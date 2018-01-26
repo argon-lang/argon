@@ -1,0 +1,8 @@
+# SBT
+target/
+
+# User-specific stuff:
+.idea/
+.vscode/
+
+
