@@ -1,6 +1,6 @@
 package com.mi3software.argon.parser
 
-import com.mi3software.argon.parser.impl.Token
+import com.mi3software.argon.parser.impl.{Grammar, Token}
 import com.mi3software.argon.util.{FileSpec, SourceLocation, WithSource}
 
 import scala.collection.immutable._
@@ -11,8 +11,14 @@ sealed trait SyntaxError {
   def location: SourceLocation
 }
 object SyntaxError {
-  final case class CouldNotMatchInputText(text: Seq[WithSource[String]], override val location: SourceLocation) extends SyntaxError
-  final case class CouldNotMatchInputTokens(tokens: Seq[WithSource[Token]], override val location: SourceLocation) extends SyntaxError
+  final case class InvalidSurrogatePairs(ch: Char, override val location: SourceLocation) extends SyntaxError
+  final case class UnexpectedCombingCharacter(cp: Int, override val location: SourceLocation) extends SyntaxError
+
+  final case class LexerError(error: Grammar.GrammarError[String, CharacterCategory]) extends SyntaxError {
+    override def location: SourceLocation = error.location
+  }
+
+  final case class CouldNotMatchInputTokens(tokens: WithSource[Token], override val location: SourceLocation) extends SyntaxError
   final case class UnterminatedString(override val location: SourceLocation) extends SyntaxError
   final case class InvalidIntegerDigit(ch: WithSource[String], base: BigInt) extends SyntaxError {
     override def location: SourceLocation = ch.location
