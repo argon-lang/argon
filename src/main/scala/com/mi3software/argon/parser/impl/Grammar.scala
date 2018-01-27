@@ -18,15 +18,11 @@ sealed trait Grammar[TToken, TokenCategory, T] {
 
   final def map[U](f: T => U): Grammar[TToken, TokenCategory, U] = mapSource(WithSource.lift(f))
 
-  final def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] = new Grammar[TToken, TokenCategory, U] {
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, U] =
-      Grammar.this.derive(token).mapSource(f)
+  def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U]
 
-    override def endOfInput(pos: FilePosition): EndOfInputResult =
-      Grammar.this.endOfInput(pos).map(_.map(f))
-  }
+  final def ++[U](b: => Grammar[TToken, TokenCategory, U]): Grammar[TToken, TokenCategory, (T, U)] =
+    ConcatGrammar(this, b) { (a, b) => WithSource((a.value, b.value), SourceLocation.merge(a.location, b.location)) }
 
-  final def ++[U](b: => Grammar[TToken, TokenCategory, U]): Grammar[TToken, TokenCategory, (T, U)] = ConcatGrammar(this, b)
   def |(other: Grammar[TToken, TokenCategory, T]): Grammar[TToken, TokenCategory, T] =
     other match {
       case other: UnionGrammar[TToken, TokenCategory, T] =>
@@ -108,11 +104,17 @@ object Grammar {
   private final case class RejectGrammar[TToken, TokenCategory, T](grammarErrors: NonEmptyList[GrammarError[TToken, TokenCategory]]) extends Grammar[TToken, TokenCategory, T] {
     override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] = RejectGrammar(grammarErrors)
     override def endOfInput(pos: FilePosition): EndOfInputResult = -\/(grammarErrors)
+
+    override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
+      RejectGrammar(grammarErrors)
   }
 
   private final case class EmptyStrGrammar[TToken, TokenCategory, T](result: NonEmptyList[WithSource[T]]) extends Grammar[TToken, TokenCategory, T] {
     override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] = RejectGrammar(NonEmptyList(ExpectedEndOfFile(token)))
     override def endOfInput(pos: FilePosition): EndOfInputResult = \/-(result)
+
+    override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
+      EmptyStrGrammar(result.map(f))
   }
 
   private final case class TokenGrammar[TToken, TokenCategory, T](category: TokenCategory, tokenMatcher: TokenMatcher[TToken, T]) extends Grammar[TToken, TokenCategory, T] {
@@ -126,23 +128,31 @@ object Grammar {
 
     override def endOfInput(pos: FilePosition): EndOfInputResult =
       -\/(NonEmptyList(UnexpectedEndOfFile(category, pos)))
+
+    override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
+      TokenGrammar(category, tokenMatcher andThen f.lift)
   }
 
-  private final class ConcatGrammar[TToken, TokenCategory, A, B](grammarA: Grammar[TToken, TokenCategory, A], grammarBUncached: => Grammar[TToken, TokenCategory, B]) extends Grammar[TToken, TokenCategory, (A, B)] {
+  private final class ConcatGrammar[TToken, TokenCategory, A, B, T]
+  (
+    grammarA: Grammar[TToken, TokenCategory, A],
+    grammarBUncached: => Grammar[TToken, TokenCategory, B],
+    combine: (WithSource[A], WithSource[B]) => WithSource[T]
+  ) extends Grammar[TToken, TokenCategory, T] {
 
     private lazy val grammarB = grammarBUncached
 
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, (A, B)] =
+    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] =
       grammarA.endOfInput(token.location.start) match {
         case \/-(items) =>
           createSimplifiedUnion(NonEmptyList(
 
-            ConcatGrammar(grammarA.derive(token), grammarB),
+            ConcatGrammar(grammarA.derive(token), grammarB)(combine),
 
             createSimplifiedUnion(
               items.map { a =>
                 grammarB.derive(token).mapSource { b =>
-                  WithSource((a.value, b.value), SourceLocation.merge(a.location, b.location))
+                  combine(a, b)
                 }
               }
             ),
@@ -150,7 +160,7 @@ object Grammar {
           ))
 
         case -\/(_) =>
-          ConcatGrammar(grammarA.derive(token), grammarB)
+          ConcatGrammar(grammarA.derive(token), grammarB)(combine)
       }
 
     override def endOfInput(pos: FilePosition): EndOfInputResult =
@@ -160,12 +170,22 @@ object Grammar {
       } yield for {
         a <- aItems
         b <- bItems
-      } yield WithSource((a.value, b.value), SourceLocation.merge(a.location, b.location))
+      } yield combine(a, b)
+
+    override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
+      ConcatGrammar(grammarA, grammarB)((a, b) => f(combine(a, b)))
+
   }
 
   private object ConcatGrammar {
-    def apply[TToken, TokenCategory, A, B](grammarA: Grammar[TToken, TokenCategory, A], grammarB: => Grammar[TToken, TokenCategory, B]): ConcatGrammar[TToken, TokenCategory, A, B] =
-      new ConcatGrammar(grammarA, grammarB)
+    def apply[TToken, TokenCategory, A, B, T]
+    (
+      grammarA: Grammar[TToken, TokenCategory, A],
+      grammarB: => Grammar[TToken, TokenCategory, B]
+    )(
+      combine: (WithSource[A], WithSource[B]) => WithSource[T]
+    ): ConcatGrammar[TToken, TokenCategory, A, B, T] =
+      new ConcatGrammar(grammarA, grammarB, combine)
   }
 
   private final case class UnionGrammar[TToken, TokenCategory, T](grammars: NonEmptyList[Grammar[TToken, TokenCategory, T]]) extends Grammar[TToken, TokenCategory, T] {
@@ -209,6 +229,9 @@ object Grammar {
         case \/-(successes) => handleSuccess(successes, results.tail)
       }
     }
+
+    override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
+      UnionGrammar(grammars.map(_.mapSource(f)))
   }
 
 }
