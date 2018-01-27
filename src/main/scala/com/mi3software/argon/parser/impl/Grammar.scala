@@ -51,6 +51,25 @@ sealed trait Grammar[TToken, TokenCategory, T] {
 
 object Grammar {
 
+  def stream[M[_] : Monad, TToken, TokenCategory, T](grammar: Grammar[TToken, TokenCategory, T])(tokens: StreamT[M, WithSource[TToken]]): StreamT[M, NonEmptyList[GrammarError[TToken, TokenCategory]] \/ WithSource[T]] =
+    StreamT[M, NonEmptyList[GrammarError[TToken, TokenCategory]] \/ WithSource[T]](
+      monadic[M] {
+        tokens.uncons.each match {
+          case Some((WithSource(_, SourceLocation(pos, _)), _)) =>
+            grammar.run(pos, tokens).each match {
+              case -\/(errors) =>
+                StreamT.Yield(-\/(errors), StreamT.empty)
+
+              case \/-((item, remaining)) =>
+                StreamT.Yield(\/-(item), stream(grammar)(remaining))
+            }
+
+          case None =>
+            StreamT.Done
+        }
+      }
+    )
+
   def emptyString[TToken, TokenCategory, T](value: T): Grammar[TToken, TokenCategory, T] =
     EmptyStrGrammar(NonEmptyList(WithSource(value, SourceLocation.empty)))
 
