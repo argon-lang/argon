@@ -6,6 +6,7 @@ import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
 import scala.language.postfixOps
 import scalaz._
 import Scalaz._
+import scalaz.Leibniz.===
 
 sealed trait Grammar[TToken, TokenCategory, T] {
 
@@ -19,6 +20,7 @@ sealed trait Grammar[TToken, TokenCategory, T] {
   final def map[U](f: T => U): Grammar[TToken, TokenCategory, U] = mapSource(WithSource.lift(f))
 
   def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U]
+
 
   final def ++[U](b: => Grammar[TToken, TokenCategory, U]): Grammar[TToken, TokenCategory, (T, U)] =
     ConcatGrammar(this, b) { (a, b) => WithSource((a.value, b.value), SourceLocation.merge(a.location, b.location)) }
@@ -45,6 +47,9 @@ sealed trait Grammar[TToken, TokenCategory, T] {
   def observeSource: Grammar[TToken, TokenCategory, WithSource[T]] = mapSource {
     case value @ WithSource(_, location) => WithSource(value, location)
   }
+
+  def consumeResults[A](implicit ev: T === IList[A]): (IList[A], Grammar[TToken, TokenCategory, T]) =
+    (INil(), this)
 }
 
 object Grammar {
@@ -100,10 +105,21 @@ object Grammar {
       case NonEmptyList(head, tail) => UnionGrammar(NonEmptyList.nel(head, tail))
     }
 
+  private def concatRepeater[TToken, TokenCategory, T](item: Grammar[TToken, TokenCategory, T]): Grammar[TToken, TokenCategory, IList[T]] = {
+    lazy val repeater: Grammar[TToken, TokenCategory, IList[T]] = ((item ++ repeater)?).map {
+      case Some((head, tail)) => head +: tail
+      case None => INil()
+    }
+
+    repeater
+  }
+
 
   private final case class RejectGrammar[TToken, TokenCategory, T](grammarErrors: NonEmptyList[GrammarError[TToken, TokenCategory]]) extends Grammar[TToken, TokenCategory, T] {
     override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] = RejectGrammar(grammarErrors)
     override def endOfInput(pos: FilePosition): EndOfInputResult = -\/(grammarErrors)
+
+    override def shortCircuit: Boolean = true
 
     override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
       RejectGrammar(grammarErrors)
@@ -186,6 +202,28 @@ object Grammar {
       combine: (WithSource[A], WithSource[B]) => WithSource[T]
     ): ConcatGrammar[TToken, TokenCategory, A, B, T] =
       new ConcatGrammar(grammarA, grammarB, combine)
+
+
+    def createSimplified[TToken, TokenCategory, A, B, T]
+    (
+      grammarA: Grammar[TToken, TokenCategory, A],
+      grammarB: => Grammar[TToken, TokenCategory, B]
+    )(
+      combine: (WithSource[A], WithSource[B]) => WithSource[T]
+    ): Grammar[TToken, TokenCategory, T] =
+      grammarA match {
+        case RejectGrammar(grammarErrors) => RejectGrammar(grammarErrors)
+        case EmptyStrGrammar(result) =>
+          createSimplifiedUnion(
+            result.map { a =>
+              grammarB.mapSource(b => combine(a, b))
+            }
+          )
+
+        case _ =>
+          apply(grammarA, grammarB)(combine)
+      }
+
   }
 
   private final case class UnionGrammar[TToken, TokenCategory, T](grammars: NonEmptyList[Grammar[TToken, TokenCategory, T]]) extends Grammar[TToken, TokenCategory, T] {
@@ -232,6 +270,89 @@ object Grammar {
 
     override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
       UnionGrammar(grammars.map(_.mapSource(f)))
+  }
+
+  sealed trait ListGrammar[TToken, TokenCategory, T] extends Grammar[TToken, TokenCategory, IList[T]] {
+
+    override def consumeResults[A](implicit ev: IList[T] === IList[A]): (IList[A], Grammar[TToken, TokenCategory, IList[T]]) = {
+      val (list, newGrammar) = consumeResultsImpl
+      (ev(list), newGrammar)
+    }
+
+    def consumeResultsImpl: (IList[T], ListGrammar[TToken, TokenCategory, T])
+
+  }
+
+  final case class RepeatGrammar[TToken, TokenCategory, T]
+  (
+    items: WithSource[IList[T]],
+    item: Grammar[TToken, TokenCategory, T]
+  ) extends ListGrammar[TToken, TokenCategory, T] {
+    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, IList[T]] =
+      RepeatBuilderGrammar(items, item.derive(token), item)
+
+    override def endOfInput(pos: FilePosition): EndOfInputResult =
+      \/-(NonEmptyList(items))
+
+    override def mapSource[U](f: WithSource[IList[T]] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
+      concatRepeater(item).mapSource(f)
+
+    override def consumeResultsImpl: (IList[T], ListGrammar[TToken, TokenCategory, T]) = {
+      val newLocation = SourceLocation(items.location.end, items.location.end)
+      (items.value, RepeatGrammar(WithSource(INil(), newLocation), item))
+    }
+
+  }
+
+  final case class RepeatBuilderGrammar[TToken, TokenCategory, T]
+  (
+    items: WithSource[IList[T]],
+    builder: Grammar[TToken, TokenCategory, T],
+    item: Grammar[TToken, TokenCategory, T]
+  ) extends ListGrammar[TToken, TokenCategory, T] {
+    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, IList[T]] =
+      builder.endOfInput(token.location.start) match {
+        case \/-(builderItems) =>
+          createSimplifiedUnion(NonEmptyList(
+
+            ConcatGrammar.createSimplified(builder.derive(token), concatRepeater(item)) { (a, b) =>
+              WithSource(
+                items.value ++ (a.value +: b.value),
+                SourceLocation.merge(items.location, b.location)
+              )
+            },
+
+            createSimplifiedUnion(
+              builderItems.map { builderItem =>
+                RepeatGrammar(WithSource(items.value :+ builderItem.value, SourceLocation.merge(items.location, builderItem.location)), item)
+              }
+            ),
+
+          ))
+
+        case -\/(_) =>
+          RepeatBuilderGrammar(items, builder.derive(token), item)
+      }
+
+
+    override def endOfInput(pos: FilePosition): EndOfInputResult =
+      builder.endOfInput(pos).map { builderResults =>
+        builderResults.map { builderResult =>
+          WithSource(items.value :+ builderResult.value, SourceLocation.merge(items.location, builderResult.location))
+        }
+      }
+
+    override def mapSource[U](f: WithSource[IList[T]] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
+      concatRepeater(item).mapSource { listResult =>
+        f(WithSource(items.value ++ listResult.value, SourceLocation.merge(items.location, listResult.location)))
+      }
+
+    override def consumeResultsImpl: (IList[T], ListGrammar[TToken, TokenCategory, T]) = {
+      val newLocation = SourceLocation(items.location.end, items.location.end)
+      (items.value, RepeatBuilderGrammar(WithSource(INil(), newLocation), builder, item))
+    }
+
+
   }
 
 }
