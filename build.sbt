@@ -4,6 +4,7 @@ scalaVersion := "2.12.4"
 
 resolvers += Resolver.sonatypeRepo("releases")
 
+addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.4")
 
 libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.0.6"
@@ -13,6 +14,7 @@ libraryDependencies += "org.apache.commons" % "commons-lang3" % "3.5"
 libraryDependencies += "commons-io" % "commons-io" % "2.5"
 libraryDependencies += "org.fusesource.jansi" % "jansi" % "1.15"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.3" % "test"
+libraryDependencies += "com.thoughtworks.each" %% "each" % "3.3.1"
 
 scalacOptions ++= Seq(
   "-encoding", "UTF-8",
