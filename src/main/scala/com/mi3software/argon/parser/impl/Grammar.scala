@@ -27,8 +27,8 @@ sealed trait Grammar[TToken, TokenCategory, T] {
 
   def |(other: Grammar[TToken, TokenCategory, T]): Grammar[TToken, TokenCategory, T] =
     other match {
-      case other: UnionGrammar[TToken, TokenCategory, T] =>
-        UnionGrammar(this <:: other.grammars)
+      case UnionGrammar(grammars) =>
+        UnionGrammar.createSimplified(this <:: grammars)
 
       case _ =>
         UnionGrammar(NonEmptyList(this, other))
@@ -87,24 +87,6 @@ object Grammar {
 
   type TokenMatcher[TToken, T] = WithSource[TToken] => Option[WithSource[T]]
 
-  private def createSimplifiedUnion[TToken, TokenCategory, T](grammars: NonEmptyList[Grammar[TToken, TokenCategory, T]]): Grammar[TToken, TokenCategory, T] =
-    createListUnion(
-      grammars.list.filter {
-        case RejectGrammar(_) => false
-        case _ => true
-      } match {
-        case ICons(head, tail) => NonEmptyList.nel(head, tail)
-        case INil() => grammars
-      }
-    )
-
-
-  private def createListUnion[TToken, TokenCategory, T](grammars: NonEmptyList[Grammar[TToken, TokenCategory, T]]): Grammar[TToken, TokenCategory, T] =
-    grammars match {
-      case NonEmptyList(head, INil()) => head
-      case NonEmptyList(head, tail) => UnionGrammar(NonEmptyList.nel(head, tail))
-    }
-
   private def concatRepeater[TToken, TokenCategory, T](item: Grammar[TToken, TokenCategory, T]): Grammar[TToken, TokenCategory, IList[T]] = {
     lazy val repeater: Grammar[TToken, TokenCategory, IList[T]] = ((item ++ repeater)?).map {
       case Some((head, tail)) => head +: tail
@@ -161,11 +143,11 @@ object Grammar {
     override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] =
       grammarA.endOfInput(token.location.start) match {
         case \/-(items) =>
-          createSimplifiedUnion(NonEmptyList(
+          UnionGrammar.createSimplified(NonEmptyList(
 
             ConcatGrammar(grammarA.derive(token), grammarB)(combine),
 
-            createSimplifiedUnion(
+            UnionGrammar.createSimplified(
               items.map { a =>
                 grammarB.derive(token).mapSource { b =>
                   combine(a, b)
@@ -214,7 +196,7 @@ object Grammar {
       grammarA match {
         case RejectGrammar(grammarErrors) => RejectGrammar(grammarErrors)
         case EmptyStrGrammar(result) =>
-          createSimplifiedUnion(
+          UnionGrammar.createSimplified(
             result.map { a =>
               grammarB.mapSource(b => combine(a, b))
             }
@@ -228,7 +210,7 @@ object Grammar {
 
   private final case class UnionGrammar[TToken, TokenCategory, T](grammars: NonEmptyList[Grammar[TToken, TokenCategory, T]]) extends Grammar[TToken, TokenCategory, T] {
     override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] =
-      createSimplifiedUnion(
+      UnionGrammar.createSimplified(
         grammars
           .map(_.derive(token))
       )
@@ -272,6 +254,20 @@ object Grammar {
       UnionGrammar(grammars.map(_.mapSource(f)))
   }
 
+  private object UnionGrammar {
+    def createSimplified[TToken, TokenCategory, T](grammars: NonEmptyList[Grammar[TToken, TokenCategory, T]]): Grammar[TToken, TokenCategory, T] = {
+      val allGrammars = grammars.flatMap {
+        case UnionGrammar(inner) => inner
+        case inner => NonEmptyList(inner)
+      }
+
+      allGrammars match {
+        case NonEmptyList(head, INil()) => head
+        case NonEmptyList(head, tail) => UnionGrammar(NonEmptyList.nel(head, tail))
+      }
+    }
+  }
+
   sealed trait ListGrammar[TToken, TokenCategory, T] extends Grammar[TToken, TokenCategory, IList[T]] {
 
     override def consumeResults[A](implicit ev: IList[T] === IList[A]): (IList[A], Grammar[TToken, TokenCategory, IList[T]]) = {
@@ -313,7 +309,7 @@ object Grammar {
     override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, IList[T]] =
       builder.endOfInput(token.location.start) match {
         case \/-(builderItems) =>
-          createSimplifiedUnion(NonEmptyList(
+          UnionGrammar.createSimplified(NonEmptyList(
 
             ConcatGrammar.createSimplified(builder.derive(token), concatRepeater(item)) { (a, b) =>
               WithSource(
@@ -322,7 +318,7 @@ object Grammar {
               )
             },
 
-            createSimplifiedUnion(
+            UnionGrammar.createSimplified(
               builderItems.map { builderItem =>
                 RepeatGrammar(WithSource(items.value :+ builderItem.value, SourceLocation.merge(items.location, builderItem.location)), item)
               }
