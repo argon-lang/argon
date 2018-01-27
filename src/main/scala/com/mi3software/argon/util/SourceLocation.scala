@@ -1,6 +1,29 @@
 package com.mi3software.argon.util
 
-final case class FilePosition(line: Int, position: Int)
+import scalaz._
+
+final case class FilePosition(line: Int, position: Int) {
+
+  def compareTo(other: FilePosition): Int =
+    if(line > other.line)
+      1
+    else if(line < other.line)
+      -1
+    else if(position > other.position)
+      1
+    else if(position < other.position)
+      -1
+    else
+      0
+
+}
+
+object FilePosition {
+
+  implicit val ordering: Order[FilePosition] = (x, y) => Ordering.fromInt(x.compareTo(y))
+
+}
+
 final case class SourceLocation(start: FilePosition, end: FilePosition)
 
 object SourceLocation {

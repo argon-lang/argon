@@ -6,14 +6,13 @@ import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
 import scala.language.postfixOps
 import scalaz._
 import Scalaz._
-import scalaz.Leibniz.===
+
+
+import com.thoughtworks.each.Monadic._
 
 sealed trait Grammar[TToken, TokenCategory, T] {
 
-  protected type EndOfInputResult = NonEmptyList[GrammarError[TToken, TokenCategory]] \/ NonEmptyList[WithSource[T]]
-
-  def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T]
-  def endOfInput(pos: FilePosition): EndOfInputResult
+  def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[GrammarError[TToken, TokenCategory]] \/ (WithSource[T], StreamT[M, WithSource[TToken]])]
 
   def shortCircuit: Boolean = false
 
@@ -48,8 +47,6 @@ sealed trait Grammar[TToken, TokenCategory, T] {
     case value @ WithSource(_, location) => WithSource(value, location)
   }
 
-  def consumeResults[A](implicit ev: T === IList[A]): (IList[A], Grammar[TToken, TokenCategory, T]) =
-    (INil(), this)
 }
 
 object Grammar {
@@ -87,19 +84,12 @@ object Grammar {
 
   type TokenMatcher[TToken, T] = WithSource[TToken] => Option[WithSource[T]]
 
-  private def concatRepeater[TToken, TokenCategory, T](item: Grammar[TToken, TokenCategory, T]): Grammar[TToken, TokenCategory, IList[T]] = {
-    lazy val repeater: Grammar[TToken, TokenCategory, IList[T]] = ((item ++ repeater)?).map {
-      case Some((head, tail)) => head +: tail
-      case None => INil()
-    }
-
-    repeater
-  }
-
 
   private final case class RejectGrammar[TToken, TokenCategory, T](grammarErrors: NonEmptyList[GrammarError[TToken, TokenCategory]]) extends Grammar[TToken, TokenCategory, T] {
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] = RejectGrammar(grammarErrors)
-    override def endOfInput(pos: FilePosition): EndOfInputResult = -\/(grammarErrors)
+
+
+    override def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[GrammarError[TToken, TokenCategory]] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] =
+      Monad[M].point(-\/(grammarErrors))
 
     override def shortCircuit: Boolean = true
 
@@ -108,24 +98,30 @@ object Grammar {
   }
 
   private final case class EmptyStrGrammar[TToken, TokenCategory, T](result: NonEmptyList[WithSource[T]]) extends Grammar[TToken, TokenCategory, T] {
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] = RejectGrammar(NonEmptyList(ExpectedEndOfFile(token)))
-    override def endOfInput(pos: FilePosition): EndOfInputResult = \/-(result)
+
+    override def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[GrammarError[TToken, TokenCategory]] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] =
+      Monad[M].point(\/-((result.head, tokens)))
 
     override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
       EmptyStrGrammar(result.map(f))
   }
 
   private final case class TokenGrammar[TToken, TokenCategory, T](category: TokenCategory, tokenMatcher: TokenMatcher[TToken, T]) extends Grammar[TToken, TokenCategory, T] {
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] =
-      tokenMatcher(token)
-        .fold(
-          RejectGrammar(NonEmptyList(UnexpectedToken(category, token))) : Grammar[TToken, TokenCategory, T]
-        ) { res =>
-          EmptyStrGrammar(NonEmptyList(res))
-        }
 
-    override def endOfInput(pos: FilePosition): EndOfInputResult =
-      -\/(NonEmptyList(UnexpectedEndOfFile(category, pos)))
+    override def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[GrammarError[TToken, TokenCategory]] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] =
+      tokens.uncons.map {
+        case Some((token, tail)) =>
+          tokenMatcher(token) match {
+            case Some(res) =>
+              \/-((res, tail))
+
+            case None =>
+              -\/(NonEmptyList(UnexpectedToken(category, token)))
+          }
+
+        case None =>
+          -\/(NonEmptyList(UnexpectedEndOfFile(category, pos)))
+      }
 
     override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
       TokenGrammar(category, tokenMatcher andThen f.lift)
@@ -140,35 +136,16 @@ object Grammar {
 
     private lazy val grammarB = grammarBUncached
 
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] =
-      grammarA.endOfInput(token.location.start) match {
-        case \/-(items) =>
-          UnionGrammar.createSimplified(NonEmptyList(
-
-            ConcatGrammar(grammarA.derive(token), grammarB)(combine),
-
-            UnionGrammar.createSimplified(
-              items.map { a =>
-                grammarB.derive(token).mapSource { b =>
-                  combine(a, b)
-                }
-              }
-            ),
-
-          ))
-
-        case -\/(_) =>
-          ConcatGrammar(grammarA.derive(token), grammarB)(combine)
+    override def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[GrammarError[TToken, TokenCategory]] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] = monadic[M] {
+      grammarA.run(pos, tokens).each match {
+        case -\/(errors) => -\/(errors)
+        case \/-((a, tail)) =>
+          grammarB.run(a.location.end, tail).each match {
+            case -\/(errors) => -\/(errors)
+            case \/-((b, tail2)) => \/-((combine(a, b), tail2))
+          }
       }
-
-    override def endOfInput(pos: FilePosition): EndOfInputResult =
-      for {
-        aItems <- grammarA.endOfInput(pos)
-        bItems <- grammarB.endOfInput(pos)
-      } yield for {
-        a <- aItems
-        b <- bItems
-      } yield combine(a, b)
+    }
 
     override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
       ConcatGrammar(grammarA, grammarB)((a, b) => f(combine(a, b)))
@@ -209,14 +186,51 @@ object Grammar {
   }
 
   private final case class UnionGrammar[TToken, TokenCategory, T](grammars: NonEmptyList[Grammar[TToken, TokenCategory, T]]) extends Grammar[TToken, TokenCategory, T] {
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] =
-      UnionGrammar.createSimplified(
-        grammars
-          .map(_.derive(token))
-      )
 
-    override def endOfInput(pos: FilePosition): EndOfInputResult =
-      combineResults(grammars.map(_.endOfInput(pos)))
+    override def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[GrammarError[TToken, TokenCategory]] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] = {
+
+      def findLastErrorPos(errorList: NonEmptyList[GrammarError[TToken, TokenCategory]]): FilePosition =
+        errorList.maximumBy1(_.location.end).location.end
+
+      def chooseBestErrorList(candidate: NonEmptyList[GrammarError[TToken, TokenCategory]], candidateLastPos: FilePosition, errorLists: IList[NonEmptyList[GrammarError[TToken, TokenCategory]]]): NonEmptyList[GrammarError[TToken, TokenCategory]] =
+        errorLists match {
+          case ICons(head, tail) =>
+            val headLastPos = findLastErrorPos(head)
+            val cmp = candidateLastPos compareTo headLastPos
+
+            if(cmp > 0)
+              chooseBestErrorList(candidate, candidateLastPos, tail)
+            else if(cmp < 0)
+              chooseBestErrorList(head, headLastPos, tail)
+            else
+              chooseBestErrorList(candidate append head, candidateLastPos, tail)
+
+          case INil() => candidate
+        }
+
+      def handleErrorLists(errorLists: NonEmptyList[NonEmptyList[GrammarError[TToken, TokenCategory]]], grammars: IList[Grammar[TToken, TokenCategory, T]]): M[NonEmptyList[GrammarError[TToken, TokenCategory]] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] =
+        monadic[M] {
+          grammars match {
+            case ICons(head, tail) =>
+              head.run(pos, tokens).each match {
+                case -\/(errorList) => handleErrorLists(errorList <:: errorLists, tail).each
+                case result @ \/-(_) => result
+              }
+
+            case INil() =>
+              val lists = errorLists.reverse
+              -\/(chooseBestErrorList(lists.head, findLastErrorPos(lists.head), lists.tail))
+          }
+        }
+
+      monadic[M] {
+        grammars.head.run(pos, tokens).each match {
+          case -\/(errorList) => handleErrorLists(NonEmptyList(errorList), grammars.tail).each
+          case result @ \/-(_) => result
+        }
+      }
+
+    }
 
     override def |(other: Grammar[TToken, TokenCategory, T]): Grammar[TToken, TokenCategory, T] =
       other match {
@@ -226,29 +240,6 @@ object Grammar {
         case _ =>
           UnionGrammar((other <:: grammars.reverse).reverse)
       }
-
-    private def combineResults(results: NonEmptyList[EndOfInputResult]): EndOfInputResult = {
-
-      def handleSuccess(successes: NonEmptyList[WithSource[T]], results: IList[EndOfInputResult]): EndOfInputResult =
-        \/-(successes :::> results.collect { case \/-(result) => result.list }.flatten)
-
-      def handleFailure(errors: NonEmptyList[GrammarError[TToken, TokenCategory]], results: IList[EndOfInputResult]): EndOfInputResult =
-        results match {
-          case ICons(-\/(newErrors), tail) =>
-            handleFailure(errors.append(newErrors), tail)
-
-          case ICons(\/-(success), tail) =>
-            handleSuccess(success, tail)
-
-          case INil() =>
-            -\/(errors)
-        }
-
-      results.head match {
-        case -\/(errors) => handleFailure(errors, results.tail)
-        case \/-(successes) => handleSuccess(successes, results.tail)
-      }
-    }
 
     override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
       UnionGrammar(grammars.map(_.mapSource(f)))
@@ -266,89 +257,6 @@ object Grammar {
         case NonEmptyList(head, tail) => UnionGrammar(NonEmptyList.nel(head, tail))
       }
     }
-  }
-
-  sealed trait ListGrammar[TToken, TokenCategory, T] extends Grammar[TToken, TokenCategory, IList[T]] {
-
-    override def consumeResults[A](implicit ev: IList[T] === IList[A]): (IList[A], Grammar[TToken, TokenCategory, IList[T]]) = {
-      val (list, newGrammar) = consumeResultsImpl
-      (ev(list), newGrammar)
-    }
-
-    def consumeResultsImpl: (IList[T], ListGrammar[TToken, TokenCategory, T])
-
-  }
-
-  final case class RepeatGrammar[TToken, TokenCategory, T]
-  (
-    items: WithSource[IList[T]],
-    item: Grammar[TToken, TokenCategory, T]
-  ) extends ListGrammar[TToken, TokenCategory, T] {
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, IList[T]] =
-      RepeatBuilderGrammar(items, item.derive(token), item)
-
-    override def endOfInput(pos: FilePosition): EndOfInputResult =
-      \/-(NonEmptyList(items))
-
-    override def mapSource[U](f: WithSource[IList[T]] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
-      concatRepeater(item).mapSource(f)
-
-    override def consumeResultsImpl: (IList[T], ListGrammar[TToken, TokenCategory, T]) = {
-      val newLocation = SourceLocation(items.location.end, items.location.end)
-      (items.value, RepeatGrammar(WithSource(INil(), newLocation), item))
-    }
-
-  }
-
-  final case class RepeatBuilderGrammar[TToken, TokenCategory, T]
-  (
-    items: WithSource[IList[T]],
-    builder: Grammar[TToken, TokenCategory, T],
-    item: Grammar[TToken, TokenCategory, T]
-  ) extends ListGrammar[TToken, TokenCategory, T] {
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, IList[T]] =
-      builder.endOfInput(token.location.start) match {
-        case \/-(builderItems) =>
-          UnionGrammar.createSimplified(NonEmptyList(
-
-            ConcatGrammar.createSimplified(builder.derive(token), concatRepeater(item)) { (a, b) =>
-              WithSource(
-                items.value ++ (a.value +: b.value),
-                SourceLocation.merge(items.location, b.location)
-              )
-            },
-
-            UnionGrammar.createSimplified(
-              builderItems.map { builderItem =>
-                RepeatGrammar(WithSource(items.value :+ builderItem.value, SourceLocation.merge(items.location, builderItem.location)), item)
-              }
-            ),
-
-          ))
-
-        case -\/(_) =>
-          RepeatBuilderGrammar(items, builder.derive(token), item)
-      }
-
-
-    override def endOfInput(pos: FilePosition): EndOfInputResult =
-      builder.endOfInput(pos).map { builderResults =>
-        builderResults.map { builderResult =>
-          WithSource(items.value :+ builderResult.value, SourceLocation.merge(items.location, builderResult.location))
-        }
-      }
-
-    override def mapSource[U](f: WithSource[IList[T]] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
-      concatRepeater(item).mapSource { listResult =>
-        f(WithSource(items.value ++ listResult.value, SourceLocation.merge(items.location, listResult.location)))
-      }
-
-    override def consumeResultsImpl: (IList[T], ListGrammar[TToken, TokenCategory, T]) = {
-      val newLocation = SourceLocation(items.location.end, items.location.end)
-      (items.value, RepeatBuilderGrammar(WithSource(INil(), newLocation), builder, item))
-    }
-
-
   }
 
 }

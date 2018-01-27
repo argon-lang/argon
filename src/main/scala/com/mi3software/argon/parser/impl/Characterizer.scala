@@ -1,6 +1,6 @@
 package com.mi3software.argon.parser.impl
 
-import com.mi3software.argon.parser.{CharacterCategory, SyntaxError}
+import com.mi3software.argon.parser.SyntaxError
 import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
 
 import scalaz._
@@ -8,9 +8,7 @@ import Scalaz._
 
 import com.thoughtworks.each.Monadic._
 
-object GrammarRunner {
-
-  type TGrammar[T] = Grammar[String, CharacterCategory, T]
+object Characterizer {
 
   private sealed trait InvalidUnicode
   private final case class InvalidSurrogate(ch: Char) extends InvalidUnicode
@@ -89,37 +87,36 @@ object GrammarRunner {
     else
       FilePosition(pos.line, pos.position + 1)
 
-  private def grammarResult[T](pos: FilePosition, grammar: TGrammar[T]): NonEmptyList[SyntaxError] \/ T =
-    grammar
-      .endOfInput(pos)
-      .leftMap(_.map(error => SyntaxError.LexerError(error) : SyntaxError))
-      .map(results => results.head.value)
+  private def posToLoc(pos: FilePosition): SourceLocation =
+    SourceLocation(pos, FilePosition(pos.line, pos.position + 1))
 
+  private def withLocation[M[_] : Monad](chs: StreamT[M, InvalidUnicode \/ String]): StreamT[M, SyntaxError \/ WithSource[String]] = {
+    def impl(pos: FilePosition, chs: StreamT[M, InvalidUnicode \/ String]): StreamT[M, SyntaxError \/ WithSource[String]] =
+      StreamT[M, SyntaxError \/ WithSource[String]](
+        monadic[M] {
+          chs.uncons.each match {
+            case Some((-\/(InvalidSurrogate(ch)), _)) =>
+              StreamT.Yield(-\/(SyntaxError.InvalidSurrogatePairs(ch, posToLoc(pos))), StreamT.empty)
 
-  private def processLocation[M[_] : Monad, T](pos: FilePosition, grammar: TGrammar[T], chars: StreamT[M, InvalidUnicode \/ String]): M[NonEmptyList[SyntaxError] \/ T] = monadic[M] {
-    if(grammar.shortCircuit)
-      grammarResult(pos, grammar)
-    else {
-      val chEnd = FilePosition(pos.line, pos.position + 1)
-      val location = SourceLocation(pos, chEnd)
-      chars.uncons.each match {
-        case Some((-\/(InvalidSurrogate(ch)), _)) =>
-          -\/(NonEmptyList(SyntaxError.InvalidSurrogatePairs(ch, location)))
+            case Some((-\/(UnexpectedCombingChar(cp)), _)) =>
+              StreamT.Yield(-\/(SyntaxError.UnexpectedCombingCharacter(cp, posToLoc(pos))), StreamT.empty)
 
-        case Some((-\/(UnexpectedCombingChar(cp)), _)) =>
-          -\/(NonEmptyList(SyntaxError.UnexpectedCombingCharacter(cp, location)))
+            case Some((\/-(head), tail)) =>
+              StreamT.Yield(
+                \/-(WithSource(head, posToLoc(pos))),
+                impl(nextPosition(head, pos), tail)
+              )
 
-        case Some((\/-(ch), tail)) =>
-          processLocation(nextPosition(ch, pos), grammar.derive(WithSource(ch, location)), tail).each
+            case None =>
+              StreamT.Done
+          }
+        }
+      )
 
-        case _ =>
-          grammarResult(pos, grammar)
-      }
-    }
+    impl(FilePosition(1, 1), chs)
   }
 
-
-  def runGrammar[M[_] : Monad, T](grammar: TGrammar[T])(chars: StreamT[M, Char]): M[NonEmptyList[SyntaxError] \/ T] =
-    processLocation(FilePosition(1, 1), grammar, getGraphemes(toCodePoints(chars)))
+  def characterize[M[_] : Monad](chars: StreamT[M, Char]): StreamT[M, SyntaxError \/ WithSource[String]] =
+    withLocation(getGraphemes(toCodePoints(chars)))
 
 }
