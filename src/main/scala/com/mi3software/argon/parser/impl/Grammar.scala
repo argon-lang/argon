@@ -48,18 +48,13 @@ sealed trait Grammar[TToken, TokenCategory, T] {
   }
 
 
-  def stream[M[_] : Monad](tokens: StreamT[M, WithSource[TToken]]): StreamT[M, NonEmptyList[GrammarError[TToken, TokenCategory]] \/ WithSource[T]] =
-    StreamT[M, NonEmptyList[GrammarError[TToken, TokenCategory]] \/ WithSource[T]](
-      monadic[M] {
-        tokens.uncons.each match {
+  def stream[M[_] : Monad](tokens: StreamT[M, WithSource[TToken]]): StreamT[EitherT[M, NonEmptyList[GrammarError[TToken, TokenCategory]], ?], WithSource[T]] =
+    StreamT[EitherT[M, NonEmptyList[GrammarError[TToken, TokenCategory]], ?], WithSource[T]](
+      monadic[EitherT[M, NonEmptyList[GrammarError[TToken, TokenCategory]], ?]] {
+        tokens.uncons.liftM[Lambda[(M2[_], T2) => EitherT[M2, NonEmptyList[GrammarError[TToken, TokenCategory]], T2]]].each match {
           case Some((WithSource(_, SourceLocation(pos, _)), _)) =>
-            run(pos, tokens).each match {
-              case -\/(errors) =>
-                StreamT.Yield(-\/(errors), StreamT.empty)
-
-              case \/-((item, remaining)) =>
-                StreamT.Yield(\/-(item), stream(remaining))
-            }
+            val (item, remaining) = EitherT(run(pos, tokens)).each
+            StreamT.Yield(item, stream(remaining))
 
           case None =>
             StreamT.Done
