@@ -12,9 +12,11 @@ import com.thoughtworks.each.Monadic._
 
 sealed trait Grammar[TToken, TokenCategory, T] {
 
+  type TokenStream[M[_]] = StreamT[M, WithSource[TToken]]
   type TGrammarError = GrammarError[TToken, TokenCategory]
+  type TErrorList = NonEmptyList[TGrammarError]
 
-  def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[TGrammarError] \/ (WithSource[T], StreamT[M, WithSource[TToken]])]
+  def run[M[_] : Monad](pos: FilePosition, tokens: TokenStream[M]): M[TErrorList \/ (WithSource[T], TokenStream[M])]
 
   def shortCircuit: Boolean = false
 
@@ -50,10 +52,10 @@ sealed trait Grammar[TToken, TokenCategory, T] {
   }
 
 
-  def stream[M[_] : Monad](tokens: StreamT[M, WithSource[TToken]]): StreamT[EitherT[M, NonEmptyList[TGrammarError], ?], WithSource[T]] =
-    StreamT[EitherT[M, NonEmptyList[TGrammarError], ?], WithSource[T]](
-      monadic[EitherT[M, NonEmptyList[TGrammarError], ?]] {
-        tokens.uncons.liftM[Lambda[(M2[_], T2) => EitherT[M2, NonEmptyList[TGrammarError], T2]]].each match {
+  def stream[M[_] : Monad](tokens: TokenStream[M]): StreamT[EitherT[M, TErrorList, ?], WithSource[T]] =
+    StreamT[EitherT[M, TErrorList, ?], WithSource[T]](
+      monadic[EitherT[M, TErrorList, ?]] {
+        tokens.uncons.liftM[Lambda[(M2[_], T2) => EitherT[M2, TErrorList, T2]]].each match {
           case Some((WithSource(_, SourceLocation(pos, _)), _)) =>
             val (item, remaining) = EitherT(run(pos, tokens)).each
             StreamT.Yield(item, stream(remaining))
@@ -105,7 +107,7 @@ object Grammar {
   private final case class RejectGrammar[TToken, TokenCategory, T](grammarErrors: NonEmptyList[GrammarError[TToken, TokenCategory]]) extends Grammar[TToken, TokenCategory, T] {
 
 
-    override def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[TGrammarError] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] =
+    override def run[M[_] : Monad](pos: FilePosition, tokens: TokenStream[M]): M[TErrorList \/ (WithSource[T], TokenStream[M])] =
       Monad[M].point(-\/(grammarErrors))
 
     override def shortCircuit: Boolean = true
@@ -116,7 +118,7 @@ object Grammar {
 
   private final case class EmptyStrGrammar[TToken, TokenCategory, T](result: NonEmptyList[WithSource[T]]) extends Grammar[TToken, TokenCategory, T] {
 
-    override def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[TGrammarError] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] =
+    override def run[M[_] : Monad](pos: FilePosition, tokens: TokenStream[M]): M[TErrorList \/ (WithSource[T], TokenStream[M])] =
       Monad[M].point(\/-((result.head, tokens)))
 
     override def mapSource[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
@@ -125,7 +127,7 @@ object Grammar {
 
   private final case class TokenGrammar[TToken, TokenCategory, T](category: TokenCategory, tokenMatcher: TokenMatcher[TToken, T]) extends Grammar[TToken, TokenCategory, T] {
 
-    override def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[TGrammarError] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] =
+    override def run[M[_] : Monad](pos: FilePosition, tokens: TokenStream[M]): M[TErrorList \/ (WithSource[T], TokenStream[M])] =
       tokens.uncons.map {
         case Some((token, tail)) =>
           tokenMatcher(token) match {
@@ -153,7 +155,7 @@ object Grammar {
 
     private lazy val grammarB = grammarBUncached
 
-    override def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[TGrammarError] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] = monadic[M] {
+    override def run[M[_] : Monad](pos: FilePosition, tokens: TokenStream[M]): M[TErrorList \/ (WithSource[T], TokenStream[M])] = monadic[M] {
       grammarA.run(pos, tokens).each match {
         case -\/(errors) => -\/(errors)
         case \/-((a, tail)) =>
@@ -204,12 +206,12 @@ object Grammar {
 
   private final case class UnionGrammar[TToken, TokenCategory, T](grammars: NonEmptyList[Grammar[TToken, TokenCategory, T]]) extends Grammar[TToken, TokenCategory, T] {
 
-    override def run[M[_] : Monad](pos: FilePosition, tokens: StreamT[M, WithSource[TToken]]): M[NonEmptyList[TGrammarError] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] = {
+    override def run[M[_] : Monad](pos: FilePosition, tokens: TokenStream[M]): M[TErrorList \/ (WithSource[T], TokenStream[M])] = {
 
-      def findLastErrorPos(errorList: NonEmptyList[TGrammarError]): FilePosition =
+      def findLastErrorPos(errorList: TErrorList): FilePosition =
         errorList.maximumBy1(_.location.end).location.end
 
-      def chooseBestErrorList(candidate: NonEmptyList[TGrammarError], candidateLastPos: FilePosition, errorLists: IList[NonEmptyList[TGrammarError]]): NonEmptyList[TGrammarError] =
+      def chooseBestErrorList(candidate: TErrorList, candidateLastPos: FilePosition, errorLists: IList[TErrorList]): TErrorList =
         errorLists match {
           case ICons(head, tail) =>
             val headLastPos = findLastErrorPos(head)
@@ -225,7 +227,7 @@ object Grammar {
           case INil() => candidate
         }
 
-      def handleErrorLists(errorLists: NonEmptyList[NonEmptyList[TGrammarError]], grammars: IList[Grammar[TToken, TokenCategory, T]]): M[NonEmptyList[TGrammarError] \/ (WithSource[T], StreamT[M, WithSource[TToken]])] =
+      def handleErrorLists(errorLists: NonEmptyList[TErrorList], grammars: IList[Grammar[TToken, TokenCategory, T]]): M[TErrorList \/ (WithSource[T], TokenStream[M])] =
         monadic[M] {
           grammars match {
             case ICons(head, tail) =>
