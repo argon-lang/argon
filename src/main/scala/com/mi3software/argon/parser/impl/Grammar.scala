@@ -85,6 +85,9 @@ object Grammar {
   def matcherSource[TToken, TokenCategory, Result](category: TokenCategory, tokenMatcher: TokenMatcher[TToken, Result]): Grammar[TToken, TokenCategory, Result] =
     TokenGrammar(category, tokenMatcher)
 
+  def partialMatcher[TToken, TokenCategory, Result](category: TokenCategory)(f: PartialFunction[TToken, Result]): Grammar[TToken, TokenCategory, Result] =
+    matcher(category, f.lift)
+
   sealed trait GrammarError[TToken, TokenCategory] {
     def location: SourceLocation
   }

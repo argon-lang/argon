@@ -76,8 +76,8 @@ final case class ClassConstructorExpr(classExpr: WithSource[Expr]) extends Expr
 final case class DotExpr(left: WithSource[Expr], right: String) extends Expr
 final case class FunctionCallExpr(func: WithSource[Expr], arg: WithSource[Expr]) extends Expr
 final case class IdentifierExpr(name: String) extends Expr
-final case class IfExpr(condition: WithSource[Expr], body: WithSource[Seq[WithSource[Stmt]]]) extends Expr
-final case class IfElseExpr(condition: WithSource[Expr], ifBody: WithSource[Seq[WithSource[Stmt]]], elseBody: WithSource[Seq[WithSource[Stmt]]]) extends Expr
+final case class IfExpr(condition: WithSource[Expr], body: WithSource[Vector[WithSource[Stmt]]]) extends Expr
+final case class IfElseExpr(condition: WithSource[Expr], ifBody: WithSource[Vector[WithSource[Stmt]]], elseBody: WithSource[Vector[WithSource[Stmt]]]) extends Expr
 final case class IntValueExpr(value: BigInt) extends Expr
 final case class LambdaTypeExpr(argType: WithSource[Expr], resultType: WithSource[Expr]) extends Expr
 final case class LambdaExpr(name: Option[String], body: WithSource[Expr]) extends Expr
@@ -144,4 +144,4 @@ object FunctionParameterListType {
   case object InferrableList extends FunctionParameterListType
 }
 
-final case class MatchExprCase(pattern: WithSource[Pattern], body: WithSource[Seq[WithSource[Stmt]]])
+final case class MatchExprCase(pattern: WithSource[Pattern], body: WithSource[Vector[WithSource[Stmt]]])
