@@ -6,7 +6,7 @@ import com.mi3software.argon.util.{EitherTFlattener, EitherTLeftMapper, WithSour
 import scalaz._
 
 object ParseHandler {
-
+/*
   private def singleToListMapper[M[_] : Monad, T] =
     new EitherTLeftMapper[M, T, NonEmptyList[T]](item => NonEmptyList(item))
 
@@ -25,7 +25,7 @@ object ParseHandler {
       .trans[EitherT[EitherT[M, NonEmptyList[SyntaxError], ?], NonEmptyList[SyntaxError], ?]](lexerErrorMapper[EitherT[M, NonEmptyList[SyntaxError], ?]])
       .trans[EitherT[M, NonEmptyList[SyntaxError], ?]](new EitherTFlattener[M, NonEmptyList[SyntaxError]])
   }
-
+*/
 
 
 

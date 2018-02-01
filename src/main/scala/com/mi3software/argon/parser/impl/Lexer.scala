@@ -7,6 +7,8 @@ import scala.language.postfixOps
 import scalaz._
 import Scalaz._
 
+import Grammar.Operators._
+
 object Lexer {
 
   type TGrammar[T] = Grammar[String, CharacterCategory, T]
@@ -22,22 +24,21 @@ object Lexer {
     val cr = token(CharacterCategory.CR, "\r")
     val lf = token(CharacterCategory.LF, "\n")
 
-    (lf.discard | (cr ++ lf).discard).mapSource {
-      case WithSource(_, location) => WithSource(Some(Token.NewLine), location)
-    }
+    (lf.discard | (cr ++ lf).discard) --> { _ => Some(Token.NewLine) }
   }
 
   private val matchWhitespace: Lex =
-    tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0))).map { _ => None }
+    tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0))) --> { _ => None }
 
-  private val matchSingleQuoteString: Lex ={
+  private val matchSingleQuoteString: Lex = {
     val singleQuote = token(CharacterCategory.SingleQuote, "'")
-    (singleQuote ++ (((singleQuote ++ singleQuote).map(_ => "'") | anyChar)*) ++ singleQuote)
-      .map { case ((_, chs), _) =>
+
+    (singleQuote ++ ((singleQuote ++ singleQuote --> { _ => "'" } | anyChar)*) ++ singleQuote) --> {
+      case ((_, chs), _) =>
         Some(Token.StringToken(NonEmptyList(
           Token.StringToken.StringPart(chs.toVector.mkString)
         )))
-      }
+    }
   }
 
   private val matchInteger: Lex = {
@@ -71,14 +72,14 @@ object Lexer {
       content.foldLeft[BigInt](0) { case (value, d) => value * base + d }
 
     val withPrefix =
-      (token(CharacterCategory.NumberDigit, "0") ++ numBase ++ (digit+)).map {
+      (token(CharacterCategory.NumberDigit, "0") ++ numBase ++ (digit+~)) --> {
         case ((_, base), content) => calcNumber(base)(content.list)
       }
 
     val noPrefix =
-      (digit*).map(calcNumber(10))
+      (digit*) --> calcNumber(10)
 
-    (withPrefix | noPrefix).map { n => Some(Token.IntToken(n)) }
+    (withPrefix | noPrefix) --> { n => Some(Token.IntToken(n)) }
   }
 
   private val matchIdentifier: Lex = {
@@ -132,7 +133,7 @@ object Lexer {
     }
 
 
-    (startChar ++ (idChar*) ++ (idTerminator?)).map {
+    (startChar ++ (idChar*) ++ (idTerminator?)) --> {
       case ((start, inner), term) =>
         Some(createToken(start + inner.toVector.mkString + term.toList.mkString))
     }
@@ -141,7 +142,7 @@ object Lexer {
   private val matchOperator: Lex = {
 
     def op(grammar: TGrammar[_], t: Token): TGrammar[Option[Token]] =
-      grammar.discard.map { _ => Some(t) }
+      grammar.discard --> { _ => Some(t) }
     
     val and = token(CharacterCategory.And, "&")
     val or = token(CharacterCategory.Or, "|")
@@ -218,6 +219,6 @@ object Lexer {
           matchIdentifier |
           matchOperator
       ).observeSource*
-    ).map { _.flatMap(WithSource.liftF(tokenOpt => tokenOpt.toIList)) }
+    ) --> { _.flatMap(WithSource.liftF(tokenOpt => tokenOpt.toIList)) }
 
 }

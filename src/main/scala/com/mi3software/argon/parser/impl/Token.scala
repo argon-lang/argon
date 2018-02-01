@@ -1,6 +1,6 @@
 package com.mi3software.argon.parser.impl
 
-import com.mi3software.argon.parser.{BinaryOperator, TokenCategory}
+import com.mi3software.argon.parser.{BinaryOperator, TokenCategory, UnaryOperator}
 
 import scalaz.NonEmptyList
 
@@ -13,8 +13,12 @@ object Token {
   class TokenWithCategory[TCategory <: TokenCategory](val category: TCategory)
   trait TokenFactory[TToken <: Token]
 
-  sealed trait BinaryOperatorToken extends Token{
+  sealed trait BinaryOperatorToken extends Token {
     def binaryOperator: BinaryOperator
+  }
+
+  sealed trait UnaryOperatorToken extends Token {
+    def unaryOperator: UnaryOperator
   }
 
   final case class StringToken(parts: NonEmptyList[StringToken.Part]) extends Token {
@@ -112,12 +116,16 @@ object Token {
   case object OP_CLOSEBRACKET extends TokenWithCategory(TokenCategory.OP_CLOSEBRACKET) with Token
   case object OP_OPENCURLY extends TokenWithCategory(TokenCategory.OP_OPENCURLY) with Token
   case object OP_CLOSECURLY extends TokenWithCategory(TokenCategory.OP_CLOSECURLY) with Token
-  case object OP_BOOLNOT extends TokenWithCategory(TokenCategory.OP_BOOLNOT) with Token
-  case object OP_ADD extends TokenWithCategory(TokenCategory.OP_ADD) with BinaryOperatorToken {
-    override def binaryOperator: BinaryOperator = BinaryOperator.Add
+  case object OP_BOOLNOT extends TokenWithCategory(TokenCategory.OP_BOOLNOT) with UnaryOperatorToken {
+    override def unaryOperator: UnaryOperator = UnaryOperator.BoolNot
   }
-  case object OP_SUB extends TokenWithCategory(TokenCategory.OP_SUB) with BinaryOperatorToken {
+  case object OP_ADD extends TokenWithCategory(TokenCategory.OP_ADD) with BinaryOperatorToken with UnaryOperatorToken {
+    override def binaryOperator: BinaryOperator = BinaryOperator.Add
+    override def unaryOperator: UnaryOperator = UnaryOperator.UnaryPlus
+  }
+  case object OP_SUB extends TokenWithCategory(TokenCategory.OP_SUB) with BinaryOperatorToken with UnaryOperatorToken {
     override def binaryOperator: BinaryOperator = BinaryOperator.Sub
+    override def unaryOperator: UnaryOperator = UnaryOperator.UnaryMinus
   }
   case object OP_MUL extends TokenWithCategory(TokenCategory.OP_MUL) with BinaryOperatorToken {
     override def binaryOperator: BinaryOperator = BinaryOperator.Mul
@@ -134,7 +142,9 @@ object Token {
   case object OP_BITXOR extends TokenWithCategory(TokenCategory.OP_BITXOR) with BinaryOperatorToken {
     override def binaryOperator: BinaryOperator = BinaryOperator.BitXOr
   }
-  case object OP_BITNOT extends TokenWithCategory(TokenCategory.OP_BITNOT) with Token
+  case object OP_BITNOT extends TokenWithCategory(TokenCategory.OP_BITNOT) with UnaryOperatorToken {
+    override def unaryOperator: UnaryOperator = UnaryOperator.BitNot
+  }
   case object OP_LESSTHAN extends TokenWithCategory(TokenCategory.OP_LESSTHAN) with BinaryOperatorToken {
     override def binaryOperator: BinaryOperator = BinaryOperator.LessThan
   }

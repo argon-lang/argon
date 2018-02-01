@@ -6,7 +6,9 @@ import com.mi3software.argon.util.WithSource
 
 import scala.reflect.ClassTag
 import scala.language.postfixOps
-import scalaz.IList
+import scalaz.{ICons, IList, INil, NonEmptyList}
+
+import Grammar.Operators._
 
 object Parser {
 
@@ -25,13 +27,13 @@ object Parser {
     matchToken(KW_UNDERSCORE).discard
 
   private val tokenIdentifier: TGrammar[String] =
-    matchTokenFactory(Identifier).map(_.name)
+    matchTokenFactory(Identifier) --> { _.name }
 
 
 
   private val ruleIdentifier: TGrammar[Option[String]] =
-    tokenUnderscore.map { _ => None : Option[String] } |
-      tokenIdentifier.map(Some.apply)
+    tokenUnderscore --> { _ => None : Option[String] } |
+      tokenIdentifier --> Some.apply
 
 
   // Expressions
@@ -42,31 +44,111 @@ object Parser {
     lazy val ifRulePart: TGrammar[Expr] =
       (
         ruleExpressionStatement.observeSource ++ matchToken(KW_THEN) ++ ruleStatementList.observeSource ++ (
-          matchToken(KW_END).map[RuleFunc] { _ => (condition, body) => IfExpr(condition, body) } |
-            (matchToken(KW_ELSE) ++ ruleStatementList.observeSource ++ matchToken(KW_END)).map[RuleFunc] {
+          matchToken(KW_END) -->[RuleFunc] { _ => (condition, body) => IfExpr(condition, body) } |
+            (matchToken(KW_ELSE) ++ ruleStatementList.observeSource ++ matchToken(KW_END)) -->[RuleFunc] {
               case ((_, elseBody), _) => (condition, body) => IfElseExpr(condition, body, elseBody.map(_.toVector))
             } |
-            (matchToken(KW_ELSIF) ++ ifRulePart.observeSource).map[RuleFunc] {
+            (matchToken(KW_ELSIF) ++ ifRulePart.observeSource) -->[RuleFunc] {
               case (_, elseExpr) => (condition, body) => IfElseExpr(condition, body, WithSource(Vector(elseExpr), elseExpr.location))
             }
         )
-      ).map { case (((condition, _), body), ruleFunc) => ruleFunc(condition, body.map(_.toVector)) }
+      ) --> { case (((condition, _), body), ruleFunc) => ruleFunc(condition, body.map(_.toVector)) }
 
-    (matchToken(KW_IF) ++ ifRulePart).map { case (_, expr) => expr }
+    matchToken(KW_IF) ++ ifRulePart --> { case (_, expr) => expr }
   }
 
   private val ruleExpressionMatch: TGrammar[Expr] = {
     val matchCaseRule: TGrammar[MatchExprCase] =
-      (rulePattern.observeSource ++ matchToken(OP_LAMBDA) ++ ruleStatementList.observeSource).map {
+      rulePattern.observeSource ++ matchToken(OP_LAMBDA) ++ ruleStatementList.observeSource --> {
         case ((pattern, _), body) => MatchExprCase(pattern, body.map(_.toVector))
       }
 
 
-    (matchToken(KW_MATCH) ++ ruleExpression.observeSource ++ (matchCaseRule.observeSource*) ++ matchToken(KW_END)).map {
+    matchToken(KW_MATCH) ++ ruleExpression.observeSource ++ (matchCaseRule.observeSource*) ++ matchToken(KW_END) --> {
       case (((_, cmpValue), cases), _) =>
         MatchExpr(cmpValue, cases.toVector)
     }
   }
+
+  private val ruleExpressionOther: TGrammar[Expr] =
+    matchTokenFactory(Identifier) --> { case Identifier(id) => IdentifierExpr(id) : Expr } |
+      matchTokenFactory(StringToken) --> {
+        case StringToken(NonEmptyList(StringToken.StringPart(str), INil())) => StringValueExpr(str)
+        case StringToken(NonEmptyList(StringToken.StringPart(str), ICons(_, _))) => ???
+      } |
+      matchTokenFactory(IntToken) --> { case IntToken(i) => IntValueExpr(i) } |
+      matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> { _ => TupleExpr(Vector()) } |
+      matchToken(OP_OPENPAREN) ++ ruleExpression ++ matchToken(OP_CLOSEPAREN) --> {
+        case ((_, expr), _) => expr
+      } |
+      matchToken(KW_TRUE) --> { _ => BoolValueExpr(true) } |
+      matchToken(KW_FALSE) --> { _ => BoolValueExpr(false) } |
+      ruleIfExpr |
+      ruleExpressionMatch
+
+  private val ruleExpressionL20 = ruleExpressionOther
+
+
+  private trait ParenCallHandlerBase {
+    def apply[T](nextRule: TGrammar[T])(f: (WithSource[T], WithSource[Expr]) => T): TGrammar[T]
+  }
+
+  private object ParenCallHandler extends ParenCallHandlerBase {
+
+    private val ruleArgList: TGrammar[Expr] =
+      matchToken(OP_OPENPAREN) ++ (ruleExpression?) ++ matchToken(OP_CLOSEPAREN) --> {
+        case ((_, Some(argList)), _) => argList
+        case ((_, None), _) => TupleExpr(Vector.empty)
+      }
+
+    override def apply[T](nextRule: TGrammar[T])(f: (WithSource[T], WithSource[Expr]) => T): TGrammar[T] = {
+      lazy val rule: TGrammar[T] =
+        nextRule | rule.observeSource ++ ruleArgList.observeSource --> f.tupled
+
+      rule
+    }
+  }
+
+  private object SkipParenCallHandler extends ParenCallHandlerBase {
+    override def apply[T](nextRule: TGrammar[T])(f: (WithSource[T], WithSource[Expr]) => T): TGrammar[T] = nextRule
+  }
+
+
+  private val ruleExpressionL19: TGrammar[Expr] =
+    ParenCallHandler(ruleExpressionL20)(FunctionCallExpr.apply)
+
+  private val ruleMemberAccess: TGrammar[WithSource[Expr] => Expr] =
+    matchTokenFactory(Identifier) --> [WithSource[Expr] => Expr] { case Identifier(id) => baseExpr => DotExpr(baseExpr, id) } |
+      matchToken(KW_NEW) --> { _ => ClassConstructorExpr.apply } |
+      matchToken(KW_TYPE) --> { _ => TypeOfExpr.apply }
+
+  private def ruleExpressionDot(nextRule: TGrammar[Expr], parenCallHandler: ParenCallHandlerBase): TGrammar[Expr] = {
+
+    lazy val rule: TGrammar[Expr] =
+      nextRule | rule.observeSource ++ matchToken(OP_DOT) ++ ruleMemberAccess --> {
+        case ((baseExpr, _), memberAccessFunc) => memberAccessFunc(baseExpr)
+      }
+
+    rule
+  }
+
+  private val ruleExpressionL18: TGrammar[Expr] =
+    ruleExpressionDot(ruleExpressionL19, ParenCallHandler)
+
+  private val ruleExpressionL18_SkipParenCalls: TGrammar[Expr] =
+    ruleExpressionDot(ruleExpressionL20, SkipParenCallHandler)
+
+  private val ruleExpressionL17: TGrammar[Expr] = {
+    def matchPrefxOp[TToken <: TokenWithCategory[_ <: TokenCategory] with UnaryOperatorToken : ClassTag](token: TToken): TGrammar[Expr] =
+      matchToken(token) ++ ruleExpressionL17.observeSource --> { case (_, inner) => UnaryOperatorExpr(token.unaryOperator, inner) }
+
+    ruleExpressionL18 |
+      matchPrefxOp(OP_BITNOT) |
+      matchPrefxOp(OP_BOOLNOT) |
+      matchPrefxOp(OP_ADD) |
+      matchPrefxOp(OP_SUB)
+  }
+
 
   private lazy val rulePattern: TGrammar[Pattern] = ???
 

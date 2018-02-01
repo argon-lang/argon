@@ -82,8 +82,8 @@ final case class IntValueExpr(value: BigInt) extends Expr
 final case class LambdaTypeExpr(argType: WithSource[Expr], resultType: WithSource[Expr]) extends Expr
 final case class LambdaExpr(name: Option[String], body: WithSource[Expr]) extends Expr
 final case class MatchExpr(value: WithSource[Expr], cases: Seq[WithSource[MatchExprCase]]) extends Expr
-final case class MultiValueExpr(values: Seq[WithSource[Expr]]) extends Expr
 final case class StringValueExpr(value: String) extends Expr
+final case class TupleExpr(values: Vector[WithSource[Expr]]) extends Expr
 final case class TypeExpr(instanceType: Option[WithSource[Expr]], subtypeOf: Option[WithSource[Expr]], supertypeOf: Option[WithSource[Expr]]) extends Expr
 final case class TypeOfExpr(ofExpr: WithSource[Expr]) extends Expr
 final case class UnaryOperatorExpr(op: UnaryOperator, inner: WithSource[Expr]) extends Expr
