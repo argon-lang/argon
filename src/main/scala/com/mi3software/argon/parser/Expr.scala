@@ -8,43 +8,43 @@ sealed trait Stmt
 final case class TraitDeclarationStmt(
                                        baseType: WithSource[Expr],
                                        name: Option[String],
-                                       parameters: Seq[FunctionParameterList],
+                                       parameters: Vector[FunctionParameterList],
                                        body: Seq[WithSource[Stmt]],
-                                       instanceBody: Seq[WithSource[Stmt]],
+                                       instanceBody: Vector[WithSource[Stmt]],
                                        modifiers: Vector[WithSource[Modifier]]
                                      ) extends Stmt
 final case class ConstructorDeclarationStmt(
                                              name: Option[String],
-                                             parameters: Seq[FunctionParameterList],
+                                             parameters: Vector[FunctionParameterList],
                                              returnType: WithSource[Expr],
-                                             body: Seq[WithSource[Stmt]],
+                                             body: Vector[WithSource[Stmt]],
                                              modifiers: Vector[WithSource[Modifier]]
                                            ) extends Stmt
 final case class ClassDeclarationStmt(
                                        baseType: WithSource[Expr],
                                        name: Option[String],
-                                       parameters: Seq[FunctionParameterList],
+                                       parameters: Vector[FunctionParameterList],
                                        body: Seq[WithSource[Stmt]],
-                                       instanceBody: Seq[WithSource[Stmt]],
+                                       instanceBody: Vector[WithSource[Stmt]],
                                        modifiers: Vector[WithSource[Modifier]]
                                      ) extends Stmt
 final case class FunctionDeclarationStmt(
                                           name: Option[String],
-                                          parameters: Seq[FunctionParameterList],
+                                          parameters: Vector[FunctionParameterList],
                                           returnType: WithSource[Expr],
-                                          body: WithSource[Seq[WithSource[Stmt]]],
+                                          body: WithSource[Vector[WithSource[Stmt]]],
                                           modifiers: Vector[WithSource[Modifier]]
                                         ) extends Stmt
 final case class MethodDeclarationStmt(
                                         instanceName: Option[String],
                                         name: Option[String],
-                                        parameters: Seq[FunctionParameterList],
+                                        parameters: Vector[FunctionParameterList],
                                         returnType: WithSource[Expr],
-                                        body: WithSource[Seq[WithSource[Stmt]]],
+                                        body: WithSource[Vector[WithSource[Stmt]]],
                                         modifiers: Vector[WithSource[Modifier]]
                                       ) extends Stmt
 final case class ClassConstructorDeclarationStmt(
-                                                  parameters: Seq[FunctionParameterList],
+                                                  parameters: Vector[FunctionParameterList],
                                                   body: WithSource[Seq[WithSource[Stmt]]],
                                                   modifiers: Vector[WithSource[Modifier]]
                                                 ) extends Stmt

@@ -36,6 +36,9 @@ object Parser {
     tokenUnderscore --> const(None : Option[String]) |
       tokenIdentifier --> Some.apply
 
+  private val skipNewLines: TGrammar[Unit] =
+    (matchToken(NewLine)*).discard
+
 
   // Expressions
   private val ruleIfExpr: TGrammar[Expr] = {
@@ -276,9 +279,9 @@ object Parser {
 
   private val ruleFieldInitialization: TGrammar[Stmt] =
     matchToken(KW_FIELD) ++
-      matchTokenFactory(Identifier) ++
+      tokenIdentifier ++
       matchToken(OP_EQUALS) ++
-      ruleExpression.observeSource --> { case (_, Identifier(id), _, value) =>
+      ruleExpression.observeSource --> { case (_, id, _, value) =>
       FieldInitializationStmt(id, value)
     }
 
@@ -291,7 +294,7 @@ object Parser {
       InitializeStmt(id, value)
     }
 
-  private val ruleModifiers: TGrammar[Vector[Modifier]] = {
+  private val ruleModifiers: TGrammar[Vector[WithSource[Modifier]]] = {
     def ruleModifier[TToken <: TokenWithCategory[_ <: TokenCategory] with ModifierToken : ClassTag](token: TToken): TGrammar[Modifier] =
       matchToken(token) --> const(token.modifier)
 
@@ -306,8 +309,85 @@ object Parser {
         ruleModifier(KW_SEALED) |
         ruleModifier(KW_OPEN)
 
-    (anyModifier*) --> { _.toVector }
+    (anyModifier.observeSource*) --> { _.toVector }
   }
+
+  // Function and Method Definition
+  private val ruleMethodParameter: TGrammar[FunctionParameter] =
+    tokenIdentifier ++
+      skipNewLines ++
+      ((matchToken(OP_COLON) ++ skipNewLines ++ ruleExpressionType.observeSource --> { case (_, _, t) => t })?) ++
+      ((matchToken(OP_SUBTYPE) ++ skipNewLines ++ ruleExpressionType.observeSource --> { case (_, _, t) => t })?) --> {
+      case (name, _, paramType, subTypeOf) =>
+        FunctionParameter(paramType, subTypeOf, name)
+    }
+
+  private val ruleMethodParameterList: TGrammar[Vector[FunctionParameter]] =
+    ((
+      ruleMethodParameter ++
+        skipNewLines ++
+        ((matchToken(OP_COMMA) ++ ruleMethodParameter ++ skipNewLines --> { case (_, param, _) => param })*) ++
+        (matchToken(OP_COMMA)?) --> {
+        case (firstParam, _, restParams, _) =>
+          firstParam +: restParams.toVector
+      }
+    )?) --> { _.getOrElse(Vector.empty) }
+
+  private val ruleMethodParameters: TGrammar[Vector[FunctionParameterList]] =
+    ((
+      (
+        matchToken(OP_OPENPAREN) ++ skipNewLines ++ ruleMethodParameterList ++ skipNewLines ++ matchToken(OP_CLOSEPAREN) --> {
+          case (_, _, params, _, _) =>
+            FunctionParameterList(FunctionParameterListType.NormalList, params)
+        }
+      ) |
+        (
+          matchToken(OP_OPENBRACKET) ++ skipNewLines ++ ruleMethodParameterList ++ skipNewLines ++ matchToken(OP_CLOSEBRACKET) --> {
+            case (_, _, params, _, _) =>
+              FunctionParameterList(FunctionParameterListType.InferrableList, params)
+          }
+        )
+    )*) --> { _.toVector }
+
+  private val ruleMethodBody: TGrammar[Vector[WithSource[Stmt]]] =
+    matchToken(KW_DO) ++ ruleStatementList ++ matchToken(KW_END) --> { case (_, body, _) => body.toVector } |
+      matchToken(OP_EQUALS) ++ ruleExpression.observeSource --> { case (_, expr) => Vector(expr) }
+
+  private val ruleMethodPurity: TGrammar[Boolean] =
+    matchToken(KW_DEF) --> const(true) |
+      matchToken(KW_PROC) --> const(false)
+
+  private val ruleFunctionDefinition: TGrammar[Stmt] =
+    ruleModifiers ++
+      ruleIdentifier ++
+      skipNewLines ++
+      ruleMethodParameters ++
+      matchToken(OP_COLON) ++
+      skipNewLines ++
+      ruleExpressionType.observeSource ++
+      skipNewLines ++
+      ruleMethodBody.observeSource --> {
+      case (modifiers, name, _, params, _, _, returnType, _, body) =>
+        FunctionDeclarationStmt(name, params, returnType, body, modifiers)
+    }
+
+  private val ruleMethodDefinition: TGrammar[Stmt] =
+    ruleModifiers ++
+      ruleIdentifier ++
+      skipNewLines ++
+      matchToken(OP_DOT) ++
+      skipNewLines ++
+      ruleIdentifier ++
+      skipNewLines ++
+      ruleMethodParameters ++
+      matchToken(OP_COLON) ++
+      skipNewLines ++
+      ruleExpressionType.observeSource ++
+      skipNewLines ++
+      ruleMethodBody.observeSource --> {
+      case (modifiers, instanceName, _, _, _, name, _, params, _, _, returnType, _, body) =>
+        MethodDeclarationStmt(instanceName, name, params, returnType, body, modifiers)
+    }
 
   private lazy val ruleStatementList: TGrammar[IList[WithSource[Stmt]]] = ???
 
