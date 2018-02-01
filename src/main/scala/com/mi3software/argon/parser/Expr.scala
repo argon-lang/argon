@@ -11,14 +11,14 @@ final case class TraitDeclarationStmt(
                                        parameters: Seq[FunctionParameterList],
                                        body: Seq[WithSource[Stmt]],
                                        instanceBody: Seq[WithSource[Stmt]],
-                                       flags: WithSource[TraitFlags]
+                                       modifiers: Vector[WithSource[Modifier]]
                                      ) extends Stmt
 final case class ConstructorDeclarationStmt(
                                              name: Option[String],
                                              parameters: Seq[FunctionParameterList],
                                              returnType: WithSource[Expr],
                                              body: Seq[WithSource[Stmt]],
-                                             flags: WithSource[ConstructorFlags]
+                                             modifiers: Vector[WithSource[Modifier]]
                                            ) extends Stmt
 final case class ClassDeclarationStmt(
                                        baseType: WithSource[Expr],
@@ -26,14 +26,14 @@ final case class ClassDeclarationStmt(
                                        parameters: Seq[FunctionParameterList],
                                        body: Seq[WithSource[Stmt]],
                                        instanceBody: Seq[WithSource[Stmt]],
-                                       flags: WithSource[ClassFlags]
+                                       modifiers: Vector[WithSource[Modifier]]
                                      ) extends Stmt
 final case class FunctionDeclarationStmt(
                                           name: Option[String],
                                           parameters: Seq[FunctionParameterList],
                                           returnType: WithSource[Expr],
                                           body: WithSource[Seq[WithSource[Stmt]]],
-                                          flags: WithSource[FunctionFlags]
+                                          modifiers: Vector[WithSource[Modifier]]
                                         ) extends Stmt
 final case class MethodDeclarationStmt(
                                         instanceName: Option[String],
@@ -41,12 +41,12 @@ final case class MethodDeclarationStmt(
                                         parameters: Seq[FunctionParameterList],
                                         returnType: WithSource[Expr],
                                         body: WithSource[Seq[WithSource[Stmt]]],
-                                        flags: WithSource[MethodFlags]
+                                        modifiers: Vector[WithSource[Modifier]]
                                       ) extends Stmt
 final case class ClassConstructorDeclarationStmt(
                                                   parameters: Seq[FunctionParameterList],
                                                   body: WithSource[Seq[WithSource[Stmt]]],
-                                                  flags: WithSource[ClassConstructorFlags]
+                                                  modifiers: Vector[WithSource[Modifier]]
                                                 ) extends Stmt
 final case class VariableDeclarationStmt(
                                           isMutable: Boolean,
@@ -96,14 +96,6 @@ case object DiscardPattern extends Pattern
 final case class BindingPattern(name: String) extends Pattern
 final case class TypeTestPattern(name: Option[String], patternType: WithSource[Expr]) extends Pattern
 
-
-
-final case class TraitFlags(isSealed: Boolean, visibility: VisibilityMode)
-final case class ConstructorFlags(visibility: VisibilityMode)
-final case class ClassFlags(isOpen: Boolean, isSealed: Boolean, isAbstract: Boolean, visibility: VisibilityMode)
-final case class MethodFlags(isPure: Boolean, visibility: VisibilityMode, virtualSpecifier: VirtualMode)
-final case class ClassConstructorFlags(visibility: VisibilityMode)
-final case class FunctionFlags(isPure: Boolean, visibility: VisibilityMode)
 
 final case class FunctionParameter(paramType: Option[WithSource[Expr]], subTypeOf: Option[WithSource[Expr]], name: String)
 final case class FunctionParameterList(listType: FunctionParameterListType, parameters: Vector[FunctionParameter])

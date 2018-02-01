@@ -43,7 +43,7 @@ object Parser {
 
     lazy val ifRulePart: TGrammar[Expr] =
       (
-        ruleExpressionStatement.observeSource ++ matchToken(KW_THEN) ++ ruleStatementList.observeSource ++ (
+        ruleExpression.observeSource ++ matchToken(KW_THEN) ++ ruleStatementList.observeSource ++ (
           matchToken(KW_END) -->[RuleFunc] { _ => (condition, body) => IfExpr(condition, body) } |
             (matchToken(KW_ELSE) ++ ruleStatementList.observeSource ++ matchToken(KW_END)) -->[RuleFunc] {
               case (_, elseBody, _) => (condition, body) => IfElseExpr(condition, body, elseBody.map(_.toVector))
@@ -245,9 +245,51 @@ object Parser {
 
   private val ruleExpressionL01: TGrammar[Expr] = ruleExpressionL02
 
-
   private lazy val ruleExpression: TGrammar[Expr] = ruleExpressionL01
-  private lazy val ruleExpressionStatement: TGrammar[Expr] = ruleExpression
+  private lazy val ruleExpressionStatement: TGrammar[Stmt] = ruleExpression --> identity
+
+  private lazy val ruleExpressionType: TGrammar[Expr] = ???
+
+  // Variable Declaration
+  private val ruleVariableMutSpec: TGrammar[Boolean] =
+    matchToken(KW_VAL) --> { _ => false} | matchToken(KW_VAR) --> { _ => true }
+
+  private val ruleVariableDeclaration: TGrammar[Stmt] =
+    ruleVariableMutSpec ++
+      ruleIdentifier ++
+      ((matchToken(OP_COLON) ++ ruleExpressionType.observeSource --> { case (_, expr) => expr })?) ++
+      matchToken(OP_EQUALS) ++
+      ruleExpression.observeSource --> { case (isMutable, id, typeAnnotation, _, value) =>
+      VariableDeclarationStmt(isMutable, typeAnnotation, id, value)
+    }
+
+  // Field
+  private val ruleFieldDeclaration: TGrammar[Stmt] =
+    matchToken(KW_FIELD) ++
+      (ruleVariableMutSpec?) ++
+      ruleIdentifier ++
+      matchToken(OP_COLON) ++
+      ruleExpressionType.observeSource --> { case (_, isMutable, id, _, typeAnnotation) =>
+      FieldDeclarationStmt(isMutable.getOrElse(false), id, typeAnnotation)
+    }
+
+  private val ruleFieldInitialization: TGrammar[Stmt] =
+    matchToken(KW_FIELD) ++
+      matchTokenFactory(Identifier) ++
+      matchToken(OP_EQUALS) ++
+      ruleExpression.observeSource --> { case (_, Identifier(id), _, value) =>
+      FieldInitializationStmt(id, value)
+    }
+
+  private val ruleInitializeStatement: TGrammar[Stmt] =
+    matchToken(KW_INITIALIZE) ++
+      ruleIdentifier ++
+      (
+        (matchToken(OP_EQUALS) ++ ruleExpression.observeSource --> { case (_, expr) => expr })?
+      ) --> { case (_, id, value) =>
+      InitializeStmt(id, value)
+    }
+
   private lazy val ruleStatementList: TGrammar[IList[WithSource[Stmt]]] = ???
 
   private lazy val rulePattern: TGrammar[Pattern] = ???

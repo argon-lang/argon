@@ -76,6 +76,7 @@ object Grammar {
 
     implicit def tuple2ConcatCombiner[A, B, C]: GrammarConcatCombiner[(A, B), C, (A, B, C)] = (t, c) => (t._1, t._2, c)
     implicit def tuple3ConcatCombiner[A, B, C, D]: GrammarConcatCombiner[(A, B, C), D, (A, B, C, D)] = (t, d) => (t._1, t._2, t._3, d)
+    implicit def tuple4ConcatCombiner[A, B, C, D, E]: GrammarConcatCombiner[(A, B, C, D), E, (A, B, C, D, E)] = (t, e) => (t._1, t._2, t._3, t._4, e)
 
   }
 
