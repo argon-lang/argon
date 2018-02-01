@@ -149,6 +149,59 @@ object Parser {
       matchPrefxOp(OP_SUB)
   }
 
+  private val ruleExpressionL16: TGrammar[Expr] =
+    ruleExpressionL17 | ruleExpressionL16.observeSource ++ ruleExpressionL18_SkipParenCalls.observeSource --> FunctionCallExpr.tupled
+
+  private def createLeftAssociativeOperatorRule(nextGrammar: => TGrammar[Expr], grammar: => TGrammar[Expr])(opGrammars: TGrammar[BinaryOperator]*): TGrammar[Expr] =
+    opGrammars.foldLeft(nextGrammar) { case (accum, opGrammar) =>
+      accum | nextGrammar.observeSource ++ opGrammar ++ grammar.observeSource --> { case ((left, op), right) => BinaryOperatorExpr(op, left, right) }
+    }
+
+  private def ruleBinaryOperator[TToken <: TokenWithCategory[_ <: TokenCategory] with BinaryOperatorToken : ClassTag](token: TToken): TGrammar[BinaryOperator] =
+    matchToken(token) --> { _ => token.binaryOperator }
+
+  private val ruleExpressionL15: TGrammar[Expr] =
+    createLeftAssociativeOperatorRule(ruleExpressionL16, ruleExpressionL15)(
+      ruleBinaryOperator(OP_MUL),
+      ruleBinaryOperator(OP_DIV),
+    )
+
+  private val ruleExpressionL14: TGrammar[Expr] =
+    createLeftAssociativeOperatorRule(ruleExpressionL15, ruleExpressionL14)(
+      ruleBinaryOperator(OP_ADD),
+      ruleBinaryOperator(OP_SUB),
+    )
+
+  private val ruleExpressionL13: TGrammar[Expr] =
+    createLeftAssociativeOperatorRule(ruleExpressionL14, ruleExpressionL13)(
+      ruleBinaryOperator(OP_SHIFTLEFT),
+      ruleBinaryOperator(OP_SHIFTRIGHT),
+    )
+
+  private val ruleExpressionL12: TGrammar[Expr] =
+    createLeftAssociativeOperatorRule(ruleExpressionL13, ruleExpressionL12)(
+      ruleBinaryOperator(OP_BITAND),
+    )
+
+  private val ruleExpressionL11: TGrammar[Expr] =
+    createLeftAssociativeOperatorRule(ruleExpressionL12, ruleExpressionL11)(
+      ruleBinaryOperator(OP_BITXOR),
+    )
+
+  private val ruleExpressionL10: TGrammar[Expr] =
+    createLeftAssociativeOperatorRule(ruleExpressionL11, ruleExpressionL10)(
+      ruleBinaryOperator(OP_BITOR),
+    )
+
+  private val ruleExpressionL09: TGrammar[Expr] =
+    ruleExpressionL10 |
+      matchToken(KW_TYPE) ++
+        ((matchToken(OP_SUBTYPE) ++ ruleExpressionL10.observeSource --> { case (_, expr) => expr })?) ++
+        ((matchToken(OP_SUPERTYPE) ++ ruleExpressionL10.observeSource --> { case (_, expr) => expr })?) ++
+        ((matchToken(OP_COLON) ++ ruleExpressionL10.observeSource --> { case (_, expr) => expr })?) --> {
+        case (((_, subtypeOf), supertypeOf), instanceType) =>
+          TypeExpr(instanceType, subtypeOf, supertypeOf)
+      }
 
   private lazy val rulePattern: TGrammar[Pattern] = ???
 
