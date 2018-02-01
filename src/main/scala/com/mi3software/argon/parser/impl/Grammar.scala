@@ -28,7 +28,17 @@ sealed trait Grammar[TToken, TokenCategory, T] {
 
 object Grammar {
 
-  object Operators {
+  trait CombinerBase {
+
+    trait GrammarConcatCombiner[A, B, T] {
+      def combine(a: A, b: B): T
+    }
+
+
+    implicit def valueConcatCombiner[A, B]: GrammarConcatCombiner[A, B, (A, B)] = (a, b) => (a, b)
+  }
+
+  object Operators extends CombinerBase {
 
     final implicit class GrammarOperatorsImpl[TToken, TokenCategory, T](grammar1: => Grammar[TToken, TokenCategory, T]) {
 
@@ -39,8 +49,8 @@ object Grammar {
       def | (grammar2: => Grammar[TToken, TokenCategory, T]): Grammar[TToken, TokenCategory, T] =
         new UnionGrammar[TToken, TokenCategory, T](grammar1, grammar2)
 
-      def ++ [U](grammar2: => Grammar[TToken, TokenCategory, U]): Grammar[TToken, TokenCategory, (T, U)] =
-        ConcatGrammar(grammar1, grammar2) { (a, b) => WithSource((a.value, b.value), SourceLocation.merge(a.location, b.location)) }
+      def ++ [U, V](grammar2: => Grammar[TToken, TokenCategory, U])(implicit combiner: GrammarConcatCombiner[T, U, V]): Grammar[TToken, TokenCategory, V] =
+        ConcatGrammar(grammar1, grammar2) { (a, b) => WithSource(combiner.combine(a.value, b.value), SourceLocation.merge(a.location, b.location)) }
 
       def discard: Grammar[TToken, TokenCategory, Unit] = --> { _ => () }
       def ? : Grammar[TToken, TokenCategory, Option[T]] =
@@ -63,6 +73,9 @@ object Grammar {
 
 
     }
+
+    implicit def tuple2ConcatCombiner[A, B, C]: GrammarConcatCombiner[(A, B), C, (A, B, C)] = (t, c) => (t._1, t._2, c)
+    implicit def tuple3ConcatCombiner[A, B, C, D]: GrammarConcatCombiner[(A, B, C), D, (A, B, C, D)] = (t, d) => (t._1, t._2, t._3, d)
 
   }
 

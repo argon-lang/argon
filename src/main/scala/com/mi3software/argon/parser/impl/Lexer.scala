@@ -34,7 +34,7 @@ object Lexer {
     val singleQuote = token(CharacterCategory.SingleQuote, "'")
 
     (singleQuote ++ ((singleQuote ++ singleQuote --> { _ => "'" } | anyChar)*) ++ singleQuote) --> {
-      case ((_, chs), _) =>
+      case (_, chs, _) =>
         Some(Token.StringToken(NonEmptyList(
           Token.StringToken.StringPart(chs.toVector.mkString)
         )))
@@ -73,7 +73,7 @@ object Lexer {
 
     val withPrefix =
       (token(CharacterCategory.NumberDigit, "0") ++ numBase ++ (digit+~)) --> {
-        case ((_, base), content) => calcNumber(base)(content.list)
+        case (_, base, content) => calcNumber(base)(content.list)
       }
 
     val noPrefix =
@@ -134,7 +134,7 @@ object Lexer {
 
 
     (startChar ++ (idChar*) ++ (idTerminator?)) --> {
-      case ((start, inner), term) =>
+      case (start, inner, term) =>
         Some(createToken(start + inner.toVector.mkString + term.toList.mkString))
     }
   }
