@@ -1,6 +1,6 @@
 package com.mi3software.argon.parser.impl
 
-import com.mi3software.argon.parser.{BinaryOperator, TokenCategory, UnaryOperator}
+import com.mi3software.argon.parser._
 
 import scalaz.NonEmptyList
 
@@ -19,6 +19,10 @@ object Token {
 
   sealed trait UnaryOperatorToken extends Token {
     def unaryOperator: UnaryOperator
+  }
+
+  sealed trait ModifierToken extends Token {
+    def modifier: Modifier
   }
 
   final case class StringToken(parts: NonEmptyList[StringToken.Part]) extends Token {
@@ -58,20 +62,38 @@ object Token {
   case object KW_TRAIT extends TokenWithCategory(TokenCategory.KW_TRAIT) with Token
   case object KW_STATIC extends TokenWithCategory(TokenCategory.KW_STATIC) with Token
   case object KW_DATA extends TokenWithCategory(TokenCategory.KW_DATA) with Token
-  case object KW_PUBLIC extends TokenWithCategory(TokenCategory.KW_PUBLIC) with Token
-  case object KW_PROTECTED extends TokenWithCategory(TokenCategory.KW_PROTECTED) with Token
-  case object KW_PRIVATE extends TokenWithCategory(TokenCategory.KW_PRIVATE) with Token
-  case object KW_INTERNAL extends TokenWithCategory(TokenCategory.KW_INTERNAL) with Token
+  case object KW_PUBLIC extends TokenWithCategory(TokenCategory.KW_PUBLIC) with ModifierToken {
+    override def modifier: Modifier = PublicModifier
+  }
+  case object KW_PROTECTED extends TokenWithCategory(TokenCategory.KW_PROTECTED) with ModifierToken {
+    override def modifier: Modifier = ProtectedModifier
+  }
+  case object KW_PRIVATE extends TokenWithCategory(TokenCategory.KW_PRIVATE) with ModifierToken {
+    override def modifier: Modifier = PrivateModifier
+  }
+  case object KW_INTERNAL extends TokenWithCategory(TokenCategory.KW_INTERNAL) with ModifierToken {
+    override def modifier: Modifier = InternalModifier
+  }
   case object KW_BASE extends TokenWithCategory(TokenCategory.KW_BASE) with Token
   case object KW_IF extends TokenWithCategory(TokenCategory.KW_IF) with Token
   case object KW_THEN extends TokenWithCategory(TokenCategory.KW_THEN) with Token
   case object KW_ELSE extends TokenWithCategory(TokenCategory.KW_ELSE) with Token
   case object KW_ELSIF extends TokenWithCategory(TokenCategory.KW_ELSIF) with Token
-  case object KW_OPEN extends TokenWithCategory(TokenCategory.KW_OPEN) with Token
-  case object KW_SEALED extends TokenWithCategory(TokenCategory.KW_SEALED) with Token
-  case object KW_VIRTUAL extends TokenWithCategory(TokenCategory.KW_VIRTUAL) with Token
-  case object KW_ABSTRACT extends TokenWithCategory(TokenCategory.KW_ABSTRACT) with Token
-  case object KW_OVERRIDE extends TokenWithCategory(TokenCategory.KW_OVERRIDE) with Token
+  case object KW_OPEN extends TokenWithCategory(TokenCategory.KW_OPEN) with ModifierToken {
+    override def modifier: Modifier = OpenModifier
+  }
+  case object KW_SEALED extends TokenWithCategory(TokenCategory.KW_SEALED) with ModifierToken {
+    override def modifier: Modifier = SealedModifier
+  }
+  case object KW_VIRTUAL extends TokenWithCategory(TokenCategory.KW_VIRTUAL) with ModifierToken {
+    override def modifier: Modifier = VirtualModifier
+  }
+  case object KW_ABSTRACT extends TokenWithCategory(TokenCategory.KW_ABSTRACT) with ModifierToken {
+    override def modifier: Modifier = AbstractModifier
+  }
+  case object KW_OVERRIDE extends TokenWithCategory(TokenCategory.KW_OVERRIDE) with ModifierToken {
+    override def modifier: Modifier = OverrideModifier
+  }
   case object KW_FINAL extends TokenWithCategory(TokenCategory.KW_FINAL) with Token
   case object KW_TYPE extends TokenWithCategory(TokenCategory.KW_TYPE) with Token
   case object KW_MATCH extends TokenWithCategory(TokenCategory.KW_MATCH) with Token

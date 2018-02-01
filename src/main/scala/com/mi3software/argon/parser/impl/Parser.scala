@@ -291,6 +291,24 @@ object Parser {
       InitializeStmt(id, value)
     }
 
+  private val ruleModifiers: TGrammar[Vector[Modifier]] = {
+    def ruleModifier[TToken <: TokenWithCategory[_ <: TokenCategory] with ModifierToken : ClassTag](token: TToken): TGrammar[Modifier] =
+      matchToken(token) --> const(token.modifier)
+
+    val anyModifier =
+      ruleModifier(KW_PUBLIC) |
+        ruleModifier(KW_PROTECTED) |
+        ruleModifier(KW_PRIVATE) |
+        ruleModifier(KW_INTERNAL) |
+        ruleModifier(KW_VIRTUAL) |
+        ruleModifier(KW_ABSTRACT) |
+        ruleModifier(KW_OVERRIDE) |
+        ruleModifier(KW_SEALED) |
+        ruleModifier(KW_OPEN)
+
+    (anyModifier*) --> { _.toVector }
+  }
+
   private lazy val ruleStatementList: TGrammar[IList[WithSource[Stmt]]] = ???
 
   private lazy val rulePattern: TGrammar[Pattern] = ???
