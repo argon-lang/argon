@@ -203,11 +203,53 @@ object Parser {
           TypeExpr(instanceType, subtypeOf, supertypeOf)
       }
 
-  private lazy val rulePattern: TGrammar[Pattern] = ???
+  private val ruleExpressionL08: TGrammar[Expr] =
+    createLeftAssociativeOperatorRule(ruleExpressionL09, ruleExpressionL08)(
+      ruleBinaryOperator(OP_LESSTHAN),
+      ruleBinaryOperator(OP_LESSTHANEQ),
+      ruleBinaryOperator(OP_GREATERTHAN),
+      ruleBinaryOperator(OP_GREATERTHANEQ),
+    )
+
+  private val ruleExpressionL07: TGrammar[Expr] =
+    createLeftAssociativeOperatorRule(ruleExpressionL08, ruleExpressionL07)(
+      ruleBinaryOperator(OP_EQUALS),
+      ruleBinaryOperator(OP_NOTEQUALS),
+    )
+
+  private val ruleExpressionL06: TGrammar[Expr] =
+    ruleExpressionL07 | ruleIdentifier ++ matchToken(OP_LAMBDA) ++ ruleExpressionL04.observeSource --> {
+      case ((id, _), body) => LambdaExpr(id, body)
+    }
+
+  private val ruleExpressionL05: TGrammar[Expr] =
+    ruleExpressionL06 | ruleExpressionL06.observeSource ++ matchToken(OP_ASSIGN) ++ ruleExpressionL06.observeSource --> {
+      case ((left, _), right) => BinaryOperatorExpr(BinaryOperator.Assign, left, right)
+    }
+
+  private lazy val ruleExpressionL04: TGrammar[Expr] =
+    ruleExpressionL05 | ruleExpressionL05.observeSource ++ matchToken(KW_AS) ++ ruleExpressionL05.observeSource --> {
+      case ((left, _), right) => AsExpr(left, right)
+    }
+
+  private val ruleExpressionL03: TGrammar[Expr] =
+    ruleExpressionL04 | ruleExpressionL04.observeSource ++ matchToken(OP_LAMBDA_TYPE) ++ ruleExpressionL03.observeSource --> {
+      case ((left, _), right) => LambdaTypeExpr(left, right)
+    }
+
+  private val ruleExpressionL02: TGrammar[Expr] =
+    ruleExpressionL03.observeSource ++ ((matchToken(OP_COMMA) ++ ruleExpressionL03.observeSource --> { case (_, expr) => expr })*) --> {
+      case (WithSource(expr, _), INil()) => expr
+      case (head, tail) => TupleExpr(head +: tail.toVector)
+    }
+
+  private val ruleExpressionL01: TGrammar[Expr] = ruleExpressionL02
 
 
-  private lazy val ruleExpression: TGrammar[Expr] = ???
-  private lazy val ruleExpressionStatement: TGrammar[Expr] = ???
+  private lazy val ruleExpression: TGrammar[Expr] = ruleExpressionL01
+  private lazy val ruleExpressionStatement: TGrammar[Expr] = ruleExpression
   private lazy val ruleStatementList: TGrammar[IList[WithSource[Stmt]]] = ???
+
+  private lazy val rulePattern: TGrammar[Pattern] = ???
 
 }
