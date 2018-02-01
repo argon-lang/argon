@@ -8,6 +8,7 @@ import scalaz._
 import Scalaz._
 
 import Grammar.Operators._
+import Function.const
 
 object Lexer {
 
@@ -24,11 +25,11 @@ object Lexer {
     val cr = token(CharacterCategory.CR, "\r")
     val lf = token(CharacterCategory.LF, "\n")
 
-    (lf.discard | (cr ++ lf).discard) --> { _ => Some(Token.NewLine) }
+    (lf.discard | (cr ++ lf).discard) --> const(Some(Token.NewLine))
   }
 
   private val matchWhitespace: Lex =
-    tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0))) --> { _ => None }
+    tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0))) --> const(None)
 
   private val matchSingleQuoteString: Lex = {
     val singleQuote = token(CharacterCategory.SingleQuote, "'")
@@ -142,7 +143,7 @@ object Lexer {
   private val matchOperator: Lex = {
 
     def op(grammar: TGrammar[_], t: Token): TGrammar[Option[Token]] =
-      grammar.discard --> { _ => Some(t) }
+      grammar --> const(Some(t))
     
     val and = token(CharacterCategory.And, "&")
     val or = token(CharacterCategory.Or, "|")

@@ -9,6 +9,7 @@ import scala.language.postfixOps
 import scalaz.{ICons, IList, INil, NonEmptyList}
 
 import Grammar.Operators._
+import Function.const
 
 object Parser {
 
@@ -32,7 +33,7 @@ object Parser {
 
 
   private val ruleIdentifier: TGrammar[Option[String]] =
-    tokenUnderscore --> { _ => None : Option[String] } |
+    tokenUnderscore --> const(None : Option[String]) |
       tokenIdentifier --> Some.apply
 
 
@@ -119,8 +120,8 @@ object Parser {
 
   private val ruleMemberAccess: TGrammar[WithSource[Expr] => Expr] =
     matchTokenFactory(Identifier) --> [WithSource[Expr] => Expr] { case Identifier(id) => baseExpr => DotExpr(baseExpr, id) } |
-      matchToken(KW_NEW) --> { _ => ClassConstructorExpr.apply } |
-      matchToken(KW_TYPE) --> { _ => TypeOfExpr.apply }
+      matchToken(KW_NEW) --> const(ClassConstructorExpr.apply) |
+      matchToken(KW_TYPE) --> const(TypeOfExpr.apply)
 
   private def ruleExpressionDot(nextRule: TGrammar[Expr], parenCallHandler: ParenCallHandlerBase): TGrammar[Expr] = {
 
@@ -158,7 +159,7 @@ object Parser {
     }
 
   private def ruleBinaryOperator[TToken <: TokenWithCategory[_ <: TokenCategory] with BinaryOperatorToken : ClassTag](token: TToken): TGrammar[BinaryOperator] =
-    matchToken(token) --> { _ => token.binaryOperator }
+    matchToken(token) --> const(token.binaryOperator)
 
   private val ruleExpressionL15: TGrammar[Expr] =
     createLeftAssociativeOperatorRule(ruleExpressionL16, ruleExpressionL15)(
@@ -252,7 +253,7 @@ object Parser {
 
   // Variable Declaration
   private val ruleVariableMutSpec: TGrammar[Boolean] =
-    matchToken(KW_VAL) --> { _ => false} | matchToken(KW_VAR) --> { _ => true }
+    matchToken(KW_VAL) --> const(false) | matchToken(KW_VAR) --> const(true)
 
   private val ruleVariableDeclaration: TGrammar[Stmt] =
     ruleVariableMutSpec ++
