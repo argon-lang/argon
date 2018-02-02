@@ -5,68 +5,80 @@ import com.mi3software.argon.util.WithSource
 import scala.collection.immutable.Seq
 
 sealed trait Stmt
-final case class TraitDeclarationStmt(
-                                       baseType: WithSource[Expr],
-                                       name: Option[String],
-                                       parameters: Vector[FunctionParameterList],
-                                       body: Seq[WithSource[Stmt]],
-                                       instanceBody: Vector[WithSource[Stmt]],
-                                       modifiers: Vector[WithSource[Modifier]]
-                                     ) extends Stmt
-final case class ConstructorDeclarationStmt(
-                                             name: Option[String],
-                                             parameters: Vector[FunctionParameterList],
-                                             returnType: WithSource[Expr],
-                                             body: Vector[WithSource[Stmt]],
-                                             modifiers: Vector[WithSource[Modifier]]
-                                           ) extends Stmt
-final case class ClassDeclarationStmt(
-                                       baseType: WithSource[Expr],
-                                       name: Option[String],
-                                       parameters: Vector[FunctionParameterList],
-                                       body: Seq[WithSource[Stmt]],
-                                       instanceBody: Vector[WithSource[Stmt]],
-                                       modifiers: Vector[WithSource[Modifier]]
-                                     ) extends Stmt
-final case class FunctionDeclarationStmt(
-                                          name: Option[String],
-                                          parameters: Vector[FunctionParameterList],
-                                          returnType: WithSource[Expr],
-                                          body: WithSource[Vector[WithSource[Stmt]]],
-                                          modifiers: Vector[WithSource[Modifier]]
-                                        ) extends Stmt
-final case class MethodDeclarationStmt(
-                                        instanceName: Option[String],
-                                        name: Option[String],
-                                        parameters: Vector[FunctionParameterList],
-                                        returnType: WithSource[Expr],
-                                        body: WithSource[Vector[WithSource[Stmt]]],
-                                        modifiers: Vector[WithSource[Modifier]]
-                                      ) extends Stmt
-final case class ClassConstructorDeclarationStmt(
-                                                  parameters: Vector[FunctionParameterList],
-                                                  body: WithSource[Seq[WithSource[Stmt]]],
-                                                  modifiers: Vector[WithSource[Modifier]]
-                                                ) extends Stmt
-final case class VariableDeclarationStmt(
-                                          isMutable: Boolean,
-                                          varType: Option[WithSource[Expr]],
-                                          name: Option[String],
-                                          value: WithSource[Expr]
-                                        ) extends Stmt
-final case class InitializeStmt(
-                                 name: Option[String],
-                                 value: Option[WithSource[Expr]]
-                               ) extends Stmt
-final case class FieldDeclarationStmt(
-                                       isMutable: Boolean,
-                                       name: Option[String],
-                                       fieldType: WithSource[Expr]
-                                     ) extends Stmt
-final case class FieldInitializationStmt(
-                                       name: String,
-                                       value: WithSource[Expr]
-                                     ) extends Stmt
+final case class TraitDeclarationStmt
+(
+  baseType: WithSource[Expr],
+  name: Option[String],
+  parameters: Vector[FunctionParameterList],
+  body: Seq[WithSource[Stmt]],
+  instanceBody: Vector[WithSource[Stmt]],
+  modifiers: Vector[WithSource[Modifier]]
+) extends Stmt
+final case class DataConstructorDeclarationStmt
+(
+  name: Option[String],
+  parameters: Vector[FunctionParameterList],
+  returnType: WithSource[Expr],
+  body: Vector[WithSource[Stmt]],
+  modifiers: Vector[WithSource[Modifier]]
+) extends Stmt
+final case class ClassDeclarationStmt
+(
+  baseType: WithSource[Expr],
+  name: Option[String],
+  parameters: Vector[FunctionParameterList],
+  body: Seq[WithSource[Stmt]],
+  instanceBody: Vector[WithSource[Stmt]],
+  modifiers: Vector[WithSource[Modifier]]
+) extends Stmt
+final case class FunctionDeclarationStmt
+(
+  name: Option[String],
+  parameters: Vector[FunctionParameterList],
+  returnType: WithSource[Expr],
+  body: WithSource[Vector[WithSource[Stmt]]],
+  modifiers: Vector[WithSource[Modifier]],
+  purity: Boolean,
+) extends Stmt
+final case class MethodDeclarationStmt
+(
+  instanceName: Option[String],
+  name: Option[String],
+  parameters: Vector[FunctionParameterList],
+  returnType: WithSource[Expr],
+  body: WithSource[Vector[WithSource[Stmt]]],
+  modifiers: Vector[WithSource[Modifier]],
+  purity: Boolean,
+) extends Stmt
+final case class ClassConstructorDeclarationStmt
+(
+  parameters: Vector[FunctionParameterList],
+  body: WithSource[Seq[WithSource[Stmt]]],
+  modifiers: Vector[WithSource[Modifier]]
+) extends Stmt
+final case class VariableDeclarationStmt
+(
+  isMutable: Boolean,
+  varType: Option[WithSource[Expr]],
+  name: Option[String],
+  value: WithSource[Expr]
+) extends Stmt
+final case class InitializeStmt
+(
+  name: Option[String],
+  value: Option[WithSource[Expr]]
+) extends Stmt
+final case class FieldDeclarationStmt
+(
+  isMutable: Boolean,
+  name: Option[String],
+  fieldType: WithSource[Expr]
+) extends Stmt
+final case class FieldInitializationStmt
+(
+  name: String,
+  value: WithSource[Expr]
+) extends Stmt
 
 sealed trait Expr extends Stmt
 final case class AsExpr(value: WithSource[Expr], valueType: WithSource[Expr]) extends Expr
