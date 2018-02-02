@@ -102,8 +102,8 @@ final case class UnaryOperatorExpr(op: UnaryOperator, inner: WithSource[Expr]) e
 
 
 sealed trait Pattern
-final case class DeconstructPattern(constructor: WithSource[Expr], args: Seq[WithSource[Pattern]]) extends Pattern
-final case class TuplePattern(values: Seq[WithSource[Pattern]]) extends Pattern
+final case class DeconstructPattern(constructor: WithSource[Expr], args: Vector[WithSource[Pattern]]) extends Pattern
+final case class TuplePattern(values: Vector[WithSource[Pattern]]) extends Pattern
 case object DiscardPattern extends Pattern
 final case class BindingPattern(name: String) extends Pattern
 final case class TypeTestPattern(name: Option[String], patternType: WithSource[Expr]) extends Pattern

@@ -6,7 +6,7 @@ import com.mi3software.argon.util.WithSource
 
 import scala.reflect.ClassTag
 import scala.language.postfixOps
-import scalaz.{ICons, IList, INil, NonEmptyList}
+import scalaz.{ICons, INil, NonEmptyList}
 
 import Grammar.Operators._
 import Function.const
@@ -63,6 +63,49 @@ object Parser {
 
     matchToken(KW_IF) ++ ifRulePart --> { case (_, expr) => expr }
   }
+
+  private val ruleParenPattern: TGrammar[Pattern] =
+    matchToken(OP_OPENPAREN) ++ rulePattern ++ matchToken(OP_CLOSEPAREN) --> {
+      case (_, pattern, _) => pattern
+    }
+
+  private val ruleVariablePattern: TGrammar[Pattern] =
+    matchToken(KW_VAL) ++ ruleIdentifier ++ ((matchToken(OP_COLON) ++ ruleExpression.observeSource)?) --> {
+      case (_, idOpt, Some((_, varType))) => TypeTestPattern(idOpt, varType)
+      case (_, Some(id), None) => BindingPattern(id)
+      case (_, None, None) => DiscardPattern
+    }
+
+  private val ruleDiscardPattern: TGrammar[Pattern] =
+    matchToken(KW_UNDERSCORE) --> const(DiscardPattern)
+
+  private val rulePatternConstructorExpr: TGrammar[Expr] =
+    {
+      lazy val idPath: TGrammar[Expr] =
+        tokenIdentifier --> { id => IdentifierExpr(id) : Expr } |
+          idPath.observeSource ++ matchToken(OP_DOT) ++ tokenIdentifier --> {
+            case (baseExpr, _, id) => DotExpr(baseExpr, id)
+          }
+
+      idPath
+    } |
+    matchToken(OP_OPENCURLY) ++ ruleExpression ++ matchToken(OP_CLOSECURLY) --> { case (_, expr, _) => expr }
+
+  private val rulePatternSeq: TGrammar[Vector[WithSource[Pattern]]] =
+    ((
+      rulePatternConstructorExpr.observeSource --> { expr => DeconstructPattern(expr, Vector()) : Pattern } |
+        ruleDiscardPattern |
+        ruleParenPattern
+    ).observeSource*) --> { _.toVector }
+
+  private val ruleDeconstructPattern: TGrammar[Pattern] =
+    rulePatternConstructorExpr.observeSource ++ rulePatternSeq --> (DeconstructPattern.apply _).tupled
+
+  private lazy val rulePattern: TGrammar[Pattern] =
+    ruleParenPattern |
+      ruleVariablePattern |
+      ruleDeconstructPattern |
+      ruleDiscardPattern
 
   private val ruleExpressionMatch: TGrammar[Expr] = {
     val matchCaseRule: TGrammar[MatchExprCase] =
@@ -471,6 +514,7 @@ object Parser {
       ruleClassConstructorDefinition |
       ruleTraitDefinition |
       ruleDataConstructorDefinition |
+      ruleClassDefinition |
       ruleExpressionStatement
 
 
@@ -478,7 +522,5 @@ object Parser {
     (ruleStatementSeparator*) ++ (((ruleStatement.observeSource ++ (ruleStatementSeparator*)) --> { case (stmt, _) => stmt })*) --> {
       case (_, stmts) => stmts.toVector
     }
-
-  private lazy val rulePattern: TGrammar[Pattern] = ???
 
 }
