@@ -18,7 +18,6 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
   final def endOfInput(pos: FilePosition): TErrorList \/ NonEmptyList[WithSource[T]] = endOfInputImpl(pos, Set())
   protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]]
 
-
   def shortCircuit: Boolean = false
   def hasResult: Boolean = false
 
@@ -44,6 +43,9 @@ object Grammar {
       def --> [U](f: T => U): Grammar[TToken, TSyntaxError, U] = -+>(WithSource.lift(f))
       def -+> [U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
         new MapGrammar[TToken, TSyntaxError, T, U](grammar1, f)
+
+      def flatMap[U](f: WithSource[T] => Grammar[TToken, TSyntaxError, U]): Grammar[TToken, TSyntaxError, U] =
+        new FlatMapGrammar(grammar1)(f)
 
       def |
       (grammar2: => Grammar[TToken, TSyntaxError, T])
@@ -80,6 +82,19 @@ object Grammar {
       def observeSource: Grammar[TToken, TSyntaxError, WithSource[T]] = -+> {
         case value @ WithSource(_, location) => WithSource(value, location)
       }
+
+
+      def streamInto[U]
+      (grammar2: Grammar[T, TSyntaxError, U])
+      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      : Grammar[TToken, TSyntaxError, U] =
+        EmptyStrGrammar(NonEmptyList(WithSource((), SourceLocation.empty))).flatMapPos[U] { (_, pos) =>
+          grammar2.endOfInput(pos) match {
+            case -\/(error) => RejectGrammar(error)
+            case \/-(result) => EmptyStrGrammar(result)
+          }
+        } |
+          flatMap { item => streamInto(grammar2.derive(item)) }
 
 
 
@@ -179,6 +194,8 @@ object Grammar {
 
     override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T] = this
 
+    def changeType[U]: RejectGrammar[TToken, TSyntaxError, U] = RejectGrammar(grammarErrors)
+
 
     override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]] = -\/(grammarErrors)
 
@@ -190,10 +207,13 @@ object Grammar {
   (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
     extends Grammar[TToken, TSyntaxError, T] {
 
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T] =
+    override def derive(token: WithSource[TToken]): RejectGrammar[TToken, TSyntaxError, T] =
       RejectGrammar(NonEmptyList(errorFactory.createError(GrammarError.ExpectedEndOfFile(token))))
 
     override def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]] = \/-(result)
+
+    def flatMapPos[U](f: (WithSource[T], FilePosition) => Grammar[TToken, TSyntaxError, U]): Grammar[TToken, TSyntaxError, U] =
+      new FlatMapPosGrammar(this)(f)
 
     override def hasResult: Boolean = true
   }
@@ -335,6 +355,40 @@ object Grammar {
 
     override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[U]] =
       inner.endOfInputImpl(pos, seen).map(_.map(f))
+
+  }
+
+  private final class FlatMapGrammar[TToken, TSyntaxError, T, U]
+  (inner: Grammar[TToken, TSyntaxError, T])
+  (f: WithSource[T] => Grammar[TToken, TSyntaxError, U])
+  extends Grammar[TToken, TSyntaxError, U] {
+
+    override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, U] =
+      new FlatMapGrammar(inner.derive(token))(f)
+
+    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[U]] =
+      inner.endOfInput(pos).flatMap { aItems =>
+        aItems
+          .traverse[TErrorList \/ ?, NonEmptyList[WithSource[U]]] { a => f(a).endOfInput(pos) }
+          .map { _.flatMap(identity) }
+      }
+
+  }
+
+  private final class FlatMapPosGrammar[TToken, TSyntaxError, T, U]
+  (inner: EmptyStrGrammar[TToken, TSyntaxError, T])
+  (f: (WithSource[T], FilePosition) => Grammar[TToken, TSyntaxError, U])
+    extends Grammar[TToken, TSyntaxError, U] {
+
+    override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, U] =
+      inner.derive(token).changeType[U]
+
+    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[U]] =
+      inner.endOfInput(pos).flatMap { aItems =>
+        aItems
+          .traverse[TErrorList \/ ?, NonEmptyList[WithSource[U]]] { a => f(a, pos).endOfInput(pos) }
+          .map { _.flatMap(identity) }
+      }
 
   }
 
