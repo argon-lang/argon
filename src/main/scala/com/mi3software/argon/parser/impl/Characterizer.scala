@@ -1,11 +1,10 @@
 package com.mi3software.argon.parser.impl
 
 import com.mi3software.argon.parser.SyntaxError
-import com.mi3software.argon.util.{EitherTFlattener, FilePosition, SourceLocation, WithSource}
+import com.mi3software.argon.util._
 
 import scalaz._
 import Scalaz._
-import com.thoughtworks.each.Monadic._
 
 object Characterizer {
 
@@ -13,35 +12,48 @@ object Characterizer {
   private final case class InvalidSurrogate(ch: Char) extends InvalidUnicode
   private final case class UnexpectedCombingChar(cp: Int) extends InvalidUnicode
 
-  private def toCodePoints[M[_] : Monad](chars: StreamT[M, Char]): StreamT[EitherT[M, InvalidUnicode, ?], Int] =
-    StreamT[EitherT[M, InvalidUnicode, ?], Int](
-      monadic[EitherT[M, InvalidUnicode, ?]] {
+  private sealed trait CodePointState[+T]
+  private final case class HighSurrogateSeen[+T](high: Char, innerState: T) extends CodePointState[T]
+  private final case class WaitingForChar[+T](innerState: T) extends CodePointState[T]
 
-        type StepType = StreamT.Step[Int, StreamT[EitherT[M, InvalidUnicode, ?], Int]]
+  private def toCodePoints[TTerminator, TResult](sequenceHandler: SequenceHandler[InvalidUnicode \/ Int, TTerminator, TResult]): SequenceHandler[Char, TTerminator, TResult] =
+    new SequenceHandler[Char, TTerminator, TResult] {
+      override type TState = CodePointState[sequenceHandler.TState]
 
-        EitherT(chars.uncons.map(\/.right[InvalidUnicode, Option[(Char, StreamT[M, Char])]])).each match {
-          case Some((ch, tail)) if Character.isHighSurrogate(ch) =>
-            EitherT(tail.uncons.map(\/.right[InvalidUnicode, Option[(Char, StreamT[M, Char])]])).each match {
-              case Some((low, tail2)) if Character.isLowSurrogate(low) =>
-                StreamT.Yield(Character.toCodePoint(ch, low), toCodePoints(tail2))
+      override def initialState: TState = WaitingForChar(sequenceHandler.initialState)
 
-              case Some((low, _)) =>
-                EitherT[M, InvalidUnicode, StepType](Monad[M].point(-\/(InvalidSurrogate(low)))).each
+      override def next(item: Char, state: TState): TState =
+        state match {
+          case HighSurrogateSeen(high, innerState) =>
+            if(Character.isLowSurrogate(item))
+              WaitingForChar(sequenceHandler.next(\/-(Character.toCodePoint(high, item)), innerState))
+            else
+              WaitingForChar(
+                sequenceHandler.next(
+                  -\/(InvalidSurrogate(item)),
+                  sequenceHandler.next(-\/(InvalidSurrogate(high)), innerState)
+                )
+              )
 
-              case None =>
-                EitherT[M, InvalidUnicode, StepType](Monad[M].point(-\/(InvalidSurrogate(ch)))).each
-            }
-          case Some((ch, _)) if Character.isSurrogate(ch) =>
-            EitherT[M, InvalidUnicode, StepType](Monad[M].point(-\/(InvalidSurrogate(ch)))).each
-
-          case Some((ch, tail))=>
-            StreamT.Yield(ch.toInt, toCodePoints(tail))
-
-          case None =>
-            StreamT.Done
+          case WaitingForChar(innerState) =>
+            if(Character.isHighSurrogate(item))
+              HighSurrogateSeen(item, innerState)
+            else if(Character.isLowSurrogate(item))
+              WaitingForChar(sequenceHandler.next(-\/(InvalidSurrogate(item)), innerState))
+            else
+              WaitingForChar(sequenceHandler.next(\/-(item.toInt), innerState))
         }
-      }
-    )
+
+      override def end(terminator: TTerminator, state: TState): TResult =
+        state match {
+          case HighSurrogateSeen(high, innerState) => sequenceHandler.end(terminator, sequenceHandler.next(-\/(InvalidSurrogate(high)), innerState))
+          case WaitingForChar(innerState) => sequenceHandler.end(terminator, innerState)
+        }
+    }
+
+  private sealed trait GraphemeState[+T]
+  private final case class WaitingForBaseChar[+T](innerState: T) extends GraphemeState[T]
+  private final case class WaitingForCombing[+T](str: String, innerState: T) extends GraphemeState[T]
 
   private def isBaseCharacterType(cp: Int): Boolean =
     Character.getType(cp) match {
@@ -52,36 +64,38 @@ object Characterizer {
         true
     }
 
-  private def appendCombingChars[M[_] : Monad](s: String, cps: StreamT[M, Int]): StreamT[EitherT[M, InvalidUnicode, ?], String] =
-    StreamT[EitherT[M, InvalidUnicode, ?], String](
-      monadic[EitherT[M, InvalidUnicode, ?]] {
-        EitherT(cps.uncons.map(\/.right[InvalidUnicode, Option[(Int, StreamT[M, Int])]])).each match {
-          case Some((cp, tail)) if !isBaseCharacterType(cp) =>
-            StreamT.Skip(appendCombingChars(s + new String(Character.toChars(cp)), tail))
+  private def getGraphemes[TTerminator, TResult](sequenceHandler: SequenceHandler[InvalidUnicode \/ String, TTerminator, TResult]): SequenceHandler[InvalidUnicode \/ Int, TTerminator, TResult] =
+    new SequenceHandler[InvalidUnicode \/ Int, TTerminator, TResult] {
+      override type TState = GraphemeState[sequenceHandler.TState]
 
-          case _ =>
-            StreamT.Yield(s, getGraphemes(cps))
+      override def initialState: TState = WaitingForBaseChar(sequenceHandler.initialState)
+
+      override def next(item: InvalidUnicode \/ Int, state: TState): TState =
+        (item, state) match {
+          case (-\/(error), WaitingForBaseChar(innerState)) =>
+            WaitingForBaseChar(sequenceHandler.next(-\/(error), innerState))
+          case (-\/(error), WaitingForCombing(_, innerState)) =>
+            WaitingForBaseChar(sequenceHandler.next(-\/(error), innerState))
+
+          case (\/-(cp), WaitingForBaseChar(innerState)) =>
+            if(isBaseCharacterType(cp))
+              WaitingForCombing(new String(Character.toChars(cp)), innerState)
+            else
+              WaitingForBaseChar(sequenceHandler.next(-\/(UnexpectedCombingChar(cp)), innerState))
+
+          case (\/-(cp), WaitingForCombing(str, innerState)) =>
+            if(isBaseCharacterType(cp))
+              WaitingForCombing(new String(Character.toChars(cp)), sequenceHandler.next(\/-(str), innerState))
+            else
+              WaitingForCombing(str + new String(Character.toChars(cp)), innerState)
         }
-      }
-    )
 
-  private def getGraphemes[M[_] : Monad](cps: StreamT[M, Int]): StreamT[EitherT[M, InvalidUnicode, ?], String] =
-    StreamT[EitherT[M, InvalidUnicode, ?], String](
-      monadic[EitherT[M, InvalidUnicode, ?]] {
-        type StepType = StreamT.Step[String, StreamT[EitherT[M, InvalidUnicode, ?], String]]
-
-        EitherT(cps.uncons.map(\/.right[InvalidUnicode, Option[(Int, StreamT[M, Int])]])).each match {
-          case Some((cp, tail)) if isBaseCharacterType(cp) =>
-            StreamT.Skip(appendCombingChars(new String(Character.toChars(cp)), tail))
-
-          case Some((cp, tail)) =>
-            EitherT[M, InvalidUnicode, StepType](Monad[M].point(-\/(UnexpectedCombingChar(cp)))).each
-
-          case None =>
-            StreamT.Done
+      override def end(terminator: TTerminator, state: TState): TResult =
+        state match {
+          case WaitingForBaseChar(innerState) => sequenceHandler.end(terminator, innerState)
+          case WaitingForCombing(str, innerState) => sequenceHandler.end(terminator, sequenceHandler.next(\/-(str), innerState))
         }
-      }
-    )
+    }
 
   private def nextPosition(ch: String, pos: FilePosition): FilePosition =
     if(ch === "\n")
@@ -92,44 +106,31 @@ object Characterizer {
   private def posToLoc(pos: FilePosition): SourceLocation =
     SourceLocation(pos, FilePosition(pos.line, pos.position + 1))
 
-  private def withLocation[M[_] : Monad](chs: StreamT[EitherT[M, InvalidUnicode, ?], String]): StreamT[EitherT[M, SyntaxError, ?], WithSource[String]] = {
-    def impl(pos: FilePosition, chs: StreamT[EitherT[M, InvalidUnicode, ?], String]): StreamT[EitherT[M, SyntaxError, ?], WithSource[String]] =
-      StreamT[EitherT[M, SyntaxError, ?], WithSource[String]](
-        EitherT[M, SyntaxError, StreamT.Step[WithSource[String], StreamT[EitherT[M, SyntaxError, ?], WithSource[String]]]](
-          monadic[M] {
-            chs.uncons.run.each match {
-              case -\/(InvalidSurrogate(ch)) =>
-                -\/(SyntaxError.InvalidSurrogatePairs(ch, posToLoc(pos)))
+  private def withLocation[TResult](sequenceHandler: SequenceHandler[WithSource[String], FilePosition, TResult]): SequenceHandler[InvalidUnicode \/ String, Any, SyntaxError \/ TResult] =
+    new SequenceHandler[InvalidUnicode \/ String, Any, SyntaxError \/ TResult] {
+      override type TState = SyntaxError \/ (FilePosition, sequenceHandler.TState)
 
-              case -\/(UnexpectedCombingChar(cp)) =>
-                -\/(SyntaxError.UnexpectedCombingCharacter(cp, posToLoc(pos)))
+      override def initialState: TState = \/-((FilePosition(1, 1), sequenceHandler.initialState))
 
-              case \/-(Some((head, tail))) =>
-                \/-(StreamT.Yield(
-                  WithSource(head, posToLoc(pos)),
-                  impl(nextPosition(head, pos), tail)
-                ))
+      override def next(item: InvalidUnicode \/ String, state: TState): TState =
+        state.flatMap { case (pos, innerState) =>
+          val loc = posToLoc(pos)
 
-              case \/-(None) =>
-                \/-(StreamT.Done)
-
+          item
+            .leftMap {
+              case InvalidSurrogate(ch) => SyntaxError.InvalidSurrogatePairs(ch, loc)
+              case UnexpectedCombingChar(cp) => SyntaxError.UnexpectedCombingCharacter(cp, loc)
             }
-          }
-        )
-      )
+            .map { str =>
+              (nextPosition(str, pos), sequenceHandler.next(WithSource(str, loc), innerState))
+            }
+        }
 
-    impl(FilePosition(1, 1), chs)
-  }
+      override def end(terminator: Any, state: TState): SyntaxError \/ TResult =
+        state.map((sequenceHandler.end _).tupled)
+    }
 
-  def characterize[M[_] : Monad](chars: StreamT[M, Char]): StreamT[EitherT[M, SyntaxError, ?], WithSource[String]] = {
-
-    implicit val level1UnicodeInst = EitherT.eitherTMonad[M, InvalidUnicode]
-    implicit val level2UnicodeInst = EitherT.eitherTMonad[EitherT[M, InvalidUnicode, ?], InvalidUnicode]
-
-    val cps = toCodePoints(chars)
-    val chs = getGraphemes[EitherT[M, InvalidUnicode, ?]](cps).trans[EitherT[M, InvalidUnicode, ?]](new EitherTFlattener[M, InvalidUnicode])
-
-    withLocation(chs)
-  }
+  def characterize[TResult](sequenceHandler: SequenceHandler[WithSource[String], FilePosition, SyntaxError \/ TResult]): SequenceHandler[Char, Any, SyntaxError \/ TResult] =
+    toCodePoints(getGraphemes(withLocation(sequenceHandler))).map { _.flatMap(identity) }
 
 }
