@@ -1,20 +1,28 @@
 package com.mi3software.argon.parser.impl
 
-import com.mi3software.argon.parser.CharacterCategory
-import com.mi3software.argon.util.WithSource
+import com.mi3software.argon.parser.{CharacterCategory, GrammarError, SyntaxError, Token}
+import com.mi3software.argon.util.{FilePosition, WithSource}
 
 import scala.language.postfixOps
 import scalaz._
 import Scalaz._
-
 import Grammar.Operators._
+
 import Function.const
 
 object Lexer {
 
-  type TGrammar[T] = Grammar[String, CharacterCategory, T]
+  type TGrammar[T] = Grammar[String, SyntaxError, T]
 
   private type Lex = TGrammar[Option[Token]]
+
+  private implicit val errorFactory = new Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] {
+    override def createError(error: GrammarError[String, CharacterCategory]): SyntaxError =
+      SyntaxError.LexerError(error)
+
+    override def errorEndLocationOrder: Order[SyntaxError] =
+      (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
+  }
 
   private def token(category: CharacterCategory, s: String): TGrammar[String] = Grammar.token(category, t => t === s)
   private def tokenF(category: CharacterCategory, f: String => Boolean): TGrammar[String] = Grammar.token(category, f)

@@ -1,6 +1,4 @@
-package com.mi3software.argon.parser.impl
-
-import com.mi3software.argon.parser._
+package com.mi3software.argon.parser
 
 import scalaz.NonEmptyList
 

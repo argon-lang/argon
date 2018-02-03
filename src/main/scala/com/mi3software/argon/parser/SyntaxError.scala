@@ -1,6 +1,5 @@
 package com.mi3software.argon.parser
 
-import com.mi3software.argon.parser.impl.{Grammar, Token}
 import com.mi3software.argon.util.{FileSpec, SourceLocation, WithSource}
 
 import scala.collection.immutable._
@@ -14,7 +13,11 @@ object SyntaxError {
   final case class InvalidSurrogatePairs(ch: Char, override val location: SourceLocation) extends SyntaxError
   final case class UnexpectedCombingCharacter(cp: Int, override val location: SourceLocation) extends SyntaxError
 
-  final case class LexerError(error: Grammar.GrammarError[String, CharacterCategory]) extends SyntaxError {
+  final case class LexerError(error: GrammarError[String, CharacterCategory]) extends SyntaxError {
+    override def location: SourceLocation = error.location
+  }
+
+  final case class ParserError(error: GrammarError[Token, TokenCategory]) extends SyntaxError {
     override def location: SourceLocation = error.location
   }
 

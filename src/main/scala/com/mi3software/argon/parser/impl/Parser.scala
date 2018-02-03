@@ -1,19 +1,27 @@
 package com.mi3software.argon.parser.impl
 
-import com.mi3software.argon.parser.impl.Token._
+import com.mi3software.argon.parser.Token._
 import com.mi3software.argon.parser._
-import com.mi3software.argon.util.{NamespacePath, WithSource}
+import com.mi3software.argon.util.{FilePosition, NamespacePath, WithSource}
 
 import scala.reflect.ClassTag
 import scala.language.postfixOps
-import scalaz.{ICons, INil, NonEmptyList}
+import scalaz.{ICons, INil, NonEmptyList, Order}
 import Grammar.Operators._
 
 import Function.const
 
 object Parser {
 
-  type TGrammar[T] = Grammar[Token, TokenCategory, T]
+  type TGrammar[T] = Grammar[Token, SyntaxError, T]
+
+  private implicit val errorFactory = new Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] {
+    override def createError(error: GrammarError[Token, TokenCategory]): SyntaxError =
+      SyntaxError.ParserError(error)
+
+    override def errorEndLocationOrder: Order[SyntaxError] =
+      (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
+  }
 
   def second[T](pair: (_, T)): T = pair._2
 

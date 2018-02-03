@@ -1,6 +1,6 @@
 package com.mi3software.argon.parser
 
-import com.mi3software.argon.parser.impl.{Characterizer, Grammar, Lexer, Token}
+import com.mi3software.argon.parser.impl.{Characterizer, Grammar, Lexer}
 import com.mi3software.argon.util.{EitherTFlattener, EitherTLeftMapper, WithSource}
 
 import scalaz._

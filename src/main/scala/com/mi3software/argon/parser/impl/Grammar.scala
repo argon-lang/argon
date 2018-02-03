@@ -1,6 +1,6 @@
 package com.mi3software.argon.parser.impl
 
-import com.mi3software.argon.parser.impl.Grammar.GrammarError
+import com.mi3software.argon.parser.GrammarError
 import com.mi3software.argon.util.{FilePosition, Lazy, SourceLocation, WithSource}
 
 import scala.collection.immutable._
@@ -8,16 +8,15 @@ import scala.language.postfixOps
 import scalaz._
 import Scalaz._
 
-sealed trait Grammar[TToken, TokenCategory, T] {
+sealed trait Grammar[TToken, TSyntaxError, T] {
 
   type TokenStream[M[_]] = StreamT[M, WithSource[TToken]]
-  type TGrammarError = GrammarError[TToken, TokenCategory]
-  type TErrorList = NonEmptyList[TGrammarError]
+  type TErrorList = NonEmptyList[TSyntaxError]
 
-  def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T]
+  def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T]
 
   final def endOfInput(pos: FilePosition): TErrorList \/ NonEmptyList[WithSource[T]] = endOfInputImpl(pos, Set())
-  protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TokenCategory, _]]): TErrorList \/ NonEmptyList[WithSource[T]]
+  protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]]
 
 
   def shortCircuit: Boolean = false
@@ -40,25 +39,37 @@ object Grammar {
 
   object Operators extends CombinerBase {
 
-    final implicit class GrammarOperatorsImpl[TToken, TokenCategory, T](grammar1: => Grammar[TToken, TokenCategory, T]) {
+    final implicit class GrammarOperatorsImpl[TToken, TSyntaxError, T](grammar1: => Grammar[TToken, TSyntaxError, T]) {
 
-      def --> [U](f: T => U): Grammar[TToken, TokenCategory, U] = -+>(WithSource.lift(f))
-      def -+> [U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TokenCategory, U] =
-        new MapGrammar[TToken, TokenCategory, T, U](grammar1, f)
+      def --> [U](f: T => U): Grammar[TToken, TSyntaxError, U] = -+>(WithSource.lift(f))
+      def -+> [U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
+        new MapGrammar[TToken, TSyntaxError, T, U](grammar1, f)
 
-      def | (grammar2: => Grammar[TToken, TokenCategory, T]): Grammar[TToken, TokenCategory, T] =
-        new UnionGrammar[TToken, TokenCategory, T](grammar1, grammar2)
+      def |
+      (grammar2: => Grammar[TToken, TSyntaxError, T])
+      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      : Grammar[TToken, TSyntaxError, T] =
+        new UnionGrammar[TToken, TSyntaxError, T](grammar1, grammar2)
 
-      def ++ [U, V](grammar2: => Grammar[TToken, TokenCategory, U])(implicit combiner: GrammarConcatCombiner[T, U, V]): Grammar[TToken, TokenCategory, V] =
+      def ++ [U, V]
+      (grammar2: => Grammar[TToken, TSyntaxError, U])
+      (implicit combiner: GrammarConcatCombiner[T, U, V], errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      : Grammar[TToken, TSyntaxError, V] =
         ConcatGrammar(grammar1, grammar2) { (a, b) => WithSource(combiner.combine(a.value, b.value), SourceLocation.merge(a.location, b.location)) }
 
-      def discard: Grammar[TToken, TokenCategory, Unit] = --> { _ => () }
-      def ? : Grammar[TToken, TokenCategory, Option[T]] =
+      def discard: Grammar[TToken, TSyntaxError, Unit] = --> { _ => () }
+      def ? (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError]): Grammar[TToken, TSyntaxError, Option[T]] =
         --> [Option[T]](Some.apply) | EmptyStrGrammar(NonEmptyList(WithSource(None, SourceLocation.empty)))
 
-      def +~ : Grammar[TToken, TokenCategory, NonEmptyList[T]] = this ++ (this*) --> { case (head, tail) => NonEmptyList.nel(head, tail) }
-      def * : Grammar[TToken, TokenCategory, IList[T]] = {
-        lazy val rep: Grammar[TToken, TokenCategory, IList[T]] = (++(rep)?) --> {
+      def +~
+      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      : Grammar[TToken, TSyntaxError, NonEmptyList[T]] =
+        this ++ (this*) --> { case (head, tail) => NonEmptyList.nel(head, tail) }
+
+      def *
+      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      : Grammar[TToken, TSyntaxError, IList[T]] = {
+        lazy val rep: Grammar[TToken, TSyntaxError, IList[T]] = (++(rep)?) --> {
           case Some((head, tail)) => head +: tail
           case None => IList()
         }
@@ -66,7 +77,7 @@ object Grammar {
         rep
       }
 
-      def observeSource: Grammar[TToken, TokenCategory, WithSource[T]] = -+> {
+      def observeSource: Grammar[TToken, TSyntaxError, WithSource[T]] = -+> {
         case value @ WithSource(_, location) => WithSource(value, location)
       }
 
@@ -114,99 +125,110 @@ object Grammar {
 
   import Operators._
 
-  def token[TToken, TokenCategory](category: TokenCategory, tokenMatches: TToken => Boolean): Grammar[TToken, TokenCategory, TToken] =
+  def token[TToken, TSyntaxError, TTokenCategory]
+  (category: TTokenCategory, tokenMatches: TToken => Boolean)
+  (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
+  : Grammar[TToken, TSyntaxError, TToken] =
     matcher(category, t => Some(t).filter(tokenMatches))
 
-  def tokenSource[TToken, TokenCategory](category: TokenCategory, tokenMatches: WithSource[TToken] => Boolean): Grammar[TToken, TokenCategory, TToken] =
+  def tokenSource[TToken, TSyntaxError, TTokenCategory]
+  (category: TTokenCategory, tokenMatches: WithSource[TToken] => Boolean)
+  (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
+  : Grammar[TToken, TSyntaxError, TToken] =
     matcherSource(category, t => Some(t).filter(tokenMatches))
 
-  def matcher[TToken, TokenCategory, Result](category: TokenCategory, tokenMatcher: TToken => Option[Result]): Grammar[TToken, TokenCategory, Result] =
+  def matcher[TToken, TSyntaxError, TTokenCategory, Result]
+  (category: TTokenCategory, tokenMatcher: TToken => Option[Result])
+  (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
+  : Grammar[TToken, TSyntaxError, Result] =
     matcherSource(category, WithSource.liftF(tokenMatcher))
 
-  def matcherSource[TToken, TokenCategory, Result](category: TokenCategory, tokenMatcher: TokenMatcher[TToken, Result]): Grammar[TToken, TokenCategory, Result] =
+  def matcherSource[TToken, TSyntaxError, TTokenCategory, Result]
+  (category: TTokenCategory, tokenMatcher: TokenMatcher[TToken, Result])
+  (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
+  : Grammar[TToken, TSyntaxError, Result] =
     TokenGrammar(category, tokenMatcher)
 
-  def partialMatcher[TToken, TokenCategory, Result](category: TokenCategory)(f: PartialFunction[TToken, Result]): Grammar[TToken, TokenCategory, Result] =
+  def partialMatcher[TToken, TSyntaxError, TTokenCategory, Result]
+  (category: TTokenCategory)
+  (f: PartialFunction[TToken, Result])
+  (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
+  : Grammar[TToken, TSyntaxError, Result] =
     matcher(category, f.lift)
 
-
-  sealed trait GrammarError[TToken, TokenCategory] {
-    def location: SourceLocation
-  }
-
-  final case class ExpectedEndOfFile[TToken, TokenCategory](token: WithSource[TToken]) extends GrammarError[TToken, TokenCategory] {
-    override def location: SourceLocation = token.location
-  }
-
-  final case class UnexpectedToken[TToken, TokenCategory](expectedCategory: TokenCategory, token: WithSource[TToken]) extends GrammarError[TToken, TokenCategory] {
-    override def location: SourceLocation = token.location
-  }
-
-  final case class UnexpectedEndOfFile[TToken, TokenCategory](expectedCategory: TokenCategory, position: FilePosition) extends GrammarError[TToken, TokenCategory] {
-    override def location: SourceLocation = SourceLocation(position, FilePosition(position.line, position.position + 1))
-  }
-
-  final case class InfiniteRecursion[TToken, TokenCategory](position: FilePosition) extends GrammarError[TToken, TokenCategory] {
-    override def location: SourceLocation = SourceLocation(position, FilePosition(position.line, position.position + 1))
+  trait ErrorFactory[-TToken, -TTokenCategory, TSyntaxError] {
+    def createError(error: GrammarError[TToken, TTokenCategory]): TSyntaxError
+    def errorEndLocationOrder: Order[TSyntaxError]
   }
 
   type TokenMatcher[TToken, T] = WithSource[TToken] => Option[WithSource[T]]
 
 
-  private abstract class CachedGrammar[TToken, TokenCategory, T] extends Grammar[TToken, TokenCategory, T] {
+  private abstract class CachedGrammar[TToken, TSyntaxError, T] extends Grammar[TToken, TSyntaxError, T] {
 
-    final override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] =
+    final override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T] =
       deriveMemo(token)
 
     private val deriveMemo = Memo.mutableHashMapMemo(deriveImpl)
 
-    protected def deriveImpl(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T]
+    protected def deriveImpl(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T]
 
   }
 
-  private final case class RejectGrammar[TToken, TokenCategory, T](grammarErrors: NonEmptyList[GrammarError[TToken, TokenCategory]]) extends Grammar[TToken, TokenCategory, T] {
+  private final case class RejectGrammar[TToken, TSyntaxError, T](grammarErrors: NonEmptyList[TSyntaxError]) extends Grammar[TToken, TSyntaxError, T] {
 
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] = this
+    override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T] = this
 
 
-    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TokenCategory, _]]): TErrorList \/ NonEmptyList[WithSource[T]] = -\/(grammarErrors)
+    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]] = -\/(grammarErrors)
 
     override def shortCircuit: Boolean = true
   }
 
-  private final case class EmptyStrGrammar[TToken, TokenCategory, T](result: NonEmptyList[WithSource[T]]) extends Grammar[TToken, TokenCategory, T] {
+  private final case class EmptyStrGrammar[TToken, TSyntaxError, T]
+  (result: NonEmptyList[WithSource[T]])
+  (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+    extends Grammar[TToken, TSyntaxError, T] {
 
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] =
-      RejectGrammar(NonEmptyList(ExpectedEndOfFile(token)))
+    override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T] =
+      RejectGrammar(NonEmptyList(errorFactory.createError(GrammarError.ExpectedEndOfFile(token))))
 
-    override def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TokenCategory, _]]): TErrorList \/ NonEmptyList[WithSource[T]] = \/-(result)
+    override def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]] = \/-(result)
 
     override def hasResult: Boolean = true
   }
 
-  private final case class TokenGrammar[TToken, TokenCategory, T](category: TokenCategory, tokenMatcher: TokenMatcher[TToken, T]) extends CachedGrammar[TToken, TokenCategory, T] {
+  private final case class TokenGrammar[TToken, TSyntaxError, TTokenCategory, T]
+  (
+    category: TTokenCategory,
+    tokenMatcher: TokenMatcher[TToken, T]
+  )(implicit
+    errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError]
+  ) extends CachedGrammar[TToken, TSyntaxError, T] {
 
-    override def deriveImpl(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] =
+    override def deriveImpl(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T] =
       tokenMatcher(token) match {
         case Some(res) => EmptyStrGrammar(NonEmptyList(res))
-        case None => RejectGrammar(NonEmptyList(UnexpectedToken(category, token)))
+        case None => RejectGrammar(NonEmptyList(errorFactory.createError(GrammarError.UnexpectedToken(category, token))))
       }
 
-    override def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TokenCategory, _]]): TErrorList \/ NonEmptyList[WithSource[T]] =
-      -\/(NonEmptyList(UnexpectedEndOfFile(category, pos)))
+    override def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]] =
+      -\/(NonEmptyList(errorFactory.createError(GrammarError.UnexpectedEndOfFile(category, pos))))
 
   }
 
-  private final class ConcatGrammar[TToken, TokenCategory, A, B, T]
+  private final class ConcatGrammar[TToken, TSyntaxError, A, B, T]
   (
-    grammarA: Grammar[TToken, TokenCategory, A],
-    grammarBUncached: => Grammar[TToken, TokenCategory, B],
+    grammarA: Grammar[TToken, TSyntaxError, A],
+    grammarBUncached: => Grammar[TToken, TSyntaxError, B],
     combine: (WithSource[A], WithSource[B]) => WithSource[T]
-  ) extends CachedGrammar[TToken, TokenCategory, T] {
+  )(implicit
+    errorFactory: ErrorFactory[TToken, _, TSyntaxError]
+  ) extends CachedGrammar[TToken, TSyntaxError, T] {
 
     private lazy val grammarB = grammarBUncached
 
-    override protected def deriveImpl(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] =
+    override protected def deriveImpl(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T] =
       grammarA.endOfInput(token.location.start) match {
         case -\/(_) => ConcatGrammar(grammarA.derive(token), grammarB)(combine)
         case \/-(aValues) =>
@@ -221,9 +243,9 @@ object Grammar {
 
 
 
-    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TokenCategory, _]]): TErrorList \/ NonEmptyList[WithSource[T]] =
+    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]] =
       if(seen contains this)
-        -\/(NonEmptyList(InfiniteRecursion(pos)))
+        -\/(NonEmptyList(errorFactory.createError(GrammarError.InfiniteRecursion(pos))))
       else
         for {
           aItems <- grammarA.endOfInputImpl(pos, seen + this)
@@ -236,25 +258,30 @@ object Grammar {
   }
 
   private object ConcatGrammar {
-    def apply[TToken, TokenCategory, A, B, T]
+    def apply[TToken, TSyntaxError, A, B, T]
     (
-      grammarA: Grammar[TToken, TokenCategory, A],
-      grammarB: => Grammar[TToken, TokenCategory, B]
+      grammarA: Grammar[TToken, TSyntaxError, A],
+      grammarB: => Grammar[TToken, TSyntaxError, B]
     )(
       combine: (WithSource[A], WithSource[B]) => WithSource[T]
-    ): ConcatGrammar[TToken, TokenCategory, A, B, T] =
+    )(implicit
+      errorFactory: ErrorFactory[TToken, _, TSyntaxError]
+    ): ConcatGrammar[TToken, TSyntaxError, A, B, T] =
       new ConcatGrammar(grammarA, grammarB, combine)
 
   }
 
-  private final class UnionGrammar[TToken, TokenCategory, T](grammarA: => Grammar[TToken, TokenCategory, T], grammarB: => Grammar[TToken, TokenCategory, T]) extends Grammar[TToken, TokenCategory, T] {
+  private final class UnionGrammar[TToken, TSyntaxError, T]
+  (grammarA: => Grammar[TToken, TSyntaxError, T], grammarB: => Grammar[TToken, TSyntaxError, T])
+  (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+    extends Grammar[TToken, TSyntaxError, T] {
 
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TokenCategory, T] =
+    override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T] =
       UnionGrammar(grammarA.derive(token), grammarB.derive(token))
 
-    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TokenCategory, _]]): TErrorList \/ NonEmptyList[WithSource[T]] =
+    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]] =
       if(seen contains this)
-        -\/(NonEmptyList(InfiniteRecursion(pos)))
+        -\/(NonEmptyList(errorFactory.createError(GrammarError.InfiniteRecursion(pos))))
       else {
         val seen2 = seen + this
 
@@ -264,18 +291,15 @@ object Grammar {
           case (-\/(_), result @ \/-(_)) => result
           case (-\/(errorA), -\/(errorB)) =>
 
-            def findLastErrorPos(errorList: TErrorList): FilePosition =
-              errorList.maximumBy1(_.location.end).location.end
-
-            val cmp = findLastErrorPos(errorA).compareTo(findLastErrorPos(errorB))
+            def findLastErrorPos(errorList: TErrorList): TSyntaxError =
+              errorList.maximum1(errorFactory.errorEndLocationOrder)
 
             -\/(
-              if(cmp > 0)
-                errorA
-              else if(cmp < 0)
-                errorB
-              else
-                errorA.append(errorB)
+              errorFactory.errorEndLocationOrder(findLastErrorPos(errorA), findLastErrorPos(errorB)) match {
+                case Ordering.GT => errorA
+                case Ordering.LT => errorB
+                case Ordering.EQ => errorA.append(errorB)
+              }
             )
         }
       }
@@ -284,10 +308,16 @@ object Grammar {
 
   object UnionGrammar {
 
-    def apply[TToken, TokenCategory, T](grammarA: => Grammar[TToken, TokenCategory, T], grammarB: => Grammar[TToken, TokenCategory, T]): Grammar[TToken, TokenCategory, T] =
-      new UnionGrammar[TToken, TokenCategory, T](grammarA, grammarB)
+    def apply[TToken, TSyntaxError, T]
+    (grammarA: => Grammar[TToken, TSyntaxError, T], grammarB: => Grammar[TToken, TSyntaxError, T])
+    (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+    : Grammar[TToken, TSyntaxError, T] =
+      new UnionGrammar[TToken, TSyntaxError, T](grammarA, grammarB)
 
-    def fromList[TToken, TokenCategory, T](grammars: NonEmptyList[Lazy[Grammar[TToken, TokenCategory, T]]]): Grammar[TToken, TokenCategory, T] =
+    def fromList[TToken, TSyntaxError, T]
+    (grammars: NonEmptyList[Lazy[Grammar[TToken, TSyntaxError, T]]])
+    (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+    : Grammar[TToken, TSyntaxError, T] =
       grammars.tail match {
         case ICons(head2, tail) =>
           tail.foldLeft(apply(grammars.head.value, head2.value)) { (a, b) => apply(a, b.value) }
@@ -298,12 +328,12 @@ object Grammar {
 
   }
 
-  private final class MapGrammar[TToken, TokenCategory, T, U](inner: => Grammar[TToken, TokenCategory, T], f: WithSource[T] => WithSource[U]) extends CachedGrammar[TToken, TokenCategory, U] {
+  private final class MapGrammar[TToken, TSyntaxError, T, U](inner: => Grammar[TToken, TSyntaxError, T], f: WithSource[T] => WithSource[U]) extends CachedGrammar[TToken, TSyntaxError, U] {
 
-    override protected def deriveImpl(token: WithSource[TToken]): Grammar[TToken, TokenCategory, U] =
+    override protected def deriveImpl(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, U] =
       inner.derive(token) -+> f
 
-    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TokenCategory, _]]): TErrorList \/ NonEmptyList[WithSource[U]] =
+    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[U]] =
       inner.endOfInputImpl(pos, seen).map(_.map(f))
 
   }
