@@ -2,18 +2,20 @@ package com.mi3software.argon.parser.impl
 
 import com.mi3software.argon.parser.impl.Token._
 import com.mi3software.argon.parser._
-import com.mi3software.argon.util.WithSource
+import com.mi3software.argon.util.{NamespacePath, WithSource}
 
 import scala.reflect.ClassTag
 import scala.language.postfixOps
 import scalaz.{ICons, INil, NonEmptyList}
-
 import Grammar.Operators._
+
 import Function.const
 
 object Parser {
 
   type TGrammar[T] = Grammar[Token, TokenCategory, T]
+
+  def second[T](pair: (_, T)): T = pair._2
 
   private def partialMatcher[T](category: TokenCategory)(f: PartialFunction[Token, T]): TGrammar[T] =
     Grammar.partialMatcher(category)(f)
@@ -70,7 +72,7 @@ object Parser {
         )
       ) --> { case (condition, _, body, ruleFunc) => ruleFunc(condition, body) }
 
-    matchToken(KW_IF) ++ ifRulePart --> { case (_, expr) => expr }
+    matchToken(KW_IF) ++ ifRulePart --> second
   }
 
   private val ruleParenPattern: TGrammar[Pattern] =
@@ -136,12 +138,12 @@ object Parser {
         case StringToken(NonEmptyList(StringToken.StringPart(str), ICons(_, _))) => ???
       } |
       matchTokenFactory(IntToken) --> { case IntToken(i) => IntValueExpr(i) } |
-      matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> { _ => TupleExpr(Vector()) } |
+      matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(TupleExpr(Vector())) |
       matchToken(OP_OPENPAREN) ++ ruleExpression ++ matchToken(OP_CLOSEPAREN) --> {
         case (_, expr, _) => expr
       } |
-      matchToken(KW_TRUE) --> { _ => BoolValueExpr(true) } |
-      matchToken(KW_FALSE) --> { _ => BoolValueExpr(false) } |
+      matchToken(KW_TRUE) --> const(BoolValueExpr(true)) |
+      matchToken(KW_FALSE) --> const(BoolValueExpr(false)) |
       ruleIfExpr |
       ruleExpressionMatch
 
@@ -248,9 +250,9 @@ object Parser {
       .chain(nextRule =>
         nextRule |
           matchToken(KW_TYPE) ++
-            ((matchToken(OP_SUBTYPE) ++ nextRule.observeSource --> { case (_, expr) => expr })?) ++
-            ((matchToken(OP_SUPERTYPE) ++ nextRule.observeSource --> { case (_, expr) => expr })?) ++
-            ((matchToken(OP_COLON) ++ nextRule.observeSource --> { case (_, expr) => expr })?) --> {
+            ((matchToken(OP_SUBTYPE) ++ nextRule.observeSource --> second)?) ++
+            ((matchToken(OP_SUPERTYPE) ++ nextRule.observeSource --> second)?) ++
+            ((matchToken(OP_COLON) ++ nextRule.observeSource --> second)?) --> {
             case (_, subtypeOf, supertypeOf, instanceType) =>
               TypeExpr(instanceType, subtypeOf, supertypeOf)
           }
@@ -296,7 +298,7 @@ object Parser {
     )
 
   private def ruleExpressionTuple(nextRule: TGrammar[Expr]): TGrammar[Expr] =
-    nextRule.observeSource ++ ((matchToken(OP_COMMA) ++ nextRule.observeSource --> { case (_, expr) => expr })*) --> {
+    nextRule.observeSource ++ ((matchToken(OP_COMMA) ++ nextRule.observeSource --> second)*) --> {
       case (WithSource(expr, _), INil()) => expr
       case (head, tail) => TupleExpr(head +: tail.toVector)
     }
@@ -321,7 +323,7 @@ object Parser {
   private val ruleVariableDeclaration: TGrammar[Stmt] =
     ruleVariableMutSpec ++
       ruleIdentifier ++
-      ((matchToken(OP_COLON) ++ ruleExpressionType.observeSource --> { case (_, expr) => expr })?) ++
+      ((matchToken(OP_COLON) ++ ruleExpressionType.observeSource --> second)?) ++
       matchToken(OP_EQUALS) ++
       ruleExpression.observeSource --> { case (isMutable, id, typeAnnotation, _, value) =>
       VariableDeclarationStmt(isMutable, typeAnnotation, id, value)
@@ -349,7 +351,7 @@ object Parser {
     matchToken(KW_INITIALIZE) ++
       ruleIdentifier ++
       (
-        (matchToken(OP_EQUALS) ++ ruleExpression.observeSource --> { case (_, expr) => expr })?
+        (matchToken(OP_EQUALS) ++ ruleExpression.observeSource --> second)?
       ) --> { case (_, id, value) =>
       InitializeStmt(id, value)
     }
@@ -536,5 +538,23 @@ object Parser {
     (ruleStatementSeparator*) ++ (((ruleStatement.observeSource ++ (ruleStatementSeparator*)) --> { case (stmt, _) => stmt })*) --> {
       case (_, stmts) => stmts.toVector
     }
+
+  private val ruleNamespacePath: TGrammar[NamespacePath] =
+    tokenIdentifier ++ ((matchToken(OP_DOT) ++ tokenIdentifier --> second)*) --> {
+      case (head, tail) => NamespacePath(head +: tail.toVector)
+    }
+
+  private val ruleNamespaceDeclaration: TGrammar[TopLevelStatement] =
+    matchToken(KW_NAMESPACE) ++ ruleNamespacePath --> { case (_, ns) => TopLevelStatement.Namespace(ns) }
+
+  private val ruleImportNamespace: TGrammar[TopLevelStatement] =
+    matchToken(KW_IMPORT) ++ ruleNamespacePath ++ matchToken(OP_DOT) ++ matchToken(KW_UNDERSCORE) --> {
+      case (_, ns, _, _) => TopLevelStatement.Import(ns)
+    }
+
+  private val ruleTopLevelStatement: TGrammar[TopLevelStatement] =
+    ruleNamespaceDeclaration |
+      ruleImportNamespace |
+      ruleStatement.observeSource --> TopLevelStatement.Statement
 
 }
