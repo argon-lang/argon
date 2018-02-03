@@ -1,8 +1,5 @@
 package com.mi3software.argon.util
 
-import scalaz._
-import Scalaz._
-
 trait SequenceHandler[@specialized(Int, Char) -TItem, -TTerminator, @specialized(Int, Char) +TResult] {
   type TState
 
