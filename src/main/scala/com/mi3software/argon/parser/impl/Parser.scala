@@ -565,4 +565,9 @@ final class Parser {
       ruleImportNamespace |
       ruleStatement.observeSource --> TopLevelStatement.Statement
 
+  val ruleTopLevelStatementList: TGrammar[Vector[WithSource[TopLevelStatement]]] =
+    (ruleStatementSeparator*) ++ ((ruleTopLevelStatement.observeSource ++ (ruleStatementSeparator*) --> { case (stmt, _) => stmt })*) --> {
+      case (_, stmts) => stmts.toVector
+    }
+
 }

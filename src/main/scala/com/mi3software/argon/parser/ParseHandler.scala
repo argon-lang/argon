@@ -1,34 +1,36 @@
 package com.mi3software.argon.parser
 
-import com.mi3software.argon.parser.impl.{Characterizer, Grammar, Lexer, Parser}
-import com.mi3software.argon.util.{EitherTFlattener, EitherTLeftMapper, WithSource}
+import com.mi3software.argon.parser.impl._
+import com.mi3software.argon.util._
 
 import scalaz._
+import Grammar.Operators._
 
 final class ParseHandler {
-  /*
-  val lexer = new Lexer()
-  val parser = new Parser()
 
-  private def singleToListMapper[M[_] : Monad, T] =
-    new EitherTLeftMapper[M, T, NonEmptyList[T]](item => NonEmptyList(item))
+  private val lexer = new Lexer()
+  private val parser = new Parser()
 
-  private def lexerErrorMapper[M[_] : Monad]: (EitherT[M, NonEmptyList[GrammarError[String, CharacterCategory]], ?] ~> EitherT[M, NonEmptyList[SyntaxError], ?]) =
-    new EitherTLeftMapper[M, NonEmptyList[GrammarError[String, CharacterCategory]], NonEmptyList[SyntaxError]](items => items.map(SyntaxError.LexerError.apply))
+  import lexer.errorFactory
 
-  def parse[M[_] : Monad](chars: StreamT[M, Char]): StreamT[EitherT[M, NonEmptyList[SyntaxError], ?], WithSource[IList[WithSource[Token]]]] = {
+  def parse(fileSpec: FileSpec): SequenceHandler[Char, Any, NonEmptyList[SyntaxError] \/ Vector[WithSource[SourceAST]]] = {
 
-    implicit val eitherEitherMonadInstance1 = EitherT.eitherTMonad[EitherT[M, NonEmptyList[SyntaxError], ?], NonEmptyList[GrammarError[String, CharacterCategory]]]
-    implicit val eitherEitherMonadInstance2 = EitherT.eitherTMonad[EitherT[M, NonEmptyList[SyntaxError], ?], NonEmptyList[SyntaxError]]
+    val grammar = lexer.token.streamInto(parser.ruleTopLevelStatementList) {
+      case Some(token) => token
+    }
 
-    val chs = Characterizer.characterize(chars)
-      .trans[EitherT[M, NonEmptyList[SyntaxError], ?]](singleToListMapper)
+    Characterizer.characterize(grammar.sequenceHandler).map {
+      case -\/(error) => -\/(NonEmptyList(error))
+      case \/-(-\/(errors)) => -\/(errors)
+      case \/-(\/-(NonEmptyList(WithSource(result, _), INil()))) =>
+        \/-(TopLevelStatement.toSourceAST(fileSpec)(result))
 
-    lexer.lexer.stream[EitherT[M, NonEmptyList[SyntaxError], ?]](chs)
-      .trans[EitherT[EitherT[M, NonEmptyList[SyntaxError], ?], NonEmptyList[SyntaxError], ?]](lexerErrorMapper[EitherT[M, NonEmptyList[SyntaxError], ?]])
-      .trans[EitherT[M, NonEmptyList[SyntaxError], ?]](new EitherTFlattener[M, NonEmptyList[SyntaxError]])
+      case \/-(\/-(NonEmptyList(WithSource(_, location), ICons(_, _)))) =>
+        -\/(NonEmptyList(SyntaxError.AmbiguousParse(location)))
+
+    }
   }
-*/
+
 
 
 

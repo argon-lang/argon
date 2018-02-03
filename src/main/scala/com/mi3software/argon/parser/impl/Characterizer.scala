@@ -130,7 +130,7 @@ object Characterizer {
         state.map((sequenceHandler.end _).tupled)
     }
 
-  def characterize[TResult](sequenceHandler: SequenceHandler[WithSource[String], FilePosition, SyntaxError \/ TResult]): SequenceHandler[Char, Any, SyntaxError \/ TResult] =
-    toCodePoints(getGraphemes(withLocation(sequenceHandler))).map { _.flatMap(identity) }
+  def characterize[TResult](sequenceHandler: SequenceHandler[WithSource[String], FilePosition, TResult]): SequenceHandler[Char, Any, SyntaxError \/ TResult] =
+    toCodePoints(getGraphemes(withLocation(sequenceHandler)))
 
 }

@@ -1,7 +1,7 @@
 package com.mi3software.argon.parser.impl
 
 import com.mi3software.argon.parser.GrammarError
-import com.mi3software.argon.util.{FilePosition, Lazy, SourceLocation, WithSource}
+import com.mi3software.argon.util._
 
 import scala.collection.immutable._
 import scala.language.postfixOps
@@ -21,6 +21,20 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
   def shortCircuit: Boolean = false
   def hasResult: Boolean = false
 
+
+  final def sequenceHandler: SequenceHandler[WithSource[TToken], FilePosition, TErrorList \/ NonEmptyList[WithSource[T]]] =
+    new SequenceHandler[WithSource[TToken], FilePosition, TErrorList \/ NonEmptyList[WithSource[T]]] {
+
+      override type TState = Grammar[TToken, TSyntaxError, T]
+
+      override def initialState: TState = Grammar.this
+
+      override def next(item: WithSource[TToken], state: TState): TState =
+        state.derive(item)
+
+      override def end(terminator: FilePosition, state: Grammar[TToken, TSyntaxError, T]): TErrorList \/ NonEmptyList[WithSource[T]] =
+        state.endOfInput(terminator)
+    }
 
 }
 
@@ -84,17 +98,23 @@ object Grammar {
       }
 
 
-      def streamInto[U]
-      (grammar2: Grammar[T, TSyntaxError, U])
+      def streamInto[U, V]
+      (grammar2: Grammar[U, TSyntaxError, V])
+      (f: PartialFunction[T, U])
       (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
-      : Grammar[TToken, TSyntaxError, U] =
-        EmptyStrGrammar(NonEmptyList(WithSource((), SourceLocation.empty))).flatMapPos[U] { (_, pos) =>
+      : Grammar[TToken, TSyntaxError, V] =
+        EmptyStrGrammar(NonEmptyList(WithSource((), SourceLocation.empty))).flatMapPos[V] { (_, pos) =>
           grammar2.endOfInput(pos) match {
             case -\/(error) => RejectGrammar(error)
             case \/-(result) => EmptyStrGrammar(result)
           }
         } |
-          flatMap { item => streamInto(grammar2.derive(item)) }
+          flatMap { case WithSource(item, location) =>
+            f.lift(item) match {
+              case Some(u) => streamInto(grammar2.derive(WithSource(u, location)))(f)
+              case None => streamInto(grammar2)(f)
+            }
+          }
 
 
 

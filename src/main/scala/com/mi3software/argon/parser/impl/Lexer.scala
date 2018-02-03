@@ -16,13 +16,14 @@ final class Lexer {
 
   private type Lex = TGrammar[Option[Token]]
 
-  private implicit val errorFactory = new Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] {
-    override def createError(error: GrammarError[String, CharacterCategory]): SyntaxError =
-      SyntaxError.LexerError(error)
+  implicit val errorFactory: Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] =
+    new Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] {
+      override def createError(error: GrammarError[String, CharacterCategory]): SyntaxError =
+        SyntaxError.LexerError(error)
 
-    override def errorEndLocationOrder: Order[SyntaxError] =
-      (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
-  }
+      override def errorEndLocationOrder: Order[SyntaxError] =
+        (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
+    }
 
   private def token(category: CharacterCategory, s: String): TGrammar[String] = Grammar.token(category, t => t === s)
   private def tokenF(category: CharacterCategory, f: String => Boolean): TGrammar[String] = Grammar.token(category, f)
@@ -37,7 +38,7 @@ final class Lexer {
   }
 
   private val matchWhitespace: Lex =
-    tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0))) --> const(None)
+    tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0)) && s != "\r" && s != "\n") --> const(None)
 
   private val matchSingleQuoteString: Lex = {
     val singleQuote = token(CharacterCategory.SingleQuote, "'")
@@ -218,16 +219,15 @@ final class Lexer {
       op(colon, Token.OP_COLON)
   }
 
+  val token: TGrammar[Option[Token]] =
+    matchNewLine |
+      matchWhitespace |
+      matchSingleQuoteString |
+      matchInteger |
+      matchIdentifier |
+      matchOperator
+
   val lexer: TGrammar[IList[WithSource[Token]]] =
-    (
-      (
-        matchNewLine |
-          matchWhitespace |
-          matchSingleQuoteString |
-          matchInteger |
-          matchIdentifier |
-          matchOperator
-      ).observeSource*
-    ) --> { _.flatMap(WithSource.liftF(tokenOpt => tokenOpt.toIList)) }
+    (token.observeSource*) --> { _.flatMap(WithSource.liftF(tokenOpt => tokenOpt.toIList)) }
 
 }

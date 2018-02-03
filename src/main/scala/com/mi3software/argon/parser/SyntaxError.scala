@@ -21,6 +21,8 @@ object SyntaxError {
     override def location: SourceLocation = error.location
   }
 
+  final case class AmbiguousParse(override val location: SourceLocation) extends SyntaxError
+
   final case class CouldNotMatchInputTokens(tokens: WithSource[Token], override val location: SourceLocation) extends SyntaxError
   final case class UnterminatedString(override val location: SourceLocation) extends SyntaxError
   final case class InvalidIntegerDigit(ch: WithSource[String], base: BigInt) extends SyntaxError {
