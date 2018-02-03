@@ -11,7 +11,7 @@ import Grammar.Operators._
 
 import Function.const
 
-object Parser {
+final class Parser {
 
   type TGrammar[T] = Grammar[Token, SyntaxError, T]
 

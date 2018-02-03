@@ -10,7 +10,7 @@ import Grammar.Operators._
 
 import Function.const
 
-object Lexer {
+final class Lexer {
 
   type TGrammar[T] = Grammar[String, SyntaxError, T]
 
@@ -26,7 +26,7 @@ object Lexer {
 
   private def token(category: CharacterCategory, s: String): TGrammar[String] = Grammar.token(category, t => t === s)
   private def tokenF(category: CharacterCategory, f: String => Boolean): TGrammar[String] = Grammar.token(category, f)
-  private val anyChar: TGrammar[String] = Grammar.token(CharacterCategory.Any, Function.const(true))
+  private val anyChar: TGrammar[String] = Grammar.token(CharacterCategory.Any, const(true))
   private def partialMatcher[T](category: CharacterCategory)(f: PartialFunction[String, T]): TGrammar[T] = Grammar.matcher(category, f.lift)
 
   private val matchNewLine: Lex = {
