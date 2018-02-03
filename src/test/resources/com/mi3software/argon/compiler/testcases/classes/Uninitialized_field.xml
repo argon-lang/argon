@@ -1,0 +1,31 @@
+<ArgonTest>
+
+    <Name>Uninitialized field</Name>
+
+
+    <InputSource name="test.ar"><![CDATA[
+            
+        import Ar._
+        
+        class MyClass <: Any
+
+            field name: String
+
+            public new()
+            end
+
+            public proc self.say_hello(): () do
+                puts 'Hello'
+                puts name
+            end
+        end
+        
+        proc main(): () do
+            MyClass.new().say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedError>FieldNotInitializedError</ExpectedError>
+
+</ArgonTest>

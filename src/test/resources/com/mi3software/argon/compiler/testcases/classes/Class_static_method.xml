@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Class static method</Name>
+
+
+    <InputSource name="test.ar"><![CDATA[
+            
+        import Ar._
+        
+        class MyClass <: Any
+        static
+            public proc self.say_hello(): () do
+                puts 'Hello World'
+            end
+        end
+        
+        proc main(): () do
+            MyClass.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

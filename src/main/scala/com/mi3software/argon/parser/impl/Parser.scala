@@ -52,16 +52,6 @@ final class Parser {
   private val ruleStatementSeparator: TGrammar[Unit] =
     matchToken(NewLine).discard | matchToken(Semicolon).discard
 
-  private trait RecRuleFunc[T] {
-    def apply(self: => T): T
-  }
-
-  private def recRule[T](f: RecRuleFunc[T]): T = {
-    lazy val value: T = f(value)
-    value
-  }
-
-
   // Expressions
   private val ruleIfExpr: TGrammar[Expr] = {
 
@@ -186,19 +176,23 @@ final class Parser {
       matchToken(KW_NEW) --> const(ClassConstructorExpr.apply) |
       matchToken(KW_TYPE) --> const(TypeOfExpr.apply)
 
-  private def ruleExpressionDot(parenCallHandler: ParenCallHandlerBase)(nextRule: TGrammar[Expr]): TGrammar[Expr] =
-    recRule[TGrammar[Expr]](rule =>
+  private def ruleExpressionDot(parenCallHandler: ParenCallHandlerBase)(nextRule: TGrammar[Expr]): TGrammar[Expr] = {
+    lazy val rule: TGrammar[Expr] =
       nextRule | rule.observeSource ++ matchToken(OP_DOT) ++ ruleMemberAccess --> {
         case (baseExpr, _, memberAccessFunc) => memberAccessFunc(baseExpr)
       }
-    )
 
-  private def createLeftAssociativeOperatorRule(opGrammars: TGrammar[BinaryOperator]*)(nextGrammar: TGrammar[Expr]): TGrammar[Expr] =
-    recRule[TGrammar[Expr]] { grammar =>
+    rule
+  }
+
+  private def createLeftAssociativeOperatorRule(opGrammars: TGrammar[BinaryOperator]*)(nextGrammar: TGrammar[Expr]): TGrammar[Expr] = {
+    lazy val grammar: TGrammar[Expr] =
       opGrammars.foldLeft(nextGrammar) { case (accum, opGrammar) =>
         accum | nextGrammar.observeSource ++ opGrammar ++ grammar.observeSource --> { case (left, op, right) => BinaryOperatorExpr(op, left, right) }
       }
-    }
+
+    grammar
+  }
 
   private def ruleBinaryOperator[TToken <: TokenWithCategory[_ <: TokenCategory] with BinaryOperatorToken : ClassTag](token: TToken): TGrammar[BinaryOperator] =
     matchToken(token) --> const(token.binaryOperator)
@@ -220,20 +214,26 @@ final class Parser {
     chainRules(ruleExpressionOther)
       .chain(ParenCallHandler(FunctionCallExpr.apply))
       .chain(ruleExpressionDot(ParenCallHandler))
-      .chain(nextExpr => recRule[TGrammar[Expr]](rule => {
-        def matchPrefixOp[TToken <: TokenWithCategory[_ <: TokenCategory] with UnaryOperatorToken : ClassTag](token: TToken): TGrammar[Expr] =
-          matchToken(token) ++ rule.observeSource --> { case (_, inner) => UnaryOperatorExpr(token.unaryOperator, inner) }
+      .chain(nextExpr => {
+        lazy val rule: TGrammar[Expr] = {
+          def matchPrefixOp[TToken <: TokenWithCategory[_ <: TokenCategory] with UnaryOperatorToken : ClassTag](token: TToken): TGrammar[Expr] =
+            matchToken(token) ++ rule.observeSource --> { case (_, inner) => UnaryOperatorExpr(token.unaryOperator, inner) }
 
-        nextExpr |
-          matchPrefixOp(OP_BITNOT) |
-          matchPrefixOp(OP_BOOLNOT) |
-          matchPrefixOp(OP_ADD) |
-          matchPrefixOp(OP_SUB)
-      }))
-      .chainPrev { case (nextExpr, (_, (skippedCallExpr, _))) => recRule[TGrammar[Expr]] { rule =>
-        nextExpr | rule.observeSource ++ ruleExpressionDot(SkipParenCallHandler)(skippedCallExpr).observeSource --> FunctionCallExpr.tupled
-      }
-      }
+          nextExpr |
+            matchPrefixOp(OP_BITNOT) |
+            matchPrefixOp(OP_BOOLNOT) |
+            matchPrefixOp(OP_ADD) |
+            matchPrefixOp(OP_SUB)
+        }
+
+        rule
+      })
+      .chainPrev { case (nextExpr, (_, (skippedCallExpr, _))) => {
+        lazy val rule: TGrammar[Expr] =
+          nextExpr | rule.observeSource ++ ruleExpressionDot(SkipParenCallHandler)(skippedCallExpr).observeSource --> FunctionCallExpr.tupled
+
+        rule
+      } }
       .chain(createLeftAssociativeOperatorRule(
         ruleBinaryOperator(OP_MUL),
         ruleBinaryOperator(OP_DIV),
@@ -294,8 +294,8 @@ final class Parser {
     }
 
 
-  private def ruleExpressionLambdas(nextRule: => TGrammar[Expr]): TGrammar[Expr] =
-    recRule[TGrammar[Expr]](rule =>
+  private def ruleExpressionLambdas(nextRule: => TGrammar[Expr]): TGrammar[Expr] = {
+    lazy val rule: TGrammar[Expr] =
       nextRule |
         ruleIdentifier ++ matchToken(OP_LAMBDA) ++ rule.observeSource --> {
           case (id, _, body) => LambdaExpr(id, body)
@@ -303,7 +303,9 @@ final class Parser {
         nextRule.observeSource ++ matchToken(OP_LAMBDA_TYPE) ++ rule.observeSource --> {
           case (left, _, right) => LambdaTypeExpr(left, right)
         }
-    )
+
+    rule
+  }
 
   private def ruleExpressionTuple(nextRule: TGrammar[Expr]): TGrammar[Expr] =
     nextRule.observeSource ++ ((matchToken(OP_COMMA) ++ nextRule.observeSource --> second)*) --> {

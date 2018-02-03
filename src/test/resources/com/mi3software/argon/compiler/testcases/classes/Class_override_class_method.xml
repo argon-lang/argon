@@ -1,0 +1,41 @@
+<ArgonTest>
+
+    <Name>Class override class method</Name>
+
+
+    <InputSource name="test.ar"><![CDATA[
+            
+        import Ar._
+
+        open class A <: Any
+
+            public new()
+            end
+
+            public virtual proc self.say_hello(): () do
+                puts 'Hello'
+            end
+
+        end
+
+        class B <: A
+
+            public new()
+                initialize _ = A.new()
+            end
+
+            public override proc self.say_hello(): () do
+                puts 'Moo'
+            end
+        end
+        
+        proc main(): () do
+            val obj: A = B.new()
+            obj.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Moo</ExpectedOutput>
+
+</ArgonTest>

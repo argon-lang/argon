@@ -1,0 +1,32 @@
+<ArgonTest>
+
+    <Name>Constructor for sealed trait in different file</Name>
+
+    <InputSource name="MyType.ar"><![CDATA[
+
+        import Ar._
+
+        sealed trait MyType <: Any
+            public abstract proc self.say_hello(): ()
+        end
+
+    ]]></InputSource>
+
+    <InputSource name="MyCtor.ar"><![CDATA[
+
+        import Ar._
+
+        constructor MyCtor(): MyType
+            public override proc self.say_hello(): () =
+                puts 'Hello World'
+        end
+
+        proc main(): () do
+            MyCtor().say_hello()
+        end
+
+    ]]></InputSource>
+
+    <ExpectedError>InstanceTypeSealed</ExpectedError>
+
+</ArgonTest>

@@ -1,0 +1,45 @@
+<ArgonTest>
+
+    <Name>Base class field</Name>
+
+
+    <InputSource name="test.ar"><![CDATA[
+            
+        import Ar._
+
+        open class A <: Any
+
+            field name: String
+
+            public new(name: String)
+                field name = name
+            end
+
+            public proc self.say_hello(): () do
+                puts 'Hello'
+                puts name
+            end
+
+        end
+
+        class B <: A
+
+            public new(name: String)
+                initialize _ = A.new(name)
+            end
+
+        end
+        
+        proc main(): () do
+            val obj: A = B.new('Tree')
+            obj.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Hello
+        Tree
+    </ExpectedOutput>
+
+</ArgonTest>

@@ -1,0 +1,35 @@
+<ArgonTest>
+
+    <Name>Box type in Ar namespace with import</Name>
+
+
+    <InputSource name="test.ar"><![CDATA[
+
+        namespace Ar
+        
+        import Ar._
+        
+        trait ValueBox(T: type) <: Any
+            public abstract def _.value: T
+        end
+        
+        constructor ValueBoxInstance(T: type)(value: T): ValueBox T
+            public override def _.value: T = value
+        end
+        
+    ]]></InputSource>
+
+    <InputSource name="main.ar"><![CDATA[
+
+        import Ar._
+
+        proc main(): () do
+            val box = ValueBoxInstance String 'Hello World'
+            puts box.value
+        end
+
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

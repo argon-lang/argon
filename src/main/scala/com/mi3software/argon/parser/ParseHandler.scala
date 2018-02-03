@@ -13,20 +13,23 @@ final class ParseHandler {
 
   import lexer.errorFactory
 
-  def parse(fileSpec: FileSpec): SequenceHandler[Char, Any, NonEmptyList[SyntaxError] \/ Vector[WithSource[SourceAST]]] = {
+  def parse(fileSpec: FileSpec): SequenceHandler[Char, Any, NonEmptyList[SyntaxErrorData] \/ Vector[WithSource[SourceAST]]] = {
+
+    def convertError(syntaxError: SyntaxError): SyntaxErrorData =
+      SyntaxErrorData(fileSpec, syntaxError)
 
     val grammar = lexer.token.streamInto(parser.ruleTopLevelStatementList) {
       case Some(token) => token
     }
 
     Characterizer.characterize(grammar.sequenceHandler).map {
-      case -\/(error) => -\/(NonEmptyList(error))
-      case \/-(-\/(errors)) => -\/(errors)
+      case -\/(error) => -\/(NonEmptyList(convertError(error)))
+      case \/-(-\/(errors)) => -\/(errors.map(convertError))
       case \/-(\/-(NonEmptyList(WithSource(result, _), INil()))) =>
         \/-(TopLevelStatement.toSourceAST(fileSpec)(result))
 
       case \/-(\/-(NonEmptyList(WithSource(_, location), ICons(_, _)))) =>
-        -\/(NonEmptyList(SyntaxError.AmbiguousParse(location)))
+        -\/(NonEmptyList(convertError(SyntaxError.AmbiguousParse(location))))
 
     }
   }

@@ -1,0 +1,10 @@
+package com.mi3software.argon.compiler
+
+trait CompilerInternalError
+
+case object VariableNotFoundError extends CompilerInternalError
+case object AbstractMethodCalledError extends CompilerInternalError
+case object CompilationFailedError extends CompilerInternalError
+case object TupleSizeMismatchError extends CompilerInternalError
+case object ResolvedAmbiguousMethodError extends CompilerInternalError
+case object ExecutionError extends CompilerInternalError

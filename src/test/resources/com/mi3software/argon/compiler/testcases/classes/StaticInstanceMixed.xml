@@ -1,0 +1,41 @@
+<ArgonTest>
+
+    <Name>Static/Instance Mixed</Name>
+
+    <InputSource name="test.ar"><![CDATA[
+
+        import Ar._
+
+        class MyClass <: Any
+
+        static
+
+            public proc self.say_hello(): () do
+                puts 'Hello'
+            end
+
+        instance
+
+            public new()
+            end
+
+            public proc self.say_world(): () do
+                puts 'World'
+            end
+
+        end
+
+        proc main(): () do
+            MyClass.say_hello()
+            MyClass.new().say_world()
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Hello
+        World
+    </ExpectedOutput>
+
+</ArgonTest>
