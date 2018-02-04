@@ -2,6 +2,7 @@ package com.mi3software.argon.parser.impl
 
 import com.mi3software.argon.parser.GrammarError
 import com.mi3software.argon.util._
+import org.apache.commons.lang3.StringEscapeUtils
 
 import scala.collection.immutable._
 import scala.language.postfixOps
@@ -21,7 +22,7 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
   def compact(pos: FilePosition): Grammar[TToken, TSyntaxError, T] = compactImpl(pos, Set.empty)
   protected def compactImpl(pos: FilePosition, set: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, T]
 
-  protected lazy val isReject: Boolean = isEmptyStrImpl(Set.empty)
+  protected lazy val isReject: Boolean = isRejectImpl(Set.empty)
   protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean
 
   protected lazy val isEmptyStr: Boolean = isEmptyStrImpl(Set.empty)
@@ -36,7 +37,8 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
       override def initialState: TState = Grammar.this
 
       override def next(item: WithSource[TToken], state: TState): TState =
-        state.derive(item)
+        state.derive(item).compact(item.location.end)
+
 
       override def end(terminator: FilePosition, state: Grammar[TToken, TSyntaxError, T]): TErrorList \/ NonEmptyList[WithSource[T]] =
         state.endOfInput(terminator)
@@ -45,6 +47,8 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
 
   protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U]
 
+  protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String
+  override def toString: String = toStringImpl(Set.empty)
 }
 
 object Grammar {
@@ -244,6 +248,9 @@ object Grammar {
     override protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] = changeType
 
     def changeType[U]: RejectGrammar[TToken, TSyntaxError, U] = RejectGrammar(grammarErrors)
+
+    override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
+      s"Reject ${grammarErrors.list}"
   }
 
   private final case class EmptyStrGrammar[TToken, TSyntaxError, T]
@@ -267,6 +274,9 @@ object Grammar {
 
     def flatMapPos[U](f: (WithSource[T], FilePosition) => Grammar[TToken, TSyntaxError, U]): Grammar[TToken, TSyntaxError, U] =
       new FlatMapPosGrammar(this)(f)
+
+    override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
+      s"EmptyStr ${result.list}"
 
   }
 
@@ -295,6 +305,9 @@ object Grammar {
 
     override protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
       this -+> f
+
+    override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
+      StringEscapeUtils.escapeJava(s"Token $category")
   }
 
   private final class ConcatGrammar[TToken, TSyntaxError, A, B, T]
@@ -387,6 +400,12 @@ object Grammar {
 
     override protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
       ConcatGrammar(grammarA, grammarB)((a, b) => f(combine(a, b)))
+
+    override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
+      if(seen contains this)
+        "recursive rule"
+      else
+        s"(${grammarA.toStringImpl(seen + this)} ++ ${grammarB.toStringImpl(seen + this)})"
   }
 
   private object ConcatGrammar {
@@ -471,6 +490,12 @@ object Grammar {
 
     override protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
       UnionGrammar(grammarA.mapNonLazy(f), grammarB.mapNonLazy(f))
+
+    override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
+      if(seen contains this)
+        "recursive rule"
+      else
+        s"(${grammarA.toStringImpl(seen + this)} | ${grammarB.toStringImpl(seen + this)})"
   }
 
   object UnionGrammar {
@@ -517,6 +542,8 @@ object Grammar {
     override protected def mapNonLazy[V](g: WithSource[U] => WithSource[V]): Grammar[TToken, TSyntaxError, V] =
       inner.mapNonLazy(f andThen g)
 
+    override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
+      s"Mapped ${inner.toStringImpl(seen)}"
   }
 
   private final class FlatMapGrammar[TToken, TSyntaxError, T, U]
@@ -547,6 +574,9 @@ object Grammar {
 
     override protected def mapNonLazy[V](g: WithSource[U] => WithSource[V]): Grammar[TToken, TSyntaxError, V] =
       new FlatMapGrammar(inner)(t => f(t).mapNonLazy(g))
+
+    override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
+      s"FlatMap ${inner.toStringImpl(seen)} -> ?"
   }
 
   private final class FlatMapPosGrammar[TToken, TSyntaxError, T, U]
@@ -575,6 +605,9 @@ object Grammar {
 
     override protected def mapNonLazy[V](g: WithSource[U] => WithSource[V]): Grammar[TToken, TSyntaxError, V] =
       new FlatMapPosGrammar(inner)((t, pos) => f(t, pos).mapNonLazy(g))
+
+    override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
+      s"FlatMapPos ${(inner : Grammar[TToken, TSyntaxError, T]).toStringImpl(seen)} -> ?"
   }
 
 
