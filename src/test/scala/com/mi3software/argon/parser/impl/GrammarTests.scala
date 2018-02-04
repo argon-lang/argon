@@ -51,7 +51,7 @@ class GrammarTests extends FlatSpec with Matchers {
   }
 
   "An repeated (*) token grammar" should "succeed for EOF" in {
-    (numberToken(7)*).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(INil(), _), INil())) => }
+    (numberToken(7)*).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(Vector(), _), INil())) => }
   }
 
   it should "fail for wrong token" in {
@@ -59,13 +59,13 @@ class GrammarTests extends FlatSpec with Matchers {
   }
 
   it should "succeed for correct token" in {
-    (numberToken(7)*).derive(ws(7)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(ICons(7, INil()), _), INil())) => }
+    (numberToken(7)*).derive(ws(7)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(Vector(7), _), INil())) => }
   }
 
   it should "succeed for 2 correct tokens" in {
     val g = numberToken(7)*
     val a = g.derive(ws(7)).derive(ws(7)).endOfInput(pos)
-    a should matchPattern { case \/-(NonEmptyList(WithSource(ICons(7, ICons(7, INil())), _), INil())) => }
+    a should matchPattern { case \/-(NonEmptyList(WithSource(Vector(7, 7), _), INil())) => }
   }
 
   "An repeated (+~) token grammar" should "fail for EOF" in {
@@ -77,13 +77,13 @@ class GrammarTests extends FlatSpec with Matchers {
   }
 
   it should "succeed for correct token" in {
-    (numberToken(7)*).derive(ws(7)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(ICons(7, INil()), _), INil())) => }
+    (numberToken(7)*).derive(ws(7)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(Vector(7), _), INil())) => }
   }
 
   it should "succeed for 2 correct tokens" in {
     val g = numberToken(7)*
     val a = g.derive(ws(7)).derive(ws(7)).endOfInput(pos)
-    a should matchPattern { case \/-(NonEmptyList(WithSource(ICons(7, ICons(7, INil())), _), INil())) => }
+    a should matchPattern { case \/-(NonEmptyList(WithSource(Vector(7, 7), _), INil())) => }
   }
 
   "An union grammar" should "fail for EOF" in {

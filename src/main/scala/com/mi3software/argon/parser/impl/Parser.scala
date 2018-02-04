@@ -309,7 +309,7 @@ final class Parser {
 
   private def ruleExpressionTuple(nextRule: TGrammar[Expr]): TGrammar[Expr] =
     nextRule.observeSource ++ ((matchToken(OP_COMMA) ++ nextRule.observeSource --> second)*) --> {
-      case (WithSource(expr, _), INil()) => expr
+      case (WithSource(expr, _), Vector()) => expr
       case (head, tail) => TupleExpr(head +: tail.toVector)
     }
 

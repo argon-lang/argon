@@ -227,7 +227,7 @@ final class Lexer {
       matchIdentifier |
       matchOperator
 
-  val lexer: TGrammar[IList[WithSource[Token]]] =
-    (token.observeSource*) --> { _.flatMap(WithSource.liftF(tokenOpt => tokenOpt.toIList)) }
+  val lexer: TGrammar[Vector[WithSource[Token]]] =
+    (token.observeSource*) --> { _.flatMap(WithSource.liftF(tokenOpt => tokenOpt.toList.toVector)) }
 
 }
