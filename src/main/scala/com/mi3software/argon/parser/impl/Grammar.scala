@@ -143,9 +143,6 @@ object Grammar {
       def -+> [U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
         new MapGrammar[TToken, TSyntaxError, T, U](grammar1, f)
 
-      private[Grammar] def flatMap[U](f: WithSource[T] => Grammar[TToken, TSyntaxError, U]): Grammar[TToken, TSyntaxError, U] =
-        new FlatMapGrammar(grammar1)(f)
-
       def |
       (grammar2: => Grammar[TToken, TSyntaxError, T])
       (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
@@ -175,27 +172,6 @@ object Grammar {
       def observeSource: Grammar[TToken, TSyntaxError, WithSource[T]] = -+> {
         case value @ WithSource(_, location) => WithSource(value, location)
       }
-
-
-      def streamInto[U, V]
-      (grammar2: Grammar[U, TSyntaxError, V])
-      (f: PartialFunction[T, U])
-      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
-      : Grammar[TToken, TSyntaxError, V] =
-        EmptyStrGrammar(NonEmptyList(WithSource((), SourceLocation.empty))).flatMapPos[V] { (_, pos) =>
-          grammar2.endOfInput(pos) match {
-            case -\/(error) => RejectGrammar(error)
-            case \/-(result) => EmptyStrGrammar(result)
-          }
-        } |
-          flatMap { case WithSource(item, location) =>
-            f.lift(item) match {
-              case Some(u) => streamInto(grammar2.derive(WithSource(u, location)))(f)
-              case None => streamInto(grammar2)(f)
-            }
-          }
-
-
 
     }
 
@@ -338,9 +314,6 @@ object Grammar {
 
     override protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
       EmptyStrGrammar(result.map(f))
-
-    def flatMapPos[U](f: (WithSource[T], FilePosition) => Grammar[TToken, TSyntaxError, U]): Grammar[TToken, TSyntaxError, U] =
-      new FlatMapPosGrammar(this)(f)
 
     override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
       s"EmptyStr ${result.list}"
@@ -726,70 +699,6 @@ object Grammar {
 
     override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
       s"Mapped ${inner.toStringImpl(seen)}"
-  }
-
-  private final class FlatMapGrammar[TToken, TSyntaxError, T, U]
-  (innerUncached: => Grammar[TToken, TSyntaxError, T])
-  (f: WithSource[T] => Grammar[TToken, TSyntaxError, U])
-  extends Grammar[TToken, TSyntaxError, U] {
-
-    private lazy val inner = innerUncached
-
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, U] =
-      new FlatMapGrammar(inner.derive(token))(f)
-
-    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[U]] =
-      inner.endOfInput(pos).flatMap { aItems =>
-        aItems
-          .traverse[TErrorList \/ ?, NonEmptyList[WithSource[U]]] { a => f(a).endOfInput(pos) }
-          .map { _.flatMap(identity) }
-      }
-
-    override protected def compactImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, U] =
-      new FlatMapGrammar(inner.compactImpl(pos, seen))(f)
-
-    override protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
-      inner.isRejectImpl(seen)
-
-    override protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
-      false
-
-    override protected def mapNonLazy[V](g: WithSource[U] => WithSource[V]): Grammar[TToken, TSyntaxError, V] =
-      new FlatMapGrammar(inner)(t => f(t).mapNonLazy(g))
-
-    override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
-      s"FlatMap ${inner.toStringImpl(seen)} -> ?"
-  }
-
-  private final class FlatMapPosGrammar[TToken, TSyntaxError, T, U]
-  (inner: EmptyStrGrammar[TToken, TSyntaxError, T])
-  (f: (WithSource[T], FilePosition) => Grammar[TToken, TSyntaxError, U])
-    extends Grammar[TToken, TSyntaxError, U] {
-
-    override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, U] =
-      inner.derive(token).changeType[U]
-
-    override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[U]] =
-      inner.endOfInput(pos).flatMap { aItems =>
-        aItems
-          .traverse[TErrorList \/ ?, NonEmptyList[WithSource[U]]] { a => f(a, pos).endOfInput(pos) }
-          .map { _.flatMap(identity) }
-      }
-
-    override protected def compactImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, U] =
-      this
-
-    override protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
-      false
-
-    override protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
-      false
-
-    override protected def mapNonLazy[V](g: WithSource[U] => WithSource[V]): Grammar[TToken, TSyntaxError, V] =
-      new FlatMapPosGrammar(inner)((t, pos) => f(t, pos).mapNonLazy(g))
-
-    override protected def toStringImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): String =
-      s"FlatMapPos ${(inner : Grammar[TToken, TSyntaxError, T]).toStringImpl(seen)} -> ?"
   }
 
 
