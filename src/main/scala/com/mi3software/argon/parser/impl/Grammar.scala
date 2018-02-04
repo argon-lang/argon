@@ -315,7 +315,7 @@ object Grammar {
         case \/-(aValues) =>
           UnionGrammar(
             UnionGrammar.fromList(aValues.map { itemA =>
-              Lazy(grammarB -+> { itemB => combine(itemA, itemB) })
+              Lazy(grammarB.derive(token) -+> { itemB => combine(itemA, itemB) })
             }),
             ConcatGrammar(grammarA.derive(token), grammarB)(combine)
           )
