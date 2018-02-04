@@ -90,7 +90,7 @@ final case class FunctionCallExpr(func: WithSource[Expr], arg: WithSource[Expr])
 final case class IdentifierExpr(name: String) extends Expr
 final case class IfExpr(condition: WithSource[Expr], body: WithSource[Vector[WithSource[Stmt]]]) extends Expr
 final case class IfElseExpr(condition: WithSource[Expr], ifBody: WithSource[Vector[WithSource[Stmt]]], elseBody: WithSource[Vector[WithSource[Stmt]]]) extends Expr
-final case class IntValueExpr(value: BigInt) extends Expr
+final case class IntValueExpr(sign: Int, base: BigInt, digits: Vector[BigInt]) extends Expr
 final case class LambdaTypeExpr(argType: WithSource[Expr], resultType: WithSource[Expr]) extends Expr
 final case class LambdaExpr(name: Option[String], body: WithSource[Expr]) extends Expr
 final case class MatchExpr(value: WithSource[Expr], cases: Seq[WithSource[MatchExprCase]]) extends Expr

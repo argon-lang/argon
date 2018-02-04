@@ -31,7 +31,7 @@ object Token {
     final case class StringPart(str: String) extends Part
   }
 
-  final case class IntToken(value: BigInt) extends Token {
+  final case class IntToken(sign: Int, base: BigInt, digits: Vector[BigInt]) extends Token {
     override def category: TokenCategory = IntToken.category
   }
   object IntToken extends TokenWithCategory(TokenCategory.IntToken) with TokenFactory[IntToken]

@@ -8,6 +8,8 @@ object CharacterCategory {
   final case object Whitespace extends CharacterCategory
   final case object SingleQuote extends CharacterCategory
   final case object NumberDigit extends CharacterCategory
+  final case object NonZeroDigit extends CharacterCategory
+  final case object Zero extends CharacterCategory
   final case object Digit extends CharacterCategory
   final case object BaseSpecifier extends CharacterCategory
   final case object Letter extends CharacterCategory

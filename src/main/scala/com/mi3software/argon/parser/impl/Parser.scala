@@ -138,7 +138,7 @@ final class Parser {
         case StringToken(NonEmptyList(StringToken.StringPart(str), INil())) => StringValueExpr(str)
         case StringToken(NonEmptyList(StringToken.StringPart(str), ICons(_, _))) => ???
       } |
-      matchTokenFactory(IntToken) --> { case IntToken(i) => IntValueExpr(i) } |
+      matchTokenFactory(IntToken) --> { case IntToken(sign, base, digits) => IntValueExpr(sign, base, digits) } |
       matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(TupleExpr(Vector())) |
       matchToken(OP_OPENPAREN) ++ ruleExpression ++ matchToken(OP_CLOSEPAREN) --> {
         case (_, expr, _) => expr
