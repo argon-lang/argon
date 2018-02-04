@@ -463,6 +463,10 @@ object Grammar {
         this
       else if(isReject || isEmptyStr)
         fromResult(endOfInput(pos))
+      else if(grammarA.isReject)
+        grammarB.compactImpl(pos, set + this)
+      else if(grammarB.isReject)
+        grammarA.compactImpl(pos, set + this)
       else {
         val gAc = grammarA.compactImpl(pos, set + this)
         val gBc = grammarB.compactImpl(pos, set + this)
@@ -480,7 +484,7 @@ object Grammar {
       if(seen contains this)
         false
       else
-        grammarA.isRejectImpl(seen + this) && grammarA.isRejectImpl(seen + this)
+        grammarA.isRejectImpl(seen + this) && grammarB.isRejectImpl(seen + this)
 
     override protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
       if(seen contains this)

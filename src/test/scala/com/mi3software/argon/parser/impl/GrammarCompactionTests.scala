@@ -29,4 +29,8 @@ class GrammarCompactionTests extends FlatSpec with Matchers {
     (numberToken(5) ++ numberToken(6)).derive(ws(4)).compact(pos).toString should startWith ("Reject")
   }
 
+  "A concat grammar" should "compact to remove failed cases" in {
+    (numberToken(5) | numberToken(6)).derive(ws(5)).compact(pos).toString should startWith ("EmptyStr")
+  }
+
 }
