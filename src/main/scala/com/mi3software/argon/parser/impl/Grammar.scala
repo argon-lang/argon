@@ -54,43 +54,46 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
     new SequenceHandler[WithSource[TToken], FilePosition, TErrorList \/ TResult] {
 
 
-      override type TState = TErrorList \/ (Grammar[TToken, TSyntaxError, T], Vector[WithSource[TToken]], Option[WithSource[T]], itemHandler.TState)
+      override type TState = TErrorList \/ (Option[Grammar[TToken, TSyntaxError, T]], Vector[WithSource[TToken]], Option[WithSource[T]], itemHandler.TState)
 
-      override def initialState: TState = \/-((Grammar.this, Vector.empty, None, itemHandler.initialState))
+      override def initialState: TState = \/-((None, Vector.empty, None, itemHandler.initialState))
 
       override def next(item: WithSource[TToken], state: TState): TState =
         state.flatMap {
           case (grammar, tokensSinceResults, prevResultOpt @ Some(prevResult), innerState) =>
-            val nextGrammar = grammar.derive(item)
+            val nextGrammar = grammar.getOrElse(Grammar.this).derive(item)
             if(nextGrammar.isReject) {
               val newInnerState = itemHandler.next(prevResult, innerState)
-              tokensSinceResults.foldLeft(\/-((Grammar.this, Vector.empty, None, newInnerState)) : TState) { (state, token) => next(token, state) }
+              tokensSinceResults.foldLeft(\/-((None, Vector.empty, None, newInnerState)) : TState) { (state, token) => next(token, state) }
             }
             else {
               nextGrammar.endOfInput(item.location.start) match {
-                case -\/(_) => \/-((nextGrammar, tokensSinceResults :+ item, prevResultOpt, innerState))
-                case \/-(NonEmptyList(result, INil())) => \/-((nextGrammar, Vector.empty, Some(result), innerState))
+                case -\/(_) => \/-((Some(nextGrammar), tokensSinceResults :+ item, prevResultOpt, innerState))
+                case \/-(NonEmptyList(result, INil())) => \/-((Some(nextGrammar), Vector.empty, Some(result), innerState))
                 case \/-(NonEmptyList(WithSource(_, location), ICons(_, _))) => -\/(NonEmptyList(errorFactory.createAmbiguityError(location)))
               }
             }
 
           case (grammar, _, None, innerState) =>
-            val nextGrammar = grammar.derive(item)
+            val nextGrammar = grammar.getOrElse(Grammar.this).derive(item)
 
             nextGrammar.endOfInput(item.location.start) match {
-              case -\/(_) => \/-((nextGrammar, Vector.empty, None, innerState))
-              case \/-(NonEmptyList(result, INil())) => \/-((nextGrammar, Vector(), Some(result), innerState))
+              case -\/(_) => \/-((Some(nextGrammar), Vector.empty, None, innerState))
+              case \/-(NonEmptyList(result, INil())) => \/-((Some(nextGrammar), Vector(), Some(result), innerState))
               case \/-(NonEmptyList(WithSource(_, location), ICons(_, _))) => -\/(NonEmptyList(errorFactory.createAmbiguityError(location)))
             }
         }
 
       override def end(terminator: FilePosition, state: TState): TErrorList \/ TResult =
         state.flatMap {
-          case (grammar, tokensSinceResults, Some(prevResult), innerState) =>
+          case (None, _, _, innerState) =>
+            \/-(itemHandler.end(terminator, innerState))
+
+          case (Some(grammar), tokensSinceResults, Some(prevResult), innerState) =>
             grammar.endOfInput(terminator) match {
-              case -\/(errorList) =>
+              case -\/(_) =>
                 val newInnerState = itemHandler.next(prevResult, innerState)
-                val newState = tokensSinceResults.foldLeft(\/-((Grammar.this, Vector.empty, None, newInnerState)) : TState) { (state, token) => next(token, state) }
+                val newState = tokensSinceResults.foldLeft(\/-((None, Vector.empty, None, newInnerState)) : TState) { (state, token) => next(token, state) }
                 end(terminator, newState)
 
               case \/-(NonEmptyList(result, INil())) =>
@@ -100,7 +103,7 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
               case \/-(NonEmptyList(WithSource(_, location), ICons(_, _))) => -\/(NonEmptyList(errorFactory.createAmbiguityError(location)))
             }
 
-          case (grammar, _, None, innerState) =>
+          case (Some(grammar), _, None, innerState) =>
             grammar.endOfInput(terminator) match {
               case -\/(errorList) => -\/(errorList)
 
