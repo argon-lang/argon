@@ -11,6 +11,8 @@ import scala.language.postfixOps
 
 class GrammarTests extends FlatSpec with Matchers {
 
+  type TGrammar = Grammar[Int, GrammarError[Int, String], Int]
+
   private implicit val errorFactory = new Grammar.ErrorFactory[Int, String, GrammarError[Int, String]] {
     override def createError(error: GrammarError[Int, String]): GrammarError[Int, String] = error
 
@@ -18,7 +20,7 @@ class GrammarTests extends FlatSpec with Matchers {
       (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
   }
 
-  private def numberToken(n: Int): Grammar[Int, GrammarError[Int, String], Int] = Grammar.matcher(n.toString, m => Some(m).filter(_ === n))
+  private def numberToken(n: Int): TGrammar = Grammar.matcher(n.toString, m => Some(m).filter(_ === n))
 
   private val pos = FilePosition(0, 0)
 
@@ -109,6 +111,37 @@ class GrammarTests extends FlatSpec with Matchers {
   it should "succeed for first and second token" in {
     val a = (numberToken(4) ++ numberToken(8)).derive(ws(4)).derive(ws(8)).endOfInput(pos)
     a should matchPattern { case \/-(NonEmptyList(WithSource((4, 8), _), _)) => }
+  }
+
+  private lazy val leftRec: TGrammar =
+    numberToken(0) | leftRec ++ numberToken(1) --> { case (a, b) => a + b }
+
+  "An left recursive grammar" should "fail for EOF" in {
+    leftRec.endOfInput(pos) should matchPattern { case -\/(_) => }
+  }
+
+  it should "fail for wrong token" in {
+    leftRec.derive(ws(2)).endOfInput(pos) should matchPattern { case -\/(_) => }
+  }
+
+  it should "fail for tail token" in {
+    leftRec.derive(ws(1)).endOfInput(pos) should matchPattern { case -\/(_) => }
+  }
+
+  it should "succeed for head token" in {
+    leftRec.derive(ws(0)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(0, _), _)) => }
+  }
+
+  it should "succeed for head tail" in {
+    leftRec.derive(ws(0)).derive(ws(1)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(1, _), _)) => }
+  }
+
+  it should "fail for head head" in {
+    leftRec.derive(ws(0)).derive(ws(0)).endOfInput(pos) should matchPattern { case -\/(_) => }
+  }
+
+  it should "succeed for head tail tail" in {
+    leftRec.derive(ws(0)).derive(ws(1)).derive(ws(1)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(2, _), _)) => }
   }
 
 }
