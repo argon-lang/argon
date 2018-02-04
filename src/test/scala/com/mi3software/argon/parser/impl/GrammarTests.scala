@@ -68,6 +68,24 @@ class GrammarTests extends FlatSpec with Matchers {
     a should matchPattern { case \/-(NonEmptyList(WithSource(ICons(7, ICons(7, INil())), _), INil())) => }
   }
 
+  "An repeated (+~) token grammar" should "fail for EOF" in {
+    (numberToken(7)+~).endOfInput(pos) should matchPattern { case -\/(_) => }
+  }
+
+  it should "fail for wrong token" in {
+    (numberToken(7)*).derive(ws(4)).endOfInput(pos) should matchPattern { case -\/(_) => }
+  }
+
+  it should "succeed for correct token" in {
+    (numberToken(7)*).derive(ws(7)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(ICons(7, INil()), _), INil())) => }
+  }
+
+  it should "succeed for 2 correct tokens" in {
+    val g = numberToken(7)*
+    val a = g.derive(ws(7)).derive(ws(7)).endOfInput(pos)
+    a should matchPattern { case \/-(NonEmptyList(WithSource(ICons(7, ICons(7, INil())), _), INil())) => }
+  }
+
   "An union grammar" should "fail for EOF" in {
     (numberToken(0) | numberToken(1)).endOfInput(pos) should matchPattern { case -\/(_) => }
   }
