@@ -61,7 +61,7 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
       override def next(item: WithSource[TToken], state: TState): TState =
         state.flatMap {
           case (grammar, tokensSinceResults, prevResultOpt @ Some(prevResult), innerState) =>
-            val nextGrammar = grammar.getOrElse(Grammar.this).derive(item)
+            val nextGrammar = grammar.getOrElse(Grammar.this).derive(item).compact(item.location.start)
             if(nextGrammar.isReject) {
               val newInnerState = itemHandler.next(prevResult, innerState)
               tokensSinceResults.foldLeft(\/-((None, Vector.empty, None, newInnerState)) : TState) { (state, token) => next(token, state) }
@@ -75,7 +75,7 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
             }
 
           case (grammar, _, None, innerState) =>
-            val nextGrammar = grammar.getOrElse(Grammar.this).derive(item)
+            val nextGrammar = grammar.getOrElse(Grammar.this).derive(item).compact(item.location.start)
 
             nextGrammar.endOfInput(item.location.start) match {
               case -\/(_) => \/-((Some(nextGrammar), Vector.empty, None, innerState))
