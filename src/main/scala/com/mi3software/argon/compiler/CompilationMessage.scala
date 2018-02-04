@@ -11,7 +11,7 @@ sealed trait CompilationMessage {
   def message: String
 
   override def toString: String =
-    s"${file.name} ${location.start.line}:${location.start.position}-${location.end.line}:${location.end.line} : ${message}"
+    s"${file.name} ${location.start.line}.${location.start.position}-${location.end.line}.${location.end.line}: ${message}"
 }
 trait CompilationError extends CompilationMessage
 
@@ -55,6 +55,55 @@ object CompilationError {
     }
 
     private def formatTokenCategory(category: TokenCategory) = ???
-    private def formatCharacterCategory(category: CharacterCategory) = ???
+    private def formatCharacterCategory(category: CharacterCategory) = category match {
+      case CharacterCategory.Any => "any character"
+      case CharacterCategory.CR => "\\r"
+      case CharacterCategory.LF => "\\n"
+      case CharacterCategory.Whitespace => "whitespace"
+      case CharacterCategory.SingleQuote => "'"
+      case CharacterCategory.NumberDigit => "digit"
+      case CharacterCategory.NonZeroDigit => "non-zero digit"
+      case CharacterCategory.Zero => "0"
+      case CharacterCategory.Digit => "unicode digit"
+      case CharacterCategory.BaseSpecifier => "base specifier"
+      case CharacterCategory.Letter => "letter"
+      case CharacterCategory.Underscore => "_"
+
+      case CharacterCategory.QMark => "?"
+      case CharacterCategory.Exclaim => "!"
+
+      case CharacterCategory.And => "&"
+      case CharacterCategory.Or => "|"
+      case CharacterCategory.LessThan => "<"
+      case CharacterCategory.GreaterThan => ">"
+      case CharacterCategory.Equals => "="
+      case CharacterCategory.Colon => ":"
+      case CharacterCategory.Plus => "+"
+      case CharacterCategory.Minus => "-"
+
+      case CharacterCategory.NotEquals => "≠"
+      case CharacterCategory.LessThanEq => "≤"
+      case CharacterCategory.GreaterThanEq => "≥"
+
+      case CharacterCategory.Dot => "."
+      case CharacterCategory.Comma => ","
+      case CharacterCategory.Semicolon => ";"
+
+      case CharacterCategory.OpenParen => "("
+      case CharacterCategory.CloseParen => ")"
+      case CharacterCategory.OpenSquare => "["
+      case CharacterCategory.CloseSquare => "]"
+      case CharacterCategory.OpenCurly => "{"
+      case CharacterCategory.CloseCurly => "}"
+
+      case CharacterCategory.Star => "*"
+      case CharacterCategory.Times => "×"
+      case CharacterCategory.Slash => "/"
+      case CharacterCategory.Divide => "÷"
+
+      case CharacterCategory.Caret => "^"
+      case CharacterCategory.Tilde => "~"
+        
+    }
   }
 }
