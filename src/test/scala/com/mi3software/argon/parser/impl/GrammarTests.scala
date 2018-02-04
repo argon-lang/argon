@@ -1,7 +1,6 @@
 package com.mi3software.argon.parser.impl
 
-import com.mi3software.argon.parser.GrammarError
-import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
+import com.mi3software.argon.util.WithSource
 import org.scalatest.{FlatSpec, Matchers}
 
 import scalaz._
@@ -9,22 +8,7 @@ import Grammar.Operators._
 
 import scala.language.postfixOps
 
-class GrammarTests extends FlatSpec with Matchers {
-
-  type TGrammar = Grammar[Int, GrammarError[Int, String], Int]
-
-  private implicit val errorFactory = new Grammar.ErrorFactory[Int, String, GrammarError[Int, String]] {
-    override def createError(error: GrammarError[Int, String]): GrammarError[Int, String] = error
-
-    override def errorEndLocationOrder: Order[GrammarError[Int, String]] =
-      (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
-  }
-
-  private def numberToken(n: Int): TGrammar = Grammar.matcher(n.toString, m => Some(m).filter(_ === n))
-
-  private val pos = FilePosition(0, 0)
-
-  private def ws[T](t: T) = WithSource(t, SourceLocation.empty)
+class GrammarTests extends FlatSpec with Matchers with GrammarTestHelpers {
 
   "A token grammar" should "fail for EOF" in {
     numberToken(5).endOfInput(pos) should matchPattern { case -\/(_) => }

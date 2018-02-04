@@ -48,10 +48,10 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
     }
 
   final def parseLongestRepeaterSequenceHandler[TResult]
-  (itemHandler: SequenceHandler[WithSource[T], FilePosition, TErrorList \/ NonEmptyList[TResult]])
+  (itemHandler: SequenceHandler[WithSource[T], FilePosition, TResult])
   (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
-  : SequenceHandler[WithSource[TToken], FilePosition, TErrorList \/ NonEmptyList[TResult]] =
-    new SequenceHandler[WithSource[TToken], FilePosition, TErrorList \/ NonEmptyList[TResult]] {
+  : SequenceHandler[WithSource[TToken], FilePosition, TErrorList \/ TResult] =
+    new SequenceHandler[WithSource[TToken], FilePosition, TErrorList \/ TResult] {
 
 
       override type TState = TErrorList \/ (Grammar[TToken, TSyntaxError, T], Vector[WithSource[TToken]], Option[WithSource[T]], itemHandler.TState)
@@ -84,7 +84,7 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
             }
         }
 
-      override def end(terminator: FilePosition, state: TState): TErrorList \/ NonEmptyList[TResult] =
+      override def end(terminator: FilePosition, state: TState): TErrorList \/ TResult =
         state.flatMap {
           case (grammar, tokensSinceResults, Some(prevResult), innerState) =>
             grammar.endOfInput(terminator) match {
@@ -95,7 +95,7 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
 
               case \/-(NonEmptyList(result, INil())) =>
                 val newInnerState = itemHandler.next(result, innerState)
-                itemHandler.end(terminator, newInnerState)
+                \/-(itemHandler.end(terminator, newInnerState))
 
               case \/-(NonEmptyList(WithSource(_, location), ICons(_, _))) => -\/(NonEmptyList(errorFactory.createAmbiguityError(location)))
             }
@@ -106,7 +106,7 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
 
               case \/-(NonEmptyList(result, INil())) =>
                 val newInnerState = itemHandler.next(result, innerState)
-                itemHandler.end(terminator, newInnerState)
+                \/-(itemHandler.end(terminator, newInnerState))
 
               case \/-(NonEmptyList(WithSource(_, location), ICons(_, _))) => -\/(NonEmptyList(errorFactory.createAmbiguityError(location)))
             }

@@ -18,16 +18,13 @@ final class ParseHandler {
     def convertError(syntaxError: SyntaxError): SyntaxErrorData =
       SyntaxErrorData(fileSpec, syntaxError)
 
-    val grammar = lexer.lexer
+    val lexHandler = lexer.lexer(new VectorBuilderSequenceHandler[WithSource[Token]])
 
-    Characterizer.characterize(grammar.sequenceHandler).map {
+    Characterizer.characterize(lexHandler).map {
       case -\/(error) => -\/(NonEmptyList(convertError(error)))
       case \/-(-\/(errors)) => -\/(errors.map(convertError))
-      case \/-(\/-(NonEmptyList(WithSource(result, _), INil()))) =>
-        \/-(result.toVector)
-
-      case \/-(\/-(NonEmptyList(WithSource(_, location), ICons(_, _)))) =>
-        -\/(NonEmptyList(convertError(SyntaxError.AmbiguousParse(location))))
+      case \/-(\/-(result)) =>
+        \/-(result)
 
     }
   }

@@ -1,7 +1,7 @@
 package com.mi3software.argon.parser.impl
 
 import com.mi3software.argon.parser.{CharacterCategory, GrammarError, SyntaxError, Token}
-import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
+import com.mi3software.argon.util.{FilePosition, SequenceHandler, SourceLocation, WithSource}
 
 import scala.language.postfixOps
 import scalaz._
@@ -222,7 +222,7 @@ final class Lexer {
       op(colon, Token.OP_COLON)
   }
 
-  val token: TGrammar[Option[Token]] =
+  private val token: TGrammar[Option[Token]] =
     matchNewLine |
       matchWhitespace |
       matchSingleQuoteString |
@@ -230,7 +230,11 @@ final class Lexer {
       matchIdentifier |
       matchOperator
 
-  val lexer: TGrammar[Vector[WithSource[Token]]] =
-    (token.observeSource*) --> { _.flatMap(WithSource.liftF(tokenOpt => tokenOpt.toList.toVector)) }
+  def lexer[TResult]
+  (tokenHandler: SequenceHandler[WithSource[Token], FilePosition, TResult])
+  : SequenceHandler[WithSource[String], FilePosition, NonEmptyList[SyntaxError] \/ TResult] =
+    token.parseLongestRepeaterSequenceHandler(tokenHandler.forCollectedItems[WithSource[Option[Token]]] {
+      case WithSource(Some(token), location) => WithSource(token, location)
+    })
 
 }
