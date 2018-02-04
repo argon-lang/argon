@@ -78,16 +78,16 @@ final class Lexer {
       case "o" => 8
     }
 
-    def calcNumber(base: BigInt)(content: IList[BigInt]): BigInt =
+    def calcNumber(base: BigInt)(content: NonEmptyList[BigInt]): BigInt =
       content.foldLeft[BigInt](0) { case (value, d) => value * base + d }
 
     val withPrefix =
       (token(CharacterCategory.NumberDigit, "0") ++ numBase ++ (digit+~)) --> {
-        case (_, base, content) => calcNumber(base)(content.list)
+        case (_, base, content) => calcNumber(base)(content)
       }
 
     val noPrefix =
-      (digit*) --> calcNumber(10)
+      (digit+~) --> calcNumber(10)
 
     (withPrefix | noPrefix) --> { n => Some(Token.IntToken(n)) }
   }

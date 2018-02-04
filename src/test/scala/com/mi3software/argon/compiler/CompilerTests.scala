@@ -3,9 +3,9 @@ package com.mi3software.argon.compiler
 import java.io.File
 
 import com.mi3software.argon.testrunner.{TestCaseLoader, TestCaseResult, TestCaseRunner, TestCaseStructure}
-import org.scalatest.{BeforeAndAfterAll, FunSpec, Matchers}
+import org.scalatest.{FunSpec, Matchers}
 
-class CompilerTests extends FunSpec with Matchers with BeforeAndAfterAll {
+class CompilerTests extends FunSpec with Matchers {
 
   private val runner = new TestCaseRunner
 

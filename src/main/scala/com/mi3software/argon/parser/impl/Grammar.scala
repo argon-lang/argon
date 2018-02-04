@@ -18,8 +18,14 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
   final def endOfInput(pos: FilePosition): TErrorList \/ NonEmptyList[WithSource[T]] = endOfInputImpl(pos, Set())
   protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]]
 
-  def shortCircuit: Boolean = false
-  def hasResult: Boolean = false
+  def compact(pos: FilePosition): Grammar[TToken, TSyntaxError, T] = compactImpl(pos, Set.empty)
+  protected def compactImpl(pos: FilePosition, set: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, T]
+
+  protected lazy val isReject: Boolean = isEmptyStrImpl(Set.empty)
+  protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean
+
+  protected lazy val isEmptyStr: Boolean = isEmptyStrImpl(Set.empty)
+  protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean
 
 
   final def sequenceHandler: SequenceHandler[WithSource[TToken], FilePosition, TErrorList \/ NonEmptyList[WithSource[T]]] =
@@ -35,6 +41,9 @@ sealed trait Grammar[TToken, TSyntaxError, T] {
       override def end(terminator: FilePosition, state: Grammar[TToken, TSyntaxError, T]): TErrorList \/ NonEmptyList[WithSource[T]] =
         state.endOfInput(terminator)
     }
+
+
+  protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U]
 
 }
 
@@ -58,7 +67,7 @@ object Grammar {
       def -+> [U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
         new MapGrammar[TToken, TSyntaxError, T, U](grammar1, f)
 
-      def flatMap[U](f: WithSource[T] => Grammar[TToken, TSyntaxError, U]): Grammar[TToken, TSyntaxError, U] =
+      private[Grammar] def flatMap[U](f: WithSource[T] => Grammar[TToken, TSyntaxError, U]): Grammar[TToken, TSyntaxError, U] =
         new FlatMapGrammar(grammar1)(f)
 
       def |
@@ -191,6 +200,15 @@ object Grammar {
   : Grammar[TToken, TSyntaxError, Result] =
     matcher(category, f.lift)
 
+  private def fromResult[TToken, TSyntaxError, TTokenCategory, T]
+  (result: NonEmptyList[TSyntaxError] \/ NonEmptyList[WithSource[T]])
+  (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
+  : Grammar[TToken, TSyntaxError, T] =
+    result match {
+      case -\/(errorList) => RejectGrammar(errorList)
+      case \/-(results) => EmptyStrGrammar(results)
+    }
+
   trait ErrorFactory[-TToken, -TTokenCategory, TSyntaxError] {
     def createError(error: GrammarError[TToken, TTokenCategory]): TSyntaxError
     def errorEndLocationOrder: Order[TSyntaxError]
@@ -214,12 +232,18 @@ object Grammar {
 
     override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T] = this
 
-    def changeType[U]: RejectGrammar[TToken, TSyntaxError, U] = RejectGrammar(grammarErrors)
-
-
     override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]] = -\/(grammarErrors)
 
-    override def shortCircuit: Boolean = true
+    override def compact(pos: FilePosition): Grammar[TToken, TSyntaxError, T] = this
+    override protected def compactImpl(pos: FilePosition, set: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, T] = this
+
+    override protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean = true
+    override protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean = false
+
+
+    override protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] = changeType
+
+    def changeType[U]: RejectGrammar[TToken, TSyntaxError, U] = RejectGrammar(grammarErrors)
   }
 
   private final case class EmptyStrGrammar[TToken, TSyntaxError, T]
@@ -232,10 +256,18 @@ object Grammar {
 
     override def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]] = \/-(result)
 
+    override def compact(pos: FilePosition): Grammar[TToken, TSyntaxError, T] = this
+    override protected def compactImpl(pos: FilePosition, set: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, T] = this
+
+    override protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean = false
+    override protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean = true
+
+    override protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
+      EmptyStrGrammar(result.map(f))
+
     def flatMapPos[U](f: (WithSource[T], FilePosition) => Grammar[TToken, TSyntaxError, U]): Grammar[TToken, TSyntaxError, U] =
       new FlatMapPosGrammar(this)(f)
 
-    override def hasResult: Boolean = true
   }
 
   private final case class TokenGrammar[TToken, TSyntaxError, TTokenCategory, T]
@@ -255,17 +287,26 @@ object Grammar {
     override def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[T]] =
       -\/(NonEmptyList(errorFactory.createError(GrammarError.UnexpectedEndOfFile(category, pos))))
 
+    override def compact(pos: FilePosition): Grammar[TToken, TSyntaxError, T] = this
+    override protected def compactImpl(pos: FilePosition, set: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, T] = this
+
+    override protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean = false
+    override protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean = false
+
+    override protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
+      this -+> f
   }
 
   private final class ConcatGrammar[TToken, TSyntaxError, A, B, T]
   (
-    grammarA: Grammar[TToken, TSyntaxError, A],
+    grammarAUncached: => Grammar[TToken, TSyntaxError, A],
     grammarBUncached: => Grammar[TToken, TSyntaxError, B],
     combine: (WithSource[A], WithSource[B]) => WithSource[T]
   )(implicit
     errorFactory: ErrorFactory[TToken, _, TSyntaxError]
   ) extends CachedGrammar[TToken, TSyntaxError, T] {
 
+    private lazy val grammarA = grammarAUncached
     private lazy val grammarB = grammarBUncached
 
     override protected def deriveImpl(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T] =
@@ -295,12 +336,63 @@ object Grammar {
           b <- bItems
         } yield combine(a, b)
 
+
+    override protected def compactImpl(pos: FilePosition, set: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, T] =
+      if(set contains this)
+        this
+      else if(isReject || isEmptyStr)
+        fromResult(endOfInput(pos))
+      else if(grammarA.isEmptyStr) {
+        grammarA.endOfInput(pos) match {
+          case -\/(errorList) => RejectGrammar(errorList)
+          case \/-(aItems) =>
+            UnionGrammar.fromList(
+              aItems.map { a => Lazy { grammarB -+> { b => combine(a, b) } } }
+            )
+        }
+      }
+      else if(grammarB.isEmptyStr) {
+        grammarB.endOfInput(pos) match {
+          case -\/(errorList) => RejectGrammar(errorList)
+          case \/-(bItems) =>
+            UnionGrammar.fromList(
+              bItems.map { b => Lazy { grammarA -+> { a => combine(a, b) } } }
+            )
+        }
+      }
+      else {
+        val gAc = grammarA.compactImpl(pos, set + this)
+        val gBc = grammarB.compactImpl(pos, set + this)
+
+        implicit val equalInstA = ReferenceEqual[Grammar[TToken, TSyntaxError, A]]
+        implicit val equalInstB = ReferenceEqual[Grammar[TToken, TSyntaxError, B]]
+
+        if((gAc =/= grammarA) || (gBc =/= grammarB))
+          ConcatGrammar(gAc, gBc)(combine)
+        else
+          this
+      }
+
+    override protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
+      if(seen contains this)
+        false
+      else
+        grammarA.isRejectImpl(seen + this) || grammarB.isRejectImpl(seen + this)
+
+    override protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
+      if(seen contains this)
+        false
+      else
+        grammarA.isRejectImpl(seen + this) && grammarB.isRejectImpl(seen + this)
+
+    override protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
+      ConcatGrammar(grammarA, grammarB)((a, b) => f(combine(a, b)))
   }
 
   private object ConcatGrammar {
     def apply[TToken, TSyntaxError, A, B, T]
     (
-      grammarA: Grammar[TToken, TSyntaxError, A],
+      grammarA: => Grammar[TToken, TSyntaxError, A],
       grammarB: => Grammar[TToken, TSyntaxError, B]
     )(
       combine: (WithSource[A], WithSource[B]) => WithSource[T]
@@ -312,9 +404,12 @@ object Grammar {
   }
 
   private final class UnionGrammar[TToken, TSyntaxError, T]
-  (grammarA: => Grammar[TToken, TSyntaxError, T], grammarB: => Grammar[TToken, TSyntaxError, T])
+  (grammarAUncached: => Grammar[TToken, TSyntaxError, T], grammarBUncached: => Grammar[TToken, TSyntaxError, T])
   (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
     extends Grammar[TToken, TSyntaxError, T] {
+
+    private lazy val grammarA = grammarAUncached
+    private lazy val grammarB = grammarBUncached
 
     override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, T] =
       UnionGrammar(grammarA.derive(token), grammarB.derive(token))
@@ -344,6 +439,38 @@ object Grammar {
         }
       }
 
+    override protected def compactImpl(pos: FilePosition, set: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, T] =
+      if(set contains this)
+        this
+      else if(isReject || isEmptyStr)
+        fromResult(endOfInput(pos))
+      else {
+        val gAc = grammarA.compactImpl(pos, set + this)
+        val gBc = grammarB.compactImpl(pos, set + this)
+
+        implicit val equalInst = ReferenceEqual[Grammar[TToken, TSyntaxError, T]]
+
+        if((gAc =/= grammarA) || (gBc =/= grammarB))
+          UnionGrammar(gAc, gBc)
+        else
+          this
+      }
+
+
+    override protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
+      if(seen contains this)
+        false
+      else
+        grammarA.isRejectImpl(seen + this) && grammarA.isRejectImpl(seen + this)
+
+    override protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
+      if(seen contains this)
+        false
+      else
+        grammarA.isEmptyStrImpl(seen + this) && grammarB.isEmptyStrImpl(seen + this)
+
+    override protected def mapNonLazy[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, U] =
+      UnionGrammar(grammarA.mapNonLazy(f), grammarB.mapNonLazy(f))
   }
 
   object UnionGrammar {
@@ -368,7 +495,9 @@ object Grammar {
 
   }
 
-  private final class MapGrammar[TToken, TSyntaxError, T, U](inner: => Grammar[TToken, TSyntaxError, T], f: WithSource[T] => WithSource[U]) extends CachedGrammar[TToken, TSyntaxError, U] {
+  private final class MapGrammar[TToken, TSyntaxError, T, U](innerUncached: => Grammar[TToken, TSyntaxError, T], f: WithSource[T] => WithSource[U]) extends CachedGrammar[TToken, TSyntaxError, U] {
+
+    private lazy val inner = innerUncached
 
     override protected def deriveImpl(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, U] =
       inner.derive(token) -+> f
@@ -376,12 +505,26 @@ object Grammar {
     override protected def endOfInputImpl(pos: FilePosition, seen: Set[Grammar[TToken, TSyntaxError, _]]): TErrorList \/ NonEmptyList[WithSource[U]] =
       inner.endOfInputImpl(pos, seen).map(_.map(f))
 
+    override protected def compactImpl(pos: FilePosition, set: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, U] =
+      inner.compactImpl(pos, set).mapNonLazy(f)
+
+    override protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
+      inner.isRejectImpl(seen)
+
+    override protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
+      inner.isEmptyStrImpl(seen)
+
+    override protected def mapNonLazy[V](g: WithSource[U] => WithSource[V]): Grammar[TToken, TSyntaxError, V] =
+      inner.mapNonLazy(f andThen g)
+
   }
 
   private final class FlatMapGrammar[TToken, TSyntaxError, T, U]
-  (inner: Grammar[TToken, TSyntaxError, T])
+  (innerUncached: => Grammar[TToken, TSyntaxError, T])
   (f: WithSource[T] => Grammar[TToken, TSyntaxError, U])
   extends Grammar[TToken, TSyntaxError, U] {
+
+    private lazy val inner = innerUncached
 
     override def derive(token: WithSource[TToken]): Grammar[TToken, TSyntaxError, U] =
       new FlatMapGrammar(inner.derive(token))(f)
@@ -393,6 +536,17 @@ object Grammar {
           .map { _.flatMap(identity) }
       }
 
+    override protected def compactImpl(pos: FilePosition, set: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, U] =
+      new FlatMapGrammar(inner.compactImpl(pos, set))(f)
+
+    override protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
+      inner.isRejectImpl(seen)
+
+    override protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
+      false
+
+    override protected def mapNonLazy[V](g: WithSource[U] => WithSource[V]): Grammar[TToken, TSyntaxError, V] =
+      new FlatMapGrammar(inner)(t => f(t).mapNonLazy(g))
   }
 
   private final class FlatMapPosGrammar[TToken, TSyntaxError, T, U]
@@ -410,6 +564,17 @@ object Grammar {
           .map { _.flatMap(identity) }
       }
 
+    override protected def compactImpl(pos: FilePosition, set: Set[Grammar[TToken, TSyntaxError, _]]): Grammar[TToken, TSyntaxError, U] =
+      this
+
+    override protected def isRejectImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
+      false
+
+    override protected def isEmptyStrImpl(seen: Set[Grammar[TToken, TSyntaxError, _]]): Boolean =
+      false
+
+    override protected def mapNonLazy[V](g: WithSource[U] => WithSource[V]): Grammar[TToken, TSyntaxError, V] =
+      new FlatMapPosGrammar(inner)((t, pos) => f(t, pos).mapNonLazy(g))
   }
 
 

@@ -34,6 +34,7 @@ scalacOptions ++= Seq(
   "-language:implicitConversions",
 )
 
+scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xfatal-warnings" || opt == "-Xlint"))
 
 wartremoverWarnings ++= Warts.allBut(
   Wart.Recursion,
@@ -47,11 +48,10 @@ wartremoverWarnings ++= Warts.allBut(
   Wart.ImplicitParameter,
   Wart.ExplicitImplicitTypes,
   Wart.DefaultArguments,
+  Wart.PublicInference,
 
   Wart.TraversableOps,
 )
-
-unmanagedJars in Compile += baseDirectory.value / "thrift-repo/lib/java/build/libthrift-1.0.0.jar"
 
 test in assembly := {}
 assemblyJarName in assembly := "argon.jar"
