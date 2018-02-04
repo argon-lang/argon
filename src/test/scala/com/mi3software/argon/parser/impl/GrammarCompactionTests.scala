@@ -10,12 +10,16 @@ import scalaz._
 
 class GrammarCompactionTests extends FlatSpec with Matchers {
 
-  type TGrammar = Grammar[Int, GrammarError[Int, String], Int]
+  type TGrammar = Grammar[Int, WithSource[String], Int]
 
-  private implicit val errorFactory = new Grammar.ErrorFactory[Int, String, GrammarError[Int, String]] {
-    override def createError(error: GrammarError[Int, String]): GrammarError[Int, String] = error
+  private implicit val errorFactory = new Grammar.ErrorFactory[Int, String, WithSource[String]] {
+    override def createError(error: GrammarError[Int, String]): WithSource[String] =
+      WithSource(error.toString, error.location)
 
-    override def errorEndLocationOrder: Order[GrammarError[Int, String]] =
+    override def createAmbiguityError(location: SourceLocation): WithSource[String] =
+      WithSource("Ambiguity", location)
+
+    override def errorEndLocationOrder: Order[WithSource[String]] =
       (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
   }
 

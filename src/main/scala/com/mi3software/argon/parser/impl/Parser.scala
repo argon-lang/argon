@@ -2,7 +2,7 @@ package com.mi3software.argon.parser.impl
 
 import com.mi3software.argon.parser.Token._
 import com.mi3software.argon.parser._
-import com.mi3software.argon.util.{FilePosition, NamespacePath, WithSource}
+import com.mi3software.argon.util.{FilePosition, NamespacePath, SourceLocation, WithSource}
 
 import scala.reflect.ClassTag
 import scala.language.postfixOps
@@ -18,6 +18,9 @@ final class Parser {
   private implicit val errorFactory = new Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] {
     override def createError(error: GrammarError[Token, TokenCategory]): SyntaxError =
       SyntaxError.ParserError(error)
+
+    override def createAmbiguityError(location: SourceLocation): SyntaxError =
+      SyntaxError.AmbiguousParse(location)
 
     override def errorEndLocationOrder: Order[SyntaxError] =
       (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)

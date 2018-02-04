@@ -1,7 +1,7 @@
 package com.mi3software.argon.parser.impl
 
 import com.mi3software.argon.parser.{CharacterCategory, GrammarError, SyntaxError, Token}
-import com.mi3software.argon.util.{FilePosition, WithSource}
+import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
 
 import scala.language.postfixOps
 import scalaz._
@@ -20,6 +20,9 @@ final class Lexer {
     new Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] {
       override def createError(error: GrammarError[String, CharacterCategory]): SyntaxError =
         SyntaxError.LexerError(error)
+
+      override def createAmbiguityError(location: SourceLocation): SyntaxError =
+        SyntaxError.AmbiguousParse(location)
 
       override def errorEndLocationOrder: Order[SyntaxError] =
         (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
@@ -46,7 +49,7 @@ final class Lexer {
     (singleQuote ++ ((singleQuote ++ singleQuote --> { _ => "'" } | anyChar)*) ++ singleQuote) --> {
       case (_, chs, _) =>
         Some(Token.StringToken(NonEmptyList(
-          Token.StringToken.StringPart(chs.toVector.mkString)
+          Token.StringToken.StringPart(chs.mkString)
         )))
     }
   }
@@ -145,7 +148,7 @@ final class Lexer {
 
     (startChar ++ (idChar*) ++ (idTerminator?)) --> {
       case (start, inner, term) =>
-        Some(createToken(start + inner.toVector.mkString + term.toList.mkString))
+        Some(createToken(start + inner.mkString + term.toList.mkString))
     }
   }
 
