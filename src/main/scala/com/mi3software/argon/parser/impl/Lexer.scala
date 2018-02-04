@@ -75,7 +75,8 @@ final class Lexer {
       case "F" | "f" => 0xF
     }
 
-    val nonZeroDigit = partialMatcher[BigInt](CharacterCategory.NonZeroDigit) {
+    val decDigit = partialMatcher[BigInt](CharacterCategory.NonZeroDigit) {
+      case "0" => 0
       case "1" => 1
       case "2" => 2
       case "3" => 3
@@ -93,15 +94,17 @@ final class Lexer {
       case "o" => 8
     }
 
-    val withPrefix =
-      (token(CharacterCategory.Zero, "0") ++ numBase ++ (digit+~)) --> {
-        case (_, base, content) => Some(Token.IntToken(1, base, content.toVector)) : Option[Token]
+    val withBaseSpec =
+      (token(CharacterCategory.Zero, "0") ++ numBase ++ (digit*)) --> {
+        case (_, base, content) => Some(Token.IntToken(1, base, content)) : Option[Token]
       }
 
-    val noPrefix =
-      nonZeroDigit ++ (digit*) --> { case (head, tail) => Some(Token.IntToken(1, 10, head +: tail)) : Option[Token] }
+    val decimalNum =
+      decDigit ++ decDigit ++ (digit*) --> { case (d1, d2, tail) => Some(Token.IntToken(1, 10, Vector(d1, d2) ++ tail)) : Option[Token] }
 
-    withPrefix | noPrefix
+    val singleDigit = decDigit --> { d => Some(Token.IntToken(1, 10, Vector(d))) : Option[Token] }
+
+    singleDigit | withBaseSpec | decimalNum
   }
 
   private val matchIdentifier: Lex = {
