@@ -1,7 +1,7 @@
 package com.mi3software.argon.parser.impl
 
 import com.mi3software.argon.parser.{CharacterCategory, GrammarError, SyntaxError, Token}
-import com.mi3software.argon.util.{FilePosition, SequenceHandler, SourceLocation, WithSource}
+import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
 
 import scala.language.postfixOps
 import scalaz._
@@ -41,7 +41,7 @@ final class Lexer {
   }
 
   private val matchWhitespace: Lex =
-    tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0)) && s != "\r" && s != "\n") --> const(None)
+    (tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0)) && s != "\r" && s != "\n")+~) --> const(None)
 
   private val matchSingleQuoteString: Lex = {
     val singleQuote = token(CharacterCategory.SingleQuote, "'")
@@ -234,7 +234,7 @@ final class Lexer {
       op(colon, Token.OP_COLON)
   }
 
-  private val token: TGrammar[Option[Token]] =
+  private val matchToken: TGrammar[Option[Token]] =
     matchNewLine |
       matchWhitespace |
       matchSingleQuoteString |
@@ -242,11 +242,13 @@ final class Lexer {
       matchIdentifier |
       matchOperator
 
-  def lexer[TResult]
-  (tokenHandler: SequenceHandler[WithSource[Token], FilePosition, TResult])
-  : SequenceHandler[WithSource[String], FilePosition, NonEmptyList[SyntaxError] \/ TResult] =
-    token.parseLongestRepeaterSequenceHandler(tokenHandler.forCollectedItems[WithSource[Option[Token]]] {
-      case WithSource(Some(token), location) => WithSource(token, location)
-    })
+  private def collectTokens(token: WithSource[Option[Token]]): Option[WithSource[Token]] =
+    token match {
+      case WithSource(Some(token), location) => Some(WithSource(token, location))
+      case WithSource(None, _) => None
+    }
+
+  def lex(chars: Vector[WithSource[String]]): Either[NonEmptyList[SyntaxError], Vector[WithSource[Token]]] =
+    Grammar.parseAll(matchToken)(collectTokens)(chars, FilePosition(1, 1))
 
 }

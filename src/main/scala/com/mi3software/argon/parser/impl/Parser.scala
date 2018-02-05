@@ -175,9 +175,9 @@ final class Parser {
 
 
   private val ruleMemberAccess: TGrammar[WithSource[Expr] => Expr] =
-    matchTokenFactory(Identifier) --> [WithSource[Expr] => Expr] { case Identifier(id) => baseExpr => DotExpr(baseExpr, id) } |
-      matchToken(KW_NEW) --> const(ClassConstructorExpr.apply) |
-      matchToken(KW_TYPE) --> const(TypeOfExpr.apply)
+    matchTokenFactory(Identifier) --> { case Identifier(id) => baseExpr: WithSource[Expr] => DotExpr(baseExpr, id) } |
+      matchToken(KW_NEW) --> const(ClassConstructorExpr.apply _) |
+      matchToken(KW_TYPE) --> const(TypeOfExpr.apply _)
 
   private def ruleExpressionDot(parenCallHandler: ParenCallHandlerBase)(nextRule: TGrammar[Expr]): TGrammar[Expr] = {
     lazy val rule: TGrammar[Expr] =
@@ -570,9 +570,16 @@ final class Parser {
       ruleImportNamespace |
       ruleStatement.observeSource --> TopLevelStatement.Statement
 
-  val ruleTopLevelStatementList: TGrammar[Vector[WithSource[TopLevelStatement]]] =
-    (ruleStatementSeparator*) ++ ((ruleTopLevelStatement.observeSource ++ (ruleStatementSeparator*) --> { case (stmt, _) => stmt })*) --> {
-      case (_, stmts) => stmts.toVector
+  private val ruleTopLevelStatementPadded: TGrammar[WithSource[TopLevelStatement]] =
+    (ruleStatementSeparator*) ++ ruleTopLevelStatement.observeSource ++ (ruleStatementSeparator*) --> {
+      case (_, stmt, _) => stmt
     }
+
+  private def collectStmts(stmt: WithSource[WithSource[TopLevelStatement]]): Option[WithSource[TopLevelStatement]] =
+    Some(stmt.value)
+
+  def parse(tokens: Vector[WithSource[Token]]): Either[NonEmptyList[SyntaxError], Vector[WithSource[TopLevelStatement]]] =
+    Grammar.parseAll(ruleTopLevelStatementPadded)(collectStmts)(tokens, FilePosition(1, 1))
+
 
 }

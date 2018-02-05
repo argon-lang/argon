@@ -1,6 +1,5 @@
 package com.mi3software.argon.parser.impl
 
-import com.mi3software.argon.util.WithSource
 import org.scalatest.{FlatSpec, Matchers}
 
 import scalaz._
@@ -11,110 +10,105 @@ import scala.language.postfixOps
 class GrammarTests extends FlatSpec with Matchers with GrammarTestHelpers {
 
   "A token grammar" should "fail for EOF" in {
-    numberToken(5).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(numberToken(5))() should matchPattern { case Left(_) => }
   }
 
   it should "fail for wrong token" in {
-    numberToken(5).derive(ws(8)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(numberToken(5))(8) should matchPattern { case Left(_) => }
   }
 
   it should "succeed for correct token" in {
-    numberToken(5).derive(ws(5)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(5, _), INil())) => }
+    parse(numberToken(5))(5) shouldBe Right((Vector(), 5))
   }
 
   "An optional token grammar" should "succeed for EOF" in {
-    (numberToken(6)?).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(None, _), _)) => }
+    parse(numberToken(6)?)() shouldBe Right((Vector(), None))
   }
 
-  it should "fail for wrong token" in {
-    (numberToken(6)?).derive(ws(2)).endOfInput(pos) should matchPattern { case -\/(_) => }
-  }
-
-  it should "succeed for correct token" in {
-    (numberToken(6)?).derive(ws(6)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(Some(6), _), INil())) => }
-  }
-
-  "An repeated (*) token grammar" should "succeed for EOF" in {
-    (numberToken(7)*).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(Vector(), _), INil())) => }
-  }
-
-  it should "fail for wrong token" in {
-    (numberToken(7)*).derive(ws(4)).endOfInput(pos) should matchPattern { case -\/(_) => }
+  it should "not consume wrong token" in {
+    parse(numberToken(6)?)(2) shouldBe Right((Vector(2), None))
   }
 
   it should "succeed for correct token" in {
-    (numberToken(7)*).derive(ws(7)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(Vector(7), _), INil())) => }
+    parse(numberToken(6)?)(6) shouldBe Right((Vector(), Some(6)))
+  }
+
+  "A repeated (*) token grammar" should "succeed for EOF" in {
+    parse(numberToken(7)*)() shouldBe Right((Vector(), Vector()))
+  }
+
+  it should "not consume wrong token" in {
+    parse(numberToken(7)*)(4) shouldBe Right((Vector(4), Vector()))
+  }
+
+  it should "succeed for correct token" in {
+    parse(numberToken(7)*)(7) shouldBe Right((Vector(), Vector(7)))
   }
 
   it should "succeed for 2 correct tokens" in {
-    val g = numberToken(7)*
-    val a = g.derive(ws(7)).derive(ws(7)).endOfInput(pos)
-    a should matchPattern { case \/-(NonEmptyList(WithSource(Vector(7, 7), _), INil())) => }
+    parse(numberToken(7)*)(7, 7) shouldBe Right((Vector(), Vector(7, 7)))
   }
 
-  "An repeated (+~) token grammar" should "fail for EOF" in {
-    (numberToken(7)+~).endOfInput(pos) should matchPattern { case -\/(_) => }
+  "A repeated (+~) token grammar" should "fail for EOF" in {
+    parse(numberToken(7)+~)() should matchPattern { case Left(_) => }
   }
 
   it should "fail for wrong token" in {
-    (numberToken(7)*).derive(ws(4)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(numberToken(7)+~)(4) should matchPattern { case Left(_) => }
   }
 
   it should "succeed for correct token" in {
-    (numberToken(7)*).derive(ws(7)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(Vector(7), _), INil())) => }
+    parse(numberToken(7)+~)(7) shouldBe Right((Vector(), NonEmptyList(7)))
   }
 
   it should "succeed for 2 correct tokens" in {
-    val g = numberToken(7)*
-    val a = g.derive(ws(7)).derive(ws(7)).endOfInput(pos)
-    a should matchPattern { case \/-(NonEmptyList(WithSource(Vector(7, 7), _), INil())) => }
+    parse(numberToken(7)+~)(7, 7) shouldBe Right((Vector(), NonEmptyList(7, 7)))
   }
 
-  "An union grammar" should "fail for EOF" in {
-    (numberToken(0) | numberToken(1)).endOfInput(pos) should matchPattern { case -\/(_) => }
+  "A union grammar" should "fail for EOF" in {
+    parse(numberToken(0) | numberToken(1))() should matchPattern { case Left(_) => }
   }
 
   it should "fail for wrong token" in {
-    (numberToken(0) | numberToken(1)).derive(ws(2)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(numberToken(0) | numberToken(1))(2) should matchPattern { case Left(_) => }
   }
 
   it should "succeed for left token" in {
-    (numberToken(0) | numberToken(1)).derive(ws(0)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(0, _), INil())) => }
+    parse(numberToken(0) | numberToken(1))(0) shouldBe Right((Vector(), 0))
   }
 
   it should "succeed for right token" in {
-    (numberToken(0) | numberToken(1)).derive(ws(1)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(1, _), INil())) => }
+    parse(numberToken(0) | numberToken(1))(1) shouldBe Right((Vector(), 1))
   }
 
-  "An concat grammar" should "fail for EOF" in {
-    (numberToken(4) ++ numberToken(8)).endOfInput(pos) should matchPattern { case -\/(_) => }
+  "A concat grammar" should "fail for EOF" in {
+    parse(numberToken(4) ++ numberToken(8))() should matchPattern { case Left(_) => }
   }
 
   it should "fail for wrong token" in {
-    (numberToken(4) ++ numberToken(8)).derive(ws(2)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(numberToken(4) ++ numberToken(8))(2) should matchPattern { case Left(_) => }
   }
 
   it should "fail for wrong first token" in {
-    (numberToken(4) ++ numberToken(8)).derive(ws(2)).derive(ws(8)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(numberToken(4) ++ numberToken(8))(2, 8) should matchPattern { case Left(_) => }
   }
 
   it should "fail for wrong second token" in {
-    (numberToken(4) ++ numberToken(8)).derive(ws(4)).derive(ws(7)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(numberToken(4) ++ numberToken(8))(4, 7) should matchPattern { case Left(_) => }
   }
 
   it should "fail for first token" in {
-    (numberToken(4) ++ numberToken(8)).derive(ws(4)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(numberToken(4) ++ numberToken(8))(4) should matchPattern { case Left(_) => }
   }
 
   it should "fail for second token" in {
-    (numberToken(4) ++ numberToken(8)).derive(ws(8)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(numberToken(4) ++ numberToken(8))(8) should matchPattern { case Left(_) => }
   }
 
   it should "succeed for first and second token" in {
-    val a = (numberToken(4) ++ numberToken(8)).derive(ws(4)).derive(ws(8)).endOfInput(pos)
-    a should matchPattern { case \/-(NonEmptyList(WithSource((4, 8), _), INil())) => }
+    parse(numberToken(4) ++ numberToken(8))(4, 8) shouldBe Right((Vector(), (4, 8)))
   }
-
+/*
   private lazy val leftRec: TGrammar =
     numberToken(0) | leftRec ++ numberToken(1) --> { case (a, b) => a + b }
 
@@ -145,36 +139,36 @@ class GrammarTests extends FlatSpec with Matchers with GrammarTestHelpers {
   it should "succeed for head tail tail" in {
     leftRec.derive(ws(0)).derive(ws(1)).derive(ws(1)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(2, _), INil())) => }
   }
-
+*/
   private lazy val rightRec: TGrammar =
     numberToken(0) | numberToken(1) ++ rightRec --> { case (a, b) => a + b }
 
-  "An right recursive grammar" should "fail for EOF" in {
-    rightRec.endOfInput(pos) should matchPattern { case -\/(_) => }
+  "A right recursive grammar" should "fail for EOF" in {
+    parse(rightRec)() should matchPattern { case Left(_) => }
   }
 
   it should "fail for wrong token" in {
-    rightRec.derive(ws(2)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(rightRec)(2) should matchPattern { case Left(_) => }
   }
 
   it should "fail for prefix token" in {
-    rightRec.derive(ws(1)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(rightRec)(1) should matchPattern { case Left(_) => }
   }
 
   it should "succeed for end token" in {
-    rightRec.derive(ws(0)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(0, _), INil())) => }
+    parse(rightRec)(0) shouldBe Right((Vector(), 0))
   }
 
   it should "succeed for prefix end" in {
-    rightRec.derive(ws(1)).derive(ws(0)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(1, _), INil())) => }
+    parse(rightRec)(1, 0) shouldBe Right((Vector(), 1))
   }
 
-  it should "fail for end end" in {
-    rightRec.derive(ws(0)).derive(ws(0)).endOfInput(pos) should matchPattern { case -\/(_) => }
+  it should "not consume second end in end end" in {
+    parse(rightRec)(0, 0) shouldBe Right((Vector(0), 0))
   }
 
   it should "succeed for prefix prefix end" in {
-    rightRec.derive(ws(1)).derive(ws(1)).derive(ws(0)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(2, _), INil())) => }
+    parse(rightRec)(1, 1, 0) shouldBe Right((Vector(), 2))
   }
 
 }

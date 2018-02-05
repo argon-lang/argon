@@ -23,8 +23,11 @@ trait GrammarTestHelpers {
 
   protected def numberToken(n: Int): TGrammar = Grammar.matcher(n.toString, m => Some(m).filter(_ === n))
 
-  protected val pos = FilePosition(0, 0)
-
-  protected def ws[T](t: T) = WithSource(t, SourceLocation.empty)
+  protected def parse[T](grammar: Grammar[Int, WithSource[String], T])(tokens: Int*): Either[NonEmptyList[WithSource[String]], (Vector[Int], T)] =
+    grammar.parse(
+      tokens.zipWithIndex.map { case (value, i) => WithSource(value, SourceLocation(FilePosition(1, i + 1), FilePosition(1, i + 2))) }.toVector,
+      FilePosition(1, 1)
+    )
+    .map { case (remTokens, _, res) => (remTokens.map { _.value }, res.value) }
 
 }
