@@ -52,6 +52,21 @@ object Grammar {
       : Grammar[TToken, TSyntaxError, V] =
         ConcatGrammar(grammar1, grammar2) { (a, b) => WithSource(combiner.combine(a.value, b.value), SourceLocation.merge(a.location, b.location)) }
 
+      final class LeftRecGrammarBuilder[U, V]
+      (grammar2: => Grammar[TToken, TSyntaxError, U])
+      (implicit combiner: GrammarConcatCombiner[T, U, V], errorFactory: ErrorFactory[TToken, _, TSyntaxError]) {
+
+        def --> (f: V => T): Grammar[TToken, TSyntaxError, T] =
+          LeftRecGrammar(grammar1, grammar2) { (a, b) => WithSource(f(combiner.combine(a.value, b.value)), SourceLocation.merge(a.location, b.location)) }
+
+      }
+
+      def -- [U, V]
+      (grammar2: => Grammar[TToken, TSyntaxError, U])
+      (implicit combiner: GrammarConcatCombiner[T, U, V], errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      : LeftRecGrammarBuilder[U, V] =
+        new LeftRecGrammarBuilder[U, V](grammar2)
+
       def discard: Grammar[TToken, TSyntaxError, Unit] = --> { _ => () }
       def ? (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError]): Grammar[TToken, TSyntaxError, Option[T]] =
         --> (Some.apply) | EmptyStrGrammar(WithSource(None, SourceLocation.empty))
@@ -109,6 +124,8 @@ object Grammar {
       (t, n) => (t._1, t._2, t._3, t._4, t._5, t._6, t._7, t._8, t._9, t._10, t._11, t._12, t._13, n)
 
   }
+
+  import Operators._
 
 
   def token[TToken, TSyntaxError, TTokenCategory]
@@ -226,16 +243,13 @@ object Grammar {
 
 
     override protected def parseImpl(tokens: Vector[WithSource[TToken]], pos: FilePosition, leftRecRules: LeftRecRules): Either[TErrorList, (Vector[WithSource[TToken]], FilePosition, WithSource[T])] =
-      if(leftRecRules contains this)
-        Left(NonEmptyList(errorFactory.createError(GrammarError.InfiniteRecursion(pos))))
-      else
-        grammarA.parseImpl(tokens, pos, leftRecRules + this).flatMap {
-          case (tokens2, pos2, valueA) =>
-            grammarB.parse(tokens2, pos2).map {
-              case (tokens3, pos3, valueB) =>
-                (tokens3, pos3, combine(valueA, valueB))
-            }
-        }
+      grammarA.parseImpl(tokens, pos, leftRecRules).flatMap {
+        case (tokens2, pos2, valueA) =>
+          grammarB.parse(tokens2, pos2).map {
+            case (tokens3, pos3, valueB) =>
+              (tokens3, pos3, combine(valueA, valueB))
+          }
+      }
 
   }
 
@@ -250,6 +264,47 @@ object Grammar {
       errorFactory: ErrorFactory[TToken, _, TSyntaxError]
     ): ConcatGrammar[TToken, TSyntaxError, A, B, T] =
       new ConcatGrammar(grammarA, grammarB, combine)
+
+  }
+
+  private final class LeftRecGrammar[TToken, TSyntaxError, A, B]
+  (
+    grammarAUncached: => Grammar[TToken, TSyntaxError, A],
+    grammarBUncached: => Grammar[TToken, TSyntaxError, B],
+    combine: (WithSource[A], WithSource[B]) => WithSource[A]
+  )(implicit
+    errorFactory: ErrorFactory[TToken, _, TSyntaxError]
+  ) extends Grammar[TToken, TSyntaxError, A] {
+
+    private lazy val grammarA = grammarAUncached
+    private val grammarBRep = grammarBUncached.observeSource*
+
+
+    override protected def parseImpl(tokens: Vector[WithSource[TToken]], pos: FilePosition, leftRecRules: LeftRecRules): Either[TErrorList, (Vector[WithSource[TToken]], FilePosition, WithSource[A])] =
+      if(leftRecRules contains this)
+        Left(NonEmptyList(errorFactory.createError(GrammarError.InfiniteRecursion(pos))))
+      else
+        grammarA.parseImpl(tokens, pos, leftRecRules + this).flatMap {
+          case (tokens2, pos2, valueA) =>
+            grammarBRep.parse(tokens2, pos2).map {
+              case (tokens3, pos3, WithSource(valueBVec, _)) =>
+                (tokens3, pos3, valueBVec.foldLeft(valueA)(combine))
+            }
+        }
+
+  }
+
+  private object LeftRecGrammar {
+    def apply[TToken, TSyntaxError, A, B]
+    (
+      grammarA: => Grammar[TToken, TSyntaxError, A],
+      grammarB: => Grammar[TToken, TSyntaxError, B]
+    )(
+      combine: (WithSource[A], WithSource[B]) => WithSource[A]
+    )(implicit
+      errorFactory: ErrorFactory[TToken, _, TSyntaxError]
+    ): LeftRecGrammar[TToken, TSyntaxError, A, B] =
+      new LeftRecGrammar(grammarA, grammarB, combine)
 
   }
 

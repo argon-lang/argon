@@ -108,38 +108,38 @@ class GrammarTests extends FlatSpec with Matchers with GrammarTestHelpers {
   it should "succeed for first and second token" in {
     parse(numberToken(4) ++ numberToken(8))(4, 8) shouldBe Right((Vector(), (4, 8)))
   }
-/*
+
   private lazy val leftRec: TGrammar =
-    numberToken(0) | leftRec ++ numberToken(1) --> { case (a, b) => a + b }
+    leftRec -- numberToken(1) --> { case (a, b) => a + b } | numberToken(0)
 
   "An left recursive grammar" should "fail for EOF" in {
-    leftRec.endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(leftRec)() should matchPattern { case Left(_) => }
   }
 
   it should "fail for wrong token" in {
-    leftRec.derive(ws(2)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(leftRec)(2) should matchPattern { case Left(_) => }
   }
 
   it should "fail for tail token" in {
-    leftRec.derive(ws(1)).endOfInput(pos) should matchPattern { case -\/(_) => }
+    parse(leftRec)(1) should matchPattern { case Left(_) => }
   }
 
   it should "succeed for head token" in {
-    leftRec.derive(ws(0)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(0, _), INil())) => }
+    parse(leftRec)(0) shouldBe Right((Vector(), 0))
   }
 
   it should "succeed for head tail" in {
-    leftRec.derive(ws(0)).derive(ws(1)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(1, _), INil())) => }
+    parse(leftRec)(0, 1) shouldBe Right((Vector(), 1))
   }
 
-  it should "fail for head head" in {
-    leftRec.derive(ws(0)).derive(ws(0)).endOfInput(pos) should matchPattern { case -\/(_) => }
+  it should "not consume second head for head head" in {
+    parse(leftRec)(0, 0) shouldBe Right((Vector(0), 0))
   }
 
   it should "succeed for head tail tail" in {
-    leftRec.derive(ws(0)).derive(ws(1)).derive(ws(1)).endOfInput(pos) should matchPattern { case \/-(NonEmptyList(WithSource(2, _), INil())) => }
+    parse(leftRec)(0, 1, 1) shouldBe Right((Vector(), 2))
   }
-*/
+
   private lazy val rightRec: TGrammar =
     numberToken(0) | numberToken(1) ++ rightRec --> { case (a, b) => a + b }
 
@@ -163,7 +163,7 @@ class GrammarTests extends FlatSpec with Matchers with GrammarTestHelpers {
     parse(rightRec)(1, 0) shouldBe Right((Vector(), 1))
   }
 
-  it should "not consume second end in end end" in {
+  it should "not consume second end for end end" in {
     parse(rightRec)(0, 0) shouldBe Right((Vector(0), 0))
   }
 
