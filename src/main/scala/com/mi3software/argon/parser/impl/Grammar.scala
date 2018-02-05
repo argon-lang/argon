@@ -52,24 +52,27 @@ object Grammar {
       : Grammar[TToken, TSyntaxError, V] =
         ConcatGrammar(grammar1, grammar2) { (a, b) => WithSource(combiner.combine(a.value, b.value), SourceLocation.merge(a.location, b.location)) }
 
-      final class LeftRecGrammarBuilder[U, V]
+      final class LeftRecGrammarBuilder[U]
       (grammar2: => Grammar[TToken, TSyntaxError, U])
-      (implicit combiner: GrammarConcatCombiner[T, U, V], errorFactory: ErrorFactory[TToken, _, TSyntaxError]) {
+      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError]) {
 
-        def --> (f: V => T): Grammar[TToken, TSyntaxError, T] =
-          LeftRecGrammar(grammar1, grammar2) { (a, b) => WithSource(f(combiner.combine(a.value, b.value)), SourceLocation.merge(a.location, b.location)) }
+        def --> (f: (T, U) => T): Grammar[TToken, TSyntaxError, T] =
+          LeftRecGrammar(grammar1, grammar2) { (a, b) => WithSource(f(a.value, b.value), SourceLocation.merge(a.location, b.location)) }
+
+        def -\> (f: (WithSource[T], U) => T): Grammar[TToken, TSyntaxError, T] =
+          LeftRecGrammar(grammar1, grammar2) { (a, b) => WithSource(f(a, b.value), SourceLocation.merge(a.location, b.location)) }
 
       }
 
-      def -- [U, V]
+      def -- [U]
       (grammar2: => Grammar[TToken, TSyntaxError, U])
-      (implicit combiner: GrammarConcatCombiner[T, U, V], errorFactory: ErrorFactory[TToken, _, TSyntaxError])
-      : LeftRecGrammarBuilder[U, V] =
-        new LeftRecGrammarBuilder[U, V](grammar2)
+      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      : LeftRecGrammarBuilder[U] =
+        new LeftRecGrammarBuilder[U](grammar2)
 
       def discard: Grammar[TToken, TSyntaxError, Unit] = --> { _ => () }
       def ? (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError]): Grammar[TToken, TSyntaxError, Option[T]] =
-        --> (Some.apply) | EmptyStrGrammar(WithSource(None, SourceLocation.empty))
+        --> (Some.apply) | EmptyStrGrammar(None)
 
       def +~
       (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
@@ -192,13 +195,13 @@ object Grammar {
   }
 
   private final case class EmptyStrGrammar[TToken, TSyntaxError, T]
-  (result: WithSource[T])
+  (result: T)
   (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
     extends Grammar[TToken, TSyntaxError, T] {
 
 
     override protected def parseImpl(tokens: Vector[WithSource[TToken]], pos: FilePosition, leftRecRules: LeftRecRules): Either[TErrorList, (Vector[WithSource[TToken]], FilePosition, WithSource[T])] =
-      Right((tokens, pos, result))
+      Right((tokens, pos, WithSource(result, SourceLocation(pos, pos))))
 
   }
 
@@ -328,11 +331,12 @@ object Grammar {
               def findLastErrorPos(errorList: TErrorList): TSyntaxError =
                 errorList.maximum1(errorFactory.errorEndLocationOrder)
 
+
               Left(
                 errorFactory.errorEndLocationOrder(findLastErrorPos(errorListA), findLastErrorPos(errorListB)) match {
                   case Ordering.GT => errorListA
                   case Ordering.LT => errorListB
-                  case Ordering.EQ => errorListA.append(errorListB)
+                  case Ordering.EQ => errorListB
                 }
               )
           }

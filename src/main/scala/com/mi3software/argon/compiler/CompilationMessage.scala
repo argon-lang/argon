@@ -11,7 +11,7 @@ sealed trait CompilationMessage {
   def message: String
 
   override def toString: String =
-    s"${file.name} ${location.start.line}.${location.start.position}-${location.end.line}.${location.end.line}: ${message}"
+    s"${file.name} ${location.start.line}.${location.start.position}-${location.end.line}.${location.end.position}: ${message}"
 }
 trait CompilationError extends CompilationMessage
 
@@ -42,7 +42,9 @@ object CompilationError {
         case GrammarError.UnexpectedToken(expectedCategory, WithSource(token, _)) => s"Expected ${categoryFormatter(expectedCategory)}, but found ${tokenFormatter(token)}"
       }
 
-    private def formatToken(token: Token) = ???
+    private def formatToken(token: Token) =
+      formatTokenCategory(token.category)
+
     private def formatCharacter(ch: String): String = {
       val utf8 = ch.getBytes(Charset.forName("UTF-8")).map { b => f"${b & 0xFF}%02X" }.mkString(" ")
 
@@ -54,7 +56,96 @@ object CompilationError {
         "\"" + ch + "\" (UTF-8: " + utf8 + ")"
     }
 
-    private def formatTokenCategory(category: TokenCategory) = ???
+    private def formatTokenCategory(category: TokenCategory) = category match {
+      case TokenCategory.StringToken => "string literal"
+      case TokenCategory.IntToken => "int literal"
+
+      case TokenCategory.Identifier => "identifier"
+
+
+      case TokenCategory.NewLine => "new line"
+      case TokenCategory.Semicolon => "semicolon"
+
+      case TokenCategory.KW_DEF => "def"
+      case TokenCategory.KW_PROC => "proc"
+      case TokenCategory.KW_INSTANCE => "instance"
+      case TokenCategory.KW_CONSTRUCTOR => "constructor"
+      case TokenCategory.KW_END => "end"
+      case TokenCategory.KW_DO => "do"
+      case TokenCategory.KW_VAR => "var"
+      case TokenCategory.KW_VAL => "val"
+      case TokenCategory.KW_TRUE => "true"
+      case TokenCategory.KW_FALSE => "false"
+      case TokenCategory.KW_AS => "as"
+      case TokenCategory.KW_NAMESPACE => "namespace"
+      case TokenCategory.KW_IMPORT => "import"
+      case TokenCategory.KW_TRAIT => "trait"
+      case TokenCategory.KW_STATIC => "static"
+      case TokenCategory.KW_DATA => "data"
+      case TokenCategory.KW_PUBLIC => "public"
+      case TokenCategory.KW_PROTECTED => "protected"
+      case TokenCategory.KW_PRIVATE => "private"
+      case TokenCategory.KW_INTERNAL => "internal"
+      case TokenCategory.KW_BASE => "base"
+      case TokenCategory.KW_IF => "if"
+      case TokenCategory.KW_THEN => "then"
+      case TokenCategory.KW_ELSE => "else"
+      case TokenCategory.KW_ELSIF => "elsif"
+      case TokenCategory.KW_OPEN => "open"
+      case TokenCategory.KW_SEALED => "sealed"
+      case TokenCategory.KW_VIRTUAL => "virtual"
+      case TokenCategory.KW_ABSTRACT => "abstract"
+      case TokenCategory.KW_OVERRIDE => "override"
+      case TokenCategory.KW_FINAL => "final"
+      case TokenCategory.KW_TYPE => "type"
+      case TokenCategory.KW_MATCH => "match"
+      case TokenCategory.KW_CASE => "case"
+      case TokenCategory.KW_CLASS => "class"
+      case TokenCategory.KW_NEW => "new"
+      case TokenCategory.KW_FIELD => "field"
+      case TokenCategory.KW_INITIALIZE => "initialize"
+      case TokenCategory.KW_UNDERSCORE => "_"
+      case TokenCategory.KW_GC => "gc"
+      case TokenCategory.KW_STRUCT => "struct"
+      case TokenCategory.KW_STACK => "stack"
+      case TokenCategory.KW_ANY => "any"
+      case TokenCategory.KW_VALUETYPE => "valuetype"
+
+      case TokenCategory.OP_BOOLAND => "&&"
+      case TokenCategory.OP_BOOLOR => "||"
+      case TokenCategory.OP_EQUALS => "="
+      case TokenCategory.OP_NOTEQUALS => "≠ (or !=)"
+      case TokenCategory.OP_LESSTHANEQ => "≤ (or <=)"
+      case TokenCategory.OP_GREATERTHANEQ => "≥ (or >=)"
+      case TokenCategory.OP_SHIFTLEFT => "<<"
+      case TokenCategory.OP_SHIFTRIGHT => ">>"
+      case TokenCategory.OP_ASSIGN => "="
+      case TokenCategory.OP_DOT => "."
+      case TokenCategory.OP_COMMA => ","
+      case TokenCategory.OP_OPENPAREN => "("
+      case TokenCategory.OP_CLOSEPAREN => ")"
+      case TokenCategory.OP_OPENBRACKET => "["
+      case TokenCategory.OP_CLOSEBRACKET => "]"
+      case TokenCategory.OP_OPENCURLY => "{"
+      case TokenCategory.OP_CLOSECURLY => "}"
+      case TokenCategory.OP_BOOLNOT => "!"
+      case TokenCategory.OP_ADD => "+"
+      case TokenCategory.OP_SUB => "-"
+      case TokenCategory.OP_MUL => "× (or *)"
+      case TokenCategory.OP_DIV => "÷ (or /)"
+      case TokenCategory.OP_BITAND => "&"
+      case TokenCategory.OP_BITOR => "|"
+      case TokenCategory.OP_BITXOR => "^"
+      case TokenCategory.OP_BITNOT => "~"
+      case TokenCategory.OP_LESSTHAN => "<"
+      case TokenCategory.OP_GREATERTHAN => ">"
+      case TokenCategory.OP_COLON => ":"
+      case TokenCategory.OP_SUBTYPE => "<:"
+      case TokenCategory.OP_SUPERTYPE => ">:"
+      case TokenCategory.OP_LAMBDA_TYPE => "->"
+      case TokenCategory.OP_LAMBDA => "=>"
+    }
+
     private def formatCharacterCategory(category: CharacterCategory) = category match {
       case CharacterCategory.Any => "any character"
       case CharacterCategory.CR => "\\r"
