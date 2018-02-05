@@ -13,7 +13,7 @@ import Function.const
 
 final class Parser {
 
-  type TGrammar[T] = Grammar[Token, SyntaxError, T]
+  type TGrammar[T] = Grammar[Token, SyntaxError, Unit, T]
 
   private implicit val errorFactory = new Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] {
     override def createError(error: GrammarError[Token, TokenCategory]): SyntaxError =

@@ -8,7 +8,7 @@ import Scalaz._
 
 trait GrammarTestHelpers {
 
-  protected type TGrammar = Grammar[Int, WithSource[String], Int]
+  protected type TGrammar = Grammar[Int, WithSource[String], Any, Int]
 
   protected implicit val errorFactory: Grammar.ErrorFactory[Int, String, WithSource[String]] = new Grammar.ErrorFactory[Int, String, WithSource[String]] {
     override def createError(error: GrammarError[Int, String]): WithSource[String] =
@@ -23,7 +23,7 @@ trait GrammarTestHelpers {
 
   protected def numberToken(n: Int): TGrammar = Grammar.matcher(n.toString, m => Some(m).filter(_ === n))
 
-  protected def parse[T](grammar: Grammar[Int, WithSource[String], T])(tokens: Int*): Either[NonEmptyList[WithSource[String]], (Vector[Int], T)] =
+  protected def parse[T](grammar: Grammar[Int, WithSource[String], Any, T])(tokens: Int*): Either[NonEmptyList[WithSource[String]], (Vector[Int], T)] =
     grammar.parse(
       tokens.zipWithIndex.map { case (value, i) => WithSource(value, SourceLocation(FilePosition(1, i + 1), FilePosition(1, i + 2))) }.toVector,
       FilePosition(1, 1)

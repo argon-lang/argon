@@ -1,6 +1,6 @@
 package com.mi3software.argon.parser.impl
 
-import com.mi3software.argon.parser.{CharacterCategory, GrammarError, SyntaxError, Token}
+import com.mi3software.argon.parser._
 import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
 
 import scala.language.postfixOps
@@ -12,7 +12,7 @@ import Function.const
 
 final class Lexer {
 
-  type TGrammar[T] = Grammar[String, SyntaxError, T]
+  type TGrammar[T] = Grammar[String, SyntaxError, TokenCategory, T]
 
   private type Lex = TGrammar[Option[Token]]
 
