@@ -360,7 +360,7 @@ object Grammar {
                 errorFactory.errorEndLocationOrder(findLastErrorPos(errorListA), findLastErrorPos(errorListB)) match {
                   case Ordering.GT => errorListA
                   case Ordering.LT => errorListB
-                  case Ordering.EQ => errorListB
+                  case Ordering.EQ => errorListA.append(errorListB)
                 }
               )
           }
@@ -432,7 +432,7 @@ object Grammar {
 
     override protected def parseImpl(state: TParseState, options: TParseOptions): Either[TErrorList, (TParseState, WithSource[T])] =
       inner.parseImpl(state, options.setLabel(label))
-
+    
   }
 
 }
