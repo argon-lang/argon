@@ -250,6 +250,6 @@ final class Lexer {
     }
 
   def lex(chars: Vector[WithSource[String]]): Either[NonEmptyList[SyntaxError], Vector[WithSource[Token]]] =
-    Grammar.parseAll(matchToken)(collectTokens)(chars, FilePosition(1, 1))
+    Grammar.parseAll(matchToken)(collectTokens)(chars, FilePosition(1, 1)).toEither
 
 }

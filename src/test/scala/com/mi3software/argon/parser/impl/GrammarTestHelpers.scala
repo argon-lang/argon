@@ -29,5 +29,6 @@ trait GrammarTestHelpers {
       FilePosition(1, 1)
     )
     .map { case (remTokens, _, res) => (remTokens.map { _.value }, res.value) }
+    .toEither
 
 }
