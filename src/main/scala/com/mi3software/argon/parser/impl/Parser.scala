@@ -490,7 +490,7 @@ final class Parser {
           skipNewLines ++
           ruleExpressionType.observeSource ++
           skipNewLines ++
-          ruleMethodBody.observeSource
+          (ruleMethodBody.observeSource?)
       ) --> {
         case (modifiers, purity, instanceName, _, _, _, name, (_, params, _, _, returnType, _, body)) =>
           MethodDeclarationStmt(instanceName, name, params, returnType, body, modifiers, purity)

@@ -46,7 +46,7 @@ final case class MethodDeclarationStmt
   name: Option[String],
   parameters: Vector[FunctionParameterList],
   returnType: WithSource[Expr],
-  body: WithSource[Vector[WithSource[Stmt]]],
+  body: Option[WithSource[Vector[WithSource[Stmt]]]],
   modifiers: Vector[WithSource[Modifier]],
   purity: Boolean,
 ) extends Stmt
