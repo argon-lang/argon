@@ -88,7 +88,7 @@ final class Parser {
     }
 
   private val ruleVariablePattern: TGrammar[Pattern] =
-    matchToken(KW_VAL) ++ ruleIdentifier ++ ((matchToken(OP_COLON) ++ ruleExpression.observeSource)?) --> {
+    matchToken(KW_VAL) ++ ruleIdentifier ++ ((matchToken(OP_COLON) ++ ruleExpressionType.observeSource)?) --> {
       case (_, idOpt, Some((_, varType))) => TypeTestPattern(idOpt, varType)
       case (_, Some(id), None) => BindingPattern(id)
       case (_, None, None) => DiscardPattern
