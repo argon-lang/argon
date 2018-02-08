@@ -128,8 +128,8 @@ final class Parser {
 
   private val ruleExpressionMatch: TGrammar[Expr] = labelRule("match_expr") {
     val matchCaseRule: TGrammar[MatchExprCase] =
-      rulePattern.observeSource ++ matchToken(OP_EQUALS) ++ ruleStatementList.observeSource --> {
-        case (pattern, _, body) => MatchExprCase(pattern, body)
+      skipNewLines ++ matchToken(KW_CASE) ++! (skipNewLines ++ rulePattern.observeSource ++ matchToken(OP_EQUALS) ++ ruleStatementList.observeSource) --> {
+        case (_, _, (_, pattern, _, body)) => MatchExprCase(pattern, body)
       }
 
 
