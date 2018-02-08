@@ -30,7 +30,6 @@ final class Lexer {
 
   private def token(category: CharacterCategory, s: String): TGrammar[String] = Grammar.token(category, t => t === s)
   private def tokenF(category: CharacterCategory, f: String => Boolean): TGrammar[String] = Grammar.token(category, f)
-  private val anyChar: TGrammar[String] = Grammar.token(CharacterCategory.Any, const(true))
   private def partialMatcher[T](category: CharacterCategory)(f: PartialFunction[String, T]): TGrammar[T] = Grammar.matcher(category, f.lift)
 
   private val matchNewLine: Lex = {
@@ -45,6 +44,8 @@ final class Lexer {
 
   private val matchSingleQuoteString: Lex = {
     val singleQuote = token(CharacterCategory.SingleQuote, "'")
+
+    val anyChar = tokenF(CharacterCategory.SingleQuoteStringChar, _ =/= "'")
 
     (singleQuote ++ ((singleQuote ++ singleQuote --> { _ => "'" } | anyChar)*) ++ singleQuote) --> {
       case (_, chs, _) =>

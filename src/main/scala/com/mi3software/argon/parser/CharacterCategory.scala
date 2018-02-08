@@ -2,7 +2,7 @@ package com.mi3software.argon.parser
 
 sealed trait CharacterCategory
 object CharacterCategory {
-  final case object Any extends CharacterCategory
+  final case object SingleQuoteStringChar extends CharacterCategory
   final case object CR extends CharacterCategory
   final case object LF extends CharacterCategory
   final case object Whitespace extends CharacterCategory

@@ -147,7 +147,7 @@ object CompilationError {
     }
 
     private def formatCharacterCategory(category: CharacterCategory) = category match {
-      case CharacterCategory.Any => "any character"
+      case CharacterCategory.SingleQuoteStringChar => "single quote string character"
       case CharacterCategory.CR => "\\r"
       case CharacterCategory.LF => "\\n"
       case CharacterCategory.Whitespace => "whitespace"
