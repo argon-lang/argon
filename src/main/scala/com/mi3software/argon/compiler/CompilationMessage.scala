@@ -119,7 +119,7 @@ object CompilationError {
       case TokenCategory.OP_GREATERTHANEQ => "≥ (or >=)"
       case TokenCategory.OP_SHIFTLEFT => "<<"
       case TokenCategory.OP_SHIFTRIGHT => ">>"
-      case TokenCategory.OP_ASSIGN => "="
+      case TokenCategory.OP_ASSIGN => ":="
       case TokenCategory.OP_DOT => "."
       case TokenCategory.OP_COMMA => ","
       case TokenCategory.OP_OPENPAREN => "("

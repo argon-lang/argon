@@ -310,8 +310,9 @@ final class Parser {
       .nextRule
 
   private def ruleExpressionAssignment(nextRule: => TGrammar[Expr]): TGrammar[Expr] =
-    nextRule.observeSource ++ matchToken(OP_ASSIGN) ++ nextRule.observeSource --> {
-      case (left, _, right) => BinaryOperatorExpr(BinaryOperator.Assign, left, right)
+    nextRule.observeSource ++ ((matchToken(OP_ASSIGN) ++ nextRule.observeSource)?) --> {
+      case (WithSource(left, _), None) => left
+      case (left, Some((_, right))) => BinaryOperatorExpr(BinaryOperator.Assign, left, right)
     }
 
   private def ruleExpressionLambda(nextRule: => TGrammar[Expr]): TGrammar[Expr] = {
