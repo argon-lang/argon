@@ -8,7 +8,7 @@
         import Ar._
         
         proc main(): () do
-            val msg = 'Hello World'
+            val msg = ''Hello World''
             puts msg
         end
         

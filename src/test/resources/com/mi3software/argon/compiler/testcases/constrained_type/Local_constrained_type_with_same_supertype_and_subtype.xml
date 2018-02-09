@@ -9,7 +9,7 @@
         
         proc main(): () do
             val t: type <: String >: String = String
-            val str: t = 'A'
+            val str: t = ''A''
             puts str
         end
         

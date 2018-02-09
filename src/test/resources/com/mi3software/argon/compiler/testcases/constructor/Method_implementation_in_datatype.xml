@@ -9,7 +9,7 @@
         
         trait MyType <: Any
             public proc self.say_hello(): () =
-                puts 'Hello World'
+                puts ''Hello World''
         end
         
         constructor MyCtor(): MyType

@@ -7,7 +7,7 @@
         import Ar._
 
         def main(): () do
-            puts 'Hello World'
+            puts ''Hello World''
         end
 
 

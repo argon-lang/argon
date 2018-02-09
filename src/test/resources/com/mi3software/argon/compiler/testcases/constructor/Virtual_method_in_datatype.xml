@@ -9,7 +9,7 @@
         
         trait MyType <: Any
             public virtual proc _.say_hello(): () =
-                puts 'Hello'
+                puts ''Hello''
         end
         
         constructor MyCtor(): MyType

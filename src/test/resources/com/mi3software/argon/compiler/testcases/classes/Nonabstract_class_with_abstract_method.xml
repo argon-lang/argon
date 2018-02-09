@@ -22,7 +22,7 @@
             end
 
             public override proc self.say_hello(): () do
-                puts 'Hello World'
+                puts ''Hello World''
             end
 
         end

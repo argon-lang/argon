@@ -11,13 +11,13 @@
         static
 
             public proc self.say_hello(): () do
-                puts 'Hello'
+                puts ''Hello''
             end
 
         instance
 
             public proc self.say_world(): () do
-                puts 'World'
+                puts ''World''
             end
 
         end

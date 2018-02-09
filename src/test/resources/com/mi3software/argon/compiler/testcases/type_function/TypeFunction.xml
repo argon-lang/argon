@@ -10,7 +10,7 @@
         def myFunc(): type >: String = String
 
         proc main(): () do
-            val s: myFunc() = 'Hello World'
+            val s: myFunc() = ''Hello World''
         end
         
             

@@ -11,7 +11,7 @@
         end
         trait B <: A
             public proc _.printMessage(): () =
-                puts 'Found B'
+                puts ''Found B''
         end
         trait C <: A
         end

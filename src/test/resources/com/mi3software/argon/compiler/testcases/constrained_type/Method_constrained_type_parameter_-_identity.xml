@@ -14,7 +14,7 @@
         end
         
         proc main(): () do
-            puts (Test.identity String 'Zero')
+            puts (Test.identity String ''Zero'')
         end
         
             

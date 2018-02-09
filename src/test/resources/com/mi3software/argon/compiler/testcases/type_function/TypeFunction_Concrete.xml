@@ -15,7 +15,7 @@
         end
 
         proc main(): () do
-            val pair: withInt String = 'Hello World', 5
+            val pair: withInt String = ''Hello World'', 5
             printStringInt pair
         end
         

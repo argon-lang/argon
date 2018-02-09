@@ -18,7 +18,7 @@
         end
         
         proc main(): () do
-            MyCtor('Hello World').say_message()
+            MyCtor(''Hello World'').say_message()
         end
             
     ]]></InputSource>

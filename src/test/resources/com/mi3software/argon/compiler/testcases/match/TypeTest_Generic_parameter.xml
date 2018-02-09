@@ -10,9 +10,9 @@
         proc checkForType(T: type)(value: Any): () =
             match value
             case val t: T =
-                puts 'Matched'
+                puts ''Matched''
             case _ =
-                puts 'Not matched'
+                puts ''Not matched''
             end
 
         trait A <: Any
@@ -31,10 +31,10 @@
         end
         
         proc main(): () do
-            checkForType A (NewB String 'Hey')
-            checkForType (B String) (NewB String 'Hey')
-            checkForType (B Int) (NewB String 'Hey')
-            checkForType C (NewB String 'Hey')
+            checkForType A (NewB String ''Hey'')
+            checkForType (B String) (NewB String ''Hey'')
+            checkForType (B Int) (NewB String ''Hey'')
+            checkForType C (NewB String ''Hey'')
             checkForType A (NewC ())
             checkForType (B String) (NewC ())
             checkForType (B Int) (NewC ())

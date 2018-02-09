@@ -22,7 +22,7 @@
 
         proc main(): () do
             val a = A.new()
-            val pair: a.withInt String = 'Hello World', 5
+            val pair: a.withInt String = ''Hello World'', 5
             printStringInt pair
         end
         
