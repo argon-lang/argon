@@ -14,6 +14,9 @@ libraryDependencies += "org.apache.commons" % "commons-lang3" % "3.5"
 libraryDependencies += "commons-io" % "commons-io" % "2.5"
 libraryDependencies += "org.fusesource.jansi" % "jansi" % "1.15"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.3" % "test"
+libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.13.4" % "test"
+libraryDependencies += "com.chuusai" %% "shapeless" % "2.3.3"
+libraryDependencies += "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test"
 
 scalacOptions ++= Seq(
   "-encoding", "UTF-8",
@@ -21,7 +24,6 @@ scalacOptions ++= Seq(
   "-deprecation",
   "-Xfuture",
   "-Xlint",
-  "-Xfatal-warnings",
   "-Yno-adapted-args",
   "-Ywarn-dead-code",
   "-Ywarn-numeric-widen",
@@ -34,9 +36,12 @@ scalacOptions ++= Seq(
   "-language:implicitConversions",
 )
 
-scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xfatal-warnings" || opt == "-Xlint"))
+scalacOptions in (Compile, compile) += "-Xfatal-warnings"
 
-wartremoverWarnings ++= Warts.allBut(
+scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xlint"))
+scalacOptions in (Test, console) ~= (_ filterNot (opt => opt == "-Xlint"))
+
+wartremoverWarnings in (Compile, compile) ++= Warts.allBut(
   Wart.Recursion,
   Wart.Any,
   Wart.Nothing,
