@@ -13,11 +13,15 @@ sealed trait ArTrait[TContext <: Context] {
 
   val isSealed: Boolean
 
+  val signature: Signature[typeSystem.type, ArTrait.ResultInfo]
+
   val methods: Comp[Vector[ArMethod[TContext]]]
   val metaType: MetaClass[TContext, ArClass[TContext]]
 }
 
 object ArTrait {
+
+  final case class ResultInfo[TS <: TypeSystem](baseTypes: BaseTypeInfoTrait[TS#TTraitInfo])
 
   implicit def equalInstance[TContext <: Context]: Equal[ArTrait[TContext]] =
     (a, b) => a.descriptor === b.descriptor
@@ -46,4 +50,3 @@ trait ArTraitInNamespace[TContext <: Context] {
 
   override val descriptor: TraitDescriptor.InNamespace
 }
-

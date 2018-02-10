@@ -2,9 +2,12 @@ package com.mi3software.argon.compiler
 
 sealed trait ArFunc[TContext <: Context] {
   val context: TContext
+  import context._
 
   val descriptor: FuncDescriptor
   val effectInfo: EffectInfo
+
+  val signature: Signature[typeSystem.type, FunctionResultInfo]
 }
 
 trait ArFuncInNamespace[TContext <: Context] {

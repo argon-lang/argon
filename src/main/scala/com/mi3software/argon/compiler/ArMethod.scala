@@ -5,6 +5,7 @@ import scalaz.Leibniz
 sealed trait ArMethod[TContext <: Context] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
+  import context._
 
   val descriptor: MethodDescriptor
 
@@ -14,6 +15,8 @@ sealed trait ArMethod[TContext <: Context] {
   val isAbstract: Boolean
   val isImplicitOverride: Boolean
   val isFinal: Boolean
+
+  val signature: Signature[typeSystem.type, FunctionResultInfo]
 
 }
 

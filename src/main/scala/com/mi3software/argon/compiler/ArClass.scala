@@ -16,12 +16,17 @@ sealed trait ArClass[TContext <: Context] {
   val isSealed: Boolean
   val isAbstract: Boolean
 
+  val signature: Signature[typeSystem.type, ArClass.ResultInfo]
+
   val methods: Comp[Vector[ArMethod[TContext]]]
   val classConstructors: Comp[Vector[ClassConstructor[TContext]]]
   val metaType: MetaClass[TContext, ArClass[TContext]]
 }
 
 object ArClass {
+
+  final case class ResultInfo[TS <: TypeSystem](baseTypes: BaseTypeInfoClass[TS#TClassInfo, TS#TTraitInfo])
+
 
   implicit def equalInstance[TContext <: Context]: Equal[ArClass[TContext]] =
     (a, b) => a.descriptor === b.descriptor

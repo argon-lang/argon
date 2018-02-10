@@ -16,6 +16,6 @@ trait Context {
 
   type Comp[+_]
 
-  val types: TypeSystem
+  val typeSystem: TypeSystem
 
 }

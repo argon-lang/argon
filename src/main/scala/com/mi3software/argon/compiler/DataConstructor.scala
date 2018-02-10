@@ -12,10 +12,14 @@ sealed trait DataConstructor[TContext <: Context] {
 
   val descriptor: DataConstructorDescriptor
 
+  val signature: Signature[typeSystem.type, DataConstructor.ResultInfo]
+
   val methods: Comp[Vector[ArMethod[TContext]]]
 }
 
 object DataConstructor {
+
+  final case class ResultInfo[TS <: TypeSystem](instanceType: TraitType[TS])
 
   implicit def equalInstance[TContext <: Context]: Equal[DataConstructor[TContext]] =
     (a, b) => a.descriptor === b.descriptor
@@ -35,3 +39,4 @@ trait DataConstructorReference[TContext <: Context] extends DataConstructor[TCon
   val methods: Comp[Vector[ArMethodReference[TContext]]]
   val contextMetadata: TConstructorMetadata
 }
+
