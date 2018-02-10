@@ -52,13 +52,9 @@ trait TypeComparer[TS <: TypeSystem] {
               isSubType(elemA, elemB)
           }
 
-      case (TupleType(_), _) | (_, TupleType(_)) => false
-
 
       case (FunctionType(argA, retA), FunctionType(argB, retB)) =>
         isSubType(argB, argA) && isSubType(retA, retB)
-
-      case (FunctionType(_, _), _) | (_, FunctionType(_, _)) => false
 
       case (UnionType(leftA, rightA), _) =>
         isSubType(leftA, typeBaseToType(b)) && isSubType(rightA, typeBaseToType(b))
@@ -71,6 +67,9 @@ trait TypeComparer[TS <: TypeSystem] {
 
       case (_, IntersectionType(leftB, rightB)) =>
         isSubType(typeBaseToType(a), leftB) && isSubType(typeBaseToType(a), rightB)
+
+      case (TupleType(_), _) | (_, TupleType(_)) => false
+      case (FunctionType(_, _), _) | (_, FunctionType(_, _)) => false
 
 
     }
