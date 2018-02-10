@@ -1,7 +1,8 @@
 package com.mi3software.argon.compiler
 
 import scala.collection.immutable._
-import scalaz.Leibniz
+import scalaz._
+import Scalaz._
 
 sealed trait ArClass[TContext <: Context] {
   val context: TContext
@@ -9,7 +10,7 @@ sealed trait ArClass[TContext <: Context] {
 
   import context._
 
-  val declaration: ClassDeclarationInfo[TContext]
+  val descriptor: ClassDescriptor
 
   val isOpen: Boolean
   val isSealed: Boolean
@@ -20,10 +21,16 @@ sealed trait ArClass[TContext <: Context] {
   val metaType: MetaClass[TContext, ArClass[TContext]]
 }
 
+object ArClass {
+
+  implicit def equalInstance[TContext <: Context]: Equal[ArClass[TContext]] =
+    (a, b) => a.descriptor === b.descriptor
+
+}
+
 trait ArClassDeclaration[TContext <: Context] extends ArClass[TContext] {
   import context._
 
-  val declaration: ClassDeclarationInfoDeclaration[TContext]
   val metaType: MetaClass[TContext, ArClassDeclaration[TContext]]
 
   val methods: Comp[Vector[ArMethodDeclaration[TContext]]]
@@ -33,7 +40,6 @@ trait ArClassDeclaration[TContext <: Context] extends ArClass[TContext] {
 trait ArClassReference[TContext <: Context] extends ArClass[TContext] {
   import context._
 
-  val declaration: ClassDeclarationInfoReference[TContext]
   val metaType: MetaClass[TContext, ArClassReference[TContext]]
 
   val methods: Comp[Vector[ArMethodReference[TContext]]]
@@ -44,5 +50,5 @@ trait ArClassReference[TContext <: Context] extends ArClass[TContext] {
 trait ArClassInNamespace[TContext <: Context] {
   self: ArClass[TContext] =>
 
-  val declaration: ClassDeclarationInNamespace[TContext]
+  override val descriptor: ClassDescriptor.InNamespace
 }

@@ -1,7 +1,8 @@
 package com.mi3software.argon.compiler
 
 import scala.collection.immutable._
-import scalaz.Leibniz
+import scalaz._
+import Scalaz._
 
 
 sealed trait DataConstructor[TContext <: Context] {
@@ -9,9 +10,16 @@ sealed trait DataConstructor[TContext <: Context] {
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
   import context._
 
-  val declaration: ConstructorDeclarationInfo[TContext]
+  val descriptor: DataConstructorDescriptor
 
   val methods: Comp[Vector[ArMethod[TContext]]]
+}
+
+object DataConstructor {
+
+  implicit def equalInstance[TContext <: Context]: Equal[DataConstructor[TContext]] =
+    (a, b) => a.descriptor === b.descriptor
+
 }
 
 trait DataConstructorDeclaration[TContext <: Context] extends DataConstructor[TContext] {

@@ -1,19 +1,27 @@
 package com.mi3software.argon.compiler
 
 import scala.collection.immutable._
-import scalaz.Leibniz
+import scalaz._
+import Scalaz._
 
 sealed trait ArTrait[TContext <: Context] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
   import context._
 
-  val declaration: TraitDeclarationInfo[TContext]
+  val descriptor: TraitDescriptor
 
   val isSealed: Boolean
 
   val methods: Comp[Vector[ArMethod[TContext]]]
   val metaType: MetaClass[TContext, ArClass[TContext]]
+}
+
+object ArTrait {
+
+  implicit def equalInstance[TContext <: Context]: Equal[ArTrait[TContext]] =
+    (a, b) => a.descriptor === b.descriptor
+
 }
 
 trait ArTraitDeclaration[TContext <: Context] extends ArTrait[TContext] {
@@ -36,6 +44,6 @@ trait ArTraitReference[TContext <: Context] extends ArTrait[TContext] {
 trait ArTraitInNamespace[TContext <: Context] {
   self: ArTrait[TContext] =>
 
-  override val declaration: TraitDeclarationInNamespace[TContext]
+  override val descriptor: TraitDescriptor.InNamespace
 }
 

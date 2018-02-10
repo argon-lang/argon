@@ -3,14 +3,14 @@ package com.mi3software.argon.compiler
 sealed trait ArFunc[TContext <: Context] {
   val context: TContext
 
-  val declaration: FuncDeclarationInfo
+  val descriptor: FuncDescriptor
   val effectInfo: EffectInfo
 }
 
 trait ArFuncInNamespace[TContext <: Context] {
   self: ArFunc[TContext] =>
 
-  override val declaration: FuncDeclarationInfoInNamespace
+  override val descriptor: FuncDescriptor.InNamespace
 }
 
 trait ArFuncDeclaration[TContext <: Context] extends ArFunc[TContext] {

@@ -16,6 +16,9 @@ libraryDependencies += "org.fusesource.jansi" % "jansi" % "1.15"
 libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.3" % "test"
 libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.13.4" % "test"
 libraryDependencies += "com.chuusai" %% "shapeless" % "2.3.3"
+libraryDependencies += "com.fommil" %% "deriving-macro" % "0.9.0"
+libraryDependencies += "com.fommil" %% "scalaz-deriving" % "0.9.0"
+
 libraryDependencies += "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test"
 
 scalacOptions ++= Seq(
