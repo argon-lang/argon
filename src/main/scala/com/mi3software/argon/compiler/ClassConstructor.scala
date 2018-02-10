@@ -7,6 +7,8 @@ sealed trait ClassConstructor[TContext <: Context] {
   val effectInfo: EffectInfo
   val accessModifier: AccessModifier
 
+  val descriptor: ClassConstructorDescriptor
+
   val signature: Signature[typeSystem.type, ClassConstructor.ResultInfo]
 
   val instanceClass: ArClass[TContext]
