@@ -3,23 +3,24 @@ package com.mi3software.argon.compiler
 trait TypeSystem {
 
   type TType
-  type TTrait
-  type TClass
-  type TDataConstructor
 
-  sealed trait TypeBase
-  sealed case class TraitType(traitInfo: TTrait, arguments: Vector[TType]) extends TypeBase
-  sealed case class ClassType(classInfo: TClass, arguments: Vector[TType]) extends TypeBase
-  sealed case class DataConstructorType(ctor: TDataConstructor, arguments: Vector[TType]) extends TypeBase
-
-  sealed case class TupleElement(elementType: TType)
-  sealed case class TupleType(elements: Vector[TupleElement]) extends TypeBase
-
-  sealed case class TraitMetaType(traitType: TraitType) extends TypeBase
-  sealed case class ClassMetaType(traitType: TraitType) extends TypeBase
-
-  sealed case class FunctionType(argumentType: TType, resultType: TType) extends TypeBase
-  sealed case class UnionType(a: TType, b: TType) extends TypeBase
-  sealed case class IntersectionType(a: TType, b: TType) extends TypeBase
+  type TTraitInfo
+  type TClassInfo
+  type TDataConstructorInfo
 
 }
+
+
+sealed trait TypeBase[TS <: TypeSystem]
+final case class TraitType[TS <: TypeSystem](traitInfo: TS#TTraitInfo) extends TypeBase[TS]
+final case class ClassType[TS <: TypeSystem](classInfo: TS#TClassInfo) extends TypeBase[TS]
+final case class DataConstructorType[TS <: TypeSystem](ctor: TS#TDataConstructorInfo) extends TypeBase[TS]
+
+final case class TraitMetaType[TS <: TypeSystem](traitInfo: TS#TTraitInfo) extends TypeBase[TS]
+final case class ClassMetaType[TS <: TypeSystem](classInfo: TS#TClassInfo) extends TypeBase[TS]
+
+final case class TupleElement[TS <: TypeSystem](elementType: TS#TType)
+final case class TupleType[TS <: TypeSystem](elements: Vector[TupleElement[TS]]) extends TypeBase[TS]
+final case class FunctionType[TS <: TypeSystem](argumentType: TS#TType, resultType: TS#TType) extends TypeBase[TS]
+final case class UnionType[TS <: TypeSystem](a: TS#TType, b: TS#TType) extends TypeBase[TS]
+final case class IntersectionType[TS <: TypeSystem](a: TS#TType, b: TS#TType) extends TypeBase[TS]

@@ -2,7 +2,7 @@ package com.mi3software.argon.testrunner
 
 import com.mi3software.argon.compiler.CompilationError
 import com.mi3software.argon.parser.{ParseHandler, SourceAST, SyntaxErrorData}
-import com.mi3software.argon.util.{CharSequenceHandlerProvider, FileID, FileSpec, WithSource}
+import com.mi3software.argon.util.{FileID, FileSpec, WithSource}
 
 import scalaz._
 import Scalaz._
