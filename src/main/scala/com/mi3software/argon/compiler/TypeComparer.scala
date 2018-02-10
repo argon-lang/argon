@@ -30,6 +30,18 @@ trait TypeComparer[TS <: TypeSystem] {
       case (TraitType(aTrait), ClassType(bClass)) => classImplementsTrait(bClass, aTrait)
       case (ClassType(_), TraitType(_)) => false
 
+      case (UnionType(leftA, rightA), _) =>
+        isSubType(leftA, typeBaseToType(b)) && isSubType(rightA, typeBaseToType(b))
+
+      case (_, UnionType(leftB, rightB)) =>
+        isSubType(typeBaseToType(a), leftB) || isSubType(typeBaseToType(a), rightB)
+
+      case (_, IntersectionType(leftB, rightB)) =>
+        isSubType(typeBaseToType(a), leftB) && isSubType(typeBaseToType(a), rightB)
+
+      case (IntersectionType(leftA, rightA), _) =>
+        isSubType(leftA, typeBaseToType(b)) || isSubType(rightA, typeBaseToType(b))
+
       case (DataConstructorType(aCtor), DataConstructorType(bCtor)) => isSameDataConstructorInfo(aCtor, bCtor)
       case (DataConstructorType(aCtor), _) => isSubType(dataConstructorReturnType(aCtor), typeBaseToType(b))
       case (_, DataConstructorType(_)) => false
@@ -52,25 +64,13 @@ trait TypeComparer[TS <: TypeSystem] {
               isSubType(elemA, elemB)
           }
 
+      case (TupleType(_), _) | (_, TupleType(_)) => false
+
 
       case (FunctionType(argA, retA), FunctionType(argB, retB)) =>
         isSubType(argB, argA) && isSubType(retA, retB)
 
-      case (UnionType(leftA, rightA), _) =>
-        isSubType(leftA, typeBaseToType(b)) && isSubType(rightA, typeBaseToType(b))
-
-      case (_, UnionType(leftB, rightB)) =>
-        isSubType(typeBaseToType(a), leftB) || isSubType(typeBaseToType(a), rightB)
-
-      case (IntersectionType(leftA, rightA), _) =>
-        isSubType(leftA, typeBaseToType(b)) || isSubType(rightA, typeBaseToType(b))
-
-      case (_, IntersectionType(leftB, rightB)) =>
-        isSubType(typeBaseToType(a), leftB) && isSubType(typeBaseToType(a), rightB)
-
-      case (TupleType(_), _) | (_, TupleType(_)) => false
       case (FunctionType(_, _), _) | (_, FunctionType(_, _)) => false
-
 
     }
 

@@ -6,15 +6,19 @@ import Scalaz._
 final class DummyTypeSystem extends TypeSystem {
   override type TType = TypeBase[this.type]
 
-  sealed class DummyTrait(val id: Int, val baseTraits: Vector[Int]) {
+  sealed class DummyTrait private[DummyTypeSystem](val id: Int, val baseTraits: Vector[Int]) {
     override def toString: String = s"DummyTrait #$id"
   }
-  sealed class DummyClass(val id: Int, val baseClasses: Vector[Int], val baseTraits: Vector[Int]) {
+  sealed class DummyClass private[DummyTypeSystem](val id: Int, val baseClasses: Vector[Int], val baseTraits: Vector[Int]) {
     override def toString: String = s"DummyClass #$id"
   }
-  sealed class DummyDataCtor(val id: Int, val returnType: TType) {
-    override def toString: String = s"DummyDataCtor #$id"
-  }
+  sealed case class DummyDataCtor(id: Int, returnType: TType)
+
+  def dummyTrait(id: Int, baseTraits: Vector[Int]): DummyTrait =
+    new DummyTrait(id, baseTraits)
+
+  def dummyClass(id: Int, baseClasses: Vector[Int], baseTraits: Vector[Int]): DummyClass =
+    new DummyClass(id, baseClasses, baseTraits)
 
   override type TTraitInfo = DummyTrait
   override type TClassInfo = DummyClass
@@ -36,9 +40,11 @@ final class DummyTypeSystem extends TypeSystem {
     override def dataConstructorReturnType(ctor: DummyDataCtor): TypeBase[DummyTypeSystem.this.type] =
       ctor.returnType
 
-    override def traitMetaClass(traitInfo: DummyTrait): ClassType[DummyTypeSystem.this.type] = ???
+    override def traitMetaClass(traitInfo: DummyTrait): ClassType[DummyTypeSystem.this.type] =
+      ClassType[DummyTypeSystem.this.type](dummyClass(-1, Vector(-1), Vector()))
 
-    override def classMetaClass(classInfo: DummyClass): ClassType[DummyTypeSystem.this.type] = ???
+    override def classMetaClass(classInfo: DummyClass): ClassType[DummyTypeSystem.this.type] =
+      ClassType[DummyTypeSystem.this.type](dummyClass(-1, Vector(-1), Vector()))
 
     override def typeBaseToType(typeBase: TypeBase[DummyTypeSystem.this.type]): TypeBase[DummyTypeSystem.this.type] =
       typeBase
