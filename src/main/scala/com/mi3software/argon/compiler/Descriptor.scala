@@ -22,6 +22,9 @@ object Descriptor {
     case (a: ClassConstructorDescriptor, b: ClassConstructorDescriptor) => a === b
     case (_: ClassConstructorDescriptor, _) | (_, _: ClassConstructorDescriptor) => false
 
+    case (a: ParameterDescriptor, b: ParameterDescriptor) => a === b
+    case (_: ParameterDescriptor, _) | (_, _: ParameterDescriptor) => false
+
     case (a: VariableDescriptor, b: VariableDescriptor) => a === b
   }
 
@@ -31,6 +34,14 @@ sealed trait VariableOwnerDescriptor extends Descriptor
 object VariableOwnerDescriptor {
 
   implicit val equalInstance: Equal[VariableOwnerDescriptor] =
+    (a, b) => (a: Descriptor) === (b: Descriptor)
+
+}
+
+sealed trait ParameterOwnerDescriptor extends VariableOwnerDescriptor
+object ParameterOwnerDescriptor {
+
+  implicit val equalInstance: Equal[ParameterOwnerDescriptor] =
     (a, b) => (a: Descriptor) === (b: Descriptor)
 
 }
@@ -50,7 +61,7 @@ object ClassLikeDescriptor {
 
 }
 
-sealed trait TraitDescriptor extends ClassLikeDescriptor
+sealed trait TraitDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
 object TraitDescriptor {
   @deriving(Equal)
   final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: String) extends TraitDescriptor
@@ -60,7 +71,7 @@ object TraitDescriptor {
   }
 }
 
-sealed trait ClassDescriptor extends ClassLikeDescriptor
+sealed trait ClassDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
 object ClassDescriptor {
   @deriving(Equal)
   final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: String) extends ClassDescriptor
@@ -70,7 +81,7 @@ object ClassDescriptor {
   }
 }
 
-sealed trait DataConstructorDescriptor extends ClassLikeDescriptor
+sealed trait DataConstructorDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
 object DataConstructorDescriptor {
   @deriving(Equal)
   final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: String) extends DataConstructorDescriptor
@@ -80,7 +91,7 @@ object DataConstructorDescriptor {
   }
 }
 
-sealed trait FuncDescriptor extends VariableOwnerDescriptor
+sealed trait FuncDescriptor extends ParameterOwnerDescriptor
 object FuncDescriptor {
   @deriving(Equal)
   final case class InNamespace(module: ModuleDescriptor, namespace: NamespacePath, name: GlobalName) extends FuncDescriptor
@@ -91,11 +102,16 @@ object FuncDescriptor {
 }
 
 @deriving(Equal)
-final case class MethodDescriptor(typeDescriptor: ClassLikeDescriptor, name: String) extends VariableOwnerDescriptor
+final case class MethodDescriptor(typeDescriptor: ClassLikeDescriptor, name: String) extends ParameterOwnerDescriptor
 
 @deriving(Equal)
-final case class ClassConstructorDescriptor(ownerClass: ClassDescriptor) extends VariableOwnerDescriptor
+final case class ClassConstructorDescriptor(ownerClass: ClassDescriptor) extends ParameterOwnerDescriptor
 
+
+sealed trait VariableLikeDescriptor extends Descriptor
 
 @deriving(Equal)
-final case class VariableDescriptor(owner: VariableOwnerDescriptor, index: Int) extends Descriptor
+final case class ParameterDescriptor(owner: ParameterOwnerDescriptor, index: Int) extends VariableLikeDescriptor
+
+@deriving(Equal)
+final case class VariableDescriptor(owner: VariableOwnerDescriptor, index: Int) extends VariableLikeDescriptor
