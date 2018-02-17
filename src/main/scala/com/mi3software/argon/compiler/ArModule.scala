@@ -5,17 +5,17 @@ sealed trait ArModule[TContext <: Context] {
   import context._
 
   val descriptor: ModuleDescriptor
-  val globalNamespace: Comp[Namespace[ScopeValue[TContext, ScopeValueTypesInNamespace]]]
+  val globalNamespace: Comp[Namespace[ScopeValue[context.ContextScopeTypes]]]
 }
 
 trait ArModuleDeclaration[TContext <: Context] extends ArModule[TContext] {
   import context._
 
-  override val globalNamespace: Comp[Namespace[ScopeValue[TContext, ScopeValueTypesDeclarationInNamespace]]]
+  override val globalNamespace: Comp[Namespace[ScopeValue[context.DeclarationScopeTypes]]]
 }
 
 trait ArModuleReference[TContext <: Context] extends ArModule[TContext] {
   import context._
 
-  override val globalNamespace: Comp[Namespace[ScopeValue[TContext, ScopeValueTypesReferenceInNamespace]]]
+  override val globalNamespace: Comp[Namespace[ScopeValue[context.ReferenceScopeTypes]]]
 }
