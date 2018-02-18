@@ -37,7 +37,9 @@ trait ExpressionConverter {
 
   def convertStatements(env: Env, stmts: WithSource[Vector[WithSource[Stmt]]]): ExprFactory = stmts.value match {
     case Vector() =>
-      ???
+      fromFixedType(env, stmts.location)(
+        wrapExpr(CreateTuple(Vector()))
+      )
 
     case WithSource(_: ClassDeclarationStmt | _: TraitDeclarationStmt | _: DataConstructorDeclarationStmt |
       _: FunctionDeclarationStmt | _: MethodDeclarationStmt | _: ClassConstructorDeclarationStmt |
@@ -70,8 +72,7 @@ trait ExpressionConverter {
     case WithSource(expr: Expr, location) +: tail =>
       exprFactory { expectedType =>
         for {
-          ignoredType <- createTypeHole
-          first <- convertExpression(env, WithSource(expr, location)).withExpectedType(ignoredType)
+          first <- convertExpression(env, WithSource(expr, location)).withExpectedType(typeComparer.typeBaseToType(TupleType(Vector())))
           second <- convertStatements(env, WithSource(tail, SourceLocation(location.end, stmts.location.end))).withExpectedType(expectedType)
         } yield wrapExpr(Sequence(first, second))
       }
