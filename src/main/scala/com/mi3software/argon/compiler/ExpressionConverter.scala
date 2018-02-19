@@ -89,7 +89,8 @@ trait ExpressionConverter {
     case BoolValueExpr(value) =>
       fromFixedType(env, expr.location)(wrapExpr(LoadConstantBool(value)))
 
-    case ClassConstructorExpr(classExpr) => ???
+    case ClassConstructorExpr(classExpr) =>
+      convertExpression(env, classExpr).accessMember(MemberName.New, expr.location)
 
     case DotExpr(baseExpr, memberName) =>
       convertExpression(env, baseExpr).accessMember(MemberName.Normal(memberName), expr.location)

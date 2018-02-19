@@ -13,6 +13,7 @@ object MemberName {
   final case class Unnamed(index: Int) extends MemberName
 
   final case object Call extends MemberName
+  final case object New extends MemberName
 
   implicit val equalInstance: Equal[MemberName] = {
     case (a @ Normal(_), b @ Normal(_)) => a === b
@@ -22,5 +23,8 @@ object MemberName {
     case (Unnamed(_), _) | (_, Unnamed(_)) => false
 
     case (Call, Call) => true
+    case (Call, _) | (_, Call) => false
+
+    case (New, New) => true
   }
 }
