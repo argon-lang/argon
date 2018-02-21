@@ -1,6 +1,6 @@
 package com.mi3software.argon.compiler
 
-import com.mi3software.argon.util.NamespacePath
+import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation}
 
 trait ScopeTypes {
   type TTrait
@@ -10,7 +10,20 @@ trait ScopeTypes {
   type TVariable
 }
 
-sealed trait Scope[+Types <: ScopeTypes]
+sealed trait Scope[+Types <: ScopeTypes] {
+
+  def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Lookup[ScopeValue[Types]] = ???
+
+}
+
+object ScopeHelpers {
+  implicit class ScopeExtensions[Types <: ScopeTypes](val scope: Scope[Types]) extends AnyVal {
+
+    final def addVariable(variable: Types#TVariable): Scope[Types] =
+      ???
+
+  }
+}
 
 sealed trait NamespacesOnlyScope[+Types <: ScopeTypes] extends Scope[Types] {
 

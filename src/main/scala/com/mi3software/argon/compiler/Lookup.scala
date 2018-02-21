@@ -2,7 +2,7 @@ package com.mi3software.argon.compiler
 
 import scalaz._
 
-sealed trait Lookup[T] {
+sealed trait Lookup[+T] {
   def next[U](cmp: LookupComparer[T])(f: T => Lookup[U]): Lookup[U]
   def resolve(cmp: LookupComparer[T]): LookupResult[T]
   def resolveAll(cmp: LookupComparer[T]): LookupResult[T]
@@ -111,7 +111,7 @@ object Lookup {
 
 }
 
-trait LookupComparer[T] {
+trait LookupComparer[-T] {
   def hasError(a: T): Boolean
   def compare(a: T, b: T): LookupComparison
 }
@@ -123,9 +123,9 @@ object LookupComparison {
   case object WorseThan extends LookupComparison
 }
 
-sealed trait LookupResult[T] {
+sealed trait LookupResult[+T] {
 
-  def orElse(other: => LookupResult[T]): LookupResult[T]
+  def orElse[U >: T](other: => LookupResult[U]): LookupResult[U]
 
   def filter(f: T => Boolean): LookupResult[T]
 
@@ -135,9 +135,9 @@ sealed trait LookupResult[T] {
   def flatMap[U](f: T => LookupResult[U]): LookupResult[U]
 
   def rejectAll: Vector[T]
-  def addRejects(newRejects: Vector[T]): LookupResult[T]
+  def addRejects[U >: T](newRejects: Vector[U]): LookupResult[U]
 
-  def ++(other: LookupResult[T]): LookupResult[T]
+  def ++[U >: T](other: LookupResult[U]): LookupResult[U]
 
 }
 object LookupResult {
@@ -155,7 +155,7 @@ object LookupResult {
     }
 
   final case class Success[T](value: T, rejects: Vector[T]) extends LookupResult[T] {
-    override def orElse(other: => LookupResult[T]): LookupResult[T] = this
+    override def orElse[U >: T](other: => LookupResult[U]): LookupResult[U] = this
 
     override def filter(f: T => Boolean): LookupResult[T] =
       if(f(value))
@@ -168,10 +168,10 @@ object LookupResult {
 
     override def rejectAll: Vector[T] = value +: rejects
 
-    override def addRejects(newRejects: Vector[T]): LookupResult[T] =
+    override def addRejects[U >: T](newRejects: Vector[U]): LookupResult[U] =
       Success(value, rejects ++ newRejects)
 
-    override def ++(other: LookupResult[T]): LookupResult[T] =
+    override def ++[U >: T](other: LookupResult[U]): LookupResult[U] =
       other match {
         case Success(otherValue, otherRejects) => Ambiguity(value, otherValue, Vector.empty, rejects ++ otherRejects)
         case Failure(otherRejects) => addRejects(otherRejects)
@@ -180,7 +180,7 @@ object LookupResult {
   }
 
   final case class Failure[T](rejects: Vector[T]) extends LookupResult[T] {
-    override def orElse(other: => LookupResult[T]): LookupResult[T] =
+    override def orElse[U >: T](other: => LookupResult[U]): LookupResult[U] =
       other.addRejects(rejects)
 
     override def filter(f: T => Boolean): LookupResult[T] =
@@ -192,15 +192,15 @@ object LookupResult {
     override def rejectAll: Vector[T] =
       rejects
 
-    override def addRejects(newRejects: Vector[T]): LookupResult[T] =
+    override def addRejects[U >: T](newRejects: Vector[U]): LookupResult[U] =
       Failure(rejects ++ newRejects)
 
-    override def ++(other: LookupResult[T]): LookupResult[T] =
+    override def ++[U >: T](other: LookupResult[U]): LookupResult[U] =
       other.addRejects(rejects)
   }
 
   final case class Ambiguity[T](item1: T, item2: T, rest: Vector[T], rejects: Vector[T]) extends LookupResult[T] {
-    override def orElse(other: => LookupResult[T]): LookupResult[T] =
+    override def orElse[U >: T](other: => LookupResult[U]): LookupResult[U] =
       this
 
     override def filter(f: T => Boolean): LookupResult[T] =
@@ -215,14 +215,14 @@ object LookupResult {
 
     override def rejectAll: Vector[T] = (item1 +: item2 +: rest) ++ rejects
 
-    override def addRejects(newRejects: Vector[T]): LookupResult[T] =
+    override def addRejects[U >: T](newRejects: Vector[U]): LookupResult[U] =
       Ambiguity(item1, item2, rest, rejects)
 
-    override def ++(other: LookupResult[T]): LookupResult[T] =
+    override def ++[U >: T](other: LookupResult[U]): LookupResult[U] =
       other match {
         case Success(otherValue, otherRejects) => Ambiguity(item1, item2, rest :+ otherValue, rejects ++ otherRejects)
         case Failure(otherRejects) => addRejects(otherRejects)
-        case other @ Ambiguity(_, _, _, otherRejects) => Ambiguity(item1, item2, rest ++ other.values, rejects ++ otherRejects)
+        case other @ Ambiguity(_, _, _, otherRejects) => Ambiguity(item1, item2, (rest : Vector[U]) ++ other.values, rejects ++ otherRejects)
       }
 
     private def values: Vector[T] = item1 +: item2 +: rest

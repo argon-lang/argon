@@ -1,10 +1,12 @@
 package com.mi3software.argon.compiler
 
 import com.mi3software.argon.parser._
-import com.mi3software.argon.util.{SourceLocation, WithSource}
+import com.mi3software.argon.util.{FileSpec, SourceLocation, WithSource}
 
 import scalaz._
 import Scalaz._
+
+import ScopeHelpers._
 
 trait ExpressionConverter {
 
@@ -14,9 +16,15 @@ trait ExpressionConverter {
   protected def nextVariableId: Conv[Int]
 
   type TExprTypes <: ArExprTypes
-  type TScopeTypes <: ScopeTypes
   type TS = TExprTypes#TS
+
+  type TScopeTypes <: ScopeTypes with ({
+    type TVariable = Variable[TS, VariableLikeDescriptor]
+  })
+
   val typeComparer: TypeComparer[TS]
+
+  val scopeLookupComparer: LookupComparer[ScopeValue[TScopeTypes]]
 
   protected def createTypeHole: Conv[TS#TType]
   protected def resolveType(t: TS#TType): Conv[TS#TType]
@@ -27,8 +35,8 @@ trait ExpressionConverter {
 
   protected trait ExprFactory {
     def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr]
-    def accessMember(memberName: MemberName, location: SourceLocation): ExprFactory
-    def forArguments(argInfo: ArgumentInfo): ExprFactory
+    def accessMember(memberName: MemberName, location: SourceLocation): ExprFactory = ???
+    def forArguments(argInfo: ArgumentInfo): ExprFactory = ???
   }
 
   protected def exprFactory(f: TS#TType => Conv[TExprTypes#TExpr]): ExprFactory
@@ -53,14 +61,17 @@ trait ExpressionConverter {
           varType <- varType.map(convertTypeExpression(env)).getOrElse(createTypeHole)
           valueExpr <- convertExpression(env, value).withExpectedType(varType)
           varTypeResolved <- resolveType(varType)
-          tailExpr <- convertStatements(env, WithSource(tail, SourceLocation(location.end, stmts.location.end))).withExpectedType(expectedType)
-        } yield wrapExpr(LetBinding(
-          Variable(
+
+          variable = Variable(
             VariableDescriptor(env.owner, varId),
             name.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
             Mutability.fromIsMutable(isMutable),
             varTypeResolved
-          ),
+          )
+
+          tailExpr <- convertStatements(env.copy(scope = env.scope.addVariable(variable)), WithSource(tail, SourceLocation(location.end, stmts.location.end))).withExpectedType(expectedType)
+        } yield wrapExpr(LetBinding(
+          variable,
           valueExpr,
           tailExpr
         ))
@@ -98,7 +109,37 @@ trait ExpressionConverter {
     case FunctionCallExpr(func, arg) =>
       convertExpression(env, func).forArguments(ArgumentInfo(convertExpression(env, arg), expr.location))
 
-    case IdentifierExpr(name) => ???
+    case IdentifierExpr(name) =>
+      val idLookup = env.scope.findIdentifier(name, env.fileSpec, expr.location)
+
+      new ExprFactory {
+        override def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr] =
+          idLookup.resolve(scopeLookupComparer) match {
+            case LookupResult.Failure(_) =>
+              ???
+
+            case LookupResult.Ambiguity(_, _, _, _) =>
+              ???
+
+            case LookupResult.Success(NamespaceScopeValue(ns), _) =>
+              ???
+
+            case LookupResult.Success(ClassScopeValue(arClass), _) =>
+              ???
+
+            case LookupResult.Success(TraitScopeValue(arTrait), _) =>
+              ???
+
+            case LookupResult.Success(DataConstructorScopeValue(ctor), _) =>
+              ???
+
+            case LookupResult.Success(FunctionScopeValue(func), _) =>
+              ???
+
+            case LookupResult.Success(VariableScopeValue(variable), _) =>
+              ???
+          }
+      }
 
     case IfExpr(condition, body) => ???
 
@@ -149,6 +190,6 @@ trait ExpressionConverter {
 
 }
 
-final case class ExpressionConvertEnvironment[Types <: ScopeTypes](owner: VariableOwnerDescriptor)
+final case class ExpressionConvertEnvironment[Types <: ScopeTypes](owner: VariableOwnerDescriptor, scope: Scope[Types], fileSpec: FileSpec)
 
 
