@@ -113,28 +113,7 @@ trait ExpressionConverter {
       val idLookup = env.scope.findIdentifier(name, env.fileSpec, expr.location)
       val desc = LookupDescription.Identifier(name)
 
-      new LookupExprFactory(desc, env, expr.location)(idLookup, scopeLookupComparer) {
-        override protected def handleResult(result: ScopeValue[TScopeTypes]): ExprFactory =
-          result match {
-            case NamespaceScopeValue(ns) =>
-              fromErrors(CompilationError.NamespaceUsedAsValueError(desc, env.fileSpec, expr.location))
-
-            case ClassScopeValue(arClass) =>
-              ???
-
-            case TraitScopeValue(arTrait) =>
-              ???
-
-            case DataConstructorScopeValue(ctor) =>
-              ???
-
-            case FunctionScopeValue(func) =>
-              ???
-
-            case VariableScopeValue(variable) =>
-              fromFixedType(env, expr.location)(wrapExpr(LoadVariable[TExprTypes](variable)))
-          }
-      }
+      new ScopeLookupExprFactory(desc, env, expr.location)(idLookup)
 
     case IfExpr(condition, body) => ???
 
@@ -202,6 +181,36 @@ trait ExpressionConverter {
       }).withExpectedType(expectedType)
 
     protected def handleResult(result: T): ExprFactory
+  }
+
+  private class ScopeLookupExprFactory
+  (
+    description: LookupDescription,
+    env: Env,
+    location: SourceLocation
+  )(
+    lookup: Lookup[ScopeValue[TScopeTypes]]
+  ) extends LookupExprFactory[ScopeValue[TScopeTypes]](description, env, location)(lookup, scopeLookupComparer) {
+    override protected def handleResult(result: ScopeValue[TScopeTypes]): ExprFactory =
+      result match {
+        case NamespaceScopeValue(ns) =>
+          fromErrors(CompilationError.NamespaceUsedAsValueError(description, env.fileSpec, location))
+
+        case ClassScopeValue(arClass) =>
+          ???
+
+        case TraitScopeValue(arTrait) =>
+          ???
+
+        case DataConstructorScopeValue(ctor) =>
+          ???
+
+        case FunctionScopeValue(func) =>
+          ???
+
+        case VariableScopeValue(variable) =>
+          fromFixedType(env, location)(wrapExpr(LoadVariable[TExprTypes](variable)))
+      }
   }
 }
 
