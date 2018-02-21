@@ -111,25 +111,29 @@ trait ExpressionConverter {
 
     case IdentifierExpr(name) =>
       val idLookup = env.scope.findIdentifier(name, env.fileSpec, expr.location)
+      val desc = LookupDescription.Identifier(name)
 
-      createLookupFactory(name, env, expr.location)(idLookup, scopeLookupComparer) {
-        case NamespaceScopeValue(ns) =>
-          fromErrors(CompilationError.NamespaceUsedAsValueError(name, env.fileSpec, expr.location))
+      new LookupExprFactory(desc, env, expr.location)(idLookup, scopeLookupComparer) {
+        override protected def handleResult(result: ScopeValue[TScopeTypes]): ExprFactory =
+          result match {
+            case NamespaceScopeValue(ns) =>
+              fromErrors(CompilationError.NamespaceUsedAsValueError(desc, env.fileSpec, expr.location))
 
-        case ClassScopeValue(arClass) =>
-          ???
+            case ClassScopeValue(arClass) =>
+              ???
 
-        case TraitScopeValue(arTrait) =>
-          ???
+            case TraitScopeValue(arTrait) =>
+              ???
 
-        case DataConstructorScopeValue(ctor) =>
-          ???
+            case DataConstructorScopeValue(ctor) =>
+              ???
 
-        case FunctionScopeValue(func) =>
-          ???
+            case FunctionScopeValue(func) =>
+              ???
 
-        case VariableScopeValue(variable) =>
-          fromFixedType(env, expr.location)(wrapExpr(LoadVariable[TExprTypes](variable)))
+            case VariableScopeValue(variable) =>
+              fromFixedType(env, expr.location)(wrapExpr(LoadVariable[TExprTypes](variable)))
+          }
       }
 
     case IfExpr(condition, body) => ???
@@ -184,20 +188,21 @@ trait ExpressionConverter {
         compilationInstance.forErrors(wrapExpr(InvalidExpression()), errors: _*)
     }
 
-  protected def createLookupFactory[T](name: String, env: Env, location: SourceLocation)(lookup: Lookup[T], cmp: LookupComparer[T])(f: T => ExprFactory): ExprFactory =
-    new ExprFactory {
-      override def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr] =
-        (lookup.resolve(cmp) match {
-          case LookupResult.Failure(_) =>
-            fromErrors(CompilationError.CouldNotFindIdentifierError(name, env.fileSpec, location))
+  private abstract class LookupExprFactory[T](description: LookupDescription, env: Env, location: SourceLocation)(lookup: Lookup[T], cmp: LookupComparer[T]) extends ExprFactory {
+    override def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr] =
+      (lookup.resolve(cmp) match {
+        case LookupResult.Failure(_) =>
+          fromErrors(CompilationError.LookupFailedError(description, env.fileSpec, location))
 
-          case LookupResult.Ambiguity(_, _, _, _) =>
-            fromErrors(CompilationError.AmbiguousLookupError(name, env.fileSpec, location))
+        case LookupResult.Ambiguity(_, _, _, _) =>
+          fromErrors(CompilationError.AmbiguousLookupError(description, env.fileSpec, location))
 
-          case LookupResult.Success(result, _) =>
-            f(result)
-        }).withExpectedType(expectedType)
-    }
+        case LookupResult.Success(result, _) =>
+          handleResult(result)
+      }).withExpectedType(expectedType)
+
+    protected def handleResult(result: T): ExprFactory
+  }
 }
 
 final case class ExpressionConvertEnvironment[Types <: ScopeTypes](owner: VariableOwnerDescriptor, scope: Scope[Types], fileSpec: FileSpec)
