@@ -10,6 +10,8 @@ trait ArExprTypes {
 
 trait ArExpr[Types <: ArExprTypes]
 
+final case class InvalidExpression[Types <: ArExprTypes]() extends ArExpr[Types]
+
 final case class ClassConstructorCall[Types <: ArExprTypes](classType: ClassType[Types#TS], classCtor: Types#TClassConstructor, args: Vector[Types#TExpr]) extends ArExpr[Types]
 final case class TupleElement[Types <: ArExprTypes](value: Types#TExpr)
 final case class CreateTuple[Types <: ArExprTypes](values: Vector[TupleElement[Types]]) extends ArExpr[Types]

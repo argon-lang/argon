@@ -1,17 +1,17 @@
 package com.mi3software.argon.compiler
 
 import com.mi3software.argon.parser._
-import com.mi3software.argon.util.{FileSpec, SourceLocation, WithSource}
+import com.mi3software.argon.util.{Compilation, FileSpec, SourceLocation, WithSource}
 
 import scalaz._
 import Scalaz._
-
 import ScopeHelpers._
 
 trait ExpressionConverter {
 
   type Conv[+T]
   protected implicit def monadInstance: Monad[Conv]
+  protected implicit def compilationInstance: Compilation[Conv]
 
   protected def nextVariableId: Conv[Int]
 
@@ -116,13 +116,13 @@ trait ExpressionConverter {
         override def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr] =
           idLookup.resolve(scopeLookupComparer) match {
             case LookupResult.Failure(_) =>
-              ???
+              compilationInstance.forErrors(wrapExpr(InvalidExpression()), CompilationError.CouldNotFindIdentifierError(name, env.fileSpec, expr.location))
 
             case LookupResult.Ambiguity(_, _, _, _) =>
-              ???
+              compilationInstance.forErrors(wrapExpr(InvalidExpression()), CompilationError.AmbiguousLookupError(name, env.fileSpec, expr.location))
 
             case LookupResult.Success(NamespaceScopeValue(ns), _) =>
-              ???
+              compilationInstance.forErrors(wrapExpr(InvalidExpression()), CompilationError.NamespaceUsedAsValueError(name, env.fileSpec, expr.location))
 
             case LookupResult.Success(ClassScopeValue(arClass), _) =>
               ???

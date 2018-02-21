@@ -197,4 +197,17 @@ object CompilationError {
         
     }
   }
+
+  final case class CouldNotFindIdentifierError(name: String, file: FileSpec, location: SourceLocation) extends CompilationError {
+    override def message: String = s"Could not find identifier '$name'"
+  }
+
+  final case class AmbiguousLookupError(name: String, file: FileSpec, location: SourceLocation) extends CompilationError {
+    override def message: String = s"Lookup for identifer '$name' is ambiguous"
+  }
+
+  final case class NamespaceUsedAsValueError(name: String, file: FileSpec, location: SourceLocation) extends CompilationError {
+    override def message: String = s"Namespace '$name' used as a value"
+  }
+
 }
