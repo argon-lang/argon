@@ -158,6 +158,8 @@ trait ExpressionConverter {
 
   def convertTypeExpression(env: Env)(expr: WithSource[Expr]): Conv[TS#TType]
 
+  protected def convertExpressionToType(expr: TExprTypes#TExpr): Conv[TS#TType]
+
 
 
   protected def fromFixedType(env: Env, location: SourceLocation)(expr: TExprTypes#TExpr): ExprFactory
@@ -167,6 +169,8 @@ trait ExpressionConverter {
       override def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr] =
         compilationInstance.forErrors(wrapExpr(InvalidExpression()), errors: _*)
     }
+
+  protected def fromConv(factory: Conv[ExprFactory]): ExprFactory
 
   private abstract class LookupExprFactory[T](description: LookupDescription, env: Env, location: SourceLocation)(lookup: Lookup[T], cmp: LookupComparer[T]) extends ExprFactory {
 

@@ -2,6 +2,9 @@ package com.mi3software.argon.compiler
 
 import com.mi3software.argon.util.SourceLocation
 
+import scalaz._
+import Scalaz._
+
 trait ExpressionConverterTypes extends ExpressionConverter {
 
   val context: Context
@@ -22,6 +25,29 @@ trait ExpressionConverterTypes extends ExpressionConverter {
   })
 
   private class FunctionExprFactory(env: Env, location: SourceLocation)(func: TExprTypes#TFunction, args: Vector[TExprTypes#TExpr], signature: Signature[TS, FunctionResultInfo]) extends ExprFactory {
+
+
+    override def forArguments(argInfo: ArgumentInfo): ExprFactory =
+      signature match {
+        case parameters: SignatureParameters[TS, FunctionResultInfo] =>
+          fromConv(
+            argInfo.argFactory.withExpectedType(parameters.parameter.paramType).flatMap { param =>
+              convertExpressionToType(param)
+                .flatMap { paramAsType =>
+                  parameters.next(paramAsType)
+                }
+                .map { sigNext =>
+                  new FunctionExprFactory(env, argInfo.location)(func, args :+ param, sigNext)
+                }
+            }
+          )
+
+        case result: SignatureResult[TS, FunctionResultInfo] =>
+          fromFixedType(env, location)(
+            wrapExpr(FunctionCall[TExprTypes](func, args, result.result.returnType))
+          ).forArguments(argInfo)
+      }
+
     override def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr] =
       signature match {
         case parameters: SignatureParameters[TS, FunctionResultInfo] =>

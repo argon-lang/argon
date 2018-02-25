@@ -1,5 +1,7 @@
 package com.mi3software.argon.compiler
 
+import com.mi3software.argon.util.Compilation
+
 sealed trait Signature[TS <: TypeSystem, TResult[_ <: TypeSystem]] {
 
   def unsubstitutedParameters: Vector[Parameter[TS]]
@@ -11,7 +13,8 @@ sealed trait Signature[TS <: TypeSystem, TResult[_ <: TypeSystem]] {
 
 trait SignatureParameters[TS <: TypeSystem, TResult[_ <: TypeSystem]] extends Signature[TS, TResult] {
 
-  def next[Comp[_]](paramType: TS#TType): Comp[Signature[TS, TResult]]
+  val parameter: Parameter[TS]
+  def next[Comp[_] : Compilation](paramType: TS#TType): Comp[Signature[TS, TResult]]
 
 }
 
