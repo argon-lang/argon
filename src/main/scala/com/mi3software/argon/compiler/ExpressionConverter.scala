@@ -209,7 +209,7 @@ trait ExpressionConverter {
           ???
 
         case FunctionScopeValue(func) =>
-          functionExprFactory(func)
+          functionExprFactory(env, location)(func)
 
         case VariableScopeValue(variable) =>
           fromFixedType(env, location)(wrapExpr(LoadVariable[TExprTypes](variable)))
@@ -217,7 +217,7 @@ trait ExpressionConverter {
 
   }
 
-  protected def functionExprFactory(func: TExprTypes#TFunction): ExprFactory
+  protected def functionExprFactory(env: Env, location: SourceLocation)(func: TExprTypes#TFunction): ExprFactory
 }
 
 final case class ExpressionConvertEnvironment[Types <: ScopeTypes](owner: VariableOwnerDescriptor, scope: Scope[Types], fileSpec: FileSpec)
