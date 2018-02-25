@@ -19,6 +19,7 @@ trait ExpressionConverter {
   type TS = TExprTypes#TS
 
   type TScopeTypes <: ScopeTypes with ({
+    type TFunc = TExprTypes#TFunction
     type TVariable = Variable[TS, VariableLikeDescriptor]
   })
 
@@ -168,7 +169,8 @@ trait ExpressionConverter {
     }
 
   private abstract class LookupExprFactory[T](description: LookupDescription, env: Env, location: SourceLocation)(lookup: Lookup[T], cmp: LookupComparer[T]) extends ExprFactory {
-    override def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr] =
+
+    final override def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr] =
       (lookup.resolve(cmp) match {
         case LookupResult.Failure(_) =>
           fromErrors(CompilationError.LookupFailedError(description, env.fileSpec, location))
@@ -191,9 +193,10 @@ trait ExpressionConverter {
   )(
     lookup: Lookup[ScopeValue[TScopeTypes]]
   ) extends LookupExprFactory[ScopeValue[TScopeTypes]](description, env, location)(lookup, scopeLookupComparer) {
+
     override protected def handleResult(result: ScopeValue[TScopeTypes]): ExprFactory =
       result match {
-        case NamespaceScopeValue(ns) =>
+        case NamespaceScopeValue(_) =>
           fromErrors(CompilationError.NamespaceUsedAsValueError(description, env.fileSpec, location))
 
         case ClassScopeValue(arClass) =>
@@ -206,12 +209,15 @@ trait ExpressionConverter {
           ???
 
         case FunctionScopeValue(func) =>
-          ???
+          functionExprFactory(func)
 
         case VariableScopeValue(variable) =>
           fromFixedType(env, location)(wrapExpr(LoadVariable[TExprTypes](variable)))
       }
+
   }
+
+  protected def functionExprFactory(func: TExprTypes#TFunction): ExprFactory
 }
 
 final case class ExpressionConvertEnvironment[Types <: ScopeTypes](owner: VariableOwnerDescriptor, scope: Scope[Types], fileSpec: FileSpec)
