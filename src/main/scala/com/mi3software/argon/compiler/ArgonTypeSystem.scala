@@ -1,0 +1,8 @@
+package com.mi3software.argon.compiler
+
+final class ArgonTypeSystem[TContext <: Context] extends TypeSystem {
+  override type TType = TypeBase[this.type]
+  override type TTraitInfo = (ArTrait[TContext], Vector[TType], ArTrait.ResultInfo[this.type])
+  override type TClassInfo = (ArClass[TContext], Vector[TType], ArClass.ResultInfo[this.type])
+  override type TDataConstructorInfo = (DataConstructor[TContext], Vector[TType], DataConstructor.ResultInfo[this.type])
+}

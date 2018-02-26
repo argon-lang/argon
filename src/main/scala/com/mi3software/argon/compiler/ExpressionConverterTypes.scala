@@ -10,7 +10,6 @@ trait ExpressionConverterTypes extends ExpressionConverter {
   val context: Context
 
   override type TExprTypes <: ArExprTypes with ({
-    type TS = context.typeSystem.type
     type TFunction = ArFunc[context.type]
     type TMethod = ArMethod[context.type]
     type TClassConstructor = ClassConstructor[context.type]
@@ -23,6 +22,8 @@ trait ExpressionConverterTypes extends ExpressionConverter {
     type TFunc = ArFunc[context.type]
     type TVariable = Variable[TS, VariableLikeDescriptor]
   })
+
+  protected val contextTypeSystemConverter: TypeSystemConverter[context.typeSystem.type, TS]
 
   private class FunctionExprFactory(env: Env, location: SourceLocation)(func: TExprTypes#TFunction, args: Vector[TExprTypes#TExpr], signature: Signature[TS, FunctionResultInfo]) extends ExprFactory {
 
@@ -61,5 +62,5 @@ trait ExpressionConverterTypes extends ExpressionConverter {
   }
 
   override protected def functionExprFactory(env: Env, location: SourceLocation)(func: ArFunc[context.type]): ExprFactory =
-    new FunctionExprFactory(env, location)(func, Vector(), func.signature)
+    new FunctionExprFactory(env, location)(func, Vector(), func.signature.convertTypeSystem(contextTypeSystemConverter))
 }

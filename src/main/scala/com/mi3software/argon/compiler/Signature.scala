@@ -7,6 +7,7 @@ sealed trait Signature[TS <: TypeSystem, TResult[_ <: TypeSystem]] {
   def unsubstitutedParameters: Vector[Parameter[TS]]
   def unsubstitutedResult: TResult[TS]
 
+  def convertTypeSystem[TS2 <: TypeSystem](converter: TypeSystemConverter[TS, TS2]): Signature[TS2, TResult]
   def mapResult[TNewResult[_ <: TypeSystem]](f: TResult[TS] => TNewResult[TS]): Signature[TS, TNewResult]
 
 }
