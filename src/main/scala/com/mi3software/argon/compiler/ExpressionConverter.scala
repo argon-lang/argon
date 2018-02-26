@@ -9,9 +9,9 @@ import ScopeHelpers._
 
 trait ExpressionConverter {
 
-  type Conv[+T]
-  protected implicit def monadInstance: Monad[Conv]
-  protected implicit def compilationInstance: Compilation[Conv]
+  type Conv[T]
+  protected implicit val monadInstance: Monad[Conv]
+  protected implicit val compilationInstance: Compilation[Conv]
 
   protected def nextVariableId: Conv[Int]
 

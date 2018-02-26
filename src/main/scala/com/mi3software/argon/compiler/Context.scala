@@ -1,5 +1,8 @@
 package com.mi3software.argon.compiler
 
+import com.mi3software.argon.util.Compilation
+import scalaz.Monad
+
 trait Context {
 
   type TFunctionImplementation
@@ -15,6 +18,8 @@ trait Context {
   type TClassConstructorMetadata
 
   type Comp[+_]
+  implicit val compMonadInstance: Monad[Comp]
+  implicit val compCompilationInstance: Compilation[Comp]
 
   val typeSystem: TypeSystem
 
