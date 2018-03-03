@@ -12,15 +12,34 @@ sealed trait Signature[TS <: TypeSystem, TResult[_ <: TypeSystem]] {
 
 }
 
-trait SignatureParameters[TS <: TypeSystem, TResult[_ <: TypeSystem]] extends Signature[TS, TResult] {
+final case class SignatureParameters[TS <: TypeSystem, TResult[_ <: TypeSystem]]
+(
+  parameter: Parameter[TS],
+  nextUnsubstituted: Signature[TS, TResult]
+) extends Signature[TS, TResult] {
 
-  val parameter: Parameter[TS]
-  def next[Comp[_] : Compilation](paramType: TS#TType): Comp[Signature[TS, TResult]]
+  override def unsubstitutedParameters: Vector[Parameter[TS]] =
+    parameter +: nextUnsubstituted.unsubstitutedParameters
 
+  override def unsubstitutedResult: TResult[TS] = nextUnsubstituted.unsubstitutedResult
+
+  def next[Comp[_] : Compilation](paramType: TS#TType): Comp[Signature[TS, TResult]] = ???
+
+  override def convertTypeSystem[TS2 <: TypeSystem](converter: TypeSystemConverter[TS, TS2]): Signature[TS2, TResult] = ???
+
+  override def mapResult[TNewResult[_ <: TypeSystem]](f: TResult[TS] => TNewResult[TS]): Signature[TS, TNewResult] = ???
 }
 
-trait SignatureResult[TS <: TypeSystem, TResult[_ <: TypeSystem]] extends Signature[TS, TResult] {
+final case class SignatureResult[TS <: TypeSystem, TResult[_ <: TypeSystem]]
+(
+  result: TResult[TS]
+) extends Signature[TS, TResult] {
 
-  val result: TResult[TS]
+  override def unsubstitutedParameters: Vector[Parameter[TS]] = Vector.empty
 
+  override def unsubstitutedResult: TResult[TS] = result
+
+  override def convertTypeSystem[TS2 <: TypeSystem](converter: TypeSystemConverter[TS, TS2]): Signature[TS2, TResult] = ???
+
+  override def mapResult[TNewResult[_ <: TypeSystem]](f: TResult[TS] => TNewResult[TS]): Signature[TS, TNewResult] = ???
 }
