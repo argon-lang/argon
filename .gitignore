@@ -1,6 +1,9 @@
 # SBT
 target/
 
+# NPM
+node_modules/
+
 # User-specific stuff:
 .idea/
 .vscode/

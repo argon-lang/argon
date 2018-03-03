@@ -1,0 +1,540 @@
+syntax = "proto3";
+
+option java_package = "com.mi3software.argon.module";
+
+message Module {
+    uint32 formatVersion = 1;
+    string name = 2;
+    bool isInterfaceOnly = 5;
+
+    repeated ModuleReference referencedModules = 10;
+    repeated Trait traits = 11;
+    repeated Class classes = 12;
+    repeated Constructor constructors = 13;
+    repeated Function functions = 14;
+    repeated Method methods = 15;
+    repeated ClassConstructor classConstructors = 16;
+}
+
+message Namespace {
+    repeated string parts = 1;
+}
+
+message FileSpec {
+    uint32 fileID = 1;
+    string name = 2;
+}
+
+message ParameterList {
+    repeated Parameter parameters = 1;
+}
+
+message Parameter {
+    Type paramType = 1;
+    string name = 2;
+}
+
+message EffectInfo {
+    bool isPure = 1;
+}
+
+enum AccessModifier {
+    Public = 0;
+    Internal = 1;
+    Protected = 2;
+    ProtectedInternal = 3;
+    Private = 4;
+    PrivateInternal = 5;
+}
+
+message Type {
+    oneof type_value {
+        ErrorType errorType = 1;
+        TraitType traitType = 2;
+        ClassType classType = 3;
+        ConstructorInstanceType constructorInstanceType = 4;
+    }
+}
+
+message ErrorType {
+
+}
+
+message TraitType {
+    uint32 traitId = 1;
+    repeated Type typeArguments = 2;
+}
+
+message ClassType {
+    uint32 classId = 1;
+    repeated Type typeArguments = 2;
+}
+
+message ConstructorInstanceType {
+    uint32 constructorId = 1;
+    repeated Type typeArguments = 2;
+}
+
+message TypeTemplate {
+    oneof typeTemplate_value {
+        uint32 traitId = 1;
+        uint32 classId = 2;
+    }
+}
+
+message ModuleReference {
+    string name = 1;
+}
+
+message Trait {
+    oneof trait_value {
+        TraitReference traitRef = 1;
+        TraitDefinition traitDef = 2;
+    }
+}
+
+message TraitReference {
+    uint32 moduleId = 1;
+    Namespace namespace = 2;
+    string name = 3;
+}
+
+message TraitDefinition {
+    TraitDescriptor descriptor = 1;
+    bool isSealed = 2;
+    TraitSignature signature = 3;
+    int32 metaClassId = 4;
+}
+
+message TraitDescriptor {
+    oneof traitDescType {
+        TraitDescriptorInNamespace inNamespace = 1;
+    }
+}
+
+message TraitDescriptorInNamespace {
+    FileSpec fileSpec = 1;
+    Namespace namespace = 2;
+    string name = 3;
+}
+
+message TraitSignature {
+    repeated ParameterList parameters = 1;
+    repeated TraitType baseTraits = 2;
+}
+
+message Class {
+    oneof class_value {
+        ClassReference classRef = 1;
+        ClassDefinition classDef = 2;
+    }
+}
+
+message ClassReference {
+    uint32 moduleId = 1;
+    Namespace namespace = 2;
+    string name = 3;
+}
+
+message ClassDefinition {
+    ClassDescriptor descriptor = 1;
+    bool isOpen = 2;
+    bool isSealed = 3;
+    bool isAbstract = 4;
+    ClassSignature signature = 5;
+    uint32 metaClassId = 6;
+}
+
+message ClassField {
+    bool isMutable = 1;
+    string name = 2;
+    Type fieldType = 3;
+}
+
+message ClassDescriptor {
+    oneof classDescType {
+        ClassDescriptorInNamespace inNamespace = 1;
+        ClassDescriptorMetaClass metaClass = 2;
+        ClassDescriptorTraitMetaClass traitMetaClass = 3;
+    }
+}
+
+message ClassDescriptorInNamespace {
+    FileSpec fileSpec = 1;
+    Namespace namespace = 2;
+    string name = 3;
+}
+
+message ClassDescriptorMetaClass {
+    uint32 ownerClass = 1;
+}
+
+message ClassDescriptorTraitMetaClass {
+    uint32 ownerTrait = 1;
+}
+
+message ClassSignature {
+    repeated ParameterList parameters = 1;
+    ClassType baseClass = 2;
+    repeated TraitType baseTraits = 3;
+}
+
+
+
+message Constructor {
+    oneof constructor_value {
+        ConstructorReference ctorRef = 1;
+        ConstructorDefinition ctorDef = 2;
+    }
+}
+
+message ConstructorReference {
+    uint32 moduleId = 1;
+    Namespace namespace = 2;
+    string name = 3;
+}
+
+message ConstructorDefinition {
+    ConstructorDeclarationInfo declaration = 1;
+    bool isSealed = 2;
+    ConstructorSignature signature = 3;
+    int32 metaClassId = 4;
+}
+
+message ConstructorDeclarationInfo {
+    oneof constructorDeclType {
+        ConstructorDeclarationInfoInNamespace inNamespace = 1;
+    }
+}
+
+message ConstructorDeclarationInfoInNamespace {
+    FileSpec fileSpec = 1;
+    Namespace namespace = 2;
+    string name = 3;
+}
+
+message ConstructorSignature {
+    repeated ParameterList parameters = 1;
+    TraitType instanceType = 2;
+}
+
+message Function {
+    FunctionDeclarationInfo declaration = 1;
+    EffectInfo effects = 2;
+    FunctionSignature signature = 3;
+    FunctionImplementation implementation = 4;
+}
+
+message FunctionDeclarationInfo {
+    oneof functionDeclType {
+        FunctionDeclarationInfoInNamespace inNamespace = 1;
+    }
+}
+
+message FunctionDeclarationInfoInNamespace {
+    FileSpec fileSpec = 1;
+    Namespace namespace = 2;
+    string name = 3;
+}
+
+message FunctionSignature {
+    repeated ParameterList parameters = 1;
+    Type returnType = 2;
+}
+
+message FunctionImplementation {
+    repeated LocalVariable localVariables = 1;
+    Expression body = 2;
+}
+
+message Method {
+    MethodDeclarationInfo declaration = 1;
+    EffectInfo effects = 2;
+    bool isVirtual = 3;
+    bool isAbstract = 4;
+    bool isImplicitOverride = 5;
+    bool isFinal = 6;
+    MethodSignature signature = 7;
+    MethodImplementation implementation = 8;
+}
+
+message MethodDeclarationInfo {
+    string name = 1;
+    AccessModifier accessModifier = 2;
+    TypeTemplate instanceType = 3;
+}
+
+message MethodSignature {
+    repeated ParameterList parameters = 1;
+    Type returnType = 2;
+}
+
+message MethodImplementation {
+    repeated LocalVariable localVariables = 1;
+    Expression body = 2;
+}
+
+message ClassConstructor {
+    AccessModifier accessModifier = 1;
+    EffectInfo effects = 2;
+    uint32 instanceClassId = 3;
+    ClassConstructorSignature signature = 4;
+    ClassConstructorImplementation implementation = 8;
+}
+
+message ClassConstructorSignature {
+    repeated ParameterList parameters = 1;
+}
+
+message ClassConstructorImplementation {
+    repeated LocalVariable localVariables = 1;
+    repeated ClassConstructorInitExpression initExprs = 2;
+    ClassConstructorBaseConstructorCall baseCtorCall = 3;
+    Expression postInitExpr = 4;
+}
+
+message ClassConstructorInitExpression {
+    oneof classCtorInitExprType {
+        Expression expression = 1;
+        ClassConstructorFieldInitialization fieldInit = 2;
+    }
+}
+
+message ClassConstructorFieldInitialization {
+    ClassField field = 1;
+    Expression value = 2;
+}
+
+message ClassConstructorBaseConstructorCall {
+    ClassType baseClassType = 1;
+    uint32 baseConstructor = 2;
+    repeated Expression arguments = 3;
+}
+
+message LocalVariable {
+    bool isMutable = 1;
+    Type variableType = 2;
+    string name = 3;
+}
+
+message VariableReference {
+    oneof variableRefChoice {
+        LocalVariableReference localVariableReference = 1;
+        FieldReference fieldReference = 2;
+    }
+}
+
+message LocalVariableOwner {
+    oneof localVariableOwnerChoice {
+        int32 functionId = 1;
+        int32 methodId = 2;
+        int32 classConstructorId = 3;
+    }
+}
+
+message LocalVariableReference {
+    LocalVariableOwner owner = 1;
+    uint32 localVariableId = 2;
+}
+
+message FieldReference {
+    uint32 classId = 1;
+    uint32 fieldId = 2;
+}
+
+message ParameterOwner {
+    oneof parameterOwnerChoice {
+        int32 traitId = 1;
+        int32 classId = 2;
+        int32 constructorId = 3;
+        int32 functionId = 4;
+        int32 methodId = 5;
+        int32 classConstructorId = 6;
+    }
+}
+
+message ParameterReference {
+    ParameterOwner owner = 1;
+    uint32 parameterId = 2;
+    uint32 parameterElementId = 3;
+}
+
+message Expression {
+    oneof exprOneof {
+        BindVariable bindVariable = 1;
+        ClassConstructorCall classConstructorCall = 2;
+        ConstructorCall constructorCall = 3;
+        FunctionCall functionCall = 4;
+        IfElse ifElse = 5;
+        IgnoreValue ignoreValue = 6;
+        LoadConstantBool loadConstantBool = 7;
+        LoadConstantInt loadConstantInt = 8;
+        LoadConstantString loadConstantString = 9;
+        LoadLambda loadLambda = 10;
+        LoadTypeValue loadTypeValue = 11;
+        LoadVariable loadVariable = 12;
+        MethodCall methodCall = 13;
+        OperationAdd operationAdd = 14;
+        OperationAdd operationSub = 15;
+        OperationAdd operationMul = 16;
+        OperationAdd operationDiv = 17;
+        OperationAdd operationEquals = 18;
+        OperationAdd operationNotEquals = 19;
+        PatternMatch patternMatch = 20;
+        Sequence sequence = 21;
+        StoreVariable storeVariable = 22;
+        TupledValues tupledValues = 23;
+        Upcast upcast = 24;
+    }
+
+    message BindVariable {
+        uint32 localVariableId = 1;
+        Expression value = 2;
+        Expression next = 3;
+    }
+
+    message ClassConstructorCall {
+        ClassType classType = 1;
+        uint32 classConstructorId = 2;
+        repeated Expression arguments = 3;
+    }
+
+    message ConstructorCall {
+        ConstructorInstanceType constructorType = 1;
+        repeated Expression arguments = 2;
+    }
+
+    message FunctionCall {
+        uint32 functionId = 1;
+        repeated Expression arguments = 2;
+    }
+
+    message IfElse {
+        Expression condition = 1;
+        Expression ifBody = 2;
+        Expression elseBody = 3;
+    }
+
+    message IgnoreValue {
+        Expression value = 1;
+    }
+
+    message LoadConstantBool {
+        bool value = 1;
+    }
+
+    message LoadConstantInt {
+        // Uses little endian representation.
+        bytes value = 1;
+    }
+
+    message LoadConstantString {
+        string value = 1;
+    }
+
+    message LoadLambda {
+        // A lambda id is unique per function
+        uint32 lambdaId = 1;
+        Type variableType = 2;
+        string name = 3;
+        Expression body = 4;
+    }
+
+    message LoadTypeValue {
+        Type loadTypeOf = 1;
+    }
+
+    message LoadVariable {
+        VariableReference variable = 1;
+    }
+
+    message MethodCall {
+        uint32 methodId = 1;
+        Expression boundObject = 2;
+        repeated Expression arguments = 3;
+    }
+
+    message OperationAdd {
+        Expression left = 1;
+        Expression right = 2;
+    }
+
+    message OperationSub {
+        Expression left = 1;
+        Expression right = 2;
+    }
+
+    message OperationMul {
+        Expression left = 1;
+        Expression right = 2;
+    }
+
+    message OperationDiv {
+        Expression left = 1;
+        Expression right = 2;
+    }
+
+    message OperationEquals {
+        Expression left = 1;
+        Expression right = 2;
+    }
+
+    message OperationNotEquals {
+        Expression left = 1;
+        Expression right = 2;
+    }
+
+    message Pattern {
+        oneof patternSelection {
+            DiscardPattern discardPattern = 1;
+            BindingPattern bindingPattern = 2;
+            TypeTestPattern typeTestPattern = 3;
+        }
+    }
+
+    message DiscardPattern {
+    }
+
+    message BindingPattern {
+        VariableReference variable = 1;
+    }
+
+    message TypeTestPattern {
+        VariableReference variable = 1;
+    }
+
+    message PatternMatchCase {
+        Pattern pattern = 1;
+        Expression body = 2;
+    }
+
+    message PatternMatch {
+        Expression value = 1;
+        repeated PatternMatchCase cases = 2;
+    }
+
+    message Sequence {
+        Expression first = 1;
+        Expression second = 2;
+    }
+
+    message StoreVariable {
+        VariableReference variable = 1;
+        Expression value = 2;
+    }
+
+    message TupledValue {
+        Type entryType = 1;
+        Expression value = 2;
+    }
+
+    message TupledValues {
+        repeated TupledValue values = 1;
+    }
+
+    message Upcast {
+        Type outerType = 1;
+        Type innerType = 2;
+        Expression inner = 3;
+    }
+}

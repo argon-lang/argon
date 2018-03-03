@@ -61,5 +61,11 @@ wartremoverWarnings in (Compile, compile) ++= Warts.allBut(
   Wart.TraversableOps,
 )
 
+wartremoverExcluded ++= (PathFinder(sourceManaged.value) ** "*.scala").get
+
 test in assembly := {}
 assemblyJarName in assembly := "argon.jar"
+
+PB.targets in Compile := Seq(
+  scalapb.gen() -> (sourceManaged in Compile).value
+)

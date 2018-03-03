@@ -177,10 +177,10 @@ trait ExpressionConverter {
     final override def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr] =
       (lookup.resolve(cmp) match {
         case LookupResult.Failure(_) =>
-          fromErrors(CompilationError.LookupFailedError(description, env.fileSpec, location))
+          fromErrors(CompilationError.LookupFailedError(description, CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
         case LookupResult.Ambiguity(_, _, _, _) =>
-          fromErrors(CompilationError.AmbiguousLookupError(description, env.fileSpec, location))
+          fromErrors(CompilationError.AmbiguousLookupError(description, CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
         case LookupResult.Success(result, _) =>
           handleResult(result)
@@ -201,7 +201,7 @@ trait ExpressionConverter {
     override protected def handleResult(result: ScopeValue[TScopeTypes]): ExprFactory =
       result match {
         case NamespaceScopeValue(_) =>
-          fromErrors(CompilationError.NamespaceUsedAsValueError(description, env.fileSpec, location))
+          fromErrors(CompilationError.NamespaceUsedAsValueError(description, CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
         case ClassScopeValue(arClass) =>
           ???

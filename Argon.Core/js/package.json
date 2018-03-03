@@ -1,0 +1,14 @@
+{
+  "name": "argon.core",
+  "version": "1.0.0",
+  "description": "Core library for the Argon programming language.",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "author": "",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "typescript": "^2.7.2"
+  }
+}

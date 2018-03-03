@@ -5,20 +5,20 @@ import java.nio.charset.Charset
 import com.mi3software.argon.parser._
 import com.mi3software.argon.util._
 
+import com.mi3software.argon.module.ArgonModule
+
 sealed trait CompilationMessage {
-  val file: FileSpec
-  val location: SourceLocation
+  val source: CompilationMessageSource
   def message: String
 
   override def toString: String =
-    s"${file.name} ${location.start.line}.${location.start.position}-${location.end.line}.${location.end.position}: ${message}"
+    s"${source.formatted}: ${message}"
 }
 trait CompilationError extends CompilationMessage
 
 object CompilationError {
   final case class SyntaxCompilerError(syntaxError: SyntaxErrorData) extends CompilationError {
-    override val file: FileSpec = syntaxError.fileSpec
-    override val location: SourceLocation = syntaxError.syntaxError.location
+    override val source: CompilationMessageSource = CompilationMessageSource.SourceFile(syntaxError.fileSpec, syntaxError.syntaxError.location)
 
     override def message: String = syntaxError.syntaxError match {
       case SyntaxError.InvalidSurrogatePairs(ch, _) => s"Invalid surrogate: ${ch.toInt.toHexString}"
@@ -198,16 +198,49 @@ object CompilationError {
     }
   }
 
-  final case class LookupFailedError(description: LookupDescription, file: FileSpec, location: SourceLocation) extends CompilationError {
-    override def message: String = s"Could not find identifier"
+  final case class LookupFailedError(description: LookupDescription, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Could not find identifier"
   }
 
-  final case class AmbiguousLookupError(description: LookupDescription, file: FileSpec, location: SourceLocation) extends CompilationError {
-    override def message: String = s"Lookup is ambiguous"
+  final case class AmbiguousLookupError(description: LookupDescription, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Lookup is ambiguous"
   }
 
-  final case class NamespaceUsedAsValueError(description: LookupDescription, file: FileSpec, location: SourceLocation) extends CompilationError {
-    override def message: String = s"Namespace used as a value"
+  final case class NamespaceUsedAsValueError(description: LookupDescription, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Namespace used as a value"
+  }
+
+  final case class UnsupportedModuleFormatVersion(version: Int, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Unsupported module format version $version"
+  }
+
+  final case class UnknownModuleFormatVersion(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Unknown module format version"
+  }
+
+  final case class ReferencedModuleNotFound(ref: ArgonModule.ModuleReference, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Could not find referenced module '${ref.name}'"
+  }
+
+  final case class MissingModuleName(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Missing module name"
+  }
+
+}
+
+sealed trait CompilationMessageSource {
+  def formatted: String
+  override def toString: String = formatted
+}
+object CompilationMessageSource {
+
+  final case class SourceFile(file: FileSpec, location: SourceLocation) extends CompilationMessageSource {
+    override def formatted: String =
+      s"${file.name} ${location.start.line}.${location.start.position}-${location.end.line}.${location.end.position}"
+  }
+
+  final case class ReferencedModule(moduleDescriptor: ModuleDescriptor) extends CompilationMessageSource {
+    override def formatted: String = s"module ${moduleDescriptor.name}"
   }
 
 }
