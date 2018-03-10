@@ -64,48 +64,48 @@ object ClassLikeDescriptor {
 sealed trait TraitDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
 object TraitDescriptor {
   @deriving(Equal)
-  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: String) extends TraitDescriptor
+  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: String, accessModifier: AccessModifierGlobal) extends TraitDescriptor
 
   implicit val equalInstance: Equal[TraitDescriptor] = {
-    case (a @ InNamespace(_, _, _), b @ InNamespace(_, _, _)) => a === b
+    case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
   }
 }
 
 sealed trait ClassDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
 object ClassDescriptor {
   @deriving(Equal)
-  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: String) extends ClassDescriptor
+  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: String, accessModifier: AccessModifierGlobal) extends ClassDescriptor
 
   implicit val equalInstance: Equal[ClassDescriptor] = {
-    case (a @ InNamespace(_, _, _), b @ InNamespace(_, _, _)) => a === b
+    case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
   }
 }
 
 sealed trait DataConstructorDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
 object DataConstructorDescriptor {
   @deriving(Equal)
-  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: String) extends DataConstructorDescriptor
+  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: String, accessModifier: AccessModifierGlobal) extends DataConstructorDescriptor
 
   implicit val equalInstance: Equal[DataConstructorDescriptor] = {
-    case (a @ InNamespace(_, _, _), b @ InNamespace(_, _, _)) => a === b
+    case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
   }
 }
 
 sealed trait FuncDescriptor extends ParameterOwnerDescriptor
 object FuncDescriptor {
   @deriving(Equal)
-  final case class InNamespace(module: ModuleDescriptor, namespace: NamespacePath, name: GlobalName) extends FuncDescriptor
+  final case class InNamespace(module: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends FuncDescriptor
 
   implicit val equalInstance: Equal[FuncDescriptor] = {
-    case (a @ InNamespace(_, _, _), b @ InNamespace(_, _, _)) => a === b
+    case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
   }
 }
 
 @deriving(Equal)
-final case class MethodDescriptor(typeDescriptor: ClassLikeDescriptor, name: String) extends ParameterOwnerDescriptor
+final case class MethodDescriptor(typeDescriptor: ClassLikeDescriptor, name: String, accessModifier: AccessModifier) extends ParameterOwnerDescriptor
 
 @deriving(Equal)
-final case class ClassConstructorDescriptor(ownerClass: ClassDescriptor) extends ParameterOwnerDescriptor
+final case class ClassConstructorDescriptor(ownerClass: ClassDescriptor, accessModifier: AccessModifier) extends ParameterOwnerDescriptor
 
 
 sealed trait VariableLikeDescriptor extends Descriptor

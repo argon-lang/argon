@@ -214,10 +214,6 @@ object CompilationError {
     override def message: String = s"Unsupported module format version $version"
   }
 
-  final case class UnknownModuleFormatVersion(source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"Unknown module format version"
-  }
-
   final case class ReferencedModuleNotFound(ref: ArgonModule.ModuleReference, source: CompilationMessageSource) extends CompilationError {
     override def message: String = s"Could not find referenced module '${ref.name}'"
   }

@@ -101,9 +101,10 @@ message TraitReference {
 
 message TraitDefinition {
     TraitDescriptor descriptor = 1;
-    bool isSealed = 2;
-    TraitSignature signature = 3;
-    int32 metaClassId = 4;
+    AccessModifier accessModifier = 2;
+    bool isSealed = 3;
+    TraitSignature signature = 4;
+    int32 metaClassId = 5;
 }
 
 message TraitDescriptor {

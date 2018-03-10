@@ -37,18 +37,9 @@ final case class EmptyScope[+Types <: ScopeTypes]() extends NamespacesOnlyScope[
 final case class NamespaceScope[+Types <: ScopeTypes](namespacePaths: Vector[NamespacePath], parentScope: NamespacesOnlyScope[Types]) extends NamespacesOnlyScope[Types]
 
 
-
-sealed trait ScopeValueTypesInNamespace[+PrevTypes <: ScopeTypes] extends ScopeTypes {
-  override type TTrait <: PrevTypes#TTrait
-  override type TClass <: PrevTypes#TClass
-  override type TDataConstructor <: PrevTypes#TDataConstructor
-  override type TFunc <: PrevTypes#TFunc
-  override type TVariable = Nothing
-}
-
 sealed trait ScopeValue[+Types <: ScopeTypes]
 
-final case class NamespaceScopeValue[+Types <: ScopeTypes](ns: Namespace[ScopeValue[ScopeValueTypesInNamespace[Types]]]) extends ScopeValue[Types]
+final case class NamespaceScopeValue[+Types <: ScopeTypes](ns: Namespace[ScopeValue[Types]]) extends ScopeValue[Types]
 
 
 sealed trait NonNamespaceScopeValue[+Types <: ScopeTypes] extends ScopeValue[Types]
