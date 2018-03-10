@@ -117,6 +117,23 @@ object ArgonModuleLoader {
               }) : ClassLoadResult[context.type])
             }(collection.breakOut)
 
+        private lazy val dataCtorMap: Map[Int, DataCtorLoadResult[context.type]] =
+          pbModule.dataConstructors.zipWithIndex
+            .map { case (dataCtorInfo, i) =>
+              i -> ((dataCtorInfo.dataConstructorValue match {
+                case ArgonModule.DataConstructor.DataConstructorValue.Empty => DataCtorUnloaded(i, None)
+                case ArgonModule.DataConstructor.DataConstructorValue.DataCtorRef(dataCtorRef @ ArgonModule.DataConstructorReference(moduleId, namespace, name)) =>
+                  lookupNamespaceValue(moduleId)(namespace, name) {
+                    case DataConstructorScopeValue(dataConstructor) => DataCtorLoaded(dataConstructor)
+                  }
+                    .getOrElse { DataCtorUnloaded(i, Some(dataCtorRef)) }
+
+                case ArgonModule.DataConstructor.DataConstructorValue.DataCtorDef(traitDef) =>
+                  ???
+
+              }) : DataCtorLoadResult[context.type])
+            }(collection.breakOut)
+
         override lazy val globalNamespace: Namespace[ScopeValue[ReferenceScopeTypes]] =
           NamespaceBuilder.createNamespace(
             traitMap.flatMap {
@@ -133,6 +150,15 @@ object ArgonModuleLoader {
                   arClass.descriptor match {
                     case ClassDescriptor.InNamespace(_, namespace, name, accessModifier) =>
                       Vector(ModuleElement(namespace, NamespaceBinding(name, accessModifier, ClassScopeValue[ReferenceScopeTypes](arClass))))
+                  }
+
+                case (_, _) => Vector.empty
+              }.toVector ++
+              dataCtorMap.flatMap {
+                case (_, DataCtorDefinition(dataCtor)) =>
+                  dataCtor.descriptor match {
+                    case DataConstructorDescriptor.InNamespace(_, namespace, name, accessModifier) =>
+                      Vector(ModuleElement(namespace, NamespaceBinding(name, accessModifier, DataConstructorScopeValue[ReferenceScopeTypes](dataCtor))))
                   }
 
                 case (_, _) => Vector.empty
@@ -154,5 +180,10 @@ object ArgonModuleLoader {
   final case class ClassLoaded[TContext <: Context](arClass: ArClass[TContext]) extends ClassLoadResult[TContext]
   final case class ClassUnloaded[TContext <: Context](classId: Int, classRef: Option[ArgonModule.ClassReference]) extends ClassLoadResult[TContext]
   final case class ClassDefinition[TContext <: Context](arClass: ArClassReference[TContext]) extends ClassLoadResult[TContext]
+
+  sealed trait DataCtorLoadResult[TContext <: Context]
+  final case class DataCtorLoaded[TContext <: Context](dataCtor: DataConstructor[TContext]) extends DataCtorLoadResult[TContext]
+  final case class DataCtorUnloaded[TContext <: Context](dataCtorId: Int, dataCtorRef: Option[ArgonModule.DataConstructorReference]) extends DataCtorLoadResult[TContext]
+  final case class DataCtorDefinition[TContext <: Context](dataCtor: DataConstructorReference[TContext]) extends DataCtorLoadResult[TContext]
 
 }

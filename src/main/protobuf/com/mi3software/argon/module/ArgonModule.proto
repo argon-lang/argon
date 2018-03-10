@@ -10,7 +10,7 @@ message Module {
     repeated ModuleReference referencedModules = 10;
     repeated Trait traits = 11;
     repeated Class classes = 12;
-    repeated Constructor constructors = 13;
+    repeated DataConstructor dataConstructors = 13;
     repeated Function functions = 14;
     repeated Method methods = 15;
     repeated ClassConstructor classConstructors = 16;
@@ -182,39 +182,39 @@ message ClassSignature {
 
 
 
-message Constructor {
-    oneof constructor_value {
-        ConstructorReference ctorRef = 1;
-        ConstructorDefinition ctorDef = 2;
+message DataConstructor {
+    oneof dataConstructor_value {
+        DataConstructorReference dataCtorRef = 1;
+        DataConstructorDefinition dataCtorDef = 2;
     }
 }
 
-message ConstructorReference {
+message DataConstructorReference {
     uint32 moduleId = 1;
     Namespace namespace = 2;
     string name = 3;
 }
 
-message ConstructorDefinition {
-    ConstructorDeclarationInfo declaration = 1;
+message DataConstructorDefinition {
+    DataConstructorDeclarationInfo declaration = 1;
     bool isSealed = 2;
-    ConstructorSignature signature = 3;
+    DataConstructorSignature signature = 3;
     int32 metaClassId = 4;
 }
 
-message ConstructorDeclarationInfo {
-    oneof constructorDeclType {
-        ConstructorDeclarationInfoInNamespace inNamespace = 1;
+message DataConstructorDeclarationInfo {
+    oneof dataConstructorDeclType {
+        DataConstructorDeclarationInfoInNamespace inNamespace = 1;
     }
 }
 
-message ConstructorDeclarationInfoInNamespace {
+message DataConstructorDeclarationInfoInNamespace {
     FileSpec fileSpec = 1;
     Namespace namespace = 2;
     string name = 3;
 }
 
-message ConstructorSignature {
+message DataConstructorSignature {
     repeated ParameterList parameters = 1;
     TraitType instanceType = 2;
 }
