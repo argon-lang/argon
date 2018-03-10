@@ -17,7 +17,7 @@ object NamespaceBuilder {
           val nestedElements = subNSElems.map { case (_, nestedNSPath, binding) => ModuleElement(nestedNSPath, binding) }
 
           val nestedNS = createNamespaceWithPath(NamespacePath(path.ns :+ nestedNSName), nestedElements)
-          NamespaceBinding(nestedNSName, AccessModifier.Public, NamespaceScopeValue(nestedNS))
+          NamespaceBinding(GlobalName.Normal(nestedNSName), AccessModifier.Public, NamespaceScopeValue(nestedNS))
         }
         .toVector
 

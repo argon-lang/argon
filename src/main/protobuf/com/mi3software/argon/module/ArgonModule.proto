@@ -220,6 +220,19 @@ message DataConstructorSignature {
 }
 
 message Function {
+    oneof function_type {
+        FunctionReference funcRef = 1;
+        FunctionDefinition funcDef = 2;
+    }
+}
+
+message FunctionReference {
+    uint32 moduleId = 1;
+    Namespace namespace = 2;
+    string name = 3;
+}
+
+message FunctionDefinition {
     FunctionDeclarationInfo declaration = 1;
     EffectInfo effects = 2;
     FunctionSignature signature = 3;

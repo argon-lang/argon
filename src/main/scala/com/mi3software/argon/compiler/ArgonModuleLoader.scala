@@ -60,7 +60,7 @@ object ArgonModuleLoader {
           def impl(namespaceParts: Vector[String])(namespaceValues: Namespace[ScopeValue[context.ContextScopeTypes]]): Option[T] =
             namespaceParts match {
               case head +: tail =>
-                namespaceValues.bindings.find(_.name === head) match {
+                namespaceValues.bindings.find(_.name === GlobalName.Normal(head)) match {
                   case Some(binding) =>
                     binding.namespaceElement match {
                       case NamespaceScopeValue(nestedNS) => impl(tail)(nestedNS)
@@ -72,7 +72,7 @@ object ArgonModuleLoader {
 
               case Vector() =>
                 namespaceValues.bindings
-                  .find { _.name === name }
+                  .find { _.name === GlobalName.Normal(name) }
                   .map { _.namespaceElement }
                   .collect(f)
             }
@@ -134,6 +134,23 @@ object ArgonModuleLoader {
               }) : DataCtorLoadResult[context.type])
             }(collection.breakOut)
 
+        private lazy val functionMap: Map[Int, FunctionLoadResult[context.type]] =
+          pbModule.functions.zipWithIndex
+            .map { case (funcInfo, i) =>
+              i -> ((funcInfo.functionType match {
+                case ArgonModule.Function.FunctionType.Empty => FunctionUnloaded(i, None)
+                case ArgonModule.Function.FunctionType.FuncRef(funcRef @ ArgonModule.FunctionReference(moduleId, namespace, name)) =>
+                  lookupNamespaceValue(moduleId)(namespace, name) {
+                    case FunctionScopeValue(arTrait) => FunctionLoaded(arTrait)
+                  }
+                    .getOrElse { FunctionUnloaded(i, Some(funcRef)) }
+
+                case ArgonModule.Function.FunctionType.FuncDef(traitDef) =>
+                  ???
+
+              }) : FunctionLoadResult[context.type])
+            }(collection.breakOut)
+
         override lazy val globalNamespace: Namespace[ScopeValue[ReferenceScopeTypes]] =
           NamespaceBuilder.createNamespace(
             traitMap.flatMap {
@@ -162,6 +179,15 @@ object ArgonModuleLoader {
                   }
 
                 case (_, _) => Vector.empty
+              }.toVector ++
+              functionMap.flatMap {
+                case (_, FunctionDefinition(func)) =>
+                  func.descriptor match {
+                    case FuncDescriptor.InNamespace(_, namespace, name, accessModifier) =>
+                      Vector(ModuleElement(namespace, NamespaceBinding(name, accessModifier, FunctionScopeValue[ReferenceScopeTypes](func))))
+                  }
+
+                case (_, _) => Vector.empty
               }.toVector
           )
       }
@@ -185,5 +211,10 @@ object ArgonModuleLoader {
   final case class DataCtorLoaded[TContext <: Context](dataCtor: DataConstructor[TContext]) extends DataCtorLoadResult[TContext]
   final case class DataCtorUnloaded[TContext <: Context](dataCtorId: Int, dataCtorRef: Option[ArgonModule.DataConstructorReference]) extends DataCtorLoadResult[TContext]
   final case class DataCtorDefinition[TContext <: Context](dataCtor: DataConstructorReference[TContext]) extends DataCtorLoadResult[TContext]
+
+  sealed trait FunctionLoadResult[TContext <: Context]
+  final case class FunctionLoaded[TContext <: Context](func: ArFunc[TContext]) extends FunctionLoadResult[TContext]
+  final case class FunctionUnloaded[TContext <: Context](funcId: Int, funcRef: Option[ArgonModule.FunctionReference]) extends FunctionLoadResult[TContext]
+  final case class FunctionDefinition[TContext <: Context](func: ArFuncReference[TContext]) extends FunctionLoadResult[TContext]
 
 }
