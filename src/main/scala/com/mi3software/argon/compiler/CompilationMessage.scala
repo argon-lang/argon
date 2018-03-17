@@ -226,6 +226,38 @@ object CompilationError {
     override def message: String = s"Could not find '$name' under namespace '${formatNamespace(namespacePath)}' in module '${module.name}'"
   }
 
+  sealed trait ModuleObjectType {
+    def name: String
+  }
+  case object ModuleObjectTrait extends ModuleObjectType {
+    override def name: String = "trait"
+  }
+  case object ModuleObjectClass extends ModuleObjectType {
+    override def name: String = "class"
+  }
+  case object ModuleObjectDataConstructor extends ModuleObjectType {
+    override def name: String = "data constructor"
+  }
+  case object ModuleObjectFunction extends ModuleObjectType {
+    override def name: String = "function"
+  }
+
+  final case class ModuleObjectInvalidDescriptor(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Invalid descriptor for ${objectType.name} #$id."
+  }
+
+  final case class ModuleObjectModuleNotLoaded(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Reference is in unloaded module for ${objectType.name} #$id."
+  }
+
+  final case class ModuleObjectNotFound(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"${objectType.name} #$id could not be found in specified module."
+  }
+
+  final case class ModuleObjectUndefined(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"${objectType.name} #$id is undefined."
+  }
+
   private def formatNamespace(namespacePath: NamespacePath): String =
     namespacePath.ns.mkString(".")
 

@@ -229,15 +229,15 @@ object ArgonModuleLoader {
                         case Some(descriptor) =>
                           referenceHandler(moduleRef)(descriptor) match {
                             case Some(refResult) => ModuleObjectReference(refResult)
-                            case None => ModuleObjectNotFound(i)
+                            case None => ModuleObjectNotFound()
                           }
 
                         case None =>
-                          ModuleObjectInvalidDescriptor(i)
+                          ModuleObjectInvalidDescriptor()
                       }
 
                     case _ =>
-                      ModuleObjectModuleNotLoaded(i)
+                      ModuleObjectModuleNotLoaded()
                   }
 
                 case Some(\/-(defValue)) =>
@@ -246,11 +246,11 @@ object ArgonModuleLoader {
                       ModuleObjectDefinition(definitionHandler(descriptor))
 
                     case None =>
-                      ModuleObjectInvalidDescriptor(i)
+                      ModuleObjectInvalidDescriptor()
                   }
 
                 case None =>
-                  ModuleObjectUndefined(i)
+                  ModuleObjectUndefined()
               }) : ModuleObjectLoadResult[TRefResult, TDefResult])
             }(collection.breakOut)
 
@@ -371,47 +371,62 @@ object ArgonModuleLoader {
           (
             elementMap: Map[Int, ModuleObjectLoadResult[TRef, TDef]]
           )(
+            moduleObjectType: CompilationError.ModuleObjectType
+          )(
             f: TDef => ModuleElement[ScopeValue[ReferenceScopeTypes]]
-          ): Vector[ModuleElement[ScopeValue[ReferenceScopeTypes]]] =
-            elementMap.flatMap {
-              case (_, ModuleObjectDefinition(element)) => Vector(f(element))
-              case (_, _) => Vector.empty
-            }(collection.breakOut)
+          ): Comp[Vector[ModuleElement[ScopeValue[ReferenceScopeTypes]]]] =
+            elementMap.toVector.traverseM[Comp, ModuleElement[ScopeValue[ReferenceScopeTypes]]] {
+              case (_, ModuleObjectDefinition(element)) => Vector(f(element)).point[Comp]
+              case (_, ModuleObjectReference(_)) => Vector.empty.point[Comp]
+              case (id, ModuleObjectInvalidDescriptor()) =>
+                implicitly[Compilation[Comp]].forErrors(Vector.empty, CompilationError.ModuleObjectInvalidDescriptor(moduleObjectType, id, CompilationMessageSource.ReferencedModule(desc)))
+              case (id, ModuleObjectModuleNotLoaded()) =>
+                implicitly[Compilation[Comp]].forErrors(Vector.empty, CompilationError.ModuleObjectModuleNotLoaded(moduleObjectType, id, CompilationMessageSource.ReferencedModule(desc)))
+              case (id, ModuleObjectNotFound()) =>
+                implicitly[Compilation[Comp]].forErrors(Vector.empty, CompilationError.ModuleObjectNotFound(moduleObjectType, id, CompilationMessageSource.ReferencedModule(desc)))
+              case (id, ModuleObjectUndefined()) =>
+                implicitly[Compilation[Comp]].forErrors(Vector.empty, CompilationError.ModuleObjectUndefined(moduleObjectType, id, CompilationMessageSource.ReferencedModule(desc)))
+            }
 
-          private lazy val globalNamespaceCompValue: Namespace[ScopeValue[ReferenceScopeTypes]] =
-            NamespaceBuilder.createNamespace(
-              createNamespaceElements(traitMap) { arTrait =>
+          private def combineNamespaceElements(elements: Comp[Vector[ModuleElement[ScopeValue[ReferenceScopeTypes]]]]*): Comp[Vector[ModuleElement[ScopeValue[ReferenceScopeTypes]]]] =
+            elements.toVector.sequence.map { _.flatten }
+
+          private lazy val globalNamespaceComp: Comp[Namespace[ScopeValue[ReferenceScopeTypes]]] =
+            combineNamespaceElements(
+              createNamespaceElements(traitMap)(CompilationError.ModuleObjectTrait) { arTrait =>
                 arTrait.descriptor match {
                   case TraitDescriptor.InNamespace(_, namespace, name, accessModifier) =>
                     ModuleElement(namespace, NamespaceBinding(name, accessModifier, TraitScopeValue[ReferenceScopeTypes](arTrait)))
                 }
-              } ++
-                createNamespaceElements(classMap) { arClass =>
-                  arClass.descriptor match {
-                    case ClassDescriptor.InNamespace(_, namespace, name, accessModifier) =>
-                      ModuleElement(namespace, NamespaceBinding(name, accessModifier, ClassScopeValue[ReferenceScopeTypes](arClass)))
-                  }
-                } ++
-                createNamespaceElements(dataCtorMap) { dataCtor =>
-                  dataCtor.descriptor match {
-                    case DataConstructorDescriptor.InNamespace(_, namespace, name, accessModifier) =>
-                      ModuleElement(namespace, NamespaceBinding(name, accessModifier, DataConstructorScopeValue[ReferenceScopeTypes](dataCtor)))
-                  }
-                } ++
-                createNamespaceElements(functionMap) { func =>
-                  func.descriptor match {
-                    case FuncDescriptor.InNamespace(_, namespace, name, accessModifier) =>
-                      ModuleElement(namespace, NamespaceBinding(name, accessModifier, FunctionScopeValue[ReferenceScopeTypes](func)))
-                  }
+              },
+              createNamespaceElements(classMap)(CompilationError.ModuleObjectClass) { arClass =>
+                arClass.descriptor match {
+                  case ClassDescriptor.InNamespace(_, namespace, name, accessModifier) =>
+                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, ClassScopeValue[ReferenceScopeTypes](arClass)))
                 }
-            )
+              },
+              createNamespaceElements(dataCtorMap)(CompilationError.ModuleObjectDataConstructor) { dataCtor =>
+                dataCtor.descriptor match {
+                  case DataConstructorDescriptor.InNamespace(_, namespace, name, accessModifier) =>
+                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, DataConstructorScopeValue[ReferenceScopeTypes](dataCtor)))
+                }
+              },
+              createNamespaceElements(functionMap)(CompilationError.ModuleObjectFunction) { func =>
+                func.descriptor match {
+                  case FuncDescriptor.InNamespace(_, namespace, name, accessModifier) =>
+                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, FunctionScopeValue[ReferenceScopeTypes](func)))
+                }
+              },
+            ).map(NamespaceBuilder.createNamespace)
 
           override lazy val module: Comp[ArModuleReference[context.type]] =
-            implicitly[Monad[Comp]].point(new ArModuleReference[context.type] {
+            for {
+              globalNamespaceCompValue <- globalNamespaceComp
+            } yield new ArModuleReference[context.type] {
               override val context: context2.type = context2
               override val descriptor: ModuleDescriptor = desc
               override lazy val globalNamespace: Namespace[ScopeValue[context.ReferenceScopeTypes]] = globalNamespaceCompValue
-            })
+            }
 
         }.module
 
@@ -427,10 +442,10 @@ object ArgonModuleLoader {
   sealed trait ModuleObjectLoadResult[TReference, TDefinition]
   final case class ModuleObjectReference[TReference, TDefinition](value: TReference) extends ModuleObjectLoadResult[TReference, TDefinition]
   final case class ModuleObjectDefinition[TReference, TDefinition](value: TDefinition) extends ModuleObjectLoadResult[TReference, TDefinition]
-  final case class ModuleObjectUndefined[TReference, TDefinition](id: Int) extends ModuleObjectLoadResult[TReference, TDefinition]
-  final case class ModuleObjectInvalidDescriptor[TReference, TDefinition](id: Int) extends ModuleObjectLoadResult[TReference, TDefinition]
-  final case class ModuleObjectModuleNotLoaded[TReference, TDefinition](id: Int) extends ModuleObjectLoadResult[TReference, TDefinition]
-  final case class ModuleObjectNotFound[TReference, TDefinition](id: Int) extends ModuleObjectLoadResult[TReference, TDefinition]
+  final case class ModuleObjectUndefined[TReference, TDefinition]() extends ModuleObjectLoadResult[TReference, TDefinition]
+  final case class ModuleObjectInvalidDescriptor[TReference, TDefinition]() extends ModuleObjectLoadResult[TReference, TDefinition]
+  final case class ModuleObjectModuleNotLoaded[TReference, TDefinition]() extends ModuleObjectLoadResult[TReference, TDefinition]
+  final case class ModuleObjectNotFound[TReference, TDefinition]() extends ModuleObjectLoadResult[TReference, TDefinition]
 
   type TraitLoadResult[TContext <: Context] = ModuleObjectLoadResult[ArTrait[TContext], ArTraitReference[TContext]]
   type ClassLoadResult[TContext <: Context] = ModuleObjectLoadResult[ArClass[TContext], ArClassReference[TContext]]
