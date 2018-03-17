@@ -2,9 +2,16 @@ syntax = "proto3";
 
 option java_package = "com.mi3software.argon.module";
 
+import "google/protobuf/wrappers.proto";
+import "scalapb/scalapb.proto";
+
+option (scalapb.options) = {
+    collection_type: "Vector"
+};
+
 message Module {
     uint32 formatVersion = 1;
-    string name = 2;
+    google.protobuf.StringValue name = 2;
     bool isInterfaceOnly = 5;
 
     repeated ModuleReference referencedModules = 10;
@@ -21,8 +28,20 @@ message Namespace {
 }
 
 message FileSpec {
-    uint32 fileID = 1;
-    string name = 2;
+    google.protobuf.UInt32Value fileID = 1;
+    google.protobuf.StringValue name = 2;
+}
+
+message UnnamedGlobalName {
+    google.protobuf.UInt32Value fileID = 1;
+    google.protobuf.UInt32Value index = 2;
+}
+
+message GlobalName {
+    oneof globalName_type {
+        string normalName = 1;
+        UnnamedGlobalName unnamed = 2;
+    }
 }
 
 message ParameterList {
@@ -39,12 +58,13 @@ message EffectInfo {
 }
 
 enum AccessModifier {
-    Public = 0;
-    Internal = 1;
-    Protected = 2;
-    ProtectedInternal = 3;
-    Private = 4;
-    PrivateInternal = 5;
+    Invalid = 0;
+    Public = 1;
+    Internal = 2;
+    Protected = 3;
+    ProtectedInternal = 4;
+    Private = 5;
+    PrivateInternal = 6;
 }
 
 message Type {
@@ -95,16 +115,14 @@ message Trait {
 
 message TraitReference {
     uint32 moduleId = 1;
-    Namespace namespace = 2;
-    string name = 3;
+    TraitDescriptor descriptor = 2;
 }
 
 message TraitDefinition {
     TraitDescriptor descriptor = 1;
-    AccessModifier accessModifier = 2;
-    bool isSealed = 3;
-    TraitSignature signature = 4;
-    int32 metaClassId = 5;
+    bool isSealed = 2;
+    TraitSignature signature = 3;
+    int32 metaClassId = 4;
 }
 
 message TraitDescriptor {
@@ -116,7 +134,8 @@ message TraitDescriptor {
 message TraitDescriptorInNamespace {
     FileSpec fileSpec = 1;
     Namespace namespace = 2;
-    string name = 3;
+    GlobalName name = 3;
+    AccessModifier accessModifier = 4;
 }
 
 message TraitSignature {
@@ -133,8 +152,7 @@ message Class {
 
 message ClassReference {
     uint32 moduleId = 1;
-    Namespace namespace = 2;
-    string name = 3;
+    ClassDescriptor descriptor = 2;
 }
 
 message ClassDefinition {
@@ -163,15 +181,16 @@ message ClassDescriptor {
 message ClassDescriptorInNamespace {
     FileSpec fileSpec = 1;
     Namespace namespace = 2;
-    string name = 3;
+    GlobalName name = 3;
+    AccessModifier accessModifier = 4;
 }
 
 message ClassDescriptorMetaClass {
-    uint32 ownerClass = 1;
+    ClassDescriptor ownerClass = 1;
 }
 
 message ClassDescriptorTraitMetaClass {
-    uint32 ownerTrait = 1;
+    TraitDescriptor ownerTrait = 1;
 }
 
 message ClassSignature {
@@ -191,27 +210,27 @@ message DataConstructor {
 
 message DataConstructorReference {
     uint32 moduleId = 1;
-    Namespace namespace = 2;
-    string name = 3;
+    DataConstructorDescriptor descriptor = 2;
 }
 
 message DataConstructorDefinition {
-    DataConstructorDeclarationInfo declaration = 1;
+    DataConstructorDescriptor descriptor = 1;
     bool isSealed = 2;
     DataConstructorSignature signature = 3;
     int32 metaClassId = 4;
 }
 
-message DataConstructorDeclarationInfo {
-    oneof dataConstructorDeclType {
-        DataConstructorDeclarationInfoInNamespace inNamespace = 1;
+message DataConstructorDescriptor {
+    oneof dataConstructorDescType {
+        DataConstructorDecscriptorInNamespace inNamespace = 1;
     }
 }
 
-message DataConstructorDeclarationInfoInNamespace {
+message DataConstructorDecscriptorInNamespace {
     FileSpec fileSpec = 1;
     Namespace namespace = 2;
-    string name = 3;
+    GlobalName name = 3;
+    AccessModifier accessModifier = 4;
 }
 
 message DataConstructorSignature {
@@ -228,27 +247,27 @@ message Function {
 
 message FunctionReference {
     uint32 moduleId = 1;
-    Namespace namespace = 2;
-    string name = 3;
+    FunctionDescriptor descriptor = 2;
 }
 
 message FunctionDefinition {
-    FunctionDeclarationInfo declaration = 1;
+    FunctionDescriptor descriptor = 1;
     EffectInfo effects = 2;
     FunctionSignature signature = 3;
     FunctionImplementation implementation = 4;
 }
 
-message FunctionDeclarationInfo {
-    oneof functionDeclType {
-        FunctionDeclarationInfoInNamespace inNamespace = 1;
+message FunctionDescriptor {
+    oneof functionDescType {
+        FunctionDescriptorInNamespace inNamespace = 1;
     }
 }
 
-message FunctionDeclarationInfoInNamespace {
+message FunctionDescriptorInNamespace {
     FileSpec fileSpec = 1;
     Namespace namespace = 2;
-    string name = 3;
+    GlobalName name = 3;
+    AccessModifier accessModifier = 4;
 }
 
 message FunctionSignature {
@@ -262,7 +281,18 @@ message FunctionImplementation {
 }
 
 message Method {
-    MethodDeclarationInfo declaration = 1;
+    oneof method_type {
+        MethodReference methodRef = 1;
+        MethodDefinition methodDef = 2;
+    }
+}
+
+message MethodReference {
+    MethodDescriptor descriptor = 1;
+}
+
+message MethodDefinition {
+    MethodDescriptor descriptor = 1;
     EffectInfo effects = 2;
     bool isVirtual = 3;
     bool isAbstract = 4;
@@ -272,7 +302,7 @@ message Method {
     MethodImplementation implementation = 8;
 }
 
-message MethodDeclarationInfo {
+message MethodDescriptor {
     string name = 1;
     AccessModifier accessModifier = 2;
     TypeTemplate instanceType = 3;

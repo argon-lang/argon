@@ -19,6 +19,8 @@ libraryDependencies += "com.chuusai" %% "shapeless" % "2.3.3"
 libraryDependencies += "com.fommil" %% "deriving-macro" % "0.9.0"
 libraryDependencies += "com.fommil" %% "scalaz-deriving" % "0.9.0"
 
+libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
+
 libraryDependencies += "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test"
 
 scalacOptions ++= Seq(
@@ -69,3 +71,5 @@ assemblyJarName in assembly := "argon.jar"
 PB.targets in Compile := Seq(
   scalapb.gen() -> (sourceManaged in Compile).value
 )
+
+

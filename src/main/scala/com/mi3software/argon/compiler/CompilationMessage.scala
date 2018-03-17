@@ -222,6 +222,13 @@ object CompilationError {
     override def message: String = s"Missing module name"
   }
 
+  final case class NamespaceElementNotFound(module: ModuleDescriptor, namespacePath: NamespacePath, name: GlobalName, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Could not find '$name' under namespace '${formatNamespace(namespacePath)}' in module '${module.name}'"
+  }
+
+  private def formatNamespace(namespacePath: NamespacePath): String =
+    namespacePath.ns.mkString(".")
+
 }
 
 sealed trait CompilationMessageSource {

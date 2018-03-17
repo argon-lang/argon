@@ -1,15 +1,20 @@
 package com.mi3software.argon.compiler
 
 import com.mi3software.argon.module.ArgonModule
-import scalaz._
+import scalaz.{Lens => _, _}
 import Scalaz._
-import com.mi3software.argon.util.{Compilation, LeibnizK}
+import com.mi3software.argon.util.{Compilation, FileID, LeibnizK, NamespacePath}
+import shapeless._
 
 import scala.collection.immutable._
 
 object ArgonModuleLoader {
 
   private val currentFormatVersion = 1
+
+  private trait ModuleCreator[TContext <: Context, Comp[_]] {
+    val module: Comp[ArModuleReference[TContext]]
+  }
 
   def loadModuleReference
   (context: Context)
@@ -21,13 +26,16 @@ object ArgonModuleLoader {
 
     def impl[Comp[_] : Monad : Compilation](implicit compEv: LeibnizK[Comp, context.Comp]): Comp[ArModuleReference[context.type]] =
       for {
+
         desc <-
-          if(pbModule.name === "") {
-            val desc = ModuleDescriptor("unknown-module")
-            implicitly[Compilation[Comp]].forErrors(desc, CompilationError.MissingModuleName(CompilationMessageSource.ReferencedModule(desc)))
+          pbModule.name match {
+            case None =>
+              val desc = ModuleDescriptor("unknown-module")
+              implicitly[Compilation[Comp]].forErrors(desc, CompilationError.MissingModuleName(CompilationMessageSource.ReferencedModule(desc)))
+
+            case Some(name) =>
+              implicitly[Monad[Comp]].point(ModuleDescriptor(name))
           }
-          else
-            implicitly[Monad[Comp]].point(ModuleDescriptor(pbModule.name))
 
         _ <-
           if(pbModule.formatVersion === 0 || pbModule.formatVersion > currentFormatVersion)
@@ -35,186 +43,398 @@ object ArgonModuleLoader {
           else
             implicitly[Monad[Comp]].point(())
 
+        module <- new ModuleCreator[context.type, Comp] {
 
-      } yield new ArModuleReference[context.type] {
-        override val context: context2.type = context2
-        override val descriptor: ModuleDescriptor = desc
 
-        private lazy val refModuleMap: Map[Int, UnloadedModule \/ ArModule[context.type]] =
-          pbModule.referencedModules.zipWithIndex
-            .map { case (modRef, i) =>
-              i -> context.referencedModules
-                .find { _.descriptor.name === modRef.name }
-                .toRightDisjunction { UnloadedModule(modRef) }
-            }(collection.breakOut)
-
-        private def lookupNamespaceValue[T]
-        (moduleId: Int)
-        (namespace: Option[ArgonModule.Namespace], name: String)
-        (f: PartialFunction[ScopeValue[context.ContextScopeTypes], T])
-        : Option[T] = {
-          val namespaceParts = namespace
-            .map { ns => ns.parts.toVector }
-            .getOrElse { Vector.empty }
-
-          def impl(namespaceParts: Vector[String])(namespaceValues: Namespace[ScopeValue[context.ContextScopeTypes]]): Option[T] =
-            namespaceParts match {
-              case head +: tail =>
-                namespaceValues.bindings.find(_.name === GlobalName.Normal(head)) match {
-                  case Some(binding) =>
-                    binding.namespaceElement match {
-                      case NamespaceScopeValue(nestedNS) => impl(tail)(nestedNS)
-                      case _ => None
-                    }
-
-                  case None => None
-                }
-
-              case Vector() =>
-                namespaceValues.bindings
-                  .find { _.name === GlobalName.Normal(name) }
-                  .map { _.namespaceElement }
-                  .collect(f)
+          private def parseNamespacePath(ns: Option[ArgonModule.Namespace]): NamespacePath =
+            ns match {
+              case Some(ArgonModule.Namespace(parts)) => NamespacePath(parts.toVector)
+              case None => NamespacePath.empty
             }
 
-          refModuleMap.get(moduleId) match {
-            case None | Some(-\/(_)) => None
-            case Some(\/-(module)) => impl(namespaceParts)(module.globalNamespace)
+          private object ValidGlobalName {
+            def unapply(globalName: Option[ArgonModule.GlobalName]): Option[GlobalName] =
+              globalName.collect {
+                case ArgonModule.GlobalName(ArgonModule.GlobalName.GlobalNameType.NormalName(name)) => GlobalName.Normal(name)
+                case ArgonModule.GlobalName(ArgonModule.GlobalName.GlobalNameType.Unnamed(ArgonModule.UnnamedGlobalName(Some(fileID), Some(index)))) =>
+                  GlobalName.Unnamed(FileID(fileID), index)
+              }
           }
-        }
 
-        private lazy val traitMap: Map[Int, TraitLoadResult[context.type]] =
-          pbModule.traits.zipWithIndex
-            .map { case (traitInfo, i) =>
-              i -> ((traitInfo.traitValue match {
-                case ArgonModule.Trait.TraitValue.Empty => TraitUnloaded(i, None)
-                case ArgonModule.Trait.TraitValue.TraitRef(traitRef @ ArgonModule.TraitReference(moduleId, namespace, name)) =>
-                  lookupNamespaceValue(moduleId)(namespace, name) {
-                    case TraitScopeValue(arTrait) => TraitLoaded(arTrait)
+          private object ParsedAccessModifier {
+            def unapply(accessModifier: ArgonModule.AccessModifier): Option[AccessModifier] =
+              accessModifier match {
+                case ArgonModule.AccessModifier.Invalid | ArgonModule.AccessModifier.Unrecognized(_) => None
+                case ArgonModule.AccessModifier.Public => Some(AccessModifier.Public)
+                case ArgonModule.AccessModifier.Internal => Some(AccessModifier.Internal)
+                case ArgonModule.AccessModifier.Protected => Some(AccessModifier.Protected)
+                case ArgonModule.AccessModifier.ProtectedInternal => Some(AccessModifier.ProtectedInternal)
+                case ArgonModule.AccessModifier.Private => Some(AccessModifier.Private)
+                case ArgonModule.AccessModifier.PrivateInternal => Some(AccessModifier.PrivateInternal)
+              }
+          }
+
+          private object ParsedGlobalAccessModifier {
+            def unapply(accessModifier: ArgonModule.AccessModifier): Option[AccessModifierGlobal] =
+              accessModifier match {
+                case ParsedAccessModifier(accessModifier: AccessModifierGlobal) => Some(accessModifier)
+                case _ => None
+              }
+          }
+
+
+
+          private lazy val refModuleMap: Map[Int, ModuleLoadResult[context.type]] =
+            pbModule.referencedModules.zipWithIndex
+              .map { case (modRef, i) =>
+                val moduleLoadRes: ModuleLoadResult[context.type] =
+                  context.referencedModules
+                    .find { _.descriptor.name === modRef.name }
+                  match {
+                    case Some(referencedModule) => ModuleReference(referencedModule)
+                    case None => ModuleNotFound(modRef)
                   }
-                    .getOrElse { TraitUnloaded(i, Some(traitRef)) }
 
-                case ArgonModule.Trait.TraitValue.TraitDef(traitDef) =>
-                  ???
+                i -> moduleLoadRes
+              }(collection.breakOut)
 
-              }) : TraitLoadResult[context.type])
+          private def lookupNamespaceValue[T]
+          (refModule: ArModule[context.type])
+          (namespace: NamespacePath, name: GlobalName)
+          (f: PartialFunction[ScopeValue[context.ContextScopeTypes], T])
+          : Option[T] = {
+            def impl(namespaceParts: Vector[String])(namespaceValues: Namespace[ScopeValue[context.ContextScopeTypes]]): Option[T] =
+              namespaceParts match {
+                case head +: tail =>
+                  namespaceValues.bindings.find(_.name === GlobalName.Normal(head)) match {
+                    case Some(binding) =>
+                      binding.namespaceElement match {
+                        case NamespaceScopeValue(nestedNS) => impl(tail)(nestedNS)
+                        case _ => None
+                      }
+
+                    case None => None
+                  }
+
+                case Vector() =>
+                  namespaceValues.bindings
+                    .find { _.name === name }
+                    .map { _.namespaceElement }
+                    .collect(f)
+              }
+
+            impl(namespace.ns)(refModule.globalNamespace)
+          }
+
+          private def parseTraitDescriptor(module: ModuleDescriptor)(desc: Option[ArgonModule.TraitDescriptor]): Option[TraitDescriptor] =
+            desc.flatMap {
+              case ArgonModule.TraitDescriptor(ArgonModule.TraitDescriptor.TraitDescType.InNamespace(
+                ArgonModule.TraitDescriptorInNamespace(
+                  Some(ArgonModule.FileSpec(Some(fileID), Some(fileName))),
+                  ns,
+                  ValidGlobalName(name),
+                  ParsedGlobalAccessModifier(accessModifier)
+                )
+              )) =>
+                Some(TraitDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
+
+              case _ =>
+                None
+            }
+
+          private def parseClassDescriptor(module: ModuleDescriptor)(desc: Option[ArgonModule.ClassDescriptor]): Option[ClassDescriptor] =
+            desc.flatMap {
+              case ArgonModule.ClassDescriptor(ArgonModule.ClassDescriptor.ClassDescType.InNamespace(
+                ArgonModule.ClassDescriptorInNamespace(
+                  Some(ArgonModule.FileSpec(Some(fileID), Some(fileName))),
+                  ns,
+                  ValidGlobalName(name),
+                  ParsedGlobalAccessModifier(accessModifier)
+                )
+              )) =>
+                Some(ClassDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
+
+              case ArgonModule.ClassDescriptor(ArgonModule.ClassDescriptor.ClassDescType.MetaClass(
+              ArgonModule.ClassDescriptorMetaClass(Some(ownerClassDescriptor))
+              )) =>
+                ???
+
+              case ArgonModule.ClassDescriptor(ArgonModule.ClassDescriptor.ClassDescType.TraitMetaClass(
+              ArgonModule.ClassDescriptorTraitMetaClass(Some(ownerTraitDescriptor))
+              )) =>
+                ???
+
+              case _ =>
+                None
+            }
+
+          private def parseDataCtorDescriptor(module: ModuleDescriptor)(desc: Option[ArgonModule.DataConstructorDescriptor]): Option[DataConstructorDescriptor] =
+            desc.flatMap {
+              case ArgonModule.DataConstructorDescriptor(ArgonModule.DataConstructorDescriptor.DataConstructorDescType.InNamespace(
+                ArgonModule.DataConstructorDecscriptorInNamespace(
+                  Some(ArgonModule.FileSpec(Some(fileID), Some(fileName))),
+                  ns,
+                  ValidGlobalName(name),
+                  ParsedGlobalAccessModifier(accessModifier)
+                )
+              )) =>
+                Some(DataConstructorDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
+
+              case _ =>
+                None
+            }
+
+          private def parseFunctionDescriptor(module: ModuleDescriptor)(desc: Option[ArgonModule.FunctionDescriptor]): Option[FuncDescriptor] =
+            desc.flatMap {
+              case ArgonModule.FunctionDescriptor(ArgonModule.FunctionDescriptor.FunctionDescType.InNamespace(
+                ArgonModule.FunctionDescriptorInNamespace(
+                  Some(ArgonModule.FileSpec(Some(fileID), Some(fileName))),
+                  ns,
+                  ValidGlobalName(name),
+                  ParsedGlobalAccessModifier(accessModifier)
+                )
+              )) =>
+                Some(FuncDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
+
+              case _ =>
+                None
+            }
+
+          private trait ModuleObjectRefDef[TValue, TRef, TDef] {
+            def fromModuleObject(value: TValue): Option[TRef \/ TDef]
+          }
+
+          private def handleModuleObjectLoading
+          [TValue, TRef, TDef, TValueDescriptor, TResultDescriptor, TRefResult, TDefResult]
+          (
+            valueLens: Lens[ArgonModule.Module, Vector[TValue]]
+          )(
+            refDef: ModuleObjectRefDef[TValue, TRef, TDef]
+          )(
+            refModuleIdLens: Lens[TRef, Int],
+            refDescriptorLens: Lens[TRef, TValueDescriptor],
+            defDescriptorLens: Lens[TDef, TValueDescriptor]
+          )(
+            parseDescriptor: ModuleDescriptor => TValueDescriptor => Option[TResultDescriptor]
+          )(
+            referenceHandler: ArModule[context.type] => TResultDescriptor => Option[TRefResult],
+            definitionHandler: TResultDescriptor => TDefResult
+          ): Map[Int, ModuleObjectLoadResult[TRefResult, TDefResult]] =
+            valueLens.get(pbModule).zipWithIndex.map { case (moduleObject, i) =>
+              i -> ((refDef.fromModuleObject(moduleObject) match {
+                case Some(-\/(refValue)) =>
+                  refModuleMap.get(refModuleIdLens.get(refValue)) match {
+                    case Some(ModuleReference(moduleRef)) =>
+                      parseDescriptor(moduleRef.descriptor)(refDescriptorLens.get(refValue)) match {
+                        case Some(descriptor) =>
+                          referenceHandler(moduleRef)(descriptor) match {
+                            case Some(refResult) => ModuleObjectReference(refResult)
+                            case None => ModuleObjectNotFound(i)
+                          }
+
+                        case None =>
+                          ModuleObjectInvalidDescriptor(i)
+                      }
+
+                    case _ =>
+                      ModuleObjectModuleNotLoaded(i)
+                  }
+
+                case Some(\/-(defValue)) =>
+                  parseDescriptor(desc)(defDescriptorLens.get(defValue)) match {
+                    case Some(descriptor) =>
+                      ModuleObjectDefinition(definitionHandler(descriptor))
+
+                    case None =>
+                      ModuleObjectInvalidDescriptor(i)
+                  }
+
+                case None =>
+                  ModuleObjectUndefined(i)
+              }) : ModuleObjectLoadResult[TRefResult, TDefResult])
             }(collection.breakOut)
 
-        private lazy val classMap: Map[Int, ClassLoadResult[context.type]] =
-          pbModule.classes.zipWithIndex
-            .map { case (classInfo, i) =>
-              i -> ((classInfo.classValue match {
-                case ArgonModule.Class.ClassValue.Empty => ClassUnloaded(i, None)
-                case ArgonModule.Class.ClassValue.ClassRef(classRef @ ArgonModule.ClassReference(moduleId, namespace, name)) =>
-                  lookupNamespaceValue(moduleId)(namespace, name) {
-                    case ClassScopeValue(arClass) => ClassLoaded(arClass)
+
+          private lazy val traitMap: Map[Int, TraitLoadResult[context.type]] =
+            handleModuleObjectLoading(
+              valueLens = lens[ArgonModule.Module] >> 'traits
+            )(
+              refDef = new ModuleObjectRefDef[ArgonModule.Trait, ArgonModule.TraitReference, ArgonModule.TraitDefinition] {
+                override def fromModuleObject(value: ArgonModule.Trait): Option[ArgonModule.TraitReference \/ ArgonModule.TraitDefinition] =
+                  value.traitValue match {
+                    case ArgonModule.Trait.TraitValue.TraitRef(traitRef) => Some(-\/(traitRef))
+                    case ArgonModule.Trait.TraitValue.TraitDef(traitDef) => Some(\/-(traitDef))
+                    case _ => None
                   }
-                    .getOrElse { ClassUnloaded(i, Some(classRef)) }
+              }
+            )(
+              refModuleIdLens = lens[ArgonModule.TraitReference] >> 'moduleId,
+              refDescriptorLens = lens[ArgonModule.TraitReference] >> 'descriptor,
+              defDescriptorLens = lens[ArgonModule.TraitDefinition] >> 'descriptor,
+            )(
+              parseDescriptor = parseTraitDescriptor
+            )(
+              referenceHandler = moduleRef => {
+                case TraitDescriptor.InNamespace(_, namespace, name, _) =>
+                  lookupNamespaceValue(moduleRef)(namespace, name) {
+                    case TraitScopeValue(arTrait) => arTrait
+                  }
+              },
+              definitionHandler = _ => ???
+            )
 
-                case ArgonModule.Class.ClassValue.ClassDef(classDef) =>
-                  ???
+          private lazy val classMap: Map[Int, ClassLoadResult[context.type]] =
+            handleModuleObjectLoading(
+              valueLens = lens[ArgonModule.Module] >> 'classes
+            )(
+              refDef = new ModuleObjectRefDef[ArgonModule.Class, ArgonModule.ClassReference, ArgonModule.ClassDefinition] {
+                override def fromModuleObject(value: ArgonModule.Class): Option[ArgonModule.ClassReference \/ ArgonModule.ClassDefinition] =
+                  value.classValue match {
+                    case ArgonModule.Class.ClassValue.ClassRef(classRef) => Some(-\/(classRef))
+                    case ArgonModule.Class.ClassValue.ClassDef(classDef) => Some(\/-(classDef))
+                    case _ => None
+                  }
+              }
+            )(
+              refModuleIdLens = lens[ArgonModule.ClassReference] >> 'moduleId,
+              refDescriptorLens = lens[ArgonModule.ClassReference] >> 'descriptor,
+              defDescriptorLens = lens[ArgonModule.ClassDefinition] >> 'descriptor,
+            )(
+              parseDescriptor = parseClassDescriptor
+            )(
+              referenceHandler = moduleRef => {
+                case ClassDescriptor.InNamespace(_, namespace, name, _) =>
+                  lookupNamespaceValue(moduleRef)(namespace, name) {
+                    case ClassScopeValue(arClass) => arClass
+                  }
+              },
+              definitionHandler = _ => ???
+            )
 
-              }) : ClassLoadResult[context.type])
+          private lazy val dataCtorMap: Map[Int, DataCtorLoadResult[context.type]] =
+            handleModuleObjectLoading(
+              valueLens = lens[ArgonModule.Module] >> 'dataConstructors
+            )(
+              refDef = new ModuleObjectRefDef[ArgonModule.DataConstructor, ArgonModule.DataConstructorReference, ArgonModule.DataConstructorDefinition] {
+                override def fromModuleObject(value: ArgonModule.DataConstructor): Option[ArgonModule.DataConstructorReference \/ ArgonModule.DataConstructorDefinition] =
+                  value.dataConstructorValue match {
+                    case ArgonModule.DataConstructor.DataConstructorValue.DataCtorRef(dataCtorRef) => Some(-\/(dataCtorRef))
+                    case ArgonModule.DataConstructor.DataConstructorValue.DataCtorDef(dataCtorDef) => Some(\/-(dataCtorDef))
+                    case _ => None
+                  }
+              }
+            )(
+              refModuleIdLens = lens[ArgonModule.DataConstructorReference] >> 'moduleId,
+              refDescriptorLens = lens[ArgonModule.DataConstructorReference] >> 'descriptor,
+              defDescriptorLens = lens[ArgonModule.DataConstructorDefinition] >> 'descriptor,
+            )(
+              parseDescriptor = parseDataCtorDescriptor
+            )(
+              referenceHandler = moduleRef => {
+                case DataConstructorDescriptor.InNamespace(_, namespace, name, _) =>
+                  lookupNamespaceValue(moduleRef)(namespace, name) {
+                    case DataConstructorScopeValue(dataCtor) => dataCtor
+                  }
+              },
+              definitionHandler = _ => ???
+            )
+
+          private lazy val functionMap: Map[Int, FunctionLoadResult[context.type]] =
+            handleModuleObjectLoading(
+              valueLens = lens[ArgonModule.Module] >> 'functions
+            )(
+              refDef = new ModuleObjectRefDef[ArgonModule.Function, ArgonModule.FunctionReference, ArgonModule.FunctionDefinition] {
+                override def fromModuleObject(value: ArgonModule.Function): Option[ArgonModule.FunctionReference \/ ArgonModule.FunctionDefinition] =
+                  value.functionType match {
+                    case ArgonModule.Function.FunctionType.FuncRef(funcRef) => Some(-\/(funcRef))
+                    case ArgonModule.Function.FunctionType.FuncDef(funcDef) => Some(\/-(funcDef))
+                    case _ => None
+                  }
+              }
+            )(
+              refModuleIdLens = lens[ArgonModule.FunctionReference] >> 'moduleId,
+              refDescriptorLens = lens[ArgonModule.FunctionReference] >> 'descriptor,
+              defDescriptorLens = lens[ArgonModule.FunctionDefinition] >> 'descriptor,
+            )(
+              parseDescriptor = parseFunctionDescriptor
+            )(
+              referenceHandler = moduleRef => {
+                case FuncDescriptor.InNamespace(_, namespace, name, _) =>
+                  lookupNamespaceValue(moduleRef)(namespace, name) {
+                    case FunctionScopeValue(arTrait) => arTrait
+                  }
+              },
+              definitionHandler = _ => ???
+            )
+
+          private def createNamespaceElements[TRef, TDef, TResult]
+          (
+            elementMap: Map[Int, ModuleObjectLoadResult[TRef, TDef]]
+          )(
+            f: TDef => ModuleElement[ScopeValue[ReferenceScopeTypes]]
+          ): Vector[ModuleElement[ScopeValue[ReferenceScopeTypes]]] =
+            elementMap.flatMap {
+              case (_, ModuleObjectDefinition(element)) => Vector(f(element))
+              case (_, _) => Vector.empty
             }(collection.breakOut)
 
-        private lazy val dataCtorMap: Map[Int, DataCtorLoadResult[context.type]] =
-          pbModule.dataConstructors.zipWithIndex
-            .map { case (dataCtorInfo, i) =>
-              i -> ((dataCtorInfo.dataConstructorValue match {
-                case ArgonModule.DataConstructor.DataConstructorValue.Empty => DataCtorUnloaded(i, None)
-                case ArgonModule.DataConstructor.DataConstructorValue.DataCtorRef(dataCtorRef @ ArgonModule.DataConstructorReference(moduleId, namespace, name)) =>
-                  lookupNamespaceValue(moduleId)(namespace, name) {
-                    case DataConstructorScopeValue(dataConstructor) => DataCtorLoaded(dataConstructor)
-                  }
-                    .getOrElse { DataCtorUnloaded(i, Some(dataCtorRef)) }
-
-                case ArgonModule.DataConstructor.DataConstructorValue.DataCtorDef(traitDef) =>
-                  ???
-
-              }) : DataCtorLoadResult[context.type])
-            }(collection.breakOut)
-
-        private lazy val functionMap: Map[Int, FunctionLoadResult[context.type]] =
-          pbModule.functions.zipWithIndex
-            .map { case (funcInfo, i) =>
-              i -> ((funcInfo.functionType match {
-                case ArgonModule.Function.FunctionType.Empty => FunctionUnloaded(i, None)
-                case ArgonModule.Function.FunctionType.FuncRef(funcRef @ ArgonModule.FunctionReference(moduleId, namespace, name)) =>
-                  lookupNamespaceValue(moduleId)(namespace, name) {
-                    case FunctionScopeValue(arTrait) => FunctionLoaded(arTrait)
-                  }
-                    .getOrElse { FunctionUnloaded(i, Some(funcRef)) }
-
-                case ArgonModule.Function.FunctionType.FuncDef(traitDef) =>
-                  ???
-
-              }) : FunctionLoadResult[context.type])
-            }(collection.breakOut)
-
-        override lazy val globalNamespace: Namespace[ScopeValue[ReferenceScopeTypes]] =
-          NamespaceBuilder.createNamespace(
-            traitMap.flatMap {
-              case (_, TraitDefinition(arTrait)) =>
+          private lazy val globalNamespaceCompValue: Namespace[ScopeValue[ReferenceScopeTypes]] =
+            NamespaceBuilder.createNamespace(
+              createNamespaceElements(traitMap) { arTrait =>
                 arTrait.descriptor match {
                   case TraitDescriptor.InNamespace(_, namespace, name, accessModifier) =>
-                    Vector(ModuleElement(namespace, NamespaceBinding(name, accessModifier, TraitScopeValue[ReferenceScopeTypes](arTrait))))
+                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, TraitScopeValue[ReferenceScopeTypes](arTrait)))
                 }
-
-              case (_, _) => Vector.empty
-            }.toVector ++
-              classMap.flatMap {
-                case (_, ClassDefinition(arClass)) =>
+              } ++
+                createNamespaceElements(classMap) { arClass =>
                   arClass.descriptor match {
                     case ClassDescriptor.InNamespace(_, namespace, name, accessModifier) =>
-                      Vector(ModuleElement(namespace, NamespaceBinding(name, accessModifier, ClassScopeValue[ReferenceScopeTypes](arClass))))
+                      ModuleElement(namespace, NamespaceBinding(name, accessModifier, ClassScopeValue[ReferenceScopeTypes](arClass)))
                   }
-
-                case (_, _) => Vector.empty
-              }.toVector ++
-              dataCtorMap.flatMap {
-                case (_, DataCtorDefinition(dataCtor)) =>
+                } ++
+                createNamespaceElements(dataCtorMap) { dataCtor =>
                   dataCtor.descriptor match {
                     case DataConstructorDescriptor.InNamespace(_, namespace, name, accessModifier) =>
-                      Vector(ModuleElement(namespace, NamespaceBinding(name, accessModifier, DataConstructorScopeValue[ReferenceScopeTypes](dataCtor))))
+                      ModuleElement(namespace, NamespaceBinding(name, accessModifier, DataConstructorScopeValue[ReferenceScopeTypes](dataCtor)))
                   }
-
-                case (_, _) => Vector.empty
-              }.toVector ++
-              functionMap.flatMap {
-                case (_, FunctionDefinition(func)) =>
+                } ++
+                createNamespaceElements(functionMap) { func =>
                   func.descriptor match {
                     case FuncDescriptor.InNamespace(_, namespace, name, accessModifier) =>
-                      Vector(ModuleElement(namespace, NamespaceBinding(name, accessModifier, FunctionScopeValue[ReferenceScopeTypes](func))))
+                      ModuleElement(namespace, NamespaceBinding(name, accessModifier, FunctionScopeValue[ReferenceScopeTypes](func)))
                   }
+                }
+            )
 
-                case (_, _) => Vector.empty
-              }.toVector
-          )
-      }
+          override lazy val module: Comp[ArModuleReference[context.type]] =
+            implicitly[Monad[Comp]].point(new ArModuleReference[context.type] {
+              override val context: context2.type = context2
+              override val descriptor: ModuleDescriptor = desc
+              override lazy val globalNamespace: Namespace[ScopeValue[context.ReferenceScopeTypes]] = globalNamespaceCompValue
+            })
+
+        }.module
+
+      } yield module
 
     impl[context.Comp](context.compMonadInstance, context.compCompilationInstance, LeibnizK.refl)
   }
 
-  final case class UnloadedModule(moduleRef: ArgonModule.ModuleReference)
+  sealed trait ModuleLoadResult[TContext <: Context]
+  final case class ModuleReference[TContext <: Context](module: ArModule[TContext]) extends ModuleLoadResult[TContext]
+  final case class ModuleNotFound[TContext <: Context](moduleRef: ArgonModule.ModuleReference) extends ModuleLoadResult[TContext]
 
-  sealed trait TraitLoadResult[TContext <: Context]
-  final case class TraitLoaded[TContext <: Context](arTrait: ArTrait[TContext]) extends TraitLoadResult[TContext]
-  final case class TraitUnloaded[TContext <: Context](traitId: Int, traitRef: Option[ArgonModule.TraitReference]) extends TraitLoadResult[TContext]
-  final case class TraitDefinition[TContext <: Context](arTrait: ArTraitReference[TContext]) extends TraitLoadResult[TContext]
+  sealed trait ModuleObjectLoadResult[TReference, TDefinition]
+  final case class ModuleObjectReference[TReference, TDefinition](value: TReference) extends ModuleObjectLoadResult[TReference, TDefinition]
+  final case class ModuleObjectDefinition[TReference, TDefinition](value: TDefinition) extends ModuleObjectLoadResult[TReference, TDefinition]
+  final case class ModuleObjectUndefined[TReference, TDefinition](id: Int) extends ModuleObjectLoadResult[TReference, TDefinition]
+  final case class ModuleObjectInvalidDescriptor[TReference, TDefinition](id: Int) extends ModuleObjectLoadResult[TReference, TDefinition]
+  final case class ModuleObjectModuleNotLoaded[TReference, TDefinition](id: Int) extends ModuleObjectLoadResult[TReference, TDefinition]
+  final case class ModuleObjectNotFound[TReference, TDefinition](id: Int) extends ModuleObjectLoadResult[TReference, TDefinition]
 
-  sealed trait ClassLoadResult[TContext <: Context]
-  final case class ClassLoaded[TContext <: Context](arClass: ArClass[TContext]) extends ClassLoadResult[TContext]
-  final case class ClassUnloaded[TContext <: Context](classId: Int, classRef: Option[ArgonModule.ClassReference]) extends ClassLoadResult[TContext]
-  final case class ClassDefinition[TContext <: Context](arClass: ArClassReference[TContext]) extends ClassLoadResult[TContext]
-
-  sealed trait DataCtorLoadResult[TContext <: Context]
-  final case class DataCtorLoaded[TContext <: Context](dataCtor: DataConstructor[TContext]) extends DataCtorLoadResult[TContext]
-  final case class DataCtorUnloaded[TContext <: Context](dataCtorId: Int, dataCtorRef: Option[ArgonModule.DataConstructorReference]) extends DataCtorLoadResult[TContext]
-  final case class DataCtorDefinition[TContext <: Context](dataCtor: DataConstructorReference[TContext]) extends DataCtorLoadResult[TContext]
-
-  sealed trait FunctionLoadResult[TContext <: Context]
-  final case class FunctionLoaded[TContext <: Context](func: ArFunc[TContext]) extends FunctionLoadResult[TContext]
-  final case class FunctionUnloaded[TContext <: Context](funcId: Int, funcRef: Option[ArgonModule.FunctionReference]) extends FunctionLoadResult[TContext]
-  final case class FunctionDefinition[TContext <: Context](func: ArFuncReference[TContext]) extends FunctionLoadResult[TContext]
+  type TraitLoadResult[TContext <: Context] = ModuleObjectLoadResult[ArTrait[TContext], ArTraitReference[TContext]]
+  type ClassLoadResult[TContext <: Context] = ModuleObjectLoadResult[ArClass[TContext], ArClassReference[TContext]]
+  type DataCtorLoadResult[TContext <: Context] = ModuleObjectLoadResult[DataConstructor[TContext], DataConstructorReference[TContext]]
+  type FunctionLoadResult[TContext <: Context] = ModuleObjectLoadResult[ArFunc[TContext], ArFuncReference[TContext]]
 
 }
