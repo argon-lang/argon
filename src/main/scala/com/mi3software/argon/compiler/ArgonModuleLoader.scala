@@ -40,7 +40,7 @@ object ArgonModuleLoader extends ModuleLoader {
   (data: ArgonModule.Module)
   (referencedModules: Vector[ArModule[context.type]])
   : context.Comp[ArModuleReference[context.type]] =
-    loadModuleReference(context)(data)
+    loadModuleReference(context)(data)(referencedModules)
 
   private val currentFormatVersion = 1
 
@@ -51,6 +51,7 @@ object ArgonModuleLoader extends ModuleLoader {
   def loadModuleReference
   (context: Context)
   (pbModule: ArgonModule.Module)
+  (referencedModules: Vector[ArModule[context.type]])
   : context.Comp[ArModuleReference[context.type]] = {
 
     import context.ReferenceScopeTypes
@@ -120,7 +121,7 @@ object ArgonModuleLoader extends ModuleLoader {
             pbModule.referencedModules.zipWithIndex
               .map { case (modRef, i) =>
                 val moduleLoadRes: ModuleLoadResult[context.type] =
-                  context.referencedModules
+                  referencedModules
                     .find { _.descriptor.name.contains(modRef.name) }
                   match {
                     case Some(referencedModule) => ModuleReference(referencedModule)

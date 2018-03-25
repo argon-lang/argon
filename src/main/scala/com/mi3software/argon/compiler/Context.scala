@@ -24,9 +24,6 @@ trait Context {
   val typeSystem: TypeSystem
 
 
-  val referencedModules: Vector[ArModule[this.type]]
-
-
   sealed trait ContextScopeTypes extends ScopeTypes {
     override type TTrait <: ArTrait[Context.this.type]
     override type TClass <: ArClass[Context.this.type]
