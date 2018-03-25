@@ -44,13 +44,8 @@ message GlobalName {
     }
 }
 
-message ParameterList {
-    repeated Parameter parameters = 1;
-}
-
 message Parameter {
     Type paramType = 1;
-    string name = 2;
 }
 
 message EffectInfo {
@@ -147,7 +142,7 @@ message TraitDescriptorInNamespace {
 }
 
 message TraitSignature {
-    repeated ParameterList parameters = 1;
+    repeated Parameter parameters = 1;
     repeated TraitType baseTraits = 2;
 }
 
@@ -206,7 +201,7 @@ message ClassDescriptorTraitMetaClass {
 }
 
 message ClassSignature {
-    repeated ParameterList parameters = 1;
+    repeated Parameter parameters = 1;
     ClassType baseClass = 2;
     repeated TraitType baseTraits = 3;
 }
@@ -246,7 +241,7 @@ message DataConstructorDecscriptorInNamespace {
 }
 
 message DataConstructorSignature {
-    repeated ParameterList parameters = 1;
+    repeated Parameter parameters = 1;
     TraitType instanceType = 2;
 }
 
@@ -283,7 +278,7 @@ message FunctionDescriptorInNamespace {
 }
 
 message FunctionSignature {
-    repeated ParameterList parameters = 1;
+    repeated Parameter parameters = 1;
     Type returnType = 2;
 }
 
@@ -321,7 +316,7 @@ message MethodDescriptor {
 }
 
 message MethodSignature {
-    repeated ParameterList parameters = 1;
+    repeated Parameter parameters = 1;
     Type returnType = 2;
 }
 
@@ -339,7 +334,7 @@ message ClassConstructor {
 }
 
 message ClassConstructorSignature {
-    repeated ParameterList parameters = 1;
+    repeated Parameter parameters = 1;
 }
 
 message ClassConstructorImplementation {

@@ -9,7 +9,8 @@ class JSContext extends Context {
   override type TTraitMetadata = JSMetadata.Trait
   override type TClassMetadata = JSMetadata.Class
 
-  override val invalidClassMetadata: TClassMetadata = JSMetadata.Class.Invalid
+  override val invalidTraitMetadata: JSMetadata.Trait = JSMetadata.Trait.Invalid
+  override val invalidClassMetadata: JSMetadata.Class = JSMetadata.Class.Invalid
 
 
 

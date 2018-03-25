@@ -17,6 +17,7 @@ trait Context {
   type TDataConstructorMetadata
   type TClassConstructorMetadata
 
+  val invalidTraitMetadata: TTraitMetadata
   val invalidClassMetadata: TClassMetadata
 
   type Comp[+_]

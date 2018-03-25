@@ -55,7 +55,8 @@ object ArgonModuleLoader extends ModuleLoader {
   (referencedModules: Vector[ArModule[context.type]])
   (payloadLoader: PayloadLoader[TPayloadSpec])
   (implicit
-    invalidClassPayload: InvalidClass.InvalidClassPayload[TPayloadSpec]
+    invalidTraitPayload: InvalidTrait.InvalidTraitPayload[TPayloadSpec],
+    invalidClassPayload: InvalidClass.InvalidClassPayload[TPayloadSpec],
   )
   : context.Comp[ArModuleWithPayload[context.type, TPayloadSpec]] = {
 
@@ -164,7 +165,7 @@ object ArgonModuleLoader extends ModuleLoader {
             impl(namespace.ns)(refModule.globalNamespace)
           }
 
-          private def parseTraitDescriptor(module: ModuleDescriptor)(desc: Option[ArgonModule.TraitDescriptor]): Option[TraitDescriptor] =
+          private def parseTraitDescriptor(module: ModuleDescriptor)(desc: Option[ArgonModule.TraitDescriptor]): Option[TraitDescriptor.Valid] =
             desc.flatMap {
               case ArgonModule.TraitDescriptor(ArgonModule.TraitDescriptor.TraitDescType.InNamespace(
                 ArgonModule.TraitDescriptorInNamespace(
@@ -329,13 +330,21 @@ object ArgonModuleLoader extends ModuleLoader {
                 override lazy val signature: context.Comp[Signature[context.typeSystem.type, ArTrait.ResultInfo]] =
                   traitValue.signature match {
                     case Some(ArgonModule.TraitSignature(parameters, baseTraits)) =>
-                      context.compMonadInstance.point(SignatureResult[context.typeSystem.type, ArTrait.ResultInfo](
-                        ArTrait.ResultInfo(BaseTypeInfoTrait[context.typeSystem.TTraitInfo](Vector()))
-                      ))
+                      compEv(
+                        for {
+                          baseTraitsResolved <- baseTraits.traverse(resolveTraitType(_))
+                          parametersResolved <- parameters.traverse(resolveParameter(_))
+
+                          result = SignatureResult[context.typeSystem.type, ArTrait.ResultInfo](
+                            ArTrait.ResultInfo(BaseTypeInfoTrait(baseTraitsResolved))
+                          )
+
+                        } yield parametersResolved.foldRight[Signature[context.typeSystem.type, ArTrait.ResultInfo]](result)(SignatureParameters[context.typeSystem.type, ArTrait.ResultInfo])
+                      )
 
                     case None =>
                       context.compMonadInstance.point(SignatureResult[context.typeSystem.type, ArTrait.ResultInfo](
-                        ArTrait.ResultInfo(BaseTypeInfoTrait[context.typeSystem.TTraitInfo](Vector()))
+                        ArTrait.ResultInfo(BaseTypeInfoTrait[TraitType[context.typeSystem.type]](Vector()))
                       ))
                   }
 
@@ -473,6 +482,9 @@ object ArgonModuleLoader extends ModuleLoader {
             combineNamespaceElements(
               createNamespaceElements(traitMap)(CompilationError.ModuleObjectTrait) { arTrait =>
                 arTrait.descriptor match {
+                  case TraitDescriptor.Invalid =>
+                    None
+
                   case TraitDescriptor.InNamespace(_, namespace, name, accessModifier) =>
                     Some(ModuleElement(namespace, NamespaceBinding(name, accessModifier, TraitScopeValue[CurrentScopeTypes](arTrait))))
                 }
@@ -499,6 +511,42 @@ object ArgonModuleLoader extends ModuleLoader {
                 }
               },
             ).map(NamespaceBuilder.createNamespace)
+
+
+          def findTrait(traitId: Int): Comp[ArTrait[context.type]] =
+            traitMap.get(traitId) match {
+              case Some(ModuleObjectReference(arTrait)) => arTrait.point[Comp]
+              case Some(ModuleObjectDefinition(arTrait)) => arTrait.point[Comp]
+              case Some(_) => InvalidTrait(context).point[Comp]
+              case None =>
+                implicitly[Compilation[Comp]].forErrors(
+                  InvalidTrait(context),
+                  CompilationError.ModuleObjectInvalidId(CompilationError.ModuleObjectTrait, traitId, CompilationMessageSource.ReferencedModule(desc))
+                )
+
+            }
+
+
+          def findTraitDef(traitId: Int): Comp[ArTraitWithPayload[context.type, TPayloadSpec]] =
+            traitMap.get(traitId) match {
+              case Some(ModuleObjectDefinition(arTrait)) => arTrait.point[Comp]
+
+
+              case Some(ModuleObjectReference(_)) =>
+                implicitly[Compilation[Comp]].forErrors(
+                  InvalidTrait(context),
+                  CompilationError.ModuleObjectMustBeDefinition(CompilationError.ModuleObjectTrait, traitId, CompilationMessageSource.ReferencedModule(desc))
+                )
+
+              case Some(_) => InvalidTrait(context).point[Comp]
+
+              case None =>
+                implicitly[Compilation[Comp]].forErrors(
+                  InvalidTrait(context),
+                  CompilationError.ModuleObjectInvalidId(CompilationError.ModuleObjectTrait, traitId, CompilationMessageSource.ReferencedModule(desc))
+                )
+
+            }
 
 
           def findClass(classId: Int): Comp[ArClass[context.type]] =
@@ -535,6 +583,10 @@ object ArgonModuleLoader extends ModuleLoader {
                 )
 
             }
+
+          def resolveTraitType(traitType: ArgonModule.TraitType): Comp[TraitType[context.typeSystem.type]] = ???
+
+          def resolveParameter(parameter: ArgonModule.Parameter): Comp[Parameter[context.typeSystem.type]] = ???
 
           override lazy val module: Comp[ArModuleWithPayload[context.type, TPayloadSpec]] =
             for {

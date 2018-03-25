@@ -63,10 +63,20 @@ object ClassLikeDescriptor {
 
 sealed trait TraitDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
 object TraitDescriptor {
+
+  sealed trait Valid extends TraitDescriptor
+
   @deriving(Equal)
-  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends TraitDescriptor
+  final case object Invalid extends TraitDescriptor
+
+  @deriving(Equal)
+  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends Valid
 
   implicit val equalInstance: Equal[TraitDescriptor] = {
+
+    case (Invalid, Invalid) => true
+    case (Invalid, _) | (_, Invalid) => false
+
     case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
   }
 }
