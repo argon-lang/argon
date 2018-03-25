@@ -7,14 +7,14 @@ trait Context {
 
   type TFunctionImplementation
   type TMethodImplementation
-  type TConstructorImplementation
+  type TDataConstructorImplementation
   type TClassConstructorImplementation
 
   type TFunctionMetadata
   type TMethodMetadata
   type TTraitMetadata
   type TClassMetadata
-  type TConstructorMetadata
+  type TDataConstructorMetadata
   type TClassConstructorMetadata
 
   type Comp[+_]
@@ -32,19 +32,11 @@ trait Context {
     override type TVariable <: Variable[typeSystem.type, VariableLikeDescriptor]
   }
 
-  sealed trait ReferenceScopeTypes extends ContextScopeTypes {
-    override type TTrait = ArTraitReference[Context.this.type]
-    override type TClass = ArClassReference[Context.this.type]
-    override type TDataConstructor = DataConstructorReference[Context.this.type]
-    override type TFunc = ArFuncReference[Context.this.type]
-    override type TVariable = Nothing
-  }
-
-  sealed trait DeclarationScopeTypes extends ContextScopeTypes {
-    override type TTrait = ArTraitDeclaration[Context.this.type]
-    override type TClass = ArClassDeclaration[Context.this.type]
-    override type TDataConstructor = DataConstructorDeclaration[Context.this.type]
-    override type TFunc = ArFuncDeclaration[Context.this.type]
+  sealed trait ScopeTypesWithPayload[TPayloadSpec[_, _]] extends ContextScopeTypes {
+    override type TTrait = ArTraitWithPayload[Context.this.type, TPayloadSpec]
+    override type TClass = ArClassWithPayload[Context.this.type, TPayloadSpec]
+    override type TDataConstructor = DataConstructorWithPayload[Context.this.type, TPayloadSpec]
+    override type TFunc = ArFuncWithPayload[Context.this.type, TPayloadSpec]
     override type TVariable = Nothing
   }
 

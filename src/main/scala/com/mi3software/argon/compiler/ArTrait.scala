@@ -9,14 +9,18 @@ sealed trait ArTrait[TContext <: Context] {
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
   import context._
 
+  type PayloadSpec[_, _]
+
   val descriptor: TraitDescriptor
 
   val isSealed: Boolean
 
   val signature: Signature[typeSystem.type, ArTrait.ResultInfo]
 
-  val methods: Comp[Vector[ArMethod[TContext]]]
-  val metaType: MetaClass[TContext, ArClass[TContext]]
+  val methods: Comp[Vector[ArMethodWithPayload[TContext, PayloadSpec]]]
+  val metaType: MetaClass[TContext, ArClassWithPayload[TContext, PayloadSpec]]
+
+  val payload: PayloadSpec[Unit, TTraitMetadata]
 }
 
 object ArTrait {
@@ -28,21 +32,8 @@ object ArTrait {
 
 }
 
-trait ArTraitDeclaration[TContext <: Context] extends ArTrait[TContext] {
-  import context._
-
-  val metaType: MetaClass[TContext, ArClassDeclaration[TContext]]
-
-  val methods: Comp[Vector[ArMethodDeclaration[TContext]]]
-}
-
-trait ArTraitReference[TContext <: Context] extends ArTrait[TContext] {
-  import context._
-
-  val metaType: MetaClass[TContext, ArClassReference[TContext]]
-
-  val methods: Comp[Vector[ArMethodReference[TContext]]]
-  val contextMetadata: context.TTraitMetadata
+trait ArTraitWithPayload[TContext <: Context, TPayloadSpec[_, _]] extends ArTrait[TContext] {
+  override type PayloadSpec[A, B] = TPayloadSpec[A, B]
 }
 
 trait ArTraitInNamespace[TContext <: Context] {

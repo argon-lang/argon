@@ -7,6 +7,8 @@ sealed trait ArMethod[TContext <: Context] {
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
   import context._
 
+  type PayloadSpec[_, _]
+
   val descriptor: MethodDescriptor
 
   val effectInfo: EffectInfo
@@ -18,16 +20,9 @@ sealed trait ArMethod[TContext <: Context] {
 
   val signature: Signature[typeSystem.type, FunctionResultInfo]
 
+  val payload: PayloadSpec[Comp[TMethodImplementation], TMethodMetadata]
 }
 
-trait ArMethodDeclaration[TContext <: Context] extends ArMethod[TContext] {
-  import context._
-
-  val implementation: Comp[context.TMethodImplementation]
-}
-
-trait ArMethodReference[TContext <: Context] extends ArMethod[TContext] {
-  import context._
-
-  val contextMetadata: TMethodMetadata
+trait ArMethodWithPayload[TContext <: Context, TPayloadSpec[_, _]] extends ArMethod[TContext] {
+  override type PayloadSpec[A, B] = TPayloadSpec[A, B]
 }

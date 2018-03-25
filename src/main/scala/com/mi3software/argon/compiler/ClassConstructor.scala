@@ -4,6 +4,8 @@ sealed trait ClassConstructor[TContext <: Context] {
   val context: TContext
   import context._
 
+  type PayloadSpec[_, _]
+
   val effectInfo: EffectInfo
   val accessModifier: AccessModifier
 
@@ -11,7 +13,9 @@ sealed trait ClassConstructor[TContext <: Context] {
 
   val signature: Signature[typeSystem.type, ClassConstructor.ResultInfo]
 
-  val instanceClass: ArClass[TContext]
+  val instanceClass: ArClassWithPayload[TContext, PayloadSpec]
+
+  val payload: PayloadSpec[Comp[TClassConstructorImplementation], TClassConstructorMetadata]
 }
 
 object ClassConstructor {
@@ -20,17 +24,6 @@ object ClassConstructor {
 
 }
 
-trait ClassConstructorDeclaration[TContext <: Context] extends ClassConstructor[TContext] {
-  import context._
-
-  val instanceClass: ArClassDeclaration[TContext]
-  val implementation: Comp[TClassConstructorImplementation]
+trait ClassConstructorWithPayload[TContext <: Context, TPayloadSpec[_, _]] extends ClassConstructor[TContext] {
+  override type PayloadSpec[A, B] = TPayloadSpec[A, B]
 }
-
-trait ClassConstructorReference[TContext <: Context] extends ClassConstructor[TContext] {
-  import context._
-
-  val instanceClass: ArClassReference[TContext]
-  val contextMetadata: TClassConstructorMetadata
-}
-

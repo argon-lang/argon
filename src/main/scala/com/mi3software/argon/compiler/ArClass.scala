@@ -7,8 +7,9 @@ import Scalaz._
 sealed trait ArClass[TContext <: Context] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
-
   import context._
+
+  type PayloadSpec[_, _]
 
   val descriptor: ClassDescriptor
 
@@ -18,9 +19,11 @@ sealed trait ArClass[TContext <: Context] {
 
   val signature: Signature[typeSystem.type, ArClass.ResultInfo]
 
-  val methods: Comp[Vector[ArMethod[TContext]]]
-  val classConstructors: Comp[Vector[ClassConstructor[TContext]]]
-  val metaType: MetaClass[TContext, ArClass[TContext]]
+  val methods: Comp[Vector[ArMethodWithPayload[TContext, PayloadSpec]]]
+  val classConstructors: Comp[Vector[ClassConstructorWithPayload[TContext, PayloadSpec]]]
+  val metaType: MetaClass[TContext, ArClassWithPayload[TContext, PayloadSpec]]
+
+  val payload: PayloadSpec[Unit, TClassMetadata]
 }
 
 object ArClass {
@@ -33,23 +36,8 @@ object ArClass {
 
 }
 
-trait ArClassDeclaration[TContext <: Context] extends ArClass[TContext] {
-  import context._
-
-  val metaType: MetaClass[TContext, ArClassDeclaration[TContext]]
-
-  val methods: Comp[Vector[ArMethodDeclaration[TContext]]]
-  val classConstructors: Comp[Vector[ClassConstructorDeclaration[TContext]]]
-}
-
-trait ArClassReference[TContext <: Context] extends ArClass[TContext] {
-  import context._
-
-  val metaType: MetaClass[TContext, ArClassReference[TContext]]
-
-  val methods: Comp[Vector[ArMethodReference[TContext]]]
-  val classConstructors: Comp[Vector[ClassConstructorReference[TContext]]]
-  val contextMetadata: TClassMetadata
+trait ArClassWithPayload[TContext <: Context, TPayloadSpec[_, _]] extends ArClass[TContext] {
+  override type PayloadSpec[A, B] = TPayloadSpec[A, B]
 }
 
 trait ArClassInNamespace[TContext <: Context] {

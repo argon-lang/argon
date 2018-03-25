@@ -35,29 +35,29 @@ object ArgonModuleLoader extends ModuleLoader {
     }
 
 
-  override def loadModule
+  override def loadModuleReference
   (context: Context)
   (data: ArgonModule.Module)
   (referencedModules: Vector[ArModule[context.type]])
-  : context.Comp[ArModuleReference[context.type]] =
-    loadModuleReference(context)(data)(referencedModules)
+  : context.Comp[ArModuleWithPayload[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]] =
+    loadModule(context)(data)(referencedModules)
 
   private val currentFormatVersion = 1
 
-  private trait ModuleCreator[TContext <: Context, Comp[_]] {
-    val module: Comp[ArModuleReference[TContext]]
+  private trait ModuleCreator[TContext <: Context, Comp[_], TPayloadSpec[_, _]] {
+    val module: Comp[ArModuleWithPayload[TContext, TPayloadSpec]]
   }
 
-  def loadModuleReference
+  def loadModule[TPayloadSpec[_, _]]
   (context: Context)
   (pbModule: ArgonModule.Module)
   (referencedModules: Vector[ArModule[context.type]])
-  : context.Comp[ArModuleReference[context.type]] = {
+  : context.Comp[ArModuleWithPayload[context.type, TPayloadSpec]] = {
 
-    import context.ReferenceScopeTypes
+    type CurrentScopeTypes = context.ScopeTypesWithPayload[TPayloadSpec]
     val context2: context.type = context
 
-    def impl[Comp[_] : Monad : Compilation](implicit compEv: LeibnizK[Comp, context.Comp]): Comp[ArModuleReference[context.type]] =
+    def impl[Comp[_] : Monad : Compilation](implicit compEv: LeibnizK[Comp, context.Comp]): Comp[ArModuleWithPayload[context.type, TPayloadSpec]] =
       for {
 
         desc <-
@@ -76,7 +76,7 @@ object ArgonModuleLoader extends ModuleLoader {
           else
             implicitly[Monad[Comp]].point(())
 
-        module <- new ModuleCreator[context.type, Comp] {
+        module <- new ModuleCreator[context.type, Comp, TPayloadSpec] {
 
 
           private def parseNamespacePath(ns: Option[ArgonModule.Namespace]): NamespacePath =
@@ -288,7 +288,7 @@ object ArgonModuleLoader extends ModuleLoader {
             }(collection.breakOut)
 
 
-          private lazy val traitMap: Map[Int, TraitLoadResult[context.type]] =
+          private lazy val traitMap: Map[Int, TraitLoadResult[context.type, TPayloadSpec]] =
             handleModuleObjectLoading(
               valueLens = lens[ArgonModule.Module] >> 'traits
             )(
@@ -316,7 +316,7 @@ object ArgonModuleLoader extends ModuleLoader {
               definitionHandler = _ => ???
             )
 
-          private lazy val classMap: Map[Int, ClassLoadResult[context.type]] =
+          private lazy val classMap: Map[Int, ClassLoadResult[context.type, TPayloadSpec]] =
             handleModuleObjectLoading(
               valueLens = lens[ArgonModule.Module] >> 'classes
             )(
@@ -344,7 +344,7 @@ object ArgonModuleLoader extends ModuleLoader {
               definitionHandler = _ => ???
             )
 
-          private lazy val dataCtorMap: Map[Int, DataCtorLoadResult[context.type]] =
+          private lazy val dataCtorMap: Map[Int, DataCtorLoadResult[context.type, TPayloadSpec]] =
             handleModuleObjectLoading(
               valueLens = lens[ArgonModule.Module] >> 'dataConstructors
             )(
@@ -372,7 +372,7 @@ object ArgonModuleLoader extends ModuleLoader {
               definitionHandler = _ => ???
             )
 
-          private lazy val functionMap: Map[Int, FunctionLoadResult[context.type]] =
+          private lazy val functionMap: Map[Int, FunctionLoadResult[context.type, TPayloadSpec]] =
             handleModuleObjectLoading(
               valueLens = lens[ArgonModule.Module] >> 'functions
             )(
@@ -406,9 +406,9 @@ object ArgonModuleLoader extends ModuleLoader {
           )(
             moduleObjectType: CompilationError.ModuleObjectType
           )(
-            f: TDef => ModuleElement[ScopeValue[ReferenceScopeTypes]]
-          ): Comp[Vector[ModuleElement[ScopeValue[ReferenceScopeTypes]]]] =
-            elementMap.toVector.traverseM[Comp, ModuleElement[ScopeValue[ReferenceScopeTypes]]] {
+            f: TDef => ModuleElement[ScopeValue[CurrentScopeTypes]]
+          ): Comp[Vector[ModuleElement[ScopeValue[CurrentScopeTypes]]]] =
+            elementMap.toVector.traverseM[Comp, ModuleElement[ScopeValue[CurrentScopeTypes]]] {
               case (_, ModuleObjectDefinition(element)) => Vector(f(element)).point[Comp]
               case (_, ModuleObjectReference(_)) => Vector.empty.point[Comp]
               case (id, ModuleObjectInvalidDescriptor()) =>
@@ -421,44 +421,44 @@ object ArgonModuleLoader extends ModuleLoader {
                 implicitly[Compilation[Comp]].forErrors(Vector.empty, CompilationError.ModuleObjectUndefined(moduleObjectType, id, CompilationMessageSource.ReferencedModule(desc)))
             }
 
-          private def combineNamespaceElements(elements: Comp[Vector[ModuleElement[ScopeValue[ReferenceScopeTypes]]]]*): Comp[Vector[ModuleElement[ScopeValue[ReferenceScopeTypes]]]] =
+          private def combineNamespaceElements(elements: Comp[Vector[ModuleElement[ScopeValue[CurrentScopeTypes]]]]*): Comp[Vector[ModuleElement[ScopeValue[CurrentScopeTypes]]]] =
             elements.toVector.sequence.map { _.flatten }
 
-          private lazy val globalNamespaceComp: Comp[Namespace[ScopeValue[ReferenceScopeTypes]]] =
+          private lazy val globalNamespaceComp: Comp[Namespace[ScopeValue[CurrentScopeTypes]]] =
             combineNamespaceElements(
               createNamespaceElements(traitMap)(CompilationError.ModuleObjectTrait) { arTrait =>
                 arTrait.descriptor match {
                   case TraitDescriptor.InNamespace(_, namespace, name, accessModifier) =>
-                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, TraitScopeValue[ReferenceScopeTypes](arTrait)))
+                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, TraitScopeValue[CurrentScopeTypes](arTrait)))
                 }
               },
               createNamespaceElements(classMap)(CompilationError.ModuleObjectClass) { arClass =>
                 arClass.descriptor match {
                   case ClassDescriptor.InNamespace(_, namespace, name, accessModifier) =>
-                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, ClassScopeValue[ReferenceScopeTypes](arClass)))
+                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, ClassScopeValue[CurrentScopeTypes](arClass)))
                 }
               },
               createNamespaceElements(dataCtorMap)(CompilationError.ModuleObjectDataConstructor) { dataCtor =>
                 dataCtor.descriptor match {
                   case DataConstructorDescriptor.InNamespace(_, namespace, name, accessModifier) =>
-                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, DataConstructorScopeValue[ReferenceScopeTypes](dataCtor)))
+                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, DataConstructorScopeValue[CurrentScopeTypes](dataCtor)))
                 }
               },
               createNamespaceElements(functionMap)(CompilationError.ModuleObjectFunction) { func =>
                 func.descriptor match {
                   case FuncDescriptor.InNamespace(_, namespace, name, accessModifier) =>
-                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, FunctionScopeValue[ReferenceScopeTypes](func)))
+                    ModuleElement(namespace, NamespaceBinding(name, accessModifier, FunctionScopeValue[CurrentScopeTypes](func)))
                 }
               },
             ).map(NamespaceBuilder.createNamespace)
 
-          override lazy val module: Comp[ArModuleReference[context.type]] =
+          override lazy val module: Comp[ArModuleWithPayload[context.type, TPayloadSpec]] =
             for {
               globalNamespaceCompValue <- globalNamespaceComp
-            } yield new ArModuleReference[context.type] {
+            } yield new ArModuleWithPayload[context.type, TPayloadSpec] {
               override val context: context2.type = context2
               override val descriptor: ModuleDescriptor = desc
-              override lazy val globalNamespace: Namespace[ScopeValue[context.ReferenceScopeTypes]] = globalNamespaceCompValue
+              override lazy val globalNamespace: Namespace[ScopeValue[CurrentScopeTypes]] = globalNamespaceCompValue
             }
 
         }.module
@@ -480,9 +480,9 @@ object ArgonModuleLoader extends ModuleLoader {
   final case class ModuleObjectModuleNotLoaded[TReference, TDefinition]() extends ModuleObjectLoadResult[TReference, TDefinition]
   final case class ModuleObjectNotFound[TReference, TDefinition]() extends ModuleObjectLoadResult[TReference, TDefinition]
 
-  type TraitLoadResult[TContext <: Context] = ModuleObjectLoadResult[ArTrait[TContext], ArTraitReference[TContext]]
-  type ClassLoadResult[TContext <: Context] = ModuleObjectLoadResult[ArClass[TContext], ArClassReference[TContext]]
-  type DataCtorLoadResult[TContext <: Context] = ModuleObjectLoadResult[DataConstructor[TContext], DataConstructorReference[TContext]]
-  type FunctionLoadResult[TContext <: Context] = ModuleObjectLoadResult[ArFunc[TContext], ArFuncReference[TContext]]
+  type TraitLoadResult[TContext <: Context, PayloadSpec[_, _]] = ModuleObjectLoadResult[ArTrait[TContext], ArTraitWithPayload[TContext, PayloadSpec]]
+  type ClassLoadResult[TContext <: Context, PayloadSpec[_, _]] = ModuleObjectLoadResult[ArClass[TContext], ArClassWithPayload[TContext, PayloadSpec]]
+  type DataCtorLoadResult[TContext <: Context, PayloadSpec[_, _]] = ModuleObjectLoadResult[DataConstructor[TContext], DataConstructorWithPayload[TContext, PayloadSpec]]
+  type FunctionLoadResult[TContext <: Context, PayloadSpec[_, _]] = ModuleObjectLoadResult[ArFunc[TContext], ArFuncWithPayload[TContext, PayloadSpec]]
 
 }

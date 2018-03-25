@@ -11,6 +11,6 @@ trait ModuleLoader {
   def loadFile(file: File): IO[Option[ModuleData]]
   def dataDescriptor(data: ModuleData): Option[ModuleDescriptor]
   def dataReferencedModules(data: ModuleData): Vector[ModuleDescriptor]
-  def loadModule(context: Context)(data: ModuleData)(referencedModules: Vector[ArModule[context.type]]): context.Comp[ArModuleReference[context.type]]
+  def loadModuleReference(context: Context)(data: ModuleData)(referencedModules: Vector[ArModule[context.type]]): context.Comp[ArModuleWithPayload[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]]
 
 }

@@ -6,20 +6,16 @@ sealed trait ArModule[TContext <: Context] {
   val context: TContext
   import context._
 
+  type PayloadSpec[_, _]
+
   val descriptor: ModuleDescriptor
   val globalNamespace: Namespace[ScopeValue[ContextScopeTypes]]
 }
 
-trait ArModuleDeclaration[TContext <: Context] extends ArModule[TContext] {
-  import context._
 
-  override val globalNamespace: Namespace[ScopeValue[DeclarationScopeTypes]]
-}
 
-trait ArModuleReference[TContext <: Context] extends ArModule[TContext] {
-  import context._
-
-  override val globalNamespace: Namespace[ScopeValue[ReferenceScopeTypes]]
+trait ArModuleWithPayload[TContext <: Context, TPayloadSpec[_, _]] extends ArModule[TContext] {
+  override type PayloadSpec[A, B] = TPayloadSpec[A, B]
 }
 
 final case class ModuleElement[+TScopeValue](namespacePath: NamespacePath, binding: NamespaceBinding[TScopeValue])

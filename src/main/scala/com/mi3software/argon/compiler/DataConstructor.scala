@@ -10,11 +10,15 @@ sealed trait DataConstructor[TContext <: Context] {
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
   import context._
 
+  type PayloadSpec[_, _]
+
   val descriptor: DataConstructorDescriptor
 
   val signature: Signature[typeSystem.type, DataConstructor.ResultInfo]
 
-  val methods: Comp[Vector[ArMethod[TContext]]]
+  val methods: Comp[Vector[ArMethodWithPayload[TContext, PayloadSpec]]]
+
+  val payload: PayloadSpec[Comp[TDataConstructorImplementation], TDataConstructorMetadata]
 }
 
 object DataConstructor {
@@ -26,17 +30,7 @@ object DataConstructor {
 
 }
 
-trait DataConstructorDeclaration[TContext <: Context] extends DataConstructor[TContext] {
-  import context._
-
-  val methods: Comp[Vector[ArMethodDeclaration[TContext]]]
-  val implementation: Comp[TConstructorImplementation]
-}
-
-trait DataConstructorReference[TContext <: Context] extends DataConstructor[TContext] {
-  import context._
-
-  val methods: Comp[Vector[ArMethodReference[TContext]]]
-  val contextMetadata: TConstructorMetadata
+trait DataConstructorWithPayload[TContext <: Context, TPayloadSpec[_, _]] extends DataConstructor[TContext] {
+  override type PayloadSpec[A, B] = TPayloadSpec[A, B]
 }
 
