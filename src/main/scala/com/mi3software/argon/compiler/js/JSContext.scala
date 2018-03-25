@@ -6,6 +6,13 @@ import scalaz.Monad
 
 class JSContext extends Context {
 
+  override type TTraitMetadata = JSMetadata.Trait
+  override type TClassMetadata = JSMetadata.Class
+
+  override val invalidClassMetadata: TClassMetadata = JSMetadata.Class.Invalid
+
+
+
   override type Comp[+T] = StandardCompilation[T]
 
   override val typeSystem: ArgonTypeSystem[this.type] = new ArgonTypeSystem[this.type]

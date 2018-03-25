@@ -17,11 +17,11 @@ sealed trait ArClass[TContext <: Context] {
   val isSealed: Boolean
   val isAbstract: Boolean
 
-  val signature: Signature[typeSystem.type, ArClass.ResultInfo]
+  val signature: Comp[Signature[typeSystem.type, ArClass.ResultInfo]]
 
   val methods: Comp[Vector[ArMethodWithPayload[TContext, PayloadSpec]]]
   val classConstructors: Comp[Vector[ClassConstructorWithPayload[TContext, PayloadSpec]]]
-  val metaType: MetaClass[TContext, ArClassWithPayload[TContext, PayloadSpec]]
+  val metaType: Comp[MetaClass[ArClassWithPayload[TContext, PayloadSpec]]]
 
   val payload: PayloadSpec[Unit, TClassMetadata]
 }

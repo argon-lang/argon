@@ -258,6 +258,18 @@ object CompilationError {
     override def message: String = s"${objectType.name} #$id is undefined."
   }
 
+  final case class ModuleObjectInvalidId(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"${objectType.name} ID #$id is invalid."
+  }
+
+  final case class ModuleObjectMustBeDefinition(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"${objectType.name} #$id was expected to be a definition."
+  }
+
+  final case class MetaClassNotSpecified(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Meta class for ${objectType.name} #$id was not specified."
+  }
+
   private def formatNamespace(namespacePath: NamespacePath): String =
     namespacePath.ns.mkString(".")
 

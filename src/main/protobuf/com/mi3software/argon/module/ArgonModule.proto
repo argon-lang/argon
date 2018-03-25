@@ -80,6 +80,10 @@ message ErrorType {
 
 }
 
+message MetaClassMetaClassSpecifier {
+
+}
+
 message TraitType {
     uint32 traitId = 1;
     repeated Type typeArguments = 2;
@@ -122,7 +126,11 @@ message TraitDefinition {
     TraitDescriptor descriptor = 1;
     bool isSealed = 2;
     TraitSignature signature = 3;
-    int32 metaClassId = 4;
+
+    oneof metaClassSpecifier {
+        int32 metaClassId = 4;
+        MetaClassMetaClassSpecifier metaClassMetaClassSpecifier = 5;
+    }
 }
 
 message TraitDescriptor {
@@ -161,7 +169,11 @@ message ClassDefinition {
     bool isSealed = 3;
     bool isAbstract = 4;
     ClassSignature signature = 5;
-    uint32 metaClassId = 6;
+
+    oneof metaClassSpecifier {
+        int32 metaClassId = 6;
+        MetaClassMetaClassSpecifier metaClassMetaClassSpecifier = 7;
+    }
 }
 
 message ClassField {

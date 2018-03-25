@@ -17,11 +17,13 @@ trait Context {
   type TDataConstructorMetadata
   type TClassConstructorMetadata
 
+  val invalidClassMetadata: TClassMetadata
+
   type Comp[+_]
   implicit val compMonadInstance: Monad[Comp]
   implicit val compCompilationInstance: Compilation[Comp]
 
-  val typeSystem: TypeSystem
+  val typeSystem: ArgonTypeSystem[this.type]
 
 
   sealed trait ContextScopeTypes extends ScopeTypes {

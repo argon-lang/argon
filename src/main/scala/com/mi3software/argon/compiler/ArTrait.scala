@@ -15,10 +15,10 @@ sealed trait ArTrait[TContext <: Context] {
 
   val isSealed: Boolean
 
-  val signature: Signature[typeSystem.type, ArTrait.ResultInfo]
+  val signature: Comp[Signature[typeSystem.type, ArTrait.ResultInfo]]
 
   val methods: Comp[Vector[ArMethodWithPayload[TContext, PayloadSpec]]]
-  val metaType: MetaClass[TContext, ArClassWithPayload[TContext, PayloadSpec]]
+  val metaType: Comp[MetaClass[ArClassWithPayload[TContext, PayloadSpec]]]
 
   val payload: PayloadSpec[Unit, TTraitMetadata]
 }
