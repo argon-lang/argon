@@ -6,6 +6,7 @@ import java.util.Locale
 import com.mi3software.argon.module.ArgonModule
 import scalaz.{Lens => _, _}
 import Scalaz._
+import com.mi3software.argon.compiler.PayloadSpecifiers.ReferencePayloadSpecifier
 import com.mi3software.argon.util._
 import scalapb.json4s.JsonFormat
 import scalaz.effect.IO
@@ -40,7 +41,7 @@ object ArgonModuleLoader extends ModuleLoader {
   (data: ArgonModule.Module)
   (referencedModules: Vector[ArModule[context.type]])
   : context.Comp[ArModuleWithPayload[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]] =
-    loadModule(context)(data)(referencedModules)
+    loadModule(context)(data)(referencedModules)(referencePayloadLoader)
 
   private val currentFormatVersion = 1
 
@@ -52,6 +53,7 @@ object ArgonModuleLoader extends ModuleLoader {
   (context: Context)
   (pbModule: ArgonModule.Module)
   (referencedModules: Vector[ArModule[context.type]])
+  (payloadLoader: PayloadLoader[TPayloadSpec])
   : context.Comp[ArModuleWithPayload[context.type, TPayloadSpec]] = {
 
     type CurrentScopeTypes = context.ScopeTypesWithPayload[TPayloadSpec]
@@ -467,6 +469,33 @@ object ArgonModuleLoader extends ModuleLoader {
 
     impl[context.Comp](context.compMonadInstance, context.compCompilationInstance, LeibnizK.refl)
   }
+
+  private trait PayloadLoader[TPayloadSpec[_, _]] {
+
+    def createClassPayload(context: Context): TPayloadSpec[Unit, context.TClassMetadata]
+    def createTraitPayload(context: Context): TPayloadSpec[Unit, context.TTraitMetadata]
+    def createDataConstructorPayload(context: Context): TPayloadSpec[context.Comp[context.TDataConstructorImplementation], context.TDataConstructorMetadata]
+    def createFunctionPayload(context: Context): TPayloadSpec[context.Comp[context.TFunctionImplementation], context.TFunctionMetadata]
+    def createMethodPayload(context: Context): TPayloadSpec[context.Comp[context.TMethodImplementation], context.TMethodMetadata]
+    def createClassConstructorPayload(context: Context): TPayloadSpec[context.Comp[context.TClassConstructorImplementation], context.TClassConstructorMetadata]
+
+  }
+
+  private val referencePayloadLoader: PayloadLoader[PayloadSpecifiers.ReferencePayloadSpecifier] =
+    new PayloadLoader[PayloadSpecifiers.ReferencePayloadSpecifier] {
+
+      override def createClassPayload(context: Context): ReferencePayloadSpecifier[Unit, context.TClassMetadata] = ???
+
+      override def createTraitPayload(context: Context): ReferencePayloadSpecifier[Unit, context.TTraitMetadata] = ???
+
+      override def createDataConstructorPayload(context: Context): ReferencePayloadSpecifier[context.Comp[context.TDataConstructorImplementation], context.TDataConstructorMetadata] = ???
+
+      override def createFunctionPayload(context: Context): ReferencePayloadSpecifier[context.Comp[context.TFunctionImplementation], context.TFunctionMetadata] = ???
+
+      override def createMethodPayload(context: Context): ReferencePayloadSpecifier[context.Comp[context.TMethodImplementation], context.TMethodMetadata] = ???
+
+      override def createClassConstructorPayload(context: Context): ReferencePayloadSpecifier[context.Comp[context.TClassConstructorImplementation], context.TClassConstructorMetadata] = ???
+    }
 
   sealed trait ModuleLoadResult[TContext <: Context]
   final case class ModuleReference[TContext <: Context](module: ArModule[TContext]) extends ModuleLoadResult[TContext]
