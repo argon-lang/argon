@@ -20,6 +20,7 @@ libraryDependencies += "com.fommil" %% "deriving-macro" % "0.9.0"
 libraryDependencies += "com.fommil" %% "scalaz-deriving" % "0.9.0"
 
 libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
+libraryDependencies += "com.thesamet.scalapb" %% "scalapb-json4s" % scalapb.compiler.Version.scalapbVersion
 
 libraryDependencies += "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test"
 

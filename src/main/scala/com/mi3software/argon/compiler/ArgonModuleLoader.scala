@@ -1,14 +1,46 @@
 package com.mi3software.argon.compiler
 
+import java.io.File
+import java.util.Locale
+
 import com.mi3software.argon.module.ArgonModule
 import scalaz.{Lens => _, _}
 import Scalaz._
-import com.mi3software.argon.util.{Compilation, FileID, LeibnizK, NamespacePath}
+import com.mi3software.argon.util._
+import scalapb.json4s.JsonFormat
+import scalaz.effect.IO
 import shapeless._
 
 import scala.collection.immutable._
 
-object ArgonModuleLoader {
+object ArgonModuleLoader extends ModuleLoader {
+
+  override type ModuleData = ArgonModule.Module
+  override def loadFile(file: File): IO[Option[ArgonModule.Module]] =
+    IO { file.getName.toLowerCase(Locale.ENGLISH) }.flatMap { ext =>
+      if(ext.endsWith(".armodule.json"))
+        FileOperations.readAllText(file)
+          .map(JsonFormat.fromJsonString[ArgonModule.Module])
+          .map(Some.apply)
+      else
+        IO(None : Option[ArgonModule.Module])
+    }
+
+  override def dataDescriptor(data: ArgonModule.Module): Option[ModuleDescriptor] =
+    data.name.map(ModuleDescriptor.apply)
+
+  override def dataReferencedModules(data: ArgonModule.Module): Vector[ModuleDescriptor] =
+    data.referencedModules.collect {
+      case ArgonModule.ModuleReference(Some(name)) => ModuleDescriptor(name)
+    }
+
+
+  override def loadModule
+  (context: Context)
+  (data: ArgonModule.Module)
+  (referencedModules: Vector[ArModule[context.type]])
+  : context.Comp[ArModuleReference[context.type]] =
+    loadModuleReference(context)(data)
 
   private val currentFormatVersion = 1
 
@@ -89,7 +121,7 @@ object ArgonModuleLoader {
               .map { case (modRef, i) =>
                 val moduleLoadRes: ModuleLoadResult[context.type] =
                   context.referencedModules
-                    .find { _.descriptor.name === modRef.name }
+                    .find { _.descriptor.name.contains(modRef.name) }
                   match {
                     case Some(referencedModule) => ModuleReference(referencedModule)
                     case None => ModuleNotFound(modRef)

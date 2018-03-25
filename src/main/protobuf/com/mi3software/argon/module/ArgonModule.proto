@@ -103,7 +103,7 @@ message TypeTemplate {
 }
 
 message ModuleReference {
-    string name = 1;
+    google.protobuf.StringValue name = 1;
 }
 
 message Trait {
