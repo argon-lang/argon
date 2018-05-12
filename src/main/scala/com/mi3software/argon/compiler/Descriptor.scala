@@ -122,7 +122,7 @@ object FuncDescriptor {
 }
 
 @deriving(Equal)
-final case class MethodDescriptor(typeDescriptor: ClassLikeDescriptor, name: String, accessModifier: AccessModifier) extends ParameterOwnerDescriptor
+final case class MethodDescriptor(typeDescriptor: ClassLikeDescriptor, name: MemberName, accessModifier: AccessModifier) extends ParameterOwnerDescriptor
 
 @deriving(Equal)
 final case class ClassConstructorDescriptor(ownerClass: ClassDescriptor, accessModifier: AccessModifier) extends ParameterOwnerDescriptor

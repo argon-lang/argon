@@ -94,10 +94,10 @@ message ConstructorInstanceType {
     repeated Type typeArguments = 2;
 }
 
-message TypeTemplate {
-    oneof typeTemplate_value {
-        uint32 traitId = 1;
-        uint32 classId = 2;
+message ClassLikeDescriptor {
+    oneof classLikeDescriptor_value {
+        TraitDescriptor traitDescriptor = 1;
+        ClassDescriptor classDescriptor = 2;
     }
 }
 
@@ -295,7 +295,8 @@ message Method {
 }
 
 message MethodReference {
-    MethodDescriptor descriptor = 1;
+    uint32 moduleId = 1;
+    MethodDescriptor descriptor = 2;
 }
 
 message MethodDefinition {
@@ -309,10 +310,23 @@ message MethodDefinition {
     MethodImplementation implementation = 8;
 }
 
+enum SpecialMemberName {
+    Call = 0;
+    New = 1;
+}
+
+message MemberName {
+    oneof memberNameType {
+        string name = 1;
+        uint32 unnamedMemberIndex = 2;
+        SpecialMemberName specialMemberName = 3;
+    }
+}
+
 message MethodDescriptor {
-    string name = 1;
+    MemberName name = 1;
     AccessModifier accessModifier = 2;
-    TypeTemplate instanceType = 3;
+    ClassLikeDescriptor instanceType = 3;
 }
 
 message MethodSignature {
