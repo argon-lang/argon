@@ -33,8 +33,7 @@ object Pipeline {
           printMessages(syntaxErrors.map(CompilationError.SyntaxCompilerError))
 
         case \/-(sourceASTs) =>
-          val context = backend.createContext(sourceASTs.flatten)
-          backend.getCompilationResult(context) match {
+          backend.compile(sourceASTs.flatten) match {
             case -\/(messages) =>
               printMessages(messages)
 

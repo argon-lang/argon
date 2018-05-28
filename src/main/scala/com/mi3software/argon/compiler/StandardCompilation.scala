@@ -45,6 +45,8 @@ sealed trait StandardCompilation[+T] {
         StandardCompilation.fromCompilationImpl(WriterT[CompilerInternalError \/ ?, Vector[CompilationMessage], U](ft.run.map(f.tupled)))
     })
 
+
+
 }
 
 object StandardCompilation {

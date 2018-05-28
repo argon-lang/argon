@@ -1,10 +1,11 @@
 package com.mi3software.argon.compiler.js
 
 import com.mi3software.argon.compiler._
+import com.mi3software.argon.parser.SourceAST
 import com.mi3software.argon.util.Compilation
 import scalaz.Monad
 
-class JSContext extends Context {
+final class JSContext extends Context {
 
   override type TTraitMetadata = JSMetadata.Trait
   override type TClassMetadata = JSMetadata.Class
@@ -21,4 +22,6 @@ class JSContext extends Context {
   override val typeSystem: ArgonTypeSystem[this.type] = new ArgonTypeSystem[this.type]
   override val moduleLoaders: Vector[ModuleLoader] = Vector(ArgonModuleLoader)
 
+  override def createModule(source: Vector[SourceAST]): ArModule[JSContext.this.type] =
+    ???
 }
