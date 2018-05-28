@@ -20,5 +20,7 @@ object FileOperations {
       new String(bytes, StandardCharsets.UTF_8)
     }
 
+  def fileFromName(fileName: String): IO[File] =
+    IO { new File(fileName) }
 
 }

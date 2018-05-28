@@ -5,12 +5,12 @@ import com.mi3software.argon.util._
 
 import scalaz._
 
-final class ParseHandler {
+object ParseHandler {
 
   private val lexer = new Lexer()
   private val parser = new Parser()
 
-  def parse(fileSpec: FileSpec)(content: String): NonEmptyList[SyntaxErrorData] \/ Vector[WithSource[SourceAST]] = {
+  def parse(fileSpec: FileSpec)(content: String): NonEmptyList[SyntaxErrorData] \/ Vector[SourceAST] = {
 
     def convertError(syntaxError: SyntaxError): SyntaxErrorData =
       SyntaxErrorData(fileSpec, syntaxError)

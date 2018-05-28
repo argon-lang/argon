@@ -11,16 +11,16 @@ object TopLevelStatement {
 
   private final case class NSAndImports(ns: NamespacePath, imports: Vector[NamespacePath])
 
-  def toSourceAST(fileSpec: FileSpec)(statements: Vector[WithSource[TopLevelStatement]]): Vector[WithSource[SourceAST]] =
-    statements.foldLeft((Vector.empty[WithSource[SourceAST]], NSAndImports(NamespacePath.empty, Vector()))) {
-      case ((acc, NSAndImports(_, imports)), WithSource(Namespace(ns), _)) =>
+  def toSourceAST(fileSpec: FileSpec)(statements: Vector[TopLevelStatement]): Vector[SourceAST] =
+    statements.foldLeft((Vector.empty[SourceAST], NSAndImports(NamespacePath.empty, Vector()))) {
+      case ((acc, NSAndImports(_, imports)), Namespace(ns)) =>
         (acc, NSAndImports(ns, imports))
 
-      case ((acc, NSAndImports(ns, imports)), WithSource(Import(importNS), _)) =>
+      case ((acc, NSAndImports(ns, imports)), Import(importNS)) =>
         (acc, NSAndImports(ns, imports :+ importNS))
 
-      case ((acc, nsAndImports @ NSAndImports(ns, imports)), WithSource(Statement(stmt), location)) =>
-        (acc :+ WithSource(SourceAST(fileSpec, ns, imports, stmt), location), nsAndImports)
+      case ((acc, nsAndImports @ NSAndImports(ns, imports)), Statement(stmt)) =>
+        (acc :+ SourceAST(fileSpec, ns, imports, stmt), nsAndImports)
     }._1
 
 }

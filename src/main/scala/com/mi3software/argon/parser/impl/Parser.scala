@@ -618,10 +618,10 @@ final class Parser {
       case (_, stmt, _) => stmt
     }
 
-  private def collectStmts(stmt: WithSource[WithSource[TopLevelStatement]]): Option[WithSource[TopLevelStatement]] =
-    Some(stmt.value)
+  private def collectStmts(stmt: WithSource[WithSource[TopLevelStatement]]): Option[TopLevelStatement] =
+    Some(stmt.value.value)
 
-  def parse(tokens: Vector[WithSource[Token]]): Either[NonEmptyList[SyntaxError], Vector[WithSource[TopLevelStatement]]] =
+  def parse(tokens: Vector[WithSource[Token]]): Either[NonEmptyList[SyntaxError], Vector[TopLevelStatement]] =
     Grammar.parseAll(ruleTopLevelStatementPadded)(collectStmts)(tokens, FilePosition(1, 1)).toEither
 
 
