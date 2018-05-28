@@ -13,11 +13,12 @@ class JSContext extends Context {
   override val invalidClassMetadata: JSMetadata.Class = JSMetadata.Class.Invalid
 
 
-
   override type Comp[+T] = StandardCompilation[T]
 
-  override val typeSystem: ArgonTypeSystem[this.type] = new ArgonTypeSystem[this.type]
   override val compMonadInstance: Monad[StandardCompilation] = StandardCompilation.monadInstance
   override val compCompilationInstance: Compilation[StandardCompilation] = StandardCompilation.compilationInstance
+
+  override val typeSystem: ArgonTypeSystem[this.type] = new ArgonTypeSystem[this.type]
+  override val moduleLoaders: Vector[ModuleLoader] = Vector(ArgonModuleLoader)
 
 }

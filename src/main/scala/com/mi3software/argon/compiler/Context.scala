@@ -25,6 +25,7 @@ trait Context {
   implicit val compCompilationInstance: Compilation[Comp]
 
   val typeSystem: ArgonTypeSystem[this.type]
+  val moduleLoaders: Vector[ModuleLoader]
 
 
   sealed trait ContextScopeTypes extends ScopeTypes {
