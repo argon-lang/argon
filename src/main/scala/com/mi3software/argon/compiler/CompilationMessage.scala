@@ -1,10 +1,10 @@
 package com.mi3software.argon.compiler
 
+import java.io.File
 import java.nio.charset.Charset
 
 import com.mi3software.argon.parser._
 import com.mi3software.argon.util._
-
 import com.mi3software.argon.module.ArgonModule
 
 sealed trait CompilationMessage {
@@ -270,6 +270,18 @@ object CompilationError {
     override def message: String = s"Meta class for ${objectType.name} #$id was not specified."
   }
 
+  final case class CouldNotFindCompatibleModuleLoader(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "A compatible module loader could not be found."
+  }
+
+  final case class ModuleDependencyNotFound(missingDependency: ModuleDescriptor, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"A module requires a dependency (${missingDependency.name}) that was not found."
+  }
+
+  final case class CircularDependencyLoadingModule(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "A circular dependency was detected among modules."
+  }
+
   private def formatNamespace(namespacePath: NamespacePath): String =
     namespacePath.ns.mkString(".")
 
@@ -288,6 +300,10 @@ object CompilationMessageSource {
 
   final case class ReferencedModule(moduleDescriptor: ModuleDescriptor) extends CompilationMessageSource {
     override def formatted: String = s"module ${moduleDescriptor.name}"
+  }
+
+  final case class ModuleFile(file: File) extends CompilationMessageSource {
+    override def formatted: String = s"module file $file"
   }
 
 }

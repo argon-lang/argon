@@ -2,7 +2,7 @@ package com.mi3software.argon.compiler
 
 import com.mi3software.argon.parser.SourceAST
 import com.mi3software.argon.util.Compilation
-import scalaz.Monad
+import scalaz._
 
 trait Context {
 
@@ -24,6 +24,9 @@ trait Context {
   type Comp[+_]
   implicit val compMonadInstance: Monad[Comp]
   implicit val compCompilationInstance: Compilation[Comp]
+
+  final lazy val withCompType: this.type with ({ type Comp[+A] = Context.this.Comp[A]}) =
+    this
 
   val typeSystem: ArgonTypeSystem[this.type]
   val moduleLoaders: Vector[ModuleLoader]

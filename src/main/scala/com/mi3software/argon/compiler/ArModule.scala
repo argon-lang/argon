@@ -2,7 +2,7 @@ package com.mi3software.argon.compiler
 
 import com.mi3software.argon.util.NamespacePath
 
-sealed trait ArModule[TContext <: Context] {
+sealed trait ArModule[+TContext <: Context] {
   val context: TContext
   import context._
 
@@ -14,7 +14,7 @@ sealed trait ArModule[TContext <: Context] {
 
 
 
-trait ArModuleWithPayload[TContext <: Context, TPayloadSpec[_, _]] extends ArModule[TContext] {
+trait ArModuleWithPayload[+TContext <: Context, TPayloadSpec[_, _]] extends ArModule[TContext] {
   override type PayloadSpec[A, B] = TPayloadSpec[A, B]
 }
 
