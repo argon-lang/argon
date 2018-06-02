@@ -8,4 +8,5 @@ final case class CompilerInput
 (
   source: Vector[SourceAST],
   references: Vector[File],
+  options: CompilerOptions,
 )

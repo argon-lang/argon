@@ -50,16 +50,6 @@ trait Context {
 
 
   final def createModule(input: CompilerInput): IO[Comp[ArModule[this.type]]] =
-    loadReferenceModules(input)
-      .map { refModComp =>
-        compMonadInstance.bind(refModComp)(createModuleWithRefs(input))
-      }
-
-  private def createModuleWithRefs(input: CompilerInput)(referencedModules: Vector[ArModuleWithPayload[this.type, PayloadSpecifiers.ReferencePayloadSpecifier]]): Comp[ArModule[this.type]] =
-    ???
-
-
-  private def loadReferenceModules(input: CompilerInput): IO[Comp[Vector[ArModuleWithPayload[this.type, PayloadSpecifiers.ReferencePayloadSpecifier]]]] =
-    ModuleLoader.loadReferencedModules(this)(input.references)
+    SourceModuleCreator.createModule[Comp](this)(input)(compMonadInstance, compCompilationInstance)
 
 }

@@ -8,6 +8,7 @@ import com.mi3software.argon.backend.Backend
 import scalaz.effect.IO
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.compiler.{CompilerOptions, ModuleDescriptor}
 import com.mi3software.argon.util.{FileID, FileOperations, FileSpec}
 import org.json4s.NoTypeHints
 import org.json4s.native.Serialization
@@ -18,6 +19,23 @@ final case class BuildInfoFileSpec
   inputFiles: List[String],
   outputFile: String,
   references: List[String],
+
+  compilerOptions: CompilerOptionsFileSpec,
+)
+
+final case class CompilerOptionsFileSpec
+(
+  moduleName: String,
+)
+
+final case class BuildInfo
+(
+  backend: Backend,
+  inputFiles: Vector[FileWithSpec],
+  outputFile: File,
+  references: Vector[File],
+
+  compilerOptions: CompilerOptions
 )
 
 object BuildInfoFileSpec {
@@ -31,14 +49,6 @@ object BuildInfoFileSpec {
 
 
 }
-
-final case class BuildInfo
-(
-  backend: Backend,
-  inputFiles: Vector[FileWithSpec],
-  outputFile: File,
-  references: Vector[File],
-)
 
 object BuildInfo {
 
@@ -66,6 +76,10 @@ object BuildInfo {
         inputFiles = inputFilesWithSpec,
         outputFile = outputFile,
         references = references,
+
+        compilerOptions = CompilerOptions(
+          moduleDescriptor = ModuleDescriptor(spec.compilerOptions.moduleName)
+        )
       )
     ).run
 

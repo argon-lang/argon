@@ -35,6 +35,7 @@ object Pipeline {
           val input = CompilerInput(
             source = sourceASTs.flatten,
             references = buildInfo.references,
+            options = buildInfo.compilerOptions
           )
 
           buildInfo.backend.compile(input).flatMap {
