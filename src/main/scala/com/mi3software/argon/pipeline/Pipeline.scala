@@ -6,7 +6,7 @@ import scalaz.effect.IO
 import scalaz._
 import Scalaz._
 import com.mi3software.argon.builder._
-import com.mi3software.argon.compiler.{CompilationError, CompilationMessage}
+import com.mi3software.argon.compiler.{CompilationError, CompilationMessage, CompilerInput}
 
 object Pipeline {
 
@@ -32,7 +32,12 @@ object Pipeline {
           printMessages(syntaxErrors.map(CompilationError.SyntaxCompilerError))
 
         case \/-(sourceASTs) =>
-          buildInfo.backend.compile(sourceASTs.flatten) match {
+          val input = CompilerInput(
+            source = sourceASTs.flatten,
+            references = buildInfo.references,
+          )
+
+          buildInfo.backend.compile(input) match {
             case -\/(messages) =>
               printMessages(messages)
 

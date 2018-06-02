@@ -1,6 +1,5 @@
 package com.mi3software.argon.compiler
 
-import com.mi3software.argon.parser.SourceAST
 import com.mi3software.argon.util.Compilation
 import scalaz._
 
@@ -31,7 +30,7 @@ trait Context {
   val typeSystem: ArgonTypeSystem[this.type]
   val moduleLoaders: Vector[ModuleLoader]
 
-  def createModule(source: Vector[SourceAST]): ArModule[this.type]
+  def createModule(input: CompilerInput): ArModule[this.type]
 
 
   sealed trait ContextScopeTypes extends ScopeTypes {

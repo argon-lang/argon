@@ -2,9 +2,8 @@ package com.mi3software.argon.backend
 
 import java.io.File
 
-import com.mi3software.argon.compiler.CompilationMessage
+import com.mi3software.argon.compiler.{CompilationMessage, CompilerInput}
 import com.mi3software.argon.compiler.js.{JSAst, JSContext, JSEmitter}
-import com.mi3software.argon.parser.SourceAST
 import com.mi3software.argon.util.{FileOperations, IOHelpers}
 import scalaz.effect.IO
 import scalaz._
@@ -15,10 +14,10 @@ object JSBackend extends Backend {
   override val id: String = "js"
   override val name: String = "JavaScript"
 
-  override def compile(sourceASTs: Vector[SourceAST]): NonEmptyList[CompilationMessage] \/ CompilationResult = {
+  override def compile(input: CompilerInput): NonEmptyList[CompilationMessage] \/ CompilationResult = {
     val context = new JSContext
     val emitter = new JSEmitter
-    val module = context.createModule(sourceASTs)
+    val module = context.createModule(input)
 
     emitter.emitModule(context)(module).run match {
       case -\/(_) => ???
