@@ -2,6 +2,7 @@ package com.mi3software.argon.compiler
 
 import com.mi3software.argon.util.Compilation
 import scalaz._
+import scalaz.effect.IO
 
 trait Context {
 
@@ -30,8 +31,6 @@ trait Context {
   val typeSystem: ArgonTypeSystem[this.type]
   val moduleLoaders: Vector[ModuleLoader]
 
-  def createModule(input: CompilerInput): ArModule[this.type]
-
 
   sealed trait ContextScopeTypes extends ScopeTypes {
     override type TTrait <: ArTrait[Context.this.type]
@@ -48,5 +47,19 @@ trait Context {
     override type TFunc = ArFuncWithPayload[Context.this.type, TPayloadSpec]
     override type TVariable = Nothing
   }
+
+
+  final def createModule(input: CompilerInput): IO[Comp[ArModule[this.type]]] =
+    loadReferenceModules(input)
+      .map { refModComp =>
+        compMonadInstance.bind(refModComp)(createModuleWithRefs(input))
+      }
+
+  private def createModuleWithRefs(input: CompilerInput)(referencedModules: Vector[ArModuleWithPayload[this.type, PayloadSpecifiers.ReferencePayloadSpecifier]]): Comp[ArModule[this.type]] =
+    ???
+
+
+  private def loadReferenceModules(input: CompilerInput): IO[Comp[Vector[ArModuleWithPayload[this.type, PayloadSpecifiers.ReferencePayloadSpecifier]]]] =
+    ModuleLoader.loadReferencedModules(this)(input.references)
 
 }

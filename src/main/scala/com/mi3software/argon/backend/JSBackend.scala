@@ -14,23 +14,22 @@ object JSBackend extends Backend {
   override val id: String = "js"
   override val name: String = "JavaScript"
 
-  override def compile(input: CompilerInput): NonEmptyList[CompilationMessage] \/ CompilationResult = {
+  override def compile(input: CompilerInput): IO[NonEmptyList[CompilationMessage] \/ CompilationResult] = {
     val context = new JSContext
     val emitter = new JSEmitter
-    val module = context.createModule(input)
 
-    emitter.emitModule(context)(module).run match {
-      case -\/(_) => ???
-      case \/-((head +: tail, _)) =>
-        -\/(NonEmptyList.nel(head, tail.toIList))
+    context.createModule(input).map {
+      _.flatMap(emitter.emitModule(context)).run match {
+        case -\/(_) => ???
+        case \/-((head +: tail, _)) =>
+          -\/(NonEmptyList.nel(head, tail.toIList))
 
-      case \/-((Vector(), jsModule)) =>
-        \/-(new CompilationResult {
-          override def writeToFile(outputFile: File): IO[Unit] =
-            FileOperations.filePrintWriter(outputFile)(IOHelpers.impureFunction(JSAst.writeModule(jsModule)))
-        })
+        case \/-((Vector(), jsModule)) =>
+          \/-(new CompilationResult {
+            override def writeToFile(outputFile: File): IO[Unit] =
+              FileOperations.filePrintWriter(outputFile)(IOHelpers.impureFunction(JSAst.writeModule(jsModule)))
+          })
+      }
     }
-
-
   }
 }

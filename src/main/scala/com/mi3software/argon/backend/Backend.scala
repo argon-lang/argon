@@ -3,12 +3,13 @@ package com.mi3software.argon.backend
 import com.mi3software.argon.compiler.{CompilationMessage, CompilerInput}
 import scalaz._
 import Scalaz._
+import scalaz.effect.IO
 
 trait Backend {
   val id: String
   val name: String
 
-  def compile(input: CompilerInput): NonEmptyList[CompilationMessage] \/ CompilationResult
+  def compile(input: CompilerInput): IO[NonEmptyList[CompilationMessage] \/ CompilationResult]
 
 }
 

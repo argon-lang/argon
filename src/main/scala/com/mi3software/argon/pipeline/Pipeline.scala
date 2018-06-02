@@ -37,7 +37,7 @@ object Pipeline {
             references = buildInfo.references,
           )
 
-          buildInfo.backend.compile(input) match {
+          buildInfo.backend.compile(input).flatMap {
             case -\/(messages) =>
               printMessages(messages)
 

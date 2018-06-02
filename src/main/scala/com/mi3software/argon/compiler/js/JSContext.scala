@@ -20,7 +20,4 @@ final class JSContext extends Context {
 
   override val typeSystem: ArgonTypeSystem[this.type] = new ArgonTypeSystem[this.type]
   override val moduleLoaders: Vector[ModuleLoader] = Vector(ArgonModuleLoader)
-
-  override def createModule(input: CompilerInput): ArModule[JSContext.this.type] =
-    ???
 }
