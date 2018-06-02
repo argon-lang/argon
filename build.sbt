@@ -18,6 +18,7 @@ libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.13.4" % "test"
 libraryDependencies += "com.chuusai" %% "shapeless" % "2.3.3"
 libraryDependencies += "com.fommil" %% "deriving-macro" % "0.9.0"
 libraryDependencies += "com.fommil" %% "scalaz-deriving" % "0.9.0"
+libraryDependencies += "org.json4s" %% "json4s-native" % "3.5.4"
 
 libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
 libraryDependencies += "com.thesamet.scalapb" %% "scalapb-json4s" % scalapb.compiler.Version.scalapbVersion

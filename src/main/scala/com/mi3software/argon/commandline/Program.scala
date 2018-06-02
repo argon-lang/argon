@@ -1,10 +1,11 @@
 package com.mi3software.argon.commandline
 
-import com.mi3software.argon.backend.Backend
 import com.mi3software.argon.pipeline.Pipeline
 import scalaz.effect.{IO, SafeApp}
 import scalaz._
-import Scalaz._
+import com.mi3software.argon.util.FileOperations
+
+import com.mi3software.argon.builder.BuildInfo
 
 object Program extends SafeApp {
   override def runl(args: List[String]): IO[Unit] = args match {
@@ -14,46 +15,22 @@ object Program extends SafeApp {
   }
 
   private def runCompilation(args: List[String]): IO[Unit] =
-    parseCompileArgs(args) match {
-      case CompileArguments(None, _, _, _) =>
-        IO.putStrLn("Backend not specified (-b).")
-
-      case CompileArguments(_, None, _, _) =>
-        IO.putStrLn("Output file not specified (-o).")
-
-      case CompileArguments(_, _, Vector(), _) =>
-        IO.putStrLn("No input files were specified.")
-
-      case CompileArguments(Some(FindBackend(backend)), Some(outputFile), inputFiles, references) =>
-        Pipeline.run(inputFiles)(references)(outputFile)(backend)
-
-      case CompileArguments(Some(backendId), _, _, _) =>
-        IO.putStrLn(s"Invalid backend '$backendId'.")
-    }
-
-  private object FindBackend {
-    private val backends: Vector[Backend] = Vector()
-
-    def unapply(backendId: String): Option[Backend] =
-      backends.find(_.id === backendId)
-  }
-
-
-  private final case class CompileArguments
-  (
-    backend: Option[String],
-    outputFile: Option[String],
-    inputFiles: Vector[String],
-    references: Vector[String],
-  )
-
-  private def parseCompileArgs(args: List[String], argState: CompileArguments = CompileArguments(None, None, Vector(), Vector())): CompileArguments =
     args match {
-      case "-b" :: backend :: tail => parseCompileArgs(tail, argState.copy(backend = Some(backend)))
-      case "-o" :: outputFile :: tail => parseCompileArgs(tail, argState.copy(outputFile = Some(outputFile)))
-      case "-r" :: refFile :: tail => parseCompileArgs(tail, argState.copy(references = argState.references :+ refFile))
-      case arg :: tail => parseCompileArgs(tail, argState.copy(inputFiles = argState.inputFiles :+ arg))
-      case Nil => argState
+      case buildInfoFileName :: Nil =>
+        FileOperations.fileFromName(buildInfoFileName)
+          .flatMap(BuildInfo.loadFile)
+          .flatMap {
+            case Some(buildInfo) => Pipeline.run(buildInfo)
+            case None =>
+              IO.putStrLn("Could not load build info file.")
+          }
+
+      case Nil =>
+        IO.putStrLn("Please specify the build info file.")
+
+      case _ :: _ :: _ =>
+        IO.putStrLn("Only one file (the build info file) may be specified.")
     }
+
 
 }

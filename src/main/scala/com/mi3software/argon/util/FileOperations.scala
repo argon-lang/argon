@@ -1,6 +1,6 @@
 package com.mi3software.argon.util
 
-import java.io.{File, FileInputStream, FileOutputStream, PrintWriter}
+import java.io._
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
@@ -31,6 +31,12 @@ object FileOperations {
       val bytes = Files.readAllBytes(file.toPath)
       new String(bytes, StandardCharsets.UTF_8)
     }
+
+  def createReader(stream: FileInputStream): IO[Reader] =
+    IO { new InputStreamReader(stream) }
+
+  def fileReader[T](file: File)(f: Reader => IO[T]): IO[T] =
+    fileInputStream(file) { stream => createReader(stream).flatMap(f) }
 
   def fileFromName(fileName: String): IO[File] =
     IO { new File(fileName) }
