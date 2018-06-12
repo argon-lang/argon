@@ -4,7 +4,7 @@ import com.mi3software.argon.compiler._
 import com.mi3software.argon.util.Compilation
 import scalaz.Monad
 
-final class JSContext extends Context {
+final class JSContext extends ContextComp[StandardCompilation] {
 
   override type TTraitMetadata = JSMetadata.Trait
   override type TClassMetadata = JSMetadata.Class

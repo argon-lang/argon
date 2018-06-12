@@ -3,6 +3,7 @@ package com.mi3software.argon.compiler
 import java.io.File
 import java.nio.charset.Charset
 
+import com.mi3software.argon.parser
 import com.mi3software.argon.parser._
 import com.mi3software.argon.util._
 import com.mi3software.argon.module.ArgonModule
@@ -282,9 +283,35 @@ object CompilationError {
     override def message: String = "A circular dependency was detected among modules."
   }
 
+  final case class InvalidAccessModifierCombination(accessModifier1: parser.AccessModifier, accessModifier2: parser.AccessModifier, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"The access modifier '${formatParserAccessModifier(accessModifier1)}' cannot be combined with '${formatParserAccessModifier(accessModifier2)}'"
+  }
+
+  final case class AccessModifierNotAllowedForGlobal(accessModifier: AccessModifier, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"The access modifier '${formatAccessModifier(accessModifier)}' is not valid on global declarations."
+  }
+
   private def formatNamespace(namespacePath: NamespacePath): String =
     namespacePath.ns.mkString(".")
 
+  private def formatParserAccessModifier(accessModifier: parser.AccessModifier): String =
+    accessModifier match {
+      case parser.PublicModifier => "public"
+      case parser.ProtectedModifier => "protected"
+      case parser.PrivateModifier => "private"
+      case parser.InternalModifier => "internal"
+    }
+
+  private def formatAccessModifier(accessModifier: AccessModifier): String =
+    accessModifier match {
+      case AccessModifier.Invalid => "invalid"
+      case AccessModifier.Public => "public"
+      case AccessModifier.Protected => "protected"
+      case AccessModifier.ProtectedInternal => "protected internal"
+      case AccessModifier.Private => "private"
+      case AccessModifier.PrivateInternal => "private internal"
+      case AccessModifier.Internal => "internal"
+    }
 }
 
 sealed trait CompilationMessageSource {

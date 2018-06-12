@@ -25,8 +25,7 @@ trait Context {
   implicit val compMonadInstance: Monad[Comp]
   implicit val compCompilationInstance: Compilation[Comp]
 
-  final lazy val withCompType: this.type with ({ type Comp[+A] = Context.this.Comp[A]}) =
-    this
+  val withCompType: this.type with ContextComp[Comp]
 
   val typeSystem: ArgonTypeSystem[this.type]
   val moduleLoaders: Vector[ModuleLoader]
@@ -50,6 +49,7 @@ trait Context {
 
 
   final def createModule(input: CompilerInput): IO[Comp[ArModule[this.type]]] =
-    SourceModuleCreator.createModule[Comp](this)(input)(compMonadInstance, compCompilationInstance)
+    SourceModuleCreator.createModule[Comp](this.withCompType)(input)(compMonadInstance, compCompilationInstance)
+      .map(identity)
 
 }

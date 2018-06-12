@@ -77,7 +77,7 @@ object ModuleLoader {
     }
 
   private def loadModuleRefFromData[TComp[+_] : Monad]
-  (context: Context with ({ type Comp[+A] = TComp[A] }))
+  (context: ContextComp[TComp])
   (refDataPairs: Vector[LoaderAndData])
   : TComp[Vector[CompilationMessage \/ PayloadResult[context.type]]] =
     loadDependencies[TComp, LoaderAndData, ModuleDescriptor, PayloadResult[context.type], CompilationMessage \/ ?](dependencyTreeOps(context))(refDataPairs)
@@ -85,7 +85,7 @@ object ModuleLoader {
 
 
   private def loadReferencedModulesImpl[TComp[+_] : Monad : Compilation]
-  (context: Context with ({ type Comp[+A] = TComp[A] }))
+  (context: ContextComp[TComp])
   (refFiles: Vector[File])
   : IO[TComp[Vector[ArModuleWithPayload[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]]]] =
     refFiles.traverseU(findWorkingLoader(context.moduleLoaders))
