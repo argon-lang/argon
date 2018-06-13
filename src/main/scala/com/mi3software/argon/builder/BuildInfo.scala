@@ -102,10 +102,12 @@ object BuildInfo {
   }
 
   def findMatchingGlobs(dir: File)(glob: String): IO[Vector[File]] = IO {
-    val pathMatcher = FileSystems.getDefault.getPathMatcher(glob)
+    val pathMatcher = FileSystems.getDefault.getPathMatcher("glob:" + glob)
 
     allDirectoryFiles(dir)
-      .filter(pathMatcher.matches)
+      .filter { path: Path =>
+        pathMatcher.matches(dir.toPath.relativize(path))
+      }
       .map { _.toFile }
       .toVector
   }
