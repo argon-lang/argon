@@ -1,7 +1,7 @@
 package com.mi3software.argon.compiler
 
 import com.mi3software.argon.parser
-import com.mi3software.argon.parser.{SourceAST, TraitDeclarationStmt}
+import com.mi3software.argon.parser.SourceAST
 import com.mi3software.argon.util.{Compilation, FileSpec, SourceLocation, WithSource}
 import scalaz._
 import Scalaz._
@@ -75,12 +75,21 @@ private[compiler] object SourceModuleCreator {
       }
 
     sourceAST.statement.value match {
-      case traitDeclarationStmt @ TraitDeclarationStmt(_, Some(traitName), _, _, _, modifiers) =>
+      case traitDeclarationStmt @ parser.TraitDeclarationStmt(_, Some(traitName), _, _, _, modifiers) =>
         createBinding(traitName, modifiers) { (globalName, accessModifier) =>
           val desc = TraitDescriptor.InNamespace(options.moduleDescriptor, sourceAST.currentNamespace, globalName, accessModifier)
 
           TraitScopeValue[context.ScopeTypesWithPayload[PayloadSpecifiers.DeclarationPayloadSpecifier]](
             SourceTrait[TComp](context)(scope)(traitDeclarationStmt)(desc)
+          )
+        }
+
+      case funcDeclarationStmt @ parser.FunctionDeclarationStmt(Some(funcName), _, _, _, modifiers, _) =>
+        createBinding(funcName, modifiers) { (globalName, accessModifier) =>
+          val desc = FuncDescriptor.InNamespace(options.moduleDescriptor, sourceAST.currentNamespace, globalName, accessModifier)
+
+          FunctionScopeValue[context.ScopeTypesWithPayload[PayloadSpecifiers.DeclarationPayloadSpecifier]](
+            SourceFunction[TComp](context)(scope)(funcDeclarationStmt)(desc)
           )
         }
 

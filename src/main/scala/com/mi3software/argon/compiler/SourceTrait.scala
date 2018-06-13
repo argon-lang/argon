@@ -29,7 +29,7 @@ private[compiler] object SourceTrait {
       override lazy val methods: TComp[Vector[ArMethodWithPayload[context2.type, DeclarationPayloadSpecifier]]] = ??? : TComp[Vector[ArMethodWithPayload[context2.type, DeclarationPayloadSpecifier]]]
       override lazy val metaType: TComp[MetaClass[ArClassWithPayload[context2.type, DeclarationPayloadSpecifier]]] = ??? : TComp[MetaClass[ArClassWithPayload[context2.type, DeclarationPayloadSpecifier]]]
 
-      override val payload: DeclarationPayloadSpecifier[Unit, context.TTraitMetadata] = ()
+      override val payload: Unit = ()
     }
 
 }
