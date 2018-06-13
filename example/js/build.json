@@ -1,0 +1,10 @@
+{
+  "backend": "js",
+  "inputFiles": [ "*.argon" ],
+  "outputFile": "example.js",
+  "references": [ "../../Argon.Core/Argon.Core.armodule.json" ],
+
+  "compilerOptions": {
+    "moduleName": "ArgonExample"
+  }
+}

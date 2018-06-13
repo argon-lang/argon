@@ -1,0 +1,4 @@
+import Ar._
+
+proc main(): () =
+    puts ''Hello World''
