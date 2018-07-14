@@ -1,77 +1,165 @@
-name := "argon"
 
-scalaVersion := "2.12.4"
 
-resolvers += Resolver.sonatypeRepo("releases")
+lazy val commonSettings = Seq(
+  scalaVersion := "2.12.4",
 
-addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
-addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.4")
+  resolvers += Resolver.sonatypeRepo("releases"),
 
-libraryDependencies += "org.scala-lang.modules" %% "scala-xml" % "1.0.6"
-libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.2.11"
-libraryDependencies += "org.scalaz" %% "scalaz-effect" % "7.2.11"
-libraryDependencies += "org.apache.commons" % "commons-lang3" % "3.5"
-libraryDependencies += "commons-io" % "commons-io" % "2.5"
-libraryDependencies += "org.fusesource.jansi" % "jansi" % "1.15"
-libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.3" % "test"
-libraryDependencies += "org.scalacheck" %% "scalacheck" % "1.13.4" % "test"
-libraryDependencies += "com.chuusai" %% "shapeless" % "2.3.3"
-libraryDependencies += "com.fommil" %% "deriving-macro" % "0.9.0"
-libraryDependencies += "com.fommil" %% "scalaz-deriving" % "0.9.0"
-libraryDependencies += "org.json4s" %% "json4s-native" % "3.5.4"
+  addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full),
+  addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.4"),
 
-libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf"
-libraryDependencies += "com.thesamet.scalapb" %% "scalapb-json4s" % scalapb.compiler.Version.scalapbVersion
+  libraryDependencies ++= Seq(
+    "org.scala-lang.modules" %% "scala-xml" % "1.0.6",
+    "org.scalaz" %% "scalaz-core" % "7.2.11",
+    "org.scalaz" %% "scalaz-effect" % "7.2.11",
+    "org.apache.commons" % "commons-lang3" % "3.5",
+    "commons-io" % "commons-io" % "2.5",
+    "org.fusesource.jansi" % "jansi" % "1.15",
+    "org.scalatest" %% "scalatest" % "3.0.3" % "test",
+    "org.scalacheck" %% "scalacheck" % "1.13.4" % "test",
+    "com.chuusai" %% "shapeless" % "2.3.3",
+    "com.fommil" %% "deriving-macro" % "0.9.0",
+    "com.fommil" %% "scalaz-deriving" % "0.9.0",
+    "org.json4s" %% "json4s-native" % "3.5.4",
+    
+    "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
+    "com.thesamet.scalapb" %% "scalapb-json4s" % scalapb.compiler.Version.scalapbVersion,
 
-libraryDependencies += "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test"
+    "org.apache.thrift" % "libthrift" % "0.11.0",
+    "com.twitter" %% "scrooge-core" % "18.7.0" exclude("com.twitter", "libthrift"),
 
-scalacOptions ++= Seq(
-  "-encoding", "UTF-8",
-  "-unchecked",
-  "-deprecation",
-  "-Xfuture",
-  "-Xlint",
-  "-Yno-adapted-args",
-  "-Ywarn-dead-code",
-  "-Ywarn-numeric-widen",
-  "-Ywarn-value-discard",
-  "-Ywarn-unused:-implicits,-explicits",
-  "-Ypatmat-exhaust-depth", "500",
-  "-feature",
-  "-language:higherKinds",
-  "-language:existentials",
-  "-language:implicitConversions",
+    "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test",
+  )
+
 )
 
-scalacOptions in (Compile, compile) += "-Xfatal-warnings"
+lazy val compilerOptions = Seq(
 
-scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xlint"))
-scalacOptions in (Test, console) ~= (_ filterNot (opt => opt == "-Xlint"))
+  scalacOptions ++= Seq(
+    "-encoding", "UTF-8",
+    "-unchecked",
+    "-deprecation",
+    "-Xfuture",
+    "-Xlint",
+    "-Xfatal-warnings",
+    "-Yno-adapted-args",
+    "-Ywarn-dead-code",
+    "-Ywarn-numeric-widen",
+    "-Ywarn-value-discard",
+    "-Ywarn-unused:-implicits,-explicits",
+    "-Ypatmat-exhaust-depth", "500",
+    "-feature",
+    "-language:higherKinds",
+    "-language:existentials",
+    "-language:implicitConversions",
+  ),
 
-wartremoverWarnings in (Compile, compile) ++= Warts.allBut(
-  Wart.Recursion,
-  Wart.Any,
-  Wart.Nothing,
-  Wart.Product,
-  Wart.Serializable,
-  Wart.LeakingSealed,
-  Wart.Overloading,
-  Wart.ImplicitConversion,
-  Wart.ImplicitParameter,
-  Wart.ExplicitImplicitTypes,
-  Wart.DefaultArguments,
-  Wart.PublicInference,
+  wartremoverWarnings in (Compile, compile) ++= Warts.allBut(
+    Wart.Recursion,
+    Wart.Any,
+    Wart.Nothing,
+    Wart.Product,
+    Wart.Serializable,
+    Wart.LeakingSealed,
+    Wart.Overloading,
+    Wart.ImplicitConversion,
+    Wart.ImplicitParameter,
+    Wart.ExplicitImplicitTypes,
+    Wart.DefaultArguments,
+    Wart.PublicInference,
 
-  Wart.TraversableOps,
+    Wart.TraversableOps,
+  ),
+
+  wartremoverExcluded += sourceManaged.value,
+
+  scalacOptions in (Compile, compile) += "-Xfatal-warnings",
+
+  scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xlint")),
+  scalacOptions in (Test, console) ~= (_ filterNot (opt => opt == "-Xlint")),
 )
 
-wartremoverExcluded ++= (PathFinder(sourceManaged.value) ** "*.scala").get
+lazy val cli = project.in(file("argon-cli"))
+  .dependsOn(argon_build)
+  .settings(
+    commonSettings,
+    compilerOptions,
 
-test in assembly := {}
-assemblyJarName in assembly := "argon.jar"
+    name := "argon-cli",
+  )
 
-PB.targets in Compile := Seq(
-  scalapb.gen() -> (sourceManaged in Compile).value
-)
+lazy val argon_build = project.in(file("argon-build"))
+  .dependsOn(util, parser, argon_compiler, compiler_js)
+  .settings(
+    commonSettings,
+    compilerOptions,
 
+    name := "argon-build",
+  )
 
+lazy val parser = project.in(file("argon-parser"))
+  .dependsOn(util, parser_data)
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-parser",
+  )
+
+lazy val parser_data = project.in(file("argon-parser-data"))
+  .dependsOn(util)
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-parser-data",
+  )
+
+lazy val argon_compiler = project.in(file("argon-compiler"))
+  .dependsOn(util, modulefmt, parser_data)
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-compiler",
+  )
+
+lazy val compiler_js = project.in(file("argon-compiler-js"))
+  .dependsOn(util, modulefmt, parser_data, argon_compiler)
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-compiler-js",
+  )
+
+lazy val util = project.in(file("argon-util"))
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-util",
+  )
+
+lazy val modulefmt = project.in(file("argon-modulefmt"))
+  .settings(
+    commonSettings,
+
+    scalacOptions ++= Seq(
+      "-encoding", "UTF-8",
+      "-unchecked",
+      "-deprecation",
+      "-Xfuture",
+      "-Xfatal-warnings",
+      "-Ypatmat-exhaust-depth", "500",
+      "-language:higherKinds",
+      "-language:existentials",
+      "-language:implicitConversions",
+    ),
+
+    PB.targets in Compile := Seq(
+      scalapb.gen() -> (sourceManaged in Compile).value / "protobuf"
+    ),
+
+    scroogeBuildOptions := Seq(),
+  )
