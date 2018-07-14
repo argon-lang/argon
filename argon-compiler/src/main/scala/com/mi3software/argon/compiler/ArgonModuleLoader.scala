@@ -3,38 +3,42 @@ package com.mi3software.argon.compiler
 import java.io.File
 import java.util.Locale
 
-import com.mi3software.argon.module.ArgonModule
+import com.mi3software.argon.{module => ArgonModule}
 import scalaz.{Lens => _, _}
 import Scalaz._
 import com.mi3software.argon.compiler.PayloadSpecifiers.ReferencePayloadSpecifier
 import com.mi3software.argon.util._
 import com.mi3software.argon.Compilation
-import scalapb.json4s.JsonFormat
+import org.apache.thrift.protocol.TBinaryProtocol
+import org.apache.thrift.transport.TSimpleFileTransport
 import scalaz.effect.IO
-import shapeless._
 
 import scala.collection.immutable._
+import scala.collection.{ Seq => QSeq }
 
 object ArgonModuleLoader extends ModuleLoader {
 
   override type ModuleData = ArgonModule.Module
   override def loadFile(file: File): IO[Option[ArgonModule.Module]] =
     IO { file.getName.toLowerCase(Locale.ENGLISH) }.flatMap { ext =>
-      if(ext.endsWith(".armodule.json"))
-        FileOperations.readAllText(file)
-          .map(JsonFormat.fromJsonString[ArgonModule.Module])
-          .map(Some.apply)
+      if(ext.endsWith(".armodule"))
+        IO {
+          val trans = new TSimpleFileTransport(file.getPath)
+          val prot = new TBinaryProtocol(trans)
+
+          Some(ArgonModule.Module.decode(prot))
+        }
       else
         IO(None : Option[ArgonModule.Module])
     }
 
   override def dataDescriptor(data: ArgonModule.Module): Option[ModuleDescriptor] =
-    data.name.map(ModuleDescriptor.apply)
+    Some(ModuleDescriptor(data.name))
 
   override def dataReferencedModules(data: ArgonModule.Module): Vector[ModuleDescriptor] =
-    data.referencedModules.collect {
-      case ArgonModule.ModuleReference(Some(name)) => ModuleDescriptor(name)
-    }
+    data.referencedModules.map {
+      case ArgonModule.ModuleReference(name) => ModuleDescriptor(name)
+    }.toVector
 
 
   override def loadModuleReference
@@ -52,7 +56,7 @@ object ArgonModuleLoader extends ModuleLoader {
 
   def loadModule[TPayloadSpec[_, _]]
   (context: Context)
-  (pbModule: ArgonModule.Module)
+  (binModule: ArgonModule.Module)
   (referencedModules: Vector[ArModule[context.type]])
   (payloadLoader: PayloadLoader[TPayloadSpec])
   (implicit
@@ -64,47 +68,41 @@ object ArgonModuleLoader extends ModuleLoader {
     type CurrentScopeTypes = context.ScopeTypesWithPayload[TPayloadSpec]
     val context2: context.type = context
 
-    def impl[Comp[+_] : Monad : Compilation](implicit compEv: LeibnizK[Comp, context.Comp]): Comp[ArModuleWithPayload[context.type, TPayloadSpec]] =
+    def impl[Comp[+_] : Monad : Compilation](implicit compEv: LeibnizK[Comp, context.Comp]): Comp[ArModuleWithPayload[context.type, TPayloadSpec]] = {
+      val desc = ModuleDescriptor(binModule.name)
+
       for {
 
-        desc <-
-          pbModule.name match {
-            case None =>
-              val desc = ModuleDescriptor("unknown-module")
-              implicitly[Compilation[Comp]].forErrors(desc, CompilationError.MissingModuleName(CompilationMessageSource.ReferencedModule(desc)))
-
-            case Some(name) =>
-              implicitly[Monad[Comp]].point(ModuleDescriptor(name))
-          }
-
         _ <-
-          if(pbModule.formatVersion === 0 || pbModule.formatVersion > currentFormatVersion)
-            implicitly[Compilation[Comp]].forErrors((), CompilationError.UnsupportedModuleFormatVersion(pbModule.formatVersion, CompilationMessageSource.ReferencedModule(desc)))
+          if(binModule.formatVersion === 0 || binModule.formatVersion > currentFormatVersion)
+            implicitly[Compilation[Comp]].forErrors((), CompilationError.UnsupportedModuleFormatVersion(binModule.formatVersion, CompilationMessageSource.ReferencedModule(desc)))
           else
             implicitly[Monad[Comp]].point(())
 
         module <- new ModuleCreator[context.type, Comp, TPayloadSpec] {
 
 
-          private def parseNamespacePath(ns: Option[ArgonModule.Namespace]): NamespacePath =
-            ns match {
+          private def parseNamespacePath(ns: ArgonModule.Namespace): NamespacePath =
+            Option(ns) match {
               case Some(ArgonModule.Namespace(parts)) => NamespacePath(parts.toVector)
               case None => NamespacePath.empty
             }
 
           private object ValidGlobalName {
-            def unapply(globalName: Option[ArgonModule.GlobalName]): Option[GlobalName] =
-              globalName.collect {
-                case ArgonModule.GlobalName(ArgonModule.GlobalName.GlobalNameType.NormalName(name)) => GlobalName.Normal(name)
-                case ArgonModule.GlobalName(ArgonModule.GlobalName.GlobalNameType.Unnamed(ArgonModule.UnnamedGlobalName(Some(fileID), Some(index)))) =>
-                  GlobalName.Unnamed(FileID(fileID), index)
+            def unapply(globalName: ArgonModule.GlobalName): Option[GlobalName] =
+              globalName match {
+                case ArgonModule.GlobalName.NormalName(name) => Some(GlobalName.Normal(name))
+                case ArgonModule.GlobalName.Unnamed(ArgonModule.UnnamedGlobalName(fileID, index)) =>
+                  Some(GlobalName.Unnamed(FileID(fileID), index))
+
+                case ArgonModule.GlobalName.UnknownUnionField(_) => None
               }
           }
 
           private object ParsedAccessModifier {
             def unapply(accessModifier: ArgonModule.AccessModifier): Option[AccessModifier] =
               accessModifier match {
-                case ArgonModule.AccessModifier.Invalid | ArgonModule.AccessModifier.Unrecognized(_) => None
+                case ArgonModule.AccessModifier.Invalid | ArgonModule.AccessModifier.EnumUnknownAccessModifier(_) => None
                 case ArgonModule.AccessModifier.Public => Some(AccessModifier.Public)
                 case ArgonModule.AccessModifier.Internal => Some(AccessModifier.Internal)
                 case ArgonModule.AccessModifier.Protected => Some(AccessModifier.Protected)
@@ -125,7 +123,7 @@ object ArgonModuleLoader extends ModuleLoader {
 
 
           private lazy val refModuleMap: Map[Int, ModuleLoadResult[context.type]] =
-            pbModule.referencedModules.zipWithIndex
+            binModule.referencedModules.zipWithIndex
               .map { case (modRef, i) =>
                 val moduleLoadRes: ModuleLoadResult[context.type] =
                   referencedModules
@@ -166,115 +164,112 @@ object ArgonModuleLoader extends ModuleLoader {
             impl(namespace.ns)(refModule.globalNamespace)
           }
 
-          private def parseTraitDescriptor(module: ModuleDescriptor)(desc: Option[ArgonModule.TraitDescriptor]): Option[TraitDescriptor.Valid] =
-            desc.flatMap {
-              case ArgonModule.TraitDescriptor(ArgonModule.TraitDescriptor.TraitDescType.InNamespace(
+          private def parseTraitDescriptor(module: ModuleDescriptor)(desc: ArgonModule.TraitDescriptor): Option[TraitDescriptor.Valid] =
+            desc match {
+              case ArgonModule.TraitDescriptor.InNamespace(
                 ArgonModule.TraitDescriptorInNamespace(
-                  Some(ArgonModule.FileSpec(Some(fileID), Some(fileName))),
+                  ArgonModule.FileSpec(fileID, fileName),
                   ns,
                   ValidGlobalName(name),
                   ParsedGlobalAccessModifier(accessModifier)
                 )
-              )) =>
+              ) =>
                 Some(TraitDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
 
-              case _ =>
+              case ArgonModule.TraitDescriptor.UnknownUnionField(_) =>
                 None
             }
 
-          private def parseClassDescriptor(module: ModuleDescriptor)(desc: Option[ArgonModule.ClassDescriptor]): Option[ClassDescriptor.Valid] =
-            desc.flatMap {
-              case ArgonModule.ClassDescriptor(ArgonModule.ClassDescriptor.ClassDescType.InNamespace(
+          private def parseClassDescriptor(module: ModuleDescriptor)(desc: ArgonModule.ClassDescriptor): Option[ClassDescriptor.Valid] =
+            desc match {
+              case ArgonModule.ClassDescriptor.InNamespace(
                 ArgonModule.ClassDescriptorInNamespace(
-                  Some(ArgonModule.FileSpec(Some(fileID), Some(fileName))),
+                  ArgonModule.FileSpec(fileID, fileName),
                   ns,
                   ValidGlobalName(name),
                   ParsedGlobalAccessModifier(accessModifier)
                 )
-              )) =>
+              ) =>
                 Some(ClassDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
 
-              case ArgonModule.ClassDescriptor(ArgonModule.ClassDescriptor.ClassDescType.MetaClass(
-              ArgonModule.ClassDescriptorMetaClass(Some(ownerClassDescriptor))
-              )) =>
+              case ArgonModule.ClassDescriptor.MetaClass(
+                ArgonModule.ClassDescriptorMetaClass(ownerClassDescriptor)
+              ) =>
                 ???
 
-              case ArgonModule.ClassDescriptor(ArgonModule.ClassDescriptor.ClassDescType.TraitMetaClass(
-              ArgonModule.ClassDescriptorTraitMetaClass(Some(ownerTraitDescriptor))
-              )) =>
+              case ArgonModule.ClassDescriptor.TraitMetaClass(
+                ArgonModule.ClassDescriptorTraitMetaClass(ownerTraitDescriptor)
+              ) =>
                 ???
 
-              case _ =>
+              case ArgonModule.ClassDescriptor.UnknownUnionField(_) =>
                 None
             }
 
-          private def parseDataCtorDescriptor(module: ModuleDescriptor)(desc: Option[ArgonModule.DataConstructorDescriptor]): Option[DataConstructorDescriptor] =
-            desc.flatMap {
-              case ArgonModule.DataConstructorDescriptor(ArgonModule.DataConstructorDescriptor.DataConstructorDescType.InNamespace(
+          private def parseDataCtorDescriptor(module: ModuleDescriptor)(desc: ArgonModule.DataConstructorDescriptor): Option[DataConstructorDescriptor] =
+            desc match {
+              case ArgonModule.DataConstructorDescriptor.InNamespace(
                 ArgonModule.DataConstructorDecscriptorInNamespace(
-                  Some(ArgonModule.FileSpec(Some(fileID), Some(fileName))),
+                  ArgonModule.FileSpec(fileID, fileName),
                   ns,
                   ValidGlobalName(name),
                   ParsedGlobalAccessModifier(accessModifier)
                 )
-              )) =>
+              ) =>
                 Some(DataConstructorDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
 
-              case _ =>
+              case ArgonModule.DataConstructorDescriptor.UnknownUnionField(_) =>
                 None
             }
 
-          private def parseFunctionDescriptor(module: ModuleDescriptor)(desc: Option[ArgonModule.FunctionDescriptor]): Option[FuncDescriptor] =
-            desc.flatMap {
-              case ArgonModule.FunctionDescriptor(ArgonModule.FunctionDescriptor.FunctionDescType.InNamespace(
+          private def parseFunctionDescriptor(module: ModuleDescriptor)(desc: ArgonModule.FunctionDescriptor): Option[FuncDescriptor] =
+            desc match {
+              case ArgonModule.FunctionDescriptor.InNamespace(
                 ArgonModule.FunctionDescriptorInNamespace(
-                  Some(ArgonModule.FileSpec(Some(fileID), Some(fileName))),
+                  ArgonModule.FileSpec(fileID, fileName),
                   ns,
                   ValidGlobalName(name),
                   ParsedGlobalAccessModifier(accessModifier)
                 )
-              )) =>
+              ) =>
                 Some(FuncDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
 
-              case _ =>
+              case ArgonModule.FunctionDescriptor.UnknownUnionField(_) =>
                 None
             }
 
           private def parseMemberName(memberName: ArgonModule.MemberName): Option[MemberName] =
             memberName match {
 
-              case ArgonModule.MemberName(ArgonModule.MemberName.MemberNameType.Empty) => None
+              case ArgonModule.MemberName.UnknownUnionField(_) => None
 
-              case ArgonModule.MemberName(ArgonModule.MemberName.MemberNameType.Name(name)) =>
+              case ArgonModule.MemberName.Name(name) =>
                 Some(MemberName.Normal(name))
 
-              case ArgonModule.MemberName(ArgonModule.MemberName.MemberNameType.UnnamedMemberIndex(index)) =>
+              case ArgonModule.MemberName.UnnamedMemberIndex(index) =>
                 Some(MemberName.Unnamed(index))
 
-              case ArgonModule.MemberName(ArgonModule.MemberName.MemberNameType.SpecialMemberName(ArgonModule.SpecialMemberName.Unrecognized(_))) => None
+              case ArgonModule.MemberName.SpecialMemberName(ArgonModule.SpecialMemberName.EnumUnknownSpecialMemberName(_)) => None
 
-              case ArgonModule.MemberName(ArgonModule.MemberName.MemberNameType.SpecialMemberName(ArgonModule.SpecialMemberName.Call)) =>
+              case ArgonModule.MemberName.SpecialMemberName(ArgonModule.SpecialMemberName.Call) =>
                 Some(MemberName.Call)
 
-              case ArgonModule.MemberName(ArgonModule.MemberName.MemberNameType.SpecialMemberName(ArgonModule.SpecialMemberName.New)) =>
+              case ArgonModule.MemberName.SpecialMemberName(ArgonModule.SpecialMemberName.New) =>
                 Some(MemberName.New)
 
             }
 
-          private def parseMethodDescriptor(module: ModuleDescriptor)(desc: Option[ArgonModule.MethodDescriptor]): Option[MethodDescriptor] =
-            desc.flatMap {
-              case ArgonModule.MethodDescriptor(Some(memberName), ParsedGlobalAccessModifier(accessModifier), Some(ArgonModule.ClassLikeDescriptor(ownerDesc))) =>
+          private def parseMethodDescriptor(module: ModuleDescriptor)(desc: ArgonModule.MethodDescriptor): Option[MethodDescriptor] =
+            desc match {
+              case ArgonModule.MethodDescriptor(memberName, ParsedGlobalAccessModifier(accessModifier), ownerDesc) =>
                 for {
                   memberNameValue <- parseMemberName(memberName)
                   ownerDescValue <- ownerDesc match {
-                    case ArgonModule.ClassLikeDescriptor.ClassLikeDescriptorValue.Empty => None
-                    case ArgonModule.ClassLikeDescriptor.ClassLikeDescriptorValue.TraitDescriptor(traitDesc) => parseTraitDescriptor(module)(Some(traitDesc))
-                    case ArgonModule.ClassLikeDescriptor.ClassLikeDescriptorValue.ClassDescriptor(classDesc) => parseClassDescriptor(module)(Some(classDesc))
+                    case ArgonModule.ClassLikeDescriptor.UnknownUnionField(_) => None
+                    case ArgonModule.ClassLikeDescriptor.TraitDescriptor(traitDesc) => parseTraitDescriptor(module)(traitDesc)
+                    case ArgonModule.ClassLikeDescriptor.ClassDescriptor(classDesc) => parseClassDescriptor(module)(classDesc)
                   }
                 } yield MethodDescriptor(ownerDescValue, memberNameValue, accessModifier)
-
-              case _ =>
-                None
             }
 
           private trait ModuleObjectRefDef[TValue, TRef, TDef] {
@@ -284,25 +279,25 @@ object ArgonModuleLoader extends ModuleLoader {
           private def handleModuleObjectLoading
           [TValue, TRef, TDef, TValueDescriptor, TResultDescriptor, TRefResult, TDefResult]
           (
-            valueLens: Lens[ArgonModule.Module, Vector[TValue]]
+            valueLens: ArgonModule.Module => QSeq[TValue]
           )(
             refDef: ModuleObjectRefDef[TValue, TRef, TDef]
           )(
-            refModuleIdLens: Lens[TRef, Int],
-            refDescriptorLens: Lens[TRef, TValueDescriptor],
-            defDescriptorLens: Lens[TDef, TValueDescriptor]
+            refModuleIdLens: TRef => Int,
+            refDescriptorLens: TRef => TValueDescriptor,
+            defDescriptorLens: TDef => TValueDescriptor,
           )(
             parseDescriptor: ModuleDescriptor => TValueDescriptor => Option[TResultDescriptor]
           )(
             referenceHandler: ArModule[context.type] => TResultDescriptor => Comp[Option[TRefResult]],
             definitionHandler: Int => TDef => TResultDescriptor => TDefResult
           ): Comp[Map[Int, ModuleObjectLoadResult[TRefResult, TDefResult]]] =
-            valueLens.get(pbModule).zipWithIndex.traverse { case (moduleObject, i) =>
+            valueLens(binModule).toVector.zipWithIndex.traverse { case (moduleObject, i) =>
               ((refDef.fromModuleObject(moduleObject) match {
                 case Some(-\/(refValue)) =>
-                  refModuleMap.get(refModuleIdLens.get(refValue)) match {
+                  refModuleMap.get(refModuleIdLens(refValue)) match {
                     case Some(ModuleReference(moduleRef)) =>
-                      parseDescriptor(moduleRef.descriptor)(refDescriptorLens.get(refValue)) match {
+                      parseDescriptor(moduleRef.descriptor)(refDescriptorLens(refValue)) match {
                         case Some(descriptor) =>
                           referenceHandler(moduleRef)(descriptor).map {
                             case Some(refResult) => ModuleObjectReference(refResult)
@@ -318,7 +313,7 @@ object ArgonModuleLoader extends ModuleLoader {
                   }
 
                 case Some(\/-(defValue)) =>
-                  parseDescriptor(desc)(defDescriptorLens.get(defValue)) match {
+                  parseDescriptor(desc)(defDescriptorLens(defValue)) match {
                     case Some(descriptor) =>
                       ModuleObjectDefinition(definitionHandler(i)(defValue)(descriptor)).point[Comp]
 
@@ -329,26 +324,26 @@ object ArgonModuleLoader extends ModuleLoader {
                 case None =>
                   ModuleObjectUndefined().point[Comp]
               }) : Comp[ModuleObjectLoadResult[TRefResult, TDefResult]])
-                  .map { i -> _ }
+                .map { i -> _ }
             }.map { elems => Map(elems: _*) }
 
 
           private lazy val traitMap: Comp[Map[Int, TraitLoadResult[context.type, TPayloadSpec]]] =
             handleModuleObjectLoading(
-              valueLens = lens[ArgonModule.Module] >> 'traits
+              valueLens = _.traits
             )(
               refDef = new ModuleObjectRefDef[ArgonModule.Trait, ArgonModule.TraitReference, ArgonModule.TraitDefinition] {
                 override def fromModuleObject(value: ArgonModule.Trait): Option[ArgonModule.TraitReference \/ ArgonModule.TraitDefinition] =
-                  value.traitValue match {
-                    case ArgonModule.Trait.TraitValue.TraitRef(traitRef) => Some(-\/(traitRef))
-                    case ArgonModule.Trait.TraitValue.TraitDef(traitDef) => Some(\/-(traitDef))
-                    case _ => None
+                  value match {
+                    case ArgonModule.Trait.TraitRef(traitRef) => Some(-\/(traitRef))
+                    case ArgonModule.Trait.TraitDef(traitDef) => Some(\/-(traitDef))
+                    case ArgonModule.Trait.UnknownUnionField(_) => None
                   }
               }
             )(
-              refModuleIdLens = lens[ArgonModule.TraitReference] >> 'moduleId,
-              refDescriptorLens = lens[ArgonModule.TraitReference] >> 'descriptor,
-              defDescriptorLens = lens[ArgonModule.TraitDefinition] >> 'descriptor,
+              refModuleIdLens = _.moduleId,
+              refDescriptorLens = _.descriptor,
+              defDescriptorLens = _.descriptor,
             )(
               parseDescriptor = parseTraitDescriptor
             )(
@@ -368,11 +363,11 @@ object ArgonModuleLoader extends ModuleLoader {
 
                 override lazy val signature: context.Comp[Signature[context.typeSystem.type, ArTrait.ResultInfo]] =
                   traitValue.signature match {
-                    case Some(ArgonModule.TraitSignature(parameters, baseTraits)) =>
+                    case ArgonModule.TraitSignature(parameters, baseTraits) =>
                       compEv(
                         for {
-                          baseTraitsResolved <- baseTraits.traverse(resolveTraitType(_))
-                          parametersResolved <- parameters.traverse(resolveParameter(_))
+                          baseTraitsResolved <- baseTraits.toVector.traverse(resolveTraitType(_))
+                          parametersResolved <- parameters.toVector.traverse(resolveParameter(_))
 
                           result = SignatureResult[context.typeSystem.type, ArTrait.ResultInfo](
                             ArTrait.ResultInfo(BaseTypeInfoTrait(baseTraitsResolved))
@@ -380,11 +375,6 @@ object ArgonModuleLoader extends ModuleLoader {
 
                         } yield parametersResolved.foldRight[Signature[context.typeSystem.type, ArTrait.ResultInfo]](result)(SignatureParameters[context.typeSystem.type, ArTrait.ResultInfo])
                       )
-
-                    case None =>
-                      context.compMonadInstance.point(SignatureResult[context.typeSystem.type, ArTrait.ResultInfo](
-                        ArTrait.ResultInfo(BaseTypeInfoTrait[TraitType[context.typeSystem.type]](Vector()))
-                      ))
                   }
 
                 override lazy val methods: context.Comp[Vector[ArMethodWithPayload[context.type, TPayloadSpec]]] =
@@ -402,16 +392,16 @@ object ArgonModuleLoader extends ModuleLoader {
 
                 override lazy val metaType: context.Comp[MetaClass[ArClassWithPayload[context.type, TPayloadSpec]]] =
                   traitValue.metaClassSpecifier match {
-                    case ArgonModule.TraitDefinition.MetaClassSpecifier.Empty =>
+                    case ArgonModule.MetaClassSpecifier.UnknownUnionField(_) =>
                       context.compCompilationInstance.forErrors(
                         MetaClassDirect(InvalidClass(context)),
                         CompilationError.MetaClassNotSpecified(CompilationError.ModuleObjectTrait, traitId, CompilationMessageSource.ReferencedModule(desc))
                       )
 
-                    case ArgonModule.TraitDefinition.MetaClassSpecifier.MetaClassId(metaClassId) =>
+                    case ArgonModule.MetaClassSpecifier.MetaClassId(metaClassId) =>
                       compEv(findClassDef(metaClassId).map(MetaClassDirect.apply))
 
-                    case ArgonModule.TraitDefinition.MetaClassSpecifier.MetaClassMetaClassSpecifier(_) =>
+                    case ArgonModule.MetaClassSpecifier.MetaClassMetaClassSpecifier(_) =>
                       context.compMonadInstance.point(MetaClassMetaClass())
                   }
 
@@ -421,20 +411,20 @@ object ArgonModuleLoader extends ModuleLoader {
 
           private lazy val classMap: Comp[Map[Int, ClassLoadResult[context.type, TPayloadSpec]]] =
             handleModuleObjectLoading(
-              valueLens = lens[ArgonModule.Module] >> 'classes
+              valueLens = _.classes
             )(
               refDef = new ModuleObjectRefDef[ArgonModule.Class, ArgonModule.ClassReference, ArgonModule.ClassDefinition] {
                 override def fromModuleObject(value: ArgonModule.Class): Option[ArgonModule.ClassReference \/ ArgonModule.ClassDefinition] =
-                  value.classValue match {
-                    case ArgonModule.Class.ClassValue.ClassRef(classRef) => Some(-\/(classRef))
-                    case ArgonModule.Class.ClassValue.ClassDef(classDef) => Some(\/-(classDef))
-                    case _ => None
+                  value match {
+                    case ArgonModule.Class.ClassRef(classRef) => Some(-\/(classRef))
+                    case ArgonModule.Class.ClassDef(classDef) => Some(\/-(classDef))
+                    case ArgonModule.Class.UnknownUnionField(_) => None
                   }
               }
             )(
-              refModuleIdLens = lens[ArgonModule.ClassReference] >> 'moduleId,
-              refDescriptorLens = lens[ArgonModule.ClassReference] >> 'descriptor,
-              defDescriptorLens = lens[ArgonModule.ClassDefinition] >> 'descriptor,
+              refModuleIdLens = _.moduleId,
+              refDescriptorLens = _.descriptor,
+              defDescriptorLens = _.descriptor,
             )(
               parseDescriptor = parseClassDescriptor
             )(
@@ -449,20 +439,20 @@ object ArgonModuleLoader extends ModuleLoader {
 
           private lazy val dataCtorMap: Comp[Map[Int, DataCtorLoadResult[context.type, TPayloadSpec]]] =
             handleModuleObjectLoading(
-              valueLens = lens[ArgonModule.Module] >> 'dataConstructors
+              valueLens = _.dataConstructors
             )(
               refDef = new ModuleObjectRefDef[ArgonModule.DataConstructor, ArgonModule.DataConstructorReference, ArgonModule.DataConstructorDefinition] {
                 override def fromModuleObject(value: ArgonModule.DataConstructor): Option[ArgonModule.DataConstructorReference \/ ArgonModule.DataConstructorDefinition] =
-                  value.dataConstructorValue match {
-                    case ArgonModule.DataConstructor.DataConstructorValue.DataCtorRef(dataCtorRef) => Some(-\/(dataCtorRef))
-                    case ArgonModule.DataConstructor.DataConstructorValue.DataCtorDef(dataCtorDef) => Some(\/-(dataCtorDef))
-                    case _ => None
+                  value match {
+                    case ArgonModule.DataConstructor.DataCtorRef(dataCtorRef) => Some(-\/(dataCtorRef))
+                    case ArgonModule.DataConstructor.DataCtorDef(dataCtorDef) => Some(\/-(dataCtorDef))
+                    case ArgonModule.DataConstructor.UnknownUnionField(_) => None
                   }
               }
             )(
-              refModuleIdLens = lens[ArgonModule.DataConstructorReference] >> 'moduleId,
-              refDescriptorLens = lens[ArgonModule.DataConstructorReference] >> 'descriptor,
-              defDescriptorLens = lens[ArgonModule.DataConstructorDefinition] >> 'descriptor,
+              refModuleIdLens = _.moduleId,
+              refDescriptorLens = _.descriptor,
+              defDescriptorLens = _.descriptor,
             )(
               parseDescriptor = parseDataCtorDescriptor
             )(
@@ -477,20 +467,20 @@ object ArgonModuleLoader extends ModuleLoader {
 
           private lazy val functionMap: Comp[Map[Int, FunctionLoadResult[context.type, TPayloadSpec]]] =
             handleModuleObjectLoading(
-              valueLens = lens[ArgonModule.Module] >> 'functions
+              valueLens = _.functions
             )(
               refDef = new ModuleObjectRefDef[ArgonModule.Function, ArgonModule.FunctionReference, ArgonModule.FunctionDefinition] {
                 override def fromModuleObject(value: ArgonModule.Function): Option[ArgonModule.FunctionReference \/ ArgonModule.FunctionDefinition] =
-                  value.functionType match {
-                    case ArgonModule.Function.FunctionType.FuncRef(funcRef) => Some(-\/(funcRef))
-                    case ArgonModule.Function.FunctionType.FuncDef(funcDef) => Some(\/-(funcDef))
-                    case _ => None
+                  value match {
+                    case ArgonModule.Function.FuncRef(funcRef) => Some(-\/(funcRef))
+                    case ArgonModule.Function.FuncDef(funcDef) => Some(\/-(funcDef))
+                    case ArgonModule.Function.UnknownUnionField(_) => None
                   }
               }
             )(
-              refModuleIdLens = lens[ArgonModule.FunctionReference] >> 'moduleId,
-              refDescriptorLens = lens[ArgonModule.FunctionReference] >> 'descriptor,
-              defDescriptorLens = lens[ArgonModule.FunctionDefinition] >> 'descriptor,
+              refModuleIdLens = _.moduleId,
+              refDescriptorLens = _.descriptor,
+              defDescriptorLens = _.descriptor,
             )(
               parseDescriptor = parseFunctionDescriptor
             )(
@@ -505,20 +495,20 @@ object ArgonModuleLoader extends ModuleLoader {
 
           private lazy val methodMap: Comp[Map[Int, MethodLoadResult[context.type, TPayloadSpec]]] =
             handleModuleObjectLoading(
-              valueLens = lens[ArgonModule.Module] >> 'methods
+              valueLens = _.methods
             )(
               refDef = new ModuleObjectRefDef[ArgonModule.Method, ArgonModule.MethodReference, ArgonModule.MethodDefinition] {
                 override def fromModuleObject(value: ArgonModule.Method): Option[ArgonModule.MethodReference \/ ArgonModule.MethodDefinition] =
-                  value.methodType match {
-                    case ArgonModule.Method.MethodType.MethodRef(methodRef) => Some(-\/(methodRef))
-                    case ArgonModule.Method.MethodType.MethodDef(methodDef) => Some(\/-(methodDef))
-                    case _ => None
+                  value match {
+                    case ArgonModule.Method.MethodRef(methodRef) => Some(-\/(methodRef))
+                    case ArgonModule.Method.MethodDef(methodDef) => Some(\/-(methodDef))
+                    case ArgonModule.Method.UnknownUnionField(_) => None
                   }
               }
             )(
-              refModuleIdLens = lens[ArgonModule.MethodReference] >> 'moduleId,
-              refDescriptorLens = lens[ArgonModule.MethodReference] >> 'descriptor,
-              defDescriptorLens = lens[ArgonModule.MethodDefinition] >> 'descriptor,
+              refModuleIdLens = _.moduleId,
+              refDescriptorLens = _.descriptor,
+              defDescriptorLens = _.descriptor,
             )(
               parseDescriptor = parseMethodDescriptor
             )(
@@ -714,6 +704,7 @@ object ArgonModuleLoader extends ModuleLoader {
         }.module
 
       } yield module
+    }
 
     impl[context.Comp](context.compMonadInstance, context.compCompilationInstance, LeibnizK.refl)
   }

@@ -1,7 +1,7 @@
 
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.12.4",
+  scalaVersion := "2.12.6",
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
@@ -21,9 +21,6 @@ lazy val commonSettings = Seq(
     "com.fommil" %% "deriving-macro" % "0.9.0",
     "com.fommil" %% "scalaz-deriving" % "0.9.0",
     "org.json4s" %% "json4s-native" % "3.5.4",
-    
-    "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
-    "com.thesamet.scalapb" %% "scalapb-json4s" % scalapb.compiler.Version.scalapbVersion,
 
     "org.apache.thrift" % "libthrift" % "0.11.0",
     "com.twitter" %% "scrooge-core" % "18.7.0" exclude("com.twitter", "libthrift"),
@@ -78,6 +75,8 @@ lazy val compilerOptions = Seq(
   scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xlint")),
   scalacOptions in (Test, console) ~= (_ filterNot (opt => opt == "-Xlint")),
 )
+
+val generateLibs = taskKey[Unit]("Generate argon library definitions")
 
 lazy val cli = project.in(file("argon-cli"))
   .dependsOn(argon_build)
@@ -157,9 +156,18 @@ lazy val modulefmt = project.in(file("argon-modulefmt"))
       "-language:implicitConversions",
     ),
 
-    PB.targets in Compile := Seq(
-      scalapb.gen() -> (sourceManaged in Compile).value / "protobuf"
-    ),
-
     scroogeBuildOptions := Seq(),
   )
+
+lazy val library_gen = project.in(file("argon-library-gen"))
+  .dependsOn(modulefmt)
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    libraryDependencies += "com.lihaoyi" % "ammonite" % "1.1.2" cross CrossVersion.full,
+
+    name := "argon-library-gen",
+  )
+
+

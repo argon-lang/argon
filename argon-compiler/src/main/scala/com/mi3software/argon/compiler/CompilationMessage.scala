@@ -6,7 +6,7 @@ import java.nio.charset.Charset
 import com.mi3software.argon.parser
 import com.mi3software.argon.parser._
 import com.mi3software.argon.util._
-import com.mi3software.argon.module.ArgonModule
+import com.mi3software.argon.module
 
 sealed trait CompilationMessage {
   val source: CompilationMessageSource
@@ -215,7 +215,7 @@ object CompilationError {
     override def message: String = s"Unsupported module format version $version"
   }
 
-  final case class ReferencedModuleNotFound(ref: ArgonModule.ModuleReference, source: CompilationMessageSource) extends CompilationError {
+  final case class ReferencedModuleNotFound(ref: module.ModuleReference, source: CompilationMessageSource) extends CompilationError {
     override def message: String = s"Could not find referenced module '${ref.name}'"
   }
 

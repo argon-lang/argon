@@ -3,7 +3,7 @@ package com.mi3software.argon.compiler
 import scalaz.Equal
 
 sealed trait AccessModifier
-sealed trait AccessModifierGlobal <: AccessModifier
+sealed trait AccessModifierGlobal extends AccessModifier
 
 
 object AccessModifier {
