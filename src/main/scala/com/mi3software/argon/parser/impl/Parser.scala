@@ -422,11 +422,11 @@ final class Parser {
         FunctionParameter(paramType, subTypeOf, name)
     }
 
-  private val ruleMethodParameterList: TGrammar[Vector[FunctionParameter]] =
+  private val ruleMethodParameterList: TGrammar[Vector[WithSource[FunctionParameter]]] =
     ((
-      ruleMethodParameter ++
+      ruleMethodParameter.observeSource ++
         skipNewLines ++
-        ((matchToken(OP_COMMA) ++ ruleMethodParameter ++ skipNewLines --> { case (_, param, _) => param })*) ++
+        ((matchToken(OP_COMMA) ++ ruleMethodParameter.observeSource ++ skipNewLines --> { case (_, param, _) => param })*) ++
         (matchToken(OP_COMMA)?) --> {
         case (firstParam, _, restParams, _) =>
           firstParam +: restParams.toVector

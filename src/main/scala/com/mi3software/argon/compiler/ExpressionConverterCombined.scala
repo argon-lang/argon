@@ -11,15 +11,15 @@ trait ExpressionConverterCombined[TContext <: Context]
   override protected implicit val compMonadInstance: Monad[Comp] = context.compMonadInstance
   override protected implicit val compCompilationInstance: Compilation[Comp] = context.compCompilationInstance
 
-  trait ExprTypes extends ArExprTypes {
-    override type TS = HoleTypeSystem[context.type]
+  final class ExprTypes extends ArExprTypes {
+    override val typeSystem: HoleTypeSystem[context.type] = new HoleTypeSystem[context.type]()
     override type TExpr = ArExpr[ExprTypes]
     override type TFunction = ArFunc[context.type]
     override type TMethod = ArMethod[context.type]
     override type TClassConstructor = ClassConstructor[context.type]
   }
 
-  override type TExprTypes = ExprTypes
+  override val exprTypes: ExprTypes = new ExprTypes
 
   override type TScopeTypes = ScopeTypes with ({
     type TTrait = ArTrait[context.type]

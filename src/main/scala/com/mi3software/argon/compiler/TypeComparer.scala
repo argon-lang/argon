@@ -54,6 +54,7 @@ trait TypeComparer[TS <: TypeSystem] {
         isSubType(leftA, typeBaseToType(b)) || isSubType(rightA, typeBaseToType(b))
       case _ => false
     }) || ((a, b) match {
+      case (ErrorType(), _) | (_, ErrorType()) => false
       case (TraitType(aTrait), TraitType(bTrait)) => isSubTraitInfo(aTrait, bTrait)
       case (ClassType(aClass), ClassType(bClass)) => isSubClassInfo(aClass, bClass)
       case (TraitType(aTrait), ClassType(bClass)) => classImplementsTrait(bClass, aTrait)

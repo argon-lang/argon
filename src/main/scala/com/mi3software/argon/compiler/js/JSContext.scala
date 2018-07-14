@@ -13,6 +13,7 @@ final class JSContext extends ContextComp[StandardCompilation] {
   override val invalidClassMetadata: JSMetadata.Class = JSMetadata.Class.Invalid
 
 
+
   override type Comp[+T] = StandardCompilation[T]
 
   override val compMonadInstance: Monad[StandardCompilation] = StandardCompilation.monadInstance

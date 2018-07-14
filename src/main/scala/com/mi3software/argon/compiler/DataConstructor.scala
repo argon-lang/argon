@@ -23,7 +23,7 @@ sealed trait DataConstructor[TContext <: Context] {
 
 object DataConstructor {
 
-  final case class ResultInfo[TS <: TypeSystem](instanceType: TraitType[TS])
+  final case class ResultInfo[+TS <: TypeSystem](instanceType: TraitType[TS])
 
   implicit def equalInstance[TContext <: Context]: Equal[DataConstructor[TContext]] =
     (a, b) => a.descriptor === b.descriptor

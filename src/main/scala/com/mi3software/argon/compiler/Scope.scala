@@ -22,6 +22,9 @@ object ScopeHelpers {
     final def addVariable(variable: Types#TVariable): Scope[Types] =
       ???
 
+    final def addVariables(variables: Vector[Types#TVariable]): Scope[Types] =
+      variables.foldLeft(scope) { (scope, variable) => scope.addVariable(variable) }
+
   }
 }
 

@@ -20,7 +20,7 @@ sealed trait ClassConstructor[TContext <: Context] {
 
 object ClassConstructor {
 
-  final case class ResultInfo[TS <: TypeSystem]()
+  final case class ResultInfo[+TS <: TypeSystem]()
 
 }
 

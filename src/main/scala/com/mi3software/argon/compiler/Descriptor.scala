@@ -25,6 +25,9 @@ object Descriptor {
     case (a: ParameterDescriptor, b: ParameterDescriptor) => a === b
     case (_: ParameterDescriptor, _) | (_, _: ParameterDescriptor) => false
 
+    case (a: DeconstructedParameterDescriptor, b: DeconstructedParameterDescriptor) => a === b
+    case (_: DeconstructedParameterDescriptor, _) | (_, _: DeconstructedParameterDescriptor) => false
+
     case (a: VariableDescriptor, b: VariableDescriptor) => a === b
   }
 
@@ -132,6 +135,9 @@ sealed trait VariableLikeDescriptor extends Descriptor
 
 @deriving(Equal)
 final case class ParameterDescriptor(owner: ParameterOwnerDescriptor, index: Int) extends VariableLikeDescriptor
+
+@deriving(Equal)
+final case class DeconstructedParameterDescriptor(owner: ParameterOwnerDescriptor, index: Int, tupleIndex: Int) extends VariableLikeDescriptor
 
 @deriving(Equal)
 final case class VariableDescriptor(owner: VariableOwnerDescriptor, index: Int) extends VariableLikeDescriptor

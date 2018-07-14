@@ -33,6 +33,10 @@ object ExpressionConverterConv {
 
   final case class ConvState(nextVariableId: Int)
 
+  object ConvState {
+    val Default = ConvState(0)
+  }
+
   private def monadInstance[F[_] : Monad]: Monad[StateT[F, ConvState, ?]] = implicitly[Monad[StateT[F, ConvState, ?]]]
 
 }

@@ -7,4 +7,6 @@ final class SignatureTypeSystem[TContext <: Context] extends TypeSystem {
   override type TClassInfo = ArClass[TContext]
   override type TDataConstructorInfo = DataConstructor[TContext]
 
+  override def fromTypeBase(typeBase: TypeBase[SignatureTypeSystem.this.type]): TypeBase[SignatureTypeSystem.this.type] = typeBase
+
 }

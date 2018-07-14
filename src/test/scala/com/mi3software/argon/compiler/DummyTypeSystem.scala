@@ -24,6 +24,9 @@ final class DummyTypeSystem extends TypeSystem {
   override type TClassInfo = DummyClass
   override type TDataConstructorInfo = DummyDataCtor
 
+
+  override def fromTypeBase(typeBase: TypeBase[DummyTypeSystem.this.type]): TypeBase[DummyTypeSystem.this.type] = typeBase
+
   val comparer: TypeComparer[this.type] = new TypeComparer[this.type] {
     override def isSubTraitInfo(a: DummyTrait, b: DummyTrait): Boolean =
       a.baseTraits contains b.id

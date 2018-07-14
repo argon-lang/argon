@@ -4,6 +4,8 @@ trait TypeSystem {
 
   type TType
 
+  def fromTypeBase(typeBase: TypeBase[this.type]): TType
+
   type TTraitInfo
   type TClassInfo
   type TDataConstructorInfo
@@ -11,15 +13,16 @@ trait TypeSystem {
 }
 
 
-sealed trait TypeBase[TS <: TypeSystem]
-final case class TraitType[TS <: TypeSystem](traitInfo: TS#TTraitInfo) extends TypeBase[TS]
-final case class ClassType[TS <: TypeSystem](classInfo: TS#TClassInfo) extends TypeBase[TS]
-final case class DataConstructorType[TS <: TypeSystem](ctor: TS#TDataConstructorInfo) extends TypeBase[TS]
+sealed trait TypeBase[+TS <: TypeSystem]
+final case class ErrorType[+TS <: TypeSystem]() extends TypeBase[TS]
+final case class TraitType[+TS <: TypeSystem](traitInfo: TS#TTraitInfo) extends TypeBase[TS]
+final case class ClassType[+TS <: TypeSystem](classInfo: TS#TClassInfo) extends TypeBase[TS]
+final case class DataConstructorType[+TS <: TypeSystem](ctor: TS#TDataConstructorInfo) extends TypeBase[TS]
 
-final case class MetaType[TS <: TypeSystem](innerType: TS#TType, baseType: TS#TType) extends TypeBase[TS]
+final case class MetaType[+TS <: TypeSystem](innerType: TS#TType, baseType: TS#TType) extends TypeBase[TS]
 
-final case class TupleTypeElement[TS <: TypeSystem](elementType: TS#TType)
-final case class TupleType[TS <: TypeSystem](elements: Vector[TupleTypeElement[TS]]) extends TypeBase[TS]
-final case class FunctionType[TS <: TypeSystem](argumentType: TS#TType, resultType: TS#TType) extends TypeBase[TS]
-final case class UnionType[TS <: TypeSystem](a: TS#TType, b: TS#TType) extends TypeBase[TS]
-final case class IntersectionType[TS <: TypeSystem](a: TS#TType, b: TS#TType) extends TypeBase[TS]
+final case class TupleTypeElement[+TS <: TypeSystem](elementType: TS#TType)
+final case class TupleType[+TS <: TypeSystem](elements: Vector[TupleTypeElement[TS]]) extends TypeBase[TS]
+final case class FunctionType[+TS <: TypeSystem](argumentType: TS#TType, resultType: TS#TType) extends TypeBase[TS]
+final case class UnionType[+TS <: TypeSystem](a: TS#TType, b: TS#TType) extends TypeBase[TS]
+final case class IntersectionType[+TS <: TypeSystem](a: TS#TType, b: TS#TType) extends TypeBase[TS]

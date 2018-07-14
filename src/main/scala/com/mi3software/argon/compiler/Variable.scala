@@ -6,5 +6,5 @@ object VariableName {
   case object Unnamed extends VariableName
 }
 
-final case class Variable[TS <: TypeSystem, +Desc <: VariableLikeDescriptor](descriptor: Desc, name: VariableName, mutability: Mutability, varType: TS#TType)
+final case class Variable[+TS <: TypeSystem, +Desc <: VariableLikeDescriptor](descriptor: Desc, name: VariableName, mutability: Mutability, varType: TS#TType)
 

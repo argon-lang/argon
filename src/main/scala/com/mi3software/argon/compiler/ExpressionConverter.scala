@@ -15,13 +15,24 @@ trait ExpressionConverter {
 
   protected def nextVariableId: Conv[Int]
 
-  type TExprTypes <: ArExprTypes
-  type TS = TExprTypes#TS
+  val context: Context
+
+  val exprTypes: ArExprTypes with ({
+    type TFunction = ArFunc[context.type]
+    type TMethod = ArMethod[context.type]
+    type TClassConstructor = ClassConstructor[context.type]
+  })
+  type TS = exprTypes.TS
 
   type TScopeTypes <: ScopeTypes with ({
-    type TFunc = TExprTypes#TFunction
+    type TTrait = ArTrait[context.type]
+    type TClass = ArClass[context.type]
+    type TDataConstructor = DataConstructor[context.type]
+    type TFunc = ArFunc[context.type]
     type TVariable = Variable[TS, VariableLikeDescriptor]
   })
+
+  protected val contextTypeSystemConverter: TypeSystemConverter[context.typeSystem.type, TS]
 
   val typeComparer: TypeComparer[TS]
 
@@ -35,14 +46,14 @@ trait ExpressionConverter {
   protected sealed case class ArgumentInfo(argFactory: ExprFactory, location: SourceLocation)
 
   protected trait ExprFactory {
-    def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr]
+    def withExpectedType(expectedType: TS#TType): Conv[exprTypes.TExpr]
     def accessMember(memberName: MemberName, location: SourceLocation): ExprFactory = ???
     def forArguments(argInfo: ArgumentInfo): ExprFactory = ???
   }
 
-  protected def exprFactory(f: TS#TType => Conv[TExprTypes#TExpr]): ExprFactory
+  protected def exprFactory(f: TS#TType => Conv[exprTypes.TExpr]): ExprFactory
 
-  protected def wrapExpr(expr: ArExpr[TExprTypes]): TExprTypes#TExpr
+  protected def wrapExpr(expr: ArExpr[exprTypes.type]): exprTypes.TExpr
 
   def convertStatements(env: Env, stmts: WithSource[Vector[WithSource[Stmt]]]): ExprFactory = stmts.value match {
     case Vector() =>
@@ -63,7 +74,7 @@ trait ExpressionConverter {
           valueExpr <- convertExpression(env, value).withExpectedType(varType)
           varTypeResolved <- resolveType(varType)
 
-          variable = Variable(
+          variable = Variable[exprTypes.typeSystem.type, VariableDescriptor](
             VariableDescriptor(env.owner, varId),
             name.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
             Mutability.fromIsMutable(isMutable),
@@ -132,7 +143,7 @@ trait ExpressionConverter {
         for {
           argType <- convertTypeExpression(env)(argTypeExpr)
           resultType <- convertTypeExpression(env)(resultTypeExpr)
-        } yield wrapExpr(LoadTypeValue[TExprTypes](typeComparer.typeBaseToType(FunctionType[TS](argType, resultType))))
+        } yield wrapExpr(LoadTypeValue[exprTypes.type](typeComparer.typeBaseToType(FunctionType[TS](argType, resultType))))
       )
 
     case LambdaExpr(name, body) => ???
@@ -158,15 +169,15 @@ trait ExpressionConverter {
 
   def convertTypeExpression(env: Env)(expr: WithSource[Expr]): Conv[TS#TType]
 
-  protected def convertExpressionToType(expr: TExprTypes#TExpr): Conv[TS#TType]
+  protected def convertExpressionToType(expr: exprTypes.TExpr): Conv[TS#TType]
 
 
 
-  protected def fromFixedType(env: Env, location: SourceLocation)(expr: TExprTypes#TExpr): ExprFactory
-  protected def fromFixedTypeConv(env: Env, location: SourceLocation)(expr: Conv[TExprTypes#TExpr]): ExprFactory
+  protected def fromFixedType(env: Env, location: SourceLocation)(expr: exprTypes.TExpr): ExprFactory
+  protected def fromFixedTypeConv(env: Env, location: SourceLocation)(expr: Conv[exprTypes.TExpr]): ExprFactory
   protected def fromErrors(errors: CompilationMessage*): ExprFactory =
     new ExprFactory {
-      override def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr] =
+      override def withExpectedType(expectedType: TS#TType): Conv[exprTypes.TExpr] =
         compilationInstance.forErrors(wrapExpr(InvalidExpression()), errors: _*)
     }
 
@@ -174,7 +185,7 @@ trait ExpressionConverter {
 
   private abstract class LookupExprFactory[T](description: LookupDescription, env: Env, location: SourceLocation)(lookup: Lookup[T], cmp: LookupComparer[T]) extends ExprFactory {
 
-    final override def withExpectedType(expectedType: TS#TType): Conv[TExprTypes#TExpr] =
+    final override def withExpectedType(expectedType: TS#TType): Conv[exprTypes.TExpr] =
       (lookup.resolve(cmp) match {
         case LookupResult.Failure(_) =>
           fromErrors(CompilationError.LookupFailedError(description, CompilationMessageSource.SourceFile(env.fileSpec, location)))
@@ -216,12 +227,53 @@ trait ExpressionConverter {
           functionExprFactory(env, location)(func)
 
         case VariableScopeValue(variable) =>
-          fromFixedType(env, location)(wrapExpr(LoadVariable[TExprTypes](variable)))
+          fromFixedType(env, location)(wrapExpr(LoadVariable[exprTypes.type](variable)))
       }
 
   }
 
-  protected def functionExprFactory(env: Env, location: SourceLocation)(func: TExprTypes#TFunction): ExprFactory
+  protected final def functionExprFactory(env: Env, location: SourceLocation)(func: exprTypes.TFunction): ExprFactory = {
+    final class FunctionExprFactory(env: Env, location: SourceLocation)(func: exprTypes.TFunction, args: Vector[exprTypes.TExpr], signature: Signature[TS, FunctionResultInfo]) extends ExprFactory {
+
+
+      override def forArguments(argInfo: ArgumentInfo): ExprFactory =
+        signature match {
+          case parameters: SignatureParameters[TS, FunctionResultInfo] =>
+            fromConv(
+              argInfo.argFactory.withExpectedType(Parameter.paramType(exprTypes.typeSystem)(parameters.parameter)).flatMap { param =>
+                convertExpressionToType(param)
+                  .flatMap { paramAsType =>
+                    parameters.next(paramAsType)
+                  }
+                  .map { sigNext =>
+                    new FunctionExprFactory(env, argInfo.location)(func, args :+ param, sigNext)
+                  }
+              }
+            )
+
+          case result: SignatureResult[TS, FunctionResultInfo] =>
+            fromFixedType(env, location)(
+              wrapExpr(FunctionCall[exprTypes.type](func, args, result.result.returnType))
+            ).forArguments(argInfo)
+        }
+
+      override def withExpectedType(expectedType: TS#TType): Conv[exprTypes.TExpr] =
+        signature match {
+          case parameters: SignatureParameters[TS, FunctionResultInfo] =>
+            ???
+
+          case result: SignatureResult[TS, FunctionResultInfo] =>
+            fromFixedType(env, location)(
+              wrapExpr(FunctionCall[exprTypes.type](func, args, result.result.returnType))
+            ).withExpectedType(expectedType)
+        }
+    }
+
+    new FunctionExprFactory(env, location)(func, Vector(), func.signature.convertTypeSystem(contextTypeSystemConverter))
+  }
+
+
+
 }
 
 final case class ExpressionConvertEnvironment[Types <: ScopeTypes](owner: VariableOwnerDescriptor, scope: Scope[Types], fileSpec: FileSpec)

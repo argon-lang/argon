@@ -291,6 +291,10 @@ object CompilationError {
     override def message: String = s"The access modifier '${formatAccessModifier(accessModifier)}' is not valid on global declarations."
   }
 
+  final case class ParameterTypeAnnotationRequired(paramName: String, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Parameter '$paramName' is missing a type annotation."
+  }
+
   private def formatNamespace(namespacePath: NamespacePath): String =
     namespacePath.ns.mkString(".")
 

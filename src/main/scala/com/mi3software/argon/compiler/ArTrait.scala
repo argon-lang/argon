@@ -25,7 +25,7 @@ sealed trait ArTrait[TContext <: Context] {
 
 object ArTrait {
 
-  final case class ResultInfo[TS <: TypeSystem](baseTypes: BaseTypeInfoTrait[TraitType[TS]])
+  final case class ResultInfo[+TS <: TypeSystem](baseTypes: BaseTypeInfoTrait[TraitType[TS]])
 
   implicit def equalInstance[TContext <: Context]: Equal[ArTrait[TContext]] =
     (a, b) => a.descriptor === b.descriptor
