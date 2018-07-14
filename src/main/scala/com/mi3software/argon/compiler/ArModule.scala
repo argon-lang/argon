@@ -10,6 +10,7 @@ sealed trait ArModule[+TContext <: Context] {
 
   val descriptor: ModuleDescriptor
   val globalNamespace: Namespace[ScopeValue[ContextScopeTypes]]
+  val referencedModules: Vector[ArModule[context.type]]
 }
 
 

@@ -69,7 +69,7 @@ object BuildInfo {
         inputFiles <- getFileList(dir)(spec.inputFiles)
         inputFilesWithSpec <- fileListWithSpecs(dir)(inputFiles)
         outputFile <- getOutputFile(dir)(spec.outputFile)
-        references <- getFileList(dir)(spec.references)
+        references <- spec.references.toVector.traverseU(refFile => IO { new File(dir, refFile) }).liftM[OptionT]
 
       } yield BuildInfo(
         backend = backend,

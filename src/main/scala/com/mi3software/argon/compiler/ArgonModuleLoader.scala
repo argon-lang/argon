@@ -704,6 +704,10 @@ object ArgonModuleLoader extends ModuleLoader {
               override val context: context2.type = context2
               override val descriptor: ModuleDescriptor = desc
               override lazy val globalNamespace: Namespace[ScopeValue[CurrentScopeTypes]] = globalNamespaceCompValue
+              override val referencedModules: Vector[ArModule[context.type]] =
+                refModuleMap.values.collect {
+                  case ModuleReference(moduleRef) => moduleRef
+                }(collection.breakOut)
             }
 
         }.module

@@ -20,16 +20,17 @@ private[compiler] object SourceModuleCreator {
   private def createModuleWithRefs[TComp[+_] : Monad : Compilation]
   (context2: ContextComp[TComp])
   (input: CompilerInput)
-  (referencedModules: Vector[ArModuleWithPayload[context2.type, PayloadSpecifiers.ReferencePayloadSpecifier]])
+  (referencedModules2: Vector[ArModuleWithPayload[context2.type, PayloadSpecifiers.ReferencePayloadSpecifier]])
     : TComp[ArModuleWithPayload[context2.type, PayloadSpecifiers.ReferencePayloadSpecifier]] =
     for {
-      moduleElements <- input.source.traverseU { ast => createNamespaceElementFromAST[TComp](context2)(input.options)(referencedModules)(ast) }
+      moduleElements <- input.source.traverseU { ast => createNamespaceElementFromAST[TComp](context2)(input.options)(referencedModules2)(ast) }
 
     } yield new ArModuleWithPayload[context2.type, PayloadSpecifiers.ReferencePayloadSpecifier] {
       override val context: context2.type = context2
       override val descriptor: ModuleDescriptor = input.options.moduleDescriptor
       override val globalNamespace: Namespace[ScopeValue[context.ContextScopeTypes]] =
         NamespaceBuilder.createNamespace(moduleElements)
+      override val referencedModules: Vector[ArModule[context2.type]] = referencedModules2
     }
 
 
