@@ -95,12 +95,24 @@ object ClassDescriptor {
   @deriving(Equal)
   final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends Valid
 
+  @deriving(Equal)
+  final case class MetaClass(ownerClass: ClassDescriptor) extends Valid
+
+  @deriving(Equal)
+  final case class TraitMetaClass(ownerTrait: TraitDescriptor) extends Valid
+
   implicit val equalInstance: Equal[ClassDescriptor] = {
 
     case (Invalid, Invalid) => true
     case (Invalid, _) | (_, Invalid) => false
 
     case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
+    case (InNamespace(_, _, _, _), _) | (_, InNamespace(_, _, _, _)) => false
+
+    case (a @ MetaClass(_), b @ MetaClass(_)) => a === b
+    case (MetaClass(_), _) | (_, MetaClass(_)) => false
+
+    case (a @ TraitMetaClass(_), b @ TraitMetaClass(_)) => a === b
   }
 }
 

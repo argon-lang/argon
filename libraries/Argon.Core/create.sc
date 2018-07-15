@@ -70,7 +70,7 @@ val module = Module(
         baseTraits = Seq(),
       ),
 
-      metaClassSpecifier = MetaClassSpecifier.MetaClassId(Object_metaClassId)
+      metaClassSpecifier = MetaClassSpecifier(Object_metaClassId)
     )),
   ),
 
@@ -86,7 +86,7 @@ val module = Module(
         baseClass = Some(ClassType(Trait_classId, Seq())),
         baseTraits = Seq(),
       ),
-      metaClassSpecifier = MetaClassSpecifier.MetaClassId(MetaClass_classId)
+      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
     )),
 
     // Ar.Type
@@ -100,7 +100,7 @@ val module = Module(
         baseClass = None,
         baseTraits = Seq(TraitType(Object_traitId, Seq())),
       ),
-      metaClassSpecifier = MetaClassSpecifier.MetaClassId(Type_metaClassId)
+      metaClassSpecifier = MetaClassSpecifier(Type_metaClassId)
     )),
 
     // Ar.Type.<MetaClass>
@@ -114,7 +114,7 @@ val module = Module(
         baseClass = Some(ClassType(Class_classId, Seq())),
         baseTraits = Seq(),
       ),
-      metaClassSpecifier = MetaClassSpecifier.MetaClassId(MetaClass_classId)
+      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
     )),
 
     // Ar.MetaClass
@@ -128,7 +128,7 @@ val module = Module(
         baseClass = Some(ClassType(Class_classId, Seq())),
         baseTraits = Seq(TraitType(Object_traitId, Seq())),
       ),
-      metaClassSpecifier = MetaClassSpecifier.MetaClassId(MetaClass_classId)
+      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
     )),
 
     // Ar.Trait
@@ -142,7 +142,7 @@ val module = Module(
         baseClass = Some(ClassType(Type_classId, Seq())),
         baseTraits = Seq(TraitType(Object_traitId, Seq())),
       ),
-      metaClassSpecifier = MetaClassSpecifier.MetaClassId(Trait_metaClassId)
+      metaClassSpecifier = MetaClassSpecifier(Trait_metaClassId)
     )),
 
     // Ar.Trait.<MetaClass>
@@ -156,7 +156,7 @@ val module = Module(
         baseClass = Some(ClassType(Class_classId, Seq())),
         baseTraits = Seq(),
       ),
-      metaClassSpecifier = MetaClassSpecifier.MetaClassId(MetaClass_classId)
+      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
     )),
 
     // Ar.Class
@@ -170,7 +170,7 @@ val module = Module(
         baseClass = Some(ClassType(Type_classId, Seq())),
         baseTraits = Seq(TraitType(Object_traitId, Seq())),
       ),
-      metaClassSpecifier = MetaClassSpecifier.MetaClassId(Class_metaClassId)
+      metaClassSpecifier = MetaClassSpecifier(Class_metaClassId)
     )),
 
     // Ar.Class.<MetaClass>
@@ -184,7 +184,7 @@ val module = Module(
         baseClass = Some(ClassType(Class_classId, Seq())),
         baseTraits = Seq(),
       ),
-      metaClassSpecifier = MetaClassSpecifier.MetaClassId(MetaClass_classId)
+      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
     )),
 
   ),

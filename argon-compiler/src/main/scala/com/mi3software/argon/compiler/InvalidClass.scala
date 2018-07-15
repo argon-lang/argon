@@ -29,7 +29,7 @@ object InvalidClass {
       context.compMonadInstance.point(Vector.empty)
 
       override val metaType: context.Comp[MetaClass[ArClassWithPayload[context.type, TPayloadSpec]]] =
-      context.compMonadInstance.point(MetaClassMetaClass())
+      context.compMonadInstance.point(MetaClass(this))
 
       override val payload: TPayloadSpec[Unit, context.TClassMetadata] =
       implicitly[InvalidClass.InvalidClassPayload[TPayloadSpec]].value(context)

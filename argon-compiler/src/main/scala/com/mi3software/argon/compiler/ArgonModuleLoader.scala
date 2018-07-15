@@ -195,12 +195,12 @@ object ArgonModuleLoader extends ModuleLoader {
               case ArgonModule.ClassDescriptor.MetaClass(
                 ArgonModule.ClassDescriptorMetaClass(ownerClassDescriptor)
               ) =>
-                ???
+                parseClassDescriptor(module)(ownerClassDescriptor).map(ClassDescriptor.MetaClass.apply)
 
               case ArgonModule.ClassDescriptor.TraitMetaClass(
                 ArgonModule.ClassDescriptorTraitMetaClass(ownerTraitDescriptor)
               ) =>
-                ???
+                parseTraitDescriptor(module)(ownerTraitDescriptor).map(ClassDescriptor.TraitMetaClass.apply)
 
               case ArgonModule.ClassDescriptor.UnknownUnionField(_) =>
                 None
@@ -327,6 +327,13 @@ object ArgonModuleLoader extends ModuleLoader {
                 .map { i -> _ }
             }.map { elems => Map(elems: _*) }
 
+          private def lookupTrait(module: ArModule[context.type]): TraitDescriptor => Comp[Option[ArTrait[context.type]]] = {
+            case TraitDescriptor.Invalid => (None : Option[ArTrait[context.type]]).point[Comp]
+            case TraitDescriptor.InNamespace(_, namespace, name, _) =>
+              lookupNamespaceValue(module)(namespace, name) {
+                case TraitScopeValue(arTrait) => arTrait
+              }.point[Comp]
+          }
 
           private lazy val traitMap: Comp[Map[Int, TraitLoadResult[context.type, TPayloadSpec]]] =
             handleModuleObjectLoading(
@@ -347,12 +354,7 @@ object ArgonModuleLoader extends ModuleLoader {
             )(
               parseDescriptor = parseTraitDescriptor
             )(
-              referenceHandler = moduleRef => {
-                case TraitDescriptor.InNamespace(_, namespace, name, _) =>
-                  lookupNamespaceValue(moduleRef)(namespace, name) {
-                    case TraitScopeValue(arTrait) => arTrait
-                  }.point[Comp]
-              },
+              referenceHandler = lookupTrait(_),
               definitionHandler = traitId => traitValue => traitDescriptor => new ArTraitWithPayload[context.type, TPayloadSpec] {
                 override val context: context2.type = context2
                 override val contextProof: Leibniz[context.type, context.type, context.type, context.type] = Leibniz.refl
@@ -391,23 +393,32 @@ object ArgonModuleLoader extends ModuleLoader {
                   )
 
                 override lazy val metaType: context.Comp[MetaClass[ArClassWithPayload[context.type, TPayloadSpec]]] =
-                  traitValue.metaClassSpecifier match {
-                    case ArgonModule.MetaClassSpecifier.UnknownUnionField(_) =>
-                      context.compCompilationInstance.forErrors(
-                        MetaClassDirect(InvalidClass(context)),
-                        CompilationError.MetaClassNotSpecified(CompilationError.ModuleObjectTrait, traitId, CompilationMessageSource.ReferencedModule(desc))
-                      )
-
-                    case ArgonModule.MetaClassSpecifier.MetaClassId(metaClassId) =>
-                      compEv(findClassDef(metaClassId).map(MetaClassDirect.apply))
-
-                    case ArgonModule.MetaClassSpecifier.MetaClassMetaClassSpecifier(_) =>
-                      context.compMonadInstance.point(MetaClassMetaClass())
-                  }
+                  compEv(findClassDef(traitValue.metaClassSpecifier.metaClassId).map(MetaClass.apply))
 
                 override lazy val payload: TPayloadSpec[Unit, context.TTraitMetadata] = payloadLoader.createTraitPayload(context)
               }
             )
+
+          private def lookupClass(module: ArModule[context.type]): ClassDescriptor => Comp[Option[ArClass[context.type]]] = {
+            case ClassDescriptor.Invalid => None.point[Comp]
+
+            case ClassDescriptor.InNamespace(_, namespace, name, _) =>
+              lookupNamespaceValue(module)(namespace, name) {
+                case ClassScopeValue(arClass) => arClass
+              }.point[Comp]
+
+            case ClassDescriptor.MetaClass(ownerClass) =>
+              lookupClass(module)(ownerClass)
+                .flatMap { _.traverse[Comp, ArClass[context.type]] { resolvedOwner =>
+                  compEv.flip(resolvedOwner.metaType).map { _.metaClass }
+                } }
+
+            case ClassDescriptor.TraitMetaClass(ownerTrait) =>
+              lookupTrait(module)(ownerTrait)
+                .flatMap { _.traverse[Comp, ArClass[context.type]] { resolvedOwner =>
+                  compEv.flip(resolvedOwner.metaType).map { _.metaClass }
+                } }
+          }
 
           private lazy val classMap: Comp[Map[Int, ClassLoadResult[context.type, TPayloadSpec]]] =
             handleModuleObjectLoading(
@@ -428,12 +439,7 @@ object ArgonModuleLoader extends ModuleLoader {
             )(
               parseDescriptor = parseClassDescriptor
             )(
-              referenceHandler = moduleRef => {
-                case ClassDescriptor.InNamespace(_, namespace, name, _) =>
-                  lookupNamespaceValue(moduleRef)(namespace, name) {
-                    case ClassScopeValue(arClass) => arClass
-                  }.point[Comp]
-              },
+              referenceHandler = lookupClass(_),
               definitionHandler = _ => ???
             )
 
@@ -516,24 +522,24 @@ object ArgonModuleLoader extends ModuleLoader {
                 case MethodDescriptor(TraitDescriptor.Invalid | ClassDescriptor.Invalid, _, _) =>
                   None.point[Comp]
 
-                case methodDesc @ MethodDescriptor(TraitDescriptor.InNamespace(_, namespace, name, _), _, _) =>
-                  lookupNamespaceValue(moduleRef)(namespace, name) {
-                    case TraitScopeValue(arTrait) => arTrait
-                  }.traverseM[Comp, ArMethod[context.type]] { arTrait =>
-                    compEv.flip(arTrait.methods).map { methods =>
-                      methods.find { method =>
-                        method.descriptor === methodDesc
+                case methodDesc @ MethodDescriptor(traitDescriptor: TraitDescriptor, _, _) =>
+                  lookupTrait(moduleRef)(traitDescriptor).flatMap { arClassOpt =>
+                    arClassOpt.traverseM[Comp, ArMethod[context.type]] { arClass =>
+                      compEv.flip(arClass.methods).map { methods =>
+                        methods.find { method =>
+                          method.descriptor === methodDesc
+                        }
                       }
                     }
                   }
 
-                case methodDesc @ MethodDescriptor(ClassDescriptor.InNamespace(_, namespace, name, _), _, _) =>
-                  lookupNamespaceValue(moduleRef)(namespace, name) {
-                    case ClassScopeValue(arClass) => arClass
-                  }.traverseM[Comp, ArMethod[context.type]] { arClass =>
-                    compEv.flip(arClass.methods).map { methods =>
-                      methods.find { method =>
-                        method.descriptor === methodDesc
+                case methodDesc @ MethodDescriptor(classDescriptor : ClassDescriptor, _, _) =>
+                  lookupClass(moduleRef)(classDescriptor).flatMap { arClassOpt =>
+                    arClassOpt.traverseM[Comp, ArMethod[context.type]] { arClass =>
+                      compEv.flip(arClass.methods).map { methods =>
+                        methods.find { method =>
+                          method.descriptor === methodDesc
+                        }
                       }
                     }
                   }
@@ -596,6 +602,9 @@ object ArgonModuleLoader extends ModuleLoader {
 
                   case ClassDescriptor.InNamespace(_, namespace, name, accessModifier) =>
                     Some(ModuleElement(namespace, NamespaceBinding(name, accessModifier, ClassScopeValue[CurrentScopeTypes](arClass))))
+
+                  case ClassDescriptor.MetaClass(_) | ClassDescriptor.TraitMetaClass(_) =>
+                    None
                 }
               },
               createNamespaceElements(dataCtorMap)(CompilationError.ModuleObjectDataConstructor) { dataCtor =>

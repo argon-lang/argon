@@ -3,7 +3,7 @@ import scalaz.Leibniz
 
 object InvalidTrait {
 
-  def apply[TPayloadSpec[_, _] : InvalidTrait.InvalidTraitPayload]
+  def apply[TPayloadSpec[_, _] : InvalidTrait.InvalidTraitPayload : InvalidClass.InvalidClassPayload]
   (context2: Context)
   : ArTraitWithPayload[context2.type, TPayloadSpec] =
     new ArTraitWithPayload[context2.type, TPayloadSpec] {
@@ -24,7 +24,7 @@ object InvalidTrait {
         context.compMonadInstance.point(Vector.empty)
 
       override val metaType: context.Comp[MetaClass[ArClassWithPayload[context.type, TPayloadSpec]]] =
-        context.compMonadInstance.point(MetaClassMetaClass())
+        context.compMonadInstance.point(MetaClass(InvalidClass[TPayloadSpec](context)))
 
       override val payload: TPayloadSpec[Unit, context.TTraitMetadata] =
         implicitly[InvalidTrait.InvalidTraitPayload[TPayloadSpec]].value(context)

@@ -48,10 +48,6 @@ struct ErrorType {
 
 }
 
-struct MetaClassMetaClassSpecifier {
-
-}
-
 struct TraitType {
     1: i32 traitId;
     2: list<Type> typeArguments;
@@ -71,9 +67,8 @@ struct ModuleReference {
     1: string name;
 }
 
-union MetaClassSpecifier {
-    1: i32 metaClassId;
-    2: MetaClassMetaClassSpecifier metaClassMetaClassSpecifier;
+struct MetaClassSpecifier {
+    1: required i32 metaClassId;
 }
 
 union TraitDescriptor {
