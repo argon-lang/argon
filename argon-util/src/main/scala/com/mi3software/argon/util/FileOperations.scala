@@ -20,11 +20,14 @@ object FileOperations {
         f(stream).ensuring(IO { stream.close() })
       }
 
-  def createPrintWriter(stream: FileOutputStream): IO[PrintWriter] =
+  def createPrintWriter[T](stream: FileOutputStream)(f: PrintWriter => IO[T]): IO[T] =
     IO { new PrintWriter(stream) }
+      .flatMap { writer =>
+        f(writer).ensuring(IO { writer.close() })
+      }
 
   def filePrintWriter[T](file: File)(f: PrintWriter => IO[T]): IO[T] =
-    fileOutputStream(file) { stream => createPrintWriter(stream).flatMap(f) }
+    fileOutputStream(file) { stream => createPrintWriter(stream)(f) }
 
   def readAllText(file: File): IO[String] =
     IO {
