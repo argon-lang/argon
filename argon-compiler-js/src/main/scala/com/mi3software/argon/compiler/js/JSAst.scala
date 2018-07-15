@@ -22,8 +22,8 @@ sealed trait JSStatement extends JSModuleStatement
 final case class JSConst(bindings: NonEmptyList[JSBinding]) extends JSStatement
 
 sealed trait JSBinding
-final case class JSBindNewVariable(name: String) extends JSBinding
-final case class JSBindValue(name: String, value: JSExpression) extends JSBinding
+final case class JSBindNewVariable(name: JSIdentifier) extends JSBinding
+final case class JSBindValue(name: JSIdentifier, value: JSExpression) extends JSBinding
 
 
 
@@ -96,10 +96,10 @@ object JSAst {
     def writeBinding(binding: JSBinding): Unit =
       binding match {
         case JSBindNewVariable(name) =>
-          writer.print(name)
+          writeIdentifier(name)
 
         case JSBindValue(name, value) =>
-          writer.print(name)
+          writeIdentifier(name)
           writer.print(" = ")
           writeExprParen(value)
       }
@@ -114,6 +114,13 @@ object JSAst {
       expr match {
         case JSObjectLiteral(members) =>
           writer.print("{")
+          members.foreach {
+            case JSObjectProperty(name, value) =>
+              writeString(name)
+              writer.print(":")
+              writeExprParen(value)
+              writer.print(",")
+          }
           writer.print("}")
 
         case expr: JSIdentifier =>
