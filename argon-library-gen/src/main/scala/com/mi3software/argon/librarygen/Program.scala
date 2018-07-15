@@ -8,7 +8,8 @@ object Program {
       .filter { _.isDirectory }
       .foreach { dir =>
         println(s"Creating library ${dir.getName}")
-        ammonite.Main.main(Array(dir.getPath + "/create.sc"))
+        val path = new File(dir, "create.sc").getPath
+        ammonite.Main.main(Array(path, path))
       }
 
 }

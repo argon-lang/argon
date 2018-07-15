@@ -155,7 +155,7 @@ struct ClassDefinition {
 
 struct ClassSignature {
     1: list<Parameter> parameters;
-    2: ClassType baseClass;
+    2: optional ClassType baseClass;
     3: list<TraitType> baseTraits;
 }
 
