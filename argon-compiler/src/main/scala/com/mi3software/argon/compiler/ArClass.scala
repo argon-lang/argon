@@ -28,7 +28,7 @@ sealed trait ArClass[TContext <: Context] {
 
 object ArClass {
 
-  final case class ResultInfo[+TS <: TypeSystem](baseTypes: BaseTypeInfoClass[TS#TClassInfo, TS#TTraitInfo])
+  final case class ResultInfo[+TS <: TypeSystem](baseTypes: BaseTypeInfoClass[ClassType[TS], TraitType[TS]])
 
 
   implicit def equalInstance[TContext <: Context]: Equal[ArClass[TContext]] =

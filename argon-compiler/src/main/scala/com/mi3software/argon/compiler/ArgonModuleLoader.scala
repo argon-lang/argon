@@ -440,7 +440,55 @@ object ArgonModuleLoader extends ModuleLoader {
               parseDescriptor = parseClassDescriptor
             )(
               referenceHandler = lookupClass(_),
-              definitionHandler = _ => ???
+              definitionHandler = classId => classValue => classDescriptor => new ArClassWithPayload[context.type, TPayloadSpec] {
+                override val context: context2.type = context2
+                override val contextProof: Leibniz[context.type, context.type, context.type, context.type] = Leibniz.refl
+
+                override val descriptor: ClassDescriptor = classDescriptor
+
+                override val isSealed: Boolean = classValue.isSealed
+                override val isOpen: Boolean = classValue.isOpen
+                override val isAbstract: Boolean = classValue.isAbstract
+
+                override lazy val signature: context.Comp[Signature[context.typeSystem.type, ArClass.ResultInfo]] =
+                  classValue.signature match {
+                    case ArgonModule.ClassSignature(parameters, baseClass, baseTraits) =>
+                      compEv(
+                        for {
+                          baseClassResolved <- baseClass.traverse(resolveClassType(_))
+                          baseTraitsResolved <- baseTraits.toVector.traverse(resolveTraitType(_))
+                          parametersResolved <- parameters.toVector.traverse(resolveParameter(_))
+
+                          result = SignatureResult[context.typeSystem.type, ArClass.ResultInfo](
+                            ArClass.ResultInfo(BaseTypeInfoClass(baseClassResolved, baseTraitsResolved))
+                          )
+
+                        } yield parametersResolved.foldRight[Signature[context.typeSystem.type, ArClass.ResultInfo]](result)(SignatureParameters[context.typeSystem.type, ArClass.ResultInfo])
+                      )
+                  }
+
+                override lazy val methods: context.Comp[Vector[ArMethodWithPayload[context.type, TPayloadSpec]]] =
+                  compEv(
+                    methodMap.map { methods =>
+                      methods.collect {
+                        case (_, ModuleObjectDefinition(method)) if (method.descriptor.typeDescriptor match {
+                          case ownerDesc: ClassDescriptor => ownerDesc === descriptor
+                          case _ => false
+                        }) =>
+                          method
+                      }.toVector
+                    }
+                  )
+
+                override lazy val metaType: context.Comp[MetaClass[ArClassWithPayload[context.type, TPayloadSpec]]] =
+                  compEv(findClassDef(classValue.metaClassSpecifier.metaClassId).map(MetaClass.apply))
+
+                override lazy val payload: TPayloadSpec[Unit, context.TClassMetadata] = payloadLoader.createClassPayload(context)
+
+                override val classConstructors: context.Comp[Vector[ClassConstructorWithPayload[context.type, TPayloadSpec]]] =
+                  context.compMonadInstance.point(Vector.empty)
+
+              }
             )
 
           private lazy val dataCtorMap: Comp[Map[Int, DataCtorLoadResult[context.type, TPayloadSpec]]] =
@@ -694,6 +742,7 @@ object ArgonModuleLoader extends ModuleLoader {
             } }
 
           def resolveTraitType(traitType: ArgonModule.TraitType): Comp[TraitType[context.typeSystem.type]] = ???
+          def resolveClassType(classType: ArgonModule.ClassType): Comp[ClassType[context.typeSystem.type]] = ???
 
           def resolveParameter(parameter: ArgonModule.Parameter): Comp[Parameter[context.typeSystem.type]] = ???
 
