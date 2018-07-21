@@ -2,7 +2,7 @@ package com.mi3software.argon.compiler
 
 import scalaz.{-\/, \/}
 
-final class HoleTypeSystem[TContext <: Context] extends TypeSystem {
+final class HoleTypeSystem[TContext <: Context] extends TypeSystemUnerased {
   override type TType = TypeBase[this.type] \/ TypeHole
 
   override def fromTypeBase(typeBase: TypeBase[this.type]): TypeBase[this.type] \/ TypeHole =

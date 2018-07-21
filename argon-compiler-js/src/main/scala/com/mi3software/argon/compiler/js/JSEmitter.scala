@@ -60,8 +60,8 @@ final class JSEmitter {
     )
   }
 
-  private def allNamespaceElements(context: Context)(namespace: Namespace[ScopeValue[context.ContextScopeTypes]]): Iterable[NonNamespaceScopeValue[context.ContextScopeTypes]] =
-    namespace.bindings.flatMap {
+  private def allNamespaceElements(context: Context)(namespace: Namespace[ScopeValue[context.ContextScopeTypes]]): Iterator[NonNamespaceScopeValue[context.ContextScopeTypes]] =
+    namespace.bindings.iterator.flatMap {
       case NamespaceBinding(_, _, NamespaceScopeValue(ns)) => allNamespaceElements(context)(ns)
       case NamespaceBinding(_, _, scopeValue: NonNamespaceScopeValue[context.ContextScopeTypes]) => Vector(scopeValue)
     }
@@ -93,5 +93,6 @@ final class JSEmitter {
       case ClassScopeValue(_) => ???
       case DataConstructorScopeValue(_) => ???
     }
+
 
 }

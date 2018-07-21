@@ -1,7 +1,7 @@
 package com.mi3software.argon.compiler
 
 trait ArExprTypes {
-  val typeSystem: TypeSystem
+  val typeSystem: TypeSystemUnerased
   type TS = typeSystem.type
   type TExpr
   type TFunction

@@ -1,6 +1,6 @@
 package com.mi3software.argon.compiler
 
-final class ArgonTypeSystem[TContext <: Context] extends TypeSystem {
+final class ArgonTypeSystem[TContext <: Context] extends TypeSystemUnerased {
   override type TType = TypeBase[this.type]
 
   override def fromTypeBase(typeBase: TypeBase[this.type]): TypeBase[this.type] =

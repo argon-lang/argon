@@ -4,7 +4,7 @@ final case class Parameter[+TS <: TypeSystem](tupleVars: Vector[Variable[TS, Dec
 
 object Parameter {
 
-  def paramType(typeSystem: TypeSystem)(param: Parameter[typeSystem.type]): typeSystem.TType =
+  def paramType(typeSystem: TypeSystemUnerased)(param: Parameter[typeSystem.type]): typeSystem.TType =
     typeSystem.fromTypeBase(TupleType(param.tupleVars.map { tupleVar => TupleTypeElement[typeSystem.type](tupleVar.varType) }))
 
 }

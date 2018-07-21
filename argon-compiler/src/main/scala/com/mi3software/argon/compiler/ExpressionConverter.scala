@@ -35,7 +35,7 @@ trait ExpressionConverter {
 
   protected val contextTypeSystemConverter: TypeSystemConverter[context.typeSystem.type, TS]
 
-  val typeComparer: TypeComparer[TS]
+  val typeComparer: TypeComparerUnerased[TS]
 
   val scopeLookupComparer: LookupComparer[ScopeValue[TScopeTypes]]
 
