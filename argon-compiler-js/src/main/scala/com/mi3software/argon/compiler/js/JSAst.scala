@@ -37,6 +37,7 @@ final case class JSObjectLiteral(members: Vector[JSObjectMember]) extends JSExpr
 
 sealed trait JSObjectMember
 final case class JSObjectProperty(name: String, value: JSExpression) extends JSObjectMember
+final case class JSObjectComputedProperty(name: JSExpression, value: JSExpression) extends JSObjectMember
 
 final case class JSIdentifier(id: String) extends JSExpression
 
@@ -139,6 +140,12 @@ object JSAst {
             case JSObjectProperty(name, value) =>
               writeString(name)
               writer.print(":")
+              writeExprParen(value)
+              writer.print(",")
+            case JSObjectComputedProperty(name, value) =>
+              writer.print("[")
+              writeExpr(name)
+              writer.print("]:")
               writeExprParen(value)
               writer.print(",")
           }

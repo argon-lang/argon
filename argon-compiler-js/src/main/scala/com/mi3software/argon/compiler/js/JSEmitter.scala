@@ -5,9 +5,14 @@ import scalaz.NonEmptyList
 
 final class JSEmitter {
 
-  def emitModule(context: JSContext)(module: ArModule[context.type]): context.Comp[JSModule] = {
+  private val moduleVarName = JSIdentifier("modules")
+  private val traitsVarName = JSIdentifier("traits")
+  private val funcsVarName = JSIdentifier("funcs")
 
-    val moduleVarName = JSIdentifier("modules")
+  private val create_empty_obj = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("create")), Vector(JSNull))
+  private def freeze_obj(varName: JSIdentifier) = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("freeze")), Vector(varName))
+
+  def emitModule(context: JSContext)(module: ArModule[context.type]): context.Comp[JSModule] = {
 
     val modulePairs = module.referencedModules
       .zipWithIndex
@@ -21,11 +26,19 @@ final class JSEmitter {
             JSImportAllStatement(None, importId, refModule.descriptor.name)
           },
 
-          Vector(JSConst(NonEmptyList(
-            JSBindValue(moduleVarName,
-              JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("create")), Vector(JSNull))
-            )
-          ))),
+          Vector(
+            JSConst(NonEmptyList(
+              JSBindValue(moduleVarName, create_empty_obj)
+            )),
+
+            JSConst(NonEmptyList(
+              JSBindValue(funcsVarName, create_empty_obj)
+            )),
+
+            JSConst(NonEmptyList(
+              JSBindValue(traitsVarName, create_empty_obj)
+            )),
+          ),
 
           modulePairs.map { case (refModule, importId) =>
             JSAssignment(
@@ -34,13 +47,51 @@ final class JSEmitter {
             )
           },
 
+          allNamespaceElements(context)(module.globalNamespace).map(createObjectsForScopeValue(context)).toVector,
+
           Vector(
-            JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("freeze")), Vector(moduleVarName))
-          )
+            freeze_obj(moduleVarName),
+            freeze_obj(funcsVarName),
+            freeze_obj(traitsVarName),
+          ),
 
         ).flatten
       )
     )
   }
+
+  private def allNamespaceElements(context: Context)(namespace: Namespace[ScopeValue[context.ContextScopeTypes]]): Iterable[NonNamespaceScopeValue[context.ContextScopeTypes]] =
+    namespace.bindings.flatMap {
+      case NamespaceBinding(_, _, NamespaceScopeValue(ns)) => allNamespaceElements(context)(ns)
+      case NamespaceBinding(_, _, scopeValue: NonNamespaceScopeValue[context.ContextScopeTypes]) => Vector(scopeValue)
+    }
+
+  private def createObjectsForScopeValue(context: Context)(value: NonNamespaceScopeValue[context.ContextScopeTypes]): JSStatement =
+    value match {
+      case VariableScopeValue(_) => ???
+      case FunctionScopeValue(func) =>
+        JSAssignment(
+          JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor))),
+          JSObjectLiteral(Vector(
+            JSObjectProperty("impl", JSNull)
+          ))
+        )
+
+      case TraitScopeValue(arTrait) =>
+        arTrait.descriptor match {
+          case desc: TraitDescriptor.Valid =>
+            JSAssignment(
+              JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(desc))),
+              JSObjectLiteral(Vector(
+                JSObjectProperty("symbol", JSFunctionCall(JSIdentifier("Symbol"), Vector()))
+              ))
+            )
+
+          case TraitDescriptor.Invalid => ???
+        }
+
+      case ClassScopeValue(_) => ???
+      case DataConstructorScopeValue(_) => ???
+    }
 
 }

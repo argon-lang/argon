@@ -48,9 +48,9 @@ final case class NamespaceScopeValue[+Types <: ScopeTypes](ns: Namespace[ScopeVa
 sealed trait NonNamespaceScopeValue[+Types <: ScopeTypes] extends ScopeValue[Types]
 
 
-final case class VariableScopeValue[+Types <: ScopeTypes](variable: Types#TVariable) extends ScopeValue[Types]
-final case class FunctionScopeValue[+Types <: ScopeTypes](func: Types#TFunc) extends ScopeValue[Types]
-final case class TraitScopeValue[+Types <: ScopeTypes](arTrait: Types#TTrait) extends ScopeValue[Types]
-final case class ClassScopeValue[+Types <: ScopeTypes](arClass: Types#TClass) extends ScopeValue[Types]
-final case class DataConstructorScopeValue[+Types <: ScopeTypes](ctor: Types#TDataConstructor) extends ScopeValue[Types]
+final case class VariableScopeValue[+Types <: ScopeTypes](variable: Types#TVariable) extends NonNamespaceScopeValue[Types]
+final case class FunctionScopeValue[+Types <: ScopeTypes](func: Types#TFunc) extends NonNamespaceScopeValue[Types]
+final case class TraitScopeValue[+Types <: ScopeTypes](arTrait: Types#TTrait) extends NonNamespaceScopeValue[Types]
+final case class ClassScopeValue[+Types <: ScopeTypes](arClass: Types#TClass) extends NonNamespaceScopeValue[Types]
+final case class DataConstructorScopeValue[+Types <: ScopeTypes](ctor: Types#TDataConstructor) extends NonNamespaceScopeValue[Types]
 
