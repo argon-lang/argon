@@ -5,7 +5,7 @@ lazy val commonSettings = Seq(
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
-  addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full),
+  addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.patch),
   addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.4"),
 
   libraryDependencies ++= Seq(
@@ -165,7 +165,7 @@ lazy val library_gen = project.in(file("argon-library-gen"))
     commonSettings,
     compilerOptions,
 
-    libraryDependencies += "com.lihaoyi" % "ammonite" % "1.1.2" cross CrossVersion.full,
+    libraryDependencies += "com.lihaoyi" % "ammonite" % "1.1.2" cross CrossVersion.patch,
 
     name := "argon-library-gen",
   )
