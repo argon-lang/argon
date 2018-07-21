@@ -5,9 +5,9 @@ import scalaz.NonEmptyList
 
 final class JSEmitter {
 
-  private val moduleVarName = JSIdentifier("modules")
-
   def emitModule(context: JSContext)(module: ArModule[context.type]): context.Comp[JSModule] = {
+
+    val moduleVarName = JSIdentifier("modules")
 
     val modulePairs = module.referencedModules
       .zipWithIndex
@@ -23,18 +23,24 @@ final class JSEmitter {
 
           Vector(JSConst(NonEmptyList(
             JSBindValue(moduleVarName,
-              JSObjectLiteral(
-                modulePairs.map { case (refModule, importId) =>
-                  JSObjectProperty(refModule.descriptor.name, importId)
-                }
-              )
+              JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("create")), Vector(JSNull))
             )
-          )))
+          ))),
+
+          modulePairs.map { case (refModule, importId) =>
+            JSAssignment(
+              JSPropertyAccessBracket(moduleVarName, JSString(refModule.descriptor.name)),
+              importId
+            )
+          },
+
+          Vector(
+            JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("freeze")), Vector(moduleVarName))
+          )
+
         ).flatten
       )
     )
   }
-
-
 
 }

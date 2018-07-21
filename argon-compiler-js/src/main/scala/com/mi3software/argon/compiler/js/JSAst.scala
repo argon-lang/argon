@@ -20,12 +20,16 @@ sealed trait JSStatement extends JSModuleStatement
 
 
 final case class JSConst(bindings: NonEmptyList[JSBinding]) extends JSStatement
+final case class JSFunctionStatement(name: JSIdentifier, parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSStatement
 
 sealed trait JSBinding
 final case class JSBindNewVariable(name: JSIdentifier) extends JSBinding
 final case class JSBindValue(name: JSIdentifier, value: JSExpression) extends JSBinding
 
-
+sealed trait JSFunctionParameterList
+case object JSFunctionEmptyParameterList extends JSFunctionParameterList
+final case class JSFunctionParameter(name: JSIdentifier, next: JSFunctionParameterList) extends JSFunctionParameterList
+final case class JSFunctionRestParameters(name: JSIdentifier) extends JSFunctionParameterList
 
 sealed trait JSExpression extends JSStatement
 
@@ -35,6 +39,14 @@ sealed trait JSObjectMember
 final case class JSObjectProperty(name: String, value: JSExpression) extends JSObjectMember
 
 final case class JSIdentifier(id: String) extends JSExpression
+
+final case class JSAssignment(left: JSExpression, right: JSExpression) extends JSExpression
+final case class JSPropertyAccessDot(expr: JSExpression, prop: JSIdentifier) extends JSExpression
+final case class JSPropertyAccessBracket(expr: JSExpression, prop: JSExpression) extends JSExpression
+final case class JSString(value: String) extends JSExpression
+final case class JSFunctionCall(function: JSExpression, args: Vector[JSExpression]) extends JSExpression
+
+case object JSNull extends JSExpression
 
 object JSAst {
 
@@ -88,6 +100,15 @@ object JSAst {
           }
           writer.print(";")
 
+        case JSFunctionStatement(name, parameters, body) =>
+          writer.print("function ")
+          writeIdentifier(name)
+          writer.print("(")
+          writeParameterList(parameters)
+          writer.print("){")
+          body.foreach(writeStatement)
+          writer.print("}")
+
         case stmt: JSExpression =>
           writeExprParen(stmt)
           writer.print(";")
@@ -125,6 +146,37 @@ object JSAst {
 
         case expr: JSIdentifier =>
           writeIdentifier(expr)
+
+        case JSAssignment(left, right) =>
+          writeExprParen(left)
+          writer.print("=")
+          writeExprParen(right)
+
+        case JSPropertyAccessDot(expr, prop) =>
+          writeExprParen(expr)
+          writer.print(".")
+          writeIdentifier(prop)
+
+        case JSPropertyAccessBracket(expr, prop) =>
+          writeExprParen(expr)
+          writer.print("[")
+          writeExpr(prop)
+          writer.print("]")
+
+        case JSString(value) =>
+          writeString(value)
+
+        case JSFunctionCall(function, args) =>
+          writeExprParen(function)
+          writer.print("(")
+          for(arg <- args) {
+            writeExprParen(arg)
+            writer.print(",")
+          }
+          writer.print(")")
+
+        case JSNull =>
+          writer.print("null")
       }
 
     def writeIdentifier(identifier: JSIdentifier): Unit =
@@ -135,6 +187,19 @@ object JSAst {
       StringEscapeUtils.ESCAPE_ECMASCRIPT.translate(str, writer)
       writer.print("\"")
     }
+
+    def writeParameterList(params: JSFunctionParameterList): Unit =
+      params match {
+        case JSFunctionEmptyParameterList => ()
+        case JSFunctionParameter(name, next) =>
+          writeIdentifier(name)
+          writer.print(",")
+          writeParameterList(next)
+
+        case JSFunctionRestParameters(name) =>
+          writer.print("...")
+          writeIdentifier(name)
+      }
 
   }
 
