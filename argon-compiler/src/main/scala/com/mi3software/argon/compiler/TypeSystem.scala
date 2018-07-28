@@ -29,7 +29,6 @@ trait TypeSystemUnerased extends TypeSystem {
 
 sealed trait TypeBase[+TS <: TypeSystem]
 sealed trait TypeBaseConcrete[+TS <: TypeSystem] extends TypeBase[TS]
-final case class ErrorType[+TS <: TypeSystem]() extends TypeBaseConcrete[TS]
 final case class TraitType[+TS <: TypeSystem](traitInfo: TS#TTraitInfo) extends TypeBaseConcrete[TS]
 final case class ClassType[+TS <: TypeSystem](classInfo: TS#TClassInfo) extends TypeBaseConcrete[TS]
 final case class DataConstructorType[+TS <: TypeSystem](ctor: TS#TDataConstructorInfo) extends TypeBaseConcrete[TS]

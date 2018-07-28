@@ -7,7 +7,6 @@ object ArgonToSignatureTypeSystemConverter {
 
   def convert(context: Context)(sigTypeSystem: SignatureTypeSystem[context.type])(t: context.typeSystem.TType): sigTypeSystem.TType =
     t match {
-      case ErrorType() => Some(ErrorType())
       case TraitType((arTrait, _, _)) => Some(TraitType[sigTypeSystem.type](arTrait))
       case ClassType((arClass, _, _)) => Some(ClassType[sigTypeSystem.type](arClass))
       case DataConstructorType((dataCtor, _, _)) => Some(DataConstructorType[sigTypeSystem.type](dataCtor))

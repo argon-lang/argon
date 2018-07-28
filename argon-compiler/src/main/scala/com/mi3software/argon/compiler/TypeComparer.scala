@@ -28,7 +28,6 @@ trait TypeComparer[TS <: TypeSystem] {
 
   def isSubTypeBaseConcrete(a: TypeBaseConcrete[TS], b: TypeBaseConcrete[TS]): Boolean =
     (a, b) match {
-      case (ErrorType(), _) | (_, ErrorType()) => false
       case (TraitType(aTrait), TraitType(bTrait)) => isSubTraitInfo(aTrait, bTrait)
       case (ClassType(aClass), ClassType(bClass)) => isSubClassInfo(aClass, bClass)
       case (TraitType(aTrait), ClassType(bClass)) => classImplementsTrait(bClass, aTrait)
