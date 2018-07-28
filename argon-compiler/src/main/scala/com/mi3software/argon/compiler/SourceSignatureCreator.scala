@@ -2,9 +2,7 @@ package com.mi3software.argon.compiler
 
 import com.mi3software.argon.parser
 import com.mi3software.argon.util.WithSource
-import com.mi3software.argon.Compilation
 import ScopeHelpers._
-
 import scalaz._
 import Scalaz._
 

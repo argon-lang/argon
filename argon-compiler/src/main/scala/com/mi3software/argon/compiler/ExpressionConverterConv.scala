@@ -1,8 +1,6 @@
 package com.mi3software.argon.compiler
 
 import com.mi3software.argon.compiler.ExpressionConverterConv.ConvState
-import com.mi3software.argon.Compilation
-
 import scalaz._
 
 trait ExpressionConverterConv extends ExpressionConverter {

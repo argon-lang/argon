@@ -1,5 +1,4 @@
 package com.mi3software.argon.compiler
-import com.mi3software.argon.Compilation
 
 trait ExpressionConverterCombined[TContext <: Context]
   extends ExpressionConverterContext[TContext]

@@ -1,7 +1,5 @@
 package com.mi3software.argon.compiler
 
-
-import com.mi3software.argon.Compilation
 import com.mi3software.argon.util.CovariantMonad
 import scalaz._
 

@@ -4,7 +4,6 @@ import com.mi3software.argon.compiler.PayloadSpecifiers.DeclarationPayloadSpecif
 import com.mi3software.argon.parser
 import com.mi3software.argon.parser.TraitDeclarationStmt
 import com.mi3software.argon.util.WithSource
-import com.mi3software.argon.Compilation
 import scalaz._
 
 private[compiler] object SourceTrait {

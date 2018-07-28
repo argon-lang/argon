@@ -2,8 +2,6 @@ package com.mi3software.argon.compiler
 
 import com.mi3software.argon.parser._
 import com.mi3software.argon.util.{FileSpec, SourceLocation, WithSource}
-import com.mi3software.argon.Compilation
-
 import scalaz._
 import Scalaz._
 import ScopeHelpers._

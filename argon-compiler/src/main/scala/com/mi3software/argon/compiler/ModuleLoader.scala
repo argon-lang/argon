@@ -4,7 +4,6 @@ import java.io.File
 
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.Compilation
 import com.mi3software.argon.util.MonadHelpers._
 import com.mi3software.argon.util.DependencyTree._
 import scalaz.effect.IO

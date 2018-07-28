@@ -1,7 +1,6 @@
 package com.mi3software.argon.compiler
 
 import com.mi3software.argon.parser.FunctionDeclarationStmt
-import com.mi3software.argon.Compilation
 import scalaz._
 
 private[compiler] object SourceFunction {

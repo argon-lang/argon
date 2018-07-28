@@ -1,6 +1,5 @@
-package com.mi3software.argon
+package com.mi3software.argon.compiler
 
-import com.mi3software.argon.compiler.{CompilationError, CompilationMessageNonFatal}
 import scalaz.{IList, Monad, NonEmptyList}
 
 trait Compilation[F[_]] extends Monad[F] {

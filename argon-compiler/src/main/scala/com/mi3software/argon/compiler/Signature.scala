@@ -1,7 +1,5 @@
 package com.mi3software.argon.compiler
 
-import com.mi3software.argon.Compilation
-
 sealed trait Signature[+TS <: TypeSystem, TResult[+_ <: TypeSystem]] {
 
   def unsubstitutedParameters: Vector[Parameter[TS]]

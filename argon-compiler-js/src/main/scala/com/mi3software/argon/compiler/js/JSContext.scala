@@ -1,7 +1,6 @@
 package com.mi3software.argon.compiler.js
 
-import com.mi3software.argon.compiler._
-import com.mi3software.argon.Compilation
+import com.mi3software.argon.compiler.{Compilation, _}
 
 final class JSContext extends ContextComp[StandardCompilation.StandardCompilationType] {
 

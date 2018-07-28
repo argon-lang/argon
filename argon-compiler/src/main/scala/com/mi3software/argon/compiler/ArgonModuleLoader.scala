@@ -8,13 +8,12 @@ import scalaz.{Lens => _, _}
 import Scalaz._
 import com.mi3software.argon.compiler.PayloadSpecifiers.ReferencePayloadSpecifier
 import com.mi3software.argon.util._
-import com.mi3software.argon.Compilation
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSimpleFileTransport
 import scalaz.effect.IO
 
 import scala.collection.immutable._
-import scala.collection.{ Seq => QSeq }
+import scala.collection.{Seq => QSeq}
 
 object ArgonModuleLoader extends ModuleLoader {
 
