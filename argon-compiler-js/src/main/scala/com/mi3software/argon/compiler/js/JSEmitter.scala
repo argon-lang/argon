@@ -19,7 +19,7 @@ final class JSEmitter {
       .map { case (refModule, i) => (refModule, JSIdentifier(s"module_$i")) }
 
 
-    context.compMonadInstance.point(
+    context.compCompilationInstance.point(
       JSModule(
         Vector(
           modulePairs.map { case (refModule, importId) =>
@@ -78,17 +78,12 @@ final class JSEmitter {
         )
 
       case TraitScopeValue(arTrait) =>
-        arTrait.descriptor match {
-          case desc: TraitDescriptor.Valid =>
-            JSAssignment(
-              JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(desc))),
-              JSObjectLiteral(Vector(
-                JSObjectProperty("symbol", JSFunctionCall(JSIdentifier("Symbol"), Vector()))
-              ))
-            )
-
-          case TraitDescriptor.Invalid => ???
-        }
+        JSAssignment(
+          JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor))),
+          JSObjectLiteral(Vector(
+            JSObjectProperty("symbol", JSFunctionCall(JSIdentifier("Symbol"), Vector()))
+          ))
+        )
 
       case ClassScopeValue(_) => ???
       case DataConstructorScopeValue(_) => ???

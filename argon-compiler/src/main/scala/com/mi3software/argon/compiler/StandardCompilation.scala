@@ -1,10 +1,66 @@
 package com.mi3software.argon.compiler
 
 
-import com.mi3software.argon.compiler.StandardCompilationHelpers._
 import com.mi3software.argon.Compilation
-import scalaz.std.vector._
-import scalaz.{-\/, Applicative, EitherT, Functor, Monad, WriterT, \/, \/-}
+import com.mi3software.argon.util.CovariantMonad
+import scalaz._
+
+import scala.collection.immutable._
+
+object StandardCompilation {
+
+  private type StandardCompState[A] = State[Set[CompilationMessageNonFatal], NonEmptyList[CompilationError] \/ A]
+  type StandardCompilationType[+A] = CovariantMonad[EitherT[State[Set[CompilationMessageNonFatal], ?], NonEmptyList[CompilationError], ?], A]
+
+  implicit val standardCompilationInstance: Compilation[StandardCompilationType] = new Compilation[StandardCompilationType] {
+
+    private def eitherTInstance = EitherT.eitherTMonad[State[Set[CompilationMessageNonFatal], ?], NonEmptyList[CompilationError]](StateT.stateMonad[Set[CompilationMessageNonFatal]])
+
+    private def monadInstance: Monad[StandardCompilationType] =
+      CovariantMonad.monadInstance[EitherT[State[Set[CompilationMessageNonFatal], ?], NonEmptyList[CompilationError], ?]](eitherTInstance)
+
+    private def fromState[A](state: StandardCompState[A]): StandardCompilationType[A] =
+      CovariantMonad[EitherT[State[Set[CompilationMessageNonFatal], ?], NonEmptyList[CompilationError], ?], A](
+        EitherT[State[Set[CompilationMessageNonFatal], ?], NonEmptyList[CompilationError], A](state)
+      )(eitherTInstance)
+
+    private def fromStateF[A](f: Set[CompilationMessageNonFatal] => (Set[CompilationMessageNonFatal], NonEmptyList[CompilationError] \/ A)): StandardCompilationType[A] =
+      fromState(State(f))
+
+    override def point[A](a: => A): StandardCompilationType[A] =
+      monadInstance.point(a)
+
+    override def ap[A, B](fa: => StandardCompilationType[A])(f: => StandardCompilationType[A => B]): StandardCompilationType[B] =
+      fromStateF(prevMsgs => {
+        val (msgsA, resA) = fa.run.run(prevMsgs) : (Set[CompilationMessageNonFatal], NonEmptyList[CompilationError] \/ A)
+        val (msgsB, resB) = f.run.run(msgsA) : (Set[CompilationMessageNonFatal], NonEmptyList[CompilationError] \/ (A => B))
+        val res = (resA, resB) match {
+          case (-\/(errA), -\/(errB)) => -\/(errA append errB)
+          case (\/-(a), \/-(b)) => \/-(b(a))
+          case (resA @ -\/(_), \/-(_)) => resA
+          case (\/-(_), resB @ -\/(_)) => resB
+        }
+        (msgsB, res)
+      })
+
+    override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): StandardCompilationType[A] =
+      fromStateF(prevMsgs => (prevMsgs ++ messages, \/-(value)))
+
+    override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): StandardCompilationType[A] =
+      fromStateF(prevMsgs => (prevMsgs ++ messages, -\/(errors)))
+
+    override def map[A, B](fa: StandardCompilationType[A])(f: A => B): StandardCompilationType[B] =
+      fa.map(f)
+
+    override def bind[A, B](fa: StandardCompilationType[A])(f: A => StandardCompilationType[B]): StandardCompilationType[B] =
+      fa.flatMap(f)
+  }
+
+}
+
+/*
+
+
 
 trait InnerValueHandler[F[_], -T, TResult] {
   def apply[T2 <: T](ft: F[T2]): TResult
@@ -13,6 +69,8 @@ trait InnerValueHandler[F[_], -T, TResult] {
 sealed trait StandardCompilation[+T] {
 
   def withInnerValue[TResult](f: InnerValueHandler[CompilationImpl, T, TResult]): TResult
+
+
 
   def run: CompilerInternalError \/ (Vector[CompilationMessage], T) =
     withInnerValue(new InnerValueHandler[CompilationImpl, T, CompilerInternalError \/ (Vector[CompilationMessage], T)] {
@@ -65,11 +123,21 @@ object StandardCompilation {
 
 
   implicit val monadInstance: Monad[StandardCompilation] = new Monad[StandardCompilation] {
-    override def point[A](a: => A): StandardCompilation[A] = StandardCompilation(a)
-    override def bind[A, B](fa: StandardCompilation[A])(f: A => StandardCompilation[B]): StandardCompilation[B] = fa.flatMap(f)
   }
 
   implicit val compilationInstance: Compilation[StandardCompilation] = new Compilation[StandardCompilation] {
+
+
+    override def create[A](value: A): StandardCompilation[A] = ???
+
+    override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): StandardCompilation[A] = ???
+
+    override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): StandardCompilation[A] = ???
+
+    override def map[A, B](fa: StandardCompilation[A])(f: A => B): StandardCompilation[B] = ???
+
+    override def combine[A, B, C](fa: StandardCompilation[A])(fb: StandardCompilation[B])(f: A => B => C): StandardCompilation[C] = ???
+
     override def forErrors[A](value: A, errors: CompilationMessage*): StandardCompilation[A] =
       StandardCompilation(value, errors: _*)
   }
@@ -163,4 +231,4 @@ object StandardCompilationHelpers {
       opt.map(StandardCompilation(_)).getOrElse { StandardCompilation(invalidValue, compilationMessages: _*) }
   }
 
-}
+}*/

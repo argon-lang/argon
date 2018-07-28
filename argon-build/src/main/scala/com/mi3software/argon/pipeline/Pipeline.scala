@@ -10,7 +10,7 @@ import com.mi3software.argon.parser.impl.ParseHandler
 
 object Pipeline {
 
-  def printMessages(msgs: NonEmptyList[CompilationMessage]): IO[Unit] =
+  def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): IO[Unit] =
     msgs
       .traverseU { msg =>
         IO.putStrLn(msg.toString)
@@ -39,11 +39,16 @@ object Pipeline {
           )
 
           buildInfo.backend.compile(input).flatMap {
-            case -\/(messages) =>
-              printMessages(messages)
+            case (msgs, result) =>
+              printMessages(msgs.toVector).flatMap { _ =>
+                result match {
+                  case -\/(errors) =>
+                    printMessages(errors)
 
-            case \/-(result) =>
-              result.writeToFile(buildInfo.outputFile)
+                  case \/-(result) =>
+                    result.writeToFile(buildInfo.outputFile)
+                }
+              }
           }
       }
 

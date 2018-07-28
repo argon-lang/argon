@@ -42,7 +42,7 @@ object ModuleLoader {
       }
   }
 
-  private def findWorkingLoader(loaders: Vector[ModuleLoader])(file: File): IO[CompilationMessage \/ LoaderAndData] =
+  private def findWorkingLoader(loaders: Vector[ModuleLoader])(file: File): IO[CompilationError \/ LoaderAndData] =
     findFirst(loaders) { load =>
       OptionT(load.loadFile(file))
         .flatMap { data =>
@@ -58,8 +58,8 @@ object ModuleLoader {
 
   private def dependencyTreeOps
   (context: Context)
-  : DependencyTreeOperations[context.Comp, LoaderAndData, ModuleDescriptor, PayloadResult[context.type], CompilationMessage \/ ?] =
-    new DependencyTreeOperations[context.Comp, LoaderAndData, ModuleDescriptor, PayloadResult[context.type], CompilationMessage \/ ?] {
+  : DependencyTreeOperations[context.Comp, LoaderAndData, ModuleDescriptor, PayloadResult[context.type], CompilationError \/ ?] =
+    new DependencyTreeOperations[context.Comp, LoaderAndData, ModuleDescriptor, PayloadResult[context.type], CompilationError \/ ?] {
       override def getItemKey(item: LoaderAndData): ModuleDescriptor = item.descriptor
 
       override def getItemDependencies(item: LoaderAndData): Vector[ModuleDescriptor] =
@@ -68,10 +68,10 @@ object ModuleLoader {
       override def loadItem(item: LoaderAndData, dependencies: Vector[PayloadResult[context.type]]): context.Comp[PayloadResult[context.type]] =
         item.loader.loadModuleReference(context)(item.data)(dependencies)
 
-      override def circularReferenceHandler(item: LoaderAndData): CompilationMessage \/ PayloadResult[context.type] =
+      override def circularReferenceHandler(item: LoaderAndData): CompilationError \/ PayloadResult[context.type] =
         -\/(CompilationError.CircularDependencyLoadingModule(CompilationMessageSource.ReferencedModule(item.descriptor)))
 
-      override def missingDependencyHandler(item: LoaderAndData, missingDepKey: ModuleDescriptor): CompilationMessage \/ PayloadResult[context.type] =
+      override def missingDependencyHandler(item: LoaderAndData, missingDepKey: ModuleDescriptor): CompilationError \/ PayloadResult[context.type] =
         -\/(CompilationError.ModuleDependencyNotFound(missingDepKey, CompilationMessageSource.ReferencedModule(item.descriptor)))
 
     }
@@ -79,12 +79,12 @@ object ModuleLoader {
   private def loadModuleRefFromData[TComp[+_] : Monad]
   (context: ContextComp[TComp])
   (refDataPairs: Vector[LoaderAndData])
-  : TComp[Vector[CompilationMessage \/ PayloadResult[context.type]]] =
-    loadDependencies[TComp, LoaderAndData, ModuleDescriptor, PayloadResult[context.type], CompilationMessage \/ ?](dependencyTreeOps(context))(refDataPairs)
+  : TComp[Vector[CompilationError \/ PayloadResult[context.type]]] =
+    loadDependencies[TComp, LoaderAndData, ModuleDescriptor, PayloadResult[context.type], CompilationError \/ ?](dependencyTreeOps(context))(refDataPairs)
 
 
 
-  private def loadReferencedModulesImpl[TComp[+_] : Monad : Compilation]
+  private def loadReferencedModulesImpl[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
   (refFiles: Vector[File])
   : IO[TComp[Vector[ArModuleWithPayload[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]]]] =
@@ -92,22 +92,22 @@ object ModuleLoader {
       .map { loadedRefFiles =>
         loadedRefFiles
           .traverseM {
-            case \/-(loaderAndData) => context.compMonadInstance.point(Vector(loaderAndData))
-            case -\/(loadError) => context.compCompilationInstance.forErrors(Vector[LoaderAndData](), loadError)
+            case \/-(loaderAndData) => context.compCompilationInstance.point(Vector(loaderAndData))
+            case -\/(loadError) => context.compCompilationInstance.forErrors(loadError)
           }
           .flatMap { refDataPairs =>
             loadModuleRefFromData[TComp](context)(refDataPairs)
           }
           .flatMap { moduleResults =>
             moduleResults.traverseM {
-              case \/-(module) => context.compMonadInstance.point(Vector(module))
-              case -\/(loadError) => context.compCompilationInstance.forErrors(Vector[PayloadResult[context.type]](), loadError)
+              case \/-(module) => context.compCompilationInstance.point(Vector(module))
+              case -\/(loadError) => context.compCompilationInstance.forErrors(loadError)
             }
           }
       }
 
   def loadReferencedModules(context: Context)(refFiles: Vector[File]): IO[context.Comp[Vector[ArModuleWithPayload[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]]]] =
-    loadReferencedModulesImpl[context.Comp](context.withCompType)(refFiles)(context.compMonadInstance, context.compCompilationInstance)
+    loadReferencedModulesImpl[context.Comp](context.withCompType)(refFiles)(context.compCompilationInstance)
       .map(identity)
 
 

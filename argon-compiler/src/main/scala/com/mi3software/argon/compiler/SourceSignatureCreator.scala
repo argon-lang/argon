@@ -40,7 +40,7 @@ object SourceSignatureCreator {
                       .map(identity)
 
                   case None =>
-                    Compilation[TComp].forErrors(ErrorType() : context.typeSystem.TType, CompilationError.ParameterTypeAnnotationRequired(paramName, CompilationMessageSource.SourceFile(env.fileSpec, loc)))
+                    Compilation[TComp].forErrors(CompilationError.ParameterTypeAnnotationRequired(paramName, CompilationMessageSource.SourceFile(env.fileSpec, loc)))
 
                 })
                 .map { t =>

@@ -11,14 +11,14 @@ import scalaz.effect.IO
 private[compiler] object SourceModuleCreator {
 
 
-  def createModule[TComp[+_] : Monad : Compilation]
+  def createModule[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
   (input: CompilerInput)
   : IO[TComp[ArModule[context.type]]] =
     loadReferenceModules[TComp](context)(input)
       .map { _.flatMap { refModules => createModuleWithRefs[TComp](context)(input)(refModules) } }
 
-  private def createModuleWithRefs[TComp[+_] : Monad : Compilation]
+  private def createModuleWithRefs[TComp[+_] : Compilation]
   (context2: ContextComp[TComp])
   (input: CompilerInput)
   (referencedModules2: Vector[ArModuleWithPayload[context2.type, PayloadSpecifiers.ReferencePayloadSpecifier]])
@@ -35,13 +35,13 @@ private[compiler] object SourceModuleCreator {
     }
 
 
-  private def loadReferenceModules[TComp[+_] : Monad : Compilation]
+  private def loadReferenceModules[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
   (input: CompilerInput)
   : IO[TComp[Vector[ArModuleWithPayload[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]]]] =
     ModuleLoader.loadReferencedModules(context)(input.references)
 
-  private def createNamespaceElementFromAST[TComp[+_] : Monad : Compilation]
+  private def createNamespaceElementFromAST[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
   (options: CompilerOptions)
   (referencedModules: Vector[ArModuleWithPayload[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]])
@@ -52,7 +52,7 @@ private[compiler] object SourceModuleCreator {
       binding <- createNamespaceElementFromASTWithScope[TComp](context)(options)(scope)(sourceAST)
     } yield ModuleElement(sourceAST.currentNamespace, binding)
 
-  private def createScope[TComp[+_] : Monad : Compilation]
+  private def createScope[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
   (referencedModules: Vector[ArModuleWithPayload[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
@@ -106,22 +106,22 @@ private[compiler] object SourceModuleCreator {
       }
       .toList
 
-  private def parseGlobalAccessModifier[TComp[+_] : Monad : Compilation](fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): TComp[AccessModifierGlobal] =
+  private def parseGlobalAccessModifier[TComp[+_] : Compilation](fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): TComp[AccessModifierGlobal] =
     parseAccessModifier[TComp](fileSpec, stmtLocation, access).flatMap {
       case accessModifier: AccessModifierGlobal => accessModifier.point[TComp]
       case AccessModifier.Private => AccessModifier.PrivateInternal.point[TComp]
       case accessModifier =>
         val loc = access.headOption.map(_.location).getOrElse(stmtLocation)
-        Compilation[TComp].forErrors(AccessModifier.Invalid, CompilationError.AccessModifierNotAllowedForGlobal(accessModifier, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation[TComp].forErrors(CompilationError.AccessModifierNotAllowedForGlobal(accessModifier, CompilationMessageSource.SourceFile(fileSpec, loc)))
     }
 
-  private def parseAccessModifier[TComp[+_] : Monad : Compilation](fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): TComp[AccessModifier] =
+  private def parseAccessModifier[TComp[+_] : Compilation](fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): TComp[AccessModifier] =
     access match {
       case WithSource(parser.PublicModifier, _) :: Nil =>
         AccessModifier.Public.point[TComp]
 
       case WithSource(a @ parser.PublicModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation[TComp].forErrors(AccessModifier.Invalid, CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.ProtectedModifier, _) :: Nil =>
         AccessModifier.Protected.point[TComp]
@@ -130,7 +130,7 @@ private[compiler] object SourceModuleCreator {
         AccessModifier.ProtectedInternal.point[TComp]
 
       case WithSource(a @ parser.ProtectedModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation[TComp].forErrors(AccessModifier.Invalid, CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.PrivateModifier, _) :: Nil =>
         AccessModifier.Protected.point[TComp]
@@ -139,7 +139,7 @@ private[compiler] object SourceModuleCreator {
         AccessModifier.PrivateInternal.point[TComp]
 
       case WithSource(a @ parser.PrivateModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation[TComp].forErrors(AccessModifier.Invalid, CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.InternalModifier, _) :: Nil =>
         AccessModifier.Protected.point[TComp]
@@ -151,7 +151,7 @@ private[compiler] object SourceModuleCreator {
         AccessModifier.PrivateInternal.point[TComp]
 
       case WithSource(a @ parser.InternalModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation[TComp].forErrors(AccessModifier.Invalid, CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case Nil =>
         AccessModifier.Private.point[TComp]

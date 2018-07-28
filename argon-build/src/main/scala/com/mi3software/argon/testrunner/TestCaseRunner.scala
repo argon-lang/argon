@@ -16,7 +16,7 @@ final class TestCaseRunner {
       case \/-(_) => TestCaseResult.Success
       case -\/(errors) =>
         TestCaseResult.Failure(
-          TestCaseActualResult.Errors(errors.toVector.map(CompilationError.SyntaxCompilerError.apply)),
+          TestCaseActualResult.Errors(errors.map(CompilationError.SyntaxCompilerError.apply)),
           TestCaseExpectedOutput("")
         )
     }

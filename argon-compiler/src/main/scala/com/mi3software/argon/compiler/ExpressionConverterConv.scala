@@ -8,16 +8,24 @@ import scalaz._
 trait ExpressionConverterConv extends ExpressionConverter {
 
   type Comp[T]
-  protected implicit val compMonadInstance: Monad[Comp]
   protected implicit val compCompilationInstance: Compilation[Comp]
 
   override type Conv[T] = StateT[Comp, ConvState, T]
-
-  override protected implicit val monadInstance: Monad[Conv] = ExpressionConverterConv.monadInstance
+  private lazy val convMonadTrans = StateT.StateMonadTrans[ConvState]
+  private lazy val convMonadInstance = convMonadTrans(compCompilationInstance)
 
   override protected implicit val compilationInstance: Compilation[Conv] = new Compilation[Conv] {
-    override def forErrors[A](value: A, errors: CompilationMessage*): Conv[A] =
-      StateT(s => compCompilationInstance.forErrors((s, value), errors: _*))
+
+    override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): Conv[A] =
+      convMonadTrans.liftM(compCompilationInstance.diagnostic(value, messages))
+
+    override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): Conv[A] =
+      convMonadTrans.liftM(compCompilationInstance.forErrors(errors, messages))
+
+    override def bind[A, B](fa: Conv[A])(f: A => Conv[B]): Conv[B] = convMonadInstance.bind(fa)(f)
+
+    override def point[A](a: => A): StateT[Comp, ConvState, A] = convMonadInstance.point(a)
+
   }
 
   override protected def nextVariableId: StateT[Comp, ConvState, Int] =
@@ -37,6 +45,5 @@ object ExpressionConverterConv {
     val Default = ConvState(0)
   }
 
-  private def monadInstance[F[_] : Monad]: Monad[StateT[F, ConvState, ?]] = implicitly[Monad[StateT[F, ConvState, ?]]]
 
 }

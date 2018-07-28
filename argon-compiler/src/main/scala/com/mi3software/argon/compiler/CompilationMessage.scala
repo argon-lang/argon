@@ -16,6 +16,7 @@ sealed trait CompilationMessage {
     s"${source.formatted}: ${message}"
 }
 trait CompilationError extends CompilationMessage
+trait CompilationMessageNonFatal extends CompilationMessage
 
 object CompilationError {
   final case class SyntaxCompilerError(syntaxError: SyntaxErrorData) extends CompilationError {
@@ -241,6 +242,9 @@ object CompilationError {
   }
   case object ModuleObjectFunction extends ModuleObjectType {
     override def name: String = "function"
+  }
+  case object ModuleObjectMethod extends ModuleObjectType {
+    override def name: String = "method"
   }
 
   final case class ModuleObjectInvalidDescriptor(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {

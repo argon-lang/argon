@@ -1,7 +1,6 @@
 package com.mi3software.argon.compiler
 
 import com.mi3software.argon.Compilation
-import scalaz._
 import scalaz.effect.IO
 
 trait Context {
@@ -22,7 +21,6 @@ trait Context {
   val invalidClassMetadata: TClassMetadata
 
   type Comp[+_]
-  implicit val compMonadInstance: Monad[Comp]
   implicit val compCompilationInstance: Compilation[Comp]
 
   val withCompType: this.type with ContextComp[Comp]
@@ -49,7 +47,7 @@ trait Context {
 
 
   final def createModule(input: CompilerInput): IO[Comp[ArModule[this.type]]] =
-    SourceModuleCreator.createModule[Comp](this.withCompType)(input)(compMonadInstance, compCompilationInstance)
+    SourceModuleCreator.createModule[Comp](this.withCompType)(input)(compCompilationInstance)
       .map(identity)
 
 }

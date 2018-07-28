@@ -2,9 +2,8 @@ package com.mi3software.argon.compiler.js
 
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.Compilation
-import scalaz.Monad
 
-final class JSContext extends ContextComp[StandardCompilation] {
+final class JSContext extends ContextComp[StandardCompilation.StandardCompilationType] {
 
   override type TTraitMetadata = JSMetadata.Trait
   override type TClassMetadata = JSMetadata.Class
@@ -14,10 +13,9 @@ final class JSContext extends ContextComp[StandardCompilation] {
 
 
 
-  override type Comp[+T] = StandardCompilation[T]
+  override type Comp[+T] = StandardCompilation.StandardCompilationType[T]
 
-  override val compMonadInstance: Monad[StandardCompilation] = StandardCompilation.monadInstance
-  override val compCompilationInstance: Compilation[StandardCompilation] = StandardCompilation.compilationInstance
+  override val compCompilationInstance: Compilation[Comp] = StandardCompilation.standardCompilationInstance
 
   override val typeSystem: ArgonTypeSystem[this.type] = new ArgonTypeSystem[this.type]
   override val moduleLoaders: Vector[ModuleLoader] = Vector(ArgonModuleLoader)

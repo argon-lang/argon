@@ -67,47 +67,29 @@ object ClassLikeDescriptor {
 sealed trait TraitDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
 object TraitDescriptor {
 
-  sealed trait Valid extends TraitDescriptor
-
   @deriving(Equal)
-  final case object Invalid extends TraitDescriptor
+  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends TraitDescriptor
 
-  @deriving(Equal)
-  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends Valid
-
-  implicit val equalInstanceValid: Equal[TraitDescriptor.Valid] = {
+  implicit val equalInstance: Equal[TraitDescriptor] = {
     case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
   }
 
-
-  implicit val equalInstance: Equal[TraitDescriptor] = {
-
-    case (Invalid, Invalid) => true
-    case (Invalid, _) | (_, Invalid) => false
-
-    case (a: Valid, b: Valid) => a === b
-  }
 }
 
 sealed trait ClassDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
 object ClassDescriptor {
 
-  sealed trait Valid extends ClassDescriptor
+  @deriving(Equal)
+  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends ClassDescriptor
 
   @deriving(Equal)
-  final case object Invalid extends ClassDescriptor
+  final case class MetaClass(ownerClass: ClassDescriptor) extends ClassDescriptor
 
   @deriving(Equal)
-  final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends Valid
-
-  @deriving(Equal)
-  final case class MetaClass(ownerClass: ClassDescriptor.Valid) extends Valid
-
-  @deriving(Equal)
-  final case class TraitMetaClass(ownerTrait: TraitDescriptor.Valid) extends Valid
+  final case class TraitMetaClass(ownerTrait: TraitDescriptor) extends ClassDescriptor
 
 
-  implicit val equalInstanceValid: Equal[ClassDescriptor.Valid] = {
+  implicit val equalInstance: Equal[ClassDescriptor] = {
     case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
     case (InNamespace(_, _, _, _), _) | (_, InNamespace(_, _, _, _)) => false
 
@@ -115,14 +97,6 @@ object ClassDescriptor {
     case (MetaClass(_), _) | (_, MetaClass(_)) => false
 
     case (a @ TraitMetaClass(_), b @ TraitMetaClass(_)) => a === b
-  }
-
-  implicit val equalInstance: Equal[ClassDescriptor] = {
-
-    case (Invalid, Invalid) => true
-    case (Invalid, _) | (_, Invalid) => false
-
-    case (a: Valid, b: Valid) => a === b
   }
 }
 

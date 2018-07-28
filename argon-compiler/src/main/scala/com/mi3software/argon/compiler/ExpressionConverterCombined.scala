@@ -1,6 +1,5 @@
 package com.mi3software.argon.compiler
 import com.mi3software.argon.Compilation
-import scalaz.Monad
 
 trait ExpressionConverterCombined[TContext <: Context]
   extends ExpressionConverterContext[TContext]
@@ -8,7 +7,6 @@ trait ExpressionConverterCombined[TContext <: Context]
 {
 
   override type Comp[T] = context.Comp[T]
-  override protected implicit val compMonadInstance: Monad[Comp] = context.compMonadInstance
   override protected implicit val compCompilationInstance: Compilation[Comp] = context.compCompilationInstance
 
   final class ExprTypes extends ArExprTypes {

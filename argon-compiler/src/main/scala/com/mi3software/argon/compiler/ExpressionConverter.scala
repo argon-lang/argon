@@ -11,7 +11,6 @@ import ScopeHelpers._
 trait ExpressionConverter {
 
   type Conv[T]
-  protected implicit val monadInstance: Monad[Conv]
   protected implicit val compilationInstance: Compilation[Conv]
 
   protected def nextVariableId: Conv[Int]
@@ -176,10 +175,10 @@ trait ExpressionConverter {
 
   protected def fromFixedType(env: Env, location: SourceLocation)(expr: exprTypes.TExpr): ExprFactory
   protected def fromFixedTypeConv(env: Env, location: SourceLocation)(expr: Conv[exprTypes.TExpr]): ExprFactory
-  protected def fromErrors(errors: CompilationMessage*): ExprFactory =
+  protected def fromErrors(headError: CompilationError, tailErrors: CompilationError*): ExprFactory =
     new ExprFactory {
       override def withExpectedType(expectedType: TS#TType): Conv[exprTypes.TExpr] =
-        compilationInstance.forErrors(wrapExpr(InvalidExpression()), errors: _*)
+        compilationInstance.forErrors(headError, tailErrors: _*)
     }
 
   protected def fromConv(factory: Conv[ExprFactory]): ExprFactory

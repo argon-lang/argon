@@ -17,14 +17,14 @@ object DescriptorId {
         case GlobalName.Unnamed(fileId, index) => "#" + fileId.id.toString + "-" + index.toString
       }) : String)
 
-  def forClass(descriptor: ClassDescriptor.Valid): String =
+  def forClass(descriptor: ClassDescriptor): String =
     descriptor match {
       case ClassDescriptor.InNamespace(_, namespace, name, _) => encodeInNamespace(namespace, name)
       case ClassDescriptor.MetaClass(ownerClass) => forClass(ownerClass) + "<MetaClass>"
       case ClassDescriptor.TraitMetaClass(ownerTrait) => forTrait(ownerTrait) + "<TraitMetaClass>"
     }
 
-  def forTrait(descriptor: TraitDescriptor.Valid): String =
+  def forTrait(descriptor: TraitDescriptor): String =
     descriptor match {
       case TraitDescriptor.InNamespace(_, namespace, name, _) => encodeInNamespace(namespace, name)
     }
