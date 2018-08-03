@@ -65,7 +65,7 @@ final class Parser {
     val ifToken = matchToken(KW_IF)
     val elseIfToken = matchToken(KW_ELSIF)
 
-    lazy val ifRulePart: TGrammar[Any] => TGrammar[Expr] = Memo.mutableHashMapMemo(prefix =>
+    lazy val ifRulePart: TGrammar[Any] => TGrammar[Expr] = Memo.immutableHashMapMemo(prefix =>
       (
         prefix ++! (ruleExpression.observeSource ++ matchToken(KW_THEN) ++ ruleStatementList.observeSource ++ (
           matchToken(KW_END) --> { _ => (condition: WithSource[Expr], body: BodyList) => IfExpr(condition, body) } |

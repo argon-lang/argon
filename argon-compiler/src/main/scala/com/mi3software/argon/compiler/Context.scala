@@ -44,6 +44,14 @@ trait Context {
     override type TVariable = Nothing
   }
 
+  final class ExprTypes extends ArExprTypes {
+    override val typeSystem: Context.this.typeSystem.type = Context.this.typeSystem
+    override type TExpr = ArExpr[ExprTypes]
+    override type TFunction = ArFunc[Context.this.type]
+    override type TMethod = ArMethod[Context.this.type]
+    override type TClassConstructor = ClassConstructor[Context.this.type]
+  }
+
 
   final def createModule(input: CompilerInput): IO[Comp[ArModule[this.type]]] =
     SourceModuleCreator.createModule[Comp](this.withCompType)(input)(compCompilationInstance)
