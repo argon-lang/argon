@@ -22,7 +22,6 @@ object ParseHandler {
     _
       .through(Characterizer.characterize)
       .through(lexer.lex)
-      .bufferAll
       .through(parser.parse)
       .through(buildSourceAST(fileSpec))
 

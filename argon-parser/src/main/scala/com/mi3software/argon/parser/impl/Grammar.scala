@@ -361,9 +361,9 @@ object Grammar {
 
         case None =>
           if(transPartial)
-            Pull.done
-          else
             parseEnd(trans)
+          else
+            Pull.done
       }
 
     s => impl(defaultTransformRule(FilePosition(1, 1)))(transPartial = false)(s).stream
