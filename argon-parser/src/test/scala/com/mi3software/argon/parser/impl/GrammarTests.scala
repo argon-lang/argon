@@ -1,13 +1,13 @@
 package com.mi3software.argon.parser.impl
 
 import org.scalatest.{FlatSpec, Matchers}
-
 import scalaz._
 import Grammar.Operators._
 
 import scala.language.postfixOps
 
-abstract class GrammarTestsCommon extends FlatSpec with Matchers with GrammarTestHelpers {
+abstract class GrammarTestsCommon extends FlatSpec with Matchers with GrammarTestHelpers with NumberTokenHelpers {
+
 
   "A token grammar" should "fail for EOF" in {
     parse(numberToken(5))() should matchPattern { case Left(_) => }
@@ -113,7 +113,7 @@ abstract class GrammarTestsCommon extends FlatSpec with Matchers with GrammarTes
     parse(numberToken(4) ++ numberToken(8))(4, 8) shouldBe Right((Vector(), (4, 8)))
   }
 
-  private lazy val leftRec: TGrammar =
+  private lazy val leftRec: TGrammar[Int] =
     leftRec -- numberToken(1) --> { case (a, b) => a + b } | numberToken(0)
 
   "A left recursive grammar" should "fail for EOF" in {
@@ -144,7 +144,7 @@ abstract class GrammarTestsCommon extends FlatSpec with Matchers with GrammarTes
     parse(leftRec)(0, 1, 1) shouldBe Right((Vector(), 2))
   }
 
-  private lazy val rightRec: TGrammar =
+  private lazy val rightRec: TGrammar[Int] =
     numberToken(0) | numberToken(1) ++ rightRec --> { case (a, b) => a + b }
 
   "A right recursive grammar" should "fail for EOF" in {

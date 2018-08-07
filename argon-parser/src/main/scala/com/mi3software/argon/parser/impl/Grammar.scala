@@ -674,8 +674,6 @@ object Grammar {
   (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
     extends Grammar[TToken, TSyntaxError, TLabel, Vector[T]] {
 
-    import Operators._
-
     private lazy val inner = innerUncached
 
 
@@ -706,20 +704,15 @@ object Grammar {
           case GrammarResultSuccess(state2, item) => parseInner(state2, options.notLeftRec, items :+ item)
 
           case trans: GrammarResultTransform[TToken, TSyntaxError, TLabel, a, T] =>
-            val inner: Grammar[TToken, TSyntaxError, TLabel, Vector[T]] =
-              new MapGrammar[TToken, TSyntaxError, TLabel, (T, Vector[T]), Vector[T]](
-                new MapGrammar[TToken, TSyntaxError, TLabel, a, T](
-                  trans.grammar,
-                  _.transformComplete(trans.f)
-                ) ++ this,
-                _.map { case (state2, WithSource((item, nextItems), loc2)) =>
-                  (state2, WithSource((items.map(removeSource) :+ item) ++ nextItems, SourceLocation(itemsLocation(state, items).start, loc2.end)))
-                }
+            GrammarResultTransform(
+              UnionGrammar(
+                new MapGrammar[TToken, TSyntaxError, TLabel, a, Vector[T]](trans.grammar, _.transformComplete(trans.f).flatMap {
+                  (state2, item) => parseInner(state2, options, items :+ item)
+                }),
+                new ParseStateGrammar(EmptyStrGrammar[TToken, TSyntaxError, TLabel, Vector[T]](items.map(removeSource)), state, options)
               )
-
-            GrammarResultTransform[TToken, TSyntaxError, TLabel, Vector[T], Vector[T]](
-              inner
             )(trans.parseOptions)(trans.pos)(identity)
+
         }
 
     override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, Vector[T]] =
