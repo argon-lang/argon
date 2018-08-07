@@ -18,7 +18,7 @@ trait TypeSystem {
 trait TypeSystemUnerased extends TypeSystem {
 
   def fromTypeBase(typeBase: TypeBase[this.type]): TType
-  override def fromTypeBaseConcrete(typeBase: TypeBaseConcrete[TypeSystemUnerased.this.type]): TType =
+  final override def fromTypeBaseConcrete(typeBase: TypeBaseConcrete[TypeSystemUnerased.this.type]): TType =
     fromTypeBase(typeBase)
 
   override type TTupleElementType = TType

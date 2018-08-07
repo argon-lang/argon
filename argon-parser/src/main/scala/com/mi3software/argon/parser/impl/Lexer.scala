@@ -7,6 +7,7 @@ import scala.language.postfixOps
 import scalaz._
 import Scalaz._
 import Grammar.Operators._
+import fs2._
 
 import Function.const
 
@@ -247,13 +248,12 @@ final class Lexer {
       matchIdentifier |
       matchOperator
 
-  private def collectTokens(token: WithSource[Option[Token]]): Option[WithSource[Token]] =
-    token match {
-      case WithSource(Some(token), location) => Some(WithSource(token, location))
-      case WithSource(None, _) => None
-    }
+  type ErrorEffect[F[_], A] = EitherT[F, NonEmptyList[SyntaxError], A]
 
-  def lex(chars: Vector[WithSource[String]]): Either[NonEmptyList[SyntaxError], Vector[WithSource[Token]]] =
-    Grammar.parseAll(matchToken)(collectTokens)(chars, FilePosition(1, 1)).toEither
+  def lex[F[_]: Monad]: Pipe[ErrorEffect[F, ?], WithSource[String], WithSource[Token]] =
+    _
+      .through(Grammar.parseAll[F, String, SyntaxError, TokenCategory, WithSource[Option[Token]]](matchToken.observeSource)(FilePosition(1, 1)))
+      .map { case WithSource(opt, loc) => opt.map { value => WithSource(value, loc) } }
+      .unNone
 
 }

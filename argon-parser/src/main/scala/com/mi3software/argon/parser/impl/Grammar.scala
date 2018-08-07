@@ -1,71 +1,138 @@
 package com.mi3software.argon.parser.impl
 
 import com.mi3software.argon.parser.GrammarError
-import com.mi3software.argon.parser.impl.Grammar.{GrammarResult, ParseOptions, ParseState}
+import com.mi3software.argon.parser.impl.Grammar._
 import com.mi3software.argon.util._
 
-import scala.collection.immutable._
+import scala.collection.immutable.{ Stream => _, _ }
 import scala.language.postfixOps
 import scalaz._
 import Scalaz._
+import fs2._
 
 sealed trait Grammar[TToken, TSyntaxError, TLabel, +T] {
 
   type TErrorList = NonEmptyList[TSyntaxError]
-  protected type TParseState = ParseState[TToken]
-  protected type TParseOptions = ParseOptions[TToken, TSyntaxError, TLabel]
+  type TParseState = ParseState[TToken]
+  type TParseOptions = ParseOptions[TToken, TSyntaxError, TLabel]
 
-  final def parse(tokens: Vector[WithSource[TToken]], pos: FilePosition): GrammarResult[TErrorList, (Vector[WithSource[TToken]], FilePosition, WithSource[T])] =
-    parseImpl(ParseState(tokens, pos), ParseOptions(Set.empty, None)).map {
-      case (ParseState(tokens2, pos2), result) => (tokens2, pos2, result)
-    }
-
-  protected def parseImpl(state: TParseState, options: TParseOptions): GrammarResult[TErrorList, (TParseState, WithSource[T])]
+  def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T]
+  def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T]
 
 }
 
 object Grammar {
 
-  sealed trait GrammarResult[+TError, +T] {
-    def map[U](f: T => U): GrammarResult[TError, U]
-    def flatMap[TError2 >: TError, U](f: T => GrammarResult[TError2, U]): GrammarResult[TError2, U]
+  sealed trait GrammarResult[TToken, TSyntaxError, TLabel, +T] {
+    def map[U](f: (ParseState[TToken], WithSource[T]) => (ParseState[TToken], WithSource[U])): GrammarResult[TToken, TSyntaxError, TLabel, U]
+    def flatMap[U](f: (ParseState[TToken], WithSource[T]) => GrammarResult[TToken, TSyntaxError, TLabel, U]): GrammarResult[TToken, TSyntaxError, TLabel, U]
 
-    def treatFailureAsError: GrammarResult[TError, T]
-    def toEither: Either[TError, T]
+    def treatFailureAsError: GrammarResult[TToken, TSyntaxError, TLabel, T]
+
+    def transformComplete[U](f: GrammarResultComplete[TToken, TSyntaxError, TLabel, T] => GrammarResult[TToken, TSyntaxError, TLabel, U]): GrammarResult[TToken, TSyntaxError, TLabel, U]
+    def completeResult: GrammarResultComplete[TToken, TSyntaxError, TLabel, T]
   }
 
-  final case class GrammarResultSuccess[+T](value: T) extends GrammarResult[Nothing, T] {
-    override def map[U](f: T => U): GrammarResult[Nothing, U] =
-      GrammarResultSuccess(f(value))
+  sealed trait GrammarResultNonSuccess[TToken, TSyntaxError, TLabel, +T] extends GrammarResult[TToken, TSyntaxError, TLabel, T]
 
-    override def flatMap[TError2 >: Nothing, U](f: T => GrammarResult[TError2, U]): GrammarResult[TError2, U] =
-      f(value)
+  sealed trait GrammarResultComplete[TToken, TSyntaxError, TLabel, +T] extends GrammarResult[TToken, TSyntaxError, TLabel, T] {
+    def toEither: Either[NonEmptyList[TSyntaxError], (ParseState[TToken], WithSource[T])]
 
-    override def treatFailureAsError: GrammarResult[Nothing, T] = this
+    def flatMap[U](f: (ParseState[TToken], WithSource[T]) => GrammarResultComplete[TToken, TSyntaxError, TLabel, U]): GrammarResultComplete[TToken, TSyntaxError, TLabel, U]
 
-    override def toEither: Either[Nothing, T] = Right(value)
+
+    override def map[U](f: (ParseState[TToken], WithSource[T]) => (ParseState[TToken], WithSource[U])): GrammarResultComplete[TToken, TSyntaxError, TLabel, U]
+    override def flatMap[U](f: (ParseState[TToken], WithSource[T]) => GrammarResult[TToken, TSyntaxError, TLabel, U]): GrammarResult[TToken, TSyntaxError, TLabel, U]
+    override def treatFailureAsError: GrammarResultComplete[TToken, TSyntaxError, TLabel, T]
+
+
+    override def transformComplete[U](f: GrammarResultComplete[TToken, TSyntaxError, TLabel, T] => GrammarResult[TToken, TSyntaxError, TLabel, U]): GrammarResult[TToken, TSyntaxError, TLabel, U] =
+      f(this)
+
+    override def completeResult: GrammarResultComplete[TToken, TSyntaxError, TLabel, T] = this
   }
 
-  final case class GrammarResultFailure[+TError](failure: TError) extends GrammarResult[TError, Nothing] {
-    override def map[U](f: Nothing => U): GrammarResult[TError, U] = this
-    override def flatMap[TError2 >: TError, U](f: Nothing => GrammarResult[TError2, U]): GrammarResult[TError2, U] = this
+  final case class GrammarResultSuccess[TToken, TSyntaxError, TLabel, +T](parseState: ParseState[TToken], value: WithSource[T]) extends GrammarResultComplete[TToken, TSyntaxError, TLabel, T] {
+    override def map[U](f: (ParseState[TToken], WithSource[T]) => (ParseState[TToken], WithSource[U])): GrammarResultComplete[TToken, TSyntaxError, TLabel, U] =
+      f(parseState, value) match { case (parseState2, value2) => GrammarResultSuccess(parseState2, value2) }
 
-    override def treatFailureAsError: GrammarResult[TError, Nothing] = GrammarResultError(failure)
+    override def flatMap[U](f: (ParseState[TToken], WithSource[T]) => GrammarResult[TToken, TSyntaxError, TLabel, U]): GrammarResult[TToken, TSyntaxError, TLabel, U] =
+      f(parseState, value)
 
-    override def toEither: Either[TError, Nothing] = Left(failure)
+    override def flatMap[U](f: (ParseState[TToken], WithSource[T]) => GrammarResultComplete[TToken, TSyntaxError, TLabel, U]): GrammarResultComplete[TToken, TSyntaxError, TLabel, U] =
+      f(parseState, value)
+
+    override def treatFailureAsError: GrammarResultComplete[TToken, TSyntaxError, TLabel, T] = this
+
+    override def toEither: Either[NonEmptyList[TSyntaxError], (ParseState[TToken], WithSource[T])] = Right((parseState, value))
   }
 
-  final case class GrammarResultError[+TError](error: TError) extends GrammarResult[TError, Nothing] {
-    override def map[U](f: Nothing => U): GrammarResult[TError, U] = this
-    override def flatMap[TError2 >: TError, U](f: Nothing => GrammarResult[TError2, U]): GrammarResult[TError2, U] = this
+  final case class GrammarResultFailure[TToken, TSyntaxError, TLabel](failure: NonEmptyList[TSyntaxError])
+    extends GrammarResultComplete[TToken, TSyntaxError, TLabel, Nothing]
+      with GrammarResultNonSuccess[TToken, TSyntaxError, TLabel, Nothing] {
 
-    override def treatFailureAsError: GrammarResult[TError, Nothing] = this
 
-    override def toEither: Either[TError, Nothing] = Left(error)
+    override def map[U](f: (ParseState[TToken], WithSource[Nothing]) => (ParseState[TToken], WithSource[U])): GrammarResultComplete[TToken, TSyntaxError, TLabel, U] = this
+
+    override def flatMap[U](f: (ParseState[TToken], WithSource[Nothing]) => GrammarResult[TToken, TSyntaxError, TLabel, U]): GrammarResult[TToken, TSyntaxError, TLabel, U] = this
+    override def flatMap[U](f: (ParseState[TToken], WithSource[Nothing]) => GrammarResultComplete[TToken, TSyntaxError, TLabel, U]): GrammarResultComplete[TToken, TSyntaxError, TLabel, U] = this
+
+    override def treatFailureAsError: GrammarResultComplete[TToken, TSyntaxError, TLabel, Nothing] = GrammarResultError(failure)
+
+    override def toEither: Either[NonEmptyList[TSyntaxError], Nothing] = Left(failure)
   }
 
-  private[impl] final case class ParseState[TToken](tokens: Vector[WithSource[TToken]], pos: FilePosition)
-  private[impl] final case class ParseOptions[TToken, TSyntaxError, TLabel](leftRecRules: Set[Grammar[TToken, TSyntaxError, TLabel, _]], currentLabel: Option[TLabel]) {
+  final case class GrammarResultError[TToken, TSyntaxError, TLabel](error: NonEmptyList[TSyntaxError])
+    extends GrammarResultComplete[TToken, TSyntaxError, TLabel, Nothing]
+      with GrammarResultNonSuccess[TToken, TSyntaxError, TLabel, Nothing] {
+
+
+    override def map[U](f: (ParseState[TToken], WithSource[Nothing]) => (ParseState[TToken], WithSource[U])): GrammarResultComplete[TToken, TSyntaxError, TLabel, U] = this
+
+    override def flatMap[U](f: (ParseState[TToken], WithSource[Nothing]) => GrammarResult[TToken, TSyntaxError, TLabel, U]): GrammarResult[TToken, TSyntaxError, TLabel, U] = this
+    override def flatMap[U](f: (ParseState[TToken], WithSource[Nothing]) => GrammarResultComplete[TToken, TSyntaxError, TLabel, U]): GrammarResultComplete[TToken, TSyntaxError, TLabel, U] = this
+
+    override def treatFailureAsError: GrammarResultComplete[TToken, TSyntaxError, TLabel, Nothing] = this
+
+    override def toEither: Either[NonEmptyList[TSyntaxError], Nothing] = Left(error)
+  }
+
+  final class GrammarResultTransform[TToken, TSyntaxError, TLabel, T, +U]
+  (
+    val grammar: Grammar[TToken, TSyntaxError, TLabel, T],
+    val parseOptions: ParseOptions[TToken, TSyntaxError, TLabel],
+    val pos: FilePosition,
+    val f: GrammarResultComplete[TToken, TSyntaxError, TLabel, T] => GrammarResult[TToken, TSyntaxError, TLabel, U]
+  ) extends GrammarResult[TToken, TSyntaxError, TLabel, U]
+    with GrammarResultNonSuccess[TToken, TSyntaxError, TLabel, U] {
+    override def map[V](f2: (ParseState[TToken], WithSource[U]) => (ParseState[TToken], WithSource[V])): GrammarResult[TToken, TSyntaxError, TLabel, V] =
+      transformComplete(_.map(f2))
+
+    override def flatMap[V](f2: (ParseState[TToken], WithSource[U]) => GrammarResult[TToken, TSyntaxError, TLabel, V]): GrammarResult[TToken, TSyntaxError, TLabel, V] =
+      transformComplete(_.flatMap(f2))
+
+    override def treatFailureAsError: GrammarResult[TToken, TSyntaxError, TLabel, U] =
+      transformComplete(_.treatFailureAsError)
+
+    override def transformComplete[V](f2: GrammarResultComplete[TToken, TSyntaxError, TLabel, U] => GrammarResult[TToken, TSyntaxError, TLabel, V]): GrammarResult[TToken, TSyntaxError, TLabel, V] =
+      GrammarResultTransform(grammar)(parseOptions)(pos)(tG => f(tG).transformComplete(f2))
+
+    override def completeResult: GrammarResultComplete[TToken, TSyntaxError, TLabel, U] =
+      f(grammar.parseEnd(pos, parseOptions)).completeResult
+  }
+
+  object GrammarResultTransform {
+    def apply[TToken, TSyntaxError, TLabel, T, U]
+    (prev: Grammar[TToken, TSyntaxError, TLabel, T])
+    (parseOptions: ParseOptions[TToken, TSyntaxError, TLabel])
+    (pos: FilePosition)
+    (f: GrammarResultComplete[TToken, TSyntaxError, TLabel, T] => GrammarResult[TToken, TSyntaxError, TLabel, U])
+    : GrammarResultTransform[TToken, TSyntaxError, TLabel, T, U] =
+      new GrammarResultTransform(prev, parseOptions, pos, f)
+  }
+
+  final case class ParseState[TToken](tokens: Vector[WithSource[TToken]], pos: FilePosition)
+  final case class ParseOptions[TToken, TSyntaxError, TLabel](leftRecRules: Set[Grammar[TToken, TSyntaxError, TLabel, _]], currentLabel: Option[TLabel]) {
 
     def notLeftRec: ParseOptions[TToken, TSyntaxError, TLabel] =
       if(leftRecRules.isEmpty)
@@ -97,7 +164,7 @@ object Grammar {
 
       def --> [U](f: T => U): Grammar[TToken, TSyntaxError, TLabel, U] = -+>(WithSource.lift(f))
       def -+> [U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, TLabel, U] =
-        new MapGrammar[TToken, TSyntaxError, TLabel, T, U](grammar1, f)
+        new MapGrammar[TToken, TSyntaxError, TLabel, T, U](grammar1, _.map { (state, value) => (state, f(value)) })
 
       def | [U >: T]
       (grammar2: => Grammar[TToken, TSyntaxError, TLabel, U])
@@ -115,7 +182,7 @@ object Grammar {
       (grammar2: => Grammar[TToken, TSyntaxError, TLabel, U])
       (implicit combiner: GrammarConcatCombiner[T, U, V], errorFactory: ErrorFactory[TToken, _, TSyntaxError])
       : Grammar[TToken, TSyntaxError, TLabel, V] =
-        StrictConcatGrammar(grammar1, grammar2) { (a, b) => WithSource(combiner.combine(a.value, b.value), SourceLocation.merge(a.location, b.location)) }
+        ConcatGrammar(grammar1, StrictGrammar(grammar2)) { (a, b) => WithSource(combiner.combine(a.value, b.value), SourceLocation.merge(a.location, b.location)) }
 
       final class LeftRecGrammarBuilder[U]
       (grammar2: => Grammar[TToken, TSyntaxError, TLabel, U])
@@ -141,8 +208,10 @@ object Grammar {
 
       def +~
       (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
-      : Grammar[TToken, TSyntaxError, TLabel, NonEmptyList[T]] =
-        this ++ (this*) --> { case (head, tail) => NonEmptyList.nel(head, tail.toIList) }
+      : Grammar[TToken, TSyntaxError, TLabel, NonEmptyList[T]] = {
+        lazy val grammar1Cached = grammar1
+        grammar1Cached ++ (grammar1Cached*) --> { case (head, tail) => NonEmptyList.nel(head, tail.toIList) }
+      }
 
       def *
       (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
@@ -229,22 +298,76 @@ object Grammar {
   : Grammar[TToken, TSyntaxError, TLabel, Result] =
     matcher(category, f.lift)
 
-  def parseAllImpl[TToken, TSyntaxError, TLabel, T, U](rule: Grammar[TToken, TSyntaxError, TLabel, T])(collector: WithSource[T] => Option[U])(tokens: Vector[WithSource[TToken]], pos: FilePosition, acc: Vector[U]): GrammarResult[NonEmptyList[TSyntaxError], Vector[U]] =
-    if(tokens.isEmpty)
-      GrammarResultSuccess(acc)
-    else
-      rule.parse(tokens, pos) match {
-        case GrammarResultError(errorList) => GrammarResultError(errorList)
-        case GrammarResultFailure(errorList) => GrammarResultFailure(errorList)
-        case GrammarResultSuccess((tokens2, pos2, item)) =>
-          collector(item) match {
-            case Some(res) => parseAllImpl(rule)(collector)(tokens2, pos2, acc :+ res)
-            case None => parseAllImpl(rule)(collector)(tokens2, pos2, acc)
-          }
+  def parseAll[F[_]: Monad, TToken, TSyntaxError, TLabel, T](rule: Grammar[TToken, TSyntaxError, TLabel, T])(pos: FilePosition): Pipe[EitherT[F, NonEmptyList[TSyntaxError], ?], WithSource[TToken], T] = {
+
+    val defaultParseOptions: ParseOptions[TToken, TSyntaxError, TLabel] = ParseOptions(Set.empty, None)
+    def defaultTransformRule(pos: FilePosition) = GrammarResultTransform(rule)(defaultParseOptions)(pos)(identity)
+
+    def handleParseError(error: NonEmptyList[TSyntaxError]): Pull[EitherT[F, NonEmptyList[TSyntaxError], ?], T, Unit] =
+      Pull.eval[EitherT[F, NonEmptyList[TSyntaxError], ?], Unit](EitherT(Monad[F].point(\/.left[NonEmptyList[TSyntaxError], Unit](error))))
+
+    final case class TransformStepResult(items: Vector[T], parseResult: GrammarResultNonSuccess[TToken, TSyntaxError, TLabel, T], transPartial: Boolean)
+
+    def parseAllPartial[A](trans: GrammarResultTransform[TToken, TSyntaxError, TLabel, A, T])(transPartial: Boolean)(tokens: Vector[WithSource[TToken]])(acc: Vector[T]): TransformStepResult =
+      if(tokens.isEmpty)
+        TransformStepResult(acc, trans, transPartial)
+      else
+        trans.grammar.parseTokens(ParseState(tokens, trans.pos), trans.parseOptions).transformComplete(trans.f) match {
+          case GrammarResultSuccess(ParseState(tokens, pos), WithSource(value, _)) =>
+            parseAllPartial(defaultTransformRule(pos))(transPartial = false)(tokens)(acc :+ value)
+
+          case result: GrammarResultNonSuccess[TToken, TSyntaxError, TLabel, T] =>
+            TransformStepResult(acc, result, transPartial = true)
+        }
+
+    def handleEndResult(result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T]): Pull[EitherT[F, NonEmptyList[TSyntaxError], ?], T, Unit] =
+      result match {
+        case GrammarResultSuccess(state, WithSource(value, _)) =>
+          Pull.output1(value).flatMap[EitherT[F, NonEmptyList[TSyntaxError], ?], T, Unit](_ => parseEndTokens(state))
+
+        case GrammarResultFailure(failure) =>
+          handleParseError(failure)
+
+        case GrammarResultError(error) =>
+          handleParseError(error)
       }
 
-  def parseAll[TToken, TSyntaxError, TLabel, T, U](rule: Grammar[TToken, TSyntaxError, TLabel, T])(collector: WithSource[T] => Option[U])(tokens: Vector[WithSource[TToken]], pos: FilePosition): GrammarResult[NonEmptyList[TSyntaxError], Vector[U]] =
-    parseAllImpl(rule)(collector)(tokens, pos, Vector.empty)
+    def parseEndTokens(state: ParseState[TToken]): Pull[EitherT[F, NonEmptyList[TSyntaxError], ?], T, Unit] =
+      if(state.tokens.isEmpty)
+        Pull.done
+      else
+        handleEndResult(rule.parseTokens(state, defaultParseOptions).completeResult)
+
+    def parseEnd[A](trans: GrammarResultTransform[TToken, TSyntaxError, TLabel, A, T]): Pull[EitherT[F, NonEmptyList[TSyntaxError], ?], T, Unit] =
+      handleEndResult(trans.completeResult)
+
+    def impl[A](trans: GrammarResultTransform[TToken, TSyntaxError, TLabel, A, T])(transPartial: Boolean)(s: fs2.Stream[EitherT[F, NonEmptyList[TSyntaxError], ?], WithSource[TToken]]): Pull[EitherT[F, NonEmptyList[TSyntaxError], ?], T, Unit] =
+      Stream.InvariantOps[EitherT[F, NonEmptyList[TSyntaxError], ?], WithSource[TToken]](s).pull.unconsChunk.flatMap[EitherT[F, NonEmptyList[TSyntaxError], ?], T, Unit] {
+        case Some((head, tail)) =>
+          val TransformStepResult(items, parseResult, transPartialNext) = parseAllPartial(trans)(transPartial)(head.toVector)(Vector.empty)
+
+          Pull.outputChunk(Chunk.vector(items)).flatMap[EitherT[F, NonEmptyList[TSyntaxError], ?], T, Unit] { _ =>
+            parseResult match {
+              case GrammarResultFailure(failure) =>
+                handleParseError(failure)
+
+              case GrammarResultError(error) =>
+                handleParseError(error)
+
+              case trans: GrammarResultTransform[TToken, TSyntaxError, TLabel, a, T] =>
+                impl(trans)(transPartialNext)(tail)
+            }
+          }
+
+        case None =>
+          if(transPartial)
+            Pull.done
+          else
+            parseEnd(trans)
+      }
+
+    s => impl(defaultTransformRule(FilePosition(1, 1)))(transPartial = false)(s).stream
+  }
 
   trait ErrorFactory[-TToken, -TTokenCategory, TSyntaxError] {
     def createError(error: GrammarError[TToken, TTokenCategory]): TSyntaxError
@@ -256,18 +379,21 @@ object Grammar {
 
   private final case class RejectGrammar[TToken, TSyntaxError, TLabel, T](grammarErrors: NonEmptyList[TSyntaxError]) extends Grammar[TToken, TSyntaxError, TLabel, T] {
 
-    override protected def parseImpl(state: TParseState, options: TParseOptions): GrammarResult[TErrorList, (TParseState, WithSource[T])] =
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
+      GrammarResultFailure(grammarErrors)
+
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
       GrammarResultFailure(grammarErrors)
 
   }
 
-  private final case class EmptyStrGrammar[TToken, TSyntaxError, TLabel, T]
-  (result: T)
-  (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
-    extends Grammar[TToken, TSyntaxError, TLabel, T] {
+  private final case class EmptyStrGrammar[TToken, TSyntaxError, TLabel, T](result: T) extends Grammar[TToken, TSyntaxError, TLabel, T] {
 
-    override protected def parseImpl(state: TParseState, options: TParseOptions): GrammarResult[TErrorList, (TParseState, WithSource[T])] =
-      GrammarResultSuccess((state, WithSource(result, SourceLocation(state.pos, state.pos))))
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
+      GrammarResultSuccess(state, WithSource(result, SourceLocation(state.pos, state.pos)))
+
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+      GrammarResultSuccess(ParseState(Vector.empty, pos), WithSource(result, SourceLocation(pos, pos)))
 
   }
 
@@ -284,19 +410,22 @@ object Grammar {
     }
 
 
-    override protected def parseImpl(state: TParseState, options: TParseOptions): GrammarResult[TErrorList, (TParseState, WithSource[T])] =
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
       state.tokens match {
         case (token @ MatchingToken(value)) +: tail =>
-          GrammarResultSuccess((
+          GrammarResultSuccess(
             ParseState(
               tail,
               tail.headOption.map { _.location.start }.getOrElse { token.location.end }
             ),
             value
-          ))
+          )
         case token +: _ => GrammarResultFailure(NonEmptyList(errorFactory.createError(GrammarError.UnexpectedToken(category, token))))
-        case Vector() => GrammarResultFailure(NonEmptyList(errorFactory.createError(GrammarError.UnexpectedEndOfFile(category, state.pos))))
+        case Vector() => GrammarResultTransform(this)(options)(state.pos)(identity)
       }
+
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+      GrammarResultFailure(NonEmptyList(errorFactory.createError(GrammarError.UnexpectedEndOfFile(category, pos))))
 
   }
 
@@ -313,10 +442,25 @@ object Grammar {
     private lazy val grammarB = grammarBUncached
 
 
-    override protected def parseImpl(state: TParseState, options: TParseOptions): GrammarResult[TErrorList, (TParseState, WithSource[T])] =
-      grammarA.parseImpl(state, options).flatMap {
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
+      grammarA.parseTokens(state, options).flatMap {
         case (state2, valueA) =>
-          grammarB.parseImpl(state2, options.notLeftRec).map {
+          grammarB.parseTokens(state2, options.notLeftRec).map {
+            case (state3, valueB) =>
+              (state3, combine(valueA, valueB))
+          }
+      }
+
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+      grammarA.parseEnd(pos, options).flatMap {
+        case (ParseState(Vector(), pos), valueA) =>
+          grammarB.parseEnd(pos, options.notLeftRec).map {
+            case (state3, valueB) =>
+              (state3, combine(valueA, valueB))
+          }
+
+        case (state2, valueA) =>
+          grammarB.parseTokens(state2, options.notLeftRec).completeResult.map {
             case (state3, valueB) =>
               (state3, combine(valueA, valueB))
           }
@@ -338,41 +482,26 @@ object Grammar {
 
   }
 
-  private final class StrictConcatGrammar[TToken, TSyntaxError, TLabel, A, B, T]
+  private final class StrictGrammar[TToken, TSyntaxError, TLabel, T]
   (
-    grammarAUncached: => Grammar[TToken, TSyntaxError, TLabel, A],
-    grammarBUncached: => Grammar[TToken, TSyntaxError, TLabel, B],
-    combine: (WithSource[A], WithSource[B]) => WithSource[T]
-  )(implicit
-    errorFactory: ErrorFactory[TToken, _, TSyntaxError]
+    innerUncached: => Grammar[TToken, TSyntaxError, TLabel, T]
   ) extends Grammar[TToken, TSyntaxError, TLabel, T] {
 
-    private lazy val grammarA = grammarAUncached
-    private lazy val grammarB = grammarBUncached
+    private lazy val inner = innerUncached
 
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
+      inner.parseTokens(state, options).treatFailureAsError
 
-    override protected def parseImpl(state: TParseState, options: TParseOptions): GrammarResult[TErrorList, (TParseState, WithSource[T])] =
-      grammarA.parseImpl(state, options).flatMap {
-        case (state2, valueA) =>
-          grammarB.parseImpl(state2, options.notLeftRec).treatFailureAsError.map {
-            case (state3, valueB) =>
-              (state3, combine(valueA, valueB))
-          }
-      }
-
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+      inner.parseEnd(pos, options).treatFailureAsError
   }
 
-  private object StrictConcatGrammar {
-    def apply[TToken, TSyntaxError, TLabel, A, B, T]
+  private object StrictGrammar {
+    def apply[TToken, TSyntaxError, TLabel, T]
     (
-      grammarA: => Grammar[TToken, TSyntaxError, TLabel, A],
-      grammarB: => Grammar[TToken, TSyntaxError, TLabel, B]
-    )(
-      combine: (WithSource[A], WithSource[B]) => WithSource[T]
-    )(implicit
-      errorFactory: ErrorFactory[TToken, _, TSyntaxError]
-    ): StrictConcatGrammar[TToken, TSyntaxError, TLabel, A, B, T] =
-      new StrictConcatGrammar(grammarA, grammarB, combine)
+      inner: => Grammar[TToken, TSyntaxError, TLabel, T]
+    ): StrictGrammar[TToken, TSyntaxError, TLabel, T] =
+      new StrictGrammar(inner)
 
   }
 
@@ -389,13 +518,31 @@ object Grammar {
     private val grammarBRep = grammarBUncached.observeSource*
 
 
-    override protected def parseImpl(state: TParseState, options: TParseOptions): GrammarResult[TErrorList, (TParseState, WithSource[A])] =
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, A] =
       if(options.leftRecRules contains this)
         GrammarResultFailure(NonEmptyList(errorFactory.createError(GrammarError.InfiniteRecursion(state.pos))))
       else
-        grammarA.parseImpl(state, options.addLeftRec(this)).flatMap {
+        grammarA.parseTokens(state, options.addLeftRec(this)).flatMap {
           case (state2, valueA) =>
-            grammarBRep.parseImpl(state2, options.notLeftRec).map {
+            grammarBRep.parseTokens(state2, options.notLeftRec).map {
+              case (state3, WithSource(valueBVec, _)) =>
+                (state3, valueBVec.foldLeft(valueA)(combine))
+            }
+        }
+
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, A] =
+      if(options.leftRecRules contains this)
+        GrammarResultFailure(NonEmptyList(errorFactory.createError(GrammarError.InfiniteRecursion(pos))))
+      else
+        grammarA.parseEnd(pos, options.addLeftRec(this)).flatMap {
+          case (ParseState(Vector(), pos), valueA) =>
+            grammarBRep.parseEnd(pos, options.notLeftRec).map {
+              case (state3, WithSource(valueBVec, _)) =>
+                (state3, valueBVec.foldLeft(valueA)(combine))
+            }
+
+          case (state2, valueA) =>
+            grammarBRep.parseTokens(state2, options.notLeftRec).completeResult.map {
               case (state3, WithSource(valueBVec, _)) =>
                 (state3, valueBVec.foldLeft(valueA)(combine))
             }
@@ -417,6 +564,22 @@ object Grammar {
 
   }
 
+  private final class ParseStateGrammar[TToken, TSyntaxError, TLabel, T]
+  (
+    innerUncached: => Grammar[TToken, TSyntaxError, TLabel, T],
+    prevState: ParseState[TToken],
+    prevOptions: ParseOptions[TToken, TSyntaxError, TLabel]
+  ) extends Grammar[TToken, TSyntaxError, TLabel, T] {
+
+    private lazy val inner = innerUncached
+
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
+      inner.parseTokens(prevState.copy(tokens = prevState.tokens ++ state.tokens), prevOptions)
+
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+      inner.parseTokens(prevState, prevOptions).completeResult
+  }
+
   private final class UnionGrammar[TToken, TSyntaxError, TLabel, T]
   (grammarAUncached: => Grammar[TToken, TSyntaxError, TLabel, T], grammarBUncached: => Grammar[TToken, TSyntaxError, TLabel, T])
   (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
@@ -425,14 +588,46 @@ object Grammar {
     private lazy val grammarA = grammarAUncached
     private lazy val grammarB = grammarBUncached
 
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
+      grammarA.parseTokens(state, options) match {
+        case result @ GrammarResultSuccess(_, _) => result
+        case result @ GrammarResultError(_) => result
+        case trans: GrammarResultTransform[TToken, TSyntaxError, TLabel, a, T] =>
+          GrammarResultTransform(UnionGrammar(
+            new MapGrammar[TToken, TSyntaxError, TLabel, a, T](
+              trans.grammar,
+              _.transformComplete(trans.f)
+            ),
+            new ParseStateGrammar(grammarB, state, options)
+          ))(trans.parseOptions)(trans.pos)(identity)
 
-    override protected def parseImpl(state: TParseState, options: TParseOptions): GrammarResult[TErrorList, (TParseState, WithSource[T])] =
-      grammarA.parseImpl(state, options) match {
-        case result @ GrammarResultSuccess(_) => result
+        case GrammarResultFailure(errorListA) =>
+          grammarB.parseTokens(state, options).transformComplete {
+            case result @ GrammarResultSuccess(_, _) => result
+            case result @ GrammarResultError(_) => result
+            case GrammarResultFailure(errorListB) =>
+
+              def findLastErrorPos(errorList: TErrorList): TSyntaxError =
+                errorList.maximum1(errorFactory.errorEndLocationOrder)
+
+
+              GrammarResultFailure(
+                errorFactory.errorEndLocationOrder(findLastErrorPos(errorListA), findLastErrorPos(errorListB)) match {
+                  case Ordering.GT => errorListA
+                  case Ordering.LT => errorListB
+                  case Ordering.EQ => errorListA.append(errorListB)
+                }
+              )
+          }
+      }
+
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+      grammarA.parseEnd(pos, options) match {
+        case result @ GrammarResultSuccess(_, _) => result
         case result @ GrammarResultError(_) => result
         case GrammarResultFailure(errorListA) =>
-          grammarB.parseImpl(state, options) match {
-            case result @ GrammarResultSuccess(_) => result
+          grammarB.parseEnd(pos, options) match {
+            case result @ GrammarResultSuccess(_, _) => result
             case result @ GrammarResultError(_) => result
             case GrammarResultFailure(errorListB) =>
 
@@ -479,44 +674,84 @@ object Grammar {
   (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
     extends Grammar[TToken, TSyntaxError, TLabel, Vector[T]] {
 
+    import Operators._
+
     private lazy val inner = innerUncached
 
 
-    override protected def parseImpl(state: TParseState, options: TParseOptions): GrammarResult[TErrorList, (TParseState, WithSource[Vector[T]])] =
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, Vector[T]] =
       parseInner(state, options, Vector.empty)
 
-    private def parseInner(state: TParseState, options: TParseOptions, items: Vector[WithSource[T]]): GrammarResult[TErrorList, (TParseState, WithSource[Vector[T]])] =
-      inner.parseImpl(state, options) match {
-        case result @ GrammarResultError(_) => result
-        case GrammarResultFailure(_) =>
-          val location = items match {
-            case WithSource(_, SourceLocation(start, _)) +: _ :+ WithSource(_, SourceLocation(_, end)) => SourceLocation(start, end)
-            case Vector(WithSource(_, loc)) => loc
-            case Vector() => SourceLocation(state.pos, state.pos)
-          }
-
-          GrammarResultSuccess((state, WithSource(items.map { case WithSource(item, _) => item }, location)))
-        case GrammarResultSuccess((state2, item)) => parseInner(state2, options.notLeftRec, items :+ item)
+    private def itemsLocation(state: TParseState, items: Vector[WithSource[T]]): SourceLocation =
+      items match {
+        case WithSource(_, SourceLocation(start, _)) +: _ :+ WithSource(_, SourceLocation(_, end)) => SourceLocation(start, end)
+        case Vector(WithSource(_, loc)) => loc
+        case Vector() => SourceLocation(state.pos, state.pos)
       }
 
+    private def parseInner(state: TParseState, options: TParseOptions, items: Vector[WithSource[T]]): GrammarResult[TToken, TSyntaxError, TLabel, Vector[T]] =
+      if(state.tokens.isEmpty)
+        GrammarResultTransform(this)(options)(state.pos)(_.map {
+          case (state2, WithSource(nextItems, SourceLocation(_, endPos))) =>
+            val startPos = items.headOption.map(_.location.start).getOrElse(state.pos)
+
+            (state2, WithSource(items.map(removeSource) ++ nextItems, SourceLocation(startPos, endPos)))
+        })
+      else
+        inner.parseTokens(state, options) match {
+          case result @ GrammarResultError(_) => result
+          case GrammarResultFailure(_) =>
+            GrammarResultSuccess(state, WithSource(items.map(removeSource), itemsLocation(state, items)))
+
+          case GrammarResultSuccess(state2, item) => parseInner(state2, options.notLeftRec, items :+ item)
+
+          case trans: GrammarResultTransform[TToken, TSyntaxError, TLabel, a, T] =>
+            val inner: Grammar[TToken, TSyntaxError, TLabel, Vector[T]] =
+              new MapGrammar[TToken, TSyntaxError, TLabel, (T, Vector[T]), Vector[T]](
+                new MapGrammar[TToken, TSyntaxError, TLabel, a, T](
+                  trans.grammar,
+                  _.transformComplete(trans.f)
+                ) ++ this,
+                _.map { case (state2, WithSource((item, nextItems), loc2)) =>
+                  (state2, WithSource((items.map(removeSource) :+ item) ++ nextItems, SourceLocation(itemsLocation(state, items).start, loc2.end)))
+                }
+              )
+
+            GrammarResultTransform[TToken, TSyntaxError, TLabel, Vector[T], Vector[T]](
+              inner
+            )(trans.parseOptions)(trans.pos)(identity)
+        }
+
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, Vector[T]] =
+      GrammarResultSuccess(ParseState(Vector.empty, pos), WithSource(Vector.empty, SourceLocation(pos, pos)))
+
+    private def removeSource[A](ws: WithSource[A]): A = ws.value
   }
 
-  private final class MapGrammar[TToken, TSyntaxError, TLabel, T, U](innerUncached: => Grammar[TToken, TSyntaxError, TLabel, T], f: WithSource[T] => WithSource[U]) extends Grammar[TToken, TSyntaxError, TLabel, U] {
+
+  private final class MapGrammar[TToken, TSyntaxError, TLabel, T, U](innerUncached: => Grammar[TToken, TSyntaxError, TLabel, T], f: GrammarResult[TToken, TSyntaxError, TLabel, T] => GrammarResult[TToken, TSyntaxError, TLabel, U]) extends Grammar[TToken, TSyntaxError, TLabel, U] {
 
     private lazy val inner = innerUncached
 
-    override protected def parseImpl(state: TParseState, options: TParseOptions): GrammarResult[TErrorList, (TParseState, WithSource[U])] =
-      inner.parseImpl(state, options).map {
-        case (state2, value) => (state2, f(value))
-      }
+
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, U] =
+      f(inner.parseTokens(state, options))
+
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, U] =
+      f(inner.parseEnd(pos, options)).completeResult
+
   }
 
   private final class LabelGrammar[TToken, TSyntaxError, TLabel, T](label: TLabel, innerUncached: => Grammar[TToken, TSyntaxError, TLabel, T]) extends Grammar[TToken, TSyntaxError, TLabel, T] {
 
     private lazy val inner = innerUncached
 
-    override protected def parseImpl(state: TParseState, options: TParseOptions): GrammarResult[TErrorList, (TParseState, WithSource[T])] =
-      inner.parseImpl(state, options.setLabel(label))
+
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
+      inner.parseTokens(state, options.copy(currentLabel = Some(label)))
+
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+      inner.parseEnd(pos, options.copy(currentLabel = Some(label)))
 
   }
 

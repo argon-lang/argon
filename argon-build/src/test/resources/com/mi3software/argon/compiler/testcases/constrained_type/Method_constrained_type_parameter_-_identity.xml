@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Method constrained type parameter - identity</Name>
+
+
+    <InputSource name="test.ar"><![CDATA[
+            
+        import Ar._
+        
+        trait Test <: Any
+        static
+            public proc _.identity (T: type) (value: T): T =
+                value
+        end
+        
+        proc main(): () do
+            puts (Test.identity String ''Zero'')
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Zero</ExpectedOutput>
+
+</ArgonTest>

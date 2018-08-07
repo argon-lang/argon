@@ -10,6 +10,7 @@ import scalaz._
 import Scalaz._
 import Grammar.Operators._
 import Grammar.{UnionGrammar, label => labelRule}
+import fs2._
 
 import Function.const
 
@@ -599,13 +600,15 @@ final class Parser {
     }
   )
 
-  private val ruleNamespaceDeclaration: TGrammar[TopLevelStatement] =
+  private val ruleNamespaceDeclaration: TGrammar[TopLevelStatement] = labelRule("namespace_declaration")(
     matchToken(KW_NAMESPACE) ++! ruleNamespacePath --> { case (_, ns) => TopLevelStatement.Namespace(ns) }
+  )
 
-  private val ruleImportNamespace: TGrammar[TopLevelStatement] =
+  private[impl] val ruleImportNamespace: TGrammar[TopLevelStatement] = labelRule("import_namespace")(
     matchToken(KW_IMPORT) ++! (ruleNamespacePath ++ matchToken(OP_DOT) ++ matchToken(KW_UNDERSCORE)) --> {
       case (_, (ns, _, _)) => TopLevelStatement.Import(ns)
     }
+  )
 
   private val ruleTopLevelStatement: TGrammar[TopLevelStatement] = labelRule("top_level_stmt")(
     ruleNamespaceDeclaration |
@@ -618,11 +621,10 @@ final class Parser {
       case (_, stmt, _) => stmt
     }
 
-  private def collectStmts(stmt: WithSource[WithSource[TopLevelStatement]]): Option[TopLevelStatement] =
-    Some(stmt.value.value)
-
-  def parse(tokens: Vector[WithSource[Token]]): Either[NonEmptyList[SyntaxError], Vector[TopLevelStatement]] =
-    Grammar.parseAll(ruleTopLevelStatementPadded)(collectStmts)(tokens, FilePosition(1, 1)).toEither
+  def parse[F[_]: Monad]: Pipe[EitherT[F, NonEmptyList[SyntaxError], ?], WithSource[Token], TopLevelStatement] =
+    _
+      .through(Grammar.parseAll[F, Token, SyntaxError, String, WithSource[TopLevelStatement]](ruleTopLevelStatementPadded)(FilePosition(1, 1)))
+      .map { _.value }
 
 
 }

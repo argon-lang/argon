@@ -59,14 +59,16 @@ trait TypeComparerUnerased[TS <: TypeSystemUnerased] extends TypeComparer[TS] {
 
   def typeBaseToType(typeBase: TypeBase[TS]): TS#TType
 
+  final override def typeBaseConcreteToType(typeBase: TypeBaseConcrete[TS]): TS#TType =
+    typeBaseToType(typeBase)
 
-  override def tupleElementIsSubType(a: TS#TTupleElementType, b: TS#TTupleElementType): Boolean =
+  final override def tupleElementIsSubType(a: TS#TTupleElementType, b: TS#TTupleElementType): Boolean =
     isSubType(a, b)
 
-  override def functionArgIsSubType(a: TS#TFunctionArgumentType, b: TS#TFunctionArgumentType): Boolean =
+  final override def functionArgIsSubType(a: TS#TFunctionArgumentType, b: TS#TFunctionArgumentType): Boolean =
     isSubType(a, b)
 
-  override def functionResultIsSubType(a: TS#TFunctionResultType, b: TS#TFunctionResultType): Boolean =
+  final override def functionResultIsSubType(a: TS#TFunctionResultType, b: TS#TFunctionResultType): Boolean =
     isSubType(a, b)
 
   private def convertTupleToMetaType(tupleType: TupleType[TS]): Option[MetaType[TS]] =

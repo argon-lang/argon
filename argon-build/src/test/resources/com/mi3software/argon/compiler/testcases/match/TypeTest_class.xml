@@ -1,0 +1,46 @@
+<ArgonTest>
+
+    <Name>Type test (class)</Name>
+
+
+    <InputSource name="test.ar"><![CDATA[
+            
+        import Ar._
+
+        open class A <: Any
+
+            public new()
+            end
+
+        end
+        class B <: A
+
+            public new()
+                initialize _ = A.new()
+            end
+
+            public proc _.printMessage(): () =
+                puts ''Found B''
+        end
+        class C <: A
+
+            public new()
+                initialize _ = A.new()
+            end
+
+        end
+        
+        proc main(): () do
+            val a: A = B.new()
+            match a
+            case val b: B =
+                b.printMessage()
+            end
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Found B</ExpectedOutput>
+
+</ArgonTest>

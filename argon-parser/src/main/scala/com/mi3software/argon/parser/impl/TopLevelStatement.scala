@@ -9,10 +9,24 @@ object TopLevelStatement {
   final case class Import(path: NamespacePath) extends TopLevelStatement
   final case class Statement(stmt: WithSource[Stmt]) extends TopLevelStatement
 
-  private final case class NSAndImports(ns: NamespacePath, imports: Vector[NamespacePath])
+  final case class NSAndImports(ns: NamespacePath, imports: Vector[NamespacePath])
+
+  val defaultNSAndImports = NSAndImports(NamespacePath.empty, Vector())
+
+  def accumulate(fileSpec: FileSpec)(nsi: NSAndImports, stmt: TopLevelStatement): (NSAndImports, Option[SourceAST]) =
+    stmt match {
+      case Namespace(ns) =>
+        (nsi.copy(ns = ns), None)
+
+      case Import(importNS) =>
+        (nsi.copy(imports = nsi.imports :+ importNS), None)
+
+      case Statement(stmt) =>
+        (nsi, Some(SourceAST(fileSpec, nsi.ns, nsi.imports, stmt)))
+    }
 
   def toSourceAST(fileSpec: FileSpec)(statements: Vector[TopLevelStatement]): Vector[SourceAST] =
-    statements.foldLeft((Vector.empty[SourceAST], NSAndImports(NamespacePath.empty, Vector()))) {
+    statements.foldLeft((Vector.empty[SourceAST], defaultNSAndImports)) {
       case ((acc, NSAndImports(_, imports)), Namespace(ns)) =>
         (acc, NSAndImports(ns, imports))
 

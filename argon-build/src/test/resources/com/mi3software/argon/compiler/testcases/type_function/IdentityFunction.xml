@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Identity function</Name>
+
+
+    <InputSource name="test.ar"><![CDATA[
+            
+        import Ar._
+
+        def identity (T: type) (value: T): T = value
+
+        proc main(): () do
+
+            val str: identity String.type String = ''75''
+
+            puts str
+
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        75
+    </ExpectedOutput>
+
+</ArgonTest>

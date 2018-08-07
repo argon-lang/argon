@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Class with same parameters</Name>
+
+
+    <InputSource name="test.ar"><![CDATA[
+            
+        import Ar._
+        
+        class MyClass(T: type) <: Any
+        end
+        
+        def myFunc(a: MyClass Int): MyClass Int =
+            a
+        
+        def main(): () do
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput></ExpectedOutput>
+
+</ArgonTest>

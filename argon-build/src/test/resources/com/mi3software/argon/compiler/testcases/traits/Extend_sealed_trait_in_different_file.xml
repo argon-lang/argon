@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Extend sealed trait in different file</Name>
+
+    <InputSource name="a.ar"><![CDATA[
+
+        import Ar._
+
+        sealed trait TraitA <: Any
+        end
+
+        proc main(): () = ()
+
+    ]]></InputSource>
+    
+    <InputSource name="b.ar"><![CDATA[
+        
+        import Ar._
+
+        trait TraitB <: Any & TraitA
+        end
+
+    ]]></InputSource>
+
+    <ExpectedError>SealedTraitExtendedError</ExpectedError>
+
+</ArgonTest>

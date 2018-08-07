@@ -1,0 +1,22 @@
+<ArgonTest>
+
+    <Name>Trait with different parameters</Name>
+
+    <InputSource name="test.ar"><![CDATA[
+
+        import Ar._
+
+        trait MyTrait(T: type) <: Any
+        end
+
+        def myFunc(a: MyTrait Int): MyTrait String =
+            a
+
+        def main(): () do
+        end
+
+    ]]></InputSource>
+
+    <ExpectedError>CouldNotConvertTypeError</ExpectedError>
+
+</ArgonTest>

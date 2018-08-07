@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Print trait parameter static method</Name>
+
+
+    <InputSource name="test.ar"><![CDATA[
+            
+        import Ar._
+        
+        trait MyTrait(str: String) <: Any
+        static
+            public proc _.printMessage(): () =
+                puts str
+
+        end
+        
+        proc main(): () do
+            MyTrait('Hello World').printMessage()
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

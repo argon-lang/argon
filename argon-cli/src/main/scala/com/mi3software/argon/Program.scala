@@ -1,11 +1,9 @@
 package com.mi3software.argon
 
-import com.mi3software.argon.pipeline.Pipeline
+import com.mi3software.argon.build.{BuildInfo, Pipeline}
 import scalaz.effect.{IO, SafeApp}
 import scalaz._
 import com.mi3software.argon.util.FileOperations
-
-import com.mi3software.argon.builder.BuildInfo
 
 object Program extends SafeApp {
   override def runl(args: List[String]): IO[Unit] = args match {

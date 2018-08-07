@@ -1,0 +1,18 @@
+<ArgonTest>
+
+    <Name>Hello World (Purity Error)</Name>
+
+    <InputSource name="test.ar">
+
+        import Ar._
+
+        def main(): () do
+            puts ''Hello World''
+        end
+
+
+    </InputSource>
+
+    <ExpectedError>InvalidEffectError</ExpectedError>
+
+</ArgonTest>

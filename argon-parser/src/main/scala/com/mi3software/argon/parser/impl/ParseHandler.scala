@@ -3,35 +3,51 @@ package com.mi3software.argon.parser.impl
 import com.mi3software.argon.parser.{SourceAST, SyntaxError, SyntaxErrorData}
 import com.mi3software.argon.util._
 import scalaz._
+import Scalaz._
 import fs2._
+import shims._
 
 object ParseHandler {
 
   private val lexer = new Lexer()
   private val parser = new Parser()
 
-  def parse(fileSpec: FileSpec)(content: String): NonEmptyList[SyntaxErrorData] \/ Vector[SourceAST] = {
+  def decodeText[F[_]]: Pipe[F, Byte, Char] =
+    _
+      .through(fs2.text.utf8Decode)
+      .mapSegments { _.flatMap { str => Segment(str: _*) }.mapResult { _ => () } }
 
-    def convertError(syntaxError: SyntaxError): SyntaxErrorData =
-      SyntaxErrorData(fileSpec, syntaxError)
 
-    val charsWithLen = Characterizer.characterize(Stream(content: _*)).toVector
+  def parse[F[_]: Monad](fileSpec: FileSpec): Pipe[EitherT[F, NonEmptyList[SyntaxError], ?], Char, SourceAST] =
+    _
+      .through(Characterizer.characterize)
+      .through(lexer.lex)
+      .bufferAll
+      .through(parser.parse)
+      .through(buildSourceAST(fileSpec))
 
-    val (chars, _) = charsWithLen.foldLeft((Vector[WithSource[String]](), FilePosition(1, 1))) {
-      case ((acc, pos @ FilePosition(startLine, startPos)), WithLength(value, length, lengthAfterNewLine)) =>
-        val newPos = if(lengthAfterNewLine) FilePosition(startLine + 1, length) else FilePosition(startLine, startPos + length)
-        (acc :+ WithSource(value, SourceLocation(pos, newPos)), newPos)
-    }
+  private def buildSourceAST[F[_]](fileSpec: FileSpec): Pipe[F, TopLevelStatement, SourceAST] =
+    _
+      .pull
+      .scanSegments(TopLevelStatement.defaultNSAndImports) { (ns, seg) =>
+        seg
+          .mapAccumulate(ns)(TopLevelStatement.accumulate(fileSpec))
+          .mapResult { case (_, ns) => ns }
+      }
+      .stream
+      .unNone
 
-    \/.fromEither(
-      lexer
-        .lex(chars)
-        .flatMap(parser.parse)
-        .map(TopLevelStatement.toSourceAST(fileSpec))
-    )
-      .leftMap { _.map(convertError) }
+
+  def addSyntaxErrorEffect[F[_] : Functor]: cats.~>[F, EitherT[F, NonEmptyList[SyntaxError], ?]] = new cats.~>[F, EitherT[F, NonEmptyList[SyntaxError], ?]] {
+    override def apply[A](fa: F[A]): EitherT[F, NonEmptyList[SyntaxError], A] =
+      EitherT(fa.map(\/.right))
   }
 
 
+  def convertSyntaxErrorToCompilationError[F[_]: Functor](fileSpec: FileSpec): cats.~>[EitherT[F, NonEmptyList[SyntaxError], ?], EitherT[F, NonEmptyList[SyntaxErrorData], ?]] =
+    new cats.~>[EitherT[F, NonEmptyList[SyntaxError], ?], EitherT[F, NonEmptyList[SyntaxErrorData], ?]] {
+      override def apply[A](fa: EitherT[F, NonEmptyList[SyntaxError], A]): EitherT[F, NonEmptyList[SyntaxErrorData], A] =
+        fa.leftMap(_.map(error => SyntaxErrorData(fileSpec, error)))
+    }
 
 }

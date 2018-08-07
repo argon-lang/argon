@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Extend sealed class in different file</Name>
+
+    <InputSource name="a.ar"><![CDATA[
+
+        import Ar._
+
+        sealed open class ClassA <: Any
+        end
+
+        proc main(): () = ()
+
+    ]]></InputSource>
+    
+    <InputSource name="b.ar"><![CDATA[
+        
+        import Ar._
+
+        class ClassB <: Any & ClassA
+        end
+
+    ]]></InputSource>
+
+    <ExpectedError>SealedClassExtendedError</ExpectedError>
+
+</ArgonTest>

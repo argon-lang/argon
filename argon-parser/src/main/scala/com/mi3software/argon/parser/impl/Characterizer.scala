@@ -2,6 +2,7 @@ package com.mi3software.argon.parser.impl
 
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
 import fs2._
 
 object Characterizer {
@@ -46,15 +47,25 @@ object Characterizer {
       .stream
       .unNone
 
-  private def withLength[F[_]]: Pipe[F, String, WithLength[String]] =
-    in => in.map { ch =>
-      if(ch === "\n")
-        WithLength(ch, 0, lengthAfterNewLine = true)
-      else
-        WithLength(ch, 1, lengthAfterNewLine = false)
-    }
+  private def withSource[F[_]]: Pipe[F, String, WithSource[String]] =
+    in => in.pull
+        .scanSegments(FilePosition(1, 1)) { (pos, seg) =>
+          seg
+            .mapAccumulate(pos) { (pos, a) =>
 
-  def characterize[F[_]]: Pipe[F, Char, WithLength[String]] =
-    _.through(toCodePoints).through(toGraphemes).through(withLength)
+              val nextPos =
+                if(a === "\n")
+                  FilePosition(pos.line + 1, 1)
+                else
+                  pos.copy(position = pos.position + 1)
+
+              (nextPos, WithSource(a, SourceLocation(pos, nextPos)))
+            }
+            .mapResult { case (_, acc) => acc }
+        }
+      .stream
+
+  def characterize[F[_]]: Pipe[F, Char, WithSource[String]] =
+    _.through(toCodePoints).through(toGraphemes).through(withSource)
 
 }

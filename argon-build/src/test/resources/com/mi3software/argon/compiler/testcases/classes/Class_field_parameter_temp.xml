@@ -1,0 +1,36 @@
+<ArgonTest>
+
+    <Name>Class field from parameter with temporary</Name>
+
+
+    <InputSource name="test.ar"><![CDATA[
+            
+        import Ar._
+        
+        class MyClass <: Any
+
+            field name: String
+
+            public new(name: String)
+                val t = name
+                field name = t
+            end
+
+            public proc self.say_hello(): () do
+                puts ''Hello''
+                puts name
+            end
+        end
+        
+        proc main(): () do
+            MyClass.new(''Bob'').say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Hello
+        Bob
+    </ExpectedOutput>
+
+</ArgonTest>

@@ -22,7 +22,9 @@ lazy val commonSettings = Seq(
     "com.fommil" %% "scalaz-deriving" % "0.9.0",
     "org.json4s" %% "json4s-native" % "3.5.4",
     "co.fs2" %% "fs2-core" % "0.10.1",
+    "co.fs2" %% "fs2-io" % "0.10.1",
     "com.codecommit" %% "shims" % "1.4.0",
+    "com.codecommit" %% "shims-effect" % "1.4.0",
 
     "org.apache.thrift" % "libthrift" % "0.11.0",
     "com.twitter" %% "scrooge-core" % "18.7.0" exclude("com.twitter", "libthrift"),
@@ -47,6 +49,7 @@ lazy val compilerOptions = Seq(
     "-Ywarn-value-discard",
     "-Ywarn-unused:-implicits,-explicits",
     "-Ypatmat-exhaust-depth", "500",
+    "-Ypartial-unification",
     "-feature",
     "-language:higherKinds",
     "-language:existentials",
