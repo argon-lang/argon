@@ -66,12 +66,15 @@ final class JSEmitter {
       case NamespaceBinding(_, _, scopeValue: NonNamespaceScopeValue[context.ContextScopeTypes]) => Vector(scopeValue)
     }
 
-  private def createObjectsForScopeValue(context: Context)(value: NonNamespaceScopeValue[context.ContextScopeTypes]): JSStatement =
+  private def createObjectsForScopeValue(context: Context)(value: NonNamespaceScopeValue[context.ContextScopeTypes]): JSStatement = {
+    val sigTypeSystem = new SignatureTypeSystem[context.type]
+    val tsConverter = ArgonToSignatureTypeSystemConverter(context)(sigTypeSystem)
+
     value match {
       case VariableScopeValue(_) => ???
       case FunctionScopeValue(func) =>
         JSAssignment(
-          JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor))),
+          JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor, func.signature.convertTypeSystem(tsConverter)))),
           JSObjectLiteral(Vector(
             JSObjectProperty("impl", JSNull)
           ))
@@ -88,6 +91,7 @@ final class JSEmitter {
       case ClassScopeValue(_) => ???
       case DataConstructorScopeValue(_) => ???
     }
+  }
 
 
 
