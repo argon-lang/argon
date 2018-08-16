@@ -34,7 +34,8 @@ trait ExpressionConverter {
 
   val scopeTypeConverter: ScopeTypeConverter[context.ContextScopeTypes, TScopeTypes]
 
-  protected val contextTypeSystemConverter: TypeSystemConverter[context.typeSystem.type, TS]
+  val contextTypeSystemConverter: TypeSystemConverter[context.typeSystem.type, TS]
+  val reverseTypeSystemConverter: TypeSystemConverter[TS, context.typeSystem.type]
 
   val typeComparer: TypeComparerUnerased[TS]
 
@@ -170,6 +171,14 @@ trait ExpressionConverter {
   private def computeIntValue(sign: Int, base: BigInt, digits: Vector[BigInt]): Conv[BigInt] = ???
 
   def convertTypeExpression(env: Env)(expr: WithSource[Expr]): Conv[TS#TType]
+  def convertTypeExpressionResolved(env: Env)(expr: WithSource[Expr]): context.Comp[context.typeSystem.TType] =
+    runConv(
+      compilationInstance.bind(convertTypeExpression(env)(expr)) { t =>
+        compilationInstance.bind(resolveType(t)) { t =>
+          compToConv(reverseTypeSystemConverter.convertType(t)(context.compCompilationInstance))
+        }
+      }
+    )
 
   protected def convertExpressionToType(expr: exprTypes.TExpr): Conv[TS#TType]
 

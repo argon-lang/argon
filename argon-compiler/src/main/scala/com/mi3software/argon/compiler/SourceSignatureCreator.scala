@@ -11,7 +11,7 @@ object SourceSignatureCreator {
 
   def fromParameters[TComp[+_] : Compilation, TResult[+_ <: TypeSystem]]
   (context: ContextComp[TComp])
-  (expressionConverter: ExpressionConverterCombined[context.type])
+  (expressionConverter: ExpressionConverterContext[context.type])
   (env: ExpressionConvertEnvironment[expressionConverter.TScopeTypes])
   (paramOwner: ParameterOwnerDescriptor)
   (params: Vector[parser.FunctionParameterList])
@@ -32,10 +32,7 @@ object SourceSignatureCreator {
               case (WithSource(parser.FunctionParameter(paramTypeOpt, _, paramName), loc), tupleIndex) =>
                 (paramTypeOpt match {
                   case Some(paramType) =>
-                    expressionConverter.convertTypeExpression(env)(paramType)
-                      .eval(ExpressionConverterConv.ConvState.Default)(implicitly[Monad[TComp]])
-                      .flatMap { t => HoleToArgonTypeSystemConverter(context)(expressionConverter.exprTypes.typeSystem).convertType[TComp](t) }
-                      .map(identity)
+                    expressionConverter.convertTypeExpressionResolved(env)(paramType)
 
                   case None =>
                     Compilation[TComp].forErrors(CompilationError.ParameterTypeAnnotationRequired(paramName, CompilationMessageSource.SourceFile(env.fileSpec, loc)))
@@ -54,7 +51,7 @@ object SourceSignatureCreator {
             .flatMap { variables =>
               variables
                 .traverse[TComp, Variable[expressionConverter.exprTypes.typeSystem.type, DeconstructedParameterDescriptor]] { variable =>
-                  ArgonToHoleTypeSystemConverter(context)(expressionConverter.exprTypes.typeSystem).convertType[TComp](variable.varType)
+                  expressionConverter.contextTypeSystemConverter.convertType[TComp](variable.varType)
                     .map { scopeVarType =>
                       Variable[expressionConverter.exprTypes.typeSystem.type, DeconstructedParameterDescriptor](
                         variable.descriptor,
@@ -88,7 +85,7 @@ object SourceSignatureCreator {
   trait ResultCreator[TResultInfo[+_ <: TypeSystem]] {
     def createResult[TComp[+_] : Compilation]
     (context: ContextComp[TComp])
-    (expressionConverter: ExpressionConverterCombined[context.type])
+    (expressionConverter: ExpressionConverterContext[context.type])
     (env: ExpressionConvertEnvironment[expressionConverter.TScopeTypes])
     : TComp[TResultInfo[context.typeSystem.type]]
   }

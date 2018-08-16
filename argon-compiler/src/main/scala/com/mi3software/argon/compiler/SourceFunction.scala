@@ -36,16 +36,10 @@ private[compiler] object SourceFunction {
   def resultCreator(returnTypeExpr: WithSource[parser.Expr]): ResultCreator[FunctionResultInfo] =  new ResultCreator[FunctionResultInfo] {
     override def createResult[TComp[+ _] : Compilation]
     (context: ContextComp[TComp])
-    (expressionConverter: ExpressionConverterCombined[context.type])
+    (expressionConverter: ExpressionConverterContext[context.type])
     (env: ExpressionConvertEnvironment[expressionConverter.TScopeTypes])
     : TComp[FunctionResultInfo[context.typeSystem.type]] =
-      expressionConverter.runConv(
-        expressionConverter.compilationInstance.bind(expressionConverter.convertTypeExpression(env)(returnTypeExpr)) { t =>
-          expressionConverter.compilationInstance.bind(expressionConverter.resolveType(t)) { t =>
-            expressionConverter.compToConv(HoleToArgonTypeSystemConverter(context)(expressionConverter.exprTypes.typeSystem).convertType(t))
-          }
-        }
-      )
+      expressionConverter.convertTypeExpressionResolved(env)(returnTypeExpr)
         .map { t => FunctionResultInfo[context.typeSystem.type](t) }
   }
 
