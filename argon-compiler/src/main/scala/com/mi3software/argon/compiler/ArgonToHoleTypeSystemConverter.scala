@@ -3,14 +3,11 @@ import scalaz._
 
 object ArgonToHoleTypeSystemConverter {
 
-  def apply(context: Context)(holeTypeSystem: HoleTypeSystem[context.type]): TypeSystemConverter[context.typeSystem.type, holeTypeSystem.type] =
-    new TypeSystemConverter[context.typeSystem.type, holeTypeSystem.type] {
+  def apply(context: Context)(holeTypeSystem: HoleTypeSystem[context.type]): TypeSystemConverterTotal[context.typeSystem.type, holeTypeSystem.type] =
+    new TypeSystemConverterTotal[context.typeSystem.type, holeTypeSystem.type] {
 
-      override def convertType[TComp[+ _] : Monad : Compilation]
-      (t: context.typeSystem.TType)
-      : TComp[holeTypeSystem.TType] =
+      override def convertTypeTotal(t: TypeBase[context.typeSystem.type]): \/[TypeBase[holeTypeSystem.type], TypeHole] =
         ???
-
     }
 
 }

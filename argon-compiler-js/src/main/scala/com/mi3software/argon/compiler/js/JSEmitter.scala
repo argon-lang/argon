@@ -1,7 +1,8 @@
 package com.mi3software.argon.compiler.js
 
 import com.mi3software.argon.compiler._
-import scalaz.NonEmptyList
+import scalaz._
+import Scalaz._
 
 final class JSEmitter {
 
@@ -12,51 +13,51 @@ final class JSEmitter {
   private val create_empty_obj = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("create")), Vector(JSNull))
   private def freeze_obj(varName: JSIdentifier) = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("freeze")), Vector(varName))
 
-  def emitModule(context: JSContext)(module: ArModule[context.type]): context.Comp[JSModule] = {
+  def emitModule[TComp[+_] : Compilation](context: JSContext[TComp])(module: ArModule[context.type]): TComp[JSModule] = {
 
     val modulePairs = module.referencedModules
       .zipWithIndex
       .map { case (refModule, i) => (refModule, JSIdentifier(s"module_$i")) }
 
 
-    context.compCompilationInstance.point(
-      JSModule(
+    for {
+      topLevelStmts <- allNamespaceElements(context)(module.globalNamespace).toVector.traverse(createObjectsForScopeValue(context))
+    } yield JSModule(
+      Vector(
+        modulePairs.map { case (refModule, importId) =>
+          JSImportAllStatement(None, importId, refModule.descriptor.name)
+        },
+
         Vector(
-          modulePairs.map { case (refModule, importId) =>
-            JSImportAllStatement(None, importId, refModule.descriptor.name)
-          },
+          JSConst(NonEmptyList(
+            JSBindValue(moduleVarName, create_empty_obj)
+          )),
 
-          Vector(
-            JSConst(NonEmptyList(
-              JSBindValue(moduleVarName, create_empty_obj)
-            )),
+          JSConst(NonEmptyList(
+            JSBindValue(funcsVarName, create_empty_obj)
+          )),
 
-            JSConst(NonEmptyList(
-              JSBindValue(funcsVarName, create_empty_obj)
-            )),
+          JSConst(NonEmptyList(
+            JSBindValue(traitsVarName, create_empty_obj)
+          )),
+        ),
 
-            JSConst(NonEmptyList(
-              JSBindValue(traitsVarName, create_empty_obj)
-            )),
-          ),
+        modulePairs.map { case (refModule, importId) =>
+          JSAssignment(
+            JSPropertyAccessBracket(moduleVarName, JSString(refModule.descriptor.name)),
+            importId
+          )
+        },
 
-          modulePairs.map { case (refModule, importId) =>
-            JSAssignment(
-              JSPropertyAccessBracket(moduleVarName, JSString(refModule.descriptor.name)),
-              importId
-            )
-          },
+        topLevelStmts,
 
-          allNamespaceElements(context)(module.globalNamespace).map(createObjectsForScopeValue(context)).toVector,
+        Vector(
+          freeze_obj(moduleVarName),
+          freeze_obj(funcsVarName),
+          freeze_obj(traitsVarName),
+        ),
 
-          Vector(
-            freeze_obj(moduleVarName),
-            freeze_obj(funcsVarName),
-            freeze_obj(traitsVarName),
-          ),
-
-        ).flatten
-      )
+      ).flatten
     )
   }
 
@@ -66,19 +67,21 @@ final class JSEmitter {
       case NamespaceBinding(_, _, scopeValue: NonNamespaceScopeValue[context.ContextScopeTypes]) => Vector(scopeValue)
     }
 
-  private def createObjectsForScopeValue(context: Context)(value: NonNamespaceScopeValue[context.ContextScopeTypes]): JSStatement = {
+  private def createObjectsForScopeValue[TComp[+_] : Compilation](context: ContextComp[TComp])(value: NonNamespaceScopeValue[context.ContextScopeTypes]): TComp[JSStatement] = {
     val sigTypeSystem = new SignatureTypeSystem[context.type]
     val tsConverter = ArgonToSignatureTypeSystemConverter(context)(sigTypeSystem)
 
     value match {
       case VariableScopeValue(_) => ???
       case FunctionScopeValue(func) =>
-        JSAssignment(
-          JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor, func.signature.convertTypeSystem(tsConverter)))),
-          JSObjectLiteral(Vector(
-            JSObjectProperty("impl", JSNull)
-          ))
-        )
+        for {
+          sig <- func.signature
+        } yield JSAssignment(
+            JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor, sig.convertTypeSystem(tsConverter)))),
+            JSObjectLiteral(Vector(
+              JSObjectProperty("impl", JSNull)
+            ))
+          )
 
       case TraitScopeValue(arTrait) =>
         JSAssignment(
@@ -86,7 +89,7 @@ final class JSEmitter {
           JSObjectLiteral(Vector(
             JSObjectProperty("symbol", JSFunctionCall(JSIdentifier("Symbol"), Vector()))
           ))
-        )
+        ).point[TComp]
 
       case ClassScopeValue(_) => ???
       case DataConstructorScopeValue(_) => ???

@@ -2,6 +2,7 @@ package com.mi3software.argon.build
 
 import java.io.File
 
+import com.mi3software.argon.compiler.StandardCompilation._
 import com.mi3software.argon.compiler.js.{JSAst, JSContext, JSEmitter}
 import com.mi3software.argon.compiler.{CompilationError, CompilationMessageNonFatal, CompilerInput}
 import com.mi3software.argon.util.{FileOperations, IOHelpers}
@@ -14,7 +15,7 @@ object JSBackend extends Backend {
   override val name: String = "JavaScript"
 
   override def compile(input: CompilerInput): IO[(Set[CompilationMessageNonFatal], NonEmptyList[CompilationError] \/ CompilationResult)] = {
-    val context = new JSContext
+    val context = new JSContext[StandardCompilationType]
     val emitter = new JSEmitter
 
     context.createModule(input).map {

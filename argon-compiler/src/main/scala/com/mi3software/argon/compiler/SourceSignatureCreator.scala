@@ -9,13 +9,13 @@ import Scalaz._
 
 object SourceSignatureCreator {
 
-  def fromParameters[TComp[+_] : Monad : Compilation, TResult[+_ <: TypeSystem]]
+  def fromParameters[TComp[+_] : Compilation, TResult[+_ <: TypeSystem]]
   (context: ContextComp[TComp])
   (expressionConverter: ExpressionConverterCombined[context.type])
   (env: ExpressionConvertEnvironment[expressionConverter.TScopeTypes])
   (paramOwner: ParameterOwnerDescriptor)
   (params: Vector[parser.FunctionParameterList])
-  (result: TResult[context.typeSystem.type])
+  (resultCreator: ResultCreator[TResult])
   : TComp[Signature[context.typeSystem.type, TResult]] = {
 
     def impl
@@ -78,12 +78,20 @@ object SourceSignatureCreator {
             }
 
         case Vector() =>
-          SignatureResult[context.typeSystem.type, TResult](result).point[TComp]
+          resultCreator.createResult(context)(expressionConverter)(env)
+              .map(result => SignatureResult[context.typeSystem.type, TResult](result))
       }
 
     impl(env)(params)(0)
   }
 
+  trait ResultCreator[TResultInfo[+_ <: TypeSystem]] {
+    def createResult[TComp[+_] : Compilation]
+    (context: ContextComp[TComp])
+    (expressionConverter: ExpressionConverterCombined[context.type])
+    (env: ExpressionConvertEnvironment[expressionConverter.TScopeTypes])
+    : TComp[TResultInfo[context.typeSystem.type]]
+  }
 
 
 }

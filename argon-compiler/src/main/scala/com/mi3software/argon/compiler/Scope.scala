@@ -10,6 +10,14 @@ trait ScopeTypes {
   type TVariable
 }
 
+trait ScopeTypeConverter[-T1 <: ScopeTypes, +T2 <: ScopeTypes] {
+  def convertTrait(t: T1#TTrait): T2#TTrait
+  def convertClass(t: T1#TClass): T2#TClass
+  def convertDataConstructor(t: T1#TDataConstructor): T2#TDataConstructor
+  def convertFunc(t: T1#TFunc): T2#TFunc
+  def convertVariable(t: T1#TVariable): T2#TVariable
+}
+
 sealed trait Scope[+Types <: ScopeTypes] {
 
   def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Lookup[ScopeValue[Types]] = ???
@@ -17,13 +25,15 @@ sealed trait Scope[+Types <: ScopeTypes] {
 }
 
 object ScopeHelpers {
-  implicit class ScopeExtensions[Types <: ScopeTypes](val scope: Scope[Types]) extends AnyVal {
+  implicit final class ScopeExtensions[Types <: ScopeTypes](val scope: Scope[Types]) extends AnyVal {
 
-    final def addVariable(variable: Types#TVariable): Scope[Types] =
+    def addVariable(variable: Types#TVariable): Scope[Types] =
       ???
 
-    final def addVariables(variables: Vector[Types#TVariable]): Scope[Types] =
+    def addVariables(variables: Vector[Types#TVariable]): Scope[Types] =
       variables.foldLeft(scope) { (scope, variable) => scope.addVariable(variable) }
+
+    def convertTypes[T2 <: ScopeTypes](scopeTypeConverter: ScopeTypeConverter[Types, T2]): Scope[T2] = ???
 
   }
 }

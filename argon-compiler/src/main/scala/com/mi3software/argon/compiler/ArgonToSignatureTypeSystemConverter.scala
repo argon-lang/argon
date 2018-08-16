@@ -18,7 +18,7 @@ object ArgonToSignatureTypeSystemConverter {
   def apply(context: Context)(sigTypeSystem: SignatureTypeSystem[context.type]): TypeSystemConverter[context.typeSystem.type, sigTypeSystem.type] =
     new TypeSystemConverter[context.typeSystem.type, sigTypeSystem.type] {
 
-      override def convertType[TComp[+ _] : Monad : Compilation]
+      override def convertType[TComp[+ _] : Compilation]
       (t: context.typeSystem.TType)
       : TComp[sigTypeSystem.TType] =
         implicitly[Monad[TComp]].point(convert(context)(sigTypeSystem)(t))

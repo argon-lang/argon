@@ -9,7 +9,7 @@ sealed trait ArFunc[TContext <: Context] {
   val descriptor: FuncDescriptor
   val effectInfo: EffectInfo
 
-  val signature: Signature[typeSystem.type, FunctionResultInfo]
+  val signature: Comp[Signature[typeSystem.type, FunctionResultInfo]]
 
   val payload: PayloadSpec[Comp[TFunctionImplementation], TFunctionMetadata]
 }

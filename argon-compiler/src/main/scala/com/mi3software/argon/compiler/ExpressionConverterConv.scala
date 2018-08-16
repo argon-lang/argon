@@ -12,7 +12,7 @@ trait ExpressionConverterConv extends ExpressionConverter {
   private lazy val convMonadTrans = StateT.StateMonadTrans[ConvState]
   private lazy val convMonadInstance = convMonadTrans(compCompilationInstance)
 
-  override protected implicit val compilationInstance: Compilation[Conv] = new Compilation[Conv] {
+  override implicit val compilationInstance: Compilation[Conv] = new Compilation[Conv] {
 
     override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): Conv[A] =
       convMonadTrans.liftM(compCompilationInstance.diagnostic(value, messages))

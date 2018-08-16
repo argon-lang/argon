@@ -9,7 +9,9 @@ import ScopeHelpers._
 trait ExpressionConverter {
 
   type Conv[T]
-  protected implicit val compilationInstance: Compilation[Conv]
+  implicit val compilationInstance: Compilation[Conv]
+  val compToConv: context.Comp ~> Conv
+  val runConv: Conv ~> context.Comp
 
   protected def nextVariableId: Conv[Int]
 
@@ -30,6 +32,8 @@ trait ExpressionConverter {
     type TVariable = Variable[TS, VariableLikeDescriptor]
   })
 
+  val scopeTypeConverter: ScopeTypeConverter[context.ContextScopeTypes, TScopeTypes]
+
   protected val contextTypeSystemConverter: TypeSystemConverter[context.typeSystem.type, TS]
 
   val typeComparer: TypeComparerUnerased[TS]
@@ -37,7 +41,7 @@ trait ExpressionConverter {
   val scopeLookupComparer: LookupComparer[ScopeValue[TScopeTypes]]
 
   protected def createTypeHole: Conv[TS#TType]
-  protected def resolveType(t: TS#TType): Conv[TS#TType]
+  def resolveType(t: TS#TType): Conv[TS#TType]
 
   type Env = ExpressionConvertEnvironment[TScopeTypes]
 
@@ -267,13 +271,17 @@ trait ExpressionConverter {
         }
     }
 
-    new FunctionExprFactory(env, location)(func, Vector(), func.signature.convertTypeSystem(contextTypeSystemConverter))
+    fromConv(
+      compilationInstance.map(compToConv(func.signature)) { sig =>
+        new FunctionExprFactory(env, location)(func, Vector(), sig.convertTypeSystem(contextTypeSystemConverter))
+      }
+    )
   }
 
 
 
 }
 
-final case class ExpressionConvertEnvironment[Types <: ScopeTypes](owner: VariableOwnerDescriptor, scope: Scope[Types], fileSpec: FileSpec)
+final case class ExpressionConvertEnvironment[+Types <: ScopeTypes](owner: VariableOwnerDescriptor, scope: Scope[Types], fileSpec: FileSpec)
 
 
