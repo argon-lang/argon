@@ -11,7 +11,7 @@ private[compiler] object SourceFunction {
 
   def apply[TComp[+_] : Compilation]
   (context2: ContextComp[TComp])
-  (expressionConverter: ExpressionConverterCombined[context2.type])
+  (expressionConverter: ExpressionConverterContext[context2.type])
   (scope: Scope[context2.ContextScopeTypes])
   (stmt: parser.FunctionDeclarationStmt)
   (fileSpec: FileSpec)
