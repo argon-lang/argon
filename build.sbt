@@ -44,7 +44,6 @@ lazy val compilerOptions = Seq(
     "-Xlint",
     "-Xfatal-warnings",
     "-Yno-adapted-args",
-    "-Ywarn-dead-code",
     "-Ywarn-numeric-widen",
     "-Ywarn-value-discard",
     "-Ywarn-unused:-implicits,-explicits",

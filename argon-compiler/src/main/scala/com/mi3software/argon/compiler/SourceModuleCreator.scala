@@ -65,7 +65,7 @@ private[compiler] object SourceModuleCreator {
   (sourceAST: SourceAST)
   : TComp[NamespaceBinding[ScopeValue[context.ContextScopeTypes]]] = {
 
-    val expressionConverter = ??? : ExpressionConverterCombined[context.type]
+    val expressionConverter = ??? : ExpressionConverterContext[context.type]
 
     def createBinding(name: String, modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => ScopeValue[context.ContextScopeTypes]): TComp[NamespaceBinding[ScopeValue[context.ContextScopeTypes]]] =
       parseGlobalAccessModifier[TComp](sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).map { accessModifier =>

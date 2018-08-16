@@ -33,7 +33,7 @@ trait Context {
     override type TClass <: ArClass[Context.this.type]
     override type TDataConstructor <: DataConstructor[Context.this.type]
     override type TFunc <: ArFunc[Context.this.type]
-    override type TVariable <: Variable[typeSystem.type, VariableLikeDescriptor]
+    override type TVariable = Nothing
   }
 
   sealed trait ScopeTypesWithPayload[TPayloadSpec[_, _]] extends ContextScopeTypes {
@@ -41,7 +41,6 @@ trait Context {
     override type TClass = ArClassWithPayload[Context.this.type, TPayloadSpec]
     override type TDataConstructor = DataConstructorWithPayload[Context.this.type, TPayloadSpec]
     override type TFunc = ArFuncWithPayload[Context.this.type, TPayloadSpec]
-    override type TVariable = Nothing
   }
 
   final class ExprTypes extends ArExprTypes {
