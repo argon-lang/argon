@@ -11,8 +11,6 @@ trait TypeComparer[TS <: TypeSystem] {
   def isSameDataConstructorInfo(a: TS#TDataConstructorInfo, b: TS#TDataConstructorInfo): Boolean
 
   def dataConstructorReturnType(ctor: TS#TDataConstructorInfo): TS#TType
-  def traitMetaClass(traitInfo: TS#TTraitInfo): ClassType[TS]
-  def classMetaClass(classInfo: TS#TClassInfo): ClassType[TS]
 
   def typeBaseConcreteToType(typeBase: TypeBaseConcrete[TS]): TS#TType
 

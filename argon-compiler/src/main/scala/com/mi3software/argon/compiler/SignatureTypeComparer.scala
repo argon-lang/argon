@@ -23,10 +23,6 @@ object SignatureTypeComparer {
 
       override def dataConstructorReturnType(ctor: DataConstructor[TContext]): Option[TypeBaseConcrete[ts.type]] = ???
 
-      override def traitMetaClass(traitInfo: ArTrait[TContext]): ClassType[ts.type] = ???
-
-      override def classMetaClass(classInfo: ArClass[TContext]): ClassType[ts.type] = ???
-
       override def typeBaseConcreteToType(typeBase: TypeBaseConcrete[ts.type]): Option[TypeBaseConcrete[ts.type]] =
         Some(typeBase)
 
