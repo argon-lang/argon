@@ -47,6 +47,9 @@ object ArgonParser {
     final case object MatchCase extends ArgonRuleNameTyped[MatchExprCase]
     final case object MatchExpr extends ArgonRuleNameTyped[Expr]
 
+    // Common Expressions
+    final case object PrimaryExpr extends ArgonRuleNameTyped[Expr]
+
 
     final case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
 
@@ -110,12 +113,12 @@ object ArgonParser {
 
 
         case Rule.ParenPattern =>
-          matchToken(OP_OPENPAREN) ++ rule(Rule.Pattern) ++ matchToken(OP_CLOSEPAREN) --> {
+          matchToken(OP_OPENPAREN) ++! rule(Rule.Pattern) ++ matchToken(OP_CLOSEPAREN) --> {
             case (_, pattern, _) => pattern
           }
 
         case Rule.VariablePattern =>
-          matchToken(KW_VAL) ++ rule(Rule.Identifier) ++ ((matchToken(OP_COLON) ++ ruleExpressionType.observeSource)?) --> {
+          matchToken(KW_VAL) ++! rule(Rule.Identifier) ++ ((matchToken(OP_COLON) ++ ruleExpressionType.observeSource)?) --> {
             case (_, idOpt, Some((_, varType))) => TypeTestPattern(idOpt, varType)
             case (_, Some(id), None) => BindingPattern(id)
             case (_, None, None) => DiscardPattern
@@ -164,6 +167,21 @@ object ArgonParser {
               MatchExpr(cmpValue, cases)
           }
 
+        case Rule.PrimaryExpr =>
+          matchTokenFactory(Identifier) --> { case Identifier(id) => IdentifierExpr(id) : Expr } |
+            matchTokenFactory(StringToken) --> {
+              case StringToken(NonEmptyList(StringToken.StringPart(str), INil())) => StringValueExpr(str)
+              case StringToken(NonEmptyList(StringToken.StringPart(str), ICons(_, _))) => ???
+            } |
+            matchTokenFactory(IntToken) --> { case IntToken(sign, base, digits) => IntValueExpr(sign, base, digits) } |
+            matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(TupleExpr(Vector())) |
+            matchToken(OP_OPENPAREN) ++ ruleExpression ++ matchToken(OP_CLOSEPAREN) --> {
+              case (_, expr, _) => expr
+            } |
+            matchToken(KW_TRUE) --> const(BoolValueExpr(true)) |
+            matchToken(KW_FALSE) --> const(BoolValueExpr(false)) |
+            rule(Rule.IfExpr) |
+            rule(Rule.MatchExpr)
 
         case Rule.TopLevelStatement =>
           (rule(Rule.StatementSeparator)*) ++ ruleTopLevelStatement.observeSource ++ (rule(Rule.StatementSeparator)*) --> {
@@ -174,22 +192,6 @@ object ArgonParser {
 
 
     // Expressions
-
-    private lazy val ruleExpressionOther: TGrammar[Expr] =
-      matchTokenFactory(Identifier) --> { case Identifier(id) => IdentifierExpr(id) : Expr } |
-        matchTokenFactory(StringToken) --> {
-          case StringToken(NonEmptyList(StringToken.StringPart(str), INil())) => StringValueExpr(str)
-          case StringToken(NonEmptyList(StringToken.StringPart(str), ICons(_, _))) => ???
-        } |
-        matchTokenFactory(IntToken) --> { case IntToken(sign, base, digits) => IntValueExpr(sign, base, digits) } |
-        matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(TupleExpr(Vector())) |
-        matchToken(OP_OPENPAREN) ++ ruleExpression ++ matchToken(OP_CLOSEPAREN) --> {
-          case (_, expr, _) => expr
-        } |
-        matchToken(KW_TRUE) --> const(BoolValueExpr(true)) |
-        matchToken(KW_FALSE) --> const(BoolValueExpr(false)) |
-        rule(Rule.IfExpr) |
-        rule(Rule.MatchExpr)
 
 
     private trait ParenCallHandlerBase {
@@ -265,7 +267,7 @@ object ArgonParser {
     private def chainRules[T](bottomRule: TGrammar[T]): RuleChainer[T, Unit] = new RuleChainer[T, Unit](bottomRule, ())
 
     private val chainUpToComparison =
-      chainRules(ruleExpressionOther)
+      chainRules(rule(Rule.PrimaryExpr))
         .chain("function_call")(ParenCallHandler(FunctionCallExpr.apply))
         .chain("dot_expr_paren")(ruleExpressionDot(ParenCallHandler))
         .chain("unary_operators")(nextExpr => {
