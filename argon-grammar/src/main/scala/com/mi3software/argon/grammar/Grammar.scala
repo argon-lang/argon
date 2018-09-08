@@ -279,25 +279,13 @@ object Grammar {
   (category: TTokenCategory, tokenMatches: TToken => Boolean)
   (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
   : Grammar[TToken, TSyntaxError, TLabel, TToken] =
-    matcher(category, t => Some(t).filter(tokenMatches))
-
-  def tokenSource[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory]
-  (category: TTokenCategory, tokenMatches: WithSource[TToken] => Boolean)
-  (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
-  : Grammar[TToken, TSyntaxError, TLabel, TToken] =
-    matcherSource(category, t => Some(t).filter(tokenMatches))
+    matcher(category, (t: TToken) => Some(t).filter(tokenMatches))
 
   def matcher[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, Result]
   (category: TTokenCategory, tokenMatcher: TToken => Option[Result])
   (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
   : Grammar[TToken, TSyntaxError, TLabel, Result] =
-    matcherSource(category, WithSource.liftF(tokenMatcher))
-
-  def matcherSource[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, Result]
-  (category: TTokenCategory, tokenMatcher: TokenMatcher[TToken, Result])
-  (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
-  : Grammar[TToken, TSyntaxError, TLabel, Result] =
-    TokenGrammar(category, tokenMatcher)
+    matcher(category, TokenMatcher.Anything(tokenMatcher))
 
   def partialMatcher[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, Result]
   (category: TTokenCategory)
@@ -305,6 +293,12 @@ object Grammar {
   (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
   : Grammar[TToken, TSyntaxError, TLabel, Result] =
     matcher(category, f.lift)
+
+  def matcher[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, Result]
+  (category: TTokenCategory, tokenMatcher: TokenMatcher[TToken, Result])
+  (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
+  : Grammar[TToken, TSyntaxError, TLabel, Result] =
+    TokenGrammar(category, tokenMatcher)
 
   def parseAll[F[_]: Monad, TToken, TSyntaxError, TLabel <: RuleLabel, T](factory: GrammarFactory[TToken, TSyntaxError, TLabel])(label: TLabel { type RuleType = T })(pos: FilePosition): Pipe[EitherT[F, NonEmptyList[TSyntaxError], ?], WithSource[TToken], T] = {
 
@@ -384,7 +378,7 @@ object Grammar {
     def errorEndLocationOrder: Order[TSyntaxError]
   }
 
-  type TokenMatcher[TToken, T] = WithSource[TToken] => Option[WithSource[T]]
+  type TokenMatcherFunc[TToken, T] = WithSource[TToken] => Option[WithSource[T]]
 
   private final case class RejectGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, T](grammarErrors: NonEmptyList[TSyntaxError]) extends Grammar[TToken, TSyntaxError, TLabel, T] {
 
@@ -414,24 +408,26 @@ object Grammar {
     errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError]
   ) extends Grammar[TToken, TSyntaxError, TLabel, T] {
 
-    object MatchingToken {
-      def unapply(arg: WithSource[TToken]): Option[WithSource[T]] = tokenMatcher(arg)
-    }
 
+    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] = {
 
-    override def parseTokens(state: TParseState, options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
+      object MatchingToken {
+        def unapply(arg: TToken): Option[T] = tokenMatcher.matchToken(arg)
+      }
+
       state.tokens match {
-        case (token @ MatchingToken(value)) +: tail =>
+        case WithSource(token @ MatchingToken(value), loc) +: tail =>
           GrammarResultSuccess(
             ParseState(
               tail,
-              tail.headOption.map { _.location.start }.getOrElse { token.location.end }
+              tail.headOption.map { _.location.start }.getOrElse { loc.end }
             ),
-            value
+            WithSource(value, loc)
           )
         case token +: _ => GrammarResultFailure(NonEmptyList(errorFactory.createError(GrammarError.UnexpectedToken(category, token))))
         case Vector() => GrammarResultTransform(this)(options)(state.pos)(identity)
       }
+    }
 
     override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
       GrammarResultFailure(NonEmptyList(errorFactory.createError(GrammarError.UnexpectedEndOfFile(category, pos))))

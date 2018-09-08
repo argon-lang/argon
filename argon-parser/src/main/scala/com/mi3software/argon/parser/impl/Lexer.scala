@@ -22,6 +22,7 @@ object Lexer {
     }
 
     final case object NewLine extends LexerRuleNameTyped[Option[Token]]
+    final case object Whitespace extends LexerRuleNameTyped[Option[Token]]
     final case object ResultToken extends LexerRuleNameTyped[WithSource[Option[Token]]]
   }
 
@@ -44,9 +45,6 @@ object Lexer {
     private def token(category: CharacterCategory, s: String): TGrammar[String] = Grammar.token(category, t => t === s)
     private def tokenF(category: CharacterCategory, f: String => Boolean): TGrammar[String] = Grammar.token(category, f)
     private def partialMatcher[T](category: CharacterCategory)(f: PartialFunction[String, T]): TGrammar[T] = Grammar.matcher(category, f.lift)
-
-    private val matchWhitespace: Lex =
-      (tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0)) && s != "\r" && s != "\n")+~) --> const(None)
 
     private val matchSingleQuoteString: Lex = {
       val singleQuote = token(CharacterCategory.SingleQuote, "'")
@@ -253,9 +251,12 @@ object Lexer {
 
           (lf.discard | (cr ++ lf).discard) --> const(Some(Token.NewLine))
 
+        case Rule.Whitespace =>
+          (tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0)) && s != "\r" && s != "\n")+~) --> const(None)
+
         case Rule.ResultToken => (
           rule(Rule.NewLine) |
-            matchWhitespace |
+            rule(Rule.Whitespace) |
             matchSingleQuoteString |
             matchInteger |
             matchIdentifier |

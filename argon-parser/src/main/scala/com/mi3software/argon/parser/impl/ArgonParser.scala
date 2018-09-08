@@ -8,7 +8,7 @@ import scala.reflect.ClassTag
 import scala.language.postfixOps
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.grammar.{Grammar, GrammarError}
+import com.mi3software.argon.grammar.{Grammar, GrammarError, TokenMatcher}
 import Grammar.Operators._
 import Grammar.{GrammarFactory, UnionGrammar}
 import fs2._
@@ -49,14 +49,11 @@ object ArgonParser {
 
     def second[T](pair: (_, T)): T = pair._2
 
-    private def partialMatcher[T](category: TokenCategory)(f: PartialFunction[Token, T]): TGrammar[T] =
-      Grammar.partialMatcher(category)(f)
-
     private def matchTokenFactory[TTokenCategory <: TokenCategory, TToken <: Token : ClassTag](factory: TokenWithCategory[TTokenCategory] with TokenFactory[TToken]): TGrammar[TToken] =
-      partialMatcher(factory.category) { case t: TToken => t }
+      Grammar.matcher(factory.category, TokenMatcher.Subtype[Token, TToken](implicitly[ClassTag[TToken]]))
 
     private def matchToken[TToken <: TokenWithCategory[_ <: TokenCategory] with Token : ClassTag](token: TToken): TGrammar[TToken] =
-      partialMatcher(token.category) { case t: TToken => t }
+      Grammar.matcher(token.category, TokenMatcher.Subtype[Token, TToken](implicitly[ClassTag[TToken]]))
 
     private val tokenUnderscore: TGrammar[Unit] =
       matchToken(KW_UNDERSCORE).discard

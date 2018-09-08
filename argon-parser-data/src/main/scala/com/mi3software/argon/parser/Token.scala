@@ -4,10 +4,11 @@ import scalaz.NonEmptyList
 
 sealed trait Token {
   def category: TokenCategory
+
 }
 
 object Token {
-  
+
   class TokenWithCategory[+TCategory <: TokenCategory](val category: TCategory)
   trait TokenFactory[TToken <: Token]
 
