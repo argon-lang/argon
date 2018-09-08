@@ -35,6 +35,19 @@ object ArgonParser {
     final case object IfExprStart extends ArgonRuleNameTyped[(WithSource[Expr], WithSource[Vector[WithSource[Stmt]]])]
     final case object IfExprPart extends ArgonRuleNameTyped[Expr]
 
+    // Pattern Matching
+    final case object ParenPattern extends ArgonRuleNameTyped[Pattern]
+    final case object VariablePattern extends ArgonRuleNameTyped[Pattern]
+    final case object DiscardPattern extends ArgonRuleNameTyped[Pattern]
+    final case object ConstructorExprPattern extends ArgonRuleNameTyped[Expr]
+    final case object ContainedPattern extends ArgonRuleNameTyped[Pattern]
+    final case object PatternSeq extends ArgonRuleNameTyped[Vector[WithSource[Pattern]]]
+    final case object DeconstructPattern extends ArgonRuleNameTyped[Pattern]
+    final case object Pattern extends ArgonRuleNameTyped[Pattern]
+    final case object MatchCase extends ArgonRuleNameTyped[MatchExprCase]
+    final case object MatchExpr extends ArgonRuleNameTyped[Expr]
+
+
     final case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
 
 
@@ -81,6 +94,8 @@ object ArgonParser {
             case (_, (ns, _, _)) => TopLevelStatement.Import(ns)
           }
 
+
+
         case Rule.IfExpr => matchToken(KW_IF) ++! rule(Rule.IfExprPart) --> second
         case Rule.IfExprStart =>
           ruleExpression.observeSource ++ matchToken(KW_THEN) ++ ruleStatementList.observeSource --> { case (condition, _, body) => (condition, body) }
@@ -92,6 +107,64 @@ object ArgonParser {
             rule(Rule.IfExprStart) ++ matchToken(KW_ELSIF) ++! rule(Rule.IfExprPart).observeSource -->
               { case (condition, body, _, elseExpr) => IfElseExpr(condition, body, WithSource(Vector(elseExpr), elseExpr.location)) }
 
+
+
+        case Rule.ParenPattern =>
+          matchToken(OP_OPENPAREN) ++ rule(Rule.Pattern) ++ matchToken(OP_CLOSEPAREN) --> {
+            case (_, pattern, _) => pattern
+          }
+
+        case Rule.VariablePattern =>
+          matchToken(KW_VAL) ++ rule(Rule.Identifier) ++ ((matchToken(OP_COLON) ++ ruleExpressionType.observeSource)?) --> {
+            case (_, idOpt, Some((_, varType))) => TypeTestPattern(idOpt, varType)
+            case (_, Some(id), None) => BindingPattern(id)
+            case (_, None, None) => DiscardPattern
+          }
+
+        case Rule.DiscardPattern =>
+          matchToken(KW_UNDERSCORE) --> const(DiscardPattern)
+
+        case Rule.ConstructorExprPattern =>
+          {
+            lazy val idPath: TGrammar[Expr] =
+              idPath -- (matchToken(OP_DOT) ++ tokenIdentifier) -\> {
+                case (baseExpr, (_, id)) => DotExpr(baseExpr, id)
+              } |
+                tokenIdentifier --> { id => IdentifierExpr(id) : Expr }
+
+            idPath
+          } |
+            matchToken(OP_OPENCURLY) ++ ruleExpression ++ matchToken(OP_CLOSECURLY) --> { case (_, expr, _) => expr }
+
+        case Rule.ContainedPattern =>
+          rule(Rule.ConstructorExprPattern).observeSource --> { expr => DeconstructPattern(expr, Vector()) : Pattern } |
+            rule(Rule.DiscardPattern) |
+            rule(Rule.ParenPattern)
+
+        case Rule.PatternSeq =>
+          (rule(Rule.ContainedPattern).observeSource*) --> { _.toVector }
+
+        case Rule.DeconstructPattern =>
+          rule(Rule.ConstructorExprPattern).observeSource ++ rule(Rule.PatternSeq) --> (DeconstructPattern.apply _).tupled
+
+        case Rule.Pattern =>
+          rule(Rule.ParenPattern) |
+            rule(Rule.VariablePattern) |
+            rule(Rule.DeconstructPattern) |
+            rule(Rule.DiscardPattern)
+
+        case Rule.MatchCase =>
+          rule(Rule.NewLines) ++ matchToken(KW_CASE) ++! (rule(Rule.NewLines) ++ rule(Rule.Pattern).observeSource ++ matchToken(OP_EQUALS) ++ ruleStatementList.observeSource) --> {
+            case (_, _, (_, pattern, _, body)) => MatchExprCase(pattern, body)
+          }
+
+        case Rule.MatchExpr =>
+          matchToken(KW_MATCH) ++! (ruleExpression.observeSource ++ (rule(Rule.MatchCase).observeSource*) ++ matchToken(KW_END)) --> {
+            case (_, (cmpValue, cases, _)) =>
+              MatchExpr(cmpValue, cases)
+          }
+
+
         case Rule.TopLevelStatement =>
           (rule(Rule.StatementSeparator)*) ++ ruleTopLevelStatement.observeSource ++ (rule(Rule.StatementSeparator)*) --> {
             case (_, stmt, _) => stmt
@@ -101,62 +174,6 @@ object ArgonParser {
 
 
     // Expressions
-
-    private val ruleParenPattern: TGrammar[Pattern] =
-      matchToken(OP_OPENPAREN) ++ rulePattern ++ matchToken(OP_CLOSEPAREN) --> {
-        case (_, pattern, _) => pattern
-      }
-
-    private val ruleVariablePattern: TGrammar[Pattern] =
-      matchToken(KW_VAL) ++ rule(Rule.Identifier) ++ ((matchToken(OP_COLON) ++ ruleExpressionType.observeSource)?) --> {
-        case (_, idOpt, Some((_, varType))) => TypeTestPattern(idOpt, varType)
-        case (_, Some(id), None) => BindingPattern(id)
-        case (_, None, None) => DiscardPattern
-      }
-
-    private val ruleDiscardPattern: TGrammar[Pattern] =
-      matchToken(KW_UNDERSCORE) --> const(DiscardPattern)
-
-    private val rulePatternConstructorExpr: TGrammar[Expr] =
-      {
-        lazy val idPath: TGrammar[Expr] =
-          idPath -- (matchToken(OP_DOT) ++ tokenIdentifier) -\> {
-            case (baseExpr, (_, id)) => DotExpr(baseExpr, id)
-          } |
-            tokenIdentifier --> { id => IdentifierExpr(id) : Expr }
-
-        idPath
-      } |
-        matchToken(OP_OPENCURLY) ++ ruleExpression ++ matchToken(OP_CLOSECURLY) --> { case (_, expr, _) => expr }
-
-    private val rulePatternSeq: TGrammar[Vector[WithSource[Pattern]]] =
-      ((
-        rulePatternConstructorExpr.observeSource --> { expr => DeconstructPattern(expr, Vector()) : Pattern } |
-          ruleDiscardPattern |
-          ruleParenPattern
-        ).observeSource*) --> { _.toVector }
-
-    private val ruleDeconstructPattern: TGrammar[Pattern] =
-      rulePatternConstructorExpr.observeSource ++ rulePatternSeq --> (DeconstructPattern.apply _).tupled
-
-    private lazy val rulePattern: TGrammar[Pattern] =
-      ruleParenPattern |
-        ruleVariablePattern |
-        ruleDeconstructPattern |
-        ruleDiscardPattern
-
-    private lazy val ruleExpressionMatch: TGrammar[Expr] = {
-      val matchCaseRule: TGrammar[MatchExprCase] =
-        rule(Rule.NewLines) ++ matchToken(KW_CASE) ++! (rule(Rule.NewLines) ++ rulePattern.observeSource ++ matchToken(OP_EQUALS) ++ ruleStatementList.observeSource) --> {
-          case (_, _, (_, pattern, _, body)) => MatchExprCase(pattern, body)
-        }
-
-
-      matchToken(KW_MATCH) ++! (ruleExpression.observeSource ++ (matchCaseRule.observeSource*) ++ matchToken(KW_END)) --> {
-        case (_, (cmpValue, cases, _)) =>
-          MatchExpr(cmpValue, cases)
-      }
-    }
 
     private lazy val ruleExpressionOther: TGrammar[Expr] =
       matchTokenFactory(Identifier) --> { case Identifier(id) => IdentifierExpr(id) : Expr } |
@@ -172,7 +189,7 @@ object ArgonParser {
         matchToken(KW_TRUE) --> const(BoolValueExpr(true)) |
         matchToken(KW_FALSE) --> const(BoolValueExpr(false)) |
         rule(Rule.IfExpr) |
-        ruleExpressionMatch
+        rule(Rule.MatchExpr)
 
 
     private trait ParenCallHandlerBase {
