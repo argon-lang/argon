@@ -29,6 +29,12 @@ object ArgonParser {
     final case object NewLines extends ArgonRuleNameTyped[Unit]
     final case object StatementSeparator extends ArgonRuleNameTyped[Unit]
     final case object ImportNamespace extends ArgonRuleNameTyped[TopLevelStatement]
+
+    // If
+    final case object IfExpr extends ArgonRuleNameTyped[Expr]
+    final case object IfExprStart extends ArgonRuleNameTyped[(WithSource[Expr], WithSource[Vector[WithSource[Stmt]]])]
+    final case object IfExprPart extends ArgonRuleNameTyped[Expr]
+
     final case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
 
 
@@ -75,6 +81,17 @@ object ArgonParser {
             case (_, (ns, _, _)) => TopLevelStatement.Import(ns)
           }
 
+        case Rule.IfExpr => matchToken(KW_IF) ++! rule(Rule.IfExprPart) --> second
+        case Rule.IfExprStart =>
+          ruleExpression.observeSource ++ matchToken(KW_THEN) ++ ruleStatementList.observeSource --> { case (condition, _, body) => (condition, body) }
+
+        case Rule.IfExprPart =>
+          rule(Rule.IfExprStart) ++ matchToken(KW_END) --> { case (condition, body, _) => IfExpr(condition, body) : Expr } |
+            rule(Rule.IfExprStart) ++ matchToken(KW_ELSE) ++! ruleStatementList.observeSource ++ matchToken(KW_END) -->
+              { case (condition, body, _, elseBody, _) => IfElseExpr(condition, body, elseBody) } |
+            rule(Rule.IfExprStart) ++ matchToken(KW_ELSIF) ++! rule(Rule.IfExprPart).observeSource -->
+              { case (condition, body, _, elseExpr) => IfElseExpr(condition, body, WithSource(Vector(elseExpr), elseExpr.location)) }
+
         case Rule.TopLevelStatement =>
           (rule(Rule.StatementSeparator)*) ++ ruleTopLevelStatement.observeSource ++ (rule(Rule.StatementSeparator)*) --> {
             case (_, stmt, _) => stmt
@@ -84,29 +101,6 @@ object ArgonParser {
 
 
     // Expressions
-    private lazy val ruleIfExpr: TGrammar[Expr] = {
-
-      type BodyList = WithSource[Vector[WithSource[Stmt]]]
-
-      val ifToken = matchToken(KW_IF)
-      val elseIfToken = matchToken(KW_ELSIF)
-
-      lazy val ifRulePart: TGrammar[Any] => TGrammar[Expr] = Memo.immutableHashMapMemo(prefix =>
-        (
-          prefix ++! (ruleExpression.observeSource ++ matchToken(KW_THEN) ++ ruleStatementList.observeSource ++ (
-            matchToken(KW_END) --> { _ => (condition: WithSource[Expr], body: BodyList) => IfExpr(condition, body) } |
-              (matchToken(KW_ELSE) ++ ruleStatementList.observeSource ++ matchToken(KW_END)) --> {
-                case (_, elseBody, _) => (condition: WithSource[Expr], body: BodyList) => IfElseExpr(condition, body, elseBody)
-              } |
-              ifRulePart(elseIfToken).observeSource --> {
-                elseExpr => (condition: WithSource[Expr], body: BodyList) => IfElseExpr(condition, body, WithSource(Vector(elseExpr), elseExpr.location))
-              }
-            )
-            )) --> { case (_, (condition, _, body, ruleFunc)) => ruleFunc(condition, body) }
-      )
-
-      ifRulePart(ifToken)
-    }
 
     private val ruleParenPattern: TGrammar[Pattern] =
       matchToken(OP_OPENPAREN) ++ rulePattern ++ matchToken(OP_CLOSEPAREN) --> {
@@ -177,7 +171,7 @@ object ArgonParser {
         } |
         matchToken(KW_TRUE) --> const(BoolValueExpr(true)) |
         matchToken(KW_FALSE) --> const(BoolValueExpr(false)) |
-        ruleIfExpr |
+        rule(Rule.IfExpr) |
         ruleExpressionMatch
 
 
