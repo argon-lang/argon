@@ -9,9 +9,6 @@ import shims._
 
 object ParseHandler {
 
-  private val lexer = new Lexer()
-  private val parser = new Parser()
-
   def decodeText[F[_]]: Pipe[F, Byte, Char] =
     _
       .through(fs2.text.utf8Decode)
@@ -21,8 +18,8 @@ object ParseHandler {
   def parse[F[_]: Monad](fileSpec: FileSpec): Pipe[EitherT[F, NonEmptyList[SyntaxError], ?], Char, SourceAST] =
     _
       .through(Characterizer.characterize)
-      .through(lexer.lex)
-      .through(parser.parse)
+      .through(Lexer.lex)
+      .through(ArgonParser.parse)
       .through(buildSourceAST(fileSpec))
 
   private def buildSourceAST[F[_]](fileSpec: FileSpec): Pipe[F, TopLevelStatement, SourceAST] =

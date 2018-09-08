@@ -1,5 +1,6 @@
 package com.mi3software.argon.parser
 
+import com.mi3software.argon.grammar.GrammarError
 import com.mi3software.argon.util.{FileSpec, SourceLocation}
 
 final case class SyntaxErrorData(fileSpec: FileSpec, syntaxError: SyntaxError)

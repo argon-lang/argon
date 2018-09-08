@@ -1,4 +1,4 @@
-package com.mi3software.argon.parser
+package com.mi3software.argon.grammar
 
 import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
 

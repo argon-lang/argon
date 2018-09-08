@@ -3,6 +3,7 @@ package com.mi3software.argon.compiler
 import java.io.File
 import java.nio.charset.Charset
 
+import com.mi3software.argon.grammar.GrammarError
 import com.mi3software.argon.parser
 import com.mi3software.argon.parser._
 import com.mi3software.argon.util._

@@ -1,6 +1,11 @@
 package com.mi3software.argon.parser
 
-sealed trait TokenCategory
+import com.mi3software.argon.grammar.Grammar
+
+sealed trait TokenCategory extends Grammar.RuleLabel {
+  override type RuleType = Token.TokenWithCategory[this.type]
+}
+
 object TokenCategory {
 
   case object StringToken extends TokenCategory

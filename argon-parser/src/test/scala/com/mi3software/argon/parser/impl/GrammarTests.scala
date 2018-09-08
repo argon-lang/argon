@@ -2,6 +2,7 @@ package com.mi3software.argon.parser.impl
 
 import org.scalatest.{FlatSpec, Matchers}
 import scalaz._
+import com.mi3software.argon.grammar.Grammar
 import Grammar.Operators._
 
 import scala.language.postfixOps

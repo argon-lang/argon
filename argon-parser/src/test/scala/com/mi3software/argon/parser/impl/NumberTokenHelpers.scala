@@ -1,15 +1,22 @@
 package com.mi3software.argon.parser.impl
 
-import com.mi3software.argon.parser.GrammarError
 import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.grammar.{Grammar, GrammarError}
 
 trait NumberTokenHelpers extends GrammarTestHelpers {
 
   override type TToken = Int
   override type TSyntaxError = WithSource[String]
-  override type TLabel = Any
+  override type TLabel = NumberTokenHelpers.NumberTokenLabel
+
+  override protected val grammarFactory: Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] =
+    new Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] {
+      override def apply[T](label: NumberTokenHelpers.NumberTokenLabel { type RuleType = T }): TGrammar[T] =
+        throw new Exception("No labels exist")
+    }
+
 
   protected implicit val errorFactory: Grammar.ErrorFactory[Int, String, WithSource[String]] = new Grammar.ErrorFactory[Int, String, WithSource[String]] {
     override def createError(error: GrammarError[Int, String]): WithSource[String] =
@@ -25,5 +32,13 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
   protected def numberToken(n: Int): TGrammar[Int] = Grammar.matcher(n.toString, m => Some(m).filter(_ === n))
 
 
+
+}
+
+object NumberTokenHelpers {
+
+  sealed trait NumberTokenLabel extends Grammar.RuleLabel {
+    override type RuleType = Nothing
+  }
 
 }

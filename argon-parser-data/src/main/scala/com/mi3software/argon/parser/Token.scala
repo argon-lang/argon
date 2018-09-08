@@ -8,7 +8,7 @@ sealed trait Token {
 
 object Token {
   
-  class TokenWithCategory[TCategory <: TokenCategory](val category: TCategory)
+  class TokenWithCategory[+TCategory <: TokenCategory](val category: TCategory)
   trait TokenFactory[TToken <: Token]
 
   sealed trait BinaryOperatorToken extends Token {

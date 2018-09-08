@@ -108,8 +108,17 @@ lazy val argon_build = project.in(file("argon-build"))
     name := "argon-build",
   )
 
+lazy val grammar = project.in(file("argon-grammar"))
+  .dependsOn(util)
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-grammar",
+  )
+
 lazy val parser = project.in(file("argon-parser"))
-  .dependsOn(util, parser_data)
+  .dependsOn(util, parser_data, grammar)
   .settings(
     commonSettings,
     compilerOptions,
@@ -118,7 +127,7 @@ lazy val parser = project.in(file("argon-parser"))
   )
 
 lazy val parser_data = project.in(file("argon-parser-data"))
-  .dependsOn(util)
+  .dependsOn(util, grammar)
   .settings(
     commonSettings,
     compilerOptions,

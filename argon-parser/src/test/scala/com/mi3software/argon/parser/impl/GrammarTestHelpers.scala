@@ -2,15 +2,18 @@ package com.mi3software.argon.parser.impl
 
 import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
 import scalaz._
-import com.mi3software.argon.parser.impl.Grammar.{GrammarResultComplete, GrammarResultTransform, ParseOptions, ParseState}
+import com.mi3software.argon.grammar.Grammar
+import Grammar.{GrammarResultComplete, GrammarResultTransform, ParseOptions, ParseState}
 
 trait GrammarTestHelpers {
 
   type TToken
   type TSyntaxError
-  type TLabel
+  type TLabel <: Grammar.RuleLabel
 
   type TGrammar[T] = Grammar[TToken, TSyntaxError, TLabel, T]
+
+  protected val grammarFactory: Grammar.GrammarFactory[TToken, TSyntaxError, TLabel]
 
   def parseTokens[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: Vector[WithSource[TToken]]): GrammarResultComplete[TToken, TSyntaxError, TLabel, T]
 
@@ -30,7 +33,7 @@ trait GrammarTestHelpersEntireSequence extends GrammarTestHelpers {
       grammar
         .parseEnd(
           FilePosition(1, 1),
-          ParseOptions(Set.empty, None)
+          ParseOptions(Set.empty, None, grammarFactory)
         )
     else
       grammar
@@ -39,7 +42,7 @@ trait GrammarTestHelpersEntireSequence extends GrammarTestHelpers {
             tokens,
             FilePosition(1, 1)
           ),
-          ParseOptions(Set.empty, None)
+          ParseOptions(Set.empty, None, grammarFactory)
         )
         .completeResult
 }
@@ -66,6 +69,6 @@ trait GrammarTestHelpersSingleTokens extends GrammarTestHelpers {
             .completeResult
       }
 
-    impl(GrammarResultTransform(grammar)(ParseOptions(Set.empty, None))(FilePosition(1, 1))(identity))(tokens)
+    impl(GrammarResultTransform(grammar)(ParseOptions(Set.empty, None, grammarFactory))(FilePosition(1, 1))(identity))(tokens)
   }
 }
