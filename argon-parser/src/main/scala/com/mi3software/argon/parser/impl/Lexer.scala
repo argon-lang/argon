@@ -13,11 +13,6 @@ import fs2._
 
 import Function.const
 
-final class Lexer {
-
-
-}
-
 object Lexer {
 
   private[Lexer] object Rule {
@@ -26,7 +21,8 @@ object Lexer {
       override type RuleType = T
     }
 
-    final case object Token extends LexerRuleNameTyped[WithSource[Option[Token]]]
+    final case object NewLine extends LexerRuleNameTyped[Option[Token]]
+    final case object ResultToken extends LexerRuleNameTyped[WithSource[Option[Token]]]
   }
 
   private[Lexer] object LexerGrammarFactory extends Grammar.GrammarFactory[String, SyntaxError, Rule.LexerRuleName] {
@@ -48,13 +44,6 @@ object Lexer {
     private def token(category: CharacterCategory, s: String): TGrammar[String] = Grammar.token(category, t => t === s)
     private def tokenF(category: CharacterCategory, f: String => Boolean): TGrammar[String] = Grammar.token(category, f)
     private def partialMatcher[T](category: CharacterCategory)(f: PartialFunction[String, T]): TGrammar[T] = Grammar.matcher(category, f.lift)
-
-    private val matchNewLine: Lex = {
-      val cr = token(CharacterCategory.CR, "\r")
-      val lf = token(CharacterCategory.LF, "\n")
-
-      (lf.discard | (cr ++ lf).discard) --> const(Some(Token.NewLine))
-    }
 
     private val matchWhitespace: Lex =
       (tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0)) && s != "\r" && s != "\n")+~) --> const(None)
@@ -256,17 +245,22 @@ object Lexer {
         op(colon, Token.OP_COLON)
     }
 
-    private val matchToken: TGrammar[Option[Token]] =
-      matchNewLine |
-        matchWhitespace |
-        matchSingleQuoteString |
-        matchInteger |
-        matchIdentifier |
-        matchOperator
-
     override def apply[T](label: Rule.LexerRuleName { type RuleType = T }): TGrammar[T] =
       label match {
-        case Rule.Token => matchToken.observeSource
+        case Rule.NewLine =>
+          val cr = token(CharacterCategory.CR, "\r")
+          val lf = token(CharacterCategory.LF, "\n")
+
+          (lf.discard | (cr ++ lf).discard) --> const(Some(Token.NewLine))
+
+        case Rule.ResultToken => (
+          rule(Rule.NewLine) |
+            matchWhitespace |
+            matchSingleQuoteString |
+            matchInteger |
+            matchIdentifier |
+            matchOperator
+        ).observeSource
       }
   }
 
@@ -275,7 +269,7 @@ object Lexer {
 
   def lex[F[_]: Monad]: Pipe[ErrorEffect[F, ?], WithSource[String], WithSource[Token]] =
     _
-      .through(Grammar.parseAll[F, String, SyntaxError, Rule.LexerRuleName, WithSource[Option[Token]]](LexerGrammarFactory)(Rule.Token)(FilePosition(1, 1)))
+      .through(Grammar.parseAll[F, String, SyntaxError, Rule.LexerRuleName, WithSource[Option[Token]]](LexerGrammarFactory)(Rule.ResultToken)(FilePosition(1, 1)))
       .map { case WithSource(opt, loc) => opt.map { value => WithSource(value, loc) } }
       .unNone
 
