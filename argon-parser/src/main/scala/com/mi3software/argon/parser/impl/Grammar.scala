@@ -434,8 +434,6 @@ object Grammar {
     grammarAUncached: => Grammar[TToken, TSyntaxError, TLabel, A],
     grammarBUncached: => Grammar[TToken, TSyntaxError, TLabel, B],
     combine: (WithSource[A], WithSource[B]) => WithSource[T]
-  )(implicit
-    errorFactory: ErrorFactory[TToken, _, TSyntaxError]
   ) extends Grammar[TToken, TSyntaxError, TLabel, T] {
 
     private lazy val grammarA = grammarAUncached
@@ -475,8 +473,6 @@ object Grammar {
       grammarB: => Grammar[TToken, TSyntaxError, TLabel, B]
     )(
       combine: (WithSource[A], WithSource[B]) => WithSource[T]
-    )(implicit
-      errorFactory: ErrorFactory[TToken, _, TSyntaxError]
     ): ConcatGrammar[TToken, TSyntaxError, TLabel, A, B, T] =
       new ConcatGrammar(grammarA, grammarB, combine)
 

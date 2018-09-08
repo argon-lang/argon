@@ -9,7 +9,7 @@ import ScopeHelpers._
 trait ExpressionConverter {
 
   type Conv[T]
-  implicit val compilationInstance: Compilation[Conv]
+  implicit val compilationInstance: ExprConversion[Conv]
   val compToConv: context.Comp ~> Conv
   val runConv: Conv ~> context.Comp
 
@@ -37,7 +37,7 @@ trait ExpressionConverter {
   val contextTypeSystemConverter: TypeSystemConverter[context.typeSystem.type, TS]
   val reverseTypeSystemConverter: TypeSystemConverter[TS, context.typeSystem.type]
 
-  val typeComparer: TypeComparerUnerased[TS]
+  val typeComparer: TypeComparerUnerased[TS, ExprConversion]
 
   val scopeLookupComparer: LookupComparer[ScopeValue[TScopeTypes]]
 

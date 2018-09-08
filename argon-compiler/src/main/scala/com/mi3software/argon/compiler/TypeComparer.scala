@@ -1,75 +1,78 @@
 package com.mi3software.argon.compiler
 
+import com.thoughtworks.each.Monadic._
 import scalaz._
 import Scalaz._
 
-trait TypeComparer[TS <: TypeSystem] {
+trait TypeComparer[TS <: TypeSystem, TCompEff[A[_]] <: Compilation[A]] {
 
-  def isSubTraitInfo(a: TS#TTraitInfo, b: TS#TTraitInfo): Boolean
-  def isSubClassInfo(a: TS#TClassInfo, b: TS#TClassInfo): Boolean
-  def classImplementsTrait(c: TS#TClassInfo, t: TS#TTraitInfo): Boolean
-  def isSameDataConstructorInfo(a: TS#TDataConstructorInfo, b: TS#TDataConstructorInfo): Boolean
+  def isSubTraitInfo[F[+_] : TCompEff](a: TS#TTraitInfo, b: TS#TTraitInfo): F[Boolean]
+  def isSubClassInfo[F[+_] : TCompEff](a: TS#TClassInfo, b: TS#TClassInfo): F[Boolean]
+  def classImplementsTrait[F[+_] : TCompEff](c: TS#TClassInfo, t: TS#TTraitInfo): F[Boolean]
+  def isSameDataConstructorInfo[F[+_] : TCompEff](a: TS#TDataConstructorInfo, b: TS#TDataConstructorInfo): F[Boolean]
 
   def dataConstructorReturnType(ctor: TS#TDataConstructorInfo): TS#TType
 
   def typeBaseConcreteToType(typeBase: TypeBaseConcrete[TS]): TS#TType
 
 
-  def isSubType(a: TS#TType, b: TS#TType): Boolean
+  def isSubType[F[+_] : TCompEff](a: TS#TType, b: TS#TType): F[Boolean]
 
-  def isSameType(a: TS#TType, b: TS#TType): Boolean =
-    isSubType(a, b) && isSubType(b, a)
+  @monadic[F]
+  def isSameType[F[+_] : TCompEff](a: TS#TType, b: TS#TType): F[Boolean] =
+    isSubType(a, b).each && isSubType(b, a).each
 
-  def tupleElementIsSubType(a: TS#TTupleElementType, b: TS#TTupleElementType): Boolean
-  def functionArgIsSubType(a: TS#TFunctionArgumentType, b: TS#TFunctionArgumentType): Boolean
-  def functionResultIsSubType(a: TS#TFunctionResultType, b: TS#TFunctionResultType): Boolean
+  def tupleElementIsSubType[F[+_] : TCompEff](a: TS#TTupleElementType, b: TS#TTupleElementType): F[Boolean]
+  def functionArgIsSubType[F[+_] : TCompEff](a: TS#TFunctionArgumentType, b: TS#TFunctionArgumentType): F[Boolean]
+  def functionResultIsSubType[F[+_] : TCompEff](a: TS#TFunctionResultType, b: TS#TFunctionResultType): F[Boolean]
 
-  def isSubTypeBaseConcrete(a: TypeBaseConcrete[TS], b: TypeBaseConcrete[TS]): Boolean =
+  @monadic[F]
+  def isSubTypeBaseConcrete[F[+_] : TCompEff](a: TypeBaseConcrete[TS], b: TypeBaseConcrete[TS]): F[Boolean] =
     (a, b) match {
-      case (TraitType(aTrait), TraitType(bTrait)) => isSubTraitInfo(aTrait, bTrait)
-      case (ClassType(aClass), ClassType(bClass)) => isSubClassInfo(aClass, bClass)
-      case (TraitType(aTrait), ClassType(bClass)) => classImplementsTrait(bClass, aTrait)
+      case (TraitType(aTrait), TraitType(bTrait)) => isSubTraitInfo[F](aTrait, bTrait).each
+      case (ClassType(aClass), ClassType(bClass)) => isSubClassInfo(aClass, bClass).each
+      case (TraitType(aTrait), ClassType(bClass)) => classImplementsTrait(bClass, aTrait).each
       case (ClassType(_), TraitType(_)) => false
 
-      case (DataConstructorType(aCtor), DataConstructorType(bCtor)) => isSameDataConstructorInfo(aCtor, bCtor)
-      case (DataConstructorType(aCtor), _) => isSubType(dataConstructorReturnType(aCtor), typeBaseConcreteToType(b))
+      case (DataConstructorType(aCtor), DataConstructorType(bCtor)) => isSameDataConstructorInfo(aCtor, bCtor).each
+      case (DataConstructorType(aCtor), _) => isSubType(dataConstructorReturnType(aCtor), typeBaseConcreteToType(b)).each
       case (_, DataConstructorType(_)) => false
 
       case (TupleType(elemsA), TupleType(elemsB)) =>
         elemsA.size === elemsB.size &&
-          elemsA.zip(elemsB).forall {
+          elemsA.zip(elemsB).allM {
             case (TupleTypeElement(elemA), TupleTypeElement(elemB)) =>
               tupleElementIsSubType(elemA, elemB)
-          }
+          }.each
 
       case (TupleType(_), _) | (_, TupleType(_)) => false
 
 
       case (FunctionType(argA, retA), FunctionType(argB, retB)) =>
-        functionArgIsSubType(argB, argA) && functionResultIsSubType(retA, retB)
+        functionArgIsSubType(argB, argA).each && functionResultIsSubType(retA, retB).each
 
       case (FunctionType(_, _), _) | (_, FunctionType(_, _)) => false
 
     }
 }
 
-trait TypeComparerUnerased[TS <: TypeSystemUnerased] extends TypeComparer[TS] {
+trait TypeComparerUnerased[TS <: TypeSystemUnerased, TCompEff[A[_]] <: Compilation[A]] extends TypeComparer[TS, TCompEff] {
 
   def typeBaseToType(typeBase: TypeBase[TS]): TS#TType
 
   final override def typeBaseConcreteToType(typeBase: TypeBaseConcrete[TS]): TS#TType =
     typeBaseToType(typeBase)
 
-  final override def tupleElementIsSubType(a: TS#TTupleElementType, b: TS#TTupleElementType): Boolean =
+  final override def tupleElementIsSubType[F[+_] : TCompEff](a: TS#TTupleElementType, b: TS#TTupleElementType): F[Boolean] =
     isSubType(a, b)
 
-  final override def functionArgIsSubType(a: TS#TFunctionArgumentType, b: TS#TFunctionArgumentType): Boolean =
+  final override def functionArgIsSubType[F[+_] : TCompEff](a: TS#TFunctionArgumentType, b: TS#TFunctionArgumentType): F[Boolean] =
     isSubType(a, b)
 
-  final override def functionResultIsSubType(a: TS#TFunctionResultType, b: TS#TFunctionResultType): Boolean =
+  final override def functionResultIsSubType[F[+_] : TCompEff](a: TS#TFunctionResultType, b: TS#TFunctionResultType): F[Boolean] =
     isSubType(a, b)
 
-  private def convertTupleToMetaType(tupleType: TupleType[TS]): Option[MetaType[TS]] =
+  protected def convertTupleToMetaType(tupleType: TupleType[TS]): Option[MetaType[TS]] =
     tupleType.elements
       .traverse[Option, (TS#TType, TS#TType)] {
       case TupleTypeElement(metaType: MetaType[TS]) => Some((metaType.innerType, metaType.baseType))
@@ -82,45 +85,46 @@ trait TypeComparerUnerased[TS <: TypeSystemUnerased] extends TypeComparer[TS] {
         )
       }
 
-  def isSubTypeBase(a: TypeBase[TS], b: TypeBase[TS]): Boolean =
+  @monadic[F]
+  def isSubTypeBase[F[+_] : TCompEff](a: TypeBase[TS], b: TypeBase[TS]): F[Boolean] =
     (a match {
       case UnionType(leftA, rightA) =>
-        isSubType(leftA, typeBaseToType(b)) && isSubType(rightA, typeBaseToType(b))
+        isSubType[F](leftA, typeBaseToType(b)).each && isSubType[F](rightA, typeBaseToType(b)).each
       case _ => false
     }) || (b match {
       case IntersectionType(leftB, rightB) =>
-        isSubType(typeBaseToType(a), leftB) && isSubType(typeBaseToType(a), rightB)
+        isSubType[F](typeBaseToType(a), leftB).each && isSubType[F](typeBaseToType(a), rightB).each
       case _ => false
     }) || (b match {
       case UnionType(leftB, rightB) =>
-        isSubType(typeBaseToType(a), leftB) || isSubType(typeBaseToType(a), rightB)
+        isSubType[F](typeBaseToType(a), leftB).each || isSubType[F](typeBaseToType(a), rightB).each
       case _ => false
     }) || (a match {
       case IntersectionType(leftA, rightA) =>
-        isSubType(leftA, typeBaseToType(b)) || isSubType(rightA, typeBaseToType(b))
+        isSubType[F](leftA, typeBaseToType(b)).each || isSubType[F](rightA, typeBaseToType(b)).each
       case _ => false
     }) || ((a, b) match {
 
       case (MetaType(innerTypeA, _), MetaType(innerTypeB, _)) =>
-        isSameType(innerTypeA, innerTypeB)
+        isSameType[F](innerTypeA, innerTypeB).each
 
       case (MetaType(_, _), tupleTypeB @ TupleType(_)) =>
         convertTupleToMetaType(tupleTypeB) match {
-          case Some(metaTypeB) => isSubTypeBase(a, metaTypeB)
+          case Some(metaTypeB) => isSubTypeBase[F](a, metaTypeB).each
           case None => false
         }
 
       case (tupleTypeA @ TupleType(_), MetaType(_, _)) =>
         convertTupleToMetaType(tupleTypeA) match {
-          case Some(metaTypeA) => isSubTypeBase(metaTypeA, b)
+          case Some(metaTypeA) => isSubTypeBase[F](metaTypeA, b).each
           case None => false
         }
 
-      case (MetaType(_, baseType), _) => isSubType(baseType, typeBaseToType(b))
+      case (MetaType(_, baseType), _) => isSubType[F](baseType, typeBaseToType(b)).each
       case (_, MetaType(_, _)) => false
 
       case (a: TypeBaseConcrete[TS], b: TypeBaseConcrete[TS]) =>
-        isSubTypeBaseConcrete(a, b)
+        isSubTypeBaseConcrete[F](a, b).each
 
       case (FunctionType(_, _), _) | (_, FunctionType(_, _)) => false
       case (IntersectionType(_, _), _) | (_, IntersectionType(_, _)) => false

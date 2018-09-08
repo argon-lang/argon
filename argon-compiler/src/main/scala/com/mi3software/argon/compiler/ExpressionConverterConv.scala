@@ -9,7 +9,7 @@ trait ExpressionConverterConv extends ExpressionConverter {
   private lazy val convMonadTrans = StateT.StateMonadTrans[ConvState]
   private lazy val convMonadInstance = convMonadTrans(context.compCompilationInstance)
 
-  override implicit val compilationInstance: Compilation[Conv] = new Compilation[Conv] {
+  override implicit val compilationInstance: ExprConversion[Conv] = new ExprConversion[Conv] {
 
     override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): Conv[A] =
       convMonadTrans.liftM(context.compCompilationInstance.diagnostic(value, messages))(context.compCompilationInstance)
@@ -23,6 +23,14 @@ trait ExpressionConverterConv extends ExpressionConverter {
 
   }
 
+
+  override protected def createTypeHole: StateT[context.Comp, ConvState, TypeBase[ExpressionConverterConv.this.TS] \/ TypeHole] =
+    (
+      for {
+        convState <- State.get[ConvState]
+        _ <- State.put(convState.copy(nextHoleId = convState.nextHoleId + 1))
+      } yield \/.right[TypeBase[ExpressionConverterConv.this.TS], TypeHole](TypeHole(convState.nextHoleId))
+    ).lift[context.Comp](implicitly, context.compCompilationInstance)
 
   override lazy val compToConv: context.Comp ~> StateT[context.Comp, ConvState, ?] = new (context.Comp ~> StateT[context.Comp, ConvState, ?]) {
     override def apply[A](fa: context.Comp[A]): StateT[context.Comp, ConvState, A] =
@@ -63,17 +71,17 @@ trait ExpressionConverterConv extends ExpressionConverter {
   override lazy val reverseTypeSystemConverter: TypeSystemConverter[TS, context.typeSystem.type] =
     HoleToArgonTypeSystemConverter(context)(exprTypes.typeSystem)
 
-  override lazy val typeComparer: TypeComparerUnerased[TS] = ??? : TypeComparerUnerased[TS]
+  override lazy val typeComparer: TypeComparerUnerased[TS, ExprConversion] = ??? : TypeComparerUnerased[TS, ExprConversion]
 
 
 }
 
 object ExpressionConverterConv {
 
-  final case class ConvState(nextVariableId: Int)
+  final case class ConvState(nextVariableId: Int, nextHoleId: Int)
 
   object ConvState {
-    val Default = ConvState(0)
+    val Default = ConvState(0, 0)
   }
 
 

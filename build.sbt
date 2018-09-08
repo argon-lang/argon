@@ -30,6 +30,8 @@ lazy val commonSettings = Seq(
     "org.apache.thrift" % "libthrift" % "0.11.0",
     "com.twitter" %% "scrooge-core" % "18.7.0" exclude("com.twitter", "libthrift"),
 
+    "com.thoughtworks.each" %% "each" % "3.3.1",
+
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test",
   )
 
@@ -47,15 +49,23 @@ lazy val compilerOptions = Seq(
     "-Yno-adapted-args",
     "-Ywarn-numeric-widen",
     "-Ywarn-value-discard",
-    "-Ywarn-unused:-implicits,-explicits",
+    "-Ywarn-unused:-implicits,-explicits,-imports",
     "-Ypatmat-exhaust-depth", "500",
     "-Ypartial-unification",
+    "-Yrangepos",
     "-feature",
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
   ),
 
+  scalacOptions in (Compile, compile) += "-Xfatal-warnings",
+
+  scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xlint")),
+  scalacOptions in (Test, console) ~= (_ filterNot (opt => opt == "-Xlint")),
+)
+
+lazy val wartremoverOptions = Seq(
   wartremoverWarnings in (Compile, compile) ++= Warts.allBut(
     Wart.Recursion,
     Wart.Any,
@@ -74,11 +84,6 @@ lazy val compilerOptions = Seq(
   ),
 
   wartremoverExcluded += sourceManaged.value,
-
-  scalacOptions in (Compile, compile) += "-Xfatal-warnings",
-
-  scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xlint")),
-  scalacOptions in (Test, console) ~= (_ filterNot (opt => opt == "-Xlint")),
 )
 
 val generateLibs = taskKey[Unit]("Generate argon library definitions")
@@ -88,6 +93,7 @@ lazy val cli = project.in(file("argon-cli"))
   .settings(
     commonSettings,
     compilerOptions,
+    wartremoverOptions,
 
     name := "argon-cli",
   )
@@ -97,6 +103,7 @@ lazy val argon_build = project.in(file("argon-build"))
   .settings(
     commonSettings,
     compilerOptions,
+    wartremoverOptions,
 
     name := "argon-build",
   )
@@ -126,6 +133,7 @@ lazy val argon_compiler = project.in(file("argon-compiler"))
     compilerOptions,
 
     name := "argon-compiler",
+    wartremoverExcluded += sourceDirectory.value / "main/scala/com/mi3software/argon/compiler/ArgonTypeComparer.scala"
   )
 
 lazy val compiler_js = project.in(file("argon-compiler-js"))
