@@ -86,6 +86,10 @@ object ArgonParser {
     case object Expression extends ArgonRuleNameTyped[Expr]
     case object ExpressionStmt extends ArgonRuleNameTyped[Expr]
 
+    // Variable Declaration
+    case object VariableMutSpec extends ArgonRuleNameTyped[Boolean]
+    case object VariableDeclaration extends ArgonRuleNameTyped[Stmt]
+
 
     case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
 
@@ -365,6 +369,20 @@ object ArgonParser {
         case Rule.ExpressionStmt =>
           rule(Rule.Expression)
 
+        case Rule.VariableMutSpec =>
+          matchToken(KW_VAL) --> const(false) |
+            matchToken(KW_VAR) --> const(true)
+
+        case Rule.VariableDeclaration =>
+          rule(Rule.VariableMutSpec) ++! (
+            rule(Rule.Identifier) ++
+              ((matchToken(OP_COLON) ++ rule(Rule.Type).observeSource --> second)?) ++
+              matchToken(OP_EQUALS) ++
+              rule(Rule.Expression).observeSource
+            ) --> { case (isMutable, (id, typeAnnotation, _, value)) =>
+              VariableDeclarationStmt(isMutable, typeAnnotation, id, value)
+            }
+
         case Rule.TopLevelStatement =>
           (rule(Rule.StatementSeparator)*) ++ ruleTopLevelStatement.observeSource ++ (rule(Rule.StatementSeparator)*) --> {
             case (_, stmt, _) => stmt
@@ -404,25 +422,10 @@ object ArgonParser {
         case (left, Some((_, right))) => LambdaTypeExpr(left, right)
       }
 
-
-    // Variable Declaration
-    private val ruleVariableMutSpec: TGrammar[Boolean] =
-      matchToken(KW_VAL) --> const(false) | matchToken(KW_VAR) --> const(true)
-
-    private val ruleVariableDeclaration: TGrammar[Stmt] =
-      ruleVariableMutSpec ++! (
-        rule(Rule.Identifier) ++
-          ((matchToken(OP_COLON) ++ rule(Rule.Type).observeSource --> second)?) ++
-          matchToken(OP_EQUALS) ++
-          rule(Rule.Expression).observeSource
-        ) --> { case (isMutable, (id, typeAnnotation, _, value)) =>
-        VariableDeclarationStmt(isMutable, typeAnnotation, id, value)
-      }
-
     // Field
     private val ruleFieldDeclaration: TGrammar[Stmt] =
       matchToken(KW_FIELD) ++
-        (ruleVariableMutSpec?) ++
+        (rule(Rule.VariableMutSpec)?) ++
         rule(Rule.Identifier) ++
         matchToken(OP_COLON) ++!
         rule(Rule.Type).observeSource --> { case (_, isMutable, id, _, typeAnnotation) =>
@@ -612,12 +615,12 @@ object ArgonParser {
           ruleStaticInstanceBody ++
           matchToken(KW_END)
         ) --> {
-        case (modifiers, _, (name, params, _, baseType, _, (staticBody, instanceBody), _)) =>
-          ClassDeclarationStmt(baseType, name, params, staticBody, instanceBody, modifiers)
-      }
+          case (modifiers, _, (name, params, _, baseType, _, (staticBody, instanceBody), _)) =>
+            ClassDeclarationStmt(baseType, name, params, staticBody, instanceBody, modifiers)
+        }
 
     private lazy val ruleStatement: TGrammar[Stmt] =
-      ruleVariableDeclaration |
+      rule(Rule.VariableDeclaration) |
         ruleFieldDeclaration |
         ruleFieldInitialization |
         ruleInitializeStatement |
