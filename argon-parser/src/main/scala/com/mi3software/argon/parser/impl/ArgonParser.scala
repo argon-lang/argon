@@ -22,6 +22,14 @@ object ArgonParser {
     sealed trait ParenAllowedState
     case object ParenAllowed extends ParenAllowedState
     case object ParenDisallowed extends ParenAllowedState
+
+    sealed trait ComparisonAllowedState
+    case object ComparisonAllowed extends ComparisonAllowedState
+    case object ComparisonDisallowed extends ComparisonAllowedState
+
+    sealed trait ArrowAllowedState
+    case object ArrowAllowed extends ArrowAllowedState
+    case object ArrowDisallowed extends ArrowAllowedState
     
 
     sealed trait ArgonRuleName extends Grammar.RuleLabel
@@ -41,14 +49,14 @@ object ArgonParser {
 
     // Pattern Matching
     case object ParenPattern extends ArgonRuleNameTyped[Pattern]
-    case object VariablePattern extends ArgonRuleNameTyped[Pattern]
+    final case class VariablePattern(arrowAllowed: ArrowAllowedState) extends ArgonRuleNameTyped[Pattern]
     case object DiscardPattern extends ArgonRuleNameTyped[Pattern]
     case object ConstructorExprPattern extends ArgonRuleNameTyped[Expr]
     case object ConstructorExprPatternIdPath extends ArgonRuleNameTyped[Expr]
     case object ContainedPattern extends ArgonRuleNameTyped[Pattern]
     case object PatternSeq extends ArgonRuleNameTyped[Vector[WithSource[Pattern]]]
     case object DeconstructPattern extends ArgonRuleNameTyped[Pattern]
-    case object Pattern extends ArgonRuleNameTyped[Pattern]
+    final case class PatternSpec(arrowAllowed: ArrowAllowedState) extends ArgonRuleNameTyped[Pattern]
     case object MatchCase extends ArgonRuleNameTyped[MatchExprCase]
     case object MatchExpr extends ArgonRuleNameTyped[Expr]
 
@@ -60,12 +68,23 @@ object ArgonParser {
     case object ParenArgList extends ArgonRuleNameTyped[Expr]
     case object MemberAccess extends ArgonRuleNameTyped[WithSource[Expr] => Expr]
     case object UnaryExpr extends ArgonRuleNameTyped[Expr]
-    case object TypeExpr extends ArgonRuleNameTyped[Expr]
+    case object ConstrainedTypeExpr extends ArgonRuleNameTyped[Expr]
     case object MultiplicativeExpr extends ArgonRuleNameTyped[Expr]
     case object AdditiveExpr extends ArgonRuleNameTyped[Expr]
     case object ShiftExpr extends ArgonRuleNameTyped[Expr]
+    case object AndExpr extends ArgonRuleNameTyped[Expr]
+    case object XorExpr extends ArgonRuleNameTyped[Expr]
+    case object OrExpr extends ArgonRuleNameTyped[Expr]
     case object RelationalExpr extends ArgonRuleNameTyped[Expr]
-    case object EqualityExpr extends ArgonRuleNameTyped[Expr]
+    final case class EqualityExpr(comparisonAllowed: ComparisonAllowedState) extends ArgonRuleNameTyped[Expr]
+    final case class AsExpr(comparisonAllowed: ComparisonAllowedState) extends ArgonRuleNameTyped[Expr]
+    final case class LambdaExpr(comparisonAllowed: ComparisonAllowedState, arrowAllowed: ArrowAllowedState) extends ArgonRuleNameTyped[Expr]
+    final case class PatternType(arrowAllowed: ArrowAllowedState) extends ArgonRuleNameTyped[Expr]
+    case object Type extends ArgonRuleNameTyped[Expr]
+    case object TupleExpr extends ArgonRuleNameTyped[Expr]
+    case object AssignExpr extends ArgonRuleNameTyped[Expr]
+    case object Expression extends ArgonRuleNameTyped[Expr]
+    case object ExpressionStmt extends ArgonRuleNameTyped[Expr]
 
 
     case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
@@ -118,7 +137,7 @@ object ArgonParser {
 
         case Rule.IfExpr => matchToken(KW_IF) ++! rule(Rule.IfExprPart) --> second
         case Rule.IfExprStart =>
-          ruleExpression.observeSource ++ matchToken(KW_THEN) ++ ruleStatementList.observeSource --> { case (condition, _, body) => (condition, body) }
+          rule(Rule.Expression).observeSource ++ matchToken(KW_THEN) ++ ruleStatementList.observeSource --> { case (condition, _, body) => (condition, body) }
 
         case Rule.IfExprPart =>
           rule(Rule.IfExprStart) ++ matchToken(KW_END) --> { case (condition, body, _) => IfExpr(condition, body) : Expr } |
@@ -130,12 +149,12 @@ object ArgonParser {
 
 
         case Rule.ParenPattern =>
-          matchToken(OP_OPENPAREN) ++! rule(Rule.Pattern) ++ matchToken(OP_CLOSEPAREN) --> {
+          matchToken(OP_OPENPAREN) ++! rule(Rule.PatternSpec(Rule.ArrowAllowed)) ++ matchToken(OP_CLOSEPAREN) --> {
             case (_, pattern, _) => pattern
           }
 
-        case Rule.VariablePattern =>
-          matchToken(KW_VAL) ++! rule(Rule.Identifier) ++ ((matchToken(OP_COLON) ++ ruleExpressionType.observeSource)?) --> {
+        case Rule.VariablePattern(arrowAllowed) =>
+          matchToken(KW_VAL) ++! rule(Rule.Identifier) ++ ((matchToken(OP_COLON) ++ rule(Rule.PatternType(arrowAllowed)).observeSource)?) --> {
             case (_, idOpt, Some((_, varType))) => TypeTestPattern(idOpt, varType)
             case (_, Some(id), None) => BindingPattern(id)
             case (_, None, None) => DiscardPattern
@@ -146,7 +165,7 @@ object ArgonParser {
 
         case Rule.ConstructorExprPattern =>
           rule(Rule.ConstructorExprPatternIdPath) |
-            matchToken(OP_OPENCURLY) ++ ruleExpression ++ matchToken(OP_CLOSECURLY) --> { case (_, expr, _) => expr }
+            matchToken(OP_OPENCURLY) ++ rule(Rule.Expression) ++ matchToken(OP_CLOSECURLY) --> { case (_, expr, _) => expr }
 
         case Rule.ConstructorExprPatternIdPath =>
           rule(Rule.ConstructorExprPatternIdPath) -- (matchToken(OP_DOT) ++ tokenIdentifier) -\> {
@@ -166,19 +185,19 @@ object ArgonParser {
         case Rule.DeconstructPattern =>
           rule(Rule.ConstructorExprPattern).observeSource ++ rule(Rule.PatternSeq) --> (DeconstructPattern.apply _).tupled
 
-        case Rule.Pattern =>
+        case Rule.PatternSpec(arrowAllowed) =>
           rule(Rule.ParenPattern) |
-            rule(Rule.VariablePattern) |
+            rule(Rule.VariablePattern(arrowAllowed)) |
             rule(Rule.DeconstructPattern) |
             rule(Rule.DiscardPattern)
 
         case Rule.MatchCase =>
-          rule(Rule.NewLines) ++ matchToken(KW_CASE) ++! (rule(Rule.NewLines) ++ rule(Rule.Pattern).observeSource ++ matchToken(OP_EQUALS) ++ ruleStatementList.observeSource) --> {
+          rule(Rule.NewLines) ++ matchToken(KW_CASE) ++! (rule(Rule.NewLines) ++ rule(Rule.PatternSpec(Rule.ArrowDisallowed)).observeSource ++ matchToken(OP_EQUALS) ++ ruleStatementList.observeSource) --> {
             case (_, _, (_, pattern, _, body)) => MatchExprCase(pattern, body)
           }
 
         case Rule.MatchExpr =>
-          matchToken(KW_MATCH) ++! (ruleExpression.observeSource ++ (rule(Rule.MatchCase).observeSource*) ++ matchToken(KW_END)) --> {
+          matchToken(KW_MATCH) ++! (rule(Rule.Expression).observeSource ++ (rule(Rule.MatchCase).observeSource*) ++ matchToken(KW_END)) --> {
             case (_, (cmpValue, cases, _)) =>
               MatchExpr(cmpValue, cases)
           }
@@ -197,7 +216,7 @@ object ArgonParser {
 
         case Rule.PrimaryExpr(Rule.ParenAllowed) =>
           matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(TupleExpr(Vector())) |
-            matchToken(OP_OPENPAREN) ++ ruleExpression ++ matchToken(OP_CLOSEPAREN) --> {
+            matchToken(OP_OPENPAREN) ++ rule(Rule.Expression) ++ matchToken(OP_CLOSEPAREN) --> {
               case (_, expr, _) => expr
             } | rule(Rule.PrimaryExpr(Rule.ParenDisallowed))
 
@@ -210,7 +229,7 @@ object ArgonParser {
           postfixExprCommon(Rule.ParenDisallowed)
 
         case Rule.ParenArgList =>
-          matchToken(OP_OPENPAREN) ++ (ruleExpression?) ++ matchToken(OP_CLOSEPAREN) --> {
+          matchToken(OP_OPENPAREN) ++ (rule(Rule.Expression)?) ++ matchToken(OP_CLOSEPAREN) --> {
             case (_, Some(argList), _) => argList
             case (_, None, _) => TupleExpr(Vector.empty)
           }
@@ -242,10 +261,10 @@ object ArgonParser {
             matchUnaryOp(OP_BOOLNOT) |
             matchUnaryOp(OP_ADD) |
             matchUnaryOp(OP_SUB) |
-            rule(Rule.TypeExpr) |
+            rule(Rule.ConstrainedTypeExpr) |
             rule(Rule.CurryCallExpr)
 
-        case Rule.TypeExpr =>
+        case Rule.ConstrainedTypeExpr =>
           matchToken(KW_TYPE) ++!
             ((matchToken(OP_SUBTYPE) ++ rule(Rule.UnaryExpr).observeSource --> second)?) ++
             ((matchToken(OP_SUPERTYPE) ++ rule(Rule.UnaryExpr).observeSource --> second)?) ++
@@ -272,6 +291,79 @@ object ArgonParser {
             ruleBinaryOperator(OP_SHIFTRIGHT),
           )(rule(Rule.AdditiveExpr))
 
+        case Rule.AndExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_BITAND),
+          )(rule(Rule.ShiftExpr))
+
+        case Rule.XorExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_BITXOR),
+          )(rule(Rule.AndExpr))
+
+        case Rule.OrExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_BITOR),
+          )(rule(Rule.XorExpr))
+
+        case Rule.RelationalExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_LESSTHAN),
+            ruleBinaryOperator(OP_LESSTHANEQ),
+            ruleBinaryOperator(OP_GREATERTHAN),
+            ruleBinaryOperator(OP_GREATERTHANEQ),
+          )(rule(Rule.OrExpr))
+
+        case Rule.EqualityExpr(Rule.ComparisonAllowed) =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_EQUALS),
+            ruleBinaryOperator(OP_NOTEQUALS),
+          )(rule(Rule.RelationalExpr))
+
+        case Rule.EqualityExpr(Rule.ComparisonDisallowed) =>
+          rule(Rule.OrExpr)
+
+        case Rule.AsExpr(comparisonAllowed) =>
+          val nextRule = rule(Rule.EqualityExpr(comparisonAllowed))
+
+          nextRule.observeSource ++ ((matchToken(KW_AS) ++! nextRule.observeSource)?) --> {
+            case (WithSource(left, _), None) => left
+            case (left, Some((_, right))) => AsExpr(left, right)
+          }
+
+        case Rule.LambdaExpr(comparisonAllowed, Rule.ArrowAllowed) =>
+          rule(Rule.Identifier) ++ matchToken(OP_LAMBDA) ++! rule(Rule.LambdaExpr(comparisonAllowed, Rule.ArrowAllowed)).observeSource -->
+            { case (id, _, body) => LambdaExpr(id, body) } |
+            ruleLambdaExprCommon(comparisonAllowed, Rule.ArrowAllowed)
+
+        case Rule.LambdaExpr(comparisonAllowed, Rule.ArrowDisallowed) =>
+          ruleLambdaExprCommon(comparisonAllowed, Rule.ArrowDisallowed)
+
+        case Rule.PatternType(arrowAllowed) =>
+          rule(Rule.LambdaExpr(Rule.ComparisonDisallowed, arrowAllowed))
+
+        case Rule.Type =>
+          rule(Rule.PatternType(Rule.ArrowAllowed))
+
+        case Rule.TupleExpr =>
+          val nextRule = rule(Rule.LambdaExpr(Rule.ComparisonAllowed, Rule.ArrowAllowed))
+          nextRule.observeSource ++ ((matchToken(OP_COMMA) ++! nextRule.observeSource --> second)*) --> {
+            case (WithSource(expr, _), Vector()) => expr
+            case (head, tail) => TupleExpr(head +: tail)
+          }
+
+        case Rule.AssignExpr =>
+          val nextRule = rule(Rule.TupleExpr)
+          nextRule.observeSource ++ ((matchToken(OP_ASSIGN) ++! nextRule.observeSource)?) --> {
+            case (WithSource(left, _), None) => left
+            case (left, Some((_, right))) => BinaryOperatorExpr(BinaryOperator.Assign, left, right)
+          }
+
+        case Rule.Expression =>
+          rule(Rule.AssignExpr)
+
+        case Rule.ExpressionStmt =>
+          rule(Rule.Expression)
 
         case Rule.TopLevelStatement =>
           (rule(Rule.StatementSeparator)*) ++ ruleTopLevelStatement.observeSource ++ (rule(Rule.StatementSeparator)*) --> {
@@ -306,95 +398,12 @@ object ArgonParser {
     private def ruleBinaryOperator[TToken <: TokenWithCategory[_ <: TokenCategory] with BinaryOperatorToken : ClassTag](token: TToken): TGrammar[BinaryOperator] =
       matchToken(token) --> const(token.binaryOperator)
 
-
-    private final class RuleChainer[T, TChain](val nextRule: TGrammar[T], skip: TChain) {
-
-      def chain[U](label: String)(ruleFunc: TGrammar[T] => TGrammar[U]): RuleChainer[U, (TGrammar[T], TChain)] =
-        chainPrev(label)((rule, _) => ruleFunc(rule))
-
-      def chainPrev[U](label: String)(ruleFunc: (TGrammar[T], TChain) => TGrammar[U]): RuleChainer[U, (TGrammar[T], TChain)] =
-        new RuleChainer[U, (TGrammar[T], TChain)](ruleFunc(nextRule, skip), (nextRule, skip))
-
-    }
-
-    private def chainRules[T](bottomRule: TGrammar[T]): RuleChainer[T, Unit] = new RuleChainer[T, Unit](bottomRule, ())
-
-    private val chainUpToComparison =
-      chainRules(rule(Rule.ShiftExpr))
-        .chain("bitand_expr")(createLeftAssociativeOperatorRule(
-          ruleBinaryOperator(OP_BITAND),
-        ))
-        .chain("bitxor_expr")(createLeftAssociativeOperatorRule(
-          ruleBinaryOperator(OP_BITXOR),
-        ))
-        .chain("bitor_expr")(createLeftAssociativeOperatorRule(
-          ruleBinaryOperator(OP_BITOR),
-        ))
-
-    private val ruleExpressionSkipCompare: TGrammar[Expr] = chainUpToComparison.nextRule
-
-
-    private val ruleCommonExpr: TGrammar[Expr] =
-      chainUpToComparison
-        .chain("inequality_expr")(createLeftAssociativeOperatorRule(
-          ruleBinaryOperator(OP_LESSTHAN),
-          ruleBinaryOperator(OP_LESSTHANEQ),
-          ruleBinaryOperator(OP_GREATERTHAN),
-          ruleBinaryOperator(OP_GREATERTHANEQ),
-        ))
-        .chain("equality_expr")(createLeftAssociativeOperatorRule(
-          ruleBinaryOperator(OP_EQUALS),
-          ruleBinaryOperator(OP_NOTEQUALS),
-        ))
-        .chain("as_expr")(nextRule =>
-          nextRule.observeSource ++ ((matchToken(KW_AS) ++! nextRule.observeSource)?) --> {
-            case (WithSource(left, _), None) => left
-            case (left, Some((_, right))) => AsExpr(left, right)
-          }
-        )
-        .nextRule
-
-    private def ruleExpressionAssignment(nextRule: => TGrammar[Expr]): TGrammar[Expr] =
-      nextRule.observeSource ++ ((matchToken(OP_ASSIGN) ++! nextRule.observeSource)?) --> {
+    private def ruleLambdaExprCommon(comparisonAllowed: Rule.ComparisonAllowedState, arrowAllowed: Rule.ArrowAllowedState): TGrammar[Expr] =
+      rule(Rule.AsExpr(comparisonAllowed)).observeSource ++ ((matchToken(OP_LAMBDA_TYPE) ++! rule(Rule.LambdaExpr(comparisonAllowed, arrowAllowed)).observeSource)?) --> {
         case (WithSource(left, _), None) => left
-        case (left, Some((_, right))) => BinaryOperatorExpr(BinaryOperator.Assign, left, right)
+        case (left, Some((_, right))) => LambdaTypeExpr(left, right)
       }
 
-    private def ruleExpressionLambda(nextRule: => TGrammar[Expr]): TGrammar[Expr] = {
-      lazy val grammar: TGrammar[Expr] =
-        rule(Rule.Identifier) ++ matchToken(OP_LAMBDA) ++! (grammar | nextRule).observeSource -->
-          { case (id, _, body) => LambdaExpr(id, body) }
-
-      grammar
-    }
-
-    private def ruleExpressionLambdaType(nextRule: => TGrammar[Expr]): TGrammar[Expr] = {
-      lazy val rule: TGrammar[Expr] =
-        nextRule.observeSource ++ ((matchToken(OP_LAMBDA_TYPE) ++! rule.observeSource)?) --> {
-          case (WithSource(left, _), None) => left
-          case (left, Some((_, right))) => LambdaTypeExpr(left, right)
-        }
-
-      rule
-    }
-
-    private def ruleExpressionTuple(nextRule: TGrammar[Expr]): TGrammar[Expr] =
-      nextRule.observeSource ++ ((matchToken(OP_COMMA) ++! nextRule.observeSource --> second)*) --> {
-        case (WithSource(expr, _), Vector()) => expr
-        case (head, tail) => TupleExpr(head +: tail)
-      }
-
-    private lazy val ruleExpression: TGrammar[Expr] =
-      ruleExpressionAssignment(ruleExpressionTuple(
-        ruleExpressionLambda(ruleExpressionAssignment(ruleCommonExpr)) | ruleExpressionLambdaType(ruleCommonExpr)
-      ))
-
-
-    private lazy val ruleExpressionStatement: TGrammar[Stmt] = ruleExpression --> identity
-
-    private lazy val ruleExpressionType: TGrammar[Expr] =
-      ruleExpressionLambda(ruleExpressionSkipCompare) |
-        ruleExpressionLambdaType(ruleExpressionSkipCompare)
 
     // Variable Declaration
     private val ruleVariableMutSpec: TGrammar[Boolean] =
@@ -403,9 +412,9 @@ object ArgonParser {
     private val ruleVariableDeclaration: TGrammar[Stmt] =
       ruleVariableMutSpec ++! (
         rule(Rule.Identifier) ++
-          ((matchToken(OP_COLON) ++ ruleExpressionType.observeSource --> second)?) ++
+          ((matchToken(OP_COLON) ++ rule(Rule.Type).observeSource --> second)?) ++
           matchToken(OP_EQUALS) ++
-          ruleExpression.observeSource
+          rule(Rule.Expression).observeSource
         ) --> { case (isMutable, (id, typeAnnotation, _, value)) =>
         VariableDeclarationStmt(isMutable, typeAnnotation, id, value)
       }
@@ -416,7 +425,7 @@ object ArgonParser {
         (ruleVariableMutSpec?) ++
         rule(Rule.Identifier) ++
         matchToken(OP_COLON) ++!
-        ruleExpressionType.observeSource --> { case (_, isMutable, id, _, typeAnnotation) =>
+        rule(Rule.Type).observeSource --> { case (_, isMutable, id, _, typeAnnotation) =>
         FieldDeclarationStmt(isMutable.getOrElse(false), id, typeAnnotation)
       }
 
@@ -424,7 +433,7 @@ object ArgonParser {
       matchToken(KW_FIELD) ++
         tokenIdentifier ++
         matchToken(OP_EQUALS) ++!
-        ruleExpression.observeSource --> { case (_, id, _, value) =>
+        rule(Rule.Expression).observeSource --> { case (_, id, _, value) =>
         FieldInitializationStmt(id, value)
       }
 
@@ -432,7 +441,7 @@ object ArgonParser {
       matchToken(KW_INITIALIZE) ++
         rule(Rule.Identifier) ++
         (
-          (matchToken(OP_EQUALS) ++ ruleExpression.observeSource --> second)?
+          (matchToken(OP_EQUALS) ++ rule(Rule.Expression).observeSource --> second)?
           ) --> { case (_, id, value) =>
         InitializeStmt(id, value)
       }
@@ -459,8 +468,8 @@ object ArgonParser {
     private val ruleMethodParameter: TGrammar[FunctionParameter] =
       tokenIdentifier ++
         rule(Rule.NewLines) ++
-        ((matchToken(OP_COLON) ++ rule(Rule.NewLines) ++ ruleExpressionType.observeSource --> { case (_, _, t) => t })?) ++
-        ((matchToken(OP_SUBTYPE) ++ rule(Rule.NewLines) ++ ruleExpressionType.observeSource --> { case (_, _, t) => t })?) --> {
+        ((matchToken(OP_COLON) ++ rule(Rule.NewLines) ++ rule(Rule.Type).observeSource --> { case (_, _, t) => t })?) ++
+        ((matchToken(OP_SUBTYPE) ++ rule(Rule.NewLines) ++ rule(Rule.Type).observeSource --> { case (_, _, t) => t })?) --> {
         case (name, _, paramType, subTypeOf) =>
           FunctionParameter(paramType, subTypeOf, name)
       }
@@ -494,7 +503,7 @@ object ArgonParser {
 
     private lazy val ruleMethodBody: TGrammar[Vector[WithSource[Stmt]]] =
       matchToken(KW_DO) ++! (ruleStatementList ++ matchToken(KW_END)) --> { case (_, (body, _)) => body } |
-        matchToken(OP_EQUALS) ++! (rule(Rule.NewLines) ++ ruleExpression.observeSource) --> { case (_, (_, expr)) => Vector(expr) }
+        matchToken(OP_EQUALS) ++! (rule(Rule.NewLines) ++ rule(Rule.Expression).observeSource) --> { case (_, (_, expr)) => Vector(expr) }
 
     private val ruleMethodPurity: TGrammar[Boolean] =
       matchToken(KW_DEF) --> const(true) |
@@ -508,7 +517,7 @@ object ArgonParser {
         ruleMethodParameters ++! (
         matchToken(OP_COLON) ++
           rule(Rule.NewLines) ++
-          ruleExpressionType.observeSource ++
+          rule(Rule.Type).observeSource ++
           rule(Rule.NewLines) ++
           ruleMethodBody.observeSource
         ) --> {
@@ -528,7 +537,7 @@ object ArgonParser {
           ruleMethodParameters ++
           matchToken(OP_COLON) ++
           rule(Rule.NewLines) ++
-          ruleExpressionType.observeSource ++
+          rule(Rule.Type).observeSource ++
           rule(Rule.NewLines) ++
           (ruleMethodBody.observeSource?)
         ) --> {
@@ -565,7 +574,7 @@ object ArgonParser {
         rule(Rule.Identifier) ++
           ruleMethodParameters ++
           matchToken(OP_SUBTYPE) ++
-          ruleExpressionType.observeSource ++
+          rule(Rule.Type).observeSource ++
           rule(Rule.StatementSeparator) ++
           ruleStaticInstanceBody ++
           matchToken(KW_END)
@@ -583,7 +592,7 @@ object ArgonParser {
           rule(Rule.NewLines) ++
           matchToken(OP_COLON) ++
           rule(Rule.NewLines) ++
-          ruleExpressionType.observeSource ++
+          rule(Rule.Type).observeSource ++
           rule(Rule.StatementSeparator) ++
           ruleStatementList ++
           matchToken(KW_END)
@@ -598,7 +607,7 @@ object ArgonParser {
         rule(Rule.Identifier) ++
           ruleMethodParameters ++
           matchToken(OP_SUBTYPE) ++
-          ruleExpressionType.observeSource ++
+          rule(Rule.Type).observeSource ++
           rule(Rule.StatementSeparator) ++
           ruleStaticInstanceBody ++
           matchToken(KW_END)
@@ -618,7 +627,7 @@ object ArgonParser {
         ruleTraitDefinition |
         ruleDataConstructorDefinition |
         ruleClassDefinition |
-        ruleExpressionStatement
+        rule(Rule.ExpressionStmt)
 
 
     private lazy val ruleStatementList: TGrammar[Vector[WithSource[Stmt]]] =
