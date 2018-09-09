@@ -8,6 +8,7 @@ lazy val commonSettings = Seq(
   addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.patch),
   addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.4"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.2.4"),
+  addCompilerPlugin("com.github.ghik" %% "silencer-plugin" % "1.2"),
 
   libraryDependencies ++= Seq(
     "org.scala-lang.modules" %% "scala-xml" % "1.0.6",
@@ -33,6 +34,8 @@ lazy val commonSettings = Seq(
     "com.thoughtworks.each" %% "each" % "3.3.1",
 
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test",
+
+    "com.github.ghik" %% "silencer-lib" % "1.2" % Provided,
   )
 
 )
@@ -57,6 +60,7 @@ lazy val compilerOptions = Seq(
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
+    "-P:silencer:globalFilters=unreachable",
   ),
 
   scalacOptions in (Compile, compile) += "-Xfatal-warnings",

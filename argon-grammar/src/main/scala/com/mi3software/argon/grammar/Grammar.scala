@@ -26,9 +26,22 @@ object Grammar {
     type RuleType
   }
 
-  trait GrammarFactory[TToken, TSyntaxError, TLabel <: RuleLabel] {
+  abstract class GrammarFactory[TToken, TSyntaxError, TLabel <: RuleLabel] {
     type TGrammar[+T] = Grammar[TToken, TSyntaxError, TLabel, T]
-    def apply[T](label: TLabel { type RuleType = T }): TGrammar[T]
+
+    private var cache: Map[TLabel, AnyRef] = Map.empty
+
+    protected def createGrammar[T](label: TLabel { type RuleType = T }): TGrammar[T]
+
+    final def apply[T](label: TLabel { type RuleType = T }): TGrammar[T] = {
+      cache.get(label) match {
+        case Some(value) => value.asInstanceOf[TGrammar[T]]
+        case None =>
+          val result = createGrammar(label)
+          cache = cache.updated(label, result)
+          result
+      }
+    }
 
     def rule(label: TLabel): Grammar[TToken, TSyntaxError, TLabel, label.RuleType] =
       new LabelRefGrammar[TToken, TSyntaxError, TLabel, label.RuleType](label)

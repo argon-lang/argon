@@ -48,7 +48,7 @@ object Lexer {
     private def tokenF(category: CharacterCategory, f: String => Boolean): TGrammar[String] = Grammar.token(category, f)
     private def partialMatcher[T](category: CharacterCategory)(f: PartialFunction[String, T]): TGrammar[T] = Grammar.matcher(category, f.lift)
 
-    override def apply[T](label: Rule.LexerRuleName { type RuleType = T }): TGrammar[T] =
+    protected override def createGrammar[T](label: Rule.LexerRuleName { type RuleType = T }): TGrammar[T] =
       label match {
         case Rule.NewLine =>
           val cr = token(CharacterCategory.CR, "\r")

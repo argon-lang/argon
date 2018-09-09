@@ -19,40 +19,50 @@ object ArgonParser {
 
   private[parser] object Rule {
 
+    sealed trait ParenAllowedState
+    case object ParenAllowed extends ParenAllowedState
+    case object ParenDisallowed extends ParenAllowedState
+    
 
     sealed trait ArgonRuleName extends Grammar.RuleLabel
     sealed trait ArgonRuleNameTyped[T] extends ArgonRuleName {
       override type RuleType = T
     }
 
-    final case object Identifier extends ArgonRuleNameTyped[Option[String]]
-    final case object NewLines extends ArgonRuleNameTyped[Unit]
-    final case object StatementSeparator extends ArgonRuleNameTyped[Unit]
-    final case object ImportNamespace extends ArgonRuleNameTyped[TopLevelStatement]
+    case object Identifier extends ArgonRuleNameTyped[Option[String]]
+    case object NewLines extends ArgonRuleNameTyped[Unit]
+    case object StatementSeparator extends ArgonRuleNameTyped[Unit]
+    case object ImportNamespace extends ArgonRuleNameTyped[TopLevelStatement]
 
     // If
-    final case object IfExpr extends ArgonRuleNameTyped[Expr]
-    final case object IfExprStart extends ArgonRuleNameTyped[(WithSource[Expr], WithSource[Vector[WithSource[Stmt]]])]
-    final case object IfExprPart extends ArgonRuleNameTyped[Expr]
+    case object IfExpr extends ArgonRuleNameTyped[Expr]
+    case object IfExprStart extends ArgonRuleNameTyped[(WithSource[Expr], WithSource[Vector[WithSource[Stmt]]])]
+    case object IfExprPart extends ArgonRuleNameTyped[Expr]
 
     // Pattern Matching
-    final case object ParenPattern extends ArgonRuleNameTyped[Pattern]
-    final case object VariablePattern extends ArgonRuleNameTyped[Pattern]
-    final case object DiscardPattern extends ArgonRuleNameTyped[Pattern]
-    final case object ConstructorExprPattern extends ArgonRuleNameTyped[Expr]
-    final case object ConstructorExprPatternIdPath extends ArgonRuleNameTyped[Expr]
-    final case object ContainedPattern extends ArgonRuleNameTyped[Pattern]
-    final case object PatternSeq extends ArgonRuleNameTyped[Vector[WithSource[Pattern]]]
-    final case object DeconstructPattern extends ArgonRuleNameTyped[Pattern]
-    final case object Pattern extends ArgonRuleNameTyped[Pattern]
-    final case object MatchCase extends ArgonRuleNameTyped[MatchExprCase]
-    final case object MatchExpr extends ArgonRuleNameTyped[Expr]
+    case object ParenPattern extends ArgonRuleNameTyped[Pattern]
+    case object VariablePattern extends ArgonRuleNameTyped[Pattern]
+    case object DiscardPattern extends ArgonRuleNameTyped[Pattern]
+    case object ConstructorExprPattern extends ArgonRuleNameTyped[Expr]
+    case object ConstructorExprPatternIdPath extends ArgonRuleNameTyped[Expr]
+    case object ContainedPattern extends ArgonRuleNameTyped[Pattern]
+    case object PatternSeq extends ArgonRuleNameTyped[Vector[WithSource[Pattern]]]
+    case object DeconstructPattern extends ArgonRuleNameTyped[Pattern]
+    case object Pattern extends ArgonRuleNameTyped[Pattern]
+    case object MatchCase extends ArgonRuleNameTyped[MatchExprCase]
+    case object MatchExpr extends ArgonRuleNameTyped[Expr]
 
     // Common Expressions
-    final case object PrimaryExpr extends ArgonRuleNameTyped[Expr]
+    final case class PrimaryExpr(parenAllowed: ParenAllowedState) extends ArgonRuleNameTyped[Expr]
+    final case class PostfixExpr(parenAllowed: ParenAllowedState) extends ArgonRuleNameTyped[Expr]
+    case object CurryCallExpr extends ArgonRuleNameTyped[Expr]
+    case object CurryFuncCallExpr extends ArgonRuleNameTyped[Expr]
+    case object ParenArgList extends ArgonRuleNameTyped[Expr]
+    case object MemberAccess extends ArgonRuleNameTyped[WithSource[Expr] => Expr]
+    case object UnaryExpr extends ArgonRuleNameTyped[Expr]
 
 
-    final case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
+    case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
 
 
   }
@@ -84,7 +94,7 @@ object ArgonParser {
     private val tokenIdentifier: TGrammar[String] =
       matchTokenFactory(Identifier) --> { _.name }
 
-    override def apply[T](name: Rule.ArgonRuleName { type RuleType = T }): TGrammar[T] =
+    protected override def createGrammar[T](name: Rule.ArgonRuleName { type RuleType = T }): TGrammar[T] =
       name match {
         case Rule.Identifier =>
           tokenUnderscore --> const(None : Option[String]) |
@@ -167,21 +177,66 @@ object ArgonParser {
               MatchExpr(cmpValue, cases)
           }
 
-        case Rule.PrimaryExpr =>
+        case Rule.PrimaryExpr(Rule.ParenDisallowed) =>
           matchTokenFactory(Identifier) --> { case Identifier(id) => IdentifierExpr(id) : Expr } |
             matchTokenFactory(StringToken) --> {
               case StringToken(NonEmptyList(StringToken.StringPart(str), INil())) => StringValueExpr(str)
               case StringToken(NonEmptyList(StringToken.StringPart(str), ICons(_, _))) => ???
             } |
             matchTokenFactory(IntToken) --> { case IntToken(sign, base, digits) => IntValueExpr(sign, base, digits) } |
-            matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(TupleExpr(Vector())) |
-            matchToken(OP_OPENPAREN) ++ ruleExpression ++ matchToken(OP_CLOSEPAREN) --> {
-              case (_, expr, _) => expr
-            } |
             matchToken(KW_TRUE) --> const(BoolValueExpr(true)) |
             matchToken(KW_FALSE) --> const(BoolValueExpr(false)) |
             rule(Rule.IfExpr) |
             rule(Rule.MatchExpr)
+
+        case Rule.PrimaryExpr(Rule.ParenAllowed) =>
+          matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(TupleExpr(Vector())) |
+            matchToken(OP_OPENPAREN) ++ ruleExpression ++ matchToken(OP_CLOSEPAREN) --> {
+              case (_, expr, _) => expr
+            } | rule(Rule.PrimaryExpr(Rule.ParenDisallowed))
+
+        case Rule.PostfixExpr(Rule.ParenAllowed) =>
+          rule(Rule.PostfixExpr(Rule.ParenAllowed)) -- rule(Rule.ParenArgList).observeSource -\> {
+            case (funcExpr, argList) => FunctionCallExpr(funcExpr, argList)
+          } | postfixExprCommon(Rule.ParenAllowed)
+
+        case Rule.PostfixExpr(Rule.ParenDisallowed) =>
+          postfixExprCommon(Rule.ParenDisallowed)
+
+        case Rule.ParenArgList =>
+          matchToken(OP_OPENPAREN) ++ (ruleExpression?) ++ matchToken(OP_CLOSEPAREN) --> {
+            case (_, Some(argList), _) => argList
+            case (_, None, _) => TupleExpr(Vector.empty)
+          }
+
+        case Rule.MemberAccess =>
+          matchTokenFactory(Identifier) --> { case Identifier(id) => baseExpr: WithSource[Expr] => DotExpr(baseExpr, id) } |
+            matchToken(KW_NEW) --> const(ClassConstructorExpr.apply _) |
+            matchToken(KW_TYPE) --> const(TypeOfExpr.apply _)
+
+        case Rule.CurryCallExpr =>
+          rule(Rule.PostfixExpr(Rule.ParenAllowed)) | rule(Rule.CurryFuncCallExpr)
+
+        case Rule.CurryFuncCallExpr =>
+          rule(Rule.CurryCallExpr) -- rule(Rule.PostfixExpr(Rule.ParenDisallowed)).observeSource -\> {
+            case (funcExpr, argExpr) => FunctionCallExpr(funcExpr, argExpr)
+          } |
+            rule(Rule.CurryCallExpr) -- rule(Rule.ParenArgList).observeSource -\> {
+              case (funcExpr, argExpr) => FunctionCallExpr(funcExpr, argExpr)
+            } |
+            rule(Rule.PostfixExpr(Rule.ParenAllowed)) -- rule(Rule.PostfixExpr(Rule.ParenDisallowed)).observeSource -\> {
+              case (funcExpr, argExpr) => FunctionCallExpr(funcExpr, argExpr)
+            }
+
+        case Rule.UnaryExpr =>
+          def matchUnaryOp[TToken <: TokenWithCategory[_ <: TokenCategory] with UnaryOperatorToken : ClassTag](token: TToken): TGrammar[Expr] =
+            matchToken(token) ++! rule(Rule.UnaryExpr).observeSource --> { case (_, inner) => UnaryOperatorExpr(token.unaryOperator, inner) }
+
+          matchUnaryOp(OP_BITNOT) |
+            matchUnaryOp(OP_BOOLNOT) |
+            matchUnaryOp(OP_ADD) |
+            matchUnaryOp(OP_SUB) |
+            rule(Rule.CurryCallExpr)
 
         case Rule.TopLevelStatement =>
           (rule(Rule.StatementSeparator)*) ++ ruleTopLevelStatement.observeSource ++ (rule(Rule.StatementSeparator)*) --> {
@@ -192,62 +247,25 @@ object ArgonParser {
 
 
     // Expressions
+    private def postfixExprCommon(parenAllowed: Rule.ParenAllowedState): TGrammar[Expr] =
+      rule(Rule.PostfixExpr(parenAllowed)) -- (matchToken(OP_DOT) ++! rule(Rule.MemberAccess)) -\> {
+        case (baseExpr, (_, memberAccessFunc)) => memberAccessFunc(baseExpr)
+      } | rule(Rule.PrimaryExpr(parenAllowed))
 
-
-    private trait ParenCallHandlerBase {
-      def apply[T](f: (WithSource[T], WithSource[Expr]) => T)(nextRule: TGrammar[T]): TGrammar[T]
-    }
-
-    private object ParenCallHandler extends ParenCallHandlerBase {
-
-      private lazy val ruleArgList: TGrammar[Expr] =
-        matchToken(OP_OPENPAREN) ++ (ruleExpression?) ++ matchToken(OP_CLOSEPAREN) --> {
-          case (_, Some(argList), _) => argList
-          case (_, None, _) => TupleExpr(Vector.empty)
-        }
-
-      override def apply[T](f: (WithSource[T], WithSource[Expr]) => T)(nextRule: TGrammar[T]): TGrammar[T] = {
-        lazy val rule: TGrammar[T] =
-          rule -- ruleArgList.observeSource -\> f | nextRule
-
-        rule
-      }
-    }
-
-    private object SkipParenCallHandler extends ParenCallHandlerBase {
-      override def apply[T](f: (WithSource[T], WithSource[Expr]) => T)(nextRule: TGrammar[T]): TGrammar[T] = nextRule
-    }
-
-
-    private val ruleMemberAccess: TGrammar[WithSource[Expr] => Expr] =
-      matchTokenFactory(Identifier) --> { case Identifier(id) => baseExpr: WithSource[Expr] => DotExpr(baseExpr, id) } |
-        matchToken(KW_NEW) --> const(ClassConstructorExpr.apply _) |
-        matchToken(KW_TYPE) --> const(TypeOfExpr.apply _)
-
-    private def ruleExpressionDot(parenCallHandler: ParenCallHandlerBase)(nextRule: TGrammar[Expr]): TGrammar[Expr] = {
-      lazy val rule: TGrammar[Expr] =
-        rule -- (matchToken(OP_DOT) ++! ruleMemberAccess) -\> {
-          case (baseExpr, (_, memberAccessFunc)) => memberAccessFunc(baseExpr)
-        } | nextRule
-
-      rule
-    }
 
     private def createLeftAssociativeOperatorRule(firstOpGrammar: TGrammar[BinaryOperator], opGrammars: TGrammar[BinaryOperator]*)(nextGrammar: TGrammar[Expr]): TGrammar[Expr] = {
       val opGrammarsNel = NonEmptyList.nel(firstOpGrammar, IList(opGrammars: _*))
 
-      lazy val grammar: TGrammar[Expr] = {
-        val rightGrammars = opGrammarsNel.map { opGrammar =>
-          Lazy { (opGrammar ++! grammar.observeSource) --> { case (op, right) => left: WithSource[Expr] => BinaryOperatorExpr(op, left, right) } }
-        }
-
-        nextGrammar.observeSource ++ (UnionGrammar.fromList(rightGrammars)?) --> {
-          case (WithSource(left, _), None) => left
-          case (left, Some(rightFunc)) => rightFunc(left)
-        }
+      val rightGrammars = opGrammarsNel.map { opGrammar =>
+        Lazy { (opGrammar ++! nextGrammar.observeSource) --> { case (op, right) => left: WithSource[Expr] => BinaryOperatorExpr(op, left, right) } }
       }
 
-      grammar
+      nextGrammar.observeSource ++ (UnionGrammar.fromList(rightGrammars).observeSource*) --> {
+        case (left, rightSeq) =>
+          rightSeq.foldLeft(left) { case (l, WithSource(f, rightLoc)) =>
+            WithSource(f(l), SourceLocation(l.location.start, rightLoc.end))
+          }.value
+      }
     }
 
     private def ruleBinaryOperator[TToken <: TokenWithCategory[_ <: TokenCategory] with BinaryOperatorToken : ClassTag](token: TToken): TGrammar[BinaryOperator] =
@@ -267,29 +285,7 @@ object ArgonParser {
     private def chainRules[T](bottomRule: TGrammar[T]): RuleChainer[T, Unit] = new RuleChainer[T, Unit](bottomRule, ())
 
     private val chainUpToComparison =
-      chainRules(rule(Rule.PrimaryExpr))
-        .chain("function_call")(ParenCallHandler(FunctionCallExpr.apply))
-        .chain("dot_expr_paren")(ruleExpressionDot(ParenCallHandler))
-        .chain("unary_operators")(nextExpr => {
-          lazy val rule: TGrammar[Expr] = {
-            def matchPrefixOp[TToken <: TokenWithCategory[_ <: TokenCategory] with UnaryOperatorToken : ClassTag](token: TToken): TGrammar[Expr] =
-              matchToken(token) ++ rule.observeSource --> { case (_, inner) => UnaryOperatorExpr(token.unaryOperator, inner) }
-
-            nextExpr |
-              matchPrefixOp(OP_BITNOT) |
-              matchPrefixOp(OP_BOOLNOT) |
-              matchPrefixOp(OP_ADD) |
-              matchPrefixOp(OP_SUB)
-          }
-
-          rule
-        })
-        .chainPrev("dot_expr_noparen") { case (nextExpr, (_, (skippedCallExpr, _))) => {
-          lazy val rule: TGrammar[Expr] =
-            rule -- ruleExpressionDot(SkipParenCallHandler)(skippedCallExpr).observeSource -\> FunctionCallExpr | nextExpr
-
-          rule
-        } }
+      chainRules(rule(Rule.CurryCallExpr))
         .chain("muldiv_expr")(createLeftAssociativeOperatorRule(
           ruleBinaryOperator(OP_MUL),
           ruleBinaryOperator(OP_DIV),
