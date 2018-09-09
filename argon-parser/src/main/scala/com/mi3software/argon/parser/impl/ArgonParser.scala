@@ -60,6 +60,12 @@ object ArgonParser {
     case object ParenArgList extends ArgonRuleNameTyped[Expr]
     case object MemberAccess extends ArgonRuleNameTyped[WithSource[Expr] => Expr]
     case object UnaryExpr extends ArgonRuleNameTyped[Expr]
+    case object TypeExpr extends ArgonRuleNameTyped[Expr]
+    case object MultiplicativeExpr extends ArgonRuleNameTyped[Expr]
+    case object AdditiveExpr extends ArgonRuleNameTyped[Expr]
+    case object ShiftExpr extends ArgonRuleNameTyped[Expr]
+    case object RelationalExpr extends ArgonRuleNameTyped[Expr]
+    case object EqualityExpr extends ArgonRuleNameTyped[Expr]
 
 
     case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
@@ -236,7 +242,36 @@ object ArgonParser {
             matchUnaryOp(OP_BOOLNOT) |
             matchUnaryOp(OP_ADD) |
             matchUnaryOp(OP_SUB) |
+            rule(Rule.TypeExpr) |
             rule(Rule.CurryCallExpr)
+
+        case Rule.TypeExpr =>
+          matchToken(KW_TYPE) ++!
+            ((matchToken(OP_SUBTYPE) ++ rule(Rule.UnaryExpr).observeSource --> second)?) ++
+            ((matchToken(OP_SUPERTYPE) ++ rule(Rule.UnaryExpr).observeSource --> second)?) ++
+            ((matchToken(OP_COLON) ++ rule(Rule.UnaryExpr).observeSource --> second)?) --> {
+            case (_, subtypeOf, supertypeOf, instanceType) =>
+              TypeExpr(instanceType, subtypeOf, supertypeOf)
+          }
+
+        case Rule.MultiplicativeExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_MUL),
+            ruleBinaryOperator(OP_DIV),
+          )(rule(Rule.CurryCallExpr))
+
+        case Rule.AdditiveExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_ADD),
+            ruleBinaryOperator(OP_SUB),
+          )(rule(Rule.MultiplicativeExpr))
+
+        case Rule.ShiftExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_SHIFTLEFT),
+            ruleBinaryOperator(OP_SHIFTRIGHT),
+          )(rule(Rule.AdditiveExpr))
+
 
         case Rule.TopLevelStatement =>
           (rule(Rule.StatementSeparator)*) ++ ruleTopLevelStatement.observeSource ++ (rule(Rule.StatementSeparator)*) --> {
@@ -285,19 +320,7 @@ object ArgonParser {
     private def chainRules[T](bottomRule: TGrammar[T]): RuleChainer[T, Unit] = new RuleChainer[T, Unit](bottomRule, ())
 
     private val chainUpToComparison =
-      chainRules(rule(Rule.CurryCallExpr))
-        .chain("muldiv_expr")(createLeftAssociativeOperatorRule(
-          ruleBinaryOperator(OP_MUL),
-          ruleBinaryOperator(OP_DIV),
-        ))
-        .chain("addsub_expr")(createLeftAssociativeOperatorRule(
-          ruleBinaryOperator(OP_ADD),
-          ruleBinaryOperator(OP_SUB),
-        ))
-        .chain("bitshift_expr")(createLeftAssociativeOperatorRule(
-          ruleBinaryOperator(OP_SHIFTLEFT),
-          ruleBinaryOperator(OP_SHIFTRIGHT),
-        ))
+      chainRules(rule(Rule.ShiftExpr))
         .chain("bitand_expr")(createLeftAssociativeOperatorRule(
           ruleBinaryOperator(OP_BITAND),
         ))
@@ -307,16 +330,6 @@ object ArgonParser {
         .chain("bitor_expr")(createLeftAssociativeOperatorRule(
           ruleBinaryOperator(OP_BITOR),
         ))
-        .chain("type_expr")(nextRule =>
-          nextRule |
-            matchToken(KW_TYPE) ++
-              ((matchToken(OP_SUBTYPE) ++ nextRule.observeSource --> second)?) ++
-              ((matchToken(OP_SUPERTYPE) ++ nextRule.observeSource --> second)?) ++
-              ((matchToken(OP_COLON) ++ nextRule.observeSource --> second)?) --> {
-              case (_, subtypeOf, supertypeOf, instanceType) =>
-                TypeExpr(instanceType, subtypeOf, supertypeOf)
-            }
-        )
 
     private val ruleExpressionSkipCompare: TGrammar[Expr] = chainUpToComparison.nextRule
 
