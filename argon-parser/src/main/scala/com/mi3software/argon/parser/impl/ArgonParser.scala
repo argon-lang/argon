@@ -90,9 +90,16 @@ object ArgonParser {
     case object VariableMutSpec extends ArgonRuleNameTyped[Boolean]
     case object VariableDeclaration extends ArgonRuleNameTyped[Stmt]
 
+    // Fields
     case object FieldDeclarationStmt extends ArgonRuleNameTyped[Stmt]
     case object FieldInitializationStmt extends ArgonRuleNameTyped[Stmt]
     case object InitializeStmt extends ArgonRuleNameTyped[Stmt]
+
+
+    case object Modifiers extends ArgonRuleNameTyped[Vector[WithSource[Modifier]]]
+
+    // Methods
+
 
     case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
 
@@ -412,6 +419,23 @@ object ArgonParser {
               InitializeStmt(id, value)
             }
 
+        case Rule.Modifiers =>
+          def ruleModifier[TToken <: TokenWithCategory[_ <: TokenCategory] with ModifierToken : ClassTag](token: TToken): TGrammar[Modifier] =
+            matchToken(token) --> const(token.modifier)
+
+          val anyModifier =
+            ruleModifier(KW_PUBLIC) |
+              ruleModifier(KW_PROTECTED) |
+              ruleModifier(KW_PRIVATE) |
+              ruleModifier(KW_INTERNAL) |
+              ruleModifier(KW_VIRTUAL) |
+              ruleModifier(KW_ABSTRACT) |
+              ruleModifier(KW_OVERRIDE) |
+              ruleModifier(KW_SEALED) |
+              ruleModifier(KW_OPEN)
+
+          (anyModifier.observeSource*) --> { _.toVector }
+
         case Rule.TopLevelStatement =>
           (rule(Rule.StatementSeparator)*) ++ ruleTopLevelStatement.observeSource ++ (rule(Rule.StatementSeparator)*) --> {
             case (_, stmt, _) => stmt
@@ -451,24 +475,6 @@ object ArgonParser {
         case (left, Some((_, right))) => LambdaTypeExpr(left, right)
       }
 
-    private val ruleModifiers: TGrammar[Vector[WithSource[Modifier]]] = {
-      def ruleModifier[TToken <: TokenWithCategory[_ <: TokenCategory] with ModifierToken : ClassTag](token: TToken): TGrammar[Modifier] =
-        matchToken(token) --> const(token.modifier)
-
-      val anyModifier =
-        ruleModifier(KW_PUBLIC) |
-          ruleModifier(KW_PROTECTED) |
-          ruleModifier(KW_PRIVATE) |
-          ruleModifier(KW_INTERNAL) |
-          ruleModifier(KW_VIRTUAL) |
-          ruleModifier(KW_ABSTRACT) |
-          ruleModifier(KW_OVERRIDE) |
-          ruleModifier(KW_SEALED) |
-          ruleModifier(KW_OPEN)
-
-      (anyModifier.observeSource*) --> { _.toVector }
-    }
-
     // Function and Method Definition
     private val ruleMethodParameter: TGrammar[FunctionParameter] =
       tokenIdentifier ++
@@ -488,7 +494,7 @@ object ArgonParser {
           case (firstParam, _, restParams, _) =>
             firstParam +: restParams.toVector
         }
-        )?) --> { _.getOrElse(Vector.empty) }
+      )?) --> { _.getOrElse(Vector.empty) }
 
     private lazy val ruleMethodParameters: TGrammar[Vector[FunctionParameterList]] =
       ((
@@ -515,7 +521,7 @@ object ArgonParser {
         matchToken(KW_PROC) --> const(false)
 
     private lazy val ruleFunctionDefinition: TGrammar[Stmt] =
-      ruleModifiers ++
+      rule(Rule.Modifiers) ++
         ruleMethodPurity ++
         rule(Rule.Identifier) ++
         rule(Rule.NewLines) ++
@@ -531,7 +537,7 @@ object ArgonParser {
       }
 
     private lazy val ruleMethodDefinition: TGrammar[Stmt] =
-      ruleModifiers ++
+      rule(Rule.Modifiers) ++
         ruleMethodPurity ++
         rule(Rule.Identifier) ++
         rule(Rule.NewLines) ++
@@ -551,7 +557,7 @@ object ArgonParser {
       }
 
     private lazy val ruleClassConstructorDefinition: TGrammar[Stmt] =
-      ruleModifiers ++
+      rule(Rule.Modifiers) ++
         matchToken(KW_NEW) ++! (
         ruleMethodParameters ++
           rule(Rule.StatementSeparator) ++
@@ -574,7 +580,7 @@ object ArgonParser {
         }
 
     private lazy val ruleTraitDefinition: TGrammar[Stmt] =
-      ruleModifiers ++
+      rule(Rule.Modifiers) ++
         matchToken(KW_TRAIT) ++! (
         rule(Rule.Identifier) ++
           ruleMethodParameters ++
@@ -589,7 +595,7 @@ object ArgonParser {
       }
 
     private lazy val ruleDataConstructorDefinition: TGrammar[Stmt] =
-      ruleModifiers ++
+      rule(Rule.Modifiers) ++
         matchToken(KW_CONSTRUCTOR) ++! (
         rule(Rule.Identifier) ++
           rule(Rule.NewLines) ++
@@ -607,7 +613,7 @@ object ArgonParser {
       }
 
     private lazy val ruleClassDefinition: TGrammar[Stmt] =
-      ruleModifiers ++
+      rule(Rule.Modifiers) ++
         matchToken(KW_CLASS) ++! (
         rule(Rule.Identifier) ++
           ruleMethodParameters ++
