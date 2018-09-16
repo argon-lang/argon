@@ -98,7 +98,16 @@ object ArgonParser {
 
     case object Modifiers extends ArgonRuleNameTyped[Vector[WithSource[Modifier]]]
 
-    // Methods
+    // Functions and Methods
+    case object MethodParameter extends ArgonRuleNameTyped[FunctionParameter]
+    case object MethodParameterList extends ArgonRuleNameTyped[Vector[WithSource[FunctionParameter]]]
+    case object MethodParameters extends ArgonRuleNameTyped[Vector[FunctionParameterList]]
+    case object MethodBody extends ArgonRuleNameTyped[Vector[WithSource[Stmt]]]
+    case object MethodPurity extends ArgonRuleNameTyped[Boolean]
+    case object FunctionDefinitionStmt extends ArgonRuleNameTyped[Stmt]
+    case object MethodDefinitionStmt extends ArgonRuleNameTyped[Stmt]
+    case object ClassConstructorDefinitionStmt extends ArgonRuleNameTyped[Stmt]
+
 
 
     case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
@@ -436,12 +445,103 @@ object ArgonParser {
 
           (anyModifier.observeSource*) --> { _.toVector }
 
+        case Rule.MethodParameter =>
+          tokenIdentifier ++
+            rule(Rule.NewLines) ++
+            ((matchToken(OP_COLON) ++ rule(Rule.NewLines) ++ rule(Rule.Type).observeSource --> { case (_, _, t) => t })?) ++
+            ((matchToken(OP_SUBTYPE) ++ rule(Rule.NewLines) ++ rule(Rule.Type).observeSource --> { case (_, _, t) => t })?) --> {
+            case (name, _, paramType, subTypeOf) =>
+                FunctionParameter(paramType, subTypeOf, name)
+            }
+
+        case Rule.MethodParameterList =>
+          ((
+            rule(Rule.MethodParameter).observeSource ++
+              rule(Rule.NewLines) ++
+              ((matchToken(OP_COMMA) ++ rule(Rule.MethodParameter).observeSource ++ rule(Rule.NewLines) --> { case (_, param, _) => param })*) ++
+              (matchToken(OP_COMMA)?) --> {
+                case (firstParam, _, restParams, _) =>
+                  firstParam +: restParams
+              }
+          )?) --> { _.getOrElse(Vector.empty) }
+
+        case Rule.MethodParameters =>
+          ((
+            (
+              matchToken(OP_OPENPAREN) ++ rule(Rule.NewLines) ++ rule(Rule.MethodParameterList) ++ rule(Rule.NewLines) ++ matchToken(OP_CLOSEPAREN) --> {
+                case (_, _, params, _, _) =>
+                  FunctionParameterList(FunctionParameterListType.NormalList, params)
+              }
+            ) |
+              (
+                matchToken(OP_OPENBRACKET) ++ rule(Rule.NewLines) ++ rule(Rule.MethodParameterList) ++ rule(Rule.NewLines) ++ matchToken(OP_CLOSEBRACKET) --> {
+                  case (_, _, params, _, _) =>
+                    FunctionParameterList(FunctionParameterListType.InferrableList, params)
+                }
+              )
+          )*) --> { _.toVector }
+
+        case Rule.MethodBody =>
+          matchToken(KW_DO) ++! (ruleStatementList ++ matchToken(KW_END)) --> { case (_, (body, _)) => body } |
+            matchToken(OP_EQUALS) ++! (rule(Rule.NewLines) ++ rule(Rule.Expression).observeSource) --> { case (_, (_, expr)) => Vector(expr) }
+
+        case Rule.MethodPurity =>
+          matchToken(KW_DEF) --> const(true) |
+            matchToken(KW_PROC) --> const(false)
+
+        case Rule.FunctionDefinitionStmt =>
+          rule(Rule.Modifiers) ++
+            rule(Rule.MethodPurity) ++
+            rule(Rule.Identifier) ++
+            rule(Rule.NewLines) ++
+            rule(Rule.MethodParameters) ++! (
+              matchToken(OP_COLON) ++
+                rule(Rule.NewLines) ++
+                rule(Rule.Type).observeSource ++
+                rule(Rule.NewLines) ++
+                rule(Rule.MethodBody).observeSource
+            ) --> {
+              case (modifiers, purity, name, _, params, (_, _, returnType, _, body)) =>
+                FunctionDeclarationStmt(name, params, returnType, body, modifiers, purity)
+            }
+
+        case Rule.MethodDefinitionStmt =>
+          rule(Rule.Modifiers) ++
+            rule(Rule.MethodPurity) ++
+            rule(Rule.Identifier) ++
+            rule(Rule.NewLines) ++
+            matchToken(OP_DOT) ++
+            rule(Rule.NewLines) ++
+            rule(Rule.Identifier) ++! (
+              rule(Rule.NewLines) ++
+                rule(Rule.MethodParameters) ++
+                matchToken(OP_COLON) ++
+                rule(Rule.NewLines) ++
+                rule(Rule.Type).observeSource ++
+                rule(Rule.NewLines) ++
+                (rule(Rule.MethodBody).observeSource?)
+            ) --> {
+            case (modifiers, purity, instanceName, _, _, _, name, (_, params, _, _, returnType, _, body)) =>
+                MethodDeclarationStmt(instanceName, name, params, returnType, body, modifiers, purity)
+            }
+
+        case Rule.ClassConstructorDefinitionStmt =>
+          rule(Rule.Modifiers) ++
+            matchToken(KW_NEW) ++! (
+              rule(Rule.MethodParameters) ++
+                rule(Rule.StatementSeparator) ++
+                ruleStatementList.observeSource ++
+                matchToken(KW_END)
+            ) --> {
+              case (modifiers, _, (params, _, body, _)) =>
+                ClassConstructorDeclarationStmt(params, body, modifiers)
+            }
+
         case Rule.TopLevelStatement =>
           (rule(Rule.StatementSeparator)*) ++ ruleTopLevelStatement.observeSource ++ (rule(Rule.StatementSeparator)*) --> {
             case (_, stmt, _) => stmt
           }
       }
-
 
 
     // Expressions
@@ -475,99 +575,6 @@ object ArgonParser {
         case (left, Some((_, right))) => LambdaTypeExpr(left, right)
       }
 
-    // Function and Method Definition
-    private val ruleMethodParameter: TGrammar[FunctionParameter] =
-      tokenIdentifier ++
-        rule(Rule.NewLines) ++
-        ((matchToken(OP_COLON) ++ rule(Rule.NewLines) ++ rule(Rule.Type).observeSource --> { case (_, _, t) => t })?) ++
-        ((matchToken(OP_SUBTYPE) ++ rule(Rule.NewLines) ++ rule(Rule.Type).observeSource --> { case (_, _, t) => t })?) --> {
-        case (name, _, paramType, subTypeOf) =>
-          FunctionParameter(paramType, subTypeOf, name)
-      }
-
-    private val ruleMethodParameterList: TGrammar[Vector[WithSource[FunctionParameter]]] =
-      ((
-        ruleMethodParameter.observeSource ++
-          rule(Rule.NewLines) ++
-          ((matchToken(OP_COMMA) ++ ruleMethodParameter.observeSource ++ rule(Rule.NewLines) --> { case (_, param, _) => param })*) ++
-          (matchToken(OP_COMMA)?) --> {
-          case (firstParam, _, restParams, _) =>
-            firstParam +: restParams.toVector
-        }
-      )?) --> { _.getOrElse(Vector.empty) }
-
-    private lazy val ruleMethodParameters: TGrammar[Vector[FunctionParameterList]] =
-      ((
-        (
-          matchToken(OP_OPENPAREN) ++ rule(Rule.NewLines) ++ ruleMethodParameterList ++ rule(Rule.NewLines) ++ matchToken(OP_CLOSEPAREN) --> {
-            case (_, _, params, _, _) =>
-              FunctionParameterList(FunctionParameterListType.NormalList, params)
-          }
-          ) |
-          (
-            matchToken(OP_OPENBRACKET) ++ rule(Rule.NewLines) ++ ruleMethodParameterList ++ rule(Rule.NewLines) ++ matchToken(OP_CLOSEBRACKET) --> {
-              case (_, _, params, _, _) =>
-                FunctionParameterList(FunctionParameterListType.InferrableList, params)
-            }
-            )
-        )*) --> { _.toVector }
-
-    private lazy val ruleMethodBody: TGrammar[Vector[WithSource[Stmt]]] =
-      matchToken(KW_DO) ++! (ruleStatementList ++ matchToken(KW_END)) --> { case (_, (body, _)) => body } |
-        matchToken(OP_EQUALS) ++! (rule(Rule.NewLines) ++ rule(Rule.Expression).observeSource) --> { case (_, (_, expr)) => Vector(expr) }
-
-    private val ruleMethodPurity: TGrammar[Boolean] =
-      matchToken(KW_DEF) --> const(true) |
-        matchToken(KW_PROC) --> const(false)
-
-    private lazy val ruleFunctionDefinition: TGrammar[Stmt] =
-      rule(Rule.Modifiers) ++
-        ruleMethodPurity ++
-        rule(Rule.Identifier) ++
-        rule(Rule.NewLines) ++
-        ruleMethodParameters ++! (
-        matchToken(OP_COLON) ++
-          rule(Rule.NewLines) ++
-          rule(Rule.Type).observeSource ++
-          rule(Rule.NewLines) ++
-          ruleMethodBody.observeSource
-        ) --> {
-        case (modifiers, purity, name, _, params, (_, _, returnType, _, body)) =>
-          FunctionDeclarationStmt(name, params, returnType, body, modifiers, purity)
-      }
-
-    private lazy val ruleMethodDefinition: TGrammar[Stmt] =
-      rule(Rule.Modifiers) ++
-        ruleMethodPurity ++
-        rule(Rule.Identifier) ++
-        rule(Rule.NewLines) ++
-        matchToken(OP_DOT) ++
-        rule(Rule.NewLines) ++
-        rule(Rule.Identifier) ++! (
-        rule(Rule.NewLines) ++
-          ruleMethodParameters ++
-          matchToken(OP_COLON) ++
-          rule(Rule.NewLines) ++
-          rule(Rule.Type).observeSource ++
-          rule(Rule.NewLines) ++
-          (ruleMethodBody.observeSource?)
-        ) --> {
-        case (modifiers, purity, instanceName, _, _, _, name, (_, params, _, _, returnType, _, body)) =>
-          MethodDeclarationStmt(instanceName, name, params, returnType, body, modifiers, purity)
-      }
-
-    private lazy val ruleClassConstructorDefinition: TGrammar[Stmt] =
-      rule(Rule.Modifiers) ++
-        matchToken(KW_NEW) ++! (
-        ruleMethodParameters ++
-          rule(Rule.StatementSeparator) ++
-          ruleStatementList.observeSource ++
-          matchToken(KW_END)
-        ) --> {
-        case (modifiers, _, (params, _, body, _)) =>
-          ClassConstructorDeclarationStmt(params, body, modifiers)
-      }
-
     // Types
     private val ruleStaticInstanceBody: TGrammar[(Vector[WithSource[Stmt]], Vector[WithSource[Stmt]])] =
       rule(Rule.NewLines) ++ matchToken(KW_STATIC) ++! (ruleStatementList ++ ((matchToken(KW_INSTANCE) ++! ruleStatementList --> { case (_, instanceBody) => instanceBody })?)) --> {
@@ -583,7 +590,7 @@ object ArgonParser {
       rule(Rule.Modifiers) ++
         matchToken(KW_TRAIT) ++! (
         rule(Rule.Identifier) ++
-          ruleMethodParameters ++
+          rule(Rule.MethodParameters) ++
           matchToken(OP_SUBTYPE) ++
           rule(Rule.Type).observeSource ++
           rule(Rule.StatementSeparator) ++
@@ -599,7 +606,7 @@ object ArgonParser {
         matchToken(KW_CONSTRUCTOR) ++! (
         rule(Rule.Identifier) ++
           rule(Rule.NewLines) ++
-          ruleMethodParameters ++
+          rule(Rule.MethodParameters) ++
           rule(Rule.NewLines) ++
           matchToken(OP_COLON) ++
           rule(Rule.NewLines) ++
@@ -616,7 +623,7 @@ object ArgonParser {
       rule(Rule.Modifiers) ++
         matchToken(KW_CLASS) ++! (
         rule(Rule.Identifier) ++
-          ruleMethodParameters ++
+          rule(Rule.MethodParameters) ++
           matchToken(OP_SUBTYPE) ++
           rule(Rule.Type).observeSource ++
           rule(Rule.StatementSeparator) ++
@@ -632,9 +639,9 @@ object ArgonParser {
         rule(Rule.FieldDeclarationStmt) |
         rule(Rule.FieldInitializationStmt) |
         rule(Rule.InitializeStmt) |
-        ruleMethodDefinition |
-        ruleFunctionDefinition |
-        ruleClassConstructorDefinition |
+        rule(Rule.MethodDefinitionStmt) |
+        rule(Rule.FunctionDefinitionStmt) |
+        rule(Rule.ClassConstructorDefinitionStmt) |
         ruleTraitDefinition |
         ruleDataConstructorDefinition |
         ruleClassDefinition |
