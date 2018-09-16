@@ -108,6 +108,12 @@ object ArgonParser {
     case object MethodDefinitionStmt extends ArgonRuleNameTyped[Stmt]
     case object ClassConstructorDefinitionStmt extends ArgonRuleNameTyped[Stmt]
 
+    // Types
+    case object StaticInstanceBody extends ArgonRuleNameTyped[(Vector[WithSource[Stmt]], Vector[WithSource[Stmt]])]
+    case object TraitDeclarationStmt extends ArgonRuleNameTyped[Stmt]
+    case object DataConstructorDeclarationStmt extends ArgonRuleNameTyped[Stmt]
+    case object ClassDeclarationStmt extends ArgonRuleNameTyped[Stmt]
+
 
 
     case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
@@ -537,6 +543,64 @@ object ArgonParser {
                 ClassConstructorDeclarationStmt(params, body, modifiers)
             }
 
+        case Rule.StaticInstanceBody =>
+          rule(Rule.NewLines) ++ matchToken(KW_STATIC) ++! (ruleStatementList ++ ((matchToken(KW_INSTANCE) ++! ruleStatementList --> { case (_, instanceBody) => instanceBody })?)) --> {
+            case (_, _, (staticBody, instanceBody)) =>
+              (staticBody, instanceBody.getOrElse(Vector.empty))
+          } |
+            ((rule(Rule.NewLines) ++ matchToken(KW_INSTANCE))?) ++ ruleStatementList --> {
+              case (_, instanceBody) =>
+                (Vector.empty, instanceBody)
+            }
+
+        case Rule.TraitDeclarationStmt =>
+          rule(Rule.Modifiers) ++
+            matchToken(KW_TRAIT) ++! (
+            rule(Rule.Identifier) ++
+              rule(Rule.MethodParameters) ++
+              matchToken(OP_SUBTYPE) ++
+              rule(Rule.Type).observeSource ++
+              rule(Rule.StatementSeparator) ++
+              rule(Rule.StaticInstanceBody) ++
+              matchToken(KW_END)
+            ) --> {
+              case (modifiers, _, (name, parameters, _, baseType, _, (staticBody, instanceBody), _)) =>
+                TraitDeclarationStmt(baseType, name, parameters, staticBody, instanceBody, modifiers)
+            }
+
+        case Rule.DataConstructorDeclarationStmt =>
+          rule(Rule.Modifiers) ++
+            matchToken(KW_CONSTRUCTOR) ++! (
+              rule(Rule.Identifier) ++
+                rule(Rule.NewLines) ++
+                rule(Rule.MethodParameters) ++
+                rule(Rule.NewLines) ++
+                matchToken(OP_COLON) ++
+                rule(Rule.NewLines) ++
+                rule(Rule.Type).observeSource ++
+                rule(Rule.StatementSeparator) ++
+                ruleStatementList ++
+                matchToken(KW_END)
+            ) --> {
+              case (modifiers, _, (name, _, params, _, _, _, returnType, _, body, _)) =>
+                DataConstructorDeclarationStmt(name, params, returnType, body, modifiers)
+            }
+
+        case Rule.ClassDeclarationStmt =>
+          rule(Rule.Modifiers) ++
+            matchToken(KW_CLASS) ++! (
+              rule(Rule.Identifier) ++
+                rule(Rule.MethodParameters) ++
+                matchToken(OP_SUBTYPE) ++
+                rule(Rule.Type).observeSource ++
+                rule(Rule.StatementSeparator) ++
+                rule(Rule.StaticInstanceBody) ++
+                matchToken(KW_END)
+            ) --> {
+              case (modifiers, _, (name, params, _, baseType, _, (staticBody, instanceBody), _)) =>
+                ClassDeclarationStmt(baseType, name, params, staticBody, instanceBody, modifiers)
+            }
+
         case Rule.TopLevelStatement =>
           (rule(Rule.StatementSeparator)*) ++ ruleTopLevelStatement.observeSource ++ (rule(Rule.StatementSeparator)*) --> {
             case (_, stmt, _) => stmt
@@ -576,64 +640,6 @@ object ArgonParser {
       }
 
     // Types
-    private val ruleStaticInstanceBody: TGrammar[(Vector[WithSource[Stmt]], Vector[WithSource[Stmt]])] =
-      rule(Rule.NewLines) ++ matchToken(KW_STATIC) ++! (ruleStatementList ++ ((matchToken(KW_INSTANCE) ++! ruleStatementList --> { case (_, instanceBody) => instanceBody })?)) --> {
-        case (_, _, (staticBody, instanceBody)) =>
-          (staticBody, instanceBody.getOrElse(Vector.empty))
-      } |
-        ((rule(Rule.NewLines) ++ matchToken(KW_INSTANCE))?) ++ ruleStatementList --> {
-          case (_, instanceBody) =>
-            (Vector.empty, instanceBody)
-        }
-
-    private lazy val ruleTraitDefinition: TGrammar[Stmt] =
-      rule(Rule.Modifiers) ++
-        matchToken(KW_TRAIT) ++! (
-        rule(Rule.Identifier) ++
-          rule(Rule.MethodParameters) ++
-          matchToken(OP_SUBTYPE) ++
-          rule(Rule.Type).observeSource ++
-          rule(Rule.StatementSeparator) ++
-          ruleStaticInstanceBody ++
-          matchToken(KW_END)
-        ) --> {
-        case (modifiers, _, (name, parameters, _, baseType, _, (staticBody, instanceBody), _)) =>
-          TraitDeclarationStmt(baseType, name, parameters, staticBody, instanceBody, modifiers)
-      }
-
-    private lazy val ruleDataConstructorDefinition: TGrammar[Stmt] =
-      rule(Rule.Modifiers) ++
-        matchToken(KW_CONSTRUCTOR) ++! (
-        rule(Rule.Identifier) ++
-          rule(Rule.NewLines) ++
-          rule(Rule.MethodParameters) ++
-          rule(Rule.NewLines) ++
-          matchToken(OP_COLON) ++
-          rule(Rule.NewLines) ++
-          rule(Rule.Type).observeSource ++
-          rule(Rule.StatementSeparator) ++
-          ruleStatementList ++
-          matchToken(KW_END)
-        ) --> {
-        case (modifiers, _, (name, _, params, _, _, _, returnType, _, body, _)) =>
-          DataConstructorDeclarationStmt(name, params, returnType, body, modifiers)
-      }
-
-    private lazy val ruleClassDefinition: TGrammar[Stmt] =
-      rule(Rule.Modifiers) ++
-        matchToken(KW_CLASS) ++! (
-        rule(Rule.Identifier) ++
-          rule(Rule.MethodParameters) ++
-          matchToken(OP_SUBTYPE) ++
-          rule(Rule.Type).observeSource ++
-          rule(Rule.StatementSeparator) ++
-          ruleStaticInstanceBody ++
-          matchToken(KW_END)
-        ) --> {
-          case (modifiers, _, (name, params, _, baseType, _, (staticBody, instanceBody), _)) =>
-            ClassDeclarationStmt(baseType, name, params, staticBody, instanceBody, modifiers)
-        }
-
     private lazy val ruleStatement: TGrammar[Stmt] =
       rule(Rule.VariableDeclaration) |
         rule(Rule.FieldDeclarationStmt) |
@@ -642,9 +648,9 @@ object ArgonParser {
         rule(Rule.MethodDefinitionStmt) |
         rule(Rule.FunctionDefinitionStmt) |
         rule(Rule.ClassConstructorDefinitionStmt) |
-        ruleTraitDefinition |
-        ruleDataConstructorDefinition |
-        ruleClassDefinition |
+        rule(Rule.TraitDeclarationStmt) |
+        rule(Rule.DataConstructorDeclarationStmt) |
+        rule(Rule.ClassDeclarationStmt) |
         rule(Rule.ExpressionStmt)
 
 
