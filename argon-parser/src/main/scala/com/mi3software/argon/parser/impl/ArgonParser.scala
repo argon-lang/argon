@@ -115,8 +115,13 @@ object ArgonParser {
     case object ClassDeclarationStmt extends ArgonRuleNameTyped[Stmt]
 
 
+    case object Statement extends ArgonRuleNameTyped[Stmt]
+    case object StatementList extends ArgonRuleNameTyped[Vector[WithSource[Stmt]]]
+    case object NamespacePathRule extends ArgonRuleNameTyped[NamespacePath]
+    case object NamespaceDeclaration extends ArgonRuleNameTyped[TopLevelStatement]
 
-    case object TopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
+    case object TopLevelStatementRule extends ArgonRuleNameTyped[TopLevelStatement]
+    case object PaddedTopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
 
 
   }
@@ -601,8 +606,39 @@ object ArgonParser {
                 ClassDeclarationStmt(baseType, name, params, staticBody, instanceBody, modifiers)
             }
 
-        case Rule.TopLevelStatement =>
-          (rule(Rule.StatementSeparator)*) ++ ruleTopLevelStatement.observeSource ++ (rule(Rule.StatementSeparator)*) --> {
+        case Rule.Statement =>
+          rule(Rule.VariableDeclaration) |
+            rule(Rule.FieldDeclarationStmt) |
+            rule(Rule.FieldInitializationStmt) |
+            rule(Rule.InitializeStmt) |
+            rule(Rule.MethodDefinitionStmt) |
+            rule(Rule.FunctionDefinitionStmt) |
+            rule(Rule.ClassConstructorDefinitionStmt) |
+            rule(Rule.TraitDeclarationStmt) |
+            rule(Rule.DataConstructorDeclarationStmt) |
+            rule(Rule.ClassDeclarationStmt) |
+            rule(Rule.ExpressionStmt)
+
+        case Rule.StatementList =>
+          (rule(Rule.StatementSeparator)*) ++ (((rule(Rule.Statement).observeSource ++ (rule(Rule.StatementSeparator)*)) --> { case (stmt, _) => stmt })*) --> {
+            case (_, stmts) => stmts
+          }
+
+        case Rule.NamespacePathRule =>
+          tokenIdentifier ++ ((matchToken(OP_DOT) ++ tokenIdentifier --> second)*) --> {
+            case (head, tail) => NamespacePath(head +: tail)
+          }
+
+        case Rule.NamespaceDeclaration =>
+          matchToken(KW_NAMESPACE) ++! rule(Rule.NamespacePathRule) --> { case (_, ns) => TopLevelStatement.Namespace(ns) }
+
+        case Rule.TopLevelStatementRule =>
+          rule(Rule.NamespaceDeclaration) |
+            rule(Rule.ImportNamespace) |
+            rule(Rule.Statement).observeSource --> TopLevelStatement.Statement
+
+        case Rule.PaddedTopLevelStatement =>
+          (rule(Rule.StatementSeparator)*) ++ rule(Rule.TopLevelStatementRule).observeSource ++ (rule(Rule.StatementSeparator)*) --> {
             case (_, stmt, _) => stmt
           }
       }
@@ -639,40 +675,6 @@ object ArgonParser {
         case (left, Some((_, right))) => LambdaTypeExpr(left, right)
       }
 
-    // Types
-    private lazy val ruleStatement: TGrammar[Stmt] =
-      rule(Rule.VariableDeclaration) |
-        rule(Rule.FieldDeclarationStmt) |
-        rule(Rule.FieldInitializationStmt) |
-        rule(Rule.InitializeStmt) |
-        rule(Rule.MethodDefinitionStmt) |
-        rule(Rule.FunctionDefinitionStmt) |
-        rule(Rule.ClassConstructorDefinitionStmt) |
-        rule(Rule.TraitDeclarationStmt) |
-        rule(Rule.DataConstructorDeclarationStmt) |
-        rule(Rule.ClassDeclarationStmt) |
-        rule(Rule.ExpressionStmt)
-
-
-    private lazy val ruleStatementList: TGrammar[Vector[WithSource[Stmt]]] =
-      (rule(Rule.StatementSeparator)*) ++ (((ruleStatement.observeSource ++ (rule(Rule.StatementSeparator)*)) --> { case (stmt, _) => stmt })*) --> {
-        case (_, stmts) => stmts
-      }
-
-    private lazy val ruleNamespacePath: TGrammar[NamespacePath] =
-      tokenIdentifier ++ ((matchToken(OP_DOT) ++ tokenIdentifier --> second)*) --> {
-        case (head, tail) => NamespacePath(head +: tail)
-      }
-
-    private lazy val ruleNamespaceDeclaration: TGrammar[TopLevelStatement] =
-      matchToken(KW_NAMESPACE) ++! ruleNamespacePath --> { case (_, ns) => TopLevelStatement.Namespace(ns) }
-
-    private lazy val ruleTopLevelStatement: TGrammar[TopLevelStatement] =
-      ruleNamespaceDeclaration |
-        rule(Rule.ImportNamespace) |
-        ruleStatement.observeSource --> TopLevelStatement.Statement
-
-    ruleTopLevelStatement
 
   }
 
@@ -680,7 +682,7 @@ object ArgonParser {
 
   def parse[F[_]: Monad]: Pipe[EitherT[F, NonEmptyList[SyntaxError], ?], WithSource[Token], TopLevelStatement] =
     _
-      .through(Grammar.parseAll[F, Token, SyntaxError, Rule.ArgonRuleName, WithSource[TopLevelStatement]](ArgonGrammarFactory)(Rule.TopLevelStatement)(FilePosition(1, 1)))
+      .through(Grammar.parseAll[F, Token, SyntaxError, Rule.ArgonRuleName, WithSource[TopLevelStatement]](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)(FilePosition(1, 1)))
       .map { _.value }
 
 }
