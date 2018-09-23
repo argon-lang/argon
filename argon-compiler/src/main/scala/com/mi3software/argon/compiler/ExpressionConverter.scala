@@ -54,7 +54,10 @@ trait ExpressionConverter {
     def forArguments(argInfo: ArgumentInfo): ExprFactory = ???
   }
 
-  protected def exprFactory(f: TS#TType => Conv[exprTypes.TExpr]): ExprFactory
+  protected def exprFactory(f: TS#TType => Conv[exprTypes.TExpr]): ExprFactory = new ExprFactory {
+    override def withExpectedType(expectedType: TS#TType): Conv[exprTypes.TExpr] =
+      f(expectedType)
+  }
 
   protected def wrapExpr(expr: ArExpr[exprTypes.type]): exprTypes.TExpr
 
@@ -192,7 +195,16 @@ trait ExpressionConverter {
         compilationInstance.forErrors(headError, tailErrors: _*)
     }
 
-  protected def fromConv(factory: Conv[ExprFactory]): ExprFactory
+  protected def fromConv(factory: Conv[ExprFactory]): ExprFactory = new ExprFactory {
+    override def withExpectedType(expectedType: TS#TType): Conv[exprTypes.TExpr] =
+      factory.flatMap(_.withExpectedType(expectedType))
+
+    override def accessMember(memberName: MemberName, location: SourceLocation): ExprFactory =
+      fromConv(factory.map(_.accessMember(memberName, location)))
+
+    override def forArguments(argInfo: ArgumentInfo): ExprFactory =
+      fromConv(factory.map(_.forArguments(argInfo)))
+  }
 
   private abstract class LookupExprFactory[T](description: LookupDescription, env: Env, location: SourceLocation)(lookup: Lookup[T], cmp: LookupComparer[T]) extends ExprFactory {
 

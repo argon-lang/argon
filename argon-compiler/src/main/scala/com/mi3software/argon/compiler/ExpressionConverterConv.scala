@@ -2,6 +2,7 @@ package com.mi3software.argon.compiler
 
 import com.mi3software.argon.compiler.ExpressionConverterConv.ConvState
 import scalaz._
+import Scalaz._
 
 trait ExpressionConverterConv extends ExpressionConverter {
 
@@ -24,13 +25,19 @@ trait ExpressionConverterConv extends ExpressionConverter {
   }
 
 
-  override protected def createTypeHole: StateT[context.Comp, ConvState, TypeBase[ExpressionConverterConv.this.TS] \/ TypeHole] =
+  override protected def createTypeHole: StateT[context.Comp, ConvState, TypeBase[TS] \/ TypeHole] =
     (
       for {
         convState <- State.get[ConvState]
         _ <- State.put(convState.copy(nextHoleId = convState.nextHoleId + 1))
       } yield \/.right[TypeBase[ExpressionConverterConv.this.TS], TypeHole](TypeHole(convState.nextHoleId))
     ).lift[context.Comp](implicitly, context.compCompilationInstance)
+
+  override def resolveType(t: TypeBase[TS] \/ TypeHole): Conv[TypeBase[TS] \/ TypeHole] =
+    t match {
+      case -\/(_) => t.point[Conv]
+      case \/-(TypeHole(id)) => ???
+    }
 
   override lazy val compToConv: context.Comp ~> StateT[context.Comp, ConvState, ?] = new (context.Comp ~> StateT[context.Comp, ConvState, ?]) {
     override def apply[A](fa: context.Comp[A]): StateT[context.Comp, ConvState, A] =
@@ -52,7 +59,7 @@ trait ExpressionConverterConv extends ExpressionConverter {
 
   final class ExprTypes extends ArExprTypes {
     override val typeSystem: HoleTypeSystem[context.type] = new HoleTypeSystem[context.type]()
-    override type TExpr = ArExpr[ExprTypes]
+    override type TExpr = ArExpr[this.type]
     override type TFunction = ArFunc[context.type]
     override type TMethod = ArMethod[context.type]
     override type TClassConstructor = ClassConstructor[context.type]
@@ -70,6 +77,8 @@ trait ExpressionConverterConv extends ExpressionConverter {
 
   override lazy val reverseTypeSystemConverter: TypeSystemConverter[TS, context.typeSystem.type] =
     HoleToArgonTypeSystemConverter(context)(exprTypes.typeSystem)
+
+  override protected def wrapExpr(expr: ArExpr[exprTypes.type]): ArExpr[exprTypes.type] = expr
 
   override lazy val typeComparer: TypeComparerUnerased[TS, ExprConversion] = ??? : TypeComparerUnerased[TS, ExprConversion]
 
