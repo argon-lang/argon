@@ -163,7 +163,7 @@ object ArgonParser {
         case Rule.StatementSeparator => matchToken(NewLine).discard | matchToken(Semicolon).discard
 
         case Rule.ImportNamespace =>
-          matchToken(KW_IMPORT) ++! (ruleNamespacePath ++ matchToken(OP_DOT) ++ matchToken(KW_UNDERSCORE)) --> {
+          matchToken(KW_IMPORT) ++! (rule(Rule.NamespacePathRule) ++ matchToken(OP_DOT) ++ matchToken(KW_UNDERSCORE)) --> {
             case (_, (ns, _, _)) => TopLevelStatement.Import(ns)
           }
 
@@ -171,11 +171,11 @@ object ArgonParser {
 
         case Rule.IfExpr => matchToken(KW_IF) ++! rule(Rule.IfExprPart) --> second
         case Rule.IfExprStart =>
-          rule(Rule.Expression).observeSource ++ matchToken(KW_THEN) ++ ruleStatementList.observeSource --> { case (condition, _, body) => (condition, body) }
+          rule(Rule.Expression).observeSource ++ matchToken(KW_THEN) ++ rule(Rule.StatementList).observeSource --> { case (condition, _, body) => (condition, body) }
 
         case Rule.IfExprPart =>
           rule(Rule.IfExprStart) ++ matchToken(KW_END) --> { case (condition, body, _) => IfExpr(condition, body) : Expr } |
-            rule(Rule.IfExprStart) ++ matchToken(KW_ELSE) ++! ruleStatementList.observeSource ++ matchToken(KW_END) -->
+            rule(Rule.IfExprStart) ++ matchToken(KW_ELSE) ++! rule(Rule.StatementList).observeSource ++ matchToken(KW_END) -->
               { case (condition, body, _, elseBody, _) => IfElseExpr(condition, body, elseBody) } |
             rule(Rule.IfExprStart) ++ matchToken(KW_ELSIF) ++! rule(Rule.IfExprPart).observeSource -->
               { case (condition, body, _, elseExpr) => IfElseExpr(condition, body, WithSource(Vector(elseExpr), elseExpr.location)) }
@@ -226,7 +226,7 @@ object ArgonParser {
             rule(Rule.DiscardPattern)
 
         case Rule.MatchCase =>
-          rule(Rule.NewLines) ++ matchToken(KW_CASE) ++! (rule(Rule.NewLines) ++ rule(Rule.PatternSpec(Rule.ArrowDisallowed)).observeSource ++ matchToken(OP_EQUALS) ++ ruleStatementList.observeSource) --> {
+          rule(Rule.NewLines) ++ matchToken(KW_CASE) ++! (rule(Rule.NewLines) ++ rule(Rule.PatternSpec(Rule.ArrowDisallowed)).observeSource ++ matchToken(OP_EQUALS) ++ rule(Rule.StatementList).observeSource) --> {
             case (_, _, (_, pattern, _, body)) => MatchExprCase(pattern, body)
           }
 
@@ -493,7 +493,7 @@ object ArgonParser {
           )*) --> { _.toVector }
 
         case Rule.MethodBody =>
-          matchToken(KW_DO) ++! (ruleStatementList ++ matchToken(KW_END)) --> { case (_, (body, _)) => body } |
+          matchToken(KW_DO) ++! (rule(Rule.StatementList) ++ matchToken(KW_END)) --> { case (_, (body, _)) => body } |
             matchToken(OP_EQUALS) ++! (rule(Rule.NewLines) ++ rule(Rule.Expression).observeSource) --> { case (_, (_, expr)) => Vector(expr) }
 
         case Rule.MethodPurity =>
@@ -541,7 +541,7 @@ object ArgonParser {
             matchToken(KW_NEW) ++! (
               rule(Rule.MethodParameters) ++
                 rule(Rule.StatementSeparator) ++
-                ruleStatementList.observeSource ++
+                rule(Rule.StatementList).observeSource ++
                 matchToken(KW_END)
             ) --> {
               case (modifiers, _, (params, _, body, _)) =>
@@ -549,11 +549,11 @@ object ArgonParser {
             }
 
         case Rule.StaticInstanceBody =>
-          rule(Rule.NewLines) ++ matchToken(KW_STATIC) ++! (ruleStatementList ++ ((matchToken(KW_INSTANCE) ++! ruleStatementList --> { case (_, instanceBody) => instanceBody })?)) --> {
+          rule(Rule.NewLines) ++ matchToken(KW_STATIC) ++! (rule(Rule.StatementList) ++ ((matchToken(KW_INSTANCE) ++! rule(Rule.StatementList) --> { case (_, instanceBody) => instanceBody })?)) --> {
             case (_, _, (staticBody, instanceBody)) =>
               (staticBody, instanceBody.getOrElse(Vector.empty))
           } |
-            ((rule(Rule.NewLines) ++ matchToken(KW_INSTANCE))?) ++ ruleStatementList --> {
+            ((rule(Rule.NewLines) ++ matchToken(KW_INSTANCE))?) ++ rule(Rule.StatementList) --> {
               case (_, instanceBody) =>
                 (Vector.empty, instanceBody)
             }
@@ -584,7 +584,7 @@ object ArgonParser {
                 rule(Rule.NewLines) ++
                 rule(Rule.Type).observeSource ++
                 rule(Rule.StatementSeparator) ++
-                ruleStatementList ++
+                rule(Rule.StatementList) ++
                 matchToken(KW_END)
             ) --> {
               case (modifiers, _, (name, _, params, _, _, _, returnType, _, body, _)) =>
