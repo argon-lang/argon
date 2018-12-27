@@ -18,7 +18,11 @@ trait TypeSystem {
   
   type WrapRef[T[_ <: Context, _[_, _]]] = AbsRef[context.type, T]
 
-  def fromSimpleType(typeBase: SimpleType): TType
+  final def fromSimpleType(simpleType: SimpleType): TType = wrapType(simpleType)
+  def fromArType(arType: context.typeSystem.TType): TType
+
+  def wrapType[A](a: A): TTypeWrapper[A]
+  def mapTypeWrapper[A, B](t: TTypeWrapper[A])(f: A => B): TTypeWrapper[B]
 
   def isSubTypeWrapper[TComp[+_] : Compilation, T]
   (f: (T, T) => TComp[Boolean])
@@ -27,6 +31,10 @@ trait TypeSystem {
 
   final def isSubType[TComp[+_] : Compilation](a: TType, b: TType): TComp[Boolean] =
     isSubTypeWrapper(isSimpleSubType[TComp])(a, b)
+
+  final def convertTypeSystem(otherTS: TypeSystem { val context: TypeSystem.this.context.type })(converter: TypeSystemConverter[this.type, otherTS.type])(t1: TType): otherTS.TType =
+    converter.convertType(this)(otherTS)(mapTypeWrapper(t1)(convertSimpleTypeSystem(otherTS)(converter)(_)))
+
 
   sealed trait SimpleType
   final case class TraitType(arTrait: WrapRef[ArTrait], args: Vector[TType], baseTypes: BaseTypeInfoTrait) extends SimpleType
@@ -97,5 +105,69 @@ trait TypeSystem {
 
 
   }
+
+  final def convertSimpleTypeSystem(otherTS: TypeSystem { val context: TypeSystem.this.context.type })(converter: TypeSystemConverter[this.type, otherTS.type])(t1: SimpleType): otherTS.SimpleType = {
+
+    def convertTraitType(traitType: TraitType): otherTS.TraitType =
+      otherTS.TraitType(
+        traitType.arTrait,
+        traitType.args.map(convertTypeSystem(otherTS)(converter)(_)),
+        otherTS.BaseTypeInfoTrait(traitType.baseTypes.baseTraits.map(convertTraitType(_)))
+      )
+
+    def convertClassType(classType: ClassType): otherTS.ClassType =
+      otherTS.ClassType(
+        classType.arClass,
+        classType.args.map(convertTypeSystem(otherTS)(converter)(_)),
+        otherTS.BaseTypeInfoClass(
+          classType.baseTypes.baseClass.map(convertClassType(_)),
+          classType.baseTypes.baseTraits.map(convertTraitType(_))
+        )
+      )
+
+    t1 match {
+      case t1: TraitType => convertTraitType(t1)
+      case t1: ClassType => convertClassType(t1)
+      case DataConstructorType(ctor, args, instanceType) =>
+        otherTS.DataConstructorType(
+          ctor,
+          args.map(convertTypeSystem(otherTS)(converter)(_)),
+          convertTraitType(instanceType)
+        )
+
+      case MetaType(innerType, baseType) =>
+        otherTS.MetaType(
+          convertTypeSystem(otherTS)(converter)(innerType),
+          convertTypeSystem(otherTS)(converter)(innerType)
+        )
+
+      case TupleType(elements) =>
+        otherTS.TupleType(elements.map { case TupleTypeElement(elementType) =>
+            otherTS.TupleTypeElement(convertTypeSystem(otherTS)(converter)(elementType))
+        })
+
+      case FunctionType(argumentType, resultType) =>
+        otherTS.FunctionType(
+          convertTypeSystem(otherTS)(converter)(argumentType),
+          convertTypeSystem(otherTS)(converter)(resultType)
+        )
+
+      case UnionType(first, second) =>
+        otherTS.UnionType(
+          convertTypeSystem(otherTS)(converter)(first),
+          convertTypeSystem(otherTS)(converter)(second)
+        )
+
+      case IntersectionType(first, second) =>
+        otherTS.IntersectionType(
+          convertTypeSystem(otherTS)(converter)(first),
+          convertTypeSystem(otherTS)(converter)(second)
+        )
+
+    }
+
+  }
+
+
 
 }

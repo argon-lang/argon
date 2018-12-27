@@ -28,7 +28,13 @@ sealed trait Context extends VariableContext with ArExprContext with SignatureCo
   type Comp[+_]
   implicit val compCompilationInstance: Compilation[Comp]
 
-  final val typeSystem: ArgonTypeSystem[this.type] = new ArgonTypeSystem[this.type](this)
+  object ContextTypeSystem extends ArgonTypeSystem {
+    override val context: Context.this.type = Context.this
+
+    override def fromArType(arType: Context.this.typeSystem.TType): TType = arType
+  }
+
+  final val typeSystem: ContextTypeSystem.type = ContextTypeSystem
 
   val moduleLoaders: Vector[ModuleLoader]
 
