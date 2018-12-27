@@ -1,0 +1,38 @@
+package com.mi3software.argon.compiler.core
+
+import com.mi3software.argon.compiler.types._
+import scala.collection.immutable._
+import scalaz._
+import Scalaz._
+
+
+sealed trait DataConstructor[TContext <: Context, TPayloadSpec[_, _]] {
+  val context: TContext
+  val contextProof: Leibniz[context.type, TContext, context.type, TContext]
+  import context._
+
+  val descriptor: DataConstructorDescriptor
+
+  val signature: Signature[DataConstructor.ResultInfo]
+
+  val methods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
+
+  val payload: TPayloadSpec[Comp[TDataConstructorImplementation], TDataConstructorMetadata]
+}
+
+object DataConstructor {
+
+  sealed trait ResultInfo[TS <: TypeSystem with Singleton] {
+    val typeSystem: TS
+    val instanceType: typeSystem.TraitType
+  }
+
+  object ResultInfo {
+    def apply(ts: TypeSystem)(instance: ts.TraitType): ResultInfo[ts.type] = new ResultInfo[ts.type] {
+      override val typeSystem: ts.type = ts
+      override val instanceType: typeSystem.TraitType = instance
+    }
+  }
+
+}
+

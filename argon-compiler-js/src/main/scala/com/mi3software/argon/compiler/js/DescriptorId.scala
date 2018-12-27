@@ -1,6 +1,7 @@
 package com.mi3software.argon.compiler.js
 
 import com.mi3software.argon.compiler._
+import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.util.NamespacePath
 
 object DescriptorId {
@@ -17,23 +18,25 @@ object DescriptorId {
         case GlobalName.Unnamed(fileId, index) => "#" + fileId.id.toString + "-" + index.toString
       }) : String)
 
-  private def encodeType[TContext <: Context](t: SignatureTypeSystem[TContext]#TType): String =
+  private def encodeType[TContext <: Context](t: ErasedSignature.SigType[TContext]): String =
     t match {
-      case Some(TraitType(traitInfo)) => s"(${forTrait(traitInfo.descriptor)})"
-      case Some(ClassType(classInfo)) => s"(${forClass(classInfo.descriptor)})"
-      case Some(DataConstructorType(ctor)) => s"(${forDataConstructor(ctor.descriptor)})"
-      case Some(FunctionType(argumentType, resultType)) => s"(${encodeType(argumentType)}->${encodeType(resultType)})"
-      case Some(TupleType(elements)) => s"(${elements.map(e => "$_:" + encodeType(e.elementType)).mkString(",")})"
-      case None => "?"
+      case ErasedSignature.BlankType() => "?"
+      case ErasedSignature.TraitType(arTrait) => s"(${forTrait(arTrait.value.descriptor)})"
+      case ErasedSignature.ClassType(arClass) => s"(${forClass(arClass.value.descriptor)})"
+      case ErasedSignature.DataConstructorType(ctor) => s"(${forDataConstructor(ctor.value.descriptor)})"
+      case ErasedSignature.FunctionType(argumentType, resultType) => s"(${encodeType(argumentType)}->${encodeType(resultType)})"
+      case ErasedSignature.TupleType(elements) => s"(${elements.map(e => "$_:" + encodeType(e)).mkString(",")})"
     }
 
-  private def encodeSignatureParameters[TContext <: Context, TResultInfo[+_ <: TypeSystem]](signature: Signature[SignatureTypeSystem[TContext], TResultInfo]): String =
-    signature.unsubstitutedParameters
-      .map(param => param.tupleVars.map(v => "$_:" + encodeType(v.varType)).mkString(","))
-      .mkString("->")
+  private def encodeSignatureParameters[TContext <: Context](signature: ErasedSignature[TContext]): String =
+    signature match {
+      case ErasedSignature.Parameter(paramType, next) =>
+        encodeType(paramType) + "->" + encodeSignatureParameters(next)
 
-  private def encodeFunctionResult[TContext <: Context](functionResultInfo: FunctionResultInfo[SignatureTypeSystem[TContext]]): String =
-    encodeType(functionResultInfo.returnType)
+      case ErasedSignature.Result(resultType) =>
+        encodeType(resultType)
+    }
+
 
   def forClass(descriptor: ClassDescriptor): String =
     descriptor match {
@@ -52,8 +55,8 @@ object DescriptorId {
       case DataConstructorDescriptor.InNamespace(_, namespace, name, _) => encodeInNamespace(namespace, name)
     }
 
-  def forFunc[TContext <: Context](descriptor: FuncDescriptor, signature: Signature[SignatureTypeSystem[TContext], FunctionResultInfo]): String =
+  def forFunc[TContext <: Context](descriptor: FuncDescriptor, signature: ErasedSignature[TContext]): String =
     descriptor match {
-      case FuncDescriptor.InNamespace(_, namespace, name, _) => s"${encodeInNamespace(namespace, name)}:${encodeSignatureParameters(signature)}->${encodeFunctionResult(signature.unsubstitutedResult)}"
+      case FuncDescriptor.InNamespace(_, namespace, name, _) => s"${encodeInNamespace(namespace, name)}:${encodeSignatureParameters(signature)}"
     }
 }

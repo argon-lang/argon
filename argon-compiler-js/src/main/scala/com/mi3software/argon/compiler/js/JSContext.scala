@@ -1,5 +1,9 @@
 package com.mi3software.argon.compiler.js
 
+import com.mi3software.argon.compiler.core.ContextComp
+import com.mi3software.argon.compiler.loaders.ModuleLoader
+import com.mi3software.argon.compiler.loaders.armodule.ArgonModuleLoader
+import com.mi3software.argon.compiler.types.ArgonTypeSystem
 import com.mi3software.argon.compiler.{Compilation, _}
 
 final class JSContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
@@ -16,6 +20,5 @@ final class JSContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
 
   override val compCompilationInstance: Compilation[Comp] = implicitly
 
-  override val typeSystem: ArgonTypeSystem[this.type] = new ArgonTypeSystem[this.type]
   override val moduleLoaders: Vector[ModuleLoader] = Vector(ArgonModuleLoader)
 }

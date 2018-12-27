@@ -1,6 +1,7 @@
 package com.mi3software.argon.compiler
 
-import scalaz.{IList, Monad, NonEmptyList}
+import scalaz._
+import Scalaz._
 
 trait Compilation[F[_]] extends Monad[F] {
 
@@ -18,6 +19,26 @@ trait Compilation[F[_]] extends Monad[F] {
 object Compilation {
 
   def apply[F[_] : Compilation]: Compilation[F] = implicitly[Compilation[F]]
+
+  object Operators {
+
+    implicit class BoolOperators[F[_]](private val left: F[Boolean]) extends AnyVal {
+
+      def && (right: => F[Boolean])(implicit comp: Compilation[F]): F[Boolean] =
+        left.flatMap {
+          case true => right
+          case false => false.pure[F]
+        }
+
+      def || (right: => F[Boolean])(implicit comp: Compilation[F]): F[Boolean] =
+        left.flatMap {
+          case true => true.pure[F]
+          case false => right
+        }
+
+    }
+
+  }
 
 }
 

@@ -1,32 +1,32 @@
 package com.mi3software.argon.compiler
 
-trait ArExprTypes {
-  val typeSystem: TypeSystemUnerased
-  type TS = typeSystem.type
-  type TExpr
-  type TFunction
-  type TMethod
-  type TClassConstructor
+import com.mi3software.argon.compiler.core._
+import com.mi3software.argon.compiler.types._
+
+trait ArExprContext extends VariableContext {
+
+  import typeSystem._
+
+  trait ArExpr
+
+  final case class ClassConstructorCall(classType: ClassType, classCtor: AbsRef[context.type, ClassConstructor], args: Vector[TType]) extends ArExpr
+  final case class TupleElement(value: TType)
+  final case class CreateTuple(values: Vector[TupleElement]) extends ArExpr
+  final case class DataConstructorCall(dataCtorInstanceType: DataConstructorType, args: Vector[TType]) extends ArExpr
+  final case class FunctionCall(function: AbsRef[context.type, ArFunc], args: Vector[ArExpr], returnType: TType) extends ArExpr
+  final case class IfElse(condition: ArExpr, ifBody: ArExpr, elseBody: ArExpr) extends ArExpr
+  final case class LetBinding(variable: Variable[VariableDescriptor], value: ArExpr, next: ArExpr) extends ArExpr
+  final case class LoadConstantBool(value: Boolean) extends ArExpr
+  final case class LoadConstantInt(value: BigInt) extends ArExpr
+  final case class LoadConstantString(value: String) extends ArExpr
+  final case class LoadLambda(argVariable: Variable[VariableDescriptor], body: ArExpr) extends ArExpr
+  final case class LoadTypeValue(value: TType) extends ArExpr
+  final case class LoadVariable(variable: Variable[VariableLikeDescriptor]) extends ArExpr
+  final case class MethodCall(method: AbsRef[context.type, ArMethod], instance: ArExpr, args: Vector[ArExpr]) extends ArExpr
+  final case class Sequence(first: ArExpr, second: ArExpr) extends ArExpr
+  final case class StoreVariable(variable: Variable[VariableLikeDescriptor]) extends ArExpr
+  
+  
 }
 
-trait ArExpr[Types <: ArExprTypes]
-
-final case class InvalidExpression[Types <: ArExprTypes]() extends ArExpr[Types]
-
-final case class ClassConstructorCall[Types <: ArExprTypes](classType: ClassType[Types#TS], classCtor: Types#TClassConstructor, args: Vector[Types#TExpr]) extends ArExpr[Types]
-final case class TupleElement[Types <: ArExprTypes](value: Types#TExpr)
-final case class CreateTuple[Types <: ArExprTypes](values: Vector[TupleElement[Types]]) extends ArExpr[Types]
-final case class DataConstructorCall[Types <: ArExprTypes](dataCtorInstanceType: DataConstructorType[Types#TS], args: Vector[Types#TExpr]) extends ArExpr[Types]
-final case class FunctionCall[Types <: ArExprTypes](function: Types#TFunction, args: Vector[Types#TExpr], returnType: Types#TS#TType) extends ArExpr[Types]
-final case class IfElse[Types <: ArExprTypes](condition: Types#TExpr, ifBody: Types#TExpr, elseBody: Types#TExpr) extends ArExpr[Types]
-final case class LetBinding[Types <: ArExprTypes](variable: Variable[Types#TS, VariableDescriptor], value: Types#TExpr, next: Types#TExpr) extends ArExpr[Types]
-final case class LoadConstantBool[Types <: ArExprTypes](value: Boolean) extends ArExpr[Types]
-final case class LoadConstantInt[Types <: ArExprTypes](value: BigInt) extends ArExpr[Types]
-final case class LoadConstantString[Types <: ArExprTypes](value: String) extends ArExpr[Types]
-final case class LoadLambda[Types <: ArExprTypes](argVariable: Variable[Types#TS, VariableDescriptor], body: Types#TExpr) extends ArExpr[Types]
-final case class LoadTypeValue[Types <: ArExprTypes](value: Types#TS#TType) extends ArExpr[Types]
-final case class LoadVariable[Types <: ArExprTypes](variable: Variable[Types#TS, VariableLikeDescriptor]) extends ArExpr[Types]
-final case class MethodCall[Types <: ArExprTypes](method: Types#TMethod, instance: Types#TExpr, args: Vector[Types#TExpr]) extends ArExpr[Types]
-final case class Sequence[Types <: ArExprTypes](first: Types#TExpr, second: Types#TExpr) extends ArExpr[Types]
-final case class StoreVariable[Types <: ArExprTypes](variable: Variable[Types#TS, VariableLikeDescriptor]) extends ArExpr[Types]
 

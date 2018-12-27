@@ -7,7 +7,8 @@ import java.nio.file._
 import scalaz.effect.IO
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.compiler.{CompilerOptions, ModuleDescriptor}
+import com.mi3software.argon.compiler._
+import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.util.{FileID, FileOperations, FileSpec}
 import org.json4s.NoTypeHints
 import org.json4s.native.Serialization

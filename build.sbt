@@ -60,7 +60,7 @@ lazy val compilerOptions = Seq(
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
-    "-P:silencer:globalFilters=unreachable",
+    "-P:silencer:globalFilters=unreachable;outer reference in this type test cannot be checked at run time.",
   ),
 
   scalacOptions in (Compile, compile) += "-Xfatal-warnings",

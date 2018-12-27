@@ -3,6 +3,8 @@ package com.mi3software.argon.compiler.js
 import com.mi3software.argon.compiler._
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.compiler.PayloadSpecifiers._
+import com.mi3software.argon.compiler.core.{GlobalBinding, _}
 
 final class JSEmitter {
 
@@ -13,7 +15,7 @@ final class JSEmitter {
   private val create_empty_obj = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("create")), Vector(JSNull))
   private def freeze_obj(varName: JSIdentifier) = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("freeze")), Vector(varName))
 
-  def emitModule[TComp[+_] : Compilation](context: JSContext[TComp])(module: ArModule[context.type]): TComp[JSModule] = {
+  def emitModule[TComp[+_] : Compilation](context: JSContext[TComp])(module: ArModule[context.type, DeclarationPayloadSpecifier]): TComp[JSModule] = {
 
     val modulePairs = module.referencedModules
       .zipWithIndex
@@ -61,29 +63,25 @@ final class JSEmitter {
     )
   }
 
-  private def allNamespaceElements(context: Context)(namespace: Namespace[ScopeValue[context.ContextScopeTypes]]): Iterator[NonNamespaceScopeValue[context.ContextScopeTypes]] =
+  private def allNamespaceElements(context: Context)(namespace: Namespace[context.type, DeclarationPayloadSpecifier]): Iterator[GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] =
     namespace.bindings.iterator.flatMap {
-      case NamespaceBinding(_, _, NamespaceScopeValue(ns)) => allNamespaceElements(context)(ns)
-      case NamespaceBinding(_, _, scopeValue: NonNamespaceScopeValue[context.ContextScopeTypes]) => Vector(scopeValue)
+      case GlobalBinding.NestedNamespace(_, ns) => allNamespaceElements(context)(ns)
+      case binding: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier] => Vector(binding)
     }
 
-  private def createObjectsForScopeValue[TComp[+_] : Compilation](context: ContextComp[TComp])(value: NonNamespaceScopeValue[context.ContextScopeTypes]): TComp[JSStatement] = {
-    val sigTypeSystem = new SignatureTypeSystem[context.type]
-    val tsConverter = ArgonToSignatureTypeSystemConverter(context)(sigTypeSystem)
-
+  private def createObjectsForScopeValue[TComp[+_] : Compilation](context: ContextComp[TComp])(value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): TComp[JSStatement] =
     value match {
-      case VariableScopeValue(_) => ???
-      case FunctionScopeValue(func) =>
+      case GlobalBinding.GlobalFunction(_, _, func) =>
         for {
           sig <- func.signature
         } yield JSAssignment(
-            JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor, sig.convertTypeSystem(tsConverter)))),
+            JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor, ErasedSignature.fromSignature(context)(sig)))),
             JSObjectLiteral(Vector(
               JSObjectProperty("impl", JSNull)
             ))
           )
 
-      case TraitScopeValue(arTrait) =>
+      case GlobalBinding.GlobalTrait(_, _, arTrait) =>
         JSAssignment(
           JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor))),
           JSObjectLiteral(Vector(
@@ -91,10 +89,9 @@ final class JSEmitter {
           ))
         ).point[TComp]
 
-      case ClassScopeValue(_) => ???
-      case DataConstructorScopeValue(_) => ???
+      case GlobalBinding.GlobalClass(_, _, _) => ???
+      case GlobalBinding.GlobalDataConstructor(_, _, _) => ???
     }
-  }
 
 
 

@@ -52,6 +52,8 @@ object StandardCompilation {
 
     override def bind[A, B](fa: StandardCompilationType[A])(f: A => StandardCompilationType[B]): StandardCompilationType[B] =
       fa.flatMap(f)
+
+
   }
 
 }

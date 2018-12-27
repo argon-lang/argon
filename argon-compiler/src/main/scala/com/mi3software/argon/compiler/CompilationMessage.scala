@@ -3,11 +3,14 @@ package com.mi3software.argon.compiler
 import java.io.File
 import java.nio.charset.Charset
 
+import com.mi3software.argon.compiler.core.GlobalName
+import com.mi3software.argon.compiler.lookup.LookupDescription
 import com.mi3software.argon.grammar.GrammarError
 import com.mi3software.argon.parser
-import com.mi3software.argon.parser._
+import com.mi3software.argon.parser.{ SyntaxError, SyntaxErrorData, TokenCategory, Token, CharacterCategory }
 import com.mi3software.argon.util._
 import com.mi3software.argon.module
+import com.mi3software.argon.compiler.core._
 
 sealed trait CompilationMessage {
   val source: CompilationMessageSource
@@ -313,7 +316,6 @@ object CompilationError {
 
   private def formatAccessModifier(accessModifier: AccessModifier): String =
     accessModifier match {
-      case AccessModifier.Invalid => "invalid"
       case AccessModifier.Public => "public"
       case AccessModifier.Protected => "protected"
       case AccessModifier.ProtectedInternal => "protected internal"
