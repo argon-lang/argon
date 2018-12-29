@@ -230,7 +230,19 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             )
 
           case TraitScopeValue(arTrait) => ???
-          case ClassScopeValue(arClass) => ???
+          case ClassScopeValue(arClass) =>
+            compFactory(
+              for {
+                sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.value.signature)
+                convSig = sig.convertTypeSystem(signatureContext)(fromArType(_))
+              } yield signatureFactory(env)(convSig) { (args, result) =>
+                for {
+                  argsAsTypes <- args.traverse(evaluateTypeExpr(env)(_))
+                } yield LoadTypeValue(fromSimpleType(ClassType(arClass, argsAsTypes, result.baseTypes)))
+              }
+            )
+
+
           case DataConstructorScopeValue(ctor) => ???
         }
 
