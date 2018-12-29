@@ -25,7 +25,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   import ExpressionConverter.{ HoleType, TypeCheck => TypeCheckA, TypeConstraint }
   import typeSystem.{ context => _, _ }
   import scopeContext.{ context => _, _ }
-  import signatureContext.{ Signature, SignatureParameters, SignatureResult }
+  import signatureContext.Signature
 
 
 
@@ -54,7 +54,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.BoolValueExpr(b) =>
         compFactory(
           for {
-            boolType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor("Ar.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))(Vector.empty)
+            boolType <- resolveBoolClass(env)(expr.location)
           } yield factoryForExpr(env)(expr.location)(LoadConstantBool(b, boolType))
         )
 
@@ -67,8 +67,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.IdentifierExpr(name) =>
         createLookupFactory(env)(LookupDescription.Identifier(name))(expr.location)(env.scope.findIdentifier(name, env.fileSpec, expr.location))
 
-      case parser.IfExpr(cond, ifBody) => ???
-      case parser.IfElseExpr(cond, ifBody, elseBody) => ???
+      case parser.IfExpr(cond, ifBody) =>
+        createIfExpr(env)(expr.location)(cond, ifBody, WithSource(Vector.empty, SourceLocation(expr.location.end, expr.location.end)))
+
+      case parser.IfElseExpr(cond, ifBody, elseBody) =>
+        createIfExpr(env)(expr.location)(cond, ifBody, elseBody)
 
       case parser.IntValueExpr(sign, base, digits) =>
         val value = sign * digits.foldRight(0 : BigInt) { (digit, acc) => acc * base + digit }
@@ -87,6 +90,17 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         )
 
       case _ => ???
+    }
+
+  def createIfExpr[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(cond: WithSource[parser.Expr], ifBody: WithSource[Vector[WithSource[parser.Stmt]]], elseBody: WithSource[Vector[WithSource[parser.Stmt]]]) =
+    new ExprFactory[TComp] {
+      override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
+        for {
+          boolType <- resolveBoolClass(env)(location)
+          condTC <- convertExpr(env)(cond).forExpectedType(boolType)
+          ifBodyTC <- convertStmts(env)(ifBody).forExpectedType(expectedType)
+          elseBodyTC <- convertStmts(env)(elseBody).forExpectedType(expectedType)
+        } yield IfElse(condTC, ifBodyTC, elseBodyTC)
     }
 
   def convertStmts[TComp[_] : TypeCheck](env: Env)(stmts: WithSource[Vector[WithSource[parser.Stmt]]]): ExprFactory[TComp] =
@@ -163,6 +177,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     argsFactory = args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
     result <- evaluateTypeExprFactory(env)(argsFactory)
   } yield result
+
+  def resolveBoolClass[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
+    resolveModuleClass(env)(location)(ModuleDescriptor("Ar.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))(Vector.empty)
 
   def factoryForExpr[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr): ExprFactory[TComp] =
     new ExprFactory[TComp] {
