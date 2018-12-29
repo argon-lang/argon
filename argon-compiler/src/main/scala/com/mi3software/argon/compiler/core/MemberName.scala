@@ -1,7 +1,7 @@
-package com.mi3software.argon.compiler
+package com.mi3software.argon.compiler.core
 
+import scalaz.Scalaz._
 import scalaz._
-import Scalaz._
 
 sealed trait MemberName
 object MemberName {

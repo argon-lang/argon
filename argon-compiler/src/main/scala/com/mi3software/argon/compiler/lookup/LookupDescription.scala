@@ -1,6 +1,6 @@
 package com.mi3software.argon.compiler.lookup
 
-import com.mi3software.argon.compiler.MemberName
+import com.mi3software.argon.compiler.core.MemberName
 
 sealed trait LookupDescription
 

@@ -1,6 +1,6 @@
 package com.mi3software.argon.compiler.core
 
-import com.mi3software.argon.compiler.PayloadSpecifiers._
+import PayloadSpecifiers._
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.loaders.ModuleLoader
 import com.mi3software.argon.compiler.loaders.source.SourceModuleCreator

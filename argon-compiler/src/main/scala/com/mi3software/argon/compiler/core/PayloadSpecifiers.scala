@@ -1,4 +1,4 @@
-package com.mi3software.argon.compiler
+package com.mi3software.argon.compiler.core
 
 object PayloadSpecifiers {
 

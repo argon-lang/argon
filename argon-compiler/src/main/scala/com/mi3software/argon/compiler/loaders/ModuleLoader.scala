@@ -2,7 +2,7 @@ package com.mi3software.argon.compiler.loaders
 
 import java.io.File
 
-import com.mi3software.argon.compiler.PayloadSpecifiers.ReferencePayloadSpecifier
+import com.mi3software.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.util.DependencyTree._

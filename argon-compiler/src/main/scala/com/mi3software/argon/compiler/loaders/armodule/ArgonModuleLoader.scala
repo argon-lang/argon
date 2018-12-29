@@ -3,7 +3,7 @@ package com.mi3software.argon.compiler.loaders.armodule
 import java.io.File
 import java.util.Locale
 
-import com.mi3software.argon.compiler.PayloadSpecifiers.ReferencePayloadSpecifier
+import com.mi3software.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.lookup._

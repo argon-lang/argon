@@ -9,7 +9,7 @@ import com.mi3software.argon.parser.SourceAST
 import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation, WithSource}
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.compiler.PayloadSpecifiers._
+import PayloadSpecifiers._
 import com.mi3software.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import scalaz.effect.IO
 

@@ -3,7 +3,6 @@ package com.mi3software.argon.compiler.core
 import com.mi3software.argon.util.NamespacePath
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.compiler.MemberName
 
 @deriving(Equal)
 final case class ModuleDescriptor(name: String)

@@ -10,7 +10,7 @@ import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation, With
 import scala.collection.immutable.Set
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.compiler.PayloadSpecifiers.ReferencePayloadSpecifier
+import PayloadSpecifiers.ReferencePayloadSpecifier
 import com.mi3software.argon.compiler.loaders.source.ExpressionConverter.HoleTypeHole
 
 import Function.const

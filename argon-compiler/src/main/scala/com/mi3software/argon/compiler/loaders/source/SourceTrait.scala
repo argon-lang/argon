@@ -1,6 +1,6 @@
 package com.mi3software.argon.compiler.loaders.source
 
-import com.mi3software.argon.compiler.PayloadSpecifiers._
+import com.mi3software.argon.compiler.core.PayloadSpecifiers._
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.loaders.source.ExpressionConverter.EnvCreator

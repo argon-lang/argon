@@ -1,6 +1,6 @@
 package com.mi3software.argon.compiler.core
 
-import com.mi3software.argon.compiler.PayloadSpecifiers.ReferencePayloadSpecifier
+import PayloadSpecifiers.ReferencePayloadSpecifier
 import com.mi3software.argon.util.NamespacePath
 
 trait ArModule[TContext <: Context, TPayloadSpec[_, _]] {
