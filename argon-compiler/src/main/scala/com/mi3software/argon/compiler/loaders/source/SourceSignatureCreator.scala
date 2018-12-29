@@ -10,18 +10,21 @@ import Scalaz._
 
 object SourceSignatureCreator {
 
-  def fromParameters[TComp[+_] : Compilation, TResult[+_ <: TypeSystem]]
+  def fromParameters[TComp[+_] : Compilation, TResult[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton]]
   (context: ContextComp[TComp])
-  (env: ExpressionConverter.Env[context.Scope])
+  (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
   (paramOwner: ParameterOwnerDescriptor)
   (params: Vector[parser.FunctionParameterList])
   (resultCreator: ResultCreator[TResult])
-  : TComp[context.Signature[TResult]] = {
+  : TComp[context.signatureContext.Signature[TResult]] = {
 
     import context._
+    import typeSystem.{ Variable, Parameter }
+    import scopeContext.{ Scope, ScopeExtensions }
+    import signatureContext.{ Signature, SignatureParameters, SignatureResult }
 
     def impl
-    (env: ExpressionConverter.Env[Scope])
+    (env: ExpressionConverter.Env[context.type, Scope])
     (params: Vector[parser.FunctionParameterList])
     (paramIndex: Int)
     : TComp[Signature[TResult]] =
@@ -34,7 +37,7 @@ object SourceSignatureCreator {
               case (WithSource(parser.FunctionParameter(paramTypeOpt, _, paramName), loc), tupleIndex) =>
                 (paramTypeOpt match {
                   case Some(paramType) =>
-                    ExpressionConverter.convertTypeExpression(context)(env)(paramType)
+                    ExpressionConverter.convertTypeExpression[TComp](context)(env)(paramType)
 
                   case None =>
                     Compilation[TComp].forErrors(CompilationError.ParameterTypeAnnotationRequired(paramName, CompilationMessageSource.SourceFile(env.fileSpec, loc)))
@@ -70,11 +73,11 @@ object SourceSignatureCreator {
     impl(env)(params)(0)
   }
 
-  trait ResultCreator[TResultInfo[+_ <: TypeSystem]] {
+  trait ResultCreator[TResultInfo[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton]] {
     def createResult[TComp[+_] : Compilation]
     (context: ContextComp[TComp])
-    (env: ExpressionConverter.Env[context.Scope])
-    : TComp[TResultInfo[context.typeSystem.type]]
+    (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
+    : TComp[TResultInfo[context.type, context.typeSystem.type]]
   }
 
 

@@ -8,10 +8,9 @@ import Compilation.Operators._
 
 import scala.collection.immutable.Vector
 
-trait TypeSystem {
+trait TypeSystem[TContext <: Context with Singleton] {
 
-  val context: Context
-  type TContext = context.type
+  val context: TContext
 
   type TTypeWrapper[A]
   type TType = TTypeWrapper[SimpleType]
@@ -24,16 +23,13 @@ trait TypeSystem {
   def wrapType[A](a: A): TTypeWrapper[A]
   def mapTypeWrapper[A, B](t: TTypeWrapper[A])(f: A => B): TTypeWrapper[B]
 
-  def isSubTypeWrapper[TComp[+_] : Compilation, T]
+  def isSubTypeWrapper[TComp[_] : Compilation, T]
   (f: (T, T) => TComp[Boolean])
   (a: TTypeWrapper[T], b: TTypeWrapper[T])
   : TComp[Boolean]
 
-  final def isSubType[TComp[+_] : Compilation](a: TType, b: TType): TComp[Boolean] =
+  final def isSubType[TComp[_] : Compilation](a: TType, b: TType): TComp[Boolean] =
     isSubTypeWrapper(isSimpleSubType[TComp])(a, b)
-
-  final def convertTypeSystem(otherTS: TypeSystem { val context: TypeSystem.this.context.type })(converter: TypeSystemConverter[this.type, otherTS.type])(t1: TType): otherTS.TType =
-    converter.convertType(this)(otherTS)(mapTypeWrapper(t1)(convertSimpleTypeSystem(otherTS)(converter)(_)))
 
 
   sealed trait SimpleType
@@ -55,8 +51,75 @@ trait TypeSystem {
 
 
 
+  final case class Variable[+Desc <: VariableLikeDescriptor](descriptor: Desc, name: VariableName, mutability: Mutability, varType: TType)
 
-  private def isSimpleSubType[F[+_] : Compilation](a: SimpleType, b: SimpleType): F[Boolean] = {
+  final case class Parameter(tupleVars: Vector[Variable[DeconstructedParameterDescriptor]])
+
+  object Parameter {
+
+    def paramType(param: Parameter): TType =
+      fromSimpleType(TupleType(param.tupleVars.map { tupleVar => TupleTypeElement(tupleVar.varType) }))
+
+  }
+
+
+
+
+  trait ArExpr {
+    val exprType: TType
+
+    def convertTypeSystem
+    (otherTS: TypeSystem[context.type])
+    (f: TType => otherTS.TType)
+    : otherTS.ArExpr = ???
+  }
+
+  final case class ClassConstructorCall(classType: ClassType, classCtor: AbsRef[context.type, ClassConstructor], args: Vector[TType]) extends ArExpr {
+    override val exprType: TType = fromSimpleType(classType)
+  }
+  final case class TupleElement(value: ArExpr)
+  final case class CreateTuple(values: Vector[TupleElement]) extends ArExpr {
+    override lazy val exprType: TType = fromSimpleType(TupleType(values.map { elem => TupleTypeElement(elem.value.exprType) }))
+  }
+  final case class DataConstructorCall(dataCtorInstanceType: DataConstructorType, args: Vector[TType]) extends ArExpr {
+    override val exprType: TType = fromSimpleType(dataCtorInstanceType)
+  }
+  final case class FunctionCall(function: AbsRef[context.type, ArFunc], args: Vector[ArExpr], returnType: TType) extends ArExpr {
+    override val exprType: TType = returnType
+  }
+  final case class IfElse(condition: ArExpr, ifBody: ArExpr, elseBody: ArExpr) extends ArExpr {
+    override lazy val exprType: TType = fromSimpleType(UnionType(ifBody.exprType, elseBody.exprType))
+  }
+  final case class LetBinding(variable: Variable[VariableDescriptor], value: ArExpr, next: ArExpr) extends ArExpr {
+    override lazy val exprType: TType = next.exprType
+  }
+  final case class LoadConstantBool(value: Boolean, exprType: TType) extends ArExpr
+  final case class LoadConstantInt(value: BigInt, exprType: TType) extends ArExpr
+  final case class LoadConstantString(value: String, exprType: TType) extends ArExpr
+  final case class LoadLambda(argVariable: Variable[VariableDescriptor], body: ArExpr) extends ArExpr {
+    override lazy val exprType: TType = fromSimpleType(FunctionType(argVariable.varType, body.exprType))
+  }
+  final case class LoadTypeValue(value: TType) extends ArExpr {
+    override lazy val exprType: TType = ???
+  }
+  final case class LoadVariable(variable: Variable[VariableLikeDescriptor]) extends ArExpr {
+    override val exprType: TType = variable.varType
+  }
+  final case class MethodCall(method: AbsRef[context.type, ArMethod], instance: ArExpr, args: Vector[ArExpr], returnType: TType) extends ArExpr {
+    override val exprType: TType = returnType
+  }
+  final case class Sequence(first: ArExpr, second: ArExpr) extends ArExpr {
+    override lazy val exprType: TType = second.exprType
+  }
+  final case class StoreVariable(variable: Variable[VariableLikeDescriptor]) extends ArExpr {
+    override val exprType: TType = fromSimpleType(TupleType(Vector.empty))
+  }
+
+
+
+
+
+  private def isSimpleSubType[F[_] : Compilation](a: SimpleType, b: SimpleType): F[Boolean] = {
 
     def compareArguments(a: Vector[TType])(b: Vector[TType]): F[Boolean] = true.pure[F]
 
@@ -106,19 +169,39 @@ trait TypeSystem {
 
   }
 
-  final def convertSimpleTypeSystem(otherTS: TypeSystem { val context: TypeSystem.this.context.type })(converter: TypeSystemConverter[this.type, otherTS.type])(t1: SimpleType): otherTS.SimpleType = {
+}
+
+object TypeSystem {
+
+  final def convertTypeSystem
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (t1: ts.TType)
+  : otherTS.TType =
+    converter.convertType(ts)(otherTS)(ts.mapTypeWrapper(t1)(convertSimpleTypeSystem(context)(ts)(otherTS)(converter)(_)))
+
+  final def convertSimpleTypeSystem
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (t1: ts.SimpleType)
+  : otherTS.SimpleType = {
+    import ts.{ context => _, _ }
 
     def convertTraitType(traitType: TraitType): otherTS.TraitType =
       otherTS.TraitType(
         traitType.arTrait,
-        traitType.args.map(convertTypeSystem(otherTS)(converter)(_)),
+        traitType.args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
         otherTS.BaseTypeInfoTrait(traitType.baseTypes.baseTraits.map(convertTraitType(_)))
       )
 
     def convertClassType(classType: ClassType): otherTS.ClassType =
       otherTS.ClassType(
         classType.arClass,
-        classType.args.map(convertTypeSystem(otherTS)(converter)(_)),
+        classType.args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
         otherTS.BaseTypeInfoClass(
           classType.baseTypes.baseClass.map(convertClassType(_)),
           classType.baseTypes.baseTraits.map(convertTraitType(_))
@@ -131,42 +214,43 @@ trait TypeSystem {
       case DataConstructorType(ctor, args, instanceType) =>
         otherTS.DataConstructorType(
           ctor,
-          args.map(convertTypeSystem(otherTS)(converter)(_)),
+          args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
           convertTraitType(instanceType)
         )
 
       case MetaType(innerType, baseType) =>
         otherTS.MetaType(
-          convertTypeSystem(otherTS)(converter)(innerType),
-          convertTypeSystem(otherTS)(converter)(innerType)
+          convertTypeSystem(context)(ts)(otherTS)(converter)(innerType),
+          convertTypeSystem(context)(ts)(otherTS)(converter)(innerType)
         )
 
       case TupleType(elements) =>
         otherTS.TupleType(elements.map { case TupleTypeElement(elementType) =>
-            otherTS.TupleTypeElement(convertTypeSystem(otherTS)(converter)(elementType))
+          otherTS.TupleTypeElement(convertTypeSystem(context)(ts)(otherTS)(converter)(elementType))
         })
 
       case FunctionType(argumentType, resultType) =>
         otherTS.FunctionType(
-          convertTypeSystem(otherTS)(converter)(argumentType),
-          convertTypeSystem(otherTS)(converter)(resultType)
+          convertTypeSystem(context)(ts)(otherTS)(converter)(argumentType),
+          convertTypeSystem(context)(ts)(otherTS)(converter)(resultType)
         )
 
       case UnionType(first, second) =>
         otherTS.UnionType(
-          convertTypeSystem(otherTS)(converter)(first),
-          convertTypeSystem(otherTS)(converter)(second)
+          convertTypeSystem(context)(ts)(otherTS)(converter)(first),
+          convertTypeSystem(context)(ts)(otherTS)(converter)(second)
         )
 
       case IntersectionType(first, second) =>
         otherTS.IntersectionType(
-          convertTypeSystem(otherTS)(converter)(first),
-          convertTypeSystem(otherTS)(converter)(second)
+          convertTypeSystem(context)(ts)(otherTS)(converter)(first),
+          convertTypeSystem(context)(ts)(otherTS)(converter)(second)
         )
 
     }
 
   }
+
 
 
 

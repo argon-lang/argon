@@ -66,8 +66,7 @@ object ArgonModuleLoader extends ModuleLoader {
   : context.Comp[ArModule[context.type, TPayloadSpec]] = {
 
     val context2: context.type = context
-    import context._
-    import context.typeSystem.{ context => _, _ }
+    import context._, typeSystem.{ context => _, _ }, signatureContext.{ context => _, typeSystem => _, _ }
 
     def impl[TComp[+_] : Compilation](implicit compEv: LeibnizK[TComp, context.Comp]): TComp[ArModule[context.type, TPayloadSpec]] = {
       val currentModuleDescriptor = ModuleDescriptor(binModule.name)
@@ -141,28 +140,8 @@ object ArgonModuleLoader extends ModuleLoader {
           (refModule: ArModule[context.type, ReferencePayloadSpecifier])
           (namespace: NamespacePath, name: GlobalName)
           (f: PartialFunction[GlobalBinding[context.type, ReferencePayloadSpecifier], T])
-          : Option[T] = {
-            def impl(namespaceParts: Vector[String])(namespaceValues: Namespace[context.type, ReferencePayloadSpecifier]): Option[T] =
-              namespaceParts match {
-                case head +: tail =>
-                  namespaceValues.bindings.find(_.name === GlobalName.Normal(head)) match {
-                    case Some(binding) =>
-                      binding match {
-                        case GlobalBinding.NestedNamespace(_, nestedNS) => impl(tail)(nestedNS)
-                        case _ => None
-                      }
-
-                    case None => None
-                  }
-
-                case Vector() =>
-                  namespaceValues.bindings
-                    .find { _.name === name }
-                    .collect(f)
-              }
-
-            impl(namespace.ns)(refModule.globalNamespace)
-          }
+          : Option[T] =
+            ModuleLookup.lookupNamespaceValue(context)(refModule)(namespace, name)(f)
 
           private def parseTraitDescriptor(module: ModuleDescriptor)(desc: ArgonModule.TraitDescriptor): Option[TraitDescriptor] =
             desc match {
@@ -414,9 +393,7 @@ object ArgonModuleLoader extends ModuleLoader {
 
           private def lookupClass(module: ArModule[context.type, ReferencePayloadSpecifier]): ClassDescriptor => TComp[Option[ArClass[context.type, ReferencePayloadSpecifier]]] = {
             case ClassDescriptor.InNamespace(_, namespace, name, _) =>
-              lookupNamespaceValue(module)(namespace, name) {
-                case GlobalBinding.GlobalClass(_, _, arClass) => arClass
-              }.point[TComp]
+              lookupNamespaceValue(module)(namespace, name)(ModuleLookup.lookupGlobalClass).point[TComp]
 
             case ClassDescriptor.MetaClass(ownerClass) =>
               lookupClass(module)(ownerClass)

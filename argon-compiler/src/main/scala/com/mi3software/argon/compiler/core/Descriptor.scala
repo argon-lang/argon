@@ -140,3 +140,9 @@ final case class DeconstructedParameterDescriptor(owner: ParameterOwnerDescripto
 
 @deriving(Equal)
 final case class VariableDescriptor(owner: VariableOwnerDescriptor, index: Int) extends VariableLikeDescriptor
+
+sealed trait VariableName
+object VariableName {
+  final case class Normal(name: String) extends VariableName
+  case object Unnamed extends VariableName
+}

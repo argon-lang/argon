@@ -6,10 +6,11 @@ import com.mi3software.argon.compiler.loaders.{ModuleLoader, NamespaceBuilder}
 import com.mi3software.argon.compiler.lookup._
 import com.mi3software.argon.parser
 import com.mi3software.argon.parser.SourceAST
-import com.mi3software.argon.util.{FileSpec, SourceLocation, WithSource}
+import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation, WithSource}
 import scalaz._
 import Scalaz._
 import com.mi3software.argon.compiler.PayloadSpecifiers._
+import com.mi3software.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import scalaz.effect.IO
 
 private[compiler] object SourceModuleCreator {
@@ -42,33 +43,46 @@ private[compiler] object SourceModuleCreator {
   private def loadReferenceModules[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
   (input: CompilerInput)
-  : IO[TComp[Vector[ArModule[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]]]] =
+  : IO[TComp[Vector[ArModule[context.type, ReferencePayloadSpecifier]]]] =
     ModuleLoader.loadReferencedModules(context)(input.references)
 
   private def createNamespaceElementFromAST[TComp[+_] : Compilation]
-  (context: ContextComp[TComp])
+  (context2: ContextComp[TComp])
   (options: CompilerOptions)
-  (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
+  (referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
-  : TComp[ModuleElement[context.type, DeclarationPayloadSpecifier]] =
+  : TComp[ModuleElement[context2.type, DeclarationPayloadSpecifier]] =
     for {
-      scope <- createScope[TComp](context)(referencedModules)(sourceAST)
-      binding <- createNamespaceElementFromASTWithScope[TComp](context)(options)(scope)(sourceAST)
+      scope <- createScope[TComp](context2)(referencedModules)(sourceAST)
+      envF = (envFileSpec: FileSpec) => new EnvCreator[context2.type] {
+        override def apply(context: context2.type)(descriptor: Descriptor): ExpressionConverter.Env[context.type, context.scopeContext.Scope] =
+          ExpressionConverter.Env(
+            descriptor = descriptor,
+            fileSpec = fileSpec,
+            referencedModules = referencedModules,
+            scope = scope,
+          )
+
+        override val fileSpec: FileSpec = envFileSpec
+      }
+      binding <- createNamespaceElementFromASTWithScope[TComp](context2)(options)(envF)(sourceAST)
     } yield ModuleElement(sourceAST.currentNamespace, binding)
 
   private def createScope[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
-  (referencedModules: Vector[ArModule[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]])
+  (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
-  : TComp[context.Scope] =
-    Monad[TComp].point(context.EmptyScope())
+  : TComp[context.scopeContext.Scope] =
+    Monad[TComp].point(context.scopeContext.EmptyScope())
 
   private def createNamespaceElementFromASTWithScope[TComp[+_] : Monad : Compilation]
   (context: ContextComp[TComp])
   (options: CompilerOptions)
-  (scope: context.Scope)
+  (envF: FileSpec => EnvCreator[context.type])
   (sourceAST: SourceAST)
   : TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] = {
+
+    val env = envF(sourceAST.fileSpec)
 
     def createBinding(name: String, modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => GlobalBinding[context.type, DeclarationPayloadSpecifier]): TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
       parseGlobalAccessModifier[TComp](sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).map { accessModifier =>
@@ -83,7 +97,7 @@ private[compiler] object SourceModuleCreator {
 
           GlobalBinding.GlobalTrait(
             globalName, accessModifier,
-            SourceTrait[TComp](context)(scope)(traitDeclarationStmt)(desc)
+            SourceTrait[TComp](context)(env)(traitDeclarationStmt)(desc)
           )
         }
 
@@ -93,7 +107,7 @@ private[compiler] object SourceModuleCreator {
 
           GlobalBinding.GlobalFunction(
             globalName, accessModifier,
-            SourceFunction[TComp](context)(scope)(funcDeclarationStmt)(sourceAST.fileSpec)(desc)
+            SourceFunction[TComp](context)(env)(funcDeclarationStmt)(desc)
           )
         }
 

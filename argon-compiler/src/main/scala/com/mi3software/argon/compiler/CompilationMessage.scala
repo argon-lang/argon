@@ -7,10 +7,11 @@ import com.mi3software.argon.compiler.core.GlobalName
 import com.mi3software.argon.compiler.lookup.LookupDescription
 import com.mi3software.argon.grammar.GrammarError
 import com.mi3software.argon.parser
-import com.mi3software.argon.parser.{ SyntaxError, SyntaxErrorData, TokenCategory, Token, CharacterCategory }
+import com.mi3software.argon.parser.{CharacterCategory, SyntaxError, SyntaxErrorData, Token, TokenCategory}
 import com.mi3software.argon.util._
 import com.mi3software.argon.module
 import com.mi3software.argon.compiler.core._
+import com.mi3software.argon.compiler.types.TypeSystem
 
 sealed trait CompilationMessage {
   val source: CompilationMessageSource
@@ -204,6 +205,10 @@ object CompilationError {
     }
   }
 
+  final case class ModuleLookupFailedError(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Could not find object in module"
+  }
+
   final case class LookupFailedError(description: LookupDescription, source: CompilationMessageSource) extends CompilationError {
     override def message: String = "Could not find identifier"
   }
@@ -301,6 +306,26 @@ object CompilationError {
 
   final case class ParameterTypeAnnotationRequired(paramName: String, source: CompilationMessageSource) extends CompilationError {
     override def message: String = s"Parameter '$paramName' is missing a type annotation."
+  }
+
+  sealed trait CouldNotConvertType extends CompilationError {
+    val context: Context
+    val typeSystem: TypeSystem[context.type]
+    val fromType: typeSystem.TType
+    val toType: typeSystem.TType
+  }
+
+  object CouldNotConvertType {
+    def apply(ctx: Context)(ts: TypeSystem[ctx.type])(fromT: ts.TType, toT: ts.TType)(src: CompilationMessageSource): CouldNotConvertType =
+      new CouldNotConvertType {
+        override val context: ctx.type = ctx
+        override val typeSystem: ts.type = ts
+        override val fromType: typeSystem.TType = fromT
+        override val toType: typeSystem.TType = toT
+        override val source: CompilationMessageSource = src
+
+        override def message: String = "Could not convert types."
+      }
   }
 
   private def formatNamespace(namespacePath: NamespacePath): String =

@@ -5,7 +5,7 @@ import com.mi3software.argon.compiler.types.TypeSystem
 
 sealed trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
-  import context._
+  import context._, signatureContext.Signature
 
   val effectInfo: EffectInfo
   val accessModifier: AccessModifier
@@ -21,6 +21,6 @@ sealed trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
 
 object ClassConstructor {
 
-  final case class ResultInfo[+TS <: TypeSystem]()
+  final case class ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton]()
 
 }

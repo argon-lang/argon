@@ -5,10 +5,10 @@ import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.loaders.ModuleLoader
 import com.mi3software.argon.compiler.loaders.source.SourceModuleCreator
 import com.mi3software.argon.compiler.lookup._
-import com.mi3software.argon.compiler.types.ArgonTypeSystem
+import com.mi3software.argon.compiler.types.{ArgonTypeSystem, TypeSystem}
 import scalaz.effect.IO
 
-sealed trait Context extends VariableContext with ArExprContext with SignatureContext with ScopeContext {
+sealed trait Context {
 
   type TFunctionImplementation
   type TMethodImplementation
@@ -28,13 +28,21 @@ sealed trait Context extends VariableContext with ArExprContext with SignatureCo
   type Comp[+_]
   implicit val compCompilationInstance: Compilation[Comp]
 
-  object ContextTypeSystem extends ArgonTypeSystem {
+  object ContextTypeSystem extends ArgonTypeSystem[this.type] {
     override val context: Context.this.type = Context.this
 
     override def fromArType(arType: Context.this.typeSystem.TType): TType = arType
   }
 
-  final val typeSystem: ContextTypeSystem.type = ContextTypeSystem
+  final lazy val typeSystem: ContextTypeSystem.type = ContextTypeSystem
+  final lazy val scopeContext: ScopeContext[this.type] { val typeSystem: Context.this.typeSystem.type } = new ScopeContext[this.type] {
+    override val context: Context.this.type = Context.this
+    override lazy val typeSystem: Context.this.typeSystem.type = Context.this.typeSystem
+  }
+  final lazy val signatureContext: SignatureContext[this.type] { val typeSystem: Context.this.typeSystem.type } = new SignatureContext[this.type] {
+    override val context: Context.this.type = Context.this
+    override lazy val typeSystem: Context.this.typeSystem.type = Context.this.typeSystem
+  }
 
   val moduleLoaders: Vector[ModuleLoader]
 

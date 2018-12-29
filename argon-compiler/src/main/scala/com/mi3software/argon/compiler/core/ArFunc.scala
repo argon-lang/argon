@@ -2,7 +2,7 @@ package com.mi3software.argon.compiler.core
 
 trait ArFunc[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
-  import context._
+  import context._, signatureContext.Signature
 
   val descriptor: FuncDescriptor
   val effectInfo: EffectInfo

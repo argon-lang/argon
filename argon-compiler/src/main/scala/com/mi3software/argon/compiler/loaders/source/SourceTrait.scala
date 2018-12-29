@@ -3,6 +3,7 @@ package com.mi3software.argon.compiler.loaders.source
 import com.mi3software.argon.compiler.PayloadSpecifiers._
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
+import com.mi3software.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import com.mi3software.argon.compiler.lookup._
 import com.mi3software.argon.parser
 import com.mi3software.argon.parser.TraitDeclarationStmt
@@ -13,13 +14,13 @@ private[compiler] object SourceTrait {
 
   def apply[TComp[+_] : Monad : Compilation]
   (context2: ContextComp[TComp])
-  (scope: context2.Scope)
+  (env: EnvCreator[context2.type])
   (stmt: TraitDeclarationStmt)
   (desc: TraitDescriptor)
   : ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] =
     new ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
-      import context._
+      import context.signatureContext.Signature
 
       override val contextProof: Leibniz[context.type, context2.type, context.type, context2.type] = Leibniz.refl
 

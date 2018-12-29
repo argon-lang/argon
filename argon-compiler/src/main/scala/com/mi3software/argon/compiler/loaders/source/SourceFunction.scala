@@ -8,14 +8,14 @@ import com.mi3software.argon.parser
 import com.mi3software.argon.util.{FileSpec, WithSource}
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 
 private[compiler] object SourceFunction {
 
   def apply[TComp[+_] : Compilation]
   (context2: ContextComp[TComp])
-  (scope: context2.Scope)
+  (env: EnvCreator[context2.type])
   (stmt: parser.FunctionDeclarationStmt)
-  (fileSpec: FileSpec)
   (desc: FuncDescriptor)
   : ArFunc[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] =
     new ArFunc[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
@@ -25,9 +25,9 @@ private[compiler] object SourceFunction {
 
       override val effectInfo: EffectInfo = EffectInfo(stmt.purity)
 
-      override lazy val signature: TComp[context.Signature[FunctionResultInfo]] =
-        SourceSignatureCreator.fromParameters(context2)(
-          ExpressionConverter.Env(descriptor, scope, fileSpec)
+      override lazy val signature: TComp[context.signatureContext.Signature[FunctionResultInfo]] =
+        SourceSignatureCreator.fromParameters[TComp, FunctionResultInfo](context2)(
+          env(context)(descriptor)
         )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType))
 
       override lazy val payload: TComp[context.TFunctionImplementation] = ??? : TComp[context.TFunctionImplementation]
@@ -36,8 +36,8 @@ private[compiler] object SourceFunction {
   def resultCreator(returnTypeExpr: WithSource[parser.Expr]): ResultCreator[FunctionResultInfo] =  new ResultCreator[FunctionResultInfo] {
     override def createResult[TComp[+ _] : Compilation]
     (context: ContextComp[TComp])
-    (env: ExpressionConverter.Env[context.Scope])
-    : TComp[FunctionResultInfo[context.typeSystem.type]] =
+    (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
+    : TComp[FunctionResultInfo[context.type, context.typeSystem.type]] =
       ExpressionConverter.convertTypeExpression(context)(env)(returnTypeExpr)
         .map { t => FunctionResultInfo(context.typeSystem)(t) }
   }

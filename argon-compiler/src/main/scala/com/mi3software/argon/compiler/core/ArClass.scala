@@ -8,7 +8,7 @@ import Scalaz._
 trait ArClass[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
-  import context._
+  import context._, signatureContext.Signature
 
   val descriptor: ClassDescriptor
 
@@ -27,13 +27,13 @@ trait ArClass[TContext <: Context, TPayloadSpec[_, _]] {
 
 object ArClass {
 
-  sealed trait ResultInfo[TS <: TypeSystem with Singleton] {
+  sealed trait ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
     val typeSystem: TS
     val baseTypes: typeSystem.BaseTypeInfoClass
   }
 
   object ResultInfo {
-    def apply(ts: TypeSystem)(bt: ts.BaseTypeInfoClass): ResultInfo[ts.type] = new ResultInfo[ts.type] {
+    def apply[TContext <: Context with Singleton](ts: TypeSystem[TContext])(bt: ts.BaseTypeInfoClass): ResultInfo[TContext, ts.type] = new ResultInfo[TContext, ts.type] {
       override val typeSystem: ts.type = ts
       override val baseTypes: typeSystem.BaseTypeInfoClass = bt
     }

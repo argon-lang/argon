@@ -5,7 +5,7 @@ import scalaz.Leibniz
 sealed trait ArMethod[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
-  import context._
+  import context._, signatureContext.Signature
 
   val descriptor: MethodDescriptor
 

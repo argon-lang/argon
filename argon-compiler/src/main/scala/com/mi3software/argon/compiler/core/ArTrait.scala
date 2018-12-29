@@ -10,7 +10,7 @@ import scala.collection.immutable._
 trait ArTrait[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
-  import context._
+  import context._, signatureContext.Signature
 
   val descriptor: TraitDescriptor
 
@@ -26,13 +26,13 @@ trait ArTrait[TContext <: Context, TPayloadSpec[_, _]] {
 
 object ArTrait {
 
-  sealed trait ResultInfo[TS <: TypeSystem with Singleton] {
+  sealed trait ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
     val typeSystem: TS
     val baseTypes: typeSystem.BaseTypeInfoTrait
   }
 
   object ResultInfo {
-    def apply(ts: TypeSystem)(bt: ts.BaseTypeInfoTrait): ResultInfo[ts.type] = new ResultInfo[ts.type] {
+    def apply[TContext <: Context with Singleton](ts: TypeSystem[TContext])(bt: ts.BaseTypeInfoTrait): ResultInfo[TContext, ts.type] = new ResultInfo[TContext, ts.type] {
       override val typeSystem: ts.type = ts
       override val baseTypes: typeSystem.BaseTypeInfoTrait = bt
     }

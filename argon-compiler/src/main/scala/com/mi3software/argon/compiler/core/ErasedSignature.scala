@@ -18,22 +18,22 @@ object ErasedSignature {
   final case class Parameter[TContext <: Context](paramType: SigType[TContext], next: ErasedSignature[TContext]) extends ErasedSignature[TContext]
   final case class Result[TContext <: Context](resultType: SigType[TContext]) extends ErasedSignature[TContext]
 
-  def fromSignature(sigContext: SignatureContext)(sig: sigContext.Signature[FunctionResultInfo]): ErasedSignature[sigContext.typeSystem.context.type] =
+  def fromSignature(context: Context)(sig: context.signatureContext.Signature[FunctionResultInfo]): ErasedSignature[context.type] =
     sig.visit(
       sigParams => ErasedSignature.Parameter(
-        TupleType(sigParams.parameter.tupleVars.map { variable => typeToSigType(sigContext)(variable.varType) }),
-        fromSignature(sigContext)(sigParams.nextUnsubstituted)
+        TupleType(sigParams.parameter.tupleVars.map { variable => typeToSigType(context)(variable.varType) }),
+        fromSignature(context)(sigParams.nextUnsubstituted)
       ),
-      sigResult => ErasedSignature.Result(typeToSigType(sigContext)(sigResult.result.returnType))
+      sigResult => ErasedSignature.Result(typeToSigType(context)(sigResult.result.returnType))
     )
 
-  private def typeToSigType(sigContext: SignatureContext)(t: sigContext.typeSystem.TType): SigType[sigContext.typeSystem.context.type] =
+  private def typeToSigType(context: Context)(t: context.signatureContext.typeSystem.TType): SigType[context.type] =
     t match {
-      case t: sigContext.typeSystem.ClassType => ClassType(t.arClass)
-      case t: sigContext.typeSystem.TraitType => TraitType(t.arTrait)
-      case t: sigContext.typeSystem.DataConstructorType => DataConstructorType(t.ctor)
-      case t: sigContext.typeSystem.TupleType => TupleType(t.elements.map { elem => typeToSigType(sigContext)(elem.elementType) })
-      case t: sigContext.typeSystem.FunctionType => FunctionType(typeToSigType(sigContext)(t.argumentType), typeToSigType(sigContext)(t.resultType))
+      case t: context.typeSystem.ClassType => ClassType(t.arClass)
+      case t: context.typeSystem.TraitType => TraitType(t.arTrait)
+      case t: context.typeSystem.DataConstructorType => DataConstructorType(t.ctor)
+      case t: context.typeSystem.TupleType => TupleType(t.elements.map { elem => typeToSigType(context)(elem.elementType) })
+      case t: context.typeSystem.FunctionType => FunctionType(typeToSigType(context)(t.argumentType), typeToSigType(context)(t.resultType))
       case _ => BlankType()
     }
 

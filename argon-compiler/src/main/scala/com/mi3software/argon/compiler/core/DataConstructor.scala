@@ -9,7 +9,7 @@ import Scalaz._
 sealed trait DataConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
-  import context._
+  import context._, signatureContext.Signature
 
   val descriptor: DataConstructorDescriptor
 
@@ -22,13 +22,13 @@ sealed trait DataConstructor[TContext <: Context, TPayloadSpec[_, _]] {
 
 object DataConstructor {
 
-  sealed trait ResultInfo[TS <: TypeSystem with Singleton] {
+  sealed trait ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
     val typeSystem: TS
     val instanceType: typeSystem.TraitType
   }
 
   object ResultInfo {
-    def apply(ts: TypeSystem)(instance: ts.TraitType): ResultInfo[ts.type] = new ResultInfo[ts.type] {
+    def apply[TContext <: Context with Singleton](ts: TypeSystem[TContext])(instance: ts.TraitType): ResultInfo[TContext, ts.type] = new ResultInfo[TContext, ts.type] {
       override val typeSystem: ts.type = ts
       override val instanceType: typeSystem.TraitType = instance
     }

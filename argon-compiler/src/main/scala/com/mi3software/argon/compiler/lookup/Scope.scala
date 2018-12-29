@@ -3,15 +3,20 @@ package com.mi3software.argon.compiler.lookup
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation}
 import com.mi3software.argon.compiler.core._
-import com.mi3software.argon.compiler.types.TypeSystem
+import com.mi3software.argon.compiler.types.{TypeSystem, TypeSystemConverter}
 
-trait ScopeContext extends VariableContext {
+trait ScopeContext[TContext <: Context with Singleton] {
 
-  import typeSystem.context
+  val context: TContext
+  val typeSystem: TypeSystem[context.type]
+
+  import typeSystem.Variable
 
   sealed trait Scope {
 
     def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult = ???
+
+    def convertScopeContext(other: ScopeContext[context.type])(f: typeSystem.TType => other.typeSystem.TType): other.Scope
 
   }
 
@@ -30,11 +35,19 @@ trait ScopeContext extends VariableContext {
     final def addNamespaces(namespacePaths: Vector[NamespacePath]): NamespaceScope =
       NamespaceScope(namespacePaths, this)
 
+    override def convertScopeContext(other: ScopeContext[context.type])(f: typeSystem.TType => other.typeSystem.TType): other.NamespacesOnlyScope
+
   }
 
-  final case class EmptyScope() extends NamespacesOnlyScope
+  final case class EmptyScope() extends NamespacesOnlyScope {
+    override def convertScopeContext(other: ScopeContext[context.type])(f: typeSystem.TType => other.typeSystem.TType): other.NamespacesOnlyScope =
+      other.EmptyScope()
+  }
 
-  final case class NamespaceScope(namespacePaths: Vector[NamespacePath], parentScope: NamespacesOnlyScope) extends NamespacesOnlyScope
+  final case class NamespaceScope(namespacePaths: Vector[NamespacePath], parentScope: NamespacesOnlyScope) extends NamespacesOnlyScope {
+    override def convertScopeContext(other: ScopeContext[context.type])(f: typeSystem.TType => other.typeSystem.TType): other.NamespacesOnlyScope =
+      other.NamespaceScope(namespacePaths, parentScope.convertScopeContext(other)(f))
+  }
 
 
   sealed trait ScopeValue
@@ -55,7 +68,7 @@ trait ScopeContext extends VariableContext {
   sealed trait OverloadResult
   object OverloadResult {
     case object End extends OverloadResult
-    final case class List(values: ScopeValue, next: OverloadResult) extends OverloadResult
+    final case class List(values: Vector[ScopeValue], next: OverloadResult) extends OverloadResult
   }
 
 }
