@@ -6,6 +6,7 @@ import com.mi3software.argon.compiler.lookup._
 import com.mi3software.argon.compiler.types.{ExpandTypeSystemConverter, TypeSystem, TypeSystemConverter}
 import com.mi3software.argon.parser
 import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation, WithSource}
+import com.mi3software.argon.util.AnyExtensions._
 
 import scala.collection.immutable.Set
 import scalaz._
@@ -171,9 +172,15 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       ModuleLookup.lookupValue(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass)
     )(CompilationError.ModuleLookupFailedError(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
     classSig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.signature)
-    classFactory = signatureFactory(env)(
+
+    classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(
       classSig.convertTypeSystem(signatureContext)(fromArType(_))
-    ) { (args, classResult) => LoadTypeValue(fromSimpleType(ClassType(AbsRef[context.type, ReferencePayloadSpecifier, ArClass](arClass), args, classResult.baseTypes))) }
+    ) { (args, classResult) =>
+      for {
+        argsAsTypes <- args.traverse(evaluateTypeExpr(env)(_))
+      } yield LoadTypeValue(fromSimpleType(ClassType(AbsRef[context.type, ReferencePayloadSpecifier, ArClass](arClass), argsAsTypes, classResult.baseTypes)))
+    }
+
     argsFactory = args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
     result <- evaluateTypeExprFactory(env)(argsFactory)
   } yield result
@@ -211,8 +218,17 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
       case LookupResult.ValuesResult(OverloadResult.List(Vector(result), _)) =>
         result match {
-          case VariableScopeValue(variable) => ???
-          case FunctionScopeValue(func) => ???
+          case VariableScopeValue(variable) =>
+            factoryForExpr(env)(location)(LoadVariable(variable))
+
+          case FunctionScopeValue(func) =>
+            compFactory(
+              for {
+                sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(func.value.signature)
+                convSig = sig.convertTypeSystem(signatureContext)(fromArType(_))
+              } yield signatureFactory(env)(convSig) { (args, result) => FunctionCall(func, args, result.returnType).upcast[ArExpr].point[TComp] }
+            )
+
           case TraitScopeValue(arTrait) => ???
           case ClassScopeValue(arClass) => ???
           case DataConstructorScopeValue(ctor) => ???
@@ -249,14 +265,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def signatureFactory[TComp[_] : TypeCheck, TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
   (env: Env)
   (signature: Signature[TResult])
-  (f: (Vector[TType], TResult[context.type, typeSystem.type]) => ArExpr)
+  (f: (Vector[ArExpr], TResult[context.type, typeSystem.type]) => TComp[ArExpr])
   : ExprFactory[TComp] = {
 
-    final class SigFactory(env: Env)(signature: Signature[TResult])(prevArgs: Vector[TType]) extends ExprFactory[TComp] {
+    final class SigFactory(env: Env)(signature: Signature[TResult])(prevArgs: Vector[ArExpr]) extends ExprFactory[TComp] {
       override def forExpectedType(expectedType: TType): TComp[ArExpr] =
         signature.visit(
           sigParams => ???,
-          sigResult => f(prevArgs, sigResult.result).point[TComp]
+          sigResult => f(prevArgs, sigResult.result)
         )
 
       override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] = ???
