@@ -13,7 +13,7 @@ sealed trait DataConstructor[TContext <: Context, TPayloadSpec[_, _]] {
 
   val descriptor: DataConstructorDescriptor
 
-  val signature: Signature[DataConstructor.ResultInfo]
+  val signature: Comp[Signature[DataConstructor.ResultInfo]]
 
   val methods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
 

@@ -253,8 +253,24 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               }
             )
 
-
-          case DataConstructorScopeValue(ctor) => ???
+          case DataConstructorScopeValue(ctor) =>
+            compFactory(
+              for {
+                sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(ctor.value.signature)
+                convSig = sig.convertTypeSystem(signatureContext)(fromArType(_))
+              } yield signatureFactory(env)(convSig) { (args, result) =>
+                for {
+                  argsAsTypes <- args.traverse(evaluateTypeExpr(env)(_))
+                } yield DataConstructorCall(
+                  DataConstructorType(
+                    ctor,
+                    argsAsTypes,
+                    result.instanceType
+                  ),
+                  args
+                )
+              }
+            )
         }
 
       case LookupResult.ValuesResult(_) => ???

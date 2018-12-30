@@ -81,7 +81,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final case class CreateTuple(values: Vector[TupleElement]) extends ArExpr {
     override lazy val exprType: TType = fromSimpleType(TupleType(values.map { elem => TupleTypeElement(elem.value.exprType) }))
   }
-  final case class DataConstructorCall(dataCtorInstanceType: DataConstructorType, args: Vector[TType]) extends ArExpr {
+  final case class DataConstructorCall(dataCtorInstanceType: DataConstructorType, args: Vector[ArExpr]) extends ArExpr {
     override val exprType: TType = fromSimpleType(dataCtorInstanceType)
   }
   final case class FunctionCall(function: AbsRef[context.type, ArFunc], args: Vector[ArExpr], returnType: TType) extends ArExpr {
