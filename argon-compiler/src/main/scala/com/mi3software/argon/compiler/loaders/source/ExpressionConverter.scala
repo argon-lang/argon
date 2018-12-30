@@ -3,7 +3,7 @@ package com.mi3software.argon.compiler.loaders.source
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.lookup._
-import com.mi3software.argon.compiler.types.{ExpandTypeSystemConverter, TypeSystem, TypeSystemConverter}
+import com.mi3software.argon.compiler.types.{ArTypeSystemConverter, ExpandTypeSystemConverter, TypeSystem, TypeSystemConverter}
 import com.mi3software.argon.parser
 import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation, WithSource}
 import com.mi3software.argon.util.AnyExtensions._
@@ -174,7 +174,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     classSig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.signature)
 
     classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(
-      classSig.convertTypeSystem(signatureContext)(fromArType(_))
+      convertSignature(classSig)
     ) { (args, classResult) =>
       for {
         argsAsTypes <- args.traverse(evaluateTypeExpr(env)(_))
@@ -225,7 +225,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             compFactory(
               for {
                 sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(func.value.signature)
-                convSig = sig.convertTypeSystem(signatureContext)(fromArType(_))
+                convSig = convertSignature(sig)
               } yield signatureFactory(env)(convSig) { (args, result) => FunctionCall(func, args, result.returnType).upcast[ArExpr].point[TComp] }
             )
 
@@ -233,7 +233,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             compFactory(
               for {
                 sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arTrait.value.signature)
-                convSig = sig.convertTypeSystem(signatureContext)(fromArType(_))
+                convSig = convertSignature(sig)
               } yield signatureFactory(env)(convSig) { (args, result) =>
                 for {
                   argsAsTypes <- args.traverse(evaluateTypeExpr(env)(_))
@@ -245,7 +245,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             compFactory(
               for {
                 sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.value.signature)
-                convSig = sig.convertTypeSystem(signatureContext)(fromArType(_))
+                convSig = convertSignature(sig)
               } yield signatureFactory(env)(convSig) { (args, result) =>
                 for {
                   argsAsTypes <- args.traverse(evaluateTypeExpr(env)(_))
@@ -257,7 +257,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             compFactory(
               for {
                 sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(ctor.value.signature)
-                convSig = sig.convertTypeSystem(signatureContext)(fromArType(_))
+                convSig = convertSignature(sig)
               } yield signatureFactory(env)(convSig) { (args, result) =>
                 for {
                   argsAsTypes <- args.traverse(evaluateTypeExpr(env)(_))
@@ -319,6 +319,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
     new SigFactory(env)(signature)(Vector.empty)
   }
+
+  def convertSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
+  (sig: context.signatureContext.Signature[TResult])
+  : Signature[TResult] =
+    sig.convertTypeSystem(signatureContext)(ArTypeSystemConverter(context)(typeSystem))
 
   def convertExprType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr)(t: typeSystem.TType): TComp[ArExpr] =
     typeSystem.isSubType[TComp](t, expr.exprType).flatMap {
@@ -446,9 +451,6 @@ object ExpressionConverter {
         ExpandTypeSystemConverter[context.type, HoleType](innerTS)(this)(new ExpandTypeSystemConverter.Expander[HoleType] {
           override def apply[A](a: A): HoleType[A] = HoleTypeType(a)
         })
-
-      override def fromArType(arType: context.typeSystem.TType): TType =
-        TypeSystem.convertTypeSystem(context)(innerTS)(this)(expandConverter)(innerTS.fromArType(arType))
 
       override def wrapType[A](a: A): HoleType[innerTS.TTypeWrapper[A]] =
         HoleTypeType(innerTS.wrapType(a))

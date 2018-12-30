@@ -5,7 +5,7 @@ import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.loaders.ModuleLoader
 import com.mi3software.argon.compiler.loaders.source.SourceModuleCreator
 import com.mi3software.argon.compiler.lookup._
-import com.mi3software.argon.compiler.types.{ArgonTypeSystem, TypeSystem}
+import com.mi3software.argon.compiler.types.{ArgonTypeSystem, TypeSystem, TypeSystemConverter}
 import scalaz.effect.IO
 
 sealed trait Context {
@@ -30,8 +30,6 @@ sealed trait Context {
 
   object ContextTypeSystem extends ArgonTypeSystem[this.type] {
     override val context: Context.this.type = Context.this
-
-    override def fromArType(arType: Context.this.typeSystem.TType): TType = arType
   }
 
   final lazy val typeSystem: ContextTypeSystem.type = ContextTypeSystem

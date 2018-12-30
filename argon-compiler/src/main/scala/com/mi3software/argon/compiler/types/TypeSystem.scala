@@ -18,7 +18,6 @@ trait TypeSystem[TContext <: Context with Singleton] {
   type WrapRef[T[_ <: Context, _[_, _]]] = AbsRef[context.type, T]
 
   final def fromSimpleType(simpleType: SimpleType): TType = wrapType(simpleType)
-  def fromArType(arType: context.typeSystem.TType): TType
 
   def wrapType[A](a: A): TTypeWrapper[A]
   def mapTypeWrapper[A, B](t: TTypeWrapper[A])(f: A => B): TTypeWrapper[B]
@@ -272,6 +271,17 @@ object TypeSystem {
       v.name,
       v.mutability,
       convertTypeSystem(context)(ts)(otherTS)(converter)(v.varType)
+    )
+
+  final def convertParameterTypeSystem[Desc <: VariableLikeDescriptor]
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (p: ts.Parameter)
+  : otherTS.Parameter =
+    otherTS.Parameter(
+      p.tupleVars.map(convertVariableTypeSystem(context)(ts)(otherTS)(converter)(_))
     )
 
   def convertExprTypeSystem
