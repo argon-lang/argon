@@ -461,7 +461,11 @@ object ExpressionConverter {
           case HoleTypeHole() => HoleTypeHole()
         }
 
-      override def isSubTypeWrapper[TComp[_] : Compilation, T](f: (T, T) => TComp[Boolean])(a: HoleType[innerTS.TTypeWrapper[T]], b: HoleType[innerTS.TTypeWrapper[T]]): TComp[Boolean] = ???
+      override def isSubTypeWrapper[TComp[_] : Compilation, T](f: (T, T) => TComp[Boolean])(a: HoleType[innerTS.TTypeWrapper[T]], b: HoleType[innerTS.TTypeWrapper[T]]): TComp[Boolean] =
+        (a, b) match {
+          case (HoleTypeType(aInner), HoleTypeType(bInner)) => innerTS.isSubTypeWrapper(f)(aInner, bInner)
+          case (_, _) => true.point[TComp]
+        }
     }
 
     new HoleTypeSystem
