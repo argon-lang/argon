@@ -349,10 +349,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       .flatMap { case (constraints, expr) =>
         for {
           fill <- inferTypeFromConstraints[TComp](inferTS)(constraints)
-          convExpr = expr.convertTypeSystem(typeSystem)(fillTypeHole(inferTS)(fill)(_))
+          convExpr = TypeSystem.convertExprTypeSystem(context)(inferTS)(typeSystem)(fillTypeHole(inferTS)(fill))(expr)
           _ <- constraints.toVector.traverse_ { constr =>
             implicitly[TypeCheck[TComp]].recordSubTypeConstraint(
-              constr.map(fillTypeHole(inferTS)(fill)(_))
+              constr.map(TypeSystem.convertTypeSystem(context)(inferTS)(typeSystem)(fillTypeHole(inferTS)(fill))(_))
             )
           }
         } yield convExpr
@@ -370,8 +370,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     type TTypeWrapper[A] = HoleType[typeSystem.TTypeWrapper[A]]
   })
   (fill: TType)
-  (t: holeTS.TType)
-  : TType = ???
+  : TypeSystemConverter[context.type, holeTS.type, typeSystem.type] =
+    new TypeSystemConverter[context.type, holeTS.type, typeSystem.type] {
+      override def convertType(ts1: holeTS.type)(ts2: typeSystem.type)(t: HoleType[typeSystem.TTypeWrapper[ts2.SimpleType]]): ts2.TTypeWrapper[ts2.SimpleType] =
+        t match {
+          case ExpressionConverter.HoleTypeType(inner) => inner
+          case ExpressionConverter.HoleTypeHole() => fill
+        }
+    }
 
 }
 
@@ -467,7 +473,7 @@ object ExpressionConverter {
   })
   : TypeSystemConverter[context.type, innerTS.type, holeTS.type] =
     new TypeSystemConverter[context.type, innerTS.type, holeTS.type] {
-      override def convertType[A](ts1: innerTS.type)(ts2: holeTS.type)(t: ts1.TTypeWrapper[A]): HoleType[innerTS.TTypeWrapper[A]] =
+      override def convertType(ts1: innerTS.type)(ts2: holeTS.type)(t: ts1.TTypeWrapper[ts2.SimpleType]): HoleType[innerTS.TTypeWrapper[ts2.SimpleType]] =
         HoleTypeType(t)
     }
 

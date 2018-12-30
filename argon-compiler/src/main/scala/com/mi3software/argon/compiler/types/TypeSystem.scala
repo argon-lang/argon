@@ -67,11 +67,6 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   trait ArExpr {
     val exprType: TType
-
-    def convertTypeSystem
-    (otherTS: TypeSystem[context.type])
-    (f: TType => otherTS.TType)
-    : otherTS.ArExpr = ???
   }
 
   final case class ClassConstructorCall(classType: ClassType, classCtor: AbsRef[context.type, ClassConstructor], args: Vector[TType]) extends ArExpr {
@@ -111,7 +106,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final case class Sequence(first: ArExpr, second: ArExpr) extends ArExpr {
     override lazy val exprType: TType = second.exprType
   }
-  final case class StoreVariable(variable: Variable[VariableLikeDescriptor]) extends ArExpr {
+  final case class StoreVariable(variable: Variable[VariableLikeDescriptor], value: ArExpr) extends ArExpr {
     override val exprType: TType = fromSimpleType(TupleType(Vector.empty))
   }
 
@@ -173,7 +168,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
 object TypeSystem {
 
-  final def convertTypeSystem
+  def convertTypeSystem
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
@@ -182,72 +177,200 @@ object TypeSystem {
   : otherTS.TType =
     converter.convertType(ts)(otherTS)(ts.mapTypeWrapper(t1)(convertSimpleTypeSystem(context)(ts)(otherTS)(converter)(_)))
 
+
+  def convertTraitType
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (traitType: ts.TraitType): otherTS.TraitType =
+    otherTS.TraitType(
+      traitType.arTrait,
+      traitType.args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
+      otherTS.BaseTypeInfoTrait(traitType.baseTypes.baseTraits.map(convertTraitType(context)(ts)(otherTS)(converter)(_)))
+    )
+
+  def convertClassType
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (classType: ts.ClassType): otherTS.ClassType =
+    otherTS.ClassType(
+      classType.arClass,
+      classType.args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
+      otherTS.BaseTypeInfoClass(
+        classType.baseTypes.baseClass.map(convertClassType(context)(ts)(otherTS)(converter)(_)),
+        classType.baseTypes.baseTraits.map(convertTraitType(context)(ts)(otherTS)(converter)(_))
+      )
+    )
+
+
+  def convertDataConstructorType
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (dataCtorType: ts.DataConstructorType): otherTS.DataConstructorType =
+    otherTS.DataConstructorType(
+      dataCtorType.ctor,
+      dataCtorType.args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
+      convertTraitType(context)(ts)(otherTS)(converter)(dataCtorType.instanceType)
+    )
+
   final def convertSimpleTypeSystem
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
   (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
   (t1: ts.SimpleType)
-  : otherTS.SimpleType = {
-    import ts.{ context => _, _ }
+  : otherTS.SimpleType = t1 match {
+    case t1: ts.TraitType => convertTraitType(context)(ts)(otherTS)(converter)(t1)
+    case t1: ts.ClassType => convertClassType(context)(ts)(otherTS)(converter)(t1)
+    case t1: ts.DataConstructorType => convertDataConstructorType(context)(ts)(otherTS)(converter)(t1)
 
-    def convertTraitType(traitType: TraitType): otherTS.TraitType =
-      otherTS.TraitType(
-        traitType.arTrait,
-        traitType.args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
-        otherTS.BaseTypeInfoTrait(traitType.baseTypes.baseTraits.map(convertTraitType(_)))
+    case ts.MetaType(innerType, baseType) =>
+      otherTS.MetaType(
+        convertTypeSystem(context)(ts)(otherTS)(converter)(innerType),
+        convertTypeSystem(context)(ts)(otherTS)(converter)(innerType)
       )
 
-    def convertClassType(classType: ClassType): otherTS.ClassType =
-      otherTS.ClassType(
-        classType.arClass,
-        classType.args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
-        otherTS.BaseTypeInfoClass(
-          classType.baseTypes.baseClass.map(convertClassType(_)),
-          classType.baseTypes.baseTraits.map(convertTraitType(_))
-        )
+    case ts.TupleType(elements) =>
+      otherTS.TupleType(elements.map { case ts.TupleTypeElement(elementType) =>
+        otherTS.TupleTypeElement(convertTypeSystem(context)(ts)(otherTS)(converter)(elementType))
+      })
+
+    case ts.FunctionType(argumentType, resultType) =>
+      otherTS.FunctionType(
+        convertTypeSystem(context)(ts)(otherTS)(converter)(argumentType),
+        convertTypeSystem(context)(ts)(otherTS)(converter)(resultType)
       )
 
-    t1 match {
-      case t1: TraitType => convertTraitType(t1)
-      case t1: ClassType => convertClassType(t1)
-      case DataConstructorType(ctor, args, instanceType) =>
-        otherTS.DataConstructorType(
-          ctor,
-          args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
-          convertTraitType(instanceType)
-        )
+    case ts.UnionType(first, second) =>
+      otherTS.UnionType(
+        convertTypeSystem(context)(ts)(otherTS)(converter)(first),
+        convertTypeSystem(context)(ts)(otherTS)(converter)(second)
+      )
 
-      case MetaType(innerType, baseType) =>
-        otherTS.MetaType(
-          convertTypeSystem(context)(ts)(otherTS)(converter)(innerType),
-          convertTypeSystem(context)(ts)(otherTS)(converter)(innerType)
-        )
+    case ts.IntersectionType(first, second) =>
+      otherTS.IntersectionType(
+        convertTypeSystem(context)(ts)(otherTS)(converter)(first),
+        convertTypeSystem(context)(ts)(otherTS)(converter)(second)
+      )
 
-      case TupleType(elements) =>
-        otherTS.TupleType(elements.map { case TupleTypeElement(elementType) =>
-          otherTS.TupleTypeElement(convertTypeSystem(context)(ts)(otherTS)(converter)(elementType))
-        })
+  }
 
-      case FunctionType(argumentType, resultType) =>
-        otherTS.FunctionType(
-          convertTypeSystem(context)(ts)(otherTS)(converter)(argumentType),
-          convertTypeSystem(context)(ts)(otherTS)(converter)(resultType)
-        )
+  final def convertVariableTypeSystem[Desc <: VariableLikeDescriptor]
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (v: ts.Variable[Desc])
+  : otherTS.Variable[Desc] =
+    otherTS.Variable(
+      v.descriptor,
+      v.name,
+      v.mutability,
+      convertTypeSystem(context)(ts)(otherTS)(converter)(v.varType)
+    )
 
-      case UnionType(first, second) =>
-        otherTS.UnionType(
-          convertTypeSystem(context)(ts)(otherTS)(converter)(first),
-          convertTypeSystem(context)(ts)(otherTS)(converter)(second)
-        )
+  def convertExprTypeSystem
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (expr: ts.ArExpr)
+  : otherTS.ArExpr = expr match {
+    case ts.ClassConstructorCall(classType, classCtor, args) =>
+      otherTS.ClassConstructorCall(
+        convertClassType(context)(ts)(otherTS)(converter)(classType),
+        classCtor,
+        args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+      )
 
-      case IntersectionType(first, second) =>
-        otherTS.IntersectionType(
-          convertTypeSystem(context)(ts)(otherTS)(converter)(first),
-          convertTypeSystem(context)(ts)(otherTS)(converter)(second)
-        )
+    case ts.CreateTuple(values) =>
+      otherTS.CreateTuple(values.map { case ts.TupleElement(value) => otherTS.TupleElement(convertExprTypeSystem(context)(ts)(otherTS)(converter)(value)) })
 
-    }
+    case ts.DataConstructorCall(dataCtor, args) =>
+      otherTS.DataConstructorCall(
+        convertDataConstructorType(context)(ts)(otherTS)(converter)(dataCtor),
+        args.map(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
+      )
+
+    case ts.FunctionCall(function, args, returnType) =>
+      otherTS.FunctionCall(
+        function,
+        args.map(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_)),
+        convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
+      )
+
+    case ts.IfElse(condition, ifBody, elseBody) =>
+      otherTS.IfElse(
+        convertExprTypeSystem(context)(ts)(otherTS)(converter)(condition),
+        convertExprTypeSystem(context)(ts)(otherTS)(converter)(ifBody),
+        convertExprTypeSystem(context)(ts)(otherTS)(converter)(elseBody)
+      )
+
+    case ts.LetBinding(variable, value, next) =>
+      otherTS.LetBinding(
+        convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable),
+        convertExprTypeSystem(context)(ts)(otherTS)(converter)(value),
+        convertExprTypeSystem(context)(ts)(otherTS)(converter)(next)
+      )
+
+    case ts.LoadConstantBool(value, exprType) =>
+      otherTS.LoadConstantBool(
+        value,
+        convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
+      )
+
+    case ts.LoadConstantInt(value, exprType) =>
+      otherTS.LoadConstantInt(
+        value,
+        convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
+      )
+
+    case ts.LoadConstantString(value, exprType) =>
+      otherTS.LoadConstantString(
+        value,
+        convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
+      )
+
+    case ts.LoadLambda(variable, body) =>
+      otherTS.LoadLambda(
+        convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable),
+        convertExprTypeSystem(context)(ts)(otherTS)(converter)(body)
+      )
+
+    case ts.LoadTypeValue(value) =>
+      otherTS.LoadTypeValue(
+        convertTypeSystem(context)(ts)(otherTS)(converter)(value)
+      )
+
+    case ts.LoadVariable(variable) =>
+      otherTS.LoadVariable(
+        convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
+      )
+
+    case ts.MethodCall(method, instance, args, returnType) =>
+      otherTS.MethodCall(
+        method,
+        convertExprTypeSystem(context)(ts)(otherTS)(converter)(instance),
+        args.map(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_)),
+        convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
+      )
+
+    case ts.Sequence(first, second) =>
+      otherTS.Sequence(
+        convertExprTypeSystem(context)(ts)(otherTS)(converter)(first),
+        convertExprTypeSystem(context)(ts)(otherTS)(converter)(second)
+      )
+
+    case ts.StoreVariable(variable, value) =>
+      otherTS.StoreVariable(
+        convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable),
+        convertExprTypeSystem(context)(ts)(otherTS)(converter)(value)
+      )
 
   }
 

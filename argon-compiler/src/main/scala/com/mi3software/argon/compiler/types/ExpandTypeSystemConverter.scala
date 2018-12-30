@@ -14,7 +14,7 @@ object ExpandTypeSystemConverter {
   (f: Expander[F])
   : TypeSystemConverter[TContext, ts1_outer.type, ts2_outer.type] =
     new TypeSystemConverter[TContext, ts1_outer.type, ts2_outer.type] {
-      override def convertType[A](ts1: ts1_outer.type)(ts2: ts2_outer.type)(t: ts1.TTypeWrapper[A]): ts2.TTypeWrapper[A] =
+      override def convertType(ts1: ts1_outer.type)(ts2: ts2_outer.type)(t: ts1.TTypeWrapper[ts2.SimpleType]): ts2.TTypeWrapper[ts2.SimpleType] =
         f(t)
     }
 
