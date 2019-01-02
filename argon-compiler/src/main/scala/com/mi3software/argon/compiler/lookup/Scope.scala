@@ -4,6 +4,7 @@ import com.mi3software.argon.compiler._
 import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation}
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.types.{TypeSystem, TypeSystemConverter}
+import scalaz.Memo
 
 trait ScopeContext[TContext <: Context with Singleton] {
 
@@ -14,9 +15,9 @@ trait ScopeContext[TContext <: Context with Singleton] {
 
   sealed trait Scope {
 
-    def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult = ???
+    def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult
 
-    def convertScopeContext(other: ScopeContext[context.type])(f: typeSystem.TType => other.typeSystem.TType): other.Scope
+    def convertScopeContext(other: ScopeContext[context.type])(f: typeSystem.TType => other.typeSystem.TType): other.Scope = ???
 
   }
 
@@ -30,23 +31,19 @@ trait ScopeContext[TContext <: Context with Singleton] {
 
   }
 
-  sealed trait NamespacesOnlyScope extends Scope {
+  sealed trait NamespacesOnlyScope extends Scope
 
-    final def addNamespaces(namespacePaths: Vector[NamespacePath]): NamespaceScope =
-      NamespaceScope(namespacePaths, this)
-
-    override def convertScopeContext(other: ScopeContext[context.type])(f: typeSystem.TType => other.typeSystem.TType): other.NamespacesOnlyScope
-
+  case object EmptyScope extends NamespacesOnlyScope {
+    override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult =
+      LookupResult.Failed
   }
 
-  final case class EmptyScope() extends NamespacesOnlyScope {
-    override def convertScopeContext(other: ScopeContext[context.type])(f: typeSystem.TType => other.typeSystem.TType): other.NamespacesOnlyScope =
-      other.EmptyScope()
-  }
+  final class NamespaceScope(findId: (String, FileSpec, SourceLocation) => LookupResult, parentScope: NamespacesOnlyScope) extends NamespacesOnlyScope {
 
-  final case class NamespaceScope(namespacePaths: Vector[NamespacePath], parentScope: NamespacesOnlyScope) extends NamespacesOnlyScope {
-    override def convertScopeContext(other: ScopeContext[context.type])(f: typeSystem.TType => other.typeSystem.TType): other.NamespacesOnlyScope =
-      other.NamespaceScope(namespacePaths, parentScope.convertScopeContext(other)(f))
+    private val findIdMemo = Memo.immutableHashMapMemo(Function.tupled(findId))
+
+    override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult =
+      findIdMemo((name, fileSpec, sourceLocation))
   }
 
 

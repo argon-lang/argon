@@ -73,7 +73,16 @@ private[compiler] object SourceModuleCreator {
   (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
   : TComp[context.scopeContext.Scope] =
-    Monad[TComp].point(context.scopeContext.EmptyScope())
+    GlobalScope.createNSScope(context)(
+      Vector(
+        Vector(sourceAST.currentNamespace),
+        sourceAST.importNamespaces,
+      )
+    )(
+      Vector(referencedModules.map(AbsRef.apply))
+    )(
+      context.scopeContext.EmptyScope
+    ).point[TComp]
 
   private def createNamespaceElementFromASTWithScope[TComp[+_] : Monad : Compilation]
   (context: ContextComp[TComp])
