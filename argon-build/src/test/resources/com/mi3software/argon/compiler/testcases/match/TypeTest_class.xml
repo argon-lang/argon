@@ -20,7 +20,7 @@
             end
 
             public proc _.printMessage(): () =
-                puts ''Found B''
+                puts 'Found B'
         end
         class C <: A
 

@@ -12,7 +12,7 @@
             end
 
             public proc self.say_hello(): () do
-                puts ''Hello World''
+                puts 'Hello World'
             end
 
         end

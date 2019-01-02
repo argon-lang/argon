@@ -34,10 +34,10 @@
         end
 
         proc main(): () do
-            val a: A = B(String).new ''Checked type parameter''
+            val a: A = B(String).new 'Checked type parameter'
             match a
             case val b: B Int =
-                puts ''Did not check type parameter''
+                puts 'Did not check type parameter'
             case val b: B String =
                 puts b.value
             end

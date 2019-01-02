@@ -18,7 +18,7 @@
         
         proc main(): () do
             val inst = Ctor ()
-            puts (inst.identity String ''Hello World'')
+            puts (inst.identity String 'Hello World')
         end
         
             

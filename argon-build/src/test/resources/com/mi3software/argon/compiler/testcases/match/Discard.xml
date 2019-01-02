@@ -8,9 +8,9 @@
         import Ar._
         
         proc main(): () do
-            match ''Hello World''
+            match 'Hello World'
             case _ =
-                puts ''Hey''
+                puts 'Hey'
             end
         end
         

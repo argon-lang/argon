@@ -19,7 +19,7 @@
         end
         
         proc main(): () do
-            val box = ValueBox(String).new ''Hello World''
+            val box = ValueBox(String).new 'Hello World'
             puts box.value
         end
         

@@ -16,7 +16,7 @@
             end
 
             public proc self.say_hello(): () do
-                puts ''Hello''
+                puts 'Hello'
                 puts name
             end
 
@@ -31,7 +31,7 @@
         end
         
         proc main(): () do
-            val obj: A = B.new(''Tree'')
+            val obj: A = B.new('Tree')
             obj.say_hello()
         end
             

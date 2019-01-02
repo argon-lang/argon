@@ -64,12 +64,11 @@ object Lexer {
 
           val anyChar = tokenF(CharacterCategory.SingleQuoteStringChar, _ =/= "'")
 
-          (singleQuote ++ singleQuote ++ ((
-            singleQuote ++ singleQuote ++ singleQuote ++ singleQuote --> { _ => "'" } |
-              singleQuote ++ anyChar --> { case (a, b) => a + b } |
+          (singleQuote ++ ((
+            singleQuote ++ singleQuote --> const("'") |
               anyChar
-            )*) ++ singleQuote ++ singleQuote) --> {
-            case (_, _, chs, _, _) =>
+            )*) ++ singleQuote) --> {
+            case (_, chs, _) =>
               Some(Token.StringToken(NonEmptyList(
                 Token.StringToken.StringPart(chs.mkString)
               )))

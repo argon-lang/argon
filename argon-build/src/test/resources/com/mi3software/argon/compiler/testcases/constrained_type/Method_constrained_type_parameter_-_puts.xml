@@ -14,7 +14,7 @@
         end
         
         proc main(): () do
-            Test.printStringLike String ''Hello Type Parameters''
+            Test.printStringLike String 'Hello Type Parameters'
         end
         
             

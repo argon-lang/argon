@@ -17,7 +17,7 @@
 
         proc main(): () do
             val a = A.new()
-            val s: a.myMethod() = ''Hello World''
+            val s: a.myMethod() = 'Hello World'
         end
         
             

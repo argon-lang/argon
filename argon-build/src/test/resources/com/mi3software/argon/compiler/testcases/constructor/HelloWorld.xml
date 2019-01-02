@@ -13,7 +13,7 @@
         
         constructor MyCtor(): MyType
             public override proc self.say_hello(): () =
-                puts ''Hello World''
+                puts 'Hello World'
         end
         
         proc main(): () do

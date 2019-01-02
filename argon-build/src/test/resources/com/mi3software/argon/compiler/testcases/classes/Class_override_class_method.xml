@@ -13,7 +13,7 @@
             end
 
             public virtual proc self.say_hello(): () do
-                puts ''Hello''
+                puts 'Hello'
             end
 
         end
@@ -25,7 +25,7 @@
             end
 
             public override proc self.say_hello(): () do
-                puts ''Moo''
+                puts 'Moo'
             end
         end
         

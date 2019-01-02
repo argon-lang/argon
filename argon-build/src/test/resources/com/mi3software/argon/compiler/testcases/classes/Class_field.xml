@@ -12,11 +12,11 @@
             field name: String
 
             public new()
-                field name = ''World''
+                field name = 'World'
             end
 
             public proc self.say_hello(): () do
-                puts ''Hello''
+                puts 'Hello'
                 puts name
             end
         end

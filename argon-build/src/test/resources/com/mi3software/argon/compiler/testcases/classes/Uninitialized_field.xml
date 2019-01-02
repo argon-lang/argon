@@ -15,7 +15,7 @@
             end
 
             public proc self.say_hello(): () do
-                puts ''Hello''
+                puts 'Hello'
                 puts name
             end
         end

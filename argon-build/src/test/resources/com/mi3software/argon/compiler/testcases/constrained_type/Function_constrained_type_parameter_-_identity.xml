@@ -11,7 +11,7 @@
             value
         
         proc main(): () do
-            puts (identity String ''Zero'')
+            puts (identity String 'Zero')
         end
         
             

@@ -11,7 +11,7 @@
             puts strLike
         
         proc main(): () do
-            printStringLike String ''Hello Type Parameters''
+            printStringLike String 'Hello Type Parameters'
         end
         
             

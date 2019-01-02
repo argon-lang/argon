@@ -7,10 +7,10 @@
 import Ar._
 
 proc printOpt (opt: Option String): () =
-	puts (opt.getOrElse(_ => ''Empty!''))
+	puts (opt.getOrElse(_ => 'Empty!'))
 
 proc main(): () do
-	printOpt (Some String ''Hello World!!!'')
+	printOpt (Some String 'Hello World!!!')
 	printOpt (None String)
 end
 

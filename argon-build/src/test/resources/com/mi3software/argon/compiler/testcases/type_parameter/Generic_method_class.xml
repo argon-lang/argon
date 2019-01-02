@@ -17,7 +17,7 @@
         
         proc main(): () do
             val inst = MyClass.new()
-            puts (inst.identity String ''Hello World'')
+            puts (inst.identity String 'Hello World')
         end
         
             
