@@ -208,24 +208,6 @@ object Grammar {
       : Grammar[TToken, TSyntaxError, TLabel, V] =
         ConcatGrammar(grammar1, StrictGrammar(grammar2)) { (a, b) => WithSource(combiner.combine(a.value, b.value), SourceLocation.merge(a.location, b.location)) }
 
-      final class LeftRecGrammarBuilder[U]
-      (grammar2: => Grammar[TToken, TSyntaxError, TLabel, U])
-      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError]) {
-
-        def --> (f: (T, U) => T): Grammar[TToken, TSyntaxError, TLabel, T] =
-          LeftRecGrammar(grammar1, grammar2) { (a, b) => WithSource(f(a.value, b.value), SourceLocation.merge(a.location, b.location)) }
-
-        def -\> (f: (WithSource[T], U) => T): Grammar[TToken, TSyntaxError, TLabel, T] =
-          LeftRecGrammar(grammar1, grammar2) { (a, b) => WithSource(f(a, b.value), SourceLocation.merge(a.location, b.location)) }
-
-      }
-
-      def -- [U]
-      (grammar2: => Grammar[TToken, TSyntaxError, TLabel, U])
-      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
-      : LeftRecGrammarBuilder[U] =
-        new LeftRecGrammarBuilder[U](grammar2)
-
       def discard: Grammar[TToken, TSyntaxError, TLabel, Unit] = --> { _ => () }
       def ? (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError]): Grammar[TToken, TSyntaxError, TLabel, Option[T]] =
         --> (Some.apply) | EmptyStrGrammar(None)
@@ -561,20 +543,6 @@ object Grammar {
                 (state3, valueBVec.foldLeft(valueA)(combine))
             }
         }
-
-  }
-
-  private object LeftRecGrammar {
-    def apply[TToken, TSyntaxError, TLabel <: RuleLabel, A, B]
-    (
-      grammarA: => Grammar[TToken, TSyntaxError, TLabel, A],
-      grammarB: => Grammar[TToken, TSyntaxError, TLabel, B]
-    )(
-      combine: (WithSource[A], WithSource[B]) => WithSource[A]
-    )(implicit
-      errorFactory: ErrorFactory[TToken, _, TSyntaxError]
-    ): LeftRecGrammar[TToken, TSyntaxError, TLabel, A, B] =
-      new LeftRecGrammar(grammarA, grammarB, combine)
 
   }
 

@@ -114,37 +114,6 @@ abstract class GrammarTestsCommon extends FlatSpec with Matchers with GrammarTes
     parse(numberToken(4) ++ numberToken(8))(4, 8) shouldBe Right((Vector(), (4, 8)))
   }
 
-  private lazy val leftRec: TGrammar[Int] =
-    leftRec -- numberToken(1) --> { case (a, b) => a + b } | numberToken(0)
-
-  "A left recursive grammar" should "fail for EOF" in {
-    parse(leftRec)() should matchPattern { case Left(_) => }
-  }
-
-  it should "fail for wrong token" in {
-    parse(leftRec)(2) should matchPattern { case Left(_) => }
-  }
-
-  it should "fail for tail token" in {
-    parse(leftRec)(1) should matchPattern { case Left(_) => }
-  }
-
-  it should "succeed for head token" in {
-    parse(leftRec)(0) shouldBe Right((Vector(), 0))
-  }
-
-  it should "succeed for head tail" in {
-    parse(leftRec)(0, 1) shouldBe Right((Vector(), 1))
-  }
-
-  it should "not consume second head for head head" in {
-    parse(leftRec)(0, 0) shouldBe Right((Vector(0), 0))
-  }
-
-  it should "succeed for head tail tail" in {
-    parse(leftRec)(0, 1, 1) shouldBe Right((Vector(), 2))
-  }
-
   private lazy val rightRec: TGrammar[Int] =
     numberToken(0) | numberToken(1) ++ rightRec --> { case (a, b) => a + b }
 
