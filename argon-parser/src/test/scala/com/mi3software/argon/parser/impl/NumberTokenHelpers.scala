@@ -13,8 +13,10 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
 
   override protected val grammarFactory: Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] =
     new Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] {
-      override def apply[T](label: NumberTokenHelpers.NumberTokenLabel { type RuleType = T }): TGrammar[T] =
+
+      override protected def createGrammar[T](label: NumberTokenHelpers.NumberTokenLabel { type RuleType = T }): TGrammar[T] =
         throw new Exception("No labels exist")
+
     }
 
 
@@ -29,7 +31,7 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
       (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
   }
 
-  protected def numberToken(n: Int): TGrammar[Int] = Grammar.matcher(n.toString, m => Some(m).filter(_ === n))
+  protected def numberToken(n: Int): TGrammar[Int] = Grammar.matcher(n.toString, (m: Int) => Some(m).filter(_ === n))
 
 
 
