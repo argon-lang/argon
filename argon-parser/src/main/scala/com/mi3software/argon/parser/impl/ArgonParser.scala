@@ -305,15 +305,15 @@ object ArgonParser {
             ((matchToken(OP_SUBTYPE) ++ rule(Rule.UnaryExpr).observeSource --> second)?) ++
             ((matchToken(OP_SUPERTYPE) ++ rule(Rule.UnaryExpr).observeSource --> second)?) ++
             ((matchToken(OP_COLON) ++ rule(Rule.UnaryExpr).observeSource --> second)?) --> {
-            case (_, subtypeOf, supertypeOf, instanceType) =>
-              TypeExpr(instanceType, subtypeOf, supertypeOf)
-          }
+              case (_, subtypeOf, supertypeOf, instanceType) =>
+                TypeExpr(instanceType, subtypeOf, supertypeOf)
+            }
 
         case Rule.MultiplicativeExpr =>
           createLeftAssociativeOperatorRule(
             ruleBinaryOperator(OP_MUL),
             ruleBinaryOperator(OP_DIV),
-          )(rule(Rule.CurryCallExpr))
+          )(rule(Rule.UnaryExpr))
 
         case Rule.AdditiveExpr =>
           createLeftAssociativeOperatorRule(
