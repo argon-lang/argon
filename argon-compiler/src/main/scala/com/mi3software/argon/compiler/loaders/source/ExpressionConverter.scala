@@ -48,7 +48,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.AsExpr(value, valueTypeExpr) =>
         compFactory(
           for {
-            expectedType <- evaluateTypeExprFactory(env)(convertExpr(env)(valueTypeExpr))
+            expectedType <- evaluateTypeExprInfer(env)(expr.location)(new FactoryTypeInferencer(env) {
+              override def createFactory[TComp2[_]](otherConv: ExpressionConverter[context.type])(env: otherConv.Env)(implicit compEv: TypeCheckT[otherConv.typeSystem.TType, TComp2]): otherConv.ExprFactory[TComp2] =
+                otherConv.convertExpr(env)(valueTypeExpr)
+            })
             result <- convertExpr(env)(value).forExpectedType(expectedType)
           } yield factoryForExpr(env)(expr.location)(result)
         )
@@ -80,14 +83,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
         compFactory(
           for {
-            intType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Int"))(Vector.empty)
+            intType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Int"))
           } yield factoryForExpr(env)(expr.location)(LoadConstantInt(value, intType))
         )
 
       case parser.StringValueExpr(str) =>
         compFactory(
           for {
-            stringType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("String"))(Vector.empty)
+            stringType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("String"))
           } yield factoryForExpr(env)(expr.location)(LoadConstantString(str, stringType))
         )
 
@@ -113,40 +116,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         new ExprFactory[TComp] {
           override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
             for {
-              first <- inferExprType(new TypeInferencer {
-                override def inferType[TComp2[_]]
-                (inferTS: TypeSystem[context.type])
-                (converter: TypeSystemConverter[context.type, typeSystem.type, inferTS.type])
-                (expectedType: inferTS.TType)
-                (implicit compEv: TypeCheckT[inferTS.TType, TComp2])
-                : TComp2[inferTS.ArExpr] = {
-                  val otherConv = new ExpressionConverter[context.type] {
-                    override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
-                    override val typeSystem: inferTS.type = inferTS
-
-                    override val scopeContext: ScopeContext[context.type] { val typeSystem: inferTS.type } =
-                      new ScopeContext[context.type] {
-                        override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
-                        override val typeSystem: inferTS.type = inferTS
-                      }
-
-                    override val signatureContext: SignatureContext[context.type] { val typeSystem: inferTS.type } =
-                      new SignatureContext[context.type] {
-                        override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
-                        override val typeSystem: inferTS.type = inferTS
-                      }
-                  }
-
-                  val env2 = ExpressionConverter.Env(
-                    descriptor = env.descriptor,
-                    fileSpec = env.fileSpec,
-                    referencedModules = env.referencedModules,
-                    scope = env.scope.convertScopeContext(otherConv.scopeContext)(TypeSystem.convertTypeSystem(context)(typeSystem)(inferTS)(converter)(_)),
-                  )
-
-                  otherConv.convertStmt(env2)(head).forExpectedType(expectedType)
-                }
-              })
+              unitType <- resolveUnitType[TComp](env)(head.location)
+              first <- convertStmt(env)(head).forExpectedType(unitType)
 
               secondStartPos = tail.headOption.map { _.location.start }.getOrElse(stmts.location.end)
               second <- convertStmts(env)(WithSource(tail, SourceLocation(secondStartPos, stmts.location.end))).forExpectedType(expectedType)
@@ -162,35 +133,46 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case _ => ???
     }
 
-  def resolveModuleClass[TComp[_] : TypeCheck]
+  def resolveModuleClassFactory[TComp[_] : TypeCheck]
   (env: Env)
   (location: SourceLocation)
   (moduleDesc: ModuleDescriptor)
   (namespacePath: NamespacePath, name: GlobalName)
   (args: Vector[ArgumentInfo[TComp]])
-  : TComp[TType] = for {
-    arClass <- Compilation[TComp].requireSome(
-      ModuleLookup.lookupValue(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass)
-    )(CompilationError.NamespaceElementNotFound(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
-    classSig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.signature)
+  : ExprFactory[TComp] = compFactory(
+    for {
+      arClass <- Compilation[TComp].requireSome(
+        ModuleLookup.lookupValue(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass)
+      )(CompilationError.NamespaceElementNotFound(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
+      classSig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.signature)
 
-    classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(
-      convertSignature(classSig)
-    ) { (args, classResult) =>
-      for {
-        argsAsTypes <- args.traverse(evaluateTypeExpr(env)(_))
-      } yield ClassType(AbsRef[context.type, ReferencePayloadSpecifier, ArClass](arClass), argsAsTypes, classResult.baseTypes)
-    }
+      classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(
+        convertSignature(classSig)
+      ) { (args, classResult) =>
+        for {
+          argsAsTypes <- args.traverse(evaluateTypeExpr(env)(location)(_))
+        } yield ClassType(AbsRef[context.type, ReferencePayloadSpecifier, ArClass](arClass), argsAsTypes, classResult.baseTypes)
+      }
 
-    argsFactory = args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
-    result <- evaluateTypeExprFactory(env)(argsFactory)
-  } yield result
+    } yield args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
+  )
+
+  def resolveModuleClass[TComp[_] : TypeCheck]
+  (env: Env)
+  (location: SourceLocation)
+  (moduleDesc: ModuleDescriptor)
+  (namespacePath: NamespacePath, name: GlobalName)
+  : TComp[TType] =
+    evaluateTypeExprInfer(env)(location)(new FactoryTypeInferencer(env) {
+      override def createFactory[TComp2[_]](otherConv: ExpressionConverter[context.type])(env: otherConv.Env)(implicit compEv: TypeCheckT[otherConv.typeSystem.TType, TComp2]): otherConv.ExprFactory[TComp2] =
+        otherConv.resolveModuleClassFactory(env)(location)(moduleDesc)(namespacePath, name)(Vector.empty)
+    })
 
   def resolveBoolClass[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
-    resolveModuleClass(env)(location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))(Vector.empty)
+    resolveModuleClass(env)(location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))
 
   def resolveUnitType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
-    resolveModuleClass(env)(location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(Vector.empty)
+    resolveModuleClass(env)(location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))
 
   def loadUnitLiteral[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): ExprFactory[TComp] =
     compFactory(
@@ -247,7 +229,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 convSig = convertSignature(sig)
               } yield signatureFactory(env)(convSig) { (args, result) =>
                 for {
-                  argsAsTypes <- args.traverse(evaluateTypeExpr(env)(_))
+                  argsAsTypes <- args.traverse(evaluateTypeExpr(env)(location)(_))
                 } yield TraitType(arTrait, argsAsTypes, result.baseTypes)
               }
             )
@@ -259,7 +241,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 convSig = convertSignature(sig)
               } yield signatureFactory(env)(convSig) { (args, result) =>
                 for {
-                  argsAsTypes <- args.traverse(evaluateTypeExpr(env)(_))
+                  argsAsTypes <- args.traverse(evaluateTypeExpr(env)(location)(_))
                 } yield ClassType(arClass, argsAsTypes, result.baseTypes)
               }
             )
@@ -271,7 +253,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 convSig = convertSignature(sig)
               } yield signatureFactory(env)(convSig) { (args, result) =>
                 for {
-                  argsAsTypes <- args.traverse(evaluateTypeExpr(env)(_))
+                  argsAsTypes <- args.traverse(evaluateTypeExpr(env)(location)(_))
                 } yield DataConstructorCall(
                   DataConstructorType(
                     ctor,
@@ -342,8 +324,22 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case false => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(t, expr.exprType)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
     }
 
-  def evaluateTypeExprFactory[TComp[_] : TypeCheck](env: Env)(exprFactory: ExprFactory[TComp]): TComp[TType] = ???
-  def evaluateTypeExpr[TComp[_] : TypeCheck](env: Env)(expr: ArExpr): TComp[TType] = ???
+  def evaluateTypeExprInfer[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(infer: TypeInferencer): TComp[TType] =
+    inferExprType(infer).flatMap { expr =>
+      evaluateTypeExpr(env)(location)(expr)
+    }
+
+  def evaluateTypeExpr[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr): TComp[TType] =
+    expr match {
+      case t: SimpleType => typeSystem.fromSimpleType(t).point[TComp]
+      case _ => Compilation[TComp].forErrors(CompilationError.ExpressionNotTypeError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+    }
+
+  def evaluateTypeExprAST[TComp[_] : TypeCheck](env: Env)(expr: WithSource[parser.Expr]): TComp[TType] =
+    evaluateTypeExprInfer(env)(expr.location)(new FactoryTypeInferencer(env) {
+      override def createFactory[TComp2[_]](otherConv: ExpressionConverter[context.type])(env: otherConv.Env)(implicit compEv: TypeCheckT[otherConv.typeSystem.TType, TComp2]): otherConv.ExprFactory[TComp2] =
+        otherConv.convertExpr(env)(expr)
+    })
 
 
   private trait TypeInferencer {
@@ -353,6 +349,43 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     (expectedType: inferTS.TType)
     (implicit compEv: TypeCheckT[inferTS.TType, TComp])
     : TComp[inferTS.ArExpr]
+  }
+
+  private abstract class FactoryTypeInferencer(env: Env) extends TypeInferencer {
+    final override def inferType[TComp2[_]]
+    (inferTS: TypeSystem[context.type])
+    (converter: TypeSystemConverter[context.type, typeSystem.type, inferTS.type])
+    (expectedType: inferTS.TType)
+    (implicit compEv: TypeCheckT[inferTS.TType, TComp2])
+    : TComp2[inferTS.ArExpr] = {
+      val otherConv = new ExpressionConverter[context.type] {
+        override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
+        override val typeSystem: inferTS.type = inferTS
+
+        override val scopeContext: ScopeContext[context.type] { val typeSystem: inferTS.type } =
+          new ScopeContext[context.type] {
+            override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
+            override val typeSystem: inferTS.type = inferTS
+          }
+
+        override val signatureContext: SignatureContext[context.type] { val typeSystem: inferTS.type } =
+          new SignatureContext[context.type] {
+            override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
+            override val typeSystem: inferTS.type = inferTS
+          }
+      }
+
+      val env2 = ExpressionConverter.Env(
+        descriptor = env.descriptor,
+        fileSpec = env.fileSpec,
+        referencedModules = env.referencedModules,
+        scope = env.scope.convertScopeContext(otherConv.scopeContext)(TypeSystem.convertTypeSystem(context)(typeSystem)(inferTS)(converter)(_)),
+      )
+
+      createFactory(otherConv)(env2).forExpectedType(expectedType)
+    }
+
+    def createFactory[TComp2[_]](otherConv: ExpressionConverter[context.type])(env: otherConv.Env)(implicit compEv: TypeCheckT[otherConv.typeSystem.TType, TComp2]): otherConv.ExprFactory[TComp2]
   }
 
   private def inferExprType[TComp[_] : TypeCheck](inferencer: TypeInferencer): TComp[ArExpr] = {
@@ -450,7 +483,9 @@ object ExpressionConverter {
   (context: ContextComp[TComp])
   (env: Env[context.type, context.scopeContext.Scope])
   (expr: WithSource[parser.Expr])
-  : TComp[context.typeSystem.TType] = ???
+  : TComp[context.typeSystem.TType] =
+    createConverter(context)
+      .evaluateTypeExprAST[TComp](env)(expr)(typeCheckArTypeInstance[TComp](context))
 
   def resolveUnitType[TComp[+_] : Compilation]
   (context: ContextComp[TComp])

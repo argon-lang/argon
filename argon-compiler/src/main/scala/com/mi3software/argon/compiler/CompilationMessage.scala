@@ -233,6 +233,10 @@ object CompilationError {
     override def message: String = s"Could not find '$name' under namespace '${formatNamespace(namespacePath)}' in module '${module.name}'"
   }
 
+  final case class ExpressionNotTypeError(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Expression is not a type"
+  }
+
   sealed trait ModuleObjectType {
     def name: String
   }
