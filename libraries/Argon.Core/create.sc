@@ -52,6 +52,16 @@ val Class_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
 val Class_classId = 6
 val Class_metaClassId = 7
 
+val Unit_fileSpec = FileSpec(fileID = 1, name = "Unit.argon")
+val Unit_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
+  Unit_fileSpec,
+  Ar_ns,
+  GlobalName.NormalName("Unit"),
+  AccessModifier.Public,
+))
+val Unit_classId = 8
+val Unit_metaClassId = 9
+
 
 val module = Module(
   formatVersion = moduleFormatVersion,
@@ -176,6 +186,34 @@ val module = Module(
     // Ar.Class.<MetaClass>
     Class.ClassDef(ClassDefinition(
       descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Class_descriptor)),
+      isOpen = false,
+      isSealed = false,
+      isAbstract = false,
+      signature = ClassSignature(
+        parameters = Seq(),
+        baseClass = Some(ClassType(Class_classId, Seq())),
+        baseTraits = Seq(),
+      ),
+      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
+    )),
+
+    // Ar.Unit
+    Class.ClassDef(ClassDefinition(
+      descriptor = Unit_descriptor,
+      isOpen = false,
+      isSealed = false,
+      isAbstract = false,
+      signature = ClassSignature(
+        parameters = Seq(),
+        baseClass = None,
+        baseTraits = Seq(TraitType(Object_traitId, Seq())),
+      ),
+      metaClassSpecifier = MetaClassSpecifier(Unit_metaClassId)
+    )),
+
+    // Ar.Unit.<MetaClass>
+    Class.ClassDef(ClassDefinition(
+      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Unit_descriptor)),
       isOpen = false,
       isSealed = false,
       isAbstract = false,

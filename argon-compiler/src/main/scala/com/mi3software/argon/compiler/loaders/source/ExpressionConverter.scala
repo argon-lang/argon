@@ -80,14 +80,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
         compFactory(
           for {
-            intType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor("Ar.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Int"))(Vector.empty)
+            intType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Int"))(Vector.empty)
           } yield factoryForExpr(env)(expr.location)(LoadConstantInt(value, intType))
         )
 
       case parser.StringValueExpr(str) =>
         compFactory(
           for {
-            stringType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor("Ar.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("String"))(Vector.empty)
+            stringType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("String"))(Vector.empty)
           } yield factoryForExpr(env)(expr.location)(LoadConstantString(str, stringType))
         )
 
@@ -171,7 +171,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   : TComp[TType] = for {
     arClass <- Compilation[TComp].requireSome(
       ModuleLookup.lookupValue(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass)
-    )(CompilationError.ModuleLookupFailedError(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
+    )(CompilationError.NamespaceElementNotFound(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
     classSig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.signature)
 
     classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(
@@ -187,10 +187,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   } yield result
 
   def resolveBoolClass[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
-    resolveModuleClass(env)(location)(ModuleDescriptor("Ar.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))(Vector.empty)
+    resolveModuleClass(env)(location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))(Vector.empty)
 
   def resolveUnitType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
-    resolveModuleClass(env)(location)(ModuleDescriptor("Ar.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(Vector.empty)
+    resolveModuleClass(env)(location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(Vector.empty)
 
   def loadUnitLiteral[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): ExprFactory[TComp] =
     compFactory(

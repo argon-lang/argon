@@ -45,7 +45,7 @@ trait SignatureContext[TContext <: Context with Singleton]
     override def visit[A](fParam: SignatureParameters[TResult] => A, fResult: SignatureResult[TResult] => A): A = fParam(this)
   }
 
-  final case class SignatureResult[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
+  final case class SignatureResult[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton] : SignatureResultConverter]
   (
     result: TResult[context.type, typeSystem.type]
   ) extends Signature[TResult] {
@@ -54,7 +54,11 @@ trait SignatureContext[TContext <: Context with Singleton]
 
     override def unsubstitutedResult: TResult[context.type, typeSystem.type] = result
 
-    override def convertTypeSystem(newContext: SignatureContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type]): newContext.Signature[TResult] = ???
+    override def convertTypeSystem(newContext: SignatureContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type]): newContext.Signature[TResult] =
+      newContext.SignatureResult(
+        implicitly[SignatureResultConverter[TResult]].convertTypeSystem(context)(typeSystem)(newContext.typeSystem)(converter)(result)
+      )
+
 
     override def mapResult[TNewResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2]]](f: TResult[context.type, typeSystem.type] => TNewResult[context.type, typeSystem.type]): Signature[TNewResult] = ???
 

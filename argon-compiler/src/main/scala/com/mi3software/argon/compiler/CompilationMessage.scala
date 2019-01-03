@@ -205,10 +205,6 @@ object CompilationError {
     }
   }
 
-  final case class ModuleLookupFailedError(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = "Could not find object in module"
-  }
-
   final case class LookupFailedError(description: LookupDescription, source: CompilationMessageSource) extends CompilationError {
     override def message: String = "Could not find identifier"
   }

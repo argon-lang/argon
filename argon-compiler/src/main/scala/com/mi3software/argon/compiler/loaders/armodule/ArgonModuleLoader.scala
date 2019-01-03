@@ -706,8 +706,40 @@ object ArgonModuleLoader extends ModuleLoader {
 
             } }
 
-          def resolveTraitType(traitType: ArgonModule.TraitType): TComp[TraitType] = ???
-          def resolveClassType(classType: ArgonModule.ClassType): TComp[ClassType] = ???
+          def resolveSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], T]
+          (sig: Signature[TResult], args: Vector[ArgonModule.Type], convArgs: Vector[TType])
+          (f: (Vector[TType], TResult[context.type, context.typeSystem.type]) => T)
+          : TComp[T] =
+            sig.visit(
+              sigParams => args match {
+                case head +: tail =>
+                  resolveType(head).flatMap { argType =>
+                    sigParams.next[TComp](argType).flatMap(resolveSignature(_, tail, convArgs :+ argType)(f))
+                  }
+                case _ => ???
+              },
+              sigResult => if(args.nonEmpty) ??? else f(convArgs, sigResult.result).point[TComp]
+            )
+
+          def resolveTraitType(traitType: ArgonModule.TraitType): TComp[TraitType] =
+            findTrait(traitType.traitId).flatMap { arTrait =>
+              compEv.flip(arTrait.value.signature).flatMap { sig =>
+                resolveSignature(sig, traitType.typeArguments.toVector, Vector.empty) {
+                  (args, result) => TraitType(arTrait, args, result.baseTypes)
+                }
+              }
+            }
+
+          def resolveClassType(classType: ArgonModule.ClassType): TComp[ClassType] =
+            findClass(classType.classId).flatMap { arClass =>
+              compEv.flip(arClass.value.signature).flatMap { sig =>
+                resolveSignature(sig, classType.typeArguments.toVector, Vector.empty) {
+                  (args, result) => ClassType(arClass, args, result.baseTypes)
+                }
+              }
+            }
+
+          def resolveType(t: ArgonModule.Type): TComp[TType] = ???
 
           def resolveParameter(parameter: ArgonModule.Parameter): TComp[Parameter] = ???
 

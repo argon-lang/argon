@@ -37,6 +37,23 @@ object ArClass {
       override val typeSystem: ts.type = ts
       override val baseTypes: typeSystem.BaseTypeInfoClass = bt
     }
+
+    implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
+      override def convertTypeSystem
+      (context: Context)
+      (ts1: TypeSystem[context.type])
+      (ts2: TypeSystem[context.type])
+      (converter: TypeSystemConverter[context.type, ts1.type, ts2.type])
+      (result: ResultInfo[context.type, ts1.type])
+      : ResultInfo[context.type, ts2.type] =
+        ResultInfo(ts2)(
+          ts2.BaseTypeInfoClass(
+            result.baseTypes.baseClass.map(TypeSystem.convertClassType(context)(ts1)(ts2)(converter)(_)),
+            result.baseTypes.baseTraits.map(TypeSystem.convertTraitType(context)(ts1)(ts2)(converter)(_)),
+          )
+        )
+    }
+
   }
 
 }
