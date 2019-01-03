@@ -2,6 +2,7 @@ package com.mi3software.argon.compiler.core
 
 import com.mi3software.argon.compiler.core.ErasedSignature.TraitType
 import com.mi3software.argon.compiler.types.TypeSystem
+import scalaz.NonEmptyList
 
 sealed trait ErasedSignature[TContext <: Context]
 
@@ -12,7 +13,7 @@ object ErasedSignature {
   final case class TraitType[TContext <: Context](arTrait: AbsRef[TContext, ArTrait]) extends SigType[TContext]
   final case class ClassType[TContext <: Context](arClass: AbsRef[TContext, ArClass]) extends SigType[TContext]
   final case class DataConstructorType[TContext <: Context](ctor: AbsRef[TContext, DataConstructor]) extends SigType[TContext]
-  final case class TupleType[TContext <: Context](elements: Vector[SigType[TContext]]) extends SigType[TContext]
+  final case class TupleType[TContext <: Context](elements: NonEmptyList[SigType[TContext]]) extends SigType[TContext]
   final case class FunctionType[TContext <: Context](argumentType: SigType[TContext], resultType: SigType[TContext]) extends SigType[TContext]
 
   final case class Parameter[TContext <: Context](paramType: SigType[TContext], next: ErasedSignature[TContext]) extends ErasedSignature[TContext]
@@ -21,7 +22,7 @@ object ErasedSignature {
   def fromSignature(context: Context)(sig: context.signatureContext.Signature[FunctionResultInfo]): ErasedSignature[context.type] =
     sig.visit(
       sigParams => ErasedSignature.Parameter(
-        TupleType(sigParams.parameter.tupleVars.map { variable => typeToSigType(context)(variable.varType) }),
+        typeToSigType(context)(sigParams.parameter.paramType),
         fromSignature(context)(sigParams.nextUnsubstituted)
       ),
       sigResult => ErasedSignature.Result(typeToSigType(context)(sigResult.result.returnType))
@@ -32,7 +33,7 @@ object ErasedSignature {
       case t: context.typeSystem.ClassType => ClassType(t.arClass)
       case t: context.typeSystem.TraitType => TraitType(t.arTrait)
       case t: context.typeSystem.DataConstructorType => DataConstructorType(t.ctor)
-      case t: context.typeSystem.TupleType => TupleType(t.elements.map { elem => typeToSigType(context)(elem.elementType) })
+      case t: context.typeSystem.LoadTupleType => TupleType(t.typeValues.map { elem => typeToSigType(context)(elem.value) })
       case t: context.typeSystem.FunctionType => FunctionType(typeToSigType(context)(t.argumentType), typeToSigType(context)(t.resultType))
       case _ => BlankType()
     }

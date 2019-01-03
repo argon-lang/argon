@@ -1,6 +1,7 @@
 package com.mi3software.argon.parser
 
 import com.mi3software.argon.util.WithSource
+import scalaz.NonEmptyList
 
 import scala.collection.immutable.Seq
 
@@ -9,7 +10,7 @@ final case class TraitDeclarationStmt
 (
   baseType: WithSource[Expr],
   name: Option[String],
-  parameters: Vector[FunctionParameterList],
+  parameters: Vector[WithSource[FunctionParameterList]],
   body: Seq[WithSource[Stmt]],
   instanceBody: Vector[WithSource[Stmt]],
   modifiers: Vector[WithSource[Modifier]]
@@ -17,7 +18,7 @@ final case class TraitDeclarationStmt
 final case class DataConstructorDeclarationStmt
 (
   name: Option[String],
-  parameters: Vector[FunctionParameterList],
+  parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
   body: Vector[WithSource[Stmt]],
   modifiers: Vector[WithSource[Modifier]]
@@ -26,7 +27,7 @@ final case class ClassDeclarationStmt
 (
   baseType: WithSource[Expr],
   name: Option[String],
-  parameters: Vector[FunctionParameterList],
+  parameters: Vector[WithSource[FunctionParameterList]],
   body: Seq[WithSource[Stmt]],
   instanceBody: Vector[WithSource[Stmt]],
   modifiers: Vector[WithSource[Modifier]]
@@ -34,7 +35,7 @@ final case class ClassDeclarationStmt
 final case class FunctionDeclarationStmt
 (
   name: Option[String],
-  parameters: Vector[FunctionParameterList],
+  parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
   body: WithSource[Vector[WithSource[Stmt]]],
   modifiers: Vector[WithSource[Modifier]],
@@ -44,7 +45,7 @@ final case class MethodDeclarationStmt
 (
   instanceName: Option[String],
   name: Option[String],
-  parameters: Vector[FunctionParameterList],
+  parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
   body: Option[WithSource[Vector[WithSource[Stmt]]]],
   modifiers: Vector[WithSource[Modifier]],
@@ -52,7 +53,7 @@ final case class MethodDeclarationStmt
 ) extends Stmt
 final case class ClassConstructorDeclarationStmt
 (
-  parameters: Vector[FunctionParameterList],
+  parameters: Vector[WithSource[FunctionParameterList]],
   body: WithSource[Seq[WithSource[Stmt]]],
   modifiers: Vector[WithSource[Modifier]]
 ) extends Stmt
@@ -95,10 +96,11 @@ final case class LambdaTypeExpr(argType: WithSource[Expr], resultType: WithSourc
 final case class LambdaExpr(name: Option[String], body: WithSource[Expr]) extends Expr
 final case class MatchExpr(value: WithSource[Expr], cases: Seq[WithSource[MatchExprCase]]) extends Expr
 final case class StringValueExpr(value: String) extends Expr
-final case class TupleExpr(values: Vector[WithSource[Expr]]) extends Expr
+final case class TupleExpr(values: NonEmptyList[WithSource[Expr]]) extends Expr
 final case class TypeExpr(instanceType: Option[WithSource[Expr]], subtypeOf: Option[WithSource[Expr]], supertypeOf: Option[WithSource[Expr]]) extends Expr
 final case class TypeOfExpr(ofExpr: WithSource[Expr]) extends Expr
 final case class UnaryOperatorExpr(op: UnaryOperator, inner: WithSource[Expr]) extends Expr
+case object UnitLiteral extends Expr
 
 
 sealed trait Pattern

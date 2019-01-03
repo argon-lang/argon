@@ -14,7 +14,7 @@ object SourceSignatureCreator {
   (context: ContextComp[TComp])
   (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
   (paramOwner: ParameterOwnerDescriptor)
-  (params: Vector[parser.FunctionParameterList])
+  (params: Vector[WithSource[parser.FunctionParameterList]])
   (resultCreator: ResultCreator[TResult])
   : TComp[context.signatureContext.Signature[TResult]] = {
 
@@ -25,13 +25,22 @@ object SourceSignatureCreator {
 
     def impl
     (env: ExpressionConverter.Env[context.type, Scope])
-    (params: Vector[parser.FunctionParameterList])
+    (params: Vector[WithSource[parser.FunctionParameterList]])
     (paramIndex: Int)
     : TComp[Signature[TResult]] =
       params match {
-        case head +: tail =>
+        case WithSource(parser.FunctionParameterList(listType, Vector()), location) +: tail =>
+          for {
+            unitType <- ExpressionConverter.resolveUnitType(context)(env)(location)
+            restSig <- impl(env)(tail)(paramIndex + 1)
+          } yield SignatureParameters[TResult](
+            Parameter(Vector(), unitType),
+            restSig
+          )
 
-          head.parameters
+        case WithSource(parser.FunctionParameterList(listType, headH +: headT), location) +: tail =>
+
+          NonEmptyList(headH, headT: _*)
             .zipWithIndex
             .traverseU {
               case (WithSource(parser.FunctionParameter(paramTypeOpt, _, paramName), loc), tupleIndex) =>
@@ -53,13 +62,20 @@ object SourceSignatureCreator {
                 }
 
             }
-            .flatMap { variables: Vector[Variable[DeconstructedParameterDescriptor]] =>
+            .flatMap { variables: NonEmptyList[Variable[DeconstructedParameterDescriptor]] =>
+
+              val variablesVec = variables.toVector
+
+              val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTupleType(
+                variables.map { v => context.typeSystem.TupleElement(v.varType) }
+              ))
+
               impl(
-                env.copy(scope = env.scope.addVariables(variables))
+                env.copy(scope = env.scope.addVariables(variablesVec))
               )(tail)(paramIndex + 1)
                 .map { restSig =>
                   SignatureParameters[TResult](
-                    Parameter(variables),
+                    Parameter(variablesVec, paramType),
                     restSig
                   )
                 }

@@ -3,6 +3,8 @@ package com.mi3software.argon.compiler.js
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.util.NamespacePath
+import scalaz._
+import Scalaz._
 
 object DescriptorId {
 
@@ -25,7 +27,7 @@ object DescriptorId {
       case ErasedSignature.ClassType(arClass) => s"(${forClass(arClass.value.descriptor)})"
       case ErasedSignature.DataConstructorType(ctor) => s"(${forDataConstructor(ctor.value.descriptor)})"
       case ErasedSignature.FunctionType(argumentType, resultType) => s"(${encodeType(argumentType)}->${encodeType(resultType)})"
-      case ErasedSignature.TupleType(elements) => s"(${elements.map(e => "$_:" + encodeType(e)).mkString(",")})"
+      case ErasedSignature.TupleType(elements) => s"(${elements.map(e => "$_:" + encodeType(e)).toVector.mkString(",")})"
     }
 
   private def encodeSignatureParameters[TContext <: Context](signature: ErasedSignature[TContext]): String =

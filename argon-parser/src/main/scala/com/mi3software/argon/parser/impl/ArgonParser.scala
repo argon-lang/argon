@@ -93,7 +93,7 @@ object ArgonParser {
     // Functions and Methods
     case object MethodParameter extends ArgonRuleNameTyped[FunctionParameter]
     case object MethodParameterList extends ArgonRuleNameTyped[Vector[WithSource[FunctionParameter]]]
-    case object MethodParameters extends ArgonRuleNameTyped[Vector[FunctionParameterList]]
+    case object MethodParameters extends ArgonRuleNameTyped[Vector[WithSource[FunctionParameterList]]]
     case object MethodBody extends ArgonRuleNameTyped[Vector[WithSource[Stmt]]]
     case object MethodPurity extends ArgonRuleNameTyped[Boolean]
     case object FunctionDefinitionStmt extends ArgonRuleNameTyped[Stmt]
@@ -250,7 +250,7 @@ object ArgonParser {
             rule(Rule.MatchExpr)
 
         case Rule.PrimaryExpr(Rule.ParenAllowed) =>
-          matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(TupleExpr(Vector())) |
+          matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(UnitLiteral) |
             matchToken(OP_OPENPAREN) ++ rule(Rule.Expression) ++ matchToken(OP_CLOSEPAREN) --> {
               case (_, expr, _) => expr
             } | rule(Rule.PrimaryExpr(Rule.ParenDisallowed))
@@ -269,7 +269,7 @@ object ArgonParser {
         case Rule.ParenArgList =>
           matchToken(OP_OPENPAREN) ++ (rule(Rule.Expression)?) ++ matchToken(OP_CLOSEPAREN) --> {
             case (_, Some(argList), _) => argList
-            case (_, None, _) => TupleExpr(Vector.empty)
+            case (_, None, _) => UnitLiteral
           }
 
         case Rule.MemberAccess =>
@@ -385,7 +385,7 @@ object ArgonParser {
           val nextRule = rule(Rule.LambdaExpr)
           nextRule.observeSource ++ ((matchToken(OP_COMMA) ++! nextRule.observeSource --> second)*) --> {
             case (WithSource(expr, _), Vector()) => expr
-            case (head, tail) => TupleExpr(head +: tail)
+            case (head, tail) => TupleExpr(NonEmptyList(head, tail: _*))
           }
 
         case Rule.AssignExpr =>
@@ -492,7 +492,7 @@ object ArgonParser {
                     FunctionParameterList(FunctionParameterListType.InferrableList, params)
                 }
               )
-          )*) --> { _.toVector }
+          ).observeSource*) --> { _.toVector }
 
         case Rule.MethodBody =>
           matchToken(KW_DO) ++! (rule(Rule.StatementList) ++ matchToken(KW_END)) --> { case (_, (body, _)) => body } |
