@@ -379,7 +379,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         descriptor = env.descriptor,
         fileSpec = env.fileSpec,
         referencedModules = env.referencedModules,
-        scope = env.scope.convertScopeContext(otherConv.scopeContext)(TypeSystem.convertTypeSystem(context)(typeSystem)(inferTS)(converter)(_)),
+        scope = env.scope.convertScopeContext(otherConv.scopeContext)(converter),
       )
 
       createFactory(otherConv)(env2).forExpectedType(expectedType)
