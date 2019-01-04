@@ -315,7 +315,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def convertExprType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr)(t: typeSystem.TType): TComp[ArExpr] =
     typeSystem.isSubType[TComp](t, expr.exprType).flatMap {
       case Some(info) => implicitly[TypeCheck[TComp]].recordConstraint(info).map(const(expr))
-      case None => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(t, expr.exprType)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+      case None => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(expr.exprType, t)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
     }
 
   def evaluateTypeExprFactory[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(factory: ExprFactory[TComp]): TComp[TType] =
@@ -339,12 +339,6 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       expr <- factory.forExpectedType(hole)
       _ <- implicitly[TypeCheck[TComp]].resolveType(hole)
     } yield expr
-
-  def inferTypeFromConstraints[TComp[_]]
-  (holeTS: TypeSystem[context.type] {
-    type TTypeWrapper[A] = HoleType[typeSystem.TTypeWrapper[A]]
-  })
-  (constraints: Set[TypeConstraint[holeTS.TType]]): TComp[TType] = ???
 
 }
 
@@ -393,10 +387,10 @@ object ExpressionConverter {
   (expectedType: context.typeSystem.TType)
   (expr: WithSource[parser.Expr])
   : TComp[context.typeSystem.ArExpr] = {
-    val ts = holeTypeSystem(context)
+    val ts = new HoleTypeSystem[context.type](context)
     val converter = createConverter(context)(ts)
 
-    val tcInstance = typeCheckHoleTypeInstance[TComp](context)(ts)
+    implicit val tcInstance = typeCheckHoleTypeInstance[TComp](context)(ts)
 
     val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
 
@@ -407,11 +401,11 @@ object ExpressionConverter {
       scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
     )
 
-    val tcExpr = converter
-      .convertExpr[HoleTypeCheckComp[TComp, ts.TType, ?]](env2)(expr)(tcInstance)
-      .forExpectedType(TypeSystem.convertTypeSystem(context)(context.typeSystem)(ts)(tsConverter)(expectedType))
-
-    fillHoles[TComp](context)(converter)(tcExpr)
+    fillHoles(context)(ts)(
+      converter
+        .convertExpr[HoleTypeCheckComp[TComp, ts.TType, ?]](env2)(expr)(tcInstance)
+        .forExpectedType(TypeSystem.convertTypeSystem(context)(context.typeSystem)(ts)(tsConverter)(expectedType))
+    )(expectedType)
   }
 
 
@@ -422,7 +416,7 @@ object ExpressionConverter {
   (env: Env[context.type, context.scopeContext.Scope])
   (expr: WithSource[parser.Expr])
   : TComp[context.typeSystem.TType] = {
-    val ts = holeTypeSystem(context)
+    val ts = new HoleTypeSystem[context.type](context)
     val converter = createConverter(context)(ts)
 
     val tcInstance = typeCheckHoleTypeInstance[TComp](context)(ts)
@@ -446,7 +440,7 @@ object ExpressionConverter {
   (context: ContextComp[TComp])
   (env: Env[context.type, context.scopeContext.Scope])
   (location: SourceLocation): TComp[context.typeSystem.TType] = {
-    val ts = holeTypeSystem(context)
+    val ts = new HoleTypeSystem[context.type](context)
     val converter = createConverter(context)(ts)
 
     val tcInstance = typeCheckHoleTypeInstance[TComp](context)(ts)
@@ -466,11 +460,36 @@ object ExpressionConverter {
   }
 
 
-  private def fillHoles[TComp[_] : Compilation]
+  private def resolveHoles[TComp[_]]
   (context: Context)
-  (exprConv: ExpressionConverter[context.type])
-  (expr: HoleTypeCheckComp[TComp, exprConv.typeSystem.TType, exprConv.typeSystem.ArExpr])
-  : TComp[context.typeSystem.ArExpr] = ???
+  (ts: TypeSystem[context.type] { type TTypeWrapper[+A] = HoleType[A] })
+  (remainingHoles: Int)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[Unit] =
+    if(remainingHoles > 0)
+      tcInstance.resolveType(HoleTypeHole(remainingHoles - 1))
+        .flatMap { _ => resolveHoles(context)(ts)(remainingHoles - 1) }
+    else
+      ().point[TComp]
+
+  private def fillHoles[TComp[+_] : Compilation]
+  (context: ContextComp[TComp])
+  (ts: HoleTypeSystem[context.type])
+  (expr: HoleTypeCheckComp[TComp, ts.TType, ts.ArExpr])
+  (expectedType: context.typeSystem.TType)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, HoleTypeCheckComp[TComp, ts.TType, ?]])
+  : TComp[context.typeSystem.ArExpr] =
+    expr
+      .flatMap { e =>
+        StateT.get[TComp, TypeCheckState[ts.TType]]
+          .flatMap { state =>
+            resolveHoles(context)(ts)(state.nextHoleId)
+          }
+          .flatMap { _ =>
+            fillHolesExpr(context)(ts)(e)(expectedType)
+          }
+      }
+      .eval(TypeCheckState.default)
 
 
   private def fillHolesType[TComp[_] : Compilation]
@@ -479,51 +498,76 @@ object ExpressionConverter {
   (expr: HoleTypeCheckComp[TComp, exprConv.typeSystem.TType, exprConv.typeSystem.TType])
   : TComp[context.typeSystem.TType] = ???
 
+  private def fillHolesExpr[TComp[_]]
+  (context: Context)
+  (ts: HoleTypeSystem[context.type])
+  (expr: ts.ArExpr)
+  (expectedType: context.typeSystem.TType)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[context.typeSystem.ArExpr] = for {
+    convExpr <- fillHolesExprChildren(context)(ts)(expr)
+    stInfo <- context.typeSystem.isSubType(convExpr.exprType, expectedType)
+    _ <- stInfo match {
+      case Some(_) => ().point[TComp]
+      case None => ???
+    }
+  } yield convExpr
+
+
+  private def fillHolesExprChildren[TComp[_]]
+  (context: Context)
+  (ts: HoleTypeSystem[context.type])
+  (expr: ts.ArExpr)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[context.typeSystem.ArExpr] = expr match {
+    case t: ts.SimpleType => fillHolesSimpleType(context)(ts)(t)
+    case _ => ???
+  }
+
+  private def fillHolesSimpleType[TComp[_]]
+  (context: Context)
+  (ts: HoleTypeSystem[context.type])
+  (expr: ts.ArExpr)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[context.typeSystem.ArExpr] = ???
+
+
   sealed trait HoleType[+T]
   private final case class HoleTypeType[+T](t: T) extends HoleType[T]
   private final case class HoleTypeHole[+T](id: Int) extends HoleType[T]
 
-  private def holeTypeSystem
-  (context: Context)
-  : TypeSystem[context.type] {
-    type TTypeWrapper[+A] = HoleType[A]
-  } = {
-    val ctx: context.type = context
-
-    final class HoleTypeSystem extends TypeSystem[context.type] {
-      override val context: ctx.type = ctx
-      override type TTypeWrapper[+A] = HoleType[A]
-
-      override def wrapType[A](a: A): HoleType[A] =
-        HoleTypeType(a)
-
-      override def mapTypeWrapper[A, B](t: HoleType[A])(f: A => B): HoleType[B] =
-        t match {
-          case HoleTypeType(a) => HoleTypeType(f(a))
-          case HoleTypeHole(id) => HoleTypeHole(id)
-        }
-
-      override def traverseTypeWrapper[A, B, F[_] : Applicative](t: HoleType[A])(f: A => F[B]): F[HoleType[B]] =
-        t match {
-          case HoleTypeType(a) => f(a).map(HoleTypeType.apply)
-          case HoleTypeHole(id) => (HoleTypeHole(id) : TTypeWrapper[B]).point[F]
-        }
-
-      override def wrapExprType(expr: WrapExpr): TType = ???
 
 
-      override def isSubTypeWrapper[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[SubTypeInfo[TType]]] =
-        (a, b) match {
-          case (HoleTypeType(aInner), HoleTypeType(bInner)) => isSimpleSubType(aInner, bInner)
-          case (_, _) => Option.empty[SubTypeInfo[TType]].point[TComp]
-        }
+  private final class HoleTypeSystem[TContext <: Context with Singleton](override val context: TContext) extends TypeSystem[TContext] {
+    override type TTypeWrapper[+A] = HoleType[A]
 
-      override def universeOfExpr(expr: WrapExpr): Universe = ???
+    override def wrapType[A](a: A): HoleType[A] =
+      HoleTypeType(a)
 
-      override def universeOfType(t: TType): TypeUniverse = ???
-    }
+    override def mapTypeWrapper[A, B](t: HoleType[A])(f: A => B): HoleType[B] =
+      t match {
+        case HoleTypeType(a) => HoleTypeType(f(a))
+        case HoleTypeHole(id) => HoleTypeHole(id)
+      }
 
-    new HoleTypeSystem
+    override def traverseTypeWrapper[A, B, F[_] : Applicative](t: HoleType[A])(f: A => F[B]): F[HoleType[B]] =
+      t match {
+        case HoleTypeType(a) => f(a).map(HoleTypeType.apply)
+        case HoleTypeHole(id) => (HoleTypeHole(id) : TTypeWrapper[B]).point[F]
+      }
+
+    override def wrapExprType(expr: WrapExpr): TType = ???
+
+
+    override def isSubTypeWrapper[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[SubTypeInfo[TType]]] =
+      (a, b) match {
+        case (HoleTypeType(aInner), HoleTypeType(bInner)) => isSimpleSubType(aInner, bInner)
+        case (_, _) => Option.empty[SubTypeInfo[TType]].point[TComp]
+      }
+
+    override def universeOfExpr(expr: WrapExpr): Universe = ???
+
+    override def universeOfType(t: TType): TypeUniverse = ???
   }
 
   private def holeTypeConverter
@@ -560,13 +604,15 @@ object ExpressionConverter {
     constraints: Map[Int, HoleConstraint[TType]],
   )
 
+  object TypeCheckState {
+    def default[TType]: TypeCheckState[TType] = TypeCheckState(0, Map.empty)
+  }
+
   type HoleTypeCheckComp[TComp[_], TType, A] = StateT[TComp, TypeCheckState[TType], A]
 
   private def typeCheckHoleTypeInstance[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
-  (ts: TypeSystem[context.type] {
-    type TTypeWrapper[A] = HoleType[A]
-  })
+  (ts: HoleTypeSystem[context.type])
   : TypeCheck[context.type, ts.TType, HoleTypeCheckComp[TComp, ts.TType, ?]] =
     new TypeCheck[context.type, ts.TType, HoleTypeCheckComp[TComp, ts.TType, ?]] {
 
@@ -605,7 +651,72 @@ object ExpressionConverter {
             info.args.traverse_(recordConstraint(_))(this)
         }
 
-      override def resolveType(t: ts.TType): HoleTypeCheckComp[TComp, ts.TType, ts.TType] = ???
+      private implicit val holeTypeCheckMonad: Monad[HoleTypeCheckComp[TComp, ts.TType, ?]] =
+        StateT.stateTMonadState[TypeCheckState[ts.TType], TComp]
+
+      private implicit val resolverStateMonad: Monad[ResolverState] =
+        StateT.stateTMonadState[Set[Int], HoleTypeCheckComp[TComp, ts.TType, ?]]
+
+      override def resolveType(t: ts.TType): HoleTypeCheckComp[TComp, ts.TType, ts.TType] =
+        TypeSystem.convertTypeSystem(context)(ts)(ts)(new ResolverConverter)(t).eval(Set.empty)
+
+      private def resolveOuterHole(id: Int): HoleTypeCheckComp[TComp, ts.TType, ts.TType] =
+        StateT.get[TComp, TypeCheckState[ts.TType]].flatMap { state =>
+          state.constraints.getOrElse(id, HoleBounds(Set.empty[TypeConstraint[ts.TType]])) match {
+            case HoleResolved(hole) => hole.point[HoleTypeCheckComp[TComp, ts.TType, ?]]
+            case HoleBounds(bounds) =>
+              val superTypeConstraints = bounds.collect {
+                case SuperTypeConstraint(superType) => superType
+              }
+
+              val resolvedType = superTypeConstraints.toVector match {
+                case head +: tail =>
+                  tail.fold(head) { (a, b) => ts.fromSimpleType(ts.IntersectionType(a, b)) }
+
+                case _ =>
+                  val subTypeConstraints = bounds.collect {
+                    case SubTypeConstraint(subType) => subType
+                  }
+
+                  subTypeConstraints.toVector match {
+                    case head +: tail =>
+                      tail.fold(head) { (a, b) => ts.fromSimpleType(ts.UnionType(a, b)) }
+
+                    case _ => ???
+                  }
+              }
+
+              for {
+                _ <- StateT.put[TComp, TypeCheckState[ts.TType]](
+                  state.copy(constraints = state.constraints.updated(id, HoleResolved(resolvedType)))
+                )
+              } yield resolvedType
+          }
+        }
+
+      type ResolverState[A] = StateT[HoleTypeCheckComp[TComp, ts.TType, ?], Set[Int], A]
+
+      private final class ResolverConverter extends TypeSystemConverter[context.type, ts.type, ts.type, ResolverState] {
+        override def convertType[A](ts1: ts.type)(ts2: ts.type)(fromSimpleType: ts2.SimpleType => A)(t: HoleType[A]): ResolverState[HoleType[A]] =
+          t match {
+            case HoleTypeType(_) => t.point[ResolverState]
+            case HoleTypeHole(id) =>
+              for {
+                seenHoles <- StateT.get[HoleTypeCheckComp[TComp, ts.TType, ?], Set[Int]]
+                _ <-
+                  if(seenHoles.contains(id))
+                    ???
+                  else
+                    StateT.put[HoleTypeCheckComp[TComp, ts.TType, ?], Set[Int]](seenHoles + id)
+
+
+                resolvedOuter <- StateT.liftM[HoleTypeCheckComp[TComp, ts.TType, ?], Set[Int], ts2.TType](resolveOuterHole(id))
+                resolvedType <- TypeSystem.convertTypeSystem(context)(ts)(ts)(this)(resolvedOuter)
+              } yield ts.mapTypeWrapper(resolvedType)(fromSimpleType)
+          }
+
+      }
+
 
       override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): HoleTypeCheckComp[TComp, ts.TType, A] =
         StateT.liftM(Compilation[TComp].diagnostic(value, messages))
