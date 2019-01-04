@@ -18,7 +18,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   type WrapExpr = TTypeWrapper[ArExpr]
   
   type WrapRef[T[_ <: Context, _[_, _]]] = AbsRef[context.type, T]
-
+  type TSubTypeInfo = SubTypeInfo[TType]
 
 
   final def fromSimpleType(simpleType: SimpleType): TType = wrapType(simpleType)
@@ -29,10 +29,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   def wrapExprType(expr: WrapExpr): TType
 
-  def isSubTypeWrapper[TComp[_] : Compilation, T]
-  (f: (T, T) => TComp[Boolean])
-  (a: TTypeWrapper[T], b: TTypeWrapper[T])
-  : TComp[Boolean]
+  def isSubTypeWrapper[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[SubTypeInfo[TType]]]
 
   def universeOfExpr(expr: WrapExpr): Universe
   def universeOfType(t: TType): TypeUniverse
@@ -43,8 +40,8 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final def largestUniverse1[U <: Universe](universes: NonEmptyList[U]): U =
     universes.foldLeft1(Universe.union)
 
-  final def isSubType[TComp[_] : Compilation](a: TType, b: TType): TComp[Boolean] =
-    isSubTypeWrapper(isSimpleSubType[TComp])(a, b)
+  final def isSubType[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[TSubTypeInfo]] =
+    isSubTypeWrapper(a, b)
 
   final def exprIsType(expr: WrapExpr): Option[TType] =
     traverseTypeWrapper(expr) {
@@ -200,54 +197,105 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
 
 
-  private def isSimpleSubType[F[_] : Compilation](a: SimpleType, b: SimpleType): F[Boolean] = {
+  protected final def isSimpleSubType[F[_] : Compilation](a: SimpleType, b: SimpleType): F[Option[TSubTypeInfo]] = {
 
-    def compareArguments(a: Vector[TType])(b: Vector[TType]): F[Boolean] = true.pure[F]
+    val notSubType = Option.empty[TSubTypeInfo].point[F]
 
-    def isSubTrait(a: TraitType)(b: TraitType): F[Boolean] =
+    def invariant(a: TType, b: TType): F[Option[Vector[TSubTypeInfo]]] =
+      isSubType[F](a, b).flatMap {
+        case Some(left) =>
+          isSubType[F](b, a).map { _.map {
+            right => Vector(left, right)
+          } }
+
+        case None => Option.empty[Vector[TSubTypeInfo]].point[F]
+      }
+
+
+    def compareArguments(aType: TType, bType: TType)(a: Vector[TType])(b: Vector[TType]): F[Option[TSubTypeInfo]] =
+      if(a.size == b.size)
+        a.zip(b)
+          .traverse { case (aArg, bArg) => OptionT(invariant(aArg, bArg)) }
+          .map { args => SubTypeInfo(aType, bType, args.flatten) }
+          .run
+      else
+        notSubType
+
+    def isSubTrait(a: TraitType)(b: TraitType): F[Option[TSubTypeInfo]] =
       if(a.arTrait.value.descriptor === b.arTrait.value.descriptor)
-        compareArguments(a.args)(b.args)
+        compareArguments(fromSimpleType(a), fromSimpleType(b))(a.args)(b.args)
       else
-        b.baseTypes.baseTraits.anyM(isSubTrait(a))
+        b.baseTypes.baseTraits.findMapM(isSubTrait(a))
 
-    def isSubClass(a: ClassType)(b: ClassType): F[Boolean] =
+    def isSubClass(a: ClassType)(b: ClassType): F[Option[TSubTypeInfo]] =
       if(a.arClass.value.descriptor === b.arClass.value.descriptor)
-        compareArguments(a.args)(b.args)
+        compareArguments(fromSimpleType(a), fromSimpleType(b))(a.args)(b.args)
       else
-        b.baseTypes.baseClass.anyM(isSubClass(a))
+        b.baseTypes.baseClass.findMapM(isSubClass(a))
 
-    def classImplementsTrait(a: TraitType)(b: ClassType): F[Boolean] =
-      b.baseTypes.baseTraits.anyM(isSubTrait(a)) ||
-        b.baseTypes.baseClass.anyM(classImplementsTrait(a))
+    def classImplementsTrait(a: TraitType)(b: ClassType): F[Option[TSubTypeInfo]] =
+      Vector(
+        () => b.baseTypes.baseTraits.findMapM(isSubTrait(a)),
+        () => b.baseTypes.baseClass.findMapM(classImplementsTrait(a)),
+      ).findMapM(_())
 
-    (a match {
-      case a: UnionType =>
-        isSubType[F](a.first, fromSimpleType(b)) && isSubType[F](a.second, fromSimpleType(b))
-      case _ => false.pure[F]
-    }) || (b match {
-      case b: IntersectionType =>
-        isSubType[F](fromSimpleType(a), b.first) && isSubType[F](fromSimpleType(a), b.second)
-      case _ => false.pure[F]
-    }) || (b match {
-      case b: UnionType =>
-        isSubType[F](fromSimpleType(a), b.first) || isSubType[F](fromSimpleType(a), b.second)
-      case _ => false.pure[F]
-    }) || (a match {
-      case a: IntersectionType =>
-        isSubType[F](a.first, fromSimpleType(b)) || isSubType[F](a.second, fromSimpleType(b))
-      case _ => false.pure[F]
-    }) || ((a, b) match {
+    Vector(
+      () => a match {
+        case a: UnionType =>
+          isSubType[F](a.first, fromSimpleType(b)).flatMap {
+            case Some(left) =>
+              isSubType[F](a.second, fromSimpleType(b)).map { _.map { right =>
+                SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(left, right))
+              } }
 
-      case (aTrait: TraitType, bTrait: TraitType) => isSubTrait(aTrait)(bTrait)
-      case (aClass: ClassType, bClass: ClassType) => isSubClass(aClass)(bClass)
-      case (aTrait: TraitType, bClass: ClassType) => classImplementsTrait(aTrait)(bClass)
-      case (_: ClassType, _: TraitType) => false.pure[F]
+            case None => notSubType
+          }
+        case _ => notSubType
+      },
+      () => b match {
+        case b: IntersectionType =>
+          isSubType[F](fromSimpleType(a), b.first).flatMap {
+            case Some(left) =>
+              isSubType[F](fromSimpleType(a), b.second).map { _.map { right =>
+                SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(left, right))
+              } }
 
-      case (_, _) => false.pure[F]
-    })
+            case None => notSubType
+          }
 
+        case _ => notSubType
+      },
+      () => b match {
+        case b: UnionType =>
+          Vector(
+            () => isSubType[F](fromSimpleType(a), b.first),
+            () => isSubType[F](fromSimpleType(a), b.second),
+          )
+            .findMapM(_())
+            .map { _.map { info => SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(info)) } }
 
+        case _ => notSubType
+      },
+      () => a match {
+        case a: IntersectionType =>
+          Vector(
+            () => isSubType[F](a.first, fromSimpleType(b)),
+            () => isSubType[F](a.second, fromSimpleType(b)),
+          )
+            .findMapM(_())
+            .map { _.map { info => SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(info)) } }
+        case _ => notSubType
+      },
+      () => (a, b) match {
 
+        case (aTrait: TraitType, bTrait: TraitType) => isSubTrait(aTrait)(bTrait)
+        case (aClass: ClassType, bClass: ClassType) => isSubClass(aClass)(bClass)
+        case (aTrait: TraitType, bClass: ClassType) => classImplementsTrait(aTrait)(bClass)
+        case (_: ClassType, _: TraitType) => notSubType
+
+        case (_, _) => notSubType
+      },
+    ).findMapM(_())
   }
 
 }

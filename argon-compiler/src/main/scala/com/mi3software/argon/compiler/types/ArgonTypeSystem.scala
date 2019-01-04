@@ -17,8 +17,8 @@ trait ArgonTypeSystem[TContext <: Context with Singleton] extends TypeSystem[TCo
 
   override def wrapExprType(expr: WrapExpr): TType = expr.exprType
 
-  final override def isSubTypeWrapper[TComp[_] : Compilation, T](f: (T, T) => TComp[Boolean])(a: T, b: T): TComp[Boolean] =
-    f(a, b)
+  override def isSubTypeWrapper[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[SubTypeInfo[TType]]] =
+    isSimpleSubType(a, b)
 
   override def universeOfExpr(expr: WrapExpr): Universe = expr.universe
 
