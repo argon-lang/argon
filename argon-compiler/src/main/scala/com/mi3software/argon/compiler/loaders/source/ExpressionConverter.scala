@@ -3,7 +3,7 @@ package com.mi3software.argon.compiler.loaders.source
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.lookup._
-import com.mi3software.argon.compiler.types.{ArTypeSystemConverter, ExpandTypeSystemConverter, TypeSystem, TypeSystemConverter}
+import com.mi3software.argon.compiler.types._
 import com.mi3software.argon.parser
 import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation, WithSource}
 import com.mi3software.argon.util.AnyExtensions._
@@ -48,10 +48,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.AsExpr(value, valueTypeExpr) =>
         compFactory(
           for {
-            expectedType <- evaluateTypeExprInfer(env)(expr.location)(new FactoryTypeInferencer(env) {
-              override def createFactory[TComp2[_]](otherConv: ExpressionConverter[context.type])(env: otherConv.Env)(implicit compEv: TypeCheckT[otherConv.typeSystem.TType, TComp2]): otherConv.ExprFactory[TComp2] =
-                otherConv.convertExpr(env)(valueTypeExpr)
-            })
+            expectedType <- evaluateTypeExprAST(env)(valueTypeExpr)
             result <- convertExpr(env)(value).forExpectedType(expectedType)
           } yield factoryForExpr(env)(expr.location)(result)
         )
@@ -163,10 +160,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   (moduleDesc: ModuleDescriptor)
   (namespacePath: NamespacePath, name: GlobalName)
   : TComp[TType] =
-    evaluateTypeExprInfer(env)(location)(new FactoryTypeInferencer(env) {
-      override def createFactory[TComp2[_]](otherConv: ExpressionConverter[context.type])(env: otherConv.Env)(implicit compEv: TypeCheckT[otherConv.typeSystem.TType, TComp2]): otherConv.ExprFactory[TComp2] =
-        otherConv.resolveModuleClassFactory(env)(location)(moduleDesc)(namespacePath, name)(Vector.empty)
-    })
+    evaluateTypeExprFactory(env)(location)(resolveModuleClassFactory(env)(location)(moduleDesc)(namespacePath, name)(Vector.empty))
 
   def resolveBoolClass[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
     resolveModuleClass(env)(location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))
@@ -324,8 +318,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case false => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(t, expr.exprType)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
     }
 
-  def evaluateTypeExprInfer[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(infer: TypeInferencer): TComp[TType] =
-    inferExprType(infer).flatMap { expr =>
+  def evaluateTypeExprFactory[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(factory: ExprFactory[TComp]): TComp[TType] =
+    inferExprType(factory).flatMap { expr =>
       evaluateTypeExpr(env)(location)(expr)
     }
 
@@ -336,77 +330,15 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     }
 
   def evaluateTypeExprAST[TComp[_] : TypeCheck](env: Env)(expr: WithSource[parser.Expr]): TComp[TType] =
-    evaluateTypeExprInfer(env)(expr.location)(new FactoryTypeInferencer(env) {
-      override def createFactory[TComp2[_]](otherConv: ExpressionConverter[context.type])(env: otherConv.Env)(implicit compEv: TypeCheckT[otherConv.typeSystem.TType, TComp2]): otherConv.ExprFactory[TComp2] =
-        otherConv.convertExpr(env)(expr)
-    })
+    evaluateTypeExprFactory(env)(expr.location)(convertExpr(env)(expr))
 
 
-  private trait TypeInferencer {
-    def inferType[TComp[_]]
-    (inferTS: TypeSystem[context.type])
-    (converter: TypeSystemConverter[context.type, typeSystem.type, inferTS.type])
-    (expectedType: inferTS.TType)
-    (implicit compEv: TypeCheckT[inferTS.TType, TComp])
-    : TComp[inferTS.ArExpr]
-  }
-
-  private abstract class FactoryTypeInferencer(env: Env) extends TypeInferencer {
-    final override def inferType[TComp2[_]]
-    (inferTS: TypeSystem[context.type])
-    (converter: TypeSystemConverter[context.type, typeSystem.type, inferTS.type])
-    (expectedType: inferTS.TType)
-    (implicit compEv: TypeCheckT[inferTS.TType, TComp2])
-    : TComp2[inferTS.ArExpr] = {
-      val otherConv = new ExpressionConverter[context.type] {
-        override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
-        override val typeSystem: inferTS.type = inferTS
-
-        override val scopeContext: ScopeContext[context.type] { val typeSystem: inferTS.type } =
-          new ScopeContext[context.type] {
-            override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
-            override val typeSystem: inferTS.type = inferTS
-          }
-
-        override val signatureContext: SignatureContext[context.type] { val typeSystem: inferTS.type } =
-          new SignatureContext[context.type] {
-            override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
-            override val typeSystem: inferTS.type = inferTS
-          }
-      }
-
-      val env2 = ExpressionConverter.Env(
-        descriptor = env.descriptor,
-        fileSpec = env.fileSpec,
-        referencedModules = env.referencedModules,
-        scope = env.scope.convertScopeContext(otherConv.scopeContext)(converter),
-      )
-
-      createFactory(otherConv)(env2).forExpectedType(expectedType)
-    }
-
-    def createFactory[TComp2[_]](otherConv: ExpressionConverter[context.type])(env: otherConv.Env)(implicit compEv: TypeCheckT[otherConv.typeSystem.TType, TComp2]): otherConv.ExprFactory[TComp2]
-  }
-
-  private def inferExprType[TComp[_] : TypeCheck](inferencer: TypeInferencer): TComp[ArExpr] = {
-    val inferTS = ExpressionConverter.holeTypeSystem(context)(typeSystem)
-    val converter = ExpressionConverter.holeTypeConverter(context)(typeSystem)(inferTS)
-    val typeCheckInstance = ExpressionConverter.typeCheckHoleTypeInstance[TComp](context)(typeSystem)(inferTS)
-
-    inferencer.inferType(inferTS)(converter)(HoleTypeHole())(typeCheckInstance)
-      .run
-      .flatMap { case (constraints, expr) =>
-        for {
-          fill <- inferTypeFromConstraints[TComp](inferTS)(constraints)
-          convExpr = TypeSystem.convertExprTypeSystem(context)(inferTS)(typeSystem)(fillTypeHole(inferTS)(fill))(expr)
-          _ <- constraints.toVector.traverse_ { constr =>
-            implicitly[TypeCheck[TComp]].recordSubTypeConstraint(
-              constr.map(TypeSystem.convertTypeSystem(context)(inferTS)(typeSystem)(fillTypeHole(inferTS)(fill))(_))
-            )
-          }
-        } yield convExpr
-      }
-  }
+  private def inferExprType[TComp[_] : TypeCheck](factory: ExprFactory[TComp]): TComp[ArExpr] =
+    for {
+      hole <- implicitly[TypeCheck[TComp]].createHole
+      expr <- factory.forExpectedType(hole)
+      _ <- implicitly[TypeCheck[TComp]].resolveType(hole)
+    } yield expr
 
   def inferTypeFromConstraints[TComp[_]]
   (holeTS: TypeSystem[context.type] {
@@ -417,8 +349,6 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def fillTypeHole
   (holeTS: TypeSystem[context.type] {
     type TTypeWrapper[+A] = HoleType[typeSystem.TTypeWrapper[A]]
-    type TUniverse = typeSystem.TUniverse
-    type TTypeUniverse = typeSystem.TTypeUniverse
   })
   (fill: TType)
   : TypeSystemConverter[context.type, holeTS.type, typeSystem.type] =
@@ -429,9 +359,6 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           case ExpressionConverter.HoleTypeHole() => typeSystem.mapTypeWrapper(fill)(fromSimpleType)
         }
 
-      override def convertUniverse(ts1: holeTS.type)(ts2: typeSystem.type)(universe: ts1.TUniverse): ts2.TUniverse = universe
-
-      override def convertTypeUniverse(ts1: holeTS.type)(ts2: typeSystem.type)(universe: ts1.TTypeUniverse): ts2.TTypeUniverse = universe
     }
 
 }
@@ -452,18 +379,26 @@ object ExpressionConverter {
     val fileSpec: FileSpec
   }
 
-  private def createConverter(context: Context): ExpressionConverter[context.type] {
-    val typeSystem: context.typeSystem.type
-    val scopeContext: context.scopeContext.type
-    val signatureContext: context.signatureContext.type
+  private def createConverter(context: Context)(ts: TypeSystem[context.type]): ExpressionConverter[context.type] {
+    val typeSystem: ts.type
   } = {
     val ctx: context.type = context
 
     new ExpressionConverter[ctx.type] {
       override val context: ctx.type = ctx
-      override val typeSystem: context.typeSystem.type = context.typeSystem
-      override val scopeContext: context.scopeContext.type = context.scopeContext
-      override val signatureContext: context.signatureContext.type = context.signatureContext
+      override val typeSystem: ts.type = ts
+
+      override val scopeContext: ScopeContext[context.type] { val typeSystem: ts.type } =
+        new ScopeContext[context.type] {
+          override val context: ctx.type = ctx
+          override val typeSystem: ts.type = ts
+        }
+
+      override val signatureContext: SignatureContext[context.type] { val typeSystem: ts.type } =
+        new SignatureContext[context.type] {
+          override val context: ctx.type = ctx
+          override val typeSystem: ts.type = ts
+        }
     }
   }
 
@@ -472,10 +407,28 @@ object ExpressionConverter {
   (env: Env[context.type, context.scopeContext.Scope])
   (expectedType: context.typeSystem.TType)
   (expr: WithSource[parser.Expr])
-  : TComp[context.typeSystem.ArExpr] =
-    createConverter(context)
-      .convertExpr[TComp](env)(expr)(typeCheckArTypeInstance[TComp](context))
-      .forExpectedType(expectedType)
+  : TComp[context.typeSystem.ArExpr] = {
+    val ts = holeTypeSystem(context)(context.typeSystem)
+    val converter = createConverter(context)(ts)
+
+    val tcInstance = typeCheckHoleTypeInstance[TComp](context)(ts)
+
+    val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
+
+    val env2 = Env(
+      descriptor = env.descriptor,
+      fileSpec = env.fileSpec,
+      referencedModules = env.referencedModules,
+      scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
+    )
+
+    val tcExpr = converter
+      .convertExpr[HoleTypeCheckComp[TComp, ts.TType, ?]](env2)(expr)(tcInstance)
+      .forExpectedType(TypeSystem.convertTypeSystem(context)(context.typeSystem)(ts)(tsConverter)(expectedType))
+
+    fillHoles[TComp](context)(converter)(tcExpr)
+  }
+
 
 
 
@@ -483,17 +436,63 @@ object ExpressionConverter {
   (context: ContextComp[TComp])
   (env: Env[context.type, context.scopeContext.Scope])
   (expr: WithSource[parser.Expr])
-  : TComp[context.typeSystem.TType] =
-    createConverter(context)
-      .evaluateTypeExprAST[TComp](env)(expr)(typeCheckArTypeInstance[TComp](context))
+  : TComp[context.typeSystem.TType] = {
+    val ts = holeTypeSystem(context)(context.typeSystem)
+    val converter = createConverter(context)(ts)
+
+    val tcInstance = typeCheckHoleTypeInstance[TComp](context)(ts)
+
+    val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
+
+    val env2 = Env(
+      descriptor = env.descriptor,
+      fileSpec = env.fileSpec,
+      referencedModules = env.referencedModules,
+      scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
+    )
+
+    val tcExpr = converter.evaluateTypeExprAST[HoleTypeCheckComp[TComp, ts.TType, ?]](env2)(expr)(tcInstance)
+
+    fillHolesType[TComp](context)(converter)(tcExpr)
+  }
+
 
   def resolveUnitType[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
   (env: Env[context.type, context.scopeContext.Scope])
-  (location: SourceLocation): TComp[context.typeSystem.TType] =
-    createConverter(context)
-      .resolveUnitType[TComp](env)(location)(typeCheckArTypeInstance[TComp](context))
+  (location: SourceLocation): TComp[context.typeSystem.TType] = {
+    val ts = holeTypeSystem(context)(context.typeSystem)
+    val converter = createConverter(context)(ts)
 
+    val tcInstance = typeCheckHoleTypeInstance[TComp](context)(ts)
+
+    val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
+
+    val env2 = Env(
+      descriptor = env.descriptor,
+      fileSpec = env.fileSpec,
+      referencedModules = env.referencedModules,
+      scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
+    )
+
+    val tcExpr = converter.resolveUnitType[HoleTypeCheckComp[TComp, ts.TType, ?]](env2)(location)(tcInstance)
+
+    fillHolesType[TComp](context)(converter)(tcExpr)
+  }
+
+
+  private def fillHoles[TComp[_] : Compilation]
+  (context: Context)
+  (exprConv: ExpressionConverter[context.type])
+  (expr: HoleTypeCheckComp[TComp, exprConv.typeSystem.TType, exprConv.typeSystem.ArExpr])
+  : TComp[context.typeSystem.ArExpr] = ???
+
+
+  private def fillHolesType[TComp[_] : Compilation]
+  (context: Context)
+  (exprConv: ExpressionConverter[context.type])
+  (expr: HoleTypeCheckComp[TComp, exprConv.typeSystem.TType, exprConv.typeSystem.TType])
+  : TComp[context.typeSystem.TType] = ???
 
   sealed trait HoleType[+T]
   private final case class HoleTypeType[+T](t: T) extends HoleType[T]
@@ -504,16 +503,12 @@ object ExpressionConverter {
   (innerTS: TypeSystem[context.type])
   : TypeSystem[context.type] {
     type TTypeWrapper[+A] = HoleType[innerTS.TTypeWrapper[A]]
-    type TUniverse = innerTS.TUniverse
-    type TTypeUniverse = innerTS.TTypeUniverse
   } = {
     val ctx: context.type = context
 
     final class HoleTypeSystem extends TypeSystem[context.type] {
       override val context: ctx.type = ctx
       override type TTypeWrapper[+A] = HoleType[innerTS.TTypeWrapper[A]]
-      override type TUniverse = innerTS.TUniverse
-      override type TTypeUniverse = innerTS.TTypeUniverse
 
       val expandConverter: TypeSystemConverter[context.type, innerTS.type, this.type] =
         ExpandTypeSystemConverter[context.type, HoleType](innerTS)(this)(new ExpandTypeSystemConverter.Expander[HoleType] {
@@ -543,20 +538,9 @@ object ExpressionConverter {
           case (_, _) => true.point[TComp]
         }
 
-      override val valueUniverse: innerTS.TUniverse = innerTS.valueUniverse
+      override def universeOfExpr(expr: WrapExpr): Universe = ???
 
-      override def nextUniverse(universe: innerTS.TUniverse): innerTS.TTypeUniverse =
-        innerTS.nextUniverse(universe)
-
-      override def previousUniverse(universe: innerTS.TTypeUniverse): innerTS.TUniverse =
-        innerTS.previousUniverse(universe)
-
-      override def universeUnion[U <: innerTS.TUniverse](a: U, b: U): U =
-        innerTS.universeUnion(a, b)
-
-      override def universeOfExpr(expr: WrapExpr): innerTS.TUniverse = ???
-
-      override def universeOfType(t: TType): innerTS.TTypeUniverse = ???
+      override def universeOfType(t: TType): TypeUniverse = ???
     }
 
     new HoleTypeSystem
@@ -567,17 +551,11 @@ object ExpressionConverter {
   (innerTS: TypeSystem[context.type])
   (holeTS: TypeSystem[context.type] {
     type TTypeWrapper[A] = HoleType[innerTS.TTypeWrapper[A]]
-    type TUniverse = innerTS.TUniverse
-    type TTypeUniverse = innerTS.TTypeUniverse
   })
   : TypeSystemConverter[context.type, innerTS.type, holeTS.type] =
     new TypeSystemConverter[context.type, innerTS.type, holeTS.type] {
       override def convertType[A](ts1: innerTS.type)(ts2: holeTS.type)(fromSimpleType: ts2.SimpleType => A)(t: ts1.TTypeWrapper[A]): HoleType[innerTS.TTypeWrapper[A]] =
         HoleTypeType(t)
-
-      override def convertUniverse(ts1: innerTS.type)(ts2: holeTS.type)(universe: ts1.TUniverse): ts2.TUniverse = universe
-
-      override def convertTypeUniverse(ts1: innerTS.type)(ts2: holeTS.type)(universe: ts1.TTypeUniverse): ts2.TTypeUniverse = universe
     }
 
 
@@ -589,58 +567,40 @@ object ExpressionConverter {
 
   private trait TypeCheck[TContext <: Context with Singleton, TType, TComp[_]] extends Compilation[TComp] {
     def fromContextComp[A](context: TContext)(comp: context.Comp[A]): TComp[A]
+    def createHole: TComp[TType]
     def recordSubTypeConstraint(constraint: TypeConstraint[TType]): TComp[Unit]
+    def resolveType(t: TType): TComp[TType]
   }
 
-  private def typeCheckArTypeInstance[TComp[+_] : Compilation](context: ContextComp[TComp]): TypeCheck[context.type, context.typeSystem.TType, TComp] =
-    new TypeCheck[context.type, context.typeSystem.TType, TComp] {
+  type HoleTypeCheckComp[TComp[_], TType, A] = WriterT[TComp, Set[TypeConstraint[TType]], A]
 
-      override def fromContextComp[A](context2: context.type)(comp: context.Comp[A]): TComp[A] =
-        comp
-
-      override def recordSubTypeConstraint(constraint: TypeConstraint[context.typeSystem.TType]): TComp[Unit] = ().pure[TComp]
-
-      override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): TComp[A] =
-        implicitly[Compilation[TComp]].diagnostic(value, messages)
-
-      override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): TComp[A] =
-        implicitly[Compilation[TComp]].forErrors(errors, messages)
-
-      override def bind[A, B](fa: TComp[A])(f: A => TComp[B]): TComp[B] =
-        implicitly[Compilation[TComp]].bind(fa)(f)
-
-      override def point[A](a: => A): TComp[A] =
-        implicitly[Compilation[TComp]].point(a)
-    }
-
-
-
-  private def typeCheckHoleTypeInstance[TComp[_]]
-  (context: Context)
-  (innerTS: TypeSystem[context.type])
+  private def typeCheckHoleTypeInstance[TComp[+_] : Compilation]
+  (context: ContextComp[TComp])
   (ts: TypeSystem[context.type] {
-    type TTypeWrapper[A] = HoleType[innerTS.TTypeWrapper[A]]
+    type TTypeWrapper[A] = HoleType[A]
   })
-  (implicit innerTypeCheck: TypeCheck[context.type, innerTS.TType, TComp])
-  : TypeCheck[context.type, ts.TType, WriterT[TComp, Set[TypeConstraint[ts.TType]], ?]] =
-    new TypeCheck[context.type, ts.TType, WriterT[TComp, Set[TypeConstraint[ts.TType]], ?]] {
+  : TypeCheck[context.type, ts.TType, HoleTypeCheckComp[TComp, ts.TType, ?]] =
+    new TypeCheck[context.type, ts.TType, HoleTypeCheckComp[TComp, ts.TType, ?]] {
 
-      override def fromContextComp[A](context2: context.type)(comp: context.Comp[A]): WriterT[TComp, Set[TypeConstraint[ts.TType]], A] =
+      override def fromContextComp[A](context2: context.type)(comp: context.Comp[A]): HoleTypeCheckComp[TComp, ts.TType, A] =
         WriterT(
-          innerTypeCheck.fromContextComp(context)(comp)
-            .map { a => (Set.empty[TypeConstraint[ts.TType]], a) }
+          comp.map { a => (Set.empty[TypeConstraint[ts.TType]], a) }
         )
 
-      override def recordSubTypeConstraint(constraint: TypeConstraint[ts.TType]): WriterT[TComp, Set[TypeConstraint[ts.TType]], Unit] =
+      override def createHole: HoleTypeCheckComp[TComp, ts.TType, ts.TType] = ???
+
+      override def recordSubTypeConstraint(constraint: TypeConstraint[ts.TType]): HoleTypeCheckComp[TComp, ts.TType, Unit] =
         WriterT((Set(constraint), ()).point[TComp])
 
-      override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): WriterT[TComp, Set[TypeConstraint[ts.TType]], A] =
+      override def resolveType(t: ts.TType): HoleTypeCheckComp[TComp, ts.TType, ts.TType] = ???
+
+      override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): HoleTypeCheckComp[TComp, ts.TType, A] =
         WriterT(Compilation[TComp].diagnostic((Set.empty[TypeConstraint[ts.TType]], value), messages))
 
-      override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): WriterT[TComp, Set[TypeConstraint[ts.TType]], A] =
+      override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): HoleTypeCheckComp[TComp, ts.TType, A] =
         WriterT(Compilation[TComp].forErrors[(Set[TypeConstraint[ts.TType]], A)](errors, messages))
 
-      override def bind[A, B](fa: WriterT[TComp, Set[TypeConstraint[ts.TType]], A])(f: A => WriterT[TComp, Set[TypeConstraint[ts.TType]], B]): WriterT[TComp, Set[TypeConstraint[ts.TType]], B] =
+      override def bind[A, B](fa: WriterT[TComp, Set[TypeConstraint[ts.TType]], A])(f: A => WriterT[TComp, Set[TypeConstraint[ts.TType]], B]): HoleTypeCheckComp[TComp, ts.TType, B] =
         fa.flatMap(f)
 
       override def point[A](a: => A): WriterT[TComp, Set[TypeConstraint[ts.TType]], A] =

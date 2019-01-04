@@ -13,8 +13,6 @@ trait TypeSystem[TContext <: Context with Singleton] {
   val context: TContext
 
   type TTypeWrapper[+_]
-  type TUniverse
-  type TTypeUniverse <: TUniverse
 
   type TType = TTypeWrapper[SimpleType]
   type WrapExpr = TTypeWrapper[ArExpr]
@@ -36,19 +34,14 @@ trait TypeSystem[TContext <: Context with Singleton] {
   (a: TTypeWrapper[T], b: TTypeWrapper[T])
   : TComp[Boolean]
 
-  val valueUniverse: TUniverse
-  def nextUniverse(universe: TUniverse): TTypeUniverse
-  def previousUniverse(universe: TTypeUniverse): TUniverse
-  def universeUnion[U <: TUniverse](a: U, b: U): U
+  def universeOfExpr(expr: WrapExpr): Universe
+  def universeOfType(t: TType): TypeUniverse
 
-  def universeOfExpr(expr: WrapExpr): TUniverse
-  def universeOfType(t: TType): TTypeUniverse
+  final def largestUniverse[U <: Universe](default: U)(universes: Vector[U]): U =
+    universes.foldLeft(default)(Universe.union)
 
-  final def largestUniverse[U <: TUniverse](default: U)(universes: Vector[U]): U =
-    universes.foldLeft(default)(universeUnion)
-
-  final def largestUniverse1[U <: TUniverse](universes: NonEmptyList[U]): U =
-    universes.foldLeft1(universeUnion)
+  final def largestUniverse1[U <: Universe](universes: NonEmptyList[U]): U =
+    universes.foldLeft1(Universe.union)
 
   final def isSubType[TComp[_] : Compilation](a: TType, b: TType): TComp[Boolean] =
     isSubTypeWrapper(isSimpleSubType[TComp])(a, b)
@@ -67,83 +60,83 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   trait ArExpr {
     val exprType: TType
-    val universe: TUniverse
+    val universe: Universe
   }
 
   final case class ClassConstructorCall(classType: ClassType, classCtor: AbsRef[context.type, ClassConstructor], args: Vector[TType]) extends ArExpr {
     override val exprType: TType = fromSimpleType(classType)
-    override val universe: TUniverse = valueUniverse
+    override val universe: Universe = ValueUniverse
   }
   final case class DataConstructorCall(dataCtorInstanceType: DataConstructorType, args: Vector[ArExpr]) extends ArExpr {
     override val exprType: TType = fromSimpleType(dataCtorInstanceType)
-    override val universe: TUniverse = valueUniverse
+    override val universe: Universe = ValueUniverse
   }
   final case class FunctionCall(function: AbsRef[context.type, ArFunc], args: Vector[ArExpr], returnType: TType) extends ArExpr {
     override val exprType: TType = returnType
-    override lazy val universe: TUniverse = previousUniverse(universeOfType(returnType))
+    override lazy val universe: Universe = universeOfType(returnType).prev
   }
   final case class IfElse(condition: ArExpr, ifBody: ArExpr, elseBody: ArExpr) extends ArExpr {
     override lazy val exprType: TType = fromSimpleType(UnionType(ifBody.exprType, elseBody.exprType))
-    override lazy val universe: TUniverse = universeUnion(ifBody.universe, elseBody.universe)
+    override lazy val universe: Universe = Universe.union(ifBody.universe, elseBody.universe)
   }
   final case class LetBinding(variable: Variable[VariableDescriptor], value: ArExpr, next: ArExpr) extends ArExpr {
     override lazy val exprType: TType = next.exprType
-    override lazy val universe: TUniverse = next.universe
+    override lazy val universe: Universe = next.universe
   }
   final case class LoadConstantBool(value: Boolean, exprType: TType) extends ArExpr {
-    override val universe: TUniverse = valueUniverse
+    override val universe: Universe = ValueUniverse
   }
   final case class LoadConstantInt(value: BigInt, exprType: TType) extends ArExpr {
-    override val universe: TUniverse = valueUniverse
+    override val universe: Universe = ValueUniverse
   }
   final case class LoadConstantString(value: String, exprType: TType) extends ArExpr {
-    override val universe: TUniverse = valueUniverse
+    override val universe: Universe = ValueUniverse
   }
   final case class LoadLambda(argVariable: Variable[VariableDescriptor], body: ArExpr) extends ArExpr {
     override lazy val exprType: TType = fromSimpleType(FunctionType(argVariable.varType, body.exprType))
-    override lazy val universe: TUniverse = universeUnion(
-      previousUniverse(universeOfType(argVariable.varType)),
-      previousUniverse(universeOfType(body.exprType))
+    override lazy val universe: Universe = Universe.union(
+      universeOfType(argVariable.varType).prev,
+      universeOfType(body.exprType).prev
     )
   }
   final case class LoadUnit(exprType: TType) extends ArExpr {
-    override val universe: TUniverse = valueUniverse
+    override val universe: Universe = ValueUniverse
   }
   final case class LoadVariable(variable: Variable[VariableLikeDescriptor]) extends ArExpr {
     override val exprType: TType = variable.varType
-    override lazy val universe: TUniverse = previousUniverse(universeOfType(variable.varType))
+    override lazy val universe: Universe = universeOfType(variable.varType).prev
   }
   final case class MethodCall(method: AbsRef[context.type, ArMethod], instance: ArExpr, args: Vector[ArExpr], returnType: TType) extends ArExpr {
     override val exprType: TType = returnType
-    override lazy val universe: TUniverse = previousUniverse(universeOfType(returnType))
+    override lazy val universe: Universe = universeOfType(returnType).prev
   }
   final case class Sequence(first: ArExpr, second: ArExpr) extends ArExpr {
     override lazy val exprType: TType = second.exprType
-    override lazy val universe: TUniverse = second.universe
+    override lazy val universe: Universe = second.universe
   }
   final case class StoreVariable(variable: Variable[VariableLikeDescriptor], value: ArExpr, exprType: TType) extends ArExpr {
-    override val universe: TUniverse = valueUniverse
+    override val universe: Universe = ValueUniverse
   }
 
 
   sealed trait SimpleType extends ArExpr {
-    override lazy val exprType: TType = fromSimpleType(TypeOfType(nextUniverse(universe)))
-    override val universe: TTypeUniverse
+    override lazy val exprType: TType = fromSimpleType(TypeOfType(TypeUniverse(universe)))
+    override val universe: TypeUniverse
   }
 
-  final case class TypeOfType(universe: TTypeUniverse) extends SimpleType
+  final case class TypeOfType(universe: TypeUniverse) extends SimpleType
   final case class TraitType(arTrait: WrapRef[ArTrait], args: Vector[TType], baseTypes: BaseTypeInfoTrait) extends SimpleType {
-    override val universe: TTypeUniverse = nextUniverse(valueUniverse)
+    override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
   final case class ClassType(arClass: WrapRef[ArClass], args: Vector[TType], baseTypes: BaseTypeInfoClass) extends SimpleType {
-    override val universe: TTypeUniverse = nextUniverse(valueUniverse)
+    override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
   final case class DataConstructorType(ctor: WrapRef[DataConstructor], args: Vector[TType], instanceType: TraitType) extends SimpleType {
-    override val universe: TTypeUniverse = nextUniverse(valueUniverse)
+    override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
 
   final case class MetaType(innerType: TType, baseType: TType) extends SimpleType {
-    override lazy val universe: TTypeUniverse = ???
+    override lazy val universe: TypeUniverse = ???
   }
 
   final case class TupleElement[+A <: ArExpr](value: TTypeWrapper[A]) {
@@ -154,7 +147,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
     val values: NonEmptyList[TupleElement[ArExpr]]
 
     override lazy val exprType: TType = fromSimpleType(LoadTupleType(values.map { _.elementTypeElement }))
-    override lazy val universe: TUniverse = largestUniverse1(values.map { elem => universeOfExpr(elem.value) })
+    override lazy val universe: Universe = largestUniverse1(values.map { elem => universeOfExpr(elem.value) })
   }
 
   object LoadTuple {
@@ -171,7 +164,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   sealed trait LoadTupleType extends LoadTuple with SimpleType {
     val typeValues: NonEmptyList[TupleElement[SimpleType]]
-    override lazy val universe: TTypeUniverse = largestUniverse1(typeValues.map { elem => universeOfType(elem.value) })
+    override lazy val universe: TypeUniverse = largestUniverse1(typeValues.map { elem => universeOfType(elem.value) })
   }
 
   object LoadTupleType {
@@ -183,19 +176,19 @@ trait TypeSystem[TContext <: Context with Singleton] {
   }
 
   final case class FunctionType(argumentType: TType, resultType: TType) extends SimpleType {
-    override val universe: TTypeUniverse = universeUnion(
+    override val universe: TypeUniverse = Universe.union(
       universeOfType(argumentType),
       universeOfType(resultType)
     )
   }
   final case class UnionType(first: TType, second: TType) extends SimpleType {
-    override val universe: TTypeUniverse = universeUnion(
+    override val universe: TypeUniverse = Universe.union(
       universeOfType(first),
       universeOfType(second)
     )
   }
   final case class IntersectionType(first: TType, second: TType) extends SimpleType {
-    override val universe: TTypeUniverse = universeUnion(
+    override val universe: TypeUniverse = Universe.union(
       universeOfType(first),
       universeOfType(second)
     )
@@ -323,7 +316,7 @@ object TypeSystem {
     case t1: ts.DataConstructorType => convertDataConstructorType(context)(ts)(otherTS)(converter)(t1)
 
     case ts.TypeOfType(universe) =>
-      otherTS.TypeOfType(converter.convertTypeUniverse(ts)(otherTS)(universe))
+      otherTS.TypeOfType(universe)
 
     case ts.MetaType(innerType, baseType) =>
       otherTS.MetaType(
