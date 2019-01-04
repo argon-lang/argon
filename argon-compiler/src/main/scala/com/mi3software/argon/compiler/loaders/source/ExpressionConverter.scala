@@ -554,10 +554,13 @@ object ExpressionConverter {
     }
 
 
+  sealed trait HoleConstraint[TType]
+  private final case class HoleResolved[TType](t: TType) extends HoleConstraint[TType]
+  private final case class HoleBounds[TType](bounds: Set[TypeConstraint[TType]]) extends HoleConstraint[TType]
 
-  final case class TypeConstraint[TType](superType: TType, subType: TType) {
-    def map[B](f: TType => B): TypeConstraint[B] = TypeConstraint(f(superType), f(subType))
-  }
+  private sealed trait TypeConstraint[TType]
+  private final case class SuperTypeConstraint[TType](superType: TType) extends TypeConstraint[TType]
+  private final case class SubTypeConstraint[TType](subType: TType) extends TypeConstraint[TType]
 
   private trait TypeCheck[TContext <: Context with Singleton, TType, TComp[_]] extends Compilation[TComp] {
     def fromContextComp[A](context: TContext)(comp: context.Comp[A]): TComp[A]
@@ -566,7 +569,13 @@ object ExpressionConverter {
     def resolveType(t: TType): TComp[TType]
   }
 
-  type HoleTypeCheckComp[TComp[_], TType, A] = WriterT[TComp, Set[TypeConstraint[TType]], A]
+  final case class TypeCheckState[TType]
+  (
+    nextHoleId: Int,
+    constraints: Map[Int, HoleConstraint[TType]],
+  )
+
+  type HoleTypeCheckComp[TComp[_], TType, A] = StateT[TComp, TypeCheckState[TType], A]
 
   private def typeCheckHoleTypeInstance[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
@@ -577,9 +586,7 @@ object ExpressionConverter {
     new TypeCheck[context.type, ts.TType, HoleTypeCheckComp[TComp, ts.TType, ?]] {
 
       override def fromContextComp[A](context2: context.type)(comp: context.Comp[A]): HoleTypeCheckComp[TComp, ts.TType, A] =
-        WriterT(
-          comp.map { a => (Set.empty[TypeConstraint[ts.TType]], a) }
-        )
+        StateT.liftM[TComp, TypeCheckState[ts.TType], A](comp)
 
       override def createHole: HoleTypeCheckComp[TComp, ts.TType, ts.TType] = ???
 
@@ -588,16 +595,17 @@ object ExpressionConverter {
       override def resolveType(t: ts.TType): HoleTypeCheckComp[TComp, ts.TType, ts.TType] = ???
 
       override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): HoleTypeCheckComp[TComp, ts.TType, A] =
-        WriterT(Compilation[TComp].diagnostic((Set.empty[TypeConstraint[ts.TType]], value), messages))
+        StateT.liftM(Compilation[TComp].diagnostic(value, messages))
 
       override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): HoleTypeCheckComp[TComp, ts.TType, A] =
-        WriterT(Compilation[TComp].forErrors[(Set[TypeConstraint[ts.TType]], A)](errors, messages))
+        StateT.liftM(Compilation[TComp].forErrors[A](errors, messages))
 
-      override def bind[A, B](fa: WriterT[TComp, Set[TypeConstraint[ts.TType]], A])(f: A => WriterT[TComp, Set[TypeConstraint[ts.TType]], B]): HoleTypeCheckComp[TComp, ts.TType, B] =
+
+      override def bind[A, B](fa: HoleTypeCheckComp[TComp, ts.TType, A])(f: A => HoleTypeCheckComp[TComp, ts.TType, B]): HoleTypeCheckComp[TComp, ts.TType, B] =
         fa.flatMap(f)
 
-      override def point[A](a: => A): WriterT[TComp, Set[TypeConstraint[ts.TType]], A] =
-        WriterT(Compilation[TComp].point((Set.empty[TypeConstraint[ts.TType]], a)))
+      override def point[A](a: => A): HoleTypeCheckComp[TComp, ts.TType, A] =
+        StateT.liftM(a.point[TComp])
     }
 
 }
