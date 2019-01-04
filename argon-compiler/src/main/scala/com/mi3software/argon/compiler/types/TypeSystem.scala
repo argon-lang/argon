@@ -302,238 +302,249 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
 object TypeSystem {
 
-  def convertTypeSystem
+  def convertTypeSystem[F[_]: Monad]
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
   (t1: ts.TType)
-  : otherTS.TType =
-    converter.convertType(ts)(otherTS)(identity)(ts.mapTypeWrapper(t1)(convertSimpleTypeSystem(context)(ts)(otherTS)(converter)(_)))
+  : F[otherTS.TType] =
+    ts.traverseTypeWrapper(t1)(convertSimpleTypeSystem(context)(ts)(otherTS)(converter)(_))
+      .flatMap(converter.convertType(ts)(otherTS)(identity)(_))
 
-
-  def convertTraitType
+  def convertTraitType[F[_]: Monad]
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
-  (traitType: ts.TraitType): otherTS.TraitType =
-    otherTS.TraitType(
-      traitType.arTrait,
-      traitType.args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
-      otherTS.BaseTypeInfoTrait(traitType.baseTypes.baseTraits.map(convertTraitType(context)(ts)(otherTS)(converter)(_)))
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
+  (traitType: ts.TraitType)
+  : F[otherTS.TraitType] = for {
+    newArgs <- traitType.args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+    newBaseTraits <- traitType.baseTypes.baseTraits.traverse(convertTraitType(context)(ts)(otherTS)(converter)(_))
+  } yield otherTS.TraitType(
+    traitType.arTrait,
+    newArgs,
+    otherTS.BaseTypeInfoTrait(newBaseTraits)
+  )
+
+  def convertClassType[F[_]: Monad]
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
+  (classType: ts.ClassType)
+  : F[otherTS.ClassType] = for {
+    newArgs <- classType.args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+    newBaseClass <- classType.baseTypes.baseClass.traverse(convertClassType(context)(ts)(otherTS)(converter)(_))
+    newBaseTraits <- classType.baseTypes.baseTraits.traverse(convertTraitType(context)(ts)(otherTS)(converter)(_))
+  } yield otherTS.ClassType(
+    classType.arClass,
+    newArgs,
+    otherTS.BaseTypeInfoClass(
+      newBaseClass,
+      newBaseTraits
     )
+  )
 
-  def convertClassType
+
+  def convertDataConstructorType[F[_]: Monad]
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
-  (classType: ts.ClassType): otherTS.ClassType =
-    otherTS.ClassType(
-      classType.arClass,
-      classType.args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
-      otherTS.BaseTypeInfoClass(
-        classType.baseTypes.baseClass.map(convertClassType(context)(ts)(otherTS)(converter)(_)),
-        classType.baseTypes.baseTraits.map(convertTraitType(context)(ts)(otherTS)(converter)(_))
-      )
-    )
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
+  (dataCtorType: ts.DataConstructorType)
+  : F[otherTS.DataConstructorType] = for {
+    newArgs <- dataCtorType.args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+    newInstanceType <- convertTraitType(context)(ts)(otherTS)(converter)(dataCtorType.instanceType)
+  } yield otherTS.DataConstructorType(
+    dataCtorType.ctor,
+    newArgs,
+    newInstanceType
+  )
 
-
-  def convertDataConstructorType
+  final def convertSimpleTypeSystem[F[_]: Monad]
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
-  (dataCtorType: ts.DataConstructorType): otherTS.DataConstructorType =
-    otherTS.DataConstructorType(
-      dataCtorType.ctor,
-      dataCtorType.args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_)),
-      convertTraitType(context)(ts)(otherTS)(converter)(dataCtorType.instanceType)
-    )
-
-  final def convertSimpleTypeSystem
-  (context: Context)
-  (ts: TypeSystem[context.type])
-  (otherTS: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
   (t1: ts.SimpleType)
-  : otherTS.SimpleType = t1 match {
-    case t1: ts.TraitType => convertTraitType(context)(ts)(otherTS)(converter)(t1)
-    case t1: ts.ClassType => convertClassType(context)(ts)(otherTS)(converter)(t1)
-    case t1: ts.DataConstructorType => convertDataConstructorType(context)(ts)(otherTS)(converter)(t1)
+  : F[otherTS.SimpleType] = t1 match {
+    case t1: ts.TraitType => convertTraitType(context)(ts)(otherTS)(converter)(t1).map(identity)
+    case t1: ts.ClassType => convertClassType(context)(ts)(otherTS)(converter)(t1).map(identity)
+    case t1: ts.DataConstructorType => convertDataConstructorType(context)(ts)(otherTS)(converter)(t1).map(identity)
 
     case ts.TypeOfType(universe) =>
-      otherTS.TypeOfType(universe)
+      (otherTS.TypeOfType(universe) : otherTS.SimpleType).point[F]
 
     case ts.MetaType(innerType, baseType) =>
-      otherTS.MetaType(
-        convertTypeSystem(context)(ts)(otherTS)(converter)(innerType),
-        convertTypeSystem(context)(ts)(otherTS)(converter)(innerType)
-      )
+      for {
+        newInnerType <- convertTypeSystem(context)(ts)(otherTS)(converter)(innerType)
+        newBaseType <- convertTypeSystem(context)(ts)(otherTS)(converter)(baseType)
+      } yield otherTS.MetaType(newInnerType, newBaseType)
 
     case t1: ts.LoadTupleType =>
-      otherTS.LoadTupleType(t1.typeValues.map { case ts.TupleElement(elementType) =>
-        otherTS.TupleElement(convertTypeSystem(context)(ts)(otherTS)(converter)(elementType))
-      })
+      t1.typeValues
+        .traverse { case ts.TupleElement(elementType) =>
+          convertTypeSystem(context)(ts)(otherTS)(converter)(elementType).map(otherTS.TupleElement(_))
+        }
+        .map(otherTS.LoadTupleType(_))
 
     case ts.FunctionType(argumentType, resultType) =>
-      otherTS.FunctionType(
-        convertTypeSystem(context)(ts)(otherTS)(converter)(argumentType),
-        convertTypeSystem(context)(ts)(otherTS)(converter)(resultType)
-      )
+      for {
+        newArgType <- convertTypeSystem(context)(ts)(otherTS)(converter)(argumentType)
+        newResultType <- convertTypeSystem(context)(ts)(otherTS)(converter)(resultType)
+      } yield otherTS.FunctionType(newArgType, newResultType)
 
     case ts.UnionType(first, second) =>
-      otherTS.UnionType(
-        convertTypeSystem(context)(ts)(otherTS)(converter)(first),
-        convertTypeSystem(context)(ts)(otherTS)(converter)(second)
-      )
+      for {
+        newFirst <- convertTypeSystem(context)(ts)(otherTS)(converter)(first)
+        newSecond <- convertTypeSystem(context)(ts)(otherTS)(converter)(second)
+      } yield otherTS.UnionType(newFirst, newSecond)
 
     case ts.IntersectionType(first, second) =>
-      otherTS.IntersectionType(
-        convertTypeSystem(context)(ts)(otherTS)(converter)(first),
-        convertTypeSystem(context)(ts)(otherTS)(converter)(second)
-      )
+      for {
+        newFirst <- convertTypeSystem(context)(ts)(otherTS)(converter)(first)
+        newSecond <- convertTypeSystem(context)(ts)(otherTS)(converter)(second)
+      } yield otherTS.IntersectionType(newFirst, newSecond)
 
   }
 
-  final def convertVariableTypeSystem[Desc <: VariableLikeDescriptor]
+  final def convertVariableTypeSystem[F[_]: Monad, Desc <: VariableLikeDescriptor]
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
   (v: ts.Variable[Desc])
-  : otherTS.Variable[Desc] =
-    otherTS.Variable(
+  : F[otherTS.Variable[Desc]] =
+    for {
+      newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(v.varType)
+    } yield otherTS.Variable(
       v.descriptor,
       v.name,
       v.mutability,
-      convertTypeSystem(context)(ts)(otherTS)(converter)(v.varType)
+      newType
     )
 
-  final def convertParameterTypeSystem[Desc <: VariableLikeDescriptor]
+  final def convertParameterTypeSystem[F[_]: Monad, Desc <: VariableLikeDescriptor]
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
   (p: ts.Parameter)
-  : otherTS.Parameter =
-    otherTS.Parameter(
-      p.tupleVars.map(convertVariableTypeSystem(context)(ts)(otherTS)(converter)(_)),
-      convertTypeSystem(context)(ts)(otherTS)(converter)(p.paramType)
-    )
+  : F[otherTS.Parameter] =
+    for {
+      newVars <- p.tupleVars.traverse(convertVariableTypeSystem(context)(ts)(otherTS)(converter)(_))
+      newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(p.paramType)
+    } yield otherTS.Parameter(newVars, newType)
 
-  def convertExprTypeSystem
+  def convertExprTypeSystem[F[_]: Monad]
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
   (expr: ts.ArExpr)
-  : otherTS.ArExpr = expr match {
+  : F[otherTS.ArExpr] = expr match {
     case t: ts.SimpleType =>
-      convertSimpleTypeSystem(context)(ts)(otherTS)(converter)(t)
+      convertSimpleTypeSystem(context)(ts)(otherTS)(converter)(t).map(identity)
 
     case ts.ClassConstructorCall(classType, classCtor, args) =>
-      otherTS.ClassConstructorCall(
-        convertClassType(context)(ts)(otherTS)(converter)(classType),
-        classCtor,
-        args.map(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
-      )
+      for {
+        newClassType <- convertClassType(context)(ts)(otherTS)(converter)(classType)
+        newArgs <- args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+      } yield otherTS.ClassConstructorCall(newClassType, classCtor, newArgs)
 
     case expr: ts.LoadTuple =>
-      otherTS.LoadTuple(expr.values.map { case ts.TupleElement(elementType) =>
-        otherTS.TupleElement(convertWrapExprTypeSystem(context)(ts)(otherTS)(converter)(elementType))
-      })
+      expr.values
+        .traverse { case ts.TupleElement(elementType) =>
+          convertWrapExprTypeSystem(context)(ts)(otherTS)(converter)(elementType).map(otherTS.TupleElement(_))
+        }
+        .map(otherTS.LoadTuple(_))
 
     case ts.DataConstructorCall(dataCtor, args) =>
-      otherTS.DataConstructorCall(
-        convertDataConstructorType(context)(ts)(otherTS)(converter)(dataCtor),
-        args.map(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
-      )
+      for {
+        newType <- convertDataConstructorType(context)(ts)(otherTS)(converter)(dataCtor)
+        newArgs <- args.traverse(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
+      } yield otherTS.DataConstructorCall(newType, newArgs)
 
     case ts.FunctionCall(function, args, returnType) =>
-      otherTS.FunctionCall(
-        function,
-        args.map(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_)),
-        convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
-      )
+      for {
+        newArgs <- args.traverse(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
+        newReturnType <- convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
+      } yield otherTS.FunctionCall(function, newArgs, newReturnType)
 
     case ts.IfElse(condition, ifBody, elseBody) =>
-      otherTS.IfElse(
-        convertExprTypeSystem(context)(ts)(otherTS)(converter)(condition),
-        convertExprTypeSystem(context)(ts)(otherTS)(converter)(ifBody),
-        convertExprTypeSystem(context)(ts)(otherTS)(converter)(elseBody)
-      )
+      for {
+        newCondition <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(condition)
+        newIfBody <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(ifBody)
+        newElseBody <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(elseBody)
+      } yield otherTS.IfElse(newCondition, newIfBody, newElseBody)
 
     case ts.LetBinding(variable, value, next) =>
-      otherTS.LetBinding(
-        convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable),
-        convertExprTypeSystem(context)(ts)(otherTS)(converter)(value),
-        convertExprTypeSystem(context)(ts)(otherTS)(converter)(next)
-      )
+      for {
+        newVar <- convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
+        newValue <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(value)
+        newNext <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(next)
+      } yield otherTS.LetBinding(newVar, newValue, newNext)
 
     case ts.LoadConstantBool(value, exprType) =>
-      otherTS.LoadConstantBool(
-        value,
-        convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
-      )
+      for {
+        newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
+      } yield otherTS.LoadConstantBool(value, newType)
 
     case ts.LoadConstantInt(value, exprType) =>
-      otherTS.LoadConstantInt(
-        value,
-        convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
-      )
+      for {
+        newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
+      } yield otherTS.LoadConstantInt(value, newType)
 
     case ts.LoadConstantString(value, exprType) =>
-      otherTS.LoadConstantString(
-        value,
-        convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
-      )
+      for {
+        newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
+      } yield otherTS.LoadConstantString(value, newType)
 
     case ts.LoadLambda(variable, body) =>
-      otherTS.LoadLambda(
-        convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable),
-        convertExprTypeSystem(context)(ts)(otherTS)(converter)(body)
-      )
+      for {
+        newVar <- convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
+        newBody <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(body)
+      } yield otherTS.LoadLambda(newVar, newBody)
 
     case ts.LoadVariable(variable) =>
-      otherTS.LoadVariable(
-        convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
-      )
+      for {
+        newVar <- convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
+      } yield otherTS.LoadVariable(newVar)
 
     case ts.MethodCall(method, instance, args, returnType) =>
-      otherTS.MethodCall(
-        method,
-        convertExprTypeSystem(context)(ts)(otherTS)(converter)(instance),
-        args.map(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_)),
-        convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
-      )
+      for {
+        newInstance <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(instance)
+        newArgs <- args.traverse(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
+        newReturnType <- convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
+      } yield otherTS.MethodCall(method, newInstance, newArgs, newReturnType)
 
     case ts.Sequence(first, second) =>
-      otherTS.Sequence(
-        convertExprTypeSystem(context)(ts)(otherTS)(converter)(first),
-        convertExprTypeSystem(context)(ts)(otherTS)(converter)(second)
-      )
+      for {
+        newFirst <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(first)
+        newSecond <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(second)
+      } yield otherTS.Sequence(newFirst, newSecond)
 
     case ts.StoreVariable(variable, value, unitType) =>
-      otherTS.StoreVariable(
-        convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable),
-        convertExprTypeSystem(context)(ts)(otherTS)(converter)(value),
-        convertTypeSystem(context)(ts)(otherTS)(converter)(unitType)
-      )
+      for {
+        newVar <- convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
+        newValue <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(value)
+        newUnitType <- convertTypeSystem(context)(ts)(otherTS)(converter)(unitType)
+      } yield otherTS.StoreVariable(newVar, newValue, newUnitType)
 
   }
 
 
-  def convertWrapExprTypeSystem
+  def convertWrapExprTypeSystem[F[_]: Monad]
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
   (expr: ts.WrapExpr)
-  : otherTS.WrapExpr =
-    converter.convertType[otherTS.ArExpr](ts)(otherTS)(t => t)(ts.mapTypeWrapper(expr)(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_)))
+  : F[otherTS.WrapExpr] =
+    ts.traverseTypeWrapper(expr)(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
+      .flatMap(converter.convertType[otherTS.ArExpr](ts)(otherTS)(t => t)(_))
 
 
 
-  }
+}

@@ -532,8 +532,8 @@ object ExpressionConverter {
   (holeTS: TypeSystem[context.type] {
     type TTypeWrapper[A] = HoleType[innerTS.TTypeWrapper[A]]
   })
-  : TypeSystemConverter[context.type, innerTS.type, holeTS.type] =
-    new TypeSystemConverter[context.type, innerTS.type, holeTS.type] {
+  : TypeSystemConverter[context.type, innerTS.type, holeTS.type, Id] =
+    new TypeSystemConverter[context.type, innerTS.type, holeTS.type, Id] {
       override def convertType[A](ts1: innerTS.type)(ts2: holeTS.type)(fromSimpleType: ts2.SimpleType => A)(t: ts1.TTypeWrapper[A]): HoleType[innerTS.TTypeWrapper[A]] =
         HoleTypeType(t)
     }

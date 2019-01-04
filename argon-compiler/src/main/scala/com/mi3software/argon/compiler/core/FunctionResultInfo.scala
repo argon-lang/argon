@@ -1,6 +1,8 @@
 package com.mi3software.argon.compiler.core
 
 import com.mi3software.argon.compiler.types._
+import scalaz._
+import Scalaz._
 
 sealed trait FunctionResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
   val typeSystem: TS
@@ -15,16 +17,15 @@ object FunctionResultInfo {
   }
 
   implicit val sigResConverterInstance: SignatureResultConverter[FunctionResultInfo] = new SignatureResultConverter[FunctionResultInfo] {
-    override def convertTypeSystem
+    override def convertTypeSystem[F[_]: Monad]
     (context: Context)
     (ts1: TypeSystem[context.type])
     (ts2: TypeSystem[context.type])
-    (converter: TypeSystemConverter[context.type, ts1.type, ts2.type])
+    (converter: TypeSystemConverter[context.type, ts1.type, ts2.type, F])
     (result: FunctionResultInfo[context.type, ts1.type])
-    : FunctionResultInfo[context.type, ts2.type] =
-      FunctionResultInfo(ts2)(
-        TypeSystem.convertTypeSystem(context)(ts1)(ts2)(converter)(result.returnType)
-      )
+    : F[FunctionResultInfo[context.type, ts2.type]] = for {
+      returnType <- TypeSystem.convertTypeSystem(context)(ts1)(ts2)(converter)(result.returnType)
+    } yield FunctionResultInfo(ts2)(returnType)
   }
 
 }

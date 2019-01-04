@@ -39,19 +39,16 @@ object ArClass {
     }
 
     implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
-      override def convertTypeSystem
+      override def convertTypeSystem[F[_]: Monad]
       (context: Context)
       (ts1: TypeSystem[context.type])
       (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverter[context.type, ts1.type, ts2.type])
+      (converter: TypeSystemConverter[context.type, ts1.type, ts2.type, F])
       (result: ResultInfo[context.type, ts1.type])
-      : ResultInfo[context.type, ts2.type] =
-        ResultInfo(ts2)(
-          ts2.BaseTypeInfoClass(
-            result.baseTypes.baseClass.map(TypeSystem.convertClassType(context)(ts1)(ts2)(converter)(_)),
-            result.baseTypes.baseTraits.map(TypeSystem.convertTraitType(context)(ts1)(ts2)(converter)(_)),
-          )
-        )
+      : F[ResultInfo[context.type, ts2.type]] = for {
+        baseClass <- result.baseTypes.baseClass.traverse(TypeSystem.convertClassType(context)(ts1)(ts2)(converter)(_))
+        baseTraits <- result.baseTypes.baseTraits.traverse(TypeSystem.convertTraitType(context)(ts1)(ts2)(converter)(_))
+      } yield ResultInfo(ts2)(ts2.BaseTypeInfoClass(baseClass, baseTraits))
     }
 
   }

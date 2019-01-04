@@ -2,6 +2,8 @@ package com.mi3software.argon.compiler.core
 
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.types._
+import scalaz._
+import Scalaz._
 
 trait SignatureContext[TContext <: Context with Singleton]
 {
@@ -14,7 +16,7 @@ trait SignatureContext[TContext <: Context with Singleton]
     def unsubstitutedParameters: Vector[Parameter]
     def unsubstitutedResult: TResult[context.type, typeSystem.type]
 
-    def convertTypeSystem(newContext: SignatureContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type]): newContext.Signature[TResult]
+    def convertTypeSystem[F[_]: Monad](newContext: SignatureContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult]]
     def mapResult[TNewResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2]]](f: TResult[context.type, typeSystem.type] => TNewResult[context.type, typeSystem.type]): Signature[TNewResult]
 
     def visit[A](fParam: SignatureParameters[TResult] => A, fResult: SignatureResult[TResult] => A): A
@@ -34,11 +36,11 @@ trait SignatureContext[TContext <: Context with Singleton]
 
     def next[Comp[_] : Compilation](paramType: typeSystem.TType): Comp[Signature[TResult]] = ???
 
-    override def convertTypeSystem(newContext: SignatureContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type]): newContext.Signature[TResult] =
-      newContext.SignatureParameters(
-        TypeSystem.convertParameterTypeSystem(context)(typeSystem)(newContext.typeSystem)(converter)(parameter),
-        nextUnsubstituted.convertTypeSystem(newContext)(converter)
-      )
+    override def convertTypeSystem[F[_]: Monad](newContext: SignatureContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult]] =
+      for {
+        newParam <- TypeSystem.convertParameterTypeSystem(context)(typeSystem)(newContext.typeSystem)(converter)(parameter)
+        newNext <- nextUnsubstituted.convertTypeSystem(newContext)(converter)
+      } yield newContext.SignatureParameters(newParam, newNext)
 
     override def mapResult[TNewResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2]]](f: TResult[context.type, typeSystem.type] => TNewResult[context.type, typeSystem.type]): Signature[TNewResult] = ???
 
@@ -54,10 +56,10 @@ trait SignatureContext[TContext <: Context with Singleton]
 
     override def unsubstitutedResult: TResult[context.type, typeSystem.type] = result
 
-    override def convertTypeSystem(newContext: SignatureContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type]): newContext.Signature[TResult] =
-      newContext.SignatureResult(
-        implicitly[SignatureResultConverter[TResult]].convertTypeSystem(context)(typeSystem)(newContext.typeSystem)(converter)(result)
-      )
+    override def convertTypeSystem[F[_]: Monad](newContext: SignatureContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult]] =
+      for {
+        newResult <- implicitly[SignatureResultConverter[TResult]].convertTypeSystem(context)(typeSystem)(newContext.typeSystem)(converter)(result)
+      } yield newContext.SignatureResult(newResult)
 
 
     override def mapResult[TNewResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2]]](f: TResult[context.type, typeSystem.type] => TNewResult[context.type, typeSystem.type]): Signature[TNewResult] = ???

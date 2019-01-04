@@ -4,7 +4,8 @@ import com.mi3software.argon.compiler._
 import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation}
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.types.{TypeSystem, TypeSystemConverter}
-import scalaz.Memo
+import scalaz._
+import Scalaz._
 
 trait ScopeContext[TContext <: Context with Singleton] {
 
@@ -17,7 +18,7 @@ trait ScopeContext[TContext <: Context with Singleton] {
 
     def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult
 
-    def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.Scope = new other.Scope {
+    def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.Scope = new other.Scope {
       override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): other.LookupResult =
         Scope.this.findIdentifier(name, fileSpec, sourceLocation).convertScopeContext(other)(converter)
     }
@@ -51,58 +52,58 @@ trait ScopeContext[TContext <: Context with Singleton] {
 
 
   sealed trait ScopeValue {
-    def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.ScopeValue
+    def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue
   }
   final case class VariableScopeValue(variable: Variable[VariableLikeDescriptor]) extends ScopeValue {
-    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.ScopeValue =
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
       other.VariableScopeValue(TypeSystem.convertVariableTypeSystem(context)(typeSystem)(other.typeSystem)(converter)(variable))
   }
   final case class FunctionScopeValue(func: AbsRef[context.type, ArFunc]) extends ScopeValue {
-    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.ScopeValue =
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
       other.FunctionScopeValue(func)
   }
   final case class TraitScopeValue(arTrait: AbsRef[context.type, ArTrait]) extends ScopeValue {
-    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.ScopeValue =
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
       other.TraitScopeValue(arTrait)
   }
   final case class ClassScopeValue(arClass: AbsRef[context.type, ArClass]) extends ScopeValue {
-    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.ScopeValue =
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
       other.ClassScopeValue(arClass)
   }
   final case class DataConstructorScopeValue(ctor: AbsRef[context.type, DataConstructor]) extends ScopeValue {
-    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.ScopeValue =
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
       other.DataConstructorScopeValue(ctor)
   }
 
 
   sealed trait LookupResult {
-    def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.LookupResult
+    def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult
   }
   object LookupResult {
     final case class ScopeResult(scope: Scope) extends LookupResult {
-      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.LookupResult =
+      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult =
         other.LookupResult.ScopeResult(scope.convertScopeContext(other)(converter))
     }
     final case class ValuesResult(overloads: OverloadResult) extends LookupResult {
-      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.LookupResult =
+      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult =
         other.LookupResult.ValuesResult(overloads.convertScopeContext(other)(converter))
     }
     case object Failed extends LookupResult {
-      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.LookupResult =
+      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult =
         other.LookupResult.Failed
     }
   }
 
   sealed trait OverloadResult {
-    def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.OverloadResult
+    def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.OverloadResult
   }
   object OverloadResult {
     case object End extends OverloadResult {
-      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.OverloadResult =
+      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.OverloadResult =
         other.OverloadResult.End
     }
     final case class List(values: Vector[ScopeValue], next: OverloadResult) extends OverloadResult {
-      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type]): other.OverloadResult =
+      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.OverloadResult =
         other.OverloadResult.List(values.map { _.convertScopeContext(other)(converter) }, next.convertScopeContext(other)(converter))
     }
   }
