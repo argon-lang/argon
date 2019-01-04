@@ -314,7 +314,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
   def convertExprType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr)(t: typeSystem.TType): TComp[ArExpr] =
     typeSystem.isSubType[TComp](t, expr.exprType).flatMap {
-      case Some(info) => implicitly[TypeCheck[TComp]].recordSubTypeConstraint(info).map(const(expr))
+      case Some(info) => implicitly[TypeCheck[TComp]].recordConstraint(info).map(const(expr))
       case None => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(t, expr.exprType)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
     }
 
@@ -345,21 +345,6 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     type TTypeWrapper[A] = HoleType[typeSystem.TTypeWrapper[A]]
   })
   (constraints: Set[TypeConstraint[holeTS.TType]]): TComp[TType] = ???
-
-  def fillTypeHole
-  (holeTS: TypeSystem[context.type] {
-    type TTypeWrapper[+A] = HoleType[typeSystem.TTypeWrapper[A]]
-  })
-  (fill: TType)
-  : TypeSystemConverter[context.type, holeTS.type, typeSystem.type] =
-    new TypeSystemConverter[context.type, holeTS.type, typeSystem.type] {
-      override def convertType[A](ts1: holeTS.type)(ts2: typeSystem.type)(fromSimpleType: ts2.SimpleType => A)(t: HoleType[typeSystem.TTypeWrapper[A]]): ts2.TTypeWrapper[A] =
-        t match {
-          case ExpressionConverter.HoleTypeType(inner) => inner
-          case ExpressionConverter.HoleTypeHole() => typeSystem.mapTypeWrapper(fill)(fromSimpleType)
-        }
-
-    }
 
 }
 
@@ -496,7 +481,7 @@ object ExpressionConverter {
 
   sealed trait HoleType[+T]
   private final case class HoleTypeType[+T](t: T) extends HoleType[T]
-  private final case class HoleTypeHole[+T]() extends HoleType[T]
+  private final case class HoleTypeHole[+T](id: Int) extends HoleType[T]
 
   private def holeTypeSystem
   (context: Context)
@@ -515,13 +500,13 @@ object ExpressionConverter {
       override def mapTypeWrapper[A, B](t: HoleType[A])(f: A => B): HoleType[B] =
         t match {
           case HoleTypeType(a) => HoleTypeType(f(a))
-          case HoleTypeHole() => HoleTypeHole()
+          case HoleTypeHole(id) => HoleTypeHole(id)
         }
 
       override def traverseTypeWrapper[A, B, F[_] : Applicative](t: HoleType[A])(f: A => F[B]): F[HoleType[B]] =
         t match {
           case HoleTypeType(a) => f(a).map(HoleTypeType.apply)
-          case HoleTypeHole() => (HoleTypeHole() : TTypeWrapper[B]).point[F]
+          case HoleTypeHole(id) => (HoleTypeHole(id) : TTypeWrapper[B]).point[F]
         }
 
       override def wrapExprType(expr: WrapExpr): TType = ???
@@ -565,7 +550,7 @@ object ExpressionConverter {
   private trait TypeCheck[TContext <: Context with Singleton, TType, TComp[_]] extends Compilation[TComp] {
     def fromContextComp[A](context: TContext)(comp: context.Comp[A]): TComp[A]
     def createHole: TComp[TType]
-    def recordSubTypeConstraint(info: SubTypeInfo[TType]): TComp[Unit]
+    def recordConstraint(info: SubTypeInfo[TType]): TComp[Unit]
     def resolveType(t: TType): TComp[TType]
   }
 
@@ -588,9 +573,37 @@ object ExpressionConverter {
       override def fromContextComp[A](context2: context.type)(comp: context.Comp[A]): HoleTypeCheckComp[TComp, ts.TType, A] =
         StateT.liftM[TComp, TypeCheckState[ts.TType], A](comp)
 
-      override def createHole: HoleTypeCheckComp[TComp, ts.TType, ts.TType] = ???
+      override def createHole: HoleTypeCheckComp[TComp, ts.TType, ts.TType] =
+        for {
+          state <- StateT.get[TComp, TypeCheckState[ts.TType]]
+          _ <- StateT.put[TComp, TypeCheckState[ts.TType]](state.copy(nextHoleId = state.nextHoleId + 1))
+        } yield HoleTypeHole(state.nextHoleId)
 
-      override def recordSubTypeConstraint(info: SubTypeInfo[ts.TType]): HoleTypeCheckComp[TComp, ts.TType, Unit] = ???
+      private def addConstraint(id: Int, constraint: TypeConstraint[ts.TType]): HoleTypeCheckComp[TComp, ts.TType, Unit] =
+        StateT.modify[TComp, TypeCheckState[ts.TType]] { state =>
+          state.constraints.getOrElse(id, HoleBounds(Set.empty[TypeConstraint[ts.TType]])) match {
+            case HoleResolved(_) => state
+            case HoleBounds(bounds) =>
+              state.copy(constraints = state.constraints.updated(id, HoleBounds(bounds + constraint)))
+          }
+        }
+
+      override def recordConstraint(info: SubTypeInfo[ts.TType]): HoleTypeCheckComp[TComp, ts.TType, Unit] =
+        (info.subType, info.superType) match {
+          case (a @ HoleTypeHole(idA), b @ HoleTypeHole(idB)) =>
+            addConstraint(idA, SuperTypeConstraint(b)).flatMap { _ =>
+              addConstraint(idB, SubTypeConstraint(a))
+            }
+
+          case (HoleTypeHole(idA), b) =>
+            addConstraint(idA, SuperTypeConstraint(b))
+
+          case (a, HoleTypeHole(idB)) =>
+            addConstraint(idB, SubTypeConstraint(a))
+
+          case (HoleTypeType(_), HoleTypeType(_)) =>
+            info.args.traverse_(recordConstraint(_))(this)
+        }
 
       override def resolveType(t: ts.TType): HoleTypeCheckComp[TComp, ts.TType, ts.TType] = ???
 
