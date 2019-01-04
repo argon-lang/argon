@@ -419,7 +419,7 @@ object ExpressionConverter {
     val ts = new HoleTypeSystem[context.type](context)
     val converter = createConverter(context)(ts)
 
-    val tcInstance = typeCheckHoleTypeInstance[TComp](context)(ts)
+    implicit val tcInstance = typeCheckHoleTypeInstance[TComp](context)(ts)
 
     val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
 
@@ -432,7 +432,7 @@ object ExpressionConverter {
 
     val tcExpr = converter.evaluateTypeExprAST[HoleTypeCheckComp[TComp, ts.TType, ?]](env2)(expr)(tcInstance)
 
-    fillHolesType[TComp](context)(converter)(tcExpr)
+    fillHolesType[TComp](context)(ts)(tcExpr)
   }
 
 
@@ -443,7 +443,7 @@ object ExpressionConverter {
     val ts = new HoleTypeSystem[context.type](context)
     val converter = createConverter(context)(ts)
 
-    val tcInstance = typeCheckHoleTypeInstance[TComp](context)(ts)
+    implicit val tcInstance = typeCheckHoleTypeInstance[TComp](context)(ts)
 
     val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
 
@@ -456,7 +456,7 @@ object ExpressionConverter {
 
     val tcExpr = converter.resolveUnitType[HoleTypeCheckComp[TComp, ts.TType, ?]](env2)(location)(tcInstance)
 
-    fillHolesType[TComp](context)(converter)(tcExpr)
+    fillHolesType[TComp](context)(ts)(tcExpr)
   }
 
 
@@ -494,9 +494,21 @@ object ExpressionConverter {
 
   private def fillHolesType[TComp[_] : Compilation]
   (context: Context)
-  (exprConv: ExpressionConverter[context.type])
-  (expr: HoleTypeCheckComp[TComp, exprConv.typeSystem.TType, exprConv.typeSystem.TType])
-  : TComp[context.typeSystem.TType] = ???
+  (ts: HoleTypeSystem[context.type])
+  (t: HoleTypeCheckComp[TComp, ts.TType, ts.TType])
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, HoleTypeCheckComp[TComp, ts.TType, ?]])
+  : TComp[context.typeSystem.TType] =
+    t
+      .flatMap { t =>
+        StateT.get[TComp, TypeCheckState[ts.TType]]
+          .flatMap { state =>
+            resolveHoles(context)(ts)(state.nextHoleId)
+          }
+          .flatMap { _ =>
+            fillHolesTypeChildren(context)(ts)(t)
+          }
+      }
+      .eval(TypeCheckState.default)
 
   private def fillHolesExpr[TComp[_]]
   (context: Context)
@@ -520,16 +532,27 @@ object ExpressionConverter {
   (expr: ts.ArExpr)
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
   : TComp[context.typeSystem.ArExpr] = expr match {
-    case t: ts.SimpleType => fillHolesSimpleType(context)(ts)(t)
+    case t: ts.SimpleType => fillHolesSimpleTypeChildren(context)(ts)(t).map(identity)
     case _ => ???
   }
 
-  private def fillHolesSimpleType[TComp[_]]
+  private def fillHolesTypeChildren[TComp[_]]
   (context: Context)
   (ts: HoleTypeSystem[context.type])
-  (expr: ts.ArExpr)
+  (t: ts.TType)
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.ArExpr] = ???
+  : TComp[context.typeSystem.TType] = t match {
+    case HoleTypeHole(_) => tcInstance.resolveType(t).flatMap(fillHolesTypeChildren(context)(ts)(_))
+    case HoleTypeType(t) => fillHolesSimpleTypeChildren(context)(ts)(t).map(context.typeSystem.fromSimpleType(_))
+  }
+
+
+  private def fillHolesSimpleTypeChildren[TComp[_]]
+  (context: Context)
+  (ts: HoleTypeSystem[context.type])
+  (t: ts.SimpleType)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[context.typeSystem.SimpleType] = ???
 
 
   sealed trait HoleType[+T]
