@@ -22,9 +22,6 @@ sealed trait Context {
   type TDataConstructorMetadata
   type TClassConstructorMetadata
 
-  val invalidTraitMetadata: TTraitMetadata
-  val invalidClassMetadata: TClassMetadata
-
   type Comp[+_]
   implicit val compCompilationInstance: Compilation[Comp]
 

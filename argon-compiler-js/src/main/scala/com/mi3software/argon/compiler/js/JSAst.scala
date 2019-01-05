@@ -19,17 +19,22 @@ final case class JSImportAllStatement(defaultExport: Option[JSIdentifier], name:
 sealed trait JSStatement extends JSModuleStatement
 
 
-final case class JSConst(bindings: NonEmptyList[JSBinding]) extends JSStatement
+final case class JSConst(declarations: NonEmptyList[JSDeclaration]) extends JSStatement
 final case class JSFunctionStatement(name: JSIdentifier, parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSStatement
 
 sealed trait JSBinding
-final case class JSBindNewVariable(name: JSIdentifier) extends JSBinding
-final case class JSBindValue(name: JSIdentifier, value: JSExpression) extends JSBinding
+sealed trait JSBindingNonEmpty extends JSBinding
+final case class JSBindingIdentifier(identifier: JSIdentifier) extends JSBindingNonEmpty
+final case class JSArrayDestructBinding(bindings: Vector[JSBinding]) extends JSBindingNonEmpty
+
+sealed trait JSDeclaration
+final case class JSDeclareNewVariable(binding: JSBindingNonEmpty) extends JSDeclaration
+final case class JSDeclareInit(binding: JSBindingNonEmpty, value: JSExpression) extends JSDeclaration
 
 sealed trait JSFunctionParameterList
 case object JSFunctionEmptyParameterList extends JSFunctionParameterList
-final case class JSFunctionParameter(name: JSIdentifier, next: JSFunctionParameterList) extends JSFunctionParameterList
-final case class JSFunctionRestParameters(name: JSIdentifier) extends JSFunctionParameterList
+final case class JSFunctionParameter(name: JSBindingNonEmpty, next: JSFunctionParameterList) extends JSFunctionParameterList
+final case class JSFunctionRestParameters(name: JSBindingNonEmpty) extends JSFunctionParameterList
 
 sealed trait JSExpression extends JSStatement
 
@@ -46,6 +51,7 @@ final case class JSPropertyAccessDot(expr: JSExpression, prop: JSIdentifier) ext
 final case class JSPropertyAccessBracket(expr: JSExpression, prop: JSExpression) extends JSExpression
 final case class JSString(value: String) extends JSExpression
 final case class JSFunctionCall(function: JSExpression, args: Vector[JSExpression]) extends JSExpression
+final case class JSFunctionExpression(name: Option[JSIdentifier], parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSExpression
 
 case object JSNull extends JSExpression
 
@@ -93,11 +99,11 @@ object JSAst {
       stmt match {
         case JSConst(bindings) =>
           writer.print("const ")
-          writeBinding(bindings.head)
+          writeDeclaration(bindings.head)
 
           for(binding <- bindings.tail.toVector) {
             writer.print(", ")
-            writeBinding(binding)
+            writeDeclaration(binding)
           }
           writer.print(";")
 
@@ -115,15 +121,29 @@ object JSAst {
           writer.print(";")
       }
 
-    def writeBinding(binding: JSBinding): Unit =
-      binding match {
-        case JSBindNewVariable(name) =>
-          writeIdentifier(name)
+    def writeDeclaration(decl: JSDeclaration): Unit =
+      decl match {
+        case JSDeclareNewVariable(binding) =>
+          writeBinding(binding)
 
-        case JSBindValue(name, value) =>
-          writeIdentifier(name)
+        case JSDeclareInit(binding, value) =>
+          writeBinding(binding)
           writer.print(" = ")
           writeExprParen(value)
+      }
+
+    def writeBinding(binding: JSBinding): Unit =
+      binding match {
+        case JSBindingIdentifier(id) =>
+          writeIdentifier(id)
+
+        case JSArrayDestructBinding(bindings) =>
+          writer.print("[")
+          for(binding <- bindings) {
+            writeBinding(binding)
+            writer.print(",")
+          }
+          writer.print("]")
       }
 
     def writeExprParen(expr: JSExpression): Unit = {
@@ -182,6 +202,15 @@ object JSAst {
           }
           writer.print(")")
 
+        case JSFunctionExpression(name, parameters, body) =>
+          writer.print("function ")
+          name.foreach(writeIdentifier)
+          writer.print("(")
+          writeParameterList(parameters)
+          writer.print("){")
+          body.foreach(writeStatement)
+          writer.print("}")
+
         case JSNull =>
           writer.print("null")
       }
@@ -198,14 +227,14 @@ object JSAst {
     def writeParameterList(params: JSFunctionParameterList): Unit =
       params match {
         case JSFunctionEmptyParameterList => ()
-        case JSFunctionParameter(name, next) =>
-          writeIdentifier(name)
+        case JSFunctionParameter(binding, next) =>
+          writeBinding(binding)
           writer.print(",")
           writeParameterList(next)
 
-        case JSFunctionRestParameters(name) =>
+        case JSFunctionRestParameters(binding) =>
           writer.print("...")
-          writeIdentifier(name)
+          writeBinding(binding)
       }
 
   }

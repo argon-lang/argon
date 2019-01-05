@@ -32,15 +32,15 @@ final class JSEmitter {
 
         Vector(
           JSConst(NonEmptyList(
-            JSBindValue(moduleVarName, create_empty_obj)
+            JSDeclareInit(JSBindingIdentifier(moduleVarName), create_empty_obj)
           )),
 
           JSConst(NonEmptyList(
-            JSBindValue(funcsVarName, create_empty_obj)
+            JSDeclareInit(JSBindingIdentifier(funcsVarName), create_empty_obj)
           )),
 
           JSConst(NonEmptyList(
-            JSBindValue(traitsVarName, create_empty_obj)
+            JSDeclareInit(JSBindingIdentifier(traitsVarName), create_empty_obj)
           )),
         ),
 
@@ -69,15 +69,18 @@ final class JSEmitter {
       case binding: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier] => Vector(binding)
     }
 
-  private def createObjectsForScopeValue[TComp[+_] : Compilation](context: ContextComp[TComp])(value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): TComp[JSStatement] =
+  private def createObjectsForScopeValue[TComp[+_] : Compilation](context: JSContext[TComp])(value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): TComp[JSStatement] =
     value match {
       case GlobalBinding.GlobalFunction(_, _, func) =>
         for {
           sig <- func.signature
+          impl <- func.payload : TComp[context.JSImpl.Function]
         } yield JSAssignment(
             JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor, ErasedSignature.fromSignature(context)(sig)))),
             JSObjectLiteral(Vector(
-              JSObjectProperty("impl", JSNull)
+              JSObjectProperty("impl", impl match {
+                case context.JSImpl.Function.ExpressionBody(expr) => createExpressionImpl(context)(sig)(expr)
+              })
             ))
           )
 
@@ -93,6 +96,29 @@ final class JSEmitter {
       case GlobalBinding.GlobalDataConstructor(_, _, _) => ???
     }
 
+  private def createExpressionImpl[TComp[+_] : Compilation](context: JSContext[TComp])(sig: context.signatureContext.Signature[FunctionResultInfo])(expr: context.typeSystem.ArExpr): JSExpression =
+    JSFunctionExpression(
+      None,
+      createParameterList(context)(sig),
+      convertStmt(context)(expr)
+    )
 
+  private def createParameterList[TComp[+_] : Compilation](context: JSContext[TComp])(sig: context.signatureContext.Signature[FunctionResultInfo]): JSFunctionParameterList =
+    sig.unsubstitutedParameters.foldRight[JSFunctionParameterList](JSFunctionEmptyParameterList) { (param, list) =>
+      JSFunctionParameter(
+        JSArrayDestructBinding(
+          param.tupleVars.map { tupleVar =>
+            JSBindingIdentifier(JSIdentifier(s"param_${tupleVar.descriptor.index}_${tupleVar.descriptor.tupleIndex}"))
+          }
+        ),
+        list
+      )
+    }
+
+  private def convertStmt[TComp[+_] : Compilation](context: JSContext[TComp])(expr: context.typeSystem.ArExpr): Vector[JSStatement] = expr match {
+    case _ => Vector(convertExpr(context)(expr))
+  }
+
+  private def convertExpr[TComp[+_] : Compilation](context: JSContext[TComp])(expr: context.typeSystem.ArExpr): JSExpression = ???
 
 }

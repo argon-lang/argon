@@ -11,14 +11,22 @@ final class JSContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
   override type TTraitMetadata = JSMetadata.Trait
   override type TClassMetadata = JSMetadata.Class
 
-  override val invalidTraitMetadata: JSMetadata.Trait = JSMetadata.Trait.Invalid
-  override val invalidClassMetadata: JSMetadata.Class = JSMetadata.Class.Invalid
-
-
+  override type TFunctionImplementation = JSImpl.Function
 
   override type Comp[+T] = TComp[T]
 
   override val compCompilationInstance: Compilation[Comp] = implicitly
 
   override val moduleLoaders: Vector[ModuleLoader] = Vector(ArgonModuleLoader)
+
+
+  object JSImpl {
+    import typeSystem._
+
+    sealed trait Function
+    object Function {
+      final case class ExpressionBody(expr: ArExpr) extends Function
+    }
+  }
+
 }
