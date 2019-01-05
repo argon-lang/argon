@@ -14,20 +14,24 @@ object JSBackend extends Backend {
   override val id: String = "js"
   override val name: String = "JavaScript"
 
-  override def compile(input: CompilerInput): IO[(Set[CompilationMessageNonFatal], NonEmptyList[CompilationError] \/ CompilationResult)] = {
+  override def compile(input: CompilerInput): IO[CompilationResult] = {
     val context = new JSContext[StandardCompilationType]
     val emitter = new JSEmitter
 
-    context.createModule(input).map {
-      _
+    context.createModule(input).map { module =>
+      val (messages, result) = module
         .flatMap(emitter.emitModule(context))
         .map { jsModule =>
-          new CompilationResult {
+          new CompilationOutput {
             override def writeToFile(outputFile: File): IO[Unit] =
               FileOperations.filePrintWriter(outputFile)(IOHelpers.impureFunction(JSAst.writeModule(jsModule)))
           }
         }
-        .run.run.run(Set.empty)
+        .run
+        .run
+        .run(Set.empty)
+
+      CompilationResult(messages, result)
     }
   }
 }

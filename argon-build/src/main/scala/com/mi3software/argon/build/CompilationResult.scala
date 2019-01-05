@@ -1,9 +1,6 @@
 package com.mi3software.argon.build
 
-import java.io.File
+import com.mi3software.argon.compiler._
+import scalaz._
 
-import scalaz.effect.IO
-
-trait CompilationResult {
-  def writeToFile(outputFile: File): IO[Unit]
-}
+final case class CompilationResult(messages: Set[CompilationMessageNonFatal], result: NonEmptyList[CompilationError] \/ CompilationOutput)

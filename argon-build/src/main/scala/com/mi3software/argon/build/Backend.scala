@@ -9,7 +9,7 @@ trait Backend {
   val id: String
   val name: String
 
-  def compile(input: CompilerInput): IO[(Set[CompilationMessageNonFatal], NonEmptyList[CompilationError] \/ CompilationResult)]
+  def compile(input: CompilerInput): IO[CompilationResult]
 
 }
 
