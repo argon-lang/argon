@@ -55,8 +55,9 @@ private[compiler] object SourceModuleCreator {
     for {
       scope <- createScope[TComp](context2)(referencedModules)(sourceAST)
       envF = (envFileSpec: FileSpec) => new EnvCreator[context2.type] {
-        override def apply(context: context2.type)(descriptor: VariableOwnerDescriptor): ExpressionConverter.Env[context.type, context.scopeContext.Scope] =
+        override def apply(context: context2.type)(effectInfo: EffectInfo, descriptor: VariableOwnerDescriptor): ExpressionConverter.Env[context.type, context.scopeContext.Scope] =
           ExpressionConverter.Env(
+            effectInfo = effectInfo,
             descriptor = descriptor,
             fileSpec = fileSpec,
             referencedModules = referencedModules,

@@ -237,6 +237,14 @@ object CompilationError {
     override def message: String = "Expression is not a type"
   }
 
+  final case class MutableVariableNotPureError(name: VariableName, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Declaring mutable variable '$name' does not meet purity requirements"
+  }
+
+  final case class ImpureFunctionCalledError(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"An invoked function does not meet purity requirements"
+  }
+
   sealed trait ModuleObjectType {
     def name: String
   }

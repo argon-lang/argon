@@ -68,10 +68,7 @@ final class BuildTestCaseRunner(backend: Backend, references: Vector[File]) exte
               )
 
             case TestCaseExpectedError(errorName) if isExpectedError(errors, errorName) =>
-              TestCaseResult.Failure(
-                TestCaseActualResult.Errors(errors),
-                testCase.expectedResult
-              )
+              TestCaseResult.Success
 
             case TestCaseExpectedError(_) =>
               TestCaseResult.Failure(

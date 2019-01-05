@@ -29,13 +29,13 @@ private[compiler] object SourceFunction {
 
       override lazy val signature: TComp[context.signatureContext.Signature[FunctionResultInfo]] =
         SourceSignatureCreator.fromParameters[TComp, FunctionResultInfo](context2)(
-          env(context)(descriptor)
+          env(context)(effectInfo, descriptor)
         )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType))
 
       override lazy val payload: TComp[context.TFunctionImplementation] =
         for {
           sig <- signature
-          env2 = env(context)(descriptor)
+          env2 = env(context)(effectInfo, descriptor)
           env3 = env2.copy(scope = env2.scope.addVariables(
             sig.unsubstitutedParameters.flatMap(_.tupleVars)
           ))

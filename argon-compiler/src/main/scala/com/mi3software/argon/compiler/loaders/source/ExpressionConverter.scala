@@ -119,8 +119,16 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
       case WithSource(stmt: parser.VariableDeclarationStmt, location) +: tail =>
         new ExprFactory[TComp] {
-          override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
+          override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] = {
+            val mutability = Mutability.fromIsMutable(stmt.isMutable)
+            val varName = stmt.name match {
+              case Some(name) => VariableName.Normal(name)
+              case None => VariableName.Unnamed
+            }
+
             for {
+              _ <- Compilation[TComp].require(env.effectInfo.canDeclareVariable(mutability))(CompilationError.MutableVariableNotPureError(varName, CompilationMessageSource.SourceFile(env.fileSpec, location)))
+
               exprType <- stmt.varType match {
                 case Some(varTypeExpr) => evaluateTypeExprAST(env)(varTypeExpr)
                 case None => implicitly[TypeCheck[TComp]].createHole
@@ -130,18 +138,19 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
               variable = Variable(
                 VariableDescriptor(env.descriptor, env.scope.nextVariable),
-                stmt.name match {
-                  case Some(name) => VariableName.Normal(name)
-                  case None => VariableName.Unnamed
-                },
-                Mutability.fromIsMutable(stmt.isMutable),
+                varName,
+                mutability,
                 varType
               )
               env2 = env.copy(scope = env.scope.addVariable(variable))
 
+
+
               secondStartPos = tail.headOption.map { _.location.start }.getOrElse(stmts.location.end)
               second <- convertStmts(env2)(WithSource(tail, SourceLocation(secondStartPos, stmts.location.end))).forExpectedType(expectedType)
             } yield LetBinding(variable, valueExpr, second)
+
+          }
         }
 
       case Vector(stmt) => convertStmt(env)(stmt)
@@ -247,6 +256,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           case FunctionScopeValue(func) =>
             compFactory(
               for {
+                _ <- Compilation[TComp].require(env.effectInfo.canCall(func.value.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
                 sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(func.value.signature)
                 convSig = convertSignature(sig)
               } yield signatureFactory(env)(location)(convSig) { (args, result) => FunctionCall(func, args, result.returnType).upcast[ArExpr].point[TComp] }
@@ -407,6 +417,7 @@ object ExpressionConverter {
 
   final case class Env[TContext <: Context with Singleton, TScope]
   (
+    effectInfo: EffectInfo,
     descriptor: VariableOwnerDescriptor,
     fileSpec: FileSpec,
     referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]],
@@ -414,7 +425,7 @@ object ExpressionConverter {
   )
 
   trait EnvCreator[TContext <: Context with Singleton] {
-    def apply(context: TContext)(descriptor: VariableOwnerDescriptor): Env[context.type, context.scopeContext.Scope]
+    def apply(context: TContext)(effectInfo: EffectInfo, descriptor: VariableOwnerDescriptor): Env[context.type, context.scopeContext.Scope]
 
     val fileSpec: FileSpec
   }
@@ -456,6 +467,7 @@ object ExpressionConverter {
     val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
 
     val env2 = Env(
+      effectInfo = env.effectInfo,
       descriptor = env.descriptor,
       fileSpec = env.fileSpec,
       referencedModules = env.referencedModules,
@@ -493,6 +505,7 @@ object ExpressionConverter {
     val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
 
     val env2 = Env(
+      effectInfo = env.effectInfo,
       descriptor = env.descriptor,
       fileSpec = env.fileSpec,
       referencedModules = env.referencedModules,
@@ -517,6 +530,7 @@ object ExpressionConverter {
     val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
 
     val env2 = Env(
+      effectInfo = env.effectInfo,
       descriptor = env.descriptor,
       fileSpec = env.fileSpec,
       referencedModules = env.referencedModules,
