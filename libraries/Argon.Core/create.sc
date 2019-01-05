@@ -300,7 +300,7 @@ val module = Module(
           )),
         ),
         returnType = Type.ClassType(ClassType(
-          classId = String_classId,
+          classId = Unit_classId,
           typeArguments = Seq(),
         ))
       ),
