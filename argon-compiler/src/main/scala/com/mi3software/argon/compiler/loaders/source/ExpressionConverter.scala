@@ -91,6 +91,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           } yield factoryForExpr(env)(expr.location)(LoadConstantString(str, stringType))
         )
 
+      case parser.UnitLiteral =>
+        compFactory(
+          for {
+            unitType <- resolveUnitType(env)(expr.location)
+          } yield factoryForExpr(env)(expr.location)(LoadUnit(unitType))
+        )
+
+
       case _ => ???
     }
 
