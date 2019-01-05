@@ -9,31 +9,6 @@ import fs2._
 import com.mi3software.argon.parser.impl.ParseHandler
 import shims._
 
-final class TestCaseRunner {
-
-  def parse[F[_]: cats.effect.Sync](testCase: TestCase): F[TestCaseResult] =
-    testCase
-      .sourceCode
-      .zipWithIndex
-      .traverse {
-        case (InputSourceData(filename, data), i) =>
-          val fileSpec = FileSpec(FileID(i), filename)
-
-          Stream(data: _*)
-            .covary[EitherT[F, NonEmptyList[SyntaxError], ?]]
-            .through(ParseHandler.parse(fileSpec))
-            .translate(ParseHandler.convertSyntaxErrorToCompilationError(fileSpec))
-            .compile
-            .toVector(CatsInstances.scalazEitherTSync)
-      }
-      .run
-      .map {
-        case \/-(_) => TestCaseResult.Success
-        case -\/(errors) =>
-          TestCaseResult.Failure(
-            TestCaseActualResult.Errors(errors.map(CompilationError.SyntaxCompilerError.apply)),
-            TestCaseExpectedOutput("")
-          )
-      }
-
+trait TestCaseRunner {
+  def runTest[F[_]: cats.effect.Sync](testCase: TestCase): F[TestCaseResult]
 }
