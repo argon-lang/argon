@@ -41,7 +41,7 @@ sealed trait Context {
     override lazy val typeSystem: Context.this.typeSystem.type = Context.this.typeSystem
   }
 
-  val moduleLoaders: Vector[ModuleLoader]
+  val moduleLoaders: Vector[ModuleLoader[this.type]]
 
   def createModule(input: CompilerInput): IO[Comp[ArModule[this.type, DeclarationPayloadSpecifier]]]
 
