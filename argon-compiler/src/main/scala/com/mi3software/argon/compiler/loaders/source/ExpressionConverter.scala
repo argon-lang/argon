@@ -574,12 +574,17 @@ object ExpressionConverter {
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
   : TComp[context.typeSystem.ArExpr] = expr match {
     case t: ts.SimpleType => fillHolesSimpleTypeChildren(context)(ts)(t).map(identity)
+
     case ts.FunctionCall(function, args, returnType) =>
       for {
         sig <- tcInstance.fromContextComp(context)(function.value.signature)
         (newArgs, result) <- fillSignatureArgs(context)(ts)(sig)(args)
       } yield context.typeSystem.FunctionCall(function, newArgs, result.returnType)
 
+    case ts.LoadConstantString(str, stringType) =>
+      for {
+        newStringType <- fillHolesTypeChildren(context)(ts)(stringType)
+      } yield context.typeSystem.LoadConstantString(str, newStringType)
 
     case t: ts.LoadTuple =>
       for {
