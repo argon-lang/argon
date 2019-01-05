@@ -589,7 +589,7 @@ object ExpressionConverter {
     override def isSubTypeWrapper[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[SubTypeInfo[TType]]] =
       (a, b) match {
         case (HoleTypeType(aInner), HoleTypeType(bInner)) => isSimpleSubType(aInner, bInner)
-        case (_, _) => Option.empty[SubTypeInfo[TType]].point[TComp]
+        case (_, _) => (Some(SubTypeInfo(a, b, Vector.empty)) : Option[SubTypeInfo[TType]]).point[TComp]
       }
 
     override def universeOfExpr(expr: WrapExpr): Universe = ???
