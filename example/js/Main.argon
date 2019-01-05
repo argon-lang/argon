@@ -1,4 +1,4 @@
 import Ar._
 
-proc main(): () =
+proc main(): Unit =
     puts 'Hello World'
