@@ -20,14 +20,18 @@ union GlobalName {
 }
 
 union Type {
-    1: ErrorType errorType;
     2: TraitType traitType;
     3: ClassType classType;
     4: ConstructorInstanceType constructorInstanceType;
 }
 
+struct ParameterElement {
+    1: string name;
+    2: Type paramType;
+}
+
 struct Parameter {
-    1: Type paramType;
+    1: list<ParameterElement> elements;
 }
 
 struct EffectInfo {

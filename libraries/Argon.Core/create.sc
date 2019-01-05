@@ -289,12 +289,15 @@ val module = Module(
       effects = EffectInfo(isPure = false),
       signature = FunctionSignature(
         parameters = Seq(
-          Parameter(
-            paramType = Type.ClassType(ClassType(
-              classId = String_classId,
-              typeArguments = Seq(),
-            ))
-          ),
+          Parameter(Seq(
+            ParameterElement(
+              paramType = Type.ClassType(ClassType(
+                classId = String_classId,
+                typeArguments = Seq(),
+              )),
+              name = "str"
+            )
+          )),
         ),
         returnType = Type.ClassType(ClassType(
           classId = String_classId,

@@ -363,7 +363,7 @@ object ArgonModuleLoader {
                         compEv(
                           for {
                             baseTraitsResolved <- baseTraits.toVector.traverse(resolveTraitType(_))
-                            parametersResolved <- parameters.toVector.traverse(resolveParameter(_))
+                            parametersResolved <- parameters.zipWithIndex.toVector.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
 
                             result = SignatureResult[ArTrait.ResultInfo](
                               ArTrait.ResultInfo(typeSystem)(BaseTypeInfoTrait(baseTraitsResolved))
@@ -449,7 +449,7 @@ object ArgonModuleLoader {
                           for {
                             baseClassResolved <- baseClass.traverse(resolveClassType(_))
                             baseTraitsResolved <- baseTraits.toVector.traverse(resolveTraitType(_))
-                            parametersResolved <- parameters.toVector.traverse(resolveParameter(_))
+                            parametersResolved <- parameters.zipWithIndex.toVector.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
 
                             result = SignatureResult[ArClass.ResultInfo](
                               ArClass.ResultInfo(typeSystem)(BaseTypeInfoClass(baseClassResolved, baseTraitsResolved))
@@ -552,7 +552,7 @@ object ArgonModuleLoader {
                         compEv(
                           for {
                             returnTypeResolved <- resolveType(returnType)
-                            parametersResolved <- parameters.toVector.traverse(resolveParameter(_))
+                            parametersResolved <- parameters.zipWithIndex.toVector.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
 
                             result = SignatureResult[FunctionResultInfo](
                               FunctionResultInfo(typeSystem)(returnTypeResolved)
@@ -765,9 +765,33 @@ object ArgonModuleLoader {
                 }
               }
 
-            def resolveType(t: ArgonModule.Type): TComp[TType] = ???
+            def resolveType(t: ArgonModule.Type): TComp[TType] =
+              t match {
+                case ArgonModule.Type.TraitType(traitType) => resolveTraitType(traitType)
+                case ArgonModule.Type.ClassType(classType) => resolveClassType(classType)
+                case ArgonModule.Type.ConstructorInstanceType(constructorInstanceType) => ???
+                case ArgonModule.Type.UnknownUnionField(_) => ???
+              }
 
-            def resolveParameter(parameter: ArgonModule.Parameter): TComp[Parameter] = ???
+            def resolveParameter(ownerDescriptor: ParameterOwnerDescriptor)(index: Int)(parameter: ArgonModule.Parameter): TComp[Parameter] =
+              parameter.elements
+                .zipWithIndex
+                .toVector
+                .traverse { case (ArgonModule.ParameterElement(name, paramType), tupleIndex) =>
+                  resolveType(paramType)
+                    .map(Variable(DeconstructedParameterDescriptor(ownerDescriptor, index, tupleIndex), VariableName.Normal(name), Mutability.Mutable, _))
+                }
+                .map {
+                  case Vector() => ???
+
+                  case variables @ head +: tail =>
+
+                  val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTupleType(
+                    NonEmptyList(head, tail: _*).map { v => context.typeSystem.TupleElement(v.varType) }
+                  ))
+
+                  Parameter(variables, paramType)
+                }
 
             override lazy val module: TComp[ArModule[context.type, TPayloadSpec]] =
               for {
