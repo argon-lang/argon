@@ -1,10 +1,11 @@
 package com.mi3software.argon.compiler.js
 
-import com.mi3software.argon.compiler._
+import com.mi3software.argon.compiler.{js, _}
 import scalaz._
 import Scalaz._
 import com.mi3software.argon.compiler.core.PayloadSpecifiers._
 import com.mi3software.argon.compiler.core.{GlobalBinding, _}
+import com.mi3software.argon.compiler.lookup.LookupNames
 
 final class JSEmitter {
 
@@ -75,12 +76,13 @@ final class JSEmitter {
         for {
           sig <- func.signature
           impl <- func.payload : TComp[context.JSImpl.Function]
+          body <- impl match {
+            case context.JSImpl.Function.ExpressionBody(expr) => createExpressionImpl(context)(sig)(expr)
+          }
         } yield JSAssignment(
             JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor, ErasedSignature.fromSignature(context)(sig)))),
             JSObjectLiteral(Vector(
-              JSObjectProperty("impl", impl match {
-                case context.JSImpl.Function.ExpressionBody(expr) => createExpressionImpl(context)(sig)(expr)
-              })
+              JSObjectProperty("impl", body)
             ))
           )
 
@@ -96,11 +98,13 @@ final class JSEmitter {
       case GlobalBinding.GlobalDataConstructor(_, _, _) => ???
     }
 
-  private def createExpressionImpl[TComp[+_] : Compilation](context: JSContext[TComp])(sig: context.signatureContext.Signature[FunctionResultInfo])(expr: context.typeSystem.ArExpr): JSExpression =
-    JSFunctionExpression(
+  private def createExpressionImpl[TComp[+_] : Compilation](context: JSContext[TComp])(sig: context.signatureContext.Signature[FunctionResultInfo])(expr: context.typeSystem.ArExpr): TComp[JSExpression] =
+    for {
+      body <- convertStmt(context)(expr)
+    } yield JSFunctionExpression(
       None,
       createParameterList(context)(sig),
-      convertStmt(context)(expr)
+      body
     )
 
   private def createParameterList[TComp[+_] : Compilation](context: JSContext[TComp])(sig: context.signatureContext.Signature[FunctionResultInfo]): JSFunctionParameterList =
@@ -115,10 +119,48 @@ final class JSEmitter {
       )
     }
 
-  private def convertStmt[TComp[+_] : Compilation](context: JSContext[TComp])(expr: context.typeSystem.ArExpr): Vector[JSStatement] = expr match {
-    case _ => Vector(convertExpr(context)(expr))
+  private def convertStmt[TComp[+_] : Compilation](context: JSContext[TComp])(expr: context.typeSystem.ArExpr): TComp[Vector[JSStatement]] = expr match {
+    case _ => convertExpr(context)(expr).map(Vector(_))
   }
 
-  private def convertExpr[TComp[+_] : Compilation](context: JSContext[TComp])(expr: context.typeSystem.ArExpr): JSExpression = ???
+  private def convertExpr[TComp[+_] : Compilation](context: JSContext[TComp])(expr: context.typeSystem.ArExpr): TComp[JSExpression] = {
+    import context.typeSystem. { context => _, _ }
+    expr match {
+      case FunctionCall(func, args, _) =>
+        for {
+          sig <- func.value.signature
+
+          funcExpr = func.value.descriptor match {
+            case FuncDescriptor.InNamespace(moduleDesc, ns, name, _) =>
+              JSPropertyAccessBracket(
+                JSPropertyAccessDot(
+                  JSPropertyAccessBracket(moduleVarName, JSString(moduleDesc.name)),
+                  funcsVarName
+                ),
+                JSString(DescriptorId.forFunc(func.value.descriptor, ErasedSignature.fromSignature(context)(sig)))
+              )
+          }
+
+          argExprs <- args.traverse(convertExpr(context)(_))
+
+        } yield JSFunctionCall(funcExpr, argExprs)
+
+      case LoadConstantString(str, _) =>
+        JSFunctionCall(
+          JSPropertyAccessDot(
+            JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
+            JSIdentifier("createString")
+          ),
+          Vector(JSString(str))
+        ).point[TComp]
+
+      case expr: LoadTuple =>
+        for {
+          values <- expr.values.toVector.traverse { elem => convertExpr(context)(elem.value) }
+        } yield JSArrayLiteral(values)
+
+      case _ => ???
+    }
+  }
 
 }

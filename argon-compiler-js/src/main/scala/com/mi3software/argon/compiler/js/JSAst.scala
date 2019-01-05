@@ -52,6 +52,7 @@ final case class JSPropertyAccessBracket(expr: JSExpression, prop: JSExpression)
 final case class JSString(value: String) extends JSExpression
 final case class JSFunctionCall(function: JSExpression, args: Vector[JSExpression]) extends JSExpression
 final case class JSFunctionExpression(name: Option[JSIdentifier], parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSExpression
+final case class JSArrayLiteral(values: Vector[JSExpression]) extends JSExpression
 
 case object JSNull extends JSExpression
 
@@ -197,7 +198,7 @@ object JSAst {
           writeExprParen(function)
           writer.print("(")
           for(arg <- args) {
-            writeExprParen(arg)
+            writeExpr(arg)
             writer.print(",")
           }
           writer.print(")")
@@ -210,6 +211,14 @@ object JSAst {
           writer.print("){")
           body.foreach(writeStatement)
           writer.print("}")
+
+        case JSArrayLiteral(values) =>
+          writer.print("[")
+          for(value <- values) {
+            writeExpr(value)
+            writer.print(",")
+          }
+          writer.print("]")
 
         case JSNull =>
           writer.print("null")

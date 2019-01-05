@@ -80,14 +80,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
         compFactory(
           for {
-            intType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Int"))
+            intType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Int"))
           } yield factoryForExpr(env)(expr.location)(LoadConstantInt(value, intType))
         )
 
       case parser.StringValueExpr(str) =>
         compFactory(
           for {
-            stringType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("String"))
+            stringType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("String"))
           } yield factoryForExpr(env)(expr.location)(LoadConstantString(str, stringType))
         )
 
@@ -171,10 +171,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     evaluateTypeExprFactory(env)(location)(resolveModuleClassFactory(env)(location)(moduleDesc)(namespacePath, name)(Vector.empty))
 
   def resolveBoolClass[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
-    resolveModuleClass(env)(location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))
+    resolveModuleClass(env)(location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))
 
   def resolveUnitType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
-    resolveModuleClass(env)(location)(ModuleDescriptor("Argon.Core"))(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))
+    resolveModuleClass(env)(location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))
 
   def loadUnitLiteral[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): ExprFactory[TComp] =
     compFactory(
