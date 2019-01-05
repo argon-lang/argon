@@ -12,8 +12,3 @@ trait ArFunc[TContext <: Context, TPayloadSpec[_, _]] {
   val payload: TPayloadSpec[Comp[TFunctionImplementation], TFunctionMetadata]
 }
 
-trait ArFuncInNamespace[TContext <: Context, TPayloadSpec[_, _]] {
-  self: ArFunc[TContext, TPayloadSpec] =>
-
-  override val descriptor: FuncDescriptor.InNamespace
-}

@@ -540,7 +540,31 @@ object ArgonModuleLoader {
                       case GlobalBinding.GlobalFunction(_, _, func) => func
                     }.point[TComp]
                 },
-                definitionHandler = _ => ???
+                definitionHandler = funcId => funcValue => funcDescriptor => new ArFunc[context.type, TPayloadSpec] {
+                  override val context: ctx.type = ctx
+                  override val descriptor: FuncDescriptor = funcDescriptor
+                  override val effectInfo: EffectInfo = EffectInfo(
+                    isPure = funcValue.effects.isPure,
+                  )
+                  override val signature: this.context.Comp[Signature[FunctionResultInfo]] =
+                    funcValue.signature match {
+                      case ArgonModule.FunctionSignature(parameters, returnType) =>
+                        compEv(
+                          for {
+                            returnTypeResolved <- resolveType(returnType)
+                            parametersResolved <- parameters.toVector.traverse(resolveParameter(_))
+
+                            result = SignatureResult[FunctionResultInfo](
+                              FunctionResultInfo(typeSystem)(returnTypeResolved)
+                            )
+
+                          } yield parametersResolved.foldRight[Signature[FunctionResultInfo]](result)(SignatureParameters[FunctionResultInfo](_, _))
+                        )
+                    }
+
+                  override val payload: TPayloadSpec[context.Comp[context.TFunctionImplementation], context.TFunctionMetadata] =
+                    payloadLoader.createFunctionPayload(context)
+                }
               )
 
             private lazy val methodMap: TComp[Map[Int, MethodLoadResult[context.type, TPayloadSpec]]] =
