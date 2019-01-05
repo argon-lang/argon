@@ -80,6 +80,8 @@ lazy val compilerOptions = Seq(
     Wart.ExplicitImplicitTypes,
     Wart.DefaultArguments,
     Wart.PublicInference,
+
+    Wart.Throw,
   ),
 
   wartremoverExcluded += sourceManaged.value,

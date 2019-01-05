@@ -77,7 +77,7 @@ final class JSEmitter {
           sig <- func.signature
           impl <- func.payload : TComp[context.JSImpl.Function]
           body <- impl match {
-            case context.JSImpl.Function.ExpressionBody(expr) => createExpressionImpl(context)(sig)(expr)
+            case context.JSImpl.Function.ExpressionBody(expr) => createExpressionImpl(context)(func.descriptor)(sig)(expr)
           }
         } yield JSAssignment(
             JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor, ErasedSignature.fromSignature(context)(sig)))),
@@ -98,31 +98,43 @@ final class JSEmitter {
       case GlobalBinding.GlobalDataConstructor(_, _, _) => ???
     }
 
-  private def createExpressionImpl[TComp[+_] : Compilation](context: JSContext[TComp])(sig: context.signatureContext.Signature[FunctionResultInfo])(expr: context.typeSystem.ArExpr): TComp[JSExpression] =
+  private def createExpressionImpl[TComp[+_] : Compilation](context: JSContext[TComp])(owner: ParameterOwnerDescriptor)(sig: context.signatureContext.Signature[FunctionResultInfo])(expr: context.typeSystem.ArExpr): TComp[JSExpression] =
     for {
       body <- convertStmt(context)(expr)
     } yield JSFunctionExpression(
       None,
-      createParameterList(context)(sig),
+      createParameterList(context)(owner)(sig),
       body
     )
 
-  private def createParameterList[TComp[+_] : Compilation](context: JSContext[TComp])(sig: context.signatureContext.Signature[FunctionResultInfo]): JSFunctionParameterList =
+  private def createParameterList[TComp[+_] : Compilation](context: JSContext[TComp])(owner: ParameterOwnerDescriptor)(sig: context.signatureContext.Signature[FunctionResultInfo]): JSFunctionParameterList =
     sig.unsubstitutedParameters.zipWithIndex.foldRight[JSFunctionParameterList](JSFunctionEmptyParameterList) { case ((param, paramIndex), list) =>
       JSFunctionParameter(
         if(param.tupleVars.nonEmpty)
           JSArrayDestructBinding(
             param.tupleVars.map { tupleVar =>
-              JSBindingIdentifier(JSIdentifier(s"param_${tupleVar.descriptor.index}_${tupleVar.descriptor.tupleIndex}"))
+              JSBindingIdentifier(getVariableName(tupleVar.descriptor))
             }
           )
         else
-          JSBindingIdentifier(JSIdentifier(s"param_$paramIndex")),
+          JSBindingIdentifier(getVariableName(ParameterDescriptor(owner, paramIndex))),
+
         list
       )
     }
 
   private def convertStmt[TComp[+_] : Compilation](context: JSContext[TComp])(expr: context.typeSystem.ArExpr): TComp[Vector[JSStatement]] = expr match {
+    case context.typeSystem.LetBinding(variable, value, next) =>
+      for {
+        valueExpr <- convertExpr(context)(value)
+        nextStmts <- convertStmt(context)(next)
+        decl = JSDeclareInit(JSBindingIdentifier(getVariableName(variable.descriptor)), valueExpr)
+        declStmt = variable.mutability match {
+          case Mutability.Mutable => JSLet(NonEmptyList(decl))
+          case Mutability.NonMutable => JSConst(NonEmptyList(decl))
+        }
+      } yield declStmt +: nextStmts
+
     case _ => convertExpr(context)(expr).map(Vector(_))
   }
 
@@ -151,6 +163,9 @@ final class JSEmitter {
 
         } yield JSFunctionCall(funcExpr, argExprs)
 
+      case LetBinding(_, _, _) =>
+        wrapStatement(context)(expr)
+
       case LoadConstantString(str, _) =>
         JSFunctionCall(
           JSPropertyAccessDot(
@@ -160,6 +175,9 @@ final class JSEmitter {
           Vector(JSString(str))
         ).point[TComp]
 
+      case LoadVariable(variable) =>
+        getVariableName(variable.descriptor).point[TComp]
+
       case expr: LoadTuple =>
         for {
           values <- expr.values.toVector.traverse { elem => convertExpr(context)(elem.value) }
@@ -168,5 +186,16 @@ final class JSEmitter {
       case _ => ???
     }
   }
+
+  private def wrapStatement[TComp[+_] : Compilation](context: JSContext[TComp])(expr: context.typeSystem.ArExpr): TComp[JSExpression] =
+    for {
+      stmts <- convertStmt(context)(expr)
+    } yield JSFunctionCall(JSFunctionExpression(None, JSFunctionEmptyParameterList, stmts), Vector())
+
+  private def getVariableName(descriptor: VariableLikeDescriptor): JSIdentifier = JSIdentifier(descriptor match {
+    case ParameterDescriptor(_, index) => s"param_$index"
+    case DeconstructedParameterDescriptor(_, index, tupleIndex) => s"param_${index}_$tupleIndex"
+    case VariableDescriptor(_, index) => s"local_$index"
+  })
 
 }

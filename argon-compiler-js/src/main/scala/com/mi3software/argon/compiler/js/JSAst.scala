@@ -21,6 +21,7 @@ sealed trait JSStatement extends JSModuleStatement
 
 sealed trait JSDeclarationStatement extends JSStatement
 final case class JSConst(declarations: NonEmptyList[JSDeclaration]) extends JSDeclarationStatement
+final case class JSLet(declarations: NonEmptyList[JSDeclaration]) extends JSDeclarationStatement
 final case class JSFunctionStatement(name: JSIdentifier, parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSDeclarationStatement
 
 sealed trait JSBinding
@@ -105,6 +106,16 @@ object JSAst {
       stmt match {
         case JSConst(bindings) =>
           writer.print("const ")
+          writeDeclaration(bindings.head)
+
+          for(binding <- bindings.tail.toVector) {
+            writer.print(", ")
+            writeDeclaration(binding)
+          }
+          writer.print(";")
+
+        case JSLet(bindings) =>
+          writer.print("let ")
           writeDeclaration(bindings.head)
 
           for(binding <- bindings.tail.toVector) {

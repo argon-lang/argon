@@ -12,6 +12,10 @@ trait Compilation[F[_]] extends Monad[F] {
 
   override def ap[A, B](fa: => F[A])(f: => F[A => B]): F[B]
 
+  final def require(value: Boolean)(head: CompilationError, tail: CompilationError*): F[Unit] =
+    if(value) point(())
+    else forErrors(head, tail: _*)
+
   final def requireSome[A](option: Option[A])(head: CompilationError, tail: CompilationError*): F[A] =
     option match {
       case Some(a) => point(a)

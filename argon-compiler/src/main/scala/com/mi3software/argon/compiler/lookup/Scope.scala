@@ -16,9 +16,14 @@ trait ScopeContext[TContext <: Context with Singleton] {
 
   sealed trait Scope {
 
+    def nextVariable: Int
+
     def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult
 
     def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.Scope = new other.Scope {
+
+      override def nextVariable: Int = Scope.this.nextVariable
+
       override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): other.LookupResult =
         Scope.this.findIdentifier(name, fileSpec, sourceLocation).convertScopeContext(other)(converter)
     }
@@ -28,14 +33,31 @@ trait ScopeContext[TContext <: Context with Singleton] {
   implicit final class ScopeExtensions(val scope: Scope) {
 
     def addVariable(variable: Variable[VariableLikeDescriptor]): Scope =
-      ???
+      new Scope {
+        override def nextVariable: Int = variable.descriptor match {
+          case VariableDescriptor(_, id) => id + 1
+          case _ => scope.nextVariable
+        }
+
+        override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult =
+          if(variable.name === VariableName.Normal(name)) {
+            val value = VariableScopeValue(variable)
+            LookupResult.ValuesResult(OverloadResult.List(Vector(value), OverloadResult.End))
+          }
+          else {
+            scope.findIdentifier(name, fileSpec, sourceLocation)
+          }
+
+      }
 
     def addVariables(variables: Vector[Variable[VariableLikeDescriptor]]): Scope =
       variables.foldLeft(scope) { (scope, variable) => scope.addVariable(variable) }
 
   }
 
-  sealed trait NamespacesOnlyScope extends Scope
+  sealed trait NamespacesOnlyScope extends Scope {
+    override def nextVariable: Int = 0
+  }
 
   case object EmptyScope extends NamespacesOnlyScope {
     override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult =

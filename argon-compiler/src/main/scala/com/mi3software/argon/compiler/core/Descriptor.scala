@@ -144,4 +144,12 @@ sealed trait VariableName
 object VariableName {
   final case class Normal(name: String) extends VariableName
   case object Unnamed extends VariableName
+
+  implicit val equalInstance: Equal[VariableName] = {
+    case (Normal(a), Normal(b)) => a === b
+    case (Normal(_), _) => false
+    case (_, Normal(_)) => false
+
+    case (Unnamed, Unnamed) => true
+  }
 }

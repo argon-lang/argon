@@ -116,6 +116,34 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def convertStmts[TComp[_] : TypeCheck](env: Env)(stmts: WithSource[Vector[WithSource[parser.Stmt]]]): ExprFactory[TComp] =
     stmts.value match {
       case Vector() => loadUnitLiteral(env)(stmts.location)
+
+      case WithSource(stmt: parser.VariableDeclarationStmt, location) +: tail =>
+        new ExprFactory[TComp] {
+          override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
+            for {
+              exprType <- stmt.varType match {
+                case Some(varTypeExpr) => evaluateTypeExprAST(env)(varTypeExpr)
+                case None => implicitly[TypeCheck[TComp]].createHole
+              }
+              valueExpr <- convertExpr(env)(stmt.value).forExpectedType(exprType)
+              varType <- implicitly[TypeCheck[TComp]].resolveType(exprType)
+
+              variable = Variable(
+                VariableDescriptor(env.descriptor, env.scope.nextVariable),
+                stmt.name match {
+                  case Some(name) => VariableName.Normal(name)
+                  case None => VariableName.Unnamed
+                },
+                Mutability.fromIsMutable(stmt.isMutable),
+                varType
+              )
+              env2 = env.copy(scope = env.scope.addVariable(variable))
+
+              secondStartPos = tail.headOption.map { _.location.start }.getOrElse(stmts.location.end)
+              second <- convertStmts(env2)(WithSource(tail, SourceLocation(secondStartPos, stmts.location.end))).forExpectedType(expectedType)
+            } yield LetBinding(variable, valueExpr, second)
+        }
+
       case Vector(stmt) => convertStmt(env)(stmt)
       case head +: tail =>
         new ExprFactory[TComp] {
@@ -379,14 +407,14 @@ object ExpressionConverter {
 
   final case class Env[TContext <: Context with Singleton, TScope]
   (
-    descriptor: Descriptor,
+    descriptor: VariableOwnerDescriptor,
     fileSpec: FileSpec,
     referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]],
     scope: TScope,
   )
 
   trait EnvCreator[TContext <: Context with Singleton] {
-    def apply(context: TContext)(descriptor: Descriptor): Env[context.type, context.scopeContext.Scope]
+    def apply(context: TContext)(descriptor: VariableOwnerDescriptor): Env[context.type, context.scopeContext.Scope]
 
     val fileSpec: FileSpec
   }
@@ -581,10 +609,25 @@ object ExpressionConverter {
         (newArgs, result) <- fillSignatureArgs(context)(ts)(sig)(args)
       } yield context.typeSystem.FunctionCall(function, newArgs, result.returnType)
 
+    case ts.LetBinding(variable, value, next) =>
+      for {
+        newVarType <- fillHolesTypeChildren(context)(ts)(variable.varType)
+        newVar = context.typeSystem.Variable(variable.descriptor, variable.name, variable.mutability, newVarType)
+
+        newValue <- fillHolesExpr(context)(ts)(value)(newVarType)
+        newNext <- fillHolesExprChildren(context)(ts)(next)
+      } yield context.typeSystem.LetBinding(newVar, newValue, newNext)
+
     case ts.LoadConstantString(str, stringType) =>
       for {
         newStringType <- fillHolesTypeChildren(context)(ts)(stringType)
       } yield context.typeSystem.LoadConstantString(str, newStringType)
+
+    case ts.LoadVariable(variable) =>
+      for {
+        newVarType <- fillHolesTypeChildren(context)(ts)(variable.varType)
+        newVar = context.typeSystem.Variable(variable.descriptor, variable.name, variable.mutability, newVarType)
+      } yield context.typeSystem.LoadVariable(newVar)
 
     case t: ts.LoadTuple =>
       for {
@@ -594,7 +637,7 @@ object ExpressionConverter {
         }
       } yield context.typeSystem.LoadTuple(elems)
 
-    case _ => ???
+    case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
   }
 
   private def fillHolesWrapExprChildren[TComp[_]]
