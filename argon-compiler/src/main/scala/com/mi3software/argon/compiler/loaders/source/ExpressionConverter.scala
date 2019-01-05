@@ -580,7 +580,31 @@ object ExpressionConverter {
         (newArgs, result) <- fillSignatureArgs(context)(ts)(sig)(args)
       } yield context.typeSystem.FunctionCall(function, newArgs, result.returnType)
 
+
+    case t: ts.LoadTuple =>
+      for {
+        elems <- t.values.traverse { elem =>
+          fillHolesWrapExprChildren(context)(ts)(elem.value)
+            .map(context.typeSystem.TupleElement(_))
+        }
+      } yield context.typeSystem.LoadTuple(elems)
+
     case _ => ???
+  }
+
+  private def fillHolesWrapExprChildren[TComp[_]]
+  (context: Context)
+  (ts: HoleTypeSystem[context.type])
+  (expr: ts.WrapExpr)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[context.typeSystem.ArExpr] = expr match {
+    case HoleTypeHole(id) =>
+      tcInstance.resolveType(HoleTypeHole(id))
+        .flatMap(fillHolesTypeChildren(context)(ts)(_))
+        .map(identity)
+
+    case HoleTypeType(e) =>
+      fillHolesExprChildren(context)(ts)(e).map(context.typeSystem.wrapType(_))
   }
 
   private def fillHolesTypeChildren[TComp[_]]
