@@ -143,7 +143,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       )(CompilationError.NamespaceElementNotFound(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
       classSig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.signature)
 
-      classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(
+      classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(location)(
         convertSignature(classSig)
       ) { (args, classResult) =>
         for {
@@ -213,7 +213,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               for {
                 sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(func.value.signature)
                 convSig = convertSignature(sig)
-              } yield signatureFactory(env)(convSig) { (args, result) => FunctionCall(func, args, result.returnType).upcast[ArExpr].point[TComp] }
+              } yield signatureFactory(env)(location)(convSig) { (args, result) => FunctionCall(func, args, result.returnType).upcast[ArExpr].point[TComp] }
             )
 
           case TraitScopeValue(arTrait) =>
@@ -221,7 +221,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               for {
                 sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arTrait.value.signature)
                 convSig = convertSignature(sig)
-              } yield signatureFactory(env)(convSig) { (args, result) =>
+              } yield signatureFactory(env)(location)(convSig) { (args, result) =>
                 for {
                   argsAsTypes <- args.traverse(evaluateTypeExpr(env)(location)(_))
                 } yield TraitType(arTrait, argsAsTypes, result.baseTypes)
@@ -233,7 +233,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               for {
                 sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.value.signature)
                 convSig = convertSignature(sig)
-              } yield signatureFactory(env)(convSig) { (args, result) =>
+              } yield signatureFactory(env)(location)(convSig) { (args, result) =>
                 for {
                   argsAsTypes <- args.traverse(evaluateTypeExpr(env)(location)(_))
                 } yield ClassType(arClass, argsAsTypes, result.baseTypes)
@@ -245,7 +245,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               for {
                 sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(ctor.value.signature)
                 convSig = convertSignature(sig)
-              } yield signatureFactory(env)(convSig) { (args, result) =>
+              } yield signatureFactory(env)(location)(convSig) { (args, result) =>
                 for {
                   argsAsTypes <- args.traverse(evaluateTypeExpr(env)(location)(_))
                 } yield DataConstructorCall(
@@ -290,6 +290,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
   def signatureFactory[TComp[_] : TypeCheck, TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
   (env: Env)
+  (location: SourceLocation)
   (signature: Signature[TResult])
   (f: (Vector[ArExpr], TResult[context.type, typeSystem.type]) => TComp[ArExpr])
   : ExprFactory[TComp] = {
@@ -298,7 +299,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       override def forExpectedType(expectedType: TType): TComp[ArExpr] =
         signature.visit(
           sigParams => ???,
-          sigResult => f(prevArgs, sigResult.result)
+          sigResult =>
+            f(prevArgs, sigResult.result).flatMap { expr =>
+              convertExprType(env)(location)(expr)(expectedType)
+            }
         )
 
       override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] = ???
