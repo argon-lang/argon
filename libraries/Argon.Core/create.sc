@@ -6,7 +6,15 @@ import com.mi3software.argon.librarygen._
 
 val Ar_ns = Namespace(Seq("Ar"))
 
-val Object_fileSpec = FileSpec(fileID = 0, name = "Object.argon")
+var nextFileId = 0
+def getFileId(): Int = {
+  val res = nextFileId
+  nextFileId += 1
+  res
+}
+
+
+val Object_fileSpec = FileSpec(fileID = getFileId(), name = "Object.argon")
 val Object_descriptor = TraitDescriptor.InNamespace(TraitDescriptorInNamespace(
   Object_fileSpec,
   Ar_ns,
@@ -16,7 +24,7 @@ val Object_descriptor = TraitDescriptor.InNamespace(TraitDescriptorInNamespace(
 val Object_traitId = 0
 val Object_metaClassId = 0
 
-val Type_fileSpec = FileSpec(fileID = 0, name = "Type.argon")
+val Type_fileSpec = FileSpec(fileID = getFileId(), name = "Type.argon")
 val Type_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
   Type_fileSpec,
   Ar_ns,
@@ -52,7 +60,7 @@ val Class_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
 val Class_classId = 6
 val Class_metaClassId = 7
 
-val Unit_fileSpec = FileSpec(fileID = 1, name = "Unit.argon")
+val Unit_fileSpec = FileSpec(fileID = getFileId(), name = "Unit.argon")
 val Unit_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
   Unit_fileSpec,
   Ar_ns,
@@ -61,6 +69,24 @@ val Unit_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
 ))
 val Unit_classId = 8
 val Unit_metaClassId = 9
+
+val String_fileSpec = FileSpec(fileID = getFileId(), name = "String.argon")
+val String_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
+  String_fileSpec,
+  Ar_ns,
+  GlobalName.NormalName("String"),
+  AccessModifier.Public,
+))
+val String_classId = 10
+val String_metaClassId = 11
+
+val Puts_fileSpec = FileSpec(fileID = getFileId(), name = "Puts.argon")
+val Puts_descriptor = FunctionDescriptor.InNamespace(FunctionDescriptorInNamespace(
+  Puts_fileSpec,
+  Ar_ns,
+  GlobalName.NormalName("puts"),
+  AccessModifier.Public,
+))
 
 
 val module = Module(
@@ -225,10 +251,60 @@ val module = Module(
       metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
     )),
 
+    // Ar.Unit
+    Class.ClassDef(ClassDefinition(
+      descriptor = String_descriptor,
+      isOpen = false,
+      isSealed = false,
+      isAbstract = false,
+      signature = ClassSignature(
+        parameters = Seq(),
+        baseClass = None,
+        baseTraits = Seq(TraitType(Object_traitId, Seq())),
+      ),
+      metaClassSpecifier = MetaClassSpecifier(String_metaClassId)
+    )),
+
+    // Ar.Unit.<MetaClass>
+    Class.ClassDef(ClassDefinition(
+      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Unit_descriptor)),
+      isOpen = false,
+      isSealed = false,
+      isAbstract = false,
+      signature = ClassSignature(
+        parameters = Seq(),
+        baseClass = Some(ClassType(Class_classId, Seq())),
+        baseTraits = Seq(),
+      ),
+      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
+    )),
+
   ),
 
   dataConstructors = Seq(),
-  functions = Seq(),
+
+  functions = Seq(
+    Function.FuncDef(FunctionDefinition(
+      descriptor = Puts_descriptor,
+      effects = EffectInfo(isPure = false),
+      signature = FunctionSignature(
+        parameters = Seq(
+          Parameter(
+            paramType = Type.ClassType(ClassType(
+              classId = String_classId,
+              typeArguments = Seq(),
+            ))
+          ),
+        ),
+        returnType = Type.ClassType(ClassType(
+          classId = String_classId,
+          typeArguments = Seq(),
+        ))
+      ),
+
+    ))
+  ),
+
   methods = Seq(),
   classConstructors = Seq(),
 )

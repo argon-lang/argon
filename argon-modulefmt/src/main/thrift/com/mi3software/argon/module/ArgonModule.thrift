@@ -262,7 +262,7 @@ struct FunctionDefinition {
     1: FunctionDescriptor descriptor;
     2: EffectInfo effects;
     3: FunctionSignature signature;
-    4: FunctionImplementation implementation;
+    4: optional FunctionImplementation implementation;
 }
 
 union Function {
