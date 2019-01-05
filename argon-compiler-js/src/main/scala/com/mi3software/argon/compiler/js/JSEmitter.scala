@@ -1,6 +1,6 @@
 package com.mi3software.argon.compiler.js
 
-import com.mi3software.argon.compiler.{js, _}
+import com.mi3software.argon.compiler._
 import scalaz._
 import Scalaz._
 import com.mi3software.argon.compiler.core.PayloadSpecifiers._

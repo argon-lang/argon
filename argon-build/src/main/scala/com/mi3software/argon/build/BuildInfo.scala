@@ -10,17 +10,21 @@ import Scalaz._
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.util.{FileID, FileOperations, FileSpec}
-import org.json4s.NoTypeHints
-import org.json4s.native.Serialization
+import toml.Toml
+import toml.Codecs._
 
 final case class BuildInfoFileSpec
+(
+  project: ProjectInfoFileSpec,
+  compilerOptions: CompilerOptionsFileSpec,
+)
+
+final case class ProjectInfoFileSpec
 (
   backend: String,
   inputFiles: List[String],
   outputFile: String,
   references: List[String],
-
-  compilerOptions: CompilerOptionsFileSpec,
 )
 
 final case class CompilerOptionsFileSpec
@@ -41,10 +45,10 @@ final case class BuildInfo
 object BuildInfoFileSpec {
 
   def parseFile(file: File): IO[Option[BuildInfoFileSpec]] =
-    FileOperations.fileReader(file) { reader =>
-      implicit val formats = Serialization.formats(NoTypeHints)
-      IO { Serialization.read[BuildInfoFileSpec](reader).point[Option] }
-    }
+    FileOperations.readAllText(file)
+      .map { text =>
+        Toml.parseAs[BuildInfoFileSpec](text).toOption
+      }
 
 
 
@@ -65,11 +69,11 @@ object BuildInfo {
   def load(dir: File, spec: BuildInfoFileSpec): IO[Option[BuildInfo]] =
     (
       for {
-        backend <- OptionT(Backend.find(spec.backend).point[IO])
-        inputFiles <- getFileList(dir)(spec.inputFiles)
+        backend <- OptionT(Backend.find(spec.project.backend).point[IO])
+        inputFiles <- getFileList(dir)(spec.project.inputFiles)
         inputFilesWithSpec <- fileListWithSpecs(dir)(inputFiles)
-        outputFile <- getOutputFile(dir)(spec.outputFile)
-        references <- spec.references.toVector.traverseU(refFile => IO { new File(dir, refFile) }).liftM[OptionT]
+        outputFile <- getOutputFile(dir)(spec.project.outputFile)
+        references <- spec.project.references.toVector.traverseU(refFile => IO { new File(dir, refFile) }).liftM[OptionT]
 
       } yield BuildInfo(
         backend = backend,

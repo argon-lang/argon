@@ -22,7 +22,7 @@ lazy val commonSettings = Seq(
     "com.chuusai" %% "shapeless" % "2.3.3",
     "com.fommil" %% "deriving-macro" % "0.9.0",
     "com.fommil" %% "scalaz-deriving" % "0.9.0",
-    "org.json4s" %% "json4s-native" % "3.5.4",
+    "tech.sparse" %%  "toml-scala" % "0.1.1",
     "co.fs2" %% "fs2-core" % "0.10.1",
     "co.fs2" %% "fs2-io" % "0.10.1",
     "com.codecommit" %% "shims" % "1.4.0",
@@ -30,8 +30,6 @@ lazy val commonSettings = Seq(
 
     "org.apache.thrift" % "libthrift" % "0.11.0",
     "com.twitter" %% "scrooge-core" % "18.7.0" exclude("com.twitter", "libthrift"),
-
-    "com.thoughtworks.each" %% "each" % "3.3.1",
 
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test",
 
@@ -146,7 +144,6 @@ lazy val argon_compiler = project.in(file("argon-compiler"))
     compilerOptions,
 
     name := "argon-compiler",
-    wartremoverExcluded += sourceDirectory.value / "main/scala/com/mi3software/argon/compiler/ArgonTypeComparer.scala"
   )
 
 lazy val compiler_js = project.in(file("argon-compiler-js"))
