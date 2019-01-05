@@ -337,7 +337,18 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def convertExprType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr)(t: typeSystem.TType): TComp[ArExpr] =
     typeSystem.isSubType[TComp](t, expr.exprType).flatMap {
       case Some(info) => implicitly[TypeCheck[TComp]].recordConstraint(info).map(const(expr))
-      case None => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(expr.exprType, t)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+      case None =>
+        implicitly[TypeCheck[TComp]].createHole.flatMap { newHole =>
+          typeSystem.isSubType(t, fromSimpleType(LoadTupleType(NonEmptyList(TupleElement(newHole))))).flatMap {
+            case Some(stTupleInfo) =>
+              convertExprType(env)(location)(expr)(newHole).map { convertedExpr =>
+                LoadTuple(NonEmptyList(TupleElement(wrapType(convertedExpr))))
+              }
+
+            case None =>
+              Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(expr.exprType, t)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          }
+        }
     }
 
   def evaluateTypeExprFactory[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(factory: ExprFactory[TComp]): TComp[TType] =
@@ -671,7 +682,10 @@ object ExpressionConverter {
         case HoleTypeHole(id) => (HoleTypeHole(id) : TTypeWrapper[B]).point[F]
       }
 
-    override def wrapExprType(expr: WrapExpr): TType = ???
+    override def wrapExprType(expr: WrapExpr): TType = expr match {
+      case HoleTypeType(t) => t.exprType
+      case HoleTypeHole(_) => ???
+    }
 
 
     override def isSubTypeWrapper[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[SubTypeInfo[TType]]] =

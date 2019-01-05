@@ -293,6 +293,17 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case (aTrait: TraitType, bClass: ClassType) => classImplementsTrait(aTrait)(bClass)
         case (_: ClassType, _: TraitType) => notSubType
 
+        case (aTuple: LoadTupleType, bTuple: LoadTupleType) =>
+          if(aTuple.typeValues.size =/= bTuple.typeValues.size)
+            notSubType
+          else
+            aTuple.typeValues.toVector.zip(bTuple.typeValues.toVector)
+              .traverse { case (aElem, bElem) =>
+                OptionT(isSubType(aElem.value, bElem.value))
+              }
+              .map(SubTypeInfo(fromSimpleType(a), fromSimpleType(b), _))
+              .run
+
         case (_, _) => notSubType
       },
     ).findMapM(_())
