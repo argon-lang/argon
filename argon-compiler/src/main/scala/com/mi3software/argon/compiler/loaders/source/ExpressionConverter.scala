@@ -556,7 +556,37 @@ object ExpressionConverter {
   (ts: HoleTypeSystem[context.type])
   (t: ts.SimpleType)
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.SimpleType] = ???
+  : TComp[context.typeSystem.SimpleType] = t match {
+    case ts.ClassType(arClass, args, baseTypes) =>
+      for {
+        sig <- tcInstance.fromContextComp(context)(arClass.value.signature)
+        (filledArgs, resultInfo) <- fillSignatureArgs(context)(ts)(sig)(args)
+      } yield context.typeSystem.ClassType(arClass, filledArgs, resultInfo.baseTypes)
+
+    case _ => ???
+  }
+
+  private def fillSignatureArgs[TComp[_], TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
+  (context: Context)
+  (ts: HoleTypeSystem[context.type])
+  (sig: context.signatureContext.Signature[TResult])
+  (args: Vector[ts.TType])
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[(Vector[context.typeSystem.TType], TResult[context.type, context.typeSystem.type])] = {
+
+    def impl
+    (sig: context.signatureContext.Signature[TResult])
+    (args: Vector[ts.TType])
+    (newArgs: Vector[context.typeSystem.TType])
+    : TComp[(Vector[context.typeSystem.TType], TResult[context.type, context.typeSystem.type])] =
+      sig.visit(
+        sigParam => ???,
+        sigResult => (newArgs, sigResult.result).point[TComp]
+      )
+
+    impl(sig)(args)(Vector.empty)
+  }
+
 
 
   sealed trait HoleType[+T]
