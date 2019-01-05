@@ -393,11 +393,11 @@ object ExpressionConverter {
     }
   }
 
-  def convertExpression[TComp[+_] : Compilation]
+  def convertStatementList[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
   (env: Env[context.type, context.scopeContext.Scope])
   (expectedType: context.typeSystem.TType)
-  (expr: WithSource[parser.Expr])
+  (stmts: WithSource[Vector[WithSource[parser.Stmt]]])
   : TComp[context.typeSystem.ArExpr] = {
     val ts = new HoleTypeSystem[context.type](context)
     val converter = createConverter(context)(ts)
@@ -415,10 +415,18 @@ object ExpressionConverter {
 
     fillHoles(context)(ts)(
       converter
-        .convertExpr[HoleTypeCheckComp[TComp, ts.TType, ?]](env2)(expr)(tcInstance)
+        .convertStmts[HoleTypeCheckComp[TComp, ts.TType, ?]](env2)(stmts)(tcInstance)
         .forExpectedType(TypeSystem.convertTypeSystem(context)(context.typeSystem)(ts)(tsConverter)(expectedType))
     )(expectedType)
   }
+
+  def convertExpression[TComp[+_] : Compilation]
+  (context: ContextComp[TComp])
+  (env: Env[context.type, context.scopeContext.Scope])
+  (expectedType: context.typeSystem.TType)
+  (expr: WithSource[parser.Expr])
+  : TComp[context.typeSystem.ArExpr] =
+    convertStatementList(context)(env)(expectedType)(WithSource(Vector(expr), expr.location))
 
 
 

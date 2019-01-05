@@ -13,6 +13,9 @@ final class JSContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
 
   override type TFunctionImplementation = JSImpl.Function
 
+  override def createExprFunctionImplementation(expr: typeSystem.ArExpr): JSImpl.Function =
+    JSImpl.Function.ExpressionBody(expr)
+
   override type Comp[+T] = TComp[T]
 
   override val compCompilationInstance: Compilation[Comp] = implicitly

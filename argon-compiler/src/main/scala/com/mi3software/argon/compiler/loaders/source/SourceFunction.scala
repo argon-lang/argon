@@ -21,6 +21,8 @@ private[compiler] object SourceFunction {
     new ArFunc[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
 
+      import context.scopeContext.ScopeExtensions
+
       override val descriptor: FuncDescriptor = desc
 
       override val effectInfo: EffectInfo = EffectInfo(stmt.purity)
@@ -30,7 +32,15 @@ private[compiler] object SourceFunction {
           env(context)(descriptor)
         )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType))
 
-      override lazy val payload: TComp[context.TFunctionImplementation] = ??? : TComp[context.TFunctionImplementation]
+      override lazy val payload: TComp[context.TFunctionImplementation] =
+        for {
+          sig <- signature
+          env2 = env(context)(descriptor)
+          env3 = env2.copy(scope = env2.scope.addVariables(
+            sig.unsubstitutedParameters.flatMap(_.tupleVars)
+          ))
+          expr <- ExpressionConverter.convertStatementList(context)(env3)(sig.unsubstitutedResult.returnType)(stmt.body)
+        } yield context.createExprFunctionImplementation(expr)
     }
 
   def resultCreator(returnTypeExpr: WithSource[parser.Expr]): ResultCreator[FunctionResultInfo] =  new ResultCreator[FunctionResultInfo] {
