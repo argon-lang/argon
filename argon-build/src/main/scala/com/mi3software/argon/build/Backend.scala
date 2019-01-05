@@ -15,7 +15,7 @@ trait Backend {
 
 object Backend {
 
-  private val allBackends = Vector(JSBackend)
+  val allBackends = Vector(JSBackend)
 
   def find(id: String): Option[Backend] =
     allBackends.find { _.id === id }

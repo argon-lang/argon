@@ -7,11 +7,13 @@ import Scalaz._
 import com.mi3software.argon.parser.SyntaxError
 import fs2._
 import com.mi3software.argon.parser.impl.ParseHandler
+import scalaz.effect.IO
 import shims._
+import shims.effect._
 
 object ParseTestCaseRunner extends TestCaseRunner {
 
-  override def runTest[F[_]: cats.effect.Sync](testCase: TestCase): F[TestCaseResult] =
+  override def runTest(testCase: TestCase): IO[TestCaseResult] =
     testCase
       .sourceCode
       .zipWithIndex
@@ -20,7 +22,7 @@ object ParseTestCaseRunner extends TestCaseRunner {
           val fileSpec = FileSpec(FileID(i), filename)
 
           Stream(data: _*)
-            .covary[EitherT[F, NonEmptyList[SyntaxError], ?]]
+            .covary[EitherT[IO, NonEmptyList[SyntaxError], ?]]
             .through(ParseHandler.parse(fileSpec))
             .translate(ParseHandler.convertSyntaxErrorToCompilationError(fileSpec))
             .compile
