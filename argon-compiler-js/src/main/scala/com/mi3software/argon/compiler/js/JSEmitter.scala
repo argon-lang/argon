@@ -11,7 +11,7 @@ final class JSEmitter {
 
   private val moduleVarName = JSIdentifier("modules")
   private val traitsVarName = JSIdentifier("traits")
-  private val funcsVarName = JSIdentifier("funcs")
+  private val funcsVarName = JSIdentifier("functions")
 
   private val create_empty_obj = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("create")), Vector(JSNull))
   private def freeze_obj(varName: JSIdentifier) = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("freeze")), Vector(varName))
@@ -36,13 +36,13 @@ final class JSEmitter {
             JSDeclareInit(JSBindingIdentifier(moduleVarName), create_empty_obj)
           )),
 
-          JSConst(NonEmptyList(
+          JSExportDeclaration(JSConst(NonEmptyList(
             JSDeclareInit(JSBindingIdentifier(funcsVarName), create_empty_obj)
-          )),
+          ))),
 
-          JSConst(NonEmptyList(
+          JSExportDeclaration(JSConst(NonEmptyList(
             JSDeclareInit(JSBindingIdentifier(traitsVarName), create_empty_obj)
-          )),
+          ))),
         ),
 
         modulePairs.map { case (refModule, importId) =>
@@ -108,13 +108,16 @@ final class JSEmitter {
     )
 
   private def createParameterList[TComp[+_] : Compilation](context: JSContext[TComp])(sig: context.signatureContext.Signature[FunctionResultInfo]): JSFunctionParameterList =
-    sig.unsubstitutedParameters.foldRight[JSFunctionParameterList](JSFunctionEmptyParameterList) { (param, list) =>
+    sig.unsubstitutedParameters.zipWithIndex.foldRight[JSFunctionParameterList](JSFunctionEmptyParameterList) { case ((param, paramIndex), list) =>
       JSFunctionParameter(
-        JSArrayDestructBinding(
-          param.tupleVars.map { tupleVar =>
-            JSBindingIdentifier(JSIdentifier(s"param_${tupleVar.descriptor.index}_${tupleVar.descriptor.tupleIndex}"))
-          }
-        ),
+        if(param.tupleVars.nonEmpty)
+          JSArrayDestructBinding(
+            param.tupleVars.map { tupleVar =>
+              JSBindingIdentifier(JSIdentifier(s"param_${tupleVar.descriptor.index}_${tupleVar.descriptor.tupleIndex}"))
+            }
+          )
+        else
+          JSBindingIdentifier(JSIdentifier(s"param_$paramIndex")),
         list
       )
     }
@@ -132,12 +135,15 @@ final class JSEmitter {
 
           funcExpr = func.value.descriptor match {
             case FuncDescriptor.InNamespace(moduleDesc, ns, name, _) =>
-              JSPropertyAccessBracket(
-                JSPropertyAccessDot(
-                  JSPropertyAccessBracket(moduleVarName, JSString(moduleDesc.name)),
-                  funcsVarName
+              JSPropertyAccessDot(
+                JSPropertyAccessBracket(
+                  JSPropertyAccessDot(
+                    JSPropertyAccessBracket(moduleVarName, JSString(moduleDesc.name)),
+                    funcsVarName
+                  ),
+                  JSString(DescriptorId.forFunc(func.value.descriptor, ErasedSignature.fromSignature(context)(sig)))
                 ),
-                JSString(DescriptorId.forFunc(func.value.descriptor, ErasedSignature.fromSignature(context)(sig)))
+                JSIdentifier("value")
               )
           }
 

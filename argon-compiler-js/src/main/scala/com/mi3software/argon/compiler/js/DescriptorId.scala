@@ -14,7 +14,7 @@ object DescriptorId {
     specialChars.foldLeft(id) { (id, ch) => id.replace(ch, "\\" + ch) }
 
   private def encodeInNamespace(namespace: NamespacePath, name: GlobalName): String =
-      namespace.ns.map(encodeIdentifier).map(_ + ".") +
+      namespace.ns.map(encodeIdentifier).map(_ + ".").mkString +
       ((name match {
         case GlobalName.Normal(id) => encodeIdentifier(id)
         case GlobalName.Unnamed(fileId, index) => "#" + fileId.id.toString + "-" + index.toString

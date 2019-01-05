@@ -1,7 +1,7 @@
 
 export const traits = Object.create(null);
 export const classes = Object.create(null);
-export const funcs = Object.create(null);
+export const functions = Object.create(null);
 
 export const classConstructorSymbol = Symbol();
 
@@ -45,7 +45,7 @@ export function createClass(creator) {
 	if(creator.createMethods) creator.createMethods(methods);
 	cls.methods = Object.freeze(methods);
 
-	return Object.freeze(trait);
+	return Object.freeze(cls);
 }
 
 function lazyProperty(obj, name, valueFunc) {
@@ -137,8 +137,8 @@ classes["Ar.String[MetaClass]"] = createClass({
 	get baseClass() { return classes["Ar.Class"]; },
 });
 
-funcs["Ar.puts:($_:(Ar.String))->(Ar.Unit)"] = Object.freeze({
-	value: function(str) {
+functions["Ar.puts:($_:(Ar.String))->(Ar.Unit)"] = Object.freeze({
+	value: function([str]) {
 		console.log(str[stringValueSymbol]);
 	},
 });
@@ -153,6 +153,6 @@ export function createString(str) {
 
 Object.freeze(traits);
 Object.freeze(classes);
-Object.freeze(funcs);
+Object.freeze(functions);
 
 

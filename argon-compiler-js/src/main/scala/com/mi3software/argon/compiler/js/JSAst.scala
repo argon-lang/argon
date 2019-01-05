@@ -11,6 +11,7 @@ sealed trait JSModuleStatement
 
 sealed trait JSExportStatement extends JSModuleStatement
 final case class JSExportDefaultStatement(expr: JSExpression) extends JSExportStatement
+final case class JSExportDeclaration(declaration: JSDeclarationStatement) extends JSExportStatement
 
 sealed trait JSImportStatement extends JSModuleStatement
 final case class JSImportDefaultStatement(defaultExport: JSIdentifier, moduleName: String) extends JSImportStatement
@@ -18,9 +19,9 @@ final case class JSImportAllStatement(defaultExport: Option[JSIdentifier], name:
 
 sealed trait JSStatement extends JSModuleStatement
 
-
-final case class JSConst(declarations: NonEmptyList[JSDeclaration]) extends JSStatement
-final case class JSFunctionStatement(name: JSIdentifier, parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSStatement
+sealed trait JSDeclarationStatement extends JSStatement
+final case class JSConst(declarations: NonEmptyList[JSDeclaration]) extends JSDeclarationStatement
+final case class JSFunctionStatement(name: JSIdentifier, parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSDeclarationStatement
 
 sealed trait JSBinding
 sealed trait JSBindingNonEmpty extends JSBinding
@@ -68,6 +69,10 @@ object JSAst {
 
     def writeModuleStatement(stmt: JSModuleStatement): Unit =
       stmt match {
+        case JSExportDeclaration(declaration) =>
+          writer.print("export ")
+          writeStatement(declaration)
+
         case JSExportDefaultStatement(expr) =>
           writer.print("export default")
           writeExprParen(expr)
