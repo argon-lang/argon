@@ -29,10 +29,12 @@ object Grammar {
   abstract class GrammarFactory[TToken, TSyntaxError, TLabel <: RuleLabel] {
     type TGrammar[+T] = Grammar[TToken, TSyntaxError, TLabel, T]
 
+    @SuppressWarnings(Array("org.wartremover.warts.Var"))
     private var cache: Map[TLabel, AnyRef] = Map.empty
 
     protected def createGrammar[T](label: TLabel { type RuleType = T }): TGrammar[T]
 
+    @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
     final def apply[T](label: TLabel { type RuleType = T }): TGrammar[T] = {
       cache.get(label) match {
         case Some(value) => value.asInstanceOf[TGrammar[T]]

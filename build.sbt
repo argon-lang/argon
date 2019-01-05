@@ -65,9 +65,8 @@ lazy val compilerOptions = Seq(
 
   scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xlint")),
   scalacOptions in (Test, console) ~= (_ filterNot (opt => opt == "-Xlint")),
-)
 
-lazy val wartremoverOptions = Seq(
+
   wartremoverWarnings in (Compile, compile) ++= Warts.allBut(
     Wart.Recursion,
     Wart.Any,
@@ -95,7 +94,6 @@ lazy val cli = project.in(file("argon-cli"))
   .settings(
     commonSettings,
     compilerOptions,
-    wartremoverOptions,
 
     name := "argon-cli",
   )
@@ -105,7 +103,6 @@ lazy val argon_build = project.in(file("argon-build"))
   .settings(
     commonSettings,
     compilerOptions,
-    wartremoverOptions,
 
     name := "argon-build",
   )

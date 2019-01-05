@@ -213,7 +213,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
 
     def compareArguments(aType: TType, bType: TType)(a: Vector[TType])(b: Vector[TType]): F[Option[TSubTypeInfo]] =
-      if(a.size == b.size)
+      if(a.size === b.size)
         a.zip(b)
           .traverse { case (aArg, bArg) => OptionT(invariant(aArg, bArg)) }
           .map { args => SubTypeInfo(aType, bType, args.flatten) }
