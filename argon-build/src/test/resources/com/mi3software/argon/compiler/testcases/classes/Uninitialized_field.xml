@@ -14,13 +14,13 @@
             public new()
             end
 
-            public proc self.say_hello(): () do
+            public proc self.say_hello(): Unit do
                 puts 'Hello'
                 puts name
             end
         end
         
-        proc main(): () do
+        proc main(): Unit do
             MyClass.new().say_hello()
         end
             

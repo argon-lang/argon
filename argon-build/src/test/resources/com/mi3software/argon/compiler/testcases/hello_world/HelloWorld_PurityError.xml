@@ -6,7 +6,7 @@
 
         import Ar._
 
-        def main(): () do
+        def main(): Unit do
             puts 'Hello World'
         end
 

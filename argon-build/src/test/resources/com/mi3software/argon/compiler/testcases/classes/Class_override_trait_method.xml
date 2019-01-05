@@ -9,7 +9,7 @@
 
         trait MyTrait <: Any
 
-            public virtual proc self.say_hello(): () do
+            public virtual proc self.say_hello(): Unit do
                 puts 'Hello'
             end
 
@@ -20,12 +20,12 @@
             public new()
             end
 
-            public override proc self.say_hello(): () do
+            public override proc self.say_hello(): Unit do
                 puts 'Moo'
             end
         end
         
-        proc main(): () do
+        proc main(): Unit do
             val obj: MyTrait = MyClass.new()
             obj.say_hello()
         end

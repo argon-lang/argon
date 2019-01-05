@@ -9,7 +9,7 @@
         sealed open class ClassA <: Any
         end
 
-        proc main(): () = ()
+        proc main(): Unit = ()
 
     ]]></InputSource>
     

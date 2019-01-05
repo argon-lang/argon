@@ -7,12 +7,12 @@
             
         import Ar._
         
-        proc printTuple(a: String, b: String): () do
+        proc printTuple(a: String, b: String): Unit do
             puts a
             puts b
         end
         
-        proc main(): () do
+        proc main(): Unit do
             val tupleValue: (String, String) = '1', '2'
             printTuple tupleValue
         end

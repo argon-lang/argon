@@ -21,7 +21,7 @@
 
         import Ar._
 
-        proc main(): () do
+        proc main(): Unit do
             val box = ValueBoxInstance String 'Hello World'
             puts box.value
         end

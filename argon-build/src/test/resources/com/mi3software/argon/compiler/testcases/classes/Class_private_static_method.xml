@@ -8,12 +8,12 @@
 
         class MyClass <: Any
         static
-            private proc self.say_hello(): () do
+            private proc self.say_hello(): Unit do
                 puts 'Hello World'
             end
         end
 
-        proc main(): () do
+        proc main(): Unit do
             MyClass.say_hello()
         end
 

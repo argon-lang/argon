@@ -9,12 +9,12 @@
         
         class MyClass <: Any
         static
-            public proc self.say_hello(): () do
+            public proc self.say_hello(): Unit do
                 puts 'Hello World'
             end
         end
         
-        proc main(): () do
+        proc main(): Unit do
             val t = MyClass
             t.say_hello()
         end

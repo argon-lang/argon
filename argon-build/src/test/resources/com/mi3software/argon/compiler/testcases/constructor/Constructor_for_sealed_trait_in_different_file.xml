@@ -7,7 +7,7 @@
         import Ar._
 
         sealed trait MyType <: Any
-            public abstract proc self.say_hello(): ()
+            public abstract proc self.say_hello(): Unit
         end
 
     ]]></InputSource>
@@ -17,11 +17,11 @@
         import Ar._
 
         constructor MyCtor(): MyType
-            public override proc self.say_hello(): () =
+            public override proc self.say_hello(): Unit =
                 puts 'Hello World'
         end
 
-        proc main(): () do
+        proc main(): Unit do
             MyCtor().say_hello()
         end
 

@@ -16,7 +16,7 @@
 
         end
         
-        proc main(): () do
+        proc main(): Unit do
         end
             
     ]]></InputSource>

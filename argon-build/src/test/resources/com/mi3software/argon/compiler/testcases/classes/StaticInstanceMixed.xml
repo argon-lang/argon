@@ -10,7 +10,7 @@
 
         static
 
-            public proc self.say_hello(): () do
+            public proc self.say_hello(): Unit do
                 puts 'Hello'
             end
 
@@ -19,13 +19,13 @@
             public new()
             end
 
-            public proc self.say_world(): () do
+            public proc self.say_world(): Unit do
                 puts 'World'
             end
 
         end
 
-        proc main(): () do
+        proc main(): Unit do
             MyClass.say_hello()
             MyClass.new().say_world()
         end

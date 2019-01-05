@@ -9,7 +9,7 @@
         proc callFunc (f: Int -> Int) (i: Int): Int =
             f i
 
-        proc main(): () do
+        proc main(): Unit do
             puts ((callFunc (x => x + 5) 10).to_s())
         end
 

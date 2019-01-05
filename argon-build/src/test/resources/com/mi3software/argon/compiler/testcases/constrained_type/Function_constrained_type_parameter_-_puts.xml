@@ -7,10 +7,10 @@
             
         import Ar._
         
-        proc printStringLike (T: type <: String) (strLike: T): () =
+        proc printStringLike (T: type <: String) (strLike: T): Unit =
             puts strLike
         
-        proc main(): () do
+        proc main(): Unit do
             printStringLike String 'Hello Type Parameters'
         end
         

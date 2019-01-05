@@ -8,14 +8,14 @@
         import Ar._
         
         trait MyType <: Any
-            public virtual proc _.say_hello(): () =
+            public virtual proc _.say_hello(): Unit =
                 puts 'Hello'
         end
         
         constructor MyCtor(): MyType
         end
         
-        proc main(): () do
+        proc main(): Unit do
             val obj: MyType = MyCtor()
             obj.say_hello()
         end

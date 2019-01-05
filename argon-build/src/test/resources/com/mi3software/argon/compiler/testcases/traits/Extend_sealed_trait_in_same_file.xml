@@ -13,7 +13,7 @@
         trait TraitB <: Any & TraitA
         end
         
-        proc main(): () = ()
+        proc main(): Unit = ()
         
             
     ]]></InputSource>

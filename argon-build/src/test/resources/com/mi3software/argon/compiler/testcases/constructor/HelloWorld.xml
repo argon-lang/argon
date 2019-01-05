@@ -8,15 +8,15 @@
         import Ar._
         
         trait MyType <: Any
-            public abstract proc self.say_hello(): ()
+            public abstract proc self.say_hello(): Unit
         end
         
         constructor MyCtor(): MyType
-            public override proc self.say_hello(): () =
+            public override proc self.say_hello(): Unit =
                 puts 'Hello World'
         end
         
-        proc main(): () do
+        proc main(): Unit do
             MyCtor().say_hello()
         end
             

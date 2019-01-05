@@ -8,7 +8,7 @@
         import Ar._
         
         trait MyTrait <: Any
-            public proc self.say_hello(): () do
+            public proc self.say_hello(): Unit do
                 puts 'Hello World'
             end
         end
@@ -16,7 +16,7 @@
         constructor MyCtor(): MyTrait
         end
         
-        proc main(): () do
+        proc main(): Unit do
             MyCtor().say_hello()
         end
             

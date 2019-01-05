@@ -9,12 +9,12 @@
         
         trait MyTrait <: Any
         static
-            public proc self.say_hello(): () do
+            public proc self.say_hello(): Unit do
                 puts 'Hello World'
             end
         end
         
-        proc main(): () do
+        proc main(): Unit do
             MyTrait.say_hello()
         end
             

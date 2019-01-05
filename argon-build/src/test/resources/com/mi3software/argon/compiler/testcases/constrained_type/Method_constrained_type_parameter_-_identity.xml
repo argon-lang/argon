@@ -13,7 +13,7 @@
                 value
         end
         
-        proc main(): () do
+        proc main(): Unit do
             puts (Test.identity String 'Zero')
         end
         

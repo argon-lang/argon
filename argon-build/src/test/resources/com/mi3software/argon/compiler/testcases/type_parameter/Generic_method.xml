@@ -16,7 +16,7 @@
                 value
         end
         
-        proc main(): () do
+        proc main(): Unit do
             val inst = Ctor ()
             puts (inst.identity String 'Hello World')
         end
