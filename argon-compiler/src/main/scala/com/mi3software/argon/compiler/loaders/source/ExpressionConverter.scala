@@ -657,7 +657,7 @@ object ExpressionConverter {
           case arg +: tailArgs =>
             fillHolesExpr(context)(ts)(arg)(sigParam.parameter.paramType).flatMap { convArg =>
               sigParam.next(convArg).flatMap { next =>
-                impl(sig)(tailArgs)(newArgs :+ convArg)
+                impl(next)(tailArgs)(newArgs :+ convArg)
               }
             }
         },
