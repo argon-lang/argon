@@ -82,7 +82,7 @@ final class JSEmitter {
         } yield JSAssignment(
             JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor, ErasedSignature.fromSignature(context)(sig)))),
             JSObjectLiteral(Vector(
-              JSObjectProperty("impl", body)
+              JSObjectProperty("value", body)
             ))
           )
 

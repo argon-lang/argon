@@ -162,7 +162,7 @@ val module = Module(
       signature = ClassSignature(
         parameters = Seq(),
         baseClass = Some(ClassType(Class_classId, Seq())),
-        baseTraits = Seq(TraitType(Object_traitId, Seq())),
+        baseTraits = Seq(),
       ),
       metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
     )),
@@ -176,7 +176,7 @@ val module = Module(
       signature = ClassSignature(
         parameters = Seq(),
         baseClass = Some(ClassType(Type_classId, Seq())),
-        baseTraits = Seq(TraitType(Object_traitId, Seq())),
+        baseTraits = Seq(),
       ),
       metaClassSpecifier = MetaClassSpecifier(Trait_metaClassId)
     )),
@@ -204,7 +204,7 @@ val module = Module(
       signature = ClassSignature(
         parameters = Seq(),
         baseClass = Some(ClassType(Type_classId, Seq())),
-        baseTraits = Seq(TraitType(Object_traitId, Seq())),
+        baseTraits = Seq(),
       ),
       metaClassSpecifier = MetaClassSpecifier(Class_metaClassId)
     )),
@@ -251,7 +251,7 @@ val module = Module(
       metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
     )),
 
-    // Ar.Unit
+    // Ar.String
     Class.ClassDef(ClassDefinition(
       descriptor = String_descriptor,
       isOpen = false,
@@ -265,7 +265,7 @@ val module = Module(
       metaClassSpecifier = MetaClassSpecifier(String_metaClassId)
     )),
 
-    // Ar.Unit.<MetaClass>
+    // Ar.String.<MetaClass>
     Class.ClassDef(ClassDefinition(
       descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Unit_descriptor)),
       isOpen = false,
