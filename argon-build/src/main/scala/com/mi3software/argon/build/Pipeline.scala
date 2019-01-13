@@ -10,8 +10,8 @@ import com.mi3software.argon.parser.{SourceAST, SyntaxErrorData}
 import shims.effect._
 import fs2.Stream
 
-final class Pipeline(buildInfo: BuildInfo) extends BuildProcess.ParsePhase[IO] {
-  override protected def findInputFiles: fs2.Stream[IO, InputFileInfo[IO]] =
+final class Pipeline(buildInfo: BuildInfo) {
+  protected def findInputFiles: fs2.Stream[IO, InputFileInfo[IO]] =
     Stream(buildInfo.inputFiles: _*)
       .covary[IO]
       .map { case FileWithSpec(file, fileSpec) =>
@@ -29,21 +29,12 @@ final class Pipeline(buildInfo: BuildInfo) extends BuildProcess.ParsePhase[IO] {
 
 
   def compileResult: IO[CompilationResult] =
-    parseInput
-      .run
-      .flatMap {
-        case -\/(syntaxErrors) =>
-          CompilationResult(Set.empty, -\/(syntaxErrors)).point[IO]
-
-        case \/-(sourceASTs) =>
-          val input = CompilerInput(
-            source = sourceASTs,
-            references = buildInfo.references,
-            options = buildInfo.compilerOptions
-          )
-
-          buildInfo.backend.compile(input)
-      }
+    BuildProcess.compile(
+      buildInfo.backend,
+      BuildProcess.parseInput(findInputFiles),
+      buildInfo.references,
+      buildInfo.compilerOptions
+    )
 
   def run: IO[Unit] =
     compileResult.flatMap {

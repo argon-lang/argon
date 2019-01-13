@@ -12,51 +12,10 @@ import java.io.File
 
 import scalaz.effect.IO
 
-final class BuildTestCaseRunner(backend: Backend, references: Vector[File]) extends TestCaseRunner with TestCaseRunnerParsePhase {
+final class BuildTestCaseRunner(backend: Backend, references: Vector[File]) extends TestCaseRunner with TestCaseRunnerCompilePhase {
   override def runTest(testCase: TestCase): IO[TestCaseResult] =
-    parseTestCaseSource(testCase)
-      .flatMap { sourceASTs =>
-
-        val input = CompilerInput(
-          source = sourceASTs,
-          references = references,
-          options = CompilerOptions(
-            moduleDescriptor = ModuleDescriptor("TestProgram")
-          )
-        )
-
-        EitherT[IO, NonEmptyList[CompilationError], CompilationOutput](backend.compile(input).map { _.result })
-      }
+    compileTestCase(testCase, backend, references)
+      .map { _ => TestCaseResult.Success }
       .run
-      .map {
-        case \/-(_) =>
-          testCase.expectedResult match {
-            case TestCaseExpectedOutput(_) => TestCaseResult.Success
-            case TestCaseExpectedError(_) =>
-              TestCaseResult.Failure(
-                TestCaseActualResult.Output(""),
-                testCase.expectedResult
-              )
-
-          }
-
-        case -\/(errors) =>
-          testCase.expectedResult match {
-            case TestCaseExpectedOutput(_) =>
-              TestCaseResult.Failure(
-                TestCaseActualResult.Errors(errors),
-                TestCaseExpectedOutput("")
-              )
-
-            case TestCaseExpectedError(errorName) if isExpectedError(errors, errorName) =>
-              TestCaseResult.Success
-
-            case TestCaseExpectedError(_) =>
-              TestCaseResult.Failure(
-                TestCaseActualResult.Errors(errors),
-                testCase.expectedResult
-              )
-
-          }
-      }
+      .map { _.merge }
 }
