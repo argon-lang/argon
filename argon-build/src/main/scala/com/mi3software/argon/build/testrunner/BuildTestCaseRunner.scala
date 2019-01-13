@@ -11,11 +11,10 @@ import com.mi3software.argon.compiler.core.ModuleDescriptor
 import java.io.File
 
 import scalaz.effect.IO
-import TestCaseRunner._
 
-final class BuildTestCaseRunner(backend: Backend, references: Vector[File]) extends TestCaseRunner {
+final class BuildTestCaseRunner(backend: Backend, references: Vector[File]) extends TestCaseRunner with TestCaseRunnerParsePhase {
   override def runTest(testCase: TestCase): IO[TestCaseResult] =
-    parseInput(testCase)
+    parseTestCaseSource(testCase)
       .flatMap { sourceASTs =>
 
         val input = CompilerInput(

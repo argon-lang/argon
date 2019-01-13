@@ -3,12 +3,10 @@ package com.mi3software.argon.build.testrunner
 import scalaz._
 import scalaz.effect.IO
 
-import TestCaseRunner._
-
-object ParseTestCaseRunner extends TestCaseRunner {
+object ParseTestCaseRunner extends TestCaseRunner with TestCaseRunnerParsePhase {
 
   override def runTest(testCase: TestCase): IO[TestCaseResult] =
-    parseInput(testCase)
+    parseTestCaseSource(testCase)
       .run
       .map {
         case \/-(_) => TestCaseResult.Success
