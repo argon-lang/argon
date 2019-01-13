@@ -8,35 +8,28 @@ import scalaz._
 import Scalaz._
 import com.mi3software.argon.parser.{SourceAST, SyntaxErrorData}
 import shims.effect._
+import fs2.Stream
 
-object Pipeline {
+final class Pipeline(buildInfo: BuildInfo) extends BuildProcess.ParsePhase[IO] {
+  override protected def findInputFiles: fs2.Stream[IO, InputFileInfo[IO]] =
+    Stream(buildInfo.inputFiles: _*)
+      .covary[IO]
+      .map { case FileWithSpec(file, fileSpec) =>
+        InputFileInfo(fileSpec,
+          fs2.io.file.readAll[IO](file.toPath, chunkSize = 1024)
+            .through(ParseHandler.decodeText)
+        )
+      }
 
   def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): IO[Unit] =
     msgs
-      .traverseU { msg =>
+      .traverse_ { msg =>
         IO.putStrLn(msg.toString)
       }
-      .map { _ => () }
 
 
-  def parseResult(buildInfo: BuildInfo): EitherT[IO, NonEmptyList[CompilationError], Vector[SourceAST]] =
-    buildInfo.inputFiles
-      .traverse {
-        case FileWithSpec(file, fileSpec) =>
-          fs2.io.file.readAll[IO](file.toPath, chunkSize = 1024)
-            .through(ParseHandler.decodeText)
-            .translate(ParseHandler.addSyntaxErrorEffect)
-            .through(ParseHandler.parse[IO](fileSpec))
-            .translate(ParseHandler.convertSyntaxErrorToCompilationError(fileSpec))
-            .compile
-            .toVector(CatsInstances.scalazEitherTSync)
-      }
-      .map { _.flatten }
-      .leftMap { _.map(CompilationError.SyntaxCompilerError) }
-
-
-  def compileResult(buildInfo: BuildInfo): IO[CompilationResult] =
-    parseResult(buildInfo)
+  def compileResult: IO[CompilationResult] =
+    parseInput
       .run
       .flatMap {
         case -\/(syntaxErrors) =>
@@ -52,8 +45,8 @@ object Pipeline {
           buildInfo.backend.compile(input)
       }
 
-  def run(buildInfo: BuildInfo): IO[Unit] =
-    compileResult(buildInfo).flatMap {
+  def run: IO[Unit] =
+    compileResult.flatMap {
       case CompilationResult(msgs, result) =>
         printMessages(msgs.toVector).flatMap { _ =>
           result match {
@@ -66,6 +59,5 @@ object Pipeline {
         }
     }
 
-
-
 }
+

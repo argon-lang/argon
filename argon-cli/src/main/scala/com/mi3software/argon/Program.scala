@@ -18,9 +18,8 @@ object Program extends SafeApp {
         FileOperations.fileFromName(buildInfoFileName)
           .flatMap(BuildInfo.loadFile)
           .flatMap {
-            case Some(buildInfo) => Pipeline.run(buildInfo)
-            case None =>
-              IO.putStrLn("Could not load build info file.")
+            case Some(buildInfo) => new Pipeline(buildInfo).run
+            case None => IO.putStrLn("Could not load build info file.")
           }
 
       case Nil =>

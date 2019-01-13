@@ -34,8 +34,8 @@ object ParseHandler {
       .unNone
 
 
-  def addSyntaxErrorEffect[F[_] : Functor]: cats.~>[F, EitherT[F, NonEmptyList[SyntaxError], ?]] = new cats.~>[F, EitherT[F, NonEmptyList[SyntaxError], ?]] {
-    override def apply[A](fa: F[A]): EitherT[F, NonEmptyList[SyntaxError], A] =
+  def addSyntaxErrorEffect[F[_] : Functor, TError]: cats.~>[F, EitherT[F, NonEmptyList[TError], ?]] = new cats.~>[F, EitherT[F, NonEmptyList[TError], ?]] {
+    override def apply[A](fa: F[A]): EitherT[F, NonEmptyList[TError], A] =
       EitherT(fa.map(\/.right))
   }
 

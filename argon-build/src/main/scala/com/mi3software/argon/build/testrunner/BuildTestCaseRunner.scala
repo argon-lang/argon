@@ -8,36 +8,18 @@ import scalaz._
 import Scalaz._
 import com.mi3software.argon.build._
 import com.mi3software.argon.compiler.core.ModuleDescriptor
-import com.mi3software.argon.parser.SyntaxError
-import fs2._
-import com.mi3software.argon.parser.impl.ParseHandler
-import shims._
 import java.io.File
-import shims.effect._
 
 import scalaz.effect.IO
+import TestCaseRunner._
 
 final class BuildTestCaseRunner(backend: Backend, references: Vector[File]) extends TestCaseRunner {
   override def runTest(testCase: TestCase): IO[TestCaseResult] =
-    testCase
-      .sourceCode
-      .zipWithIndex
-      .traverse {
-        case (InputSourceData(filename, data), i) =>
-          val fileSpec = FileSpec(FileID(i), filename)
-
-          Stream(data: _*)
-            .covary[EitherT[IO, NonEmptyList[SyntaxError], ?]]
-            .through(ParseHandler.parse(fileSpec))
-            .translate(ParseHandler.convertSyntaxErrorToCompilationError(fileSpec))
-            .compile
-            .toVector(CatsInstances.scalazEitherTSync)
-      }
-      .leftMap { _.map[CompilationError](CompilationError.SyntaxCompilerError) }
+    parseInput(testCase)
       .flatMap { sourceASTs =>
 
         val input = CompilerInput(
-          source = sourceASTs.flatten,
+          source = sourceASTs,
           references = references,
           options = CompilerOptions(
             moduleDescriptor = ModuleDescriptor("TestProgram")
@@ -78,12 +60,4 @@ final class BuildTestCaseRunner(backend: Backend, references: Vector[File]) exte
 
           }
       }
-
-  private def isExpectedError(errors: NonEmptyList[CompilationError], errorName: String): Boolean =
-    errors match {
-      case NonEmptyList(error, INil()) =>
-        error.getClass.getName === CompilationError.getClass.getName + errorName
-
-      case _ => false
-    }
 }
