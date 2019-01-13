@@ -12,18 +12,16 @@ import shims.effect._
 private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
 
   protected final def parseTestCaseSource(testCase: TestCase): EitherT[IO, NonEmptyList[CompilationError], Vector[SourceAST]] =
-    new BuildProcess.ParsePhase[IO] {
-      override protected def findInputFiles: fs2.Stream[IO, InputFileInfo[IO]] =
-        Stream(testCase.sourceCode.zipWithIndex: _*)
-          .covary[IO]
-          .map {
-            case (InputSourceData(filename, data), i) =>
-              InputFileInfo(
-                FileSpec(FileID(i), filename),
-                Stream(data: _*).covary[IO]
-              )
-          }
-
-    }.parseInput
+    BuildProcess.parseInput(
+      Stream(testCase.sourceCode.zipWithIndex: _*)
+        .covary[IO]
+        .map {
+          case (InputSourceData(filename, data), i) =>
+            InputFileInfo(
+              FileSpec(FileID(i), filename),
+              Stream(data: _*).covary[IO]
+            )
+        }
+    )
 
 }
