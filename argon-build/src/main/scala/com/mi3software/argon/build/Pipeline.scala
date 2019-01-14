@@ -1,12 +1,10 @@
 package com.mi3software.argon.build
 
-import com.mi3software.argon.compiler.{CompilationError, CompilationMessage, CompilerInput}
+import com.mi3software.argon.compiler.CompilationMessage
 import com.mi3software.argon.parser.impl.ParseHandler
-import com.mi3software.argon.util.CatsInstances
 import scalaz.effect.IO
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.parser.{SourceAST, SyntaxErrorData}
 import shims.effect._
 import fs2.Stream
 

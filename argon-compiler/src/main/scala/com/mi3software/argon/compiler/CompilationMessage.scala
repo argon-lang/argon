@@ -1,7 +1,7 @@
 package com.mi3software.argon.compiler
 
 import java.io.File
-import java.nio.charset.Charset
+import java.nio.charset.StandardCharsets
 
 import com.mi3software.argon.compiler.core.GlobalName
 import com.mi3software.argon.compiler.lookup.LookupDescription
@@ -53,7 +53,7 @@ object CompilationError {
       formatTokenCategory(token.category)
 
     private def formatCharacter(ch: String): String = {
-      val utf8 = ch.getBytes(Charset.forName("UTF-8")).map { b => f"${b & 0xFF}%02X" }.mkString(" ")
+      val utf8 = ch.getBytes(StandardCharsets.UTF_8).map { b => f"${b & 0xFF}%02X" }.mkString(" ")
 
       val cp = ch.codePointAt(0)
 

@@ -1,6 +1,7 @@
 package com.mi3software.argon.build
 
 import java.io.{File, PrintWriter, StringWriter}
+import java.nio.charset.StandardCharsets
 
 import com.mi3software.argon.compiler.StandardCompilation._
 import com.mi3software.argon.compiler.js.{JSAst, JSContext, JSEmitter}
@@ -30,7 +31,7 @@ object JSBackend extends Backend {
               val writer = new StringWriter()
               val printWriter = new PrintWriter(writer)
               JSAst.writeModule(jsModule)(printWriter)
-              writer.toString.getBytes("UTF-8")
+              writer.toString.getBytes(StandardCharsets.UTF_8)
             }
           }
         }

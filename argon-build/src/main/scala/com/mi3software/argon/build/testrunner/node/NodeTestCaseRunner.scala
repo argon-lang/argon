@@ -1,6 +1,7 @@
 package com.mi3software.argon.build.testrunner.node
 
 import java.io.{File, FileInputStream}
+import java.nio.charset.StandardCharsets
 
 import com.mi3software.argon.build.JSBackend
 import com.mi3software.argon.build.testrunner._
@@ -42,10 +43,10 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
       files.map { file =>
         val libName = FilenameUtils.removeExtension(file.getName)
         val libFile = new File(new File(file.getParentFile, "js"), libName + ".js")
-        val content = IOUtils.toString(new FileInputStream(libFile), "UTF-8")
+        val content = IOUtils.toString(new FileInputStream(libFile), StandardCharsets.UTF_8)
         FileInfo(libName, content)
       }
-      :+ FileInfo(moduleDescriptor.name, new String(compiledFile, "UTF-8"))
+      :+ FileInfo(moduleDescriptor.name, new String(compiledFile, StandardCharsets.UTF_8))
     ).toArray
 
     Await.result(launcher.serverFunctions.executeJS(moduleDescriptor.name, modules), Duration.Inf)
