@@ -1,7 +1,7 @@
 
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.12.6",
+  scalaVersion := "2.12.8",
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
@@ -29,7 +29,8 @@ lazy val commonSettings = Seq(
     "com.codecommit" %% "shims-effect" % "1.4.0",
 
     "org.apache.thrift" % "libthrift" % "0.11.0",
-    "com.twitter" %% "scrooge-core" % "18.7.0" exclude("com.twitter", "libthrift"),
+    "com.twitter" %% "scrooge-core" % "18.12.0" exclude("com.twitter", "libthrift"),
+    "com.twitter" %% "finagle-thrift" % "18.12.0" exclude("com.twitter", "libthrift"),
 
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test",
 
@@ -89,6 +90,8 @@ lazy val compilerOptions = Seq(
 
 val generateLibs = taskKey[Unit]("Generate argon library definitions")
 
+lazy val gcrpcRuntime = RootProject(file("gcrpc/runtime/scala"))
+
 lazy val cli = project.in(file("argon-cli"))
   .dependsOn(argon_build)
   .settings(
@@ -99,7 +102,7 @@ lazy val cli = project.in(file("argon-cli"))
   )
 
 lazy val argon_build = project.in(file("argon-build"))
-  .dependsOn(util, parser, argon_compiler, compiler_js)
+  .dependsOn(util, parser, argon_compiler, compiler_js, gcrpcRuntime)
   .settings(
     commonSettings,
     compilerOptions,
@@ -185,7 +188,7 @@ lazy val library_gen = project.in(file("argon-library-gen"))
     commonSettings,
     compilerOptions,
 
-    libraryDependencies += "com.lihaoyi" % "ammonite" % "1.1.2" cross CrossVersion.patch,
+    libraryDependencies += "com.lihaoyi" % "ammonite" % "1.6.0" cross CrossVersion.patch,
 
     name := "argon-library-gen",
   )

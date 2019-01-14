@@ -3,6 +3,7 @@ target/
 
 # NPM
 node_modules/
+bin/
 
 # User-specific stuff:
 .idea/
@@ -12,3 +13,5 @@ node_modules/
 example/**/*.js
 *.armodule
 
+# Generated Code
+*.gen.*

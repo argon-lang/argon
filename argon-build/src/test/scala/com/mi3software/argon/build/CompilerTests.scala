@@ -3,9 +3,10 @@ package com.mi3software.argon.build
 import java.io.File
 
 import com.mi3software.argon.build.testrunner._
-import org.scalatest.{FunSpec, Matchers}
+import com.mi3software.argon.build.testrunner.node.{NodeLauncher, NodeTestCaseRunner}
+import org.scalatest.{BeforeAndAfterAll, FunSpec, Matchers}
 
-class CompilerTests extends FunSpec with Matchers {
+class CompilerTests extends FunSpec with Matchers with BeforeAndAfterAll {
 
   private def processTestCases(runner: TestCaseRunner, structure: TestCaseStructure): Unit = {
 
@@ -27,6 +28,8 @@ class CompilerTests extends FunSpec with Matchers {
     "Argon.Core",
   )
 
+  private val nodeLauncher = new NodeLauncher("external-api/node-api/bin/index.js")
+
   private val references = libraries.map { name => new File(s"libraries/$name/$name.armodule") }
 
   private def generateTestCases(): Unit = {
@@ -36,7 +39,9 @@ class CompilerTests extends FunSpec with Matchers {
       "Parsing" -> ParseTestCaseRunner,
     ) ++ Backend.allBackends.map { backend =>
       s"Compilation (${backend.name})" -> new BuildTestCaseRunner(backend, references)
-    }
+    } ++ Vector(
+      "Node Execution" -> new NodeTestCaseRunner(references, nodeLauncher)
+    )
 
     runners foreach { case (desc, runner) =>
       describe(desc) {
@@ -46,4 +51,8 @@ class CompilerTests extends FunSpec with Matchers {
   }
 
   generateTestCases()
+
+  override protected def afterAll(): Unit = {
+    nodeLauncher.close()
+  }
 }

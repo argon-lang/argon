@@ -1,0 +1,17 @@
+{
+  "name": "argon-node-executor",
+  "version": "1.0.0",
+  "description": "",
+  "main": "bin/index.js",
+  "scripts": {
+    "build": "tsc"
+  },
+  "author": "",
+  "dependencies": {
+    "gcrpc-runtime": "file:../../gcrpc/runtime/node"
+  },
+  "devDependencies": {
+    "@types/node": "^10.12.18",
+    "typescript": "^3.2.2"
+  }
+}

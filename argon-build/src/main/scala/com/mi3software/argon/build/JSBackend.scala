@@ -1,6 +1,6 @@
 package com.mi3software.argon.build
 
-import java.io.File
+import java.io.{File, PrintWriter, StringWriter}
 
 import com.mi3software.argon.compiler.StandardCompilation._
 import com.mi3software.argon.compiler.js.{JSAst, JSContext, JSEmitter}
@@ -25,6 +25,13 @@ object JSBackend extends Backend {
           new CompilationOutput {
             override def writeToFile(outputFile: File): IO[Unit] =
               FileOperations.filePrintWriter(outputFile)(IOHelpers.impureFunction(JSAst.writeModule(jsModule)))
+
+            override def toByteArray: IO[Array[Byte]] = IO {
+              val writer = new StringWriter()
+              val printWriter = new PrintWriter(writer)
+              JSAst.writeModule(jsModule)(printWriter)
+              writer.toString.getBytes("UTF-8")
+            }
           }
         }
         .run

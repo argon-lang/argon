@@ -1,0 +1,8 @@
+module com.mi3software.argon.build.testrunner.node.ExternalApi
+
+def executeJS(entrypoint: String, files: Array<FileInfo>): String;
+
+record FileInfo {
+	name: String;
+	content: String;
+}

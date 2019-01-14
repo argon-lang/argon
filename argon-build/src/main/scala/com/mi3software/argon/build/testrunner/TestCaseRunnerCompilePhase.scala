@@ -10,6 +10,8 @@ import scalaz.effect.IO
 
 private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParsePhase {
 
+  protected val moduleDescriptor = ModuleDescriptor("TestProgram")
+
   def compileTestCase(testCase: TestCase, backend: Backend, references: Vector[File]): EitherT[IO, TestCaseResult, (CompilationOutput, String)] =
     EitherT(
       BuildProcess.compile(
@@ -17,7 +19,7 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
         parseTestCaseSource(testCase),
         references,
         CompilerOptions(
-          moduleDescriptor = ModuleDescriptor("TestProgram")
+          moduleDescriptor = moduleDescriptor
         ),
       )
         .map { _.result match {

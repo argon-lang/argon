@@ -6,4 +6,5 @@ import scalaz.effect.IO
 
 trait CompilationOutput {
   def writeToFile(outputFile: File): IO[Unit]
+  def toByteArray: IO[Array[Byte]]
 }
