@@ -6,10 +6,10 @@ import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
 import scala.language.postfixOps
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.grammar.{Grammar, GrammarError}
+import com.mi3software.argon.grammar.{Grammar, GrammarError, SyntaxErrorReporter}
 import Grammar.Operators._
 import com.mi3software.argon.parser.impl.Lexer.LexerGrammarFactory
-import fs2._
+import com.mi3software.argon.util.stream.StreamTransformationM
 
 import Function.const
 
@@ -263,10 +263,14 @@ object Lexer {
   type ErrorEffect[F[_], A] = EitherT[F, NonEmptyList[SyntaxError], A]
 
 
-  def lex[F[_]: Monad]: Pipe[ErrorEffect[F, ?], WithSource[String], WithSource[Token]] =
-    _
-      .through(Grammar.parseAll[F, String, SyntaxError, Rule.LexerRuleName, WithSource[Option[Token]]](LexerGrammarFactory)(Rule.ResultToken)(FilePosition(1, 1)))
-      .map { case WithSource(opt, loc) => opt.map { value => WithSource(value, loc) } }
-      .unNone
+  type ErrorReporter[F[_]] = SyntaxErrorReporter[F, SyntaxError]
+
+  def lex[F[_]: ErrorReporter]: StreamTransformationM[F, WithSource[String], FilePosition, WithSource[Token], FilePosition] =
+    Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken)
+      .flatMapItems {
+        case WithSource(Some(value), loc) => Vector(WithSource(value, loc))
+        case _ => Vector.empty
+      }
+
 
 }

@@ -8,10 +8,10 @@ import scala.reflect.ClassTag
 import scala.language.postfixOps
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.grammar.{Grammar, GrammarError, TokenMatcher}
+import com.mi3software.argon.grammar.{Grammar, GrammarError, SyntaxErrorReporter, TokenMatcher}
 import Grammar.Operators._
 import Grammar.{GrammarFactory, UnionGrammar}
-import fs2._
+import com.mi3software.argon.util.stream.StreamTransformationM
 
 import Function.const
 
@@ -655,9 +655,9 @@ object ArgonParser {
 
 
     private def createLeftAssociativeOperatorRule(firstOpGrammar: TGrammar[BinaryOperator], opGrammars: TGrammar[BinaryOperator]*)(nextGrammar: TGrammar[Expr]): TGrammar[Expr] = {
-      val opGrammarsNel = NonEmptyList.nel(firstOpGrammar, IList(opGrammars: _*))
+      val opGrammarsNev = NonEmptyVector(firstOpGrammar, opGrammars.toVector)
 
-      val rightGrammars = opGrammarsNel.map { opGrammar =>
+      val rightGrammars = opGrammarsNev.map { opGrammar =>
         Lazy { (opGrammar ++! nextGrammar.observeSource) --> { case (op, right) => left: WithSource[Expr] => BinaryOperatorExpr(op, left, right) } }
       }
 
@@ -676,9 +676,11 @@ object ArgonParser {
 
   private[impl] def grammarFactory: GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] = ArgonGrammarFactory
 
-  def parse[F[_]: Monad]: Pipe[EitherT[F, NonEmptyList[SyntaxError], ?], WithSource[Token], TopLevelStatement] =
-    _
-      .through(Grammar.parseAll[F, Token, SyntaxError, Rule.ArgonRuleName, WithSource[TopLevelStatement]](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)(FilePosition(1, 1)))
-      .map { _.value }
+  type ErrorReporter[F[_]] = SyntaxErrorReporter[F, SyntaxError]
+
+  def parse[F[_]: ErrorReporter]: StreamTransformationM[F, WithSource[Token], FilePosition, TopLevelStatement, Unit] =
+    Grammar.parseAll(ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)
+      .mapItems { _.value }
+      .mapResult { _ => ()}
 
 }

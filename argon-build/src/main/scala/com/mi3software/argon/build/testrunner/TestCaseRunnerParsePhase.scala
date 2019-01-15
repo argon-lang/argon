@@ -3,25 +3,24 @@ package com.mi3software.argon.build.testrunner
 import com.mi3software.argon.build._
 import com.mi3software.argon.compiler.CompilationError
 import com.mi3software.argon.parser.SourceAST
+import com.mi3software.argon.util.stream.ArStream
 import com.mi3software.argon.util.{FileID, FileSpec}
 import scalaz.{EitherT, NonEmptyList}
 import scalaz.effect.IO
-import fs2.Stream
-import shims.effect._
+import com.mi3software.argon.compiler.IOCompilation
 
 private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
 
-  protected final def parseTestCaseSource(testCase: TestCase): EitherT[IO, NonEmptyList[CompilationError], Vector[SourceAST]] =
-    BuildProcess.parseInput(
-      Stream(testCase.sourceCode.zipWithIndex: _*)
-        .covary[IO]
-        .map {
+  protected final def parseTestCaseSource(testCase: TestCase)(implicit ioComp: IOCompilation): IO[Vector[SourceAST]] =
+    BuildProcess.parseInput[IO](
+      ArStream.fromVector[IO, (InputSourceData, Int), Unit](testCase.sourceCode.zipWithIndex, ())
+        .mapItems {
           case (InputSourceData(filename, data), i) =>
             InputFileInfo(
               FileSpec(FileID(i), filename),
-              Stream(data: _*).covary[IO]
+              ArStream.fromVector[IO, Char, Unit](data.toVector, ())
             )
         }
-    )
+    ).toVector
 
 }

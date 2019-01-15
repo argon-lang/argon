@@ -3,7 +3,7 @@ package com.mi3software.argon.build.testrunner
 
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
-import com.mi3software.argon.util.{CatsInstances, FileID, FileSpec}
+import com.mi3software.argon.util.{FileID, FileSpec}
 import scalaz._
 import Scalaz._
 import com.mi3software.argon.build._

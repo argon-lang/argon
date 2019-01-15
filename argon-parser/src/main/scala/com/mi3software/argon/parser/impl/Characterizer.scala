@@ -2,26 +2,69 @@ package com.mi3software.argon.parser.impl
 
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.util.stream.{ArStream, StreamTransformation, StreamTransformationM}
 import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
-import fs2._
+
 
 object Characterizer {
 
-  private def toCodePoints[F[_]]: Pipe[F, Char, Int] =
-    in => in
-      .pull
-      .scanSegments(None : Option[Char]) { (prevCharOpt, seg) =>
-        seg
-          .mapAccumulate(prevCharOpt) {
-            case (None, ch) if Character.isHighSurrogate(ch) => (Some(ch), None)
-            case (None, ch) => (None, Some(ch.toInt))
-            case (Some(prevCh), ch) => (None, Some(Character.toCodePoint(prevCh, ch)))
-          }
-          .mapResult { case (_, prevCharOpt) => prevCharOpt }
+  private val toCodePoints: StreamTransformation[Char, Unit, Int, Unit] =
+    new StreamTransformation.Single[Char, Unit, Int, Unit] {
+      override protected type S = Option[Char]
+
+      override protected val initialState: Option[Char] = None
+
+      override protected def processItem(state: Option[Char], item: Char): (Option[Char], Vector[Int]) =
+        state match {
+          case Some(prevCh) => (None, Vector(Character.toCodePoint(prevCh, item)))
+          case None =>
+            if(Character.isHighSurrogate(item))
+              (Some(item), Vector.empty)
+            else
+              (None, Vector(item.toInt))
+        }
+
+      override protected def processResult(state: Option[Char], result: Unit): (Unit, Vector[Int]) =
+        ((), state.map { _.toInt }.toVector)
+    }
+
+  private val toGraphemes: StreamTransformation[Int, Unit, String, Unit] =
+    new StreamTransformation.Single[Int, Unit, String, Unit] {
+      override protected type S = Option[String]
+
+      override protected val initialState: Option[String] = None
+
+      override protected def processItem(state: Option[String], item: Int): (Option[String], Vector[String]) =
+        state match {
+          case Some(str) if isCombiningChar(item) => (Some(str + codePointToString(item)), Vector.empty)
+          case _ => (Some(codePointToString(item)), state.toVector)
+        }
+
+      override protected def processResult(state: Option[String], result: Unit): (Unit, Vector[String]) =
+        ((), state.toVector)
+    }
+
+
+  private val withSource: StreamTransformation[String, Unit, WithSource[String], FilePosition] =
+    new StreamTransformation.Single[String, Unit, WithSource[String], FilePosition] {
+      override protected type S = FilePosition
+
+      override protected val initialState: FilePosition = FilePosition(1, 1)
+
+      override protected def processItem(pos: FilePosition, item: String): (FilePosition, Vector[WithSource[String]]) = {
+        val nextPos =
+          if(item === "\n")
+            FilePosition(pos.line + 1, 1)
+          else
+            pos.copy(position = pos.position + 1)
+
+        (nextPos, Vector(WithSource(item, SourceLocation(pos, nextPos))))
       }
-      .flatMap(lastCharOpt => Pull.output1(lastCharOpt.map { _.toInt }))
-      .stream
-      .unNone
+
+      override protected def processResult(state: FilePosition, result: Unit): (FilePosition, Vector[WithSource[String]]) =
+        (state, Vector.empty)
+    }
+
 
   private def isCombiningChar(cp: Int): Boolean =
     Character.getType(cp) match {
@@ -32,40 +75,8 @@ object Characterizer {
   private def codePointToString(cp: Int): String =
     new String(Character.toChars(cp))
 
-  private def toGraphemes[F[_]]: Pipe[F, Int, String] =
-    in => in
-      .pull
-      .scanSegments(None : Option[String]) { (acc, seg) =>
-        seg
-          .mapAccumulate(acc) {
-            case (Some(str), cp) if isCombiningChar(cp) => (Some(str + codePointToString(cp)), None)
-            case (strOpt, cp) => (Some(codePointToString(cp)), strOpt)
-          }
-          .mapResult { case (_, acc) => acc }
-      }
-      .flatMap(Pull.output1)
-      .stream
-      .unNone
 
-  private def withSource[F[_]]: Pipe[F, String, WithSource[String]] =
-    in => in.pull
-        .scanSegments(FilePosition(1, 1)) { (pos, seg) =>
-          seg
-            .mapAccumulate(pos) { (pos, a) =>
-
-              val nextPos =
-                if(a === "\n")
-                  FilePosition(pos.line + 1, 1)
-                else
-                  pos.copy(position = pos.position + 1)
-
-              (nextPos, WithSource(a, SourceLocation(pos, nextPos)))
-            }
-            .mapResult { case (_, acc) => acc }
-        }
-      .stream
-
-  def characterize[F[_]]: Pipe[F, Char, WithSource[String]] =
-    _.through(toCodePoints).through(toGraphemes).through(withSource)
+  def characterize[F[_]: Monad](stream: ArStream[F, Char, Unit]): ArStream[F, WithSource[String], FilePosition] =
+    stream.transformWith(toCodePoints).transformWith(toGraphemes).transformWith(withSource)
 
 }

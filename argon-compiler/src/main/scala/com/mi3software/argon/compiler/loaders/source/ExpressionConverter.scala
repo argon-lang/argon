@@ -564,7 +564,7 @@ object ExpressionConverter {
   : TComp[context.typeSystem.ArExpr] =
     expr
       .flatMap { e =>
-        StateT.get[TComp, TypeCheckState[ts.TType]]
+        State.get[TypeCheckState[ts.TType]].lift[TComp]
           .flatMap { state =>
             resolveHoles(context)(ts)(state.nextHoleId)
           }
@@ -583,7 +583,7 @@ object ExpressionConverter {
   : TComp[context.typeSystem.TType] =
     t
       .flatMap { t =>
-        StateT.get[TComp, TypeCheckState[ts.TType]]
+        State.get[TypeCheckState[ts.TType]].lift[TComp]
           .flatMap { state =>
             resolveHoles(context)(ts)(state.nextHoleId)
           }
@@ -838,22 +838,22 @@ object ExpressionConverter {
     new TypeCheck[context.type, ts.TType, HoleTypeCheckComp[TComp, ts.TType, ?]] {
 
       override def fromContextComp[A](context2: context.type)(comp: context.Comp[A]): HoleTypeCheckComp[TComp, ts.TType, A] =
-        StateT.liftM[TComp, TypeCheckState[ts.TType], A](comp)
+        StateT((s: TypeCheckState[ts.TType]) => comp.map { a => (s, a) })
 
       override def createHole: HoleTypeCheckComp[TComp, ts.TType, ts.TType] =
         for {
-          state <- StateT.get[TComp, TypeCheckState[ts.TType]]
-          _ <- StateT.put[TComp, TypeCheckState[ts.TType]](state.copy(nextHoleId = state.nextHoleId + 1))
+          state <- State.get[TypeCheckState[ts.TType]].lift[TComp]
+          _ <- State.put[TypeCheckState[ts.TType]](state.copy(nextHoleId = state.nextHoleId + 1)).lift[TComp]
         } yield HoleTypeHole(state.nextHoleId)
 
       private def addConstraint(id: Int, constraint: TypeConstraint[ts.TType]): HoleTypeCheckComp[TComp, ts.TType, Unit] =
-        StateT.modify[TComp, TypeCheckState[ts.TType]] { state =>
+        State.modify[TypeCheckState[ts.TType]] { state =>
           state.constraints.getOrElse(id, HoleBounds(Set.empty[TypeConstraint[ts.TType]])) match {
             case HoleResolved(_) => state
             case HoleBounds(bounds) =>
               state.copy(constraints = state.constraints.updated(id, HoleBounds(bounds + constraint)))
           }
-        }
+        }.lift[TComp]
 
       override def recordConstraint(info: SubTypeInfo[ts.TType]): HoleTypeCheckComp[TComp, ts.TType, Unit] =
         (info.subType, info.superType) match {
@@ -882,7 +882,7 @@ object ExpressionConverter {
         TypeSystem.convertTypeSystem(context)(ts)(ts)(new ResolverConverter)(t).eval(Set.empty)
 
       private def resolveOuterHole(id: Int): HoleTypeCheckComp[TComp, ts.TType, ts.TType] =
-        StateT.get[TComp, TypeCheckState[ts.TType]].flatMap { state =>
+        State.get[TypeCheckState[ts.TType]].lift[TComp].flatMap { state =>
           state.constraints.getOrElse(id, HoleBounds(Set.empty[TypeConstraint[ts.TType]])) match {
             case HoleResolved(hole) => hole.point[HoleTypeCheckComp[TComp, ts.TType, ?]]
             case HoleBounds(bounds) =>
@@ -908,9 +908,9 @@ object ExpressionConverter {
               }
 
               for {
-                _ <- StateT.put[TComp, TypeCheckState[ts.TType]](
+                _ <- State.put[TypeCheckState[ts.TType]](
                   state.copy(constraints = state.constraints.updated(id, HoleResolved(resolvedType)))
-                )
+                ).lift[TComp]
               } yield resolvedType
           }
         }
@@ -923,15 +923,15 @@ object ExpressionConverter {
             case HoleTypeType(_) => t.point[ResolverState]
             case HoleTypeHole(id) =>
               for {
-                seenHoles <- StateT.get[HoleTypeCheckComp[TComp, ts.TType, ?], Set[Int]]
+                seenHoles <- State.get[Set[Int]].lift[HoleTypeCheckComp[TComp, ts.TType, ?]]
                 _ <-
                   if(seenHoles.contains(id))
                     ???
                   else
-                    StateT.put[HoleTypeCheckComp[TComp, ts.TType, ?], Set[Int]](seenHoles + id)
+                    State.put[Set[Int]](seenHoles + id).lift[HoleTypeCheckComp[TComp, ts.TType, ?]]
 
 
-                resolvedOuter <- StateT.liftM[HoleTypeCheckComp[TComp, ts.TType, ?], Set[Int], ts2.TType](resolveOuterHole(id))
+                resolvedOuter <- StateT((s: Set[Int]) => resolveOuterHole(id).map { a => (s, a) })
                 resolvedType <- TypeSystem.convertTypeSystem(context)(ts)(ts)(this)(resolvedOuter)
               } yield ts.mapTypeWrapper(resolvedType)(fromSimpleType)
           }
@@ -940,17 +940,18 @@ object ExpressionConverter {
 
 
       override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): HoleTypeCheckComp[TComp, ts.TType, A] =
-        StateT.liftM(Compilation[TComp].diagnostic(value, messages))
+        StateT((s: TypeCheckState[ts.TType]) => Compilation[TComp].diagnostic(value, messages).map { a => (s, a) })
 
       override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): HoleTypeCheckComp[TComp, ts.TType, A] =
-        StateT.liftM(Compilation[TComp].forErrors[A](errors, messages))
+        StateT((s: TypeCheckState[ts.TType]) => Compilation[TComp].forErrors[A](errors, messages).map { a => (s, a) })
 
 
       override def bind[A, B](fa: HoleTypeCheckComp[TComp, ts.TType, A])(f: A => HoleTypeCheckComp[TComp, ts.TType, B]): HoleTypeCheckComp[TComp, ts.TType, B] =
         fa.flatMap(f)
 
       override def point[A](a: => A): HoleTypeCheckComp[TComp, ts.TType, A] =
-        StateT.liftM(a.point[TComp])
+        StateT((s: TypeCheckState[ts.TType]) => (s, a).point[TComp])
+
     }
 
 }

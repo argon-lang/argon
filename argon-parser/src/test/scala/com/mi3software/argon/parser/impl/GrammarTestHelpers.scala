@@ -1,9 +1,9 @@
 package com.mi3software.argon.parser.impl
 
-import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
+import com.mi3software.argon.util.{FilePosition, NonEmptyVector, SourceLocation, WithSource}
 import scalaz._
 import com.mi3software.argon.grammar.Grammar
-import Grammar.{GrammarResultComplete, GrammarResultTransform, ParseOptions, ParseState}
+import Grammar.{GrammarResultComplete, GrammarResultTransform, ParseOptions}
 
 trait GrammarTestHelpers {
 
@@ -17,44 +17,46 @@ trait GrammarTestHelpers {
 
   def parseTokens[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: Vector[WithSource[TToken]]): GrammarResultComplete[TToken, TSyntaxError, TLabel, T]
 
-  protected def parse[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: TToken*): Either[NonEmptyList[TSyntaxError], (Vector[TToken], T)] =
+  protected def parse[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: TToken*): Either[NonEmptyVector[TSyntaxError], (Vector[TToken], T)] =
     parseTokens(grammar)(
       tokens.zipWithIndex.map { case (value, i) => WithSource(value, SourceLocation(FilePosition(1, i + 1), FilePosition(1, i + 2))) }.toVector
     )
       .toEither
-      .map { case (ParseState(remTokens, _), res) => (remTokens.map { _.value }, res.value) }
+      .map { case (remTokens, res) => (remTokens.map { _.value }, res.value) }
 
 
 }
 
 trait GrammarTestHelpersEntireSequence extends GrammarTestHelpers {
   override def parseTokens[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: Vector[WithSource[TToken]]): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
-    if(tokens.isEmpty)
-      grammar
-        .parseEnd(
-          FilePosition(1, 1),
-          ParseOptions(Set.empty, None, grammarFactory)
-        )
-    else
-      grammar
-        .parseTokens(
-          ParseState(
-            tokens,
-            FilePosition(1, 1)
-          ),
-          ParseOptions(Set.empty, None, grammarFactory)
-        )
-        .completeResult
+    tokens match {
+      case head +: tail =>
+        grammar
+          .parseTokens(
+            NonEmptyVector(head, tail),
+            ParseOptions(Set.empty, None, grammarFactory)
+          )
+          .completeResult(FilePosition(1, tokens.size + 1))
+
+      case Vector() =>
+        grammar
+          .parseEnd(
+            FilePosition(1, 1),
+            ParseOptions(Set.empty, None, grammarFactory)
+          )
+    }
 }
 
 trait GrammarTestHelpersSingleTokens extends GrammarTestHelpers {
   override def parseTokens[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: Vector[WithSource[TToken]]): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] = {
+    val endPos = FilePosition(1, tokens.size + 1)
+
     def impl[A](trans: GrammarResultTransform[TToken, TSyntaxError, TLabel, A, T])(tokens: Vector[WithSource[TToken]]): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
       tokens match {
         case head +: tail =>
-          trans.grammar.parseTokens(ParseState(Vector(head), trans.pos), trans.parseOptions).transformComplete(trans.f) match {
+          trans.grammar.parseTokens(NonEmptyVector.of(head), trans.parseOptions).transformComplete(trans.f) match {
             case result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =>
-              result.map { case (ParseState(unusedTokens, pos), t) => (ParseState(unusedTokens ++ tail, pos), t) }
+              result.map { case (unusedTokens, t) => (unusedTokens ++ tail, t) }
             case trans: GrammarResultTransform[TToken, TSyntaxError, TLabel, a, T] =>
               impl(trans)(tail)
           }
@@ -62,13 +64,13 @@ trait GrammarTestHelpersSingleTokens extends GrammarTestHelpers {
         case _ =>
           trans.grammar
             .parseEnd(
-              trans.pos,
+              endPos,
               trans.parseOptions
             )
             .transformComplete(trans.f)
-            .completeResult
+            .completeResult(endPos)
       }
 
-    impl(GrammarResultTransform(grammar)(ParseOptions(Set.empty, None, grammarFactory))(FilePosition(1, 1))(identity))(tokens)
+    impl(GrammarResultTransform(grammar)(ParseOptions(Set.empty, None, grammarFactory))(identity))(tokens)
   }
 }

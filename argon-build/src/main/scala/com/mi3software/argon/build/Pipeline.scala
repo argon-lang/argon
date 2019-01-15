@@ -2,20 +2,19 @@ package com.mi3software.argon.build
 
 import com.mi3software.argon.compiler.CompilationMessage
 import com.mi3software.argon.parser.impl.ParseHandler
-import scalaz.effect.IO
+import com.mi3software.argon.util.stream.{ArStream, FileStream}
+import scalaz.effect._
 import scalaz._
 import Scalaz._
-import shims.effect._
-import fs2.Stream
+import com.mi3software.argon.util.IOHelpers.ioMonadError
+import com.mi3software.argon.compiler.IOCompilation
 
 final class Pipeline(buildInfo: BuildInfo) {
-  protected def findInputFiles: fs2.Stream[IO, InputFileInfo[IO]] =
-    Stream(buildInfo.inputFiles: _*)
-      .covary[IO]
-      .map { case FileWithSpec(file, fileSpec) =>
+  protected def findInputFiles: ArStream[IO, InputFileInfo[IO], Unit] =
+    ArStream.fromVector[IO, FileWithSpec, Unit](buildInfo.inputFiles, ())
+      .mapItems { case FileWithSpec(file, fileSpec) =>
         InputFileInfo(fileSpec,
-          fs2.io.file.readAll[IO](file.toPath, chunkSize = 1024)
-            .through(ParseHandler.decodeText)
+          FileStream.readFileText[IO](file, bufferSize = 1024)
         )
       }
 
@@ -27,12 +26,16 @@ final class Pipeline(buildInfo: BuildInfo) {
 
 
   def compileResult: IO[CompilationResult] =
-    BuildProcess.compile(
-      buildInfo.backend,
-      BuildProcess.parseInput(findInputFiles),
-      buildInfo.references,
-      buildInfo.compilerOptions
-    )
+    IOCompilation.compilationInstance.flatMap { implicit compInstance =>
+      BuildProcess.parseInput(findInputFiles).toVector(compInstance).flatMap { parsedInput =>
+        BuildProcess.compile(
+          buildInfo.backend,
+          parsedInput,
+          buildInfo.references,
+          buildInfo.compilerOptions
+        )
+      }
+    }
 
   def run: IO[Unit] =
     compileResult.flatMap {

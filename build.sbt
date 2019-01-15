@@ -23,10 +23,6 @@ lazy val commonSettings = Seq(
     "com.fommil" %% "deriving-macro" % "0.9.0",
     "com.fommil" %% "scalaz-deriving" % "0.9.0",
     "tech.sparse" %%  "toml-scala" % "0.1.1",
-    "co.fs2" %% "fs2-core" % "0.10.1",
-    "co.fs2" %% "fs2-io" % "0.10.1",
-    "com.codecommit" %% "shims" % "1.4.0",
-    "com.codecommit" %% "shims-effect" % "1.4.0",
 
     "org.apache.thrift" % "libthrift" % "0.11.0",
     "com.twitter" %% "scrooge-core" % "18.12.0" exclude("com.twitter", "libthrift"),
