@@ -166,6 +166,15 @@ final class JSEmitter {
       case LetBinding(_, _, _) =>
         wrapStatement(context)(expr)
 
+      case LoadConstantInt(i, _) =>
+        JSFunctionCall(
+          JSPropertyAccessDot(
+            JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
+            JSIdentifier("createInt")
+          ),
+          Vector(JSBigInt(i))
+        ).point[TComp]
+
       case LoadConstantString(str, _) =>
         JSFunctionCall(
           JSPropertyAccessDot(
@@ -182,6 +191,18 @@ final class JSEmitter {
         for {
           values <- expr.values.toVector.traverse { elem => convertExpr(context)(elem.value) }
         } yield JSArrayLiteral(values)
+
+      case PrimitiveOp(PrimitiveOperation.AddInt, left, right, _) =>
+        for {
+          leftExpr <- convertExpr(context)(left)
+          rightExpr <- convertExpr(context)(right)
+        } yield JSFunctionCall(
+          JSPropertyAccessDot(
+            JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
+            JSIdentifier("addInt")
+          ),
+          Vector(leftExpr, rightExpr)
+        )
 
       case _ => ???
     }

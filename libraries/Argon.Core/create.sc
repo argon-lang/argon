@@ -80,6 +80,16 @@ val String_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
 val String_classId = 10
 val String_metaClassId = 11
 
+val Int_fileSpec = FileSpec(fileID = getFileId(), name = "Int.argon")
+val Int_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
+  Int_fileSpec,
+  Ar_ns,
+  GlobalName.NormalName("Int"),
+  AccessModifier.Public,
+))
+val Int_classId = 12
+val Int_metaClassId = 13
+
 val Puts_fileSpec = FileSpec(fileID = getFileId(), name = "Puts.argon")
 val Puts_descriptor = FunctionDescriptor.InNamespace(FunctionDescriptorInNamespace(
   Puts_fileSpec,
@@ -267,7 +277,35 @@ val module = Module(
 
     // Ar.String.<MetaClass>
     Class.ClassDef(ClassDefinition(
-      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Unit_descriptor)),
+      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(String_descriptor)),
+      isOpen = false,
+      isSealed = false,
+      isAbstract = false,
+      signature = ClassSignature(
+        parameters = Seq(),
+        baseClass = Some(ClassType(Class_classId, Seq())),
+        baseTraits = Seq(),
+      ),
+      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
+    )),
+
+    // Ar.Int
+    Class.ClassDef(ClassDefinition(
+      descriptor = Int_descriptor,
+      isOpen = false,
+      isSealed = false,
+      isAbstract = false,
+      signature = ClassSignature(
+        parameters = Seq(),
+        baseClass = None,
+        baseTraits = Seq(TraitType(Object_traitId, Seq())),
+      ),
+      metaClassSpecifier = MetaClassSpecifier(String_metaClassId)
+    )),
+
+    // Ar.Int.<MetaClass>
+    Class.ClassDef(ClassDefinition(
+      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Int_descriptor)),
       isOpen = false,
       isSealed = false,
       isAbstract = false,

@@ -137,6 +137,14 @@ classes["Ar.String[MetaClass]"] = createClass({
 	get baseClass() { return classes["Ar.Class"]; },
 });
 
+classes["Ar.Int"] = createClass({
+	get baseTraits() { return [ traits["Ar.Object"] ]; },
+});
+
+classes["Ar.Int[MetaClass]"] = createClass({
+	get baseClass() { return classes["Ar.Class"]; },
+});
+
 functions["Ar.puts:($_:(Ar.String))->(Ar.Unit)"] = Object.freeze({
 	value: function([str]) {
 		console.log(str[stringValueSymbol]);
@@ -150,6 +158,16 @@ export function createString(str) {
 	obj[stringValueSymbol] = str;
 	return Object.freeze(obj);
 };
+
+export function createInt(i) {
+    const obj = Object.create(classes["Ar.Int"].constructor.prototype);
+    obj[intValueSymbol] = i;
+    return Object.freeze(obj);
+}
+
+export function addInt(a, b) {
+    return createInt(a[intValueSymbol] + b[intValueSymbol]);
+}
 
 Object.freeze(traits);
 Object.freeze(classes);

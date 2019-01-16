@@ -114,6 +114,14 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final case class StoreVariable(variable: Variable[VariableLikeDescriptor], value: ArExpr, exprType: TType) extends ArExpr {
     override val universe: Universe = ValueUniverse
   }
+  final case class PrimitiveOp(operation: PrimitiveOperation, left: ArExpr, right: ArExpr, exprType: TType) extends ArExpr {
+    override val universe: Universe = universeOfType(exprType).prev
+  }
+
+  sealed trait PrimitiveOperation
+  object PrimitiveOperation {
+    case object AddInt extends PrimitiveOperation
+  }
 
 
   sealed trait SimpleType extends ArExpr {

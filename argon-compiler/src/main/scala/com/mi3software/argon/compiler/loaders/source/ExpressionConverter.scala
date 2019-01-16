@@ -53,6 +53,15 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           } yield factoryForExpr(env)(expr.location)(result)
         )
 
+      case parser.BinaryOperatorExpr(parser.BinaryOperator.Add, left, right) =>
+        compFactory(
+          for {
+            intType <- resolveIntType(env)(expr.location)
+            leftExpr <- convertExpr(env)(left).forExpectedType(intType)
+            rightExpr <- convertExpr(env)(right).forExpectedType(intType)
+          } yield factoryForExpr(env)(expr.location)(PrimitiveOp(PrimitiveOperation.AddInt, leftExpr, rightExpr, intType))
+        )
+
       case parser.BoolValueExpr(b) =>
         compFactory(
           for {
@@ -80,7 +89,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
         compFactory(
           for {
-            intType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Int"))
+            intType <- resolveIntType(env)(expr.location)
           } yield factoryForExpr(env)(expr.location)(LoadConstantInt(value, intType))
         )
 
@@ -212,6 +221,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
   def resolveUnitType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
     resolveModuleClass(env)(location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))
+
+  def resolveIntType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
+    resolveModuleClass(env)(location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Int"))
 
   def loadUnitLiteral[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): ExprFactory[TComp] =
     compFactory(
@@ -617,6 +629,13 @@ object ExpressionConverter {
   : TComp[context.typeSystem.ArExpr] = expr match {
     case t: ts.SimpleType => fillHolesSimpleTypeChildren(context)(ts)(t).map(identity)
 
+    case ts.PrimitiveOp(ts.PrimitiveOperation.AddInt, left, right, intType) =>
+      for {
+        newIntType <- fillHolesTypeChildren(context)(ts)(intType)
+        newLeft <- fillHolesExpr(context)(ts)(left)(newIntType)
+        newRight <- fillHolesExpr(context)(ts)(right)(newIntType)
+      } yield context.typeSystem.PrimitiveOp(context.typeSystem.PrimitiveOperation.AddInt, newLeft, newRight, newIntType)
+
     case ts.FunctionCall(function, args, returnType) =>
       for {
         sig <- tcInstance.fromContextComp(context)(function.value.signature)
@@ -788,7 +807,10 @@ object ExpressionConverter {
 
     override def universeOfExpr(expr: WrapExpr): Universe = ???
 
-    override def universeOfType(t: TType): TypeUniverse = ???
+    override def universeOfType(t: TType): TypeUniverse = t match {
+      case HoleTypeHole(_) => ???
+      case HoleTypeType(t) => t.universe
+    }
   }
 
   private def holeTypeConverter

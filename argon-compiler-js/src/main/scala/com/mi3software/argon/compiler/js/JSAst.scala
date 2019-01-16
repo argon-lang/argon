@@ -52,6 +52,7 @@ final case class JSAssignment(left: JSExpression, right: JSExpression) extends J
 final case class JSPropertyAccessDot(expr: JSExpression, prop: JSIdentifier) extends JSExpression
 final case class JSPropertyAccessBracket(expr: JSExpression, prop: JSExpression) extends JSExpression
 final case class JSString(value: String) extends JSExpression
+final case class JSBigInt(value: BigInt) extends JSExpression
 final case class JSFunctionCall(function: JSExpression, args: Vector[JSExpression]) extends JSExpression
 final case class JSFunctionExpression(name: Option[JSIdentifier], parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSExpression
 final case class JSArrayLiteral(values: Vector[JSExpression]) extends JSExpression
@@ -209,6 +210,10 @@ object JSAst {
 
         case JSString(value) =>
           writeString(value)
+
+        case JSBigInt(i) =>
+          writer.print(i.toString)
+          writer.print("n")
 
         case JSFunctionCall(function, args) =>
           writeExprParen(function)
