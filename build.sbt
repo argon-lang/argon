@@ -12,8 +12,9 @@ lazy val commonSettings = Seq(
 
   libraryDependencies ++= Seq(
     "org.scala-lang.modules" %% "scala-xml" % "1.0.6",
-    "org.scalaz" %% "scalaz-core" % "7.2.11",
-    "org.scalaz" %% "scalaz-effect" % "7.2.11",
+    "org.scalaz" %% "scalaz-core" % "7.2.27",
+    "org.scalaz" %% "scalaz-zio" % "0.5.3",
+    "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "0.5.3",
     "org.apache.commons" % "commons-lang3" % "3.5",
     "commons-io" % "commons-io" % "2.5",
     "org.fusesource.jansi" % "jansi" % "1.15",

@@ -9,7 +9,6 @@ import com.mi3software.argon.util.DependencyTree._
 import com.mi3software.argon.util.MonadHelpers._
 import scalaz.Scalaz._
 import scalaz._
-import scalaz.effect.IO
 
 import scala.collection.immutable._
 
@@ -17,7 +16,7 @@ trait ModuleLoader[TContext <: Context with Singleton] {
 
   type ModuleData
 
-  def loadFile(file: File): IO[Option[ModuleData]]
+  def loadResource[TComp[_]: Compilation, I](id: I)(implicit res: ResourceAccess[TComp, I]): TComp[Option[ModuleData]]
   def dataDescriptor(data: ModuleData): Option[ModuleDescriptor]
   def dataReferencedModules(data: ModuleData): Vector[ModuleDescriptor]
   def loadModuleReference(context: TContext)(data: ModuleData)(referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]]): context.Comp[ArModule[context.type, ReferencePayloadSpecifier]]
@@ -44,18 +43,18 @@ object ModuleLoader {
       }
   }
 
-  private def findWorkingLoader[TContext <: Context with Singleton](loaders: Vector[ModuleLoader[TContext]])(file: File): IO[CompilationError \/ LoaderAndData[TContext]] =
+  private def findWorkingLoader[TContext <: Context with Singleton, TComp[_]: Compilation, I: Show](loaders: Vector[ModuleLoader[TContext]])(id: I)(implicit res: ResourceAccess[TComp, I]): TComp[LoaderAndData[TContext]] =
     findFirst(loaders) { load =>
-      OptionT(load.loadFile(file))
+      OptionT(load.loadResource(id))
         .flatMap { data =>
           val descOpt = load.dataDescriptor(data)
-          OptionT(IO(descOpt))
+          OptionT(descOpt.point[TComp])
             .map(LoaderAndData(load)(data))
         }
         .run
     }
-    .map {
-      _.toRightDisjunction(CompilationError.CouldNotFindCompatibleModuleLoader(CompilationMessageSource.ModuleFile(file)))
+    .flatMap { loaderAndData =>
+      Compilation[TComp].requireSome(loaderAndData)(CompilationError.CouldNotFindCompatibleModuleLoader(CompilationMessageSource.ModuleResource(id)))
     }
 
   private def dependencyTreeOps
@@ -86,20 +85,14 @@ object ModuleLoader {
 
 
 
-  def loadReferencedModules[TComp[+_] : Compilation]
+  def loadReferencedModules[TComp[+_] : Compilation, I: Show]
   (context: ContextComp[TComp])
-  (refFiles: Vector[File])
-  : IO[TComp[Vector[ArModule[context.type, ReferencePayloadSpecifier]]]] =
-    refFiles.traverseU(findWorkingLoader(context.moduleLoaders)(_))
-      .map { loadedRefFiles =>
-        loadedRefFiles
-          .traverseM {
-            case \/-(loaderAndData) => context.compCompilationInstance.point(Vector(loaderAndData))
-            case -\/(loadError) => context.compCompilationInstance.forErrors(loadError)
-          }
-          .flatMap { refDataPairs =>
-            loadModuleRefFromData[TComp](context)(refDataPairs)
-          }
+  (refFiles: Vector[I])
+  (implicit res: ResourceAccess[TComp, I])
+  : TComp[Vector[ArModule[context.type, ReferencePayloadSpecifier]]] =
+    refFiles.traverse { id => findWorkingLoader[context.type, TComp, I](context.moduleLoaders)(id) }
+      .flatMap { loadedRefFiles =>
+        loadModuleRefFromData[TComp](context)(loadedRefFiles)
           .flatMap { moduleResults =>
             moduleResults.traverseM {
               case \/-(module) => context.compCompilationInstance.point(Vector(module))

@@ -12,6 +12,7 @@ import com.mi3software.argon.util._
 import com.mi3software.argon.module
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.types.TypeSystem
+import scalaz._
 
 sealed trait CompilationMessage {
   val source: CompilationMessageSource
@@ -373,8 +374,8 @@ object CompilationMessageSource {
     override def formatted: String = s"module ${moduleDescriptor.name}"
   }
 
-  final case class ModuleFile(file: File) extends CompilationMessageSource {
-    override def formatted: String = s"module file $file"
+  final case class ModuleResource[I: Show](id: I) extends CompilationMessageSource {
+    override def formatted: String = s"module ${Show[I].shows(id)}"
   }
 
 }

@@ -1,8 +1,5 @@
 package com.mi3software.argon.compiler.loaders.armodule
 
-import java.io.File
-import java.util.Locale
-
 import com.mi3software.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
@@ -11,12 +8,8 @@ import com.mi3software.argon.compiler.loaders.{ModuleLoader, NamespaceBuilder}
 import com.mi3software.argon.compiler.types._
 import com.mi3software.argon.{module => ArgonModule}
 import com.mi3software.argon.util._
-import org.apache.thrift.protocol.TBinaryProtocol
-import org.apache.thrift.transport.TSimpleFileTransport
-import scalaz.effect.IO
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.module.Module
 
 import scala.collection.immutable.{Map, Vector}
 
@@ -25,17 +18,11 @@ object ArgonModuleLoader {
   def apply(ctx: Context)(referencePayloadLoader: PayloadLoader[ctx.type, ReferencePayloadSpecifier]): ModuleLoader[ctx.type] = new ModuleLoader[ctx.type] {
 
     override type ModuleData = ArgonModule.Module
-    override def loadFile(file: File): IO[Option[ArgonModule.Module]] =
-      IO { file.getName.toLowerCase(Locale.ENGLISH) }.flatMap { ext =>
-        if(ext.endsWith(".armodule"))
-          IO {
-            val trans = new TSimpleFileTransport(file.getPath)
-            val prot = new TBinaryProtocol(trans)
 
-            Some(ArgonModule.Module.decode(prot))
-          }
-        else
-          IO(None : Option[ArgonModule.Module])
+    override def loadResource[TComp[_] : Compilation, I](id: I)(implicit res: ResourceAccess[TComp, I]): TComp[Option[ArgonModule.Module]] =
+      res.getExtension(id).flatMap {
+        case "armodule" => res.loadThriftStruct(id)(ArgonModule.Module).map(Some.apply)
+        case _ => Option.empty[ArgonModule.Module].point[TComp]
       }
 
     override def dataDescriptor(data: ArgonModule.Module): Option[ModuleDescriptor] =

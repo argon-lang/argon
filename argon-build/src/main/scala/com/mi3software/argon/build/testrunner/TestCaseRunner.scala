@@ -3,10 +3,10 @@ package com.mi3software.argon.build.testrunner
 import com.mi3software.argon.compiler.CompilationError
 import scalaz._
 import Scalaz._
-import scalaz.effect.IO
+import scalaz.zio.IO
 
 trait TestCaseRunner {
-  def runTest(testCase: TestCase): IO[TestCaseResult]
+  def runTest(testCase: TestCase): IO[Throwable, TestCaseResult]
 
   protected def isExpectedError(errors: NonEmptyList[CompilationError], errorName: String): Boolean =
     errors match {

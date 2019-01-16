@@ -1,10 +1,26 @@
 package com.mi3software.argon.build
 
-import java.io.File
+import java.io.{OutputStream, PrintWriter}
+import java.nio.charset.StandardCharsets
 
-import scalaz.effect.IO
+import com.mi3software.argon.compiler.ResourceAccess
+import scalaz._
+import Scalaz._
 
 trait CompilationOutput {
-  def writeToFile(outputFile: File): IO[Unit]
-  def toByteArray: IO[Array[Byte]]
+  def write(stream: OutputStream): Unit
+}
+
+trait CompilationOutputText extends CompilationOutput {
+
+  override def write(stream: OutputStream): Unit = {
+    val writer = new PrintWriter(stream)
+    try {
+      writeText(writer)
+    }
+    finally writer.close()
+  }
+
+  def writeText(writer: PrintWriter): Unit
+
 }

@@ -6,13 +6,14 @@ import com.mi3software.argon.build.{Backend, BuildProcess, CompilationOutput, Co
 import com.mi3software.argon.compiler.{CompilationError, CompilerInput, CompilerOptions, IOCompilation}
 import com.mi3software.argon.compiler.core.ModuleDescriptor
 import scalaz._
-import scalaz.effect.IO
+import scalaz.zio.IO
+import com.mi3software.argon.util.FileOperations.fileShow
 
 private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParsePhase {
 
   protected val moduleDescriptor = ModuleDescriptor("TestProgram")
 
-  def compileTestCase(testCase: TestCase, backend: Backend, references: Vector[File]): EitherT[IO, TestCaseResult, (CompilationOutput, String)] =
+  def compileTestCase(testCase: TestCase, backend: Backend, references: Vector[File]): EitherT[IO[Throwable, ?], TestCaseResult, (backend.TCompilationOutput, String)] =
     EitherT(
       IOCompilation.compilationInstance.flatMap { implicit ioComp =>
         parseTestCaseSource(testCase)
@@ -24,7 +25,7 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
               CompilerOptions(
                 moduleDescriptor = moduleDescriptor
               ),
-            )
+            )(ioComp, implicitly, ioComp, IOCompilation.fileSystemResourceAccess)
           }
           .map { _.result match {
             case \/-(compilationOutput) =>

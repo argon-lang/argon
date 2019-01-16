@@ -4,14 +4,16 @@ import java.io.File
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file._
 
-import scalaz.effect.IO
 import scalaz._
 import Scalaz._
+import scalaz.zio._
+import scalaz.zio.interop.scalaz72._
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.util.{FileID, FileOperations, FileSpec}
 import toml.Toml
 import toml.Codecs._
+import com.mi3software.argon.util.AnyExtensions._
 
 final case class BuildInfoFileSpec
 (
@@ -44,7 +46,7 @@ final case class BuildInfo
 
 object BuildInfoFileSpec {
 
-  def parseFile(file: File): IO[Option[BuildInfoFileSpec]] =
+  def parseFile(file: File): IO[Throwable, Option[BuildInfoFileSpec]] =
     FileOperations.readAllText(file)
       .map { text =>
         Toml.parseAs[BuildInfoFileSpec](text).toOption
@@ -56,24 +58,24 @@ object BuildInfoFileSpec {
 
 object BuildInfo {
 
-  def loadFile(file: File): IO[Option[BuildInfo]] =
+  def loadFile(file: File): IO[Throwable, Option[BuildInfo]] =
     (
       for {
         spec <- OptionT(BuildInfoFileSpec.parseFile(file))
-        dir <- OptionT(IO { file.getParentFile.point[Option] })
+        dir <- OptionT(IO.syncThrowable { file.getParentFile.point[Option] })
         buildInfo <- OptionT(load(dir, spec))
       } yield buildInfo
     ).run
 
 
-  def load(dir: File, spec: BuildInfoFileSpec): IO[Option[BuildInfo]] =
+  def load(dir: File, spec: BuildInfoFileSpec): IO[Throwable, Option[BuildInfo]] =
     (
       for {
-        backend <- OptionT(Backend.find(spec.project.backend).point[IO])
+        backend <- OptionT(IO.point(Backend.find(spec.project.backend)) : IO[Throwable, Option[Backend]])
         inputFiles <- getFileList(dir)(spec.project.inputFiles)
         inputFilesWithSpec <- fileListWithSpecs(dir)(inputFiles)
         outputFile <- getOutputFile(dir)(spec.project.outputFile)
-        references <- spec.project.references.toVector.traverseU(refFile => IO { new File(dir, refFile) }).liftM[OptionT]
+        references <- spec.project.references.toVector.traverseU(refFile => IO.syncThrowable { new File(dir, refFile) }).liftM[OptionT]
 
       } yield BuildInfo(
         backend = backend,
@@ -87,7 +89,7 @@ object BuildInfo {
       )
     ).run
 
-  def getFileList(dir: File)(fileNames: List[String]): OptionT[IO, Vector[File]] =
+  def getFileList(dir: File)(fileNames: List[String]): OptionT[IO[Throwable, ?], Vector[File]] =
     fileNames
       .toVector
       .traverseM(findMatchingGlobs(dir))
@@ -105,7 +107,7 @@ object BuildInfo {
     }
   }
 
-  def findMatchingGlobs(dir: File)(glob: String): IO[Vector[File]] = IO {
+  def findMatchingGlobs(dir: File)(glob: String): IO[Throwable, Vector[File]] = IO.syncException {
     val pathMatcher = FileSystems.getDefault.getPathMatcher("glob:" + glob)
 
     allDirectoryFiles(dir)
@@ -116,15 +118,15 @@ object BuildInfo {
       .toVector
   }
 
-  def fileListWithSpecs(dir: File)(files: Vector[File]): OptionT[IO, Vector[FileWithSpec]] =
+  def fileListWithSpecs(dir: File)(files: Vector[File]): OptionT[IO[Throwable, ?], Vector[FileWithSpec]] =
     files
       .zipWithIndex
-      .traverse[IO, FileWithSpec] { case (file, id) => fileWithSpec(dir)(id)(file) }
+      .traverse[IO[Throwable, ?], FileWithSpec] { case (file, id) => fileWithSpec(dir)(id)(file) }
       .liftM[OptionT]
 
   @SuppressWarnings(Array("org.wartremover.warts.ToString"))
-  def fileWithSpec(dir: File)(id: Int)(file: File): IO[FileWithSpec] =
-    IO { dir.toPath.relativize(file.toPath).toString }
+  def fileWithSpec(dir: File)(id: Int)(file: File): IO[Throwable, FileWithSpec] =
+    IO.syncThrowable { dir.toPath.relativize(file.toPath).toString }
       .map { path =>
         FileWithSpec(
           file,
@@ -132,7 +134,7 @@ object BuildInfo {
         )
       }
 
-  def getOutputFile(dir: File)(fileName: String): OptionT[IO, File] =
-    IO { new File(dir, fileName) }.liftM[OptionT]
+  def getOutputFile(dir: File)(fileName: String): OptionT[IO[Throwable, ?], File] =
+    IO.syncThrowable { new File(dir, fileName) }.upcast[IO[Throwable, File]].liftM[OptionT]
 
 }

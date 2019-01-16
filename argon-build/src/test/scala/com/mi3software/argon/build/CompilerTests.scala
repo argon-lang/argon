@@ -5,8 +5,11 @@ import java.io.File
 import com.mi3software.argon.build.testrunner._
 import com.mi3software.argon.build.testrunner.node.{NodeLauncher, NodeTestCaseRunner}
 import org.scalatest.{BeforeAndAfterAll, FunSpec, Matchers}
+import scalaz.zio.RTS
 
 class CompilerTests extends FunSpec with Matchers with BeforeAndAfterAll {
+
+  private val rts: RTS = new RTS {}
 
   private def processTestCases(runner: TestCaseRunner, structure: TestCaseStructure): Unit = {
 
@@ -18,7 +21,7 @@ class CompilerTests extends FunSpec with Matchers with BeforeAndAfterAll {
 
     for(testCase <- structure.tests) {
       it(testCase.name) {
-        runner.runTest(testCase).unsafePerformIO() shouldBe TestCaseResult.Success
+        rts.unsafeRun(runner.runTest(testCase)) shouldBe TestCaseResult.Success
       }
     }
 
@@ -33,7 +36,7 @@ class CompilerTests extends FunSpec with Matchers with BeforeAndAfterAll {
   private val references = libraries.map { name => new File(s"libraries/$name/$name.armodule") }
 
   private def generateTestCases(): Unit = {
-    val testCases = TestCaseLoader.findTestCases(new File(getClass.getResource("/com/mi3software/argon/compiler/testcases/").toURI)).unsafePerformIO()
+    val testCases = rts.unsafeRun(TestCaseLoader.findTestCases(new File(getClass.getResource("/com/mi3software/argon/compiler/testcases/").toURI)))
 
     val runners = Vector(
       "Parsing" -> ParseTestCaseRunner,
@@ -54,5 +57,6 @@ class CompilerTests extends FunSpec with Matchers with BeforeAndAfterAll {
 
   override protected def afterAll(): Unit = {
     nodeLauncher.close()
+    rts.shutdown()
   }
 }

@@ -11,21 +11,21 @@ import scalaz._
 import Scalaz._
 import PayloadSpecifiers._
 import com.mi3software.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
-import scalaz.effect.IO
 
 private[compiler] object SourceModuleCreator {
 
 
-  def createModule[TComp[+_] : Compilation]
+  def createModule[TComp[+_] : Compilation, I: Show]
   (context: ContextComp[TComp])
-  (input: CompilerInput)
-  : IO[TComp[ArModule[context.type, DeclarationPayloadSpecifier]]] =
-    loadReferenceModules[TComp](context)(input)
-      .map { _.flatMap { refModules => createModuleWithRefs[TComp](context)(input)(refModules) } }
+  (input: CompilerInput[I])
+  (implicit res: ResourceAccess[TComp, I])
+  : TComp[ArModule[context.type, DeclarationPayloadSpecifier]] =
+    loadReferenceModules[TComp, I](context)(input)
+      .flatMap { refModules => createModuleWithRefs[TComp, I](context)(input)(refModules) }
 
-  private def createModuleWithRefs[TComp[+_] : Compilation]
+  private def createModuleWithRefs[TComp[+_] : Compilation, I]
   (context2: ContextComp[TComp])
-  (input: CompilerInput)
+  (input: CompilerInput[I])
   (referencedModules2: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
     : TComp[ArModule[context2.type, DeclarationPayloadSpecifier]] =
     for {
@@ -40,10 +40,11 @@ private[compiler] object SourceModuleCreator {
     }
 
 
-  private def loadReferenceModules[TComp[+_] : Compilation]
+  private def loadReferenceModules[TComp[+_] : Compilation, I: Show]
   (context: ContextComp[TComp])
-  (input: CompilerInput)
-  : IO[TComp[Vector[ArModule[context.type, ReferencePayloadSpecifier]]]] =
+  (input: CompilerInput[I])
+  (implicit res: ResourceAccess[TComp, I])
+  : TComp[Vector[ArModule[context.type, ReferencePayloadSpecifier]]] =
     ModuleLoader.loadReferencedModules(context)(input.references)
 
   private def createNamespaceElementFromAST[TComp[+_] : Compilation]

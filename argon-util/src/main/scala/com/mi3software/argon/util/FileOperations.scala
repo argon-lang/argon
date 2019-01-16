@@ -1,53 +1,59 @@
 package com.mi3software.argon.util
 
 import java.io
+import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
 import scalaz._
 import Scalaz._
-import scalaz.effect.{IO, LiftIO}
+import scalaz.zio._
+import scalaz.zio.interop.scalaz72._
 import MonadErrorExtensions._
-import IOHelpers.ioMonadError
 
 object FileOperations {
 
-  type MonadErrorThrowable[F[_]] = MonadError[F, Throwable]
+  implicit val fileShow: Show[java.io.File] = new Show[java.io.File] {
+    override def shows(f: File): String = f.toString
+  }
 
-  def fileInputStream[F[_]: MonadErrorThrowable : LiftIO, T](file: io.File)(f: io.FileInputStream => F[T]): F[T] =
-    LiftIO[F].liftIO(IO { new io.FileInputStream(file) })
+  type MonadErrorThrowable[F[_, _]] = MonadError[F[Throwable, ?], Throwable]
+  type ZIOThrowable[F[_]] = ZIO[Lambda[(E, A) => F[A]]]
+
+  def fileInputStream[F[_, _]: MonadErrorThrowable : ZIO, T](file: io.File)(f: io.FileInputStream => F[Throwable, T]): F[Throwable, T] =
+    ZIO[F].liftZIO(IO.syncThrowable { new io.FileInputStream(file) })
       .flatMap { stream =>
-        f(stream).ensuring(LiftIO[F].liftIO(IO { stream.close() }))
+        f(stream).closing(stream)
       }
 
-  def fileOutputStream[T](file: io.File)(f: io.FileOutputStream => IO[T]): IO[T] =
-    IO { new io.FileOutputStream(file) }
+  def fileOutputStream[T](file: io.File)(f: io.FileOutputStream => IO[Throwable, T]): IO[Throwable, T] =
+    IO.syncThrowable { new io.FileOutputStream(file) }
       .flatMap { stream =>
-        f(stream).ensuring(IO { stream.close() })
+        f(stream).closing(stream)
       }
 
-  def createPrintWriter[T](stream: io.FileOutputStream)(f: io.PrintWriter => IO[T]): IO[T] =
-    IO { new io.PrintWriter(stream) }
+  def createPrintWriter[T](stream: io.FileOutputStream)(f: io.PrintWriter => IO[Throwable, T]): IO[Throwable, T] =
+    IO.syncThrowable { new io.PrintWriter(stream) }
       .flatMap { writer =>
-        f(writer).ensuring(IO { writer.close() })
+        f(writer).closing(stream)
       }
 
-  def filePrintWriter[T](file: io.File)(f: io.PrintWriter => IO[T]): IO[T] =
+  def filePrintWriter[T](file: io.File)(f: io.PrintWriter => IO[Throwable, T]): IO[Throwable, T] =
     fileOutputStream(file) { stream => createPrintWriter(stream)(f) }
 
-  def readAllText(file: io.File): IO[String] =
-    IO {
+  def readAllText(file: io.File): IO[Throwable, String] =
+    IO.syncThrowable {
       val bytes = Files.readAllBytes(file.toPath)
       new String(bytes, StandardCharsets.UTF_8)
     }
 
-  def createReader[F[_] : LiftIO, T](stream: io.FileInputStream): F[io.Reader] =
-    LiftIO[F].liftIO(IO { new io.InputStreamReader(stream) })
+  def createReader[F[_, _] : ZIO, T](stream: io.FileInputStream): F[Throwable, io.Reader] =
+    ZIO[F].liftZIO(IO.syncThrowable { new io.InputStreamReader(stream) })
 
-  def fileReader[F[_]: MonadErrorThrowable : LiftIO, T](file: io.File)(f: io.Reader => F[T]): F[T] =
+  def fileReader[F[_, _]: MonadErrorThrowable : ZIO, T](file: io.File)(f: io.Reader => F[Throwable, T]): F[Throwable, T] =
     fileInputStream(file) { stream => createReader(stream).flatMap(f) }
 
-  def fileFromName(fileName: String): IO[io.File] =
-    IO { new io.File(fileName) }
+  def fileFromName(fileName: String): IO[Throwable, io.File] =
+    IO.syncThrowable { new io.File(fileName) }
 
 }

@@ -6,7 +6,7 @@ import com.mi3software.argon.compiler.loaders.ModuleLoader
 import com.mi3software.argon.compiler.loaders.source.SourceModuleCreator
 import com.mi3software.argon.compiler.lookup._
 import com.mi3software.argon.compiler.types.{ArgonTypeSystem, TypeSystem, TypeSystemConverter}
-import scalaz.effect.IO
+import scalaz.Show
 
 sealed trait Context {
 
@@ -43,7 +43,7 @@ sealed trait Context {
 
   val moduleLoaders: Vector[ModuleLoader[this.type]]
 
-  def createModule(input: CompilerInput): IO[Comp[ArModule[this.type, DeclarationPayloadSpecifier]]]
+  def createModule[I: Show](input: CompilerInput[I])(implicit fs: ResourceAccess[Comp, I]): Comp[ArModule[this.type, DeclarationPayloadSpecifier]]
 
 
 }
@@ -51,6 +51,6 @@ sealed trait Context {
 trait ContextComp[TComp[+_]] extends Context {
   override type Comp[+A] = TComp[A]
 
-  override def createModule(input: CompilerInput): IO[TComp[ArModule[this.type, DeclarationPayloadSpecifier]]] =
-    SourceModuleCreator.createModule[Comp](this)(input)(compCompilationInstance)
+  override def createModule[I: Show](input: CompilerInput[I])(implicit res: ResourceAccess[TComp, I]): TComp[ArModule[this.type, DeclarationPayloadSpecifier]] =
+    SourceModuleCreator.createModule[Comp, I](this)(input)(compCompilationInstance, implicitly, res)
 }

@@ -2,15 +2,14 @@ package com.mi3software.argon.build
 
 import java.io.File
 
-import com.mi3software.argon.compiler.{Compilation, CompilationError, CompilerInput, CompilerOptions}
+import com.mi3software.argon.compiler._
 import com.mi3software.argon.parser.{SourceAST, SyntaxError, SyntaxErrorData}
 import scalaz._
 import Scalaz._
 import com.mi3software.argon.grammar.SyntaxErrorReporter
 import com.mi3software.argon.parser.impl.ParseHandler
 import com.mi3software.argon.util.{FileSpec, NonEmptyVector}
-import com.mi3software.argon.util.stream.{ArStream, StreamTransformationM}
-import scalaz.effect.IO
+import com.mi3software.argon.util.stream.ArStream
 
 object BuildProcess {
 
@@ -32,20 +31,22 @@ object BuildProcess {
       ParseHandler.parse(fileInfo.fileSpec)(fileInfo.dataStream)
     }
 
-  def compile
+  def compile[F[+_], G[_]: Monad, I: Show]
   (
     backend: Backend,
     sourceASTs: Vector[SourceAST],
-    references: Vector[File],
+    references: Vector[I],
     compilerOptions: CompilerOptions,
-  ): IO[CompilationResult] = {
+  )
+  (implicit comp: CompilationExec[F, G], res: ResourceAccess[F, I])
+  : G[CompilationResult[backend.TCompilationOutput]] = {
     val input = CompilerInput(
       source = sourceASTs,
       references = references,
       options = compilerOptions
     )
 
-    backend.compile(input)
+    backend.compile[F, G, I](input)
   }
 
 
