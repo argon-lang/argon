@@ -107,6 +107,30 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           } yield factoryForExpr(env)(expr.location)(LoadUnit(unitType))
         )
 
+      case parser.TupleExpr(values) =>
+        new ExprFactory[TComp] {
+          override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
+            values
+              .traverse1 { elem =>
+                implicitly[TypeCheck[TComp]].createHole.map { elemHole =>
+                  (elem, elemHole)
+                }
+              }
+              .flatMap { elemPairs =>
+                val tupleType = fromSimpleType(LoadTupleType(elemPairs.map { case (_, elemHole) => TupleElement[SimpleType](elemHole) }))
+                convertExprTypeDelay(env)(expr.location)(tupleType)(expectedType).flatMap { exprTypeConv =>
+                  elemPairs
+                    .traverse1 { case (elem, elemHole) =>
+                        convertExpr(env)(elem).forExpectedType(elemHole).map { elemExpr =>
+                          TupleElement[ArExpr](wrapType(exprTypeConv(elemExpr)))
+                        }
+                    }
+                    .map { tupleElements =>
+                      LoadTuple(tupleElements)
+                    }
+                }
+              }
+        }
 
       case _ => ???
     }
@@ -385,18 +409,21 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     sig.convertTypeSystem(signatureContext)(ArTypeSystemConverter(context)(typeSystem))
 
   def convertExprType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr)(t: typeSystem.TType): TComp[ArExpr] =
-    typeSystem.isSubType[TComp](t, expr.exprType).flatMap {
-      case Some(info) => implicitly[TypeCheck[TComp]].recordConstraint(info).map(const(expr))
+    convertExprTypeDelay(env)(location)(expr.exprType)(t).map { f => f(expr) }
+
+  def convertExprTypeDelay[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(exprType: typeSystem.TType)(t: typeSystem.TType): TComp[ArExpr => ArExpr] =
+    typeSystem.isSubType[TComp](t, exprType).flatMap {
+      case Some(info) => implicitly[TypeCheck[TComp]].recordConstraint(info).map(const(identity))
       case None =>
         implicitly[TypeCheck[TComp]].createHole.flatMap { newHole =>
           typeSystem.isSubType(t, fromSimpleType(LoadTupleType(NonEmptyList(TupleElement(newHole))))).flatMap {
             case Some(stTupleInfo) =>
-              convertExprType(env)(location)(expr)(newHole).map { convertedExpr =>
-                LoadTuple(NonEmptyList(TupleElement(wrapType(convertedExpr))))
+              convertExprTypeDelay(env)(location)(exprType)(newHole).map { innerConverter =>
+                expr => LoadTuple(NonEmptyList(TupleElement(wrapType(innerConverter(expr)))))
               }
 
             case None =>
-              Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(expr.exprType, t)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(exprType, t)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
           }
         }
     }
