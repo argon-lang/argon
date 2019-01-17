@@ -720,6 +720,17 @@ object ExpressionConverter {
         (newArgs, result) <- fillSignatureArgs(context)(ts)(sig)(args)
       } yield context.typeSystem.FunctionCall(function, newArgs, result.returnType)
 
+    case ts.FunctionObjectCall(funcExpr, args, _) =>
+      for {
+        newFuncExpr <- fillHolesExprChildren(context)(ts)(funcExpr)
+        newFuncType = newFuncExpr.exprType match {
+          case t @ context.typeSystem.FunctionType(_, _) => t
+          case _ => ???
+        }
+
+        newArgs <- fillHolesExpr(context)(ts)(args)(newFuncType.argumentType)
+      } yield context.typeSystem.FunctionObjectCall(newFuncExpr, newArgs, newFuncType.resultType)
+
     case ts.LetBinding(variable, value, next) =>
       for {
         newVarType <- fillHolesTypeChildren(context)(ts)(variable.varType)

@@ -319,6 +319,14 @@ trait TypeSystem[TContext <: Context with Singleton] {
               .map(SubTypeInfo(fromSimpleType(a), fromSimpleType(b), _))
               .run
 
+        case (FunctionType(argA, resA), FunctionType(argB, resB)) =>
+          (
+            for {
+              argCheck <- OptionT(isSubType(argB, argA))
+              resCheck <- OptionT(isSubType(resA, resB))
+            } yield SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(argCheck, resCheck))
+          ).run
+
         case (_, _) => notSubType
       },
     ).findMapM(_())
