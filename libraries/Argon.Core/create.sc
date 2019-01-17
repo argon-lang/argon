@@ -98,6 +98,12 @@ val Puts_descriptor = FunctionDescriptor.InNamespace(FunctionDescriptorInNamespa
   AccessModifier.Public,
 ))
 
+val Int_to_s_descriptor = MethodDescriptor(
+  MemberName.Name("to_s"),
+  AccessModifier.Public,
+  ClassLikeDescriptor.ClassDescriptor(Int_descriptor)
+)
+
 
 val module = Module(
   formatVersion = moduleFormatVersion,
@@ -346,7 +352,24 @@ val module = Module(
     ))
   ),
 
-  methods = Seq(),
+  methods = Seq(
+    Method.MethodDef(MethodDefinition(
+      descriptor = Int_to_s_descriptor,
+      effects = EffectInfo(isPure = false),
+      isVirtual = false,
+      isAbstract = false,
+      isImplicitOverride = false,
+      isFinal = false,
+      signature = MethodSignature(
+        parameters = Seq(),
+        returnType = Type.ClassType(ClassType(
+          classId = String_classId,
+          typeArguments = Seq(),
+        ))
+      ),
+      implementation = None,
+    ))
+  ),
   classConstructors = Seq(),
 )
 

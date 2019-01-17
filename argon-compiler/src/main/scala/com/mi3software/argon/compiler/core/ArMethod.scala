@@ -16,7 +16,7 @@ sealed trait ArMethod[TContext <: Context, TPayloadSpec[_, _]] {
   val isImplicitOverride: Boolean
   val isFinal: Boolean
 
-  val signature: Signature[FunctionResultInfo]
+  val signature: Comp[Signature[FunctionResultInfo]]
 
   val payload: TPayloadSpec[Comp[TMethodImplementation], TMethodMetadata]
 }

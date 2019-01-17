@@ -4,7 +4,7 @@ import com.mi3software.argon.compiler._
 import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation}
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.types.{TypeSystem, TypeSystemConverter}
-import scalaz._
+import scalaz.{Scalaz, _}
 import Scalaz._
 
 trait ScopeContext[TContext <: Context with Singleton] {
@@ -111,7 +111,6 @@ trait ScopeContext[TContext <: Context with Singleton] {
       other.DataConstructorScopeValue(ctor)
   }
 
-
   sealed trait LookupResult {
     def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult
   }
@@ -120,27 +119,13 @@ trait ScopeContext[TContext <: Context with Singleton] {
       override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult =
         other.LookupResult.ScopeResult(scope.convertScopeContext(other)(converter))
     }
-    final case class ValuesResult(overloads: OverloadResult) extends LookupResult {
+    final case class ValuesResult(overloads: OverloadResult[ScopeValue]) extends LookupResult {
       override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult =
-        other.LookupResult.ValuesResult(overloads.convertScopeContext(other)(converter))
+        other.LookupResult.ValuesResult(overloads.map { _.convertScopeContext(other)(converter) })
     }
     case object Failed extends LookupResult {
       override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult =
         other.LookupResult.Failed
-    }
-  }
-
-  sealed trait OverloadResult {
-    def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.OverloadResult
-  }
-  object OverloadResult {
-    case object End extends OverloadResult {
-      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.OverloadResult =
-        other.OverloadResult.End
-    }
-    final case class List(values: Vector[ScopeValue], next: OverloadResult) extends OverloadResult {
-      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.OverloadResult =
-        other.OverloadResult.List(values.map { _.convertScopeContext(other)(converter) }, next.convertScopeContext(other)(converter))
     }
   }
 

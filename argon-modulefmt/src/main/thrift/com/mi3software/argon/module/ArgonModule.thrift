@@ -316,7 +316,7 @@ struct MethodDefinition {
     5: bool isImplicitOverride;
     6: bool isFinal;
     7: MethodSignature signature;
-    8: MethodImplementation implementation;
+    8: optional MethodImplementation implementation;
 }
 
 union Method {

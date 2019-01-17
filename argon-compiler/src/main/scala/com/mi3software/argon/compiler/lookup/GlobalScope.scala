@@ -124,8 +124,8 @@ object GlobalScope {
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[Vector[AbsRef[context.type, ArModule]]])
   (name: String)
-  : context.Comp[context.scopeContext.OverloadResult] = modules match {
-    case Vector() => context.compCompilationInstance.point(context.scopeContext.OverloadResult.End)
+  : context.Comp[OverloadResult[context.scopeContext.ScopeValue]] = modules match {
+    case Vector() => context.compCompilationInstance.point(OverloadResult.End)
     case head +: tail =>
       context.compCompilationInstance.bind(
         overloadResult(context)(imports)(tail)(name)
@@ -137,8 +137,8 @@ object GlobalScope {
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[AbsRef[context.type, ArModule]])
   (name: String)
-  (nextResult: context.scopeContext.OverloadResult)
-  : context.Comp[context.scopeContext.OverloadResult] = imports match {
+  (nextResult: OverloadResult[context.scopeContext.ScopeValue])
+  : context.Comp[OverloadResult[context.scopeContext.ScopeValue]] = imports match {
     case Vector() => context.compCompilationInstance.point(nextResult)
     case head +: tail =>
       context.compCompilationInstance.bind(
@@ -151,8 +151,8 @@ object GlobalScope {
   (imports: Vector[NamespacePath])
   (modules: Vector[AbsRef[context.type, ArModule]])
   (name: String)
-  (nextResult: context.scopeContext.OverloadResult)
-  : context.Comp[context.scopeContext.OverloadResult] =
+  (nextResult: OverloadResult[context.scopeContext.ScopeValue])
+  : context.Comp[OverloadResult[context.scopeContext.ScopeValue]] =
     context.compCompilationInstance.map(
       imports.traverseM { importNS =>
         modules.traverseM { module =>
@@ -167,7 +167,7 @@ object GlobalScope {
       if(overloads.isEmpty)
         nextResult
       else
-        context.scopeContext.OverloadResult.List(overloads, nextResult)
+        OverloadResult.List(overloads, nextResult)
     }
 
   private def getScopeValue[TPayloadSpec[_, _]]
