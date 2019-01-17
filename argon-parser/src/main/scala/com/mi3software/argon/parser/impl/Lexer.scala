@@ -123,7 +123,7 @@ object Lexer {
 
           val singleDigit = decDigit --> { d => Some(Token.IntToken(1, 10, Vector(d))) : Option[Token] }
 
-          singleDigit | withBaseSpec | decimalNum
+          withBaseSpec | decimalNum | singleDigit
 
         case Rule.Identifier =>
           def startChar = tokenF(CharacterCategory.Letter, ch => Character.isLetter(ch.codePointAt(0))) | token(CharacterCategory.Underscore, "_")
