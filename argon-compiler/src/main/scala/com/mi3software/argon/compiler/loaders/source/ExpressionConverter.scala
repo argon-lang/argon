@@ -35,29 +35,50 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   private type TypeCheckT[TCType, TComp[_]] = TypeCheckA[context.type, TCType, TComp]
   private type TypeCheck[TComp[_]] = TypeCheckT[typeSystem.TType, TComp]
 
-  final case class ArgumentInfo[TComp[_]](argFactory: ExprFactory[TComp], location: SourceLocation)
+  final case class ArgumentInfo[TComp[_]](argFactory: ExprFactory[TComp], env: Env, location: SourceLocation)
 
   abstract class ExprFactory[TComp[_]: TypeCheck] {
     def forExpectedType(expectedType: TType): TComp[ArExpr]
     def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] =
       compFactory(inferExprType(ExprFactory.this).flatMap { thisExpr =>
         implicitly[TypeCheck[TComp]].resolveType(thisExpr.exprType).flatMap { resolvedType =>
-          val resolvedSimpleType = unwrapType(resolvedType).getOrElse(???)
+          unwrapType(resolvedType) match {
+            case Some(resolvedTypeWithMethods: TypeWithMethods) =>
+              implicitly[TypeCheck[TComp]].fromContextComp(context)(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)).flatMap {
+                case OverloadResult.List(Vector(MemberValue.Method(method)), _) =>
+                  for {
+                    _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                    sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(method.value.signature)
+                    convSig = convertSignature(sig)
+                  } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(method, thisExpr, args, result.returnType).upcast[ArExpr].point[TComp] }
 
-          implicitly[TypeCheck[TComp]].fromContextComp(context)(MethodLookup.lookupMethods(context)(typeSystem)(resolvedSimpleType)).flatMap {
-            case OverloadResult.List(Vector(MemberValue.Method(method)), _) =>
-              for {
-                _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(method.value.signature)
-                convSig = convertSignature(sig)
-              } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(method, thisExpr, args, result.returnType).upcast[ArExpr].point[TComp] }
+                case _ => ???
+              }
+
+            case Some(funcType @ FunctionType(argType, resultType)) if memberName === MemberName.Call =>
+              new ExprFactory[TComp] {
+                override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
+                  ExprFactory.this.forExpectedType(expectedType)
+
+                override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] =
+                  ???
+
+                override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
+                  compFactory(
+                    for {
+                      funcExpr <- ExprFactory.this.forExpectedType(fromSimpleType(funcType))
+                      argExpr <- argInfo.argFactory.forExpectedType(argType)
+                    } yield factoryForExpr(argInfo.env)(argInfo.location)(FunctionObjectCall(funcExpr, argExpr, resultType))
+                  )
+              }.point[TComp]
 
             case _ => ???
           }
         }
       })
 
-    def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] = ???
+    def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
+      memberAccessExpr(MemberName.Call, argInfo.env, argInfo.location).forArguments(argInfo)
   }
 
   def convertExpr[TComp[_] : TypeCheck](env: Env)(expr: WithSource[parser.Expr]): ExprFactory[TComp] =
@@ -90,7 +111,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         convertExpr(env)(obj).memberAccessExpr(MemberName.Normal(member), env, expr.location)
 
       case parser.FunctionCallExpr(func, arg) =>
-        convertExpr[TComp](env)(func).forArguments(ArgumentInfo[TComp](convertExpr(env)(arg), arg.location))
+        convertExpr[TComp](env)(func).forArguments(ArgumentInfo[TComp](convertExpr(env)(arg), env, arg.location))
 
       case parser.IdentifierExpr(name) =>
         compFactory(
@@ -111,6 +132,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           for {
             intType <- resolveIntType(env)(expr.location)
           } yield factoryForExpr(env)(expr.location)(LoadConstantInt(value, intType))
+        )
+
+      case parser.LambdaTypeExpr(argType, resultType) =>
+        compFactory(
+          for {
+            argTypeValue <- evaluateTypeExprAST(env)(argType)
+            resultTypeValue <- evaluateTypeExprAST(env)(resultType)
+          } yield factoryForExpr(env)(expr.location)(FunctionType(argTypeValue, resultTypeValue))
         )
 
       case parser.StringValueExpr(str) =>
@@ -776,6 +805,12 @@ object ExpressionConverter {
         sig <- tcInstance.fromContextComp(context)(arClass.value.signature)
         (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(args)
       } yield context.typeSystem.ClassType(arClass, filledArgs, resultInfo.baseTypes)
+
+    case ts.FunctionType(argumentType, resultType) =>
+      for {
+        newArgType <- fillHolesTypeChildren(context)(ts)(argumentType)
+        newResultType <- fillHolesTypeChildren(context)(ts)(resultType)
+      } yield context.typeSystem.FunctionType(newArgType, newResultType)
 
     case _ => ???
   }

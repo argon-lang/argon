@@ -73,6 +73,10 @@ trait TypeSystem[TContext <: Context with Singleton] {
     override val exprType: TType = returnType
     override lazy val universe: Universe = universeOfType(returnType).prev
   }
+  final case class FunctionObjectCall(function: ArExpr, arg: ArExpr, returnType: TType) extends ArExpr {
+    override val exprType: TType = returnType
+    override lazy val universe: Universe = universeOfType(returnType).prev
+  }
   final case class IfElse(condition: ArExpr, ifBody: ArExpr, elseBody: ArExpr) extends ArExpr {
     override lazy val exprType: TType = fromSimpleType(UnionType(ifBody.exprType, elseBody.exprType))
     override lazy val universe: Universe = Universe.union(ifBody.universe, elseBody.universe)
@@ -130,14 +134,16 @@ trait TypeSystem[TContext <: Context with Singleton] {
     override val universe: TypeUniverse
   }
 
+  sealed trait TypeWithMethods extends SimpleType
+
   final case class TypeOfType(universe: TypeUniverse) extends SimpleType
-  final case class TraitType(arTrait: WrapRef[ArTrait], args: Vector[TType], baseTypes: BaseTypeInfoTrait) extends SimpleType {
+  final case class TraitType(arTrait: WrapRef[ArTrait], args: Vector[TType], baseTypes: BaseTypeInfoTrait) extends TypeWithMethods {
     override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
-  final case class ClassType(arClass: WrapRef[ArClass], args: Vector[TType], baseTypes: BaseTypeInfoClass) extends SimpleType {
+  final case class ClassType(arClass: WrapRef[ArClass], args: Vector[TType], baseTypes: BaseTypeInfoClass) extends TypeWithMethods {
     override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
-  final case class DataConstructorType(ctor: WrapRef[DataConstructor], args: Vector[TType], instanceType: TraitType) extends SimpleType {
+  final case class DataConstructorType(ctor: WrapRef[DataConstructor], args: Vector[TType], instanceType: TraitType) extends TypeWithMethods {
     override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
 
