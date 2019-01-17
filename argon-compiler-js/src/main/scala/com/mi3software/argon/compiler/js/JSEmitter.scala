@@ -166,6 +166,12 @@ final class JSEmitter {
 
           } yield JSFunctionCall(funcExpr, argExprs)
 
+        case FunctionObjectCall(funcExpr, arg, _) =>
+          for {
+            jsFunc <- convertExpr(funcExpr)
+            jsArg <- convertExpr(arg)
+          } yield JSFunctionCall(jsFunc, Vector(jsArg))
+
         case LetBinding(_, _, _) =>
           wrapStatement(expr)
 
