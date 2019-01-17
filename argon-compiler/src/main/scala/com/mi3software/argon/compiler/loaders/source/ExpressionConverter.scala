@@ -38,18 +38,22 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   final case class ArgumentInfo[TComp[_]](argFactory: ExprFactory[TComp], location: SourceLocation)
 
   abstract class ExprFactory[TComp[_]: TypeCheck] {
-    def forExpectedType(expectedType: typeSystem.TType): TComp[ArExpr]
+    def forExpectedType(expectedType: TType): TComp[ArExpr]
     def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] =
       compFactory(inferExprType(ExprFactory.this).flatMap { thisExpr =>
-        MethodLookup.lookupMethods[TComp](context)(typeSystem)(thisExpr.exprType).flatMap {
-          case OverloadResult.List(Vector(MemberValue.Method(method)), _) =>
-            for {
-              _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-              sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(method.value.signature)
-              convSig = convertSignature(sig)
-            } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(method, thisExpr, args, result.returnType).upcast[ArExpr].point[TComp] }
+        implicitly[TypeCheck[TComp]].resolveType(thisExpr.exprType).flatMap { resolvedType =>
+          val resolvedSimpleType = unwrapType(resolvedType).getOrElse(???)
 
-          case _ => ???
+          MethodLookup.lookupMethods[TComp](context)(typeSystem)(resolvedSimpleType).flatMap {
+            case OverloadResult.List(Vector(MemberValue.Method(method)), _) =>
+              for {
+                _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(method.value.signature)
+                convSig = convertSignature(sig)
+              } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(method, thisExpr, args, result.returnType).upcast[ArExpr].point[TComp] }
+
+            case _ => ???
+          }
         }
       })
 
@@ -825,6 +829,12 @@ object ExpressionConverter {
 
     override def wrapType[A](a: A): HoleType[A] =
       HoleTypeType(a)
+
+    override def unwrapType[A](t: HoleType[A]): Option[A] =
+      t match {
+        case HoleTypeType(t) => Some(t)
+        case HoleTypeHole(_) => None
+      }
 
     override def mapTypeWrapper[A, B](t: HoleType[A])(f: A => B): HoleType[B] =
       t match {

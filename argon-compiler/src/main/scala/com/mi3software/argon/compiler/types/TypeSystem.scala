@@ -24,6 +24,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final def fromSimpleType(simpleType: SimpleType): TType = wrapType(simpleType)
 
   def wrapType[A](a: A): TTypeWrapper[A]
+  def unwrapType[A](t: TTypeWrapper[A]): Option[A]
   def mapTypeWrapper[A, B](t: TTypeWrapper[A])(f: A => B): TTypeWrapper[B]
   def traverseTypeWrapper[A, B, F[_] : Applicative](t: TTypeWrapper[A])(f: A => F[B]): F[TTypeWrapper[B]]
 

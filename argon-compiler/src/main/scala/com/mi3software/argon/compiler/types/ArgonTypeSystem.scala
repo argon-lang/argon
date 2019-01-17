@@ -10,6 +10,8 @@ trait ArgonTypeSystem[TContext <: Context with Singleton] extends TypeSystem[TCo
 
   final override def wrapType[A](a: A): A = a
 
+  override def unwrapType[A](t: A): Option[A] = Some(t)
+
   final override def mapTypeWrapper[A, B](t: A)(f: A => B): B = f(t)
 
   override def traverseTypeWrapper[A, B, F[_] : Applicative](t: A)(f: A => F[B]): F[B] =

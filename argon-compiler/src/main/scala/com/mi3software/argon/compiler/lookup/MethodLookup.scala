@@ -5,6 +5,6 @@ import com.mi3software.argon.compiler.types.TypeSystem
 
 object MethodLookup {
 
-  def lookupMethods[TComp[_]](context: Context)(ts: TypeSystem[context.type])(instanceType: ts.TType): TComp[OverloadResult[MemberValue[context.type]]] = ???
+  def lookupMethods[TComp[_]](context: Context)(ts: TypeSystem[context.type])(instanceType: ts.SimpleType): TComp[OverloadResult[MemberValue[context.type]]] = ???
 
 }
