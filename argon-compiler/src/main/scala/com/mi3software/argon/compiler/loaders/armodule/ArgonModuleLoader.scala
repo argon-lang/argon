@@ -612,7 +612,38 @@ object ArgonModuleLoader {
                       }
                     }
                 },
-                definitionHandler = _ => ???
+                definitionHandler = methodId => methodValue => methodDescriptor => new ArMethod[context.type, TPayloadSpec] {
+                  override val context: ctx.type = ctx
+                  override val contextProof: Leibniz[context.type, context.type, context.type, context.type] = Leibniz.refl
+                  override val descriptor: MethodDescriptor = methodDescriptor
+                  override val effectInfo: EffectInfo = EffectInfo(
+                    isPure = methodValue.effects.isPure,
+                  )
+
+                  override val isVirtual: Boolean = methodValue.isVirtual
+                  override val isAbstract: Boolean = methodValue.isAbstract
+                  override val isImplicitOverride: Boolean = methodValue.isImplicitOverride
+                  override val isFinal: Boolean = methodValue.isFinal
+
+                  override val signature: context.Comp[Signature[FunctionResultInfo]] =
+                    methodValue.signature match {
+                      case ArgonModule.MethodSignature(parameters, returnType) =>
+                        compEv(
+                          for {
+                            returnTypeResolved <- resolveType(returnType)
+                            parametersResolved <- parameters.zipWithIndex.toVector.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
+
+                            result = SignatureResult[FunctionResultInfo](
+                              FunctionResultInfo(typeSystem)(returnTypeResolved)
+                            )
+
+                          } yield parametersResolved.foldRight[Signature[FunctionResultInfo]](result)(SignatureParameters[FunctionResultInfo](_, _))
+                        )
+                    }
+
+                  override val payload: TPayloadSpec[context.Comp[context.TMethodImplementation], context.TMethodMetadata] =
+                    payloadLoader.createMethodPayload(context)
+                }
               )
 
             private def createNamespaceElements[TRef, TDef, TResult]

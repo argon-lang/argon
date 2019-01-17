@@ -11,37 +11,40 @@ object MethodLookup {
   def lookupMethods(context: Context)(ts: TypeSystem[context.type])(instanceType: ts.SimpleType): context.Comp[OverloadResult[MemberValue[context.type]]] =
     lookupMethodsImpl(context)(ts)(Vector(instanceType))(Set.empty)
 
-  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(instanceTypes: Vector[ts.SimpleType])(seenTypes: Set[ClassLikeDescriptor]): context.Comp[OverloadResult[MemberValue[context.type]]] = {
-    val newSeenTypes = seenTypes ++ instanceTypes.flatMap(getDescriptor(context)(ts)(_).toVector)
+  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(instanceTypes: Vector[ts.SimpleType])(seenTypes: Set[ClassLikeDescriptor]): context.Comp[OverloadResult[MemberValue[context.type]]] =
+    if(instanceTypes.isEmpty)
+      context.compCompilationInstance.point(OverloadResult.End)
+    else {
+      val newSeenTypes = seenTypes ++ instanceTypes.flatMap(getDescriptor(context)(ts)(_).toVector)
 
-    val unseenInstanceTypes = instanceTypes.filterNot { t => getDescriptor(context)(ts)(t).exists(seenTypes.contains) }
+      val unseenInstanceTypes = instanceTypes.filterNot { t => getDescriptor(context)(ts)(t).exists(seenTypes.contains) }
 
-    val newBaseTypes = unseenInstanceTypes.flatMap {
-      case ts.ClassType(_, _, baseTypes) => baseTypes.baseClass.toVector ++ baseTypes.baseTraits
-      case ts.TraitType(_, _, baseTypes) => baseTypes.baseTraits
-      case ts.DataConstructorType(_, _, instanceType) => Vector(instanceType)
-      case _ => ???
-    }
-
-    context.compCompilationInstance.bind(
-      unseenInstanceTypes
-        .traverseM {
-          case ts.ClassType(arClass, _, _) => context.compCompilationInstance.map(arClass.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
-          case ts.TraitType(arTrait, _, _) => context.compCompilationInstance.map(arTrait.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
-          case ts.DataConstructorType(ctor, _, _) => context.compCompilationInstance.map(ctor.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
-          case _ => ???
-        }(context.compCompilationInstance, implicitly)
-    ) { memberValues =>
-      context.compCompilationInstance.map(
-        lookupMethodsImpl(context)(ts)(newBaseTypes)(newSeenTypes)
-      ) { baseTypeOverloads =>
-          if(memberValues.nonEmpty)
-            OverloadResult.List(memberValues, baseTypeOverloads)
-          else
-            baseTypeOverloads
-        }
+      val newBaseTypes = unseenInstanceTypes.flatMap {
+        case ts.ClassType(_, _, baseTypes) => baseTypes.baseClass.toVector ++ baseTypes.baseTraits
+        case ts.TraitType(_, _, baseTypes) => baseTypes.baseTraits
+        case ts.DataConstructorType(_, _, instanceType) => Vector(instanceType)
+        case _ => ???
       }
-  }
+
+      context.compCompilationInstance.bind(
+        unseenInstanceTypes
+          .traverseM {
+            case ts.ClassType(arClass, _, _) => context.compCompilationInstance.map(arClass.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
+            case ts.TraitType(arTrait, _, _) => context.compCompilationInstance.map(arTrait.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
+            case ts.DataConstructorType(ctor, _, _) => context.compCompilationInstance.map(ctor.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
+            case _ => ???
+          }(context.compCompilationInstance, implicitly)
+      ) { memberValues =>
+        context.compCompilationInstance.map(
+          lookupMethodsImpl(context)(ts)(newBaseTypes)(newSeenTypes)
+        ) { baseTypeOverloads =>
+            if(memberValues.nonEmpty)
+              OverloadResult.List(memberValues, baseTypeOverloads)
+            else
+              baseTypeOverloads
+          }
+        }
+    }
 
   private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem[context.type])(t: ts.SimpleType): Option[ClassLikeDescriptor] =
     t match {
