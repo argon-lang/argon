@@ -44,7 +44,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         implicitly[TypeCheck[TComp]].resolveType(thisExpr.exprType).flatMap { resolvedType =>
           val resolvedSimpleType = unwrapType(resolvedType).getOrElse(???)
 
-          MethodLookup.lookupMethods[TComp](context)(typeSystem)(resolvedSimpleType).flatMap {
+          implicitly[TypeCheck[TComp]].fromContextComp(context)(MethodLookup.lookupMethods(context)(typeSystem)(resolvedSimpleType)).flatMap {
             case OverloadResult.List(Vector(MemberValue.Method(method)), _) =>
               for {
                 _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
