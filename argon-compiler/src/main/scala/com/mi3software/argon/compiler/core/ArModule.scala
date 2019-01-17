@@ -8,7 +8,7 @@ trait ArModule[TContext <: Context, TPayloadSpec[_, _]] {
   import context._
 
   val descriptor: ModuleDescriptor
-  val globalNamespace: Namespace[context.type, TPayloadSpec]
+  val globalNamespace: context.Comp[Namespace[context.type, TPayloadSpec]]
   val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]]
 }
 

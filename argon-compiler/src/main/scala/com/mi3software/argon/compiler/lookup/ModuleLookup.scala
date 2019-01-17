@@ -6,6 +6,7 @@ import com.mi3software.argon.util.NamespacePath
 import scala.collection.immutable.Vector
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.compiler.Compilation
 
 object ModuleLookup {
 
@@ -15,10 +16,10 @@ object ModuleLookup {
   (moduleDesc: ModuleDescriptor)
   (namespace: NamespacePath, name: GlobalName)
   (f: PartialFunction[GlobalBinding[context.type, TPayloadSpec], T])
-  : Option[T] =
-    findModule(context)(referencedModules)(moduleDesc).flatMap { module =>
+  : context.Comp[Option[T]] =
+    findModule(context)(referencedModules)(moduleDesc).traverseM { module =>
       lookupNamespaceValue(context)(module)(namespace, name)(f)
-    }
+    }(context.compCompilationInstance, implicitly)
 
   def findModule[TPayloadSpec[_, _]]
   (context: Context)
@@ -32,7 +33,7 @@ object ModuleLookup {
   (module: ArModule[context.type, TPayloadSpec])
   (namespace: NamespacePath, name: GlobalName)
   (f: PartialFunction[GlobalBinding[context.type, TPayloadSpec], T])
-  : Option[T] = {
+  : context.Comp[Option[T]] = {
     def impl(namespaceParts: Vector[String])(namespaceValues: Namespace[context.type, TPayloadSpec]): Option[T] =
       namespaceParts match {
         case head +: tail =>
@@ -52,7 +53,7 @@ object ModuleLookup {
             .collect(f)
       }
 
-    impl(namespace.ns)(module.globalNamespace)
+    context.compCompilationInstance.map(module.globalNamespace)(impl(namespace.ns))
   }
 
   def lookupGlobalClass[TContext <: Context, TPayloadSpec[_, _]]: PartialFunction[GlobalBinding[TContext, TPayloadSpec], ArClass[TContext, TPayloadSpec]] =  {

@@ -27,15 +27,20 @@ private[compiler] object SourceModuleCreator {
   (context2: ContextComp[TComp])
   (input: CompilerInput[I])
   (referencedModules2: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
-    : TComp[ArModule[context2.type, DeclarationPayloadSpecifier]] =
-    for {
-      moduleElements <- input.source.traverseU { ast => createNamespaceElementFromAST[TComp](context2)(input.options)(referencedModules2)(ast) }
-
-    } yield new ArModule[context2.type, DeclarationPayloadSpecifier] {
+    : TComp[ArModule[context2.type, DeclarationPayloadSpecifier]] = for {
+    globalNamespaceCache <- Compilation[TComp].createCache[Namespace[context2.type, DeclarationPayloadSpecifier]]
+  } yield new ArModule[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
       override val descriptor: ModuleDescriptor = input.options.moduleDescriptor
-      override val globalNamespace: Namespace[context.type, DeclarationPayloadSpecifier] =
-        NamespaceBuilder.createNamespace[context.type, DeclarationPayloadSpecifier](moduleElements)
+      override val globalNamespace: TComp[Namespace[context.type, DeclarationPayloadSpecifier]] =
+        globalNamespaceCache(
+          input.source
+            .traverse { ast =>
+              createNamespaceElementFromAST[TComp](context2)(input.options)(this)(referencedModules2)(ast)
+            }
+            .map(NamespaceBuilder.createNamespace[context.type, DeclarationPayloadSpecifier])
+        )
+
       override val referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]] = referencedModules2
     }
 
@@ -50,11 +55,12 @@ private[compiler] object SourceModuleCreator {
   private def createNamespaceElementFromAST[TComp[+_] : Compilation]
   (context2: ContextComp[TComp])
   (options: CompilerOptions)
+  (currentModule: ArModule[context2.type, DeclarationPayloadSpecifier])
   (referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
   : TComp[ModuleElement[context2.type, DeclarationPayloadSpecifier]] =
     for {
-      scope <- createScope[TComp](context2)(referencedModules)(sourceAST)
+      scope <- createScope[TComp](context2)(currentModule)(referencedModules)(sourceAST)
       envF = (envFileSpec: FileSpec) => new EnvCreator[context2.type] {
         override def apply(context: context2.type)(effectInfo: EffectInfo, descriptor: VariableOwnerDescriptor): ExpressionConverter.Env[context.type, context.scopeContext.Scope] =
           ExpressionConverter.Env(
@@ -72,6 +78,7 @@ private[compiler] object SourceModuleCreator {
 
   private def createScope[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
+  (currentModule: ArModule[context.type, DeclarationPayloadSpecifier])
   (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
   : TComp[context.scopeContext.Scope] =
@@ -81,10 +88,13 @@ private[compiler] object SourceModuleCreator {
         sourceAST.importNamespaces,
       )
     )(
-      Vector(referencedModules.map(AbsRef.apply))
+      Vector(
+        Vector(AbsRef(currentModule)),
+        referencedModules.map(AbsRef.apply),
+      )
     )(
       context.scopeContext.EmptyScope
-    ).point[TComp]
+    )
 
   private def createNamespaceElementFromASTWithScope[TComp[+_] : Monad : Compilation]
   (context: ContextComp[TComp])

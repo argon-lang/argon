@@ -24,7 +24,8 @@ final class JSEmitter {
 
 
     for {
-      topLevelStmts <- allNamespaceElements(context)(module.globalNamespace).toVector.traverse(createObjectsForScopeValue(context))
+      globalNamespace <- module.globalNamespace
+      topLevelStmts <- allNamespaceElements(context)(globalNamespace).toVector.traverse(createObjectsForScopeValue(context))
     } yield JSModule(
       Vector(
         modulePairs.map { case (refModule, importId) =>

@@ -76,7 +76,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         convertExpr[TComp](env)(func).forArguments(ArgumentInfo[TComp](convertExpr(env)(arg), arg.location))
 
       case parser.IdentifierExpr(name) =>
-        createLookupFactory(env)(LookupDescription.Identifier(name))(expr.location)(env.scope.findIdentifier(name, env.fileSpec, expr.location))
+        compFactory(
+          implicitly[TypeCheck[TComp]].fromContextComp(context)(env.scope.findIdentifier(name, env.fileSpec, expr.location))
+            .map(createLookupFactory(env)(LookupDescription.Identifier(name))(expr.location))
+        )
 
       case parser.IfExpr(cond, ifBody) =>
         createIfExpr(env)(expr.location)(cond, ifBody, WithSource(Vector.empty, SourceLocation(expr.location.end, expr.location.end)))
@@ -216,8 +219,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   (args: Vector[ArgumentInfo[TComp]])
   : ExprFactory[TComp] = compFactory(
     for {
-      arClass <- Compilation[TComp].requireSome(
+      arClassOpt <- implicitly[TypeCheck[TComp]].fromContextComp(context)(
         ModuleLookup.lookupValue(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass)
+      )
+      arClass <- Compilation[TComp].requireSome(
+        arClassOpt
       )(CompilationError.NamespaceElementNotFound(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
       classSig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.signature)
 
@@ -269,14 +275,13 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           override def forExpectedType(expectedType: typeSystem.TType): TComp[ArExpr] =
             Compilation[TComp].forErrors(CompilationError.NamespaceUsedAsValueError(description, CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
-          override def memberAccessExpr(memberName: MemberName, location: SourceLocation): ExprFactory[TComp] = {
-            val newResult = memberName match {
-              case MemberName.Normal(name) => scope.findIdentifier(name, env.fileSpec, location)
-              case _ => LookupResult.Failed
-            }
-
-            createLookupFactory(env)(LookupDescription.Member(description, memberName))(location)(newResult)
-          }
+          override def memberAccessExpr(memberName: MemberName, location: SourceLocation): ExprFactory[TComp] =
+            compFactory(
+              (memberName match {
+                case MemberName.Normal(name) => implicitly[TypeCheck[TComp]].fromContextComp(context)(scope.findIdentifier(name, env.fileSpec, location))
+                case _ => LookupResult.Failed.upcast[LookupResult].point[TComp]
+              }).map(createLookupFactory(env)(LookupDescription.Member(description, memberName))(location)(_)(implicitly[TypeCheck[TComp]]))
+            )
 
           override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
             compFactory(
@@ -994,6 +999,11 @@ object ExpressionConverter {
       override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): HoleTypeCheckComp[TComp, ts.TType, A] =
         StateT((s: TypeCheckState[ts.TType]) => Compilation[TComp].forErrors[A](errors, messages).map { a => (s, a) })
 
+      override def createCache[A]: HoleTypeCheckComp[TComp, ts.TType, HoleTypeCheckComp[TComp, ts.TType, A] => HoleTypeCheckComp[TComp, ts.TType, A]] =
+        point(identity)
+
+      override def createMemo[A, B]: HoleTypeCheckComp[TComp, ts.TType, (A => HoleTypeCheckComp[TComp, ts.TType, B]) => A => HoleTypeCheckComp[TComp, ts.TType, B]] =
+        point(identity)
 
       override def bind[A, B](fa: HoleTypeCheckComp[TComp, ts.TType, A])(f: A => HoleTypeCheckComp[TComp, ts.TType, B]): HoleTypeCheckComp[TComp, ts.TType, B] =
         fa.flatMap(f)

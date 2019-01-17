@@ -26,19 +26,40 @@ object IOCompilation {
     override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): IO[Throwable, A] =
       messageAccum.update { acc => acc ++ messages }.flatMap { _ => IO.fail(CompilationErrorException(errors)) }
 
+    override def createCache[A]: IO[Throwable, IO[Throwable, A] => IO[Throwable, A]] =
+      RefM(Option.empty[Promise[Throwable, A]]).map { ref => createValue =>
+        ref.modify {
+          case value @ Some(promise) => IO.now((promise, value))
+          case None =>
+            for {
+              promise <- Promise.make[Throwable, A]
+              _ <- promise.done(createValue).fork
+            } yield (promise, Some(promise))
+        }
+          .flatMap { promise => promise.get }
+      }
+
+    override def createMemo[A, B]: IO[Throwable, (A => IO[Throwable, B]) => A => IO[Throwable, B]] =
+      RefM(Map[A, Promise[Throwable, B]]()).map { ref => createValue => a =>
+        ref.modify { map =>
+          map.get(a) match {
+            case Some(promise) => IO.now((promise, map))
+            case None =>
+              for {
+                promise <- Promise.make[Throwable, B]
+                _ <- promise.done(createValue(a)).fork
+              } yield (promise, map + (a -> promise))
+          }
+        }
+          .flatMap { promise => promise.get }
+      }
+
     override def point[A](a: => A): IO[Throwable, A] = IO.point(a)
 
     override def bind[A, B](fa: IO[Throwable, A])(f: A => IO[Throwable, B]): IO[Throwable, B] =
       fa.flatMap(f)
 
 
-
-    /*
-
-    override def getMessages: IO[Nothing, Vector[CompilationMessageNonFatal]] = messageAccum.get
-
-    override def getResult[A](fa: IO[Throwable, A]): IO[Throwable, NonEmptyList[CompilationError] \/ A] =
-      */
     override def getResult[A](fa: IO[Throwable, A]): IO[Throwable, (Vector[CompilationMessageNonFatal], NonEmptyList[CompilationError] \/ A)] =
       fa
         .flatMap { a =>

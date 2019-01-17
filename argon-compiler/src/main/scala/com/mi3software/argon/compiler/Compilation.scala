@@ -10,6 +10,9 @@ trait Compilation[F[_]] extends Monad[F] {
   final def forErrors[A](head: CompilationError, tail: CompilationError*): F[A] =
     forErrors(NonEmptyList.nel(head, IList(tail: _*)))
 
+  def createCache[A]: F[F[A] => F[A]]
+  def createMemo[A, B]: F[(A => F[B]) => A => F[B]]
+
   override def ap[A, B](fa: => F[A])(f: => F[A => B]): F[B]
 
   final def require(value: Boolean)(head: CompilationError, tail: CompilationError*): F[Unit] =

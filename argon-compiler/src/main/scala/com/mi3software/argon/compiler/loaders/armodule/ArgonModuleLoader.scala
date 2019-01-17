@@ -129,8 +129,8 @@ object ArgonModuleLoader {
             (refModule: ArModule[context.type, ReferencePayloadSpecifier])
             (namespace: NamespacePath, name: GlobalName)
             (f: PartialFunction[GlobalBinding[context.type, ReferencePayloadSpecifier], T])
-            : Option[T] =
-              ModuleLookup.lookupNamespaceValue(context)(refModule)(namespace, name)(f)
+            : TComp[Option[T]] =
+              compEv.flip(ModuleLookup.lookupNamespaceValue(context)(refModule)(namespace, name)(f))
 
             private def parseTraitDescriptor(module: ModuleDescriptor)(desc: ArgonModule.TraitDescriptor): Option[TraitDescriptor] =
               desc match {
@@ -311,7 +311,7 @@ object ArgonModuleLoader {
               case TraitDescriptor.InNamespace(_, namespace, name, _) =>
                 lookupNamespaceValue(module)(namespace, name) {
                   case GlobalBinding.GlobalTrait(_, _, arTrait) => arTrait
-                }.point[TComp]
+                }
             }
 
             private lazy val traitMap: TComp[Map[Int, TraitLoadResult[context.type, TPayloadSpec]]] =
@@ -382,7 +382,7 @@ object ArgonModuleLoader {
 
             private def lookupClass(module: ArModule[context.type, ReferencePayloadSpecifier]): ClassDescriptor => TComp[Option[ArClass[context.type, ReferencePayloadSpecifier]]] = {
               case ClassDescriptor.InNamespace(_, namespace, name, _) =>
-                lookupNamespaceValue(module)(namespace, name)(ModuleLookup.lookupGlobalClass).point[TComp]
+                lookupNamespaceValue(module)(namespace, name)(ModuleLookup.lookupGlobalClass)
 
               case ClassDescriptor.MetaClass(ownerClass) =>
                 lookupClass(module)(ownerClass)
@@ -495,7 +495,7 @@ object ArgonModuleLoader {
                   case DataConstructorDescriptor.InNamespace(_, namespace, name, _) =>
                     lookupNamespaceValue(moduleRef)(namespace, name) {
                       case GlobalBinding.GlobalDataConstructor(_, _, dataCtor) => dataCtor
-                    }.point[TComp]
+                    }
                 },
                 definitionHandler = _ => ???
               )
@@ -525,7 +525,7 @@ object ArgonModuleLoader {
                   case FuncDescriptor.InNamespace(_, namespace, name, _) =>
                     lookupNamespaceValue(moduleRef)(namespace, name) {
                       case GlobalBinding.GlobalFunction(_, _, func) => func
-                    }.point[TComp]
+                    }
                 },
                 definitionHandler = funcId => funcValue => funcDescriptor => new ArFunc[context.type, TPayloadSpec] {
                   override val context: ctx.type = ctx
@@ -601,11 +601,14 @@ object ArgonModuleLoader {
                   case methodDesc @ MethodDescriptor(DataConstructorDescriptor.InNamespace(_, namespace, name, _), _, _) =>
                     lookupNamespaceValue(moduleRef)(namespace, name) {
                       case GlobalBinding.GlobalDataConstructor(_, _, dataCtor) => dataCtor
-                    }.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { dataCtor =>
-                      compEv.flip(dataCtor.methods).map { methods =>
-                        methods.find { method =>
-                          method.descriptor === methodDesc
-                        }
+                    }
+                      .flatMap {
+                        _.traverseM { dataCtor =>
+                          compEv.flip(dataCtor.methods).map { methods =>
+                            methods.find { method =>
+                              method.descriptor === methodDesc
+                            }
+                          }
                       }
                     }
                 },
@@ -782,11 +785,11 @@ object ArgonModuleLoader {
 
             override lazy val module: TComp[ArModule[context.type, TPayloadSpec]] =
               for {
-                globalNamespaceCompValue <- globalNamespaceComp
+                globalNamespaceCache <- Compilation[TComp].createCache[Namespace[context.type, TPayloadSpec]]
               } yield new ArModule[context.type, TPayloadSpec] {
                 override val context: context2.type = context2
                 override val descriptor: ModuleDescriptor = currentModuleDescriptor
-                override lazy val globalNamespace: Namespace[context.type, TPayloadSpec] = globalNamespaceCompValue
+                override lazy val globalNamespace: context.Comp[Namespace[context.type, TPayloadSpec]] = compEv(globalNamespaceCache(globalNamespaceComp))
                 override val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]] =
                   refModuleMap.values.collect {
                     case ModuleReference(moduleRef) => moduleRef

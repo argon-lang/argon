@@ -18,14 +18,16 @@ trait ScopeContext[TContext <: Context with Singleton] {
 
     def nextVariable: Int
 
-    def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult
+    def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): context.Comp[LookupResult]
 
     def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.Scope = new other.Scope {
 
       override def nextVariable: Int = Scope.this.nextVariable
 
-      override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): other.LookupResult =
-        Scope.this.findIdentifier(name, fileSpec, sourceLocation).convertScopeContext(other)(converter)
+      override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): context.Comp[other.LookupResult] =
+        context.compCompilationInstance.map(
+          Scope.this.findIdentifier(name, fileSpec, sourceLocation)
+        ) { _.convertScopeContext(other)(converter) }
     }
 
   }
@@ -39,10 +41,12 @@ trait ScopeContext[TContext <: Context with Singleton] {
           case _ => scope.nextVariable
         }
 
-        override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult =
+        override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): context.Comp[LookupResult] =
           if(variable.name === VariableName.Normal(name)) {
             val value = VariableScopeValue(variable)
-            LookupResult.ValuesResult(OverloadResult.List(Vector(value), OverloadResult.End))
+            context.compCompilationInstance.point(
+              LookupResult.ValuesResult(OverloadResult.List(Vector(value), OverloadResult.End))
+            )
           }
           else {
             scope.findIdentifier(name, fileSpec, sourceLocation)
@@ -60,16 +64,26 @@ trait ScopeContext[TContext <: Context with Singleton] {
   }
 
   case object EmptyScope extends NamespacesOnlyScope {
-    override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult =
-      LookupResult.Failed
+    override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): context.Comp[LookupResult] =
+      context.compCompilationInstance.point(LookupResult.Failed)
   }
 
-  final class NamespaceScope(findId: (String, FileSpec, SourceLocation) => LookupResult, parentScope: NamespacesOnlyScope) extends NamespacesOnlyScope {
+  final class NamespaceScope private(findId: ((String, FileSpec, SourceLocation)) => context.Comp[LookupResult], parentScope: NamespacesOnlyScope) extends NamespacesOnlyScope {
 
-    private val findIdMemo = Memo.immutableHashMapMemo(Function.tupled(findId))
+    override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): context.Comp[LookupResult] =
+      findId((name, fileSpec, sourceLocation))
 
-    override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): LookupResult =
-      findIdMemo((name, fileSpec, sourceLocation))
+  }
+
+  object NamespaceScope {
+
+    def apply(findId: (String, FileSpec, SourceLocation) => context.Comp[LookupResult], parentScope: NamespacesOnlyScope): context.Comp[NamespaceScope] =
+      context.compCompilationInstance.map(
+        context.compCompilationInstance.createMemo[(String, FileSpec, SourceLocation), LookupResult]
+      ) { findIdMemo =>
+        new NamespaceScope(findIdMemo(findId.tupled), parentScope)
+      }
+
   }
 
 
