@@ -361,7 +361,9 @@ val module = Module(
       isImplicitOverride = false,
       isFinal = false,
       signature = MethodSignature(
-        parameters = Seq(),
+        parameters = Seq(
+          Parameter(Seq()),
+        ),
         returnType = Type.ClassType(ClassType(
           classId = String_classId,
           typeArguments = Seq(),

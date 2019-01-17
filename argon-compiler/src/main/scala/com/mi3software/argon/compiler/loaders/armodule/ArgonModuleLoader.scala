@@ -802,8 +802,30 @@ object ArgonModuleLoader {
                   resolveType(paramType)
                     .map(Variable(DeconstructedParameterDescriptor(ownerDescriptor, index, tupleIndex), VariableName.Normal(name), Mutability.Mutable, _))
                 }
-                .map {
-                  case Vector() => ???
+                .flatMap {
+                  case Vector() =>
+                    val arCore = ModuleDescriptor(LookupNames.argonCoreLib)
+
+                    for {
+                      unitClassOpt <-
+                        if(currentModuleDescriptor === arCore)
+                          module.flatMap { m =>
+                            compEv.flip(ModuleLookup.lookupNamespaceValue(context)(m)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass))
+                              .map { _.map(AbsRef.apply) }
+                          }
+                        else
+                          compEv.flip(ModuleLookup.lookupValue(context)(referencedModules)(arCore)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass))
+                              .map { _.map(AbsRef.apply) }
+
+                      unitClass <- Compilation[TComp].requireSome(
+                        unitClassOpt
+                      )(CompilationError.NamespaceElementNotFound(arCore, NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"), CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
+
+                      unitClassSig <- compEv.flip(unitClass.value.signature)
+                    } yield Parameter(Vector(), context.typeSystem.fromSimpleType(context.typeSystem.ClassType(unitClass, Vector(), unitClassSig.unsubstitutedResult.baseTypes)))
+
+
+
 
                   case variables @ head +: tail =>
 
@@ -811,7 +833,7 @@ object ArgonModuleLoader {
                     NonEmptyList(head, tail: _*).map { v => context.typeSystem.TupleElement(v.varType) }
                   ))
 
-                  Parameter(variables, paramType)
+                  Parameter(variables, paramType).point[TComp]
                 }
 
             override lazy val module: TComp[ArModule[context.type, TPayloadSpec]] =
