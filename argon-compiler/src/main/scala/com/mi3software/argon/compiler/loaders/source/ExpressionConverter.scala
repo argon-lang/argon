@@ -685,7 +685,7 @@ object ExpressionConverter {
         newRight <- fillHolesExpr(context)(ts)(right)(newIntType)
       } yield context.typeSystem.PrimitiveOp(context.typeSystem.PrimitiveOperation.AddInt, newLeft, newRight, newIntType)
 
-    case ts.FunctionCall(function, args, returnType) =>
+    case ts.FunctionCall(function, args, _) =>
       for {
         sig <- tcInstance.fromContextComp(context)(function.value.signature)
         (newArgs, result) <- fillSignatureArgs(context)(ts)(sig)(args)
@@ -700,16 +700,15 @@ object ExpressionConverter {
         newNext <- fillHolesExprChildren(context)(ts)(next)
       } yield context.typeSystem.LetBinding(newVar, newValue, newNext)
 
+    case ts.LoadConstantInt(i, intType) =>
+      for {
+        newIntType <- fillHolesTypeChildren(context)(ts)(intType)
+      } yield context.typeSystem.LoadConstantInt(i, newIntType)
+
     case ts.LoadConstantString(str, stringType) =>
       for {
         newStringType <- fillHolesTypeChildren(context)(ts)(stringType)
       } yield context.typeSystem.LoadConstantString(str, newStringType)
-
-    case ts.LoadVariable(variable) =>
-      for {
-        newVarType <- fillHolesTypeChildren(context)(ts)(variable.varType)
-        newVar = context.typeSystem.Variable(variable.descriptor, variable.name, variable.mutability, newVarType)
-      } yield context.typeSystem.LoadVariable(newVar)
 
     case t: ts.LoadTuple =>
       for {
@@ -718,6 +717,24 @@ object ExpressionConverter {
             .map(context.typeSystem.TupleElement(_))
         }
       } yield context.typeSystem.LoadTuple(elems)
+
+    case ts.LoadUnit(unitType) =>
+      for {
+        newUnitType <- fillHolesTypeChildren(context)(ts)(unitType)
+      } yield context.typeSystem.LoadUnit(newUnitType)
+
+    case ts.LoadVariable(variable) =>
+      for {
+        newVarType <- fillHolesTypeChildren(context)(ts)(variable.varType)
+        newVar = context.typeSystem.Variable(variable.descriptor, variable.name, variable.mutability, newVarType)
+      } yield context.typeSystem.LoadVariable(newVar)
+
+    case ts.MethodCall(method, instance, args, _) =>
+      for {
+        newInstance <- fillHolesExprChildren(context)(ts)(instance)
+        sig <- tcInstance.fromContextComp(context)(method.value.signature)
+        (newArgs, result) <- fillSignatureArgs(context)(ts)(sig)(args)
+      } yield context.typeSystem.MethodCall(method, newInstance, newArgs, result.returnType)
 
     case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
   }

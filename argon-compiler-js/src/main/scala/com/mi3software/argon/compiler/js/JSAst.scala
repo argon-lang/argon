@@ -38,6 +38,8 @@ case object JSFunctionEmptyParameterList extends JSFunctionParameterList
 final case class JSFunctionParameter(name: JSBindingNonEmpty, next: JSFunctionParameterList) extends JSFunctionParameterList
 final case class JSFunctionRestParameters(name: JSBindingNonEmpty) extends JSFunctionParameterList
 
+final case class JSReturn(value: JSExpression) extends JSStatement
+
 sealed trait JSExpression extends JSStatement
 
 final case class JSObjectLiteral(members: Vector[JSObjectMember]) extends JSExpression
@@ -58,6 +60,7 @@ final case class JSFunctionExpression(name: Option[JSIdentifier], parameters: JS
 final case class JSArrayLiteral(values: Vector[JSExpression]) extends JSExpression
 
 case object JSNull extends JSExpression
+case object JSThis extends JSExpression
 
 object JSAst {
 
@@ -133,6 +136,11 @@ object JSAst {
           writer.print("){")
           body.foreach(writeStatement)
           writer.print("}")
+
+        case JSReturn(value) =>
+          writer.print("return ")
+          writeExprParen(value)
+          writer.print(";")
 
         case stmt: JSExpression =>
           writeExprParen(stmt)
@@ -243,6 +251,9 @@ object JSAst {
 
         case JSNull =>
           writer.print("null")
+
+        case JSThis =>
+          writer.print("this")
       }
 
     def writeIdentifier(identifier: JSIdentifier): Unit =

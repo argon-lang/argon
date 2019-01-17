@@ -5,6 +5,16 @@ export const functions = Object.create(null);
 
 export const classConstructorSymbol = Symbol();
 
+function createMethods(methodDescriptions, methods) {
+    for(const description of methodDescriptions) {
+        const methodInfo = Object.create(null);
+        methodInfo.symbol = Symbol();
+        methodInfo.value = description.value;
+        Object.freeze(methodInfo)
+        methods[description.descriptor] = methodInfo;
+    }
+}
+
 export function createTrait(creator) {
 	const trait = Object.create(null);
 
@@ -15,7 +25,7 @@ export function createTrait(creator) {
 	});
 
 	const methods = Object.create(null);
-	if(creator.createMethods) creator.createMethods(methods);
+	if(creator.methods) createMethods(creator.methods, methods);
 	trait.methods = Object.freeze(methods);
 
 	return Object.freeze(trait);
@@ -37,12 +47,12 @@ export function createClass(creator) {
 					implementTrait(proto, trait);
 				}
 			}
-		
+            implementMethods(proto, methods);
 		});
 	});
 
 	const methods = Object.create(null);
-	if(creator.createMethods) creator.createMethods(methods);
+	if(creator.methods) createMethods(creator.methods, methods);
 	cls.methods = Object.freeze(methods);
 
 	return Object.freeze(cls);
@@ -84,8 +94,16 @@ function implementTrait(obj, trait) {
 	}
 }
 
+function implementMethods(obj, methods) {
+    for(const method in methods) {
+        const methodInfo = methods[method];
+        obj[methodInfo.symbol] = methodInfo.value;
+    }
+}
+
 
 const stringValueSymbol = Symbol();
+const intValueSymbol = Symbol();
 
 traits["Ar.Object"] = createTrait({});
 
@@ -139,6 +157,14 @@ classes["Ar.String[MetaClass]"] = createClass({
 
 classes["Ar.Int"] = createClass({
 	get baseTraits() { return [ traits["Ar.Object"] ]; },
+	methods: [
+	    {
+	        descriptor: "to_s:(Ar.Unit)->(Ar.String)",
+	        value: function(param_0) {
+                return createString(this[intValueSymbol].toString());
+            },
+	    },
+	],
 });
 
 classes["Ar.Int[MetaClass]"] = createClass({
@@ -172,5 +198,4 @@ export function addInt(a, b) {
 Object.freeze(traits);
 Object.freeze(classes);
 Object.freeze(functions);
-
 

@@ -51,7 +51,7 @@ object ParameterOwnerDescriptor {
 
 }
 
-sealed trait ClassLikeDescriptor extends VariableOwnerDescriptor
+sealed trait ClassLikeDescriptor extends ParameterOwnerDescriptor
 object ClassLikeDescriptor {
 
   implicit val equalInstance: Equal[ClassLikeDescriptor] = {
@@ -66,7 +66,7 @@ object ClassLikeDescriptor {
 
 }
 
-sealed trait TraitDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
+sealed trait TraitDescriptor extends ClassLikeDescriptor
 object TraitDescriptor {
 
   @deriving(Equal)
@@ -78,7 +78,7 @@ object TraitDescriptor {
 
 }
 
-sealed trait ClassDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
+sealed trait ClassDescriptor extends ClassLikeDescriptor
 object ClassDescriptor {
 
   @deriving(Equal)
@@ -102,7 +102,7 @@ object ClassDescriptor {
   }
 }
 
-sealed trait DataConstructorDescriptor extends ClassLikeDescriptor with ParameterOwnerDescriptor
+sealed trait DataConstructorDescriptor extends ClassLikeDescriptor
 object DataConstructorDescriptor {
   @deriving(Equal)
   final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends DataConstructorDescriptor

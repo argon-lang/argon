@@ -39,6 +39,13 @@ object DescriptorId {
         encodeType(resultType)
     }
 
+  private def encodeMemberName[TContext <: Context](memberName: MemberName): String =
+    memberName match {
+      case MemberName.Normal(name) => encodeIdentifier(name)
+      case MemberName.Unnamed(index) => "#" + index.toString
+      case MemberName.Call => "$call"
+      case MemberName.New => "$new"
+    }
 
   def forClass(descriptor: ClassDescriptor): String =
     descriptor match {
@@ -61,4 +68,8 @@ object DescriptorId {
     descriptor match {
       case FuncDescriptor.InNamespace(_, namespace, name, _) => s"${encodeInNamespace(namespace, name)}:${encodeSignatureParameters(signature)}"
     }
+
+  def forMethod[TContext <: Context](descriptor: MethodDescriptor, signature: ErasedSignature[TContext]): String =
+    s"${encodeMemberName(descriptor.name)}:${encodeSignatureParameters(signature)}"
+
 }
