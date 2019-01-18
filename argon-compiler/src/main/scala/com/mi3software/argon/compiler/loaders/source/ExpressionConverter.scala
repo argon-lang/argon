@@ -154,7 +154,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         createIfExpr(env)(expr.location)(cond, ifBody, elseBody)
 
       case parser.IntValueExpr(sign, base, digits) =>
-        val value = sign * digits.foldRight(0 : BigInt) { (digit, acc) => acc * base + digit }
+        val value = sign * digits.foldLeft(0 : BigInt) { (acc, digit) => acc * base + digit }
 
         compFactory(
           for {
@@ -169,7 +169,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               argHole <- implicitly[TypeCheck[TComp]].createHole
               resultHole <- implicitly[TypeCheck[TComp]].createHole
 
-              typeCheck <- isSubType(expectedType, fromSimpleType(FunctionType(argHole, resultHole)))
+              exprConverter <- convertExprTypeDelay(env)(expr.location)(fromSimpleType(FunctionType(argHole, resultHole)))(expectedType)
 
               argVar = Variable(
                 VariableDescriptor(env.descriptor, env.scope.nextVariable),
@@ -181,7 +181,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
               bodyExpr <- convertExpr(env2)(body).forExpectedType(resultHole)
 
-            } yield LoadLambda(argVar, bodyExpr)
+            } yield exprConverter(LoadLambda(argVar, bodyExpr))
         }
 
       case parser.LambdaTypeExpr(argType, resultType) =>
