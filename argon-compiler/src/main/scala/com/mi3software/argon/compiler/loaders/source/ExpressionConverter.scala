@@ -134,6 +134,28 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           } yield factoryForExpr(env)(expr.location)(LoadConstantInt(value, intType))
         )
 
+      case parser.LambdaExpr(varName, body) =>
+        new ExprFactory[TComp] {
+          override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
+            for {
+              argHole <- implicitly[TypeCheck[TComp]].createHole
+              resultHole <- implicitly[TypeCheck[TComp]].createHole
+
+              typeCheck <- isSubType(expectedType, fromSimpleType(FunctionType(argHole, resultHole)))
+
+              argVar = Variable(
+                VariableDescriptor(env.descriptor, env.scope.nextVariable),
+                varName.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
+                Mutability.NonMutable,
+                argHole
+              )
+              env2 = env.copy(scope = env.scope.addVariable(argVar))
+
+              bodyExpr <- convertExpr(env2)(body).forExpectedType(resultHole)
+
+            } yield LoadLambda(argVar, bodyExpr)
+        }
+
       case parser.LambdaTypeExpr(argType, resultType) =>
         compFactory(
           for {

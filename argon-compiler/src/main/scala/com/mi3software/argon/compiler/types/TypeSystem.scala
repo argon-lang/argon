@@ -188,19 +188,19 @@ trait TypeSystem[TContext <: Context with Singleton] {
   }
 
   final case class FunctionType(argumentType: TType, resultType: TType) extends SimpleType {
-    override val universe: TypeUniverse = Universe.union(
+    override lazy val universe: TypeUniverse = Universe.union(
       universeOfType(argumentType),
       universeOfType(resultType)
     )
   }
   final case class UnionType(first: TType, second: TType) extends SimpleType {
-    override val universe: TypeUniverse = Universe.union(
+    override lazy val universe: TypeUniverse = Universe.union(
       universeOfType(first),
       universeOfType(second)
     )
   }
   final case class IntersectionType(first: TType, second: TType) extends SimpleType {
-    override val universe: TypeUniverse = Universe.union(
+    override lazy val universe: TypeUniverse = Universe.union(
       universeOfType(first),
       universeOfType(second)
     )
