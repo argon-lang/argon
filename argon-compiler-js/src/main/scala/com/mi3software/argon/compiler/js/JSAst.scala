@@ -38,6 +38,7 @@ case object JSFunctionEmptyParameterList extends JSFunctionParameterList
 final case class JSFunctionParameter(name: JSBindingNonEmpty, next: JSFunctionParameterList) extends JSFunctionParameterList
 final case class JSFunctionRestParameters(name: JSBindingNonEmpty) extends JSFunctionParameterList
 
+final case class JSIfElseStatement(condition: JSExpression, ifBody: Vector[JSStatement], elseBody: Vector[JSStatement]) extends JSStatement
 final case class JSReturn(value: JSExpression) extends JSStatement
 
 sealed trait JSExpression extends JSStatement
@@ -136,6 +137,15 @@ object JSAst {
           writeParameterList(parameters)
           writer.print("){")
           body.foreach(writeStatement)
+          writer.print("}")
+
+        case JSIfElseStatement(condition, ifBody, elseBody) =>
+          writer.print("if(")
+          writeExpr(condition)
+          writer.print(") {")
+          ifBody.foreach(writeStatement)
+          writer.print("} else {")
+          elseBody.foreach(writeStatement)
           writer.print("}")
 
         case JSReturn(value) =>

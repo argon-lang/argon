@@ -104,6 +104,7 @@ function implementMethods(obj, methods) {
 
 const stringValueSymbol = Symbol();
 const intValueSymbol = Symbol();
+export const boolValueSymbol = Symbol();
 
 traits["Ar.Object"] = createTrait({});
 
@@ -171,6 +172,14 @@ classes["Ar.Int[MetaClass]"] = createClass({
 	get baseClass() { return classes["Ar.Class"]; },
 });
 
+classes["Ar.Bool"] = createClass({
+	get baseTraits() { return [ traits["Ar.Object"] ]; },
+});
+
+classes["Ar.Bool[MetaClass]"] = createClass({
+	get baseClass() { return classes["Ar.Class"]; },
+});
+
 functions["Ar.puts:($_:(Ar.String))->(Ar.Unit)"] = Object.freeze({
 	value: function([str]) {
 		console.log(str[stringValueSymbol]);
@@ -191,8 +200,26 @@ export function createInt(i) {
     return Object.freeze(obj);
 }
 
+export function createBool(b) {
+    const obj = Object.create(classes["Ar.Bool"].constructor.prototype);
+    obj[boolValueSymbol] = b;
+    return Object.freeze(obj);
+}
+
 export function addInt(a, b) {
     return createInt(a[intValueSymbol] + b[intValueSymbol]);
+}
+
+export function subInt(a, b) {
+    return createInt(a[intValueSymbol] - b[intValueSymbol]);
+}
+
+export function mulInt(a, b) {
+    return createInt(a[intValueSymbol] * b[intValueSymbol]);
+}
+
+export function intEqual(a, b) {
+    return createBool(a[intValueSymbol] === b[intValueSymbol]);
 }
 
 Object.freeze(traits);

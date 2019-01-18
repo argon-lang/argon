@@ -100,6 +100,34 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           } yield factoryForExpr(env)(expr.location)(PrimitiveOp(PrimitiveOperation.AddInt, leftExpr, rightExpr, intType))
         )
 
+      case parser.BinaryOperatorExpr(parser.BinaryOperator.Sub, left, right) =>
+        compFactory(
+          for {
+            intType <- resolveIntType(env)(expr.location)
+            leftExpr <- convertExpr(env)(left).forExpectedType(intType)
+            rightExpr <- convertExpr(env)(right).forExpectedType(intType)
+          } yield factoryForExpr(env)(expr.location)(PrimitiveOp(PrimitiveOperation.SubInt, leftExpr, rightExpr, intType))
+        )
+
+      case parser.BinaryOperatorExpr(parser.BinaryOperator.Mul, left, right) =>
+        compFactory(
+          for {
+            intType <- resolveIntType(env)(expr.location)
+            leftExpr <- convertExpr(env)(left).forExpectedType(intType)
+            rightExpr <- convertExpr(env)(right).forExpectedType(intType)
+          } yield factoryForExpr(env)(expr.location)(PrimitiveOp(PrimitiveOperation.MulInt, leftExpr, rightExpr, intType))
+        )
+
+      case parser.BinaryOperatorExpr(parser.BinaryOperator.Equal, left, right) =>
+        compFactory(
+          for {
+            intType <- resolveIntType(env)(expr.location)
+            boolType <- resolveBoolClass(env)(expr.location)
+            leftExpr <- convertExpr(env)(left).forExpectedType(intType)
+            rightExpr <- convertExpr(env)(right).forExpectedType(intType)
+          } yield factoryForExpr(env)(expr.location)(PrimitiveOp(PrimitiveOperation.IntEqual, leftExpr, rightExpr, boolType))
+        )
+
       case parser.BoolValueExpr(b) =>
         compFactory(
           for {
@@ -203,7 +231,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               }
         }
 
-      case _ => ???
+      case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented: $e")
     }
 
   def createIfExpr[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(cond: WithSource[parser.Expr], ifBody: WithSource[Vector[WithSource[parser.Stmt]]], elseBody: WithSource[Vector[WithSource[parser.Stmt]]]) =
@@ -760,6 +788,27 @@ object ExpressionConverter {
         newRight <- fillHolesExpr(context)(ts)(right)(newIntType)
       } yield context.typeSystem.PrimitiveOp(context.typeSystem.PrimitiveOperation.AddInt, newLeft, newRight, newIntType)
 
+    case ts.PrimitiveOp(ts.PrimitiveOperation.SubInt, left, right, intType) =>
+      for {
+        newIntType <- fillHolesTypeChildren(context)(ts)(intType)
+        newLeft <- fillHolesExpr(context)(ts)(left)(newIntType)
+        newRight <- fillHolesExpr(context)(ts)(right)(newIntType)
+      } yield context.typeSystem.PrimitiveOp(context.typeSystem.PrimitiveOperation.SubInt, newLeft, newRight, newIntType)
+
+    case ts.PrimitiveOp(ts.PrimitiveOperation.MulInt, left, right, intType) =>
+      for {
+        newIntType <- fillHolesTypeChildren(context)(ts)(intType)
+        newLeft <- fillHolesExpr(context)(ts)(left)(newIntType)
+        newRight <- fillHolesExpr(context)(ts)(right)(newIntType)
+      } yield context.typeSystem.PrimitiveOp(context.typeSystem.PrimitiveOperation.MulInt, newLeft, newRight, newIntType)
+
+    case ts.PrimitiveOp(ts.PrimitiveOperation.IntEqual, left, right, boolType) =>
+      for {
+        newBoolType <- fillHolesTypeChildren(context)(ts)(boolType)
+        newLeft <- fillHolesExprChildren(context)(ts)(left)
+        newRight <- fillHolesExprChildren(context)(ts)(right)
+      } yield context.typeSystem.PrimitiveOp(context.typeSystem.PrimitiveOperation.IntEqual, newLeft, newRight, newBoolType)
+
     case ts.FunctionCall(function, args, _) =>
       for {
         sig <- tcInstance.fromContextComp(context)(function.value.signature)
@@ -776,6 +825,13 @@ object ExpressionConverter {
 
         newArgs <- fillHolesExpr(context)(ts)(args)(newFuncType.argumentType)
       } yield context.typeSystem.FunctionObjectCall(newFuncExpr, newArgs, newFuncType.resultType)
+
+    case ts.IfElse(condition, ifBody, elseBody) =>
+      for {
+        newCondition <- fillHolesExprChildren(context)(ts)(condition)
+        newIfBody <- fillHolesExprChildren(context)(ts)(ifBody)
+        newElseBody <- fillHolesExprChildren(context)(ts)(elseBody)
+      } yield context.typeSystem.IfElse(newCondition, newIfBody, newElseBody)
 
     case ts.LetBinding(variable, value, next) =>
       for {

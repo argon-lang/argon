@@ -132,6 +132,22 @@ final class JSEmitter {
           }
         } yield declStmt +: nextStmts
 
+      case context.typeSystem.IfElse(condition, ifBody, elseBody) =>
+        for {
+          condExpr <- convertExpr(condition)
+          ifBodyStmts <- convertStmt(ifBody)
+          elseBodyStmts <- convertStmt(elseBody)
+
+          accessNativeBool = JSPropertyAccessBracket(
+            condExpr,
+            JSPropertyAccessDot(
+              JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
+              JSIdentifier("boolValueSymbol")
+            )
+          )
+        } yield Vector(JSIfElseStatement(accessNativeBool, ifBodyStmts, elseBodyStmts))
+
+
       case _ => convertExpr(expr).map(jsExpr => Vector(JSReturn(jsExpr)))
     }
 
@@ -171,6 +187,9 @@ final class JSEmitter {
             jsFunc <- convertExpr(funcExpr)
             jsArg <- convertExpr(arg)
           } yield JSFunctionCall(jsFunc, Vector(jsArg))
+
+        case IfElse(_, _, _) =>
+          wrapStatement(expr)
 
         case LetBinding(_, _, _) =>
           wrapStatement(expr)
@@ -244,19 +263,24 @@ final class JSEmitter {
           } yield JSFunctionCall(methodExpr, argExprs)
 
 
-        case PrimitiveOp(PrimitiveOperation.AddInt, left, right, _) =>
+        case PrimitiveOp(op, left, right, _) =>
           for {
             leftExpr <- convertExpr(left)
             rightExpr <- convertExpr(right)
           } yield JSFunctionCall(
             JSPropertyAccessDot(
               JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
-              JSIdentifier("addInt")
+              JSIdentifier(op match {
+                case PrimitiveOperation.AddInt => "addInt"
+                case PrimitiveOperation.SubInt => "subInt"
+                case PrimitiveOperation.MulInt => "mulInt"
+                case PrimitiveOperation.IntEqual => "intEqual"
+              })
             ),
             Vector(leftExpr, rightExpr)
           )
 
-        case _ => ???
+        case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
       }
     }
 
