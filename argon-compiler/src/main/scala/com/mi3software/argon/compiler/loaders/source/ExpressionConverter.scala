@@ -774,6 +774,13 @@ object ExpressionConverter {
         newStringType <- fillHolesTypeChildren(context)(ts)(stringType)
       } yield context.typeSystem.LoadConstantString(str, newStringType)
 
+    case ts.LoadLambda(argVariable, body) =>
+      for {
+        newVarType <- fillHolesTypeChildren(context)(ts)(argVariable.varType)
+        newVar = context.typeSystem.Variable(argVariable.descriptor, argVariable.name, argVariable.mutability, newVarType)
+        newBody <- fillHolesExprChildren(context)(ts)(body)
+      } yield context.typeSystem.LoadLambda(newVar, newBody)
+
     case t: ts.LoadTuple =>
       for {
         elems <- t.values.traverse { elem =>

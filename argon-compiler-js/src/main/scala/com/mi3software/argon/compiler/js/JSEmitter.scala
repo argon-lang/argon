@@ -193,6 +193,14 @@ final class JSEmitter {
             Vector(JSString(str))
           ).point[TComp]
 
+        case LoadLambda(argVariable, body) =>
+          for {
+            bodyExpr <- convertExpr(body)
+          } yield JSArrowFunctionExpr(
+            JSFunctionParameter(JSBindingIdentifier(getVariableName(argVariable.descriptor)), JSFunctionEmptyParameterList),
+            bodyExpr
+          )
+
         case expr: LoadTuple =>
           for {
             values <- expr.values.toVector.traverse { elem => convertExpr(elem.value) }

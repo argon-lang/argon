@@ -57,6 +57,7 @@ final case class JSString(value: String) extends JSExpression
 final case class JSBigInt(value: BigInt) extends JSExpression
 final case class JSFunctionCall(function: JSExpression, args: Vector[JSExpression]) extends JSExpression
 final case class JSFunctionExpression(name: Option[JSIdentifier], parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSExpression
+final case class JSArrowFunctionExpr(parameters: JSFunctionParameterList, body: JSExpression) extends JSExpression
 final case class JSArrayLiteral(values: Vector[JSExpression]) extends JSExpression
 
 case object JSNull extends JSExpression
@@ -240,6 +241,13 @@ object JSAst {
           writer.print("){")
           body.foreach(writeStatement)
           writer.print("}")
+
+        case JSArrowFunctionExpr(parameters, body) =>
+          writer.print("(")
+          writeParameterList(parameters)
+          writer.print(") => ")
+          writeExprParen(body)
+
 
         case JSArrayLiteral(values) =>
           writer.print("[")
