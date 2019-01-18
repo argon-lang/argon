@@ -424,14 +424,16 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def signatureFactory[TComp[_] : TypeCheck, TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
   (env: Env)
   (location: SourceLocation)
-  (signature: Signature[TResult])
+  (fullSignature: Signature[TResult])
   (f: (Vector[ArExpr], TResult[context.type, typeSystem.type]) => TComp[ArExpr])
   : ExprFactory[TComp] = {
 
     final class SigFactory(env: Env)(signature: Signature[TResult])(prevArgs: Vector[ArExpr]) extends ExprFactory[TComp] {
       override def forExpectedType(expectedType: TType): TComp[ArExpr] =
         signature.visit(
-          sigParams => ???,
+          sigParams => partiallyApply(env, prevArgs, Vector(), fullSignature, identity).flatMap { expr =>
+            convertExprType(env)(location)(expr)(expectedType)
+          },
           sigResult =>
             f(prevArgs, sigResult.result).flatMap { expr =>
               convertExprType(env)(location)(expr)(expectedType)
@@ -451,7 +453,29 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         )
     }
 
-    new SigFactory(env)(signature)(Vector.empty)
+    def partiallyApply(env: Env, prevArgs: Vector[ArExpr], argVariables: Vector[ArExpr], signature: Signature[TResult], wrapInLambda: ArExpr => ArExpr): TComp[ArExpr] =
+      signature.visit(
+        sigParams => prevArgs match {
+          case Vector() =>
+            val newVar = Variable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+            val env2 = env.copy(scope = env.scope.addVariable(newVar))
+            val newVarExpr = LoadVariable(newVar)
+            sigParams.next(newVarExpr).flatMap { nextSig =>
+              partiallyApply(env2, prevArgs, argVariables :+ newVarExpr, nextSig, inner => wrapInLambda(LoadLambda(newVar, inner)))
+            }
+
+          case head +: tail =>
+            val newVar = Variable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+            val env2 = env.copy(scope = env.scope.addVariable(newVar))
+            val newVarExpr = LoadVariable(newVar)
+            sigParams.next(newVarExpr).flatMap { nextSig =>
+              partiallyApply(env2, tail, argVariables :+ newVarExpr, nextSig, inner => wrapInLambda(LetBinding(newVar, head, inner)))
+            }
+        },
+        sigResult => f(argVariables, sigResult.result).map(wrapInLambda)
+      )
+
+    new SigFactory(env)(fullSignature)(Vector.empty)
   }
 
   def convertSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
@@ -694,7 +718,7 @@ object ExpressionConverter {
     stInfo <- context.typeSystem.isSubType(convExpr.exprType, expectedType)
     _ <- stInfo match {
       case Some(_) => ().point[TComp]
-      case None => ???
+      case None => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(context.typeSystem)(convExpr.exprType, expectedType)(???))
     }
   } yield convExpr
 
@@ -822,6 +846,14 @@ object ExpressionConverter {
         newArgType <- fillHolesTypeChildren(context)(ts)(argumentType)
         newResultType <- fillHolesTypeChildren(context)(ts)(resultType)
       } yield context.typeSystem.FunctionType(newArgType, newResultType)
+
+    case t: ts.LoadTupleType =>
+      t.typeValues
+        .traverse1 { case ts.TupleElement(elemType) =>
+            fillHolesTypeChildren(context)(ts)(elemType)
+              .map(context.typeSystem.TupleElement(_))
+        }
+        .map(context.typeSystem.LoadTupleType(_))
 
     case _ => ???
   }
