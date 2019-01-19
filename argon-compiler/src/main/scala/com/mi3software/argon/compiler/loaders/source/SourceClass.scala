@@ -6,9 +6,10 @@ import com.mi3software.argon.compiler.core.{ArClass, _}
 import com.mi3software.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import com.mi3software.argon.parser
 import com.mi3software.argon.parser.ClassDeclarationStmt
-import com.mi3software.argon.util.WithSource
+import com.mi3software.argon.util.{SourceLocation, WithSource}
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 
 private[compiler] object SourceClass extends AccessModifierHelpers {
 
@@ -30,6 +31,8 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
   (stmt: ClassDeclarationStmt)
   (desc: ClassDescriptor)
   : TComp[ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier]] = for {
+    sigCache <- Compilation[TComp].createCache[context2.signatureContext.Signature[ArClass.ResultInfo]]
+
     groupedStaticCache <- Compilation[TComp].createCache[GroupedStaticStatements]
     groupedInstCache <- Compilation[TComp].createCache[GroupedInstanceStatements]
 
@@ -85,7 +88,12 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         }
       )
 
-    override val signature: TComp[Signature[ArClass.ResultInfo]] = ??? : TComp[Signature[ArClass.ResultInfo]]
+    override val signature: TComp[Signature[ArClass.ResultInfo]] =
+      sigCache(
+        SourceSignatureCreator.fromParameters[TComp, ArClass.ResultInfo](context2)(
+          env(context)(EffectInfo.pure, descriptor)
+        )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType))
+      )
 
     override val fields: TComp[Vector[context.typeSystem.Variable[FieldDescriptor]]] =
       fieldCache(groupedInst.flatMap { inst =>
@@ -142,6 +150,42 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     } yield ???
 
     override val payload: Unit = ()
+  }
+
+  def resultCreator(baseTypeExpr: WithSource[parser.Expr]): ResultCreator[ArClass.ResultInfo] =  new ResultCreator[ArClass.ResultInfo] {
+    override def createResult[TComp[+ _] : Compilation]
+    (context: ContextComp[TComp])
+    (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
+    : TComp[ArClass.ResultInfo[context.type, context.typeSystem.type]] =
+      ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
+        .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoClass(None, Vector())))
+        .map { baseTypes => ArClass.ResultInfo(context.typeSystem)(baseTypes) }
+
+    private def typeToBaseTypes[TComp[+ _] : Compilation]
+    (context: ContextComp[TComp])
+    (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
+    (t: context.typeSystem.TType)
+    (location: SourceLocation)
+    (acc: context.typeSystem.BaseTypeInfoClass)
+    : TComp[context.typeSystem.BaseTypeInfoClass] =
+      t match {
+        case t: context.typeSystem.ClassType =>
+          if(acc.baseClass.isDefined)
+            Compilation[TComp].forErrors(CompilationError.MultipleBaseClasses(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          else
+            acc.copy(baseClass = Some(t)).point[TComp]
+
+        case t: context.typeSystem.TraitType =>
+          acc.copy(baseTraits = acc.baseTraits :+ t).point[TComp]
+
+        case context.typeSystem.IntersectionType(first, second) =>
+          typeToBaseTypes(context)(env)(first)(location)(acc).flatMap { acc2 =>
+            typeToBaseTypes(context)(env)(second)(location)(acc2)
+          }
+
+        case _ =>
+          Compilation[TComp].forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+      }
   }
 
 }

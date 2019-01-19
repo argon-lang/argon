@@ -329,6 +329,14 @@ object CompilationError {
     override def message: String = s"Non abstract method must have an implementation."
   }
 
+  final case class InvalidBaseType(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Type is not valid as a base type."
+  }
+
+  final case class MultipleBaseClasses(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Class has multiple base classes."
+  }
+
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context
     val typeSystem: TypeSystem[context.type]
