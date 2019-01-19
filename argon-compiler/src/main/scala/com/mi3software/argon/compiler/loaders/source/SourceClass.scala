@@ -126,8 +126,11 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
               case None => MemberName.Unnamed(i)
             }
 
-            val desc = MethodDescriptor(descriptor, memberName, modifiers)
-            SourceMethod(context)(env)(method.value, method.location)(desc)
+            fields.flatMap { fieldVars =>
+              val env2 = env.addVariables(context)(fieldVars)
+              val desc = MethodDescriptor(descriptor, memberName, modifiers)
+              SourceMethod(context)(env2)(method.value, method.location)(desc)
+            }
           }
         }
       })

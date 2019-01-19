@@ -203,7 +203,13 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
               )
 
               baseCallExpr.args.traverse(convertExpr(ctor.descriptor)(_)).map { argExprs =>
-                JSNewCall(JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")), baseCtorSymbol +: argExprs)
+                JSFunctionCall(
+                  JSPropertyAccessDot(
+                    JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")),
+                    JSIdentifier("call")
+                  ),
+                  JSThis +: baseCtorSymbol +: argExprs
+                )
               }
             }
 
@@ -277,6 +283,12 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
       } yield Vector(JSIfElseStatement(accessNativeBool, ifBodyStmts, elseBodyStmts))
 
 
+    case context.typeSystem.Sequence(first, second) =>
+      for {
+        convFirst <- wrapStatement(owner)(first)
+        convSecond <- convertStmt(owner)(useReturn)(second)
+      } yield convFirst +: convSecond
+
     case _ =>
       if(useReturn) convertExpr(owner)(expr).map { jsExpr => Vector(JSReturn(jsExpr)) }
       else convertExpr(owner)(expr).map { jsExpr => Vector(jsExpr) }
@@ -285,6 +297,29 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
   def convertExpr(owner: ParameterOwnerDescriptor)(expr: context.typeSystem.ArExpr): TComp[JSExpression] = {
     import context.typeSystem. { context => _, _ }
     expr match {
+      case ClassConstructorCall(classType, ctor, args) =>
+        for {
+          sig <- ctor.value.signature
+
+          ownerObj = getClassJSObject(getParamOwnerModule(owner), ctor.value.descriptor.ownerClass)
+          descriptorId = DescriptorId.forClassConstructor(ErasedSignature.fromSignatureParameters(context)(sig))
+
+          baseCtorSymbol = JSPropertyAccessDot(
+            JSPropertyAccessBracket(
+              JSPropertyAccessDot(
+                ownerObj,
+                constructorsPropName
+              ),
+              JSString(descriptorId)
+            ),
+            JSIdentifier("symbol")
+          )
+
+          argExprs <- args.traverse(convertExpr(ctor.value.descriptor)(_))
+
+        } yield JSNewCall(JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")), baseCtorSymbol +: argExprs)
+
+
       case FunctionCall(func, args, _) =>
         for {
           sig <- func.value.signature
@@ -410,6 +445,9 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           ),
           Vector(leftExpr, rightExpr)
         )
+
+      case e @ Sequence(_, _) =>
+        wrapStatement(owner)(e)
 
       case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
     }

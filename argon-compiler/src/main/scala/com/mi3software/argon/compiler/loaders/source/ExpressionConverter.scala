@@ -617,6 +617,8 @@ object ExpressionConverter {
   trait EnvCreator[TContext <: Context with Singleton] {
     def apply(context: TContext)(effectInfo: EffectInfo, descriptor: VariableOwnerDescriptor): Env[context.type, context.scopeContext.Scope]
 
+    def addVariables(context: TContext)(variables: Vector[context.typeSystem.Variable[VariableLikeDescriptor]]): EnvCreator[TContext]
+
     val fileSpec: FileSpec
   }
 
@@ -920,6 +922,12 @@ object ExpressionConverter {
         sig <- tcInstance.fromContextComp(context)(method.value.signature)
         (newArgs, result) <- fillSignatureArgs(context)(ts)(sig)(args)
       } yield context.typeSystem.MethodCall(method, newInstance, newArgs, result.returnType)
+
+    case ts.Sequence(first, second) =>
+      for {
+        newFirst <- fillHolesExprChildren(context)(ts)(first)
+        newSecond <- fillHolesExprChildren(context)(ts)(second)
+      } yield context.typeSystem.Sequence(newFirst, newSecond)
 
     case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
   }

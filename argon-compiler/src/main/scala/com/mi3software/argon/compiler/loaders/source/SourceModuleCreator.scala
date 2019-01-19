@@ -59,9 +59,11 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
   (referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
   : TComp[ModuleElement[context2.type, DeclarationPayloadSpecifier]] =
-    for {
-      scope <- createScope[TComp](context2)(currentModule)(referencedModules)(sourceAST)
-      envF = (envFileSpec: FileSpec) => new EnvCreator[context2.type] {
+    createScope[TComp](context2)(currentModule)(referencedModules)(sourceAST).flatMap { scope =>
+
+      import context2.scopeContext.ScopeExtensions
+
+      final class EnvCreatorInstance(envFileSpec: FileSpec, scope: context2.scopeContext.Scope) extends EnvCreator[context2.type] {
         override def apply(context: context2.type)(effectInfo: EffectInfo, descriptor: VariableOwnerDescriptor): ExpressionConverter.Env[context.type, context.scopeContext.Scope] =
           ExpressionConverter.Env(
             effectInfo = effectInfo,
@@ -72,10 +74,18 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
             scope = scope,
           )
 
+
+        override def addVariables(context: context2.type)(variables: Vector[context.typeSystem.Variable[VariableLikeDescriptor]]): EnvCreator[context2.type] =
+          new EnvCreatorInstance(envFileSpec, scope.addVariables(variables))
+
         override val fileSpec: FileSpec = envFileSpec
       }
-      binding <- createNamespaceElementFromASTWithScope[TComp](context2)(options)(envF)(sourceAST)
-    } yield ModuleElement(sourceAST.currentNamespace, binding)
+
+      val envF = (envFileSpec: FileSpec) => new EnvCreatorInstance(envFileSpec, scope)
+      createNamespaceElementFromASTWithScope[TComp](context2)(options)(envF)(sourceAST).map { binding =>
+        ModuleElement(sourceAST.currentNamespace, binding)
+      }
+    }
 
   private def createScope[TComp[+_] : Compilation]
   (context: ContextComp[TComp])
