@@ -210,6 +210,20 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final case class BaseTypeInfoClass(baseClass: Option[ClassType], baseTraits: Vector[TraitType])
 
 
+  sealed trait ClassConstructorStatement
+  final case class ClassConstructorStatementExpr(expr: ArExpr) extends ClassConstructorStatement
+  final case class InitializeFieldStatement(field: Variable[FieldDescriptor], value: ArExpr) extends ClassConstructorStatement
+
+  final case class ClassConstructorBody
+  (
+    initStatements: Vector[ClassConstructorStatement],
+    baseConstructorCall: Option[ClassConstructorCall],
+    endExpr: ArExpr,
+  )
+
+
+
+
 
   protected final def isSimpleSubType[F[_] : Compilation](a: SimpleType, b: SimpleType): F[Option[TSubTypeInfo]] = {
 

@@ -54,7 +54,7 @@ final case class MethodDeclarationStmt
 final case class ClassConstructorDeclarationStmt
 (
   parameters: Vector[WithSource[FunctionParameterList]],
-  body: WithSource[Seq[WithSource[Stmt]]],
+  body: WithSource[Vector[WithSource[Stmt]]],
   modifiers: Vector[WithSource[Modifier]]
 ) extends Stmt
 final case class VariableDeclarationStmt

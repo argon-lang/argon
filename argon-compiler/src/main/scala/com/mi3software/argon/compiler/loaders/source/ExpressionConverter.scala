@@ -11,7 +11,7 @@ import com.mi3software.argon.util.AnyExtensions._
 import scala.collection.immutable.Set
 import scalaz._
 import Scalaz._
-import PayloadSpecifiers.ReferencePayloadSpecifier
+import PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import com.mi3software.argon.compiler.loaders.source.ExpressionConverter.HoleTypeHole
 import com.mi3software.argon.parser.UnitLiteral
 
@@ -584,6 +584,7 @@ object ExpressionConverter {
     effectInfo: EffectInfo,
     descriptor: VariableOwnerDescriptor,
     fileSpec: FileSpec,
+    currentModule: ArModule[TContext, DeclarationPayloadSpecifier],
     referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]],
     scope: TScope,
   )
@@ -634,6 +635,7 @@ object ExpressionConverter {
       effectInfo = env.effectInfo,
       descriptor = env.descriptor,
       fileSpec = env.fileSpec,
+      currentModule = env.currentModule,
       referencedModules = env.referencedModules,
       scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
     )
@@ -672,6 +674,7 @@ object ExpressionConverter {
       effectInfo = env.effectInfo,
       descriptor = env.descriptor,
       fileSpec = env.fileSpec,
+      currentModule = env.currentModule,
       referencedModules = env.referencedModules,
       scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
     )
@@ -697,6 +700,7 @@ object ExpressionConverter {
       effectInfo = env.effectInfo,
       descriptor = env.descriptor,
       fileSpec = env.fileSpec,
+      currentModule = env.currentModule,
       referencedModules = env.referencedModules,
       scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
     )

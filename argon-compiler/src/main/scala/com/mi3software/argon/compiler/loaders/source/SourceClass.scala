@@ -38,6 +38,8 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
     fieldCache <- Compilation[TComp].createCache[Vector[context2.typeSystem.Variable[FieldDescriptor]]]
     methodCache <- Compilation[TComp].createCache[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]]
+    staticMethodCache <- Compilation[TComp].createCache[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]]
+    classCtorCache <- Compilation[TComp].createCache[Vector[ClassConstructor[context2.type, DeclarationPayloadSpecifier]]]
 
   } yield new ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
     override val context: context2.type = context2
@@ -131,7 +133,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
       })
 
     override val staticMethods: TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]] =
-      methodCache(groupedStatic.flatMap { statics =>
+      staticMethodCache(groupedStatic.flatMap { statics =>
         statics.staticMethods.zipWithIndex.traverse { case (method, i) =>
           parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
             val memberName = method.value.name match {
@@ -145,14 +147,21 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         }
       })
 
-    override val classConstructors: TComp[Vector[ClassConstructor[context2.type, DeclarationPayloadSpecifier]]] = for {
-      statics <- groupedStatic
-    } yield ???
+    override val classConstructors: TComp[Vector[ClassConstructor[context2.type, DeclarationPayloadSpecifier]]] =
+      classCtorCache(groupedStatic.flatMap { statics =>
+        statics.classCtors.traverse { classCtor =>
+          parseAccessModifier(env.fileSpec, classCtor.location, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
+            val desc = ClassConstructorDescriptor(descriptor, modifiers)
+            SourceClassConstructor(context)(env)(this)(classCtor.value)(desc)
+          }
+        }
+      })
+
 
     override val payload: Unit = ()
   }
 
-  def resultCreator(baseTypeExpr: WithSource[parser.Expr]): ResultCreator[ArClass.ResultInfo] =  new ResultCreator[ArClass.ResultInfo] {
+  def resultCreator(baseTypeExpr: WithSource[parser.Expr]): ResultCreator[ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
     override def createResult[TComp[+ _] : Compilation]
     (context: ContextComp[TComp])
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])

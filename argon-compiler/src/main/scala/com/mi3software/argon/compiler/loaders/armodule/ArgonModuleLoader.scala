@@ -4,7 +4,7 @@ import com.mi3software.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpe
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.lookup._
-import com.mi3software.argon.compiler.loaders.{ModuleLoader, NamespaceBuilder}
+import com.mi3software.argon.compiler.loaders.{ModuleLoader, NamespaceBuilder, StandardTypeLoaders}
 import com.mi3software.argon.compiler.types._
 import com.mi3software.argon.{module => ArgonModule}
 import com.mi3software.argon.util._
@@ -67,6 +67,8 @@ object ArgonModuleLoader {
               implicitly[Compilation[TComp]].forErrors(CompilationError.UnsupportedModuleFormatVersion(binModule.formatVersion, CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
             else
               implicitly[Monad[TComp]].point(())
+
+          moduleCache <- Compilation[TComp].createCache[ArModule[context.type, TPayloadSpec]]
 
           module <- new ModuleCreator[context.type, TComp, TPayloadSpec] {
 
@@ -836,25 +838,15 @@ object ArgonModuleLoader {
                 }
                 .flatMap {
                   case Vector() =>
-                    val arCore = ModuleDescriptor(LookupNames.argonCoreLib)
-
                     for {
-                      unitClassOpt <-
-                        if(currentModuleDescriptor === arCore)
-                          module.flatMap { m =>
-                            compEv.flip(ModuleLookup.lookupNamespaceValue(context)(m)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass))
-                              .map { _.map(AbsRef.apply) }
-                          }
-                        else
-                          compEv.flip(ModuleLookup.lookupValue(context)(referencedModules)(arCore)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass))
-                              .map { _.map(AbsRef.apply) }
+                      currentModule <- module
+                      unitType <- compEv.flip(
+                        StandardTypeLoaders.loadUnitType(context)(
+                          CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
+                        )(currentModule)(referencedModules)
+                      )
 
-                      unitClass <- Compilation[TComp].requireSome(
-                        unitClassOpt
-                      )(CompilationError.NamespaceElementNotFound(arCore, NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"), CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
-
-                      unitClassSig <- compEv.flip(unitClass.value.signature)
-                    } yield Parameter(Vector(), context.typeSystem.fromSimpleType(context.typeSystem.ClassType(unitClass, Vector(), unitClassSig.unsubstitutedResult.baseTypes)))
+                    } yield Parameter(Vector(), unitType)
 
 
 
@@ -869,17 +861,19 @@ object ArgonModuleLoader {
                 }
 
             override lazy val module: TComp[ArModule[context.type, TPayloadSpec]] =
-              for {
-                globalNamespaceCache <- Compilation[TComp].createCache[Namespace[context.type, TPayloadSpec]]
-              } yield new ArModule[context.type, TPayloadSpec] {
-                override val context: context2.type = context2
-                override val descriptor: ModuleDescriptor = currentModuleDescriptor
-                override lazy val globalNamespace: context.Comp[Namespace[context.type, TPayloadSpec]] = compEv(globalNamespaceCache(globalNamespaceComp))
-                override val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]] =
-                  refModuleMap.values.collect {
-                    case ModuleReference(moduleRef) => moduleRef
-                  }(collection.breakOut)
-              }
+              moduleCache(
+                for {
+                  globalNamespaceCache <- Compilation[TComp].createCache[Namespace[context.type, TPayloadSpec]]
+                } yield new ArModule[context.type, TPayloadSpec] {
+                  override val context: context2.type = context2
+                  override val descriptor: ModuleDescriptor = currentModuleDescriptor
+                  override lazy val globalNamespace: context.Comp[Namespace[context.type, TPayloadSpec]] = compEv(globalNamespaceCache(globalNamespaceComp))
+                  override val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]] =
+                    refModuleMap.values.collect {
+                      case ModuleReference(moduleRef) => moduleRef
+                    }(collection.breakOut)
+                }
+              )
 
           }.module
 

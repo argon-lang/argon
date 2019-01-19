@@ -337,6 +337,18 @@ object CompilationError {
     override def message: String = s"Class has multiple base classes."
   }
 
+  final case class FieldNotFound(name: String, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"""No field "$name" was found."""
+  }
+
+  final case class BaseConstructorNotCalled(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Base constructor was not called."
+  }
+
+  final case class InvalidBaseConstructorCall(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Invalid base constructor call."
+  }
+
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context
     val typeSystem: TypeSystem[context.type]

@@ -1,20 +1,19 @@
 package com.mi3software.argon.compiler.core
 
 import com.mi3software.argon.compiler._
-import com.mi3software.argon.compiler.types.TypeSystem
+import com.mi3software.argon.compiler.types._
+import scalaz._
+import Scalaz._
 
-sealed trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
+trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
   import context._, signatureContext.Signature
 
   val effectInfo: EffectInfo
-  val accessModifier: AccessModifier
 
   val descriptor: ClassConstructorDescriptor
 
-  val signature: Signature[ClassConstructor.ResultInfo]
-
-  val instanceClass: ArClass[TContext, TPayloadSpec]
+  val signature: context.Comp[Signature[ClassConstructor.ResultInfo]]
 
   val payload: TPayloadSpec[Comp[TClassConstructorImplementation], TClassConstructorMetadata]
 }
@@ -22,5 +21,19 @@ sealed trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
 object ClassConstructor {
 
   final case class ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton]()
+
+  object ResultInfo {
+
+    implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
+      override def convertTypeSystem[F[_]: Monad]
+      (context: Context)
+      (ts1: TypeSystem[context.type])
+      (ts2: TypeSystem[context.type])
+      (converter: TypeSystemConverter[context.type, ts1.type, ts2.type, F])
+      (result: ResultInfo[context.type, ts1.type])
+      : F[ResultInfo[context.type, ts2.type]] =
+        ResultInfo[context.type, ts2.type]().point[F]
+    }
+  }
 
 }

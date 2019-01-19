@@ -67,6 +67,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
             effectInfo = effectInfo,
             descriptor = descriptor,
             fileSpec = fileSpec,
+            currentModule = currentModule,
             referencedModules = referencedModules,
             scope = scope,
           )
