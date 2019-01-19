@@ -72,6 +72,28 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   )
               }.point[TComp]
 
+            case Some(TypeOfType(_)) =>
+              thisExpr match {
+                case t: ClassType =>
+                  memberName match {
+                    case MemberName.New =>
+                      implicitly[TypeCheck[TComp]].fromContextComp(context)(t.arClass.value.classConstructors).flatMap {
+                        case Vector(classCtor) =>
+                          for {
+                            _ <- Compilation[TComp].require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                            sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(classCtor.signature)
+                            convSig = convertSignature(sig)
+                          } yield signatureFactory(env)(location)(convSig) { (args, result) => ClassConstructorCall(t, AbsRef(classCtor), args).upcast[ArExpr].point[TComp] }
+
+                        case _ => ???
+                      }
+
+                    case _ => ???
+                  }
+
+                case _ => ???
+              }
+
             case _ => ???
           }
         }
@@ -134,6 +156,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             boolType <- resolveBoolClass(env)(expr.location)
           } yield factoryForExpr(env)(expr.location)(LoadConstantBool(b, boolType))
         )
+
+      case parser.ClassConstructorExpr(classExpr) =>
+        convertExpr(env)(classExpr).memberAccessExpr(MemberName.New, env, expr.location)
 
       case parser.DotExpr(obj, member) =>
         convertExpr(env)(obj).memberAccessExpr(MemberName.Normal(member), env, expr.location)
@@ -769,7 +794,7 @@ object ExpressionConverter {
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
   : TComp[context.typeSystem.ArExpr] = for {
     convExpr <- fillHolesExprChildren(context)(ts)(expr)
-    stInfo <- context.typeSystem.isSubType(convExpr.exprType, expectedType)
+    stInfo <- context.typeSystem.isSubType(expectedType, convExpr.exprType)
     _ <- stInfo match {
       case Some(_) => ().point[TComp]
       case None => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(context.typeSystem)(convExpr.exprType, expectedType)(???))
@@ -784,6 +809,13 @@ object ExpressionConverter {
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
   : TComp[context.typeSystem.ArExpr] = expr match {
     case t: ts.SimpleType => fillHolesSimpleTypeChildren(context)(ts)(t).map(identity)
+
+    case ts.ClassConstructorCall(classType, ctor, args) =>
+      for {
+        newClassType <-  fillHolesClassType(context)(ts)(classType)
+        sig <- tcInstance.fromContextComp(context)(ctor.value.signature)
+        (newArgs, _) <- fillSignatureArgs(context)(ts)(sig)(args)
+      } yield context.typeSystem.ClassConstructorCall(newClassType, ctor, newArgs)
 
     case ts.PrimitiveOp(ts.PrimitiveOperation.AddInt, left, right, intType) =>
       for {
@@ -924,11 +956,7 @@ object ExpressionConverter {
   (t: ts.SimpleType)
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
   : TComp[context.typeSystem.SimpleType] = t match {
-    case ts.ClassType(arClass, args, baseTypes) =>
-      for {
-        sig <- tcInstance.fromContextComp(context)(arClass.value.signature)
-        (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(args)
-      } yield context.typeSystem.ClassType(arClass, filledArgs, resultInfo.baseTypes)
+    case t: ts.ClassType => fillHolesClassType(context)(ts)(t).map(identity)
 
     case ts.TraitType(arTrait, args, baseTypes) =>
       for {
@@ -952,6 +980,17 @@ object ExpressionConverter {
 
     case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
   }
+
+  private def fillHolesClassType[TComp[_]]
+  (context: Context)
+  (ts: HoleTypeSystem[context.type])
+  (t: ts.ClassType)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[context.typeSystem.ClassType] =
+    for {
+      sig <- tcInstance.fromContextComp(context)(t.arClass.value.signature)
+      (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(t.args)
+    } yield context.typeSystem.ClassType(t.arClass, filledArgs, resultInfo.baseTypes)
 
   private def fillSignatureArgs[TComp[_], TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
   (context: Context)

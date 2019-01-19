@@ -61,7 +61,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
     val universe: Universe
   }
 
-  final case class ClassConstructorCall(classType: ClassType, classCtor: AbsRef[context.type, ClassConstructor], args: Vector[TType]) extends ArExpr {
+  final case class ClassConstructorCall(classType: ClassType, classCtor: AbsRef[context.type, ClassConstructor], args: Vector[ArExpr]) extends ArExpr {
     override val exprType: TType = fromSimpleType(classType)
     override val universe: Universe = ValueUniverse
   }
@@ -491,7 +491,7 @@ object TypeSystem {
     case ts.ClassConstructorCall(classType, classCtor, args) =>
       for {
         newClassType <- convertClassType(context)(ts)(otherTS)(converter)(classType)
-        newArgs <- args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+        newArgs <- args.traverse(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
       } yield otherTS.ClassConstructorCall(newClassType, classCtor, newArgs)
 
     case expr: ts.LoadTuple =>

@@ -8,18 +8,23 @@
         import Ar._
         
         abstract open class A <: Object
-
+        static
             public new()
             end
+
+        instance
 
             public abstract proc self.say_hello(): Unit
         end
 
         class B <: A
+        static
 
             public new()
                 initialize _ = A.new()
             end
+
+        instance
 
             public override proc self.say_hello(): Unit do
                 puts 'Hello World'
