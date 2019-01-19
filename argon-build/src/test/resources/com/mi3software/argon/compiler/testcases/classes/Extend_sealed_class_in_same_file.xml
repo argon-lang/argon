@@ -7,10 +7,10 @@
             
         import Ar._
         
-        sealed open class ClassA <: Any
+        sealed open class ClassA <: Object
         end
         
-        class ClassB <: Any & ClassA
+        class ClassB <: Object & ClassA
         end
         
         proc main(): Unit = ()

@@ -6,7 +6,7 @@
 
         import Ar._
 
-        class MyClass <: Any
+        class MyClass <: Object
         static
             private proc self.say_hello(): Unit do
                 puts 'Hello World'

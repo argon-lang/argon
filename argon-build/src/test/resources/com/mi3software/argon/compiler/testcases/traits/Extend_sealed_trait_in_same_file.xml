@@ -7,10 +7,10 @@
             
         import Ar._
         
-        sealed trait TraitA <: Any
+        sealed trait TraitA <: Object
         end
         
-        trait TraitB <: Any & TraitA
+        trait TraitB <: Object & TraitA
         end
         
         proc main(): Unit = ()

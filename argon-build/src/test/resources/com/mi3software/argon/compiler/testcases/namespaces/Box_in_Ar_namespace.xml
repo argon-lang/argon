@@ -7,7 +7,7 @@
 
         namespace Ar
 
-        trait ValueBox(T: type) <: Any
+        trait ValueBox(T: type) <: Object
             public abstract def _.value: T
         end
         

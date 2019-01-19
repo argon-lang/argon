@@ -6,7 +6,7 @@
 
         import Ar._
 
-        sealed open class ClassA <: Any
+        sealed open class ClassA <: Object
         end
 
         proc main(): Unit = ()
@@ -17,7 +17,7 @@
         
         import Ar._
 
-        class ClassB <: Any & ClassA
+        class ClassB <: Object & ClassA
         end
 
     ]]></InputSource>

@@ -20,7 +20,7 @@ end
     <InputSource name="Option.argon"><![CDATA[
         namespace Ar
 
-        public sealed trait Option(T: type) <: Any
+        public sealed trait Option(T: type) <: Object
 
             public abstract def _.map(U: type)(f1: T -> U): Option U
             public abstract def _.getOrElse(f2: Unit -> T): T

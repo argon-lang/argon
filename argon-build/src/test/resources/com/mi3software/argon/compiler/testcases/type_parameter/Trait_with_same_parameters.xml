@@ -7,7 +7,7 @@
             
         import Ar._
         
-        trait MyTrait(T: type) <: Any
+        trait MyTrait(T: type) <: Object
         end
         
         def myFunc(a: MyTrait Int): MyTrait Int =

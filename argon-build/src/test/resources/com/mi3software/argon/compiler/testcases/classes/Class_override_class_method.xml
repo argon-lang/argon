@@ -7,7 +7,7 @@
             
         import Ar._
 
-        open class A <: Any
+        open class A <: Object
 
             public new()
             end

@@ -7,7 +7,7 @@
             
         import Ar._
 
-        proc checkForType(T: type)(value: Any): Unit =
+        proc checkForType(T: type)(value: Object): Unit =
             match value
             case val t: T =
                 puts 'Matched'
@@ -15,7 +15,7 @@
                 puts 'Not matched'
             end
 
-        trait A <: Any
+        trait A <: Object
         end
         trait B(T: type) <: A
             public abstract def _.value: T

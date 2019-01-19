@@ -930,6 +930,12 @@ object ExpressionConverter {
         (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(args)
       } yield context.typeSystem.ClassType(arClass, filledArgs, resultInfo.baseTypes)
 
+    case ts.TraitType(arTrait, args, baseTypes) =>
+      for {
+        sig <- tcInstance.fromContextComp(context)(arTrait.value.signature)
+        (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(args)
+      } yield context.typeSystem.TraitType(arTrait, filledArgs, resultInfo.baseTypes)
+
     case ts.FunctionType(argumentType, resultType) =>
       for {
         newArgType <- fillHolesTypeChildren(context)(ts)(argumentType)
@@ -944,7 +950,7 @@ object ExpressionConverter {
         }
         .map(context.typeSystem.LoadTupleType(_))
 
-    case _ => ???
+    case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
   }
 
   private def fillSignatureArgs[TComp[_], TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]

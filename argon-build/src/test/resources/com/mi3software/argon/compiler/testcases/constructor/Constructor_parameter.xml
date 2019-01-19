@@ -7,7 +7,7 @@
             
         import Ar._
         
-        trait MyType <: Any
+        trait MyType <: Object
             public abstract proc self.say_message(): Unit
         end
         

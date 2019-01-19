@@ -7,7 +7,7 @@
             
         import Ar._
 
-        trait A <: Any
+        trait A <: Object
         end
         trait B(T: type) <: A
             public abstract def _.value: T

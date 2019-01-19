@@ -7,7 +7,7 @@
             
         import Ar._
         
-        trait Test <: Any
+        trait Test <: Object
         static
             public proc _.printStringLike (T: type <: String) (strLike: T): Unit =
                 puts strLike

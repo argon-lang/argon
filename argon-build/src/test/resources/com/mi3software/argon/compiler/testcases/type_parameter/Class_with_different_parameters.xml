@@ -6,7 +6,7 @@
 
         import Ar._
 
-        class MyClass(T: type) <: Any
+        class MyClass(T: type) <: Object
         end
 
         def myFunc(a: MyClass Int): MyClass String =

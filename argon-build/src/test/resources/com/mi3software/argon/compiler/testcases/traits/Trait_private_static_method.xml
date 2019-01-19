@@ -6,7 +6,7 @@
 
         import Ar._
 
-        trait MyTrait <: Any
+        trait MyTrait <: Object
         static
             private proc self.say_hello(): Unit do
                 puts 'Hello World'

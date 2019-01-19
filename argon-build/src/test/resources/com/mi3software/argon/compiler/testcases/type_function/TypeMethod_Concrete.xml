@@ -7,7 +7,7 @@
             
         import Ar._
 
-        class A <: Any
+        class A <: Object
 
             public def _.withInt(T: type): (T, Int).type = T, Int
 

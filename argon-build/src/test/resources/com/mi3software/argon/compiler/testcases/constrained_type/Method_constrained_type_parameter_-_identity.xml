@@ -7,7 +7,7 @@
             
         import Ar._
         
-        trait Test <: Any
+        trait Test <: Object
         static
             public proc _.identity (T: type) (value: T): T =
                 value

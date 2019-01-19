@@ -7,10 +7,10 @@
             
         import Ar._
         
-        class ClassA <: Any
+        class ClassA <: Object
         end
         
-        class ClassB <: Any & ClassA
+        class ClassB <: Object & ClassA
         end
         
         proc main(): Unit = ()

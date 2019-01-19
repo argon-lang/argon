@@ -6,7 +6,7 @@
 
         import Ar._
 
-        sealed trait TraitA <: Any
+        sealed trait TraitA <: Object
         end
 
         proc main(): Unit = ()
@@ -17,7 +17,7 @@
         
         import Ar._
 
-        trait TraitB <: Any & TraitA
+        trait TraitB <: Object & TraitA
         end
 
     ]]></InputSource>

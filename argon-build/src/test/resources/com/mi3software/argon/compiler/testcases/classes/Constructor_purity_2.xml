@@ -9,7 +9,7 @@
 
         proc zero(): Int = 0
 
-        class A <: Any
+        class A <: Object
 
             public new(a: Int)
             end
