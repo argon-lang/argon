@@ -28,7 +28,7 @@ final case class ClassDeclarationStmt
   baseType: WithSource[Expr],
   name: Option[String],
   parameters: Vector[WithSource[FunctionParameterList]],
-  body: Seq[WithSource[Stmt]],
+  body: Vector[WithSource[Stmt]],
   instanceBody: Vector[WithSource[Stmt]],
   modifiers: Vector[WithSource[Modifier]]
 ) extends Stmt

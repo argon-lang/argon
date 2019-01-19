@@ -317,6 +317,10 @@ object CompilationError {
     override def message: String = s"Parameter '$paramName' is missing a type annotation."
   }
 
+  final case class UnexpectedStatement(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Unexpected statement."
+  }
+
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context
     val typeSystem: TypeSystem[context.type]

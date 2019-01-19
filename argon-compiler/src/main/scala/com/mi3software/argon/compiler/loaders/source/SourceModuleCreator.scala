@@ -105,8 +105,8 @@ private[compiler] object SourceModuleCreator {
 
     val env = envF(sourceAST.fileSpec)
 
-    def createBinding(name: String, modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => GlobalBinding[context.type, DeclarationPayloadSpecifier]): TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
-      parseGlobalAccessModifier[TComp](sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).map { accessModifier =>
+    def createBinding(name: String, modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
+      parseGlobalAccessModifier[TComp](sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
         val globalName = GlobalName.Normal(name)
         f(globalName, accessModifier)
       }
@@ -119,7 +119,16 @@ private[compiler] object SourceModuleCreator {
           GlobalBinding.GlobalTrait(
             globalName, accessModifier,
             SourceTrait[TComp](context)(env)(traitDeclarationStmt)(desc)
-          )
+          ).point[TComp]
+        }
+
+      case classDeclarationStmt @ parser.ClassDeclarationStmt(baseType, Some(className), parameters, body, instanceBody, modifiers) =>
+        createBinding(className, modifiers) { (globalName, accessModifier) =>
+          val desc = ClassDescriptor.InNamespace(options.moduleDescriptor, sourceAST.currentNamespace, globalName, accessModifier)
+
+          for {
+            arClass <- SourceClass[TComp](context)(env)(classDeclarationStmt)(desc)
+          } yield GlobalBinding.GlobalClass(globalName, accessModifier, arClass)
         }
 
       case funcDeclarationStmt @ parser.FunctionDeclarationStmt(Some(funcName), _, _, _, modifiers, _) =>
@@ -129,7 +138,7 @@ private[compiler] object SourceModuleCreator {
           GlobalBinding.GlobalFunction(
             globalName, accessModifier,
             SourceFunction[TComp](context)(env)(funcDeclarationStmt)(desc)
-          )
+          ).point[TComp]
         }
 
       case _ => ???
