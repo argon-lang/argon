@@ -108,52 +108,12 @@ export const boolValueSymbol = Symbol();
 
 traits["Ar.Object"] = createTrait({});
 
-classes["Ar.Object[TraitMetaClass]"] = createClass({
-	get baseClass() { return classes["Ar.Trait"]; },
-});
-
-classes["Ar.Type"] = createClass({
-	get baseTraits() { return [ traits["Ar.Object"] ]; },
-});
-
-classes["Ar.Type[MetaClass]"] = createClass({
-	get baseClass() { return classes["Ar.Class"]; },
-});
-
-classes["Ar.MetaClass"] = createClass({
-	get baseTraits() { return classes["Ar.Class"]; },
-});
-
-classes["Ar.Trait"] = createClass({
-	get baseClass() { return classes["Ar.Type"]; },
-});
-
-classes["Ar.Trait[MetaClass]"] = createClass({
-	get baseClass() { return classes["Ar.Class"]; },
-});
-
-classes["Ar.Class"] = createClass({
-	get baseClass() { return classes["Ar.Type"]; },
-});
-
-classes["Ar.Class[MetaClass]"] = createClass({
-	get baseClass() { return classes["Ar.Class"]; },
-});
-
 classes["Ar.Unit"] = createClass({
 	get baseTraits() { return [ traits["Ar.Object"] ]; },
 });
 
-classes["Ar.Unit[MetaClass]"] = createClass({
-	get baseClass() { return classes["Ar.Class"]; },
-});
-
 classes["Ar.String"] = createClass({
 	get baseTraits() { return [ traits["Ar.Object"] ]; },
-});
-
-classes["Ar.String[MetaClass]"] = createClass({
-	get baseClass() { return classes["Ar.Class"]; },
 });
 
 classes["Ar.Int"] = createClass({
@@ -168,16 +128,8 @@ classes["Ar.Int"] = createClass({
 	],
 });
 
-classes["Ar.Int[MetaClass]"] = createClass({
-	get baseClass() { return classes["Ar.Class"]; },
-});
-
 classes["Ar.Bool"] = createClass({
 	get baseTraits() { return [ traits["Ar.Object"] ]; },
-});
-
-classes["Ar.Bool[MetaClass]"] = createClass({
-	get baseClass() { return classes["Ar.Class"]; },
 });
 
 functions["Ar.puts:($_:(Ar.String))->(Ar.Unit)"] = Object.freeze({

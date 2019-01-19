@@ -47,6 +47,7 @@ final case class JSObjectLiteral(members: Vector[JSObjectMember]) extends JSExpr
 
 sealed trait JSObjectMember
 final case class JSObjectProperty(name: String, value: JSExpression) extends JSObjectMember
+final case class JSObjectGetProperty(name: String, body: Vector[JSStatement]) extends JSObjectMember
 final case class JSObjectComputedProperty(name: JSExpression, value: JSExpression) extends JSObjectMember
 
 final case class JSIdentifier(id: String) extends JSExpression
@@ -57,8 +58,10 @@ final case class JSPropertyAccessBracket(expr: JSExpression, prop: JSExpression)
 final case class JSString(value: String) extends JSExpression
 final case class JSBigInt(value: BigInt) extends JSExpression
 final case class JSFunctionCall(function: JSExpression, args: Vector[JSExpression]) extends JSExpression
+final case class JSNewCall(function: JSExpression, args: Vector[JSExpression]) extends JSExpression
 final case class JSFunctionExpression(name: Option[JSIdentifier], parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSExpression
 final case class JSArrowFunctionExpr(parameters: JSFunctionParameterList, body: JSExpression) extends JSExpression
+final case class JSArrowFunctionStmts(parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSExpression
 final case class JSArrayLiteral(values: Vector[JSExpression]) extends JSExpression
 
 case object JSNull extends JSExpression
@@ -199,6 +202,12 @@ object JSAst {
               writer.print(":")
               writeExprParen(value)
               writer.print(",")
+            case JSObjectGetProperty(name, value) =>
+              writer.write("get ")
+              writeString(name)
+              writer.print("() {")
+              value.foreach(writeStatement)
+              writer.print("},")
             case JSObjectComputedProperty(name, value) =>
               writer.print("[")
               writeExpr(name)
@@ -243,6 +252,16 @@ object JSAst {
           }
           writer.print(")")
 
+        case JSNewCall(function, args) =>
+          writer.print("new ")
+          writeExprParen(function)
+          writer.print("(")
+          for(arg <- args) {
+            writeExpr(arg)
+            writer.print(",")
+          }
+          writer.print(")")
+
         case JSFunctionExpression(name, parameters, body) =>
           writer.print("function ")
           name.foreach(writeIdentifier)
@@ -257,6 +276,13 @@ object JSAst {
           writeParameterList(parameters)
           writer.print(") => ")
           writeExprParen(body)
+
+        case JSArrowFunctionStmts(parameters, body) =>
+          writer.print("(")
+          writeParameterList(parameters)
+          writer.print(") => {")
+          body.foreach(writeStatement)
+          writer.print("}")
 
 
         case JSArrayLiteral(values) =>

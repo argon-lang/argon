@@ -19,11 +19,11 @@ object JSBackend extends Backend {
 
   override def compile[F[+_], G[_]: Monad, I: Show](input: CompilerInput[I])(implicit comp: CompilationExec[F, G], res: ResourceAccess[F, I]): G[CompilationResult[TCompilationOutput]] = {
     val context = new JSContext[F]
-    val emitter = new JSEmitter
+    val emitter = new JSEmitter[F, context.type](context)
 
     comp.getResult(
       context.createModule(input)
-        .flatMap(emitter.emitModule(context))
+        .flatMap(emitter.emitModule)
         .map(createOutput)
     )
       .map { case (messages, result) =>

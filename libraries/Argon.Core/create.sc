@@ -22,43 +22,6 @@ val Object_descriptor = TraitDescriptor.InNamespace(TraitDescriptorInNamespace(
   AccessModifier.Public,
 ))
 val Object_traitId = 0
-val Object_metaClassId = 0
-
-val Type_fileSpec = FileSpec(fileID = getFileId(), name = "Type.argon")
-val Type_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
-  Type_fileSpec,
-  Ar_ns,
-  GlobalName.NormalName("Type"),
-  AccessModifier.Public,
-))
-val Type_classId = 1
-val Type_metaClassId = 2
-
-val MetaClass_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
-  Type_fileSpec,
-  Ar_ns,
-  GlobalName.NormalName("MetaClass"),
-  AccessModifier.Public,
-))
-val MetaClass_classId = 3
-
-val Trait_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
-  Type_fileSpec,
-  Ar_ns,
-  GlobalName.NormalName("Trait"),
-  AccessModifier.Public,
-))
-val Trait_classId = 4
-val Trait_metaClassId = 5
-
-val Class_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
-  Type_fileSpec,
-  Ar_ns,
-  GlobalName.NormalName("Class"),
-  AccessModifier.Public,
-))
-val Class_classId = 6
-val Class_metaClassId = 7
 
 val Unit_fileSpec = FileSpec(fileID = getFileId(), name = "Unit.argon")
 val Unit_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
@@ -67,8 +30,7 @@ val Unit_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
   GlobalName.NormalName("Unit"),
   AccessModifier.Public,
 ))
-val Unit_classId = 8
-val Unit_metaClassId = 9
+val Unit_classId = 0
 
 val String_fileSpec = FileSpec(fileID = getFileId(), name = "String.argon")
 val String_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
@@ -77,8 +39,7 @@ val String_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
   GlobalName.NormalName("String"),
   AccessModifier.Public,
 ))
-val String_classId = 10
-val String_metaClassId = 11
+val String_classId = 1
 
 val Int_fileSpec = FileSpec(fileID = getFileId(), name = "Int.argon")
 val Int_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
@@ -87,8 +48,7 @@ val Int_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
   GlobalName.NormalName("Int"),
   AccessModifier.Public,
 ))
-val Int_classId = 12
-val Int_metaClassId = 13
+val Int_classId = 2
 
 val Bool_fileSpec = FileSpec(fileID = getFileId(), name = "Bool.argon")
 val Bool_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
@@ -97,8 +57,7 @@ val Bool_descriptor = ClassDescriptor.InNamespace(ClassDescriptorInNamespace(
   GlobalName.NormalName("Bool"),
   AccessModifier.Public,
 ))
-val Bool_classId = 14
-val Bool_metaClassId = 15
+val Bool_classId = 3
 
 val Puts_fileSpec = FileSpec(fileID = getFileId(), name = "Puts.argon")
 val Puts_descriptor = FunctionDescriptor.InNamespace(FunctionDescriptorInNamespace(
@@ -111,7 +70,7 @@ val Puts_descriptor = FunctionDescriptor.InNamespace(FunctionDescriptorInNamespa
 val Int_to_s_descriptor = MethodDescriptor(
   MemberName.Name("to_s"),
   AccessModifier.Public,
-  ClassLikeDescriptor.ClassDescriptor(Int_descriptor)
+  MethodOwnerDescriptor.ClassDescriptor(Int_descriptor)
 )
 
 
@@ -131,124 +90,10 @@ val module = Module(
         parameters = Seq(),
         baseTraits = Seq(),
       ),
-
-      metaClassSpecifier = MetaClassSpecifier(Object_metaClassId)
     )),
   ),
 
   classes = Seq(
-    // Ar.Object.<MetaClass>
-    Class.ClassDef(ClassDefinition(
-      descriptor = ClassDescriptor.TraitMetaClass(ClassDescriptorTraitMetaClass(Object_descriptor)),
-      isOpen = false,
-      isSealed = false,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = Some(ClassType(Trait_classId, Seq())),
-        baseTraits = Seq(),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
-    )),
-
-    // Ar.Type
-    Class.ClassDef(ClassDefinition(
-      descriptor = Type_descriptor,
-      isOpen = true,
-      isSealed = true,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = None,
-        baseTraits = Seq(TraitType(Object_traitId, Seq())),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(Type_metaClassId)
-    )),
-
-    // Ar.Type.<MetaClass>
-    Class.ClassDef(ClassDefinition(
-      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Type_descriptor)),
-      isOpen = false,
-      isSealed = false,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = Some(ClassType(Class_classId, Seq())),
-        baseTraits = Seq(),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
-    )),
-
-    // Ar.MetaClass
-    Class.ClassDef(ClassDefinition(
-      descriptor = MetaClass_descriptor,
-      isOpen = false,
-      isSealed = false,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = Some(ClassType(Class_classId, Seq())),
-        baseTraits = Seq(),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
-    )),
-
-    // Ar.Trait
-    Class.ClassDef(ClassDefinition(
-      descriptor = Trait_descriptor,
-      isOpen = true,
-      isSealed = true,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = Some(ClassType(Type_classId, Seq())),
-        baseTraits = Seq(),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(Trait_metaClassId)
-    )),
-
-    // Ar.Trait.<MetaClass>
-    Class.ClassDef(ClassDefinition(
-      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Trait_descriptor)),
-      isOpen = false,
-      isSealed = false,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = Some(ClassType(Class_classId, Seq())),
-        baseTraits = Seq(),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
-    )),
-
-    // Ar.Class
-    Class.ClassDef(ClassDefinition(
-      descriptor = Class_descriptor,
-      isOpen = true,
-      isSealed = true,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = Some(ClassType(Type_classId, Seq())),
-        baseTraits = Seq(),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(Class_metaClassId)
-    )),
-
-    // Ar.Class.<MetaClass>
-    Class.ClassDef(ClassDefinition(
-      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Class_descriptor)),
-      isOpen = false,
-      isSealed = false,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = Some(ClassType(Class_classId, Seq())),
-        baseTraits = Seq(),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
-    )),
-
     // Ar.Unit
     Class.ClassDef(ClassDefinition(
       descriptor = Unit_descriptor,
@@ -260,21 +105,6 @@ val module = Module(
         baseClass = None,
         baseTraits = Seq(TraitType(Object_traitId, Seq())),
       ),
-      metaClassSpecifier = MetaClassSpecifier(Unit_metaClassId)
-    )),
-
-    // Ar.Unit.<MetaClass>
-    Class.ClassDef(ClassDefinition(
-      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Unit_descriptor)),
-      isOpen = false,
-      isSealed = false,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = Some(ClassType(Class_classId, Seq())),
-        baseTraits = Seq(),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
     )),
 
     // Ar.String
@@ -288,21 +118,6 @@ val module = Module(
         baseClass = None,
         baseTraits = Seq(TraitType(Object_traitId, Seq())),
       ),
-      metaClassSpecifier = MetaClassSpecifier(String_metaClassId)
-    )),
-
-    // Ar.String.<MetaClass>
-    Class.ClassDef(ClassDefinition(
-      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(String_descriptor)),
-      isOpen = false,
-      isSealed = false,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = Some(ClassType(Class_classId, Seq())),
-        baseTraits = Seq(),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
     )),
 
     // Ar.Int
@@ -316,21 +131,6 @@ val module = Module(
         baseClass = None,
         baseTraits = Seq(TraitType(Object_traitId, Seq())),
       ),
-      metaClassSpecifier = MetaClassSpecifier(String_metaClassId)
-    )),
-
-    // Ar.Int.<MetaClass>
-    Class.ClassDef(ClassDefinition(
-      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Int_descriptor)),
-      isOpen = false,
-      isSealed = false,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = Some(ClassType(Class_classId, Seq())),
-        baseTraits = Seq(),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(MetaClass_classId)
     )),
 
     // Ar.Bool
@@ -344,21 +144,6 @@ val module = Module(
         baseClass = None,
         baseTraits = Seq(TraitType(Object_traitId, Seq())),
       ),
-      metaClassSpecifier = MetaClassSpecifier(Bool_metaClassId)
-    )),
-
-    // Ar.Bool.<MetaClass>
-    Class.ClassDef(ClassDefinition(
-      descriptor = ClassDescriptor.MetaClass(ClassDescriptorMetaClass(Bool_descriptor)),
-      isOpen = false,
-      isSealed = false,
-      isAbstract = false,
-      signature = ClassSignature(
-        parameters = Seq(),
-        baseClass = Some(ClassType(Class_classId, Seq())),
-        baseTraits = Seq(),
-      ),
-      metaClassSpecifier = MetaClassSpecifier(Bool_classId)
     )),
 
   ),
