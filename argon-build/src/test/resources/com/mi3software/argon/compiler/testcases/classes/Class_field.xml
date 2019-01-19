@@ -8,12 +8,14 @@
         import Ar._
         
         class MyClass <: Object
-
-            field name: String
-
+        static
             public new()
                 field name = 'World'
             end
+
+        instance
+            field name: String
+
 
             public proc self.say_hello(): Unit do
                 puts 'Hello'

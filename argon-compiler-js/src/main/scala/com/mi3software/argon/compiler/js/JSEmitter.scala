@@ -49,6 +49,10 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           JSExportDeclaration(JSConst(NonEmptyList(
             JSDeclareInit(JSBindingIdentifier(traitsVarName), create_empty_obj)
           ))),
+
+          JSExportDeclaration(JSConst(NonEmptyList(
+            JSDeclareInit(JSBindingIdentifier(classesVarName), create_empty_obj)
+          ))),
         ),
 
         modulePairs.map { case (refModule, importId) =>
@@ -64,6 +68,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           freeze_obj(moduleVarName),
           freeze_obj(funcsVarName),
           freeze_obj(traitsVarName),
+          freeze_obj(classesVarName),
         ),
 
       ).flatten
@@ -117,9 +122,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           staticMethodObjects <- staticMethods.traverse(createMethodObject(_))
           ctorObjects <- classConstructors.traverse(createClassCtorObject(_))
 
-        } yield JSAssignment(
-          JSPropertyAccessBracket(classesVarName, JSString(DescriptorId.forClass(arClass.descriptor))),
-          JSObjectLiteral(Vector(
+          classSpec = JSObjectLiteral(Vector(
 
             sig.unsubstitutedResult.baseTypes.baseClass.map { baseClass =>
               JSObjectGetProperty(
@@ -149,6 +152,16 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
             ),
 
           ).flatten)
+
+        } yield JSAssignment(
+          JSPropertyAccessBracket(classesVarName, JSString(DescriptorId.forClass(arClass.descriptor))),
+          JSFunctionCall(
+            JSPropertyAccessDot(
+              JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
+              JSIdentifier("createClass")
+            ),
+            Vector(classSpec)
+          )
         )
 
 
@@ -475,12 +488,15 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
     case FieldDescriptor(owner, name) =>
       JSPropertyAccessBracket(
         JSThis,
-        JSPropertyAccessBracket(
-          JSPropertyAccessDot(
-            getClassJSObject(moduleDescriptor, owner),
-            JSIdentifier("fields")
+        JSPropertyAccessDot(
+          JSPropertyAccessBracket(
+            JSPropertyAccessDot(
+              getClassJSObject(moduleDescriptor, owner),
+              JSIdentifier("fields")
+            ),
+            JSString(name)
           ),
-          JSString(name)
+          JSIdentifier("symbol")
         )
       )
   }

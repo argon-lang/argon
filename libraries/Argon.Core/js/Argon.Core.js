@@ -34,13 +34,10 @@ export function createTrait(creator) {
 export function createClass(creator) {
 	const cls = Object.create(null);
 
-	lazyProperty(cls, "constructor", function() {
-		
-		const ctors = Object.create(null);
-		if(creator.createConstructors) creator.createConstructors(ctors);
-		Object.freeze(ctors);
 
-		return createClassConstructor(creator.baseClass, ctors, function(proto) {
+	lazyProperty(cls, "constructor", function() {
+
+		return createClassConstructor(creator.baseClass, ctorMap, function(proto) {
 			const implTraits = creator.baseTraits;
 			if(implTraits) {
 				for(const trait of implTraits) {
@@ -51,9 +48,36 @@ export function createClass(creator) {
 		});
 	});
 
+	const ctors = Object.create(null);
+	const ctorMap = Object.create(null);
+	if(creator.constructors) {
+		for(const ctor of creator.constructors) {
+			const ctorInfo = Object.create(null);
+			ctorInfo.symbol = Symbol();
+			ctors[ctor.descriptor] = Object.freeze(ctorInfo);
+			ctorMap[ctorInfo.symbol] = ctor.value;
+		}
+	}
+	cls.constructors = Object.freeze(ctors);
+	Object.freeze(ctorMap);
+
+	const fields = Object.create(null);
+	if(creator.fields) {
+		for(const field of creator.fields) {
+			const fieldInfo = Object.create(null);
+			fieldInfo.symbol = Symbol();
+			fields[field.name] = Object.freeze(fieldInfo);
+		}
+	}
+	cls.fields = fields;
+
 	const methods = Object.create(null);
 	if(creator.methods) createMethods(creator.methods, methods);
 	cls.methods = Object.freeze(methods);
+
+	const staticMethods = Object.create(null);
+	if(creator.staticMethods) createMethods(creator.staticMethods, staticMethods);
+	cls.staticMethods = Object.freeze(staticMethods);
 
 	return Object.freeze(cls);
 }

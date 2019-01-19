@@ -31,7 +31,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
           }
             .flatMap(runJSOutput(references))
             .map { output =>
-              if(output.trim === expectedOutput.trim)
+              if(normalizeOutput(output) === normalizeOutput(expectedOutput))
                 TestCaseResult.Success
               else
                 TestCaseResult.Failure(
@@ -44,6 +44,9 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
       }
       .run
       .map { _.merge}
+
+  private def normalizeOutput(output: String): String =
+    output.split("\n").map { _.trim }.filter { _.nonEmpty }.mkString("\n")
 
   private def runJSOutput(files: Vector[File])(compiledFile: String): IO[Throwable, String] = IO.syncThrowable {
 
