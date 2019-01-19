@@ -321,6 +321,14 @@ object CompilationError {
     override def message: String = s"Unexpected statement."
   }
 
+  final case class FieldMustHaveName(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Field must have name."
+  }
+
+  final case class NonAbstractMethodNotImplemented(descriptor: MethodDescriptor, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Non abstract method must have an implementation."
+  }
+
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context
     val typeSystem: TypeSystem[context.type]

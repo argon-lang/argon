@@ -110,11 +110,11 @@ final class JSEmitter {
           if(param.tupleVars.nonEmpty)
             JSArrayDestructBinding(
               param.tupleVars.map { tupleVar =>
-                JSBindingIdentifier(getVariableName(tupleVar.descriptor))
+                JSBindingIdentifier(getDeconstructedParameterName(tupleVar.descriptor))
               }
             )
           else
-            JSBindingIdentifier(getVariableName(ParameterDescriptor(owner, paramIndex))),
+            JSBindingIdentifier(getParameterName(ParameterDescriptor(owner, paramIndex))),
 
           list
         )
@@ -232,7 +232,7 @@ final class JSEmitter {
           ).point[TComp]
 
         case LoadVariable(variable) =>
-          getVariableName(variable.descriptor).point[TComp]
+          getVariableExpr(getParamOwnerModule(owner), variable.descriptor).point[TComp]
 
         case MethodCall(method, instance, args, _) =>
           for {
@@ -301,11 +301,31 @@ final class JSEmitter {
     )
   }
 
-  private def getVariableName(descriptor: VariableLikeDescriptor): JSIdentifier = JSIdentifier(descriptor match {
-    case ParameterDescriptor(_, index) => s"param_$index"
-    case DeconstructedParameterDescriptor(_, index, tupleIndex) => s"param_${index}_$tupleIndex"
-    case VariableDescriptor(_, index) => s"local_$index"
-  })
+  private def getParameterName(descriptor: ParameterDescriptor): JSIdentifier =
+    JSIdentifier(s"param_${descriptor.index}")
+
+  private def getDeconstructedParameterName(descriptor: DeconstructedParameterDescriptor): JSIdentifier =
+    JSIdentifier(s"param_${descriptor.index}_${descriptor.tupleIndex}")
+
+  private def getVariableName(descriptor: VariableDescriptor): JSIdentifier =
+    JSIdentifier(s"local_${descriptor.index}")
+
+  private def getVariableExpr(moduleDescriptor: ModuleDescriptor, descriptor: VariableLikeDescriptor): JSExpression = descriptor match {
+    case descriptor: ParameterDescriptor => getParameterName(descriptor)
+    case descriptor: DeconstructedParameterDescriptor => getDeconstructedParameterName(descriptor)
+    case descriptor: VariableDescriptor => getVariableName(descriptor)
+    case FieldDescriptor(owner, name) =>
+      JSPropertyAccessBracket(
+        JSThis,
+        JSPropertyAccessBracket(
+          JSPropertyAccessDot(
+            getClassJSObject(moduleDescriptor, owner),
+            JSIdentifier("fields")
+          ),
+          JSString(name)
+        )
+      )
+  }
 
   private def getClassJSObject(moduleDescriptor: ModuleDescriptor, descriptor: ClassDescriptor): JSExpression = {
     val classModule = getParamOwnerModule(descriptor)

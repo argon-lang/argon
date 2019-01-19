@@ -140,6 +140,7 @@ struct ClassDefinition {
     3: bool isSealed;
     4: bool isAbstract;
     5: ClassSignature signature;
+    6: list<ClassField> fields;
 }
 
 struct ClassSignature {

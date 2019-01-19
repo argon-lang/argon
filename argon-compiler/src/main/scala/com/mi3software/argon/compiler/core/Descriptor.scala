@@ -31,6 +31,9 @@ object Descriptor {
     case (_: DeconstructedParameterDescriptor, _) | (_, _: DeconstructedParameterDescriptor) => false
 
     case (a: VariableDescriptor, b: VariableDescriptor) => a === b
+    case (_: VariableDescriptor, _) | (_, _: VariableDescriptor) => false
+
+    case (a: FieldDescriptor, b: FieldDescriptor) => a === b
   }
 
 }
@@ -138,6 +141,9 @@ final case class DeconstructedParameterDescriptor(owner: ParameterOwnerDescripto
 
 @deriving(Equal)
 final case class VariableDescriptor(owner: VariableOwnerDescriptor, index: Int) extends VariableLikeDescriptor
+
+@deriving(Equal)
+final case class FieldDescriptor(owner: ClassDescriptor, name: String) extends VariableLikeDescriptor
 
 sealed trait VariableName
 object VariableName {

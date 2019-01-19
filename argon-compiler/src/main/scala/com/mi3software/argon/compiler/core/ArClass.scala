@@ -18,6 +18,7 @@ trait ArClass[TContext <: Context, TPayloadSpec[_, _]] {
 
   val signature: Comp[Signature[ArClass.ResultInfo]]
 
+  val fields: Comp[Vector[typeSystem.Variable[FieldDescriptor]]]
   val methods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
   val staticMethods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
   val classConstructors: Comp[Vector[ClassConstructor[TContext, TPayloadSpec]]]

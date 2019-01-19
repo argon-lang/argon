@@ -436,6 +436,20 @@ object ArgonModuleLoader {
                         )
                     }
 
+                  override val fields: context.Comp[Vector[context.typeSystem.Variable[FieldDescriptor]]] =
+                    compEv(
+                      classValue.fields.toVector.traverse { field =>
+                        for {
+                          fieldType <- resolveType(field.fieldType)
+                        } yield Variable(
+                          FieldDescriptor(descriptor, field.name),
+                          VariableName.Normal(field.name),
+                          Mutability.fromIsMutable(field.isMutable),
+                          fieldType
+                        )
+                      }
+                    )
+
                   override lazy val methods: context.Comp[Vector[ArMethod[context.type, TPayloadSpec]]] =
                     compEv(
                       methodMap.map { methods =>

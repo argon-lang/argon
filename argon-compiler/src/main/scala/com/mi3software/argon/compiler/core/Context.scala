@@ -23,6 +23,8 @@ sealed trait Context {
   type TClassConstructorMetadata
 
   def createExprFunctionImplementation(expr: typeSystem.ArExpr): TFunctionImplementation
+  def createExprMethodImplementation(expr: typeSystem.ArExpr): TMethodImplementation
+  def abstractMethodImplementation: TMethodImplementation
 
   type Comp[+_]
   implicit val compCompilationInstance: Compilation[Comp]

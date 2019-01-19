@@ -17,9 +17,15 @@ final class JSContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
   override type TClassConstructorMetadata = Unit
 
   override type TFunctionImplementation = JSImpl.Function
+  override type TMethodImplementation = JSImpl.Method
 
   override def createExprFunctionImplementation(expr: typeSystem.ArExpr): JSImpl.Function =
     JSImpl.Function.ExpressionBody(expr)
+
+  override def createExprMethodImplementation(expr: typeSystem.ArExpr): JSImpl.Method =
+    JSImpl.Method.ExpressionBody(expr)
+
+  override def abstractMethodImplementation: JSImpl.Method = JSImpl.Method.Abstract
 
   override type Comp[+T] = TComp[T]
 
@@ -52,6 +58,12 @@ final class JSContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
     sealed trait Function
     object Function {
       final case class ExpressionBody(expr: ArExpr) extends Function
+    }
+
+    sealed trait Method
+    object Method {
+      case object Abstract extends Method
+      final case class ExpressionBody(expr: ArExpr) extends Method
     }
   }
 
