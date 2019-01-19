@@ -19,7 +19,7 @@ trait ArTrait[TContext <: Context, TPayloadSpec[_, _]] {
   val signature: Comp[Signature[ArTrait.ResultInfo]]
 
   val methods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
-  val metaType: Comp[MetaClass[ArClass[TContext, TPayloadSpec]]]
+  val staticMethods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
 
   val payload: TPayloadSpec[Unit, TTraitMetadata]
 }

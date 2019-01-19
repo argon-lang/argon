@@ -71,10 +71,6 @@ struct ModuleReference {
     1: string name;
 }
 
-struct MetaClassSpecifier {
-    1: required i32 metaClassId;
-}
-
 union TraitDescriptor {
     1: TraitDescriptorInNamespace inNamespace;
 }
@@ -100,8 +96,6 @@ struct TraitDefinition {
     1: TraitDescriptor descriptor;
     2: bool isSealed;
     3: TraitSignature signature;
-
-    4: MetaClassSpecifier metaClassSpecifier;
 }
 
 union Trait {
@@ -118,8 +112,6 @@ struct ClassField {
 
 union ClassDescriptor {
     1: ClassDescriptorInNamespace inNamespace;
-    2: ClassDescriptorMetaClass metaClass;
-    3: ClassDescriptorTraitMetaClass traitMetaClass;
 }
 
 struct ClassDescriptorInNamespace {
@@ -148,8 +140,6 @@ struct ClassDefinition {
     3: bool isSealed;
     4: bool isAbstract;
     5: ClassSignature signature;
-
-    6: MetaClassSpecifier metaClassSpecifier;
 }
 
 struct ClassSignature {
@@ -165,9 +155,11 @@ union Class {
 
 
 
-union ClassLikeDescriptor {
+union MethodOwnerDescriptor {
     1: TraitDescriptor traitDescriptor;
-    2: ClassDescriptor classDescriptor;
+    2: TraitDescriptor traitObjectDescriptor;
+    3: ClassDescriptor classDescriptor;
+    4: ClassDescriptor classObjectDescriptor;
 }
 
 
@@ -290,7 +282,7 @@ union MemberName {
 struct MethodDescriptor {
     1: MemberName name;
     2: AccessModifier accessModifier;
-    3: ClassLikeDescriptor instanceType;
+    3: MethodOwnerDescriptor instanceType;
 }
 
 struct MethodSignature {

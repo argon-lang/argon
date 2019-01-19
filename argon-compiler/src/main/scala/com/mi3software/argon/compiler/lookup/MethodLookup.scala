@@ -1,6 +1,6 @@
 package com.mi3software.argon.compiler.lookup
 
-import com.mi3software.argon.compiler.core.{AbsRef, ClassLikeDescriptor, Context}
+import com.mi3software.argon.compiler.core.{AbsRef, MethodOwnerDescriptor, Context}
 import com.mi3software.argon.compiler.types.TypeSystem
 import scalaz._
 import Scalaz._
@@ -11,7 +11,7 @@ object MethodLookup {
   def lookupMethods(context: Context)(ts: TypeSystem[context.type])(instanceType: ts.TypeWithMethods): context.Comp[OverloadResult[MemberValue[context.type]]] =
     lookupMethodsImpl(context)(ts)(Vector(instanceType))(Set.empty)
 
-  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(instanceTypes: Vector[ts.TypeWithMethods])(seenTypes: Set[ClassLikeDescriptor]): context.Comp[OverloadResult[MemberValue[context.type]]] =
+  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(instanceTypes: Vector[ts.TypeWithMethods])(seenTypes: Set[MethodOwnerDescriptor]): context.Comp[OverloadResult[MemberValue[context.type]]] =
     if(instanceTypes.isEmpty)
       context.compCompilationInstance.point(OverloadResult.End)
     else {
@@ -44,7 +44,7 @@ object MethodLookup {
         }
     }
 
-  private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem[context.type])(t: ts.SimpleType): Option[ClassLikeDescriptor] =
+  private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem[context.type])(t: ts.SimpleType): Option[MethodOwnerDescriptor] =
     t match {
       case ts.ClassType(arClass, _, _) => Some(arClass.value.descriptor)
       case ts.TraitType(arTrait, _, _) => Some(arTrait.value.descriptor)

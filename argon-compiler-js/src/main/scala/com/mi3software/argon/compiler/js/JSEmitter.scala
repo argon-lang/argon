@@ -350,10 +350,12 @@ final class JSEmitter {
     JSPropertyAccessBracket(dataCtorsObj, JSString(DescriptorId.forDataConstructor(descriptor)))
   }
 
-  private def getClassLikeJSObject(moduleDescriptor: ModuleDescriptor, descriptor: ClassLikeDescriptor): JSExpression =
+  private def getClassLikeJSObject(moduleDescriptor: ModuleDescriptor, descriptor: MethodOwnerDescriptor): JSExpression =
     descriptor match {
-      case descriptor: ClassDescriptor => getClassJSObject(moduleDescriptor, descriptor)
       case descriptor: TraitDescriptor => getTraitJSObject(moduleDescriptor, descriptor)
+      case TraitObjectDescriptor(traitDescriptor) => JSPropertyAccessDot(getTraitJSObject(moduleDescriptor, traitDescriptor), JSIdentifier("static"))
+      case descriptor: ClassDescriptor => getClassJSObject(moduleDescriptor, descriptor)
+      case ClassObjectDescriptor(classDescriptor) => JSPropertyAccessDot(getClassJSObject(moduleDescriptor, classDescriptor), JSIdentifier("static"))
       case descriptor: DataConstructorDescriptor => getDataCtorJSObject(moduleDescriptor, descriptor)
     }
 
@@ -362,9 +364,9 @@ final class JSEmitter {
       case FuncDescriptor.InNamespace(module, _, _, _) => module
       case MethodDescriptor(typeDescriptor, _, _) => getParamOwnerModule(typeDescriptor)
       case ClassDescriptor.InNamespace(module, _, _, _) => module
-      case ClassDescriptor.MetaClass(ownerClass) => getParamOwnerModule(ownerClass)
-      case ClassDescriptor.TraitMetaClass(ownerTrait) => getParamOwnerModule(ownerTrait)
+      case ClassObjectDescriptor(ownerClass) => getParamOwnerModule(ownerClass)
       case TraitDescriptor.InNamespace(module, _, _, _) => module
+      case TraitObjectDescriptor(ownerTrait) => getParamOwnerModule(ownerTrait)
       case DataConstructorDescriptor.InNamespace(module, _, _, _) => module
       case ClassConstructorDescriptor(ownerClass, _) => getParamOwnerModule(ownerClass)
     }

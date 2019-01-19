@@ -160,16 +160,6 @@ object ArgonModuleLoader {
                 ) =>
                   Some(ClassDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
 
-                case ArgonModule.ClassDescriptor.MetaClass(
-                ArgonModule.ClassDescriptorMetaClass(ownerClassDescriptor)
-                ) =>
-                  parseClassDescriptor(module)(ownerClassDescriptor).map(ClassDescriptor.MetaClass.apply)
-
-                case ArgonModule.ClassDescriptor.TraitMetaClass(
-                ArgonModule.ClassDescriptorTraitMetaClass(ownerTraitDescriptor)
-                ) =>
-                  parseTraitDescriptor(module)(ownerTraitDescriptor).map(ClassDescriptor.TraitMetaClass.apply)
-
                 case ArgonModule.ClassDescriptor.UnknownUnionField(_) =>
                   None
               }
@@ -233,9 +223,11 @@ object ArgonModuleLoader {
                   for {
                     memberNameValue <- parseMemberName(memberName)
                     ownerDescValue <- ownerDesc match {
-                      case ArgonModule.ClassLikeDescriptor.UnknownUnionField(_) => None
-                      case ArgonModule.ClassLikeDescriptor.TraitDescriptor(traitDesc) => parseTraitDescriptor(module)(traitDesc)
-                      case ArgonModule.ClassLikeDescriptor.ClassDescriptor(classDesc) => parseClassDescriptor(module)(classDesc)
+                      case ArgonModule.MethodOwnerDescriptor.UnknownUnionField(_) => None
+                      case ArgonModule.MethodOwnerDescriptor.TraitDescriptor(traitDesc) => parseTraitDescriptor(module)(traitDesc)
+                      case ArgonModule.MethodOwnerDescriptor.ClassDescriptor(classDesc) => parseClassDescriptor(module)(classDesc)
+                      case ArgonModule.MethodOwnerDescriptor.TraitObjectDescriptor(traitDesc) => parseTraitDescriptor(module)(traitDesc).map(TraitObjectDescriptor.apply)
+                      case ArgonModule.MethodOwnerDescriptor.ClassObjectDescriptor(classDesc) => parseClassDescriptor(module)(classDesc).map(ClassObjectDescriptor.apply)
                     }
                   } yield MethodDescriptor(ownerDescValue, memberNameValue, accessModifier)
               }
@@ -373,8 +365,18 @@ object ArgonModuleLoader {
                       }
                     )
 
-                  override lazy val metaType: context.Comp[MetaClass[ArClass[context.type, TPayloadSpec]]] =
-                    compEv(findClassDef(traitValue.metaClassSpecifier.metaClassId).map(MetaClass.apply))
+                  override val staticMethods: context.Comp[Vector[ArMethod[context.type, TPayloadSpec]]] =
+                    compEv(
+                      methodMap.map { methods =>
+                        methods.collect {
+                          case (_, ModuleObjectDefinition(method)) if (method.descriptor.typeDescriptor match {
+                            case TraitObjectDescriptor(ownerDesc) => ownerDesc === descriptor
+                            case _ => false
+                          }) =>
+                            method
+                        }.toVector
+                      }
+                    )
 
                   override lazy val payload: TPayloadSpec[Unit, context.TTraitMetadata] = payloadLoader.createTraitPayload(context)
                 }
@@ -383,18 +385,6 @@ object ArgonModuleLoader {
             private def lookupClass(module: ArModule[context.type, ReferencePayloadSpecifier]): ClassDescriptor => TComp[Option[ArClass[context.type, ReferencePayloadSpecifier]]] = {
               case ClassDescriptor.InNamespace(_, namespace, name, _) =>
                 lookupNamespaceValue(module)(namespace, name)(ModuleLookup.lookupGlobalClass)
-
-              case ClassDescriptor.MetaClass(ownerClass) =>
-                lookupClass(module)(ownerClass)
-                  .flatMap { _.traverse[TComp, ArClass[context.type, ReferencePayloadSpecifier]] { resolvedOwner =>
-                    compEv.flip(resolvedOwner.metaType).map { _.metaClass }
-                  } }
-
-              case ClassDescriptor.TraitMetaClass(ownerTrait) =>
-                lookupTrait(module)(ownerTrait)
-                  .flatMap { _.traverse[TComp, ArClass[context.type, ReferencePayloadSpecifier]] { resolvedOwner =>
-                    compEv.flip(resolvedOwner.metaType).map { _.metaClass }
-                  } }
             }
 
             private lazy val classMap: TComp[Map[Int, ClassLoadResult[context.type, TPayloadSpec]]] =
@@ -459,8 +449,18 @@ object ArgonModuleLoader {
                       }
                     )
 
-                  override lazy val metaType: context.Comp[MetaClass[ArClass[context.type, TPayloadSpec]]] =
-                    compEv(findClassDef(classValue.metaClassSpecifier.metaClassId).map(MetaClass.apply))
+                  override lazy val staticMethods: context.Comp[Vector[ArMethod[context.type, TPayloadSpec]]] =
+                    compEv(
+                      methodMap.map { methods =>
+                        methods.collect {
+                          case (_, ModuleObjectDefinition(method)) if (method.descriptor.typeDescriptor match {
+                            case ClassObjectDescriptor(ownerDesc) => ownerDesc === descriptor
+                            case _ => false
+                          }) =>
+                            method
+                        }.toVector
+                      }
+                    )
 
                   override lazy val payload: TPayloadSpec[Unit, context.TClassMetadata] = payloadLoader.createClassPayload(context)
 
@@ -577,9 +577,19 @@ object ArgonModuleLoader {
               )(
                 referenceHandler = moduleRef => {
                   case methodDesc @ MethodDescriptor(traitDescriptor: TraitDescriptor, _, _) =>
-                    lookupTrait(moduleRef)(traitDescriptor).flatMap { arClassOpt =>
-                      arClassOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arClass =>
-                        compEv.flip(arClass.methods).map { methods =>
+                    lookupTrait(moduleRef)(traitDescriptor).flatMap { arTraitOpt =>
+                      arTraitOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arTrait =>
+                        compEv.flip(arTrait.methods).map { methods =>
+                          methods.find { method =>
+                            method.descriptor === methodDesc
+                          }
+                        }
+                      }
+                    }
+                  case methodDesc @ MethodDescriptor(TraitObjectDescriptor(traitDescriptor), _, _) =>
+                    lookupTrait(moduleRef)(traitDescriptor).flatMap { arTraitOpt =>
+                      arTraitOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arTrait =>
+                        compEv.flip(arTrait.staticMethods).map { methods =>
                           methods.find { method =>
                             method.descriptor === methodDesc
                           }
@@ -591,6 +601,17 @@ object ArgonModuleLoader {
                     lookupClass(moduleRef)(classDescriptor).flatMap { arClassOpt =>
                       arClassOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arClass =>
                         compEv.flip(arClass.methods).map { methods =>
+                          methods.find { method =>
+                            method.descriptor === methodDesc
+                          }
+                        }
+                      }
+                    }
+
+                  case methodDesc @ MethodDescriptor(ClassObjectDescriptor(classDescriptor), _, _) =>
+                    lookupClass(moduleRef)(classDescriptor).flatMap { arClassOpt =>
+                      arClassOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arClass =>
+                        compEv.flip(arClass.staticMethods).map { methods =>
                           methods.find { method =>
                             method.descriptor === methodDesc
                           }
@@ -674,9 +695,6 @@ object ArgonModuleLoader {
                   arClass.descriptor match {
                     case ClassDescriptor.InNamespace(_, namespace, name, accessModifier) =>
                       Some(ModuleElement(namespace, GlobalBinding.GlobalClass(name, accessModifier, arClass)))
-
-                    case ClassDescriptor.MetaClass(_) | ClassDescriptor.TraitMetaClass(_) =>
-                      None
                   }
                 },
                 createNamespaceElements(dataCtorMap) { dataCtor =>

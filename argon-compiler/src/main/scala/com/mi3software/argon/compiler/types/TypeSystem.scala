@@ -150,10 +150,6 @@ trait TypeSystem[TContext <: Context with Singleton] {
     override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
 
-  final case class MetaType(innerType: TType, baseType: TType) extends SimpleType {
-    override lazy val universe: TypeUniverse = ???
-  }
-
   final case class TupleElement[+A <: ArExpr](value: TTypeWrapper[A]) {
     lazy val elementTypeElement: TupleElement[SimpleType] = TupleElement[SimpleType](wrapExprType(value))
   }
@@ -412,12 +408,6 @@ object TypeSystem {
 
     case ts.TypeOfType(universe) =>
       (otherTS.TypeOfType(universe) : otherTS.SimpleType).point[F]
-
-    case ts.MetaType(innerType, baseType) =>
-      for {
-        newInnerType <- convertTypeSystem(context)(ts)(otherTS)(converter)(innerType)
-        newBaseType <- convertTypeSystem(context)(ts)(otherTS)(converter)(baseType)
-      } yield otherTS.MetaType(newInnerType, newBaseType)
 
     case t1: ts.LoadTupleType =>
       t1.typeValues

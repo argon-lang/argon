@@ -33,7 +33,7 @@ private[compiler] object SourceTrait {
 
       override lazy val signature: TComp[Signature[ArTrait.ResultInfo]] = ??? : TComp[Signature[ArTrait.ResultInfo]]
       override lazy val methods: TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]] = ??? : TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]]
-      override lazy val metaType: TComp[MetaClass[ArClass[context2.type, DeclarationPayloadSpecifier]]] = ??? : TComp[MetaClass[ArClass[context2.type, DeclarationPayloadSpecifier]]]
+      override lazy val staticMethods: TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]] = ??? : TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]]
 
       override val payload: Unit = ()
     }

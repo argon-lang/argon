@@ -11,8 +11,8 @@ sealed trait Descriptor
 object Descriptor {
 
   implicit val equalInstance: Equal[Descriptor] = {
-    case (a: ClassLikeDescriptor, b: ClassLikeDescriptor) => a === b
-    case (_: ClassLikeDescriptor, _) | (_, _: ClassLikeDescriptor) => false
+    case (a: MethodOwnerDescriptor, b: MethodOwnerDescriptor) => a === b
+    case (_: MethodOwnerDescriptor, _) | (_, _: MethodOwnerDescriptor) => false
 
 
     case (a: FuncDescriptor, b: FuncDescriptor) => a === b
@@ -51,10 +51,10 @@ object ParameterOwnerDescriptor {
 
 }
 
-sealed trait ClassLikeDescriptor extends ParameterOwnerDescriptor
-object ClassLikeDescriptor {
+sealed trait MethodOwnerDescriptor extends ParameterOwnerDescriptor
+object MethodOwnerDescriptor {
 
-  implicit val equalInstance: Equal[ClassLikeDescriptor] = {
+  implicit val equalInstance: Equal[MethodOwnerDescriptor] = {
     case (a: TraitDescriptor, b: TraitDescriptor) => a === b
     case (_: TraitDescriptor, _) | (_, _: TraitDescriptor) => false
 
@@ -62,11 +62,17 @@ object ClassLikeDescriptor {
     case (_: ClassDescriptor, _) | (_, _: ClassDescriptor) => false
 
     case (a: DataConstructorDescriptor, b: DataConstructorDescriptor) => a === b
+    case (_: DataConstructorDescriptor, _) | (_, _: DataConstructorDescriptor) => false
+
+    case (a: TraitObjectDescriptor, b: TraitObjectDescriptor) => a === b
+    case (_: TraitObjectDescriptor, _) | (_, _: TraitObjectDescriptor) => false
+
+    case (a: ClassObjectDescriptor, b: ClassObjectDescriptor) => a === b
   }
 
 }
 
-sealed trait TraitDescriptor extends ClassLikeDescriptor
+sealed trait TraitDescriptor extends MethodOwnerDescriptor
 object TraitDescriptor {
 
   @deriving(Equal)
@@ -78,31 +84,18 @@ object TraitDescriptor {
 
 }
 
-sealed trait ClassDescriptor extends ClassLikeDescriptor
+sealed trait ClassDescriptor extends MethodOwnerDescriptor
 object ClassDescriptor {
 
   @deriving(Equal)
   final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends ClassDescriptor
 
-  @deriving(Equal)
-  final case class MetaClass(ownerClass: ClassDescriptor) extends ClassDescriptor
-
-  @deriving(Equal)
-  final case class TraitMetaClass(ownerTrait: TraitDescriptor) extends ClassDescriptor
-
-
   implicit val equalInstance: Equal[ClassDescriptor] = {
     case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
-    case (InNamespace(_, _, _, _), _) | (_, InNamespace(_, _, _, _)) => false
-
-    case (a @ MetaClass(_), b @ MetaClass(_)) => a === b
-    case (MetaClass(_), _) | (_, MetaClass(_)) => false
-
-    case (a @ TraitMetaClass(_), b @ TraitMetaClass(_)) => a === b
   }
 }
 
-sealed trait DataConstructorDescriptor extends ClassLikeDescriptor
+sealed trait DataConstructorDescriptor extends MethodOwnerDescriptor
 object DataConstructorDescriptor {
   @deriving(Equal)
   final case class InNamespace(moduleDescriptor: ModuleDescriptor, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends DataConstructorDescriptor
@@ -111,6 +104,12 @@ object DataConstructorDescriptor {
     case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
   }
 }
+
+@deriving(Equal)
+final case class TraitObjectDescriptor(traitDescriptor: TraitDescriptor) extends MethodOwnerDescriptor
+
+@deriving(Equal)
+final case class ClassObjectDescriptor(classDescriptor: ClassDescriptor) extends MethodOwnerDescriptor
 
 sealed trait FuncDescriptor extends ParameterOwnerDescriptor
 object FuncDescriptor {
@@ -123,7 +122,7 @@ object FuncDescriptor {
 }
 
 @deriving(Equal)
-final case class MethodDescriptor(typeDescriptor: ClassLikeDescriptor, name: MemberName, accessModifier: AccessModifier) extends ParameterOwnerDescriptor
+final case class MethodDescriptor(typeDescriptor: MethodOwnerDescriptor, name: MemberName, accessModifier: AccessModifier) extends ParameterOwnerDescriptor
 
 @deriving(Equal)
 final case class ClassConstructorDescriptor(ownerClass: ClassDescriptor, accessModifier: AccessModifier) extends ParameterOwnerDescriptor

@@ -50,8 +50,6 @@ object DescriptorId {
   def forClass(descriptor: ClassDescriptor): String =
     descriptor match {
       case ClassDescriptor.InNamespace(_, namespace, name, _) => encodeInNamespace(namespace, name)
-      case ClassDescriptor.MetaClass(ownerClass) => forClass(ownerClass) + "[MetaClass]"
-      case ClassDescriptor.TraitMetaClass(ownerTrait) => forTrait(ownerTrait) + "[TraitMetaClass]"
     }
 
   def forTrait(descriptor: TraitDescriptor): String =

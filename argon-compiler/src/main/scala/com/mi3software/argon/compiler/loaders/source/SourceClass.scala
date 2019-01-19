@@ -75,15 +75,17 @@ private[compiler] object SourceClass {
 
     override val signature: TComp[Signature[ArClass.ResultInfo]] = ??? : TComp[Signature[ArClass.ResultInfo]]
 
-    override lazy val methods: TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]] = for {
+    override val methods: TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]] = for {
       inst <- groupedInst
     } yield inst.methods
+
+    override val staticMethods: TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]] = for {
+      statics <- groupedStatic
+    } yield statics.staticMethods
 
     override val classConstructors: TComp[Vector[ClassConstructor[context2.type, DeclarationPayloadSpecifier]]] = for {
       statics <- groupedStatic
     } yield statics.classCtors
-
-    override lazy val metaType: TComp[MetaClass[ArClass[context2.type, DeclarationPayloadSpecifier]]] = ??? : TComp[MetaClass[ArClass[context2.type, DeclarationPayloadSpecifier]]]
 
     override val payload: Unit = ()
   }

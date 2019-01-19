@@ -19,8 +19,8 @@ trait ArClass[TContext <: Context, TPayloadSpec[_, _]] {
   val signature: Comp[Signature[ArClass.ResultInfo]]
 
   val methods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
+  val staticMethods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
   val classConstructors: Comp[Vector[ClassConstructor[TContext, TPayloadSpec]]]
-  val metaType: Comp[MetaClass[ArClass[TContext, TPayloadSpec]]]
 
   val payload: TPayloadSpec[Unit, TClassMetadata]
 }
