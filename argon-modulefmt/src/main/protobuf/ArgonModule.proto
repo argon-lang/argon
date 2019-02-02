@@ -1,0 +1,278 @@
+syntax = "proto2";
+
+import "scalapb/scalapb.proto";
+
+option (scalapb.options) = {
+    scope: FILE
+    package_name: "com.mi3software.argon.module2"
+    flat_package: true
+};
+
+// File Formats
+
+// argon-metadata
+message Metadata {
+    required int32 formatVersion = 1;
+    required string name = 2;
+    optional bool isInterfaceModule = 5;
+
+    repeated GlobalDeclarations globals = 10;
+}
+
+message GlobalDeclarations {
+    oneof descriptor {
+        TraitDescriptorInNamespace traitDescriptor = 2;
+        ClassDescriptorInNamespace classDescriptor = 3;
+        DataConstructorDescriptor dataConstructorDescriptor = 4;
+        FunctionDescriptorInNamespace functionDescriptor = 5;
+    }
+
+    required int32 id = 1;
+}
+
+// *-ref/id
+message TraitReference {
+    required int32 moduleId = 1;
+    required TraitDescriptor descriptor = 2;
+    repeated Parameter parameters = 3;
+}
+
+message ClassReference {
+    required int32 moduleId = 1;
+    required ClassDescriptor descriptor = 2;
+    repeated Parameter parameters = 3;
+}
+
+message DataConstructorReference {
+    required int32 moduleId = 1;
+    required DataConstructorDescriptor descriptor = 2;
+    repeated Parameter parameters = 3;
+}
+
+message FunctionReference {
+    required int32 moduleId = 1;
+    required FunctionDescriptor descriptor = 2;
+}
+
+message MethodReference {
+    required int32 moduleId = 1;
+    required MethodDescriptor descriptor = 2;
+}
+
+
+// */id
+message TraitDefinition {
+    required TraitDescriptor descriptor = 1;
+    required TraitSignature signature = 2;
+    optional bool isSealed = 3;
+}
+
+message ClassDefinition {
+    required ClassDescriptor descriptor = 1;
+    required ClassSignature signature = 2;
+    optional bool isOpen = 3;
+    optional bool isSealed = 4;
+    optional bool isAbstract = 5;
+    repeated ClassField fields = 6;
+}
+
+message ClassField {
+    required bool isMutable = 1;
+    required string name = 2;
+    required Type fieldType = 3;
+}
+
+message DataConstructorDefinition {
+    required DataConstructorDescriptor descriptor = 1;
+    required DataConstructorSignature signature = 2;
+    optional bool isSealed = 3;
+}
+
+message FunctionDefinition {
+    required FunctionDescriptor descriptor = 1;
+    required FunctionSignature signature = 2;
+    required EffectInfo effects = 3;
+}
+
+message MethodDefinition {
+    required MethodDescriptor descriptor = 1;
+    required MethodSignature signature = 2;
+    required EffectInfo effects = 3;
+    optional bool isVirtual = 4;
+    optional bool isAbstract = 5;
+    optional bool isImplicitOverride = 6;
+    optional bool isFinal = 7;
+}
+
+message EffectInfo {
+    required bool isPure = 1;
+}
+
+
+// Shared types
+
+// Simple types
+message FileSpec {
+    required int32 id = 1;
+    required string name = 2;
+}
+
+message Namespace {
+    repeated string path = 1;
+}
+
+message GlobalName {
+    oneof globalName {
+        string normalName = 1;
+        UnnamedGlobalName unnamed = 2;
+    }
+}
+
+message UnnamedGlobalName {
+    required int32 fileID = 1;
+    required int32 index = 2;
+}
+
+enum AccessModifier {
+    Invalid = 0;
+    Public = 1;
+    Internal = 2;
+    Protected = 3;
+    ProtectedInternal = 4;
+    Private = 5;
+    PrivateInternal = 6;
+}
+
+// Descriptors
+message ClassDescriptor {
+    oneof descriptor {
+        ClassDescriptorInNamespace inNamespace = 1;
+    }
+}
+
+message ClassDescriptorInNamespace {
+    required FileSpec fileSpec = 1;
+    required Namespace ns = 2;
+    required GlobalName name = 3;
+    required AccessModifier accessModifier = 4;
+}
+
+message TraitDescriptor {
+    oneof descriptor {
+        TraitDescriptorInNamespace inNamespace = 1;
+    }
+}
+
+message TraitDescriptorInNamespace {
+    required FileSpec fileSpec = 1;
+    required Namespace ns = 2;
+    required GlobalName name = 3;
+    required AccessModifier accessModifier = 4;
+}
+
+message DataConstructorDescriptor {
+    oneof descriptor {
+        DataConstructorDescriptorInNamespace inNamespace = 1;
+    }
+}
+
+message DataConstructorDescriptorInNamespace {
+    required FileSpec fileSpec = 1;
+    required Namespace ns = 2;
+    required GlobalName name = 3;
+    required AccessModifier accessModifier = 4;
+}
+
+message FunctionDescriptor {
+    oneof descriptor {
+        FunctionDescriptorInNamespace inNamespace = 1;
+    }
+}
+
+message FunctionDescriptorInNamespace {
+    required FileSpec fileSpec = 1;
+    required Namespace ns = 2;
+    required GlobalName name = 3;
+    required AccessModifier accessModifier = 4;
+}
+
+message MethodDescriptor {
+    oneof memberName {
+        string name = 2;
+        int32 unnamedMemberIndex = 3;
+        SpecialMemberName specialMemberName = 4;
+    }
+    required AccessModifier accessModifier = 1;
+    oneof instanceType {
+        TraitDescriptor traitDescriptor = 5;
+        TraitDescriptor traitObjectDescriptor = 6;
+        ClassDescriptor classDescriptor = 7;
+        ClassDescriptor classObjectDescriptor = 8;
+    }
+}
+
+enum SpecialMemberName {
+    Call = 0;
+    New = 1;
+}
+
+// Types
+message TraitType {
+    required int32 traitId = 1;
+    repeated Type typeArguments = 2;
+}
+
+message ClassType {
+    required int32 classId = 1;
+    repeated Type typeArguments = 2;
+}
+
+message DataConstructorInstanceType {
+    required int32 constructorId = 1;
+    repeated Type typeArguments = 2;
+}
+
+message Type {
+    oneof typeInfo {
+        TraitType traitType = 1;
+        ClassType classType = 2;
+        DataConstructorInstanceType dataConstructorInstanceType = 3;
+    }
+}
+
+// Signature
+message ParameterElement {
+    required string name = 1;
+    required Type paramType = 2;
+}
+
+message Parameter {
+    repeated ParameterElement elements = 1;
+}
+
+message TraitSignature {
+    repeated Parameter parameters = 1;
+    repeated TraitType baseTraits = 2;
+}
+
+message ClassSignature {
+    repeated Parameter parameters = 1;
+    optional ClassType baseClass = 2;
+    repeated TraitType baseTraits = 3;
+}
+
+message DataConstructorSignature {
+    repeated Parameter parameters = 1;
+    required TraitType instanceType = 2;
+}
+
+message FunctionSignature {
+    repeated Parameter parameters = 1;
+    required Type returnType = 2;
+}
+
+message MethodSignature {
+    repeated Parameter parameters = 1;
+    required Type returnType = 2;
+}
+

@@ -152,6 +152,15 @@ lazy val compiler_js = project.in(file("argon-compiler-js"))
     name := "argon-compiler-js",
   )
 
+lazy val compiler_module = project.in(file("argon-compiler-module"))
+  .dependsOn(util, modulefmt, parser_data, argon_compiler)
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-compiler-module",
+  )
+
 lazy val util = project.in(file("argon-util"))
   .settings(
     commonSettings,
@@ -177,6 +186,12 @@ lazy val modulefmt = project.in(file("argon-modulefmt"))
     ),
 
     scroogeBuildOptions := Seq(),
+
+    libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
+    
+    PB.targets in Compile := Seq(
+      scalapb.gen() -> (sourceManaged in Compile).value / "protobuf"
+    ),
   )
 
 lazy val library_gen = project.in(file("argon-library-gen"))

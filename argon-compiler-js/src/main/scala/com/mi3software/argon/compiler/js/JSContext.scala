@@ -32,8 +32,6 @@ final class JSContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
     JSImpl.ClassConstructor.StatementBody(body)
 
 
-  override type Comp[+T] = TComp[T]
-
   override val compCompilationInstance: Compilation[Comp] = implicitly
 
 
