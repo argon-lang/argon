@@ -4,6 +4,7 @@ import org.scalatest.{FlatSpec, Matchers}
 import scalaz._
 import com.mi3software.argon.grammar.Grammar
 import Grammar.Operators._
+import com.mi3software.argon.util.NonEmptyVector
 
 import scala.language.postfixOps
 
@@ -63,11 +64,11 @@ abstract class GrammarTestsCommon extends FlatSpec with Matchers with GrammarTes
   }
 
   it should "succeed for correct token" in {
-    parse(numberToken(7)+~)(7) shouldBe Right((Vector(), NonEmptyList(7)))
+    parse(numberToken(7)+~)(7) shouldBe Right((Vector(), NonEmptyVector.of(7)))
   }
 
   it should "succeed for 2 correct tokens" in {
-    parse(numberToken(7)+~)(7, 7) shouldBe Right((Vector(), NonEmptyList(7, 7)))
+    parse(numberToken(7)+~)(7, 7) shouldBe Right((Vector(), NonEmptyVector.of(7, 7)))
   }
 
   "A union grammar" should "fail for EOF" in {
