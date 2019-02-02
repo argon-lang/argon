@@ -632,11 +632,8 @@ object Grammar {
       WithSource(items.map(removeSource), itemsLocation(pos, items))
 
     private def parseInner(tokens: NonEmptyVector[WithSource[TToken]], options: TParseOptions, items: Vector[WithSource[T]]): GrammarResult[TToken, TSyntaxError, TLabel, Vector[T]] =
-      inner.parseTokens(tokens, options).transformComplete {
-        case result @ GrammarResultError(_) => result
-        case result @ GrammarResultFailure(_) => result
-
-        case GrammarResultSuccess(Vector(), item) =>
+      inner.parseTokens(tokens, options).flatMap {
+        case (Vector(), item) =>
           new GrammarResultSuspend[TToken, TSyntaxError, TLabel, Vector[T]] {
             override def continue(tokens: NonEmptyVector[WithSource[TToken]]): GrammarResult[TToken, TSyntaxError, TLabel, Vector[T]] =
               parseInner(tokens, options.notLeftRec, items :+ item)
@@ -645,8 +642,8 @@ object Grammar {
               GrammarResultSuccess(Vector(), finalItems(items :+ item, pos))
           }
 
-        case GrammarResultSuccess(head +: tail, item) => parseInner(NonEmptyVector(head, tail), options.notLeftRec, items :+ item)
-
+        case (head +: tail, item) =>
+          parseInner(NonEmptyVector(head, tail), options.notLeftRec, items :+ item)
       }
       .recoverFailure { (laterTokens, _) => GrammarResultSuccess(tokens.toVector ++ laterTokens, finalItems(items, tokens.head.location.start)) }
 
