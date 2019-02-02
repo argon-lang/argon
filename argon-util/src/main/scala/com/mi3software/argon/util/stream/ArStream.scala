@@ -64,35 +64,14 @@ trait ArStream[F[_], A, R] {
       ArStream.this.foldChunksM(start) { (b, r) => resultHandler(b, f(r)) } (f2)
   }
 
-  def transformM[B, R2, S](start: S)(resultHandler: (S, R) => F[(R2, Vector[B])])(f: (S, NonEmptyVector[A]) => F[(S, Vector[B])]): ArStream[F, B, R2] = new ArStream[F, B, R2] {
+  def transformWith[B, R2](transformation: StreamTransformation[F, A, R, B, R2])(implicit monadInstance: Monad[F]): ArStream[F, B, R2] = new ArStream[F, B, R2] {
     override def foldChunksM[C, R3](startC: C)(resultHandlerC: (C, R2) => R3)(fC: (C, NonEmptyVector[B]) => F[C])(implicit monadInstance: Monad[F]): F[R3] =
-      ArStream.this.foldChunksM((start, startC)) {
-        case ((s, c), r) =>
-          resultHandler(s, r).flatMap {
-            case (r2, Vector()) => resultHandlerC(c, r2).point[F]
-            case (r2, head +: tail) => fC(c, NonEmptyVector(head, tail)).map { c2 => resultHandlerC(c2, r2) }
-          }
-      } { case ((s, c), a) =>
-        f(s, a).flatMap {
-          case (s2, Vector()) =>
-            (s2, c).point[F]
-
-          case (s2, head +: tail) =>
-            fC(c, NonEmptyVector(head, tail)).map { c2 =>
-              (s2, c2)
-            }
-        }
-      }.flatMap(identity)
+      ArStream.this.foldChunksM((transformation.initialState, startC)) {
+        case ((s, c), r) => transformation.processResult(s, c, r)(fC)
+      } {
+        case ((s, c), a) => transformation.processItems(s, c, a)(fC)
+      }.flatMap(_.map { case (r2, c) => resultHandlerC(c, r2) })
   }
-
-  def transform[B, R2, S](start: S)(resultHandler: (S, R) => (R2, Vector[B]))(f: (S, NonEmptyVector[A]) => (S, Vector[B]))(implicit monadInstance: Monad[F]): ArStream[F, B, R2] =
-    transformM(start) { (s, r) => resultHandler(s, r).point[F] } { (s, a) => f(s, a).point[F] }
-
-  def transformWith[B, R2](transformation: StreamTransformation[A, R, B, R2])(implicit monadInstance: Monad[F]): ArStream[F, B, R2] =
-    transformation.transformStream(this)
-
-  def transformWith[B, R2](transformation: StreamTransformationM[F, A, R, B, R2])(implicit monadInstance: Monad[F]): ArStream[F, B, R2] =
-    transformation.transformStream(this)
 
   def merge[B, R2: Monoid](mergeResult: (R2, R) => R2)(f: A => ArStream[F, B, R2]): ArStream[F, B, R2] = new ArStream[F, B, R2] {
     override def foldChunksM[C, R3](start: C)(resultHandler: (C, R2) => R3)(f2: (C, NonEmptyVector[B]) => F[C])(implicit monadInstance: Monad[F]): F[R3] =

@@ -14,23 +14,28 @@ object ParseHandler {
 
   def parse[F[_]: Monad : ErrorReporter](fileSpec: FileSpec)(text: ArStream[F, Char, Unit]): ArStream[F, SourceAST, Unit] =
     Characterizer.characterize(text)
+      .chunkBuffer(1024 * 8)
       .transformWith(Lexer.lex)
+      .chunkBuffer(1024 * 2)
       .transformWith(ArgonParser.parse)
       .transformWith(buildSourceAST(fileSpec))
 
-  private def buildSourceAST[F[_]](fileSpec: FileSpec): StreamTransformation.Single[TopLevelStatement, Unit, SourceAST, Unit] =
-    new StreamTransformation.Single[TopLevelStatement, Unit, SourceAST, Unit] {
-      override protected type S = NSAndImports
-      override protected val initialState: NSAndImports = TopLevelStatement.defaultNSAndImports
+  private def buildSourceAST[F[_]](fileSpec: FileSpec): StreamTransformation.Single[F, TopLevelStatement, Unit, SourceAST, Unit] =
+    new StreamTransformation.Single[F, TopLevelStatement, Unit, SourceAST, Unit] {
+      override type S = NSAndImports
+      override val initialState: NSAndImports = TopLevelStatement.defaultNSAndImports
 
-      override protected def processItem(state: NSAndImports, item: TopLevelStatement): (NSAndImports, Vector[SourceAST]) = {
+      override protected def processItem[S2](state: NSAndImports, state2: S2, item: TopLevelStatement)(f: (S2, NonEmptyVector[SourceAST]) => F[S2])(implicit monadInstance: Monad[F]): F[(NSAndImports, S2)] = {
         val (newState, opt) = TopLevelStatement.accumulate(fileSpec)(state, item)
-        (newState, opt.toVector)
+
+        opt
+          .traverse { tls => f(state2, NonEmptyVector.of(tls)) }
+          .map { newState2 => (newState, newState2.getOrElse(state2)) }
       }
 
+      override def processResult[S2](state: NSAndImports, state2: S2, result: Unit)(f: (S2, NonEmptyVector[SourceAST]) => F[S2])(implicit monadInstance: Monad[F]): F[(Unit, S2)] =
+        ((), state2).point[F]
 
-      override protected def processResult(state: NSAndImports, result: Unit): (Unit, Vector[SourceAST]) =
-        ((), Vector.empty)
     }
 
 }

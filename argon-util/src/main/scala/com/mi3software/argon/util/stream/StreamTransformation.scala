@@ -1,33 +1,80 @@
 package com.mi3software.argon.util.stream
 
-import com.mi3software.argon.util.NonEmptyVector
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.util.NonEmptyVector
 
-trait StreamTransformation[A, R, B, R2] {
+trait StreamTransformation[F[_], A, R, B, R2] {
 
-  protected type S
-  protected val initialState: S
+  type S
+  val initialState: S
 
-  protected def processItems(state: S, items: NonEmptyVector[A]): (S, Vector[B])
-  protected def processResult(state: S, result: R): (R2, Vector[B])
+  def processItems[S2](state: S, state2: S2, items: NonEmptyVector[A])(f: (S2, NonEmptyVector[B]) => F[S2])(implicit monadInstance: Monad[F]): F[(S, S2)]
+  def processResult[S2](state: S, state2: S2, result: R)(f: (S2, NonEmptyVector[B]) => F[S2])(implicit monadInstance: Monad[F]): F[(R2, S2)]
 
-  final def transformStream[F[_]: Monad](stream: ArStream[F, A, R]): ArStream[F, B, R2] =
-    stream.transform(initialState)(processResult)(processItems)
+
+  final def mapItems[B2](f: B => B2): StreamTransformation[F, A, R, B2, R2] = new StreamTransformation[F, A, R, B2, R2] {
+    override type S = StreamTransformation.this.S
+
+    override val initialState: S = StreamTransformation.this.initialState
+
+
+    override def processItems[S2](state: S, state2: S2, items: NonEmptyVector[A])(f2: (S2, NonEmptyVector[B2]) => F[S2])(implicit monadInstance: Monad[F]): F[(S, S2)] =
+      StreamTransformation.this.processItems(state, state2, items) { (s2, bItems) => f2(s2, bItems.map(f)) }
+
+    override def processResult[S2](state: S, state2: S2, result: R)(f2: (S2, NonEmptyVector[B2]) => F[S2])(implicit monadInstance: Monad[F]): F[(R2, S2)] =
+      StreamTransformation.this.processResult(state, state2, result) { (s2, bItems) => f2(s2, bItems.map(f)) }
+
+  }
+
+
+  final def flatMapItems[B2](f: B => Vector[B2]): StreamTransformation[F, A, R, B2, R2] = new StreamTransformation[F, A, R, B2, R2] {
+    override type S = StreamTransformation.this.S
+
+    override val initialState: S = StreamTransformation.this.initialState
+
+    override def processItems[S2](state: S, state2: S2, items: NonEmptyVector[A])(f2: (S2, NonEmptyVector[B2]) => F[S2])(implicit monadInstance: Monad[F]): F[(S, S2)] =
+      StreamTransformation.this.processItems(state, state2, items) { (s2, bItems) =>
+        bItems.toVector.flatMap(f) match {
+          case Vector() => s2.point[F]
+          case head +: tail => f2(s2, NonEmptyVector(head, tail))
+        }
+      }
+
+    override def processResult[S2](state: S, state2: S2, result: R)(f2: (S2, NonEmptyVector[B2]) => F[S2])(implicit monadInstance: Monad[F]): F[(R2, S2)] =
+      StreamTransformation.this.processResult(state, state2, result) { (s2, bItems) =>
+        bItems.toVector.flatMap(f) match {
+          case Vector() => s2.point[F]
+          case head +: tail => f2(s2, NonEmptyVector(head, tail))
+        }
+      }
+
+  }
+
+
+  final def mapResult[R3](f: R2 => R3): StreamTransformation[F, A, R, B, R3] = new StreamTransformation[F, A, R, B, R3] {
+    override type S = StreamTransformation.this.S
+
+    override val initialState: S = StreamTransformation.this.initialState
+
+    override def processItems[S2](state: S, state2: S2, items: NonEmptyVector[A])(f2: (S2, NonEmptyVector[B]) => F[S2])(implicit monadInstance: Monad[F]): F[(S, S2)] =
+      StreamTransformation.this.processItems(state, state2, items)(f2)
+
+    override def processResult[S2](state: S, state2: S2, result: R)(f2: (S2, NonEmptyVector[B]) => F[S2])(implicit monadInstance: Monad[F]): F[(R3, S2)] =
+      StreamTransformation.this.processResult(state, state2, result)(f2).map { case (result, state2) => (f(result), state2) }
+
+  }
 
 }
 
 object StreamTransformation {
+  trait Single[F[_], A, R, B, R2] extends StreamTransformation[F, A, R, B, R2] {
+    protected def processItem[S2](state: S, state2: S2, item: A)(f: (S2, NonEmptyVector[B]) => F[S2])(implicit monadInstance: Monad[F]): F[(S, S2)]
 
-  trait Single[A, R, B, R2] extends StreamTransformation[A, R, B, R2] {
-    protected def processItem(state: S, item: A): (S, Vector[B])
-
-    final override protected def processItems(state: S, items: NonEmptyVector[A]): (S, Vector[B]) =
-      items.foldLeft((state, Vector.empty[B])) {
-        case ((state, acc), item) =>
-          val (state2, newItems) = processItem(state, item)
-          (state2, acc ++ newItems)
+    override def processItems[S2](state: S, state2: S2, items: NonEmptyVector[A])(f: (S2, NonEmptyVector[B]) => F[S2])(implicit monadInstance: Monad[F]): F[(S, S2)] =
+      items.foldLeftM((state, state2)) {
+        case ((state, state2), item) =>
+          processItem(state, state2, item)(f)
       }
   }
-
 }

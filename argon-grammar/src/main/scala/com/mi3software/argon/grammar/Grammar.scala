@@ -7,7 +7,7 @@ import scala.collection.immutable.{Stream => _, _}
 import scala.language.postfixOps
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.util.stream.StreamTransformationM
+import com.mi3software.argon.util.stream.StreamTransformation
 
 sealed trait Grammar[TToken, TSyntaxError, TLabel <: RuleLabel, +T] {
 
@@ -311,8 +311,8 @@ object Grammar {
   (factory: GrammarFactory[TToken, TSyntaxError, TLabel])
   (label: TLabel { type RuleType = T })
   (implicit errorReporter: SyntaxErrorReporter[F, TSyntaxError])
-  : StreamTransformationM[F, WithSource[TToken], FilePosition, T, FilePosition] =
-    new StreamTransformationM[F, WithSource[TToken], FilePosition, T, FilePosition] {
+  : StreamTransformation[F, WithSource[TToken], FilePosition, T, FilePosition] =
+    new StreamTransformation[F, WithSource[TToken], FilePosition, T, FilePosition] {
 
       private val defaultParseOptions: ParseOptions[TToken, TSyntaxError, TLabel] = ParseOptions(Set.empty, None, factory)
       private val rule = factory(label)
@@ -323,54 +323,58 @@ object Grammar {
 
       final case class TransformStepResult(items: Vector[T], step: ParseStep)
 
-      override protected type S = ParseStep
-      override protected val initialState: ParseStep = ParseStepReady
+      override type S = ParseStep
+      override val initialState: ParseStep = ParseStepReady
 
 
 
-      private def parseNext(tokens: NonEmptyVector[WithSource[TToken]], acc: Vector[T])(implicit monadInstance: Monad[F]): F[(ParseStep, Vector[T])] =
+      private def parseNext[S2](state: S2, tokens: NonEmptyVector[WithSource[TToken]], f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(ParseStep, S2)] =
         rule.parseTokens(tokens, defaultParseOptions) match {
-          case GrammarResultSuccess(head +: tail, WithSource(value, _)) => parseNext(NonEmptyVector(head, tail), acc :+ value)
-          case GrammarResultSuccess(Vector(), WithSource(value, _)) => (ParseStepReady : ParseStep, acc :+ value).point[F]
+          case GrammarResultSuccess(head +: tail, WithSource(value, _)) => f(state, NonEmptyVector.of(value)).flatMap { state => parseNext(state, NonEmptyVector(head, tail), f) }
+          case GrammarResultSuccess(Vector(), WithSource(value, _)) => f(state, NonEmptyVector.of(value)).map { state => (ParseStepReady : ParseStep, state) }
           case GrammarResultFailure(failure) => errorReporter.reportError(failure)
           case GrammarResultError(error) => errorReporter.reportError(error)
-          case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] => (ParseStepPartial(suspend) : ParseStep, acc).point[F]
+          case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] => (ParseStepPartial(suspend) : ParseStep, state).point[F]
         }
 
-      private def parseRemaining(tokens: NonEmptyVector[WithSource[TToken]], suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T])(implicit monadInstance: Monad[F]): F[(ParseStep, Vector[T])] =
+      private def parseRemaining[S2](state: S2, tokens: NonEmptyVector[WithSource[TToken]], suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T], f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(ParseStep, S2)] =
         suspend.continue(tokens) match {
-          case GrammarResultSuccess(head +: tail, WithSource(value, _)) => parseNext(NonEmptyVector(head, tail), Vector(value))
-          case GrammarResultSuccess(Vector(), WithSource(value, _)) => (ParseStepReady : ParseStep, Vector(value)).point[F]
+          case GrammarResultSuccess(head +: tail, WithSource(value, _)) => f(state, NonEmptyVector.of(value)).flatMap { state => parseNext(state, NonEmptyVector(head, tail), f) }
+          case GrammarResultSuccess(Vector(), WithSource(value, _)) => f(state, NonEmptyVector.of(value)).map { state => (ParseStepReady : ParseStep, state) }
           case GrammarResultError(error) => errorReporter.reportError(error)
-          case suspend2: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] => (ParseStepPartial(suspend2) : ParseStep, Vector.empty[T]).point[F]
+          case suspend2: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] => (ParseStepPartial(suspend2) : ParseStep, state).point[F]
         }
 
-
-      private def processEnd(state: ParseStep, end: FilePosition, acc: Vector[T])(implicit monadInstance: Monad[F]): F[(FilePosition, Vector[T])] =
-        state match {
-          case ParseStepReady => (end, Vector.empty[T]).point[F]
-          case ParseStepPartial(transform) => parseEnd(end, transform, acc)
+      private def processEnd[S2](step: ParseStep, state: S2, end: FilePosition, f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(FilePosition, S2)] =
+        step match {
+          case ParseStepReady => (end, state).point[F]
+          case ParseStepPartial(transform) => parseEnd(state, end, transform, f)
         }
 
-      private def parseEnd(end: FilePosition, suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T], acc: Vector[T])(implicit monadInstance: Monad[F]): F[(FilePosition, Vector[T])] =
+      private def parseEnd[S2, A](state: S2, end: FilePosition, suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T], f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(FilePosition, S2)] =
         suspend.completeResult(end) match {
           case GrammarResultSuccess(head +: tail, WithSource(value, _)) =>
-            parseNext(NonEmptyVector(head, tail), Vector(value)).flatMap {
-              case (step, items) => processEnd(step, end, items)
-            }
-          case GrammarResultSuccess(Vector(), WithSource(value, _)) => (end, Vector(value)).point[F]
+            f(state, NonEmptyVector.of(value))
+              .flatMap { state => parseNext(state, NonEmptyVector(head, tail), f) }
+              .flatMap { case (step, state) => processEnd(step, state, end, f) }
+
+          case GrammarResultSuccess(Vector(), WithSource(value, _)) =>
+            f(state, NonEmptyVector.of(value)).map { state => (end, state) }
+
           case GrammarResultFailure(failure) => errorReporter.reportError(failure)
           case GrammarResultError(error) => errorReporter.reportError(error)
         }
 
-      override protected def processItems(state: ParseStep, items: NonEmptyVector[WithSource[TToken]])(implicit monadInstance: Monad[F]): F[(ParseStep, Vector[T])] =
+
+      override def processItems[S2](state: ParseStep, state2: S2, items: NonEmptyVector[WithSource[TToken]])(f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(ParseStep, S2)] =
         state match {
-          case ParseStepReady => parseNext(items, Vector.empty)
-          case ParseStepPartial(transform) => parseRemaining(items, transform)
+          case ParseStepReady => parseNext(state2, items, f)
+          case ParseStepPartial(transform) => parseRemaining(state2, items, transform, f)
         }
 
-      override protected def processResult(state: ParseStep, result: FilePosition)(implicit monadInstance: Monad[F]): F[(FilePosition, Vector[T])] =
-        processEnd(state, result, Vector.empty)
+      override def processResult[S2](state: ParseStep, state2: S2, result: FilePosition)(f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(FilePosition, S2)] =
+        processEnd(state, state2, result, f)
+
     }
 
   trait ErrorFactory[-TToken, -TTokenCategory, TSyntaxError] {

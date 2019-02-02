@@ -2,67 +2,79 @@ package com.mi3software.argon.parser.impl
 
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.util.stream.{ArStream, StreamTransformation, StreamTransformationM}
-import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
+import com.mi3software.argon.util.stream.{ArStream, StreamTransformation}
+import com.mi3software.argon.util.{FilePosition, NonEmptyVector, SourceLocation, WithSource}
 
 
 object Characterizer {
 
-  private val toCodePoints: StreamTransformation[Char, Unit, Int, Unit] =
-    new StreamTransformation.Single[Char, Unit, Int, Unit] {
-      override protected type S = Option[Char]
+  private def toCodePoints[F[_]]: StreamTransformation[F, Char, Unit, Int, Unit] =
+    new StreamTransformation.Single[F, Char, Unit, Int, Unit] {
+      override type S = Option[Char]
 
-      override protected val initialState: Option[Char] = None
+      override val initialState: Option[Char] = None
 
-      override protected def processItem(state: Option[Char], item: Char): (Option[Char], Vector[Int]) =
+
+      override protected def processItem[S2](state: Option[Char], state2: S2, item: Char)(f: (S2, NonEmptyVector[Int]) => F[S2])(implicit monadInstance: Monad[F]): F[(Option[Char], S2)] =
         state match {
-          case Some(prevCh) => (None, Vector(Character.toCodePoint(prevCh, item)))
+          case Some(prevCh) =>
+            f(state2, NonEmptyVector.of(Character.toCodePoint(prevCh, item))).map { state2 => (None, state2) }
+
           case None =>
             if(Character.isHighSurrogate(item))
-              (Some(item), Vector.empty)
+              (item.point[Option], state2).point[F]
             else
-              (None, Vector(item.toInt))
+              f(state2, NonEmptyVector.of(item.toInt)).map { state2 => (Option.empty[Char], state2) }
         }
 
-      override protected def processResult(state: Option[Char], result: Unit): (Unit, Vector[Int]) =
-        ((), state.map { _.toInt }.toVector)
+      override def processResult[S2](state: Option[Char], state2: S2, result: Unit)(f: (S2, NonEmptyVector[Int]) => F[S2])(implicit monadInstance: Monad[F]): F[(Unit, S2)] =
+        state
+          .traverse { ch => f(state2, NonEmptyVector.of(ch.toInt)) }
+          .map { newState2 => ((), newState2.getOrElse(state2)) }
+
     }
 
-  private val toGraphemes: StreamTransformation[Int, Unit, String, Unit] =
-    new StreamTransformation.Single[Int, Unit, String, Unit] {
-      override protected type S = Option[String]
+  private def toGraphemes[F[_]]: StreamTransformation[F, Int, Unit, String, Unit] =
+    new StreamTransformation.Single[F, Int, Unit, String, Unit] {
+      override type S = Option[String]
 
-      override protected val initialState: Option[String] = None
+      override val initialState: Option[String] = None
 
-      override protected def processItem(state: Option[String], item: Int): (Option[String], Vector[String]) =
+
+      override protected def processItem[S2](state: Option[String], state2: S2, item: Int)(f: (S2, NonEmptyVector[String]) => F[S2])(implicit monadInstance: Monad[F]): F[(Option[String], S2)] =
         state match {
-          case Some(str) if isCombiningChar(item) => (Some(str + codePointToString(item)), Vector.empty)
-          case _ => (Some(codePointToString(item)), state.toVector)
+          case Some(str) if isCombiningChar(item) => ((str + codePointToString(item)).point[Option], state2).point[F]
+          case _ => f(state2, NonEmptyVector.of(codePointToString(item))).map { state2 => (Option.empty[String], state2) }
         }
 
-      override protected def processResult(state: Option[String], result: Unit): (Unit, Vector[String]) =
-        ((), state.toVector)
+      override def processResult[S2](state: Option[String], state2: S2, result: Unit)(f: (S2, NonEmptyVector[String]) => F[S2])(implicit monadInstance: Monad[F]): F[(Unit, S2)] =
+        state
+          .traverse { s => f(state2, NonEmptyVector.of(s)) }
+          .map { newState2 => ((), newState2.getOrElse(state2)) }
+
     }
 
 
-  private val withSource: StreamTransformation[String, Unit, WithSource[String], FilePosition] =
-    new StreamTransformation.Single[String, Unit, WithSource[String], FilePosition] {
-      override protected type S = FilePosition
+  private def withSource[F[_]]: StreamTransformation[F, String, Unit, WithSource[String], FilePosition] =
+    new StreamTransformation.Single[F, String, Unit, WithSource[String], FilePosition] {
+      override type S = FilePosition
 
-      override protected val initialState: FilePosition = FilePosition(1, 1)
+      override val initialState: FilePosition = FilePosition(1, 1)
 
-      override protected def processItem(pos: FilePosition, item: String): (FilePosition, Vector[WithSource[String]]) = {
+      override protected def processItem[S2](pos: FilePosition, state2: S2, item: String)(f: (S2, NonEmptyVector[WithSource[String]]) => F[S2])(implicit monadInstance: Monad[F]): F[(FilePosition, S2)] = {
         val nextPos =
           if(item === "\n")
             FilePosition(pos.line + 1, 1)
           else
             pos.copy(position = pos.position + 1)
 
-        (nextPos, Vector(WithSource(item, SourceLocation(pos, nextPos))))
+        val newItem = WithSource(item, SourceLocation(pos, nextPos))
+
+        f(state2, NonEmptyVector.of(newItem)).map { state2 => (nextPos, state2) }
       }
 
-      override protected def processResult(state: FilePosition, result: Unit): (FilePosition, Vector[WithSource[String]]) =
-        (state, Vector.empty)
+      override def processResult[S2](pos: FilePosition, state2: S2, result: Unit)(f: (S2, NonEmptyVector[WithSource[String]]) => F[S2])(implicit monadInstance: Monad[F]): F[(FilePosition, S2)] =
+        (pos, state2).point[F]
     }
 
 

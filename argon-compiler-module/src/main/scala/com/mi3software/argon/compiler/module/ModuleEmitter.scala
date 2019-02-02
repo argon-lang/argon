@@ -3,7 +3,7 @@ package com.mi3software.argon.compiler.module
 import com.mi3software.argon.compiler.Compilation
 import com.mi3software.argon.compiler.core.{ArModule, GlobalBinding, Namespace}
 import com.mi3software.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
-import com.mi3software.argon.util.stream.{ArStream, StreamTransformation, StreamTransformationM}
+import com.mi3software.argon.util.stream.{ArStream, StreamTransformation}
 import scalapb.GeneratedMessage
 import scalaz._
 import Scalaz._

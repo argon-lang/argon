@@ -9,7 +9,7 @@ import Scalaz._
 import com.mi3software.argon.grammar.{Grammar, GrammarError, SyntaxErrorReporter}
 import Grammar.Operators._
 import com.mi3software.argon.parser.impl.Lexer.LexerGrammarFactory
-import com.mi3software.argon.util.stream.StreamTransformationM
+import com.mi3software.argon.util.stream.StreamTransformation
 
 import Function.const
 
@@ -265,7 +265,7 @@ object Lexer {
 
   type ErrorReporter[F[_]] = SyntaxErrorReporter[F, SyntaxError]
 
-  def lex[F[_]: ErrorReporter]: StreamTransformationM[F, WithSource[String], FilePosition, WithSource[Token], FilePosition] =
+  def lex[F[_]: ErrorReporter]: StreamTransformation[F, WithSource[String], FilePosition, WithSource[Token], FilePosition] =
     Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken)
       .flatMapItems {
         case WithSource(Some(value), loc) => Vector(WithSource(value, loc))

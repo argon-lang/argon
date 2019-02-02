@@ -11,7 +11,7 @@ import Scalaz._
 import com.mi3software.argon.grammar.{Grammar, GrammarError, SyntaxErrorReporter, TokenMatcher}
 import Grammar.Operators._
 import Grammar.{GrammarFactory, UnionGrammar}
-import com.mi3software.argon.util.stream.StreamTransformationM
+import com.mi3software.argon.util.stream.StreamTransformation
 
 import Function.const
 
@@ -678,7 +678,7 @@ object ArgonParser {
 
   type ErrorReporter[F[_]] = SyntaxErrorReporter[F, SyntaxError]
 
-  def parse[F[_]: ErrorReporter]: StreamTransformationM[F, WithSource[Token], FilePosition, TopLevelStatement, Unit] =
+  def parse[F[_]: ErrorReporter]: StreamTransformation[F, WithSource[Token], FilePosition, TopLevelStatement, Unit] =
     Grammar.parseAll(ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)
       .mapItems { _.value }
       .mapResult { _ => ()}
