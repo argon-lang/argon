@@ -3,7 +3,7 @@ package com.mi3software.argon.parser.impl
 import com.mi3software.argon.util.{FilePosition, NonEmptyVector, SourceLocation, WithSource}
 import scalaz._
 import com.mi3software.argon.grammar.Grammar
-import Grammar.{GrammarResultComplete, GrammarResultTransform, ParseOptions}
+import Grammar.{GrammarResult, GrammarResultComplete, GrammarResultSuspend, ParseOptions}
 
 trait GrammarTestHelpers {
 
@@ -51,26 +51,29 @@ trait GrammarTestHelpersSingleTokens extends GrammarTestHelpers {
   override def parseTokens[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: Vector[WithSource[TToken]]): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] = {
     val endPos = FilePosition(1, tokens.size + 1)
 
-    def impl[A](trans: GrammarResultTransform[TToken, TSyntaxError, TLabel, A, T])(tokens: Vector[WithSource[TToken]]): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
-      tokens match {
-        case head +: tail =>
-          trans.grammar.parseTokens(NonEmptyVector.of(head), trans.parseOptions).transformComplete(trans.f) match {
-            case result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =>
-              result.map { case (unusedTokens, t) => (unusedTokens ++ tail, t) }
-            case trans: GrammarResultTransform[TToken, TSyntaxError, TLabel, a, T] =>
-              impl(trans)(tail)
-          }
-
-        case _ =>
-          trans.grammar
-            .parseEnd(
-              endPos,
-              trans.parseOptions
-            )
-            .transformComplete(trans.f)
-            .completeResult(endPos)
+    def handleResult(result: GrammarResult[TToken, TSyntaxError, TLabel, T], tail: Vector[WithSource[TToken]]): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+      result match {
+        case result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =>
+          result.map { case (unusedTokens, t) => (unusedTokens ++ tail, t) }
+        case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] =>
+          impl(suspend)(tail)
       }
 
-    impl(GrammarResultTransform(grammar)(ParseOptions(Set.empty, None, grammarFactory))(identity))(tokens)
+    def impl(suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T])(tokens: Vector[WithSource[TToken]]): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+      tokens match {
+        case head +: tail =>
+          handleResult(suspend.continue(NonEmptyVector.of(head)), tail)
+
+        case Vector() =>
+          suspend.completeResult(endPos)
+      }
+
+    tokens match {
+      case head +: tail =>
+        handleResult(grammar.parseTokens(NonEmptyVector.of(head), ParseOptions(Set.empty, None, grammarFactory)), tail)
+
+      case Vector() =>
+        grammar.parseEnd(endPos, ParseOptions(Set.empty, None, grammarFactory))
+    }
   }
 }
