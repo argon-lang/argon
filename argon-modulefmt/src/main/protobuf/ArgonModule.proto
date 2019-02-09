@@ -243,7 +243,7 @@ message Type {
 
 // Signature
 message ParameterElement {
-    required string name = 1;
+    optional string name = 1;
     required Type paramType = 2;
 }
 

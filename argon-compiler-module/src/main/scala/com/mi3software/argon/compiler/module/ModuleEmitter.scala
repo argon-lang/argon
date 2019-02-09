@@ -166,7 +166,31 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
   private def convertSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], A]
   (sig: Signature[TResult])
   (f: (Vector[module.Parameter], TResult[context.type, context.typeSystem.type]) => Emit[A])
-  : Emit[A] = ???
+  : Emit[A] = {
+
+    def impl(sig: Signature[TResult], prevParams: Vector[module.Parameter]): Emit[A] =
+      sig.visit(
+        sigParams =>
+          sigParams.parameter.tupleVars
+            .traverse { elem =>
+              convertType(elem.varType).map { paramType =>
+                module.ParameterElement(
+                  elem.name match {
+                    case VariableName.Normal(name) => Some(name)
+                    case VariableName.Unnamed => None
+                  },
+                  paramType
+                )
+              }
+            }
+            .flatMap { elems =>
+              impl(sig, prevParams :+ module.Parameter(elems))
+            },
+        sigResult => f(prevParams, sigResult.result),
+      )
+
+    impl(sig, Vector.empty)
+  }
 
   private def convertClassType(classType: typeSystem.ClassType): Emit[module.ClassType] = ???
   private def convertTraitType(traitType: typeSystem.TraitType): Emit[module.TraitType] = ???
