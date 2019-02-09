@@ -192,9 +192,29 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
     impl(sig, Vector.empty)
   }
 
-  private def convertClassType(classType: typeSystem.ClassType): Emit[module.ClassType] = ???
-  private def convertTraitType(traitType: typeSystem.TraitType): Emit[module.TraitType] = ???
-  private def convertType(traitType: typeSystem.SimpleType): Emit[module.Type] = ???
+  private def convertClassType(classType: typeSystem.ClassType): Emit[module.ClassType] = for {
+    id <- getClassId(classType.arClass.value.descriptor)
+    args <- classType.args.traverse(convertType)
+  } yield module.ClassType(id, args)
+
+  private def convertTraitType(traitType: typeSystem.TraitType): Emit[module.TraitType] = for {
+    id <- getTraitId(traitType.arTrait.value.descriptor)
+    args <- traitType.args.traverse(convertType)
+  } yield module.TraitType(id, args)
+
+  private def convertDataCtorType(dataCtorType: typeSystem.DataConstructorType): Emit[module.DataConstructorType] = for {
+    id <- getDataCtorId(dataCtorType.ctor.value.descriptor)
+    args <- dataCtorType.args.traverse(convertType)
+  } yield module.DataConstructorType(id, args)
+
+  private def convertType(t: typeSystem.SimpleType): Emit[module.Type] =
+    ((t match {
+      case t: typeSystem.ClassType => convertClassType(t).map(module.Type.TypeInfo.ClassType)
+      case t: typeSystem.TraitType => convertTraitType(t).map(module.Type.TypeInfo.TraitType)
+      case t: typeSystem.DataConstructorType => convertDataCtorType(t).map(module.Type.TypeInfo.DataConstructorType)
+      case _ => ???
+    }) : Emit[module.Type.TypeInfo])
+      .map(module.Type.apply)
 
   private def convertInNamespaceDescriptor(descriptor: InNamespaceDescriptor): module.InNamespaceDescriptor =
     module.InNamespaceDescriptor(

@@ -228,7 +228,7 @@ message ClassType {
     repeated Type typeArguments = 2;
 }
 
-message DataConstructorInstanceType {
+message DataConstructorType {
     required sint32 constructorId = 1;
     repeated Type typeArguments = 2;
 }
@@ -237,7 +237,7 @@ message Type {
     oneof typeInfo {
         TraitType traitType = 1;
         ClassType classType = 2;
-        DataConstructorInstanceType dataConstructorInstanceType = 3;
+        DataConstructorType dataConstructorType = 3;
     }
 }
 
