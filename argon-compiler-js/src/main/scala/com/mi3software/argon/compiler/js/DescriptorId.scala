@@ -31,18 +31,6 @@ object DescriptorId {
       case ErasedSignature.TupleType(elements) => s"(${elements.map(e => "$_:" + encodeType(e)).toVector.mkString(",")})"
     }
 
-  private def encodeSignature[TContext <: Context](signature: ErasedSignature[TContext]): String =
-    signature match {
-      case ErasedSignature.Parameter(paramType, next) =>
-        encodeType(paramType) + "->" + encodeSignature(next)
-
-      case ErasedSignature.Result(resultType) =>
-        encodeType(resultType)
-    }
-
-  private def encodeSignatureParameters[TContext <: Context](signature: ErasedSignature.ParameterOnlySignature[TContext]): String =
-    signature.paramTypes.map { paramType => encodeType(paramType) + "->" }.mkString
-
   private def encodeMemberName[TContext <: Context](memberName: MemberName): String =
     memberName match {
       case MemberName.Normal(name) => encodeIdentifier(name)
@@ -72,9 +60,9 @@ object DescriptorId {
     }
 
   def forMethod[TContext <: Context](descriptor: MethodDescriptor, signature: ErasedSignature[TContext]): String =
-    s"${descriptor.index}:${encodeMemberName(descriptor.name)}:${encodeSignature(signature)}"
+    s"${encodeMemberName(descriptor.name)}#${descriptor.index}"
 
-  def forClassConstructor[TContext <: Context](signature: ErasedSignature.ParameterOnlySignature[TContext]): String =
-    encodeSignatureParameters(signature)
+  def forClassConstructor[TContext <: Context](descriptor: ClassConstructorDescriptor): String =
+    s"\$new#${descriptor.index}"
 
 }
