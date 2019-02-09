@@ -84,7 +84,7 @@ object ArgonModuleLoader {
                 globalName match {
                   case ArgonModule.GlobalName.NormalName(name) => Some(GlobalName.Normal(name))
                   case ArgonModule.GlobalName.Unnamed(ArgonModule.UnnamedGlobalName(fileID, index)) =>
-                    Some(GlobalName.Unnamed(FileID(fileID), index))
+                    Some(GlobalName.Unnamed)
 
                   case ArgonModule.GlobalName.UnknownUnionField(_) => None
                 }
@@ -144,7 +144,7 @@ object ArgonModuleLoader {
                     ParsedGlobalAccessModifier(accessModifier)
                   )
                 ) =>
-                  Some(TraitDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
+                  Some(TraitDescriptor.InNamespace(module, FileID(fileID), 0, parseNamespacePath(ns), name, accessModifier))
 
                 case ArgonModule.TraitDescriptor.UnknownUnionField(_) =>
                   None
@@ -160,7 +160,7 @@ object ArgonModuleLoader {
                     ParsedGlobalAccessModifier(accessModifier)
                   )
                 ) =>
-                  Some(ClassDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
+                  Some(ClassDescriptor.InNamespace(module, FileID(fileID), 0, parseNamespacePath(ns), name, accessModifier))
 
                 case ArgonModule.ClassDescriptor.UnknownUnionField(_) =>
                   None
@@ -176,7 +176,7 @@ object ArgonModuleLoader {
                     ParsedGlobalAccessModifier(accessModifier)
                   )
                 ) =>
-                  Some(DataConstructorDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
+                  Some(DataConstructorDescriptor.InNamespace(module, FileID(fileID), 0, parseNamespacePath(ns), name, accessModifier))
 
                 case ArgonModule.DataConstructorDescriptor.UnknownUnionField(_) =>
                   None
@@ -192,13 +192,13 @@ object ArgonModuleLoader {
                     ParsedGlobalAccessModifier(accessModifier)
                   )
                 ) =>
-                  Some(FuncDescriptor.InNamespace(module, parseNamespacePath(ns), name, accessModifier))
+                  Some(FuncDescriptor.InNamespace(module, FileID(fileID), 0, parseNamespacePath(ns), name, accessModifier))
 
                 case ArgonModule.FunctionDescriptor.UnknownUnionField(_) =>
                   None
               }
 
-            private def parseMemberName(memberName: ArgonModule.MemberName): Option[MemberName] =
+            private def parseMemberName(memberName: ArgonModule.MemberName): Option[MethodName] =
               memberName match {
 
                 case ArgonModule.MemberName.UnknownUnionField(_) => None
@@ -207,7 +207,7 @@ object ArgonModuleLoader {
                   Some(MemberName.Normal(name))
 
                 case ArgonModule.MemberName.UnnamedMemberIndex(index) =>
-                  Some(MemberName.Unnamed(index))
+                  Some(MemberName.Unnamed)
 
                 case ArgonModule.MemberName.SpecialMemberName(ArgonModule.SpecialMemberName.EnumUnknownSpecialMemberName(_)) => None
 
@@ -215,7 +215,7 @@ object ArgonModuleLoader {
                   Some(MemberName.Call)
 
                 case ArgonModule.MemberName.SpecialMemberName(ArgonModule.SpecialMemberName.New) =>
-                  Some(MemberName.New)
+                  None
 
               }
 
@@ -231,7 +231,7 @@ object ArgonModuleLoader {
                       case ArgonModule.MethodOwnerDescriptor.TraitObjectDescriptor(traitDesc) => parseTraitDescriptor(module)(traitDesc).map(TraitObjectDescriptor.apply)
                       case ArgonModule.MethodOwnerDescriptor.ClassObjectDescriptor(classDesc) => parseClassDescriptor(module)(classDesc).map(ClassObjectDescriptor.apply)
                     }
-                  } yield MethodDescriptor(ownerDescValue, memberNameValue, accessModifier)
+                  } yield MethodDescriptor(ownerDescValue, 0, memberNameValue, accessModifier)
               }
 
             private trait ModuleObjectRefDef[TValue, TRef, TDef] {
@@ -302,7 +302,7 @@ object ArgonModuleLoader {
               }.map { elems => Map(elems: _*) }
 
             private def lookupTrait(module: ArModule[context.type, ReferencePayloadSpecifier]): TraitDescriptor => TComp[Option[ArTrait[context.type, ReferencePayloadSpecifier]]] = {
-              case TraitDescriptor.InNamespace(_, namespace, name, _) =>
+              case TraitDescriptor.InNamespace(_, _, _, namespace, name, _) =>
                 lookupNamespaceValue(module)(namespace, name) {
                   case GlobalBinding.GlobalTrait(_, _, arTrait) => arTrait
                 }
@@ -385,7 +385,7 @@ object ArgonModuleLoader {
               )
 
             private def lookupClass(module: ArModule[context.type, ReferencePayloadSpecifier]): ClassDescriptor => TComp[Option[ArClass[context.type, ReferencePayloadSpecifier]]] = {
-              case ClassDescriptor.InNamespace(_, namespace, name, _) =>
+              case ClassDescriptor.InNamespace(_, _, _, namespace, name, _) =>
                 lookupNamespaceValue(module)(namespace, name)(ModuleLookup.lookupGlobalClass)
             }
 
@@ -508,7 +508,7 @@ object ArgonModuleLoader {
                 parseDescriptor = parseDataCtorDescriptor
               )(
                 referenceHandler = moduleRef => {
-                  case DataConstructorDescriptor.InNamespace(_, namespace, name, _) =>
+                  case DataConstructorDescriptor.InNamespace(_, _, _, namespace, name, _) =>
                     lookupNamespaceValue(moduleRef)(namespace, name) {
                       case GlobalBinding.GlobalDataConstructor(_, _, dataCtor) => dataCtor
                     }
@@ -538,7 +538,7 @@ object ArgonModuleLoader {
                 parseDescriptor = parseFunctionDescriptor
               )(
                 referenceHandler = moduleRef => {
-                  case FuncDescriptor.InNamespace(_, namespace, name, _) =>
+                  case FuncDescriptor.InNamespace(_, _, _, namespace, name, _) =>
                     lookupNamespaceValue(moduleRef)(namespace, name) {
                       case GlobalBinding.GlobalFunction(_, _, func) => func
                     }
@@ -592,7 +592,7 @@ object ArgonModuleLoader {
                 parseDescriptor = parseMethodDescriptor
               )(
                 referenceHandler = moduleRef => {
-                  case methodDesc @ MethodDescriptor(traitDescriptor: TraitDescriptor, _, _) =>
+                  case methodDesc @ MethodDescriptor(traitDescriptor: TraitDescriptor, _, _, _) =>
                     lookupTrait(moduleRef)(traitDescriptor).flatMap { arTraitOpt =>
                       arTraitOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arTrait =>
                         compEv.flip(arTrait.methods).map { methods =>
@@ -602,7 +602,7 @@ object ArgonModuleLoader {
                         }
                       }
                     }
-                  case methodDesc @ MethodDescriptor(TraitObjectDescriptor(traitDescriptor), _, _) =>
+                  case methodDesc @ MethodDescriptor(TraitObjectDescriptor(traitDescriptor), _, _, _) =>
                     lookupTrait(moduleRef)(traitDescriptor).flatMap { arTraitOpt =>
                       arTraitOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arTrait =>
                         compEv.flip(arTrait.staticMethods).map { methods =>
@@ -613,7 +613,7 @@ object ArgonModuleLoader {
                       }
                     }
 
-                  case methodDesc @ MethodDescriptor(classDescriptor : ClassDescriptor, _, _) =>
+                  case methodDesc @ MethodDescriptor(classDescriptor : ClassDescriptor, _, _, _) =>
                     lookupClass(moduleRef)(classDescriptor).flatMap { arClassOpt =>
                       arClassOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arClass =>
                         compEv.flip(arClass.methods).map { methods =>
@@ -624,7 +624,7 @@ object ArgonModuleLoader {
                       }
                     }
 
-                  case methodDesc @ MethodDescriptor(ClassObjectDescriptor(classDescriptor), _, _) =>
+                  case methodDesc @ MethodDescriptor(ClassObjectDescriptor(classDescriptor), _, _, _) =>
                     lookupClass(moduleRef)(classDescriptor).flatMap { arClassOpt =>
                       arClassOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arClass =>
                         compEv.flip(arClass.staticMethods).map { methods =>
@@ -635,7 +635,7 @@ object ArgonModuleLoader {
                       }
                     }
 
-                  case methodDesc @ MethodDescriptor(DataConstructorDescriptor.InNamespace(_, namespace, name, _), _, _) =>
+                  case methodDesc @ MethodDescriptor(DataConstructorDescriptor.InNamespace(_, _, _, namespace, name, _), _, _, _) =>
                     lookupNamespaceValue(moduleRef)(namespace, name) {
                       case GlobalBinding.GlobalDataConstructor(_, _, dataCtor) => dataCtor
                     }
@@ -703,25 +703,25 @@ object ArgonModuleLoader {
               combineNamespaceElements(
                 createNamespaceElements(traitMap) { arTrait =>
                   arTrait.descriptor match {
-                    case TraitDescriptor.InNamespace(_, namespace, name, accessModifier) =>
+                    case TraitDescriptor.InNamespace(_, _, _, namespace, name, accessModifier) =>
                       Some(ModuleElement(namespace, GlobalBinding.GlobalTrait(name, accessModifier, arTrait)))
                   }
                 },
                 createNamespaceElements(classMap) { arClass =>
                   arClass.descriptor match {
-                    case ClassDescriptor.InNamespace(_, namespace, name, accessModifier) =>
+                    case ClassDescriptor.InNamespace(_, _, _, namespace, name, accessModifier) =>
                       Some(ModuleElement(namespace, GlobalBinding.GlobalClass(name, accessModifier, arClass)))
                   }
                 },
                 createNamespaceElements(dataCtorMap) { dataCtor =>
                   dataCtor.descriptor match {
-                    case DataConstructorDescriptor.InNamespace(_, namespace, name, accessModifier) =>
+                    case DataConstructorDescriptor.InNamespace(_, _, _, namespace, name, accessModifier) =>
                       Some(ModuleElement(namespace, GlobalBinding.GlobalDataConstructor(name, accessModifier, dataCtor)))
                   }
                 },
                 createNamespaceElements(functionMap) { func =>
                   func.descriptor match {
-                    case FuncDescriptor.InNamespace(_, namespace, name, accessModifier) =>
+                    case FuncDescriptor.InNamespace(_, _, _, namespace, name, accessModifier) =>
                       Some(ModuleElement(namespace, GlobalBinding.GlobalFunction(name, accessModifier, func)))
                   }
                 },

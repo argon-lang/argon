@@ -338,7 +338,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           sig <- func.value.signature
 
           funcExpr = func.value.descriptor match {
-            case FuncDescriptor.InNamespace(moduleDesc, ns, name, _) =>
+            case FuncDescriptor.InNamespace(moduleDesc, _, _, ns, name, _) =>
               val funcsObject =
                 if(moduleDesc === getParamOwnerModule(owner))
                   funcsVarName
@@ -555,13 +555,13 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
 
   private def getParamOwnerModule(descriptor: ParameterOwnerDescriptor): ModuleDescriptor =
     descriptor match {
-      case FuncDescriptor.InNamespace(module, _, _, _) => module
-      case MethodDescriptor(typeDescriptor, _, _) => getParamOwnerModule(typeDescriptor)
-      case ClassDescriptor.InNamespace(module, _, _, _) => module
+      case FuncDescriptor.InNamespace(module, _, _, _, _, _) => module
+      case MethodDescriptor(typeDescriptor, _, _, _) => getParamOwnerModule(typeDescriptor)
+      case ClassDescriptor.InNamespace(module, _, _, _, _, _) => module
       case ClassObjectDescriptor(ownerClass) => getParamOwnerModule(ownerClass)
-      case TraitDescriptor.InNamespace(module, _, _, _) => module
+      case TraitDescriptor.InNamespace(module, _, _, _, _, _) => module
       case TraitObjectDescriptor(ownerTrait) => getParamOwnerModule(ownerTrait)
-      case DataConstructorDescriptor.InNamespace(module, _, _, _) => module
-      case ClassConstructorDescriptor(ownerClass, _) => getParamOwnerModule(ownerClass)
+      case DataConstructorDescriptor.InNamespace(module, _, _, _, _, _) => module
+      case ClassConstructorDescriptor(ownerClass, _, _) => getParamOwnerModule(ownerClass)
     }
 }

@@ -13,12 +13,13 @@ object DescriptorId {
   private def encodeIdentifier(id: String): String =
     specialChars.foldLeft(id) { (id, ch) => id.replace(ch, "\\" + ch) }
 
-  private def encodeInNamespace(namespace: NamespacePath, name: GlobalName): String =
-      namespace.ns.map(encodeIdentifier).map(_ + ".").mkString +
-      ((name match {
+  private def encodeInNamespace(descriptor: InNamespaceDescriptor): String =
+    descriptor.namespace.ns.map(encodeIdentifier).map(_ + ".").mkString +
+      ((descriptor.name match {
         case GlobalName.Normal(id) => encodeIdentifier(id)
-        case GlobalName.Unnamed(fileId, index) => "#" + fileId.id.toString + "-" + index.toString
-      }) : String)
+        case GlobalName.Unnamed => "$_"
+      }) : String) +
+      s"#${descriptor.fileId.id}-${descriptor.index}"
 
   private def encodeType[TContext <: Context](t: ErasedSignature.SigType[TContext]): String =
     t match {
@@ -45,33 +46,33 @@ object DescriptorId {
   private def encodeMemberName[TContext <: Context](memberName: MemberName): String =
     memberName match {
       case MemberName.Normal(name) => encodeIdentifier(name)
-      case MemberName.Unnamed(index) => "#" + index.toString
+      case MemberName.Unnamed => "$_"
       case MemberName.Call => "$call"
       case MemberName.New => "$new"
     }
 
   def forClass(descriptor: ClassDescriptor): String =
     descriptor match {
-      case ClassDescriptor.InNamespace(_, namespace, name, _) => encodeInNamespace(namespace, name)
+      case descriptor @ ClassDescriptor.InNamespace(_, _, _, _, _, _) => encodeInNamespace(descriptor)
     }
 
   def forTrait(descriptor: TraitDescriptor): String =
     descriptor match {
-      case TraitDescriptor.InNamespace(_, namespace, name, _) => encodeInNamespace(namespace, name)
+      case descriptor @ TraitDescriptor.InNamespace(_, _, _, _, _, _) => encodeInNamespace(descriptor)
     }
 
   def forDataConstructor(descriptor: DataConstructorDescriptor): String =
     descriptor match {
-      case DataConstructorDescriptor.InNamespace(_, namespace, name, _) => encodeInNamespace(namespace, name)
+      case descriptor @ DataConstructorDescriptor.InNamespace(_, _, _, _, _, _) => encodeInNamespace(descriptor)
     }
 
   def forFunc[TContext <: Context](descriptor: FuncDescriptor, signature: ErasedSignature[TContext]): String =
     descriptor match {
-      case FuncDescriptor.InNamespace(_, namespace, name, _) => s"${encodeInNamespace(namespace, name)}:${encodeSignature(signature)}"
+      case descriptor @ FuncDescriptor.InNamespace(_, _, _, _, _, _) => encodeInNamespace(descriptor)
     }
 
   def forMethod[TContext <: Context](descriptor: MethodDescriptor, signature: ErasedSignature[TContext]): String =
-    s"${encodeMemberName(descriptor.name)}:${encodeSignature(signature)}"
+    s"${descriptor.index}:${encodeMemberName(descriptor.name)}:${encodeSignature(signature)}"
 
   def forClassConstructor[TContext <: Context](signature: ErasedSignature.ParameterOnlySignature[TContext]): String =
     encodeSignatureParameters(signature)

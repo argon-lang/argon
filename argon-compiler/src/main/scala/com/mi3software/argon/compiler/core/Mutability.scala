@@ -10,4 +10,10 @@ object Mutability {
       Mutable
     else
       NonMutable
+
+  def toIsMutable(mutability: Mutability): Boolean =
+    mutability match {
+      case Mutable => true
+      case NonMutable => false
+    }
 }

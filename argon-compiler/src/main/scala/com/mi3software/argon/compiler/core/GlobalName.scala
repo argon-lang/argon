@@ -10,12 +10,12 @@ object GlobalName {
   final case class Normal(name: String) extends GlobalName
 
   @deriving(Equal)
-  final case class Unnamed(fileId: FileID, index: Int) extends GlobalName
+  case object Unnamed extends GlobalName
 
   implicit val equalInstance: Equal[GlobalName] = {
     case (a @ Normal(_), b @ Normal(_)) => a === b
     case (Normal(_), _) | (_, Normal(_)) => false
 
-    case (a @ Unnamed(_, _), b @ Unnamed(_, _)) => a === b
+    case (a @ Unnamed, b @ Unnamed) => a === b
   }
 }

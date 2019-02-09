@@ -123,12 +123,12 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
             val memberName = method.value.name match {
               case Some(name) => MemberName.Normal(name)
-              case None => MemberName.Unnamed(i)
+              case None => MemberName.Unnamed
             }
 
             fields.flatMap { fieldVars =>
               val env2 = env.addVariables(context)(fieldVars)
-              val desc = MethodDescriptor(descriptor, memberName, modifiers)
+              val desc = MethodDescriptor(descriptor, i, memberName, modifiers)
               SourceMethod(context)(env2)(method.value, method.location)(desc)
             }
           }
@@ -141,10 +141,10 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
             val memberName = method.value.name match {
               case Some(name) => MemberName.Normal(name)
-              case None => MemberName.Unnamed(i)
+              case None => MemberName.Unnamed
             }
 
-            val desc = MethodDescriptor(ClassObjectDescriptor(descriptor), memberName, modifiers)
+            val desc = MethodDescriptor(ClassObjectDescriptor(descriptor), i, memberName, modifiers)
             SourceMethod(context)(env)(method.value, method.location)(desc)
           }
         }
@@ -152,9 +152,9 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
     override val classConstructors: TComp[Vector[ClassConstructor[context2.type, DeclarationPayloadSpecifier]]] =
       classCtorCache(groupedStatic.flatMap { statics =>
-        statics.classCtors.traverse { classCtor =>
+        statics.classCtors.zipWithIndex.traverse { case (classCtor, i) =>
           parseAccessModifier(env.fileSpec, classCtor.location, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
-            val desc = ClassConstructorDescriptor(descriptor, modifiers)
+            val desc = ClassConstructorDescriptor(descriptor, i, modifiers)
             SourceClassConstructor(context)(env)(this)(classCtor.value)(desc)
           }
         }

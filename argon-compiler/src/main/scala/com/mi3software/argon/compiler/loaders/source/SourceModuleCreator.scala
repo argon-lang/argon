@@ -116,16 +116,20 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
     val env = envF(sourceAST.fileSpec)
 
-    def createBinding(name: String, modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
+    def createBinding(name: Option[String], modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
       parseGlobalAccessModifier[TComp](sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
-        val globalName = GlobalName.Normal(name)
+        val globalName = name match {
+          case Some(n) => GlobalName.Normal(n)
+          case None => GlobalName.Unnamed
+        }
+
         f(globalName, accessModifier)
       }
 
     sourceAST.statement.value match {
-      case traitDeclarationStmt @ parser.TraitDeclarationStmt(_, Some(traitName), _, _, _, modifiers) =>
+      case traitDeclarationStmt @ parser.TraitDeclarationStmt(_, traitName, _, _, _, modifiers) =>
         createBinding(traitName, modifiers) { (globalName, accessModifier) =>
-          val desc = TraitDescriptor.InNamespace(options.moduleDescriptor, sourceAST.currentNamespace, globalName, accessModifier)
+          val desc = TraitDescriptor.InNamespace(options.moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
 
           GlobalBinding.GlobalTrait(
             globalName, accessModifier,
@@ -133,18 +137,18 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           ).point[TComp]
         }
 
-      case classDeclarationStmt @ parser.ClassDeclarationStmt(_, Some(className), _, _, _, modifiers) =>
+      case classDeclarationStmt @ parser.ClassDeclarationStmt(_, className, _, _, _, modifiers) =>
         createBinding(className, modifiers) { (globalName, accessModifier) =>
-          val desc = ClassDescriptor.InNamespace(options.moduleDescriptor, sourceAST.currentNamespace, globalName, accessModifier)
+          val desc = ClassDescriptor.InNamespace(options.moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
 
           for {
             arClass <- SourceClass[TComp](context)(env)(classDeclarationStmt)(desc)
           } yield GlobalBinding.GlobalClass(globalName, accessModifier, arClass)
         }
 
-      case funcDeclarationStmt @ parser.FunctionDeclarationStmt(Some(funcName), _, _, _, modifiers, _) =>
+      case funcDeclarationStmt @ parser.FunctionDeclarationStmt(funcName, _, _, _, modifiers, _) =>
         createBinding(funcName, modifiers) { (globalName, accessModifier) =>
-          val desc = FuncDescriptor.InNamespace(options.moduleDescriptor, sourceAST.currentNamespace, globalName, accessModifier)
+          val desc = FuncDescriptor.InNamespace(options.moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
 
           GlobalBinding.GlobalFunction(
             globalName, accessModifier,

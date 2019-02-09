@@ -88,9 +88,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                         case _ => ???
                       }
 
-                    case _ =>
+                    case methodName: MethodName =>
                       implicitly[TypeCheck[TComp]].fromContextComp(context)(t.arClass.value.staticMethods)
-                        .map { _.filter { method => method.descriptor.name === memberName } }
+                        .map { _.filter { method => method.descriptor.name === methodName } }
                         .flatMap {
                           case Vector(method) =>
                             for {
