@@ -31,22 +31,22 @@ object BuildProcess {
       ParseHandler.parse(fileInfo.fileSpec)(fileInfo.dataStream)
     }
 
-  def compile[F[+_], G[_]: Monad, I: Show]
+  def compile[F[+_], I: Show]
   (
     backend: Backend,
     sourceASTs: Vector[SourceAST],
     references: Vector[I],
     compilerOptions: CompilerOptions,
   )
-  (implicit comp: CompilationExec[F, G], res: ResourceAccess[F, I])
-  : G[CompilationResult[backend.TCompilationOutput]] = {
+  (implicit comp: Compilation[F], res: ResourceAccess[F, I])
+  : F[backend.TCompilationOutput[F]] = {
     val input = CompilerInput(
       source = sourceASTs,
       references = references,
       options = compilerOptions
     )
 
-    backend.compile[F, G, I](input)
+    backend.compile[F, I](input)
   }
 
 

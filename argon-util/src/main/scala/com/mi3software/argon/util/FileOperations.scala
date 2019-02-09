@@ -4,6 +4,7 @@ import java.io
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import scalaz._
 import Scalaz._
@@ -32,10 +33,10 @@ object FileOperations {
         f(stream).closing(stream)
       }
 
-  def createPrintWriter[T](stream: io.FileOutputStream)(f: io.PrintWriter => IO[Throwable, T]): IO[Throwable, T] =
-    IO.syncThrowable { new io.PrintWriter(stream) }
+  def createPrintWriter[F[_, _]: MonadErrorThrowable : ZIO, T](stream: io.OutputStream)(f: io.PrintWriter => F[Throwable, T]): F[Throwable, T] =
+    ZIO[F].liftZIO(IO.syncThrowable { new io.PrintWriter(stream) })
       .flatMap { writer =>
-        f(writer).closing(stream)
+        f(writer).closing(writer)
       }
 
   def filePrintWriter[T](file: io.File)(f: io.PrintWriter => IO[Throwable, T]): IO[Throwable, T] =
@@ -55,5 +56,21 @@ object FileOperations {
 
   def fileFromName(fileName: String): IO[Throwable, io.File] =
     IO.syncThrowable { new io.File(fileName) }
+
+  def zipOutputStream[F2[_, _] : MonadErrorThrowable : ZIO, A](stream: io.OutputStream)(f: ZipOutputStream => F2[Throwable, A]): F2[Throwable, A] =
+    ZIO[F2].liftZIO(IO.syncThrowable { new ZipOutputStream(stream) })
+      .flatMap { zip => f(zip).closing(zip) }
+
+  def createZipEntry[F2[_, _] : MonadErrorThrowable : ZIO, A](zip: ZipOutputStream, path: String)(f: ZipEntry => F2[Throwable, A]): F2[Throwable, A] =
+    ZIO[F2].liftZIO(IO.syncThrowable {
+      val entry = new ZipEntry(path)
+      zip.putNextEntry(entry)
+      entry
+    })
+      .flatMap { entry =>
+        f(entry).ensuring(
+          ZIO[F2].liftZIO(IO.syncThrowable { zip.closeEntry() })
+        )
+      }
 
 }

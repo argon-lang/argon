@@ -15,7 +15,7 @@ object Program extends App {
     args match {
       case "compile" :: tail =>
         runCompilation(tail)
-          .const(ExitStatus.ExitWhenDone(0, Duration.Infinity))
+          .map { ExitStatus.ExitWhenDone(_, Duration.Infinity) }
           .catchAll { ex =>
             IO.sync {
               ExceptionUtils.printRootCauseStackTrace(ex)
@@ -26,21 +26,21 @@ object Program extends App {
       case _ => putStrLn("Please specify a command.").const(ExitStatus.ExitNow(1))
     }
 
-  private def runCompilation(args: List[String]): IO[Throwable, Unit] =
+  private def runCompilation(args: List[String]): IO[Throwable, Int] =
     args match {
       case buildInfoFileName :: Nil =>
         FileOperations.fileFromName(buildInfoFileName)
           .flatMap(BuildInfo.loadFile)
           .flatMap {
             case Some(buildInfo) => Pipeline.run(buildInfo)
-            case None => putStrLn("Could not load build info file.")
+            case None => putStrLn("Could not load build info file.").const(1)
           }
 
       case Nil =>
-        putStrLn("Please specify the build info file.")
+        putStrLn("Please specify the build info file.").const(1)
 
       case _ :: _ :: _ =>
-        putStrLn("Only one file (the build info file) may be specified.")
+        putStrLn("Only one file (the build info file) may be specified.").const(1)
     }
 
 

@@ -6,12 +6,12 @@ import Scalaz._
 
 trait Backend {
 
-  type TCompilationOutput <: CompilationOutput
+  type TCompilationOutput[F[+_]] <: CompilationOutput[F]
 
   val id: String
   val name: String
 
-  def compile[F[+_], G[_]: Monad, I: Show](input: CompilerInput[I])(implicit comp: CompilationExec[F, G], res: ResourceAccess[F, I]): G[CompilationResult[TCompilationOutput]]
+  def compile[F[+_], I: Show](input: CompilerInput[I])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[TCompilationOutput[F]]
 
 }
 

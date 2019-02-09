@@ -99,7 +99,7 @@ lazy val cli = project.in(file("argon-cli"))
   )
 
 lazy val argon_build = project.in(file("argon-build"))
-  .dependsOn(util, parser, argon_compiler, compiler_js, gcrpcRuntime)
+  .dependsOn(util, parser, argon_compiler, compiler_js, compiler_module, gcrpcRuntime)
   .settings(
     commonSettings,
     compilerOptions,

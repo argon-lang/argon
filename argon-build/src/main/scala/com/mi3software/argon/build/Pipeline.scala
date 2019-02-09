@@ -2,7 +2,7 @@ package com.mi3software.argon.build
 
 import java.io.File
 
-import com.mi3software.argon.compiler.{CompilationError, CompilationMessage, IOCompilation}
+import com.mi3software.argon.compiler.{CompilationError, CompilationExec, CompilationMessage, IOCompilation}
 import com.mi3software.argon.util.stream.{ArStream, FileStream}
 import scalaz._
 import Scalaz._
@@ -30,33 +30,33 @@ object Pipeline {
         ZIO[F].liftZIO(putStrLn(msg.toString))
       }
 
-  def compileResult(buildInfo: BuildInfo): IO[Throwable, CompilationResult[buildInfo.backend.TCompilationOutput]] =
-    IOCompilation.compilationInstance.flatMap { implicit compInstance =>
-      BuildProcess.parseInput(findInputFiles[IO](buildInfo)).toVector(compInstance).flatMap { parsedInput =>
-        BuildProcess.compile(
-          buildInfo.backend,
-          parsedInput,
-          buildInfo.references,
-          buildInfo.compilerOptions
-        )(compInstance, implicitly, compInstance, IOCompilation.fileSystemResourceAccess)
-      }
+  def compileResult(buildInfo: BuildInfo)(implicit compInstance: IOCompilation): IO[Throwable, buildInfo.backend.TCompilationOutput[IO[Throwable, +?]]] =
+    BuildProcess.parseInput(findInputFiles[IO](buildInfo)).toVector(compInstance).flatMap { parsedInput =>
+      BuildProcess.compile(
+        buildInfo.backend,
+        parsedInput,
+        buildInfo.references,
+        buildInfo.compilerOptions
+      )(implicitly, compInstance, IOCompilation.fileSystemResourceAccess)
     }
 
-  def run(buildInfo: BuildInfo): IO[Throwable, Unit] =
-    compileResult(buildInfo).flatMap {
-      case CompilationResult(msgs, result) =>
-        printMessages[IO, Vector, CompilationMessage](msgs.toVector).flatMap { _ =>
-          result match {
-            case -\/(errors) =>
-              printMessages[IO, NonEmptyList, CompilationError](errors)
-
-            case \/-(result) =>
-              FileOperations.fileOutputStream(buildInfo.outputFile) { stream =>
-                IO.syncThrowable { result.write(stream) }
-              }
+  def run(buildInfo: BuildInfo): IO[Throwable, Int] =
+    IOCompilation.compilationInstance
+      .flatMap { implicit compInstance =>
+        compInstance.getResult(
+          compileResult(buildInfo).flatMap { output =>
+            FileOperations.fileOutputStream(buildInfo.outputFile)(output.write[IO])
           }
-        }
+        )
+      }
+    .flatMap {
+      case (msgs, -\/(errors)) =>
+        printMessages[IO, Vector, CompilationMessage](errors.toVector ++ msgs).map { _ => 1 }
+
+      case (msgs, \/-(_)) =>
+        printMessages[IO, Vector, CompilationMessage](msgs).map { _ => 0 }
     }
+
 
 }
 

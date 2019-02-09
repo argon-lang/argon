@@ -2,10 +2,11 @@ package com.mi3software.argon.build.testrunner
 
 import java.io.File
 
-import com.mi3software.argon.build.{Backend, BuildProcess, CompilationOutput, CompilationResult}
+import com.mi3software.argon.build.{Backend, BuildProcess}
 import com.mi3software.argon.compiler.{CompilationError, CompilerInput, CompilerOptions, IOCompilation}
 import com.mi3software.argon.compiler.core.ModuleDescriptor
 import scalaz._
+import Scalaz._
 import scalaz.zio.IO
 import com.mi3software.argon.util.FileOperations.fileShow
 
@@ -13,54 +14,62 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
 
   protected val moduleDescriptor = ModuleDescriptor("TestProgram")
 
-  def compileTestCase(testCase: TestCase, backend: Backend, references: Vector[File]): EitherT[IO[Throwable, ?], TestCaseResult, (backend.TCompilationOutput, String)] =
-    EitherT(
-      IOCompilation.compilationInstance.flatMap { implicit ioComp =>
-        parseTestCaseSource(testCase)
-          .flatMap { parsedSource =>
-            BuildProcess.compile(
-              backend,
-              parsedSource,
-              references,
-              CompilerOptions(
-                moduleDescriptor = moduleDescriptor
-              ),
-            )(ioComp, implicitly, ioComp, IOCompilation.fileSystemResourceAccess)
-          }
-          .map { _.result match {
-            case \/-(compilationOutput) =>
-              testCase.expectedResult match {
-                case TestCaseExpectedOutput(expectedOutput) =>
-                  \/-((compilationOutput, expectedOutput))
+  protected val backend: Backend
 
-                case TestCaseExpectedError(_) =>
-                  -\/(TestCaseResult.Failure(
-                    TestCaseActualResult.Output(""),
-                    testCase.expectedResult
-                  ))
+  protected def getProgramOutput(compOutput: backend.TCompilationOutput[IO[Throwable, +?]]): IO[Throwable, String]
 
-              }
+  protected def normalizeOutput(output: String): String =
+    output.split("\n").map { _.trim }.filter { _.nonEmpty }.mkString("\n")
 
-            case -\/(errors) =>
-              -\/(testCase.expectedResult match {
-                case TestCaseExpectedOutput(_) =>
-                  TestCaseResult.Failure(
-                    TestCaseActualResult.Errors(errors),
-                    testCase.expectedResult
-                  )
 
-                case TestCaseExpectedError(errorName) if isExpectedError(errors, errorName) =>
-                  TestCaseResult.Success
-
-                case TestCaseExpectedError(_) =>
-                  TestCaseResult.Failure(
-                    TestCaseActualResult.Errors(errors),
-                    testCase.expectedResult
-                  )
-
-              })
-          } }
-      }
+  def compileTestCase[A](testCase: TestCase, references: Vector[File]): IO[Throwable, TestCaseResult] =
+  IOCompilation.compilationInstance.flatMap { implicit ioComp =>
+    ioComp.getResult(
+      parseTestCaseSource(testCase)
+        .flatMap { parsedSource =>
+          BuildProcess.compile(
+            backend,
+            parsedSource,
+            references,
+            CompilerOptions(
+              moduleDescriptor = moduleDescriptor
+            ),
+          )(implicitly, ioComp, IOCompilation.fileSystemResourceAccess)
+        }
+        .flatMap(getProgramOutput)
     )
+      .map {
+        case (_, \/-(programOutput)) =>
+          testCase.expectedResult match {
+            case TestCaseExpectedOutput(expectedOutput) if normalizeOutput(programOutput) === normalizeOutput(expectedOutput) =>
+              TestCaseResult.Success
+
+            case _ =>
+              TestCaseResult.Failure(
+                TestCaseActualResult.Output(programOutput),
+                testCase.expectedResult
+              )
+          }
+
+        case (_, -\/(errors)) =>
+          testCase.expectedResult match {
+            case TestCaseExpectedOutput(_) =>
+              TestCaseResult.Failure(
+                TestCaseActualResult.Errors(errors),
+                testCase.expectedResult
+              )
+
+            case TestCaseExpectedError(errorName) if isExpectedError(errors, errorName) =>
+              TestCaseResult.Success
+
+            case TestCaseExpectedError(_) =>
+              TestCaseResult.Failure(
+                TestCaseActualResult.Errors(errors),
+                testCase.expectedResult
+              )
+
+          }
+      }
+  }
 
 }

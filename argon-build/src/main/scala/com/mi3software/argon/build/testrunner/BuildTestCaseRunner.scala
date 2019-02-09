@@ -8,10 +8,14 @@ import java.io.File
 
 import scalaz.zio.IO
 
-final class BuildTestCaseRunner(backend: Backend, references: Vector[File]) extends TestCaseRunner with TestCaseRunnerCompilePhase {
+final class BuildTestCaseRunner(protected val backend: Backend, references: Vector[File]) extends TestCaseRunnerCompilePhase {
+
+
+  override protected def getProgramOutput(compOutput: backend.TCompilationOutput[IO[Throwable, +?]]): IO[Throwable, String] =
+    IO.now("")
+
+  override protected def normalizeOutput(output: String): String = ""
+
   override def runTest(testCase: TestCase): IO[Throwable, TestCaseResult] =
-    compileTestCase(testCase, backend, references)
-      .map { _ => TestCaseResult.Success }
-      .run
-      .map { _.merge }
+    compileTestCase(testCase, references)
 }

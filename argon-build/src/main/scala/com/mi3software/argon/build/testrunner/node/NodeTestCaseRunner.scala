@@ -3,7 +3,7 @@ package com.mi3software.argon.build.testrunner.node
 import java.io.{File, FileInputStream, PrintWriter, StringWriter}
 import java.nio.charset.StandardCharsets
 
-import com.mi3software.argon.build.JSBackend
+import com.mi3software.argon.build.{Backend, CompilationOutputText, JSBackend}
 import com.mi3software.argon.build.testrunner._
 import scalaz._
 import Scalaz._
@@ -17,36 +17,21 @@ import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
 final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher) extends TestCaseRunnerCompilePhase {
+
+  override protected val backend: JSBackend.type = JSBackend
+
+  override protected def getProgramOutput(compOutput: CompilationOutputText[IO[Throwable, +?]]): IO[Throwable, String] =
+    IO.syncThrowable {
+      val writer = new StringWriter()
+      val printWriter = new PrintWriter(writer)
+      compOutput.writeText(printWriter)
+      printWriter.close()
+      writer.toString
+    }
+      .flatMap(runJSOutput(references))
+
   override def runTest(testCase: TestCase): IO[Throwable, TestCaseResult] =
-    compileTestCase(testCase, JSBackend, references)
-      .flatMap { case (compileOutput, expectedOutput) =>
-
-        EitherT(
-          IO.syncThrowable {
-            val writer = new StringWriter()
-            val printWriter = new PrintWriter(writer)
-            compileOutput.writeText(printWriter)
-            printWriter.close()
-            writer.toString
-          }
-            .flatMap(runJSOutput(references))
-            .map { output =>
-              if(normalizeOutput(output) === normalizeOutput(expectedOutput))
-                TestCaseResult.Success
-              else
-                TestCaseResult.Failure(
-                  TestCaseActualResult.Output(output),
-                  TestCaseExpectedOutput(expectedOutput)
-                )
-            }
-            .map(\/.right[TestCaseResult, TestCaseResult])
-        )
-      }
-      .run
-      .map { _.merge}
-
-  private def normalizeOutput(output: String): String =
-    output.split("\n").map { _.trim }.filter { _.nonEmpty }.mkString("\n")
+    compileTestCase(testCase, references)
 
   private def runJSOutput(files: Vector[File])(compiledFile: String): IO[Throwable, String] = IO.syncThrowable {
 
