@@ -7,7 +7,9 @@ import Scalaz._
 @deriving(Equal)
 final case class ModuleDescriptor(name: String)
 
-sealed trait Descriptor
+sealed trait Descriptor {
+  def moduleDescriptor: ModuleDescriptor
+}
 object Descriptor {
 
   implicit val equalInstance: Equal[Descriptor] = {
@@ -118,10 +120,14 @@ object DataConstructorDescriptor {
 }
 
 @deriving(Equal)
-final case class TraitObjectDescriptor(traitDescriptor: TraitDescriptor) extends MethodOwnerDescriptor
+final case class TraitObjectDescriptor(traitDescriptor: TraitDescriptor) extends MethodOwnerDescriptor {
+  override def moduleDescriptor: ModuleDescriptor = traitDescriptor.moduleDescriptor
+}
 
 @deriving(Equal)
-final case class ClassObjectDescriptor(classDescriptor: ClassDescriptor) extends MethodOwnerDescriptor
+final case class ClassObjectDescriptor(classDescriptor: ClassDescriptor) extends MethodOwnerDescriptor {
+  override def moduleDescriptor: ModuleDescriptor = classDescriptor.moduleDescriptor
+}
 
 sealed trait FuncDescriptor extends ParameterOwnerDescriptor
 object FuncDescriptor {
@@ -134,25 +140,37 @@ object FuncDescriptor {
 }
 
 @deriving(Equal)
-final case class MethodDescriptor(typeDescriptor: MethodOwnerDescriptor, index: Int, name: MethodName, accessModifier: AccessModifier) extends ParameterOwnerDescriptor
+final case class MethodDescriptor(typeDescriptor: MethodOwnerDescriptor, index: Int, name: MethodName, accessModifier: AccessModifier) extends ParameterOwnerDescriptor {
+  override def moduleDescriptor: ModuleDescriptor = typeDescriptor.moduleDescriptor
+}
 
 @deriving(Equal)
-final case class ClassConstructorDescriptor(ownerClass: ClassDescriptor, index: Int, accessModifier: AccessModifier) extends ParameterOwnerDescriptor
+final case class ClassConstructorDescriptor(ownerClass: ClassDescriptor, index: Int, accessModifier: AccessModifier) extends ParameterOwnerDescriptor {
+  override def moduleDescriptor: ModuleDescriptor = ownerClass.moduleDescriptor
+}
 
 
 sealed trait VariableLikeDescriptor extends Descriptor
 
 @deriving(Equal)
-final case class ParameterDescriptor(owner: ParameterOwnerDescriptor, index: Int) extends VariableLikeDescriptor
+final case class ParameterDescriptor(owner: ParameterOwnerDescriptor, index: Int) extends VariableLikeDescriptor {
+  override def moduleDescriptor: ModuleDescriptor = owner.moduleDescriptor
+}
 
 @deriving(Equal)
-final case class DeconstructedParameterDescriptor(owner: ParameterOwnerDescriptor, index: Int, tupleIndex: Int) extends VariableLikeDescriptor
+final case class DeconstructedParameterDescriptor(owner: ParameterOwnerDescriptor, index: Int, tupleIndex: Int) extends VariableLikeDescriptor {
+  override def moduleDescriptor: ModuleDescriptor = owner.moduleDescriptor
+}
 
 @deriving(Equal)
-final case class VariableDescriptor(owner: VariableOwnerDescriptor, index: Int) extends VariableLikeDescriptor
+final case class VariableDescriptor(owner: VariableOwnerDescriptor, index: Int) extends VariableLikeDescriptor {
+  override def moduleDescriptor: ModuleDescriptor = owner.moduleDescriptor
+}
 
 @deriving(Equal)
-final case class FieldDescriptor(owner: ClassDescriptor, name: String) extends VariableLikeDescriptor
+final case class FieldDescriptor(owner: ClassDescriptor, name: String) extends VariableLikeDescriptor {
+  override def moduleDescriptor: ModuleDescriptor = owner.moduleDescriptor
+}
 
 sealed trait VariableName
 object VariableName {

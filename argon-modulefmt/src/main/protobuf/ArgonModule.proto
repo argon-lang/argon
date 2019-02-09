@@ -17,10 +17,15 @@ message Metadata {
     required string name = 2;
     optional bool isInterfaceModule = 5;
 
-    repeated GlobalDeclarations globals = 10;
+    repeated ModuleReference references = 9;
+    repeated GlobalDeclaration globals = 10;
 }
 
-message GlobalDeclarations {
+message ModuleReference {
+    required string name = 1;
+}
+
+message GlobalDeclaration {
     oneof descriptor {
         InNamespaceDescriptor traitDescriptor = 2;
         InNamespaceDescriptor classDescriptor = 3;

@@ -48,15 +48,21 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
     classCtorRefIds: Map[ClassConstructorDescriptor, Int] = Map(),
   )
 
+  private final case class ModuleRefs
+  (
+    nextModuleId: Int = 1,
+    moduleRefIds: Map[ModuleDescriptor, Int] = Map(),
+  )
+
   private type Emit[A] = StateT[TComp, ModuleIds, A]
 
   private def emitComp[A](comp: TComp[A]): Emit[A] = StateT.liftM(comp)
 
 
-  private def globalTransform[F[_]](fromComp: TComp ~> F): StreamTransformation[F, Namespace[context.type, DeclarationPayloadSpecifier], Unit, (String, GeneratedMessage), Unit] =
-    new StreamTransformation.Single[F, Namespace[context.type, DeclarationPayloadSpecifier], Unit, (String, GeneratedMessage), Unit] {
-      override type S = ModuleIds
-      override val initialState: ModuleIds = ModuleIds()
+  private def globalTransform[F[_]](fromComp: TComp ~> F): StreamTransformation[F, ArModule[context.type, DeclarationPayloadSpecifier], Unit, (String, GeneratedMessage), Unit] =
+    new StreamTransformation.Single[F, ArModule[context.type, DeclarationPayloadSpecifier], Unit, (String, GeneratedMessage), Unit] {
+      override type S = Unit
+      override val initialState: Unit = ()
 
       private def processMethods[S2](state: ModuleIds, state2: S2, methods: Vector[ArMethod[context.type, DeclarationPayloadSpecifier]])(f: (S2, NonEmptyVector[(String, GeneratedMessage)]) => F[S2])(implicit monadInstance: Monad[F]): F[(ModuleIds, S2)] =
         methods.foldLeftM((state, state2)) { case ((state, state2), method) =>
@@ -121,28 +127,85 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
                 f(state2, NonEmptyVector.of(result)).map { (state, _) }
               }
 
-          case GlobalBinding.NestedNamespace(_, namespace) => processItem(state, state2, namespace)(f)
+          case GlobalBinding.NestedNamespace(_, namespace) => processNamespace(state, state2, namespace)(f)
         }
 
-      override protected def processItem[S2](state: ModuleIds, state2: S2, item: Namespace[context.type, DeclarationPayloadSpecifier])(f: (S2, NonEmptyVector[(String, GeneratedMessage)]) => F[S2])(implicit monadInstance: Monad[F]): F[(ModuleIds, S2)] =
+      private def processNamespace[S2](state: ModuleIds, state2: S2, item: Namespace[context.type, DeclarationPayloadSpecifier])(f: (S2, NonEmptyVector[(String, GeneratedMessage)]) => F[S2])(implicit monadInstance: Monad[F]): F[(ModuleIds, S2)] =
         item.bindings.foldLeftM((state, state2)) { case ((state, state2), binding) => processBinding(state, state2, binding)(f) }
 
-      override def processResult[S2](state: ModuleIds, state2: S2, result: Unit)(f: (S2, NonEmptyVector[(String, GeneratedMessage)]) => F[S2])(implicit monadInstance: Monad[F]): F[(Unit, S2)] =
+      private def emitRefs[D1 <: Descriptor, D2, R <: GeneratedMessage, S2](state2: S2, dir: String)(refIds: Map[D1, Int])(convertDescriptor: D1 => D2)(createRef: (Int, D2) => R)(f: (S2, NonEmptyVector[(String, GeneratedMessage)]) => F[S2])(implicit monadInstance: Monad[F]): StateT[F, ModuleRefs, S2] =
+        refIds.toVector
+          .foldLeftM(state2) { case (state2, (desc, id)) =>
+            getModuleId[F](desc.moduleDescriptor).flatMap { moduleId =>
+              val ref = createRef(moduleId, convertDescriptor(desc))
+              StateT.liftM(f(state2, NonEmptyVector.of(s"$dir-ref/${id.abs}" -> ref)))
+            }
+          }
+
+      private def createGlobalDeclarations[D](refIds: Map[D, Int])(createDesc: module.InNamespaceDescriptor => module.GlobalDeclaration.Descriptor): Vector[module.GlobalDeclaration] =
+        refIds.toVector.collect {
+          case (desc: InNamespaceDescriptor, id) =>
+            module.GlobalDeclaration(
+              descriptor = createDesc(convertInNamespaceDescriptor(desc)),
+              id = id,
+            )
+        }
+
+      override protected def processItem[S2](state: Unit, state2: S2, item: ArModule[context.type, DeclarationPayloadSpecifier])(f: (S2, NonEmptyVector[(String, GeneratedMessage)]) => F[S2])(implicit monadInstance: Monad[F]): F[(Unit, S2)] =
+        fromComp(item.globalNamespace)
+          .flatMap { ns =>
+            processNamespace(ModuleIds(), state2, ns)(f)
+          }
+          .flatMap { case (moduleIds, state2) =>
+            (
+              for {
+                state2 <- emitRefs(state2, "trait")(moduleIds.traitRefIds)(convertTraitDescriptor)(module.TraitReference.apply)(f)
+                state2 <- emitRefs(state2, "class")(moduleIds.classRefIds)(convertClassDescriptor)(module.ClassReference.apply)(f)
+                state2 <- emitRefs(state2, "dataCtor")(moduleIds.dataCtorRefIds)(convertDataCtorDescriptor)(module.DataConstructorReference.apply)(f)
+                state2 <- emitRefs(state2, "func")(moduleIds.functionRefIds)(convertFuncDescriptor)(module.FunctionReference.apply)(f)
+                state2 <- emitRefs(state2, "method")(moduleIds.methodRefIds)(convertMethodDescriptor)(module.MethodReference.apply)(f)
+                state2 <- emitRefs(state2, "classCtor")(moduleIds.classCtorRefIds)(convertClassCtorDescriptor)(module.ClassConstructorReference.apply)(f)
+              } yield (state2)
+            )
+              .run(ModuleRefs())
+              .flatMap { case (moduleRefs, state2) =>
+                f(state2, NonEmptyVector.of("argon_module" -> module.Metadata(
+                  formatVersion = 1,
+                  name = item.descriptor.name,
+                  references =
+                    moduleRefs.moduleRefIds
+                      .toVector
+                      .sortBy { case (_, id) => id }
+                      .map { case (ModuleDescriptor(name), _) => module.ModuleReference(name) },
+                  globals =
+                    createGlobalDeclarations(moduleIds.traitIds)(module.GlobalDeclaration.Descriptor.TraitDescriptor.apply) ++
+                      createGlobalDeclarations(moduleIds.classIds)(module.GlobalDeclaration.Descriptor.ClassDescriptor.apply) ++
+                      createGlobalDeclarations(moduleIds.dataCtorIds)(module.GlobalDeclaration.Descriptor.DataConstructorDescriptor.apply) ++
+                      createGlobalDeclarations(moduleIds.functionIds)(module.GlobalDeclaration.Descriptor.FunctionDescriptor.apply)
+                )))
+              }
+          }
+          .map { ((), _) }
+
+      override def processResult[S2](state: Unit, state2: S2, result: Unit)(f: (S2, NonEmptyVector[(String, GeneratedMessage)]) => F[S2])(implicit monadInstance: Monad[F]): F[(Unit, S2)] =
         ((), state2).point[F]
     }
 
-  private def getObjId[D](descriptor: D)(nextId: Lens[ModuleIds, Int], idMap: Lens[ModuleIds, Map[D, Int]]): Emit[Int] =
-    StateT.get[TComp, ModuleIds].flatMap { ids =>
+  private def getObjId[F[_]: Monad, O, D](descriptor: D)(nextId: Lens[O, Int], idMap: Lens[O, Map[D, Int]]): StateT[F, O, Int] =
+    StateT.get[F, O].flatMap { ids =>
       val map = idMap.get(ids)
       map.get(descriptor) match {
-        case Some(id) => id.point[Emit]
+        case Some(id) => id.point[StateT[F, O, ?]]
         case None =>
           val id = nextId.get(ids)
-          StateT.put[TComp, ModuleIds](
+          StateT.put[F, O](
             idMap.set(nextId.set(ids)(id + 1))(map + (descriptor -> id))
           ).map { _ => id }
       }
     }
+
+  private def getModuleId[F[_]: Monad](descriptor: ModuleDescriptor): StateT[F, ModuleRefs, Int] =
+    getObjId(descriptor)(lens[ModuleRefs].nextModuleId, lens[ModuleRefs].moduleRefIds)
 
   private def getTraitId(descriptor: TraitDescriptor): Emit[Int] =
     getObjId(descriptor)(lens[ModuleIds].nextTraitId, lens[ModuleIds].traitIds)
@@ -256,6 +319,13 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
     module.DataConstructorDescriptor(module.DataConstructorDescriptor.Descriptor.InNamespace(
       descriptor match {
         case descriptor @ DataConstructorDescriptor.InNamespace(_, _, _, _, _, _) => convertInNamespaceDescriptor(descriptor)
+      }
+    ))
+
+  private def convertFuncDescriptor(descriptor: FuncDescriptor): module.FunctionDescriptor =
+    module.FunctionDescriptor(module.FunctionDescriptor.Descriptor.InNamespace(
+      descriptor match {
+        case descriptor @ FuncDescriptor.InNamespace(_, _, _, _, _, _) => convertInNamespaceDescriptor(descriptor)
       }
     ))
 
@@ -393,11 +463,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
         )
       }
     } yield s"func/$id" -> module.FunctionDefinition(
-      descriptor = module.FunctionDescriptor(module.FunctionDescriptor.Descriptor.InNamespace(
-        func.descriptor match {
-          case descriptor @ FuncDescriptor.InNamespace(_, _, _, _, _, _) => convertInNamespaceDescriptor(descriptor)
-        }
-      )),
+      descriptor = convertFuncDescriptor(func.descriptor),
       signature = convSig,
       effects = module.EffectInfo(
         isPure = func.effectInfo.isPure
@@ -416,7 +482,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
           returnType = returnType,
         )
       }
-    } yield s"func/$id" -> module.MethodDefinition(
+    } yield s"method/$id" -> module.MethodDefinition(
       descriptor = convertMethodDescriptor(method.descriptor),
       signature = convSig,
       effects = module.EffectInfo(
@@ -445,8 +511,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
     )
 
   def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): ArStream[TComp, (String, GeneratedMessage), Unit] =
-    ArStream.wrapEffect(
-      module.globalNamespace.map { globalNS => ArStream.fromVector[TComp, Namespace[context.type, DeclarationPayloadSpecifier], Unit](Vector(globalNS), ()) }
-    ).transformWith(globalTransform(NaturalTransformation.refl))
+    ArStream.fromVector[TComp, ArModule[context.type, DeclarationPayloadSpecifier], Unit](Vector(module), ())
+      .transformWith(globalTransform(NaturalTransformation.refl))
 
 }
