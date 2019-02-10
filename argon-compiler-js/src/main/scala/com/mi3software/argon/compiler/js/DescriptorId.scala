@@ -63,6 +63,6 @@ object DescriptorId {
     s"${encodeMemberName(descriptor.name)}#${descriptor.index}"
 
   def forClassConstructor[TContext <: Context](descriptor: ClassConstructorDescriptor): String =
-    s"\$new#${descriptor.index}"
+    "$new#" + descriptor.index.toString
 
 }

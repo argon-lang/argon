@@ -33,17 +33,20 @@ object BuildProcess {
 
   def compile[F[+_], I: Show]
   (
-    backend: Backend,
+    backend: Backend
+  )(
     sourceASTs: Vector[SourceAST],
     references: Vector[I],
-    compilerOptions: CompilerOptions,
+    compilerOptions: CompilerOptions[Id],
+    backendOptions: backend.BackendOptions[Id, I]
   )
   (implicit comp: Compilation[F], res: ResourceAccess[F, I])
-  : F[backend.TCompilationOutput[F]] = {
+  : F[backend.TCompilationOutput[F, I]] = {
     val input = CompilerInput(
       source = sourceASTs,
       references = references,
-      options = compilerOptions
+      options = compilerOptions,
+      backendOptions = backendOptions,
     )
 
     backend.compile[F, I](input)

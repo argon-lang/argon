@@ -11,21 +11,20 @@ import org.apache.commons.io.output.NullOutputStream
 import scalaz.Leibniz.===
 import scalaz.zio.{IO, ZIO}
 
-trait CompilationOutput[F[+_]] {
+trait CompilationOutput[F[+_], I] {
   type MonadErrorThrowable[A[_, _]] = MonadError[A[Throwable, ?], Throwable]
 
-  def write[F2[_, _]: MonadErrorThrowable: ZIO](stream: OutputStream)(implicit ev: F[Unit] === F2[Throwable, Unit]): F2[Throwable, Unit]
+  def write(implicit resourceAccess: ResourceAccess[F, I]): F[Unit]
 
-  def runDiscard[F2[_, _]: MonadErrorThrowable: ZIO](implicit ev: F[Unit] === F2[Throwable, Unit]): F2[Throwable, Unit] =
-    ZIO[F2].liftZIO(IO.syncThrowable { new NullOutputStream() }).flatMap(write[F2])
 }
 
-trait CompilationOutputText[F[+_]] extends CompilationOutput[F] {
+trait CompilationOutputText[F[+_], I] extends CompilationOutput[F, I] {
 
-  override def write[F2[_, _] : MonadErrorThrowable : ZIO](stream: OutputStream)(implicit ev: F[Unit] === F2[Throwable, Unit]): F2[Throwable, Unit] =
-    FileOperations.createPrintWriter(stream) { writer =>
-      ZIO[F2].liftZIO(IO.syncThrowable { writeText(writer) })
-    }
+
+  override def write(implicit resourceAccess: ResourceAccess[F, I]): F[Unit] =
+    resourceAccess.createPrintWriter(outputResource)(writeText)
+
+  def outputResource: I
 
   def writeText(writer: PrintWriter): Unit
 

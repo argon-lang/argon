@@ -22,6 +22,8 @@ sealed trait Context {
   type TDataConstructorMetadata
   type TClassConstructorMetadata
 
+  type BackendOptions[_]
+
   def createExprFunctionImplementation(expr: typeSystem.ArExpr): TFunctionImplementation
   def createExprMethodImplementation(expr: typeSystem.ArExpr): TMethodImplementation
   def abstractMethodImplementation: TMethodImplementation
@@ -46,7 +48,7 @@ sealed trait Context {
 
   val moduleLoaders: Vector[ModuleLoader[this.type]]
 
-  def createModule[I: Show](input: CompilerInput[I])(implicit fs: ResourceAccess[Comp, I]): Comp[ArModule[this.type, DeclarationPayloadSpecifier]]
+  def createModule[I: Show](input: CompilerInput[I, BackendOptions])(implicit fs: ResourceAccess[Comp, I]): Comp[ArModule[this.type, DeclarationPayloadSpecifier]]
 
 
 }
@@ -54,6 +56,6 @@ sealed trait Context {
 trait ContextComp[TComp[+_]] extends Context {
   override type Comp[+A] = TComp[A]
 
-  override def createModule[I: Show](input: CompilerInput[I])(implicit res: ResourceAccess[TComp, I]): TComp[ArModule[this.type, DeclarationPayloadSpecifier]] =
+  override def createModule[I: Show](input: CompilerInput[I, BackendOptions])(implicit res: ResourceAccess[TComp, I]): TComp[ArModule[this.type, DeclarationPayloadSpecifier]] =
     SourceModuleCreator.createModule[Comp, I](this)(input)(compCompilationInstance, implicitly, res)
 }

@@ -1,17 +1,27 @@
 package com.mi3software.argon.build
 
+import java.io.File
+
 import com.mi3software.argon.compiler._
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.build.project.{ProjectFileHandler, ProjectLoader}
 
 trait Backend {
 
-  type TCompilationOutput[F[+_]] <: CompilationOutput[F]
+  type TCompilationOutput[F[+_], I] <: CompilationOutput[F, I]
+  type BackendOptions[_[_], _]
+  type BackendOptionsId[A] = BackendOptions[Id, A]
 
   val id: String
   val name: String
 
-  def compile[F[+_], I: Show](input: CompilerInput[I])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[TCompilationOutput[F]]
+  def emptyBackendOptions[I]: BackendOptions[Option, I]
+  def inferBackendOptions(compilerOptions: CompilerOptions[Id], options: BackendOptions[Option, String]): BackendOptionsId[String]
+  def projectLoader[F[_, _], I]: ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I]
+  def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Codec.Error, BackendOptions[Option, String]]
+
+  def compile[F[+_], I: Show](input: CompilerInput[I, BackendOptions[Id, ?]])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[TCompilationOutput[F, I]]
 
 }
 

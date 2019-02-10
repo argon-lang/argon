@@ -1,4 +1,4 @@
-package com.mi3software.argon.build
+package com.mi3software.argon.build.project
 
 import java.io.File
 

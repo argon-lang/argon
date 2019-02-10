@@ -3,32 +3,54 @@ package com.mi3software.argon.build
 import java.io.{File, PrintWriter, StringWriter}
 import java.nio.charset.StandardCharsets
 
-import com.mi3software.argon.compiler.js.{JSAst, JSContext, JSEmitter, JSModule}
+import com.mi3software.argon.compiler.js._
 import com.mi3software.argon.compiler._
 import com.mi3software.argon.util.{FileOperations, IOHelpers}
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.build.project.ProjectLoader
 import scalaz.Leibniz.===
 import scalaz.zio.{IO, ZIO}
+import toml.Codecs._
+import shapeless.{ Id => _, _ }
 
 object JSBackend extends Backend {
 
-  override type TCompilationOutput[F[+_]] = CompilationOutputText[F]
+  override type TCompilationOutput[F[+_], I] = CompilationOutputText[F, I]
+  override type BackendOptions[F[_], I] = JSBackendOptions[F, I]
 
   override val id: String = "js"
   override val name: String = "JavaScript"
 
+  override def emptyBackendOptions[I]: JSBackendOptions[Option, I] = JSBackendOptions(None)
+  override def inferBackendOptions(compilerOptions: CompilerOptions[Id], options: JSBackendOptions[Option, String]): BackendOptionsId[String] =
+    JSBackendOptions[Id, String](
+      outputFile = options.outputFile.getOrElse(compilerOptions.moduleName + ".js")
+    )
 
-  override def compile[F[+_], I: Show](input: CompilerInput[I])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[CompilationOutputText[F]] = {
+  override def projectLoader[F[_, _], I]: ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I] = {
+    import shapeless._
+    import ProjectLoader.Implicits._
+
+    ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I]
+  }
+
+  override def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Codec.Error, JSBackendOptions[Option, String]] =
+    toml.Toml.parseAs[JSBackendOptions[Option, String]](table)
+
+
+  override def compile[F[+ _], I: Show](input: CompilerInput[I, BackendOptions[Id, ?]])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[CompilationOutputText[F, I]] = {
     val context = new JSContext[F]
     val emitter = new JSEmitter[F, context.type](context)
 
     context.createModule(input)
       .flatMap(emitter.emitModule)
-      .map(createOutput[F])
+      .map(createOutput[F, I](input.backendOptions.outputFile))
   }
 
-  private def createOutput[F[+_]](jsModule: JSModule): CompilationOutputText[F] = new CompilationOutputText[F] {
+  private def createOutput[F[+_], I](outputRes: I)(jsModule: JSModule): CompilationOutputText[F, I] = new CompilationOutputText[F, I] {
+
+    override def outputResource: I = outputRes
 
     override def writeText(writer: PrintWriter): Unit =
       JSAst.writeModule(jsModule)(writer)

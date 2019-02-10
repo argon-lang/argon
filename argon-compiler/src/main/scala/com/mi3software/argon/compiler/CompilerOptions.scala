@@ -2,7 +2,7 @@ package com.mi3software.argon.compiler
 
 import com.mi3software.argon.compiler.core._
 
-final case class CompilerOptions
+final case class CompilerOptions[F[_]]
 (
-  moduleDescriptor: ModuleDescriptor
+  moduleName: F[String],
 )

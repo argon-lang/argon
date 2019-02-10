@@ -5,6 +5,8 @@ import com.mi3software.argon.compiler.core.ContextComp
 import com.mi3software.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import com.mi3software.argon.compiler.loaders.ModuleLoader
 import com.mi3software.argon.compiler.loaders.armodule.ArgonModuleLoader
+import scalaz._
+import Scalaz._
 
 class ModuleContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
   override type TFunctionMetadata = Unit
@@ -17,6 +19,8 @@ class ModuleContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
   override type TFunctionImplementation = typeSystem.ArExpr
   override type TMethodImplementation = Option[typeSystem.ArExpr]
   override type TClassConstructorImplementation = typeSystem.ClassConstructorBody
+
+  override type BackendOptions[I] = ModuleBackendOptions[Id, I]
 
   override def createExprFunctionImplementation(expr: typeSystem.ArExpr): typeSystem.ArExpr = expr
   override def createExprMethodImplementation(expr: typeSystem.ArExpr): Option[typeSystem.ArExpr] = Some(expr)

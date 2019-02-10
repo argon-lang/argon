@@ -17,7 +17,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
   def createModule[TComp[+_] : Compilation, I: Show]
   (context: ContextComp[TComp])
-  (input: CompilerInput[I])
+  (input: CompilerInput[I, context.BackendOptions])
   (implicit res: ResourceAccess[TComp, I])
   : TComp[ArModule[context.type, DeclarationPayloadSpecifier]] =
     loadReferenceModules[TComp, I](context)(input)
@@ -25,13 +25,13 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
   private def createModuleWithRefs[TComp[+_] : Compilation, I]
   (context2: ContextComp[TComp])
-  (input: CompilerInput[I])
+  (input: CompilerInput[I, context2.BackendOptions])
   (referencedModules2: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
     : TComp[ArModule[context2.type, DeclarationPayloadSpecifier]] = for {
     globalNamespaceCache <- Compilation[TComp].createCache[Namespace[context2.type, DeclarationPayloadSpecifier]]
   } yield new ArModule[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
-      override val descriptor: ModuleDescriptor = input.options.moduleDescriptor
+      override val descriptor: ModuleDescriptor = ModuleDescriptor(input.options.moduleName)
       override val globalNamespace: TComp[Namespace[context.type, DeclarationPayloadSpecifier]] =
         globalNamespaceCache(
           input.source
@@ -47,14 +47,14 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
   private def loadReferenceModules[TComp[+_] : Compilation, I: Show]
   (context: ContextComp[TComp])
-  (input: CompilerInput[I])
+  (input: CompilerInput[I, context.BackendOptions])
   (implicit res: ResourceAccess[TComp, I])
   : TComp[Vector[ArModule[context.type, ReferencePayloadSpecifier]]] =
     ModuleLoader.loadReferencedModules(context)(input.references)
 
   private def createNamespaceElementFromAST[TComp[+_] : Compilation]
   (context2: ContextComp[TComp])
-  (options: CompilerOptions)
+  (options: CompilerOptions[Id])
   (currentModule: ArModule[context2.type, DeclarationPayloadSpecifier])
   (referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
@@ -109,12 +109,13 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
   private def createNamespaceElementFromASTWithScope[TComp[+_] : Monad : Compilation]
   (context: ContextComp[TComp])
-  (options: CompilerOptions)
+  (options: CompilerOptions[Id])
   (envF: FileSpec => EnvCreator[context.type])
   (sourceAST: SourceAST)
   : TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] = {
 
     val env = envF(sourceAST.fileSpec)
+    val moduleDescriptor = ModuleDescriptor(options.moduleName)
 
     def createBinding(name: Option[String], modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
       parseGlobalAccessModifier[TComp](sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
@@ -129,7 +130,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
     sourceAST.statement.value match {
       case traitDeclarationStmt @ parser.TraitDeclarationStmt(_, traitName, _, _, _, modifiers) =>
         createBinding(traitName, modifiers) { (globalName, accessModifier) =>
-          val desc = TraitDescriptor.InNamespace(options.moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
+          val desc = TraitDescriptor.InNamespace(moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
 
           GlobalBinding.GlobalTrait(
             globalName, accessModifier,
@@ -139,7 +140,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
       case classDeclarationStmt @ parser.ClassDeclarationStmt(_, className, _, _, _, modifiers) =>
         createBinding(className, modifiers) { (globalName, accessModifier) =>
-          val desc = ClassDescriptor.InNamespace(options.moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
+          val desc = ClassDescriptor.InNamespace(moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
 
           for {
             arClass <- SourceClass[TComp](context)(env)(classDeclarationStmt)(desc)
@@ -148,7 +149,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
       case funcDeclarationStmt @ parser.FunctionDeclarationStmt(funcName, _, _, _, modifiers, _) =>
         createBinding(funcName, modifiers) { (globalName, accessModifier) =>
-          val desc = FuncDescriptor.InNamespace(options.moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
+          val desc = FuncDescriptor.InNamespace(moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
 
           GlobalBinding.GlobalFunction(
             globalName, accessModifier,

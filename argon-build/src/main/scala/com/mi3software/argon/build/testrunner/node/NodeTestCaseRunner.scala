@@ -5,11 +5,13 @@ import java.nio.charset.StandardCharsets
 
 import com.mi3software.argon.build.{Backend, CompilationOutputText, JSBackend}
 import com.mi3software.argon.build.testrunner._
-import scalaz._
+import scalaz.{Scalaz, _}
 import Scalaz._
 import scalaz.zio._
 import scalaz.zio.interop.scalaz72._
 import com.mi3software.argon.build.testrunner.node.ExternalApi._
+import com.mi3software.argon.compiler.CompilerOptions
+import com.mi3software.argon.compiler.js.JSBackendOptions
 import com.mi3software.argon.util.FileOperations
 import org.apache.commons.io.{FilenameUtils, IOUtils}
 
@@ -20,7 +22,13 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
 
   override protected val backend: JSBackend.type = JSBackend
 
-  override protected def getProgramOutput(compOutput: CompilationOutputText[IO[Throwable, +?]]): IO[Throwable, String] =
+  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[Throwable, JSBackendOptions[Id, File]] = for {
+    outFile <- FileOperations.fileFromName(compilerOptions.moduleName + ".js")
+  } yield JSBackendOptions[Id, File](
+      outputFile = outFile,
+    )
+
+  override protected def getProgramOutput(compOutput: CompilationOutputText[IO[Throwable, +?], File]): IO[Throwable, String] =
     IO.syncThrowable {
       val writer = new StringWriter()
       val printWriter = new PrintWriter(writer)
@@ -42,9 +50,9 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
         val content = IOUtils.toString(new FileInputStream(libFile), StandardCharsets.UTF_8)
         FileInfo(libName, content)
       }
-      :+ FileInfo(moduleDescriptor.name, compiledFile)
+      :+ FileInfo(moduleName, compiledFile)
     ).toArray
 
-    Await.result(launcher.serverFunctions.executeJS(moduleDescriptor.name, modules), Duration.Inf)
+    Await.result(launcher.serverFunctions.executeJS(moduleName, modules), Duration.Inf)
   }
 }

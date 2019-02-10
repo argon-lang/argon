@@ -5,7 +5,9 @@ import com.mi3software.argon.compiler.core.{ContextComp, PayloadSpecifiers}
 import com.mi3software.argon.compiler.loaders.ModuleLoader
 import com.mi3software.argon.compiler.loaders.armodule.ArgonModuleLoader
 import com.mi3software.argon.compiler.types.ArgonTypeSystem
-import com.mi3software.argon.compiler.{Compilation, _}
+import com.mi3software.argon.compiler._
+import scalaz._
+import Scalaz._
 
 final class JSContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
 
@@ -19,6 +21,8 @@ final class JSContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
   override type TFunctionImplementation = JSImpl.Function
   override type TMethodImplementation = JSImpl.Method
   override type TClassConstructorImplementation = JSImpl.ClassConstructor
+
+  override type BackendOptions[I] = JSBackendOptions[Id, I]
 
   override def createExprFunctionImplementation(expr: typeSystem.ArExpr): JSImpl.Function =
     JSImpl.Function.ExpressionBody(expr)

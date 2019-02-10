@@ -2,9 +2,12 @@ package com.mi3software.argon.compiler
 
 import com.mi3software.argon.parser.SourceAST
 
-final case class CompilerInput[I]
+import scalaz.Scalaz.Id
+
+final case class CompilerInput[I, B[_]]
 (
   source: Vector[SourceAST],
   references: Vector[I],
-  options: CompilerOptions,
+  options: CompilerOptions[Id],
+  backendOptions: B[I],
 )

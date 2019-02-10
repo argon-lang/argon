@@ -1,9 +1,12 @@
 package com.mi3software.argon
 
-import com.mi3software.argon.build.{BuildInfo, Pipeline}
+import com.mi3software.argon.build.Pipeline
+import com.mi3software.argon.build.project.BuildInfo
 import scalaz._
+import Scalaz._
 import scalaz.zio.{ BuildInfo => _, _ }
 import scalaz.zio.console._
+import scalaz.zio.interop.scalaz72._
 import com.mi3software.argon.util.FileOperations
 import org.apache.commons.lang3.exception.ExceptionUtils
 import scalaz.zio.duration.Duration
@@ -32,7 +35,12 @@ object Program extends App {
         FileOperations.fileFromName(buildInfoFileName)
           .flatMap(BuildInfo.loadFile)
           .flatMap {
-            case Some(buildInfo) => Pipeline.run(buildInfo)
+            case Some(buildInfos) => buildInfos.foldLeftM(0) { (exitCode, buildInfo) =>
+              Pipeline.run(buildInfo).map { exitCode2 =>
+                if(exitCode === 0) exitCode2
+                else exitCode
+              }
+            }
             case None => putStrLn("Could not load build info file.").const(1)
           }
 

@@ -1,14 +1,18 @@
 package com.mi3software.argon.compiler
 
-import java.io.File
+import java.io.{File, OutputStream, PrintWriter}
 import java.util.Locale
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
+import com.mi3software.argon.util.FileOperations
 import com.twitter.scrooge.{ThriftStruct, ThriftStructCodec}
 import org.apache.commons.io.FilenameUtils
 import org.apache.thrift.protocol.TBinaryProtocol
 import org.apache.thrift.transport.TSimpleFileTransport
-import scalaz.{NonEmptyList, \/}
+import scalapb.GeneratedMessage
+import scalaz._
 import scalaz.zio._
+import scalaz.zio.interop.scalaz72._
 
 trait IOCompilation extends CompilationExec[IO[Throwable, ?], IO[Throwable, ?]]
 
@@ -88,6 +92,18 @@ object IOCompilation {
         codec.decode(prot)
       }
 
+      override def createPrintWriter[A](id: File)(f: PrintWriter => A): IO[Throwable, A] =
+        FileOperations.filePrintWriter(id) { writer => IO.syncThrowable { f(writer) } }
+
+      override def createOutputStream[A](id: File)(f: OutputStream => IO[Throwable, A]): IO[Throwable, A] =
+        FileOperations.fileOutputStream(id)(f)
+
+      override def createZipOutputStream[A](stream: OutputStream)(f: ZipOutputStream => IO[Throwable, A]): IO[Throwable, A] =
+        FileOperations.zipOutputStream(stream)(f)
+
+      override def createZipEntry[A](zip: ZipOutputStream, path: String)(f: ZipEntry => IO[Throwable, A]): IO[Throwable, A] = ???
+
+      override def writeProtocolBufferMessage(stream: OutputStream, message: GeneratedMessage): IO[Throwable, Unit] = ???
     }
 
 }

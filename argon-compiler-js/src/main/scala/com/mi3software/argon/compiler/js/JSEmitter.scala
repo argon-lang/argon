@@ -184,7 +184,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
   private def createClassCtorObject(ctor: ClassConstructor[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): TComp[JSExpression] =
     for {
       sig <- ctor.signature
-      descriptorId = DescriptorId.forClassConstructor(ErasedSignature.fromSignatureParameters(context)(sig))
+      descriptorId = DescriptorId.forClassConstructor(ctor.descriptor)
       impl <- ctor.payload : TComp[context.JSImpl.ClassConstructor]
       body <- impl match {
         case context.JSImpl.ClassConstructor.StatementBody(body) =>
@@ -315,7 +315,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           sig <- ctor.value.signature
 
           ownerObj = getClassJSObject(getParamOwnerModule(owner), ctor.value.descriptor.ownerClass)
-          descriptorId = DescriptorId.forClassConstructor(ErasedSignature.fromSignatureParameters(context)(sig))
+          descriptorId = DescriptorId.forClassConstructor(ctor.value.descriptor)
 
           baseCtorSymbol = JSPropertyAccessDot(
             JSPropertyAccessBracket(
