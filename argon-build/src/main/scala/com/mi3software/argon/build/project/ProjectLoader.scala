@@ -70,14 +70,19 @@ object ProjectFileHandler {
       IO.syncThrowable { new File(dir, file) }
 
     override def loadFileGlob(glob: String): IO[Throwable, List[File]] = IO.syncThrowable {
-      val pathMatcher = FileSystems.getDefault.getPathMatcher("glob:" + glob)
+      if(glob.contains("*")) {
+        val pathMatcher = FileSystems.getDefault.getPathMatcher("glob:" + glob)
 
-      allDirectoryFiles
-        .filter { path: Path =>
-          pathMatcher.matches(dir.toPath.relativize(path))
-        }
-        .map { _.toFile }
-        .toList
+        allDirectoryFiles
+          .filter { path: Path =>
+            pathMatcher.matches(dir.toPath.relativize(path))
+          }
+          .map { _.toFile }
+          .toList
+      }
+      else {
+        List(new File(dir, glob))
+      }
     }
 
     def allDirectoryFiles: Traversable[Path] = new Traversable[Path] {
