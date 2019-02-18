@@ -25,10 +25,6 @@ lazy val commonSettings = Seq(
     "com.fommil" %% "scalaz-deriving" % "0.9.0",
     "tech.sparse" %%  "toml-scala" % "0.1.1",
 
-    "org.apache.thrift" % "libthrift" % "0.11.0",
-    "com.twitter" %% "scrooge-core" % "18.12.0" exclude("com.twitter", "libthrift"),
-    "com.twitter" %% "finagle-thrift" % "18.12.0" exclude("com.twitter", "libthrift"),
-
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test",
 
     "com.github.ghik" %% "silencer-lib" % "1.2" % Provided,
@@ -185,24 +181,11 @@ lazy val modulefmt = project.in(file("argon-modulefmt"))
       "-language:implicitConversions",
     ),
 
-    scroogeBuildOptions := Seq(),
-
     libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
     
     PB.targets in Compile := Seq(
       scalapb.gen() -> (sourceManaged in Compile).value / "protobuf"
     ),
-  )
-
-lazy val library_gen = project.in(file("argon-library-gen"))
-  .dependsOn(modulefmt)
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    libraryDependencies += "com.lihaoyi" % "ammonite" % "1.6.0" cross CrossVersion.patch,
-
-    name := "argon-library-gen",
   )
 
 

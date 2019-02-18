@@ -4,7 +4,7 @@ import "scalapb/scalapb.proto";
 
 option (scalapb.options) = {
     scope: FILE
-    package_name: "com.mi3software.argon.module2"
+    package_name: "com.mi3software.argon.module"
     flat_package: true
     collection_type: "scala.collection.immutable.Vector"
 };
@@ -79,6 +79,7 @@ message TraitDefinition {
     required TraitSignature signature = 2;
     optional bool isSealed = 3;
     repeated MethodMember methods = 4;
+    repeated MethodMember staticMethods = 5;
 }
 
 message ClassDefinition {
@@ -89,7 +90,8 @@ message ClassDefinition {
     optional bool isAbstract = 5;
     repeated ClassField fields = 6;
     repeated MethodMember methods = 7;
-    repeated ClassConstructorMember constructors = 8;
+    repeated MethodMember staticMethods = 8;
+    repeated ClassConstructorMember constructors = 9;
 }
 
 message ClassField {

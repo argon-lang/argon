@@ -349,6 +349,11 @@ object CompilationError {
     override def message: String = s"Invalid base constructor call."
   }
 
+  final case class InvalidGlobal(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "An invalid global declaration was found."
+  }
+
+
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context
     val typeSystem: TypeSystem[context.type]

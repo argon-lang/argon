@@ -31,7 +31,7 @@ object BuildProcess {
       ParseHandler.parse(fileInfo.fileSpec)(fileInfo.dataStream)
     }
 
-  def compile[F[+_], I: Show]
+  def compile[F[+_], I: Show, A]
   (
     backend: Backend
   )(
@@ -39,9 +39,11 @@ object BuildProcess {
     references: Vector[I],
     compilerOptions: CompilerOptions[Id],
     backendOptions: backend.BackendOptions[Id, I]
+  )(
+    f: backend.TCompilationOutput[F, I] => F[A]
   )
   (implicit comp: Compilation[F], res: ResourceAccess[F, I])
-  : F[backend.TCompilationOutput[F, I]] = {
+  : F[A] = {
     val input = CompilerInput(
       source = sourceASTs,
       references = references,
@@ -49,7 +51,7 @@ object BuildProcess {
       backendOptions = backendOptions,
     )
 
-    backend.compile[F, I](input)
+    backend.compile[F, I, A](input)(f)
   }
 
 

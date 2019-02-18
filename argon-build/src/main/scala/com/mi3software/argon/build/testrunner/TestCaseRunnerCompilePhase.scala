@@ -42,10 +42,9 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
                 references,
                 compilerOptions,
                 backendOpts,
-              )(implicitly, ioComp, IOCompilation.fileSystemResourceAccess)
+              )(getProgramOutput)(implicitly, ioComp, IOCompilation.fileSystemResourceAccess)
             }
           }
-          .flatMap(getProgramOutput)
       )
         .map {
           case (_, \/-(programOutput)) =>

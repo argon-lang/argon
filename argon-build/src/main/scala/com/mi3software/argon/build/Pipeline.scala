@@ -33,7 +33,7 @@ object Pipeline {
         ZIO[F].liftZIO(putStrLn(msg.toString))
       }
 
-  def compileResult(buildInfo: BuildInfo[File])(implicit compInstance: IOCompilation): IO[Throwable, buildInfo.backend.TCompilationOutput[IO[Throwable, +?], File]] =
+  def compileResult[A](buildInfo: BuildInfo[File])(f: buildInfo.backend.TCompilationOutput[IO[Throwable, +?], File] => IO[Throwable, A])(implicit compInstance: IOCompilation): IO[Throwable, A] =
     BuildProcess.parseInput(findInputFiles[IO](buildInfo)).toVector(compInstance).flatMap { parsedInput =>
       BuildProcess.compile(
         buildInfo.backend
@@ -44,14 +44,14 @@ object Pipeline {
           moduleName = buildInfo.compilerOptions.moduleName
         ),
         buildInfo.backendOptions,
-      )(implicitly, compInstance, IOCompilation.fileSystemResourceAccess)
+      )(f)(implicitly, compInstance, IOCompilation.fileSystemResourceAccess)
     }
 
   def run(buildInfo: BuildInfo[File]): IO[Throwable, Int] =
     IOCompilation.compilationInstance
       .flatMap { implicit compInstance =>
         compInstance.getResult(
-          compileResult(buildInfo).flatMap { output =>
+          compileResult(buildInfo) { output =>
             output.write
           }
         )

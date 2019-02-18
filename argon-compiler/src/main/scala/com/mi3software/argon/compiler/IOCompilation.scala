@@ -1,15 +1,12 @@
 package com.mi3software.argon.compiler
 
-import java.io.{File, OutputStream, PrintWriter}
+import java.io.{File, InputStream, OutputStream, PrintWriter}
 import java.util.Locale
-import java.util.zip.{ZipEntry, ZipOutputStream}
+import java.util.zip.{ZipEntry, ZipFile, ZipOutputStream}
 
 import com.mi3software.argon.util.FileOperations
-import com.twitter.scrooge.{ThriftStruct, ThriftStructCodec}
 import org.apache.commons.io.FilenameUtils
-import org.apache.thrift.protocol.TBinaryProtocol
-import org.apache.thrift.transport.TSimpleFileTransport
-import scalapb.GeneratedMessage
+import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import scalaz._
 import scalaz.zio._
 import scalaz.zio.interop.scalaz72._
@@ -86,12 +83,6 @@ object IOCompilation {
         FilenameUtils.getExtension(id.getName).toLowerCase(Locale.ENGLISH)
       }
 
-      override def loadThriftStruct[T <: ThriftStruct](id: File)(codec: ThriftStructCodec[T]): IO[Throwable, T] = IO.syncThrowable {
-        val trans = new TSimpleFileTransport(id.getPath)
-        val prot = new TBinaryProtocol(trans)
-        codec.decode(prot)
-      }
-
       override def createPrintWriter[A](id: File)(f: PrintWriter => A): IO[Throwable, A] =
         FileOperations.filePrintWriter(id) { writer => IO.syncThrowable { f(writer) } }
 
@@ -102,6 +93,13 @@ object IOCompilation {
         FileOperations.zipOutputStream(stream)(f)
 
       override def createZipEntry[A](zip: ZipOutputStream, path: String)(f: ZipEntry => IO[Throwable, A]): IO[Throwable, A] = ???
+
+
+      override type ZipReader = ZipFile
+      override def getZipFile[A](id: File)(f: ZipFile => IO[Throwable, A]): IO[Throwable, A] = ???
+      override def getZipEntryStream[A](zip: ZipFile, name: String)(f: InputStream => IO[Throwable, A]): IO[Throwable, A] = ???
+
+      override def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): IO[Throwable, A] = ???
 
       override def writeProtocolBufferMessage(stream: OutputStream, message: GeneratedMessage): IO[Throwable, Unit] = ???
     }

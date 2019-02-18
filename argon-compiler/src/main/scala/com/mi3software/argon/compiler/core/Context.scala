@@ -48,7 +48,7 @@ sealed trait Context {
 
   val moduleLoaders: Vector[ModuleLoader[this.type]]
 
-  def createModule[I: Show](input: CompilerInput[I, BackendOptions])(implicit fs: ResourceAccess[Comp, I]): Comp[ArModule[this.type, DeclarationPayloadSpecifier]]
+  def createModule[I: Show, A](input: CompilerInput[I, BackendOptions])(f: ArModule[this.type, DeclarationPayloadSpecifier] => Comp[A])(implicit res: ResourceAccess[Comp, I]): Comp[A]
 
 
 }
@@ -56,6 +56,8 @@ sealed trait Context {
 trait ContextComp[TComp[+_]] extends Context {
   override type Comp[+A] = TComp[A]
 
-  override def createModule[I: Show](input: CompilerInput[I, BackendOptions])(implicit res: ResourceAccess[TComp, I]): TComp[ArModule[this.type, DeclarationPayloadSpecifier]] =
-    SourceModuleCreator.createModule[Comp, I](this)(input)(compCompilationInstance, implicitly, res)
+
+  override def createModule[I: Show, A](input: CompilerInput[I, BackendOptions])(f: ArModule[ContextComp.this.type, DeclarationPayloadSpecifier] => TComp[A])(implicit res: ResourceAccess[TComp, I]): TComp[A] =
+    SourceModuleCreator.createModule[Comp, I, A](this)(input)(f)(compCompilationInstance, implicitly, res)
+
 }

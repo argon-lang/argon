@@ -15,13 +15,15 @@ import com.mi3software.argon.compiler.loaders.source.ExpressionConverter.EnvCrea
 private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
 
-  def createModule[TComp[+_] : Compilation, I: Show]
+  def createModule[TComp[+_] : Compilation, I: Show, A]
   (context: ContextComp[TComp])
   (input: CompilerInput[I, context.BackendOptions])
+  (f: ArModule[context.type, DeclarationPayloadSpecifier] => TComp[A])
   (implicit res: ResourceAccess[TComp, I])
-  : TComp[ArModule[context.type, DeclarationPayloadSpecifier]] =
-    loadReferenceModules[TComp, I](context)(input)
-      .flatMap { refModules => createModuleWithRefs[TComp, I](context)(input)(refModules) }
+  : TComp[A] =
+    ModuleLoader.loadReferencedModules(context)(input.references) { refModules =>
+      createModuleWithRefs[TComp, I](context)(input)(refModules).flatMap(f)
+    }
 
   private def createModuleWithRefs[TComp[+_] : Compilation, I]
   (context2: ContextComp[TComp])
@@ -43,14 +45,6 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
       override val referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]] = referencedModules2
     }
-
-
-  private def loadReferenceModules[TComp[+_] : Compilation, I: Show]
-  (context: ContextComp[TComp])
-  (input: CompilerInput[I, context.BackendOptions])
-  (implicit res: ResourceAccess[TComp, I])
-  : TComp[Vector[ArModule[context.type, ReferencePayloadSpecifier]]] =
-    ModuleLoader.loadReferencedModules(context)(input.references)
 
   private def createNamespaceElementFromAST[TComp[+_] : Compilation]
   (context2: ContextComp[TComp])

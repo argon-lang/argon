@@ -5,11 +5,12 @@ import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import com.mi3software.argon.util.stream.{ArStream, StreamTransformation}
 import scalapb.GeneratedMessage
-import scalaz.{ Lens => _, _ }
+import scalaz.{Lens => _, _}
 import Scalaz._
+import com.mi3software.argon.compiler.loaders.armodule.ModulePaths
 import com.mi3software.argon.compiler.types.TypeSystem
 import com.mi3software.argon.util.NonEmptyVector
-import com.mi3software.argon.{module2 => module}
+import com.mi3software.argon.module
 import shapeless._
 
 final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TComp] with Singleton](context: TContext) {
@@ -133,12 +134,12 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
       private def processNamespace[S2](state: ModuleIds, state2: S2, item: Namespace[context.type, DeclarationPayloadSpecifier])(f: (S2, NonEmptyVector[(String, GeneratedMessage)]) => F[S2])(implicit monadInstance: Monad[F]): F[(ModuleIds, S2)] =
         item.bindings.foldLeftM((state, state2)) { case ((state, state2), binding) => processBinding(state, state2, binding)(f) }
 
-      private def emitRefs[D1 <: Descriptor, D2, R <: GeneratedMessage, S2](state2: S2, dir: String)(refIds: Map[D1, Int])(convertDescriptor: D1 => D2)(createRef: (Int, D2) => R)(f: (S2, NonEmptyVector[(String, GeneratedMessage)]) => F[S2])(implicit monadInstance: Monad[F]): StateT[F, ModuleRefs, S2] =
+      private def emitRefs[D1 <: Descriptor, D2, R <: GeneratedMessage, S2](state2: S2, createPath: Int => String)(refIds: Map[D1, Int])(convertDescriptor: D1 => D2)(createRef: (Int, D2) => R)(f: (S2, NonEmptyVector[(String, GeneratedMessage)]) => F[S2])(implicit monadInstance: Monad[F]): StateT[F, ModuleRefs, S2] =
         refIds.toVector
           .foldLeftM(state2) { case (state2, (desc, id)) =>
             getModuleId[F](desc.moduleDescriptor).flatMap { moduleId =>
               val ref = createRef(moduleId, convertDescriptor(desc))
-              StateT.liftM(f(state2, NonEmptyVector.of(s"$dir-ref/${id.abs}" -> ref)))
+              StateT.liftM(f(state2, NonEmptyVector.of(createPath(id.abs) -> ref)))
             }
           }
 
@@ -159,17 +160,17 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
           .flatMap { case (moduleIds, state2) =>
             (
               for {
-                state2 <- emitRefs(state2, "trait")(moduleIds.traitRefIds)(convertTraitDescriptor)(module.TraitReference.apply)(f)
-                state2 <- emitRefs(state2, "class")(moduleIds.classRefIds)(convertClassDescriptor)(module.ClassReference.apply)(f)
-                state2 <- emitRefs(state2, "dataCtor")(moduleIds.dataCtorRefIds)(convertDataCtorDescriptor)(module.DataConstructorReference.apply)(f)
-                state2 <- emitRefs(state2, "func")(moduleIds.functionRefIds)(convertFuncDescriptor)(module.FunctionReference.apply)(f)
-                state2 <- emitRefs(state2, "method")(moduleIds.methodRefIds)(convertMethodDescriptor)(module.MethodReference.apply)(f)
-                state2 <- emitRefs(state2, "classCtor")(moduleIds.classCtorRefIds)(convertClassCtorDescriptor)(module.ClassConstructorReference.apply)(f)
+                state2 <- emitRefs(state2, ModulePaths.traitRef)(moduleIds.traitRefIds)(convertTraitDescriptor)(module.TraitReference.apply)(f)
+                state2 <- emitRefs(state2, ModulePaths.classRef)(moduleIds.classRefIds)(convertClassDescriptor)(module.ClassReference.apply)(f)
+                state2 <- emitRefs(state2, ModulePaths.dataCtorRef)(moduleIds.dataCtorRefIds)(convertDataCtorDescriptor)(module.DataConstructorReference.apply)(f)
+                state2 <- emitRefs(state2, ModulePaths.funcRef)(moduleIds.functionRefIds)(convertFuncDescriptor)(module.FunctionReference.apply)(f)
+                state2 <- emitRefs(state2, ModulePaths.methodRef)(moduleIds.methodRefIds)(convertMethodDescriptor)(module.MethodReference.apply)(f)
+                state2 <- emitRefs(state2, ModulePaths.classCtorRef)(moduleIds.classCtorRefIds)(convertClassCtorDescriptor)(module.ClassConstructorReference.apply)(f)
               } yield (state2)
             )
               .run(ModuleRefs())
               .flatMap { case (moduleRefs, state2) =>
-                f(state2, NonEmptyVector.of("argon_module" -> module.Metadata(
+                f(state2, NonEmptyVector.of(ModulePaths.metadata -> module.Metadata(
                   formatVersion = 1,
                   name = item.descriptor.name,
                   references =
@@ -375,7 +376,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
         }
       }
 
-    } yield s"trait/$id" -> module.TraitDefinition(
+    } yield ModulePaths.traitDef(id) -> module.TraitDefinition(
       descriptor = convertTraitDescriptor(arTrait.descriptor),
       signature = convSig,
       isSealed = Some(arTrait.isSealed).filter(identity),
@@ -417,7 +418,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
           module.ClassConstructorMember(convertClassCtorDescriptor(ctor.descriptor), id)
         }
       }
-    } yield s"class/$id" -> module.ClassDefinition(
+    } yield ModulePaths.classDef(id) -> module.ClassDefinition(
       descriptor = convertClassDescriptor(arClass.descriptor),
       signature = convSig,
       isOpen = Some(arClass.isOpen).filter(identity),
@@ -445,7 +446,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
           module.MethodMember(convertMethodDescriptor(method.descriptor), id)
         }
       }
-    } yield s"dataCtor/$id" -> module.DataConstructorDefinition(
+    } yield ModulePaths.dataCtorDef(id) -> module.DataConstructorDefinition(
       descriptor = convertDataCtorDescriptor(dataCtor.descriptor),
       signature = convSig,
     )
@@ -462,7 +463,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
           returnType = returnType,
         )
       }
-    } yield s"func/$id" -> module.FunctionDefinition(
+    } yield ModulePaths.funcDef(id) -> module.FunctionDefinition(
       descriptor = convertFuncDescriptor(func.descriptor),
       signature = convSig,
       effects = module.EffectInfo(
@@ -482,7 +483,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
           returnType = returnType,
         )
       }
-    } yield s"method/$id" -> module.MethodDefinition(
+    } yield ModulePaths.methodDef(id) -> module.MethodDefinition(
       descriptor = convertMethodDescriptor(method.descriptor),
       signature = convSig,
       effects = module.EffectInfo(
@@ -502,7 +503,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
       convSig <- convertSignature(sig) { (params, result) =>
         module.ClassConstructorSignature(params).point[Emit]
       }
-    } yield s"classCtor/$id" -> module.ClassConstructorDefinition(
+    } yield ModulePaths.classCtorDef(id) -> module.ClassConstructorDefinition(
       descriptor = convertClassCtorDescriptor(ctor.descriptor),
       signature = convSig,
       effects = module.EffectInfo(
