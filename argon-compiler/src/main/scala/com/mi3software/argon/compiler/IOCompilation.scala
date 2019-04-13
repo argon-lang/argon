@@ -102,7 +102,9 @@ object IOCompilation {
 
       override def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): Task[A] = ???
 
-      override def writeProtocolBufferMessage(stream: OutputStream, message: GeneratedMessage): IO[Throwable, Unit] = ???
+      override def writeProtocolBufferMessage(stream: OutputStream, message: GeneratedMessage): Task[Unit] = IO.effect {
+        message.writeTo(stream)
+      }
     }
 
 }
