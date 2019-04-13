@@ -351,26 +351,33 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   (moduleDesc: ModuleDescriptor)
   (namespacePath: NamespacePath, name: GlobalName)
   (args: Vector[ArgumentInfo[TComp]])
-  : ExprFactory[TComp] = compFactory(
-    for {
-      arClassOpt <- implicitly[TypeCheck[TComp]].fromContextComp(context)(
-        ModuleLookup.lookupValue(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass)
-      )
-      arClass <- Compilation[TComp].requireSome(
-        arClassOpt
-      )(CompilationError.NamespaceElementNotFound(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
-      classSig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.signature)
+  : ExprFactory[TComp] = {
 
-      classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(location)(
-        convertSignature(classSig)
-      ) { (args, classResult) =>
+    def resolveClass[ClassPS[_, _]](arClassOptComp: context.Comp[Option[ArClass[context.type, ClassPS]]]): ExprFactory[TComp] =
+      compFactory(
         for {
-          argsAsTypes <- args.traverse(evaluateTypeExpr(env)(location)(_))
-        } yield ClassType(AbsRef[context.type, ReferencePayloadSpecifier, ArClass](arClass), argsAsTypes, classResult.baseTypes)
-      }
+          arClassOpt <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClassOptComp)
+          arClass <- Compilation[TComp].requireSome(
+            arClassOpt
+          )(CompilationError.NamespaceElementNotFound(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          classSig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(arClass.signature)
 
-    } yield args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
-  )
+          classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(location)(
+            convertSignature(classSig)
+          ) { (args, classResult) =>
+            for {
+              argsAsTypes <- args.traverse(evaluateTypeExpr(env)(location)(_))
+            } yield ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), argsAsTypes, classResult.baseTypes)
+          }
+
+        } yield args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
+      )
+
+    if(moduleDesc === env.currentModule.descriptor)
+      resolveClass(ModuleLookup.lookupNamespaceValue(context)(env.currentModule)(namespacePath, name)(ModuleLookup.lookupGlobalClass))
+    else
+      resolveClass(ModuleLookup.lookupValue(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass))
+  }
 
   def resolveModuleClass[TComp[_] : TypeCheck]
   (env: Env)

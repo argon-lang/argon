@@ -1,0 +1,4 @@
+namespace Ar
+
+public trait Object <: _
+end

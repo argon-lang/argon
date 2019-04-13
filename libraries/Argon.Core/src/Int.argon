@@ -1,0 +1,5 @@
+namespace Ar
+
+public class Int <: Object
+	public def this.to_s(): String = extern Int_to_s
+end

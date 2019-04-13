@@ -1,5 +1,5 @@
 [project]
-inputFiles = [ "*.argon" ]
+inputFiles = [ "src/*.argon" ]
 
 [compiler-options]
 moduleName = "Argon.Core"

@@ -1,0 +1,4 @@
+namespace Ar
+
+public class Bool <: Object
+end
