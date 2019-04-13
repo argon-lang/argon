@@ -49,7 +49,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
       traitRefIds: Map[TraitDescriptor, Int] = Map(),
       dataCtorRefIds: Map[DataConstructorDescriptor, Int] = Map(),
       functionRefIds: Map[FuncDescriptor, Int] = Map(),
-      methodRefIds: Map[MethodDescriptor, Int] = Map(),
+      methodRefIds: Map[MethodDescriptor, (Int, module.MethodReference.MethodOwner)] = Map(),
       classCtorRefIds: Map[ClassConstructorDescriptor, Int] = Map(),
 
       emittedPaths: Set[String] = Set(),
@@ -65,6 +65,8 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
     type Emit[A] = EmitF[TComp, A]
 
     def emitComp[A](comp: TComp[A]): Emit[A] = StateT.liftM(comp)
+
+    private implicit val fromCompRefl: TComp ~> TComp = NaturalTransformation.refl
 
 
     def globalTransform[F[_]](fromComp: TComp ~> F): StreamTransformation[F, ArModule[context.type, DeclarationPayloadSpecifier], Unit, (String, GeneratedMessage), Unit] =
@@ -201,19 +203,19 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
         }
 
         private def emitRefsSimple[D1 <: Descriptor, D2, R <: GeneratedMessage]
-        (createPath: Int => String)
         (refIds: ModuleIds => Map[D1, Int])
+        (createPath: Int => String)
         (convertDescriptor: (ArModule[context.type, DeclarationPayloadSpecifier], D1) => EmitF[F, D2])
         (createRef: (Int, D2) => R)
         (implicit monadInstance: Monad[F])
         : RefEmitHandler =
-          emitRefs(createPath)(refIds)(convertDescriptor)(createRef)
+          emitRefs(refIds)(createPath)(convertDescriptor)((moduleId, d2, _) => createRef(moduleId, d2))
 
-        private def emitRefs[D1 <: Descriptor, D2, R <: GeneratedMessage]
-        (createPath: Int => String)
-        (refIds: ModuleIds => Map[D1, Int])
+        private def emitRefs[D1 <: Descriptor, ID, D2, R <: GeneratedMessage]
+        (refIds: ModuleIds => Map[D1, ID])
+        (createPath: ID => String)
         (convertDescriptor: (ArModule[context.type, DeclarationPayloadSpecifier], D1) => EmitF[F, D2])
-        (createRef: (Int, D2) => R)
+        (createRef: (Int, D2, ID) => R)
         (implicit monadInstance: Monad[F])
         : RefEmitHandler = new RefEmitHandler {
           override def emitRefs[S2](armodule: ArModule[context.type, DeclarationPayloadSpecifier], state2: S2, f: (S2, NonEmptyVector[(String, GeneratedMessage)]) => F[S2]): StateT[F, (ModuleIds, ModuleRefs), S2] =
@@ -227,9 +229,9 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
                     }
 
                     convDesc <- pairState(convertDescriptor(armodule, desc))(lens[(ModuleIds, ModuleRefs)]._1)
-                    ref = createRef(moduleId, convDesc)
+                    ref = createRef(moduleId, convDesc, id)
 
-                    state2 <- StateT.liftM[F, (ModuleIds, ModuleRefs), S2](f(state2, NonEmptyVector.of(createPath(id.abs) -> ref)))
+                    state2 <- StateT.liftM[F, (ModuleIds, ModuleRefs), S2](f(state2, NonEmptyVector.of(createPath(id) -> ref)))
                   } yield state2
                 }
             }
@@ -269,12 +271,15 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
               ns <- emitF(fromComp(item.globalNamespace))
               state2 <- processNamespace(item, state2, ns)(f)
               (moduleRefs, state2) <- emitAllRefs(item)(state2)(f)(
-                emitRefs(ModulePaths.methodRef)(_.methodRefIds)(convertMethodDescriptor[F])((_, _) => ???),
-                emitRefsSimple(ModulePaths.classCtorRef)(_.classCtorRefIds)(convertClassCtorDescriptor[F])(module.ClassConstructorReference.apply),
-                emitRefsSimple(ModulePaths.traitRef)(_.traitRefIds)(convertTraitDescriptor[F])(module.TraitReference.apply),
-                emitRefsSimple(ModulePaths.classRef)(_.classRefIds)(convertClassDescriptor[F])(module.ClassReference.apply),
-                emitRefsSimple(ModulePaths.dataCtorRef)(_.dataCtorRefIds)(convertDataCtorDescriptor[F])(module.DataConstructorReference.apply),
-                emitRefsSimple(ModulePaths.funcRef)(_.functionRefIds)(convertFuncDescriptor[F])(module.FunctionReference.apply),
+                emitRefs(_.methodRefIds)({ case (id, _) => ModulePaths.methodRef(id) })(convertMethodDescriptor[F]) {
+                  case (moduleId, desc, (_, owner)) =>
+                    module.MethodReference(moduleId, desc, owner)
+                },
+                emitRefsSimple(_.classCtorRefIds)(ModulePaths.classCtorRef)(convertClassCtorDescriptor[F])(module.ClassConstructorReference.apply),
+                emitRefsSimple(_.traitRefIds)(ModulePaths.traitRef)(convertTraitDescriptor[F])(module.TraitReference.apply),
+                emitRefsSimple(_.classRefIds)(ModulePaths.classRef)(convertClassDescriptor[F])(module.ClassReference.apply),
+                emitRefsSimple(_.dataCtorRefIds)(ModulePaths.dataCtorRef)(convertDataCtorDescriptor[F])(module.DataConstructorReference.apply),
+                emitRefsSimple(_.functionRefIds)(ModulePaths.funcRef)(convertFuncDescriptor[F])(module.FunctionReference.apply),
               )
               moduleIds <- StateT.get[F, ModuleIds]
               state2 <- emitF(f(state2, NonEmptyVector.of(ModulePaths.metadata -> module.Metadata(
@@ -294,55 +299,86 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
           ((), state2).point[F]
       }
 
-    def getObjId[F[_]: Monad, O, D](descriptor: D)(nextId: Lens[O, Int], idMap: Lens[O, Map[D, Int]]): StateT[F, O, Int] =
+    def getObjId[F[_]: Monad, O, T, D, ID](value: T)(getDesc: T => D)(nextId: Lens[O, Int], idMap: Lens[O, Map[D, ID]])(createId: => StateT[F, O, Int => ID]): StateT[F, O, ID] =
       StateT.get[F, O].flatMap { ids =>
         val map = idMap.get(ids)
+        val descriptor = getDesc(value)
         map.get(descriptor) match {
           case Some(id) => id.point[StateT[F, O, ?]]
           case None =>
-            val id = nextId.get(ids)
-            StateT.put[F, O](
-              idMap.set(nextId.set(ids)(id + 1))(map + (descriptor -> id))
-            ).map { _ => id }
+            for {
+              createIdFunc <- createId
+              ids <- StateT.get[F, O]
+              idNum = nextId.get(ids)
+              id = createIdFunc(idNum)
+              _ <- StateT.put[F, O](
+                idMap.set(nextId.set(ids)(idNum + 1))(map + (descriptor -> id))
+              )
+            } yield id
         }
       }
 
+    def getObjIdInt[F[_]: Monad, O, D](descriptor: D)(nextId: Lens[O, Int], idMap: Lens[O, Map[D, Int]]): StateT[F, O, Int] =
+      getObjId(descriptor)(identity)(nextId, idMap)((identity[Int] _).point[StateT[F, O, ?]])
+
     def getModuleId[F[_]: Monad](descriptor: ModuleDescriptor): StateT[F, ModuleRefs, Int] =
-      getObjId(descriptor)(lens[ModuleRefs].nextModuleId, lens[ModuleRefs].moduleRefIds)
+      getObjIdInt(descriptor)(lens[ModuleRefs].nextModuleId, lens[ModuleRefs].moduleRefIds)
 
     def getTraitId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: TraitDescriptor): EmitF[F, Int] =
       if(descriptor.moduleDescriptor === armodule.descriptor)
-        getObjId(descriptor)(lens[ModuleIds].nextTraitId, lens[ModuleIds].traitIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextTraitId, lens[ModuleIds].traitIds)
       else
-        getObjId(descriptor)(lens[ModuleIds].nextTraitRefId, lens[ModuleIds].traitRefIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextTraitRefId, lens[ModuleIds].traitRefIds)
 
 
     def getClassId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: ClassDescriptor): EmitF[F, Int] =
       if(descriptor.moduleDescriptor === armodule.descriptor)
-        getObjId(descriptor)(lens[ModuleIds].nextClassId, lens[ModuleIds].classIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextClassId, lens[ModuleIds].classIds)
       else
-        getObjId(descriptor)(lens[ModuleIds].nextClassRefId, lens[ModuleIds].classRefIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextClassRefId, lens[ModuleIds].classRefIds)
 
     def getDataCtorId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: DataConstructorDescriptor): EmitF[F, Int] =
       if(descriptor.moduleDescriptor === armodule.descriptor)
-        getObjId(descriptor)(lens[ModuleIds].nextDataCtorId, lens[ModuleIds].dataCtorIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextDataCtorId, lens[ModuleIds].dataCtorIds)
       else
-        getObjId(descriptor)(lens[ModuleIds].nextDataCtorRefId, lens[ModuleIds].dataCtorRefIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextDataCtorRefId, lens[ModuleIds].dataCtorRefIds)
 
     def getFuncId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: FuncDescriptor): EmitF[F, Int] =
       if(descriptor.moduleDescriptor === armodule.descriptor)
-        getObjId(descriptor)(lens[ModuleIds].nextFunctionId, lens[ModuleIds].functionIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextFunctionId, lens[ModuleIds].functionIds)
       else
-        getObjId(descriptor)(lens[ModuleIds].nextFunctionRefId, lens[ModuleIds].functionRefIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextFunctionRefId, lens[ModuleIds].functionRefIds)
 
-    def getMethodId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: MethodDescriptor): EmitF[F, Int] =
-      if(descriptor.moduleDescriptor === armodule.descriptor)
-        getObjId(descriptor)(lens[ModuleIds].nextMethodId, lens[ModuleIds].methodIds)
+    def getMethodId[F[_]: Monad, TPayloadSpec[_, _]](armodule: ArModule[context.type, DeclarationPayloadSpecifier], method: ArMethod[context.type, TPayloadSpec])(implicit fromComp: TComp ~> F): EmitF[F, Int] =
+      if(method.descriptor.moduleDescriptor === armodule.descriptor)
+        getObjIdInt(method.descriptor)(lens[ModuleIds].nextMethodId, lens[ModuleIds].methodIds)
       else
-        getObjId(descriptor)(lens[ModuleIds].nextMethodRefId, lens[ModuleIds].methodRefIds)
+        getObjId(method)(_.descriptor)(lens[ModuleIds].nextMethodRefId, lens[ModuleIds].methodRefIds)(
+          method.owner match {
+            case ArMethod.ClassOwner(ownerClass) =>
+              getClassId[F](armodule, ownerClass.descriptor)
+                .map { classId => id => (id, module.MethodReference.MethodOwner.OwnerClassId(classId)) }
+
+            case ArMethod.ClassObjectOwner(ownerClass) =>
+              getClassId[F](armodule, ownerClass.descriptor)
+                .map { classId => id => (id, module.MethodReference.MethodOwner.OwnerClassObjectId(classId)) }
+
+            case ArMethod.TraitOwner(ownerTrait) =>
+              getTraitId[F](armodule, ownerTrait.descriptor)
+                .map { traitId => id => (id, module.MethodReference.MethodOwner.OwnerTraitId(traitId)) }
+
+            case ArMethod.TraitObjectOwner(ownerTrait) =>
+              getTraitId[F](armodule, ownerTrait.descriptor)
+                .map { traitId => id => (id, module.MethodReference.MethodOwner.OwnerTraitObjectId(traitId)) }
+
+            case ArMethod.DataCtorOwner(dataCtor) =>
+              getDataCtorId[F](armodule, dataCtor.descriptor)
+                .map { ctorId => id => (id, module.MethodReference.MethodOwner.OwnerConstructorId(ctorId)) }
+          }
+        ).map { case (id, _) => id }
 
     def getClassCtorId[F[_]: Monad](descriptor: ClassConstructorDescriptor): EmitF[F, Int] =
-      getObjId(descriptor)(lens[ModuleIds].nextClassCtorId, lens[ModuleIds].classCtorIds)
+      getObjIdInt(descriptor)(lens[ModuleIds].nextClassCtorId, lens[ModuleIds].classCtorIds)
 
 
     def convertSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], A]
@@ -625,7 +661,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
     def createMethodDefMessage(armodule: ArModule[context.type, DeclarationPayloadSpecifier], method: ArMethod[context.type, DeclarationPayloadSpecifier]): Emit[(String, module.MethodDefinition)] =
       for {
         sig <- emitComp(method.signature)
-        id <- getMethodId[TComp](armodule, method.descriptor)
+        id <- getMethodId[TComp, DeclarationPayloadSpecifier](armodule, method)
         convSig <- convertSignature(armodule)(sig) { (params, result) =>
           for {
             returnType <- convertType(armodule, result.returnType)

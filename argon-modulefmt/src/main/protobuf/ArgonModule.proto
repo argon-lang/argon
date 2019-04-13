@@ -63,8 +63,10 @@ message MethodReference {
     required MethodDescriptor descriptor = 2;
     oneof methodOwner {
         sint32 ownerClassId = 3;
-        sint32 ownerTraitId = 4;
-        sint32 ownerConstructorId = 5;
+        int32 ownerClassObjectId = 4;
+        sint32 ownerTraitId = 5;
+        int32 ownerTraitObjectId = 6;
+        sint32 ownerConstructorId = 7;
     }
 }
 

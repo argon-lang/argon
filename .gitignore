@@ -8,6 +8,8 @@ bin/
 # User-specific stuff:
 .idea/
 .vscode/
+.metals/
+.bloop/
 
 # Argon Build Output
 example/**/*.js
