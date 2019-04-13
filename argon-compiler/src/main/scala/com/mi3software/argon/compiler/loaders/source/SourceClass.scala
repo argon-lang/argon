@@ -167,7 +167,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     override val payload: Unit = ()
   }
 
-  def resultCreator(baseTypeExpr: Option[WithSource[parser.Expr]]): ResultCreator[ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
+  private def resultCreator(baseTypeExpr: Option[WithSource[parser.Expr]]): ResultCreator[ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
     override def createResult[TComp[+ _] : Compilation]
     (context: ContextComp[TComp])
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
