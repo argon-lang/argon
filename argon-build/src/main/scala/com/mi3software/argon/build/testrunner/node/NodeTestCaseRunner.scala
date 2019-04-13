@@ -29,7 +29,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
     )
 
   override protected def getProgramOutput(compOutput: CompilationOutputText[IO[Throwable, +?], File]): IO[Throwable, String] =
-    IO.syncThrowable {
+    IO.effect {
       val writer = new StringWriter()
       val printWriter = new PrintWriter(writer)
       compOutput.writeText(printWriter)
@@ -41,7 +41,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
   override def runTest(testCase: TestCase): IO[Throwable, TestCaseResult] =
     compileTestCase(testCase, references)
 
-  private def runJSOutput(files: Vector[File])(compiledFile: String): IO[Throwable, String] = IO.syncThrowable {
+  private def runJSOutput(files: Vector[File])(compiledFile: String): IO[Throwable, String] = IO.fromFuture { _ =>
 
     val modules = (
       files.map { file =>
@@ -53,6 +53,6 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
       :+ FileInfo(moduleName, compiledFile)
     ).toArray
 
-    Await.result(launcher.serverFunctions.executeJS(moduleName, modules), Duration.Inf)
+    launcher.serverFunctions.executeJS(moduleName, modules)
   }
 }

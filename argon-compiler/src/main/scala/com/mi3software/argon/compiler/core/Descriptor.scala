@@ -1,6 +1,6 @@
 package com.mi3software.argon.compiler.core
 
-import com.mi3software.argon.util.{FileID, NamespacePath}
+import com.mi3software.argon.util.NamespacePath
 import scalaz._
 import Scalaz._
 

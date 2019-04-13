@@ -10,11 +10,11 @@ import scalaz.zio.interop.scalaz72._
 
 object TestCaseLoader {
 
-  def findTestCases(dir: File): IO[Throwable, TestCaseStructure] = for {
-    testCaseFiles <- IO.syncThrowable { dir.listFiles.sortBy(f => f.getName).toVector }
+  def findTestCases(dir: File): Task[TestCaseStructure] = for {
+    testCaseFiles <- IO.effect { dir.listFiles.sortBy(f => f.getName).toVector }
 
     subDirCases <- testCaseFiles
-      .filterM { f => IO.syncThrowable { f.isDirectory } }
+      .filterM { f => IO.effect { f.isDirectory } }
       .flatMap {
         _.traverse { f =>
           findTestCases(f).map(f.getName.->)
@@ -22,7 +22,7 @@ object TestCaseLoader {
       }
 
     fileCases <- testCaseFiles
-      .filterM { f => IO.syncThrowable { f.isFile && f.getName.endsWith(".xml") } }
+      .filterM { f => IO.effect { f.isFile && f.getName.endsWith(".xml") } }
       .flatMap { _.traverse(loadTestCase) }
 
   } yield TestCaseStructure(
@@ -30,12 +30,12 @@ object TestCaseLoader {
     tests = fileCases
   )
 
-  def loadTestCase(file: File): IO[Throwable, TestCase] =
-    IO.syncThrowable { XML.loadFile(file) }
+  def loadTestCase(file: File): Task[TestCase] =
+    IO.effect { XML.loadFile(file) }
       .flatMap { elem =>
         TestCase.fromXml(elem)
           .map { _.point[IO[Throwable, ?]] }
-          .getOrElse(IO.syncThrowable { file.getAbsolutePath }.flatMap { path => IO.fail(new Exception(s"Invalid test case ${path}")) })
+          .getOrElse(IO.effect { file.getAbsolutePath }.flatMap { path => IO.fail(new Exception(s"Invalid test case ${path}")) })
       }
 
 }

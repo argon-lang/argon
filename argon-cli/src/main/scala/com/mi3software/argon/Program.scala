@@ -14,22 +14,21 @@ import scalaz.zio.duration.Duration
 object Program extends App {
 
 
-  override def run(args: List[String]): IO[Nothing, ExitStatus] =
+  override def run(args: List[String]): ZIO[Environment, Nothing, Int] =
     args match {
       case "compile" :: tail =>
         runCompilation(tail)
-          .map { ExitStatus.ExitWhenDone(_, Duration.Infinity) }
           .catchAll { ex =>
-            IO.sync {
+            IO.effectTotal {
               ExceptionUtils.printRootCauseStackTrace(ex)
-              ExitStatus.ExitNow(1)
+              1
             }
           }
-      case cmd :: _ => putStrLn(s"Unknown command '$cmd'.").const(ExitStatus.ExitNow(1))
-      case _ => putStrLn("Please specify a command.").const(ExitStatus.ExitNow(1))
+      case cmd :: _ => putStrLn(s"Unknown command '$cmd'.").const(1)
+      case _ => putStrLn("Please specify a command.").const(1)
     }
 
-  private def runCompilation(args: List[String]): IO[Throwable, Int] =
+  private def runCompilation(args: List[String]): ZIO[Environment, Throwable, Int] =
     args match {
       case buildInfoFileName :: Nil =>
         FileOperations.fileFromName(buildInfoFileName)

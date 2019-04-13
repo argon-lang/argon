@@ -67,9 +67,9 @@ object ProjectFileHandler {
   def fileHandlerFile(dir: File): ProjectFileHandler[IO, File] = new ProjectFileHandler[IO, File] {
 
     override def loadSingleFile(file: String): IO[Throwable, File] =
-      IO.syncThrowable { new File(dir, file) }
+      IO.effect { new File(dir, file) }
 
-    override def loadFileGlob(glob: String): IO[Throwable, List[File]] = IO.syncThrowable {
+    override def loadFileGlob(glob: String): IO[Throwable, List[File]] = IO.effect {
       if(glob.contains("*")) {
         val pathMatcher = FileSystems.getDefault.getPathMatcher("glob:" + glob)
 

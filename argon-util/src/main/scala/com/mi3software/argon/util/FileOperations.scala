@@ -9,8 +9,6 @@ import java.util.zip.{ZipEntry, ZipOutputStream}
 import scalaz._
 import Scalaz._
 import scalaz.zio._
-import scalaz.zio.interop.scalaz72._
-import MonadErrorExtensions._
 
 object FileOperations {
 
@@ -19,58 +17,42 @@ object FileOperations {
   }
 
   type MonadErrorThrowable[F[_, _]] = MonadError[F[Throwable, ?], Throwable]
-  type ZIOThrowable[F[_]] = ZIO[Lambda[(E, A) => F[A]]]
 
-  def fileInputStream[F[_, _]: MonadErrorThrowable : ZIO, T](file: io.File)(f: io.FileInputStream => F[Throwable, T]): F[Throwable, T] =
-    ZIO[F].liftZIO(IO.syncThrowable { new io.FileInputStream(file) })
-      .flatMap { stream =>
-        f(stream).closing(stream)
-      }
+  def fileInputStream[T](file: io.File)(f: io.FileInputStream => Task[T]): Task[T] =
+    IO.effect { new io.FileInputStream(file) }.bracket(stream => IO.effectTotal { stream.close() })(f)
 
-  def fileOutputStream[T](file: io.File)(f: io.FileOutputStream => IO[Throwable, T]): IO[Throwable, T] =
-    IO.syncThrowable { new io.FileOutputStream(file) }
-      .flatMap { stream =>
-        f(stream).closing(stream)
-      }
+  def fileOutputStream[T](file: io.File)(f: io.FileOutputStream => Task[T]): Task[T] =
+    IO.effect { new io.FileOutputStream(file) }.bracket(stream => IO.effectTotal { stream.close() })(f)
 
-  def createPrintWriter[F[_, _]: MonadErrorThrowable : ZIO, T](stream: io.OutputStream)(f: io.PrintWriter => F[Throwable, T]): F[Throwable, T] =
-    ZIO[F].liftZIO(IO.syncThrowable { new io.PrintWriter(stream) })
-      .flatMap { writer =>
-        f(writer).closing(writer)
-      }
+  def createPrintWriter[T](stream: io.OutputStream)(f: io.PrintWriter => Task[T]): Task[T] =
+    IO.effect { new io.PrintWriter(stream) }.bracket(writer => IO.effectTotal { writer.close() })(f)
 
-  def filePrintWriter[T](file: io.File)(f: io.PrintWriter => IO[Throwable, T]): IO[Throwable, T] =
+  def filePrintWriter[T](file: io.File)(f: io.PrintWriter => Task[T]): Task[T] =
     fileOutputStream(file) { stream => createPrintWriter(stream)(f) }
 
-  def readAllText(file: io.File): IO[Throwable, String] =
-    IO.syncThrowable {
+  def readAllText(file: io.File): Task[String] =
+    IO.effect {
       val bytes = Files.readAllBytes(file.toPath)
       new String(bytes, StandardCharsets.UTF_8)
     }
 
-  def createReader[F[_, _] : ZIO, T](stream: io.FileInputStream): F[Throwable, io.Reader] =
-    ZIO[F].liftZIO(IO.syncThrowable { new io.InputStreamReader(stream) })
+  def createReader[T](stream: io.FileInputStream): Task[io.Reader] =
+    IO.effect { new io.InputStreamReader(stream) }
 
-  def fileReader[F[_, _]: MonadErrorThrowable : ZIO, T](file: io.File)(f: io.Reader => F[Throwable, T]): F[Throwable, T] =
+  def fileReader[T](file: io.File)(f: io.Reader => Task[T]): Task[T] =
     fileInputStream(file) { stream => createReader(stream).flatMap(f) }
 
-  def fileFromName(fileName: String): IO[Throwable, io.File] =
-    IO.syncThrowable { new io.File(fileName) }
+  def fileFromName(fileName: String): Task[io.File] =
+    IO.effect { new io.File(fileName) }
 
-  def zipOutputStream[F2[_, _] : MonadErrorThrowable : ZIO, A](stream: io.OutputStream)(f: ZipOutputStream => F2[Throwable, A]): F2[Throwable, A] =
-    ZIO[F2].liftZIO(IO.syncThrowable { new ZipOutputStream(stream) })
-      .flatMap { zip => f(zip).closing(zip) }
+  def zipOutputStream[A](stream: io.OutputStream)(f: ZipOutputStream => Task[A]): Task[A] =
+    IO.effect { new ZipOutputStream(stream) }.bracket(stream => IO.effectTotal { stream.close() })(f)
 
-  def createZipEntry[F2[_, _] : MonadErrorThrowable : ZIO, A](zip: ZipOutputStream, path: String)(f: ZipEntry => F2[Throwable, A]): F2[Throwable, A] =
-    ZIO[F2].liftZIO(IO.syncThrowable {
+  def createZipEntry[A](zip: ZipOutputStream, path: String)(f: ZipEntry => Task[A]): Task[A] =
+    IO.effect {
       val entry = new ZipEntry(path)
       zip.putNextEntry(entry)
       entry
-    })
-      .flatMap { entry =>
-        f(entry).ensuring(
-          ZIO[F2].liftZIO(IO.syncThrowable { zip.closeEntry() })
-        )
-      }
+    }.bracket(_ => IO.effectTotal { zip.closeEntry() })(f)
 
 }

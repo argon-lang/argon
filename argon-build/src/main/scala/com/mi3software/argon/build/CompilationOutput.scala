@@ -6,7 +6,7 @@ import java.nio.charset.StandardCharsets
 import com.mi3software.argon.compiler.ResourceAccess
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.util.{FileOperations, IOHelpers}
+import com.mi3software.argon.util.FileOperations
 import org.apache.commons.io.output.NullOutputStream
 import scalaz.Leibniz.===
 import scalaz.zio.{IO, ZIO}

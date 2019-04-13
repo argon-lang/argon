@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets
 
 import com.mi3software.argon.compiler.js._
 import com.mi3software.argon.compiler._
-import com.mi3software.argon.util.{FileOperations, IOHelpers}
+import com.mi3software.argon.util.FileOperations
 import scalaz._
 import Scalaz._
 import com.mi3software.argon.build.project.ProjectLoader

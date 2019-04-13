@@ -5,26 +5,31 @@ lazy val commonSettings = Seq(
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
-  addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.patch),
-  addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.4"),
-  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.2.4"),
-  addCompilerPlugin("com.github.ghik" %% "silencer-plugin" % "1.2"),
+  //addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.patch),
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.0"),
+  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
+  addCompilerPlugin("com.github.ghik" %% "silencer-plugin" % "1.3.3"),
+  addCompilerPlugin("org.scalaz" %% "deriving-plugin" % "1.0.0"),
 
   libraryDependencies ++= Seq(
-    "org.scala-lang.modules" %% "scala-xml" % "1.0.6",
+    "org.scala-lang.modules" %% "scala-xml" % "1.2.0",
+    
     "org.scalaz" %% "scalaz-core" % "7.2.27",
-    "org.scalaz" %% "scalaz-zio" % "0.5.3",
-    "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "0.5.3",
-    "org.apache.commons" % "commons-lang3" % "3.5",
-    "commons-io" % "commons-io" % "2.5",
-    "org.fusesource.jansi" % "jansi" % "1.15",
-    "org.scalatest" %% "scalatest" % "3.0.3" % "test",
-    "org.scalacheck" %% "scalacheck" % "1.13.4" % "test",
-    "com.chuusai" %% "shapeless" % "2.3.3",
-    "com.fommil" %% "deriving-macro" % "0.9.0",
-    "com.fommil" %% "scalaz-deriving" % "0.9.0",
-    "tech.sparse" %%  "toml-scala" % "0.1.1",
+    "org.scalaz" %% "scalaz-zio" % "1.0-RC3",
+    "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC3",
+    "org.scalaz" %% "deriving-macro" % "1.0.0",
+    "org.scalaz" %% "scalaz-deriving" % "1.0.0",
 
+    "com.chuusai" %% "shapeless" % "2.3.3",
+    "tech.sparse" %%  "toml-scala" % "0.2.0",
+    
+    "org.apache.commons" % "commons-lang3" % "3.8.1",
+    "commons-io" % "commons-io" % "2.6",
+    
+    "org.fusesource.jansi" % "jansi" % "1.18",
+    
+    "org.scalatest" %% "scalatest" % "3.0.7" % "test",
+    "org.scalacheck" %% "scalacheck" % "1.14.0" % "test",
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test",
 
     "com.github.ghik" %% "silencer-lib" % "1.2" % Provided,

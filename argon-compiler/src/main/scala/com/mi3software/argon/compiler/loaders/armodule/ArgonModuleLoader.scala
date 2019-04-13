@@ -691,7 +691,9 @@ object ArgonModuleLoader {
                   for {
                     methodOwner <- definition.methodOwner match {
                       case MethodDefinition.MethodOwner.OwnerClassId(ownerId) => findClassDef(ownerId).map(ArMethod.ClassOwner.apply)
+                      case MethodDefinition.MethodOwner.OwnerClassObjectId(ownerId) => findClassDef(ownerId).map(ArMethod.ClassObjectOwner.apply)
                       case MethodDefinition.MethodOwner.OwnerTraitId(ownerId) => findTraitDef(ownerId).map(ArMethod.TraitOwner.apply)
+                      case MethodDefinition.MethodOwner.OwnerTraitObjectId(ownerId) => findTraitDef(ownerId).map(ArMethod.TraitObjectOwner.apply)
                       case MethodDefinition.MethodOwner.OwnerConstructorId(ownerId) => findDataConstructorDef(ownerId).map(ArMethod.DataCtorOwner.apply)
                       case MethodDefinition.MethodOwner.Empty => Compilation[TComp].forErrors(
                         CompilationError.MethodMustHaveOwner(

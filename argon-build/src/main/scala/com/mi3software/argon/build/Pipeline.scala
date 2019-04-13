@@ -19,22 +19,22 @@ object Pipeline {
 
   type MonadErrorThrowable[F[_, _]] = MonadError[F[Throwable, ?], Throwable]
 
-  protected def findInputFiles[F[_, _] : MonadErrorThrowable : ZIO](buildInfo: BuildInfo[File]): ArStream[F[Throwable, ?], InputFileInfo[F[Throwable, ?]], Unit] =
-    ArStream.fromVector[F[Throwable, ?], (File, Int), Unit](buildInfo.project.inputFiles.toVector.zipWithIndex, ())
+  protected def findInputFiles(buildInfo: BuildInfo[File]): ArStream[Task, InputFileInfo[Task], Unit] =
+    ArStream.fromVector[Task, (File, Int), Unit](buildInfo.project.inputFiles.toVector.zipWithIndex, ())
       .mapItems { case (file, id) =>
         InputFileInfo(FileSpec(FileID(id), file.getPath),
-          FileStream.readFileText[F](file, bufferSize = 1024)
+          FileStream.readFileText(file, bufferSize = 1024)
         )
       }
 
-  def printMessages[F[_, _] : MonadErrorThrowable : ZIO, C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): F[Throwable, Unit] =
+  def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): TaskR[Console, Unit] =
     msgs
       .traverse_ { msg =>
-        ZIO[F].liftZIO(putStrLn(msg.toString))
+        putStrLn(msg.toString)
       }
 
-  def compileResult[A](buildInfo: BuildInfo[File])(f: buildInfo.backend.TCompilationOutput[IO[Throwable, +?], File] => IO[Throwable, A])(implicit compInstance: IOCompilation): IO[Throwable, A] =
-    BuildProcess.parseInput(findInputFiles[IO](buildInfo)).toVector(compInstance).flatMap { parsedInput =>
+  def compileResult[A](buildInfo: BuildInfo[File])(f: buildInfo.backend.TCompilationOutput[Task, File] => Task[A])(implicit compInstance: IOCompilation): Task[A] =
+    BuildProcess.parseInput(findInputFiles(buildInfo)).toVector(compInstance).flatMap { parsedInput =>
       BuildProcess.compile(
         buildInfo.backend
       )(
@@ -47,7 +47,7 @@ object Pipeline {
       )(f)(implicitly, compInstance, IOCompilation.fileSystemResourceAccess)
     }
 
-  def run(buildInfo: BuildInfo[File]): IO[Throwable, Int] =
+  def run(buildInfo: BuildInfo[File]): TaskR[Console, Int] =
     IOCompilation.compilationInstance
       .flatMap { implicit compInstance =>
         compInstance.getResult(
@@ -58,10 +58,10 @@ object Pipeline {
       }
     .flatMap {
       case (msgs, -\/(errors)) =>
-        printMessages[IO, Vector, CompilationMessage](errors.toVector ++ msgs).map { _ => 1 }
+        printMessages[Vector, CompilationMessage](errors.toVector ++ msgs).map { _ => 1 }
 
       case (msgs, \/-(_)) =>
-        printMessages[IO, Vector, CompilationMessage](msgs).map { _ => 0 }
+        printMessages[Vector, CompilationMessage](msgs).map { _ => 0 }
     }
 
 

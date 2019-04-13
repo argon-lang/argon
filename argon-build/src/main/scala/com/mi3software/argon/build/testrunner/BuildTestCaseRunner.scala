@@ -19,10 +19,10 @@ final class BuildTestCaseRunner(protected val backend: Backend, references: Vect
 
   private implicit val dummyFileHandler: ProjectFileHandler[IO, File] = new ProjectFileHandler[IO, File] {
     override def loadSingleFile(file: String): IO[Throwable, File] =
-      IO.syncThrowable { new File(file) }
+      IO.effect { new File(file) }
 
     override def loadFileGlob(glob: String): IO[Throwable, List[File]] =
-      IO.point(Nil)
+      IO.succeed(Nil)
   }
 
   override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[Throwable, backend.BackendOptions[Id, File]] =
@@ -31,7 +31,7 @@ final class BuildTestCaseRunner(protected val backend: Backend, references: Vect
     )
 
   override protected def getProgramOutput(compOutput: backend.TCompilationOutput[IO[Throwable, +?], File]): IO[Throwable, String] =
-    IO.now("")
+    IO.succeed("")
 
   override protected def normalizeOutput(output: String): String = ""
 
