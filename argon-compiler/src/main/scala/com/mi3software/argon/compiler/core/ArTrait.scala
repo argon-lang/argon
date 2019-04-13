@@ -7,7 +7,7 @@ import scalaz._
 
 import scala.collection.immutable._
 
-trait ArTrait[TContext <: Context, TPayloadSpec[_, _]] {
+trait ArTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
   import context._, signatureContext.Signature
@@ -18,13 +18,16 @@ trait ArTrait[TContext <: Context, TPayloadSpec[_, _]] {
 
   val signature: Comp[Signature[ArTrait.ResultInfo]]
 
-  val methods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
-  val staticMethods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
+  val methods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]
+  val staticMethods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]
 
   val payload: TPayloadSpec[Unit, TTraitMetadata]
 }
 
 object ArTrait {
+
+  type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
+    ArTrait[TContext, TPayloadSpec] { val descriptor: TraitDescriptor.InNamespace }
 
   sealed trait ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
     val typeSystem: TS
@@ -51,10 +54,4 @@ object ArTrait {
     }
   }
 
-}
-
-trait ArTraitInNamespace[TContext <: Context, TPayloadSpec[_, _]] {
-  self: ArTrait[TContext, TPayloadSpec] =>
-
-  override val descriptor: TraitDescriptor.InNamespace
 }

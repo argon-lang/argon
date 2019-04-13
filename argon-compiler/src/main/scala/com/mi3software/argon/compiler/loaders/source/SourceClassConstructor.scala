@@ -8,6 +8,7 @@ import com.mi3software.argon.parser
 import com.mi3software.argon.util._
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import com.mi3software.argon.compiler.loaders.StandardTypeLoaders
 
 object SourceClassConstructor {
@@ -15,7 +16,7 @@ object SourceClassConstructor {
   def apply[TComp[+_] : Compilation]
   (context2: ContextComp[TComp])
   (env: EnvCreator[context2.type])
-  (ownerClass: ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier])
+  (ownerClass2: ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier])
   (stmt: parser.ClassConstructorDeclarationStmt)
   (desc: ClassConstructorDescriptor)
   : TComp[ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier]] = for {
@@ -32,6 +33,8 @@ object SourceClassConstructor {
     override val descriptor: ClassConstructorDescriptor = desc
 
     override val effectInfo: EffectInfo = EffectInfo.pure
+
+    override val ownerClass: ArClass[context.type, DeclarationPayloadSpecifier] = ownerClass2
 
     override lazy val signature: TComp[context.signatureContext.Signature[ClassConstructor.ResultInfo]] =
       sigCache(
@@ -168,9 +171,9 @@ object SourceClassConstructor {
       }
     }
 
-    private def findField(name: String, location: SourceLocation): TComp[typeSystem.Variable[FieldDescriptor]] =
+    private def findField(name: String, location: SourceLocation): TComp[typeSystem.FieldVariable] =
       ownerClass.fields.flatMap { fields =>
-        Compilation[TComp].requireSome(fields.find { _.name === VariableName.Normal(name) })(
+        Compilation[TComp].requireSome(fields.find { _.name.name === name })(
           CompilationError.FieldNotFound(name, CompilationMessageSource.SourceFile(env.fileSpec, location))
         )
       }

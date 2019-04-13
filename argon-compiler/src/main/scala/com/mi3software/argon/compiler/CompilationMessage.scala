@@ -353,6 +353,10 @@ object CompilationError {
     override def message: String = "An invalid global declaration was found."
   }
 
+  final case class MethodMustHaveOwner(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Method must have owner."
+  }
+
 
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context

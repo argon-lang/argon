@@ -19,7 +19,7 @@ object SourceSignatureCreator {
   : TComp[context.signatureContext.Signature[TResult]] = {
 
     import context._
-    import typeSystem.{ Variable, Parameter }
+    import typeSystem.{ ParameterElementVariable, Parameter }
     import scopeContext.{ Scope, ScopeExtensions }
     import signatureContext.{ Signature, SignatureParameters, SignatureResult }
 
@@ -53,7 +53,7 @@ object SourceSignatureCreator {
 
                 })
                 .map { t =>
-                  Variable[DeconstructedParameterDescriptor](
+                  ParameterElementVariable(
                     DeconstructedParameterDescriptor(paramOwner, paramIndex, tupleIndex),
                     VariableName.Normal(paramName),
                     Mutability.NonMutable,
@@ -62,7 +62,7 @@ object SourceSignatureCreator {
                 }
 
             }
-            .flatMap { variables: NonEmptyList[Variable[DeconstructedParameterDescriptor]] =>
+            .flatMap { variables: NonEmptyList[ParameterElementVariable] =>
 
               val variablesVec = variables.toVector
 

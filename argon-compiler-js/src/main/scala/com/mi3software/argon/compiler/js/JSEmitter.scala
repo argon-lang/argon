@@ -98,12 +98,14 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           )
 
       case GlobalBinding.GlobalTrait(_, _, arTrait) =>
-        JSAssignment(
-          JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor))),
+        for {
+          sig <- arTrait.signature
+        } yield JSAssignment(
+          JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))),
           JSObjectLiteral(Vector(
             JSObjectProperty("symbol", JSFunctionCall(JSIdentifier("Symbol"), Vector()))
           ))
-        ).point[TComp]
+        )
 
       case GlobalBinding.GlobalClass(_, _, arClass) =>
         for {
@@ -118,28 +120,39 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
               JSObjectProperty("name", JSString(field.descriptor.name))
             ))
           }
-          methodObjects <- methods.traverse(createMethodObject(_))
-          staticMethodObjects <- staticMethods.traverse(createMethodObject(_))
-          ctorObjects <- classConstructors.traverse(createClassCtorObject(_))
+          methodObjects <- methods.traverse { method => createMethodObject(method.method) }
+          staticMethodObjects <- staticMethods.traverse { method => createMethodObject(method.method) }
+          ctorObjects <- classConstructors.traverse { ctor => createClassCtorObject(ctor.ctor) }
 
-          classSpec = JSObjectLiteral(Vector(
+          baseClassExpr <- sig.unsubstitutedResult.baseTypes.baseClass.traverse { baseClass =>
+            baseClass.arClass.value.signature.map { sig =>
+              val erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
 
-            sig.unsubstitutedResult.baseTypes.baseClass.map { baseClass =>
               JSObjectGetProperty(
                 "baseClass",
                 Vector(
-                  JSReturn(getClassJSObject(getParamOwnerModule(arClass.descriptor), baseClass.arClass.value.descriptor))
+                  JSReturn(getClassJSObject(getParamOwnerModule(arClass.descriptor), baseClass.arClass.value.descriptor, erasedSig))
                 )
               )
-            }.toVector,
+            }
+          }
+
+          baseTraitExprs <- sig.unsubstitutedResult.baseTypes.baseTraits.traverse { baseTrait =>
+            baseTrait.arTrait.value.signature.map { sig =>
+              val erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
+              getTraitJSObject(getParamOwnerModule(arClass.descriptor), baseTrait.arTrait.value.descriptor, erasedSig)
+            }
+          }
+
+          classSpec = JSObjectLiteral(Vector(
+
+            baseClassExpr.toVector,
 
             Vector(JSObjectGetProperty(
               "baseTraits",
               Vector(
                 JSReturn(JSArrayLiteral(
-                  sig.unsubstitutedResult.baseTypes.baseTraits.map { baseTrait =>
-                    getTraitJSObject(getParamOwnerModule(arClass.descriptor), baseTrait.arTrait.value.descriptor)
-                  }
+                  baseTraitExprs
                 ))
               )
             )),
@@ -154,7 +167,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           ).flatten)
 
         } yield JSAssignment(
-          JSPropertyAccessBracket(classesVarName, JSString(DescriptorId.forClass(arClass.descriptor))),
+          JSPropertyAccessBracket(classesVarName, JSString(DescriptorId.forClass(arClass.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))),
           JSFunctionCall(
             JSPropertyAccessDot(
               JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
@@ -184,7 +197,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
   private def createClassCtorObject(ctor: ClassConstructor[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): TComp[JSExpression] =
     for {
       sig <- ctor.signature
-      descriptorId = DescriptorId.forClassConstructor(ctor.descriptor)
+      descriptorId = DescriptorId.forClassConstructor(ErasedSignature.fromSignatureParameters(context)(sig))
       impl <- ctor.payload : TComp[context.JSImpl.ClassConstructor]
       body <- impl match {
         case context.JSImpl.ClassConstructor.StatementBody(body) =>
@@ -193,36 +206,40 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
               case context.typeSystem.ClassConstructorStatementExpr(expr) => convertStmt(ctor.descriptor)(useReturn = false)(expr)
               case context.typeSystem.InitializeFieldStatement(field, value) =>
                 for {
+                  varExpr <- getVariableExpr(getParamOwnerModule(ctor.descriptor), field)
                   valueExpr <- convertExpr(ctor.descriptor)(value)
                 } yield Vector(JSAssignment(
-                  getVariableExpr(getParamOwnerModule(ctor.descriptor), field.descriptor),
+                  varExpr,
                   valueExpr
                 ))
             }
 
             baseCall <- body.baseConstructorCall.traverse { baseCallExpr =>
-              val descriptor = baseCallExpr.classCtor.value.descriptor
-              val ownerObj = getClassJSObject(getParamOwnerModule(ctor.descriptor), descriptor.ownerClass)
+              val ownerClass = baseCallExpr.classCtor.value.ownerClass
+              baseCallExpr.classCtor.value.ownerClass.signature.flatMap { ownerClassSig =>
+                val ownerClassErasedSig = ErasedSignature.fromSignatureParameters(context)(ownerClassSig)
+                val ownerObj = getClassJSObject(getParamOwnerModule(ctor.descriptor), ownerClass.descriptor, ownerClassErasedSig)
 
-              val baseCtorSymbol = JSPropertyAccessDot(
-                JSPropertyAccessBracket(
-                  JSPropertyAccessDot(
-                    ownerObj,
-                    constructorsPropName
+                val baseCtorSymbol = JSPropertyAccessDot(
+                  JSPropertyAccessBracket(
+                    JSPropertyAccessDot(
+                      ownerObj,
+                      constructorsPropName
+                    ),
+                    JSString(descriptorId)
                   ),
-                  JSString(descriptorId)
-                ),
-                JSIdentifier("symbol")
-              )
-
-              baseCallExpr.args.traverse(convertExpr(ctor.descriptor)(_)).map { argExprs =>
-                JSFunctionCall(
-                  JSPropertyAccessDot(
-                    JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")),
-                    JSIdentifier("call")
-                  ),
-                  JSThis +: baseCtorSymbol +: argExprs
+                  JSIdentifier("symbol")
                 )
+
+                baseCallExpr.args.traverse(convertExpr(ctor.descriptor)(_)).map { argExprs =>
+                  JSFunctionCall(
+                    JSPropertyAccessDot(
+                      JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")),
+                      JSIdentifier("call")
+                    ),
+                    JSThis +: baseCtorSymbol +: argExprs
+                  )
+                }
               }
             }
 
@@ -313,9 +330,10 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
       case ClassConstructorCall(classType, ctor, args) =>
         for {
           sig <- ctor.value.signature
+          ownerClassSig <- ctor.value.ownerClass.signature
 
-          ownerObj = getClassJSObject(getParamOwnerModule(owner), ctor.value.descriptor.ownerClass)
-          descriptorId = DescriptorId.forClassConstructor(ctor.value.descriptor)
+          ownerObj = getClassJSObject(getParamOwnerModule(owner), ctor.value.descriptor.ownerClass, ErasedSignature.fromSignatureParameters(context)(ownerClassSig))
+          descriptorId = DescriptorId.forClassConstructor(ErasedSignature.fromSignatureParameters(context)(sig))
 
           baseCtorSymbol = JSPropertyAccessDot(
             JSPropertyAccessBracket(
@@ -338,7 +356,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           sig <- func.value.signature
 
           funcExpr = func.value.descriptor match {
-            case FuncDescriptor.InNamespace(moduleDesc, _, _, ns, name, _) =>
+            case FuncDescriptor.InNamespace(moduleDesc, _, ns, name) =>
               val funcsObject =
                 if(moduleDesc === getParamOwnerModule(owner))
                   funcsVarName
@@ -411,7 +429,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
         ).point[TComp]
 
       case LoadVariable(variable) =>
-        getVariableExpr(getParamOwnerModule(owner), variable.descriptor).point[TComp]
+        getVariableExpr(getParamOwnerModule(owner), variable)
 
       case MethodCall(method, instance, args, _) =>
         for {
@@ -419,10 +437,9 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
 
           instanceExpr <- convertExpr(owner)(instance)
 
-          methodSymbol = {
-            val descriptor = method.value.descriptor
-            val ownerObj = getClassLikeJSObject(getParamOwnerModule(owner), descriptor.typeDescriptor)
+          ownerObj <- getClassLikeJSObject(getParamOwnerModule(owner), method.value.owner)
 
+          methodSymbol =
             JSPropertyAccessDot(
               JSPropertyAccessBracket(
                 JSPropertyAccessDot(
@@ -433,7 +450,6 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
               ),
               JSIdentifier("symbol")
             )
-          }
 
           methodExpr = JSPropertyAccessBracket(instanceExpr, methodSymbol)
 
@@ -481,17 +497,20 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
   private def getVariableName(descriptor: VariableDescriptor): JSIdentifier =
     JSIdentifier(s"local_${descriptor.index}")
 
-  private def getVariableExpr(moduleDescriptor: ModuleDescriptor, descriptor: VariableLikeDescriptor): JSExpression = descriptor match {
-    case descriptor: ParameterDescriptor => getParameterName(descriptor)
-    case descriptor: DeconstructedParameterDescriptor => getDeconstructedParameterName(descriptor)
-    case descriptor: VariableDescriptor => getVariableName(descriptor)
-    case FieldDescriptor(owner, name) =>
-      JSPropertyAccessBracket(
+  private def getVariableExpr(moduleDescriptor: ModuleDescriptor, variable: context.typeSystem.Variable): TComp[JSExpression] = variable match {
+    case context.typeSystem.LocalVariable(descriptor, _, _, _) => getVariableName(descriptor).point[TComp]
+    case context.typeSystem.ParameterVariable(descriptor, _, _, _) => getParameterName(descriptor).point[TComp]
+    case context.typeSystem.ParameterElementVariable(descriptor, _, _, _) => getDeconstructedParameterName(descriptor).point[TComp]
+    case context.typeSystem.FieldVariable(FieldDescriptor(owner, name), ownerClass, _, _, _) =>
+      for {
+        sig <- ownerClass.value.signature
+        erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
+      } yield JSPropertyAccessBracket(
         JSThis,
         JSPropertyAccessDot(
           JSPropertyAccessBracket(
             JSPropertyAccessDot(
-              getClassJSObject(moduleDescriptor, owner),
+              getClassJSObject(moduleDescriptor, owner, erasedSig),
               JSIdentifier("fields")
             ),
             JSString(name)
@@ -501,7 +520,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
       )
   }
 
-  private def getClassJSObject(moduleDescriptor: ModuleDescriptor, descriptor: ClassDescriptor): JSExpression = {
+  private def getClassJSObject(moduleDescriptor: ModuleDescriptor, descriptor: ClassDescriptor, sig: ErasedSignature.ParameterOnlySignature[context.type]): JSExpression = {
     val classModule = getParamOwnerModule(descriptor)
     val classesObj =
       if(moduleDescriptor === classModule)
@@ -512,10 +531,10 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           classesVarName
         )
 
-    JSPropertyAccessBracket(classesObj, JSString(DescriptorId.forClass(descriptor)))
+    JSPropertyAccessBracket(classesObj, JSString(DescriptorId.forClass(descriptor, sig)))
   }
 
-  private def getTraitJSObject(moduleDescriptor: ModuleDescriptor, descriptor: TraitDescriptor): JSExpression = {
+  private def getTraitJSObject(moduleDescriptor: ModuleDescriptor, descriptor: TraitDescriptor, sig: ErasedSignature.ParameterOnlySignature[context.type]): JSExpression = {
     val traitModule = getParamOwnerModule(descriptor)
     val traitsObj =
       if(moduleDescriptor === traitModule)
@@ -526,11 +545,11 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           traitsVarName
         )
 
-    JSPropertyAccessBracket(traitsObj, JSString(DescriptorId.forTrait(descriptor)))
+    JSPropertyAccessBracket(traitsObj, JSString(DescriptorId.forTrait(descriptor, sig)))
   }
 
 
-  private def getDataCtorJSObject(moduleDescriptor: ModuleDescriptor, descriptor: DataConstructorDescriptor): JSExpression = {
+  private def getDataCtorJSObject(moduleDescriptor: ModuleDescriptor, descriptor: DataConstructorDescriptor, sig: ErasedSignature.ParameterOnlySignature[context.type]): JSExpression = {
     val dataCtorModule = getParamOwnerModule(descriptor)
     val dataCtorsObj =
       if(moduleDescriptor === dataCtorModule)
@@ -541,16 +560,16 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           dataCtorsVarName
         )
 
-    JSPropertyAccessBracket(dataCtorsObj, JSString(DescriptorId.forDataConstructor(descriptor)))
+    JSPropertyAccessBracket(dataCtorsObj, JSString(DescriptorId.forDataConstructor(descriptor, sig)))
   }
 
-  private def getClassLikeJSObject(moduleDescriptor: ModuleDescriptor, descriptor: MethodOwnerDescriptor): JSExpression =
-    descriptor match {
-      case descriptor: TraitDescriptor => getTraitJSObject(moduleDescriptor, descriptor)
-      case TraitObjectDescriptor(traitDescriptor) => JSPropertyAccessDot(getTraitJSObject(moduleDescriptor, traitDescriptor), JSIdentifier("static"))
-      case descriptor: ClassDescriptor => getClassJSObject(moduleDescriptor, descriptor)
-      case ClassObjectDescriptor(classDescriptor) => JSPropertyAccessDot(getClassJSObject(moduleDescriptor, classDescriptor), JSIdentifier("static"))
-      case descriptor: DataConstructorDescriptor => getDataCtorJSObject(moduleDescriptor, descriptor)
+  private def getClassLikeJSObject[TPayloadSpec[_, _]](moduleDescriptor: ModuleDescriptor, methodOwner: ArMethod.Owner[context.type, TPayloadSpec]): TComp[JSExpression] =
+    methodOwner match {
+      case ArMethod.TraitOwner(ownerTrait) => ownerTrait.signature.map { sig => getTraitJSObject(moduleDescriptor, ownerTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)) }
+      case ArMethod.TraitObjectOwner(ownerTrait) => ownerTrait.signature.map { sig => JSPropertyAccessDot(getTraitJSObject(moduleDescriptor, ownerTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)), JSIdentifier("static")) }
+      case ArMethod.ClassOwner(ownerClass) => ownerClass.signature.map { sig => getClassJSObject(moduleDescriptor, ownerClass.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)) }
+      case ArMethod.ClassObjectOwner(ownerClass) => ownerClass.signature.map { sig => JSPropertyAccessDot(getClassJSObject(moduleDescriptor, ownerClass.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)), JSIdentifier("static")) }
+      case ArMethod.DataCtorOwner(dataCtor) => dataCtor.signature.map { sig => getDataCtorJSObject(moduleDescriptor, dataCtor.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)) }
     }
 
   private def getParamOwnerModule(descriptor: ParameterOwnerDescriptor): ModuleDescriptor =

@@ -4,22 +4,22 @@ import com.mi3software.argon.compiler.core.ErasedSignature.TraitType
 import com.mi3software.argon.compiler.types.TypeSystem
 import scalaz.NonEmptyList
 
-sealed trait ErasedSignature[TContext <: Context]
+sealed trait ErasedSignature[TContext <: Context with Singleton]
 
 object ErasedSignature {
 
-  sealed trait SigType[TContext <: Context]
-  final case class BlankType[TContext <: Context]() extends SigType[TContext]
-  final case class TraitType[TContext <: Context](arTrait: AbsRef[TContext, ArTrait]) extends SigType[TContext]
-  final case class ClassType[TContext <: Context](arClass: AbsRef[TContext, ArClass]) extends SigType[TContext]
-  final case class DataConstructorType[TContext <: Context](ctor: AbsRef[TContext, DataConstructor]) extends SigType[TContext]
-  final case class TupleType[TContext <: Context](elements: NonEmptyList[SigType[TContext]]) extends SigType[TContext]
-  final case class FunctionType[TContext <: Context](argumentType: SigType[TContext], resultType: SigType[TContext]) extends SigType[TContext]
+  sealed trait SigType[TContext <: Context with Singleton]
+  final case class BlankType[TContext <: Context with Singleton]() extends SigType[TContext]
+  final case class TraitType[TContext <: Context with Singleton](arTrait: AbsRef[TContext, ArTrait]) extends SigType[TContext]
+  final case class ClassType[TContext <: Context with Singleton](arClass: AbsRef[TContext, ArClass]) extends SigType[TContext]
+  final case class DataConstructorType[TContext <: Context with Singleton](ctor: AbsRef[TContext, DataConstructor]) extends SigType[TContext]
+  final case class TupleType[TContext <: Context with Singleton](elements: NonEmptyList[SigType[TContext]]) extends SigType[TContext]
+  final case class FunctionType[TContext <: Context with Singleton](argumentType: SigType[TContext], resultType: SigType[TContext]) extends SigType[TContext]
 
-  final case class Parameter[TContext <: Context](paramType: SigType[TContext], next: ErasedSignature[TContext]) extends ErasedSignature[TContext]
-  final case class Result[TContext <: Context](resultType: SigType[TContext]) extends ErasedSignature[TContext]
+  final case class Parameter[TContext <: Context with Singleton](paramType: SigType[TContext], next: ErasedSignature[TContext]) extends ErasedSignature[TContext]
+  final case class Result[TContext <: Context with Singleton](resultType: SigType[TContext]) extends ErasedSignature[TContext]
 
-  final case class ParameterOnlySignature[TContext <: Context](paramTypes: Vector[SigType[TContext]])
+  final case class ParameterOnlySignature[TContext <: Context with Singleton](paramTypes: Vector[SigType[TContext]])
 
   def fromSignature(context: Context)(sig: context.signatureContext.Signature[FunctionResultInfo]): ErasedSignature[context.type] =
     sig.visit(

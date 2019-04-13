@@ -17,14 +17,14 @@ private[compiler] object SourceTrait {
   (env: EnvCreator[context2.type])
   (stmt: TraitDeclarationStmt)
   (desc: TraitDescriptor)
-  : ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] =
+  : ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type } =
     new ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
       import context.signatureContext.Signature
 
       override val contextProof: Leibniz[context.type, context2.type, context.type, context2.type] = Leibniz.refl
 
-      override val descriptor: TraitDescriptor = desc
+      override val descriptor: desc.type = desc
 
       override val isSealed: Boolean = stmt.modifiers.exists {
         case WithSource(parser.SealedModifier, _) => true
@@ -32,8 +32,8 @@ private[compiler] object SourceTrait {
       }
 
       override lazy val signature: TComp[Signature[ArTrait.ResultInfo]] = ??? : TComp[Signature[ArTrait.ResultInfo]]
-      override lazy val methods: TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]] = ??? : TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]]
-      override lazy val staticMethods: TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]] = ??? : TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]]
+      override lazy val methods: TComp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] = ??? : TComp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      override lazy val staticMethods: TComp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] = ??? : TComp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
 
       override val payload: Unit = ()
     }

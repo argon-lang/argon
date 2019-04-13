@@ -8,6 +8,7 @@ import com.mi3software.argon.parser
 import com.mi3software.argon.util._
 import scalaz._
 import Scalaz._
+import com.mi3software.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 
 object SourceMethod {
   def apply[TComp[+_] : Compilation]
@@ -15,10 +16,11 @@ object SourceMethod {
   (env: EnvCreator[context2.type])
   (stmt: parser.MethodDeclarationStmt, location: SourceLocation)
   (desc: MethodDescriptor)
-  : TComp[ArMethod[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier]] = for {
+  (methodOwner: ArMethod.Owner[context2.type, DeclarationPayloadSpecifier])
+  : TComp[ArMethod[context2.type, DeclarationPayloadSpecifier]] = for {
     sigCache <- Compilation[TComp].createCache[context2.signatureContext.Signature[FunctionResultInfo]]
     implCache <- Compilation[TComp].createCache[context2.TMethodImplementation]
-  } yield new ArMethod[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
+  } yield new ArMethod[context2.type, DeclarationPayloadSpecifier] {
     override val context: context2.type = context2
     override val contextProof: Leibniz[context.type, context2.type, context.type, context2.type] = Leibniz.refl
 
@@ -48,6 +50,9 @@ object SourceMethod {
     }
 
     override val effectInfo: EffectInfo = EffectInfo(stmt.purity)
+
+
+    override val owner: ArMethod.Owner[context.type, DeclarationPayloadSpecifier] = methodOwner
 
     override lazy val signature: TComp[context.signatureContext.Signature[FunctionResultInfo]] =
       sigCache(

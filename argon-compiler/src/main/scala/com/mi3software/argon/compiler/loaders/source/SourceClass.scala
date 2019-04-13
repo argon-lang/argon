@@ -30,16 +30,16 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
   (env: EnvCreator[context2.type])
   (stmt: ClassDeclarationStmt)
   (desc: ClassDescriptor)
-  : TComp[ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier]] = for {
+  : TComp[ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type }] = for {
     sigCache <- Compilation[TComp].createCache[context2.signatureContext.Signature[ArClass.ResultInfo]]
 
     groupedStaticCache <- Compilation[TComp].createCache[GroupedStaticStatements]
     groupedInstCache <- Compilation[TComp].createCache[GroupedInstanceStatements]
 
-    fieldCache <- Compilation[TComp].createCache[Vector[context2.typeSystem.Variable[FieldDescriptor]]]
-    methodCache <- Compilation[TComp].createCache[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]]
-    staticMethodCache <- Compilation[TComp].createCache[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]]
-    classCtorCache <- Compilation[TComp].createCache[Vector[ClassConstructor[context2.type, DeclarationPayloadSpecifier]]]
+    fieldCache <- Compilation[TComp].createCache[Vector[context2.typeSystem.FieldVariable]]
+    methodCache <- Compilation[TComp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+    staticMethodCache <- Compilation[TComp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+    classCtorCache <- Compilation[TComp].createCache[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]]
 
   } yield new ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
     override val context: context2.type = context2
@@ -47,7 +47,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
     override val contextProof: Leibniz[context.type, context2.type, context.type, context2.type] = Leibniz.refl
 
-    override val descriptor: ClassDescriptor = desc
+    override val descriptor: desc.type = desc
 
     override val isSealed: Boolean = stmt.modifiers.exists {
       case WithSource(parser.SealedModifier, _) => true
@@ -97,14 +97,15 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType))
       )
 
-    override val fields: TComp[Vector[context.typeSystem.Variable[FieldDescriptor]]] =
+    override val fields: TComp[Vector[context.typeSystem.FieldVariable]] =
       fieldCache(groupedInst.flatMap { inst =>
         inst.fields.traverse { field =>
           field.value.name match {
             case Some(fieldName) =>
               ExpressionConverter.convertTypeExpression(context)(env(context)(EffectInfo.pure, descriptor))(field.value.fieldType).map { fieldType =>
-                context.typeSystem.Variable(
+                context.typeSystem.FieldVariable(
                   FieldDescriptor(descriptor, fieldName),
+                  AbsRef(this),
                   VariableName.Normal(fieldName),
                   Mutability.fromIsMutable(field.value.isMutable),
                   fieldType
@@ -117,7 +118,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         }
       })
 
-    override val methods: TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]] =
+    override val methods: TComp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
       methodCache(groupedInst.flatMap { inst =>
         inst.methods.zipWithIndex.traverse { case (method, i) =>
           parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
@@ -128,14 +129,15 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
             fields.flatMap { fieldVars =>
               val env2 = env.addVariables(context)(fieldVars)
-              val desc = MethodDescriptor(descriptor, i, memberName, modifiers)
-              SourceMethod(context)(env2)(method.value, method.location)(desc)
+              val desc = MethodDescriptor(descriptor, i, memberName)
+              SourceMethod(context)(env2)(method.value, method.location)(desc)(ArMethod.ClassOwner(this))
+                .map(MethodBinding(memberName, i, modifiers, _))
             }
           }
         }
       })
 
-    override val staticMethods: TComp[Vector[ArMethod[context2.type, DeclarationPayloadSpecifier]]] =
+    override val staticMethods: TComp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
       staticMethodCache(groupedStatic.flatMap { statics =>
         statics.staticMethods.zipWithIndex.traverse { case (method, i) =>
           parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
@@ -144,18 +146,19 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
               case None => MemberName.Unnamed
             }
 
-            val desc = MethodDescriptor(ClassObjectDescriptor(descriptor), i, memberName, modifiers)
-            SourceMethod(context)(env)(method.value, method.location)(desc)
+            val desc = MethodDescriptor(ClassObjectDescriptor(descriptor), i, memberName)
+            SourceMethod(context)(env)(method.value, method.location)(desc)(ArMethod.ClassObjectOwner(this))
+              .map(MethodBinding(memberName, i, modifiers, _))
           }
         }
       })
 
-    override val classConstructors: TComp[Vector[ClassConstructor[context2.type, DeclarationPayloadSpecifier]]] =
+    override val classConstructors: TComp[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]] =
       classCtorCache(groupedStatic.flatMap { statics =>
         statics.classCtors.zipWithIndex.traverse { case (classCtor, i) =>
           parseAccessModifier(env.fileSpec, classCtor.location, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
-            val desc = ClassConstructorDescriptor(descriptor, i, modifiers)
-            SourceClassConstructor(context)(env)(this)(classCtor.value)(desc)
+            val desc = ClassConstructorDescriptor(descriptor, i)
+            SourceClassConstructor(context)(env)(this)(classCtor.value)(desc).map(ClassConstructorBinding(i, modifiers, _))
           }
         }
       })

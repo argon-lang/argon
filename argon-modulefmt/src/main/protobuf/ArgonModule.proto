@@ -27,13 +27,14 @@ message ModuleReference {
 
 message GlobalDeclaration {
     oneof descriptor {
-        InNamespaceDescriptor traitDescriptor = 2;
-        InNamespaceDescriptor classDescriptor = 3;
-        InNamespaceDescriptor dataConstructorDescriptor = 4;
-        InNamespaceDescriptor functionDescriptor = 5;
+        InNamespaceDescriptor traitDescriptor = 3;
+        InNamespaceDescriptor classDescriptor = 4;
+        InNamespaceDescriptor dataConstructorDescriptor = 5;
+        InNamespaceDescriptor functionDescriptor = 6;
     }
 
     required int32 id = 1;
+    required AccessModifier accessModifier = 2;
 }
 
 // *-ref/id
@@ -60,6 +61,11 @@ message FunctionReference {
 message MethodReference {
     required int32 moduleId = 1;
     required MethodDescriptor descriptor = 2;
+    oneof methodOwner {
+        sint32 ownerClassId = 3;
+        sint32 ownerTraitId = 4;
+        sint32 ownerConstructorId = 5;
+    }
 }
 
 message ClassConstructorReference {
@@ -72,6 +78,7 @@ message ClassConstructorReference {
 message MethodMember {
     required MethodDescriptor descriptor = 1;
     required int32 id = 2;
+    required AccessModifier accessModifier = 3;
 }
 
 message TraitDefinition {
@@ -124,6 +131,13 @@ message FunctionDefinition {
 message MethodDefinition {
     required MethodDescriptor descriptor = 1;
     required MethodSignature signature = 2;
+    oneof methodOwner {
+        int32 ownerClassId = 8;
+        int32 ownerClassObjectId = 9;
+        int32 ownerTraitId = 10;
+        int32 ownerTraitObjectId = 11;
+        int32 ownerConstructorId = 12;
+    }
     required EffectInfo effects = 3;
     optional bool isVirtual = 4;
     optional bool isAbstract = 5;
@@ -166,11 +180,8 @@ enum AccessModifier {
 
 // Descriptors
 message InNamespaceDescriptor {
-    required int32 fileId = 1;
-    required int32 index = 2;
-    required Namespace ns = 3;
-    required GlobalName name = 4;
-    required AccessModifier accessModifier = 5;
+    required Namespace ns = 1;
+    required GlobalName name = 2;
 }
 
 message TraitDescriptor {
@@ -199,17 +210,17 @@ message FunctionDescriptor {
 
 message MethodDescriptor {
     required int32 index = 1;
-    required AccessModifier accessModifier = 2;
     oneof memberName {
         string name = 3;
         SpecialMethodName specialMethodName = 4;
     }
+    required int32 instanceTypeId = 5;
     oneof instanceType {
-        TraitDescriptor traitDescriptor = 6;
-        TraitDescriptor traitObjectDescriptor = 7;
-        ClassDescriptor classDescriptor = 8;
-        ClassDescriptor classObjectDescriptor = 9;
-        DataConstructorDescriptor dataConstructorDescriptor = 10;
+        TraitDescriptor traitDescriptor = 7;
+        TraitDescriptor traitObjectDescriptor = 8;
+        ClassDescriptor classDescriptor = 9;
+        ClassDescriptor classObjectDescriptor = 10;
+        DataConstructorDescriptor dataConstructorDescriptor = 11;
     }
 }
 
@@ -221,7 +232,6 @@ enum SpecialMethodName {
 message ClassConstructorDescriptor {
     required ClassDescriptor ownerClass = 1;
     required int32 index = 2;
-    required AccessModifier accessModifier = 3;
 }
 
 // Types

@@ -7,10 +7,10 @@ import com.mi3software.argon.compiler.types._
 
 object NamespaceBuilder {
 
-  def createNamespace[TContext <: Context, TPayloadSpec[_, _]](elements: Vector[ModuleElement[TContext, TPayloadSpec]]): Namespace[TContext, TPayloadSpec] =
+  def createNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](elements: Vector[ModuleElement[TContext, TPayloadSpec]]): Namespace[TContext, TPayloadSpec] =
     createNamespaceWithPath(NamespacePath.empty, elements)
 
-  def createNamespaceWithPath[TContext <: Context, TPayloadSpec[_, _]](path: NamespacePath, elements: Vector[ModuleElement[TContext, TPayloadSpec]]): Namespace[TContext, TPayloadSpec] = {
+  def createNamespaceWithPath[TContext <: Context with Singleton, TPayloadSpec[_, _]](path: NamespacePath, elements: Vector[ModuleElement[TContext, TPayloadSpec]]): Namespace[TContext, TPayloadSpec] = {
     val (directElements, nestedElements) = divideNamespaceElements(elements)(Vector.empty, Vector.empty)
 
     val nestedElementGroups =
@@ -27,7 +27,7 @@ object NamespaceBuilder {
     Namespace(path, nestedElementGroups ++ directElements)
   }
 
-  private def divideNamespaceElements[TContext <: Context, TPayloadSpec[_, _]]
+  private def divideNamespaceElements[TContext <: Context with Singleton, TPayloadSpec[_, _]]
   (elements: Vector[ModuleElement[TContext, TPayloadSpec]])
   (accDirect: Vector[GlobalBinding[TContext, TPayloadSpec]], accNested: Vector[(String, NamespacePath, GlobalBinding[TContext, TPayloadSpec])])
   : (Vector[GlobalBinding[TContext, TPayloadSpec]], Vector[(String, NamespacePath, GlobalBinding[TContext, TPayloadSpec])]) =

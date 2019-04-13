@@ -12,3 +12,9 @@ trait ArFunc[TContext <: Context, TPayloadSpec[_, _]] {
   val payload: TPayloadSpec[Comp[TFunctionImplementation], TFunctionMetadata]
 }
 
+object ArFunc {
+
+  type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
+    ArFunc[TContext, TPayloadSpec] { val descriptor: FuncDescriptor.InNamespace }
+
+}

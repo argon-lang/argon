@@ -17,13 +17,13 @@ private[compiler] object SourceFunction {
   (env: EnvCreator[context2.type])
   (stmt: parser.FunctionDeclarationStmt)
   (desc: FuncDescriptor)
-  : ArFunc[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] =
+  : ArFunc[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type } =
     new ArFunc[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
 
       import context.scopeContext.ScopeExtensions
 
-      override val descriptor: FuncDescriptor = desc
+      override val descriptor: desc.type = desc
 
       override val effectInfo: EffectInfo = EffectInfo(stmt.purity)
 

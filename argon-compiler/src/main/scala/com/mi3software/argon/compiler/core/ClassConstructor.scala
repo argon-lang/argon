@@ -13,6 +13,7 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
 
   val descriptor: ClassConstructorDescriptor
 
+  val ownerClass: ArClass[context.type, TPayloadSpec]
   val signature: context.Comp[Signature[ClassConstructor.ResultInfo]]
 
   val payload: TPayloadSpec[Comp[TClassConstructorImplementation], TClassConstructorMetadata]

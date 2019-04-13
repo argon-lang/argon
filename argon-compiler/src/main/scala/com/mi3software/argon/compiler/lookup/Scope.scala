@@ -34,7 +34,7 @@ trait ScopeContext[TContext <: Context with Singleton] {
 
   implicit final class ScopeExtensions(val scope: Scope) {
 
-    def addVariable(variable: Variable[VariableLikeDescriptor]): Scope =
+    def addVariable(variable: Variable): Scope =
       new Scope {
         override def nextVariable: Int = variable.descriptor match {
           case VariableDescriptor(_, id) => id + 1
@@ -54,7 +54,7 @@ trait ScopeContext[TContext <: Context with Singleton] {
 
       }
 
-    def addVariables(variables: Vector[Variable[VariableLikeDescriptor]]): Scope =
+    def addVariables(variables: Vector[Variable]): Scope =
       variables.foldLeft(scope) { (scope, variable) => scope.addVariable(variable) }
 
   }
@@ -90,7 +90,7 @@ trait ScopeContext[TContext <: Context with Singleton] {
   sealed trait ScopeValue {
     def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue
   }
-  final case class VariableScopeValue(variable: Variable[VariableLikeDescriptor]) extends ScopeValue {
+  final case class VariableScopeValue(variable: Variable) extends ScopeValue {
     override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
       other.VariableScopeValue(TypeSystem.convertVariableTypeSystem(context)(typeSystem)(other.typeSystem)(converter)(variable))
   }

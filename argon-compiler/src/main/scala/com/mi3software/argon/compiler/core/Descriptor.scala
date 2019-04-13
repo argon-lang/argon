@@ -79,21 +79,19 @@ object MethodOwnerDescriptor {
 
 sealed trait InNamespaceDescriptor extends Descriptor {
   val moduleDescriptor: ModuleDescriptor
-  val fileId: FileID
-  val index: Int
+  val id: BigInt
   val namespace: NamespacePath
   val name: GlobalName
-  val accessModifier: AccessModifierGlobal
 }
 
 sealed trait TraitDescriptor extends MethodOwnerDescriptor
 object TraitDescriptor {
 
   @deriving(Equal)
-  final case class InNamespace(moduleDescriptor: ModuleDescriptor, fileId: FileID, index: Int, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends TraitDescriptor with InNamespaceDescriptor
+  final case class InNamespace(moduleDescriptor: ModuleDescriptor, id: BigInt, namespace: NamespacePath, name: GlobalName) extends TraitDescriptor with InNamespaceDescriptor
 
   implicit val equalInstance: Equal[TraitDescriptor] = {
-    case (a @ InNamespace(_, _, _, _, _, _), b @ InNamespace(_, _, _, _, _, _)) => a === b
+    case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
   }
 
 }
@@ -102,20 +100,20 @@ sealed trait ClassDescriptor extends MethodOwnerDescriptor
 object ClassDescriptor {
 
   @deriving(Equal)
-  final case class InNamespace(moduleDescriptor: ModuleDescriptor, fileId: FileID, index: Int, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends ClassDescriptor with InNamespaceDescriptor
+  final case class InNamespace(moduleDescriptor: ModuleDescriptor, id: BigInt, namespace: NamespacePath, name: GlobalName) extends ClassDescriptor with InNamespaceDescriptor
 
   implicit val equalInstance: Equal[ClassDescriptor] = {
-    case (a @ InNamespace(_, _, _, _, _, _), b @ InNamespace(_, _, _, _, _, _)) => a === b
+    case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
   }
 }
 
 sealed trait DataConstructorDescriptor extends MethodOwnerDescriptor
 object DataConstructorDescriptor {
   @deriving(Equal)
-  final case class InNamespace(moduleDescriptor: ModuleDescriptor, fileId: FileID, index: Int, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends DataConstructorDescriptor with InNamespaceDescriptor
+  final case class InNamespace(moduleDescriptor: ModuleDescriptor, id: BigInt, namespace: NamespacePath, name: GlobalName) extends DataConstructorDescriptor with InNamespaceDescriptor
 
   implicit val equalInstance: Equal[DataConstructorDescriptor] = {
-    case (a @ InNamespace(_, _, _, _, _, _), b @ InNamespace(_, _, _, _, _, _)) => a === b
+    case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
   }
 }
 
@@ -132,20 +130,20 @@ final case class ClassObjectDescriptor(classDescriptor: ClassDescriptor) extends
 sealed trait FuncDescriptor extends ParameterOwnerDescriptor
 object FuncDescriptor {
   @deriving(Equal)
-  final case class InNamespace(moduleDescriptor: ModuleDescriptor, fileId: FileID, index: Int, namespace: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal) extends FuncDescriptor with InNamespaceDescriptor
+  final case class InNamespace(moduleDescriptor: ModuleDescriptor, id: BigInt, namespace: NamespacePath, name: GlobalName) extends FuncDescriptor with InNamespaceDescriptor
 
   implicit val equalInstance: Equal[FuncDescriptor] = {
-    case (a @ InNamespace(_, _, _, _, _, _), b @ InNamespace(_, _, _, _, _, _)) => a === b
+    case (a @ InNamespace(_, _, _, _), b @ InNamespace(_, _, _, _)) => a === b
   }
 }
 
 @deriving(Equal)
-final case class MethodDescriptor(typeDescriptor: MethodOwnerDescriptor, index: Int, name: MethodName, accessModifier: AccessModifier) extends ParameterOwnerDescriptor {
+final case class MethodDescriptor(typeDescriptor: MethodOwnerDescriptor, index: Int, name: MethodName) extends ParameterOwnerDescriptor {
   override def moduleDescriptor: ModuleDescriptor = typeDescriptor.moduleDescriptor
 }
 
 @deriving(Equal)
-final case class ClassConstructorDescriptor(ownerClass: ClassDescriptor, index: Int, accessModifier: AccessModifier) extends ParameterOwnerDescriptor {
+final case class ClassConstructorDescriptor(ownerClass: ClassDescriptor, index: Int) extends ParameterOwnerDescriptor {
   override def moduleDescriptor: ModuleDescriptor = ownerClass.moduleDescriptor
 }
 

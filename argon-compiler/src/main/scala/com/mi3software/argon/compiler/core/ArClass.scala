@@ -5,7 +5,7 @@ import scala.collection.immutable._
 import scalaz._
 import Scalaz._
 
-trait ArClass[TContext <: Context, TPayloadSpec[_, _]] {
+trait ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
   import context._, signatureContext.Signature
@@ -18,15 +18,18 @@ trait ArClass[TContext <: Context, TPayloadSpec[_, _]] {
 
   val signature: Comp[Signature[ArClass.ResultInfo]]
 
-  val fields: Comp[Vector[typeSystem.Variable[FieldDescriptor]]]
-  val methods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
-  val staticMethods: Comp[Vector[ArMethod[TContext, TPayloadSpec]]]
-  val classConstructors: Comp[Vector[ClassConstructor[TContext, TPayloadSpec]]]
+  val fields: Comp[Vector[typeSystem.FieldVariable]]
+  val methods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]
+  val staticMethods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]
+  val classConstructors: Comp[Vector[ClassConstructorBinding[TContext, TPayloadSpec]]]
 
   val payload: TPayloadSpec[Unit, TClassMetadata]
 }
 
 object ArClass {
+
+  type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
+    ArClass[TContext, TPayloadSpec] { val descriptor: ClassDescriptor.InNamespace }
 
   sealed trait ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
     val typeSystem: TS
@@ -54,10 +57,4 @@ object ArClass {
 
   }
 
-}
-
-trait ArClassInNamespace[TContext <: Context, TPayloadSpec[_, _]] {
-  self: ArClass[TContext, TPayloadSpec] =>
-
-  override val descriptor: ClassDescriptor.InNamespace
 }

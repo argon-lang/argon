@@ -17,7 +17,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   type TType = TTypeWrapper[SimpleType]
   type WrapExpr = TTypeWrapper[ArExpr]
   
-  type WrapRef[T[_ <: Context, _[_, _]]] = AbsRef[context.type, T]
+  type WrapRef[T[_ <: Context with Singleton, _[_, _]]] = AbsRef[context.type, T]
   type TSubTypeInfo = SubTypeInfo[TType]
 
 
@@ -51,9 +51,19 @@ trait TypeSystem[TContext <: Context with Singleton] {
     }
 
 
-  final case class Variable[+Desc <: VariableLikeDescriptor](descriptor: Desc, name: VariableName, mutability: Mutability, varType: TType)
+  sealed trait Variable {
+    val descriptor: VariableLikeDescriptor
+    val name: VariableName
+    val mutability: Mutability
+    val varType: TType
+  }
 
-  final case class Parameter(tupleVars: Vector[Variable[DeconstructedParameterDescriptor]], paramType: TType)
+  final case class LocalVariable(descriptor: VariableDescriptor, name: VariableName, mutability: Mutability, varType: TType) extends Variable
+  final case class ParameterVariable(descriptor: ParameterDescriptor, name: VariableName, mutability: Mutability, varType: TType) extends Variable
+  final case class ParameterElementVariable(descriptor: DeconstructedParameterDescriptor, name: VariableName, mutability: Mutability, varType: TType) extends Variable
+  final case class FieldVariable(descriptor: FieldDescriptor, ownerClass: AbsRef[context.type, ArClass], name: VariableName.Normal, mutability: Mutability, varType: TType) extends Variable
+
+  final case class Parameter(tupleVars: Vector[ParameterElementVariable], paramType: TType)
 
 
   trait ArExpr {
@@ -81,7 +91,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
     override lazy val exprType: TType = fromSimpleType(UnionType(ifBody.exprType, elseBody.exprType))
     override lazy val universe: Universe = Universe.union(ifBody.universe, elseBody.universe)
   }
-  final case class LetBinding(variable: Variable[VariableDescriptor], value: ArExpr, next: ArExpr) extends ArExpr {
+  final case class LetBinding(variable: LocalVariable, value: ArExpr, next: ArExpr) extends ArExpr {
     override lazy val exprType: TType = next.exprType
     override lazy val universe: Universe = next.universe
   }
@@ -94,7 +104,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final case class LoadConstantString(value: String, exprType: TType) extends ArExpr {
     override val universe: Universe = ValueUniverse
   }
-  final case class LoadLambda(argVariable: Variable[VariableDescriptor], body: ArExpr) extends ArExpr {
+  final case class LoadLambda(argVariable: LocalVariable, body: ArExpr) extends ArExpr {
     override lazy val exprType: TType = fromSimpleType(FunctionType(argVariable.varType, body.exprType))
     override lazy val universe: Universe = Universe.union(
       universeOfType(argVariable.varType).prev,
@@ -104,7 +114,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final case class LoadUnit(exprType: TType) extends ArExpr {
     override val universe: Universe = ValueUniverse
   }
-  final case class LoadVariable(variable: Variable[VariableLikeDescriptor]) extends ArExpr {
+  final case class LoadVariable(variable: Variable) extends ArExpr {
     override val exprType: TType = variable.varType
     override lazy val universe: Universe = universeOfType(variable.varType).prev
   }
@@ -116,7 +126,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
     override lazy val exprType: TType = second.exprType
     override lazy val universe: Universe = second.universe
   }
-  final case class StoreVariable(variable: Variable[VariableLikeDescriptor], value: ArExpr, exprType: TType) extends ArExpr {
+  final case class StoreVariable(variable: Variable, value: ArExpr, exprType: TType) extends ArExpr {
     override val universe: Universe = ValueUniverse
   }
   final case class PrimitiveOp(operation: PrimitiveOperation, left: ArExpr, right: ArExpr, exprType: TType) extends ArExpr {
@@ -212,7 +222,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   sealed trait ClassConstructorStatement
   final case class ClassConstructorStatementExpr(expr: ArExpr) extends ClassConstructorStatement
-  final case class InitializeFieldStatement(field: Variable[FieldDescriptor], value: ArExpr) extends ClassConstructorStatement
+  final case class InitializeFieldStatement(field: FieldVariable, value: ArExpr) extends ClassConstructorStatement
 
   final case class ClassConstructorBody
   (
@@ -450,21 +460,53 @@ object TypeSystem {
 
   }
 
-  final def convertVariableTypeSystem[F[_]: Monad, Desc <: VariableLikeDescriptor]
+  final def convertLocalVariableTypeSystem[F[_]: Monad]
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
   (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
-  (v: ts.Variable[Desc])
-  : F[otherTS.Variable[Desc]] =
+  (v: ts.LocalVariable)
+  : F[otherTS.LocalVariable] =
     for {
-      newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(v.varType)
-    } yield otherTS.Variable(
-      v.descriptor,
-      v.name,
-      v.mutability,
-      newType
-    )
+      newType <- TypeSystem.convertTypeSystem(context)(ts)(otherTS)(converter)(v.varType)
+    } yield otherTS.LocalVariable(v.descriptor, v.name, v.mutability, newType)
+
+  final def convertParameterElementVariableTypeSystem[F[_]: Monad]
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
+  (v: ts.ParameterElementVariable)
+  : F[otherTS.ParameterElementVariable] =
+    for {
+      newType <- TypeSystem.convertTypeSystem(context)(ts)(otherTS)(converter)(v.varType)
+    } yield otherTS.ParameterElementVariable(v.descriptor, v.name, v.mutability, newType)
+
+  final def convertVariableTypeSystem[F[_]: Monad]
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
+  (v: ts.Variable)
+  : F[otherTS.Variable] =
+    v match {
+      case v @ ts.LocalVariable(_, _, _, _) =>
+        convertLocalVariableTypeSystem(context)(ts)(otherTS)(converter)(v).map(identity)
+
+      case ts.ParameterVariable(descriptor, name, mutability, varType) =>
+        for {
+          newType <- TypeSystem.convertTypeSystem(context)(ts)(otherTS)(converter)(varType)
+        } yield otherTS.ParameterVariable(descriptor, name, mutability, newType)
+
+      case v @ ts.ParameterElementVariable(_, _, _, _) =>
+        convertParameterElementVariableTypeSystem(context)(ts)(otherTS)(converter)(v).map(identity)
+
+      case ts.FieldVariable(descriptor, ownerClass, name, mutability, varType) =>
+        for {
+          newType <- TypeSystem.convertTypeSystem(context)(ts)(otherTS)(converter)(varType)
+        } yield otherTS.FieldVariable(descriptor, ownerClass, name, mutability, newType)
+
+    }
 
   final def convertParameterTypeSystem[F[_]: Monad, Desc <: VariableLikeDescriptor]
   (context: Context)
@@ -474,7 +516,7 @@ object TypeSystem {
   (p: ts.Parameter)
   : F[otherTS.Parameter] =
     for {
-      newVars <- p.tupleVars.traverse(convertVariableTypeSystem(context)(ts)(otherTS)(converter)(_))
+      newVars <- p.tupleVars.traverse(convertParameterElementVariableTypeSystem(context)(ts)(otherTS)(converter)(_))
       newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(p.paramType)
     } yield otherTS.Parameter(newVars, newType)
 
@@ -522,7 +564,7 @@ object TypeSystem {
 
     case ts.LetBinding(variable, value, next) =>
       for {
-        newVar <- convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
+        newVar <- convertLocalVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
         newValue <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(value)
         newNext <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(next)
       } yield otherTS.LetBinding(newVar, newValue, newNext)
@@ -544,7 +586,7 @@ object TypeSystem {
 
     case ts.LoadLambda(variable, body) =>
       for {
-        newVar <- convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
+        newVar <- convertLocalVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
         newBody <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(body)
       } yield otherTS.LoadLambda(newVar, newBody)
 

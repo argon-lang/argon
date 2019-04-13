@@ -3,7 +3,7 @@ package com.mi3software.argon.compiler.core
 import PayloadSpecifiers.ReferencePayloadSpecifier
 import com.mi3software.argon.util.NamespacePath
 
-trait ArModule[TContext <: Context, TPayloadSpec[_, _]] {
+trait ArModule[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
   import context._
 
@@ -12,4 +12,4 @@ trait ArModule[TContext <: Context, TPayloadSpec[_, _]] {
   val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]]
 }
 
-final case class ModuleElement[TContext <: Context, TPayloadSpec[_, _]](namespacePath: NamespacePath, binding: GlobalBinding[TContext, TPayloadSpec])
+final case class ModuleElement[TContext <: Context with Singleton, TPayloadSpec[_, _]](namespacePath: NamespacePath, binding: GlobalBinding[TContext, TPayloadSpec])

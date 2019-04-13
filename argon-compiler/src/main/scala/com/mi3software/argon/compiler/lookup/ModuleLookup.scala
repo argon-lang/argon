@@ -56,7 +56,7 @@ object ModuleLookup {
     context.compCompilationInstance.map(module.globalNamespace)(impl(namespace.ns))
   }
 
-  def lookupGlobalClass[TContext <: Context, TPayloadSpec[_, _]]: PartialFunction[GlobalBinding[TContext, TPayloadSpec], ArClass[TContext, TPayloadSpec]] =  {
+  def lookupGlobalClass[TContext <: Context with Singleton, TPayloadSpec[_, _]]: PartialFunction[GlobalBinding[TContext, TPayloadSpec], ArClass[TContext, TPayloadSpec]] =  {
     case GlobalBinding.GlobalClass(_, _, arClass) => arClass
   }
 

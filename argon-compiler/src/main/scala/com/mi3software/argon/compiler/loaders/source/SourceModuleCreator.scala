@@ -6,7 +6,7 @@ import com.mi3software.argon.compiler.loaders.{ModuleLoader, NamespaceBuilder}
 import com.mi3software.argon.compiler.lookup._
 import com.mi3software.argon.parser
 import com.mi3software.argon.parser.SourceAST
-import com.mi3software.argon.util.{FileSpec, NamespacePath, SourceLocation, WithSource}
+import com.mi3software.argon.util._
 import scalaz._
 import Scalaz._
 import PayloadSpecifiers._
@@ -69,7 +69,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           )
 
 
-        override def addVariables(context: context2.type)(variables: Vector[context.typeSystem.Variable[VariableLikeDescriptor]]): EnvCreator[context2.type] =
+        override def addVariables(context: context2.type)(variables: Vector[context.typeSystem.Variable]): EnvCreator[context2.type] =
           new EnvCreatorInstance(envFileSpec, scope.addVariables(variables))
 
         override val fileSpec: FileSpec = envFileSpec
@@ -101,6 +101,13 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
       context.scopeContext.EmptyScope
     )
 
+  private def createId(sourceAST: SourceAST): BigInt = {
+    val a: BigInt = sourceAST.fileSpec.fileID.id
+    val b: BigInt = sourceAST.index
+
+    (a + b) * (a + b + 1) / 2 + b
+  }
+
   private def createNamespaceElementFromASTWithScope[TComp[+_] : Monad : Compilation]
   (context: ContextComp[TComp])
   (options: CompilerOptions[Id])
@@ -124,7 +131,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
     sourceAST.statement.value match {
       case traitDeclarationStmt @ parser.TraitDeclarationStmt(_, traitName, _, _, _, modifiers) =>
         createBinding(traitName, modifiers) { (globalName, accessModifier) =>
-          val desc = TraitDescriptor.InNamespace(moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
+          val desc = TraitDescriptor.InNamespace(moduleDescriptor, createId(sourceAST), sourceAST.currentNamespace, globalName)
 
           GlobalBinding.GlobalTrait(
             globalName, accessModifier,
@@ -134,7 +141,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
       case classDeclarationStmt @ parser.ClassDeclarationStmt(_, className, _, _, _, modifiers) =>
         createBinding(className, modifiers) { (globalName, accessModifier) =>
-          val desc = ClassDescriptor.InNamespace(moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
+          val desc = ClassDescriptor.InNamespace(moduleDescriptor, createId(sourceAST), sourceAST.currentNamespace, globalName)
 
           for {
             arClass <- SourceClass[TComp](context)(env)(classDeclarationStmt)(desc)
@@ -143,7 +150,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
       case funcDeclarationStmt @ parser.FunctionDeclarationStmt(funcName, _, _, _, modifiers, _) =>
         createBinding(funcName, modifiers) { (globalName, accessModifier) =>
-          val desc = FuncDescriptor.InNamespace(moduleDescriptor, sourceAST.fileSpec.fileID, sourceAST.index, sourceAST.currentNamespace, globalName, accessModifier)
+          val desc = FuncDescriptor.InNamespace(moduleDescriptor, createId(sourceAST), sourceAST.currentNamespace, globalName)
 
           GlobalBinding.GlobalFunction(
             globalName, accessModifier,

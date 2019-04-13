@@ -47,10 +47,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               implicitly[TypeCheck[TComp]].fromContextComp(context)(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)).flatMap {
                 case OverloadResult.List(Vector(MemberValue.Method(method)), _) =>
                   for {
-                    _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                    sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(method.value.signature)
+                    _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                    sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(method.value.method.signature)
                     convSig = convertSignature(sig)
-                  } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(method, thisExpr, args, result.returnType).upcast[ArExpr].point[TComp] }
+                  } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(AbsRef(method.value.method), thisExpr, args, result.returnType).upcast[ArExpr].point[TComp] }
 
                 case _ => ???
               }
@@ -78,7 +78,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   memberName match {
                     case MemberName.New =>
                       implicitly[TypeCheck[TComp]].fromContextComp(context)(t.arClass.value.classConstructors).flatMap {
-                        case Vector(classCtor) =>
+                        case Vector(ClassConstructorBinding(_, _, classCtor)) =>
                           for {
                             _ <- Compilation[TComp].require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
                             sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(classCtor.signature)
@@ -90,9 +90,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
                     case methodName: MethodName =>
                       implicitly[TypeCheck[TComp]].fromContextComp(context)(t.arClass.value.staticMethods)
-                        .map { _.filter { method => method.descriptor.name === methodName } }
+                        .map { _.filter { binding => binding.name === methodName } }
                         .flatMap {
-                          case Vector(method) =>
+                          case Vector(MethodBinding(_, _, _, method)) =>
                             for {
                               _ <- Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
                               sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(method.signature)
@@ -209,7 +209,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
               exprConverter <- convertExprTypeDelay(env)(expr.location)(fromSimpleType(FunctionType(argHole, resultHole)))(expectedType)
 
-              argVar = Variable(
+              argVar = LocalVariable(
                 VariableDescriptor(env.descriptor, env.scope.nextVariable),
                 varName.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
                 Mutability.NonMutable,
@@ -306,7 +306,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               valueExpr <- convertExpr(env)(stmt.value).forExpectedType(exprType)
               varType <- implicitly[TypeCheck[TComp]].resolveType(exprType)
 
-              variable = Variable(
+              variable = LocalVariable(
                 VariableDescriptor(env.descriptor, env.scope.nextVariable),
                 varName,
                 mutability,
@@ -545,7 +545,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       signature.visit(
         sigParams => prevArgs match {
           case Vector() =>
-            val newVar = Variable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+            val newVar = LocalVariable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
             val env2 = env.copy(scope = env.scope.addVariable(newVar))
             val newVarExpr = LoadVariable(newVar)
             sigParams.next(newVarExpr).flatMap { nextSig =>
@@ -553,7 +553,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             }
 
           case head +: tail =>
-            val newVar = Variable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+            val newVar = LocalVariable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
             val env2 = env.copy(scope = env.scope.addVariable(newVar))
             val newVarExpr = LoadVariable(newVar)
             sigParams.next(newVarExpr).flatMap { nextSig =>
@@ -630,7 +630,7 @@ object ExpressionConverter {
   trait EnvCreator[TContext <: Context with Singleton] {
     def apply(context: TContext)(effectInfo: EffectInfo, descriptor: VariableOwnerDescriptor): Env[context.type, context.scopeContext.Scope]
 
-    def addVariables(context: TContext)(variables: Vector[context.typeSystem.Variable[VariableLikeDescriptor]]): EnvCreator[TContext]
+    def addVariables(context: TContext)(variables: Vector[context.typeSystem.Variable]): EnvCreator[TContext]
 
     val fileSpec: FileSpec
   }
@@ -887,7 +887,7 @@ object ExpressionConverter {
     case ts.LetBinding(variable, value, next) =>
       for {
         newVarType <- fillHolesTypeChildren(context)(ts)(variable.varType)
-        newVar = context.typeSystem.Variable(variable.descriptor, variable.name, variable.mutability, newVarType)
+        newVar = context.typeSystem.LocalVariable(variable.descriptor, variable.name, variable.mutability, newVarType)
 
         newValue <- fillHolesExpr(context)(ts)(value)(newVarType)
         newNext <- fillHolesExprChildren(context)(ts)(next)
@@ -906,7 +906,7 @@ object ExpressionConverter {
     case ts.LoadLambda(argVariable, body) =>
       for {
         newVarType <- fillHolesTypeChildren(context)(ts)(argVariable.varType)
-        newVar = context.typeSystem.Variable(argVariable.descriptor, argVariable.name, argVariable.mutability, newVarType)
+        newVar = context.typeSystem.LocalVariable(argVariable.descriptor, argVariable.name, argVariable.mutability, newVarType)
         newBody <- fillHolesExprChildren(context)(ts)(body)
       } yield context.typeSystem.LoadLambda(newVar, newBody)
 
@@ -923,10 +923,28 @@ object ExpressionConverter {
         newUnitType <- fillHolesTypeChildren(context)(ts)(unitType)
       } yield context.typeSystem.LoadUnit(newUnitType)
 
-    case ts.LoadVariable(variable) =>
+    case ts.LoadVariable(ts.LocalVariable(descriptor, name, mutability, varType)) =>
       for {
-        newVarType <- fillHolesTypeChildren(context)(ts)(variable.varType)
-        newVar = context.typeSystem.Variable(variable.descriptor, variable.name, variable.mutability, newVarType)
+        newVarType <- fillHolesTypeChildren(context)(ts)(varType)
+        newVar = context.typeSystem.LocalVariable(descriptor, name, mutability, newVarType)
+      } yield context.typeSystem.LoadVariable(newVar)
+
+    case ts.LoadVariable(ts.ParameterVariable(descriptor, name, mutability, varType)) =>
+      for {
+        newVarType <- fillHolesTypeChildren(context)(ts)(varType)
+        newVar = context.typeSystem.ParameterVariable(descriptor, name, mutability, newVarType)
+      } yield context.typeSystem.LoadVariable(newVar)
+
+    case ts.LoadVariable(ts.ParameterElementVariable(descriptor, name, mutability, varType)) =>
+      for {
+        newVarType <- fillHolesTypeChildren(context)(ts)(varType)
+        newVar = context.typeSystem.ParameterElementVariable(descriptor, name, mutability, newVarType)
+      } yield context.typeSystem.LoadVariable(newVar)
+
+    case ts.LoadVariable(ts.FieldVariable(descriptor, ownerClass, name, mutability, varType)) =>
+      for {
+        newVarType <- fillHolesTypeChildren(context)(ts)(varType)
+        newVar = context.typeSystem.FieldVariable(descriptor, ownerClass, name, mutability, newVarType)
       } yield context.typeSystem.LoadVariable(newVar)
 
     case ts.MethodCall(method, instance, args, _) =>
