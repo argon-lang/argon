@@ -92,7 +92,8 @@ object IOCompilation {
       override def createZipOutputStream[A](stream: OutputStream)(f: ZipOutputStream => Task[A]): Task[A] =
         FileOperations.zipOutputStream(stream)(f)
 
-      override def createZipEntry[A](zip: ZipOutputStream, path: String)(f: ZipEntry => Task[A]): Task[A] = ???
+      override def createZipEntry[A](zip: ZipOutputStream, path: String)(f: ZipEntry => Task[A]): Task[A] =
+        FileOperations.createZipEntry(zip, path)(f)
 
 
       override type ZipReader = ZipFile
