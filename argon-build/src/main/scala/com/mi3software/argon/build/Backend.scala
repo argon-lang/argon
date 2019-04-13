@@ -27,7 +27,7 @@ trait Backend {
 
 object Backend {
 
-  val allBackends = Vector(JSBackend)
+  val allBackends = Vector(ArModuleBackend, JSBackend)
 
   def find(id: String): Option[Backend] =
     allBackends.find { _.id === id }

@@ -5,9 +5,10 @@ inputFiles = [ "*.argon" ]
 moduleName = "Argon.Core"
 
 [argon-module]
-referenceModule = "Argon.Core.2.armodule"
+referenceModule = "Argon.Core.armodule"
 
 [js]
+# referenceModule = "js/Argon.Core.armodule"
 outputFile = "js/Argon.Core.js"
 
 

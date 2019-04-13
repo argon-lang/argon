@@ -86,7 +86,7 @@ lazy val compilerOptions = Seq(
   wartremoverExcluded += sourceManaged.value,
 )
 
-val generateLibs = taskKey[Unit]("Generate argon library definitions")
+lazy val buildArgonLibs = taskKey[Unit]("Compile Argon libraries")
 
 lazy val gcrpcRuntime = RootProject(file("gcrpc/runtime/scala"))
 
@@ -97,6 +97,22 @@ lazy val cli = project.in(file("argon-cli"))
     compilerOptions,
 
     name := "argon-cli",
+
+
+    buildArgonLibs := (Def.taskDyn {
+      Def.sequential(
+        IO.listFiles(file("libraries"), DirectoryFilter).map { libDir =>
+          val libName = libDir.getName
+
+          Def.task {
+            streams.value.log.info(s"Building library $libName")
+            (runMain in Compile).toTask(s" com.mi3software.argon.Program compile libraries/$libName/build.toml").value
+          }
+        },
+
+        Def.task {}
+      )
+    }).value
   )
 
 lazy val argon_build = project.in(file("argon-build"))
@@ -192,5 +208,4 @@ lazy val modulefmt = project.in(file("argon-modulefmt"))
       scalapb.gen() -> (sourceManaged in Compile).value / "protobuf"
     ),
   )
-
 
