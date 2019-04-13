@@ -169,6 +169,7 @@ object Lexer {
             case "new" => Token.KW_NEW
             case "field" => Token.KW_FIELD
             case "initialize" => Token.KW_INITIALIZE
+            case "extern" => Token.KW_EXTERN
             case "_" => Token.KW_UNDERSCORE
 
             case _ => Token.Identifier(id);

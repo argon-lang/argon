@@ -167,13 +167,18 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     override val payload: Unit = ()
   }
 
-  def resultCreator(baseTypeExpr: WithSource[parser.Expr]): ResultCreator[ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
+  def resultCreator(baseTypeExpr: Option[WithSource[parser.Expr]]): ResultCreator[ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
     override def createResult[TComp[+ _] : Compilation]
     (context: ContextComp[TComp])
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
     : TComp[ArClass.ResultInfo[context.type, context.typeSystem.type]] =
-      ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
-        .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoClass(None, Vector())))
+      (baseTypeExpr match {
+        case Some(baseTypeExpr) =>
+          ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
+            .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoClass(None, Vector())))
+        case None =>
+          context.typeSystem.BaseTypeInfoClass(None, Vector()).point[TComp]
+      })
         .map { baseTypes => ArClass.ResultInfo(context.typeSystem)(baseTypes) }
 
     private def typeToBaseTypes[TComp[+ _] : Compilation]

@@ -102,6 +102,7 @@ object ArgonParser {
 
     // Types
     case object StaticInstanceBody extends ArgonRuleNameTyped[(Vector[WithSource[Stmt]], Vector[WithSource[Stmt]])]
+    case object BaseTypeSpecifier extends ArgonRuleNameTyped[Option[WithSource[Expr]]]
     case object TraitDeclarationStmt extends ArgonRuleNameTyped[Stmt]
     case object DataConstructorDeclarationStmt extends ArgonRuleNameTyped[Stmt]
     case object ClassDeclarationStmt extends ArgonRuleNameTyped[Stmt]
@@ -247,7 +248,10 @@ object ArgonParser {
             matchToken(KW_TRUE) --> const(BoolValueExpr(true)) |
             matchToken(KW_FALSE) --> const(BoolValueExpr(false)) |
             rule(Rule.IfExpr) |
-            rule(Rule.MatchExpr)
+            rule(Rule.MatchExpr) |
+            (matchToken(KW_EXTERN) ++! matchTokenFactory(Identifier)) --> {
+              case (_, Identifier(id)) => ExternExpr(id)
+            }
 
         case Rule.PrimaryExpr(Rule.ParenAllowed) =>
           matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(UnitLiteral) |
@@ -560,6 +564,10 @@ object ArgonParser {
                 (Vector.empty, instanceBody)
             }
 
+        case Rule.BaseTypeSpecifier =>
+          matchToken(KW_UNDERSCORE) --> { _ => Option.empty[WithSource[Expr]] } |
+            rule(Rule.Type).observeSource --> Some.apply
+
         case Rule.TraitDeclarationStmt =>
           rule(Rule.Modifiers) ++
             matchToken(KW_TRAIT) ++! (
@@ -567,7 +575,7 @@ object ArgonParser {
                 rule(Rule.NewLines) ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_SUBTYPE) ++
-                rule(Rule.Type).observeSource ++
+                rule(Rule.BaseTypeSpecifier) ++
                 rule(Rule.StatementSeparator) ++
                 rule(Rule.StaticInstanceBody) ++
                 matchToken(KW_END)
@@ -600,7 +608,7 @@ object ArgonParser {
               rule(Rule.Identifier) ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_SUBTYPE) ++
-                rule(Rule.Type).observeSource ++
+                rule(Rule.BaseTypeSpecifier) ++
                 rule(Rule.StatementSeparator) ++
                 rule(Rule.StaticInstanceBody) ++
                 matchToken(KW_END)

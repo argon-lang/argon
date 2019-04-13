@@ -107,6 +107,7 @@ object Token {
   case object KW_STACK extends TokenWithCategory(TokenCategory.KW_STACK) with Token
   case object KW_ANY extends TokenWithCategory(TokenCategory.KW_ANY) with Token
   case object KW_VALUETYPE extends TokenWithCategory(TokenCategory.KW_VALUETYPE) with Token
+  case object KW_EXTERN extends TokenWithCategory(TokenCategory.KW_EXTERN) with Token
 
   case object OP_BOOLAND extends TokenWithCategory(TokenCategory.OP_BOOLAND) with Token
   case object OP_BOOLOR extends TokenWithCategory(TokenCategory.OP_BOOLOR) with Token

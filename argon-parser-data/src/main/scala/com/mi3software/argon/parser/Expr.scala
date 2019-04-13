@@ -8,7 +8,7 @@ import scala.collection.immutable.Seq
 sealed trait Stmt
 final case class TraitDeclarationStmt
 (
-  baseType: WithSource[Expr],
+  baseType: Option[WithSource[Expr]],
   name: Option[String],
   parameters: Vector[WithSource[FunctionParameterList]],
   body: Seq[WithSource[Stmt]],
@@ -25,7 +25,7 @@ final case class DataConstructorDeclarationStmt
 ) extends Stmt
 final case class ClassDeclarationStmt
 (
-  baseType: WithSource[Expr],
+  baseType: Option[WithSource[Expr]],
   name: Option[String],
   parameters: Vector[WithSource[FunctionParameterList]],
   body: Vector[WithSource[Stmt]],
@@ -87,6 +87,7 @@ final case class BinaryOperatorExpr(op: BinaryOperator, left: WithSource[Expr], 
 final case class BoolValueExpr(value: Boolean) extends Expr
 final case class ClassConstructorExpr(classExpr: WithSource[Expr]) extends Expr
 final case class DotExpr(left: WithSource[Expr], right: String) extends Expr
+final case class ExternExpr(specifier: String) extends Expr
 final case class FunctionCallExpr(func: WithSource[Expr], arg: WithSource[Expr]) extends Expr
 final case class IdentifierExpr(name: String) extends Expr
 final case class IfExpr(condition: WithSource[Expr], body: WithSource[Vector[WithSource[Stmt]]]) extends Expr

@@ -118,6 +118,7 @@ object CompilationError {
       case TokenCategory.KW_STACK => "stack"
       case TokenCategory.KW_ANY => "any"
       case TokenCategory.KW_VALUETYPE => "valuetype"
+      case TokenCategory.KW_EXTERN => "extern"
 
       case TokenCategory.OP_BOOLAND => "&&"
       case TokenCategory.OP_BOOLOR => "||"
