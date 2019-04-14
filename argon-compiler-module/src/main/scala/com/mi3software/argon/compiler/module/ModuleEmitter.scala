@@ -403,7 +403,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
                 }
               }
               .flatMap { elems =>
-                impl(sig, prevParams :+ module.Parameter(elems))
+                impl(sigParams.nextUnsubstituted, prevParams :+ module.Parameter(elems))
               },
           sigResult => f(prevParams, sigResult.result),
         )
