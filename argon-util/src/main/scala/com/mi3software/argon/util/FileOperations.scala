@@ -4,7 +4,7 @@ import java.io
 import java.io.File
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import java.util.zip.{ZipEntry, ZipOutputStream}
+import java.util.zip.{ZipEntry, ZipFile, ZipOutputStream}
 
 import scalaz._
 import Scalaz._
@@ -55,4 +55,9 @@ object FileOperations {
       entry
     }.bracket(_ => IO.effectTotal { zip.closeEntry() })(f)
 
+  def createZipFile[A](file: File)(f: ZipFile => Task[A]): Task[A] =
+    IO.effect { new ZipFile(file) }.bracket(f => IO.effectTotal { f.close() })(f)
+
+  def getZipEntryStream[A](zip: ZipFile, name: String)(f: io.InputStream => Task[A]): Task[A] =
+    IO.effect { zip.getInputStream(zip.getEntry(name)) }.bracket(f => IO.effectTotal { f.close() })(f)
 }

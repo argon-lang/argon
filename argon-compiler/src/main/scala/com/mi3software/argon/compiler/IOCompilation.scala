@@ -97,10 +97,15 @@ object IOCompilation {
 
 
       override type ZipReader = ZipFile
-      override def getZipFile[A](id: File)(f: ZipFile => Task[A]): Task[A] = ???
-      override def getZipEntryStream[A](zip: ZipFile, name: String)(f: InputStream => Task[A]): Task[A] = ???
+      override def getZipFile[A](id: File)(f: ZipFile => Task[A]): Task[A] =
+        FileOperations.createZipFile(id)(f)
 
-      override def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): Task[A] = ???
+      override def getZipEntryStream[A](zip: ZipFile, name: String)(f: InputStream => Task[A]): Task[A] =
+        FileOperations.getZipEntryStream(zip, name)(f)
+
+      override def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): Task[A] = IO.effect {
+        companion.parseFrom(stream)
+      }
 
       override def writeProtocolBufferMessage(stream: OutputStream, message: GeneratedMessage): Task[Unit] = IO.effect {
         message.writeTo(stream)
