@@ -11,4 +11,21 @@ referenceModule = "Argon.Core.armodule"
 # referenceModule = "js/Argon.Core.armodule"
 outputFile = "js/Argon.Core.js"
 
+[js.extern]
+Int_to_s = """
+
+function() {
+    throw new Error("Not Implemented")
+}
+
+"""
+
+puts = """
+
+function(s) {
+    throw new Error("Not Implemented")
+}
+
+"""
+
 
