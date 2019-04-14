@@ -14,6 +14,8 @@ import scalaz.zio.{IO, ZIO}
 import toml.Codecs._
 import shapeless.{ Id => _, _ }
 
+import com.mi3software.argon.util.ExtraTomlCodecs._
+
 object JSBackend extends Backend {
 
   override type TCompilationOutput[F[+_], I] = CompilationOutputText[F, I]
@@ -25,11 +27,19 @@ object JSBackend extends Backend {
   override def emptyBackendOptions[I]: JSBackendOptions[Option, I] = JSBackendOptions[Option, I](
     outputFile = None,
     extern = None,
+    inject = None,
   )
   override def inferBackendOptions(compilerOptions: CompilerOptions[Id], options: JSBackendOptions[Option, String]): BackendOptionsId[String] =
     JSBackendOptions[Id, String](
       outputFile = options.outputFile.getOrElse(compilerOptions.moduleName + ".js"),
-      extern = options.extern.getOrElse(Map.empty)
+      extern = options.extern.getOrElse(Map.empty),
+      inject = options.inject.getOrElse(JSInjectCode[Option](before = None, after = None)) match {
+        case JSInjectCode(beforeOpt, afterOpt) =>
+          JSInjectCode[Id](
+            before = beforeOpt.flatten,
+            after = afterOpt.flatten
+          )
+      }
     )
 
   override def projectLoader[F[_, _], I]: ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I] = {

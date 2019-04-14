@@ -11,7 +11,7 @@ import scalaz.zio._
 import scalaz.zio.interop.scalaz72._
 import com.mi3software.argon.build.testrunner.node.ExternalApi._
 import com.mi3software.argon.compiler.CompilerOptions
-import com.mi3software.argon.compiler.js.JSBackendOptions
+import com.mi3software.argon.compiler.js.{JSBackendOptions, JSInjectCode}
 import com.mi3software.argon.util.FileOperations
 import org.apache.commons.io.{FilenameUtils, IOUtils}
 
@@ -25,8 +25,13 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
   override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[Throwable, JSBackendOptions[Id, File]] = for {
     outFile <- FileOperations.fileFromName(compilerOptions.moduleName + ".js")
   } yield JSBackendOptions[Id, File](
-      outputFile = outFile,
+    outputFile = outFile,
+    extern = Map.empty,
+    inject = JSInjectCode[Id](
+      before = None,
+      after = None,
     )
+  )
 
   override protected def getProgramOutput(compOutput: CompilationOutputText[IO[Throwable, +?], File]): IO[Throwable, String] =
     IO.effect {
