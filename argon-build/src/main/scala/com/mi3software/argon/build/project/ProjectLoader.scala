@@ -51,6 +51,20 @@ object ProjectLoader {
           loader.loadProject(gen1.to(a))(monadInstance, fileHandler).map(gen2.from)
       }
 
+    implicit def mapLoader[K1, K2, V1, V2, I](implicit keyLoader: ProjectLoader[K1, K2, I], valueLoader: ProjectLoader[V1, V2, I]): ProjectLoader[Map[K1, V1], Map[K2, V2], I] =
+      new ProjectLoader[Map[K1, V1], Map[K2, V2], I] {
+        override def loadProject[F[_, _]](a: Map[K1, V1])(implicit monadInstance: Monad[F[Throwable, ?]], fileHandler: ProjectFileHandler[F, I]): F[Throwable, Map[K2, V2]] =
+          a
+          .toVector
+          .traverse { case (k, v) =>
+            for {
+              k2 <- keyLoader.loadProject(k)(monadInstance, fileHandler)
+              v2 <- valueLoader.loadProject(v)(monadInstance, fileHandler)
+            } yield k2 -> v2
+          }
+          .map(_.toMap)
+      }
+
   }
 
 

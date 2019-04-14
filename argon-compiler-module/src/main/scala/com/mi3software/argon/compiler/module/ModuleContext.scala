@@ -1,6 +1,6 @@
 package com.mi3software.argon.compiler.module
 
-import com.mi3software.argon.compiler.Compilation
+import com.mi3software.argon.compiler._
 import com.mi3software.argon.compiler.core.ContextComp
 import com.mi3software.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import com.mi3software.argon.compiler.loaders.ModuleLoader
@@ -8,7 +8,7 @@ import com.mi3software.argon.compiler.loaders.armodule.ArgonModuleLoader
 import scalaz._
 import Scalaz._
 
-class ModuleContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
+class ModuleContext[TComp[+_] : Compilation, I](override protected val compilerInput: CompilerInput[I, ModuleBackendOptions[Id, I]]) extends ContextComp[TComp] {
   override type TFunctionMetadata = Unit
   override type TMethodMetadata = Unit
   override type TTraitMetadata = Unit
@@ -20,12 +20,18 @@ class ModuleContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
   override type TMethodImplementation = Option[typeSystem.ArExpr]
   override type TClassConstructorImplementation = typeSystem.ClassConstructorBody
 
-  override type BackendOptions[I] = ModuleBackendOptions[Id, I]
+  override type BackendOptions = ModuleBackendOptions[Id, I]
 
   override def createExprFunctionImplementation(expr: typeSystem.ArExpr): typeSystem.ArExpr = expr
   override def createExprMethodImplementation(expr: typeSystem.ArExpr): Option[typeSystem.ArExpr] = Some(expr)
   override def abstractMethodImplementation: Option[typeSystem.ArExpr] = None
   override def createClassConstructorBodyImplementation(body: typeSystem.ClassConstructorBody): typeSystem.ClassConstructorBody = body
+
+  override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): TComp[typeSystem.ArExpr] =
+    Compilation[TComp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+
+  override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): TComp[Option[typeSystem.ArExpr]] =
+    Compilation[TComp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
 
   override val compCompilationInstance: Compilation[TComp] = implicitly
 
@@ -49,4 +55,5 @@ class ModuleContext[TComp[+_] : Compilation] extends ContextComp[TComp] {
     }
 
   override val moduleLoaders: Vector[ModuleLoader[this.type]] = Vector(ArgonModuleLoader(this)(referencePayloadLoader))
+  override type ResIndicator = I
 }

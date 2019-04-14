@@ -8,7 +8,7 @@ import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.lookup.LookupNames
 import com.mi3software.argon.compiler.types.TypeSystem
 
-final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with Singleton](context: TContext) {
+final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] with Singleton](context: TContext) {
 
   private val moduleVarName = JSIdentifier("modules")
   private val traitsVarName = JSIdentifier("traits")
@@ -88,6 +88,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
           sig <- func.signature
           impl <- func.payload : TComp[context.JSImpl.Function]
           body <- impl match {
+            case context.JSImpl.Function.JSExpressionBody(expr) => expr.point[TComp]
             case context.JSImpl.Function.ExpressionBody(expr) => createExpressionImpl(func.descriptor)(sig)(expr)
           }
         } yield JSAssignment(
@@ -186,6 +187,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp] with
       sig <- method.signature
       impl <- method.payload : TComp[context.JSImpl.Method]
       body <- impl match {
+        case context.JSImpl.Method.JSExpressionBody(expr) => expr.point[TComp]
         case context.JSImpl.Method.ExpressionBody(expr) => createExpressionImpl(method.descriptor)(sig)(expr)
         case context.JSImpl.Method.Abstract => JSNull.point[TComp]
       }

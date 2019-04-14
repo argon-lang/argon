@@ -69,6 +69,9 @@ object SourceMethod {
           context.abstractMethodImplementation.point[TComp]
         else
           stmt.body match {
+            case Some(WithSource(Vector(WithSource(parser.ExternExpr(specifier), location)), _)) =>
+              context.createExternMethodImplementation(specifier, CompilationMessageSource.SourceFile(env.fileSpec, location))
+
             case Some(body) =>
               for {
                 sig <- signature

@@ -22,10 +22,14 @@ object JSBackend extends Backend {
   override val id: String = "js"
   override val name: String = "JavaScript"
 
-  override def emptyBackendOptions[I]: JSBackendOptions[Option, I] = JSBackendOptions(None)
+  override def emptyBackendOptions[I]: JSBackendOptions[Option, I] = JSBackendOptions[Option, I](
+    outputFile = None,
+    extern = None,
+  )
   override def inferBackendOptions(compilerOptions: CompilerOptions[Id], options: JSBackendOptions[Option, String]): BackendOptionsId[String] =
     JSBackendOptions[Id, String](
-      outputFile = options.outputFile.getOrElse(compilerOptions.moduleName + ".js")
+      outputFile = options.outputFile.getOrElse(compilerOptions.moduleName + ".js"),
+      extern = options.extern.getOrElse(Map.empty)
     )
 
   override def projectLoader[F[_, _], I]: ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I] = {
@@ -39,11 +43,11 @@ object JSBackend extends Backend {
     toml.Toml.parseAs[JSBackendOptions[Option, String]](table)
 
 
-  override def compile[F[+ _], I: Show, A](input: CompilerInput[I, BackendOptions[Id, ?]])(f: CompilationOutputText[F, I] => F[A])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[A] = {
-    val context = new JSContext[F]
+  override def compile[F[+ _], I: Show, A](input: CompilerInput[I, BackendOptions[Id, I]])(f: CompilationOutputText[F, I] => F[A])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[A] = {
+    val context = new JSContext[F, I](input)
     val emitter = new JSEmitter[F, context.type](context)
 
-    context.createModule(input) { module =>
+    context.createModule { module =>
       emitter.emitModule(module).flatMap { jsModule =>
         f(createOutput(input.backendOptions.outputFile)(jsModule))
       }

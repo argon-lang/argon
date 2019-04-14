@@ -358,6 +358,10 @@ object CompilationError {
     override def message: String = s"Method must have owner."
   }
 
+  final case class UnknownExternImplementation(name: String, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = s"Extern implementation $name is unknown."
+  }
+
 
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context

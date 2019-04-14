@@ -22,12 +22,15 @@ sealed trait Context {
   type TDataConstructorMetadata
   type TClassConstructorMetadata
 
-  type BackendOptions[_]
+  type BackendOptions
 
   def createExprFunctionImplementation(expr: typeSystem.ArExpr): TFunctionImplementation
   def createExprMethodImplementation(expr: typeSystem.ArExpr): TMethodImplementation
   def abstractMethodImplementation: TMethodImplementation
   def createClassConstructorBodyImplementation(body: typeSystem.ClassConstructorBody): TClassConstructorImplementation
+
+  def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[TFunctionImplementation]
+  def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[TMethodImplementation]
 
   type Comp[+_]
   implicit val compCompilationInstance: Compilation[Comp]
@@ -48,7 +51,10 @@ sealed trait Context {
 
   val moduleLoaders: Vector[ModuleLoader[this.type]]
 
-  def createModule[I: Show, A](input: CompilerInput[I, BackendOptions])(f: ArModule[this.type, DeclarationPayloadSpecifier] => Comp[A])(implicit res: ResourceAccess[Comp, I]): Comp[A]
+  type ResIndicator
+  protected val compilerInput: CompilerInput[ResIndicator, BackendOptions]
+
+  def createModule[A](f: ArModule[this.type, DeclarationPayloadSpecifier] => Comp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[Comp, ResIndicator]): Comp[A]
 
 
 }
@@ -57,7 +63,7 @@ trait ContextComp[TComp[+_]] extends Context {
   override type Comp[+A] = TComp[A]
 
 
-  override def createModule[I: Show, A](input: CompilerInput[I, BackendOptions])(f: ArModule[ContextComp.this.type, DeclarationPayloadSpecifier] => TComp[A])(implicit res: ResourceAccess[TComp, I]): TComp[A] =
-    SourceModuleCreator.createModule[Comp, I, A](this)(input)(f)(compCompilationInstance, implicitly, res)
+  override def createModule[A](f: ArModule[ContextComp.this.type, DeclarationPayloadSpecifier] => TComp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[TComp, ResIndicator]): TComp[A] =
+    SourceModuleCreator.createModule[Comp, ResIndicator, A](this)(compilerInput)(f)(compCompilationInstance, implicitly, res)
 
 }

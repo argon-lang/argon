@@ -40,11 +40,11 @@ object ArModuleBackend extends Backend {
     toml.Toml.parseAs[ModuleBackendOptions[Option, String]](table)
 
 
-  override def compile[F[+ _], I: Show, A](input: CompilerInput[I, ModuleBackendOptions[Id, ?]])(f: CompilationOutput[F, I] => F[A])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[A] = {
-    val context = new ModuleContext[F]
+  override def compile[F[+ _], I: Show, A](input: CompilerInput[I, ModuleBackendOptions[Id, I]])(f: CompilationOutput[F, I] => F[A])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[A] = {
+    val context = new ModuleContext[F, I](input)
     val emitter = new ModuleEmitter[F, context.type](context)
 
-    context.createModule(input) { module =>
+    context.createModule { module =>
       f(createOutput(input.backendOptions.referenceModule)(emitter.emitModule(module)))
     }
   }

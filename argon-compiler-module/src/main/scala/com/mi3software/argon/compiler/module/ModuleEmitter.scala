@@ -13,7 +13,7 @@ import com.mi3software.argon.util.NonEmptyVector
 import com.mi3software.argon.module
 import shapeless._
 
-final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TComp] with Singleton](context: TContext) {
+final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TComp, _] with Singleton](context: TContext) {
 
   import context.signatureContext.Signature
   import context.typeSystem

@@ -32,15 +32,20 @@ private[compiler] object SourceFunction {
           env(context)(effectInfo, descriptor)
         )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType))
 
-      override lazy val payload: TComp[context.TFunctionImplementation] =
-        for {
-          sig <- signature
-          env2 = env(context)(effectInfo, descriptor)
-          env3 = env2.copy(scope = env2.scope.addVariables(
-            sig.unsubstitutedParameters.flatMap(_.tupleVars)
-          ))
-          expr <- ExpressionConverter.convertStatementList(context)(env3)(sig.unsubstitutedResult.returnType)(stmt.body)
-        } yield context.createExprFunctionImplementation(expr)
+      override lazy val payload: TComp[context.TFunctionImplementation] = stmt.body match {
+        case WithSource(Vector(WithSource(parser.ExternExpr(specifier), location)), _) =>
+          context.createExternFunctionImplementation(specifier, CompilationMessageSource.SourceFile(env.fileSpec, location))
+
+        case _ =>
+          for {
+            sig <- signature
+            env2 = env(context)(effectInfo, descriptor)
+            env3 = env2.copy(scope = env2.scope.addVariables(
+              sig.unsubstitutedParameters.flatMap(_.tupleVars)
+            ))
+            expr <- ExpressionConverter.convertStatementList(context)(env3)(sig.unsubstitutedResult.returnType)(stmt.body)
+          } yield context.createExprFunctionImplementation(expr)
+      }
     }
 
   def resultCreator(returnTypeExpr: WithSource[parser.Expr]): ResultCreator[FunctionResultInfo] =  new ResultCreator[FunctionResultInfo] {

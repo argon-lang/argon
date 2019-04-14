@@ -43,6 +43,8 @@ final case class JSReturn(value: JSExpression) extends JSStatement
 
 sealed trait JSExpression extends JSStatement
 
+final case class JSExpressionRaw(code: String) extends JSExpression
+
 final case class JSObjectLiteral(members: Vector[JSObjectMember]) extends JSExpression
 
 sealed trait JSObjectMember
@@ -194,6 +196,9 @@ object JSAst {
 
     def writeExpr(expr: JSExpression): Unit =
       expr match {
+        case JSExpressionRaw(code) =>
+          writer.print(code)
+
         case JSObjectLiteral(members) =>
           writer.print("{")
           members.foreach {
