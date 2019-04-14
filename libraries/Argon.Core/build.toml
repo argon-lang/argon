@@ -31,10 +31,6 @@ function(s) {
 [js.inject]
 before = """
 
-export const traits = Object.create(null);
-export const classes = Object.create(null);
-export const functions = Object.create(null);
-
 export const classConstructorSymbol = Symbol();
 
 function createMethods(methodDescriptions, methods) {
@@ -146,7 +142,7 @@ function implementTrait(obj, trait) {
 
        obj[trait.marker] = true;
        for(const baseTrait of trait.baseTraits) {
-               implementTrait(baseTrait);
+               implementTrait(obj, baseTrait);
        }
 }
 
@@ -167,7 +163,7 @@ export const boolValueSymbol = Symbol();
 
 after = """
 
-export const unitValue = Object.freeze(Object.create(classes["Ar.Unit"].constructor.prototype));
+export const unitValue = Object.freeze(Object.create(classes["Ar.Unit:"].constructor.prototype));
 
 export function createString(str) {
        const obj = Object.create(classes["Ar.String"].constructor.prototype);

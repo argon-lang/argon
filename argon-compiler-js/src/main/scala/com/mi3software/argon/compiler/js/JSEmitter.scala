@@ -8,7 +8,7 @@ import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.lookup.LookupNames
 import com.mi3software.argon.compiler.types.TypeSystem
 
-final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] with Singleton](context: TContext) {
+final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] with Singleton](context: TContext, inject: JSInjectCode[Id]) {
 
   private val moduleVarName = JSIdentifier("modules")
   private val traitsVarName = JSIdentifier("traits")
@@ -37,6 +37,8 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
           JSImportAllStatement(None, importId, refModule.descriptor.name)
         },
 
+        inject.before.map(JSModuleRaw.apply).toVector,
+
         Vector(
           JSConst(NonEmptyList(
             JSDeclareInit(JSBindingIdentifier(moduleVarName), create_empty_obj)
@@ -64,6 +66,8 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
 
         topLevelStmts,
 
+        inject.after.map(JSModuleRaw.apply).toVector,
+
         Vector(
           freeze_obj(moduleVarName),
           freeze_obj(funcsVarName),
@@ -80,6 +84,15 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
       case GlobalBinding.NestedNamespace(_, ns) => allNamespaceElements(ns)
       case binding: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier] => Vector(binding)
     }
+
+  private def coreLibExport(moduleDescriptor: ModuleDescriptor, name: String): JSExpression =
+    if(moduleDescriptor.name === LookupNames.argonCoreLib)
+      JSIdentifier(name)
+    else
+      JSPropertyAccessDot(
+        JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
+        JSIdentifier(name)
+      )
 
   private def createObjectsForScopeValue(value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): TComp[JSStatement] =
     value match {
@@ -103,9 +116,14 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
           sig <- arTrait.signature
         } yield JSAssignment(
           JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))),
-          JSObjectLiteral(Vector(
-            JSObjectProperty("symbol", JSFunctionCall(JSIdentifier("Symbol"), Vector()))
-          ))
+          JSFunctionCall(
+            coreLibExport(arTrait.descriptor.moduleDescriptor, "createTrait"),
+            Vector(
+              JSObjectLiteral(Vector(
+                JSObjectProperty("symbol", JSFunctionCall(JSIdentifier("Symbol"), Vector()))
+              ))
+            )
+          )
         )
 
       case GlobalBinding.GlobalClass(_, _, arClass) =>
@@ -170,10 +188,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
         } yield JSAssignment(
           JSPropertyAccessBracket(classesVarName, JSString(DescriptorId.forClass(arClass.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))),
           JSFunctionCall(
-            JSPropertyAccessDot(
-              JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
-              JSIdentifier("createClass")
-            ),
+            coreLibExport(arClass.descriptor.moduleDescriptor, "createClass"),
             Vector(classSpec)
           )
         )
@@ -307,10 +322,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
 
         accessNativeBool = JSPropertyAccessBracket(
           condExpr,
-          JSPropertyAccessDot(
-            JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
-            JSIdentifier("boolValueSymbol")
-          )
+          coreLibExport(owner.moduleDescriptor, "boolValueSymbol")
         )
       } yield Vector(JSIfElseStatement(accessNativeBool, ifBodyStmts, elseBodyStmts))
 
@@ -395,19 +407,13 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
 
       case LoadConstantInt(i, _) =>
         JSFunctionCall(
-          JSPropertyAccessDot(
-            JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
-            JSIdentifier("createInt")
-          ),
+          coreLibExport(owner.moduleDescriptor, "createInt"),
           Vector(JSBigInt(i))
         ).point[TComp]
 
       case LoadConstantString(str, _) =>
         JSFunctionCall(
-          JSPropertyAccessDot(
-            JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
-            JSIdentifier("createString")
-          ),
+          coreLibExport(owner.moduleDescriptor, "createString"),
           Vector(JSString(str))
         ).point[TComp]
 
@@ -425,10 +431,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
         } yield JSArrayLiteral(values)
 
       case LoadUnit(_) =>
-        JSPropertyAccessDot(
-          JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
-          JSIdentifier("unitValue")
-        ).point[TComp]
+        coreLibExport(owner.moduleDescriptor, "unitValue").point[TComp]
 
       case LoadVariable(variable) =>
         getVariableExpr(getParamOwnerModule(owner), variable)
@@ -465,14 +468,13 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
           leftExpr <- convertExpr(owner)(left)
           rightExpr <- convertExpr(owner)(right)
         } yield JSFunctionCall(
-          JSPropertyAccessDot(
-            JSPropertyAccessBracket(moduleVarName, JSString(LookupNames.argonCoreLib)),
-            JSIdentifier(op match {
+          coreLibExport(owner.moduleDescriptor,
+            op match {
               case PrimitiveOperation.AddInt => "addInt"
               case PrimitiveOperation.SubInt => "subInt"
               case PrimitiveOperation.MulInt => "mulInt"
               case PrimitiveOperation.IntEqual => "intEqual"
-            })
+            }
           ),
           Vector(leftExpr, rightExpr)
         )

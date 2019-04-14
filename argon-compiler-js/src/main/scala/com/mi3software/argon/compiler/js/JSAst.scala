@@ -17,6 +17,8 @@ sealed trait JSImportStatement extends JSModuleStatement
 final case class JSImportDefaultStatement(defaultExport: JSIdentifier, moduleName: String) extends JSImportStatement
 final case class JSImportAllStatement(defaultExport: Option[JSIdentifier], name: JSIdentifier, moduleName: String) extends JSImportStatement
 
+final case class JSModuleRaw(code: String) extends JSModuleStatement
+
 sealed trait JSStatement extends JSModuleStatement
 
 sealed trait JSDeclarationStatement extends JSStatement
@@ -108,6 +110,9 @@ object JSAst {
           writer.print(" from ")
           writeString(moduleName)
           writer.print(";")
+
+        case JSModuleRaw(code) =>
+          writer.print(code)
 
         case stmt: JSStatement =>
           writeStatement(stmt)

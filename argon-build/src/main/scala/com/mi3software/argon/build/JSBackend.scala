@@ -55,7 +55,7 @@ object JSBackend extends Backend {
 
   override def compile[F[+ _], I: Show, A](input: CompilerInput[I, BackendOptions[Id, I]])(f: CompilationOutputText[F, I] => F[A])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[A] = {
     val context = new JSContext[F, I](input)
-    val emitter = new JSEmitter[F, context.type](context)
+    val emitter = new JSEmitter[F, context.type](context, input.backendOptions.inject)
 
     context.createModule { module =>
       emitter.emitModule(module).flatMap { jsModule =>
