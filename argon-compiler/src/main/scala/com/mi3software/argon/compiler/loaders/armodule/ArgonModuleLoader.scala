@@ -54,8 +54,6 @@ object ArgonModuleLoader {
       loadModule[ReferencePayloadSpecifier, I, TRes](data.zip)(data.metadata)(referencedModules)(referencePayloadLoader)
 
 
-    private val currentFormatVersion = 1
-
     private trait ModuleCreator[TContext <: Context with Singleton, Comp[_], TPayloadSpec[_, _]] {
       val module: Comp[ArModule[TContext, TPayloadSpec]]
     }
@@ -76,7 +74,7 @@ object ArgonModuleLoader {
       for {
 
         _ <- Compilation[TComp].require(
-          metadata.formatVersion <= 0 || metadata.formatVersion > currentFormatVersion
+          metadata.formatVersion > 0 && metadata.formatVersion <= ModuleFormatVersion.currentVersion
         )(
           CompilationError.UnsupportedModuleFormatVersion(metadata.formatVersion, CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
         )

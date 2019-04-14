@@ -7,7 +7,7 @@ import com.mi3software.argon.util.stream.{ArStream, StreamTransformation}
 import scalapb.GeneratedMessage
 import scalaz.{Lens => _, _}
 import Scalaz._
-import com.mi3software.argon.compiler.loaders.armodule.ModulePaths
+import com.mi3software.argon.compiler.loaders.armodule.{ModuleFormatVersion, ModulePaths}
 import com.mi3software.argon.compiler.types.TypeSystem
 import com.mi3software.argon.util.NonEmptyVector
 import com.mi3software.argon.module
@@ -283,7 +283,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
               )
               moduleIds <- StateT.get[F, ModuleIds]
               state2 <- emitF(f(state2, NonEmptyVector.of(ModulePaths.metadata -> module.Metadata(
-                formatVersion = 1,
+                formatVersion = ModuleFormatVersion.currentVersion,
                 name = item.descriptor.name,
                 references =
                   moduleRefs.moduleRefIds
