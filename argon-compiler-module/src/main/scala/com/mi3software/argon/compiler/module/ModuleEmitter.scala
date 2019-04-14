@@ -328,26 +328,26 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
       if(descriptor.moduleDescriptor === armodule.descriptor)
         getObjIdInt(descriptor)(lens[ModuleIds].nextTraitId, lens[ModuleIds].traitIds)
       else
-        getObjIdInt(descriptor)(lens[ModuleIds].nextTraitRefId, lens[ModuleIds].traitRefIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextTraitRefId, lens[ModuleIds].traitRefIds)(implicitly[Monad[F]]).map(-_)
 
 
     def getClassId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: ClassDescriptor): EmitF[F, Int] =
       if(descriptor.moduleDescriptor === armodule.descriptor)
         getObjIdInt(descriptor)(lens[ModuleIds].nextClassId, lens[ModuleIds].classIds)
       else
-        getObjIdInt(descriptor)(lens[ModuleIds].nextClassRefId, lens[ModuleIds].classRefIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextClassRefId, lens[ModuleIds].classRefIds)(implicitly[Monad[F]]).map(-_)
 
     def getDataCtorId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: DataConstructorDescriptor): EmitF[F, Int] =
       if(descriptor.moduleDescriptor === armodule.descriptor)
         getObjIdInt(descriptor)(lens[ModuleIds].nextDataCtorId, lens[ModuleIds].dataCtorIds)
       else
-        getObjIdInt(descriptor)(lens[ModuleIds].nextDataCtorRefId, lens[ModuleIds].dataCtorRefIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextDataCtorRefId, lens[ModuleIds].dataCtorRefIds)(implicitly[Monad[F]]).map(-_)
 
     def getFuncId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: FuncDescriptor): EmitF[F, Int] =
       if(descriptor.moduleDescriptor === armodule.descriptor)
         getObjIdInt(descriptor)(lens[ModuleIds].nextFunctionId, lens[ModuleIds].functionIds)
       else
-        getObjIdInt(descriptor)(lens[ModuleIds].nextFunctionRefId, lens[ModuleIds].functionRefIds)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextFunctionRefId, lens[ModuleIds].functionRefIds)(implicitly[Monad[F]]).map(-_)
 
     def getMethodId[F[_]: Monad, TPayloadSpec[_, _]](armodule: ArModule[context.type, DeclarationPayloadSpecifier], method: ArMethod[context.type, TPayloadSpec])(implicit fromComp: TComp ~> F): EmitF[F, Int] =
       if(method.descriptor.moduleDescriptor === armodule.descriptor)
@@ -375,7 +375,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
               getDataCtorId[F](armodule, dataCtor.descriptor)
                 .map { ctorId => id => (id, module.MethodReference.MethodOwner.OwnerConstructorId(ctorId)) }
           }
-        ).map { case (id, _) => id }
+        )(implicitly[Monad[F]]).map { case (id, _) => -id }
 
     def getClassCtorId[F[_]: Monad](descriptor: ClassConstructorDescriptor): EmitF[F, Int] =
       getObjIdInt(descriptor)(lens[ModuleIds].nextClassCtorId, lens[ModuleIds].classCtorIds)
@@ -546,13 +546,8 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
           )
         }
 
-        instMethods <- emitComp(arTrait.methods)
-        staticMethods <- emitComp(arTrait.staticMethods)
-        methods <- (instMethods ++ staticMethods).traverse { method =>
-          convertMethodDescriptor[TComp](armodule, method.method.descriptor).map { convDesc =>
-            module.MethodMember(convDesc, method.index, convertAccessModifier(method.accessModifier))
-          }
-        }
+        instMethods <- createMethodMembers(armodule, arTrait.methods)
+        staticMethods <- createMethodMembers(armodule, arTrait.staticMethods)
 
         convDesc <- convertTraitDescriptor[TComp](armodule, arTrait.descriptor)
 
@@ -560,8 +555,19 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
         descriptor = convDesc,
         signature = convSig,
         isSealed = Some(arTrait.isSealed).filter(identity),
-        methods = methods,
+        methods = instMethods,
+        staticMethods = staticMethods,
       )
+
+    def createMethodMembers(armodule: ArModule[context.type, DeclarationPayloadSpecifier], methods: context.Comp[Vector[MethodBinding[context.type, DeclarationPayloadSpecifier]]]): Emit[Vector[module.MethodMember]] =
+      emitComp(methods).flatMap {
+        _.traverse { method =>
+          for {
+            convDesc <- convertMethodDescriptor[TComp](armodule, method.method.descriptor)
+            methodId <- getMethodId[TComp, DeclarationPayloadSpecifier](armodule, method.method)
+          } yield module.MethodMember(convDesc, methodId, convertAccessModifier(method.accessModifier))
+        }
+      }
 
     def createClassDefMessage(armodule: ArModule[context.type, DeclarationPayloadSpecifier], arClass: ArClass[context.type, DeclarationPayloadSpecifier]): Emit[module.ClassDefinition] =
       for {
@@ -583,13 +589,8 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
           }
         }
 
-        instMethods <- emitComp(arClass.methods)
-        staticMethods <- emitComp(arClass.staticMethods)
-        methods <- (instMethods ++ staticMethods).traverse { method =>
-          convertMethodDescriptor[TComp](armodule, method.method.descriptor).map { convDesc =>
-            module.MethodMember(convDesc, method.index, convertAccessModifier(method.accessModifier))
-          }
-        }
+        instMethods <- createMethodMembers(armodule, arClass.methods)
+        staticMethods <- createMethodMembers(armodule, arClass.staticMethods)
 
         classCtors <- emitComp(arClass.classConstructors)
         ctors <- classCtors.traverse { ctor =>
@@ -606,7 +607,10 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
         isOpen = Some(arClass.isOpen).filter(identity),
         isAbstract = Some(arClass.isAbstract).filter(identity),
         isSealed = Some(arClass.isSealed).filter(identity),
-        fields = convFields
+        fields = convFields,
+        methods = instMethods,
+        staticMethods = staticMethods,
+        constructors = ctors
       )
 
     def createDataCtorDefMessage(armodule: ArModule[context.type, DeclarationPayloadSpecifier], dataCtor: DataConstructor[context.type, DeclarationPayloadSpecifier]): Emit[module.DataConstructorDefinition] =
@@ -621,17 +625,14 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
           )
         }
 
+        methods <- createMethodMembers(armodule, dataCtor.methods)
         instMethods <- emitComp(dataCtor.methods)
-        methods <- instMethods.traverse { method =>
-          convertMethodDescriptor[TComp](armodule, method.method.descriptor).map { convDesc =>
-            module.MethodMember(convDesc, method.index, convertAccessModifier(method.accessModifier))
-          }
-        }
 
         convDesc <- convertDataCtorDescriptor[TComp](armodule, dataCtor.descriptor)
         ctorDef = module.DataConstructorDefinition(
           descriptor = convDesc,
           signature = convSig,
+          methods = methods,
         )
 
       } yield ctorDef

@@ -11,9 +11,7 @@ import com.mi3software.argon.util.AnyExtensions._
 import scala.collection.immutable.Set
 import scalaz._
 import Scalaz._
-import PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
-import com.mi3software.argon.compiler.loaders.source.ExpressionConverter.HoleTypeHole
-import com.mi3software.argon.parser.UnitLiteral
+import PayloadSpecifiers._
 
 import Function.const
 
@@ -44,7 +42,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         implicitly[TypeCheck[TComp]].resolveType(thisExpr.exprType).flatMap { resolvedType =>
           unwrapType(resolvedType) match {
             case Some(resolvedTypeWithMethods: TypeWithMethods) =>
-              implicitly[TypeCheck[TComp]].fromContextComp(context)(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)).flatMap {
+              implicitly[TypeCheck[TComp]].fromContextComp(context)(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(memberName)).flatMap {
                 case OverloadResult.List(Vector(MemberValue.Method(method)), _) =>
                   for {
                     _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
@@ -52,7 +50,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                     convSig = convertSignature(sig)
                   } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(AbsRef(method.value.method), thisExpr, args, result.returnType).upcast[ArExpr].point[TComp] }
 
-                case _ => ???
+                case methods => ???
               }
 
             case Some(funcType @ FunctionType(argType, resultType)) if memberName === MemberName.Call =>

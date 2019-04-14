@@ -1,6 +1,6 @@
 package com.mi3software.argon.compiler.lookup
 
-import com.mi3software.argon.compiler.core.{AbsRef, MethodOwnerDescriptor, Context}
+import com.mi3software.argon.compiler.core._
 import com.mi3software.argon.compiler.types.TypeSystem
 import scalaz._
 import Scalaz._
@@ -8,10 +8,10 @@ import com.mi3software.argon.compiler.Compilation
 
 object MethodLookup {
 
-  def lookupMethods(context: Context)(ts: TypeSystem[context.type])(instanceType: ts.TypeWithMethods): context.Comp[OverloadResult[MemberValue[context.type]]] =
-    lookupMethodsImpl(context)(ts)(Vector(instanceType))(Set.empty)
+  def lookupMethods(context: Context)(ts: TypeSystem[context.type])(instanceType: ts.TypeWithMethods)(memberName: MemberName): context.Comp[OverloadResult[MemberValue[context.type]]] =
+    lookupMethodsImpl(context)(ts)(memberName)(Vector(instanceType))(Set.empty)
 
-  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(instanceTypes: Vector[ts.TypeWithMethods])(seenTypes: Set[MethodOwnerDescriptor]): context.Comp[OverloadResult[MemberValue[context.type]]] =
+  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(memberName: MemberName)(instanceTypes: Vector[ts.TypeWithMethods])(seenTypes: Set[MethodOwnerDescriptor]): context.Comp[OverloadResult[MemberValue[context.type]]] =
     if(instanceTypes.isEmpty)
       context.compCompilationInstance.point(OverloadResult.End)
     else {
@@ -33,11 +33,16 @@ object MethodLookup {
             case ts.DataConstructorType(ctor, _, _) => context.compCompilationInstance.map(ctor.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
           }(context.compCompilationInstance, implicitly)
       ) { memberValues =>
+        val filteredMembers = memberValues.filter { method =>
+          val methodName = method.arMethod.value.name
+          methodName =/= MemberName.Unnamed && memberName === methodName
+        }
+
         context.compCompilationInstance.map(
-          lookupMethodsImpl(context)(ts)(newBaseTypes)(newSeenTypes)
+          lookupMethodsImpl(context)(ts)(memberName)(newBaseTypes)(newSeenTypes)
         ) { baseTypeOverloads =>
-            if(memberValues.nonEmpty)
-              OverloadResult.List(memberValues, baseTypeOverloads)
+            if(filteredMembers.nonEmpty)
+              OverloadResult.List(filteredMembers, baseTypeOverloads)
             else
               baseTypeOverloads
           }
