@@ -6,10 +6,6 @@ import java.nio.charset.StandardCharsets
 import dev.argon.compiler.ResourceAccess
 import scalaz._
 import Scalaz._
-import dev.argon.util.FileOperations
-import org.apache.commons.io.output.NullOutputStream
-import scalaz.Leibniz.===
-import scalaz.zio.{IO, ZIO}
 
 trait CompilationOutput[F[+_], I] {
   type MonadErrorThrowable[A[_, _]] = MonadError[A[Throwable, ?], Throwable]

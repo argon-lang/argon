@@ -11,8 +11,8 @@ import scalaz.zio._
 import dev.argon.build.testrunner.node.ExternalApi._
 import dev.argon.compiler.CompilerOptions
 import dev.argon.compiler.js.{JSBackendOptions, JSInjectCode}
-import dev.argon.util.FileOperations
-import org.apache.commons.io.{FilenameUtils, IOUtils}
+import dev.argon.util.{FileOperations, FilenameManip}
+import org.apache.commons.io.IOUtils
 
 final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher) extends TestCaseRunnerCompilePhase {
 
@@ -46,7 +46,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
 
     val modules = (
       files.map { file =>
-        val libName = FilenameUtils.removeExtension(file.getName)
+        val libName = FilenameManip.getBasename(file)
         val libFile = new File(new File(file.getParentFile, "js"), libName + ".js")
         val content = IOUtils.toString(new FileInputStream(libFile), StandardCharsets.UTF_8)
         FileInfo(libName, content)

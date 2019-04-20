@@ -4,8 +4,7 @@ import java.io.{File, InputStream, OutputStream, PrintWriter}
 import java.util.Locale
 import java.util.zip.{ZipEntry, ZipFile, ZipOutputStream}
 
-import dev.argon.util.FileOperations
-import org.apache.commons.io.FilenameUtils
+import dev.argon.util.{FileOperations, FilenameManip}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import scalaz._
 import scalaz.zio._
@@ -80,7 +79,7 @@ object IOCompilation {
     new ResourceAccess[Task, File] {
 
       override def getExtension(id: File): Task[String] = IO.effect {
-        FilenameUtils.getExtension(id.getName).toLowerCase(Locale.ENGLISH)
+        FilenameManip.getExtension(id)
       }
 
       override def createPrintWriter[A](id: File)(f: PrintWriter => A): Task[A] =

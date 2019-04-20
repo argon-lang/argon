@@ -11,11 +11,10 @@ import scalaz.zio._
 import scalaz.zio.interop.scalaz72._
 import dev.argon.compiler._
 import dev.argon.compiler.core._
-import dev.argon.util.FileOperations
+import dev.argon.util.{FileOperations, FilenameManip}
 import toml.Toml
 import toml.Codecs._
 import dev.argon.util.AnyExtensions._
-import org.apache.commons.io.FilenameUtils
 import shapeless.{Id => _, _}
 
 final case class ProjectInfoFormat[F[_], I]
@@ -96,7 +95,7 @@ object BuildInfo {
 
       backend.parseBackendOptions(table2).toOption.map { backendOptions =>
         val compilerOpts = CompilerOptions[Id](
-          moduleName = compOpts.moduleName.orElse(globalOptions.moduleName).getOrElse(FilenameUtils.getBaseName(file.getName)),
+          moduleName = compOpts.moduleName.orElse(globalOptions.moduleName).getOrElse(FilenameManip.getBasename(file)),
         )
 
         BuildInfo(backend)(

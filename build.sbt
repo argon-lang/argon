@@ -21,11 +21,10 @@ lazy val commonSettings = Seq(
 
     "com.chuusai" %% "shapeless" % "2.3.3",
     "tech.sparse" %%  "toml-scala" % "0.2.0",
-    
-    "org.apache.commons" % "commons-lang3" % "3.8.1",
+
+    "org.apache.commons" % "commons-text" % "1.6",
     "commons-io" % "commons-io" % "2.6",
     
-    "org.fusesource.jansi" % "jansi" % "1.18",
     
     "org.scalatest" %% "scalatest" % "3.0.7" % "test",
     "org.scalacheck" %% "scalacheck" % "1.14.0" % "test",
