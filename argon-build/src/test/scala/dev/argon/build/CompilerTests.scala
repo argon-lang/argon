@@ -29,7 +29,7 @@ class CompilerTests extends FunSpec with DefaultRuntime with Matchers with Befor
     "Argon.Core",
   )
 
-  private val nodeLauncher = new NodeLauncher("external-api/node-api/bin/index.js")
+  private val nodeLauncher = unsafeRun(NodeLauncher("external-api/node-api/bin/index.js"))
 
   private val references = libraries.map { name => new File(s"libraries/$name/$name.armodule") }
 
@@ -54,6 +54,6 @@ class CompilerTests extends FunSpec with DefaultRuntime with Matchers with Befor
   generateTestCases()
 
   override protected def afterAll(): Unit = {
-    nodeLauncher.close()
+    unsafeRun(nodeLauncher.close)
   }
 }

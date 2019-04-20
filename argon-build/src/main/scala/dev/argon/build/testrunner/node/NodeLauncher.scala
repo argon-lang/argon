@@ -2,36 +2,64 @@ package dev.argon.build.testrunner.node
 
 import dev.argon.build.testrunner.node.ExternalApi.{MethodCallHandler, ServerFunctionCallClient, ServerFunctions}
 import com.mi3software.gcrpc.runtime.{BinaryProtocol, RpcConnection, RpcStreamTransport, StandardRpcConnection}
+import scalaz._
+import Scalaz._
+import scalaz.zio._
+import scalaz.zio.interop.scalaz72._
 
-final class NodeLauncher(file: String) {
+trait NodeLauncher {
+  def serverFunctions: Task[ServerFunctions]
+  def close: UIO[Unit]
+}
 
-  @SuppressWarnings(Array("org.wartremover.warts.Var"))
-  private var connOpt: Option[(RpcConnection, ServerFunctions)] = None
+object NodeLauncher {
 
-  def serverFunctions: ServerFunctions = connOpt match {
-    case Some((_, funcs)) => funcs
-    case None =>
-      val child = new ProcessBuilder("node", "--no-warnings", "--experimental-vm-modules", "--", file)
-        .redirectInput(ProcessBuilder.Redirect.PIPE)
-        .redirectOutput(ProcessBuilder.Redirect.PIPE)
-        .start()
+  def apply(file: String): UIO[NodeLauncher] = for {
+    connOpt <- RefM.make[Option[Fiber[Throwable, (RpcConnection, ServerFunctions)]]](None)
+  } yield new NodeLauncher {
 
-      val transport = new RpcStreamTransport(child.getInputStream, child.getOutputStream)
-      val protocol = new BinaryProtocol()
-      val conn = new StandardRpcConnection(transport, protocol, MethodCallHandler)
-      conn.startBackground()
+    def serverFunctions: Task[ServerFunctions] =
+      connOpt
+        .modify {
+          case conn @ Some(fiber) => (fiber, conn).point[UIO]
+          case None =>
+            IO.effect {
+              val child = new ProcessBuilder("node", "--no-warnings", "--experimental-vm-modules", "--", file)
+                .redirectInput(ProcessBuilder.Redirect.PIPE)
+                .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                .start()
 
-      val serverFunctions = ServerFunctionCallClient(conn)
+              val transport = new RpcStreamTransport(child.getInputStream, child.getOutputStream)
+              val protocol = new BinaryProtocol()
+              val conn = new StandardRpcConnection(transport, protocol, MethodCallHandler)
+              conn.startBackground()
 
-      connOpt = Some((conn, serverFunctions))
+              val serverFunctions = ServerFunctionCallClient(conn)
 
-      serverFunctions
+              (conn, serverFunctions)
+            }.fork.map(fiber => (fiber, Some(fiber)))
+        }
+        .flatMap { _.join }
+        .map { case (_, serverFuncs) => serverFuncs }
+
+    def close: UIO[Unit] =
+      connOpt.modify {
+        case Some(fiber) =>
+          fiber.await.flatMap {
+            case Exit.Success((conn, _)) =>
+              IO.effectTotal {
+                conn.close()
+                ((), None)
+              }
+
+            case _ =>
+              ((), None).point[UIO]
+          }
+
+        case None => ((), None).point[UIO]
+      }
+
   }
 
-  def close(): Unit =
-    connOpt.foreach { case (conn, _) =>
-      conn.close()
-      connOpt = None
-    }
 
 }

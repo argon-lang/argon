@@ -42,18 +42,21 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
   override def runTest(testCase: TestCase): IO[Throwable, TestCaseResult] =
     compileTestCase(testCase, references)
 
-  private def runJSOutput(files: Vector[File])(compiledFile: String): IO[Throwable, String] = IO.fromFuture { _ =>
+  private def runJSOutput(files: Vector[File])(compiledFile: String): IO[Throwable, String] = for {
+    modules <- IO.effect {
+      (
+        files.map { file =>
+          val libName = FilenameManip.getBasename(file)
+          val libFile = new File(new File(file.getParentFile, "js"), libName + ".js")
+          val content = IOUtils.toString(new FileInputStream(libFile), StandardCharsets.UTF_8)
+          FileInfo(libName, content)
+        }
+        :+ FileInfo(moduleName, compiledFile)
+      ).toArray
+    }
 
-    val modules = (
-      files.map { file =>
-        val libName = FilenameManip.getBasename(file)
-        val libFile = new File(new File(file.getParentFile, "js"), libName + ".js")
-        val content = IOUtils.toString(new FileInputStream(libFile), StandardCharsets.UTF_8)
-        FileInfo(libName, content)
-      }
-      :+ FileInfo(moduleName, compiledFile)
-    ).toArray
+    serverFuncs <- launcher.serverFunctions
+    output <- IO.fromFuture { _ => serverFuncs.executeJS(moduleName, modules) }
+  } yield output
 
-    launcher.serverFunctions.executeJS(moduleName, modules)
-  }
 }

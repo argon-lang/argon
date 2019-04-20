@@ -60,7 +60,7 @@ object ArgonModuleLoader {
 
     private def loadModule[TPayloadSpec[_, _], I, TRes <: ResourceAccess[TComp, I] with Singleton]
     (res: TRes)
-    (zipFile: TRes#ZipReader)
+    (zipFile: res.ZipReader)
     (metadata: ArgonModule.Metadata)
     (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
     (payloadLoader: PayloadLoader[context.type, TPayloadSpec])
@@ -268,8 +268,7 @@ object ArgonModuleLoader {
           ): Int => TComp[ModuleObjectLoadResult[TDefResult, TDefResult { val descriptor: TGlobalDescriptor }, TRefResult]] =
             cache { id =>
 
-              @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
-              val zip = zipFile.asInstanceOf[res.ZipReader]
+              val zip = zipFile
 
               if(id < 0)
                 res.getZipEntryStream(zip, refPathFunction(id.abs))(res.readProtocolBufferMessage(refCompanion))
