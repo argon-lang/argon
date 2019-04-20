@@ -8,15 +8,11 @@ import com.mi3software.argon.build.testrunner._
 import scalaz.{Scalaz, _}
 import Scalaz._
 import scalaz.zio._
-import scalaz.zio.interop.scalaz72._
 import com.mi3software.argon.build.testrunner.node.ExternalApi._
 import com.mi3software.argon.compiler.CompilerOptions
 import com.mi3software.argon.compiler.js.{JSBackendOptions, JSInjectCode}
 import com.mi3software.argon.util.FileOperations
 import org.apache.commons.io.{FilenameUtils, IOUtils}
-
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
 
 final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher) extends TestCaseRunnerCompilePhase {
 
