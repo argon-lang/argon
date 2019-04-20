@@ -1,9 +1,9 @@
-package com.mi3software.argon.parser.impl
+package dev.argon.parser.impl
 
-import com.mi3software.argon.util.{FilePosition, SourceLocation, WithSource}
+import dev.argon.util.{FilePosition, SourceLocation, WithSource}
 import scalaz._
 import Scalaz._
-import com.mi3software.argon.grammar.{Grammar, GrammarError}
+import dev.argon.grammar.{Grammar, GrammarError}
 
 trait NumberTokenHelpers extends GrammarTestHelpers {
 

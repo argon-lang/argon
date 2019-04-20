@@ -1,10 +1,10 @@
-package com.mi3software.argon.parser.impl
+package dev.argon.parser.impl
 
 import org.scalatest.{FlatSpec, Matchers}
 import scalaz._
-import com.mi3software.argon.grammar.Grammar
+import dev.argon.grammar.Grammar
 import Grammar.Operators._
-import com.mi3software.argon.util.NonEmptyVector
+import dev.argon.util.NonEmptyVector
 
 import scala.language.postfixOps
 

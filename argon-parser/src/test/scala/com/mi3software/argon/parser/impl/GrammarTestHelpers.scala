@@ -1,8 +1,8 @@
-package com.mi3software.argon.parser.impl
+package dev.argon.parser.impl
 
-import com.mi3software.argon.util.{FilePosition, NonEmptyVector, SourceLocation, WithSource}
+import dev.argon.util.{FilePosition, NonEmptyVector, SourceLocation, WithSource}
 import scalaz._
-import com.mi3software.argon.grammar.Grammar
+import dev.argon.grammar.Grammar
 import Grammar.{GrammarResult, GrammarResultComplete, GrammarResultSuspend, ParseOptions}
 
 trait GrammarTestHelpers {

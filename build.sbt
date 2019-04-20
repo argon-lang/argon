@@ -105,7 +105,7 @@ lazy val cli = project.in(file("argon-cli"))
 
           Def.task {
             streams.value.log.info(s"Building library $libName")
-            (runMain in Compile).toTask(s" com.mi3software.argon.Program compile libraries/$libName/build.toml").value
+            (runMain in Compile).toTask(s" dev.argon.Program compile libraries/$libName/build.toml").value
           }
         },
 

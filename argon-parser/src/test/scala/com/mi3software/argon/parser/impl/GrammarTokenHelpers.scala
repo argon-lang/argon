@@ -1,7 +1,7 @@
-package com.mi3software.argon.parser.impl
+package dev.argon.parser.impl
 
-import com.mi3software.argon.grammar.Grammar
-import com.mi3software.argon.parser.{SyntaxError, Token}
+import dev.argon.grammar.Grammar
+import dev.argon.parser.{SyntaxError, Token}
 
 trait GrammarTokenHelpers extends GrammarTestHelpers {
   override type TToken = Token

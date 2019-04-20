@@ -4,7 +4,7 @@ import "scalapb/scalapb.proto";
 
 option (scalapb.options) = {
     scope: FILE
-    package_name: "com.mi3software.argon.module"
+    package_name: "dev.argon.module"
     flat_package: true
     collection_type: "scala.collection.immutable.Vector"
 };
