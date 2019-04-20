@@ -24,7 +24,7 @@ object ArgonModuleLoader {
     type ModuleData[I, TRes <: ResourceAccess[TComp, I] with Singleton] = ResAndMetadata[I, TRes]
 
 
-    override def loadResource[I, TRes <: ResourceAccess[TComp, I] with Singleton, A](id: I)(f: Option[ResAndMetadata[I, TRes]] => TComp[A])(implicit res: TRes): TComp[A] =
+    override def loadResource[I, TRes <: ResourceAccess[TComp, I] with Singleton, A](res: TRes)(id: I)(f: Option[ResAndMetadata[I, res.type]] => TComp[A]): TComp[A] =
       res.getExtension(id).flatMap {
         case "armodule" =>
           res.getZipFile(id) { zip =>
@@ -47,11 +47,11 @@ object ArgonModuleLoader {
 
 
     override def loadModuleReference[I, TRes <: ResourceAccess[TComp, I] with Singleton]
-    (data: ResAndMetadata[I, TRes])
+    (res: TRes)
+    (data: ResAndMetadata[I, res.type])
     (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
-    (implicit res: TRes)
     : TComp[ArModule[context.type, ReferencePayloadSpecifier]] =
-      loadModule[ReferencePayloadSpecifier, I, TRes](data.zip)(data.metadata)(referencedModules)(referencePayloadLoader)
+      loadModule[ReferencePayloadSpecifier, I, TRes](res)(data.zip)(data.metadata)(referencedModules)(referencePayloadLoader)
 
 
     private trait ModuleCreator[TContext <: Context with Singleton, Comp[_], TPayloadSpec[_, _]] {
@@ -59,11 +59,11 @@ object ArgonModuleLoader {
     }
 
     private def loadModule[TPayloadSpec[_, _], I, TRes <: ResourceAccess[TComp, I] with Singleton]
+    (res: TRes)
     (zipFile: TRes#ZipReader)
     (metadata: ArgonModule.Metadata)
     (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
     (payloadLoader: PayloadLoader[context.type, TPayloadSpec])
-    (implicit res: TRes)
     : context.Comp[ArModule[context.type, TPayloadSpec]] = {
 
       val context2: context.type = context

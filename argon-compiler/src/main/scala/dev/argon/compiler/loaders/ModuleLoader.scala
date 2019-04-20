@@ -16,10 +16,10 @@ trait ModuleLoader[TContext <: Context with Singleton] {
 
   type ModuleData[I, TRes <: ResourceAccess[TContext#Comp, I] with Singleton]
 
-  def loadResource[I, TRes <: ResourceAccess[TContext#Comp, I] with Singleton, A](id: I)(f: Option[ModuleData[I, TRes]] => TContext#Comp[A])(implicit res: TRes): TContext#Comp[A]
+  def loadResource[I, TRes <: ResourceAccess[TContext#Comp, I] with Singleton, A](res: TRes)(id: I)(f: Option[ModuleData[I, res.type]] => TContext#Comp[A]): TContext#Comp[A]
   def dataDescriptor[I, TRes <: ResourceAccess[TContext#Comp, I] with Singleton](data: ModuleData[I, TRes]): ModuleDescriptor
   def dataReferencedModules[I, TRes <: ResourceAccess[TContext#Comp, I] with Singleton](data: ModuleData[I, TRes]): Vector[ModuleDescriptor]
-  def loadModuleReference[I, TRes <: ResourceAccess[TContext#Comp, I] with Singleton](data: ModuleData[I, TRes])(referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]])(implicit res: TRes): TContext#Comp[ArModule[TContext, ReferencePayloadSpecifier]]
+  def loadModuleReference[I, TRes <: ResourceAccess[TContext#Comp, I] with Singleton](res: TRes)(data: ModuleData[I, res.type])(referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]]): TContext#Comp[ArModule[TContext, ReferencePayloadSpecifier]]
 
 }
 
@@ -49,13 +49,13 @@ object ModuleLoader {
     def findWorkingLoader(loaders: Vector[ModuleLoader[context.type]])(id: I)(f: LoaderAndData => TComp[A]): TComp[A] =
       loaders match {
         case load +: tail =>
-          load.loadResource[I, res.type, A](id) {
+          load.loadResource[I, res.type, A](res)(id) {
             case Some(data) =>
               f(LoaderAndData(load)(data))
 
             case None =>
               findWorkingLoader(tail)(id)(f)
-          }(res)
+          }
 
         case Vector() =>
           Compilation[TComp].forErrors(CompilationError.CouldNotFindCompatibleModuleLoader(CompilationMessageSource.ModuleResource(id)))
@@ -72,7 +72,7 @@ object ModuleLoader {
           item.loader.dataReferencedModules[I, res.type](item.data)
 
         override def loadItem(item: LoaderAndData, dependencies: Vector[PayloadResult]): TComp[PayloadResult] =
-          item.loader.loadModuleReference[I, res.type](item.data)(dependencies)(res)
+          item.loader.loadModuleReference[I, res.type](res)(item.data)(dependencies)
 
         override def circularReferenceHandler(item: LoaderAndData): CompilationError \/ PayloadResult =
           -\/(CompilationError.CircularDependencyLoadingModule(CompilationMessageSource.ReferencedModule(item.loader.dataDescriptor[I, res.type](item.data))))
