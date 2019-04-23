@@ -2,35 +2,39 @@ package dev.argon
 
 import dev.argon.build.Pipeline
 import dev.argon.build.project.BuildInfo
-import scalaz._
+import scalaz.{ :+: => _, _ }
 import Scalaz._
 import scalaz.zio.{ BuildInfo => _, _ }
 import scalaz.zio.console._
 import scalaz.zio.interop.scalaz72._
 import dev.argon.util.FileOperations
 import org.apache.commons.lang3.exception.ExceptionUtils
-import scalaz.zio.duration.Duration
+import shapeless.{ BuildInfo => _, Id => _, _ }
+import CommandLineParser.Implicits._
 
 object Program extends App {
 
 
   override def run(args: List[String]): ZIO[Environment, Nothing, Int] =
-    args match {
-      case "compile" :: tail =>
-        runCompilation(tail)
+    CommandLineParser.parse(CommandLineArguments.parser)(args) match {
+      case Some(CommandLineArguments(cmd: CompileCommand[Id])) =>
+        runCompilation(cmd)
           .catchAll { ex =>
             IO.effectTotal {
               ExceptionUtils.printRootCauseStackTrace(ex)
               1
             }
           }
-      case cmd :: _ => putStrLn(s"Unknown command '$cmd'.").const(1)
-      case _ => putStrLn("Please specify a command.").const(1)
+
+      case None =>
+        for {
+          _ <- putStrLn("Invalid arguments")
+        } yield 1
     }
 
-  private def runCompilation(args: List[String]): ZIO[Environment, Throwable, Int] =
+  private def runCompilation(args: CompileCommand[Id]): ZIO[Environment, Throwable, Int] =
     args match {
-      case buildInfoFileName :: Nil =>
+      case CompileCommand(buildInfoFileName) =>
         FileOperations.fileFromName(buildInfoFileName)
           .flatMap(BuildInfo.loadFile)
           .flatMap {
@@ -42,12 +46,6 @@ object Program extends App {
             }
             case None => putStrLn("Could not load build info file.").const(1)
           }
-
-      case Nil =>
-        putStrLn("Please specify the build info file.").const(1)
-
-      case _ :: _ :: _ =>
-        putStrLn("Only one file (the build info file) may be specified.").const(1)
     }
 
 
