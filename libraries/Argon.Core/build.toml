@@ -15,7 +15,7 @@ outputFile = "js/Argon.Core.js"
 Int_to_s = """
 
 function() {
-    return createString(this[intValueSymbol]);
+    return createString(this[intValueSymbol].toString());
 }
 
 """
