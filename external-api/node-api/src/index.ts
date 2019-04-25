@@ -1,17 +1,26 @@
 import { rpcStreamTransport, standardRpcConnection, binaryProtocol } from "gcrpc-runtime";
 import { ServerFunctions, FileInfo, ServerFunctionCallHandler, MethodCallHandler } from "./api.gen";
+import { WritableStream } from "memory-streams";
 import * as vm from "vm";
+import { Console } from "console";
 
 const serverFunctions: ServerFunctions = {
 	async executeJS(entrypoint: string, files: Array<FileInfo>): Promise<string> {
-		let output = "";
-		const sandbox = vm.createContext({
-			console: {
-				log: function(message: any): void {
-					output += String(message) + "\n";
-				},
-			},
-		});
+		const stdout = new WritableStream();
+		const sandboxConsole = new Console(stdout);
+
+		const sandbox = Object.create(null);
+		sandbox.console = Object.create(null);
+
+		vm.createContext(sandbox);
+
+		vm.runInContext(`
+			(function(outerConsole) {
+				for(let m in outerConsole) {
+					console[m] = outerConsole[m];
+				}
+			})
+		`, sandbox)(sandboxConsole);
 
 		async function linker(specifier: string, referencingModule: vm.SourceTextModule): Promise<vm.SourceTextModule> {
 			const fileInfo = files.find(fi => fi.name === specifier);
@@ -37,7 +46,7 @@ const serverFunctions: ServerFunctions = {
 		mainModule.instantiate();
 		await mainModule.evaluate();
 		
-		return output;
+		return stdout.toString();
 	},
 };
 
