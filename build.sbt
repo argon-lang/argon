@@ -14,8 +14,8 @@ lazy val commonSettings = Seq(
     "org.scala-lang.modules" %% "scala-xml" % "1.2.0",
     
     "org.scalaz" %% "scalaz-core" % "7.2.27",
-    "org.scalaz" %% "scalaz-zio" % "1.0-RC3",
-    "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC3",
+    "org.scalaz" %% "scalaz-zio" % "1.0-RC4",
+    "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
     "org.scalaz" %% "deriving-macro" % "1.0.0",
     "org.scalaz" %% "scalaz-deriving" % "1.0.0",
 
