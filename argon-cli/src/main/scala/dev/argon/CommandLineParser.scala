@@ -39,8 +39,15 @@ object CommandLineParser {
       override def emptyValue: Option[H] :: TPartial = None :: tailParser.emptyValue
       override def parse(parser: ArgumentParser[H] :: TParser)(acc: Option[H] :: TPartial)(args: List[String]): CommandParseResult[(Option[H] :: TPartial, List[String])] =
         parser.head.parse(args) match {
-          case CommandParseResult.Value(_) if acc.head.isDefined => CommandParseResult.Error
-          case CommandParseResult.Value((value, tail)) => CommandParseResult.Value((Some(value) :: acc.tail, tail))
+          case CommandParseResult.Value((value, tail)) =>
+            (acc.head match {
+              case Some(oldValue) => parser.head.combine(oldValue, value)
+              case None => Some(value)
+            }) match {
+              case Some(value) => CommandParseResult.Value((Some(value) :: acc.tail, tail))
+              case None => CommandParseResult.Error
+            }
+
           case CommandParseResult.Skip => tailParser.parse(parser.tail)(acc.tail)(args).map {
             case (tailPartial, tailArgs) =>
               (acc.head :: tailPartial, tailArgs)

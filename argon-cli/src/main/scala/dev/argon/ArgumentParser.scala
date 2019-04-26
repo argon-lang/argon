@@ -5,12 +5,14 @@ import Scalaz._
 
 sealed trait ArgumentParser[A] {
   def parse(args: List[String]): CommandParseResult[(A, List[String])]
+  def combine(a: A, b: A): Option[A]
 }
 
 import scala.collection.immutable.Seq
 
 trait ArgumentValueParser[A] {
   def parse(args: List[String]): Option[(A, List[String])]
+  def combine(a: A, b: A): Option[A]
 }
 
 final case class SimpleValueParser[A]
@@ -30,6 +32,8 @@ final case class SimpleValueParser[A]
     case _ =>
       CommandParseResult.Skip
   }
+
+  override def combine(a: A, b: A): Option[A] = value.combine(a, b)
 }
 
 final case class RestValueParser[A]
@@ -43,6 +47,8 @@ final case class RestValueParser[A]
       case Some(value) => CommandParseResult.Value(value)
       case None => CommandParseResult.Error
     }
+
+  override def combine(a: A, b: A): Option[A] = value.combine(a, b)
 }
 
 final case class SubCommandMultiParser[A]
@@ -53,6 +59,8 @@ final case class SubCommandMultiParser[A]
     commands.foldLeft[CommandParseResult[(A, List[String])]](CommandParseResult.Skip) { (res, command) =>
       res.continue(command.parse(args))
     }
+
+  override def combine(a: A, b: A): Option[A] = None
 }
 
 sealed trait SubCommandParser[+A] {
@@ -103,6 +111,19 @@ object ArgumentParser {
       case value :: tail => Some((value, tail))
       case Nil => None
     }
+
+    override def combine(a: String, b: String): Option[String] = None
+  }
+
+  implicit def vectorArgumentValueParser[A: ArgumentValueParser]: ArgumentValueParser[Vector[A]] = new ArgumentValueParser[Vector[A]] {
+    override def parse(args: List[String]): Option[(Vector[A], List[String])] =
+      implicitly[ArgumentValueParser[A]].parse(args).map {
+        case (value, tail) => (Vector(value), tail)
+      }
+
+
+    override def combine(a: Vector[A], b: Vector[A]): Option[Vector[A]] =
+      Some(a ++ b)
   }
 
 }
