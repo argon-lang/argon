@@ -17,7 +17,7 @@ const serverFunctions: ServerFunctions = {
 		vm.runInContext(`
 			(function(outerConsole) {
 				for(let m in outerConsole) {
-					console[m] = outerConsole[m];
+					console[m] = function(...args) { return outerConsole[m](...args); };
 				}
 			})
 		`, sandbox)(sandboxConsole);
