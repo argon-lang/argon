@@ -35,7 +35,7 @@ const serverFunctions: ServerFunctions = {
 
 		const mainModule = new vm.SourceTextModule(`
 		import * as arCore from "Argon.Core";
-		import * as mainModule from "${entrypoint}";
+		import * as mainModule from ${JSON.stringify(entrypoint)};
 
 		mainModule.functions["main:(Ar.Unit)->(Ar.Unit)"].value(arCore.unitValue)
 		`, {
