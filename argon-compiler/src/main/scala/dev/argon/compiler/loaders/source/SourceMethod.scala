@@ -29,11 +29,6 @@ object SourceMethod {
     override val descriptor: MethodDescriptor = desc
 
 
-    override val isVirtual: Boolean = stmt.modifiers.exists {
-      case WithSource(parser.VirtualModifier, _) => true
-      case _ => false
-    }
-
     override val isAbstract: Boolean = stmt.modifiers.exists {
       case WithSource(parser.AbstractModifier, _) => true
       case _ => false
@@ -46,6 +41,11 @@ object SourceMethod {
 
     override val isFinal: Boolean = stmt.modifiers.exists {
       case WithSource(parser.FinalModifier, _) => true
+      case _ => false
+    }
+
+    override val isVirtual: Boolean = isAbstract || isImplicitOverride || isFinal || stmt.modifiers.exists {
+      case WithSource(parser.VirtualModifier, _) => true
       case _ => false
     }
 
