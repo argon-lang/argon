@@ -5,7 +5,7 @@ import scala.collection.immutable._
 import scalaz._
 import Scalaz._
 
-trait ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
   import context._, signatureContext.Signature
@@ -24,6 +24,13 @@ trait ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val classConstructors: Comp[Vector[ClassConstructorBinding[TContext, TPayloadSpec]]]
 
   val payload: TPayloadSpec[Unit, TClassMetadata]
+
+  override def hashCode(): Int = descriptor.hashCode()
+
+  override def equals(o: Any): Boolean = o match {
+    case other: ArClass[_, _] => other.descriptor === descriptor
+    case _ => false
+  }
 }
 
 object ArClass {

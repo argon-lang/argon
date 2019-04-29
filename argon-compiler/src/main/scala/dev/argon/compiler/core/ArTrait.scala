@@ -22,6 +22,13 @@ trait ArTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val staticMethods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]
 
   val payload: TPayloadSpec[Unit, TTraitMetadata]
+
+  override def hashCode(): Int = descriptor.hashCode()
+
+  override def equals(o: Any): Boolean = o match {
+    case other: ArTrait[_, _] => other.descriptor === descriptor
+    case _ => false
+  }
 }
 
 object ArTrait {

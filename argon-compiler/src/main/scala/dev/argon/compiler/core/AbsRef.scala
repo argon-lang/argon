@@ -11,6 +11,14 @@ object AbsRef {
     new AbsRef[TContext, T] {
       override type PayloadSpec[A, B] = TPayloadSpec[A, B]
       override val value: T[TContext, PayloadSpec] = instance
+
+      override def hashCode(): Int = value.hashCode()
+
+      @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+      override def equals(o: Any): Boolean = o match {
+        case other: AbsRef[_, _] => value.equals(other.value)
+        case _ => false
+      }
     }
 
 }

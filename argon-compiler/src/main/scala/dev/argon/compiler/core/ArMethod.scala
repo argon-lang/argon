@@ -1,8 +1,9 @@
 package dev.argon.compiler.core
 
-import scalaz.Leibniz
+import scalaz._
+import Scalaz._
 
-trait ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
   import context._, signatureContext.Signature
@@ -20,6 +21,13 @@ trait ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val signature: Comp[Signature[FunctionResultInfo]]
 
   val payload: TPayloadSpec[Comp[TMethodImplementation], TMethodMetadata]
+
+  override def hashCode(): Int = descriptor.hashCode()
+
+  override def equals(o: Any): Boolean = o match {
+    case other: ArMethod[_, _] => other.descriptor === descriptor
+    case _ => false
+  }
 }
 
 object ArMethod {
