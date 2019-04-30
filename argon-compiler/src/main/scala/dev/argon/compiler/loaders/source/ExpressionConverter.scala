@@ -164,6 +164,22 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           } yield factoryForExpr(env)(expr.location)(PrimitiveOp(PrimitiveOperation.IntEqual, leftExpr, rightExpr, boolType))
         )
 
+      case parser.BinaryOperatorExpr(parser.BinaryOperator.Union, left, right) =>
+        compFactory(
+          for {
+            leftExpr <- evaluateTypeExprAST(env)(left)
+            rightExpr <- evaluateTypeExprAST(env)(right)
+          } yield factoryForExpr(env)(expr.location)(UnionType(leftExpr, rightExpr))
+        )
+
+      case parser.BinaryOperatorExpr(parser.BinaryOperator.Intersection, left, right) =>
+        compFactory(
+          for {
+            leftExpr <- evaluateTypeExprAST(env)(left)
+            rightExpr <- evaluateTypeExprAST(env)(right)
+          } yield factoryForExpr(env)(expr.location)(IntersectionType(leftExpr, rightExpr))
+        )
+
       case parser.BoolValueExpr(b) =>
         compFactory(
           for {
@@ -1028,6 +1044,18 @@ object ExpressionConverter {
               .map(context.typeSystem.TupleElement(_))
         }
         .map(context.typeSystem.LoadTupleType(_))
+
+    case ts.UnionType(first, second) =>
+      for {
+        newFirst <- fillHolesTypeChildren(context)(ts)(first)
+        newSecond <- fillHolesTypeChildren(context)(ts)(second)
+      } yield context.typeSystem.UnionType(newFirst, newSecond)
+
+    case ts.IntersectionType(first, second) =>
+      for {
+        newFirst <- fillHolesTypeChildren(context)(ts)(first)
+        newSecond <- fillHolesTypeChildren(context)(ts)(second)
+      } yield context.typeSystem.IntersectionType(newFirst, newSecond)
 
     case ts.TypeOfType(inner, universe) =>
       for {
