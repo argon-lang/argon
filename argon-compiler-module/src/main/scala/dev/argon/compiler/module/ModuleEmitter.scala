@@ -9,7 +9,7 @@ import scalaz.{Lens => _, _}
 import Scalaz._
 import dev.argon.compiler.loaders.armodule.{ModuleFormatVersion, ModulePaths}
 import dev.argon.compiler.types.TypeSystem
-import dev.argon.util.NonEmptyVector
+import dev.argon.util.{FileID, NonEmptyVector}
 import dev.argon.module
 import shapeless._
 
@@ -454,6 +454,9 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
         case AccessModifier.PrivateInternal => module.AccessModifier.PrivateInternal
       }
 
+    def convertFileId(id: FileID): module.FileID =
+      module.FileID(id.id)
+
     def convertTraitDescriptor[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: TraitDescriptor): EmitF[F, module.TraitDescriptor] =
       module.TraitDescriptor(module.TraitDescriptor.Descriptor.InNamespace(
         descriptor match {
@@ -553,6 +556,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
 
       } yield module.TraitDefinition(
         descriptor = convDesc,
+        fileId = convertFileId(arTrait.fileId),
         signature = convSig,
         isSealed = Some(arTrait.isSealed).filter(identity),
         methods = instMethods,
@@ -603,6 +607,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
 
       } yield module.ClassDefinition(
         descriptor = convDesc,
+        fileId = convertFileId(arClass.fileId),
         signature = convSig,
         isOpen = Some(arClass.isOpen).filter(identity),
         isAbstract = Some(arClass.isAbstract).filter(identity),
@@ -631,6 +636,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
         convDesc <- convertDataCtorDescriptor[TComp](armodule, dataCtor.descriptor)
         ctorDef = module.DataConstructorDefinition(
           descriptor = convDesc,
+          fileId = convertFileId(dataCtor.fileId),
           signature = convSig,
           methods = methods,
         )
@@ -653,6 +659,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
 
       } yield module.FunctionDefinition(
         descriptor = convDesc,
+        fileId = convertFileId(func.fileId),
         signature = convSig,
         effects = module.EffectInfo(
           isPure = func.effectInfo.isPure
@@ -683,6 +690,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
         convDesc <- convertMethodDescriptor[TComp](armodule, method.descriptor)
         methodDef = module.MethodDefinition(
           descriptor = convDesc,
+          fileId = convertFileId(method.fileId),
           signature = convSig,
           effects = module.EffectInfo(
             isPure = method.effectInfo.isPure
@@ -709,6 +717,7 @@ final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TCo
         convDesc <- convertClassCtorDescriptor[TComp](armodule, ctor.descriptor)
         classCtorDef = module.ClassConstructorDefinition(
           descriptor = convDesc,
+          fileId = convertFileId(ctor.fileId),
           signature = convSig,
           effects = module.EffectInfo(
             isPure = ctor.effectInfo.isPure

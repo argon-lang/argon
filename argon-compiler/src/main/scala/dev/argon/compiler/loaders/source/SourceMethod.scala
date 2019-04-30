@@ -27,6 +27,7 @@ object SourceMethod {
     import context.scopeContext.ScopeExtensions
 
     override val descriptor: MethodDescriptor = desc
+    override val fileId: FileID = env.fileSpec.fileID
 
 
     override val isAbstract: Boolean = stmt.modifiers.exists {

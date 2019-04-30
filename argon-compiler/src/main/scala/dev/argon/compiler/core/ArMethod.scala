@@ -2,6 +2,7 @@ package dev.argon.compiler.core
 
 import scalaz._
 import Scalaz._
+import dev.argon.util.FileID
 
 abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
@@ -9,6 +10,7 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
   import context._, signatureContext.Signature
 
   val descriptor: MethodDescriptor
+  val fileId: FileID
   val owner: ArMethod.Owner[context.type, TPayloadSpec]
 
   val effectInfo: EffectInfo

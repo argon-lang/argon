@@ -31,6 +31,7 @@ object SourceClassConstructor {
     import typeSystem.{ArExpr, TType}
 
     override val descriptor: ClassConstructorDescriptor = desc
+    override val fileId: FileID = env.fileSpec.fileID
 
     override val effectInfo: EffectInfo = EffectInfo.pure
 

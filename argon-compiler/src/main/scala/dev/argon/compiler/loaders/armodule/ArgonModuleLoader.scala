@@ -234,6 +234,9 @@ object ArgonModuleLoader {
                 } yield -\/(MethodDescriptor(ownerDescValue, 0, memberNameValue))
             }
 
+          private def convertFileId(id: ArgonModule.FileID): FileID =
+            FileID(id.id)
+
           trait ObjectDefinitionLoader[TDef, TDescriptor <: AnyRef, TDefResult] {
             def apply(id: Int, definition: TDef, desc: TDescriptor): TComp[TDefResult { val descriptor: desc.type }]
           }
@@ -369,6 +372,7 @@ object ArgonModuleLoader {
                     override val contextProof: Leibniz[context.type, context.type, context.type, context.type] = Leibniz.refl
 
                     override val descriptor: desc.type = desc
+                    override val fileId: FileID = convertFileId(definition.fileId)
 
                     override val isSealed: Boolean = definition.isSealed.getOrElse(false)
 
@@ -438,6 +442,7 @@ object ArgonModuleLoader {
                     override val contextProof: Leibniz[context.type, context.type, context.type, context.type] = Leibniz.refl
 
                     override val descriptor: desc.type = desc
+                    override val fileId: FileID = convertFileId(definition.fileId)
 
                     override val isSealed: Boolean = definition.isSealed.getOrElse(false)
                     override val isOpen: Boolean = definition.isOpen.getOrElse(false)
@@ -564,6 +569,7 @@ object ArgonModuleLoader {
                   new ArFunc[context.type, TPayloadSpec] {
                     override val context: context2.type = context2
                     override val descriptor: desc.type = desc
+                    override val fileId: FileID = convertFileId(definition.fileId)
                     override val effectInfo: EffectInfo = EffectInfo(
                       isPure = definition.effects.isPure,
                     )
@@ -702,6 +708,7 @@ object ArgonModuleLoader {
                     override val context: context2.type = context2
                     override val contextProof: Leibniz[context.type, context.type, context.type, context.type] = Leibniz.refl
                     override val descriptor: desc.type = desc
+                    override val fileId: FileID = convertFileId(definition.fileId)
                     override val effectInfo: EffectInfo = EffectInfo(
                       isPure = definition.effects.isPure,
                     )

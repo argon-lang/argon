@@ -6,7 +6,7 @@ import dev.argon.compiler.core.{ArClass, _}
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.ClassDeclarationStmt
-import dev.argon.util.{SourceLocation, WithSource}
+import dev.argon.util.{FileID, SourceLocation, WithSource}
 import scalaz._
 import Scalaz._
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
@@ -48,6 +48,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     override val contextProof: Leibniz[context.type, context2.type, context.type, context2.type] = Leibniz.refl
 
     override val descriptor: desc.type = desc
+    override val fileId: FileID = env.fileSpec.fileID
 
     override val isSealed: Boolean = stmt.modifiers.exists {
       case WithSource(parser.SealedModifier, _) => true

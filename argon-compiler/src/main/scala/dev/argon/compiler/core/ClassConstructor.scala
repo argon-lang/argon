@@ -4,6 +4,7 @@ import dev.argon.compiler._
 import dev.argon.compiler.types._
 import scalaz._
 import Scalaz._
+import dev.argon.util.FileID
 
 trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
@@ -12,6 +13,7 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   val effectInfo: EffectInfo
 
   val descriptor: ClassConstructorDescriptor
+  val fileId: FileID
 
   val ownerClass: ArClass[context.type, TPayloadSpec]
   val signature: context.Comp[Signature[ClassConstructor.ResultInfo]]

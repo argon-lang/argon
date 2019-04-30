@@ -5,7 +5,7 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.compiler.lookup._
 import dev.argon.parser
-import dev.argon.util.{FileSpec, WithSource}
+import dev.argon.util.{FileID, FileSpec, WithSource}
 import scalaz._
 import Scalaz._
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
@@ -24,6 +24,7 @@ private[compiler] object SourceFunction {
       import context.scopeContext.ScopeExtensions
 
       override val descriptor: desc.type = desc
+      override val fileId: FileID = env.fileSpec.fileID
 
       override val effectInfo: EffectInfo = EffectInfo(stmt.purity)
 

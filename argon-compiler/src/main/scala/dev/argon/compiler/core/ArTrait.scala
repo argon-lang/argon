@@ -2,6 +2,7 @@ package dev.argon.compiler.core
 
 import dev.argon.compiler._
 import dev.argon.compiler.types._
+import dev.argon.util.FileID
 import scalaz.Scalaz._
 import scalaz._
 
@@ -13,6 +14,7 @@ trait ArTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   import context._, signatureContext.Signature
 
   val descriptor: TraitDescriptor
+  val fileId: FileID
 
   val isSealed: Boolean
 

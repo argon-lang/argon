@@ -1,9 +1,11 @@
 package dev.argon.compiler.core
 
 import dev.argon.compiler.types._
+
 import scala.collection.immutable._
 import scalaz._
 import Scalaz._
+import dev.argon.util.FileID
 
 
 sealed trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
@@ -12,6 +14,7 @@ sealed trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_,
   import context._, signatureContext.Signature
 
   val descriptor: DataConstructorDescriptor
+  val fileId: FileID
 
   val signature: Comp[Signature[DataConstructor.ResultInfo]]
 

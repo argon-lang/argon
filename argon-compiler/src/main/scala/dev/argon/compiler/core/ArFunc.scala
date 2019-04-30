@@ -2,12 +2,14 @@ package dev.argon.compiler.core
 
 import scalaz._
 import Scalaz._
+import dev.argon.util.FileID
 
 trait ArFunc[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
   import context._, signatureContext.Signature
 
   val descriptor: FuncDescriptor
+  val fileId: FileID
   val effectInfo: EffectInfo
 
   val signature: Comp[Signature[FunctionResultInfo]]

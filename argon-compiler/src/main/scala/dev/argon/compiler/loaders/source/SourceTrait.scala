@@ -8,7 +8,7 @@ import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.parser.TraitDeclarationStmt
-import dev.argon.util.{SourceLocation, WithSource}
+import dev.argon.util.{FileID, SourceLocation, WithSource}
 import scalaz._
 import Scalaz._
 
@@ -46,6 +46,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
     override val contextProof: Leibniz[context.type, context2.type, context.type, context2.type] = Leibniz.refl
 
     override val descriptor: desc.type = desc
+    override val fileId: FileID = env.fileSpec.fileID
 
     override val isSealed: Boolean = stmt.modifiers.exists {
       case WithSource(parser.SealedModifier, _) => true

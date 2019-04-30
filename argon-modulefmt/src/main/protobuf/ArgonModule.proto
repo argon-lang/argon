@@ -37,6 +37,10 @@ message GlobalDeclaration {
     required AccessModifier accessModifier = 2;
 }
 
+message FileID {
+    required int32 id = 1;
+}
+
 // *-ref/id
 message TraitReference {
     required int32 moduleId = 1;
@@ -85,6 +89,7 @@ message MethodMember {
 
 message TraitDefinition {
     required TraitDescriptor descriptor = 1;
+    required FileID fileId = 6;
     required TraitSignature signature = 2;
     optional bool isSealed = 3;
     repeated MethodMember methods = 4;
@@ -93,6 +98,7 @@ message TraitDefinition {
 
 message ClassDefinition {
     required ClassDescriptor descriptor = 1;
+    required FileID fileId = 10;
     required ClassSignature signature = 2;
     optional bool isOpen = 3;
     optional bool isSealed = 4;
@@ -116,6 +122,7 @@ message ClassConstructorMember {
 
 message DataConstructorDefinition {
     required DataConstructorDescriptor descriptor = 1;
+    required FileID fileId = 4;
     required DataConstructorSignature signature = 2;
     repeated MethodMember methods = 3;
 }
@@ -126,12 +133,14 @@ message EffectInfo {
 
 message FunctionDefinition {
     required FunctionDescriptor descriptor = 1;
+    required FileID fileId = 4;
     required FunctionSignature signature = 2;
     required EffectInfo effects = 3;
 }
 
 message MethodDefinition {
     required MethodDescriptor descriptor = 1;
+    required FileID fileId = 13;
     required MethodSignature signature = 2;
     oneof methodOwner {
         int32 ownerClassId = 8;
@@ -149,6 +158,7 @@ message MethodDefinition {
 
 message ClassConstructorDefinition {
     required ClassConstructorDescriptor descriptor = 1;
+    required FileID fileId = 4;
     required ClassConstructorSignature signature = 2;
     required EffectInfo effects = 3;
 }
