@@ -66,6 +66,7 @@ object VTableBuilder {
             baseTypeVTable.methodMap
               .keys
               .filter { slotMethod =>
+                slotMethod.value.isVirtual &&
                 !slotMethod.value.isFinal &&
                   slotMethod.value.descriptor.name === method.name &&
                   slotMethod.value.descriptor.name =/= MemberName.Unnamed
@@ -90,7 +91,6 @@ object VTableBuilder {
 
       private def addNewMethods[TPayloadSpec[_, _]](methods: Vector[MethodBinding[context.type, TPayloadSpec]])(source: EntrySource[context.type])(baseTypeVTable: VT): TComp[VT] =
         methods
-          .filter { _.method.isVirtual }
           .traverse { method => overrideMethod(method)(source)(baseTypeVTable) }
           .map { baseTypeVTable |+| _.suml }
 
