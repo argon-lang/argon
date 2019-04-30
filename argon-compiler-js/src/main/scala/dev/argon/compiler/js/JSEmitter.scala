@@ -117,13 +117,16 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
       case GlobalBinding.GlobalTrait(_, _, arTrait) =>
         for {
           sig <- arTrait.signature
+          methods <- arTrait.methods
+          methodObjects <- methods.traverse { method => createMethodObject(method.method) }
         } yield JSAssignment(
           JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))),
           JSFunctionCall(
             coreLibExport(arTrait.descriptor.moduleDescriptor, "createTrait"),
             Vector(
               JSObjectLiteral(Vector(
-                JSObjectProperty("symbol", JSFunctionCall(JSIdentifier("Symbol"), Vector()))
+                JSObjectProperty("symbol", JSFunctionCall(JSIdentifier("Symbol"), Vector())),
+                JSObjectProperty("methods", JSArrayLiteral(methodObjects)),
               ))
             )
           )
