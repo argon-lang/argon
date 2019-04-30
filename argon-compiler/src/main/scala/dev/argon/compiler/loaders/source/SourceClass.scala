@@ -16,13 +16,13 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
   final case class GroupedStaticStatements
   (
     staticMethods: Vector[WithSource[parser.MethodDeclarationStmt]],
-    classCtors: Vector[WithSource[parser.ClassConstructorDeclarationStmt]],
   )
 
   final case class GroupedInstanceStatements
   (
     methods: Vector[WithSource[parser.MethodDeclarationStmt]],
     fields: Vector[WithSource[parser.FieldDeclarationStmt]],
+    classCtors: Vector[WithSource[parser.ClassConstructorDeclarationStmt]],
   )
 
   def apply[TComp[+_] : Compilation]
@@ -64,12 +64,9 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
     private val groupedStatic =
       groupedStaticCache(
-        stmt.body.foldLeftM(GroupedStaticStatements(Vector.empty, Vector.empty)) {
+        stmt.body.foldLeftM(GroupedStaticStatements(Vector.empty)) {
           case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
             group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)).point[TComp]
-
-          case (group, WithSource(stmt: parser.ClassConstructorDeclarationStmt, location)) =>
-            group.copy(classCtors = group.classCtors :+ WithSource(stmt, location)).point[TComp]
 
           case (_, WithSource(_, location)) =>
             Compilation[TComp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
@@ -78,12 +75,15 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
     private val groupedInst =
       groupedInstCache(
-        stmt.instanceBody.foldLeftM(GroupedInstanceStatements(Vector.empty, Vector.empty)) {
+        stmt.instanceBody.foldLeftM(GroupedInstanceStatements(Vector.empty, Vector.empty, Vector.empty)) {
           case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
             group.copy(methods = group.methods :+ WithSource(stmt, location)).point[TComp]
 
           case (group, WithSource(stmt: parser.FieldDeclarationStmt, location)) =>
             group.copy(fields = group.fields :+ WithSource(stmt, location)).point[TComp]
+
+          case (group, WithSource(stmt: parser.ClassConstructorDeclarationStmt, location)) =>
+            group.copy(classCtors = group.classCtors :+ WithSource(stmt, location)).point[TComp]
 
           case (_, WithSource(_, location)) =>
             Compilation[TComp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
@@ -154,8 +154,8 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
       })
 
     override val classConstructors: TComp[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]] =
-      classCtorCache(groupedStatic.flatMap { statics =>
-        statics.classCtors.zipWithIndex.traverse { case (classCtor, i) =>
+      classCtorCache(groupedInst.flatMap { inst =>
+        inst.classCtors.zipWithIndex.traverse { case (classCtor, i) =>
           parseAccessModifier(env.fileSpec, classCtor.location, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
             val desc = ClassConstructorDescriptor(descriptor, i)
             SourceClassConstructor(context)(env)(this)(classCtor.value)(desc).map(ClassConstructorBinding(i, modifiers, _))

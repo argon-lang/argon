@@ -8,12 +8,9 @@
         import Ar._
 
         open class A <: Object
-        static
             public new(name: String)
                 field name = name
             end
-
-        instance
 
             field name: String
 
@@ -25,7 +22,6 @@
         end
 
         class B <: A
-        static
             public new(name: String)
                 initialize _ = A.new(name)
             end

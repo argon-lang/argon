@@ -8,12 +8,10 @@
         import Ar._
         
         class MyClass <: Object
-        static
             public new(name: String)
                 field name = name
             end
 
-        instance
             field name: String
 
             public proc self.say_hello(): Unit do

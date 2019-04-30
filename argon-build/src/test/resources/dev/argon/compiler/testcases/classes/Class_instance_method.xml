@@ -8,11 +8,9 @@
         import Ar._
         
         class MyClass <: Object
-        static
             public new()
             end
 
-        instance
             public proc self.say_hello(): Unit do
                 puts 'Hello World'
             end

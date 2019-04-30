@@ -8,12 +8,10 @@
         import Ar._
         
         class MyClass <: Object
-        static
             public new()
                 field name = 'World'
             end
 
-        instance
             field name: String
 
 
