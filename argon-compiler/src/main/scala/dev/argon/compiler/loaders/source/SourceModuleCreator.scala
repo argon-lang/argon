@@ -66,6 +66,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
             currentModule = currentModule,
             referencedModules = referencedModules,
             scope = scope,
+            allowAbstractConstructor = false,
           )
 
 

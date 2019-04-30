@@ -75,16 +75,19 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 case Some(t: ClassType) =>
                   memberName match {
                     case MemberName.New =>
-                      implicitly[TypeCheck[TComp]].fromContextComp(context)(t.arClass.value.classConstructors).flatMap {
-                        case Vector(ClassConstructorBinding(_, _, classCtor)) =>
-                          for {
-                            _ <- Compilation[TComp].require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                            sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(classCtor.signature)
-                            convSig = convertSignature(sig)
-                          } yield signatureFactory(env)(location)(convSig) { (args, result) => ClassConstructorCall(t, AbsRef(classCtor), args).upcast[ArExpr].point[TComp] }
+                      if(!env.allowAbstractConstructor && t.arClass.value.isAbstract)
+                        Compilation[TComp].forErrors(CompilationError.AbstractClassConstructorCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                      else
+                        implicitly[TypeCheck[TComp]].fromContextComp(context)(t.arClass.value.classConstructors).flatMap {
+                          case Vector(ClassConstructorBinding(_, _, classCtor)) =>
+                            for {
+                              _ <- Compilation[TComp].require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                              sig <- implicitly[TypeCheck[TComp]].fromContextComp(context)(classCtor.signature)
+                              convSig = convertSignature(sig)
+                            } yield signatureFactory(env)(location)(convSig) { (args, result) => ClassConstructorCall(t, AbsRef(classCtor), args).upcast[ArExpr].point[TComp] }
 
-                        case _ => ???
-                      }
+                          case _ => ???
+                        }
 
                     case methodName: MethodName =>
                       implicitly[TypeCheck[TComp]].fromContextComp(context)(t.arClass.value.staticMethods)
@@ -630,6 +633,7 @@ object ExpressionConverter {
     currentModule: ArModule[TContext, DeclarationPayloadSpecifier],
     referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]],
     scope: TScope,
+    allowAbstractConstructor: Boolean,
   )
 
   trait EnvCreator[TContext <: Context with Singleton] {
@@ -683,6 +687,7 @@ object ExpressionConverter {
       currentModule = env.currentModule,
       referencedModules = env.referencedModules,
       scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
+      allowAbstractConstructor = env.allowAbstractConstructor,
     )
 
     fillHoles(context)(ts)(
@@ -722,6 +727,7 @@ object ExpressionConverter {
       currentModule = env.currentModule,
       referencedModules = env.referencedModules,
       scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
+      allowAbstractConstructor = env.allowAbstractConstructor,
     )
 
     val tcExpr = converter.evaluateTypeExprAST[HoleTypeCheckComp[TComp, ts.TType, ?]](env2)(expr)(tcInstance)
@@ -748,6 +754,7 @@ object ExpressionConverter {
       currentModule = env.currentModule,
       referencedModules = env.referencedModules,
       scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
+      allowAbstractConstructor = env.allowAbstractConstructor,
     )
 
     val tcExpr = converter.resolveUnitType[HoleTypeCheckComp[TComp, ts.TType, ?]](env2)(location)(tcInstance)

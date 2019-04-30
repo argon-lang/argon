@@ -134,7 +134,7 @@ object SourceClassConstructor {
                   None.point[TComp]
 
                 case (Some(baseCtorExpr), Some(baseClass)) =>
-                  ExpressionConverter.convertExpression(context)(env2)(typeSystem.fromSimpleType(baseClass))(baseCtorExpr).flatMap {
+                  ExpressionConverter.convertExpression(context)(env2.copy(allowAbstractConstructor = true))(typeSystem.fromSimpleType(baseClass))(baseCtorExpr).flatMap {
                     case baseCall: typeSystem.ClassConstructorCall => Some(baseCall).point[TComp]
                     case _ =>
                       Compilation[TComp].forErrors(

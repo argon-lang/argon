@@ -362,6 +362,10 @@ object CompilationError {
     override def message: String = s"Extern implementation $name is unknown."
   }
 
+  final case class AbstractClassConstructorCalledError(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Cannot call constructor of abstract class."
+  }
+
 
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context
