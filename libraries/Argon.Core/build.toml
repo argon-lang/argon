@@ -106,9 +106,20 @@ export function createClass(creator) {
 	if(creator.methods) createMethods(creator.methods, methods);
 	cls.methods = Object.freeze(methods);
 
+	const clsStatic = Object.create(null);
 	const staticMethods = Object.create(null);
 	if(creator.staticMethods) createMethods(creator.staticMethods, staticMethods);
-	cls.staticMethods = Object.freeze(staticMethods);
+	clsStatic.methods = Object.freeze(staticMethods);
+	cls.static = clsStatic;
+
+	cls.create = function() {
+		const clsObj = Object.create(null);
+		for(const desc in this.static.methods) {
+			const methodInfo = this.static.methods[desc];
+			clsObj[methodInfo.symbol] = methodInfo.value;
+		}
+		return clsObj;
+	};
 
 	return Object.freeze(cls);
 }

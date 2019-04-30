@@ -18,6 +18,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
   private val funcsVarName = JSIdentifier("functions")
   private val methodsPropName = JSIdentifier("methods")
   private val constructorsPropName = JSIdentifier("constructors")
+  private val classCreateMethodName = JSIdentifier("create")
 
   private val create_empty_obj = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("create")), Vector(JSNull))
   private def freeze_obj(varName: JSIdentifier) = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("freeze")), Vector(varName))
@@ -492,6 +493,18 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
 
       case e @ Sequence(_, _) =>
         wrapStatement(owner)(e)
+
+      case ClassType(arClass, args, _) =>
+        for {
+          sig <- arClass.value.signature
+          erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
+          classObj = getClassJSObject(getParamOwnerModule(owner), arClass.value.descriptor, erasedSig)
+
+          argExprs <- args.traverse(convertExpr(owner)(_))
+        } yield JSFunctionCall(
+          JSPropertyAccessDot(classObj, classCreateMethodName),
+          argExprs
+        )
 
       case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
     }
