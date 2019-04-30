@@ -29,6 +29,6 @@
             
     ]]></InputSource>
 
-    <ExpectedError>InvalidEffectError</ExpectedError>
+    <ExpectedError>ImpureFunctionCalledError</ExpectedError>
 
 </ArgonTest>
