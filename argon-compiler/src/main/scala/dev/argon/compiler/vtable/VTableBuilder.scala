@@ -14,8 +14,11 @@ sealed abstract class VTableBuilder[TComp[+_]: Compilation, TContext <: ContextC
 
 object VTableBuilder {
 
-  def apply[TComp[+_]: Compilation, TContext <: ContextComp[TComp] with Singleton](context: TContext): VTableBuilder[TComp, context.type] =
-    new VTableBuilder[TComp, context.type] {
+  def apply[TComp[+_]: Compilation, TContext <: ContextComp[TComp] with Singleton](context: TContext): TComp[VTableBuilder[TComp, context.type]] = for {
+    classVtableCache <- Compilation[TComp].createMemo[AbsRef[context.type, ArClass], VTable[context.type]]
+    traitVtableCache <- Compilation[TComp].createMemo[AbsRef[context.type, ArTrait], VTable[context.type]]
+    dataCtorVtableCache <- Compilation[TComp].createMemo[AbsRef[context.type, DataConstructor], VTable[context.type]]
+  } yield new VTableBuilder[TComp, context.type] {
 
       type VT = VTable[context.type]
       type Entry = VTableEntry[context.type]
@@ -116,44 +119,59 @@ object VTableBuilder {
         baseTraits.foldLeft(Vector.empty[AbsRef[context.type, ArTrait]])(addTrait(_, _))
       }
 
-      override def fromClass[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): TComp[VT] = for {
-        sig <- arClass.signature
-        baseClass = sig.unsubstitutedResult.baseTypes.baseClass
-        baseTraits = sig.unsubstitutedResult.baseTypes.baseTraits
-        baseClassVTable <- baseClass.traverse(bc => fromClass(bc.arClass.value))
-        baseTraitVTables <- baseTraits.traverse(bt => fromTrait(bt.arTrait.value))
+      override def fromClass[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): TComp[VT] =
+        classVtableCache { arClassWrap =>
+          val arClass = arClassWrap.value
 
-        baseTypeOnlyVTable = baseClassVTable.suml |+| baseTraitVTables.suml
+          for {
+            sig <- arClass.signature
+            baseClass = sig.unsubstitutedResult.baseTypes.baseClass
+            baseTraits = sig.unsubstitutedResult.baseTypes.baseTraits
+            baseClassVTable <- baseClass.traverse(bc => fromClass(bc.arClass.value))
+            baseTraitVTables <- baseTraits.traverse(bt => fromTrait(bt.arTrait.value))
 
-        methods <- arClass.methods
-        source = EntrySourceClass(AbsRef(arClass), findAllBaseClasses(baseClass), findAllBaseTraits(baseTraits))
-        newVTable <- addNewMethods(methods)(source)(baseTypeOnlyVTable)
+            baseTypeOnlyVTable = baseClassVTable.suml |+| baseTraitVTables.suml
 
-      } yield newVTable
+            methods <- arClass.methods
+            source = EntrySourceClass(AbsRef(arClass), findAllBaseClasses(baseClass), findAllBaseTraits(baseTraits))
+            newVTable <- addNewMethods(methods)(source)(baseTypeOnlyVTable)
 
-      override def fromTrait[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): TComp[VT] = for {
-        sig <- arTrait.signature
-        baseTraits = sig.unsubstitutedResult.baseTypes.baseTraits
-        baseTraitVTables <- baseTraits.traverse(bt => fromTrait(bt.arTrait.value))
+          } yield newVTable
+        }(AbsRef(arClass))
 
-        baseTraitOnlyVTable = baseTraitVTables.suml
+      override def fromTrait[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): TComp[VT] =
+        traitVtableCache { arTraitWrap =>
+          val arTrait = arTraitWrap.value
 
-        methods <- arTrait.methods
-        source = EntrySourceTrait(AbsRef(arTrait), findAllBaseTraits(baseTraits))
-        newVTable <- addNewMethods(methods)(source)(baseTraitOnlyVTable)
+          for {
+            sig <- arTrait.signature
+            baseTraits = sig.unsubstitutedResult.baseTypes.baseTraits
+            baseTraitVTables <- baseTraits.traverse(bt => fromTrait(bt.arTrait.value))
 
-      } yield newVTable
+            baseTraitOnlyVTable = baseTraitVTables.suml
 
-      override def fromDataConstructor[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): TComp[VT] = for {
-        sig <- ctor.signature
-        baseTrait = sig.unsubstitutedResult.instanceType
-        baseTraitVTable <- fromTrait(baseTrait.arTrait.value)
+            methods <- arTrait.methods
+            source = EntrySourceTrait(AbsRef(arTrait), findAllBaseTraits(baseTraits))
+            newVTable <- addNewMethods(methods)(source)(baseTraitOnlyVTable)
 
-        methods <- ctor.methods
-        source = EntrySourceDataCtor(AbsRef(ctor), findAllBaseTraits(Vector(baseTrait)))
-        newVTable <- addNewMethods(methods)(source)(baseTraitVTable)
+          } yield newVTable
+        }(AbsRef(arTrait))
 
-      } yield newVTable
+      override def fromDataConstructor[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): TComp[VT] =
+        dataCtorVtableCache { dataCtorWrap =>
+          val ctor = dataCtorWrap.value
+
+          for {
+            sig <- ctor.signature
+            baseTrait = sig.unsubstitutedResult.instanceType
+            baseTraitVTable <- fromTrait(baseTrait.arTrait.value)
+
+            methods <- ctor.methods
+            source = EntrySourceDataCtor(AbsRef(ctor), findAllBaseTraits(Vector(baseTrait)))
+            newVTable <- addNewMethods(methods)(source)(baseTraitVTable)
+
+          } yield newVTable
+        }(AbsRef(ctor))
     }
 
 }

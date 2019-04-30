@@ -66,6 +66,8 @@ export function createClass(creator) {
 
 	lazyProperty(cls, "constructor", function() {
 
+		const vtable = creator.vtable;
+
 		return createClassConstructor(creator.baseClass, ctorMap, function(proto) {
 			const implTraits = creator.baseTraits;
 			if(implTraits) {
@@ -73,7 +75,7 @@ export function createClass(creator) {
 					implementTrait(proto, trait);
 				}
 			}
-			implementMethods(proto, methods);
+			implementMethods(proto, vtable);
 		});
 	});
 
@@ -147,10 +149,9 @@ function implementTrait(obj, trait) {
 	}
 }
 
-function implementMethods(obj, methods) {
-	for(const method in methods) {
-		const methodInfo = methods[method];
-		obj[methodInfo.symbol] = methodInfo.value;
+function implementMethods(obj, vtable) {
+	for(const entry of vtable) {
+		obj[entry.symbol] = entry.value;
 	}
 }
 

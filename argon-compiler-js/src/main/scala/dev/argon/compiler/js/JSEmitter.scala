@@ -7,6 +7,7 @@ import dev.argon.compiler.core.PayloadSpecifiers._
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
+import dev.argon.compiler.vtable._
 
 final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] with Singleton](context: TContext, inject: JSInjectCode[Id]) {
 
@@ -30,7 +31,8 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
 
     for {
       globalNamespace <- module.globalNamespace
-      topLevelStmts <- allNamespaceElements(globalNamespace).toVector.traverse(createObjectsForScopeValue)
+      vtableBuilder <- VTableBuilder[TComp, context.type](context)
+      topLevelStmts <- allNamespaceElements(globalNamespace).toVector.traverse(createObjectsForScopeValue(vtableBuilder))
     } yield JSModule(
       Vector(
         modulePairs.map { case (refModule, importId) =>
@@ -94,7 +96,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
         JSIdentifier(name)
       )
 
-  private def createObjectsForScopeValue(value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): TComp[JSStatement] =
+  private def createObjectsForScopeValue(vtableBuilder: VTableBuilder[TComp, context.type])(value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): TComp[JSStatement] =
     value match {
       case GlobalBinding.GlobalFunction(_, _, func) =>
         for {
@@ -143,6 +145,29 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
           staticMethodObjects <- staticMethods.traverse { method => createMethodObject(method.method) }
           ctorObjects <- classConstructors.traverse { ctor => createClassCtorObject(ctor.ctor) }
 
+          vtable <- vtableBuilder.fromClass(arClass)
+          vtableObjects <- vtable.methodMap.toVector.traverse {
+            case (slotMethod, VTableEntryMethod(method, _)) =>
+              for {
+                slotSym <- getMethodSymbol(getParamOwnerModule(arClass.descriptor))(slotMethod)
+                implObj <- getMethodObject(getParamOwnerModule(arClass.descriptor))(method)
+              } yield JSObjectLiteral(Vector(
+                JSObjectProperty("symbol", slotSym),
+                JSObjectProperty("value", JSPropertyAccessDot(
+                  implObj,
+                  JSIdentifier("value")
+                )),
+              ))
+
+            case (slotMethod, _) =>
+              for {
+                slotSym <- getMethodSymbol(getParamOwnerModule(arClass.descriptor))(slotMethod)
+              } yield JSObjectLiteral(Vector(
+                JSObjectProperty("symbol", slotSym),
+                JSObjectProperty("value", JSNull),
+              ))
+          }
+
           baseClassExpr <- sig.unsubstitutedResult.baseTypes.baseClass.traverse { baseClass =>
             baseClass.arClass.value.signature.map { sig =>
               val erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
@@ -181,6 +206,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
               JSObjectProperty("methods", JSArrayLiteral(methodObjects)),
               JSObjectProperty("staticMethods", JSArrayLiteral(staticMethodObjects)),
               JSObjectProperty("constructors", JSArrayLiteral(ctorObjects)),
+              JSObjectGetProperty("vtable", Vector(JSReturn(JSArrayLiteral(vtableObjects)))),
             ),
 
           ).flatten)
@@ -438,24 +464,9 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
 
       case MethodCall(method, instance, args, _) =>
         for {
-          sig <- method.value.signature
-
           instanceExpr <- convertExpr(owner)(instance)
 
-          ownerObj <- getClassLikeJSObject(getParamOwnerModule(owner), method.value.owner)
-
-          methodSymbol =
-            JSPropertyAccessDot(
-              JSPropertyAccessBracket(
-                JSPropertyAccessDot(
-                  ownerObj,
-                  methodsPropName
-                ),
-                JSString(DescriptorId.forMethod(method.value.descriptor, ErasedSignature.fromSignature(context)(sig)))
-              ),
-              JSIdentifier("symbol")
-            )
-
+          methodSymbol <- getMethodSymbol(getParamOwnerModule(owner))(method)
           methodExpr = JSPropertyAccessBracket(instanceExpr, methodSymbol)
 
           argExprs <- args.traverse(convertExpr(owner)(_))
@@ -485,6 +496,24 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
       case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
     }
   }
+
+  def getMethodObject(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): TComp[JSExpression] = for {
+    sig <- method.value.signature
+    ownerObj <- getClassLikeJSObject(moduleDescriptor, method.value.owner)
+  } yield JSPropertyAccessBracket(
+    JSPropertyAccessDot(
+      ownerObj,
+      methodsPropName
+    ),
+    JSString(DescriptorId.forMethod(method.value.descriptor, ErasedSignature.fromSignature(context)(sig)))
+  )
+
+  def getMethodSymbol(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): TComp[JSExpression] = for {
+    methodObj <- getMethodObject(moduleDescriptor)(method)
+  } yield JSPropertyAccessDot(
+    methodObj,
+    JSIdentifier("symbol")
+  )
 
   def wrapStatement(owner: ParameterOwnerDescriptor)(expr: context.typeSystem.ArExpr): TComp[JSExpression] =
     for {
