@@ -70,9 +70,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   )
               }.point[TComp]
 
-            case Some(TypeOfType(_)) =>
-              thisExpr match {
-                case t: ClassType =>
+            case Some(TypeOfType(thisType, _)) =>
+              unwrapType(thisType) match {
+                case Some(t: ClassType) =>
                   memberName match {
                     case MemberName.New =>
                       implicitly[TypeCheck[TComp]].fromContextComp(context)(t.arClass.value.classConstructors).flatMap {
@@ -1021,6 +1021,11 @@ object ExpressionConverter {
               .map(context.typeSystem.TupleElement(_))
         }
         .map(context.typeSystem.LoadTupleType(_))
+
+    case ts.TypeOfType(inner, universe) =>
+      for {
+        newInner <- fillHolesTypeChildren(context)(ts)(inner)
+      } yield context.typeSystem.TypeOfType(newInner, universe)
 
     case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
   }

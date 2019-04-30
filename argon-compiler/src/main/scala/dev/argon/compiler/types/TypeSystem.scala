@@ -143,13 +143,13 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
 
   sealed trait SimpleType extends ArExpr {
-    override lazy val exprType: TType = fromSimpleType(TypeOfType(TypeUniverse(universe)))
+    override lazy val exprType: TType = fromSimpleType(TypeOfType(fromSimpleType(this), TypeUniverse(universe)))
     override val universe: TypeUniverse
   }
 
   sealed trait TypeWithMethods extends SimpleType
 
-  final case class TypeOfType(universe: TypeUniverse) extends SimpleType
+  final case class TypeOfType(inner: TType, universe: TypeUniverse) extends SimpleType
   final case class TraitType(arTrait: WrapRef[ArTrait], args: Vector[TType], baseTypes: BaseTypeInfoTrait) extends TypeWithMethods {
     override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
@@ -350,6 +350,14 @@ trait TypeSystem[TContext <: Context with Singleton] {
             } yield SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(argCheck, resCheck))
           ).run
 
+        case (TypeOfType(innerA, _), TypeOfType(innerB, _)) =>
+          (
+            for {
+              c1 <- OptionT(isSubType(innerA, innerB))
+              c2 <- OptionT(isSubType(innerB, innerA))
+            } yield SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(c1, c2))
+          ).run
+
         case (_, _) => notSubType
       },
     ).findMapM(_())
@@ -430,8 +438,10 @@ object TypeSystem {
     case t1: ts.ClassType => convertClassType(context)(ts)(otherTS)(converter)(t1).map(identity)
     case t1: ts.DataConstructorType => convertDataConstructorType(context)(ts)(otherTS)(converter)(t1).map(identity)
 
-    case ts.TypeOfType(universe) =>
-      (otherTS.TypeOfType(universe) : otherTS.SimpleType).point[F]
+    case ts.TypeOfType(inner, universe) =>
+      for {
+        newInner <- convertTypeSystem(context)(ts)(otherTS)(converter)(inner)
+      } yield (otherTS.TypeOfType(newInner, universe) : otherTS.SimpleType)
 
     case t1: ts.LoadTupleType =>
       t1.typeValues
