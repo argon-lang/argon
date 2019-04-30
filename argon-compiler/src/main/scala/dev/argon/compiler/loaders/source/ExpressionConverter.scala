@@ -42,7 +42,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         implicitly[TypeCheck[TComp]].resolveType(thisExpr.exprType).flatMap { resolvedType =>
           unwrapType(resolvedType) match {
             case Some(resolvedTypeWithMethods: TypeWithMethods) =>
-              implicitly[TypeCheck[TComp]].fromContextComp(context)(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(memberName)).flatMap {
+              implicitly[TypeCheck[TComp]].fromContextComp(context)(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.descriptor, env.fileSpec)(memberName)).flatMap {
                 case OverloadResult.List(Vector(MemberValue.Method(method)), _) =>
                   for {
                     _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))

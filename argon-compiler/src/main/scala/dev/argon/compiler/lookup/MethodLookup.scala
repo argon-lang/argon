@@ -1,6 +1,7 @@
 package dev.argon.compiler.lookup
 
 import dev.argon.compiler.core._
+import dev.argon.util.FileSpec
 import dev.argon.compiler.types.TypeSystem
 import scalaz._
 import Scalaz._
@@ -8,10 +9,10 @@ import dev.argon.compiler.Compilation
 
 object MethodLookup {
 
-  def lookupMethods(context: Context)(ts: TypeSystem[context.type])(instanceType: ts.TypeWithMethods)(memberName: MemberName): context.Comp[OverloadResult[MemberValue[context.type]]] =
-    lookupMethodsImpl(context)(ts)(memberName)(Vector(instanceType))(Set.empty)
+  def lookupMethods(context: Context)(ts: TypeSystem[context.type])(instanceType: ts.TypeWithMethods)(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName): context.Comp[OverloadResult[MemberValue[context.type]]] =
+    lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(Vector(instanceType))(Set.empty)
 
-  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(memberName: MemberName)(instanceTypes: Vector[ts.TypeWithMethods])(seenTypes: Set[MethodOwnerDescriptor]): context.Comp[OverloadResult[MemberValue[context.type]]] =
+  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName)(instanceTypes: Vector[ts.TypeWithMethods])(seenTypes: Set[MethodOwnerDescriptor]): context.Comp[OverloadResult[MemberValue[context.type]]] =
     if(instanceTypes.isEmpty)
       context.compCompilationInstance.point(OverloadResult.End)
     else {
@@ -33,20 +34,27 @@ object MethodLookup {
             case ts.DataConstructorType(ctor, _, _) => context.compCompilationInstance.map(ctor.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
           }(context.compCompilationInstance, implicitly)
       ) { memberValues =>
-        val filteredMembers = memberValues.filter { method =>
-          val methodName = method.arMethod.value.name
-          methodName =/= MemberName.Unnamed && memberName === methodName
-        }
-
-        context.compCompilationInstance.map(
-          lookupMethodsImpl(context)(ts)(memberName)(newBaseTypes)(newSeenTypes)
-        ) { baseTypeOverloads =>
-            if(filteredMembers.nonEmpty)
-              OverloadResult.List(filteredMembers, baseTypeOverloads)
-            else
-              baseTypeOverloads
+        context.compCompilationInstance.bind(
+          memberValues
+            .filter { method =>
+              val methodName = method.arMethod.value.name
+              methodName =/= MemberName.Unnamed && memberName === methodName
+            }
+            .filterM { method =>
+              AccessCheck.checkInstance[context.Comp, context.type, method.arMethod.PayloadSpec](callerDescriptor, fileSpec, method.arMethod.value)(context.compCompilationInstance)
+            }(context.compCompilationInstance)
+        ) { filteredMembers =>
+            context.compCompilationInstance.map(
+              lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(newBaseTypes)(newSeenTypes)
+            ) { baseTypeOverloads =>
+              if(filteredMembers.nonEmpty)
+                OverloadResult.List(filteredMembers, baseTypeOverloads)
+              else
+                baseTypeOverloads
+            }
           }
-        }
+      }
+
     }
 
   private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem[context.type])(t: ts.SimpleType): Option[MethodOwnerDescriptor] =
