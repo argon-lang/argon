@@ -178,4 +178,10 @@ object Token {
   case object OP_SUPERTYPE extends TokenWithCategory(TokenCategory.OP_SUPERTYPE) with Token
   case object OP_LAMBDA_TYPE extends TokenWithCategory(TokenCategory.OP_LAMBDA_TYPE) with Token
   case object OP_LAMBDA extends TokenWithCategory(TokenCategory.OP_LAMBDA) with Token
+  case object OP_UNION extends TokenWithCategory(TokenCategory.OP_UNION) with BinaryOperatorToken {
+    override def binaryOperator: BinaryOperator = BinaryOperator.Union
+  }
+  case object OP_INTERSECTION extends TokenWithCategory(TokenCategory.OP_INTERSECTION) with BinaryOperatorToken {
+    override def binaryOperator: BinaryOperator = BinaryOperator.Intersection
+  }
 }

@@ -60,6 +60,8 @@ object ArgonParser {
     case object MemberAccess extends ArgonRuleNameTyped[WithSource[Expr] => Expr]
     case object UnaryExpr extends ArgonRuleNameTyped[Expr]
     case object ConstrainedTypeExpr extends ArgonRuleNameTyped[Expr]
+    case object IntersectionExpr extends ArgonRuleNameTyped[Expr]
+    case object UnionExpr extends ArgonRuleNameTyped[Expr]
     case object MultiplicativeExpr extends ArgonRuleNameTyped[Expr]
     case object AdditiveExpr extends ArgonRuleNameTyped[Expr]
     case object ShiftExpr extends ArgonRuleNameTyped[Expr]
@@ -313,11 +315,21 @@ object ArgonParser {
                 TypeExpr(instanceType, subtypeOf, supertypeOf)
             }
 
+        case Rule.IntersectionExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_INTERSECTION),
+          )(rule(Rule.UnaryExpr))
+
+        case Rule.UnionExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_UNION),
+          )(rule(Rule.IntersectionExpr))
+
         case Rule.MultiplicativeExpr =>
           createLeftAssociativeOperatorRule(
             ruleBinaryOperator(OP_MUL),
             ruleBinaryOperator(OP_DIV),
-          )(rule(Rule.UnaryExpr))
+          )(rule(Rule.UnionExpr))
 
         case Rule.AdditiveExpr =>
           createLeftAssociativeOperatorRule(

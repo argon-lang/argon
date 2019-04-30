@@ -242,8 +242,8 @@ object Lexer {
             op(token(CharacterCategory.Times, "×"), Token.OP_MUL) |
             op(slash, Token.OP_DIV) |
             op(token(CharacterCategory.Divide, "÷"), Token.OP_DIV) |
-            op(and, Token.OP_BITAND) |
-            op(or, Token.OP_BITOR) |
+            op(and, Token.OP_INTERSECTION) |
+            op(or, Token.OP_UNION) |
             op(caret, Token.OP_BITXOR) |
             op(tilde, Token.OP_BITNOT) |
             op(lessThan, Token.OP_LESSTHAN) |

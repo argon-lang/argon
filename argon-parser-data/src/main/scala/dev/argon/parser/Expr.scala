@@ -135,6 +135,8 @@ object BinaryOperator {
   case object BoolAnd extends BinaryOperator
   case object ShiftLeft extends BinaryOperator
   case object ShiftRight extends BinaryOperator
+  case object Union extends BinaryOperator
+  case object Intersection extends BinaryOperator
 }
 
 sealed trait UnaryOperator

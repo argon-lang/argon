@@ -142,9 +142,9 @@ object CompilationError {
       case TokenCategory.OP_SUB => "-"
       case TokenCategory.OP_MUL => "× (or *)"
       case TokenCategory.OP_DIV => "÷ (or /)"
-      case TokenCategory.OP_BITAND => "&"
-      case TokenCategory.OP_BITOR => "|"
-      case TokenCategory.OP_BITXOR => "^"
+      case TokenCategory.OP_BITAND => "&&&"
+      case TokenCategory.OP_BITOR => "|||"
+      case TokenCategory.OP_BITXOR => "^^^"
       case TokenCategory.OP_BITNOT => "~"
       case TokenCategory.OP_LESSTHAN => "<"
       case TokenCategory.OP_GREATERTHAN => ">"
@@ -153,6 +153,8 @@ object CompilationError {
       case TokenCategory.OP_SUPERTYPE => ">:"
       case TokenCategory.OP_LAMBDA_TYPE => "->"
       case TokenCategory.OP_LAMBDA => "=>"
+      case TokenCategory.OP_UNION => "|"
+      case TokenCategory.OP_INTERSECTION => "&"
     }
 
     private def formatCharacterCategory(category: CharacterCategory) = category match {
