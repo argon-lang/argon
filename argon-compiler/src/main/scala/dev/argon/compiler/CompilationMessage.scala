@@ -384,7 +384,13 @@ object CompilationError {
     override def message: String = "An abstract method was not implemented."
   }
 
+  final case class FieldReinitializedError(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "An initialized field cannot be reinitialized."
+  }
 
+  final case class FieldNotInitializedError(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "A field was not initialized."
+  }
 
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context
