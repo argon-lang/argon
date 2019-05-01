@@ -368,6 +368,17 @@ object CompilationError {
     override def message: String = "Cannot call constructor of abstract class."
   }
 
+  final case class NonOpenClassExtendedError(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Cannot extend non-open class."
+  }
+
+  final case class SealedClassExtendedError(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "A sealed class may only be extend in the same file."
+  }
+
+  final case class SealedTraitExtendedError(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "A sealed trait may only be extend in the same file."
+  }
 
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context

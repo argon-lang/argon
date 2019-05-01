@@ -38,7 +38,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
     methodCache <- Compilation[TComp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
     staticMethodCache <- Compilation[TComp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
 
-  } yield new ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
+  } yield new ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] with OpenSealedCheck {
     override val context: context2.type = context2
 
     import context.signatureContext.Signature
@@ -57,7 +57,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
       sigCache(
         SourceSignatureCreator.fromParameters[TComp, ArTrait.ResultInfo](context2)(
           env(context)(EffectInfo.pure, descriptor)
-        )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType))
+        )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType)(this))
       )
 
     private val groupedStatic =
@@ -121,7 +121,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
   }
 
 
-  private def resultCreator(baseTypeExpr: Option[WithSource[parser.Expr]]): ResultCreator[ArTrait.ResultInfo] = new ResultCreator[ArTrait.ResultInfo] {
+  private def resultCreator(baseTypeExpr: Option[WithSource[parser.Expr]])(osCheck: OpenSealedCheck): ResultCreator[ArTrait.ResultInfo] = new ResultCreator[ArTrait.ResultInfo] {
     override def createResult[TComp[+ _] : Compilation]
     (context: ContextComp[TComp])
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
@@ -130,6 +130,14 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
         case Some(baseTypeExpr) =>
           ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
             .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoTrait(Vector())))
+            .flatMap { baseTypes =>
+              val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
+
+              baseTypes.baseTraits.traverse_ { baseTrait =>
+                osCheck.checkExtendTrait(baseTrait.arTrait.value)(messageSource)
+              }
+                .map { _ => baseTypes }
+            }
         case None =>
           context.typeSystem.BaseTypeInfoTrait(Vector()).point[TComp]
       })

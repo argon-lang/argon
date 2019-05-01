@@ -41,7 +41,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     staticMethodCache <- Compilation[TComp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
     classCtorCache <- Compilation[TComp].createCache[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]]
 
-  } yield new ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
+  } yield new ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] with OpenSealedCheck {
     override val context: context2.type = context2
     import context.signatureContext.Signature
 
@@ -95,7 +95,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
       sigCache(
         SourceSignatureCreator.fromParameters[TComp, ArClass.ResultInfo](context2)(
           env(context)(EffectInfo.pure, descriptor)
-        )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType))
+        )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType)(this))
       )
 
     override val fields: TComp[Vector[context.typeSystem.FieldVariable]] =
@@ -168,7 +168,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     override val payload: Unit = ()
   }
 
-  private def resultCreator(baseTypeExpr: Option[WithSource[parser.Expr]]): ResultCreator[ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
+  private def resultCreator(baseTypeExpr: Option[WithSource[parser.Expr]])(osCheck: OpenSealedCheck): ResultCreator[ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
     override def createResult[TComp[+ _] : Compilation]
     (context: ContextComp[TComp])
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
@@ -177,6 +177,19 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         case Some(baseTypeExpr) =>
           ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
             .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoClass(None, Vector())))
+            .flatMap { baseTypes =>
+              val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
+
+              baseTypes.baseClass.traverse_ { baseClass =>
+                osCheck.checkExtendClass(baseClass.arClass.value)(messageSource)
+              }
+                .flatMap { _ =>
+                  baseTypes.baseTraits.traverse_ { baseTrait =>
+                    osCheck.checkExtendTrait(baseTrait.arTrait.value)(messageSource)
+                  }
+                }
+                .map { _ => baseTypes }
+            }
         case None =>
           context.typeSystem.BaseTypeInfoClass(None, Vector()).point[TComp]
       })

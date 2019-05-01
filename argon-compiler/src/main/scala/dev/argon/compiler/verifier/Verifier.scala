@@ -9,7 +9,7 @@ import Scalaz._
 
 class Verifier {
 
-  def passes: Set[VerifyPass] = Set(SealedOpenPass)
+  def passes: Set[VerifyPass] = Set()
 
   def verifyModule[TComp[+_] : Compilation](context: ContextComp[TComp])(module: ArModule[context.type, DeclarationPayloadSpecifier]): TComp[Unit] =
     module.globalNamespace.flatMap { globalNamespace =>
