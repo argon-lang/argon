@@ -5,6 +5,7 @@ import dev.argon.compiler.types._
 import scala.collection.immutable._
 import scalaz._
 import Scalaz._
+import dev.argon.compiler.CompilationMessageSource
 import dev.argon.util.FileID
 
 abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
@@ -14,6 +15,7 @@ abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
 
   val descriptor: ClassDescriptor
   val fileId: FileID
+  val classMessageSource: CompilationMessageSource
 
   val isOpen: Boolean
   val isSealed: Boolean

@@ -617,7 +617,7 @@ object ArgonParser {
         case Rule.ClassDeclarationStmt =>
           rule(Rule.Modifiers) ++
             matchToken(KW_CLASS) ++! (
-              rule(Rule.Identifier) ++
+              rule(Rule.Identifier).observeSource ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_SUBTYPE) ++
                 rule(Rule.BaseTypeSpecifier) ++

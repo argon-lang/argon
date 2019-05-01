@@ -443,6 +443,7 @@ object ArgonModuleLoader {
 
                     override val descriptor: desc.type = desc
                     override val fileId: FileID = convertFileId(definition.fileId)
+                    override val classMessageSource: CompilationMessageSource = CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
 
                     override val isSealed: Boolean = definition.isSealed.getOrElse(false)
                     override val isOpen: Boolean = definition.isOpen.getOrElse(false)

@@ -380,6 +380,12 @@ object CompilationError {
     override def message: String = "A sealed trait may only be extend in the same file."
   }
 
+  final case class AbstractMethodNotImplementedError(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "An abstract method was not implemented."
+  }
+
+
+
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context
     val typeSystem: TypeSystem[context.type]

@@ -49,6 +49,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
     override val descriptor: desc.type = desc
     override val fileId: FileID = env.fileSpec.fileID
+    override val classMessageSource: CompilationMessageSource = CompilationMessageSource.SourceFile(env.fileSpec, stmt.name.location)
 
     override val isSealed: Boolean = stmt.modifiers.exists {
       case WithSource(parser.SealedModifier, _) => true

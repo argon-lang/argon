@@ -5,6 +5,7 @@ import dev.argon.compiler.types._
 import scala.collection.immutable._
 import scalaz._
 import Scalaz._
+import dev.argon.compiler.CompilationMessageSource
 import dev.argon.util.FileID
 
 
@@ -15,6 +16,7 @@ sealed trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_,
 
   val descriptor: DataConstructorDescriptor
   val fileId: FileID
+  val ctorMessageSource: CompilationMessageSource
 
   val signature: Comp[Signature[DataConstructor.ResultInfo]]
 

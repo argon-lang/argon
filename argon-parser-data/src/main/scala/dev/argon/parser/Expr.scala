@@ -26,7 +26,7 @@ final case class DataConstructorDeclarationStmt
 final case class ClassDeclarationStmt
 (
   baseType: Option[WithSource[Expr]],
-  name: Option[String],
+  name: WithSource[Option[String]],
   parameters: Vector[WithSource[FunctionParameterList]],
   body: Vector[WithSource[Stmt]],
   instanceBody: Vector[WithSource[Stmt]],

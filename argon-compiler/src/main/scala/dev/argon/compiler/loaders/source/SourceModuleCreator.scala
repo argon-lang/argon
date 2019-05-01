@@ -139,7 +139,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           } yield GlobalBinding.GlobalTrait(globalName, accessModifier, arTrait)
         }
 
-      case classDeclarationStmt @ parser.ClassDeclarationStmt(_, className, _, _, _, modifiers) =>
+      case classDeclarationStmt @ parser.ClassDeclarationStmt(_, WithSource(className, _), _, _, _, modifiers) =>
         createBinding(className, modifiers) { (globalName, accessModifier) =>
           val desc = ClassDescriptor.InNamespace(moduleDescriptor, createId(sourceAST), sourceAST.currentNamespace, globalName)
 
