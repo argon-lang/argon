@@ -9,8 +9,8 @@
 		"target": "esnext",
 		"strict": true,
 
-        "removeComments": true,
-        "preserveConstEnums": true,
+		"removeComments": true,
+		"preserveConstEnums": true,
 		"sourceMap": true,
 		"declaration": true
 	}
