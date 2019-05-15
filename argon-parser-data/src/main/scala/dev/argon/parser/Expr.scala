@@ -17,7 +17,7 @@ final case class TraitDeclarationStmt
 ) extends Stmt
 final case class DataConstructorDeclarationStmt
 (
-  name: Option[String],
+  name: WithSource[Option[String]],
   parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
   body: Vector[WithSource[Stmt]],

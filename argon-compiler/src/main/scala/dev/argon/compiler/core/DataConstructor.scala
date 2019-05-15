@@ -9,7 +9,7 @@ import dev.argon.compiler.CompilationMessageSource
 import dev.argon.util.FileID
 
 
-sealed trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
   val contextProof: Leibniz[context.type, TContext, context.type, TContext]
   import context._, signatureContext.Signature
@@ -39,6 +39,18 @@ object DataConstructor {
     def apply[TContext <: Context with Singleton](ts: TypeSystem[TContext])(instance: ts.TraitType): ResultInfo[TContext, ts.type] = new ResultInfo[TContext, ts.type] {
       override val typeSystem: ts.type = ts
       override val instanceType: typeSystem.TraitType = instance
+    }
+
+    implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
+      override def convertTypeSystem[F[_]: Monad]
+      (context: Context)
+      (ts1: TypeSystem[context.type])
+      (ts2: TypeSystem[context.type])
+      (converter: TypeSystemConverter[context.type, ts1.type, ts2.type, F])
+      (result: ResultInfo[context.type, ts1.type])
+      : F[ResultInfo[context.type, ts2.type]] = for {
+        instanceType <- TypeSystem.convertTraitType(context)(ts1)(ts2)(converter)(result.instanceType)
+      } yield ResultInfo(ts2)(instanceType)
     }
   }
 

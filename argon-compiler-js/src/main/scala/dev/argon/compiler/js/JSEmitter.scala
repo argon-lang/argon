@@ -224,7 +224,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
         )
 
 
-      case GlobalBinding.GlobalDataConstructor(_, _, _) => ???
+      case GlobalBinding.GlobalDataConstructor(_, _, ctor) => ???
     }
 
   private def createMethodObject(method: ArMethod[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): TComp[JSExpression] =

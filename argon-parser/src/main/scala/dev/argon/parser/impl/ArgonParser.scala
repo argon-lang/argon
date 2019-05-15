@@ -599,7 +599,7 @@ object ArgonParser {
         case Rule.DataConstructorDeclarationStmt =>
           rule(Rule.Modifiers) ++
             matchToken(KW_CONSTRUCTOR) ++! (
-              rule(Rule.Identifier) ++
+              rule(Rule.Identifier).observeSource ++
                 rule(Rule.NewLines) ++
                 rule(Rule.MethodParameters) ++
                 rule(Rule.NewLines) ++

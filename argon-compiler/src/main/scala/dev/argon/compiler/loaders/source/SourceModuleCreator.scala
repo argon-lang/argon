@@ -158,6 +158,16 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           ).point[TComp]
         }
 
+      case dataCtorDeclarationStmt @ parser.DataConstructorDeclarationStmt(WithSource(name, _), _, _, _, modifiers) =>
+        createBinding(name, modifiers) { (globalName, accessModifier) =>
+          val desc = DataConstructorDescriptor.InNamespace(moduleDescriptor, createId(sourceAST), sourceAST.currentNamespace, globalName)
+
+
+          for {
+            ctor <- SourceDataConstructor[TComp](context)(env)(dataCtorDeclarationStmt)(desc)
+          } yield GlobalBinding.GlobalDataConstructor(globalName, accessModifier, ctor)
+        }
+
       case _ => ???
     }
   }
