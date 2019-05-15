@@ -607,7 +607,7 @@ object ArgonParser {
                 rule(Rule.NewLines) ++
                 rule(Rule.Type).observeSource ++
                 rule(Rule.StatementSeparator) ++
-                rule(Rule.StatementList) ++
+                rule(Rule.StatementList).observeSource ++
                 matchToken(KW_END)
             ) --> {
               case (modifiers, _, (name, _, params, _, _, _, returnType, _, body, _)) =>

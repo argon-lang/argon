@@ -57,6 +57,9 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
       import context2.scopeContext.ScopeExtensions
 
+      val currentModule2 = currentModule
+      val referencedModules2 = referencedModules
+
       final class EnvCreatorInstance(envFileSpec: FileSpec, scope: context2.scopeContext.Scope) extends EnvCreator[context2.type] {
         override def apply(context: context2.type)(effectInfo: EffectInfo, descriptor: VariableOwnerDescriptor): ExpressionConverter.Env[context.type, context.scopeContext.Scope] =
           ExpressionConverter.Env(
@@ -74,6 +77,8 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           new EnvCreatorInstance(envFileSpec, scope.addVariables(variables))
 
         override val fileSpec: FileSpec = envFileSpec
+        override val currentModule: ArModule[context2.type, DeclarationPayloadSpecifier] = currentModule2
+        override val referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]] = referencedModules2
       }
 
       val envF = (envFileSpec: FileSpec) => new EnvCreatorInstance(envFileSpec, scope)

@@ -656,8 +656,12 @@ object ExpressionConverter {
     def apply(context: TContext)(effectInfo: EffectInfo, descriptor: VariableOwnerDescriptor): Env[context.type, context.scopeContext.Scope]
 
     def addVariables(context: TContext)(variables: Vector[context.typeSystem.Variable]): EnvCreator[TContext]
+    def addVariable(context: TContext)(variable: context.typeSystem.Variable): EnvCreator[TContext] =
+      addVariables(context)(Vector(variable))
 
     val fileSpec: FileSpec
+    val currentModule: ArModule[TContext, DeclarationPayloadSpecifier]
+    val referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]]
   }
 
   private def createConverter(context: Context)(ts: TypeSystem[context.type]): ExpressionConverter[context.type] {

@@ -20,7 +20,7 @@ final case class DataConstructorDeclarationStmt
   name: WithSource[Option[String]],
   parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
-  body: Vector[WithSource[Stmt]],
+  body: WithSource[Vector[WithSource[Stmt]]],
   modifiers: Vector[WithSource[Modifier]]
 ) extends Stmt
 final case class ClassDeclarationStmt

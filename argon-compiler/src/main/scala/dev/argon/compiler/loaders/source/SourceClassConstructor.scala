@@ -73,19 +73,8 @@ object SourceClassConstructor {
           (converted, env).point[TComp]
         else
           ExpressionConverter.convertStatementList(context)(env)(unitType)(unconverted).map { newStmt =>
-            
-            def addNewVariables(stmt: ArExpr, env: ExpressionConverter.Env[context.type, Scope]): ExpressionConverter.Env[context.type, Scope] =
-              stmt match {
-                case typeSystem.LetBinding(variable, _, next) =>
-                  addNewVariables(next, env.copy(scope = env.scope.addVariable(variable)))
 
-                case typeSystem.Sequence(_, next) =>
-                  addNewVariables(next, env)
-
-                case _ => env
-              }
-
-            (converted :+ typeSystem.ClassConstructorStatementExpr(newStmt), addNewVariables(newStmt, env))
+            (converted :+ typeSystem.ClassConstructorStatementExpr(newStmt), ExpressionScopeExtractor.addDeclarationsFrom(context)(newStmt, env))
           }
       
       def nextBody(tail: Vector[WithSource[parser.Stmt]]) = {

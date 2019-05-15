@@ -9,6 +9,7 @@ import dev.argon.parser.DataConstructorDeclarationStmt
 import dev.argon.util.{FileID, SourceLocation, WithSource}
 import scalaz._
 import Scalaz._
+import dev.argon.compiler.loaders.StandardTypeLoaders
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 
 private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
@@ -16,6 +17,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
   final case class GroupedInstanceStatements
   (
     methods: Vector[WithSource[parser.MethodDeclarationStmt]],
+    body: Vector[WithSource[parser.Stmt]],
   )
 
   def apply[TComp[+_] : Compilation]
@@ -26,7 +28,8 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
   : TComp[DataConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type }] = for {
     sigCache <- Compilation[TComp].createCache[context2.signatureContext.Signature[DataConstructor.ResultInfo]]
 
-    groupedInstCache <- Compilation[TComp].createCache[GroupedInstanceStatements]
+    bodyStmtCache <- Compilation[TComp].createCache[context2.typeSystem.ArExpr]
+    bodyEnvCache <- Compilation[TComp].createCache[EnvCreator[context2.type]]
 
     methodCache <- Compilation[TComp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
 
@@ -40,16 +43,14 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
     override val fileId: FileID = env.fileSpec.fileID
     override val ctorMessageSource: CompilationMessageSource = CompilationMessageSource.SourceFile(env.fileSpec, stmt.name.location)
 
-    private val groupedInst =
-      groupedInstCache(
-        stmt.body.foldLeftM(GroupedInstanceStatements(Vector.empty)) {
-          case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
-            group.copy(methods = group.methods :+ WithSource(stmt, location)).point[TComp]
+    private lazy val groupedInst =
+      stmt.body.value.foldLeft(GroupedInstanceStatements(Vector.empty, Vector.empty)) {
+        case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
+          group.copy(methods = group.methods :+ WithSource(stmt, location))
 
-          case (_, WithSource(_, location)) =>
-            Compilation[TComp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-        }
-      )
+        case (group, stmt) =>
+          group.copy(body = group.body :+ stmt)
+      }
 
     override val signature: TComp[Signature[DataConstructor.ResultInfo]] =
       sigCache(
@@ -58,21 +59,53 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
         )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType)(this))
       )
 
+    private def paramEnv = for {
+      sig <- signature
+    } yield env.addVariables(context)(
+      sig.unsubstitutedParameters.flatMap(_.tupleVars)
+    )
+
+    private val bodyStmt =
+      bodyStmtCache(
+        for {
+          pEnv <- paramEnv
+
+          unitType <- StandardTypeLoaders.loadUnitType(context)(
+            CompilationMessageSource.SourceFile(env.fileSpec, stmt.body.location)
+          )(pEnv.currentModule)(pEnv.referencedModules)
+
+          expr <- ExpressionConverter.convertStatementList(context)(pEnv(context)(EffectInfo.pure, descriptor))(unitType)(WithSource(groupedInst.body, stmt.body.location))
+        } yield expr
+      )
+
+    private val bodyEnv =
+      bodyEnvCache(
+        for {
+          pEnv <- paramEnv
+          body <- bodyStmt
+        } yield ExpressionScopeExtractor.addDeclarationsCreator(context2)(body, pEnv)
+      )
+
+
     override val methods: TComp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
-      methodCache(groupedInst.flatMap { inst =>
-        inst.methods.zipWithIndex.traverse { case (method, i) =>
-          parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
-            val memberName = method.value.name match {
+      methodCache(
+        groupedInst.methods.zipWithIndex.traverse { case (method, i) =>
+          for {
+            modifiers <- parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers))
+
+            memberName = method.value.name match {
               case Some(name) => MemberName.Normal(name)
               case None => MemberName.Unnamed
             }
 
-            val desc = MethodDescriptor(descriptor, i, memberName)
-            SourceMethod(context)(env)(method.value, method.location)(desc)(ArMethod.DataCtorOwner(this))
-              .map(MethodBinding(memberName, i, modifiers, _))
-          }
+            desc = MethodDescriptor(descriptor, i, memberName)
+
+            bEnv <- bodyEnv
+
+            method <- SourceMethod(context)(bEnv)(method.value, method.location)(desc)(ArMethod.DataCtorOwner(this))
+          } yield MethodBinding(memberName, i, modifiers, method)
         }
-      })
+      )
 
 
     override lazy val payload: TComp[context.TDataConstructorImplementation] = ???
