@@ -28,6 +28,7 @@ sealed trait Context {
   def createExprMethodImplementation(expr: typeSystem.ArExpr): TMethodImplementation
   def abstractMethodImplementation: TMethodImplementation
   def createClassConstructorBodyImplementation(body: typeSystem.ClassConstructorBody): TClassConstructorImplementation
+  def createDataConstructorImplementation(body: typeSystem.ArExpr): TDataConstructorImplementation
 
   def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[TFunctionImplementation]
   def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[TMethodImplementation]

@@ -108,7 +108,9 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
       )
 
 
-    override lazy val payload: TComp[context.TDataConstructorImplementation] = ???
+    override lazy val payload: TComp[context.TDataConstructorImplementation] = for {
+      stmt <- bodyStmt
+    } yield context.createDataConstructorImplementation(stmt)
   }
 
   private def resultCreator(baseTypeExpr: WithSource[parser.Expr])(osCheck: OpenSealedCheck): ResultCreator[DataConstructor.ResultInfo] = new ResultCreator[DataConstructor.ResultInfo] {

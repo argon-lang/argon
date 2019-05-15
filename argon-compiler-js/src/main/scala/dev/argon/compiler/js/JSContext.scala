@@ -21,6 +21,7 @@ final class JSContext[TComp[+_] : Compilation, I](override protected val compile
   override type TFunctionImplementation = JSImpl.Function
   override type TMethodImplementation = JSImpl.Method
   override type TClassConstructorImplementation = JSImpl.ClassConstructor
+  override type TDataConstructorImplementation = JSImpl.DataConstructor
 
   override type BackendOptions = JSBackendOptions[Id, I]
 
@@ -34,6 +35,9 @@ final class JSContext[TComp[+_] : Compilation, I](override protected val compile
 
   override def createClassConstructorBodyImplementation(body: typeSystem.ClassConstructorBody): JSImpl.ClassConstructor =
     JSImpl.ClassConstructor.StatementBody(body)
+
+  override def createDataConstructorImplementation(body: typeSystem.ArExpr): JSImpl.DataConstructor =
+    JSImpl.DataConstructor.ExpressionBody(body)
 
   override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): TComp[JSImpl.Function] =
     compilerInput.backendOptions.extern.get(specifier) match {
@@ -93,6 +97,11 @@ final class JSContext[TComp[+_] : Compilation, I](override protected val compile
     sealed trait ClassConstructor
     object ClassConstructor {
       final case class StatementBody(body: ClassConstructorBody) extends ClassConstructor
+    }
+
+    sealed trait DataConstructor
+    object DataConstructor {
+      final case class ExpressionBody(expr: ArExpr) extends DataConstructor
     }
   }
 

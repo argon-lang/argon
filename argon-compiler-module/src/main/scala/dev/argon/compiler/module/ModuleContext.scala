@@ -19,6 +19,8 @@ class ModuleContext[TComp[+_] : Compilation, I](override protected val compilerI
   override type TFunctionImplementation = typeSystem.ArExpr
   override type TMethodImplementation = Option[typeSystem.ArExpr]
   override type TClassConstructorImplementation = typeSystem.ClassConstructorBody
+  override type TDataConstructorImplementation = typeSystem.ArExpr
+
 
   override type BackendOptions = ModuleBackendOptions[Id, I]
 
@@ -26,6 +28,8 @@ class ModuleContext[TComp[+_] : Compilation, I](override protected val compilerI
   override def createExprMethodImplementation(expr: typeSystem.ArExpr): Option[typeSystem.ArExpr] = Some(expr)
   override def abstractMethodImplementation: Option[typeSystem.ArExpr] = None
   override def createClassConstructorBodyImplementation(body: typeSystem.ClassConstructorBody): typeSystem.ClassConstructorBody = body
+  override def createDataConstructorImplementation(body: typeSystem.ArExpr): typeSystem.ArExpr = body
+
 
   override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): TComp[typeSystem.ArExpr] =
     Compilation[TComp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
