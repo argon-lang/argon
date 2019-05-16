@@ -11,6 +11,8 @@ import dev.argon.compiler.vtable._
 
 final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] with Singleton](context: TContext, inject: JSInjectCode[Id]) {
 
+  import context.signatureContext.{ context => _, typeSystem => _, _ }
+
   private val moduleVarName = JSIdentifier("modules")
   private val traitsVarName = JSIdentifier("traits")
   private val classesVarName = JSIdentifier("classes")
@@ -23,7 +25,12 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
   private val create_empty_obj = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("create")), Vector(JSNull))
   private def freeze_obj(varName: JSIdentifier) = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("freeze")), Vector(varName))
 
+  private type VarMap = Map[VariableLikeDescriptor, JSExpression]
+
+  private final case class EmitParams(owner: ParameterOwnerDescriptor, varMapping: VarMap)
+
   def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): TComp[JSModule] = {
+
 
     val modulePairs = module.referencedModules
       .zipWithIndex
@@ -97,6 +104,21 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
         JSIdentifier(name)
       )
 
+  private def parameterVarMapping[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: Signature[TResult]): VarMap =
+    sig.unsubstitutedParameters.zipWithIndex.flatMap {
+      case (param, paramIndex) =>
+        if(param.tupleVars.nonEmpty)
+          param.tupleVars.map { tupleVar =>
+            tupleVar.descriptor -> getDeconstructedParameterName(tupleVar.descriptor)
+          }
+        else {
+          val desc = ParameterDescriptor(owner, paramIndex)
+          Vector(desc -> getParameterName(desc))
+        }
+    }.toMap
+
+
+
   private def createObjectsForScopeValue(vtableBuilder: VTableBuilder[TComp, context.type])(value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): TComp[JSStatement] =
     value match {
       case GlobalBinding.GlobalFunction(_, _, func) =>
@@ -105,7 +127,11 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
           impl <- func.payload : TComp[context.JSImpl.Function]
           body <- impl match {
             case context.JSImpl.Function.JSExpressionBody(expr) => expr.point[TComp]
-            case context.JSImpl.Function.ExpressionBody(expr) => createExpressionImpl(func.descriptor)(sig)(expr)
+            case context.JSImpl.Function.ExpressionBody(expr) =>
+              createExpressionImpl(EmitParams(
+                owner = func.descriptor,
+                varMapping = parameterVarMapping(func.descriptor)(sig),
+              ))(sig)(expr)
           }
         } yield JSAssignment(
             JSPropertyAccessBracket(funcsVarName, JSString(DescriptorId.forFunc(func.descriptor, ErasedSignature.fromSignature(context)(sig)))),
@@ -118,7 +144,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
         for {
           sig <- arTrait.signature
           methods <- arTrait.methods
-          methodObjects <- methods.traverse { method => createMethodObject(method.method) }
+          methodObjects <- methods.traverse { method => createMethodObject(Map.empty)(method.method) }
         } yield JSAssignment(
           JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))),
           JSFunctionCall(
@@ -145,8 +171,18 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
               JSObjectProperty("name", JSString(field.descriptor.name))
             ))
           }
-          methodObjects <- methods.traverse { method => createMethodObject(method.method) }
-          staticMethodObjects <- staticMethods.traverse { method => createMethodObject(method.method) }
+          methodObjects <- methods.traverse { method =>
+            fields
+              .traverse { field =>
+                getFieldVariableExpr(arClass.descriptor.moduleDescriptor, field).map { fieldExpr =>
+                  field.descriptor -> fieldExpr
+                }
+              }
+              .flatMap { fieldVarMap =>
+                createMethodObject(fieldVarMap.toMap)(method.method)
+              }
+          }
+          staticMethodObjects <- staticMethods.traverse { method => createMethodObject(Map.empty)(method.method) }
           ctorObjects <- classConstructors.traverse { ctor => createClassCtorObject(ctor.ctor) }
 
           vtable <- vtableBuilder.fromClass(arClass)
@@ -227,13 +263,17 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
       case GlobalBinding.GlobalDataConstructor(_, _, ctor) => ???
     }
 
-  private def createMethodObject(method: ArMethod[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): TComp[JSExpression] =
+  private def createMethodObject(ownerVarMapping: VarMap)(method: ArMethod[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): TComp[JSExpression] =
     for {
       sig <- method.signature
       impl <- method.payload : TComp[context.JSImpl.Method]
       body <- impl match {
         case context.JSImpl.Method.JSExpressionBody(expr) => expr.point[TComp]
-        case context.JSImpl.Method.ExpressionBody(expr) => createExpressionImpl(method.descriptor)(sig)(expr)
+        case context.JSImpl.Method.ExpressionBody(expr) =>
+          createExpressionImpl(EmitParams(
+            owner = method.descriptor,
+            varMapping = ownerVarMapping ++ parameterVarMapping(method.descriptor)(sig),
+          ))(sig)(expr)
         case context.JSImpl.Method.Abstract => JSNull.point[TComp]
       }
     } yield JSObjectLiteral(Vector(
@@ -248,17 +288,31 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
       impl <- ctor.payload : TComp[context.JSImpl.ClassConstructor]
       body <- impl match {
         case context.JSImpl.ClassConstructor.StatementBody(body) =>
+          val paramVarMapping = parameterVarMapping(ctor.descriptor)(sig)
+
           for {
-            initStmts <- body.initStatements.traverseM {
-              case context.typeSystem.ClassConstructorStatementExpr(expr) => convertStmt(ctor.descriptor)(useReturn = false)(expr)
-              case context.typeSystem.InitializeFieldStatement(field, value) =>
+            (initStmts, initVarMapping) <- body.initStatements.foldLeftM((Vector.empty[JSStatement], paramVarMapping)) {
+              case ((acc, varMapping), context.typeSystem.ClassConstructorStatementExpr(expr)) =>
                 for {
-                  varExpr <- getVariableExpr(getParamOwnerModule(ctor.descriptor), field)
-                  valueExpr <- convertExpr(ctor.descriptor)(value)
-                } yield Vector(JSAssignment(
+                  (newStmts, newMapping) <- StatementConverterLocalBinding.convertStmt(EmitParams(
+                    owner = ctor.descriptor,
+                    varMapping = varMapping
+                  ))(useReturn = false)(expr)
+                } yield (acc ++ newStmts, newMapping)
+
+              case ((acc, varMapping), context.typeSystem.InitializeFieldStatement(field, value)) =>
+                for {
+                  varExpr <- getFieldVariableExpr(getParamOwnerModule(ctor.descriptor), field)
+                  valueExpr <- convertExpr(EmitParams(
+                    owner = ctor.descriptor,
+                    varMapping = varMapping,
+                  ))(value)
+
+                  newMapping = varMapping + (field.descriptor -> varExpr)
+                } yield (acc ++ Vector(JSAssignment(
                   varExpr,
                   valueExpr
-                ))
+                )), newMapping)
             }
 
             baseCall <- body.baseConstructorCall.traverse { baseCallExpr =>
@@ -278,7 +332,12 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
                   JSIdentifier("symbol")
                 )
 
-                baseCallExpr.args.traverse(convertExpr(ctor.descriptor)(_)).map { argExprs =>
+                val emitParams = EmitParams(
+                  owner = ctor.descriptor,
+                  varMapping = initVarMapping,
+                )
+
+                baseCallExpr.args.traverse(convertExpr(emitParams)(_)).map { argExprs =>
                   JSFunctionCall(
                     JSPropertyAccessDot(
                       JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")),
@@ -290,7 +349,10 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
               }
             }
 
-            endExpr <- convertStmt(ctor.descriptor)(useReturn = false)(body.endExpr)
+            endExpr <- convertStmt(EmitParams(
+              owner = ctor.descriptor,
+              varMapping = initVarMapping,
+            ))(useReturn = false)(body.endExpr)
           } yield initStmts ++ baseCall.toVector ++ endExpr
 
       }
@@ -307,12 +369,12 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
     ))
 
 
-  private def createExpressionImpl(owner: ParameterOwnerDescriptor)(sig: context.signatureContext.Signature[FunctionResultInfo])(expr: context.typeSystem.ArExpr): TComp[JSExpression] =
+  private def createExpressionImpl(params: EmitParams)(sig: context.signatureContext.Signature[FunctionResultInfo])(expr: context.typeSystem.ArExpr): TComp[JSExpression] =
     for {
-      body <- convertStmt(owner)(useReturn = true)(expr)
+      body <- convertStmt(params)(useReturn = true)(expr)
     } yield JSFunctionExpression(
       None,
-      createParameterList(owner)(sig),
+      createParameterList(params.owner)(sig),
       body
     )
 
@@ -332,43 +394,70 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
       )
     }
 
-  def convertStmt(owner: ParameterOwnerDescriptor)(useReturn: Boolean)(expr: context.typeSystem.ArExpr): TComp[Vector[JSStatement]] = expr match {
-    case context.typeSystem.LetBinding(variable, value, next) =>
+  private trait StatementConverter {
+
+    protected def initializeLetBinding(variable: context.typeSystem.LocalVariable, valueExpr: JSExpression): (Vector[JSStatement], JSExpression)
+
+    final def wrapStatement(params: EmitParams)(expr: context.typeSystem.ArExpr): TComp[JSExpression] =
       for {
-        valueExpr <- convertExpr(owner)(value)
-        nextStmts <- convertStmt(owner)(useReturn)(next)
-        decl = JSDeclareInit(JSBindingIdentifier(getVariableName(variable.descriptor)), valueExpr)
-        declStmt = variable.mutability match {
-          case Mutability.Mutable => JSLet(NonEmptyList(decl))
-          case Mutability.NonMutable => JSConst(NonEmptyList(decl))
-        }
-      } yield declStmt +: nextStmts
+        (stmts, _) <- convertStmt(params)(useReturn = true)(expr)
+      } yield JSFunctionCall(JSArrowFunctionStmts(JSFunctionEmptyParameterList, stmts), Vector())
 
-    case context.typeSystem.IfElse(condition, ifBody, elseBody) =>
-      for {
-        condExpr <- convertExpr(owner)(condition)
-        ifBodyStmts <- convertStmt(owner)(useReturn)(ifBody)
-        elseBodyStmts <- convertStmt(owner)(useReturn)(elseBody)
+    final def convertStmt(params: EmitParams)(useReturn: Boolean)(expr: context.typeSystem.ArExpr): TComp[(Vector[JSStatement], VarMap)] = expr match {
+      case context.typeSystem.LetBinding(variable, value, next) =>
+        for {
+          valueExpr <- convertExpr(params)(value)
+          bindingResult = initializeLetBinding(variable, valueExpr)
+          declStmts = bindingResult._1
+          varExpr = bindingResult._2
+          (nextStmts, endMapping) <- convertStmt(params.copy(varMapping = params.varMapping + (variable.descriptor -> varExpr)))(useReturn)(next)
+        } yield (declStmts ++ nextStmts, endMapping)
 
-        accessNativeBool = JSPropertyAccessBracket(
-          condExpr,
-          coreLibExport(owner.moduleDescriptor, "boolValueSymbol")
-        )
-      } yield Vector(JSIfElseStatement(accessNativeBool, ifBodyStmts, elseBodyStmts))
+      case context.typeSystem.IfElse(condition, ifBody, elseBody) =>
+        for {
+          condExpr <- convertExpr(params)(condition)
+          (ifBodyStmts, _) <- convertStmt(params)(useReturn)(ifBody)
+          (elseBodyStmts, _) <- convertStmt(params)(useReturn)(elseBody)
+
+          accessNativeBool = JSPropertyAccessBracket(
+            condExpr,
+            coreLibExport(params.owner.moduleDescriptor, "boolValueSymbol")
+          )
+        } yield (Vector(JSIfElseStatement(accessNativeBool, ifBodyStmts, elseBodyStmts)), params.varMapping)
 
 
-    case context.typeSystem.Sequence(first, second) =>
-      for {
-        convFirst <- wrapStatement(owner)(first)
-        convSecond <- convertStmt(owner)(useReturn)(second)
-      } yield convFirst +: convSecond
+      case context.typeSystem.Sequence(first, second) =>
+        for {
+          convFirst <- wrapStatement(params)(first)
+          (convSecond, endMapping) <- convertStmt(params)(useReturn)(second)
+        } yield (convFirst +: convSecond, endMapping)
 
-    case _ =>
-      if(useReturn) convertExpr(owner)(expr).map { jsExpr => Vector(JSReturn(jsExpr)) }
-      else convertExpr(owner)(expr).map { jsExpr => Vector(jsExpr) }
+      case _ =>
+        if(useReturn) convertExpr(params)(expr).map { jsExpr => (Vector(JSReturn(jsExpr)), params.varMapping) }
+        else convertExpr(params)(expr).map { jsExpr => (Vector(jsExpr), params.varMapping) }
+    }
+
   }
 
-  def convertExpr(owner: ParameterOwnerDescriptor)(expr: context.typeSystem.ArExpr): TComp[JSExpression] = {
+  private object StatementConverterLocalBinding extends StatementConverter {
+    override def initializeLetBinding(variable: context.typeSystem.LocalVariable, valueExpr: JSExpression): (Vector[JSStatement], JSExpression) = {
+      val varName = getVariableName(variable.descriptor)
+      val decl = JSDeclareInit(JSBindingIdentifier(varName), valueExpr)
+      val declStmt = variable.mutability match {
+        case Mutability.Mutable => JSLet(NonEmptyList(decl))
+        case Mutability.NonMutable => JSConst(NonEmptyList(decl))
+      }
+
+      (Vector(declStmt), varName)
+    }
+  }
+
+
+  def convertStmt(params: EmitParams)(useReturn: Boolean)(expr: context.typeSystem.ArExpr): TComp[Vector[JSStatement]] =
+    StatementConverterLocalBinding.convertStmt(params)(useReturn)(expr).map { case (convBody, _) => convBody }
+
+
+  def convertExpr(params: EmitParams)(expr: context.typeSystem.ArExpr): TComp[JSExpression] = {
     import context.typeSystem. { context => _, _ }
     expr match {
       case ClassConstructorCall(classType, ctor, args) =>
@@ -376,7 +465,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
           sig <- ctor.value.signature
           ownerClassSig <- ctor.value.ownerClass.signature
 
-          ownerObj = getClassJSObject(getParamOwnerModule(owner), ctor.value.descriptor.ownerClass, ErasedSignature.fromSignatureParameters(context)(ownerClassSig))
+          ownerObj = getClassJSObject(getParamOwnerModule(params.owner), ctor.value.descriptor.ownerClass, ErasedSignature.fromSignatureParameters(context)(ownerClassSig))
           descriptorId = DescriptorId.forClassConstructor(ErasedSignature.fromSignatureParameters(context)(sig))
 
           baseCtorSymbol = JSPropertyAccessDot(
@@ -390,7 +479,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
             JSIdentifier("symbol")
           )
 
-          argExprs <- args.traverse(convertExpr(ctor.value.descriptor)(_))
+          argExprs <- args.traverse(convertExpr(params)(_))
 
         } yield JSNewCall(JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")), baseCtorSymbol +: argExprs)
 
@@ -402,7 +491,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
           funcExpr = func.value.descriptor match {
             case FuncDescriptor.InNamespace(moduleDesc, _, ns, name) =>
               val funcsObject =
-                if(moduleDesc === getParamOwnerModule(owner))
+                if(moduleDesc === getParamOwnerModule(params.owner))
                   funcsVarName
                 else
                   JSPropertyAccessDot(
@@ -419,71 +508,72 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
               )
           }
 
-          argExprs <- args.traverse(convertExpr(owner)(_))
+          argExprs <- args.traverse(convertExpr(params)(_))
 
         } yield JSFunctionCall(funcExpr, argExprs)
 
       case FunctionObjectCall(funcExpr, arg, _) =>
         for {
-          jsFunc <- convertExpr(owner)(funcExpr)
-          jsArg <- convertExpr(owner)(arg)
+          jsFunc <- convertExpr(params)(funcExpr)
+          jsArg <- convertExpr(params)(arg)
         } yield JSFunctionCall(jsFunc, Vector(jsArg))
 
       case IfElse(_, _, _) =>
-        wrapStatement(owner)(expr)
+        StatementConverterLocalBinding.wrapStatement(params)(expr)
 
       case LetBinding(_, _, _) =>
-        wrapStatement(owner)(expr)
+        StatementConverterLocalBinding.wrapStatement(params)(expr)
 
       case LoadConstantInt(i, _) =>
         JSFunctionCall(
-          coreLibExport(owner.moduleDescriptor, "createInt"),
+          coreLibExport(params.owner.moduleDescriptor, "createInt"),
           Vector(JSBigInt(i))
         ).point[TComp]
 
       case LoadConstantString(str, _) =>
         JSFunctionCall(
-          coreLibExport(owner.moduleDescriptor, "createString"),
+          coreLibExport(params.owner.moduleDescriptor, "createString"),
           Vector(JSString(str))
         ).point[TComp]
 
       case LoadLambda(argVariable, body) =>
+        val varName = getVariableName(argVariable.descriptor)
         for {
-          bodyExpr <- convertExpr(owner)(body)
+          bodyExpr <- convertExpr(params.copy(varMapping = params.varMapping + (argVariable.descriptor -> varName)))(body)
         } yield JSArrowFunctionExpr(
-          JSFunctionParameter(JSBindingIdentifier(getVariableName(argVariable.descriptor)), JSFunctionEmptyParameterList),
+          JSFunctionParameter(JSBindingIdentifier(varName), JSFunctionEmptyParameterList),
           bodyExpr
         )
 
       case expr: LoadTuple =>
         for {
-          values <- expr.values.toVector.traverse { elem => convertExpr(owner)(elem.value) }
+          values <- expr.values.toVector.traverse { elem => convertExpr(params)(elem.value) }
         } yield JSArrayLiteral(values)
 
       case LoadUnit(_) =>
-        coreLibExport(owner.moduleDescriptor, "unitValue").point[TComp]
+        coreLibExport(params.owner.moduleDescriptor, "unitValue").point[TComp]
 
       case LoadVariable(variable) =>
-        getVariableExpr(getParamOwnerModule(owner), variable)
+        params.varMapping(variable.descriptor).point[TComp]
 
       case MethodCall(method, instance, args, _) =>
         for {
-          instanceExpr <- convertExpr(owner)(instance)
+          instanceExpr <- convertExpr(params)(instance)
 
-          methodSymbol <- getMethodSymbol(getParamOwnerModule(owner))(method)
+          methodSymbol <- getMethodSymbol(getParamOwnerModule(params.owner))(method)
           methodExpr = JSPropertyAccessBracket(instanceExpr, methodSymbol)
 
-          argExprs <- args.traverse(convertExpr(owner)(_))
+          argExprs <- args.traverse(convertExpr(params)(_))
 
         } yield JSFunctionCall(methodExpr, argExprs)
 
 
       case PrimitiveOp(op, left, right, _) =>
         for {
-          leftExpr <- convertExpr(owner)(left)
-          rightExpr <- convertExpr(owner)(right)
+          leftExpr <- convertExpr(params)(left)
+          rightExpr <- convertExpr(params)(right)
         } yield JSFunctionCall(
-          coreLibExport(owner.moduleDescriptor,
+          coreLibExport(params.owner.moduleDescriptor,
             op match {
               case PrimitiveOperation.AddInt => "addInt"
               case PrimitiveOperation.SubInt => "subInt"
@@ -495,15 +585,15 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
         )
 
       case e @ Sequence(_, _) =>
-        wrapStatement(owner)(e)
+        StatementConverterLocalBinding.wrapStatement(params)(e)
 
       case ClassType(arClass, args, _) =>
         for {
           sig <- arClass.value.signature
           erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
-          classObj = getClassJSObject(getParamOwnerModule(owner), arClass.value.descriptor, erasedSig)
+          classObj = getClassJSObject(getParamOwnerModule(params.owner), arClass.value.descriptor, erasedSig)
 
-          argExprs <- args.traverse(convertExpr(owner)(_))
+          argExprs <- args.traverse(convertExpr(params)(_))
         } yield JSFunctionCall(
           JSPropertyAccessDot(classObj, classCreateMethodName),
           argExprs
@@ -531,11 +621,6 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
     JSIdentifier("symbol")
   )
 
-  def wrapStatement(owner: ParameterOwnerDescriptor)(expr: context.typeSystem.ArExpr): TComp[JSExpression] =
-    for {
-      stmts <- convertStmt(owner)(useReturn = true)(expr)
-    } yield JSFunctionCall(JSArrowFunctionStmts(JSFunctionEmptyParameterList, stmts), Vector())
-
 
   private def getParameterName(descriptor: ParameterDescriptor): JSIdentifier =
     JSIdentifier(s"param_${descriptor.index}")
@@ -546,28 +631,22 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
   private def getVariableName(descriptor: VariableDescriptor): JSIdentifier =
     JSIdentifier(s"local_${descriptor.index}")
 
-  private def getVariableExpr(moduleDescriptor: ModuleDescriptor, variable: context.typeSystem.Variable): TComp[JSExpression] = variable match {
-    case context.typeSystem.LocalVariable(descriptor, _, _, _) => getVariableName(descriptor).point[TComp]
-    case context.typeSystem.ParameterVariable(descriptor, _, _, _) => getParameterName(descriptor).point[TComp]
-    case context.typeSystem.ParameterElementVariable(descriptor, _, _, _) => getDeconstructedParameterName(descriptor).point[TComp]
-    case context.typeSystem.FieldVariable(FieldDescriptor(owner, name), ownerClass, _, _, _) =>
-      for {
-        sig <- ownerClass.value.signature
-        erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
-      } yield JSPropertyAccessBracket(
-        JSThis,
+  private def getFieldVariableExpr(moduleDescriptor: ModuleDescriptor, variable: context.typeSystem.FieldVariable): TComp[JSExpression] = for {
+    sig <- variable.ownerClass.value.signature
+    erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
+  } yield JSPropertyAccessBracket(
+    JSThis,
+    JSPropertyAccessDot(
+      JSPropertyAccessBracket(
         JSPropertyAccessDot(
-          JSPropertyAccessBracket(
-            JSPropertyAccessDot(
-              getClassJSObject(moduleDescriptor, owner, erasedSig),
-              JSIdentifier("fields")
-            ),
-            JSString(name)
-          ),
-          JSIdentifier("symbol")
-        )
-      )
-  }
+          getClassJSObject(moduleDescriptor, variable.descriptor.owner, erasedSig),
+          JSIdentifier("fields")
+        ),
+        JSString(variable.descriptor.name)
+      ),
+      JSIdentifier("symbol")
+    )
+  )
 
   private def getClassJSObject(moduleDescriptor: ModuleDescriptor, descriptor: ClassDescriptor, sig: ErasedSignature.ParameterOnlySignature[context.type]): JSExpression = {
     val classModule = getParamOwnerModule(descriptor)
