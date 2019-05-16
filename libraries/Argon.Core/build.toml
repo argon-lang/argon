@@ -124,6 +124,45 @@ export function createClass(creator) {
 	return Object.freeze(cls);
 }
 
+export function createDataConstructor(creator) {
+	const cls = Object.create(null);
+
+	lazyProperty(cls, "constructor", function() {
+
+		const vtable = creator.vtable;
+		const ctor = creator.constructor;
+
+		function func(...args) {
+			ctor.call(this, ...args);
+		}
+
+		func.prototype = Object.create(null);
+
+		implementTrait(func.prototype, creator.instanceType);
+		implementMethods(func.prototype, vtable);
+
+		Object.freeze(func.prototype);
+		Object.freeze(func);
+	});
+
+
+	const parameters = Object.create(null);
+	if(creator.parameters) {
+		for(const parameter of creator.parameters) {
+			const paramInfo = Object.create(null);
+			paramInfo.symbol = Symbol();
+			parameters[parameter.name] = Object.freeze(paramInfo);
+		}
+	}
+	cls.parameters = parameters;
+
+	const methods = Object.create(null);
+	if(creator.methods) createMethods(creator.methods, methods);
+	cls.methods = Object.freeze(methods);
+
+	return Object.freeze(cls);
+}
+
 function lazyProperty(obj, name, valueFunc) {
 	let value;
 	Object.defineProperty(obj, name, {

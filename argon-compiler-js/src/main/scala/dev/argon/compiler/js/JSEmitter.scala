@@ -104,7 +104,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
         JSIdentifier(name)
       )
 
-  private def parameterVarMapping[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: Signature[TResult]): VarMap =
+  private def parameterVarMapping[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: Signature[TResult]): Map[VariableLikeDescriptor, JSIdentifier] =
     sig.unsubstitutedParameters.zipWithIndex.flatMap {
       case (param, paramIndex) =>
         if(param.tupleVars.nonEmpty)
@@ -186,27 +186,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
           ctorObjects <- classConstructors.traverse { ctor => createClassCtorObject(ctor.ctor) }
 
           vtable <- vtableBuilder.fromClass(arClass)
-          vtableObjects <- vtable.methodMap.toVector.traverse {
-            case (slotMethod, VTableEntryMethod(method, _)) =>
-              for {
-                slotSym <- getMethodSymbol(getParamOwnerModule(arClass.descriptor))(slotMethod)
-                implObj <- getMethodObject(getParamOwnerModule(arClass.descriptor))(method)
-              } yield JSObjectLiteral(Vector(
-                JSObjectProperty("symbol", slotSym),
-                JSObjectProperty("value", JSPropertyAccessDot(
-                  implObj,
-                  JSIdentifier("value")
-                )),
-              ))
-
-            case (slotMethod, _) =>
-              for {
-                slotSym <- getMethodSymbol(getParamOwnerModule(arClass.descriptor))(slotMethod)
-              } yield JSObjectLiteral(Vector(
-                JSObjectProperty("symbol", slotSym),
-                JSObjectProperty("value", JSNull),
-              ))
-          }
+          vtableObject <- createVTableObject(vtable, arClass.descriptor)
 
           baseClassExpr <- sig.unsubstitutedResult.baseTypes.baseClass.traverse { baseClass =>
             baseClass.arClass.value.signature.map { sig =>
@@ -246,7 +226,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
               JSObjectProperty("methods", JSArrayLiteral(methodObjects)),
               JSObjectProperty("staticMethods", JSArrayLiteral(staticMethodObjects)),
               JSObjectProperty("constructors", JSArrayLiteral(ctorObjects)),
-              JSObjectGetProperty("vtable", Vector(JSReturn(JSArrayLiteral(vtableObjects)))),
+              JSObjectGetProperty("vtable", Vector(JSReturn(vtableObject))),
             ),
 
           ).flatten)
@@ -260,7 +240,71 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
         )
 
 
-      case GlobalBinding.GlobalDataConstructor(_, _, ctor) => ???
+      case GlobalBinding.GlobalDataConstructor(_, _, ctor) =>
+        for {
+          sig <- ctor.signature
+          methods <- ctor.methods
+          ctorImpl <- ctor.payload : TComp[context.JSImpl.DataConstructor]
+
+          descString = JSString(DescriptorId.forDataConstructor(ctor.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))
+
+          sigVarMapping = parameterVarMapping(ctor.descriptor)(sig)
+          paramObjects = sigVarMapping.values.map {
+            case JSIdentifier(name) => JSObjectLiteral(Vector(
+              JSObjectProperty("name", JSString(name))
+            ))
+          }.toVector
+
+          sigVarMemberMapping = sigVarMapping.mapValues { id =>
+            JSPropertyAccessDot(
+              JSPropertyAccessBracket(
+                JSPropertyAccessDot(
+                  JSPropertyAccessBracket(
+                    JSThis,
+                    JSPropertyAccessBracket(dataCtorsVarName, descString)
+                  ),
+                  JSIdentifier("parameters")
+                ),
+                id
+              ),
+              JSIdentifier("symbol")
+            )
+          }
+
+          methodObjects <- methods.traverse { method =>
+              createMethodObject(sigVarMemberMapping)(method.method)
+          }
+
+          ctorFunc <- createDataCtorBody(ctor, sig, ctorImpl, sigVarMapping, sigVarMemberMapping)
+
+          vtable <- vtableBuilder.fromDataConstructor(ctor)
+          vtableObject <- createVTableObject(vtable, ctor.descriptor)
+
+          instanceTypeSig <- sig.unsubstitutedResult.instanceType.arTrait.value.signature
+          instanceTypeExpr = getTraitJSObject(
+            getParamOwnerModule(ctor.descriptor),
+            sig.unsubstitutedResult.instanceType.arTrait.value.descriptor,
+            ErasedSignature.fromSignatureParameters(context)(instanceTypeSig)
+          )
+
+          classSpec = JSObjectLiteral(Vector(
+            JSObjectGetProperty("instanceType", Vector(JSReturn(instanceTypeExpr))),
+            JSObjectProperty("parameters", JSArrayLiteral(paramObjects)),
+            JSObjectProperty("methods", JSArrayLiteral(methodObjects)),
+            JSObjectProperty("constructor", ctorFunc),
+            JSObjectGetProperty("vtable", Vector(JSReturn(vtableObject))),
+          ))
+
+        } yield JSAssignment(
+          JSPropertyAccessBracket(dataCtorsVarName, descString),
+          JSFunctionCall(
+            coreLibExport(ctor.descriptor.moduleDescriptor, "createClass"),
+            Vector(classSpec)
+          )
+        )
+
+
+
     }
 
   private def createMethodObject(ownerVarMapping: VarMap)(method: ArMethod[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): TComp[JSExpression] =
@@ -288,7 +332,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
       impl <- ctor.payload : TComp[context.JSImpl.ClassConstructor]
       body <- impl match {
         case context.JSImpl.ClassConstructor.StatementBody(body) =>
-          val paramVarMapping = parameterVarMapping(ctor.descriptor)(sig)
+          val paramVarMapping: VarMap = parameterVarMapping(ctor.descriptor)(sig)
 
           for {
             (initStmts, initVarMapping) <- body.initStatements.foldLeftM((Vector.empty[JSStatement], paramVarMapping)) {
@@ -367,6 +411,53 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
       JSObjectProperty("descriptor", JSString(descriptorId)),
       JSObjectProperty("value", func),
     ))
+
+  private def createDataCtorBody(ctor: DataConstructor[context.type, DeclarationPayloadSpecifier], sig: Signature[DataConstructor.ResultInfo], ctorImpl: context.JSImpl.DataConstructor, sigVarMapping: VarMap, sigVarMemberMapping: VarMap): TComp[JSExpression] =
+    ctorImpl match {
+      case context.JSImpl.DataConstructor.ExpressionBody(expr) =>
+
+        val paramMemberInitStmts =
+          sigVarMemberMapping.toVector.map {
+            case (descriptor, memberExpr) =>
+              JSAssignment(memberExpr, sigVarMapping(descriptor))
+          }
+
+        for {
+          body <- convertStmt(EmitParams(
+            owner = ctor.descriptor,
+            varMapping = sigVarMapping,
+          ))(useReturn = true)(expr)
+        } yield JSFunctionExpression(
+          None,
+          createParameterList(ctor.descriptor)(sig),
+          paramMemberInitStmts ++ body
+        )
+    }
+
+  private def createVTableObject(vtable: VTable[context.type], descriptor: MethodOwnerDescriptor): TComp[JSExpression] =
+    vtable.methodMap.toVector
+      .traverse {
+        case (slotMethod, VTableEntryMethod(method, _)) =>
+          for {
+            slotSym <- getMethodSymbol(getParamOwnerModule(descriptor))(slotMethod)
+            implObj <- getMethodObject(getParamOwnerModule(descriptor))(method)
+          } yield JSObjectLiteral(Vector(
+            JSObjectProperty("symbol", slotSym),
+            JSObjectProperty("value", JSPropertyAccessDot(
+              implObj,
+              JSIdentifier("value")
+            )),
+          ))
+
+        case (slotMethod, _) =>
+          for {
+            slotSym <- getMethodSymbol(getParamOwnerModule(descriptor))(slotMethod)
+          } yield JSObjectLiteral(Vector(
+            JSObjectProperty("symbol", slotSym),
+            JSObjectProperty("value", JSNull),
+          ))
+      }
+    .map(JSArrayLiteral(_))
 
 
   private def createExpressionImpl(params: EmitParams)(sig: context.signatureContext.Signature[FunctionResultInfo])(expr: context.typeSystem.ArExpr): TComp[JSExpression] =

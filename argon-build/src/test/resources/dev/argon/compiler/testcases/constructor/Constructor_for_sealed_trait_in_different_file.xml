@@ -27,6 +27,6 @@
 
     ]]></InputSource>
 
-    <ExpectedError>InstanceTypeSealed</ExpectedError>
+    <ExpectedError>SealedTraitExtendedError</ExpectedError>
 
 </ArgonTest>
