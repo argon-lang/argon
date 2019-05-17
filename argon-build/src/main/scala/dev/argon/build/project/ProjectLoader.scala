@@ -1,17 +1,17 @@
 package dev.argon.build.project
 
-import java.io.File
-import java.nio.file.attribute.BasicFileAttributes
+import java.io.{ File, IOException }
 import java.nio.file._
 
 import scalaz._
 import Scalaz._
-import scalaz.zio.IO
+import dev.argon.util.FilenameManip
+import scalaz.zio._
 import scalaz.zio.interop.scalaz72._
-import shapeless.{ Path => _, _ }
+import shapeless.{Path => _, _}
 
 trait ProjectLoader[A, B, I] {
-  def loadProject[F[_, _]](a: A)(implicit monadInstance: Monad[F[Throwable, ?]], fileHandler: ProjectFileHandler[F, I]): F[Throwable, B]
+  def loadProject[F[_]](a: A)(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[B]
 }
 
 object ProjectLoader {
@@ -21,23 +21,23 @@ object ProjectLoader {
   object Implicits {
 
     implicit def identityLoader[A, I]: ProjectLoader[A, A, I] = new ProjectLoader[A, A, I] {
-      override def loadProject[F[_, _]](a: A)(implicit monadInstance: Monad[F[Throwable, ?]], fileHandler: ProjectFileHandler[F, I]): F[Throwable, A] =
+      override def loadProject[F[_]](a: A)(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[A] =
         monadInstance.point(a)
     }
 
     implicit def fileLoader[I]: ProjectLoader[String, I, I] = new ProjectLoader[String, I, I] {
-      override def loadProject[F[_, _]](a: String)(implicit monadInstance: Monad[F[Throwable, ?]], fileHandler: ProjectFileHandler[F, I]): F[Throwable, I] =
+      override def loadProject[F[_]](a: String)(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[I] =
         fileHandler.loadSingleFile(a)
     }
 
     implicit def fileListLoader[I]: ProjectLoader[List[String], List[I], I] = new ProjectLoader[List[String], List[I], I] {
-      override def loadProject[F[_, _]](a: List[String])(implicit monadInstance: Monad[F[Throwable, ?]], fileHandler: ProjectFileHandler[F, I]): F[Throwable, List[I]] =
+      override def loadProject[F[_]](a: List[String])(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[List[I]] =
         a.traverseM(fileHandler.loadFileGlob)
     }
 
     implicit def hconsLoader[AHead, ATail <: HList, BHead, BTail <: HList, I](implicit headLoader: ProjectLoader[AHead, BHead, I], tailLoader: ProjectLoader[ATail, BTail, I]): ProjectLoader[AHead :: ATail, BHead :: BTail, I] =
       new ProjectLoader[AHead :: ATail, BHead :: BTail, I] {
-        override def loadProject[F[_, _]](a: AHead :: ATail)(implicit monadInstance: Monad[F[Throwable, ?]], fileHandler: ProjectFileHandler[F, I]): F[Throwable, BHead :: BTail] =
+        override def loadProject[F[_]](a: AHead :: ATail)(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[BHead :: BTail] =
           headLoader.loadProject(a.head)(monadInstance, fileHandler).flatMap { bHead =>
             tailLoader.loadProject(a.tail)(monadInstance, fileHandler).map { bTail =>
               bHead :: bTail
@@ -47,13 +47,13 @@ object ProjectLoader {
 
     implicit def productGenericLoader[A[_] <: Product, T1, T2, L1 <: HList, L2 <: HList, I](implicit gen1: Generic.Aux[A[T1], L1], gen2: Generic.Aux[A[T2], L2], loader: ProjectLoader[L1, L2, I]): ProjectLoader[A[T1], A[T2], I] =
       new ProjectLoader[A[T1], A[T2], I] {
-        override def loadProject[F[_, _]](a: A[T1])(implicit monadInstance: Monad[F[Throwable, ?]], fileHandler: ProjectFileHandler[F, I]): F[Throwable, A[T2]] =
+        override def loadProject[F[_]](a: A[T1])(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[A[T2]] =
           loader.loadProject(gen1.to(a))(monadInstance, fileHandler).map(gen2.from)
       }
 
     implicit def mapLoader[K1, K2, V1, V2, I](implicit keyLoader: ProjectLoader[K1, K2, I], valueLoader: ProjectLoader[V1, V2, I]): ProjectLoader[Map[K1, V1], Map[K2, V2], I] =
       new ProjectLoader[Map[K1, V1], Map[K2, V2], I] {
-        override def loadProject[F[_, _]](a: Map[K1, V1])(implicit monadInstance: Monad[F[Throwable, ?]], fileHandler: ProjectFileHandler[F, I]): F[Throwable, Map[K2, V2]] =
+        override def loadProject[F[_]](a: Map[K1, V1])(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[Map[K2, V2]] =
           a
           .toVector
           .traverse { case (k, v) =>
@@ -71,45 +71,21 @@ object ProjectLoader {
 
 }
 
-trait ProjectFileHandler[F[_, _], I] {
-  def loadSingleFile(file: String): F[Throwable, I]
-  def loadFileGlob(glob: String): F[Throwable, List[I]]
+trait ProjectFileHandler[F[_], I] {
+  def loadSingleFile(file: String): F[I]
+  def loadFileGlob(glob: String): F[List[I]]
 }
 
 object ProjectFileHandler {
 
-  def fileHandlerFile(dir: File): ProjectFileHandler[IO, File] = new ProjectFileHandler[IO, File] {
+  def fileHandlerFile(dir: File): ProjectFileHandler[IO[IOException, ?], File] = new ProjectFileHandler[IO[IOException, ?], File] {
 
-    override def loadSingleFile(file: String): IO[Throwable, File] =
-      IO.effect { new File(dir, file) }
+    override def loadSingleFile(file: String): IO[IOException, File] =
+      IO.effect { new File(dir, file) }.refineOrDie { case e: IOException => e }
 
-    override def loadFileGlob(glob: String): IO[Throwable, List[File]] = IO.effect {
-      if(glob.contains("*")) {
-        val pathMatcher = FileSystems.getDefault.getPathMatcher("glob:" + glob)
-
-        allDirectoryFiles
-          .filter { path: Path =>
-            pathMatcher.matches(dir.toPath.relativize(path))
-          }
-          .map { _.toFile }
-          .toList
-      }
-      else {
-        List(new File(dir, glob))
-      }
-    }
-
-    def allDirectoryFiles: Traversable[Path] = new Traversable[Path] {
-      override def foreach[U](f: Path => U): Unit = {
-        val _ =
-          Files.walkFileTree(dir.toPath, new SimpleFileVisitor[Path] {
-            override def visitFile(t: Path, basicFileAttributes: BasicFileAttributes): FileVisitResult = {
-              val _ = f(t)
-              FileVisitResult.CONTINUE
-            }
-          })
-      }
-    }
+    override def loadFileGlob(glob: String): IO[IOException, List[File]] = IO.effect {
+      FilenameManip.findGlob(dir.toPath, Paths.get(glob)).map { _.toFile }.toList
+    }.refineOrDie { case e: IOException => e }
 
   }
 

@@ -1,7 +1,7 @@
 package dev.argon.util
 
 import java.io
-import java.io.File
+import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.zip.{ZipEntry, ZipFile, ZipOutputStream}
@@ -30,11 +30,12 @@ object FileOperations {
   def filePrintWriter[T](file: io.File)(f: io.PrintWriter => Task[T]): Task[T] =
     fileOutputStream(file) { stream => createPrintWriter(stream)(f) }
 
-  def readAllText(file: io.File): Task[String] =
+  def readAllText(file: io.File): IO[IOException, String] =
     IO.effect {
       val bytes = Files.readAllBytes(file.toPath)
       new String(bytes, StandardCharsets.UTF_8)
     }
+      .refineOrDie { case e: IOException => e }
 
   def createReader[T](stream: io.FileInputStream): Task[io.Reader] =
     IO.effect { new io.InputStreamReader(stream) }
@@ -42,8 +43,8 @@ object FileOperations {
   def fileReader[T](file: io.File)(f: io.Reader => Task[T]): Task[T] =
     fileInputStream(file) { stream => createReader(stream).flatMap(f) }
 
-  def fileFromName(fileName: String): Task[io.File] =
-    IO.effect { new io.File(fileName) }
+  def fileFromName(fileName: String): UIO[io.File] =
+    IO.effectTotal { new io.File(fileName) }
 
   def zipOutputStream[A](stream: io.OutputStream)(f: ZipOutputStream => Task[A]): Task[A] =
     IO.effect { new ZipOutputStream(stream) }.bracket(stream => IO.effectTotal { stream.close() })(f)

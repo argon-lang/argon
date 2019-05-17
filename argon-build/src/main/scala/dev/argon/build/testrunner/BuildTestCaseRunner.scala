@@ -4,29 +4,29 @@ import scalaz.{Scalaz, _}
 import Scalaz._
 import scalaz.zio.interop.scalaz72._
 import dev.argon.build._
-import java.io.File
+import java.io.{File, IOException}
 
 import dev.argon.compiler.CompilerOptions
 import scalaz._
 import Scalaz._
 import dev.argon.build.project.ProjectFileHandler
-import scalaz.zio.IO
+import scalaz.zio._
 import scalaz.zio.interop.scalaz72._
 import shapeless.{Id => _, _}
 import dev.argon.build.project.ProjectLoader.Implicits._
 
 final class BuildTestCaseRunner(protected val backend: Backend, references: Vector[File]) extends TestCaseRunnerCompilePhase {
 
-  private implicit val dummyFileHandler: ProjectFileHandler[IO, File] = new ProjectFileHandler[IO, File] {
-    override def loadSingleFile(file: String): IO[Throwable, File] =
-      IO.effect { new File(file) }
+  private implicit val dummyFileHandler: ProjectFileHandler[UIO, File] = new ProjectFileHandler[UIO, File] {
+    override def loadSingleFile(file: String): UIO[File] =
+      IO.effectTotal { new File(file) }
 
-    override def loadFileGlob(glob: String): IO[Throwable, List[File]] =
+    override def loadFileGlob(glob: String): UIO[List[File]] =
       IO.succeed(Nil)
   }
 
-  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[Throwable, backend.BackendOptions[Id, File]] =
-    backend.projectLoader.loadProject(
+  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[IOException, backend.BackendOptions[Id, File]] =
+    backend.projectLoader.loadProject[UIO](
       backend.inferBackendOptions(compilerOptions, backend.emptyBackendOptions)
     )
 

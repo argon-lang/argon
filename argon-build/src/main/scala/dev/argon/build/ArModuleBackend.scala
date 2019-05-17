@@ -29,7 +29,7 @@ object ArModuleBackend extends Backend {
       referenceModule = options.referenceModule.getOrElse(compilerOptions.moduleName + ".armodule")
     )
 
-  override def projectLoader[F[_, _], I]: ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I] = {
+  override def projectLoader[I]: ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I] = {
     import shapeless._
     import ProjectLoader.Implicits._
 

@@ -1,6 +1,6 @@
 package dev.argon.build.testrunner
 
-import java.io.File
+import java.io.{ File, IOException }
 
 import dev.argon.build.{Backend, BuildProcess}
 import dev.argon.compiler.{CompilationError, CompilerInput, CompilerOptions, IOCompilation}
@@ -17,7 +17,7 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
 
   protected val backend: Backend
 
-  protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[Throwable, backend.BackendOptions[Id, File]]
+  protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[IOException, backend.BackendOptions[Id, File]]
 
   protected def getProgramOutput(compOutput: backend.TCompilationOutput[IO[Throwable, +?], File]): IO[Throwable, String]
 

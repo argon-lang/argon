@@ -1,11 +1,11 @@
 package dev.argon.build.testrunner.node
 
-import java.io.{File, FileInputStream, PrintWriter, StringWriter}
+import java.io.{File, FileInputStream, IOException, PrintWriter, StringWriter}
 import java.nio.charset.StandardCharsets
 
 import dev.argon.build.{Backend, CompilationOutputText, JSBackend}
 import dev.argon.build.testrunner._
-import scalaz.{Scalaz, _}
+import scalaz._
 import Scalaz._
 import scalaz.zio._
 import dev.argon.build.testrunner.node.ExternalApi._
@@ -18,7 +18,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
 
   override protected val backend: JSBackend.type = JSBackend
 
-  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[Throwable, JSBackendOptions[Id, File]] = for {
+  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[IOException, JSBackendOptions[Id, File]] = for {
     outFile <- FileOperations.fileFromName(compilerOptions.moduleName + ".js")
   } yield JSBackendOptions[Id, File](
     outputFile = outFile,

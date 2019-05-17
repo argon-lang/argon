@@ -1,6 +1,6 @@
 package dev.argon.build.project
 
-import java.io.File
+import java.io.{ File, IOException }
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file._
 
@@ -50,23 +50,27 @@ object BuildInfo {
   private val projectKey = "project"
   private val compilerOptionsKey = "compiler-options"
 
-  def loadFile(file: File): IO[Throwable, Option[Vector[BuildInfo[File]]]] =
-    FileOperations.readAllText(file).flatMap { buildFile =>
-      Toml.parse(buildFile)
-        .toOption
-        .flatMap { rootTable =>
-          val proj = loadProjectOpt(rootTable.values.get(projectKey))
-          val compOpts = loadCompilerOptionsOpt(rootTable.values.get(compilerOptionsKey))
+  def loadFile(file: File): IO[IOException, Option[Vector[BuildInfo[File]]]] =
+    IO.effect { file.getAbsoluteFile.getParentFile }
+      .refineOrDie { case e: IOException => e }
+      .flatMap { dir =>
+        FileOperations.readAllText(file).flatMap { buildFile =>
+          Toml.parse(buildFile)
+            .toOption
+            .flatMap { rootTable =>
+              val proj = loadProjectOpt(rootTable.values.get(projectKey))
+              val compOpts = loadCompilerOptionsOpt(rootTable.values.get(compilerOptionsKey))
 
-          (rootTable.values - projectKey - compilerOptionsKey).toVector.traverse {
-            case (key, value: toml.Value.Tbl) =>
-              loadBuildInfo(file, key, value, proj, compOpts)
+              (rootTable.values - projectKey - compilerOptionsKey).toVector.traverse {
+                case (key, value: toml.Value.Tbl) =>
+                  loadBuildInfo(file, key, value, proj, compOpts)
 
-            case (_, _) => None
-          }
+                case (_, _) => None
+              }
+            }
+            .traverse { _.traverse(loadProjectFile(dir)) }
         }
-        .traverse { _.traverse(loadProjectFile(file.getParentFile)) }
-    }
+      }
 
   private def loadProjectOpt(proj: Option[toml.Value]): ProjectInfoFormat[Option, String] =
     proj
@@ -109,15 +113,15 @@ object BuildInfo {
       }
     }
 
-  private def loadProjectFile(dir: File)(build: BuildInfo[String]): IO[Throwable, BuildInfo[File]] = {
+  private def loadProjectFile(dir: File)(build: BuildInfo[String]): IO[IOException, BuildInfo[File]] = {
     import ProjectLoader.Implicits._
 
     type ProjFormat[A] = ProjectInfoFormat[Id, A]
     implicit val fileHandler = ProjectFileHandler.fileHandlerFile(dir)
 
     for {
-      resolvedProj <- ProjectLoader[ProjFormat[String], ProjFormat[File], File].loadProject(build.project)
-      resolvedBackendOpts <- build.backend.projectLoader.loadProject(build.backendOptions)
+      resolvedProj <-ProjectLoader[ProjFormat[String], ProjFormat[File], File].loadProject[IO[IOException, ?]](build.project)
+      resolvedBackendOpts <- build.backend.projectLoader[File].loadProject[IO[IOException, ?]](build.backendOptions)
     } yield BuildInfo(build.backend)(
       project = resolvedProj,
       compilerOptions = build.compilerOptions,

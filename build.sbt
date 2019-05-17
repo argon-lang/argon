@@ -12,6 +12,7 @@ lazy val commonSettings = Seq(
 
   libraryDependencies ++= Seq(
     "org.scala-lang.modules" %% "scala-xml" % "1.2.0",
+    "org.scala-lang.modules" %% "scala-java8-compat" % "0.9.0",
     
     "org.scalaz" %% "scalaz-core" % "7.2.27",
     "org.scalaz" %% "scalaz-zio" % "1.0-RC4",
@@ -57,9 +58,7 @@ lazy val compilerOptions = Seq(
     "-language:implicitConversions",
     "-P:silencer:globalFilters=unreachable;outer reference in this type test cannot be checked at run time.",
   ),
-
-  scalacOptions in (Compile, compile) += "-Xfatal-warnings",
-
+  
   scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xlint")),
   scalacOptions in (Test, console) ~= (_ filterNot (opt => opt == "-Xlint")),
 
