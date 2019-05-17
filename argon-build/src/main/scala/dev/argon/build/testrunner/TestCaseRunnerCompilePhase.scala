@@ -47,7 +47,7 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
           }
       )
         .map {
-          case (_, \/-(programOutput)) =>
+          case (_, Right(programOutput)) =>
             testCase.expectedResult match {
               case TestCaseExpectedOutput(expectedOutput) if normalizeOutput(programOutput) === normalizeOutput(expectedOutput) =>
                 TestCaseResult.Success
@@ -59,7 +59,7 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
                 )
             }
 
-          case (_, -\/(errors)) =>
+          case (_, Left(errors)) =>
             testCase.expectedResult match {
               case TestCaseExpectedOutput(_) =>
                 TestCaseResult.Failure(

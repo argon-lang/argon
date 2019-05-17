@@ -60,17 +60,17 @@ object IOCompilation {
       fa.flatMap(f)
 
 
-    override def getResult[A](fa: Task[A]): IO[Throwable, (Vector[CompilationMessageNonFatal], NonEmptyList[CompilationError] \/ A)] =
+    override def getResult[A](fa: Task[A]): IO[Throwable, (Vector[CompilationMessageNonFatal], Either[NonEmptyList[CompilationError], A])] =
       fa
         .flatMap { a =>
           messageAccum.get.map { messages =>
-            (messages, \/.right[NonEmptyList[CompilationError], A](a))
+            (messages, Right(a))
           }
         }
         .catchSome {
           case CompilationErrorException(errors) =>
             messageAccum.get.map { messages =>
-              (messages, \/.left[NonEmptyList[CompilationError], A](errors))
+              (messages, Left(errors))
             }
         }
   }

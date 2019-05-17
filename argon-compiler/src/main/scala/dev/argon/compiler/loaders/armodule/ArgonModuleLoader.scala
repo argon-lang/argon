@@ -145,7 +145,7 @@ object ArgonModuleLoader {
           : TComp[Option[T]] =
             ModuleLookup.lookupNamespaceValue(context)(refModule)(namespace, name)(f)
 
-          private def parseTraitDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.TraitDescriptor): Option[TraitDescriptor \/ TraitDescriptor.InNamespace] =
+          private def parseTraitDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.TraitDescriptor): Option[Either[TraitDescriptor, TraitDescriptor.InNamespace]] =
             desc.descriptor match {
               case ArgonModule.TraitDescriptor.Descriptor.InNamespace(
                 ArgonModule.InNamespaceDescriptor(
@@ -153,13 +153,13 @@ object ArgonModuleLoader {
                   ValidGlobalName(name),
                 )
               ) =>
-                Some(\/-(TraitDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
+                Some(Right(TraitDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
 
               case ArgonModule.TraitDescriptor.Descriptor.Empty =>
                 None
             }
 
-          private def parseClassDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.ClassDescriptor): Option[ClassDescriptor \/ ClassDescriptor.InNamespace] =
+          private def parseClassDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.ClassDescriptor): Option[Either[ClassDescriptor, ClassDescriptor.InNamespace]] =
             desc.descriptor match {
               case ArgonModule.ClassDescriptor.Descriptor.InNamespace(
                 ArgonModule.InNamespaceDescriptor(
@@ -167,13 +167,13 @@ object ArgonModuleLoader {
                   ValidGlobalName(name),
                 )
               ) =>
-                Some(\/-(ClassDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
+                Some(Right(ClassDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
 
               case ArgonModule.ClassDescriptor.Descriptor.Empty =>
                 None
             }
 
-          private def parseDataCtorDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.DataConstructorDescriptor): Option[DataConstructorDescriptor \/ DataConstructorDescriptor.InNamespace] =
+          private def parseDataCtorDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.DataConstructorDescriptor): Option[Either[DataConstructorDescriptor, DataConstructorDescriptor.InNamespace]] =
             desc.descriptor match {
               case ArgonModule.DataConstructorDescriptor.Descriptor.InNamespace(
                 ArgonModule.InNamespaceDescriptor(
@@ -181,13 +181,13 @@ object ArgonModuleLoader {
                   ValidGlobalName(name),
                 )
               ) =>
-                Some(\/-(DataConstructorDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
+                Some(Right(DataConstructorDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
 
               case ArgonModule.DataConstructorDescriptor.Descriptor.Empty =>
                 None
             }
 
-          private def parseFunctionDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.FunctionDescriptor): Option[FuncDescriptor \/ FuncDescriptor.InNamespace] =
+          private def parseFunctionDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.FunctionDescriptor): Option[Either[FuncDescriptor, FuncDescriptor.InNamespace]] =
             desc.descriptor match {
               case ArgonModule.FunctionDescriptor.Descriptor.InNamespace(
                 ArgonModule.InNamespaceDescriptor(
@@ -195,7 +195,7 @@ object ArgonModuleLoader {
                   ValidGlobalName(name),
                 )
               ) =>
-                Some(\/-(FuncDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
+                Some(Right(FuncDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
 
               case ArgonModule.FunctionDescriptor.Descriptor.Empty =>
                 None
@@ -218,7 +218,7 @@ object ArgonModuleLoader {
 
             }
 
-          private def parseMethodDescriptor(module: ModuleDescriptor)(desc: ArgonModule.MethodDescriptor): Option[MethodDescriptor \/ Nothing] =
+          private def parseMethodDescriptor(module: ModuleDescriptor)(desc: ArgonModule.MethodDescriptor): Option[Either[MethodDescriptor, Nothing]] =
             desc match {
               case ArgonModule.MethodDescriptor(index, instanceTypeId, memberName, ownerDesc) =>
                 for {
@@ -231,7 +231,7 @@ object ArgonModuleLoader {
                     case ArgonModule.MethodDescriptor.InstanceType.ClassObjectDescriptor(classDesc) => parseClassDescriptor(instanceTypeId)(module)(classDesc).map(_.merge).map(ClassObjectDescriptor.apply)
                     case ArgonModule.MethodDescriptor.InstanceType.DataConstructorDescriptor(dataCtorDesc) => parseDataCtorDescriptor(instanceTypeId)(module)(dataCtorDesc).map(_.merge)
                   }
-                } yield -\/(MethodDescriptor(ownerDescValue, 0, memberNameValue))
+                } yield Left(MethodDescriptor(ownerDescValue, 0, memberNameValue))
             }
 
           private def convertFileId(id: ArgonModule.FileID): FileID =
@@ -264,7 +264,7 @@ object ArgonModuleLoader {
             refDescriptorLens: TRef => TValueDescriptor,
             defDescriptorLens: TDef => TValueDescriptor,
           )(
-            parseDescriptor: ModuleDescriptor => TValueDescriptor => Option[TResultDescriptor \/ TGlobalDescriptor]
+            parseDescriptor: ModuleDescriptor => TValueDescriptor => Option[Either[TResultDescriptor, TGlobalDescriptor]]
           )(
             referenceHandler: ArModule[context.type, ReferencePayloadSpecifier] => TResultDescriptor => TComp[Option[TRefResult]],
             definitionHandler: ObjectDefinitionLoader[TDef, TResultDescriptor, TDefResult],
@@ -303,10 +303,10 @@ object ArgonModuleLoader {
                 res.getZipEntryStream(zip, defPathFunction(id))(res.readProtocolBufferMessage(defCompanion))
                   .flatMap { defValue =>
                     parseDescriptor(currentModuleDescriptor)(defDescriptorLens(defValue)) match {
-                      case Some(-\/(descriptor)) =>
+                      case Some(Left(descriptor)) =>
                         definitionHandler(id, defValue, descriptor).map(ModuleObjectDefinition.apply)
 
-                      case Some(\/-(descriptor)) =>
+                      case Some(Right(descriptor)) =>
                         definitionHandler(id, defValue, descriptor).map(ModuleObjectGlobalDefinition.apply)
 
                       case None =>

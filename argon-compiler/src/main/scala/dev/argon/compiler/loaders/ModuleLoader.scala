@@ -64,8 +64,8 @@ object ModuleLoader {
     type PayloadResult = ArModule[context.type, ReferencePayloadSpecifier]
 
     val dependencyTreeOps
-    : DependencyTreeOperations[TComp, LoaderAndData, ModuleDescriptor, PayloadResult, CompilationError \/ ?] =
-      new DependencyTreeOperations[TComp, LoaderAndData, ModuleDescriptor, PayloadResult, CompilationError \/ ?] {
+    : DependencyTreeOperations[TComp, LoaderAndData, ModuleDescriptor, PayloadResult, Either[CompilationError, ?]] =
+      new DependencyTreeOperations[TComp, LoaderAndData, ModuleDescriptor, PayloadResult, Either[CompilationError, ?]] {
         override def getItemKey(item: LoaderAndData): ModuleDescriptor = item.loader.dataDescriptor[I, res.type](item.data)
 
         override def getItemDependencies(item: LoaderAndData): Vector[ModuleDescriptor] =
@@ -74,19 +74,19 @@ object ModuleLoader {
         override def loadItem(item: LoaderAndData, dependencies: Vector[PayloadResult]): TComp[PayloadResult] =
           item.loader.loadModuleReference[I, res.type](res)(item.data)(dependencies)
 
-        override def circularReferenceHandler(item: LoaderAndData): CompilationError \/ PayloadResult =
-          -\/(CompilationError.CircularDependencyLoadingModule(CompilationMessageSource.ReferencedModule(item.loader.dataDescriptor[I, res.type](item.data))))
+        override def circularReferenceHandler(item: LoaderAndData): Either[CompilationError, PayloadResult] =
+          Left(CompilationError.CircularDependencyLoadingModule(CompilationMessageSource.ReferencedModule(item.loader.dataDescriptor[I, res.type](item.data))))
 
-        override def missingDependencyHandler(item: LoaderAndData, missingDepKey: ModuleDescriptor): CompilationError \/ PayloadResult =
-          -\/(CompilationError.ModuleDependencyNotFound(missingDepKey, CompilationMessageSource.ReferencedModule(item.loader.dataDescriptor[I, res.type](item.data))))
+        override def missingDependencyHandler(item: LoaderAndData, missingDepKey: ModuleDescriptor): Either[CompilationError, PayloadResult] =
+          Left(CompilationError.ModuleDependencyNotFound(missingDepKey, CompilationMessageSource.ReferencedModule(item.loader.dataDescriptor[I, res.type](item.data))))
 
       }
 
     def loadModuleRefFromData
     (context: ContextComp[TComp])
     (refDataPairs: Vector[LoaderAndData])
-    : TComp[Vector[CompilationError \/ PayloadResult]] =
-    loadDependencies[TComp, LoaderAndData, ModuleDescriptor, PayloadResult, CompilationError \/ ?](dependencyTreeOps)(refDataPairs)
+    : TComp[Vector[Either[CompilationError, PayloadResult]]] =
+    loadDependencies[TComp, LoaderAndData, ModuleDescriptor, PayloadResult, Either[CompilationError, ?]](dependencyTreeOps)(refDataPairs)
 
 
 
@@ -102,8 +102,8 @@ object ModuleLoader {
           loadModuleRefFromData(context)(loadedFiles)
             .flatMap { moduleResults =>
               moduleResults.traverseM {
-                case \/-(module) => context.compCompilationInstance.point(Vector(module))
-                case -\/(loadError) => context.compCompilationInstance.forErrors(loadError)
+                case Right(module) => context.compCompilationInstance.point(Vector(module))
+                case Left(loadError) => context.compCompilationInstance.forErrors(loadError)
               }
             }
             .flatMap(f)

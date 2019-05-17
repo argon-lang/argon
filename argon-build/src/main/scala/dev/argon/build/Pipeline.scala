@@ -57,10 +57,10 @@ object Pipeline {
         )
       }
     .flatMap {
-      case (msgs, -\/(errors)) =>
+      case (msgs, Left(errors)) =>
         printMessages[Vector, CompilationMessage](errors.toVector ++ msgs).map { _ => 1 }
 
-      case (msgs, \/-(_)) =>
+      case (msgs, Right(_)) =>
         printMessages[Vector, CompilationMessage](msgs).map { _ => 0 }
     }
 
