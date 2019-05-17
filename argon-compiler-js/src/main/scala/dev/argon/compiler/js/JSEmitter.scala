@@ -249,33 +249,14 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
           descString = JSString(DescriptorId.forDataConstructor(ctor.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))
 
           sigVarMapping = parameterVarMapping(ctor.descriptor)(sig)
-          paramObjects = sigVarMapping.values.map {
-            case JSIdentifier(name) => JSObjectLiteral(Vector(
-              JSObjectProperty("name", JSString(name))
-            ))
-          }.toVector
 
-          sigVarMemberMapping = sigVarMapping.mapValues { id =>
-            JSPropertyAccessDot(
-              JSPropertyAccessBracket(
-                JSPropertyAccessDot(
-                  JSPropertyAccessBracket(
-                    JSThis,
-                    JSPropertyAccessBracket(dataCtorsVarName, descString)
-                  ),
-                  JSIdentifier("parameters")
-                ),
-                id
-              ),
-              JSIdentifier("symbol")
-            )
-          }
+          sigVarMemberMapping = sigVarMapping.mapValues(StatementConverterDataCtorFieldBinding(descString).fieldVarExpr)
+
+          (ctorFunc, methodVarMap) <- createDataCtorBody(ctor, sig, ctorImpl, sigVarMapping, sigVarMemberMapping, StatementConverterDataCtorFieldBinding(descString))
 
           methodObjects <- methods.traverse { method =>
-              createMethodObject(sigVarMemberMapping)(method.method)
+              createMethodObject(methodVarMap)(method.method)
           }
-
-          ctorFunc <- createDataCtorBody(ctor, sig, ctorImpl, sigVarMapping, sigVarMemberMapping)
 
           vtable <- vtableBuilder.fromDataConstructor(ctor)
           vtableObject <- createVTableObject(vtable, ctor.descriptor)
@@ -287,9 +268,22 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
             ErasedSignature.fromSignatureParameters(context)(instanceTypeSig)
           )
 
+          propObjects = methodVarMap.keys
+            .collect {
+              case desc: ParameterDescriptor => getParameterName(desc)
+              case desc: DeconstructedParameterDescriptor => getDeconstructedParameterName(desc)
+              case desc: VariableDescriptor => getVariableName(desc)
+            }
+            .map { case JSIdentifier(id) =>
+              JSObjectLiteral(Vector(
+                JSObjectProperty("name", JSString(id))
+              ))
+            }
+            .toVector
+
           classSpec = JSObjectLiteral(Vector(
             JSObjectGetProperty("instanceType", Vector(JSReturn(instanceTypeExpr))),
-            JSObjectProperty("parameters", JSArrayLiteral(paramObjects)),
+            JSObjectProperty("properties", JSArrayLiteral(propObjects)),
             JSObjectProperty("methods", JSArrayLiteral(methodObjects)),
             JSObjectProperty("constructor", ctorFunc),
             JSObjectGetProperty("vtable", Vector(JSReturn(vtableObject))),
@@ -412,7 +406,7 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
       JSObjectProperty("value", func),
     ))
 
-  private def createDataCtorBody(ctor: DataConstructor[context.type, DeclarationPayloadSpecifier], sig: Signature[DataConstructor.ResultInfo], ctorImpl: context.JSImpl.DataConstructor, sigVarMapping: VarMap, sigVarMemberMapping: VarMap): TComp[JSExpression] =
+  private def createDataCtorBody(ctor: DataConstructor[context.type, DeclarationPayloadSpecifier], sig: Signature[DataConstructor.ResultInfo], ctorImpl: context.JSImpl.DataConstructor, sigVarMapping: VarMap, sigVarMemberMapping: VarMap, statementConverter: StatementConverter): TComp[(JSExpression, VarMap)] =
     ctorImpl match {
       case context.JSImpl.DataConstructor.ExpressionBody(expr) =>
 
@@ -423,15 +417,17 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
           }
 
         for {
-          body <- convertStmt(EmitParams(
+          (body, varMap) <- statementConverter.convertStmt(EmitParams(
             owner = ctor.descriptor,
-            varMapping = sigVarMapping,
+            varMapping = sigVarMemberMapping,
           ))(useReturn = true)(expr)
-        } yield JSFunctionExpression(
-          None,
-          createParameterList(ctor.descriptor)(sig),
-          paramMemberInitStmts ++ body
-        )
+
+          ctorFunc = JSFunctionExpression(
+            None,
+            createParameterList(ctor.descriptor)(sig),
+            paramMemberInitStmts ++ body
+          )
+        } yield (ctorFunc, varMap)
     }
 
   private def createVTableObject(vtable: VTable[context.type], descriptor: MethodOwnerDescriptor): TComp[JSExpression] =
@@ -543,9 +539,39 @@ final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] w
     }
   }
 
-
   def convertStmt(params: EmitParams)(useReturn: Boolean)(expr: context.typeSystem.ArExpr): TComp[Vector[JSStatement]] =
     StatementConverterLocalBinding.convertStmt(params)(useReturn)(expr).map { case (convBody, _) => convBody }
+
+  private trait StatementConverterFieldBinding extends StatementConverter {
+    def fieldVarExpr(id: JSIdentifier): JSExpression
+
+    override protected final def initializeLetBinding(variable: context.typeSystem.LocalVariable, valueExpr: JSExpression): (Vector[JSStatement], JSExpression) = {
+      val varName = getVariableName(variable.descriptor)
+      val fieldExpr = fieldVarExpr(varName)
+      val assign = JSAssignment(fieldExpr, valueExpr)
+
+      (Vector(assign), fieldExpr)
+    }
+  }
+
+  private final case class StatementConverterDataCtorFieldBinding(descString: JSString) extends StatementConverterFieldBinding {
+
+    override def fieldVarExpr(id: JSIdentifier): JSExpression =
+      JSPropertyAccessDot(
+        JSPropertyAccessBracket(
+          JSPropertyAccessDot(
+            JSPropertyAccessBracket(
+              JSThis,
+              JSPropertyAccessBracket(dataCtorsVarName, descString)
+            ),
+            JSIdentifier("properties")
+          ),
+          id
+        ),
+        JSIdentifier("symbol")
+      )
+
+  }
 
 
   def convertExpr(params: EmitParams)(expr: context.typeSystem.ArExpr): TComp[JSExpression] = {
