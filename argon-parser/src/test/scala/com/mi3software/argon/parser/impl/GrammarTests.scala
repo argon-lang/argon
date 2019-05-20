@@ -4,7 +4,7 @@ import org.scalatest.{FlatSpec, Matchers}
 import scalaz._
 import dev.argon.grammar.Grammar
 import Grammar.Operators._
-import dev.argon.util.NonEmptyVector
+import cats.data.NonEmptyVector
 
 import scala.language.postfixOps
 

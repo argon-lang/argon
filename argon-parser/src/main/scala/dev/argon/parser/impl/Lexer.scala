@@ -4,9 +4,10 @@ import dev.argon.parser._
 import dev.argon.util.{FilePosition, SourceLocation, WithSource}
 
 import scala.language.postfixOps
-import scalaz._
-import Scalaz._
-import dev.argon.grammar.{Grammar, GrammarError, SyntaxErrorReporter}
+import cats._
+import cats.data._
+import cats.implicits._
+import dev.argon.grammar.{Grammar, GrammarError}
 import Grammar.Operators._
 import dev.argon.parser.impl.Lexer.LexerGrammarFactory
 import dev.argon.util.stream.StreamTransformation
@@ -41,7 +42,7 @@ object Lexer {
           SyntaxError.AmbiguousParse(location)
 
         override def errorEndLocationOrder: Order[SyntaxError] =
-          (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
+          (a, b) => implicitly[Order[FilePosition]].compare(a.location.end, b.location.end)
       }
 
     private def token(category: CharacterCategory, s: String): TGrammar[String] = Grammar.token(category, t => t === s)
@@ -62,14 +63,14 @@ object Lexer {
         case Rule.SingleQuoteString =>
           val singleQuote = token(CharacterCategory.SingleQuote, "'")
 
-          val anyChar = tokenF(CharacterCategory.SingleQuoteStringChar, _ =/= "'")
+          val anyChar = tokenF(CharacterCategory.SingleQuoteStringChar, _ =!= "'")
 
           (singleQuote ++ ((
             singleQuote ++ singleQuote --> const("'") |
               anyChar
             )*) ++ singleQuote) --> {
             case (_, chs, _) =>
-              Some(Token.StringToken(NonEmptyList(
+              Some(Token.StringToken(NonEmptyList.of(
                 Token.StringToken.StringPart(chs.mkString)
               )))
           }
@@ -264,14 +265,10 @@ object Lexer {
   type ErrorEffect[F[_], A] = EitherT[F, NonEmptyList[SyntaxError], A]
 
 
-  type ErrorReporter[F[_]] = SyntaxErrorReporter[F, SyntaxError]
-
-  def lex[F[_]: ErrorReporter]: StreamTransformation[F, WithSource[String], FilePosition, WithSource[Token], FilePosition] =
-    Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken)
-      .flatMapItems {
-        case WithSource(Some(value), loc) => Vector(WithSource(value, loc))
-        case _ => Vector.empty
-      }
+  def lex: StreamTransformation[Either, NonEmptyVector[SyntaxError], WithSource[String], FilePosition, WithSource[Token], FilePosition] =
+    Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken).collect {
+      case WithSource(Some(value), loc) => WithSource(value, loc)
+    }
 
 
 }

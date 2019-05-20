@@ -1,7 +1,8 @@
 package dev.argon.parser.impl
 
-import dev.argon.util.{FilePosition, NonEmptyVector, SourceLocation, WithSource}
+import dev.argon.util.{FilePosition, SourceLocation, WithSource}
 import scalaz._
+import cats.data.NonEmptyVector
 import dev.argon.grammar.Grammar
 import Grammar.{GrammarResult, GrammarResultComplete, GrammarResultSuspend, ParseOptions}
 

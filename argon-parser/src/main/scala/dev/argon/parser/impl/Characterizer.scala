@@ -1,67 +1,66 @@
 package dev.argon.parser.impl
 
-import scalaz._
-import Scalaz._
-import dev.argon.util.stream.{ArStream, StreamTransformation}
-import dev.argon.util.{FilePosition, NonEmptyVector, SourceLocation, WithSource}
+import cats._
+import cats.data._
+import cats.implicits._
+import dev.argon.util.stream._
+import dev.argon.util.{FilePosition, SourceLocation, WithSource}
 
 
 object Characterizer {
 
-  private def toCodePoints[F[_]]: StreamTransformation[F, Char, Unit, Int, Unit] =
-    new StreamTransformation.Single[F, Char, Unit, Int, Unit] {
-      override type S = Option[Char]
-
-      override val initialState: Option[Char] = None
+  private def toCodePoints: StreamTransformation[Either, Nothing, Char, Unit, Int, Unit] =
+    new StreamTransformation.PureSingle[Nothing, Char, Unit, Int, Unit] {
+      override type State = Option[Char]
 
 
-      override protected def processItem[S2](state: Option[Char], state2: S2, item: Char)(f: (S2, NonEmptyVector[Int]) => F[S2])(implicit monadInstance: Monad[F]): F[(Option[Char], S2)] =
-        state match {
-          case Some(prevCh) =>
-            f(state2, NonEmptyVector.of(Character.toCodePoint(prevCh, item))).map { state2 => (None, state2) }
+      override def initialPure: Option[Char] = None
+
+
+      override def stepSinglePure(s: Option[Char], a: Char): StepPure[Option[Char], Nothing, Nothing, Int, Unit] =
+        s match {
+          case Some(prevCh) => Step.Produce(None, Character.toCodePoint(prevCh, a), Vector.empty)
 
           case None =>
-            if(Character.isHighSurrogate(item))
-              (item.point[Option], state2).point[F]
+            if(Character.isHighSurrogate(a))
+              Step.Continue(Some(a))
             else
-              f(state2, NonEmptyVector.of(item.toInt)).map { state2 => (Option.empty[Char], state2) }
+              Step.Produce(None, a.toInt, Vector.empty)
         }
 
-      override def processResult[S2](state: Option[Char], state2: S2, result: Unit)(f: (S2, NonEmptyVector[Int]) => F[S2])(implicit monadInstance: Monad[F]): F[(Unit, S2)] =
-        state
-          .traverse { ch => f(state2, NonEmptyVector.of(ch.toInt)) }
-          .map { newState2 => ((), newState2.getOrElse(state2)) }
+
+      override def endPure(s: Option[Char], result: Unit): (Vector[Int], Either[Nothing, Unit]) =
+        (s.map { _.toInt }.toList.toVector, Right(()))
 
     }
 
-  private def toGraphemes[F[_]]: StreamTransformation[F, Int, Unit, String, Unit] =
-    new StreamTransformation.Single[F, Int, Unit, String, Unit] {
-      override type S = Option[String]
-
-      override val initialState: Option[String] = None
+  private def toGraphemes: StreamTransformation[Either, Nothing, Int, Unit, String, Unit] =
+    new StreamTransformation.PureSingle[Nothing, Int, Unit, String, Unit] {
+      override type State = Option[String]
 
 
-      override protected def processItem[S2](state: Option[String], state2: S2, item: Int)(f: (S2, NonEmptyVector[String]) => F[S2])(implicit monadInstance: Monad[F]): F[(Option[String], S2)] =
-        state match {
-          case Some(str) if isCombiningChar(item) => ((str + codePointToString(item)).point[Option], state2).point[F]
-          case _ => f(state2, NonEmptyVector.of(codePointToString(item))).map { state2 => (Option.empty[String], state2) }
+      override def initialPure: Option[String] = None
+
+      override def stepSinglePure(s: Option[String], a: Int): StepPure[Option[String], Nothing, Int, String, Unit] =
+        s match {
+          case Some(str) if isCombiningChar(a) => Step.Continue(Some(str + codePointToString(a)))
+          case Some(str) => Step.Produce(None, str, Vector(a))
+          case None => Step.Continue(Some(codePointToString(a)))
         }
 
-      override def processResult[S2](state: Option[String], state2: S2, result: Unit)(f: (S2, NonEmptyVector[String]) => F[S2])(implicit monadInstance: Monad[F]): F[(Unit, S2)] =
-        state
-          .traverse { s => f(state2, NonEmptyVector.of(s)) }
-          .map { newState2 => ((), newState2.getOrElse(state2)) }
+      override def endPure(s: Option[String], result: Unit): (Vector[String], Either[Nothing, Unit]) =
+        (s.toList.toVector, Right(()))
 
     }
 
 
-  private def withSource[F[_]]: StreamTransformation[F, String, Unit, WithSource[String], FilePosition] =
-    new StreamTransformation.Single[F, String, Unit, WithSource[String], FilePosition] {
-      override type S = FilePosition
+  private def withSource: StreamTransformation[Either, Nothing, String, Unit, WithSource[String], FilePosition] =
+    new StreamTransformation.PureSingle[Nothing, String, Unit, WithSource[String], FilePosition] {
+      override type State = FilePosition
 
-      override val initialState: FilePosition = FilePosition(1, 1)
+      override def initialPure: FilePosition = FilePosition(1, 1)
 
-      override protected def processItem[S2](pos: FilePosition, state2: S2, item: String)(f: (S2, NonEmptyVector[WithSource[String]]) => F[S2])(implicit monadInstance: Monad[F]): F[(FilePosition, S2)] = {
+      override def stepSinglePure(pos: FilePosition, item: String): StepPure[FilePosition, Nothing, String, WithSource[String], FilePosition] = {
         val nextPos =
           if(item === "\n")
             FilePosition(pos.line + 1, 1)
@@ -70,11 +69,12 @@ object Characterizer {
 
         val newItem = WithSource(item, SourceLocation(pos, nextPos))
 
-        f(state2, NonEmptyVector.of(newItem)).map { state2 => (nextPos, state2) }
+        Step.Produce(nextPos, newItem, Vector.empty)
       }
 
-      override def processResult[S2](pos: FilePosition, state2: S2, result: Unit)(f: (S2, NonEmptyVector[WithSource[String]]) => F[S2])(implicit monadInstance: Monad[F]): F[(FilePosition, S2)] =
-        (pos, state2).point[F]
+      override def endPure(s: FilePosition, result: Unit): (Vector[WithSource[String]], Either[Nothing, FilePosition]) =
+        (Vector.empty, Right(s))
+
     }
 
 
@@ -88,7 +88,7 @@ object Characterizer {
     new String(Character.toChars(cp))
 
 
-  def characterize[F[_]: Monad](stream: ArStream[F, Char, Unit]): ArStream[F, WithSource[String], FilePosition] =
-    stream.transformWith(toCodePoints).transformWith(toGraphemes).transformWith(withSource)
+  def characterize: StreamTransformation[Either, Nothing, Char, Unit, WithSource[String], FilePosition] =
+    toCodePoints.into(toGraphemes).into(withSource)
 
 }

@@ -6,9 +6,10 @@ import dev.argon.util._
 
 import scala.reflect.ClassTag
 import scala.language.postfixOps
-import scalaz._
-import Scalaz._
-import dev.argon.grammar.{Grammar, GrammarError, SyntaxErrorReporter, TokenMatcher}
+import cats._
+import cats.data._
+import cats.implicits._
+import dev.argon.grammar.{Grammar, GrammarError, TokenMatcher}
 import Grammar.Operators._
 import Grammar.{GrammarFactory, UnionGrammar}
 import dev.argon.util.stream.StreamTransformation
@@ -116,7 +117,7 @@ object ArgonParser {
     case object NamespaceDeclaration extends ArgonRuleNameTyped[TopLevelStatement]
 
     case object TopLevelStatementRule extends ArgonRuleNameTyped[TopLevelStatement]
-    case object PaddedTopLevelStatement extends ArgonRuleNameTyped[WithSource[TopLevelStatement]]
+    case object PaddedTopLevelStatement extends ArgonRuleNameTyped[TopLevelStatement]
 
 
   }
@@ -131,7 +132,7 @@ object ArgonParser {
         SyntaxError.AmbiguousParse(location)
 
       override def errorEndLocationOrder: Order[SyntaxError] =
-        (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
+        Order.from((a, b) => implicitly[Order[FilePosition]].compare(a.location.end, b.location.end))
     }
 
     def second[T](pair: (_, T)): T = pair._2
@@ -243,8 +244,8 @@ object ArgonParser {
         case Rule.PrimaryExpr(Rule.ParenDisallowed) =>
           matchTokenFactory(Identifier) --> { case Identifier(id) => IdentifierExpr(id) : Expr } |
             matchTokenFactory(StringToken) --> {
-              case StringToken(NonEmptyList(StringToken.StringPart(str), INil())) => StringValueExpr(str)
-              case StringToken(NonEmptyList(StringToken.StringPart(str), ICons(_, _))) => ???
+              case StringToken(NonEmptyList(StringToken.StringPart(str), Nil)) => StringValueExpr(str)
+              case StringToken(NonEmptyList(StringToken.StringPart(str), _ :: _)) => ???
             } |
             matchTokenFactory(IntToken) --> { case IntToken(sign, base, digits) => IntValueExpr(sign, base, digits) } |
             matchToken(KW_TRUE) --> const(BoolValueExpr(true)) |
@@ -401,7 +402,7 @@ object ArgonParser {
           val nextRule = rule(Rule.LambdaExpr)
           nextRule.observeSource ++ ((matchToken(OP_COMMA) ++! nextRule.observeSource --> second)*) --> {
             case (WithSource(expr, _), Vector()) => expr
-            case (head, tail) => TupleExpr(NonEmptyList(head, tail: _*))
+            case (head, tail) => TupleExpr(NonEmptyList(head, tail.toList))
           }
 
         case Rule.AssignExpr =>
@@ -661,7 +662,7 @@ object ArgonParser {
             rule(Rule.Statement).observeSource --> TopLevelStatement.Statement
 
         case Rule.PaddedTopLevelStatement =>
-          (rule(Rule.StatementSeparator)*) ++ rule(Rule.TopLevelStatementRule).observeSource ++ (rule(Rule.StatementSeparator)*) --> {
+          (rule(Rule.StatementSeparator)*) ++ rule(Rule.TopLevelStatementRule) ++ (rule(Rule.StatementSeparator)*) --> {
             case (_, stmt, _) => stmt
           }
       }
@@ -696,11 +697,8 @@ object ArgonParser {
 
   private[impl] def grammarFactory: GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] = ArgonGrammarFactory
 
-  type ErrorReporter[F[_]] = SyntaxErrorReporter[F, SyntaxError]
-
-  def parse[F[_]: ErrorReporter]: StreamTransformation[F, WithSource[Token], FilePosition, TopLevelStatement, Unit] =
-    Grammar.parseAll(ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)
-      .mapItems { _.value }
-      .mapResult { _ => ()}
+  def parse: StreamTransformation[Either, NonEmptyVector[SyntaxError], WithSource[Token], FilePosition, TopLevelStatement, Unit] =
+    Grammar.parseAll[Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)
+      .mapResult(const(()))
 
 }

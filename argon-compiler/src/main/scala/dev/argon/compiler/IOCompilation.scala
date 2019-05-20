@@ -73,6 +73,8 @@ object IOCompilation {
   implicit val fileSystemResourceAccess: IOResourceAccess =
     new IOResourceAccess {
 
+      implicit val fileShow = scalaz.Show.shows(FileOperations.fileShow.show)
+
       private def handleIOException[A](file: io.File)(value: IO[io.IOException, Either[NonEmptyList[CompilationError], A]]): IO[NonEmptyList[CompilationError], A] =
         value.either.flatMap { either =>
           IO.fromEither(

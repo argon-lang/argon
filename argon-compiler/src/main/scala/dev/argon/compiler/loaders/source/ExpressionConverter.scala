@@ -12,6 +12,7 @@ import scala.collection.immutable.Set
 import scalaz._
 import Scalaz._
 import PayloadSpecifiers._
+import shims._
 
 import Function.const
 
@@ -265,22 +266,22 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         new ExprFactory[TComp] {
           override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
             values
-              .traverse1 { elem =>
+              .traverse { elem =>
                 implicitly[TypeCheck[TComp]].createHole.map { elemHole =>
                   (elem, elemHole)
                 }
               }
               .flatMap { elemPairs =>
-                val tupleType = fromSimpleType(LoadTupleType(elemPairs.map { case (_, elemHole) => TupleElement[SimpleType](elemHole) }))
+                val tupleType = fromSimpleType(LoadTupleType(elemPairs.map { case (_, elemHole) => TupleElement[SimpleType](elemHole) }.asScalaz))
                 convertExprTypeDelay(env)(expr.location)(tupleType)(expectedType).flatMap { exprTypeConv =>
                   elemPairs
-                    .traverse1 { case (elem, elemHole) =>
+                    .traverse { case (elem, elemHole) =>
                         convertExpr(env)(elem).forExpectedType(elemHole).map { elemExpr =>
                           TupleElement[ArExpr](wrapType(exprTypeConv(elemExpr)))
                         }
                     }
                     .map { tupleElements =>
-                      LoadTuple(tupleElements)
+                      LoadTuple(tupleElements.asScalaz)
                     }
                 }
               }

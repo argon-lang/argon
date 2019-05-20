@@ -7,6 +7,8 @@ import dev.argon.util.FileID
 import scalaz._
 import Scalaz._
 
+import cats.implicits._
+
 trait OpenSealedCheck {
 
   val descriptor: Descriptor

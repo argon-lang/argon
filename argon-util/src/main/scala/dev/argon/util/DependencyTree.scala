@@ -1,7 +1,9 @@
 package dev.argon.util
 
-import scalaz._
-import Scalaz._
+import cats._
+import cats.data._
+import cats.implicits._
+import cats.mtl._
 
 import scala.collection.immutable._
 
@@ -17,31 +19,31 @@ object DependencyTree {
 
 
 
-  def loadDependencyTree[LoadAction[_]: Monad, Item, ItemKey : Equal, LoadedValue, LoadResult[_] : Monad : Traverse]
+  def loadDependencyTree[LoadAction[_]: Monad, Item, ItemKey : Eq, LoadedValue, LoadResult[_] : Monad : Traverse]
   (ops: DependencyTreeOperations[LoadAction, Item, ItemKey, LoadedValue, LoadResult])
   (item: Item)
   (allDeps: Vector[Item])
   : LoadAction[LoadResult[LoadedValue]] =
-    loadDependencyTreeImpl(item)(allDeps)(ops).eval((Map.empty, Vector.empty))
+    loadDependencyTreeImpl(item)(allDeps)(ops).runA((Map.empty, Vector.empty))
 
-  def loadDependencies[LoadAction[_]: Monad, Item, ItemKey : Equal, LoadedValue, LoadResult[_] : Monad : Traverse]
+  def loadDependencies[LoadAction[_]: Monad, Item, ItemKey : Eq, LoadedValue, LoadResult[_] : Monad : Traverse]
   (ops: DependencyTreeOperations[LoadAction, Item, ItemKey, LoadedValue, LoadResult])
   (allDeps: Vector[Item])
   : LoadAction[Vector[LoadResult[LoadedValue]]] =
     allDeps
-      .traverseU { item =>
+      .traverse { item =>
         loadDependencyTreeImpl(item)(allDeps)(ops)
       }
-      .eval((Map.empty, Vector.empty))
+      .runA((Map.empty, Vector.empty))
 
-  private def loadDependencyTreeImpl[LoadAction[_]: Monad, Item, ItemKey : Equal, LoadedValue, LoadResult[_] : Monad : Traverse]
+  private def loadDependencyTreeImpl[LoadAction[_]: Monad, Item, ItemKey : Eq, LoadedValue, LoadResult[_] : Monad : Traverse]
   (item: Item)
   (allDeps: Vector[Item])
   (ops: DependencyTreeOperations[LoadAction, Item, ItemKey, LoadedValue, LoadResult])
   : StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), LoadResult[LoadedValue]] =
     handleDependencyCache(ops)(item)(ops.getItemKey(item)) {
       ops.getItemDependencies(item)
-        .traverseU { dep =>
+        .traverse { dep =>
           allDeps.iterator
             .map { depItem => (ops.getItemKey(depItem), depItem) }
             .collectFirst {
@@ -51,35 +53,35 @@ object DependencyTree {
                 loadDependencyTreeImpl(depItem)(allDeps)(ops)
 
               case None =>
-                ops.missingDependencyHandler(item, dep).point[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), ?]]
+                ops.missingDependencyHandler(item, dep).pure[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), ?]]
             }
         }
         .flatMap { depItemResults =>
-          implicitly[MonadTrans[StateT[?[_], (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), ?]]].liftM(
-            depItemResults.sequenceU.traverseU { depItems =>
+          StateT.liftF(
+            depItemResults.sequence.traverse { depItems =>
               ops.loadItem(item, depItems)
             }
           )
         }
     }
 
-  private def handleDependencyCache[LoadAction[_]: Monad, Item, ItemKey : Equal, LoadedValue, LoadResult[_] : Monad]
+  private def handleDependencyCache[LoadAction[_]: Monad, Item, ItemKey : Eq, LoadedValue, LoadResult[_] : Monad]
   (ops: DependencyTreeOperations[LoadAction, Item, ItemKey, LoadedValue, LoadResult])
   (item: Item)
   (key: ItemKey)
   (load: => StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), LoadResult[LoadedValue]])
   : StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), LoadResult[LoadedValue]] =
-    State.get[(Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey])].lift[LoadAction].flatMap { case (cache, loadingItems) =>
+    StateT.get[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey])].flatMap { case (cache, loadingItems) =>
       cache.get(key) match {
-        case Some(loadedDep) => loadedDep.point[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), ?]]
+        case Some(loadedDep) => loadedDep.pure[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), ?]]
         case None =>
-          if(loadingItems.any(key === _))
-            ops.circularReferenceHandler(item).point[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), ?]]
+          if(loadingItems.exists(key === _))
+            ops.circularReferenceHandler(item).pure[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), ?]]
           else
             for {
-              _ <- State.modify[(Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey])] { case (cache, loadingItems) => (cache, loadingItems :+ key) }.lift[LoadAction]
+              _ <- StateT.modify[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey])] { case (cache, loadingItems) => (cache, loadingItems :+ key) }
               result <- load
-              _ <- State.modify[(Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey])] { case (cache, _) => (cache + (key -> result), loadingItems) }.lift[LoadAction]
+              _ <- StateT.modify[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey])] { case (cache, _) => (cache + (key -> result), loadingItems) }
             } yield result
       }
     }

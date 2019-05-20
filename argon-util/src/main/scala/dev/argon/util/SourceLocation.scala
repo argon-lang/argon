@@ -1,6 +1,6 @@
 package dev.argon.util
 
-import scalaz._
+import cats._
 
 final case class FilePosition(line: Int, position: Int) {
 
@@ -20,7 +20,7 @@ final case class FilePosition(line: Int, position: Int) {
 
 object FilePosition {
 
-  implicit val ordering: Order[FilePosition] = (x, y) => Ordering.fromInt(x.compareTo(y))
+  implicit val ordering: Order[FilePosition] = Order.from((x, y) => x.compareTo(y))
 
 }
 

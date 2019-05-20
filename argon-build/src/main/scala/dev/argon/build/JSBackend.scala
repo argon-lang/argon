@@ -6,10 +6,10 @@ import java.nio.charset.StandardCharsets
 import dev.argon.compiler.js._
 import dev.argon.compiler._
 import dev.argon.util.FileOperations
-import scalaz.{Scalaz, _}
-import Scalaz._
+import cats._
+import cats.instances._
+import scalaz.NonEmptyList
 import dev.argon.build.project.ProjectLoader
-import scalaz.Leibniz.===
 import scalaz.zio.{IO, ZIO}
 import toml.Codecs._
 import shapeless.{Id => _, _}
@@ -51,17 +51,19 @@ object JSBackend extends Backend {
   override def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Codec.Error, JSBackendOptions[Option, String]] =
     toml.Toml.parseAs[JSBackendOptions[Option, String]](table)
 
-
   override def compile[F[+_, +_] : CompilationE, I: Show, A]
-  (input: CompilerInput[I, JSBackendOptions[Scalaz.Id, I]])
+  (input: CompilerInput[I, JSBackendOptions[Id, I]])
   (f: CompilationOutputText[F, I] => F[NonEmptyList[CompilationError], A])
   (implicit res: ResourceAccess[F[NonEmptyList[CompilationError], ?], I])
   : F[NonEmptyList[CompilationError], A] = {
     val context = new JSContext[F, I](input)
     val emitter = new JSEmitter[F, context.type](context, input.backendOptions.inject)
 
+    implicit val monadInst = shims.monadToCats[F[NonEmptyList[CompilationError], ?]]
+    implicit val showInst = shims.showToScalaz[I]
+
     context.createModule { module =>
-      emitter.emitModule(module).flatMap { jsModule =>
+      monadInst.flatMap(emitter.emitModule(module)) { jsModule =>
         f(createOutput(input.backendOptions.outputFile)(jsModule))
       }
     }

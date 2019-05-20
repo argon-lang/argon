@@ -1,7 +1,7 @@
 package dev.argon.parser
 
 import dev.argon.util.WithSource
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 
 import scala.collection.immutable.Seq
 

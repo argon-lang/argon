@@ -4,29 +4,53 @@ import java.io
 import java.io.File
 
 import dev.argon.compiler._
-import dev.argon.util.stream.{ArStream, FileStream}
-import scalaz._
-import Scalaz._
+import dev.argon.util.stream._
+import cats._
+import cats.implicits._
 import dev.argon.build.project.{BuildInfo, FileWithSpec}
 import dev.argon.compiler.core.ModuleDescriptor
 import dev.argon.util.{FileID, FileOperations, FileSpec}
 import scalaz.zio._
 import scalaz.zio.console._
-import scalaz.zio.interop.scalaz72._
+import scalaz.zio.interop.catz._
 import dev.argon.util.FileOperations.fileShow
 import IOCompilation.fileSystemResourceAccess
+import cats.data.NonEmptyVector
+import dev.argon.parser.SourceAST
 
 object Pipeline {
 
-  type MonadErrorThrowable[F[_, _]] = MonadError[F[Throwable, ?], Throwable]
+  private implicit val fileShow = scalaz.Show.shows(FileOperations.fileShow.show)
 
-  protected def findInputFiles(buildInfo: BuildInfo[File]): ArStream[IO[NonEmptyList[CompilationError], ?], InputFileInfo[IO[NonEmptyList[CompilationError], ?]], Unit] =
-    ArStream.fromVector[IO[NonEmptyList[CompilationError], ?], (File, Int), Unit](buildInfo.project.inputFiles.toVector.zipWithIndex, ())
-      .mapItems { case (file, id) =>
+  private def refineIOToCompilationError(file: File): PartialFunction[Throwable, scalaz.NonEmptyList[CompilationError]] = {
+    case ex: io.IOException => scalaz.NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(file), ex))
+  }
+
+  private def createFileDataStream(file: File): stream.Stream[scalaz.NonEmptyList[CompilationError], Char] =
+    stream.ZStream.managed(
+      ZManaged.make(
+        IO.effect { new io.FileReader(file) }.refineOrDie(refineIOToCompilationError(file))
+      )(
+        reader => IO.effectTotal { reader.close() }
+      )
+    ) { reader =>
+      IO.effect {
+        val b = reader.read()
+        if(b < 0)
+          None
+        else
+          Some(b.toChar)
+      }.refineOrDie(refineIOToCompilationError(file))
+    }
+
+
+
+  protected def findInputFiles(buildInfo: BuildInfo[File]): ArStream[IO, scalaz.NonEmptyList[CompilationError], InputFileInfo[IO]] =
+
+    ArStream.fromVector[IO, scalaz.NonEmptyList[CompilationError], (File, Int)](buildInfo.project.inputFiles.toVector.zipWithIndex)
+      .map { case (file, id) =>
         InputFileInfo(FileSpec(FileID(id), file.getPath),
-          FileStream.readFileText(file, bufferSize = 1024) {
-            case ex: io.IOException => NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(file), ex))
-          }
+          ArStream.fromZStream(createFileDataStream(file))
         )
       }
 
@@ -36,8 +60,15 @@ object Pipeline {
         putStrLn(msg.toString)
       }
 
-  def compileResult[A](buildInfo: BuildInfo[File])(f: buildInfo.backend.TCompilationOutput[IO, File] => IO[NonEmptyList[CompilationError], A])(implicit compInstance: IOCompilation): IO[NonEmptyList[CompilationError], A] =
-    BuildProcess.parseInput[IO[NonEmptyList[CompilationError], ?]](findInputFiles(buildInfo)).toVector(compInstance).flatMap { parsedInput =>
+  def compileResult[A]
+  (buildInfo: BuildInfo[File])
+  (f: buildInfo.backend.TCompilationOutput[IO, File] => IO[scalaz.NonEmptyList[CompilationError], A])
+  (implicit compInstance: IOCompilation)
+  : IO[scalaz.NonEmptyList[CompilationError], A] =
+    BuildProcess.parseInput[IO](findInputFiles(buildInfo)).foldLeft(StreamTransformation.toVector[IO, scalaz.NonEmptyList[CompilationError], SourceAST]).flatMap { parsedInput =>
+
+      implicit val fileShow: cats.Show[File] = FileOperations.fileShow
+
       BuildProcess.compile(
         buildInfo.backend
       )(
@@ -61,7 +92,7 @@ object Pipeline {
       }
     .flatMap {
       case (msgs, Left(errors)) =>
-        printMessages[Vector, CompilationMessage](errors.toVector ++ msgs).map { _ => 1 }
+        printMessages[Vector, CompilationMessage](errors.list.toVector ++ msgs).map { _ => 1 }
 
       case (msgs, Right(_)) =>
         printMessages[Vector, CompilationMessage](msgs).map { _ => 0 }

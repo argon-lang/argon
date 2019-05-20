@@ -14,11 +14,14 @@ lazy val commonSettings = Seq(
     "org.scala-lang.modules" %% "scala-xml" % "1.2.0",
     "org.scala-lang.modules" %% "scala-java8-compat" % "0.9.0",
     
-    "org.scalaz" %% "scalaz-core" % "7.2.27",
+    "org.typelevel" %% "cats-core" % "1.6.0",
+    "org.typelevel" %% "cats-effect" % "1.3.0",
+    "org.typelevel" %% "cats-mtl-core" % "0.4.0",
+    "org.typelevel" %% "kittens" % "1.2.1",
     "org.scalaz" %% "scalaz-zio" % "1.0-RC4",
-    "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
-    "org.scalaz" %% "deriving-macro" % "1.0.0",
-    "org.scalaz" %% "scalaz-deriving" % "1.0.0",
+    "org.scalaz" %% "scalaz-zio-streams" % "1.0-RC4",
+    "org.scalaz" %% "scalaz-zio-interop-cats" % "1.0-RC4",
+
 
     "com.chuusai" %% "shapeless" % "2.3.3",
     "tech.sparse" %%  "toml-scala" % "0.2.0",
@@ -117,6 +120,13 @@ lazy val argon_build = project.in(file("argon-build"))
   .settings(
     commonSettings,
     compilerOptions,
+    
+    libraryDependencies ++= Seq(
+      "org.scalaz" %% "scalaz-core" % "7.2.27",
+      "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
+      "org.scalaz" %% "deriving-macro" % "1.0.0",
+      "org.scalaz" %% "scalaz-deriving" % "1.0.0",
+    ),
 
     name := "argon-build",
   )
@@ -154,6 +164,14 @@ lazy val argon_compiler = project.in(file("argon-compiler"))
     commonSettings,
     compilerOptions,
 
+    libraryDependencies ++= Seq(
+      "org.scalaz" %% "scalaz-core" % "7.2.27",
+      "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
+      "org.scalaz" %% "deriving-macro" % "1.0.0",
+      "org.scalaz" %% "scalaz-deriving" % "1.0.0",
+      "com.codecommit" %% "shims" % "1.7.0",
+    ),
+
     name := "argon-compiler",
   )
 
@@ -162,6 +180,13 @@ lazy val compiler_js = project.in(file("argon-compiler-js"))
   .settings(
     commonSettings,
     compilerOptions,
+
+    libraryDependencies ++= Seq(
+      "org.scalaz" %% "scalaz-core" % "7.2.27",
+      "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
+      "org.scalaz" %% "deriving-macro" % "1.0.0",
+      "org.scalaz" %% "scalaz-deriving" % "1.0.0",
+    ),
 
     name := "argon-compiler-js",
   )
@@ -172,6 +197,13 @@ lazy val compiler_module = project.in(file("argon-compiler-module"))
     commonSettings,
     compilerOptions,
 
+    libraryDependencies ++= Seq(
+      "org.scalaz" %% "scalaz-core" % "7.2.27",
+      "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
+      "org.scalaz" %% "deriving-macro" % "1.0.0",
+      "org.scalaz" %% "scalaz-deriving" % "1.0.0",
+    ),
+
     name := "argon-compiler-module",
   )
 
@@ -179,6 +211,13 @@ lazy val util = project.in(file("argon-util"))
   .settings(
     commonSettings,
     compilerOptions,
+
+    libraryDependencies ++= Seq(
+      "org.scalaz" %% "scalaz-core" % "7.2.27",
+      "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
+      "org.scalaz" %% "deriving-macro" % "1.0.0",
+      "org.scalaz" %% "scalaz-deriving" % "1.0.0",
+    ),
 
     name := "argon-util",
   )

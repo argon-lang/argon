@@ -6,7 +6,6 @@ import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.util.DependencyTree._
-import dev.argon.util.MonadHelpers._
 import scalaz.Scalaz._
 import scalaz._
 
@@ -85,8 +84,12 @@ object ModuleLoader {
     def loadModuleRefFromData
     (context: ContextComp[TComp])
     (refDataPairs: Vector[LoaderAndData])
-    : TComp[Vector[Either[CompilationError, PayloadResult]]] =
-    loadDependencies[TComp, LoaderAndData, ModuleDescriptor, PayloadResult, Either[CompilationError, ?]](dependencyTreeOps)(refDataPairs)
+    : TComp[Vector[Either[CompilationError, PayloadResult]]] = {
+
+      import shims._
+
+      loadDependencies[TComp, LoaderAndData, ModuleDescriptor, PayloadResult, Either[CompilationError, ?]](dependencyTreeOps)(refDataPairs)(shims.monadToCats[TComp], implicitly, shims.monadToCats[Either[CompilationError, ?]], shims.traverseToCats[Either[CompilationError, ?]])
+    }
 
 
 

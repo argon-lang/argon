@@ -6,16 +6,16 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.zip.{ZipEntry, ZipFile, ZipOutputStream}
 
-import scalaz._
-import Scalaz._
+import cats._
 import scalaz.zio._
 import scalaz.zio.interop._
 
 object FileOperations {
 
   implicit val fileShow: Show[File] = new Show[File] {
-    override def shows(f: File): String = f.toString
+    override def show(f: File): String = f.toString
   }
+
 
   def fileInputStream[E >: IOException, T](file: io.File)(f: io.FileInputStream => IO[E, T]): IO[E, T] =
     IO.effect { new io.FileInputStream(file) }

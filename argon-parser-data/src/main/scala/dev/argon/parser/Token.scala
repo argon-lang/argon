@@ -1,6 +1,6 @@
 package dev.argon.parser
 
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 
 sealed trait Token {
   def category: TokenCategory

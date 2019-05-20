@@ -1,8 +1,8 @@
 package dev.argon.parser.impl
 
 import dev.argon.util.{FilePosition, SourceLocation, WithSource}
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import dev.argon.grammar.{Grammar, GrammarError}
 
 trait NumberTokenHelpers extends GrammarTestHelpers {
@@ -28,7 +28,7 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
       WithSource("Ambiguity", location)
 
     override def errorEndLocationOrder: Order[WithSource[String]] =
-      (a, b) => implicitly[Order[FilePosition]].order(a.location.end, b.location.end)
+      (a, b) => implicitly[Order[FilePosition]].compare(a.location.end, b.location.end)
   }
 
   protected def numberToken(n: Int): TGrammar[Int] = Grammar.matcher(n.toString, (m: Int) => Some(m).filter(_ === n))

@@ -3,9 +3,17 @@ package dev.argon.compiler.core
 import dev.argon.util.NamespacePath
 import scalaz._
 import Scalaz._
+import cats.Eq
 
 @deriving(Equal)
 final case class ModuleDescriptor(name: String)
+
+object ModuleDescriptor {
+  import cats.implicits._
+
+  implicit val eqInstance: Eq[ModuleDescriptor] = cats.derived.semi.eq
+
+}
 
 sealed trait Descriptor {
   def moduleDescriptor: ModuleDescriptor

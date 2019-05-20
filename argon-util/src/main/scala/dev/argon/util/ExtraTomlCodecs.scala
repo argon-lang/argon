@@ -2,8 +2,7 @@ package dev.argon.util
 
 import shapeless.{::, HList, Lazy => SLazy, Witness}
 import shapeless.labelled.{FieldType, field}
-import toml.Codec.{Address, Message}
-import toml.{Codec, Value}
+import toml.Codec
 
 object ExtraTomlCodecs {
 

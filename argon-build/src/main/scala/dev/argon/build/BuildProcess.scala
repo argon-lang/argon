@@ -4,32 +4,34 @@ import java.io.File
 
 import dev.argon.compiler._
 import dev.argon.parser.{SourceAST, SyntaxError, SyntaxErrorData}
-import scalaz._
-import Scalaz._
-import dev.argon.grammar.SyntaxErrorReporter
+import cats._
+import cats.implicits._
+import cats.data.NonEmptyVector
 import dev.argon.parser.impl.ParseHandler
-import dev.argon.util.{FileSpec, NonEmptyVector}
-import dev.argon.util.stream.ArStream
+import dev.argon.util.FileSpec
+import dev.argon.util.stream._
 
 object BuildProcess {
 
-  private def errorReporter[F[_]: Compilation](fileSpec: FileSpec): SyntaxErrorReporter[F, SyntaxError] =
-    new SyntaxErrorReporter[F, SyntaxError] {
+  def parseInput[F[+_, +_]: CompilationE](inputFiles: ArStream[F, scalaz.NonEmptyList[CompilationError], InputFileInfo[F]]): ArStream[F, scalaz.NonEmptyList[CompilationError], SourceAST] = {
 
-      private def toCompileError(error: SyntaxError): CompilationError =
-        CompilationError.SyntaxCompilerError(SyntaxErrorData(fileSpec, error))
+    implicit val catsMonad = shims.monadToCats[F[scalaz.NonEmptyList[CompilationError], ?]]
 
-      override def reportError[A](error: NonEmptyVector[SyntaxError]): F[A] =
-        Compilation[F].forErrors(toCompileError(error.head), error.tail.map(toCompileError): _*)
+    inputFiles.flatMap { fileInfo =>
+      fileInfo.dataStream.transformWith(
+        ParseHandler.parse(fileInfo.fileSpec).translate(new (Either[NonEmptyVector[SyntaxError], ?] ~> F[scalaz.NonEmptyList[CompilationError], ?]) {
+
+          private def toCompileError(error: SyntaxError): CompilationError =
+            CompilationError.SyntaxCompilerError(SyntaxErrorData(fileInfo.fileSpec, error))
+
+          override def apply[A](fa: Either[NonEmptyVector[SyntaxError], A]): F[scalaz.NonEmptyList[CompilationError], A] = fa match {
+            case Left(error) => CompilationE[F].forErrors(toCompileError(error.head), error.tail.map(toCompileError): _*)
+            case Right(value) => value.pure[F[scalaz.NonEmptyList[CompilationError], ?]]
+          }
+        })
+      )
     }
-
-
-
-  def parseInput[F[_]: Compilation](inputFiles: ArStream[F, InputFileInfo[F], Unit]): ArStream[F, SourceAST, Unit] =
-    inputFiles.merge[SourceAST, Unit] { case (_: Unit, _) => } { fileInfo =>
-      implicit val reporter = errorReporter[F](fileInfo.fileSpec)
-      ParseHandler.parse(fileInfo.fileSpec)(fileInfo.dataStream)
-    }
+  }
 
   def compile[F[+_, +_]: CompilationE, I: Show, A]
   (
@@ -40,10 +42,10 @@ object BuildProcess {
     compilerOptions: CompilerOptions[Id],
     backendOptions: backend.BackendOptions[Id, I]
   )(
-    f: backend.TCompilationOutput[F, I] => F[NonEmptyList[CompilationError], A]
+    f: backend.TCompilationOutput[F, I] => F[scalaz.NonEmptyList[CompilationError], A]
   )
-  (implicit res: ResourceAccess[F[NonEmptyList[CompilationError], ?], I])
-  : F[NonEmptyList[CompilationError], A] = {
+  (implicit res: ResourceAccess[F[scalaz.NonEmptyList[CompilationError], ?], I])
+  : F[scalaz.NonEmptyList[CompilationError], A] = {
     val input = CompilerInput(
       source = sourceASTs,
       references = references,

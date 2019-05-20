@@ -5,9 +5,10 @@ import dev.argon.util._
 
 import scala.collection.immutable.{Stream => _, _}
 import scala.language.postfixOps
-import scalaz._
-import Scalaz._
-import dev.argon.util.stream.StreamTransformation
+import cats._
+import cats.data._
+import cats.implicits._
+import dev.argon.util.stream._
 
 sealed trait Grammar[TToken, TSyntaxError, TLabel <: RuleLabel, +T] {
 
@@ -307,12 +308,11 @@ object Grammar {
   : Grammar[TToken, TSyntaxError, TLabel, Result] =
     TokenGrammar(category, tokenMatcher)
 
-  def parseAll[F[_], TToken, TSyntaxError, TLabel <: RuleLabel, T]
+  def parseAll[TToken, TSyntaxError, TLabel <: RuleLabel, T]
   (factory: GrammarFactory[TToken, TSyntaxError, TLabel])
   (label: TLabel { type RuleType = T })
-  (implicit errorReporter: SyntaxErrorReporter[F, TSyntaxError])
-  : StreamTransformation[F, WithSource[TToken], FilePosition, T, FilePosition] =
-    new StreamTransformation[F, WithSource[TToken], FilePosition, T, FilePosition] {
+  : StreamTransformation[Either, NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] =
+    new StreamTransformation.Pure[NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] {
 
       private val defaultParseOptions: ParseOptions[TToken, TSyntaxError, TLabel] = ParseOptions(Set.empty, None, factory)
       private val rule = factory(label)
@@ -321,61 +321,45 @@ object Grammar {
       case object ParseStepReady extends ParseStep
       final case class ParseStepPartial(suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T]) extends ParseStep
 
-      final case class TransformStepResult(items: Vector[T], step: ParseStep)
-
-      override type S = ParseStep
-      override val initialState: ParseStep = ParseStepReady
+      override type State = ParseStep
 
 
+      override def initialPure: ParseStep = ParseStepReady
 
-      private def parseNext[S2](state: S2, tokens: NonEmptyVector[WithSource[TToken]], f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(ParseStep, S2)] =
-        rule.parseTokens(tokens, defaultParseOptions) match {
-          case GrammarResultSuccess(head +: tail, WithSource(value, _)) => f(state, NonEmptyVector.of(value)).flatMap { state => parseNext(state, NonEmptyVector(head, tail), f) }
-          case GrammarResultSuccess(Vector(), WithSource(value, _)) => f(state, NonEmptyVector.of(value)).map { state => (ParseStepReady : ParseStep, state) }
-          case GrammarResultFailure(failure) => errorReporter.reportError(failure)
-          case GrammarResultError(error) => errorReporter.reportError(error)
-          case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] => (ParseStepPartial(suspend) : ParseStep, state).point[F]
+      override def stepPure(s: ParseStep, ca: NonEmptyVector[WithSource[TToken]]): StepPure[ParseStep, NonEmptyVector[TSyntaxError], WithSource[TToken], T, FilePosition] =
+        runParseStep(s, ca)  match {
+          case GrammarResultSuccess(remaining, WithSource(value, _)) => Step.Produce(ParseStepReady, value, remaining)
+          case GrammarResultFailure(failure) => Step.Fail(failure)
+          case GrammarResultError(error) => Step.Fail(error)
+          case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] => Step.Continue(ParseStepPartial(suspend))
         }
 
-      private def parseRemaining[S2](state: S2, tokens: NonEmptyVector[WithSource[TToken]], suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T], f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(ParseStep, S2)] =
-        suspend.continue(tokens) match {
-          case GrammarResultSuccess(head +: tail, WithSource(value, _)) => f(state, NonEmptyVector.of(value)).flatMap { state => parseNext(state, NonEmptyVector(head, tail), f) }
-          case GrammarResultSuccess(Vector(), WithSource(value, _)) => f(state, NonEmptyVector.of(value)).map { state => (ParseStepReady : ParseStep, state) }
-          case GrammarResultError(error) => errorReporter.reportError(error)
-          case suspend2: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] => (ParseStepPartial(suspend2) : ParseStep, state).point[F]
-        }
-
-      private def processEnd[S2](step: ParseStep, state: S2, end: FilePosition, f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(FilePosition, S2)] =
-        step match {
-          case ParseStepReady => (end, state).point[F]
-          case ParseStepPartial(transform) => parseEnd(state, end, transform, f)
-        }
-
-      private def parseEnd[S2, A](state: S2, end: FilePosition, suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T], f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(FilePosition, S2)] =
-        suspend.completeResult(end) match {
-          case GrammarResultSuccess(head +: tail, WithSource(value, _)) =>
-            f(state, NonEmptyVector.of(value))
-              .flatMap { state => parseNext(state, NonEmptyVector(head, tail), f) }
-              .flatMap { case (step, state) => processEnd(step, state, end, f) }
-
-          case GrammarResultSuccess(Vector(), WithSource(value, _)) =>
-            f(state, NonEmptyVector.of(value)).map { state => (end, state) }
-
-          case GrammarResultFailure(failure) => errorReporter.reportError(failure)
-          case GrammarResultError(error) => errorReporter.reportError(error)
+      override def endPure(s: ParseStep, end: FilePosition): (Vector[T], Either[NonEmptyVector[TSyntaxError], FilePosition]) =
+        s match {
+          case ParseStepReady => (Vector.empty, Right(end))
+          case ParseStepPartial(suspend) => parseEnd(end, suspend.completeResult(end), Vector.empty)
         }
 
 
-      override def processItems[S2](state: ParseStep, state2: S2, items: NonEmptyVector[WithSource[TToken]])(f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(ParseStep, S2)] =
-        state match {
-          case ParseStepReady => parseNext(state2, items, f)
-          case ParseStepPartial(transform) => parseRemaining(state2, items, transform, f)
+      private def runParseStep[A2 <: WithSource[TToken]](s: ParseStep, tokens: NonEmptyVector[A2]): GrammarResult[TToken, TSyntaxError, TLabel, T] =
+        s match {
+          case ParseStepReady => rule.parseTokens(tokens, defaultParseOptions)
+          case ParseStepPartial(suspend) => suspend.continue(tokens)
         }
 
-      override def processResult[S2](state: ParseStep, state2: S2, result: FilePosition)(f: (S2, NonEmptyVector[T]) => F[S2])(implicit monadInstance: Monad[F]): F[(FilePosition, S2)] =
-        processEnd(state, state2, result, f)
+      private def parseEnd(end: FilePosition, result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T], acc: Vector[T]): (Vector[T], Either[NonEmptyVector[TSyntaxError], FilePosition]) =
+        result match {
+          case GrammarResultSuccess(remaining, WithSource(value, _)) =>
+            NonEmptyVector.fromVector(remaining) match {
+              case Some(tokens) => parseEnd(end, rule.parseTokens(tokens, defaultParseOptions).completeResult(end), acc :+ value)
+              case None => (acc :+ value, Right(end))
+            }
 
+          case GrammarResultFailure(failure) => (acc, Left(failure))
+          case GrammarResultError(error) => (acc, Left(error))
+        }
     }
+
 
   trait ErrorFactory[-TToken, -TTokenCategory, TSyntaxError] {
     def createError(error: GrammarError[TToken, TTokenCategory]): TSyntaxError
@@ -526,7 +510,7 @@ object Grammar {
     private lazy val inner = innerUncached
 
     override def parseTokens(tokens: NonEmptyVector[WithSource[TToken]], options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
-      inner.parseTokens(tokens.prepend(prevTokens), prevOptions)
+      inner.parseTokens(NonEmptyVector.fromVector(prevTokens).map { _ ++: tokens }.getOrElse(tokens), prevOptions)
 
     override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
       prevTokens match {
@@ -547,20 +531,20 @@ object Grammar {
     override def parseTokens(tokens: NonEmptyVector[WithSource[TToken]], options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
       grammarA.parseTokens(tokens, options).recoverFailure {
         case (laterTokens, GrammarResultFailure(errorListA)) =>
-          grammarB.parseTokens(tokens.append(laterTokens), options).transformComplete {
+          grammarB.parseTokens(tokens ++ laterTokens, options).transformComplete {
             case result @ GrammarResultSuccess(_, _) => result
             case result @ GrammarResultError(_) => result
             case GrammarResultFailure(errorListB) =>
 
               def findLastErrorPos(errorList: TErrorList): TSyntaxError =
-                errorList.maximum1(errorFactory.errorEndLocationOrder)
+                errorList.maximum(errorFactory.errorEndLocationOrder)
 
 
               GrammarResultFailure(
-                errorFactory.errorEndLocationOrder(findLastErrorPos(errorListA), findLastErrorPos(errorListB)) match {
-                  case Ordering.GT => errorListA
-                  case Ordering.LT => errorListB
-                  case Ordering.EQ => errorListA.append(errorListB)
+                errorFactory.errorEndLocationOrder.compare(findLastErrorPos(errorListA), findLastErrorPos(errorListB)) match {
+                  case o if o > 0 => errorListA
+                  case o if o < 0 => errorListB
+                  case _ => errorListA ++: errorListB
                 }
               )
           }
@@ -577,14 +561,14 @@ object Grammar {
             case GrammarResultFailure(errorListB) =>
 
               def findLastErrorPos(errorList: TErrorList): TSyntaxError =
-                errorList.maximum1(errorFactory.errorEndLocationOrder)
+                errorList.maximum(errorFactory.errorEndLocationOrder)
 
 
               GrammarResultFailure(
-                errorFactory.errorEndLocationOrder(findLastErrorPos(errorListA), findLastErrorPos(errorListB)) match {
-                  case Ordering.GT => errorListA
-                  case Ordering.LT => errorListB
-                  case Ordering.EQ => errorListA.append(errorListB)
+                errorFactory.errorEndLocationOrder.compare(findLastErrorPos(errorListA), findLastErrorPos(errorListB)) match {
+                  case o if o > 0 => errorListA
+                  case o if o < 0 => errorListB
+                  case _ => errorListA ++: errorListB
                 }
               )
           }

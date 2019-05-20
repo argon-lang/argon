@@ -4,16 +4,14 @@ import java.util.zip.ZipOutputStream
 
 import dev.argon.compiler._
 import dev.argon.compiler.module._
-import dev.argon.util.stream.ArStream
+import dev.argon.util.stream._
 import scalapb.GeneratedMessage
-import scalaz._
-import Scalaz._
-import dev.argon.build.project.{ProjectFileHandler, ProjectLoader}
-import dev.argon.util.FileOperations
-import scalaz.Leibniz.===
-import scalaz.zio.{IO, ZIO}
+import cats._
+import cats.instances._
+import scalaz.NonEmptyList
+import dev.argon.build.project.ProjectLoader
 import toml.Codecs._
-import shapeless.{ Id => _, _ }
+import shapeless.{Id => _, _}
 
 object ArModuleBackend extends Backend {
   override type TCompilationOutput[F[+_, +_], I] = CompilationOutput[F, I]
@@ -44,24 +42,27 @@ object ArModuleBackend extends Backend {
     val context = new ModuleContext[F, I](input)
     val emitter = new ModuleEmitter[F, context.type](context)
 
+    implicit val showInstance = shims.showToScalaz[I]
+
     context.createModule { module =>
       f(createOutput(input.backendOptions.referenceModule)(emitter.emitModule(module)))
     }
   }
 
-  private def createOutput[F[+_, +_]: CompilationE, I](outputFile: I)(moduleStream: ArStream[F[NonEmptyList[CompilationError], ?], (String, GeneratedMessage), Unit]): CompilationOutput[F, I] = new CompilationOutput[F, I] {
+  private def createOutput[F[+_, +_]: CompilationE, I](outputFile: I)(moduleStream: ArStream[F, NonEmptyList[CompilationError], (String, GeneratedMessage)]): CompilationOutput[F, I] = new CompilationOutput[F, I] {
 
     override def write(implicit resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I]): F[NonEmptyList[CompilationError], Unit] =
       resourceAccess.createOutputStream(outputFile) { stream =>
         resourceAccess.createZipWriter(stream) { zip =>
-          moduleStream.foldLeftM(()) {
-            case (_, _) => ()
-          } {
-            case (_, (path, message)) =>
-              resourceAccess.writeZipEntry(zip, path) { entry =>
-                resourceAccess.writeProtocolBufferMessage(entry, message)
-              }
+
+          implicit val catsMonad = shims.monadToCats[F[NonEmptyList[CompilationError], ?]]
+
+          moduleStream.forEach { case (path, message) =>
+            resourceAccess.writeZipEntry(zip, path) { entry =>
+              resourceAccess.writeProtocolBufferMessage(entry, message)
+            }
           }
+
         }
       }
 

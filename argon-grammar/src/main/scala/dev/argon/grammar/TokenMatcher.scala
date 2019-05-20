@@ -1,7 +1,7 @@
 package dev.argon.grammar
 
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 import scala.reflect.ClassTag
 
@@ -10,7 +10,7 @@ trait TokenMatcher[T, TParsed] {
 }
 
 object TokenMatcher {
-  final case class Value[T: Equal](value: T) extends TokenMatcher[T, T] {
+  final case class Value[T: Eq](value: T) extends TokenMatcher[T, T] {
     override def matchToken(other: T): Option[T] =
       if(value === other)
         Some(other)
