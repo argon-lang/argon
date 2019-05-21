@@ -16,7 +16,7 @@ import toml.Codecs._
 import shapeless.{ Id => _, _ }
 
 object ArModuleBackend extends Backend {
-  override type TCompilationOutput[F[+_], I] = CompilationOutput[F, I]
+  override type TCompilationOutput[F[+_, +_], I] = CompilationOutput[F, I]
   override type BackendOptions[F[_], I] = ModuleBackendOptions[F, I]
 
 
@@ -40,7 +40,7 @@ object ArModuleBackend extends Backend {
     toml.Toml.parseAs[ModuleBackendOptions[Option, String]](table)
 
 
-  override def compile[F[+ _], I: Show, A](input: CompilerInput[I, ModuleBackendOptions[Id, I]])(f: CompilationOutput[F, I] => F[A])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[A] = {
+  override def compile[F[+_, +_]: CompilationE, I: Show, A](input: CompilerInput[I, ModuleBackendOptions[Id, I]])(f: CompilationOutput[F, I] => F[NonEmptyList[CompilationError], A])(implicit res: ResourceAccess[F[NonEmptyList[CompilationError], ?], I]): F[NonEmptyList[CompilationError], A] = {
     val context = new ModuleContext[F, I](input)
     val emitter = new ModuleEmitter[F, context.type](context)
 
@@ -49,17 +49,17 @@ object ArModuleBackend extends Backend {
     }
   }
 
-  private def createOutput[F[+_]: Monad, I](outputFile: I)(moduleStream: ArStream[F, (String, GeneratedMessage), Unit]): CompilationOutput[F, I] = new CompilationOutput[F, I] {
+  private def createOutput[F[+_, +_]: CompilationE, I](outputFile: I)(moduleStream: ArStream[F[NonEmptyList[CompilationError], ?], (String, GeneratedMessage), Unit]): CompilationOutput[F, I] = new CompilationOutput[F, I] {
 
-    override def write(implicit resourceAccess: ResourceAccess[F, I]): F[Unit] =
+    override def write(implicit resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I]): F[NonEmptyList[CompilationError], Unit] =
       resourceAccess.createOutputStream(outputFile) { stream =>
-        resourceAccess.createZipOutputStream(stream) { zip =>
+        resourceAccess.createZipWriter(stream) { zip =>
           moduleStream.foldLeftM(()) {
             case (_, _) => ()
           } {
             case (_, (path, message)) =>
-              resourceAccess.createZipEntry(zip, path) { entry =>
-                resourceAccess.writeProtocolBufferMessage(zip, message)
+              resourceAccess.writeZipEntry(zip, path) { entry =>
+                resourceAccess.writeProtocolBufferMessage(entry, message)
               }
           }
         }

@@ -1332,11 +1332,7 @@ object ExpressionConverter {
 
       }
 
-
-      override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): HoleTypeCheckComp[TComp, ts.TType, A] =
-        StateT((s: TypeCheckState[ts.TType]) => Compilation[TComp].diagnostic(value, messages).map { a => (s, a) })
-
-      override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): HoleTypeCheckComp[TComp, ts.TType, A] =
+      override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[Nothing]): HoleTypeCheckComp[TComp, ts.TType, A] =
         StateT((s: TypeCheckState[ts.TType]) => Compilation[TComp].forErrors[A](errors, messages).map { a => (s, a) })
 
       override def createCache[A]: HoleTypeCheckComp[TComp, ts.TType, HoleTypeCheckComp[TComp, ts.TType, A] => HoleTypeCheckComp[TComp, ts.TType, A]] =

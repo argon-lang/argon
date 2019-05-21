@@ -58,7 +58,7 @@ object ModuleLoader {
           }
 
         case Vector() =>
-          Compilation[TComp].forErrors(CompilationError.CouldNotFindCompatibleModuleLoader(CompilationMessageSource.ModuleResource(id)))
+          Compilation[TComp].forErrors(CompilationError.CouldNotFindCompatibleModuleLoader(CompilationMessageSource.ResourceIdentifier(id)))
       }
 
     type PayloadResult = ArModule[context.type, ReferencePayloadSpecifier]

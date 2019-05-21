@@ -1,7 +1,7 @@
 package dev.argon.util
 
 import java.io
-import java.io.{File, IOException}
+import java.io.{ File, IOException }
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.zip.{ZipEntry, ZipFile, ZipOutputStream}
@@ -9,26 +9,31 @@ import java.util.zip.{ZipEntry, ZipFile, ZipOutputStream}
 import scalaz._
 import Scalaz._
 import scalaz.zio._
+import scalaz.zio.interop._
 
 object FileOperations {
 
-  implicit val fileShow: Show[java.io.File] = new Show[java.io.File] {
+  implicit val fileShow: Show[File] = new Show[File] {
     override def shows(f: File): String = f.toString
   }
 
-  type MonadErrorThrowable[F[_, _]] = MonadError[F[Throwable, ?], Throwable]
+  def fileInputStream[E >: IOException, T](file: io.File)(f: io.FileInputStream => IO[E, T]): IO[E, T] =
+    IO.effect { new io.FileInputStream(file) }
+      .refineOrDie { case e: IOException => e }
+      .bracketAuto(f)
 
-  def fileInputStream[T](file: io.File)(f: io.FileInputStream => Task[T]): Task[T] =
-    IO.effect { new io.FileInputStream(file) }.bracket(stream => IO.effectTotal { stream.close() })(f)
+  def fileOutputStream[E >: IOException, T](file: io.File)(f: io.FileOutputStream => IO[E, T]): IO[E, T] =
+    IO.effect { new io.FileOutputStream(file) }
+      .refineOrDie { case e: IOException => e }
+      .bracketAuto(f)
 
-  def fileOutputStream[T](file: io.File)(f: io.FileOutputStream => Task[T]): Task[T] =
-    IO.effect { new io.FileOutputStream(file) }.bracket(stream => IO.effectTotal { stream.close() })(f)
+  def createPrintWriter[E >: IOException, T](stream: io.OutputStream)(f: io.PrintWriter => IO[E, T]): IO[E, T] =
+    IO.effect { new io.PrintWriter(stream) }
+      .refineOrDie { case e: IOException => e }
+      .bracketAuto(f)
 
-  def createPrintWriter[T](stream: io.OutputStream)(f: io.PrintWriter => Task[T]): Task[T] =
-    IO.effect { new io.PrintWriter(stream) }.bracket(writer => IO.effectTotal { writer.close() })(f)
-
-  def filePrintWriter[T](file: io.File)(f: io.PrintWriter => Task[T]): Task[T] =
-    fileOutputStream(file) { stream => createPrintWriter(stream)(f) }
+  def filePrintWriter[E >: IOException, T](file: io.File)(f: io.PrintWriter => IO[E, T]): IO[E, T] =
+    fileOutputStream[E, T](file) { stream => createPrintWriter[E, T](stream)(f) }
 
   def readAllText(file: io.File): IO[IOException, String] =
     IO.effect {
@@ -37,28 +42,36 @@ object FileOperations {
     }
       .refineOrDie { case e: IOException => e }
 
-  def createReader[T](stream: io.FileInputStream): Task[io.Reader] =
-    IO.effect { new io.InputStreamReader(stream) }
+  def createReader[T](stream: io.FileInputStream): UIO[io.Reader] =
+    IO.effectTotal { new io.InputStreamReader(stream) }
 
-  def fileReader[T](file: io.File)(f: io.Reader => Task[T]): Task[T] =
-    fileInputStream(file) { stream => createReader(stream).flatMap(f) }
+  def fileReader[E >: IOException, T](file: io.File)(f: io.Reader => IO[E, T]): IO[E, T] =
+    fileInputStream[E, T](file) { stream => createReader(stream).flatMap(f) }
 
   def fileFromName(fileName: String): UIO[io.File] =
     IO.effectTotal { new io.File(fileName) }
 
-  def zipOutputStream[A](stream: io.OutputStream)(f: ZipOutputStream => Task[A]): Task[A] =
-    IO.effect { new ZipOutputStream(stream) }.bracket(stream => IO.effectTotal { stream.close() })(f)
+  def zipOutputStream[E >: IOException, A](stream: io.OutputStream)(f: ZipOutputStream => IO[E, A]): IO[E, A] =
+    IO.effectTotal { new ZipOutputStream(stream) }.bracketAuto(f)
 
-  def createZipEntry[A](zip: ZipOutputStream, path: String)(f: ZipEntry => Task[A]): Task[A] =
+  def createZipEntry[E >: IOException, A](zip: ZipOutputStream, path: String)(f: ZipEntry => IO[E, A]): IO[E, A] =
     IO.effect {
       val entry = new ZipEntry(path)
       zip.putNextEntry(entry)
       entry
-    }.bracket(_ => IO.effectTotal { zip.closeEntry() })(f)
+    }
+      .refineOrDie { case e: IOException => e }
+      .bracket(_ =>
+        IO.effectTotal { zip.closeEntry() }
+      )(f)
 
-  def createZipFile[A](file: File)(f: ZipFile => Task[A]): Task[A] =
-    IO.effect { new ZipFile(file) }.bracket(f => IO.effectTotal { f.close() })(f)
+  def createZipFile[E >: IOException, A](file: File)(f: ZipFile => IO[E, A]): IO[E, A] =
+    IO.effect { new ZipFile(file) }
+      .refineOrDie { case e: IOException => e }
+      .bracketAuto(f)
 
-  def getZipEntryStream[A](zip: ZipFile, name: String)(f: io.InputStream => Task[A]): Task[A] =
-    IO.effect { zip.getInputStream(zip.getEntry(name)) }.bracket(f => IO.effectTotal { f.close() })(f)
+  def getZipEntryStream[E >: IOException, A](zip: ZipFile, name: String)(f: io.InputStream => IO[E, A]): IO[E, A] =
+    IO.effect { zip.getInputStream(zip.getEntry(name)) }
+      .refineOrDie { case e: IOException => e }
+      .bracketAuto(f)
 }

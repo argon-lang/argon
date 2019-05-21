@@ -1,5 +1,6 @@
 package dev.argon.build
 
+import java.io
 import java.io.File
 
 import dev.argon.compiler._
@@ -19,11 +20,13 @@ object Pipeline {
 
   type MonadErrorThrowable[F[_, _]] = MonadError[F[Throwable, ?], Throwable]
 
-  protected def findInputFiles(buildInfo: BuildInfo[File]): ArStream[Task, InputFileInfo[Task], Unit] =
-    ArStream.fromVector[Task, (File, Int), Unit](buildInfo.project.inputFiles.toVector.zipWithIndex, ())
+  protected def findInputFiles(buildInfo: BuildInfo[File]): ArStream[IO[NonEmptyList[CompilationError], ?], InputFileInfo[IO[NonEmptyList[CompilationError], ?]], Unit] =
+    ArStream.fromVector[IO[NonEmptyList[CompilationError], ?], (File, Int), Unit](buildInfo.project.inputFiles.toVector.zipWithIndex, ())
       .mapItems { case (file, id) =>
         InputFileInfo(FileSpec(FileID(id), file.getPath),
-          FileStream.readFileText(file, bufferSize = 1024)
+          FileStream.readFileText(file, bufferSize = 1024) {
+            case ex: io.IOException => NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(file), ex))
+          }
         )
       }
 
@@ -33,8 +36,8 @@ object Pipeline {
         putStrLn(msg.toString)
       }
 
-  def compileResult[A](buildInfo: BuildInfo[File])(f: buildInfo.backend.TCompilationOutput[Task, File] => Task[A])(implicit compInstance: IOCompilation): Task[A] =
-    BuildProcess.parseInput(findInputFiles(buildInfo)).toVector(compInstance).flatMap { parsedInput =>
+  def compileResult[A](buildInfo: BuildInfo[File])(f: buildInfo.backend.TCompilationOutput[IO, File] => IO[NonEmptyList[CompilationError], A])(implicit compInstance: IOCompilation): IO[NonEmptyList[CompilationError], A] =
+    BuildProcess.parseInput[IO[NonEmptyList[CompilationError], ?]](findInputFiles(buildInfo)).toVector(compInstance).flatMap { parsedInput =>
       BuildProcess.compile(
         buildInfo.backend
       )(
@@ -44,7 +47,7 @@ object Pipeline {
           moduleName = buildInfo.compilerOptions.moduleName
         ),
         buildInfo.backendOptions,
-      )(f)(implicitly, compInstance, IOCompilation.fileSystemResourceAccess)
+      )(f)
     }
 
   def run(buildInfo: BuildInfo[File]): TaskR[Console, Int] =
@@ -52,7 +55,7 @@ object Pipeline {
       .flatMap { implicit compInstance =>
         compInstance.getResult(
           compileResult(buildInfo) { output =>
-            output.write
+            output.write(IOCompilation.fileSystemResourceAccess)
           }
         )
       }

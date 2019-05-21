@@ -1,7 +1,7 @@
 package dev.argon.compiler.js
 
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
-import dev.argon.compiler.core.{ContextComp, PayloadSpecifiers}
+import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.ModuleLoader
 import dev.argon.compiler.loaders.armodule.ArgonModuleLoader
 import dev.argon.compiler.types.ArgonTypeSystem
@@ -9,7 +9,7 @@ import dev.argon.compiler._
 import scalaz._
 import Scalaz._
 
-final class JSContext[TComp[+_] : Compilation, I](override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]]) extends ContextComp[TComp] {
+final class JSContext[TCompE[+_, +_] : CompilationE, I](override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]]) extends ContextCompE[TCompE] {
 
   override type TTraitMetadata = Unit
   override type TClassMetadata = Unit
@@ -39,19 +39,19 @@ final class JSContext[TComp[+_] : Compilation, I](override protected val compile
   override def createDataConstructorImplementation(body: typeSystem.ArExpr): JSImpl.DataConstructor =
     JSImpl.DataConstructor.ExpressionBody(body)
 
-  override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): TComp[JSImpl.Function] =
+  override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[JSImpl.Function] =
     compilerInput.backendOptions.extern.get(specifier) match {
-      case Some(impl) => JSImpl.Function.JSExpressionBody(JSExpressionRaw(impl)).point[TComp]
-      case None => Compilation[TComp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+      case Some(impl) => JSImpl.Function.JSExpressionBody(JSExpressionRaw(impl)).pure[Comp]
+      case None => Compilation[Comp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
     }
 
-  override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): TComp[JSImpl.Method] =
+  override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[JSImpl.Method] =
     compilerInput.backendOptions.extern.get(specifier) match {
-      case Some(impl) => JSImpl.Method.JSExpressionBody(JSExpressionRaw(impl)).point[TComp]
-      case None => Compilation[TComp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+      case Some(impl) => JSImpl.Method.JSExpressionBody(JSExpressionRaw(impl)).pure[Comp]
+      case None => Compilation[Comp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
     }
 
-  override val compCompilationInstance: Compilation[Comp] = implicitly
+  override val compECompilationInstance: CompilationE[CompE] = implicitly
 
 
 

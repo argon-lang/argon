@@ -6,7 +6,7 @@ import dev.argon.compiler.loaders.ModuleLoader
 import dev.argon.compiler.loaders.source.SourceModuleCreator
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types.{ArgonTypeSystem, TypeSystem, TypeSystemConverter}
-import scalaz.Show
+import scalaz.{Monad, Show}
 
 sealed trait Context {
 
@@ -33,8 +33,10 @@ sealed trait Context {
   def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[TFunctionImplementation]
   def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[TMethodImplementation]
 
+  type CompE[+_, +_]
   type Comp[+_]
   implicit val compCompilationInstance: Compilation[Comp]
+  implicit val compECompilationInstance: CompilationE[CompE]
 
   object ContextTypeSystem extends ArgonTypeSystem[this.type] {
     override val context: Context.this.type = Context.this
@@ -63,8 +65,12 @@ sealed trait Context {
 trait ContextComp[TComp[+_]] extends Context {
   override type Comp[+A] = TComp[A]
 
-
   override def createModule[A](f: ArModule[ContextComp.this.type, DeclarationPayloadSpecifier] => TComp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[TComp, ResIndicator]): TComp[A] =
     SourceModuleCreator.createModule[Comp, ResIndicator, A](this)(compilerInput)(f)(compCompilationInstance, implicitly, res)
 
+}
+
+trait ContextCompE[TCompE[+_, +_]] extends ContextComp[TCompE[scalaz.NonEmptyList[CompilationError], +?]] {
+  override type CompE[+E, +A] = TCompE[E, A]
+  override implicit lazy val compCompilationInstance: Compilation[Comp] = compECompilationInstance
 }

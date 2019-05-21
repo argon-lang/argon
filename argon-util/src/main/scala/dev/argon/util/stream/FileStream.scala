@@ -15,7 +15,7 @@ object FileStream {
   def readFile(file: File, bufferSize: Int): ArStream[Task, Byte, Unit] = new ArStream[Task, Byte, Unit] {
 
     override def foldChunksM[B, R2](start: B)(resultHandler: (B, Unit) => R2)(f: (B, NonEmptyVector[Byte]) => Task[B])(implicit monadInstance: Monad[Task]): Task[R2] =
-      FileOperations.fileInputStream(file) { stream =>
+      FileOperations.fileInputStream[Throwable, B](file) { stream =>
         IO.effect { new Array[Byte](bufferSize) }.flatMap { buffer =>
 
           def accum(b: B): Task[B] =
@@ -33,36 +33,39 @@ object FileStream {
       }.map { b => resultHandler(b, ()) }
   }
 
-  def readFileText(file: File, bufferSize: Int): ArStream[Task, Char, Unit] = new ArStream[Task, Char, Unit] {
+  def readFileText[E](file: File, bufferSize: Int)(refineErr: PartialFunction[Throwable, E]): ArStream[IO[E, ?], Char, Unit] = new ArStream[IO[E, ?], Char, Unit] {
 
-    override def foldChunksM[B, R2](start: B)(resultHandler: (B, Unit) => R2)(f: (B, NonEmptyVector[Char]) => Task[B])(implicit monadInstance: Monad[Task]): Task[R2] =
-      FileOperations.fileReader(file) { reader =>
+    override def foldChunksM[B, R2](start: B)(resultHandler: (B, Unit) => R2)(f: (B, NonEmptyVector[Char]) => IO[E, B])(implicit monadInstance: Monad[IO[E, ?]]): IO[E, R2] =
+      FileOperations.fileReader[Throwable, Either[E, B]](file) { reader =>
         IO.effect { new Array[Char](bufferSize) }.flatMap { buffer =>
 
-          def accum(b: B): Task[B] =
-            IO.effect { reader.read(buffer) }.flatMap {
+          def accum(b: B): IO[E, B] =
+            IO.effect { reader.read(buffer) }.refineOrDie(refineErr).flatMap {
               case charsRead if charsRead > 0 =>
                 buffer.iterator.take(charsRead).toVector match {
                   case head +: tail => f(b, NonEmptyVector(head, tail))
-                  case Vector() => b.point[Task]
+                  case Vector() => monadInstance.pure(b)
                 }
-              case _ => b.point[Task]
+              case _ => monadInstance.pure(b)
             }
 
-          accum(start)
+          accum(start).either
         }
-      }.map { b => resultHandler(b, ()) }
+      }
+        .refineOrDie(refineErr)
+        .flatMap(IO.fromEither(_))
+        .map { b => resultHandler(b, ()) }
   }
 
   def writeFile(file: File, stream: ArStream[IO[Throwable, ?], Byte, Unit]): IO[Throwable, Unit] =
-    FileOperations.fileOutputStream(file) { outStream =>
+    FileOperations.fileOutputStream[Throwable, Unit](file) { outStream =>
       stream.foldChunksM(()) { (_, _) => } { (_, chunk) =>
         IO.effect { outStream.write(chunk.toArray) }
       }
     }
 
   def writeFileText(file: File, stream: ArStream[IO[Throwable, ?], Char, Unit]): IO[Throwable, Unit] =
-    FileOperations.filePrintWriter(file) { writer =>
+    FileOperations.filePrintWriter[Throwable, Unit](file) { writer =>
       stream.foldChunksM(()) { (_, _) => } { (_, chunk) =>
         IO.effect { writer.write(chunk.toArray) }
       }

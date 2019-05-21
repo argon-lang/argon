@@ -7,6 +7,7 @@ sealed trait TestCaseResult
 object TestCaseResult {
   object Success extends TestCaseResult
   final case class Failure(actualResult: TestCaseActualResult, expectedResult: TestCaseExpectedResult) extends TestCaseResult
+  final case class ExecutionError(ex: Throwable) extends TestCaseResult
 }
 
 sealed trait TestCaseActualResult

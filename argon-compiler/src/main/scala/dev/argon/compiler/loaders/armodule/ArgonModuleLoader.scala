@@ -27,8 +27,8 @@ object ArgonModuleLoader {
     override def loadResource[I, TRes <: ResourceAccess[TComp, I] with Singleton, A](res: TRes)(id: I)(f: Option[ResAndMetadata[I, res.type]] => TComp[A]): TComp[A] =
       res.getExtension(id).flatMap {
         case "armodule" =>
-          res.getZipFile(id) { zip =>
-            res.getZipEntryStream(zip, ModulePaths.metadata)(res.readProtocolBufferMessage(ArgonModule.Metadata))
+          res.getZipReader(id) { zip =>
+            res.getZipEntryInputStream(zip, ModulePaths.metadata)(res.readProtocolBufferMessage(ArgonModule.Metadata))
               .flatMap { metadata =>
                 f(Some(ResAndMetadata(zip, metadata)))
               }
@@ -274,7 +274,7 @@ object ArgonModuleLoader {
               val zip = zipFile
 
               if(id < 0)
-                res.getZipEntryStream(zip, refPathFunction(id.abs))(res.readProtocolBufferMessage(refCompanion))
+                res.getZipEntryInputStream(zip, refPathFunction(id.abs))(res.readProtocolBufferMessage(refCompanion))
                   .flatMap { refValue =>
                     refModuleMap.get(refModuleIdLens(refValue)) match {
                       case Some(ModuleReference(moduleRef)) =>
@@ -300,7 +300,7 @@ object ArgonModuleLoader {
                     }
                   }
               else
-                res.getZipEntryStream(zip, defPathFunction(id))(res.readProtocolBufferMessage(defCompanion))
+                res.getZipEntryInputStream(zip, defPathFunction(id))(res.readProtocolBufferMessage(defCompanion))
                   .flatMap { defValue =>
                     parseDescriptor(currentModuleDescriptor)(defDescriptorLens(defValue)) match {
                       case Some(Left(descriptor)) =>

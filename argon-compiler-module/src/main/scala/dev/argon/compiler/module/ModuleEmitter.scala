@@ -1,6 +1,6 @@
 package dev.argon.compiler.module
 
-import dev.argon.compiler.Compilation
+import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.util.stream.{ArStream, StreamTransformation}
@@ -13,7 +13,9 @@ import dev.argon.util.{FileID, NonEmptyVector}
 import dev.argon.module
 import shapeless._
 
-final class ModuleEmitter[TComp[+_] : Compilation, TContext <: ModuleContext[TComp, _] with Singleton](context: TContext) {
+final class ModuleEmitter[TCompE[+_, +_] : CompilationE, TContext <: ModuleContext[TCompE, _] with Singleton](val context: TContext) {
+
+  type TComp[+A] = context.Comp[A]
 
   import context.signatureContext.Signature
   import context.typeSystem

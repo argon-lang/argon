@@ -1,15 +1,16 @@
 package dev.argon.build.testrunner
 
-import java.io.{ File, IOException }
+import java.io.{File, IOException}
 
 import dev.argon.build.{Backend, BuildProcess}
-import dev.argon.compiler.{CompilationError, CompilerInput, CompilerOptions, IOCompilation}
+import dev.argon.compiler._
 import dev.argon.compiler.core.ModuleDescriptor
 import scalaz._
 import Scalaz._
 import dev.argon.build.project.{ProjectFileHandler, ProjectLoader}
-import scalaz.zio.IO
+import scalaz.zio._
 import dev.argon.util.FileOperations.fileShow
+import IOCompilation.fileSystemResourceAccess
 
 private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParsePhase {
 
@@ -19,35 +20,45 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
 
   protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[IOException, backend.BackendOptions[Id, File]]
 
-  protected def getProgramOutput(compOutput: backend.TCompilationOutput[IO[Throwable, +?], File]): IO[Throwable, String]
+  protected def getProgramOutput(compOutput: backend.TCompilationOutput[IO, File]): IO[NonEmptyList[CompilationError], Either[Throwable, String]]
 
   protected def normalizeOutput(output: String): String =
     output.split("\n").map { _.trim }.filter { _.nonEmpty }.mkString("\n")
 
 
-  def compileTestCase[A](testCase: TestCase, references: Vector[File]): IO[Throwable, TestCaseResult] =
+  def compileTestCase(testCase: TestCase, references: Vector[File]): UIO[TestCaseResult] =
     IOCompilation.compilationInstance.flatMap { implicit ioComp =>
-      ioComp.getResult(
-        parseTestCaseSource(testCase)
-          .flatMap { parsedSource =>
-            val compilerOptions = CompilerOptions[Id](
-              moduleName = moduleName
-            )
 
-            backendOptions(compilerOptions).flatMap { backendOpts =>
-              BuildProcess.compile(
-                backend
-              )(
-                parsedSource,
-                references,
-                compilerOptions,
-                backendOpts,
-              )(getProgramOutput)(implicitly, ioComp, IOCompilation.fileSystemResourceAccess)
+      val result: UIO[(Vector[CompilationMessageNonFatal], Either[NonEmptyList[CompilationError], Either[Throwable, String]])] =
+        ioComp.getResult(
+          parseTestCaseSource(testCase)
+            .flatMap { parsedSource =>
+              val compilerOptions = CompilerOptions[Id](
+                moduleName = moduleName
+              )
+
+              backendOptions(compilerOptions)
+                .either
+                .flatMap {
+                  case Left(ex) => IO.succeed(Left(ex))
+                  case Right(backendOpts) =>
+                    BuildProcess.compile(
+                      backend
+                    )(
+                      parsedSource,
+                      references,
+                      compilerOptions,
+                      backendOpts,
+                    )(getProgramOutput)
+                }
             }
-          }
-      )
+        )
+
+      result
         .map {
-          case (_, Right(programOutput)) =>
+          case (_, Right(Left(ex))) => TestCaseResult.ExecutionError(ex)
+
+          case (_, Right(Right(programOutput))) =>
             testCase.expectedResult match {
               case TestCaseExpectedOutput(expectedOutput) if normalizeOutput(programOutput) === normalizeOutput(expectedOutput) =>
                 TestCaseResult.Success

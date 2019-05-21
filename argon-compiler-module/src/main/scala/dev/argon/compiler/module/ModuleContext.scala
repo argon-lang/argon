@@ -1,14 +1,14 @@
 package dev.argon.compiler.module
 
 import dev.argon.compiler._
-import dev.argon.compiler.core.ContextComp
+import dev.argon.compiler.core._
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.loaders.ModuleLoader
 import dev.argon.compiler.loaders.armodule.ArgonModuleLoader
 import scalaz._
 import Scalaz._
 
-class ModuleContext[TComp[+_] : Compilation, I](override protected val compilerInput: CompilerInput[I, ModuleBackendOptions[Id, I]]) extends ContextComp[TComp] {
+class ModuleContext[TCompE[+_, +_] : CompilationE, I](override protected val compilerInput: CompilerInput[I, ModuleBackendOptions[Id, I]]) extends ContextCompE[TCompE] {
   override type TFunctionMetadata = Unit
   override type TMethodMetadata = Unit
   override type TTraitMetadata = Unit
@@ -31,13 +31,13 @@ class ModuleContext[TComp[+_] : Compilation, I](override protected val compilerI
   override def createDataConstructorImplementation(body: typeSystem.ArExpr): typeSystem.ArExpr = body
 
 
-  override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): TComp[typeSystem.ArExpr] =
-    Compilation[TComp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+  override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[typeSystem.ArExpr] =
+    Compilation[Comp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
 
-  override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): TComp[Option[typeSystem.ArExpr]] =
-    Compilation[TComp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+  override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[Option[typeSystem.ArExpr]] =
+    Compilation[Comp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
 
-  override val compCompilationInstance: Compilation[TComp] = implicitly
+  override val compECompilationInstance: CompilationE[TCompE] = implicitly
 
 
 

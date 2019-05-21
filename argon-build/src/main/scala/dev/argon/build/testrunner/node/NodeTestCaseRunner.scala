@@ -9,7 +9,7 @@ import scalaz._
 import Scalaz._
 import scalaz.zio._
 import dev.argon.build.testrunner.node.ExternalApi._
-import dev.argon.compiler.CompilerOptions
+import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
 import dev.argon.compiler.js.{JSBackendOptions, JSInjectCode}
 import dev.argon.util.{FileOperations, FilenameManip}
 import org.apache.commons.io.IOUtils
@@ -29,15 +29,15 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
     )
   )
 
-  override protected def getProgramOutput(compOutput: CompilationOutputText[IO[Throwable, +?], File]): IO[Throwable, String] =
-    IO.effect {
-      val writer = new StringWriter()
-      val printWriter = new PrintWriter(writer)
-      compOutput.writeText(printWriter)
-      printWriter.close()
-      writer.toString
-    }
-      .flatMap(runJSOutput(references))
+  override protected def getProgramOutput(compOutput: CompilationOutputText[IO, File]): IO[NonEmptyList[CompilationError], Either[Throwable, String]] = for {
+    writer <- IO.effectTotal { new StringWriter() }
+    printWriter <- IO.effectTotal { new PrintWriter(writer) }
+    _ <- compOutput.writeText(IOCompilation.fileSystemResourceAccess)((printWriter, compOutput.outputResource))
+    _ <- IO.effectTotal { printWriter.close() }
+    compiledFile <- IO.effectTotal { writer.toString }
+    output <- runJSOutput(references)(compiledFile).either
+  } yield output
+
 
   override def runTest(testCase: TestCase): IO[Throwable, TestCaseResult] =
     compileTestCase(testCase, references)

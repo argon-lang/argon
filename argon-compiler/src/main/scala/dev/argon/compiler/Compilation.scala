@@ -5,8 +5,7 @@ import Scalaz._
 
 trait Compilation[F[_]] extends Monad[F] {
 
-  def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): F[A]
-  def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal] = Vector()): F[A]
+  def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[Nothing] = Vector()): F[A]
   final def forErrors[A](head: CompilationError, tail: CompilationError*): F[A] =
     forErrors(NonEmptyList.nel(head, IList(tail: _*)))
 

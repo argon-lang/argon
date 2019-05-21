@@ -3,25 +3,21 @@ package dev.argon.build
 import java.io.{OutputStream, PrintWriter}
 import java.nio.charset.StandardCharsets
 
-import dev.argon.compiler.ResourceAccess
+import dev.argon.compiler.{CompilationError, ResourceAccess}
 import scalaz._
 import Scalaz._
 
-trait CompilationOutput[F[+_], I] {
-  type MonadErrorThrowable[A[_, _]] = MonadError[A[Throwable, ?], Throwable]
-
-  def write(implicit resourceAccess: ResourceAccess[F, I]): F[Unit]
-
+trait CompilationOutput[F[+_, +_], I] {
+  def write(implicit resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I]): F[NonEmptyList[CompilationError], Unit]
 }
 
-trait CompilationOutputText[F[+_], I] extends CompilationOutput[F, I] {
+trait CompilationOutputText[F[+_, +_], I] extends CompilationOutput[F, I] {
 
-
-  override def write(implicit resourceAccess: ResourceAccess[F, I]): F[Unit] =
-    resourceAccess.createPrintWriter(outputResource)(writeText)
+  override def write(implicit resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I]): F[NonEmptyList[CompilationError], Unit] =
+    resourceAccess.createPrintWriter(outputResource)(writeText(resourceAccess)(_))
 
   def outputResource: I
 
-  def writeText(writer: PrintWriter): Unit
+  def writeText(resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I])(writer: resourceAccess.PrintWriter): F[NonEmptyList[CompilationError], Unit]
 
 }

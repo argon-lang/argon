@@ -9,7 +9,9 @@ import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
 import dev.argon.compiler.vtable._
 
-final class JSEmitter[TComp[+_] : Compilation, TContext <: JSContext[TComp, _] with Singleton](context: TContext, inject: JSInjectCode[Id]) {
+final class JSEmitter[TCompE[+_, +_] : CompilationE, TContext <: JSContext[TCompE, _] with Singleton](context: TContext, inject: JSInjectCode[Id]) {
+
+  private type TComp[+A] = context.Comp[A]
 
   import context.signatureContext.{ context => _, typeSystem => _, _ }
 

@@ -1,6 +1,6 @@
 package dev.argon.compiler
 
-import java.io.File
+import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
 
 import dev.argon.compiler.core.GlobalName
@@ -392,6 +392,14 @@ object CompilationError {
     override def message: String = "A field was not initialized."
   }
 
+  final case class InvalidProtocolBufferMessage(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Invalid protocol buffer message."
+  }
+
+  final case class ResourceIOError(source: CompilationMessageSource, exception: IOException) extends CompilationError {
+    override def message: String = "An IO error occurred."
+  }
+
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context
     val typeSystem: TypeSystem[context.type]
@@ -449,8 +457,8 @@ object CompilationMessageSource {
     override def formatted: String = s"module ${moduleDescriptor.name}"
   }
 
-  final case class ModuleResource[I: Show](id: I) extends CompilationMessageSource {
-    override def formatted: String = s"module ${Show[I].shows(id)}"
+  final case class ResourceIdentifier[I: Show](id: I) extends CompilationMessageSource {
+    override def formatted: String = Show[I].shows(id)
   }
 
 }

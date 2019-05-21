@@ -6,19 +6,18 @@ import java.nio.charset.StandardCharsets
 import dev.argon.compiler.js._
 import dev.argon.compiler._
 import dev.argon.util.FileOperations
-import scalaz._
+import scalaz.{Scalaz, _}
 import Scalaz._
 import dev.argon.build.project.ProjectLoader
 import scalaz.Leibniz.===
 import scalaz.zio.{IO, ZIO}
 import toml.Codecs._
-import shapeless.{ Id => _, _ }
-
+import shapeless.{Id => _, _}
 import dev.argon.util.ExtraTomlCodecs._
 
 object JSBackend extends Backend {
 
-  override type TCompilationOutput[F[+_], I] = CompilationOutputText[F, I]
+  override type TCompilationOutput[F[+_, +_], I] = CompilationOutputText[F, I]
   override type BackendOptions[F[_], I] = JSBackendOptions[F, I]
 
   override val id: String = "js"
@@ -53,7 +52,11 @@ object JSBackend extends Backend {
     toml.Toml.parseAs[JSBackendOptions[Option, String]](table)
 
 
-  override def compile[F[+ _], I: Show, A](input: CompilerInput[I, BackendOptions[Id, I]])(f: CompilationOutputText[F, I] => F[A])(implicit comp: Compilation[F], res: ResourceAccess[F, I]): F[A] = {
+  override def compile[F[+_, +_] : CompilationE, I: Show, A]
+  (input: CompilerInput[I, JSBackendOptions[Scalaz.Id, I]])
+  (f: CompilationOutputText[F, I] => F[NonEmptyList[CompilationError], A])
+  (implicit res: ResourceAccess[F[NonEmptyList[CompilationError], ?], I])
+  : F[NonEmptyList[CompilationError], A] = {
     val context = new JSContext[F, I](input)
     val emitter = new JSEmitter[F, context.type](context, input.backendOptions.inject)
 
@@ -64,12 +67,17 @@ object JSBackend extends Backend {
     }
   }
 
-  private def createOutput[F[+_], I](outputRes: I)(jsModule: JSModule): CompilationOutputText[F, I] = new CompilationOutputText[F, I] {
+  private def createOutput[F[+_, +_], I](outputRes: I)(jsModule: JSModule): CompilationOutputText[F, I] = new CompilationOutputText[F, I] {
 
     override def outputResource: I = outputRes
 
-    override def writeText(writer: PrintWriter): Unit =
-      JSAst.writeModule(jsModule)(writer)
+    override def writeText(resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I])(writer: resourceAccess.PrintWriter): F[NonEmptyList[CompilationError], Unit] = {
+
+      val strWriter = new StringWriter()
+      JSAst.writeModule(jsModule)(new PrintWriter(strWriter))
+
+      resourceAccess.writeText(writer, strWriter.toString)
+    }
 
   }
 }

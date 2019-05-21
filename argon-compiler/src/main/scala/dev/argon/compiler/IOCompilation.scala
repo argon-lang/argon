@@ -1,52 +1,48 @@
 package dev.argon.compiler
 
-import java.io.{File, InputStream, OutputStream, PrintWriter}
-import java.util.Locale
-import java.util.zip.{ZipEntry, ZipFile, ZipOutputStream}
+import java.io
+import java.util.zip
 
 import dev.argon.util.{FileOperations, FilenameManip}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import scalaz._
 import scalaz.zio._
 import scalaz.zio.interop.scalaz72._
+import FileOperations.fileShow
+import com.google.protobuf.InvalidProtocolBufferException
 
-trait IOCompilation extends CompilationExec[Task, Task]
+trait IOCompilation extends CompilationExec[IO, UIO]
 
 object IOCompilation {
 
-  final case class CompilationErrorException(errors: NonEmptyList[CompilationError]) extends Exception
+  val compilationInstance: UIO[IOCompilation] = IO.succeed(new IOCompilation {
 
-  val compilationInstance: UIO[IOCompilation] = for {
-    messageAccum <- Ref.make(Vector.empty[CompilationMessageNonFatal])
-  } yield new IOCompilation {
-    override def diagnostic[A](value: A, messages: Vector[CompilationMessageNonFatal]): Task[A] = for {
-      _ <- messageAccum.update { acc => acc ++ messages }
-    } yield value
+    type E = ErrorType
 
-    override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal]): Task[A] =
-      messageAccum.update { acc => acc ++ messages }.flatMap { _ => IO.fail(CompilationErrorException(errors)) }
+    override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[Nothing]): IO[E, A] =
+      IO.fail(errors)
 
-    override def createCache[A]: Task[Task[A] => Task[A]] =
-      RefM.make(Option.empty[Promise[Throwable, A]]).map { ref => createValue =>
+    override def createCache[A]: IO[E, IO[E, A] => IO[E, A]] =
+      RefM.make(Option.empty[Promise[E, A]]).map { ref => createValue =>
         ref.modify {
           case value @ Some(promise) => IO.succeed((promise, value))
           case None =>
             for {
-              promise <- Promise.make[Throwable, A]
+              promise <- Promise.make[E, A]
               _ <- promise.done(createValue).fork
             } yield (promise, Some(promise))
         }
           .flatMap { promise => promise.await }
       }
 
-    override def createMemo[A, B]: Task[(A => Task[B]) => A => Task[B]] =
-      RefM.make(Map[A, Promise[Throwable, B]]()).map { ref => createValue => a =>
+    override def createMemo[A, B]: IO[E, (A => IO[E, B]) => A => IO[E, B]] =
+      RefM.make(Map[A, Promise[E, B]]()).map { ref => createValue => a =>
         ref.modify { map =>
           map.get(a) match {
             case Some(promise) => IO.succeed((promise, map))
             case None =>
               for {
-                promise <- Promise.make[Throwable, B]
+                promise <- Promise.make[E, B]
                 _ <- promise.done(createValue(a)).fork
               } yield (promise, map + (a -> promise))
           }
@@ -54,61 +50,75 @@ object IOCompilation {
           .flatMap { promise => promise.await }
       }
 
-    override def point[A](a: => A): Task[A] = IO(a)
 
-    override def bind[A, B](fa: Task[A])(f: A => IO[Throwable, B]): IO[Throwable, B] =
+    override def point[A](a: => A): UIO[A] = IO.succeed(a)
+
+    override def bind[A, B](fa: IO[E, A])(f: A => IO[E, B]): IO[E, B] =
       fa.flatMap(f)
 
+    override def getResult[A](fa: IO[E, A]): UIO[(Vector[CompilationMessageNonFatal], Either[E, A])] = for {
+      eitherRes <- fa.either
+    } yield (Vector(), eitherRes)
 
-    override def getResult[A](fa: Task[A]): IO[Throwable, (Vector[CompilationMessageNonFatal], Either[NonEmptyList[CompilationError], A])] =
-      fa
-        .flatMap { a =>
-          messageAccum.get.map { messages =>
-            (messages, Right(a))
-          }
-        }
-        .catchSome {
-          case CompilationErrorException(errors) =>
-            messageAccum.get.map { messages =>
-              (messages, Left(errors))
-            }
-        }
+  })
+
+  trait IOResourceAccess extends ResourceAccess[IO[NonEmptyList[CompilationError], ?], io.File] {
+    override type PrintWriter = (io.PrintWriter, io.File)
+    override type OutputStream = (io.OutputStream, io.File)
+    override type InputStream = (io.InputStream, io.File)
+    override type ZipWriter = (zip.ZipOutputStream, io.File)
+    override type ZipReader = (zip.ZipFile, io.File)
   }
 
-  implicit val fileSystemResourceAccess: ResourceAccess[Task, File] =
-    new ResourceAccess[Task, File] {
+  implicit val fileSystemResourceAccess: IOResourceAccess =
+    new IOResourceAccess {
 
-      override def getExtension(id: File): Task[String] = IO.effect {
+      private def handleIOException[A](file: io.File)(value: IO[io.IOException, Either[NonEmptyList[CompilationError], A]]): IO[NonEmptyList[CompilationError], A] =
+        value.either.flatMap { either =>
+          IO.fromEither(
+            either.left.map { ex => NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(file), ex)) }
+              .flatMap(identity)
+          )
+        }
+
+      override def getExtension(id: io.File): IO[NonEmptyList[CompilationError], String] = IO.effectTotal {
         FilenameManip.getExtension(id)
       }
 
-      override def createPrintWriter[A](id: File)(f: PrintWriter => A): Task[A] =
-        FileOperations.filePrintWriter(id) { writer => IO.effect { f(writer) } }
+      override def createPrintWriter[A](id: io.File)(f: PrintWriter => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
+        handleIOException(id)(FileOperations.filePrintWriter(id)(writer => f((writer, id)).either))
 
-      override def createOutputStream[A](id: File)(f: OutputStream => Task[A]): Task[A] =
-        FileOperations.fileOutputStream(id)(f)
+      override def createOutputStream[A](id: io.File)(f: OutputStream => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
+        handleIOException(id)(FileOperations.fileOutputStream(id)(stream => f((stream, id)).either))
 
-      override def createZipOutputStream[A](stream: OutputStream)(f: ZipOutputStream => Task[A]): Task[A] =
-        FileOperations.zipOutputStream(stream)(f)
+      override def writeText(writer: PrintWriter, text: String): IO[NonEmptyList[CompilationError], Unit] =
+        IO.effect { writer._1.print(text) }.refineOrDie {
+          case ex: io.IOException => NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(writer._2), ex))
+        }
 
-      override def createZipEntry[A](zip: ZipOutputStream, path: String)(f: ZipEntry => Task[A]): Task[A] =
-        FileOperations.createZipEntry(zip, path)(f)
+      override def createZipWriter[A](stream: OutputStream)(f: ZipWriter => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
+        handleIOException(stream._2)(FileOperations.zipOutputStream(stream._1)(zipStream => f((zipStream, stream._2)).either))
 
+      override def writeZipEntry[A](zip: ZipWriter, path: String)(f: OutputStream => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
+        handleIOException(zip._2)(FileOperations.createZipEntry(zip._1, path)(_ => f(zip).either))
 
-      override type ZipReader = ZipFile
-      override def getZipFile[A](id: File)(f: ZipFile => Task[A]): Task[A] =
-        FileOperations.createZipFile(id)(f)
+      override def getZipReader[A](id: io.File)(f: ZipReader => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
+        handleIOException(id)(FileOperations.createZipFile(id)(zipFile => f((zipFile, id)).either))
 
-      override def getZipEntryStream[A](zip: ZipFile, name: String)(f: InputStream => Task[A]): Task[A] =
-        FileOperations.getZipEntryStream(zip, name)(f)
+      override def getZipEntryInputStream[A](zip: ZipReader, name: String)(f: InputStream => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
+        handleIOException(zip._2)(FileOperations.getZipEntryStream(zip._1, name)(stream => f((stream, zip._2)).either))
 
-      override def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): Task[A] = IO.effect {
-        companion.parseFrom(stream)
-      }
+      override def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): IO[NonEmptyList[CompilationError], A] =
+        IO.effect { companion.parseFrom(stream._1) }.refineOrDie {
+          case ex: io.IOException => NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(stream._2), ex))
+          case _: InvalidProtocolBufferException => NonEmptyList[CompilationError](CompilationError.InvalidProtocolBufferMessage(CompilationMessageSource.ResourceIdentifier(stream._2)))
+        }
 
-      override def writeProtocolBufferMessage(stream: OutputStream, message: GeneratedMessage): Task[Unit] = IO.effect {
-        message.writeTo(stream)
-      }
+      override def writeProtocolBufferMessage(stream: OutputStream, message: GeneratedMessage): IO[NonEmptyList[CompilationError], Unit] =
+        IO.effect { message.writeTo(stream._1) }.refineOrDie {
+          case ex: io.IOException => NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(stream._2), ex))
+          case _: InvalidProtocolBufferException => NonEmptyList[CompilationError](CompilationError.InvalidProtocolBufferMessage(CompilationMessageSource.ResourceIdentifier(stream._2)))
+        }
     }
 
 }
