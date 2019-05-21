@@ -48,8 +48,8 @@ package object stream {
                     case stop @ Step.Stop(_) => stop.pure[F[E2, ?]]
                   }
 
-                case Step.Continue(s1) => step(BothRunning(s1, chunkB, s2), ca)
-                case Step.Stop(r2) => step(FirstFinished(r2, chunkB, s2), ca)
+                case Step.Continue(s1) => Step.Continue(BothRunning(s1, chunkB, s2)).pure[F[E2, ?]]
+                case Step.Stop(r2) => Step.Continue(FirstFinished(r2, chunkB, s2)).pure[F[E2, ?]]
               }
 
             case FirstFinished(r2, chunkB, s2) =>
