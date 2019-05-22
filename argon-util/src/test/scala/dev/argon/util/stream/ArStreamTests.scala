@@ -50,6 +50,10 @@ class ArStreamTests extends FlatSpec with Matchers with DefaultRuntime with Samp
     unsafeRun(ArStream.fromVector[IO, Int, Int](sampleValues).foldLeft(StreamTransformation.toVector[IO, Int, Int])) shouldEqual sampleValues
   }
 
+  it should "map" in {
+    unsafeRun(checkStream(sampleValues.map { _ + 1 }, ArStream.fromVector[IO, Int, Int](sampleValues).map { _ + 1 }))
+  }
+
   it should "flatMap" in {
     unsafeRun(checkStream(sampleValues, ArStream.fromVector[IO, Int, Vector[Int]](Vector(sampleValues)).flatMap(ArStream.fromVector[IO, Int, Int])))
   }

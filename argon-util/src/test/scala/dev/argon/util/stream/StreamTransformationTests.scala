@@ -21,6 +21,25 @@ class StreamTransformationTests extends FlatSpec with Matchers with DefaultRunti
     )))
   }
 
+  it should "work for ZStream" in {
+    unsafeRun(checkZStream(sampleValues, ZStream.fromIterable(sampleValues).transformIO(
+      StreamTransformation.identity[IO, Int, Int, Unit]
+    )))
+  }
+
+  it should "handle collect" in {
+    unsafeRun(checkStream(sampleValues.filter { _ =!= 100 }.map { _ + 1 }, ArStream.fromVector[IO, Int, Int](sampleValues).transformWith(
+      StreamTransformation.identity[IO, Int, Int, Unit].collect {
+        case x if x =!= 100 => x + 1
+      }
+    )))
+  }
+
+  it should "handle map" in {
+    unsafeRun(checkStream(sampleValues.map { _ + 1 }, ArStream.fromVector[IO, Int, Int](sampleValues).transformWith(
+      StreamTransformation.identity[IO, Int, Int, Unit].map { _ + 1 }
+    )))
+  }
 
 
 
