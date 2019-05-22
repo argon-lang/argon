@@ -141,7 +141,7 @@ package object stream {
             case Step.Stop(result) => (acc, result.pure[F[E, ?]]).pure[F[E, ?]]
           }
 
-          case None => sink.end(s, result)
+          case None => sink.end(s, result).map { case (lastB, fr2) => (acc ++ lastB, fr2) }
         }
 
     }
