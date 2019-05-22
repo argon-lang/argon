@@ -1,13 +1,9 @@
 package dev.argon.compiler.core
 
-import scalaz.Scalaz._
-import scalaz._
+import cats._
+import cats.implicits._
 
-@deriving(Equal)
 sealed trait MemberName
-
-@deriving(Equal)
-sealed trait MethodName extends MemberName
 
 object MemberName {
 
@@ -17,4 +13,13 @@ object MemberName {
 
   case object Call extends MethodName
   case object New extends MemberName
+
+  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  implicit val eqInstance: Eq[MemberName] = cats.derived.semi.eq
+}
+
+sealed trait MethodName extends MemberName
+object MethodName {
+  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+  implicit val eqInstance: Eq[MethodName] = cats.derived.semi.eq
 }

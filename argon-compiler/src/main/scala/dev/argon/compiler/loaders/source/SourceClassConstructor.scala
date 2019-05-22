@@ -6,8 +6,8 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.parser
 import dev.argon.util._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.StandardTypeLoaders
 
@@ -70,7 +70,7 @@ object SourceClassConstructor {
 
       def convertUnconverted: TComp[(Vector[typeSystem.ClassConstructorStatement], ExpressionConverter.Env[context.type, Scope])] =
         if(unconverted.value.isEmpty)
-          (converted, env).point[TComp]
+          (converted, env).pure[TComp]
         else
           ExpressionConverter.convertStatementList(context)(env)(unitType)(unconverted).map { newStmt =>
 
@@ -105,7 +105,7 @@ object SourceClassConstructor {
 
         case WithSource(parser.InitializeStmt(thisName, baseCtorExprOpt), location) +: tail =>
           ownerClass.fields.flatMap { fields =>
-            if(fields.size =/= initializedFields.size)
+            if(fields.size =!= initializedFields.size)
               Compilation[TComp].forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
             else
               convertUnconverted.flatMap { case (newConverted, env2) =>
@@ -122,11 +122,11 @@ object SourceClassConstructor {
                       )
 
                     case (None, None) =>
-                      None.point[TComp]
+                      None.pure[TComp]
 
                     case (Some(baseCtorExpr), Some(baseClass)) =>
                       ExpressionConverter.convertExpression(context)(env2.copy(allowAbstractConstructor = true))(typeSystem.fromSimpleType(baseClass))(baseCtorExpr).flatMap {
-                        case baseCall: typeSystem.ClassConstructorCall => Some(baseCall).point[TComp]
+                        case baseCall: typeSystem.ClassConstructorCall => Some(baseCall).pure[TComp]
                         case _ =>
                           Compilation[TComp].forErrors(
                             CompilationError.InvalidBaseConstructorCall(CompilationMessageSource.SourceFile(env.fileSpec, location))
@@ -156,7 +156,7 @@ object SourceClassConstructor {
               )
             else
               ownerClass.fields.flatMap { fields =>
-                if(fields.size =/= initializedFields.size)
+                if(fields.size =!= initializedFields.size)
                   Compilation[TComp].forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, unconverted.location)))
                 else
                   ExpressionConverter.convertStatementList(context)(env)(unitType)(unconverted).map { endExpr =>
@@ -182,6 +182,6 @@ object SourceClassConstructor {
     (context: ContextComp[TComp])
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
     : TComp[ClassConstructor.ResultInfo[context.type, context.typeSystem.type]] =
-      ClassConstructor.ResultInfo[context.type, context.typeSystem.type]().point[TComp]
+      ClassConstructor.ResultInfo[context.type, context.typeSystem.type]().pure[TComp]
   }
 }

@@ -3,10 +3,10 @@ package dev.argon.build.testrunner
 import java.io.File
 
 import scala.xml.XML
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import scalaz.zio._
-import scalaz.zio.interop.scalaz72._
+import scalaz.zio.interop.catz._
 
 object TestCaseLoader {
 
@@ -14,7 +14,7 @@ object TestCaseLoader {
     testCaseFiles <- IO.effect { dir.listFiles.sortBy(f => f.getName).toVector }
 
     subDirCases <- testCaseFiles
-      .filterM { f => IO.effect { f.isDirectory } }
+      .filterA { f => IO.effect { f.isDirectory } }
       .flatMap {
         _.traverse { f =>
           findTestCases(f).map(f.getName.->)
@@ -22,7 +22,7 @@ object TestCaseLoader {
       }
 
     fileCases <- testCaseFiles
-      .filterM { f => IO.effect { f.isFile && f.getName.endsWith(".xml") } }
+      .filterA { f => IO.effect { f.isFile && f.getName.endsWith(".xml") } }
       .flatMap { _.traverse(loadTestCase) }
 
   } yield TestCaseStructure(
@@ -34,7 +34,7 @@ object TestCaseLoader {
     IO.effect { XML.loadFile(file) }
       .flatMap { elem =>
         TestCase.fromXml(elem)
-          .map { _.point[IO[Throwable, ?]] }
+          .map { _.pure[IO[Throwable, ?]] }
           .getOrElse(IO.effect { file.getAbsolutePath }.flatMap { path => IO.fail(new Exception(s"Invalid test case ${path}")) })
       }
 

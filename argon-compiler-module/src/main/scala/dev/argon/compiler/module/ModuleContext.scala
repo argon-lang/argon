@@ -5,8 +5,8 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.loaders.ModuleLoader
 import dev.argon.compiler.loaders.armodule.ArgonModuleLoader
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 class ModuleContext[TCompE[+_, +_] : CompilationE, I](override protected val compilerInput: CompilerInput[I, ModuleBackendOptions[Id, I]]) extends ContextCompE[TCompE] {
   override type TFunctionMetadata = Unit

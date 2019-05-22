@@ -6,8 +6,8 @@ import dev.argon.compiler.loaders.ModuleLoader
 import dev.argon.compiler.loaders.armodule.ArgonModuleLoader
 import dev.argon.compiler.types.ArgonTypeSystem
 import dev.argon.compiler._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 final class JSContext[TCompE[+_, +_] : CompilationE, I](override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]]) extends ContextCompE[TCompE] {
 

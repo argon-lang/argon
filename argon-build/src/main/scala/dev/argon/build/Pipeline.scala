@@ -12,21 +12,18 @@ import dev.argon.compiler.core.ModuleDescriptor
 import dev.argon.util.{FileID, FileOperations, FileSpec}
 import scalaz.zio._
 import scalaz.zio.console._
-import scalaz.zio.interop.catz._
 import dev.argon.util.FileOperations.fileShow
 import IOCompilation.fileSystemResourceAccess
-import cats.data.NonEmptyVector
+import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.parser.SourceAST
 
 object Pipeline {
 
-  private implicit val fileShow = scalaz.Show.shows(FileOperations.fileShow.show)
-
-  private def refineIOToCompilationError(file: File): PartialFunction[Throwable, scalaz.NonEmptyList[CompilationError]] = {
-    case ex: io.IOException => scalaz.NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(file), ex))
+  private def refineIOToCompilationError(file: File): PartialFunction[Throwable, NonEmptyList[CompilationError]] = {
+    case ex: io.IOException => NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(file), ex))
   }
 
-  private def createFileDataStream(file: File): stream.Stream[scalaz.NonEmptyList[CompilationError], Char] =
+  private def createFileDataStream(file: File): stream.Stream[NonEmptyList[CompilationError], Char] =
     stream.ZStream.managed(
       ZManaged.make(
         IO.effect { new io.FileReader(file) }.refineOrDie(refineIOToCompilationError(file))
@@ -45,30 +42,32 @@ object Pipeline {
 
 
 
-  protected def findInputFiles(buildInfo: BuildInfo[File]): ArStream[IO, scalaz.NonEmptyList[CompilationError], InputFileInfo[IO]] =
+  protected def findInputFiles(buildInfo: BuildInfo[File]): ArStream[IO, NonEmptyList[CompilationError], InputFileInfo[IO]] = {
+    import scalaz.zio.interop.catz._
 
-    ArStream.fromVector[IO, scalaz.NonEmptyList[CompilationError], (File, Int)](buildInfo.project.inputFiles.toVector.zipWithIndex)
+    ArStream.fromVector[IO, NonEmptyList[CompilationError], (File, Int)](buildInfo.project.inputFiles.toVector.zipWithIndex)
       .map { case (file, id) =>
         InputFileInfo(FileSpec(FileID(id), file.getPath),
           ArStream.fromZStream(createFileDataStream(file))
         )
       }
+  }
 
-  def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): TaskR[Console, Unit] =
+  def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): TaskR[Console, Unit] = {
+    import scalaz.zio.interop.catz._
+
     msgs
       .traverse_ { msg =>
         putStrLn(msg.toString)
       }
+  }
 
   def compileResult[A]
   (buildInfo: BuildInfo[File])
-  (f: buildInfo.backend.TCompilationOutput[IO, File] => IO[scalaz.NonEmptyList[CompilationError], A])
+  (f: buildInfo.backend.TCompilationOutput[IO, File] => IO[NonEmptyList[CompilationError], A])
   (implicit compInstance: IOCompilation)
-  : IO[scalaz.NonEmptyList[CompilationError], A] =
-    BuildProcess.parseInput[IO](findInputFiles(buildInfo)).foldLeft(StreamTransformation.toVector[IO, scalaz.NonEmptyList[CompilationError], SourceAST]).flatMap { parsedInput =>
-
-      implicit val fileShow: cats.Show[File] = FileOperations.fileShow
-
+  : IO[NonEmptyList[CompilationError], A] =
+    BuildProcess.parseInput[IO](findInputFiles(buildInfo)).foldLeft(StreamTransformation.toVector[IO, NonEmptyList[CompilationError], SourceAST]).flatMap { parsedInput =>
       BuildProcess.compile(
         buildInfo.backend
       )(
@@ -92,7 +91,7 @@ object Pipeline {
       }
     .flatMap {
       case (msgs, Left(errors)) =>
-        printMessages[Vector, CompilationMessage](errors.list.toVector ++ msgs).map { _ => 1 }
+        printMessages[Vector, CompilationMessage](errors.toList.toVector ++ msgs).map { _ => 1 }
 
       case (msgs, Right(_)) =>
         printMessages[Vector, CompilationMessage](msgs).map { _ => 0 }

@@ -6,7 +6,9 @@ import dev.argon.compiler.loaders.ModuleLoader
 import dev.argon.compiler.loaders.source.SourceModuleCreator
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types.{ArgonTypeSystem, TypeSystem, TypeSystemConverter}
-import scalaz.{Monad, Show}
+import cats._
+import cats.data.NonEmptyList
+
 
 sealed trait Context {
 
@@ -66,11 +68,11 @@ trait ContextComp[TComp[+_]] extends Context {
   override type Comp[+A] = TComp[A]
 
   override def createModule[A](f: ArModule[ContextComp.this.type, DeclarationPayloadSpecifier] => TComp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[TComp, ResIndicator]): TComp[A] =
-    SourceModuleCreator.createModule[Comp, ResIndicator, A](this)(compilerInput)(f)(compCompilationInstance, implicitly, res)
+    SourceModuleCreator.createModule[Comp, ResIndicator, A](this)(compilerInput)(f)(compCompilationInstance, showRes, res)
 
 }
 
-trait ContextCompE[TCompE[+_, +_]] extends ContextComp[TCompE[scalaz.NonEmptyList[CompilationError], +?]] {
+trait ContextCompE[TCompE[+_, +_]] extends ContextComp[TCompE[NonEmptyList[CompilationError], +?]] {
   override type CompE[+E, +A] = TCompE[E, A]
   override implicit lazy val compCompilationInstance: Compilation[Comp] = compECompilationInstance
 }

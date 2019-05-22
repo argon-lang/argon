@@ -2,7 +2,7 @@ package dev.argon.compiler
 
 import dev.argon.parser.SourceAST
 
-import scalaz.Scalaz.Id
+import cats._
 
 final case class CompilerInput[I, B]
 (

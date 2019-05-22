@@ -3,11 +3,11 @@ package dev.argon.build.project
 import java.io.{ File, IOException }
 import java.nio.file._
 
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import dev.argon.util.FilenameManip
 import scalaz.zio._
-import scalaz.zio.interop.scalaz72._
+import scalaz.zio.interop.catz._
 import shapeless.{Path => _, _}
 
 trait ProjectLoader[A, B, I] {
@@ -32,7 +32,7 @@ object ProjectLoader {
 
     implicit def fileListLoader[I]: ProjectLoader[List[String], List[I], I] = new ProjectLoader[List[String], List[I], I] {
       override def loadProject[F[_]](a: List[String])(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[List[I]] =
-        a.traverseM(fileHandler.loadFileGlob)
+        a.flatTraverse(fileHandler.loadFileGlob)
     }
 
     implicit def hconsLoader[AHead, ATail <: HList, BHead, BTail <: HList, I](implicit headLoader: ProjectLoader[AHead, BHead, I], tailLoader: ProjectLoader[ATail, BTail, I]): ProjectLoader[AHead :: ATail, BHead :: BTail, I] =

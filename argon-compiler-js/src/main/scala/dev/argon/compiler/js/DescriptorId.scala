@@ -3,8 +3,8 @@ package dev.argon.compiler.js
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.util.NamespacePath
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 object DescriptorId {
 
@@ -39,7 +39,7 @@ object DescriptorId {
         }
 
       case ErasedSignature.FunctionType(argumentType, resultType) => s"(${encodeType(argumentType)}->${encodeType(resultType)})"
-      case ErasedSignature.TupleType(elements) => s"(${elements.map(e => "$_:" + encodeType(e)).toVector.mkString(",")})"
+      case ErasedSignature.TupleType(elements) => s"(${elements.map(e => "$_:" + encodeType(e)).toList.toVector.mkString(",")})"
     }
 
   private def encodeSignature[TContext <: Context with Singleton](signature: ErasedSignature[TContext]): String =

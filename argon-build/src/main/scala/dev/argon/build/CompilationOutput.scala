@@ -4,8 +4,9 @@ import java.io.{OutputStream, PrintWriter}
 import java.nio.charset.StandardCharsets
 
 import dev.argon.compiler.{CompilationError, ResourceAccess}
-import scalaz._
-import Scalaz._
+import cats._
+import cats.data.NonEmptyList
+import cats.instances._
 
 trait CompilationOutput[F[+_, +_], I] {
   def write(implicit resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I]): F[NonEmptyList[CompilationError], Unit]

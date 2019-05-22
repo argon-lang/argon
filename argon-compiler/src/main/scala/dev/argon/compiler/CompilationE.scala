@@ -1,6 +1,6 @@
 package dev.argon.compiler
 
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 
 trait CompilationE[F[_, _]] extends Compilation[F[NonEmptyList[CompilationError], ?]] {
   type ErrorType = NonEmptyList[CompilationError]

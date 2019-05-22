@@ -12,7 +12,7 @@ import dev.argon.util._
 import dev.argon.module
 import dev.argon.compiler.core._
 import dev.argon.compiler.types.TypeSystem
-import scalaz._
+import cats._
 
 sealed trait CompilationMessage {
   val source: CompilationMessageSource
@@ -458,7 +458,7 @@ object CompilationMessageSource {
   }
 
   final case class ResourceIdentifier[I: Show](id: I) extends CompilationMessageSource {
-    override def formatted: String = Show[I].shows(id)
+    override def formatted: String = Show[I].show(id)
   }
 
 }

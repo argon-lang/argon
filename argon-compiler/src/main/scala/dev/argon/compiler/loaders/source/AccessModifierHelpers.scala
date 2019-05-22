@@ -4,8 +4,8 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.util._
 import dev.argon.parser
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 trait AccessModifierHelpers {
 
@@ -18,8 +18,8 @@ trait AccessModifierHelpers {
 
   protected def parseGlobalAccessModifier[TComp[+_] : Compilation](fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): TComp[AccessModifierGlobal] =
     parseAccessModifier[TComp](fileSpec, stmtLocation, access).flatMap {
-      case accessModifier: AccessModifierGlobal => accessModifier.point[TComp]
-      case AccessModifier.Private => AccessModifier.PrivateInternal.point[TComp]
+      case accessModifier: AccessModifierGlobal => accessModifier.pure[TComp]
+      case AccessModifier.Private => AccessModifier.PrivateInternal.pure[TComp]
       case accessModifier =>
         val loc = access.headOption.map(_.location).getOrElse(stmtLocation)
         Compilation[TComp].forErrors(CompilationError.AccessModifierNotAllowedForGlobal(accessModifier, CompilationMessageSource.SourceFile(fileSpec, loc)))
@@ -28,43 +28,43 @@ trait AccessModifierHelpers {
   protected def parseAccessModifier[TComp[+_] : Compilation](fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): TComp[AccessModifier] =
     access match {
       case WithSource(parser.PublicModifier, _) :: Nil =>
-        AccessModifier.Public.point[TComp]
+        AccessModifier.Public.pure[TComp]
 
       case WithSource(a @ parser.PublicModifier, loc) :: WithSource(b, _) :: _ =>
         Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.ProtectedModifier, _) :: Nil =>
-        AccessModifier.Protected.point[TComp]
+        AccessModifier.Protected.pure[TComp]
 
       case WithSource(parser.ProtectedModifier, _) :: WithSource(parser.InternalModifier, _) :: Nil =>
-        AccessModifier.ProtectedInternal.point[TComp]
+        AccessModifier.ProtectedInternal.pure[TComp]
 
       case WithSource(a @ parser.ProtectedModifier, loc) :: WithSource(b, _) :: _ =>
         Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.PrivateModifier, _) :: Nil =>
-        AccessModifier.Protected.point[TComp]
+        AccessModifier.Protected.pure[TComp]
 
       case WithSource(parser.PrivateModifier, _) :: WithSource(parser.InternalModifier, _) :: Nil =>
-        AccessModifier.PrivateInternal.point[TComp]
+        AccessModifier.PrivateInternal.pure[TComp]
 
       case WithSource(a @ parser.PrivateModifier, loc) :: WithSource(b, _) :: _ =>
         Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.InternalModifier, _) :: Nil =>
-        AccessModifier.Protected.point[TComp]
+        AccessModifier.Protected.pure[TComp]
 
       case WithSource(parser.InternalModifier, _) :: WithSource(parser.ProtectedModifier, _) :: Nil =>
-        AccessModifier.ProtectedInternal.point[TComp]
+        AccessModifier.ProtectedInternal.pure[TComp]
 
       case WithSource(parser.InternalModifier, _) :: WithSource(parser.PrivateModifier, _) :: Nil =>
-        AccessModifier.PrivateInternal.point[TComp]
+        AccessModifier.PrivateInternal.pure[TComp]
 
       case WithSource(a @ parser.InternalModifier, loc) :: WithSource(b, _) :: _ =>
         Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case Nil =>
-        AccessModifier.Private.point[TComp]
+        AccessModifier.Private.pure[TComp]
     }
 
 }

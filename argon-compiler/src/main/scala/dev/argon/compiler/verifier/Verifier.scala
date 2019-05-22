@@ -4,8 +4,8 @@ import dev.argon.compiler.Compilation
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.core._
 
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 class Verifier {
 
@@ -13,7 +13,7 @@ class Verifier {
 
   def verifyModule[TComp[+_] : Compilation](context: ContextComp[TComp])(module: ArModule[context.type, DeclarationPayloadSpecifier]): TComp[Unit] =
     module.globalNamespace.flatMap { globalNamespace =>
-      passes.traverse_ { _.verifyNamespace(context)(globalNamespace) }
+      passes.toVector.traverse_ { _.verifyNamespace(context)(globalNamespace) }
     }
 
 }

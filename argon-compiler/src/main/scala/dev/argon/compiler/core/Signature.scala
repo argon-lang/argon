@@ -2,8 +2,8 @@ package dev.argon.compiler.core
 
 import dev.argon.compiler._
 import dev.argon.compiler.types._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 trait SignatureContext[TContext <: Context with Singleton]
 {
@@ -35,7 +35,7 @@ trait SignatureContext[TContext <: Context with Singleton]
     override def unsubstitutedResult: TResult[context.type, typeSystem.type] = nextUnsubstituted.unsubstitutedResult
 
     def next[Comp[_] : Compilation](param: typeSystem.ArExpr): Comp[Signature[TResult]] =
-      nextUnsubstituted.point[Comp]
+      nextUnsubstituted.pure[Comp]
 
     override def convertTypeSystem[F[_]: Monad](newContext: SignatureContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult]] =
       for {

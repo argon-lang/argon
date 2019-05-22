@@ -4,8 +4,8 @@ import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
 import dev.argon.util.{FileSpec, NamespacePath, SourceLocation}
 import scala.collection.Set
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 object GlobalScope {
 
@@ -36,7 +36,7 @@ object GlobalScope {
     sourceLocation: SourceLocation,
   )
   : context.Comp[context.scopeContext.LookupResult] =
-    context.compCompilationInstance.bind(
+    context.compCompilationInstance.flatMap(
       resolveName(context)(imports)(modules)(name)(NotFound)
     ) {
       case NotFound => context.compCompilationInstance.point(context.scopeContext.LookupResult.Failed)
@@ -64,7 +64,7 @@ object GlobalScope {
   (acc: ResolvedName)
   : context.Comp[ResolvedName] = modules match {
     case Vector() => context.compCompilationInstance.point(acc)
-    case head +: tail => context.compCompilationInstance.bind(
+    case head +: tail => context.compCompilationInstance.flatMap(
       resolveNameStage1(context)(imports)(head)(name)(acc)
     ) {
       case NotFound => resolveName(context)(imports)(tail)(name)(NotFound)
@@ -81,7 +81,7 @@ object GlobalScope {
   (acc: ResolvedName)
   : context.Comp[ResolvedName] = imports match {
     case Vector() => context.compCompilationInstance.point(acc)
-    case head +: tail => context.compCompilationInstance.bind(
+    case head +: tail => context.compCompilationInstance.flatMap(
       resolveNameStage2(context)(head)(modules)(name)(acc)
     ) {
       case FoundOverloadable => context.compCompilationInstance.point(FoundOverloadable)
@@ -97,7 +97,7 @@ object GlobalScope {
   (acc: ResolvedName)
   : context.Comp[ResolvedName] =
     context.compCompilationInstance.map(
-      imports.traverseM { importNS =>
+      imports.flatTraverse { importNS =>
         modules.traverse { module =>
           ModuleLookup.lookupNamespaceValue(context)(module.value)(importNS, GlobalName.Normal(name)) {
             case GlobalBinding.NestedNamespace(_, _) => NestedNamespaces(Set(NamespacePath(importNS.ns :+ name)))
@@ -127,7 +127,7 @@ object GlobalScope {
   : context.Comp[OverloadResult[context.scopeContext.ScopeValue]] = modules match {
     case Vector() => context.compCompilationInstance.point(OverloadResult.End)
     case head +: tail =>
-      context.compCompilationInstance.bind(
+      context.compCompilationInstance.flatMap(
         overloadResult(context)(imports)(tail)(name)
       )(overloadResultStage1(context)(imports)(head)(name)(_))
   }
@@ -141,7 +141,7 @@ object GlobalScope {
   : context.Comp[OverloadResult[context.scopeContext.ScopeValue]] = imports match {
     case Vector() => context.compCompilationInstance.point(nextResult)
     case head +: tail =>
-      context.compCompilationInstance.bind(
+      context.compCompilationInstance.flatMap(
         overloadResultStage1(context)(tail)(modules)(name)(nextResult)
       )(overloadResultStage2(context)(head)(modules)(name)(_))
   }
@@ -154,13 +154,13 @@ object GlobalScope {
   (nextResult: OverloadResult[context.scopeContext.ScopeValue])
   : context.Comp[OverloadResult[context.scopeContext.ScopeValue]] =
     context.compCompilationInstance.map(
-      imports.traverseM { importNS =>
-        modules.traverseM { module =>
+      imports.flatTraverse { importNS =>
+        modules.flatTraverse { module =>
           context.compCompilationInstance.map(
             ModuleLookup.lookupNamespaceValue(context)(module.value)(importNS, GlobalName.Normal(name)) {
               case binding: GlobalBinding.NonNamespace[context.type, module.PayloadSpec] =>
                 getScopeValue(context)(binding)
-            }) { _.toVector }
+            }) { _.toList.toVector }
         }(context.compCompilationInstance, implicitly)
       }(context.compCompilationInstance, implicitly)
     ) { overloads =>

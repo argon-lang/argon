@@ -1,7 +1,7 @@
 package dev.argon.build.testrunner
 
 import dev.argon.compiler.CompilationError
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 
 sealed trait TestCaseResult
 object TestCaseResult {

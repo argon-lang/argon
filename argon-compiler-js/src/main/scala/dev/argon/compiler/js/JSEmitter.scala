@@ -1,8 +1,9 @@
 package dev.argon.compiler.js
 
 import dev.argon.compiler._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
+import cats.data.NonEmptyList
 import dev.argon.compiler.core.PayloadSpecifiers._
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup.LookupNames
@@ -49,22 +50,22 @@ final class JSEmitter[TCompE[+_, +_] : CompilationE, TContext <: JSContext[TComp
           JSImportAllStatement(None, importId, refModule.descriptor.name)
         },
 
-        inject.before.map(JSModuleRaw.apply).toVector,
+        inject.before.map(JSModuleRaw.apply).toList.toVector,
 
         Vector(
-          JSConst(NonEmptyList(
+          JSConst(NonEmptyList.of(
             JSDeclareInit(JSBindingIdentifier(moduleVarName), create_empty_obj)
           )),
 
-          JSExportDeclaration(JSConst(NonEmptyList(
+          JSExportDeclaration(JSConst(NonEmptyList.of(
             JSDeclareInit(JSBindingIdentifier(funcsVarName), create_empty_obj)
           ))),
 
-          JSExportDeclaration(JSConst(NonEmptyList(
+          JSExportDeclaration(JSConst(NonEmptyList.of(
             JSDeclareInit(JSBindingIdentifier(traitsVarName), create_empty_obj)
           ))),
 
-          JSExportDeclaration(JSConst(NonEmptyList(
+          JSExportDeclaration(JSConst(NonEmptyList.of(
             JSDeclareInit(JSBindingIdentifier(classesVarName), create_empty_obj)
           ))),
         ),
@@ -78,7 +79,7 @@ final class JSEmitter[TCompE[+_, +_] : CompilationE, TContext <: JSContext[TComp
 
         topLevelStmts,
 
-        inject.after.map(JSModuleRaw.apply).toVector,
+        inject.after.map(JSModuleRaw.apply).toList.toVector,
 
         Vector(
           freeze_obj(moduleVarName),
@@ -128,7 +129,7 @@ final class JSEmitter[TCompE[+_, +_] : CompilationE, TContext <: JSContext[TComp
           sig <- func.signature
           impl <- func.payload : TComp[context.JSImpl.Function]
           body <- impl match {
-            case context.JSImpl.Function.JSExpressionBody(expr) => expr.point[TComp]
+            case context.JSImpl.Function.JSExpressionBody(expr) => expr.pure[TComp]
             case context.JSImpl.Function.ExpressionBody(expr) =>
               createExpressionImpl(EmitParams(
                 owner = func.descriptor,
@@ -212,7 +213,7 @@ final class JSEmitter[TCompE[+_, +_] : CompilationE, TContext <: JSContext[TComp
 
           classSpec = JSObjectLiteral(Vector(
 
-            baseClassExpr.toVector,
+            baseClassExpr.toList.toVector,
 
             Vector(JSObjectGetProperty(
               "baseTraits",
@@ -308,13 +309,13 @@ final class JSEmitter[TCompE[+_, +_] : CompilationE, TContext <: JSContext[TComp
       sig <- method.signature
       impl <- method.payload : TComp[context.JSImpl.Method]
       body <- impl match {
-        case context.JSImpl.Method.JSExpressionBody(expr) => expr.point[TComp]
+        case context.JSImpl.Method.JSExpressionBody(expr) => expr.pure[TComp]
         case context.JSImpl.Method.ExpressionBody(expr) =>
           createExpressionImpl(EmitParams(
             owner = method.descriptor,
             varMapping = ownerVarMapping ++ parameterVarMapping(method.descriptor)(sig),
           ))(sig)(expr)
-        case context.JSImpl.Method.Abstract => JSNull.point[TComp]
+        case context.JSImpl.Method.Abstract => JSNull.pure[TComp]
       }
     } yield JSObjectLiteral(Vector(
       JSObjectProperty("descriptor", JSString(DescriptorId.forMethod(method.descriptor, ErasedSignature.fromSignature(context)(sig)))),
@@ -393,7 +394,7 @@ final class JSEmitter[TCompE[+_, +_] : CompilationE, TContext <: JSContext[TComp
               owner = ctor.descriptor,
               varMapping = initVarMapping,
             ))(useReturn = false)(body.endExpr)
-          } yield initStmts ++ baseCall.toVector ++ endExpr
+          } yield initStmts ++ baseCall.toList.toVector ++ endExpr
 
       }
 
@@ -533,8 +534,8 @@ final class JSEmitter[TCompE[+_, +_] : CompilationE, TContext <: JSContext[TComp
       val varName = getVariableName(variable.descriptor)
       val decl = JSDeclareInit(JSBindingIdentifier(varName), valueExpr)
       val declStmt = variable.mutability match {
-        case Mutability.Mutable => JSLet(NonEmptyList(decl))
-        case Mutability.NonMutable => JSConst(NonEmptyList(decl))
+        case Mutability.Mutable => JSLet(NonEmptyList.of(decl))
+        case Mutability.NonMutable => JSConst(NonEmptyList.of(decl))
       }
 
       (Vector(declStmt), varName)
@@ -647,13 +648,13 @@ final class JSEmitter[TCompE[+_, +_] : CompilationE, TContext <: JSContext[TComp
         JSFunctionCall(
           coreLibExport(params.owner.moduleDescriptor, "createInt"),
           Vector(JSBigInt(i))
-        ).point[TComp]
+        ).pure[TComp]
 
       case LoadConstantString(str, _) =>
         JSFunctionCall(
           coreLibExport(params.owner.moduleDescriptor, "createString"),
           Vector(JSString(str))
-        ).point[TComp]
+        ).pure[TComp]
 
       case LoadLambda(argVariable, body) =>
         val varName = getVariableName(argVariable.descriptor)
@@ -666,14 +667,14 @@ final class JSEmitter[TCompE[+_, +_] : CompilationE, TContext <: JSContext[TComp
 
       case expr: LoadTuple =>
         for {
-          values <- expr.values.toVector.traverse { elem => convertExpr(params)(elem.value) }
+          values <- expr.values.toList.toVector.traverse { elem => convertExpr(params)(elem.value) }
         } yield JSArrayLiteral(values)
 
       case LoadUnit(_) =>
-        coreLibExport(params.owner.moduleDescriptor, "unitValue").point[TComp]
+        coreLibExport(params.owner.moduleDescriptor, "unitValue").pure[TComp]
 
       case LoadVariable(variable) =>
-        params.varMapping(variable.descriptor).point[TComp]
+        params.varMapping(variable.descriptor).pure[TComp]
 
       case MethodCall(method, instance, args, _) =>
         for {

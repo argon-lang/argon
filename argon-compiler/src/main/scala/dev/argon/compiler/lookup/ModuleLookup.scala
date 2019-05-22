@@ -4,8 +4,8 @@ import dev.argon.compiler.core._
 import dev.argon.util.NamespacePath
 
 import scala.collection.immutable.Vector
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import dev.argon.compiler.Compilation
 
 object ModuleLookup {
@@ -17,7 +17,7 @@ object ModuleLookup {
   (namespace: NamespacePath, name: GlobalName)
   (f: PartialFunction[GlobalBinding[context.type, TPayloadSpec], T])
   : context.Comp[Option[T]] =
-    findModule(context)(referencedModules)(moduleDesc).traverseM { module =>
+    findModule(context)(referencedModules)(moduleDesc).flatTraverse { module =>
       lookupNamespaceValue(context)(module)(namespace, name)(f)
     }(context.compCompilationInstance, implicitly)
 

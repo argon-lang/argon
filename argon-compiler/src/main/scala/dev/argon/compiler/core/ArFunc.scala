@@ -1,7 +1,7 @@
 package dev.argon.compiler.core
 
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import dev.argon.util.FileID
 
 trait ArFunc[TContext <: Context, TPayloadSpec[_, _]] {

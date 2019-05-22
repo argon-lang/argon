@@ -2,10 +2,10 @@ package dev.argon.build.testrunner.node
 
 import dev.argon.build.testrunner.node.ExternalApi.{MethodCallHandler, ServerFunctionCallClient, ServerFunctions}
 import com.mi3software.gcrpc.runtime.{BinaryProtocol, RpcConnection, RpcStreamTransport, StandardRpcConnection}
-import scalaz._
-import Scalaz._
+import cats._
+import cats.instances._
 import scalaz.zio._
-import scalaz.zio.interop.scalaz72._
+import scalaz.zio.interop.catz._
 
 trait NodeLauncher {
   def serverFunctions: Task[ServerFunctions]
@@ -21,7 +21,7 @@ object NodeLauncher {
     def serverFunctions: Task[ServerFunctions] =
       connOpt
         .modify {
-          case conn @ Some(fiber) => (fiber, conn).point[UIO]
+          case conn @ Some(fiber) => IO.succeed((fiber, conn))
           case None =>
             IO.effect {
               val child = new ProcessBuilder("node", "--no-warnings", "--experimental-vm-modules", "--", file)
@@ -53,10 +53,10 @@ object NodeLauncher {
               }
 
             case _ =>
-              ((), None).point[UIO]
+              IO.succeed(((), None))
           }
 
-        case None => ((), None).point[UIO]
+        case None => IO.succeed(((), None))
       }
 
   }

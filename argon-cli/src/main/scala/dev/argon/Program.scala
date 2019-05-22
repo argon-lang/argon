@@ -2,11 +2,11 @@ package dev.argon
 
 import dev.argon.build.Pipeline
 import dev.argon.build.project.BuildInfo
-import scalaz.{ :+: => _, _ }
-import Scalaz._
+import cats._
+import cats.implicits._
 import scalaz.zio.{ BuildInfo => _, _ }
 import scalaz.zio.console._
-import scalaz.zio.interop.scalaz72._
+import scalaz.zio.interop.catz._
 import dev.argon.util.FileOperations
 import org.apache.commons.lang3.exception.ExceptionUtils
 import shapeless.{ BuildInfo => _, Id => _, _ }

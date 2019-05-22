@@ -3,7 +3,7 @@ package dev.argon.compiler.js
 import java.io.PrintWriter
 
 import org.apache.commons.text.StringEscapeUtils
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 
 final case class JSModule(statements: Vector[JSModuleStatement])
 

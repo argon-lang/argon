@@ -2,8 +2,8 @@ package dev.argon.compiler.vtable
 
 import dev.argon.compiler._
 import dev.argon.compiler.core._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 sealed abstract class VTableBuilder[TComp[+_]: Compilation, TContext <: ContextComp[TComp] with Singleton] {
   def fromClass[TPayloadSpec[_, _]](arClass: ArClass[TContext, TPayloadSpec]): TComp[VTable[TContext]]
@@ -34,16 +34,16 @@ object VTableBuilder {
             bParam => isSubType[TComp](aParam.parameter.paramType, bParam.parameter.paramType).map { _.isDefined }
               .flatMap {
                 case true => isSubType[TComp](bParam.parameter.paramType, aParam.parameter.paramType).map { _.isDefined }
-                case false => false.point[TComp]
+                case false => false.pure[TComp]
               }
               .flatMap {
                 case true => impl(aParam.nextUnsubstituted, bParam.nextUnsubstituted)
-                case false => false.point[TComp]
+                case false => false.pure[TComp]
               },
-            _ => false.point[TComp]
+            _ => false.pure[TComp]
           ),
           aResult => slotSig.visit(
-            _ => false.point[TComp],
+            _ => false.pure[TComp],
             bResult => isSubType[TComp](aResult.result.returnType, bResult.result.returnType).map { _.isDefined }
           )
         )
@@ -71,10 +71,10 @@ object VTableBuilder {
               slotMethod.value.isVirtual &&
               !slotMethod.value.isFinal &&
                 slotMethod.value.descriptor.name === method.name &&
-                slotMethod.value.descriptor.name =/= MemberName.Unnamed
+                slotMethod.value.descriptor.name =!= MemberName.Unnamed
             }
             .toVector
-            .filterM { slotMethod => signatureMatches(method.method)(slotMethod.value) }
+            .filterA { slotMethod => signatureMatches(method.method)(slotMethod.value) }
             .map { slotMethods =>
               VTable(
                 methodMap = slotMethods.map { slotMethod => slotMethod -> newEntry }.toMap[AbsRef[context.type, ArMethod], VTableEntry[context.type]]
@@ -83,7 +83,7 @@ object VTableBuilder {
         else
           VTable[context.type](
             methodMap = Map.empty
-          ).point[TComp]
+          ).pure[TComp]
       ).map { case VTable(methodMap) =>
         VTable(
           methodMap = methodMap + (AbsRef(method.method) -> newEntry)
@@ -94,12 +94,12 @@ object VTableBuilder {
     private def addNewMethods[TPayloadSpec[_, _]](methods: Vector[MethodBinding[context.type, TPayloadSpec]])(source: EntrySource[context.type])(baseTypeVTable: VT): TComp[VT] =
       methods
         .traverse { method => overrideMethod(method)(source)(baseTypeVTable) }
-        .map { baseTypeVTable |+| _.suml }
+        .map { baseTypeVTable |+| _.combineAll }
 
     private def findAllBaseClasses(baseClass: Option[ClassType]): Vector[AbsRef[context.type, ArClass]] = {
 
       def addClass(acc: Vector[AbsRef[context.type, ArClass]], baseClass: ClassType): Vector[AbsRef[context.type, ArClass]] =
-        if(acc.any { _.value.descriptor === baseClass.arClass.value.descriptor })
+        if(acc.exists { _.value.descriptor === baseClass.arClass.value.descriptor })
           acc
         else
           baseClass.baseTypes.baseClass.foldLeft(acc :+ baseClass.arClass)(addClass(_, _))
@@ -110,7 +110,7 @@ object VTableBuilder {
     private def findAllBaseTraits(baseTraits: Vector[TraitType]): Vector[AbsRef[context.type, ArTrait]] = {
 
       def addTrait(acc: Vector[AbsRef[context.type, ArTrait]], baseTrait: TraitType): Vector[AbsRef[context.type, ArTrait]] =
-        if(acc.any { _.value.descriptor === baseTrait.arTrait.value.descriptor })
+        if(acc.exists { _.value.descriptor === baseTrait.arTrait.value.descriptor })
           acc
         else
           baseTrait.baseTypes.baseTraits.foldLeft(acc :+ baseTrait.arTrait)(addTrait(_, _))
@@ -119,8 +119,8 @@ object VTableBuilder {
     }
 
     private def ensureNonAbstract(vtable: VT, source: CompilationMessageSource): TComp[Unit] =
-      vtable.methodMap.traverse_ {
-        case VTableEntryMethod(_, _) => ().point[TComp]
+      vtable.methodMap.values.toVector.traverse_ {
+        case VTableEntryMethod(_, _) => ().pure[TComp]
         case VTableEntryAbstract(_) =>
           Compilation[TComp].forErrors(CompilationError.AbstractMethodNotImplementedError(source))
 
@@ -138,13 +138,13 @@ object VTableBuilder {
           baseClassVTable <- baseClass.traverse(bc => fromClass(bc.arClass.value))
           baseTraitVTables <- baseTraits.traverse(bt => fromTrait(bt.arTrait.value))
 
-          baseTypeOnlyVTable = baseClassVTable.suml |+| baseTraitVTables.suml
+          baseTypeOnlyVTable = baseClassVTable.combineAll |+| baseTraitVTables.combineAll
 
           methods <- arClass.methods
           source = EntrySourceClass(AbsRef(arClass), findAllBaseClasses(baseClass), findAllBaseTraits(baseTraits))
           newVTable <- addNewMethods(methods)(source)(baseTypeOnlyVTable)
 
-          _ <- if(!arClass.isAbstract) ensureNonAbstract(newVTable, arClass.classMessageSource) else ().point[TComp]
+          _ <- if(!arClass.isAbstract) ensureNonAbstract(newVTable, arClass.classMessageSource) else ().pure[TComp]
 
         } yield newVTable
       }(AbsRef(arClass))
@@ -158,7 +158,7 @@ object VTableBuilder {
           baseTraits = sig.unsubstitutedResult.baseTypes.baseTraits
           baseTraitVTables <- baseTraits.traverse(bt => fromTrait(bt.arTrait.value))
 
-          baseTraitOnlyVTable = baseTraitVTables.suml
+          baseTraitOnlyVTable = baseTraitVTables.combineAll
 
           methods <- arTrait.methods
           source = EntrySourceTrait(AbsRef(arTrait), findAllBaseTraits(baseTraits))

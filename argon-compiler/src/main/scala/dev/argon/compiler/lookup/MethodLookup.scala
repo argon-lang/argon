@@ -3,8 +3,8 @@ package dev.argon.compiler.lookup
 import dev.argon.compiler.core._
 import dev.argon.util.FileSpec
 import dev.argon.compiler.types.TypeSystem
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import dev.argon.compiler.Compilation
 
 object MethodLookup {
@@ -16,31 +16,31 @@ object MethodLookup {
     if(instanceTypes.isEmpty)
       context.compCompilationInstance.point(OverloadResult.End)
     else {
-      val newSeenTypes = seenTypes ++ instanceTypes.flatMap(getDescriptor(context)(ts)(_).toVector)
+      val newSeenTypes = seenTypes ++ instanceTypes.flatMap(getDescriptor(context)(ts)(_).toList.toVector)
 
       val unseenInstanceTypes = instanceTypes.filterNot { t => getDescriptor(context)(ts)(t).exists(seenTypes.contains) }
 
       val newBaseTypes = unseenInstanceTypes.flatMap {
-        case ts.ClassType(_, _, baseTypes) => baseTypes.baseClass.toVector ++ baseTypes.baseTraits
+        case ts.ClassType(_, _, baseTypes) => baseTypes.baseClass.toList.toVector ++ baseTypes.baseTraits
         case ts.TraitType(_, _, baseTypes) => baseTypes.baseTraits
         case ts.DataConstructorType(_, _, instanceType) => Vector(instanceType)
       }
 
-      context.compCompilationInstance.bind(
+      context.compCompilationInstance.flatMap(
         unseenInstanceTypes
-          .traverseM {
+          .flatTraverse {
             case ts.ClassType(arClass, _, _) => context.compCompilationInstance.map(arClass.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
             case ts.TraitType(arTrait, _, _) => context.compCompilationInstance.map(arTrait.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
             case ts.DataConstructorType(ctor, _, _) => context.compCompilationInstance.map(ctor.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
           }(context.compCompilationInstance, implicitly)
       ) { memberValues =>
-        context.compCompilationInstance.bind(
+        context.compCompilationInstance.flatMap(
           memberValues
             .filter { method =>
               val methodName = method.arMethod.value.name
-              methodName =/= MemberName.Unnamed && memberName === methodName
+              methodName =!= MemberName.Unnamed && memberName === methodName
             }
-            .filterM { method =>
+            .filterA { method =>
               AccessCheck.checkInstance[context.Comp, context.type, method.arMethod.PayloadSpec](callerDescriptor, fileSpec, method.arMethod.value)(context.compCompilationInstance)
             }(context.compCompilationInstance)
         ) { filteredMembers =>

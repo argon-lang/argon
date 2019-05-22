@@ -7,8 +7,8 @@ import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.parser.SourceAST
 import dev.argon.util._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import PayloadSpecifiers._
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 
@@ -160,7 +160,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           GlobalBinding.GlobalFunction(
             globalName, accessModifier,
             SourceFunction[TComp](context)(env)(funcDeclarationStmt)(desc)
-          ).point[TComp]
+          ).pure[TComp]
         }
 
       case dataCtorDeclarationStmt @ parser.DataConstructorDeclarationStmt(WithSource(name, _), _, _, _, modifiers) =>

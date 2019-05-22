@@ -5,8 +5,9 @@ import java.nio.charset.StandardCharsets
 
 import dev.argon.build.{Backend, CompilationOutputText, JSBackend}
 import dev.argon.build.testrunner._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.data.NonEmptyList
+import cats.instances._
 import scalaz.zio._
 import dev.argon.build.testrunner.node.ExternalApi._
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}

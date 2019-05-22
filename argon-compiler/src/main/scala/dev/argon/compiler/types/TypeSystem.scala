@@ -2,8 +2,9 @@ package dev.argon.compiler.types
 
 import dev.argon.compiler._
 import dev.argon.compiler.core._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
+import cats.data._
 import Compilation.Operators._
 
 import scala.collection.immutable.Vector
@@ -39,7 +40,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
     universes.foldLeft(default)(Universe.union)
 
   final def largestUniverse1[U <: Universe](universes: NonEmptyList[U]): U =
-    universes.foldLeft1(Universe.union)
+    universes.reduceLeft[U](Universe.union)
 
   final def isSubType[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[TSubTypeInfo]] =
     isSubTypeWrapper(a, b)
@@ -237,7 +238,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   protected final def isSimpleSubType[F[_] : Compilation](a: SimpleType, b: SimpleType): F[Option[TSubTypeInfo]] = {
 
-    val notSubType = Option.empty[TSubTypeInfo].point[F]
+    val notSubType = Option.empty[TSubTypeInfo].pure[F]
 
     def invariant(a: TType, b: TType): F[Option[Vector[TSubTypeInfo]]] =
       isSubType[F](a, b).flatMap {
@@ -246,7 +247,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
             right => Vector(left, right)
           } }
 
-        case None => Option.empty[Vector[TSubTypeInfo]].point[F]
+        case None => Option.empty[Vector[TSubTypeInfo]].pure[F]
       }
 
 
@@ -255,7 +256,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
         a.zip(b)
           .traverse { case (aArg, bArg) => OptionT(invariant(aArg, bArg)) }
           .map { args => SubTypeInfo(aType, bType, args.flatten) }
-          .run
+          .value
       else
         notSubType
 
@@ -263,19 +264,19 @@ trait TypeSystem[TContext <: Context with Singleton] {
       if(a.arTrait.value.descriptor === b.arTrait.value.descriptor)
         compareArguments(fromSimpleType(a), fromSimpleType(b))(a.args)(b.args)
       else
-        b.baseTypes.baseTraits.findMapM(isSubTrait(a))
+        b.baseTypes.baseTraits.collectFirstSomeM(isSubTrait(a))
 
     def isSubClass(a: ClassType)(b: ClassType): F[Option[TSubTypeInfo]] =
       if(a.arClass.value.descriptor === b.arClass.value.descriptor)
         compareArguments(fromSimpleType(a), fromSimpleType(b))(a.args)(b.args)
       else
-        b.baseTypes.baseClass.findMapM(isSubClass(a))
+        b.baseTypes.baseClass.collectFirstSomeM(isSubClass(a))
 
     def classImplementsTrait(a: TraitType)(b: ClassType): F[Option[TSubTypeInfo]] =
       Vector(
-        () => b.baseTypes.baseTraits.findMapM(isSubTrait(a)),
-        () => b.baseTypes.baseClass.findMapM(classImplementsTrait(a)),
-      ).findMapM(_())
+        () => b.baseTypes.baseTraits.collectFirstSomeM(isSubTrait(a)),
+        () => b.baseTypes.baseClass.collectFirstSomeM(classImplementsTrait(a)),
+      ).collectFirstSomeM(_())
 
     Vector(
       () => a match {
@@ -309,7 +310,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
             () => isSubType[F](fromSimpleType(a), b.first),
             () => isSubType[F](fromSimpleType(a), b.second),
           )
-            .findMapM(_())
+            .collectFirstSomeM(_())
             .map { _.map { info => SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(info)) } }
 
         case _ => notSubType
@@ -320,7 +321,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
             () => isSubType[F](a.first, fromSimpleType(b)),
             () => isSubType[F](a.second, fromSimpleType(b)),
           )
-            .findMapM(_())
+            .collectFirstSomeM(_())
             .map { _.map { info => SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(info)) } }
         case _ => notSubType
       },
@@ -332,15 +333,15 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case (_: ClassType, _: TraitType) => notSubType
 
         case (aTuple: LoadTupleType, bTuple: LoadTupleType) =>
-          if(aTuple.typeValues.size =/= bTuple.typeValues.size)
+          if(aTuple.typeValues.size =!= bTuple.typeValues.size)
             notSubType
           else
-            aTuple.typeValues.toVector.zip(bTuple.typeValues.toVector)
+            aTuple.typeValues.toList.toVector.zip(bTuple.typeValues.toList.toVector)
               .traverse { case (aElem, bElem) =>
                 OptionT(isSubType(aElem.value, bElem.value))
               }
               .map(SubTypeInfo(fromSimpleType(a), fromSimpleType(b), _))
-              .run
+              .value
 
         case (FunctionType(argA, resA), FunctionType(argB, resB)) =>
           (
@@ -348,7 +349,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
               argCheck <- OptionT(isSubType(argB, argA))
               resCheck <- OptionT(isSubType(resA, resB))
             } yield SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(argCheck, resCheck))
-          ).run
+          ).value
 
         case (TypeOfType(innerA, _), TypeOfType(innerB, _)) =>
           (
@@ -356,11 +357,11 @@ trait TypeSystem[TContext <: Context with Singleton] {
               c1 <- OptionT(isSubType(innerA, innerB))
               c2 <- OptionT(isSubType(innerB, innerA))
             } yield SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(c1, c2))
-          ).run
+          ).value
 
         case (_, _) => notSubType
       },
-    ).findMapM(_())
+    ).collectFirstSomeM(_())
   }
 
 }

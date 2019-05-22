@@ -1,7 +1,7 @@
 package dev.argon.compiler.core
 
 import dev.argon.compiler.types.{TypeSystem, TypeSystemConverter}
-import scalaz.Monad
+import cats.Monad
 
 trait SignatureResultConverter[TResult[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton]] {
   def convertTypeSystem[F[_]: Monad]

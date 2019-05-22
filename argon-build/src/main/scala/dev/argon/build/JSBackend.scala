@@ -8,7 +8,7 @@ import dev.argon.compiler._
 import dev.argon.util.FileOperations
 import cats._
 import cats.instances._
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 import dev.argon.build.project.ProjectLoader
 import scalaz.zio.{IO, ZIO}
 import toml.Codecs._
@@ -59,11 +59,8 @@ object JSBackend extends Backend {
     val context = new JSContext[F, I](input)
     val emitter = new JSEmitter[F, context.type](context, input.backendOptions.inject)
 
-    implicit val monadInst = shims.monadToCats[F[NonEmptyList[CompilationError], ?]]
-    implicit val showInst = shims.showToScalaz[I]
-
     context.createModule { module =>
-      monadInst.flatMap(emitter.emitModule(module)) { jsModule =>
+      implicitly[CompilationE[F]].flatMap(emitter.emitModule(module)) { jsModule =>
         f(createOutput(input.backendOptions.outputFile)(jsModule))
       }
     }

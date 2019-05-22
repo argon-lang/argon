@@ -4,8 +4,8 @@ import dev.argon.compiler._
 import dev.argon.util.{FileSpec, NamespacePath, SourceLocation}
 import dev.argon.compiler.core._
 import dev.argon.compiler.types.{TypeSystem, TypeSystemConverter}
-import scalaz.{Scalaz, _}
-import Scalaz._
+import cats._
+import cats.implicits._
 
 trait ScopeContext[TContext <: Context with Singleton] {
 

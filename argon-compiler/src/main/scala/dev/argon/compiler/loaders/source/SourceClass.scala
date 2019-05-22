@@ -7,8 +7,9 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.ClassDeclarationStmt
 import dev.argon.util.{FileID, SourceLocation, WithSource}
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
+import cats.evidence.Is
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 
 private[compiler] object SourceClass extends AccessModifierHelpers {
@@ -45,7 +46,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     override val context: context2.type = context2
     import context.signatureContext.Signature
 
-    override val contextProof: Leibniz[context.type, context2.type, context.type, context2.type] = Leibniz.refl
+    override val contextProof: context.type Is context2.type = Is.refl
 
     override val descriptor: desc.type = desc
     override val fileId: FileID = env.fileSpec.fileID
@@ -68,7 +69,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
       groupedStaticCache(
         stmt.body.foldLeftM(GroupedStaticStatements(Vector.empty)) {
           case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
-            group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)).point[TComp]
+            group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)).pure[TComp]
 
           case (_, WithSource(_, location)) =>
             Compilation[TComp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
@@ -79,13 +80,13 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
       groupedInstCache(
         stmt.instanceBody.foldLeftM(GroupedInstanceStatements(Vector.empty, Vector.empty, Vector.empty)) {
           case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
-            group.copy(methods = group.methods :+ WithSource(stmt, location)).point[TComp]
+            group.copy(methods = group.methods :+ WithSource(stmt, location)).pure[TComp]
 
           case (group, WithSource(stmt: parser.FieldDeclarationStmt, location)) =>
-            group.copy(fields = group.fields :+ WithSource(stmt, location)).point[TComp]
+            group.copy(fields = group.fields :+ WithSource(stmt, location)).pure[TComp]
 
           case (group, WithSource(stmt: parser.ClassConstructorDeclarationStmt, location)) =>
-            group.copy(classCtors = group.classCtors :+ WithSource(stmt, location)).point[TComp]
+            group.copy(classCtors = group.classCtors :+ WithSource(stmt, location)).pure[TComp]
 
           case (_, WithSource(_, location)) =>
             Compilation[TComp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
@@ -192,7 +193,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
                 .map { _ => baseTypes }
             }
         case None =>
-          context.typeSystem.BaseTypeInfoClass(None, Vector()).point[TComp]
+          context.typeSystem.BaseTypeInfoClass(None, Vector()).pure[TComp]
       })
         .map { baseTypes => ArClass.ResultInfo(context.typeSystem)(baseTypes) }
 
@@ -208,10 +209,10 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           if(acc.baseClass.isDefined)
             Compilation[TComp].forErrors(CompilationError.MultipleBaseClasses(CompilationMessageSource.SourceFile(env.fileSpec, location)))
           else
-            acc.copy(baseClass = Some(t)).point[TComp]
+            acc.copy(baseClass = Some(t)).pure[TComp]
 
         case t: context.typeSystem.TraitType =>
-          acc.copy(baseTraits = acc.baseTraits :+ t).point[TComp]
+          acc.copy(baseTraits = acc.baseTraits :+ t).pure[TComp]
 
         case context.typeSystem.IntersectionType(first, second) =>
           typeToBaseTypes(context)(env)(first)(location)(acc).flatMap { acc2 =>

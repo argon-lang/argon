@@ -8,8 +8,10 @@ import dev.argon.compiler.loaders.{ModuleLoader, NamespaceBuilder, StandardTypeL
 import dev.argon.compiler.types._
 import dev.argon.{module => ArgonModule}
 import dev.argon.util._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.evidence.Is
+import cats.data.NonEmptyList
+import cats.implicits._
 import dev.argon.module.{ClassDefinition, DataConstructorDefinition, FunctionDefinition, MethodDefinition, TraitDefinition}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 
@@ -281,7 +283,7 @@ object ArgonModuleLoader {
                         parseDescriptor(moduleRef.descriptor)(refDescriptorLens(refValue)) match {
                           case Some(descriptor) =>
                             referenceHandler(moduleRef)(descriptor.merge).flatMap {
-                              case Some(refResult) => ModuleObjectReference(refResult).point[TComp]
+                              case Some(refResult) => ModuleObjectReference(refResult).pure[TComp]
                               case None => Compilation[TComp].forErrors(CompilationError.ModuleObjectNotFound(
                                 moduleObjectType, id, CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
                               ))
@@ -369,7 +371,7 @@ object ArgonModuleLoader {
                 override def apply(id: Int, definition: TraitDefinition, desc: TraitDescriptor): TComp[ArTrait[context.type, TPayloadSpec] { val descriptor: desc.type }] =
                   new ArTrait[context.type, TPayloadSpec] {
                     override val context: context2.type = context2
-                    override val contextProof: Leibniz[context.type, context.type, context.type, context.type] = Leibniz.refl
+                    override val contextProof: context.type Is context.type = Is.refl
 
                     override val descriptor: desc.type = desc
                     override val fileId: FileID = convertFileId(definition.fileId)
@@ -397,7 +399,7 @@ object ArgonModuleLoader {
                       getMethodMembers(definition.staticMethods)
 
                     override lazy val payload: TPayloadSpec[Unit, context.TTraitMetadata] = payloadLoader.createTraitPayload(context)
-                  }.point[TComp]
+                  }.pure[TComp]
               }
             )(
               id
@@ -439,7 +441,7 @@ object ArgonModuleLoader {
                 override def apply(id: Int, definition: ClassDefinition, desc: ClassDescriptor): TComp[ArClass[context.type, TPayloadSpec] { val descriptor: desc.type }] =
                   new ArClass[context.type, TPayloadSpec] {
                     override val context: context2.type = context2
-                    override val contextProof: Leibniz[context.type, context.type, context.type, context.type] = Leibniz.refl
+                    override val contextProof: context.type Is context.type = Is.refl
 
                     override val descriptor: desc.type = desc
                     override val fileId: FileID = convertFileId(definition.fileId)
@@ -486,9 +488,9 @@ object ArgonModuleLoader {
                     override lazy val payload: TPayloadSpec[Unit, context.TClassMetadata] = payloadLoader.createClassPayload(context)
 
                     override val classConstructors: context.Comp[Vector[ClassConstructorBinding[context.type, TPayloadSpec]]] =
-                      context.compCompilationInstance.point(Vector.empty)
+                      context.compCompilationInstance.pure(Vector.empty)
 
-                  }.point[TComp]
+                  }.pure[TComp]
               }
             )(
               id
@@ -590,7 +592,7 @@ object ArgonModuleLoader {
 
                     override val payload: TPayloadSpec[context.Comp[context.TFunctionImplementation], context.TFunctionMetadata] =
                       payloadLoader.createFunctionPayload(context)
-                  }.point[TComp]
+                  }.pure[TComp]
               }
             )(
               id
@@ -625,7 +627,7 @@ object ArgonModuleLoader {
               referenceHandler = moduleRef => {
                 case methodDesc @ MethodDescriptor(traitDescriptor: TraitDescriptor, _, _) =>
                   lookupTrait(moduleRef)(traitDescriptor).flatMap { arTraitOpt =>
-                    arTraitOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arTrait =>
+                    arTraitOpt.flatTraverse[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arTrait =>
                       arTrait.methods.map { methods =>
                         methods
                           .find { binding =>
@@ -637,7 +639,7 @@ object ArgonModuleLoader {
                   }
                 case methodDesc @ MethodDescriptor(TraitObjectDescriptor(traitDescriptor), _, _) =>
                   lookupTrait(moduleRef)(traitDescriptor).flatMap { arTraitOpt =>
-                    arTraitOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arTrait =>
+                    arTraitOpt.flatTraverse[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arTrait =>
                       arTrait.staticMethods.map { methods =>
                         methods
                           .find { binding =>
@@ -650,7 +652,7 @@ object ArgonModuleLoader {
 
                 case methodDesc @ MethodDescriptor(classDescriptor : ClassDescriptor, _, _) =>
                   lookupClass(moduleRef)(classDescriptor).flatMap { arClassOpt =>
-                    arClassOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arClass =>
+                    arClassOpt.flatTraverse[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arClass =>
                       arClass.methods.map { methods =>
                         methods
                           .find { binding =>
@@ -663,7 +665,7 @@ object ArgonModuleLoader {
 
                 case methodDesc @ MethodDescriptor(ClassObjectDescriptor(classDescriptor), _, _) =>
                   lookupClass(moduleRef)(classDescriptor).flatMap { arClassOpt =>
-                    arClassOpt.traverseM[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arClass =>
+                    arClassOpt.flatTraverse[TComp, ArMethod[context.type, ReferencePayloadSpecifier]] { arClass =>
                       arClass.staticMethods.map { methods =>
                         methods
                           .find { binding =>
@@ -679,7 +681,7 @@ object ArgonModuleLoader {
                     case GlobalBinding.GlobalDataConstructor(_, _, dataCtor) => dataCtor
                   }
                     .flatMap {
-                      _.traverseM { dataCtor =>
+                      _.flatTraverse { dataCtor =>
                         dataCtor.methods.map { methods =>
                           methods
                             .find { binding =>
@@ -707,7 +709,7 @@ object ArgonModuleLoader {
                     }
                   } yield new ArMethod[context.type, TPayloadSpec] {
                     override val context: context2.type = context2
-                    override val contextProof: Leibniz[context.type, context.type, context.type, context.type] = Leibniz.refl
+                    override val contextProof: context.type Is context.type = Is.refl
                     override val descriptor: desc.type = desc
                     override val fileId: FileID = convertFileId(definition.fileId)
                     override val effectInfo: EffectInfo = EffectInfo(
@@ -757,7 +759,7 @@ object ArgonModuleLoader {
                 loadElement(id).flatMap {
                   case ModuleObjectGlobalDefinition(elem) =>
                     val nsPath = parseNamespacePath(ns)
-                    ModuleElement(nsPath, createBinding(name, accessModifier, elem)).point[TComp]
+                    ModuleElement(nsPath, createBinding(name, accessModifier, elem)).pure[TComp]
 
                   case ModuleObjectDefinition(_) | ModuleObjectReference(_) =>
                     Compilation[TComp].forErrors(CompilationError.InvalidGlobal(CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
@@ -795,8 +797,8 @@ object ArgonModuleLoader {
 
           def findTraitDef(traitId: Int): TComp[ArTrait[context.type, TPayloadSpec]] =
             getTrait(traitId).flatMap {
-              case ModuleObjectDefinition(arTrait) => arTrait.point[TComp]
-              case ModuleObjectGlobalDefinition(arTrait) => arTrait.point[TComp]
+              case ModuleObjectDefinition(arTrait) => arTrait.pure[TComp]
+              case ModuleObjectGlobalDefinition(arTrait) => arTrait.pure[TComp]
               case ModuleObjectReference(_) =>
                 implicitly[Compilation[TComp]].forErrors(
                   CompilationError.ModuleObjectMustBeDefinition(CompilationError.ModuleObjectTrait, traitId, CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
@@ -813,8 +815,8 @@ object ArgonModuleLoader {
 
           def findClassDef(classId: Int): TComp[ArClass[context.type, TPayloadSpec]] =
             getArClass(classId).flatMap {
-              case ModuleObjectDefinition(arClass) => arClass.point[TComp]
-              case ModuleObjectGlobalDefinition(arClass) => arClass.point[TComp]
+              case ModuleObjectDefinition(arClass) => arClass.pure[TComp]
+              case ModuleObjectGlobalDefinition(arClass) => arClass.pure[TComp]
 
               case ModuleObjectReference(_) =>
                 implicitly[Compilation[TComp]].forErrors(
@@ -825,8 +827,8 @@ object ArgonModuleLoader {
 
           def findDataConstructorDef(ctorId: Int): TComp[DataConstructor[context.type, TPayloadSpec]] =
             getDataCtor(ctorId).flatMap {
-              case ModuleObjectDefinition(ctor) => ctor.point[TComp]
-              case ModuleObjectGlobalDefinition(ctor) => ctor.point[TComp]
+              case ModuleObjectDefinition(ctor) => ctor.pure[TComp]
+              case ModuleObjectGlobalDefinition(ctor) => ctor.pure[TComp]
 
               case ModuleObjectReference(_) =>
                 implicitly[Compilation[TComp]].forErrors(
@@ -846,7 +848,7 @@ object ArgonModuleLoader {
                   }
                 case _ => ???
               },
-              sigResult => if(args.nonEmpty) ??? else f(convArgs, sigResult.result).point[TComp]
+              sigResult => if(args.nonEmpty) ??? else f(convArgs, sigResult.result).pure[TComp]
             )
 
           def resolveTraitType(traitType: ArgonModule.TraitType): TComp[TraitType] =
@@ -900,10 +902,10 @@ object ArgonModuleLoader {
                 case variables @ head +: tail =>
 
                   val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTupleType(
-                    NonEmptyList(head, tail: _*).map { v => context.typeSystem.TupleElement(v.varType) }
+                    NonEmptyList(head, tail.toList).map { v => context.typeSystem.TupleElement(v.varType) }
                   ))
 
-                  Parameter(variables, paramType).point[TComp]
+                  Parameter(variables, paramType).pure[TComp]
               }
 
           override lazy val module: TComp[ArModule[context.type, TPayloadSpec]] =

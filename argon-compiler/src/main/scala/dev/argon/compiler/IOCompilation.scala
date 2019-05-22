@@ -5,10 +5,11 @@ import java.util.zip
 
 import dev.argon.util.{FileOperations, FilenameManip}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
-import scalaz._
+import cats._
 import scalaz.zio._
-import scalaz.zio.interop.scalaz72._
+import scalaz.zio.interop.catz._
 import FileOperations.fileShow
+import cats.data.NonEmptyList
 import com.google.protobuf.InvalidProtocolBufferException
 
 trait IOCompilation extends CompilationExec[IO, UIO]
@@ -51,10 +52,13 @@ object IOCompilation {
       }
 
 
-    override def point[A](a: => A): UIO[A] = IO.succeed(a)
-
-    override def bind[A, B](fa: IO[E, A])(f: A => IO[E, B]): IO[E, B] =
+    override def flatMap[A, B](fa: IO[NonEmptyList[CompilationError], A])(f: A => IO[NonEmptyList[CompilationError], B]): IO[NonEmptyList[CompilationError], B] =
       fa.flatMap(f)
+
+    override def tailRecM[A, B](a: A)(f: A => IO[NonEmptyList[CompilationError], Either[A, B]]): IO[NonEmptyList[CompilationError], B] =
+      implicitly[Monad[IO[NonEmptyList[CompilationError], ?]]].tailRecM(a)(f)
+
+    override def pure[A](x: A): IO[NonEmptyList[CompilationError], A] = IO.succeed(x)
 
     override def getResult[A](fa: IO[E, A]): UIO[(Vector[CompilationMessageNonFatal], Either[E, A])] = for {
       eitherRes <- fa.either
@@ -73,12 +77,10 @@ object IOCompilation {
   implicit val fileSystemResourceAccess: IOResourceAccess =
     new IOResourceAccess {
 
-      implicit val fileShow = scalaz.Show.shows(FileOperations.fileShow.show)
-
       private def handleIOException[A](file: io.File)(value: IO[io.IOException, Either[NonEmptyList[CompilationError], A]]): IO[NonEmptyList[CompilationError], A] =
         value.either.flatMap { either =>
           IO.fromEither(
-            either.left.map { ex => NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(file), ex)) }
+            either.left.map { ex => NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(file), ex)) }
               .flatMap(identity)
           )
         }
@@ -95,7 +97,7 @@ object IOCompilation {
 
       override def writeText(writer: PrintWriter, text: String): IO[NonEmptyList[CompilationError], Unit] =
         IO.effect { writer._1.print(text) }.refineOrDie {
-          case ex: io.IOException => NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(writer._2), ex))
+          case ex: io.IOException => NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(writer._2), ex))
         }
 
       override def createZipWriter[A](stream: OutputStream)(f: ZipWriter => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
@@ -112,14 +114,14 @@ object IOCompilation {
 
       override def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): IO[NonEmptyList[CompilationError], A] =
         IO.effect { companion.parseFrom(stream._1) }.refineOrDie {
-          case ex: io.IOException => NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(stream._2), ex))
-          case _: InvalidProtocolBufferException => NonEmptyList[CompilationError](CompilationError.InvalidProtocolBufferMessage(CompilationMessageSource.ResourceIdentifier(stream._2)))
+          case ex: io.IOException => NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(stream._2), ex))
+          case _: InvalidProtocolBufferException => NonEmptyList.of(CompilationError.InvalidProtocolBufferMessage(CompilationMessageSource.ResourceIdentifier(stream._2)))
         }
 
       override def writeProtocolBufferMessage(stream: OutputStream, message: GeneratedMessage): IO[NonEmptyList[CompilationError], Unit] =
         IO.effect { message.writeTo(stream._1) }.refineOrDie {
-          case ex: io.IOException => NonEmptyList[CompilationError](CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(stream._2), ex))
-          case _: InvalidProtocolBufferException => NonEmptyList[CompilationError](CompilationError.InvalidProtocolBufferMessage(CompilationMessageSource.ResourceIdentifier(stream._2)))
+          case ex: io.IOException => NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(stream._2), ex))
+          case _: InvalidProtocolBufferException => NonEmptyList.of(CompilationError.InvalidProtocolBufferMessage(CompilationMessageSource.ResourceIdentifier(stream._2)))
         }
     }
 

@@ -4,8 +4,8 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup.{LookupNames, ModuleLookup}
 import dev.argon.util.NamespacePath
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 object StandardTypeLoaders {
 
@@ -17,8 +17,8 @@ object StandardTypeLoaders {
   (currentModule: ArModule[context.type, TPayloadSpec])
   (referencedModules: Vector[ArModule[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]])
   : context.Comp[context.typeSystem.TType] =
-    context.compCompilationInstance.bind(
-      context.compCompilationInstance.bind(
+    context.compCompilationInstance.flatMap(
+      context.compCompilationInstance.flatMap(
         if(currentModule.descriptor === arCore)
           context.compCompilationInstance.map(
             ModuleLookup.lookupNamespaceValue(context)(currentModule)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass)

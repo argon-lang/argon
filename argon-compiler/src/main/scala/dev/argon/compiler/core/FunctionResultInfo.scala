@@ -1,8 +1,8 @@
 package dev.argon.compiler.core
 
 import dev.argon.compiler.types._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 sealed trait FunctionResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
   val typeSystem: TS

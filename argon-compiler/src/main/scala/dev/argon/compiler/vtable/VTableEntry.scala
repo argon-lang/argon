@@ -1,8 +1,8 @@
 package dev.argon.compiler.vtable
 
 import dev.argon.compiler.core._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 sealed trait VTableEntry[TContext <: Context with Singleton] {
   val entrySource: EntrySource[TContext]
@@ -38,17 +38,17 @@ object VTableEntry {
     (a, b) match {
       case (EntrySourceMulti(a1, a2), _) => moreSpecificSource(a1, b) || moreSpecificSource(a2, b)
       case (_, EntrySourceMulti(b1, b2)) => moreSpecificSource(a, b1) && moreSpecificSource(a, b2)
-      case (EntrySourceTrait(_, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.any { _.value.descriptor === arTrait.value.descriptor }
+      case (EntrySourceTrait(_, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.exists { _.value.descriptor === arTrait.value.descriptor }
       case (EntrySourceTrait(_, _), _) => false
-      case (EntrySourceClass(_, baseClasses, _), EntrySourceClass(arClass, _, _)) => baseClasses.any { _.value.descriptor === arClass.value.descriptor }
-      case (EntrySourceClass(_, _, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.any { _.value.descriptor === arTrait.value.descriptor }
+      case (EntrySourceClass(_, baseClasses, _), EntrySourceClass(arClass, _, _)) => baseClasses.exists { _.value.descriptor === arClass.value.descriptor }
+      case (EntrySourceClass(_, _, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.exists { _.value.descriptor === arTrait.value.descriptor }
       case (EntrySourceClass(_, _, _), _) => false
-      case (EntrySourceDataCtor(_, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.any { _.value.descriptor === arTrait.value.descriptor }
+      case (EntrySourceDataCtor(_, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.exists { _.value.descriptor === arTrait.value.descriptor }
       case (EntrySourceDataCtor(_, _), _) => false
     }
 
   implicit def semigroupInstance[TContext <: Context with Singleton]: Semigroup[VTableEntry[TContext]] = new Semigroup[VTableEntry[TContext]] {
-    override def append(f1: VTableEntry[TContext], f2: => VTableEntry[TContext]): VTableEntry[TContext] = (f1, f2) match {
+    override def combine(x: VTableEntry[TContext], y: VTableEntry[TContext]): VTableEntry[TContext] = (x, y) match {
       case (a, b) if sameSource(a.entrySource, b.entrySource) => a
       case (a, b) if moreSpecificSource(a.entrySource, b.entrySource) => a
       case (a, b) if moreSpecificSource(b.entrySource, a.entrySource) => b

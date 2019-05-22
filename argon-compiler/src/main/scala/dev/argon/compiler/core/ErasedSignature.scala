@@ -1,8 +1,9 @@
 package dev.argon.compiler.core
 
+import cats.data.NonEmptyList
 import dev.argon.compiler.core.ErasedSignature.TraitType
 import dev.argon.compiler.types.TypeSystem
-import scalaz.NonEmptyList
+
 
 sealed trait ErasedSignature[TContext <: Context with Singleton]
 

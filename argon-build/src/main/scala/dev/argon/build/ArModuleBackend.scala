@@ -8,7 +8,7 @@ import dev.argon.util.stream._
 import scalapb.GeneratedMessage
 import cats._
 import cats.instances._
-import scalaz.NonEmptyList
+import cats.data.NonEmptyList
 import dev.argon.build.project.ProjectLoader
 import toml.Codecs._
 import shapeless.{Id => _, _}
@@ -42,8 +42,6 @@ object ArModuleBackend extends Backend {
     val context = new ModuleContext[F, I](input)
     val emitter = new ModuleEmitter[F, context.type](context)
 
-    implicit val showInstance = shims.showToScalaz[I]
-
     context.createModule { module =>
       f(createOutput(input.backendOptions.referenceModule)(emitter.emitModule(module)))
     }
@@ -54,9 +52,6 @@ object ArModuleBackend extends Backend {
     override def write(implicit resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I]): F[NonEmptyList[CompilationError], Unit] =
       resourceAccess.createOutputStream(outputFile) { stream =>
         resourceAccess.createZipWriter(stream) { zip =>
-
-          implicit val catsMonad = shims.monadToCats[F[NonEmptyList[CompilationError], ?]]
-
           moduleStream.forEach { case (path, message) =>
             resourceAccess.writeZipEntry(zip, path) { entry =>
               resourceAccess.writeProtocolBufferMessage(entry, message)

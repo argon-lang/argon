@@ -1,12 +1,13 @@
 package dev.argon.compiler.core
 
-import scalaz._
-import Scalaz._
+import cats._
+import cats.evidence.Is
+import cats.implicits._
 import dev.argon.util.FileID
 
 abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
-  val contextProof: Leibniz[context.type, TContext, context.type, TContext]
+  val contextProof: context.type Is TContext
   import context._, signatureContext.Signature
 
   val descriptor: MethodDescriptor

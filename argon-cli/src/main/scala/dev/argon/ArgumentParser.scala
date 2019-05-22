@@ -1,7 +1,7 @@
 package dev.argon
 
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 sealed trait ArgumentParser[A] {
   def parse(args: List[String]): CommandParseResult[(A, List[String])]

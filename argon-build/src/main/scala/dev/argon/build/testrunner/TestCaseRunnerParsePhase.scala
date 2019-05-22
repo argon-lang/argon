@@ -6,22 +6,22 @@ import dev.argon.util.stream._
 import dev.argon.util.{FileID, FileSpec}
 import dev.argon.compiler.{CompilationError, IOCompilation}
 import cats._
+import cats.data.NonEmptyList
 import cats.instances._
 import scalaz.zio._
-import scalaz.zio.interop.catz._
 
 private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
 
-  protected final def parseTestCaseSource(testCase: TestCase)(implicit ioComp: IOCompilation): IO[scalaz.NonEmptyList[CompilationError], Vector[SourceAST]] =
+  protected final def parseTestCaseSource(testCase: TestCase)(implicit ioComp: IOCompilation): IO[NonEmptyList[CompilationError], Vector[SourceAST]] =
     BuildProcess.parseInput[IO](
-      ArStream.fromVector[IO, scalaz.NonEmptyList[CompilationError], (InputSourceData, Int)](testCase.sourceCode.zipWithIndex)
+      ArStream.fromVector[IO, NonEmptyList[CompilationError], (InputSourceData, Int)](testCase.sourceCode.zipWithIndex)
         .map {
           case (InputSourceData(filename, data), i) =>
             InputFileInfo(
               FileSpec(FileID(i), filename),
-              ArStream.fromVector[IO, scalaz.NonEmptyList[CompilationError], Char](data.toVector)
+              ArStream.fromVector[IO, NonEmptyList[CompilationError], Char](data.toVector)
             )
         }
-    ).foldLeft(StreamTransformation.toVector[IO, scalaz.NonEmptyList[CompilationError], SourceAST])
+    ).foldLeft(StreamTransformation.toVector[IO, NonEmptyList[CompilationError], SourceAST])
 
 }

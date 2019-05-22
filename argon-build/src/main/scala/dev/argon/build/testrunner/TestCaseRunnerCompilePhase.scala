@@ -5,12 +5,13 @@ import java.io.{File, IOException}
 import dev.argon.build.{Backend, BuildProcess}
 import dev.argon.compiler._
 import dev.argon.compiler.core.ModuleDescriptor
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import dev.argon.build.project.{ProjectFileHandler, ProjectLoader}
 import scalaz.zio._
 import dev.argon.util.FileOperations.fileShow
 import IOCompilation.fileSystemResourceAccess
+import cats.data.NonEmptyList
 
 private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParsePhase {
 

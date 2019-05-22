@@ -4,8 +4,8 @@ import dev.argon.compiler.Compilation
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.core._
 
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 trait VerifyPass {
 

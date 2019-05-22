@@ -3,8 +3,8 @@ package dev.argon.compiler.core
 import dev.argon.compiler.Compilation
 import dev.argon.util.FileSpec
 
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 object AccessCheck {
 
@@ -14,11 +14,11 @@ object AccessCheck {
     fileSpec: FileSpec,
     methodBinding: MethodBinding[TContext, TPayloadSpec]
   ): TComp[Boolean] = methodBinding.accessModifier match {
-    case global: AccessModifierGlobal => checkGlobal(callerDescriptor, fileSpec, global).point[TComp]
+    case global: AccessModifierGlobal => checkGlobal(callerDescriptor, fileSpec, global).pure[TComp]
     case AccessModifier.Protected => ???
     case AccessModifier.ProtectedInternal => ???
     case AccessModifier.Private =>
-      (callerDescriptor === methodBinding.method.descriptor).point[TComp]
+      (callerDescriptor === methodBinding.method.descriptor).pure[TComp]
   }
 
   def checkGlobal(callerDescriptor: Descriptor, fileSpec: FileSpec, accessModifier: AccessModifierGlobal): Boolean = accessModifier match {

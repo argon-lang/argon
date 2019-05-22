@@ -2,7 +2,7 @@ package dev.argon.compiler.types
 
 import dev.argon.compiler.core._
 import dev.argon.compiler._
-import scalaz.Applicative
+import cats._
 
 trait ArgonTypeSystem[TContext <: Context with Singleton] extends TypeSystem[TContext] {
 

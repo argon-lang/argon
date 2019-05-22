@@ -120,13 +120,6 @@ lazy val argon_build = project.in(file("argon-build"))
   .settings(
     commonSettings,
     compilerOptions,
-    
-    libraryDependencies ++= Seq(
-      "org.scalaz" %% "scalaz-core" % "7.2.27",
-      "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
-      "org.scalaz" %% "deriving-macro" % "1.0.0",
-      "org.scalaz" %% "scalaz-deriving" % "1.0.0",
-    ),
 
     name := "argon-build",
   )
@@ -164,14 +157,6 @@ lazy val argon_compiler = project.in(file("argon-compiler"))
     commonSettings,
     compilerOptions,
 
-    libraryDependencies ++= Seq(
-      "org.scalaz" %% "scalaz-core" % "7.2.27",
-      "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
-      "org.scalaz" %% "deriving-macro" % "1.0.0",
-      "org.scalaz" %% "scalaz-deriving" % "1.0.0",
-      "com.codecommit" %% "shims" % "1.7.0",
-    ),
-
     name := "argon-compiler",
   )
 
@@ -180,13 +165,6 @@ lazy val compiler_js = project.in(file("argon-compiler-js"))
   .settings(
     commonSettings,
     compilerOptions,
-
-    libraryDependencies ++= Seq(
-      "org.scalaz" %% "scalaz-core" % "7.2.27",
-      "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
-      "org.scalaz" %% "deriving-macro" % "1.0.0",
-      "org.scalaz" %% "scalaz-deriving" % "1.0.0",
-    ),
 
     name := "argon-compiler-js",
   )
@@ -197,13 +175,6 @@ lazy val compiler_module = project.in(file("argon-compiler-module"))
     commonSettings,
     compilerOptions,
 
-    libraryDependencies ++= Seq(
-      "org.scalaz" %% "scalaz-core" % "7.2.27",
-      "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
-      "org.scalaz" %% "deriving-macro" % "1.0.0",
-      "org.scalaz" %% "scalaz-deriving" % "1.0.0",
-    ),
-
     name := "argon-compiler-module",
   )
 
@@ -211,13 +182,6 @@ lazy val util = project.in(file("argon-util"))
   .settings(
     commonSettings,
     compilerOptions,
-
-    libraryDependencies ++= Seq(
-      "org.scalaz" %% "scalaz-core" % "7.2.27",
-      "org.scalaz" %% "scalaz-zio-interop-scalaz7x" % "1.0-RC4",
-      "org.scalaz" %% "deriving-macro" % "1.0.0",
-      "org.scalaz" %% "scalaz-deriving" % "1.0.0",
-    ),
 
     name := "argon-util",
   )

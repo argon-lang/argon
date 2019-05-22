@@ -6,8 +6,8 @@ import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.util.DependencyTree._
-import scalaz.Scalaz._
-import scalaz._
+import cats._
+import cats.implicits._
 
 import scala.collection.immutable._
 
@@ -84,12 +84,8 @@ object ModuleLoader {
     def loadModuleRefFromData
     (context: ContextComp[TComp])
     (refDataPairs: Vector[LoaderAndData])
-    : TComp[Vector[Either[CompilationError, PayloadResult]]] = {
-
-      import shims._
-
-      loadDependencies[TComp, LoaderAndData, ModuleDescriptor, PayloadResult, Either[CompilationError, ?]](dependencyTreeOps)(refDataPairs)(shims.monadToCats[TComp], implicitly, shims.monadToCats[Either[CompilationError, ?]], shims.traverseToCats[Either[CompilationError, ?]])
-    }
+    : TComp[Vector[Either[CompilationError, PayloadResult]]] =
+      loadDependencies[TComp, LoaderAndData, ModuleDescriptor, PayloadResult, Either[CompilationError, ?]](dependencyTreeOps)(refDataPairs)
 
 
 
@@ -104,7 +100,7 @@ object ModuleLoader {
         case Vector() =>
           loadModuleRefFromData(context)(loadedFiles)
             .flatMap { moduleResults =>
-              moduleResults.traverseM {
+              moduleResults.flatTraverse {
                 case Right(module) => context.compCompilationInstance.point(Vector(module))
                 case Left(loadError) => context.compCompilationInstance.forErrors(loadError)
               }

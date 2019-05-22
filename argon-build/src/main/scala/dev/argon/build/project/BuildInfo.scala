@@ -4,11 +4,11 @@ import java.io.{ File, IOException }
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file._
 
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import dev.argon.build.Backend
 import scalaz.zio._
-import scalaz.zio.interop.scalaz72._
+import scalaz.zio.interop.catz._
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.util.{FileOperations, FilenameManip}

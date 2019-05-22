@@ -1,8 +1,8 @@
 package dev.argon.compiler.vtable
 
 import dev.argon.compiler.core._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 final case class VTable[TContext <: Context with Singleton]
 (
@@ -12,11 +12,13 @@ final case class VTable[TContext <: Context with Singleton]
 object VTable {
 
   implicit def vtableMonoid[TContext <: Context with Singleton](implicit entrySemigroup: Semigroup[VTableEntry[TContext]]): Monoid[VTable[TContext]] = new Monoid[VTable[TContext]] {
-    override def zero: VTable[TContext] = VTable(methodMap = Map.empty)
 
-    override def append(f1: VTable[TContext], f2: => VTable[TContext]): VTable[TContext] =
+
+    override def empty: VTable[TContext] = VTable(methodMap = Map.empty)
+
+    override def combine(x: VTable[TContext], y: VTable[TContext]): VTable[TContext] =
       VTable(
-        methodMap = f1.methodMap |+| f2.methodMap
+        methodMap = x.methodMap |+| y.methodMap
       )
   }
 

@@ -4,6 +4,7 @@ import java.io.File
 
 import dev.argon.compiler._
 import cats._
+import cats.data.NonEmptyList
 import cats.implicits._
 import dev.argon.build.project.{ProjectFileHandler, ProjectLoader}
 
@@ -23,9 +24,9 @@ trait Backend {
 
   def compile[F[+_, +_]: CompilationE, I: Show, A]
   (input: CompilerInput[I, BackendOptions[Id, I]])
-  (f: TCompilationOutput[F, I] => F[scalaz.NonEmptyList[CompilationError], A])
-  (implicit res: ResourceAccess[F[scalaz.NonEmptyList[CompilationError], ?], I])
-  : F[scalaz.NonEmptyList[CompilationError], A]
+  (f: TCompilationOutput[F, I] => F[NonEmptyList[CompilationError], A])
+  (implicit res: ResourceAccess[F[NonEmptyList[CompilationError], ?], I])
+  : F[NonEmptyList[CompilationError], A]
 
 }
 

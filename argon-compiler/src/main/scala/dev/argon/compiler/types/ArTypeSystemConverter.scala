@@ -1,8 +1,8 @@
 package dev.argon.compiler.types
 
 import dev.argon.compiler.core.Context
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 
 object ArTypeSystemConverter {
 

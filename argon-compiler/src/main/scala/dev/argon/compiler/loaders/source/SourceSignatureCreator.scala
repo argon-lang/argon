@@ -5,8 +5,9 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.types._
 import dev.argon.parser
 import dev.argon.util.WithSource
-import scalaz._
-import Scalaz._
+import cats._
+import cats.data.NonEmptyList
+import cats.implicits._
 
 object SourceSignatureCreator {
 
@@ -40,9 +41,9 @@ object SourceSignatureCreator {
 
         case WithSource(parser.FunctionParameterList(listType, headH +: headT), location) +: tail =>
 
-          NonEmptyList(headH, headT: _*)
+          NonEmptyList(headH, headT.toList)
             .zipWithIndex
-            .traverseU {
+            .traverse {
               case (WithSource(parser.FunctionParameter(paramTypeOpt, _, paramName), loc), tupleIndex) =>
                 (paramTypeOpt match {
                   case Some(paramType) =>
@@ -64,7 +65,7 @@ object SourceSignatureCreator {
             }
             .flatMap { variables: NonEmptyList[ParameterElementVariable] =>
 
-              val variablesVec = variables.toVector
+              val variablesVec = variables.toList.toVector
 
               val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTupleType(
                 variables.map { v => context.typeSystem.TupleElement(v.varType) }

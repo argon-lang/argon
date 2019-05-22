@@ -2,8 +2,8 @@ package dev.argon.compiler.core
 
 import dev.argon.compiler._
 import dev.argon.compiler.types._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import dev.argon.util.FileID
 
 trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
@@ -35,7 +35,7 @@ object ClassConstructor {
       (converter: TypeSystemConverter[context.type, ts1.type, ts2.type, F])
       (result: ResultInfo[context.type, ts1.type])
       : F[ResultInfo[context.type, ts2.type]] =
-        ResultInfo[context.type, ts2.type]().point[F]
+        ResultInfo[context.type, ts2.type]().pure[F]
     }
   }
 

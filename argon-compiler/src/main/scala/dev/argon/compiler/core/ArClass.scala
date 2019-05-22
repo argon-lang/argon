@@ -3,14 +3,15 @@ package dev.argon.compiler.core
 import dev.argon.compiler.types._
 
 import scala.collection.immutable._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.evidence.Is
+import cats.implicits._
 import dev.argon.compiler.CompilationMessageSource
 import dev.argon.util.FileID
 
 abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
-  val contextProof: Leibniz[context.type, TContext, context.type, TContext]
+  val contextProof: context.type Is TContext
   import context._, signatureContext.Signature
 
   val descriptor: ClassDescriptor

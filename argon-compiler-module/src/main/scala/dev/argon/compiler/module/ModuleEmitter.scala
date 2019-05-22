@@ -24,8 +24,6 @@ final class ModuleEmitter[TCompE[+_, +_] : CompilationE, TContext <: ModuleConte
   import context.signatureContext.Signature
   import context.typeSystem
 
-  private implicit val compCatsMonad = shims.monadToCats[TComp]
-
   private object Implementation {
 
     final case class ModuleIds
@@ -76,7 +74,7 @@ final class ModuleEmitter[TCompE[+_, +_] : CompilationE, TContext <: ModuleConte
 
     implicit val fromCompRefl: TComp ~> TComp = arrow.FunctionK.id
 
-    def moduleBindingStream[F[+_, +_], E >: scalaz.NonEmptyList[CompilationError]](fromComp: ArStream.EffectConverter[TCompE, F])(armodule: ArModule[context.type, DeclarationPayloadSpecifier]): ArStream[F, E, GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] =
+    def moduleBindingStream[F[+_, +_], E >: NonEmptyList[CompilationError]](fromComp: ArStream.EffectConverter[TCompE, F])(armodule: ArModule[context.type, DeclarationPayloadSpecifier]): ArStream[F, E, GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] =
       new ArStreamTranslatable[F, E, GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] {
 
         type FE[+A] = F[E, A]
@@ -135,12 +133,12 @@ final class ModuleEmitter[TCompE[+_, +_] : CompilationE, TContext <: ModuleConte
     def moduleEmitTransform[F[+_, +_]]
     (fromComp: ArStream.EffectConverter[TCompE, F])
     (armodule: ArModule[context.type, DeclarationPayloadSpecifier])
-    (implicit monadInstance: Monad[F[scalaz.NonEmptyList[CompilationError], ?]])
-    : StreamTransformation[F, scalaz.NonEmptyList[CompilationError], GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier], Unit, Vector[(String, GeneratedMessage)], Unit] =
-      new StreamTransformation.Single[F, scalaz.NonEmptyList[CompilationError], GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier], Unit, Vector[(String, GeneratedMessage)], Unit] {
+    (implicit monadInstance: Monad[F[NonEmptyList[CompilationError], ?]])
+    : StreamTransformation[F, NonEmptyList[CompilationError], GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier], Unit, Vector[(String, GeneratedMessage)], Unit] =
+      new StreamTransformation.Single[F, NonEmptyList[CompilationError], GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier], Unit, Vector[(String, GeneratedMessage)], Unit] {
         override type State = ModuleIds
 
-        type E = scalaz.NonEmptyList[CompilationError]
+        type E = NonEmptyList[CompilationError]
         type FE[+X] = F[E, X]
 
         override def initial: FE[ModuleIds] = ModuleIds().pure[FE]
@@ -788,11 +786,11 @@ final class ModuleEmitter[TCompE[+_, +_] : CompilationE, TContext <: ModuleConte
 
   }
 
-  def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): ArStream[TCompE, scalaz.NonEmptyList[CompilationError], (String, GeneratedMessage)] =
-    Implementation.moduleBindingStream[TCompE, scalaz.NonEmptyList[CompilationError]](ArStream.EffectConverter.id)(module)
+  def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): ArStream[TCompE, NonEmptyList[CompilationError], (String, GeneratedMessage)] =
+    Implementation.moduleBindingStream[TCompE, NonEmptyList[CompilationError]](ArStream.EffectConverter.id)(module)
         .transformWith(
           Implementation.moduleEmitTransform[TCompE](ArStream.EffectConverter.id)(module)
-            .into(StreamTransformation.flattenVector[TCompE, scalaz.NonEmptyList[CompilationError], (String, GeneratedMessage), Unit])
+            .into(StreamTransformation.flattenVector[TCompE, NonEmptyList[CompilationError], (String, GeneratedMessage), Unit])
         )
 
 

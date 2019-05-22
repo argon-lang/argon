@@ -6,8 +6,8 @@ import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.util.{FileID, FileSpec, WithSource}
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 
 private[compiler] object SourceFunction {

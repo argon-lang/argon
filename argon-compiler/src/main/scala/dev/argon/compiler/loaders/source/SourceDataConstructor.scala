@@ -7,8 +7,9 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.DataConstructorDeclarationStmt
 import dev.argon.util.{FileID, SourceLocation, WithSource}
-import scalaz._
-import Scalaz._
+import cats._
+import cats.evidence.Is
+import cats.implicits._
 import dev.argon.compiler.loaders.StandardTypeLoaders
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 
@@ -37,7 +38,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
     override val context: context2.type = context2
     import context.signatureContext.Signature
 
-    override val contextProof: Leibniz[context.type, context2.type, context.type, context2.type] = Leibniz.refl
+    override val contextProof: context.type Is context2.type = Is.refl
 
     override val descriptor: desc.type = desc
     override val fileId: FileID = env.fileSpec.fileID
@@ -135,7 +136,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
     : TComp[context.typeSystem.TraitType] =
       t match {
         case t: context.typeSystem.TraitType =>
-          t.point[TComp]
+          t.pure[TComp]
 
         case _ =>
           Compilation[TComp].forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))

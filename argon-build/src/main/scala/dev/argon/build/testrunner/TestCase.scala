@@ -2,9 +2,8 @@ package dev.argon.build.testrunner
 
 import scala.collection.immutable._
 import scala.xml.Elem
-import scalaz.std.option._
-import scalaz.std.vector._
-import scalaz.syntax.traverse._
+import cats._
+import cats.implicits._
 
 final case class TestCase(name: String, sourceCode: Vector[InputSourceData], expectedResult: TestCaseExpectedResult)
 

@@ -1,16 +1,15 @@
 package dev.argon.build.testrunner
 
-import scalaz._
-import Scalaz._
-import scalaz.zio.interop.scalaz72._
+import cats._
+import cats.implicits._
+import scalaz.zio.interop.catz._
 import dev.argon.build._
 import java.io.{File, IOException}
 
+import cats.data.NonEmptyList
 import dev.argon.compiler.{CompilationError, CompilerOptions}
-import Scalaz._
 import dev.argon.build.project.ProjectFileHandler
 import scalaz.zio._
-import scalaz.zio.interop.scalaz72._
 import shapeless.{Id => _, _}
 import dev.argon.build.project.ProjectLoader.Implicits._
 

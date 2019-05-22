@@ -1,7 +1,5 @@
 package dev.argon.compiler.lookup
 
-import scalaz._
-import Scalaz._
 import dev.argon.compiler.core.{AbsRef, Context, MethodBinding}
 
 trait MemberValue[TContext <: Context with Singleton] {

@@ -6,8 +6,9 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.parser
 import dev.argon.util._
-import scalaz._
-import Scalaz._
+import cats._
+import cats.evidence.Is
+import cats.implicits._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 
 object SourceMethod {
@@ -22,7 +23,7 @@ object SourceMethod {
     implCache <- Compilation[TComp].createCache[context2.TMethodImplementation]
   } yield new ArMethod[context2.type, DeclarationPayloadSpecifier] {
     override val context: context2.type = context2
-    override val contextProof: Leibniz[context.type, context2.type, context.type, context2.type] = Leibniz.refl
+    override val contextProof: context.type Is context2.type = Is.refl
 
     import context.scopeContext.ScopeExtensions
 
@@ -67,7 +68,7 @@ object SourceMethod {
     override lazy val payload: TComp[context.TMethodImplementation] =
       implCache(
         if(isAbstract)
-          context.abstractMethodImplementation.point[TComp]
+          context.abstractMethodImplementation.pure[TComp]
         else
           stmt.body match {
             case Some(WithSource(Vector(WithSource(parser.ExternExpr(specifier), location)), _)) =>

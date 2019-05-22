@@ -9,8 +9,9 @@ import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.parser.TraitDeclarationStmt
 import dev.argon.util.{FileID, SourceLocation, WithSource}
-import scalaz._
-import Scalaz._
+import cats._
+import cats.implicits._
+import cats.evidence.Is
 
 private[compiler] object SourceTrait extends AccessModifierHelpers {
 
@@ -43,7 +44,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
 
     import context.signatureContext.Signature
 
-    override val contextProof: Leibniz[context.type, context2.type, context.type, context2.type] = Leibniz.refl
+    override val contextProof: context.type Is context2.type = Is.refl
 
     override val descriptor: desc.type = desc
     override val fileId: FileID = env.fileSpec.fileID
@@ -64,7 +65,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
       groupedStaticCache(
         stmt.body.toVector.foldLeftM(GroupedStaticStatements(Vector.empty)) {
           case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
-            group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)).point[TComp]
+            group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)).pure[TComp]
 
           case (_, WithSource(_, location)) =>
             Compilation[TComp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
@@ -75,7 +76,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
       groupedInstCache(
         stmt.instanceBody.foldLeftM(GroupedInstanceStatements(Vector.empty)) {
           case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
-            group.copy(methods = group.methods :+ WithSource(stmt, location)).point[TComp]
+            group.copy(methods = group.methods :+ WithSource(stmt, location)).pure[TComp]
 
           case (_, WithSource(_, location)) =>
             Compilation[TComp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
@@ -139,7 +140,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
                 .map { _ => baseTypes }
             }
         case None =>
-          context.typeSystem.BaseTypeInfoTrait(Vector()).point[TComp]
+          context.typeSystem.BaseTypeInfoTrait(Vector()).pure[TComp]
       })
         .map { baseTypes => ArTrait.ResultInfo(context.typeSystem)(baseTypes) }
   }
@@ -153,7 +154,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
   : TComp[context.typeSystem.BaseTypeInfoTrait] =
     t match {
       case t: context.typeSystem.TraitType =>
-        acc.copy(baseTraits = acc.baseTraits :+ t).point[TComp]
+        acc.copy(baseTraits = acc.baseTraits :+ t).pure[TComp]
 
       case context.typeSystem.IntersectionType(first, second) =>
         typeToBaseTypes(context)(env)(first)(location)(acc).flatMap { acc2 =>
