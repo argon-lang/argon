@@ -83,7 +83,12 @@ package object stream {
                           case Step.Stop(r3) => (acc, r3.pure[F[E2, ?]]).pure[F[E2, ?]]
                         }
 
-                      case None => feToFe2(fr2).flatMap(other.end(s2, _))
+                      case None =>
+                        feToFe2(fr2).flatMap { r2 =>
+                          other.end(s2, r2).map {
+                            case (lastC, fr3) => (acc ++ lastC, fr3)
+                          }
+                        }
                     }
 
                   feed(s2, chunkB ++ lastB, Vector.empty)
@@ -99,7 +104,7 @@ package object stream {
                       case Step.Stop(r3) => (acc, r3.pure[F[E2, ?]]).pure[F[E2, ?]]
                     }
 
-                  case None => other.end(s2, r2)
+                  case None => other.end(s2, r2).map { case (lastC, fr3) => (acc ++ lastC, fr3) }
                 }
 
               feed(s2, lastB, Vector.empty)

@@ -21,6 +21,15 @@ class StreamTransformationTests extends FlatSpec with Matchers with DefaultRunti
     )))
   }
 
+  it should "handle buffer twice" in {
+    unsafeRun(checkStream(sampleValues, ArStream.fromVector[IO, Int, Int](sampleValues).transformWith(
+      StreamTransformation.identity[IO, Int, Int, Unit]
+        .buffer(10)
+        .into(StreamTransformation.identity[IO, Int, Int, Unit])
+        .buffer(10)
+    )))
+  }
+
   it should "work for ZStream" in {
     unsafeRun(checkZStream(sampleValues, ZStream.fromIterable(sampleValues).transformIO(
       StreamTransformation.identity[IO, Int, Int, Unit]
