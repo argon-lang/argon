@@ -8,7 +8,7 @@ import dev.argon.compiler.loaders.armodule.ArgonModuleLoader
 import cats._
 import cats.implicits._
 
-class ModuleContext[TCompE[+_, +_] : CompilationE, I](override protected val compilerInput: CompilerInput[I, ModuleBackendOptions[Id, I]]) extends ContextCompE[TCompE] {
+class ModuleContext[TCompRE[-_, +_, +_] : CompilationRE, I](override protected val compilerInput: CompilerInput[I, ModuleBackendOptions[Id, I]]) extends ContextCompRE[TCompRE] {
   override type TFunctionMetadata = Unit
   override type TMethodMetadata = Unit
   override type TTraitMetadata = Unit
@@ -37,7 +37,7 @@ class ModuleContext[TCompE[+_, +_] : CompilationE, I](override protected val com
   override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[Option[typeSystem.ArExpr]] =
     Compilation[Comp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
 
-  override val compECompilationInstance: CompilationE[TCompE] = implicitly
+  override val compCompilationInstance: CompilationRE[TCompRE] = implicitly
 
 
 

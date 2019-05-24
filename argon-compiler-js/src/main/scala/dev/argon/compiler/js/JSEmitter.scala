@@ -10,7 +10,7 @@ import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
 import dev.argon.compiler.vtable._
 
-final class JSEmitter[TCompE[+_, +_] : CompilationE, TContext <: JSContext[TCompE, _] with Singleton](context: TContext, inject: JSInjectCode[Id]) {
+final class JSEmitter[TCompRE[-_, +_, +_] : CompilationRE, TContext <: JSContext[TCompRE, _] with Singleton](context: TContext, inject: JSInjectCode[Id]) {
 
   private type TComp[+A] = context.Comp[A]
 

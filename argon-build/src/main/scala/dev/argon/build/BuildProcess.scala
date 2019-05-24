@@ -40,7 +40,7 @@ object BuildProcess {
   )(
     f: backend.TCompilationOutput[F, I] => F[Any, NonEmptyList[CompilationError], A]
   )
-  (implicit res: ResourceAccess[F[Any, NonEmptyList[CompilationError], ?], I])
+  (implicit res: ResourceAccess[F, I])
   : F[Any, NonEmptyList[CompilationError], A] = {
     val input = CompilerInput(
       source = sourceASTs,

@@ -66,7 +66,7 @@ object IOCompilation {
 
   })
 
-  trait IOResourceAccess extends ResourceAccess[IO[NonEmptyList[CompilationError], ?], io.File] {
+  trait IOResourceAccess extends ResourceAccess[ZIO, io.File] {
     override type PrintWriter = (io.PrintWriter, io.File)
     override type OutputStream = (io.OutputStream, io.File)
     override type InputStream = (io.InputStream, io.File)
@@ -85,7 +85,7 @@ object IOCompilation {
           )
         }
 
-      override def getExtension(id: io.File): IO[NonEmptyList[CompilationError], String] = IO.effectTotal {
+      override def getExtension(id: io.File): UIO[String] = IO.effectTotal {
         FilenameManip.getExtension(id)
       }
 

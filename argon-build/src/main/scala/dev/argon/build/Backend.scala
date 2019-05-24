@@ -25,7 +25,7 @@ trait Backend {
   def compile[F[-_, +_, +_]: CompilationRE, I: Show, A]
   (input: CompilerInput[I, BackendOptions[Id, I]])
   (f: TCompilationOutput[F, I] => F[Any, NonEmptyList[CompilationError], A])
-  (implicit res: ResourceAccess[F[Any, NonEmptyList[CompilationError], ?], I])
+  (implicit res: ResourceAccess[F, I])
   : F[Any, NonEmptyList[CompilationError], A]
 
 }

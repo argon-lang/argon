@@ -54,10 +54,10 @@ object JSBackend extends Backend {
   override def compile[F[-_, +_, +_] : CompilationRE, I: Show, A]
   (input: CompilerInput[I, JSBackendOptions[Id, I]])
   (f: CompilationOutputText[F, I] => F[Any, NonEmptyList[CompilationError], A])
-  (implicit res: ResourceAccess[F[Any, NonEmptyList[CompilationError], ?], I])
+  (implicit res: ResourceAccess[F, I])
   : F[Any, NonEmptyList[CompilationError], A] = {
-    val context = new JSContext[F[Any, +?, +?], I](input)
-    val emitter = new JSEmitter[F[Any, +?, +?], context.type](context, input.backendOptions.inject)
+    val context = new JSContext[F, I](input)
+    val emitter = new JSEmitter[F, context.type](context, input.backendOptions.inject)
 
     context.createModule { module =>
       implicitly[CompilationRE[F]].flatMap(emitter.emitModule(module)) { jsModule =>
@@ -70,7 +70,7 @@ object JSBackend extends Backend {
 
     override def outputResource: I = outputRes
 
-    override def writeText(resourceAccess: ResourceAccess[F[Any, NonEmptyList[CompilationError], ?], I])(writer: resourceAccess.PrintWriter): F[Any, NonEmptyList[CompilationError], Unit] = {
+    override def writeText(resourceAccess: ResourceAccess[F, I])(writer: resourceAccess.PrintWriter): F[Any, NonEmptyList[CompilationError], Unit] = {
 
       val strWriter = new StringWriter()
       JSAst.writeModule(jsModule)(new PrintWriter(strWriter))

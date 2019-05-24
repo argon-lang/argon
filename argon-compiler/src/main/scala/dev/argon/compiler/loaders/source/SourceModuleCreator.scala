@@ -15,14 +15,14 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
 
-  def createModule[TComp[+_] : Compilation, I: Show, A]
-  (context: ContextComp[TComp])
+  def createModule[TCompRE[-_, +_, +_] : CompilationRE, I: Show, A]
+  (context: ContextCompRE[TCompRE])
   (input: CompilerInput[I, context.BackendOptions])
-  (f: ArModule[context.type, DeclarationPayloadSpecifier] => TComp[A])
-  (implicit res: ResourceAccess[TComp, I])
-  : TComp[A] =
+  (f: ArModule[context.type, DeclarationPayloadSpecifier] => context.Comp[A])
+  (implicit res: ResourceAccess[TCompRE, I])
+  : context.Comp[A] =
     ModuleLoader.loadReferencedModules(context)(input.references) { refModules =>
-      createModuleWithRefs[TComp, I](context)(input)(refModules).flatMap(f)
+      createModuleWithRefs[context.Comp, I](context)(input)(refModules).flatMap(f)
     }
 
   private def createModuleWithRefs[TComp[+_] : Compilation, I]

@@ -17,7 +17,7 @@ import dev.argon.util.AnyExtensions._
 import scalaz.zio.stream.ZStream.Fold
 import scalaz.zio.{IO, ZIO, stream => zstream}
 
-final class ModuleEmitter[TCompRE[-_, +_, +_] : CompilationRE, TContext <: ModuleContext[TCompRE[Any, +?, +?], _] with Singleton](val context: TContext) {
+final class ModuleEmitter[TCompRE[-_, +_, +_] : CompilationRE, TContext <: ModuleContext[TCompRE, _] with Singleton](val context: TContext) {
 
   type TCompE[+E, +A] = context.CompE[E, A]
   type TComp[+A] = context.Comp[A]

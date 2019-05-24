@@ -9,7 +9,7 @@ import dev.argon.compiler._
 import cats._
 import cats.implicits._
 
-final class JSContext[TCompE[+_, +_] : CompilationE, I](override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]]) extends ContextCompE[TCompE] {
+final class JSContext[TCompRE[-_, +_, +_] : CompilationRE, I](override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]]) extends ContextCompRE[TCompRE] {
 
   override type TTraitMetadata = Unit
   override type TClassMetadata = Unit
@@ -51,7 +51,7 @@ final class JSContext[TCompE[+_, +_] : CompilationE, I](override protected val c
       case None => Compilation[Comp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
     }
 
-  override val compECompilationInstance: CompilationE[CompE] = implicitly
+  override val compCompilationInstance: CompilationRE[CompRE] = implicitly
 
 
 
