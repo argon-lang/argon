@@ -188,11 +188,8 @@ final class ModuleEmitter[TCompRE[-_, +_, +_] : CompilationRE, TContext <: Modul
                 globals = moduleIds.globals
               ))
             } yield (refEntries :+ metadataEntry, ().pure[FE])
-          ).runA(ModuleIds())
+          ).runA(s)
 
-
-        implicit val emitFMonad: Monad[EmitF[FE, ?]] = implicitly
-        implicit val pairStateFMonad: Monad[StateT[FE, (ModuleIds, ModuleRefs), ?]] = implicitly
 
 
         def addGlobalDecl(g: module.GlobalDeclaration): EmitF[FE, Unit] =
@@ -344,8 +341,9 @@ final class ModuleEmitter[TCompRE[-_, +_, +_] : CompilationRE, TContext <: Modul
             )
               .flatMap { case (moduleRefs, entries) =>
                 StateT.get[FE, ModuleIds].flatMap { newState =>
-                  if(entries.nonEmpty)
-                    impl(moduleRefs, acc ++ entries)
+                  val newEntries = entries.flatten
+                  if(newEntries.nonEmpty)
+                    impl(moduleRefs, acc :+ newEntries)
                   else
                     (moduleRefs, acc).pure[StateT[FE, ModuleIds, ?]]
                 }

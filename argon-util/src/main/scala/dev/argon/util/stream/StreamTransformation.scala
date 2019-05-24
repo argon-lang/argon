@@ -6,7 +6,7 @@ import cats.implicits._
 import scalaz.zio._
 import scalaz.zio.stream.ZSink
 
-trait StreamTransformation[+F[-_, +_, +_], -R, +E, A, -X, +B, +Y] {
+trait StreamTransformation[F[-_, +_, +_], -R, +E, A, -X, +B, +Y] {
 
   type State
 
@@ -15,6 +15,110 @@ trait StreamTransformation[+F[-_, +_, +_], -R, +E, A, -X, +B, +Y] {
   def step(s: State, ca: NonEmptyVector[A]): F[R, E, Step[State, A, B, Y]]
 
   def end(s: State, result: X): F[R, E, (Vector[B], F[R, E, Y])]
+
+
+  def into[R2 <: R, E2 >: E, B2 >: B, C, Z](other: StreamTransformation[F, R2, E2, B2, Y, C, Z])(implicit monadInstance: Monad[F[R2, E2, ?]]): StreamTransformation[F, R2, E2, A, X, C, Z] =
+    new StreamTransformation[F, R2, E2, A, X, C, Z] {
+
+      sealed trait IntoState
+      final case class BothRunning(s1: StreamTransformation.this.State, chunkB: Vector[B2], s2: other.State) extends IntoState
+      final case class FirstFinished(r2: Y, chunkB: Vector[B2], s2: other.State) extends IntoState
+      final case class BothFinished(chunkC: Vector[C], fr3: F[R2, E2, Z]) extends IntoState
+
+      override type State = IntoState
+
+      def feToFe2[W](fe: F[R, E, W]): F[R2, E2, W] = fe
+
+      override def initial: F[R2, E2, State] = for {
+        s1 <- feToFe2(StreamTransformation.this.initial)
+        s2 <- other.initial
+      } yield BothRunning(s1, Vector.empty, s2)
+
+
+      override def step(s: State, ca: NonEmptyVector[A]): F[R2, E2, Step[State, A, C, Z]] =
+        s match {
+          case BothRunning(s1, chunkB, s2) =>
+            feToFe2(StreamTransformation.this.step(s1, ca)).flatMap {
+              case Step.Produce(s1, value, chunkA) =>
+                other.step(s2, NonEmptyVector.fromVector(chunkB).map { _ :+ value }.getOrElse(NonEmptyVector.of(value))).flatMap {
+                  case Step.Produce(s2, value, chunkB) => Step.Produce(BothRunning(s1, chunkB, s2), value, chunkA).pure[F[R2, E2, ?]]
+                  case Step.Continue(s2) =>
+                    val newState = BothRunning(s1, Vector.empty, s2)
+                    NonEmptyVector.fromVector(chunkA) match {
+                      case Some(chunkA) => step(newState, chunkA)
+                      case None => Step.Continue(newState).pure[F[R2, E2, ?]]
+                    }
+
+                  case stop @ Step.Stop(_) => stop.pure[F[R2, E2, ?]]
+                }
+
+              case Step.Continue(s1) => Step.Continue(BothRunning(s1, chunkB, s2)).pure[F[R2, E2, ?]]
+              case Step.Stop(r2) => Step.Continue(FirstFinished(r2, chunkB, s2)).pure[F[R2, E2, ?]]
+            }
+
+          case FirstFinished(r2, chunkB, s2) =>
+            NonEmptyVector.fromVector(chunkB) match {
+              case Some(chunkB) => other.step(s2, chunkB).flatMap {
+                case Step.Produce(s2, value, chunkB) => Step.Produce(FirstFinished(r2, chunkB, s2), value, ca.toVector).pure[F[R2, E2, ?]]
+                case Step.Continue(s2) => other.end(s2, r2).flatMap { case (chunkC, fr3) => step(BothFinished(chunkC, fr3), ca) }
+                case done @ Step.Stop(_) => done.pure[F[R2, E2, ?]]
+              }
+
+              case None => other.end(s2, r2).flatMap {
+                case (chunkC, fr3) => step(BothFinished(chunkC, fr3), ca)
+              }
+            }
+
+          case BothFinished(head +: tail, fr3) => Step.Produce(BothFinished(tail, fr3), head, ca.toVector).pure[F[R2, E2, ?]]
+          case BothFinished(Vector(), fr3) => fr3.map { r3 => Step.Stop(r3) }
+        }
+
+      override def end(s: State, result: X): F[R2, E2, (Vector[C], F[R2, E2, Z])] =
+        s match {
+          case BothRunning(s1, chunkB, s2) =>
+            feToFe2(StreamTransformation.this.end(s1, result)).flatMap {
+              case (lastB, fr2) =>
+                def feed(s2: other.State, lastB: Vector[B2], acc: Vector[C]): F[R2, E2, (Vector[C], F[R2, E2, Z])] =
+                  NonEmptyVector.fromVector(lastB) match {
+                    case Some(elems) =>
+                      other.step(s2, elems).flatMap {
+                        case Step.Produce(s2, value, chunk) => feed(s2, chunk, acc :+ value)
+                        case Step.Continue(state) => feed(state, Vector.empty, acc)
+                        case Step.Stop(r3) => (acc, r3.pure[F[R2, E2, ?]]).pure[F[R2, E2, ?]]
+                      }
+
+                    case None =>
+                      feToFe2(fr2).flatMap { r2 =>
+                        other.end(s2, r2).map {
+                          case (lastC, fr3) => (acc ++ lastC, fr3)
+                        }
+                      }
+                  }
+
+                feed(s2, chunkB ++ lastB, Vector.empty)
+            }
+
+          case FirstFinished(r2, lastB, s2) =>
+            def feed(s2: other.State, lastB: Vector[B2], acc: Vector[C]): F[R2, E2, (Vector[C], F[R2, E2, Z])] =
+              NonEmptyVector.fromVector(lastB) match {
+                case Some(elems) =>
+                  other.step(s2, elems).flatMap {
+                    case Step.Produce(s2, value, chunk) => feed(s2, chunk, acc :+ value)
+                    case Step.Continue(state) => feed(state, Vector.empty, acc)
+                    case Step.Stop(r3) => (acc, r3.pure[F[R2, E2, ?]]).pure[F[R2, E2, ?]]
+                  }
+
+                case None => other.end(s2, r2).map { case (lastC, fr3) => (acc ++ lastC, fr3) }
+              }
+
+            feed(s2, lastB, Vector.empty)
+
+          case BothFinished(chunkC, fr3) => (chunkC, fr3).pure[F[R2, E2, ?]]
+        }
+
+    }
+
+
 }
 
 object StreamTransformation {

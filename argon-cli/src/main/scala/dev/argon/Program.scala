@@ -39,7 +39,7 @@ object Program extends App {
           .flatMap(BuildInfo.loadFile)
           .flatMap {
             case Some(buildInfos) => buildInfos.foldLeftM(0) { (exitCode, buildInfo) =>
-              Pipeline.run(buildInfo).map { exitCode2 =>
+              Pipeline.run(this)(buildInfo).map { exitCode2 =>
                 if(exitCode === 0) exitCode2
                 else exitCode
               }

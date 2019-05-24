@@ -1,16 +1,20 @@
 package dev.argon.compiler
 
 import java.io
+import java.io.File
 import java.util.zip
 
 import dev.argon.util.{FileOperations, FilenameManip}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import cats._
 import scalaz.zio._
+import scalaz.zio.interop._
 import scalaz.zio.interop.catz._
 import FileOperations.fileShow
 import cats.data.NonEmptyList
 import com.google.protobuf.InvalidProtocolBufferException
+import dev.argon.util.stream.{ArStream, OutputStreamTransformation, OutputStreamWriterStream, Resource, StreamTransformation, ZipEntryInfo, ZipEntryStreamTransformation}
+import scalaz.zio
 
 trait IOCompilation extends CompilationExec[ZIO, UIO]
 
@@ -67,20 +71,20 @@ object IOCompilation {
   })
 
   trait IOResourceAccess extends ResourceAccess[ZIO, io.File] {
-    override type PrintWriter = (io.PrintWriter, io.File)
-    override type OutputStream = (io.OutputStream, io.File)
-    override type InputStream = (io.InputStream, io.File)
-    override type ZipWriter = (zip.ZipOutputStream, io.File)
-    override type ZipReader = (zip.ZipFile, io.File)
+    override type InputStream = io.InputStream
+    override type ZipReader = zip.ZipFile
   }
 
-  implicit val fileSystemResourceAccess: IOResourceAccess =
+  def fileSystemResourceAccess(rt: zio.Runtime[_]): IOResourceAccess =
     new IOResourceAccess {
 
-      private def handleIOException[A](file: io.File)(value: IO[io.IOException, Either[NonEmptyList[CompilationError], A]]): IO[NonEmptyList[CompilationError], A] =
+      private def ioExceptionToError(ex: io.IOException): NonEmptyList[CompilationError] =
+        NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex)))
+
+      private def handleIOException[A](value: IO[io.IOException, Either[NonEmptyList[CompilationError], A]]): IO[NonEmptyList[CompilationError], A] =
         value.either.flatMap { either =>
           IO.fromEither(
-            either.left.map { ex => NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(file), ex)) }
+            either.left.map(ioExceptionToError)
               .flatMap(identity)
           )
         }
@@ -89,40 +93,34 @@ object IOCompilation {
         FilenameManip.getExtension(id)
       }
 
-      override def createPrintWriter[A](id: io.File)(f: PrintWriter => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
-        handleIOException(id)(FileOperations.filePrintWriter(id)(writer => f((writer, id)).either))
-
-      override def createOutputStream[A](id: io.File)(f: OutputStream => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
-        handleIOException(id)(FileOperations.fileOutputStream(id)(stream => f((stream, id)).either))
-
-      override def writeText(writer: PrintWriter, text: String): IO[NonEmptyList[CompilationError], Unit] =
-        IO.effect { writer._1.print(text) }.refineOrDie {
-          case ex: io.IOException => NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(writer._2), ex))
+      override def resourceSink(id: File): Resource[ZIO, Any, NonEmptyList[CompilationError], StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]] =
+        new Resource[ZIO, Any, NonEmptyList[CompilationError], StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]] {
+          override def use[R2 <: Any, E2 >: NonEmptyList[CompilationError], B](f: StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit] => ZIO[R2, E2, B]): ZIO[R2, E2, B] =
+            IO.effect { new io.FileOutputStream(id) }.refineOrDie {
+              case ex: io.IOException => ioExceptionToError(ex)
+            }.bracketAuto { outputStream =>
+              f(OutputStreamTransformation(ioExceptionToError)(outputStream))
+            }
         }
 
-      override def createZipWriter[A](stream: OutputStream)(f: ZipWriter => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
-        handleIOException(stream._2)(FileOperations.zipOutputStream(stream._1)(zipStream => f((zipStream, stream._2)).either))
-
-      override def writeZipEntry[A](zip: ZipWriter, path: String)(f: OutputStream => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
-        handleIOException(zip._2)(FileOperations.createZipEntry(zip._1, path)(_ => f(zip).either))
+      override def zipFromEntries(entryStream: ArStream[ZIO, Any, NonEmptyList[CompilationError], ZipEntryInfo[ZIO, Any, NonEmptyList[CompilationError]]]): ArStream[ZIO, Any, NonEmptyList[CompilationError], Byte] =
+        ZipEntryStreamTransformation(rt)(ioExceptionToError)(entryStream)
 
       override def getZipReader[A](id: io.File)(f: ZipReader => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
-        handleIOException(id)(FileOperations.createZipFile(id)(zipFile => f((zipFile, id)).either))
+        handleIOException(FileOperations.createZipFile(id)(zipFile => f(zipFile).either))
 
       override def getZipEntryInputStream[A](zip: ZipReader, name: String)(f: InputStream => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
-        handleIOException(zip._2)(FileOperations.getZipEntryStream(zip._1, name)(stream => f((stream, zip._2)).either))
+        handleIOException(FileOperations.getZipEntryStream(zip, name)(stream => f(stream).either))
 
       override def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): IO[NonEmptyList[CompilationError], A] =
-        IO.effect { companion.parseFrom(stream._1) }.refineOrDie {
-          case ex: io.IOException => NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(stream._2), ex))
-          case _: InvalidProtocolBufferException => NonEmptyList.of(CompilationError.InvalidProtocolBufferMessage(CompilationMessageSource.ResourceIdentifier(stream._2)))
+        IO.effect { companion.parseFrom(stream) }.refineOrDie {
+          case ex: io.IOException => ioExceptionToError(ex)
         }
 
-      override def writeProtocolBufferMessage(stream: OutputStream, message: GeneratedMessage): IO[NonEmptyList[CompilationError], Unit] =
-        IO.effect { message.writeTo(stream._1) }.refineOrDie {
-          case ex: io.IOException => NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ResourceIdentifier(stream._2), ex))
-          case _: InvalidProtocolBufferException => NonEmptyList.of(CompilationError.InvalidProtocolBufferMessage(CompilationMessageSource.ResourceIdentifier(stream._2)))
-        }
+      override def protocolBufferStream(message: GeneratedMessage): ArStream[ZIO, Any, NonEmptyList[CompilationError], Byte] =
+        OutputStreamWriterStream(rt)(stream => IO.effect { message.writeTo(stream) }.refineOrDie {
+          case ex: io.IOException => ioExceptionToError(ex)
+        })
     }
 
 }

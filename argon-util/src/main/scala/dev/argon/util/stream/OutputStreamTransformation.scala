@@ -5,30 +5,31 @@ import java.io.{IOException, OutputStream}
 import cats.data.NonEmptyVector
 import scalaz.zio._
 
-trait OutputStreamTransformation[+R] extends StreamTransformation[ZIO, Any, IOException, Byte, Unit, Nothing, R] {
-  def writeDirectly[E2 >: IOException](f: OutputStream => IO[E2, Unit]): IO[E2, R]
+trait OutputStreamTransformation[+E, +X] extends StreamTransformation[ZIO, Any, E, Byte, Unit, Nothing, X] {
+  def writeDirectly[R2, E2 >: E](f: OutputStream => ZIO[R2, E2, Unit]): ZIO[R2, E2, X]
 }
 
 object OutputStreamTransformation {
 
-  def apply(outputStream: OutputStream): OutputStreamTransformation[Unit] = new OutputStreamTransformation[Unit] {
+  def apply[E](errorHandler: IOException => E)(outputStream: OutputStream): OutputStreamTransformation[E, Unit] = new OutputStreamTransformation[E, Unit] {
 
     override type State = Unit
 
-    override def initial: IO[IOException, Unit] = IO.succeed(())
+    override def initial: IO[E, Unit] = IO.succeed(())
 
-    override def step(s: Unit, ca: NonEmptyVector[Byte]): IO[IOException, Step[Unit, Byte, Nothing, Unit]] =
+    override def step(s: Unit, ca: NonEmptyVector[Byte]): IO[E, Step[Unit, Byte, Nothing, Unit]] =
       IO.effect {
         outputStream.write(ca.toVector.toArray)
         Step.Continue(())
       }.refineOrDie {
-        case ex: IOException => ex
+        case ex: IOException => errorHandler(ex)
       }
 
-    override def end(s: Unit, result: Unit): IO[IOException, (Vector[Nothing], IO[IOException, Unit])] =
+    override def end(s: Unit, result: Unit): IO[E, (Vector[Nothing], IO[E, Unit])] =
       IO.succeed((Vector(), IO.succeed(())))
 
-    override def writeDirectly[E2 >: IOException](f: OutputStream => IO[E2, Unit]): IO[E2, Unit] = f(outputStream)
+
+    override def writeDirectly[R2, E2](f: OutputStream => ZIO[R2, E2, Unit]): ZIO[R2, E2, Unit] = f(outputStream)
   }
 
 }

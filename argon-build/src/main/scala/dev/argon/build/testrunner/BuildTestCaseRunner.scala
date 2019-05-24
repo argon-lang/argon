@@ -33,8 +33,8 @@ final class BuildTestCaseRunner(protected val backend: Backend, references: Vect
   override protected def getProgramOutput(compOutput: backend.TCompilationOutput[ZIO, File]): IO[NonEmptyList[CompilationError], Either[Throwable, String]] =
     IO.succeed(Right(""))
 
-  override def runTest(testCase: TestCase): IO[Throwable, TestCaseResult] =
-    compileTestCase(testCase, references)
+  override def runTest(rt: Runtime[_])(testCase: TestCase): IO[Throwable, TestCaseResult] =
+    compileTestCase(rt)(testCase, references)
 
   override protected def normalizeOutput(output: String): String = ""
 }

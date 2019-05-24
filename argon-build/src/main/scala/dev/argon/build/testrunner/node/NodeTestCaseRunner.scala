@@ -6,12 +6,14 @@ import java.nio.charset.StandardCharsets
 import dev.argon.build.{Backend, CompilationOutputText, JSBackend}
 import dev.argon.build.testrunner._
 import cats._
-import cats.data.NonEmptyList
+import cats.data.{NonEmptyList, NonEmptyVector}
 import cats.instances._
 import scalaz.zio._
+import scalaz.zio.interop.catz._
 import dev.argon.build.testrunner.node.ExternalApi._
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
 import dev.argon.compiler.js.{JSBackendOptions, JSInjectCode}
+import dev.argon.util.stream.{Step, StreamTransformation}
 import dev.argon.util.{FileOperations, FilenameManip}
 import org.apache.commons.io.IOUtils
 
@@ -31,17 +33,13 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
   )
 
   override protected def getProgramOutput(compOutput: CompilationOutputText[ZIO, File]): IO[NonEmptyList[CompilationError], Either[Throwable, String]] = for {
-    writer <- IO.effectTotal { new StringWriter() }
-    printWriter <- IO.effectTotal { new PrintWriter(writer) }
-    _ <- compOutput.writeText(IOCompilation.fileSystemResourceAccess)((printWriter, compOutput.outputResource))
-    _ <- IO.effectTotal { printWriter.close() }
-    compiledFile <- IO.effectTotal { writer.toString }
+    compiledFile <- compOutput.textStream.foldLeft(stringConcatTrans)
     output <- runJSOutput(references)(compiledFile).either
   } yield output
 
 
-  override def runTest(testCase: TestCase): IO[Throwable, TestCaseResult] =
-    compileTestCase(testCase, references)
+  override def runTest(rt: Runtime[_])(testCase: TestCase): IO[Throwable, TestCaseResult] =
+    compileTestCase(rt)(testCase, references)
 
   private def runJSOutput(files: Vector[File])(compiledFile: String): IO[Throwable, String] = for {
     modules <- IO.effect {
@@ -59,5 +57,18 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
     serverFuncs <- launcher.serverFunctions
     output <- IO.fromFuture { _ => serverFuncs.executeJS(moduleName, modules) }
   } yield output
+
+  private def stringConcatTrans: StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], String, Unit, Nothing, String] =
+    new StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], String, Unit, Nothing, String] {
+      override type State = String
+
+      override def initial: ZIO[Any, NonEmptyList[CompilationError], String] = IO.succeed("")
+
+      override def step(s: String, ca: NonEmptyVector[String]): ZIO[Any, NonEmptyList[CompilationError], Step[String, String, Nothing, String]] =
+        IO.succeed(Step.Continue(s + ca.toVector.mkString))
+
+      override def end(s: String, result: Unit): ZIO[Any, NonEmptyList[CompilationError], (Vector[Nothing], ZIO[Any, NonEmptyList[CompilationError], String])] =
+        IO.succeed((Vector(), IO.succeed(s)))
+    }
 
 }

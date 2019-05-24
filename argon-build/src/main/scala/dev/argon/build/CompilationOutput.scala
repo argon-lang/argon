@@ -7,18 +7,22 @@ import dev.argon.compiler.{CompilationError, ResourceAccess}
 import cats._
 import cats.data.NonEmptyList
 import cats.instances._
+import dev.argon.util.stream.{ArStream, StringToByteStreamTransformation}
 
 trait CompilationOutput[F[-_, +_, +_], I] {
   def write(implicit resourceAccess: ResourceAccess[F, I]): F[Any, NonEmptyList[CompilationError], Unit]
 }
 
-trait CompilationOutputText[F[-_, +_, +_], I] extends CompilationOutput[F, I] {
+abstract class CompilationOutputText[F[-_, +_, +_], I](implicit monadInstance: Monad[F[Any, NonEmptyList[CompilationError], ?]]) extends CompilationOutput[F, I] {
 
   override def write(implicit resourceAccess: ResourceAccess[F, I]): F[Any, NonEmptyList[CompilationError], Unit] =
-    resourceAccess.createPrintWriter(outputResource)(writeText(resourceAccess)(_))
+    resourceAccess.resourceSink(outputResource).use { sink =>
+      textStream.foldLeft(StringToByteStreamTransformation(StandardCharsets.UTF_8).into(sink))
+    }
 
   def outputResource: I
 
-  def writeText(resourceAccess: ResourceAccess[F, I])(writer: resourceAccess.PrintWriter): F[Any, NonEmptyList[CompilationError], Unit]
+  def textStream: ArStream[F, Any, NonEmptyList[CompilationError], String]
+
 
 }

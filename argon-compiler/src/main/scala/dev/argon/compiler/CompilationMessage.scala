@@ -396,7 +396,7 @@ object CompilationError {
     override def message: String = "Invalid protocol buffer message."
   }
 
-  final case class ResourceIOError(source: CompilationMessageSource, exception: IOException) extends CompilationError {
+  final case class ResourceIOError(source: CompilationMessageSource.ThrownException) extends CompilationError {
     override def message: String = "An IO error occurred."
   }
 
@@ -459,6 +459,10 @@ object CompilationMessageSource {
 
   final case class ResourceIdentifier[I: Show](id: I) extends CompilationMessageSource {
     override def formatted: String = Show[I].show(id)
+  }
+
+  final case class ThrownException(ex: Exception) extends CompilationMessageSource {
+    override def formatted: String = ex.toString
   }
 
 }

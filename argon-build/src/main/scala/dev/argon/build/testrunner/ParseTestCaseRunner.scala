@@ -2,11 +2,11 @@ package dev.argon.build.testrunner
 
 import dev.argon.compiler.IOCompilation
 import scalaz._
-import scalaz.zio.IO
+import scalaz.zio.{IO, Runtime}
 
 object ParseTestCaseRunner extends TestCaseRunner with TestCaseRunnerParsePhase {
 
-  override def runTest(testCase: TestCase): IO[Throwable, TestCaseResult] =
+  override def runTest(rt: Runtime[_])(testCase: TestCase): IO[Throwable, TestCaseResult] =
     IOCompilation.compilationInstance.flatMap { implicit ioComp =>
       ioComp.getResult(parseTestCaseSource(testCase))
         .map {

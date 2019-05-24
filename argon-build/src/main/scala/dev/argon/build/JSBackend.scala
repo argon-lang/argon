@@ -14,6 +14,7 @@ import scalaz.zio.{IO, ZIO}
 import toml.Codecs._
 import shapeless.{Id => _, _}
 import dev.argon.util.ExtraTomlCodecs._
+import dev.argon.util.stream.ArStream
 
 object JSBackend extends Backend {
 
@@ -66,16 +67,15 @@ object JSBackend extends Backend {
     }
   }
 
-  private def createOutput[F[-_, +_, +_], I](outputRes: I)(jsModule: JSModule): CompilationOutputText[F, I] = new CompilationOutputText[F, I] {
+  private def createOutput[F[-_, +_, +_], I](outputRes: I)(jsModule: JSModule)(implicit monadInstance: Monad[F[Any, NonEmptyList[CompilationError], ?]]) : CompilationOutputText[F, I] = new CompilationOutputText[F, I] {
 
     override def outputResource: I = outputRes
 
-    override def writeText(resourceAccess: ResourceAccess[F, I])(writer: resourceAccess.PrintWriter): F[Any, NonEmptyList[CompilationError], Unit] = {
 
+    override def textStream: ArStream[F, Any, NonEmptyList[CompilationError], String] = {
       val strWriter = new StringWriter()
       JSAst.writeModule(jsModule)(new PrintWriter(strWriter))
-
-      resourceAccess.writeText(writer, strWriter.toString)
+      ArStream.fromVector(Vector(strWriter.toString))
     }
 
   }

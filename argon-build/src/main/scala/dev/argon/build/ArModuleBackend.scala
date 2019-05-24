@@ -50,15 +50,13 @@ object ArModuleBackend extends Backend {
   private def createOutput[F[-_, +_, +_]: CompilationRE, I](outputFile: I)(moduleStream: ArStream[F, Any, NonEmptyList[CompilationError], (String, GeneratedMessage)]): CompilationOutput[F, I] = new CompilationOutput[F, I] {
 
     override def write(implicit resourceAccess: ResourceAccess[F, I]): F[Any, NonEmptyList[CompilationError], Unit] =
-      resourceAccess.createOutputStream(outputFile) { stream =>
-        resourceAccess.createZipWriter(stream) { zip =>
-          moduleStream.forEach { case (path, message) =>
-            resourceAccess.writeZipEntry(zip, path) { entry =>
-              resourceAccess.writeProtocolBufferMessage(entry, message)
-            }
+      resourceAccess.resourceSink(outputFile).use { sink =>
+        resourceAccess.zipFromEntries(
+          moduleStream.map { case (path, message) =>
+            ZipEntryInfo(path, resourceAccess.protocolBufferStream(message))
           }
-
-        }
+        )
+          .foldLeft(sink)
       }
 
 

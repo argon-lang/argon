@@ -19,7 +19,7 @@ class CompilerTests extends FunSpec with DefaultRuntime with Matchers with Befor
 
     for(testCase <- structure.tests) {
       it(testCase.name) {
-        unsafeRun(runner.runTest(testCase)) shouldBe TestCaseResult.Success
+        unsafeRun(runner.runTest(this)(testCase)) shouldBe TestCaseResult.Success
       }
     }
 

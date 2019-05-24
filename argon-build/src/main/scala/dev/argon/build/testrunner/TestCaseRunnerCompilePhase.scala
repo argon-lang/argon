@@ -27,7 +27,7 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
     output.split("\n").map { _.trim }.filter { _.nonEmpty }.mkString("\n")
 
 
-  def compileTestCase(testCase: TestCase, references: Vector[File]): UIO[TestCaseResult] =
+  def compileTestCase(rt: Runtime[_])(testCase: TestCase, references: Vector[File]): UIO[TestCaseResult] =
     IOCompilation.compilationInstance.flatMap { implicit ioComp =>
 
       val result: UIO[(Vector[CompilationMessageNonFatal], Either[NonEmptyList[CompilationError], Either[Throwable, String]])] =
@@ -43,6 +43,8 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
                 .flatMap {
                   case Left(ex) => IO.succeed(Left(ex))
                   case Right(backendOpts) =>
+                    implicit val res = IOCompilation.fileSystemResourceAccess(rt)
+
                     BuildProcess.compile(
                       backend
                     )(
