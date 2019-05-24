@@ -75,7 +75,7 @@ object IOCompilation {
     override type ZipReader = zip.ZipFile
   }
 
-  def fileSystemResourceAccess(rt: zio.Runtime[_]): IOResourceAccess =
+  implicit val fileSystemResourceAccess: IOResourceAccess =
     new IOResourceAccess {
 
       private def ioExceptionToError(ex: io.IOException): NonEmptyList[CompilationError] =
@@ -104,7 +104,7 @@ object IOCompilation {
         }
 
       override def zipFromEntries(entryStream: ArStream[ZIO, Any, NonEmptyList[CompilationError], ZipEntryInfo[ZIO, Any, NonEmptyList[CompilationError]]]): ArStream[ZIO, Any, NonEmptyList[CompilationError], Byte] =
-        ZipEntryStreamTransformation(rt)(ioExceptionToError)(entryStream)
+        ZipEntryStreamTransformation(ioExceptionToError)(entryStream)
 
       override def getZipReader[A](id: io.File)(f: ZipReader => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
         handleIOException(FileOperations.createZipFile(id)(zipFile => f(zipFile).either))
@@ -118,7 +118,7 @@ object IOCompilation {
         }
 
       override def protocolBufferStream(message: GeneratedMessage): ArStream[ZIO, Any, NonEmptyList[CompilationError], Byte] =
-        OutputStreamWriterStream(rt)(stream => IO.effect { message.writeTo(stream) }.refineOrDie {
+        OutputStreamWriterStream(stream => IO.effect { message.writeTo(stream) }.refineOrDie {
           case ex: io.IOException => ioExceptionToError(ex)
         })
     }

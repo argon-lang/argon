@@ -15,6 +15,7 @@ import scalaz.zio.console._
 import dev.argon.util.FileOperations.fileShow
 import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.parser.SourceAST
+import IOCompilation.fileSystemResourceAccess
 
 object Pipeline {
 
@@ -62,15 +63,11 @@ object Pipeline {
   }
 
   def compileResult[A]
-  (rt: Runtime[_])
   (buildInfo: BuildInfo[File])
   (f: buildInfo.backend.TCompilationOutput[ZIO, File] => IO[NonEmptyList[CompilationError], A])
   (implicit compInstance: IOCompilation)
   : IO[NonEmptyList[CompilationError], A] =
     BuildProcess.parseInput[ZIO](findInputFiles(buildInfo)).foldLeft(StreamTransformation.toVector[ZIO, Any, NonEmptyList[CompilationError], SourceAST]).flatMap { parsedInput =>
-
-      implicit val res = IOCompilation.fileSystemResourceAccess(rt)
-
       BuildProcess.compile(
         buildInfo.backend
       )(
@@ -83,12 +80,12 @@ object Pipeline {
       )(f)
     }
 
-  def run(rt: Runtime[_])(buildInfo: BuildInfo[File]): TaskR[Console, Int] =
+  def run(buildInfo: BuildInfo[File]): TaskR[Console, Int] =
     IOCompilation.compilationInstance
       .flatMap { implicit compInstance =>
         compInstance.getResult(
-          compileResult(rt)(buildInfo) { output =>
-            output.write(IOCompilation.fileSystemResourceAccess(rt))
+          compileResult(buildInfo) { output =>
+            output.write
           }
         )
       }

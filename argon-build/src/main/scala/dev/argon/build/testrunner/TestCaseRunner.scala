@@ -7,7 +7,7 @@ import cats.implicits._
 import scalaz.zio.{IO, Runtime}
 
 trait TestCaseRunner {
-  def runTest(rt: Runtime[_])(testCase: TestCase): IO[Throwable, TestCaseResult]
+  def runTest(testCase: TestCase): IO[Throwable, TestCaseResult]
 
   protected def isExpectedError(errors: NonEmptyList[CompilationError], errorName: String): Boolean =
     errors match {

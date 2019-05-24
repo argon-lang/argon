@@ -12,8 +12,8 @@ import scalaz.zio.interop.catz._
 
 object ZipEntryStreamTransformation {
 
-  def apply[R, E](rt: zio.Runtime[_])(errorHandler: IOException => E)(stream: ArStream[ZIO, R, E, ZipEntryInfo[ZIO, Any, E]]): ArStream[ZIO, R, E, Byte] =
-    OutputStreamWriterStream(rt) { outputStream =>
+  def apply[R, E](errorHandler: IOException => E)(stream: ArStream[ZIO, R, E, ZipEntryInfo[ZIO, Any, E]]): ArStream[ZIO, R, E, Byte] =
+    OutputStreamWriterStream { outputStream =>
       IO.effectTotal { new ZipOutputStream(outputStream) }.bracketAuto { zipStream =>
         stream.forEach { case ZipEntryInfo(path, dataStream) =>
           IO.effect {

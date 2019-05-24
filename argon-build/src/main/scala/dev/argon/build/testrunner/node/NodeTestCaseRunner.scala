@@ -38,8 +38,8 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
   } yield output
 
 
-  override def runTest(rt: Runtime[_])(testCase: TestCase): IO[Throwable, TestCaseResult] =
-    compileTestCase(rt)(testCase, references)
+  override def runTest(testCase: TestCase): IO[Throwable, TestCaseResult] =
+    compileTestCase(testCase, references)
 
   private def runJSOutput(files: Vector[File])(compiledFile: String): IO[Throwable, String] = for {
     modules <- IO.effect {
