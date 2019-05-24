@@ -13,15 +13,15 @@ import scalaz.zio._
 private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
 
   protected final def parseTestCaseSource(testCase: TestCase)(implicit ioComp: IOCompilation): IO[NonEmptyList[CompilationError], Vector[SourceAST]] =
-    BuildProcess.parseInput[IO](
-      ArStream.fromVector[IO, NonEmptyList[CompilationError], (InputSourceData, Int)](testCase.sourceCode.zipWithIndex)
+    BuildProcess.parseInput[ZIO](
+      ArStream.fromVector[ZIO, Any, NonEmptyList[CompilationError], (InputSourceData, Int)](testCase.sourceCode.zipWithIndex)
         .map {
           case (InputSourceData(filename, data), i) =>
             InputFileInfo(
               FileSpec(FileID(i), filename),
-              ArStream.fromVector[IO, NonEmptyList[CompilationError], Char](data.toVector)
+              ArStream.fromVector[ZIO, Any, NonEmptyList[CompilationError], Char](data.toVector)
             )
         }
-    ).foldLeft(StreamTransformation.toVector[IO, NonEmptyList[CompilationError], SourceAST])
+    ).foldLeft(StreamTransformation.toVector[ZIO, Any, NonEmptyList[CompilationError], SourceAST])
 
 }

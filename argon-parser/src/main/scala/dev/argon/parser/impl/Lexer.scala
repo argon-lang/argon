@@ -10,7 +10,7 @@ import cats.implicits._
 import dev.argon.grammar.{Grammar, GrammarError}
 import Grammar.Operators._
 import dev.argon.parser.impl.Lexer.LexerGrammarFactory
-import dev.argon.util.stream.StreamTransformation
+import dev.argon.util.stream.{PureEffect, StreamTransformation}
 
 import Function.const
 
@@ -265,7 +265,7 @@ object Lexer {
   type ErrorEffect[F[_], A] = EitherT[F, NonEmptyList[SyntaxError], A]
 
 
-  def lex: StreamTransformation[Either, NonEmptyVector[SyntaxError], WithSource[String], FilePosition, WithSource[Token], FilePosition] =
+  def lex: StreamTransformation[PureEffect, Any, NonEmptyVector[SyntaxError], WithSource[String], FilePosition, WithSource[Token], FilePosition] =
     Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken).collect {
       case WithSource(Some(value), loc) => WithSource(value, loc)
     }

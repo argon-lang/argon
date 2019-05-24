@@ -12,7 +12,7 @@ import FileOperations.fileShow
 import cats.data.NonEmptyList
 import com.google.protobuf.InvalidProtocolBufferException
 
-trait IOCompilation extends CompilationExec[IO, UIO]
+trait IOCompilation extends CompilationExec[ZIO, UIO]
 
 object IOCompilation {
 

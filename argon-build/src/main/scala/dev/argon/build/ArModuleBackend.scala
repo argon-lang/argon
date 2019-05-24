@@ -14,7 +14,7 @@ import toml.Codecs._
 import shapeless.{Id => _, _}
 
 object ArModuleBackend extends Backend {
-  override type TCompilationOutput[F[+_, +_], I] = CompilationOutput[F, I]
+  override type TCompilationOutput[F[-_, +_, +_], I] = CompilationOutput[F, I]
   override type BackendOptions[F[_], I] = ModuleBackendOptions[F, I]
 
 
@@ -38,8 +38,8 @@ object ArModuleBackend extends Backend {
     toml.Toml.parseAs[ModuleBackendOptions[Option, String]](table)
 
 
-  override def compile[F[+_, +_]: CompilationE, I: Show, A](input: CompilerInput[I, ModuleBackendOptions[Id, I]])(f: CompilationOutput[F, I] => F[NonEmptyList[CompilationError], A])(implicit res: ResourceAccess[F[NonEmptyList[CompilationError], ?], I]): F[NonEmptyList[CompilationError], A] = {
-    val context = new ModuleContext[F, I](input)
+  override def compile[F[-_, +_, +_]: CompilationRE, I: Show, A](input: CompilerInput[I, ModuleBackendOptions[Id, I]])(f: CompilationOutput[F, I] => F[Any, NonEmptyList[CompilationError], A])(implicit res: ResourceAccess[F[Any, NonEmptyList[CompilationError], ?], I]): F[Any, NonEmptyList[CompilationError], A] = {
+    val context = new ModuleContext[F[Any, +?, +?], I](input)
     val emitter = new ModuleEmitter[F, context.type](context)
 
     context.createModule { module =>
@@ -47,9 +47,9 @@ object ArModuleBackend extends Backend {
     }
   }
 
-  private def createOutput[F[+_, +_]: CompilationE, I](outputFile: I)(moduleStream: ArStream[F, NonEmptyList[CompilationError], (String, GeneratedMessage)]): CompilationOutput[F, I] = new CompilationOutput[F, I] {
+  private def createOutput[F[-_, +_, +_]: CompilationRE, I](outputFile: I)(moduleStream: ArStream[F, Any, NonEmptyList[CompilationError], (String, GeneratedMessage)]): CompilationOutput[F, I] = new CompilationOutput[F, I] {
 
-    override def write(implicit resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I]): F[NonEmptyList[CompilationError], Unit] =
+    override def write(implicit resourceAccess: ResourceAccess[F[Any, NonEmptyList[CompilationError], ?], I]): F[Any, NonEmptyList[CompilationError], Unit] =
       resourceAccess.createOutputStream(outputFile) { stream =>
         resourceAccess.createZipWriter(stream) { zip =>
           moduleStream.forEach { case (path, message) =>

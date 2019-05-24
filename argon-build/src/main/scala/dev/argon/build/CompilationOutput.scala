@@ -8,17 +8,17 @@ import cats._
 import cats.data.NonEmptyList
 import cats.instances._
 
-trait CompilationOutput[F[+_, +_], I] {
-  def write(implicit resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I]): F[NonEmptyList[CompilationError], Unit]
+trait CompilationOutput[F[-_, +_, +_], I] {
+  def write(implicit resourceAccess: ResourceAccess[F[Any, NonEmptyList[CompilationError], ?], I]): F[Any, NonEmptyList[CompilationError], Unit]
 }
 
-trait CompilationOutputText[F[+_, +_], I] extends CompilationOutput[F, I] {
+trait CompilationOutputText[F[-_, +_, +_], I] extends CompilationOutput[F, I] {
 
-  override def write(implicit resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I]): F[NonEmptyList[CompilationError], Unit] =
+  override def write(implicit resourceAccess: ResourceAccess[F[Any, NonEmptyList[CompilationError], ?], I]): F[Any, NonEmptyList[CompilationError], Unit] =
     resourceAccess.createPrintWriter(outputResource)(writeText(resourceAccess)(_))
 
   def outputResource: I
 
-  def writeText(resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I])(writer: resourceAccess.PrintWriter): F[NonEmptyList[CompilationError], Unit]
+  def writeText(resourceAccess: ResourceAccess[F[Any, NonEmptyList[CompilationError], ?], I])(writer: resourceAccess.PrintWriter): F[Any, NonEmptyList[CompilationError], Unit]
 
 }

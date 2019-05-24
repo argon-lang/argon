@@ -10,15 +10,15 @@ import dev.argon.util.stream._
 
 object ParseHandler {
 
-  def parse(fileSpec: FileSpec): StreamTransformation[Either, NonEmptyVector[SyntaxError], Char, Unit, SourceAST, Unit] =
-    (Characterizer.characterize : StreamTransformation[Either, NonEmptyVector[SyntaxError], Char, Unit, WithSource[String], FilePosition])
+  def parse(fileSpec: FileSpec): StreamTransformation[PureEffect, Any, NonEmptyVector[SyntaxError], Char, Unit, SourceAST, Unit] =
+    (Characterizer.characterize : StreamTransformation[PureEffect, Any, NonEmptyVector[SyntaxError], Char, Unit, WithSource[String], FilePosition])
       .buffer(1024 * 8)
       .into(Lexer.lex)
       .buffer(1024 * 2)
       .into(ArgonParser.parse)
       .into(buildSourceAST(fileSpec))
 
-  private def buildSourceAST(fileSpec: FileSpec): StreamTransformation[Either, NonEmptyVector[SyntaxError], TopLevelStatement, Unit, SourceAST, Unit] =
+  private def buildSourceAST(fileSpec: FileSpec): StreamTransformation[PureEffect, Any, NonEmptyVector[SyntaxError], TopLevelStatement, Unit, SourceAST, Unit] =
     new StreamTransformation.PureSingle[NonEmptyVector[SyntaxError], TopLevelStatement, Unit, SourceAST, Unit] {
       override type State = NSAndImports
 

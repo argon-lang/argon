@@ -5,4 +5,4 @@ import dev.argon.compiler.CompilationError
 import dev.argon.util.FileSpec
 import dev.argon.util.stream.ArStream
 
-final case class InputFileInfo[F[+_, +_]](fileSpec: FileSpec, dataStream: ArStream[F, NonEmptyList[CompilationError], Char])
+final case class InputFileInfo[F[-_, +_, +_]](fileSpec: FileSpec, dataStream: ArStream[F, Any, NonEmptyList[CompilationError], Char])

@@ -17,7 +17,7 @@ import dev.argon.util.ExtraTomlCodecs._
 
 object JSBackend extends Backend {
 
-  override type TCompilationOutput[F[+_, +_], I] = CompilationOutputText[F, I]
+  override type TCompilationOutput[F[-_, +_, +_], I] = CompilationOutputText[F, I]
   override type BackendOptions[F[_], I] = JSBackendOptions[F, I]
 
   override val id: String = "js"
@@ -51,26 +51,26 @@ object JSBackend extends Backend {
   override def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Codec.Error, JSBackendOptions[Option, String]] =
     toml.Toml.parseAs[JSBackendOptions[Option, String]](table)
 
-  override def compile[F[+_, +_] : CompilationE, I: Show, A]
+  override def compile[F[-_, +_, +_] : CompilationRE, I: Show, A]
   (input: CompilerInput[I, JSBackendOptions[Id, I]])
-  (f: CompilationOutputText[F, I] => F[NonEmptyList[CompilationError], A])
-  (implicit res: ResourceAccess[F[NonEmptyList[CompilationError], ?], I])
-  : F[NonEmptyList[CompilationError], A] = {
-    val context = new JSContext[F, I](input)
-    val emitter = new JSEmitter[F, context.type](context, input.backendOptions.inject)
+  (f: CompilationOutputText[F, I] => F[Any, NonEmptyList[CompilationError], A])
+  (implicit res: ResourceAccess[F[Any, NonEmptyList[CompilationError], ?], I])
+  : F[Any, NonEmptyList[CompilationError], A] = {
+    val context = new JSContext[F[Any, +?, +?], I](input)
+    val emitter = new JSEmitter[F[Any, +?, +?], context.type](context, input.backendOptions.inject)
 
     context.createModule { module =>
-      implicitly[CompilationE[F]].flatMap(emitter.emitModule(module)) { jsModule =>
+      implicitly[CompilationRE[F]].flatMap(emitter.emitModule(module)) { jsModule =>
         f(createOutput(input.backendOptions.outputFile)(jsModule))
       }
     }
   }
 
-  private def createOutput[F[+_, +_], I](outputRes: I)(jsModule: JSModule): CompilationOutputText[F, I] = new CompilationOutputText[F, I] {
+  private def createOutput[F[-_, +_, +_], I](outputRes: I)(jsModule: JSModule): CompilationOutputText[F, I] = new CompilationOutputText[F, I] {
 
     override def outputResource: I = outputRes
 
-    override def writeText(resourceAccess: ResourceAccess[F[NonEmptyList[CompilationError], ?], I])(writer: resourceAccess.PrintWriter): F[NonEmptyList[CompilationError], Unit] = {
+    override def writeText(resourceAccess: ResourceAccess[F[Any, NonEmptyList[CompilationError], ?], I])(writer: resourceAccess.PrintWriter): F[Any, NonEmptyList[CompilationError], Unit] = {
 
       val strWriter = new StringWriter()
       JSAst.writeModule(jsModule)(new PrintWriter(strWriter))

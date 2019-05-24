@@ -21,7 +21,7 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
 
   protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[IOException, backend.BackendOptions[Id, File]]
 
-  protected def getProgramOutput(compOutput: backend.TCompilationOutput[IO, File]): IO[NonEmptyList[CompilationError], Either[Throwable, String]]
+  protected def getProgramOutput(compOutput: backend.TCompilationOutput[ZIO, File]): IO[NonEmptyList[CompilationError], Either[Throwable, String]]
 
   protected def normalizeOutput(output: String): String =
     output.split("\n").map { _.trim }.filter { _.nonEmpty }.mkString("\n")

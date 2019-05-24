@@ -9,7 +9,7 @@ import dev.argon.util.{FilePosition, SourceLocation, WithSource}
 
 object Characterizer {
 
-  private def toCodePoints: StreamTransformation[Either, Nothing, Char, Unit, Int, Unit] =
+  private def toCodePoints: StreamTransformation[PureEffect, Any, Nothing, Char, Unit, Int, Unit] =
     new StreamTransformation.PureSingle[Nothing, Char, Unit, Int, Unit] {
       override type State = Option[Char]
 
@@ -34,7 +34,7 @@ object Characterizer {
 
     }
 
-  private def toGraphemes: StreamTransformation[Either, Nothing, Int, Unit, String, Unit] =
+  private def toGraphemes: StreamTransformation[PureEffect, Any, Nothing, Int, Unit, String, Unit] =
     new StreamTransformation.PureSingle[Nothing, Int, Unit, String, Unit] {
       override type State = Option[String]
 
@@ -54,7 +54,7 @@ object Characterizer {
     }
 
 
-  private def withSource: StreamTransformation[Either, Nothing, String, Unit, WithSource[String], FilePosition] =
+  private def withSource: StreamTransformation[PureEffect, Any, Nothing, String, Unit, WithSource[String], FilePosition] =
     new StreamTransformation.PureSingle[Nothing, String, Unit, WithSource[String], FilePosition] {
       override type State = FilePosition
 
@@ -88,7 +88,7 @@ object Characterizer {
     new String(Character.toChars(cp))
 
 
-  def characterize: StreamTransformation[Either, Nothing, Char, Unit, WithSource[String], FilePosition] =
+  def characterize: StreamTransformation[PureEffect, Any, Nothing, Char, Unit, WithSource[String], FilePosition] =
     toCodePoints.into(toGraphemes).into(withSource)
 
 }

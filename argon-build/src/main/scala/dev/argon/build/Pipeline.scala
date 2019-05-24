@@ -42,10 +42,10 @@ object Pipeline {
 
 
 
-  protected def findInputFiles(buildInfo: BuildInfo[File]): ArStream[IO, NonEmptyList[CompilationError], InputFileInfo[IO]] = {
+  protected def findInputFiles(buildInfo: BuildInfo[File]): ArStream[ZIO, Any, NonEmptyList[CompilationError], InputFileInfo[ZIO]] = {
     import scalaz.zio.interop.catz._
 
-    ArStream.fromVector[IO, NonEmptyList[CompilationError], (File, Int)](buildInfo.project.inputFiles.toVector.zipWithIndex)
+    ArStream.fromVector[ZIO, Any, NonEmptyList[CompilationError], (File, Int)](buildInfo.project.inputFiles.toVector.zipWithIndex)
       .map { case (file, id) =>
         InputFileInfo(FileSpec(FileID(id), file.getPath),
           ArStream.fromZStream(createFileDataStream(file))
@@ -64,10 +64,10 @@ object Pipeline {
 
   def compileResult[A]
   (buildInfo: BuildInfo[File])
-  (f: buildInfo.backend.TCompilationOutput[IO, File] => IO[NonEmptyList[CompilationError], A])
+  (f: buildInfo.backend.TCompilationOutput[ZIO, File] => IO[NonEmptyList[CompilationError], A])
   (implicit compInstance: IOCompilation)
   : IO[NonEmptyList[CompilationError], A] =
-    BuildProcess.parseInput[IO](findInputFiles(buildInfo)).foldLeft(StreamTransformation.toVector[IO, NonEmptyList[CompilationError], SourceAST]).flatMap { parsedInput =>
+    BuildProcess.parseInput[ZIO](findInputFiles(buildInfo)).foldLeft(StreamTransformation.toVector[ZIO, Any, NonEmptyList[CompilationError], SourceAST]).flatMap { parsedInput =>
       BuildProcess.compile(
         buildInfo.backend
       )(

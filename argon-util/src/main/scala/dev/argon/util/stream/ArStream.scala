@@ -7,37 +7,37 @@ import scalaz.zio.{stream => zstream, _}
 import scalaz.zio.interop.catz._
 import scalaz.zio.stream.ZStream.Fold
 
-trait ArStream[F[+_, +_], +E, +A] {
+trait ArStream[F[-_, +_, +_], -R, +E, +A] {
 
-  def foldLeft[E2 >: E, A2 >: A, R](trans: StreamTransformation[F, E2, A2, Unit, Nothing, R])(implicit monadInstance: Monad[F[E2, ?]]): F[E2, R]
+  def foldLeft[R2 <: R, E2 >: E, A2 >: A, X](trans: StreamTransformation[F, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[F[R2, E2, ?]]): F[R2, E2, X]
 
-  def toZStream[E2 >: E](toIO: ArStream.EffectConverter[F, IO]): zstream.Stream[E2, A]
+  def toZStream(toIO: ArStream.EffectConverter[F, ZIO]): zstream.ZStream[R, E, A]
 
 }
 
-trait ArStreamTranslatable[F[+_, +_], +E, +A] extends ArStream[F, E, A] {
+trait ArStreamTranslatable[F[-_, +_, +_], -R, +E, +A] extends ArStream[F, R, E, A] {
 
-  def translate[G[+_, +_], E2 >: E](f: ArStream.EffectConverter[F, G]): ArStream[G, E2, A]
+  def translate[G[-_, +_, +_]](f: ArStream.EffectConverter[F, G]): ArStream[G, R, E, A]
 
 
-  override def toZStream[E2 >: E](toIO: ArStream.EffectConverter[F, IO]): zstream.Stream[E2, A] =
-    new zstream.Stream[E2, A] {
-      override def fold[R1 <: Any, E3 >: E2, A1 >: A, S]: Fold[R1, E3, A1, S] =
+  override def toZStream(toIO: ArStream.EffectConverter[F, ZIO]): zstream.ZStream[R, E, A] =
+    new zstream.ZStream[R, E, A] {
+      override def fold[R1 <: R, E2 >: E, A1 >: A, S]: Fold[R1, E2, A1, S] =
         ZIO.succeedLazy { (s, cont, f) =>
 
-          val toZIO = new ArStream.EffectConverter[F, ZIO[R1, +?, +?]] {
-            override def apply[E4, A2](fea: F[E4, A2]): ZIO[R1, E4, A2] = toIO(fea)
+          val toZIO = new ArStream.EffectConverter[F, ZIO] {
+            override def apply[R2, E3, A2](fea: F[R2, E3, A2]): ZIO[R2, E3, A2] = toIO(fea)
           }
 
-          translate[ZIO[R1, +?, +?], E3](toZIO).foldLeft(new StreamTransformation.Single[ZIO[R1, +?, +?], E3, A1, Unit, Nothing, S] {
+          translate[ZIO](toZIO).foldLeft(new StreamTransformation.Single[ZIO, R1, E2, A1, Unit, Nothing, S] {
             override type State = S
-            override def initial: ZIO[R1, E3, S] = IO.succeed(s)
-            override def stepSingle(s: S, a: A1): ZIO[R1, E3, Step[S, A1, Nothing, S]] =
+            override def initial: ZIO[R1, E2, S] = IO.succeed(s)
+            override def stepSingle(s: S, a: A1): ZIO[R1, E2, Step[S, A1, Nothing, S]] =
               if(cont(s))
                 f(s, a).map { Step.Continue(_) }
               else
                 IO.succeed(Step.Stop(s))
-            override def end(s: S, result: Unit): ZIO[R1, E3, (Vector[Nothing], ZIO[R1, E3, S])] =
+            override def end(s: S, result: Unit): ZIO[R1, E2, (Vector[Nothing], ZIO[R1, E2, S])] =
               IO.succeed((Vector.empty, IO.succeed(s)))
           })
         }
@@ -46,27 +46,27 @@ trait ArStreamTranslatable[F[+_, +_], +E, +A] extends ArStream[F, E, A] {
 
 object ArStream {
 
-  trait EffectConverter[-F[_, _], +G[_, _]] {
-    def apply[E, A](fea: F[E, A]): G[E, A]
+  trait EffectConverter[-F[_, _, _], +G[_, _, _]] {
+    def apply[R, E, A](fea: F[R, E, A]): G[R, E, A]
 
-    final def andThen[H[_, _]](other: EffectConverter[G, H]): EffectConverter[F, H] = new EffectConverter[F, H] {
-      override def apply[E, A](fea: F[E, A]): H[E, A] = other(EffectConverter.this(fea))
+    final def andThen[H[_, _, _]](other: EffectConverter[G, H]): EffectConverter[F, H] = new EffectConverter[F, H] {
+      override def apply[R, E, A](fea: F[R, E, A]): H[R, E, A] = other(EffectConverter.this(fea))
     }
 
   }
 
   object EffectConverter {
 
-    def id[F[_, _]]: EffectConverter[F, F] = new EffectConverter[F, F] {
-      override def apply[E, A](fea: F[E, A]): F[E, A] = fea
+    def id[F[_, _, _]]: EffectConverter[F, F] = new EffectConverter[F, F] {
+      override def apply[R, E, A](fea: F[R, E, A]): F[R, E, A] = fea
     }
 
   }
 
-  def fromZStream[E, A](stream: zstream.Stream[E, A]): ArStream[IO, E, A] = new ArStream[IO, E, A] {
+  def fromZStream[R, E, A](stream: zstream.ZStream[R, E, A]): ArStream[ZIO, R, E, A] = new ArStream[ZIO, R, E, A] {
 
-    override def foldLeft[E2 >: E, A2 >: A, R](trans: StreamTransformation[IO, E2, A2, Unit, Nothing, R])(implicit monadInstance: Monad[IO[E2, ?]]): IO[E2, R] =
-      stream.fold[Any, E2, A2, Either[R, trans.State]].flatMap { f0 =>
+    override def foldLeft[R2 <: R, E2 >: E, A2 >: A, X](trans: StreamTransformation[ZIO, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[ZIO[R2, E2, ?]]): ZIO[R2, E2, X] =
+      stream.fold[R2, E2, A2, Either[X, trans.State]].flatMap { f0 =>
         trans.initial
           .flatMap { initial =>
             f0(Right(initial), s => s.isRight, {
@@ -84,19 +84,21 @@ object ArStream {
           }
       }
 
-    override def toZStream[E2 >: E](toIO: EffectConverter[IO, IO]): zstream.Stream[E, A] = stream
+    override def toZStream(toIO: EffectConverter[ZIO, ZIO]): zstream.ZStream[R, E, A] = stream
   }
 
-  def fromVector[F[+_, +_], E, A](coll: Vector[A]): ArStream[F, E, A] = new ArStream[F, E, A] {
+  def fromVector[F[-_, +_, +_], R, E, A](coll: Vector[A]): ArStream[F, R, E, A] = new ArStream[F, R, E, A] {
 
-    override def foldLeft[E2 >: E, A2 >: A, R](trans: StreamTransformation[F, E2, A2, Unit, Nothing, R])(implicit monadInstance: Monad[F[E2, ?]]): F[E2, R] = {
 
-      def feed(s: trans.State, coll: Vector[A]): F[E2, R] =
+
+    override def foldLeft[R2 <: R, E2 >: E, A2 >: A, X](trans: StreamTransformation[F, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[F[R2, E2, ?]]): F[R2, E2, X] = {
+
+      def feed(s: trans.State, coll: Vector[A]): F[R2, E2, X] =
         coll match {
           case head +: tail => trans.step(s, NonEmptyVector.of(head)).flatMap {
             case Step.Produce(_, value, _) => value
             case Step.Continue(s) => feed(s, tail)
-            case Step.Stop(result) => result.pure[F[E2, ?]]
+            case Step.Stop(result) => result.pure[F[R2, E2, ?]]
           }
           case Vector() => trans.end(s, ()).flatMap { case (_, result) => result }
         }
@@ -106,7 +108,10 @@ object ArStream {
       }
     }
 
-    override def toZStream[E2 >: E](toIO: EffectConverter[F, IO]): zstream.Stream[E, A] = zstream.Stream.fromIterable(coll)
+    //override def foldLeft[R2 <: R, E2 >: E, A2 >: A, X](trans: StreamTransformation[F, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[F[R2, E2, ?]]): F[R2, E2, X] =
+
+
+    override def toZStream(toIO: EffectConverter[F, ZIO]): zstream.ZStream[R, E, A] = zstream.Stream.fromIterable(coll)
   }
 
 }

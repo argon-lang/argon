@@ -8,23 +8,23 @@ import scalaz.zio.stream.ZSink
 
 trait StreamChecker {
 
-  def checkStream[F[+_, +_], A: Eq](values: Vector[A], stream: ArStream[F, Int, A])(implicit monadInstance: MonadError[F[Int, ?], Int]): F[Int, Unit] =
-    stream.foldLeft(new StreamTransformation.Single[F, Int, A, Unit, Nothing, Unit] {
+  def checkStream[F[-_, +_, +_], A: Eq](values: Vector[A], stream: ArStream[F, Any, Int, A])(implicit monadInstance: MonadError[F[Any, Int, ?], Int]): F[Any, Int, Unit] =
+    stream.foldLeft(new StreamTransformation.Single[F, Any, Int, A, Unit, Nothing, Unit] {
       override type State = (Int, Vector[A])
 
-      override def initial: F[Int, State] = (0, values).pure[F[Int, ?]]
+      override def initial: F[Any, Int, State] = (0, values).pure[F[Any, Int, ?]]
 
-      override def stepSingle(s: State, a: A): F[Int, Step[State, A, Nothing, Unit]] =
+      override def stepSingle(s: State, a: A): F[Any, Int, Step[State, A, Nothing, Unit]] =
         s match {
-          case (i, h +: _) if h =!= a => MonadError[F[Int, ?], Int].raiseError(i)
-          case (i, _ +: t) => Step.Continue((i + 1, t)).pure[F[Int, ?]]
-          case (i, Vector()) => MonadError[F[Int, ?], Int].raiseError(i)
+          case (i, h +: _) if h =!= a => MonadError[F[Any, Int, ?], Int].raiseError(i)
+          case (i, _ +: t) => Step.Continue((i + 1, t)).pure[F[Any, Int, ?]]
+          case (i, Vector()) => MonadError[F[Any, Int, ?], Int].raiseError(i)
         }
 
-      override def end(s: (Int, Vector[A]), result: Unit): F[Int, (Vector[Nothing], F[Int, Unit])] =
+      override def end(s: (Int, Vector[A]), result: Unit): F[Any, Int, (Vector[Nothing], F[Any, Int, Unit])] =
         s match {
-          case (i, _ +: _) => MonadError[F[Int, ?], Int].raiseError(i)
-          case (_, Vector()) => (Vector(), ().pure[F[Int, ?]]).pure[F[Int, ?]]
+          case (i, _ +: _) => MonadError[F[Any, Int, ?], Int].raiseError(i)
+          case (_, Vector()) => (Vector(), ().pure[F[Any, Int, ?]]).pure[F[Any, Int, ?]]
         }
     })
 

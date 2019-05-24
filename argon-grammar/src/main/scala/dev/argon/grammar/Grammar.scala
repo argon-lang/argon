@@ -311,7 +311,7 @@ object Grammar {
   def parseAll[TToken, TSyntaxError, TLabel <: RuleLabel, T]
   (factory: GrammarFactory[TToken, TSyntaxError, TLabel])
   (label: TLabel { type RuleType = T })
-  : StreamTransformation[Either, NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] =
+  : StreamTransformation[PureEffect, Any, NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] =
     new StreamTransformation.Pure[NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] {
 
       private val defaultParseOptions: ParseOptions[TToken, TSyntaxError, TLabel] = ParseOptions(Set.empty, None, factory)
@@ -333,6 +333,8 @@ object Grammar {
           case GrammarResultError(error) => Step.Fail(error)
           case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] => Step.Continue(ParseStepPartial(suspend))
         }
+
+
 
       override def endPure(s: ParseStep, end: FilePosition): (Vector[T], Either[NonEmptyVector[TSyntaxError], FilePosition]) =
         s match {

@@ -30,7 +30,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
     )
   )
 
-  override protected def getProgramOutput(compOutput: CompilationOutputText[IO, File]): IO[NonEmptyList[CompilationError], Either[Throwable, String]] = for {
+  override protected def getProgramOutput(compOutput: CompilationOutputText[ZIO, File]): IO[NonEmptyList[CompilationError], Either[Throwable, String]] = for {
     writer <- IO.effectTotal { new StringWriter() }
     printWriter <- IO.effectTotal { new PrintWriter(writer) }
     _ <- compOutput.writeText(IOCompilation.fileSystemResourceAccess)((printWriter, compOutput.outputResource))

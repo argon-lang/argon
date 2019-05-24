@@ -12,7 +12,7 @@ import cats.implicits._
 import dev.argon.grammar.{Grammar, GrammarError, TokenMatcher}
 import Grammar.Operators._
 import Grammar.{GrammarFactory, UnionGrammar}
-import dev.argon.util.stream.StreamTransformation
+import dev.argon.util.stream._
 
 import Function.const
 
@@ -697,7 +697,7 @@ object ArgonParser {
 
   private[impl] def grammarFactory: GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] = ArgonGrammarFactory
 
-  def parse: StreamTransformation[Either, NonEmptyVector[SyntaxError], WithSource[Token], FilePosition, TopLevelStatement, Unit] =
+  def parse: StreamTransformation[PureEffect, Any, NonEmptyVector[SyntaxError], WithSource[Token], FilePosition, TopLevelStatement, Unit] =
     Grammar.parseAll[Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)
       .mapResult(const(()))
 
