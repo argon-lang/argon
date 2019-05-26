@@ -16,6 +16,7 @@ import dev.argon.compiler.js.{JSBackendOptions, JSInjectCode}
 import dev.argon.util.stream.{Step, StreamTransformation}
 import dev.argon.util.{FileOperations, FilenameManip}
 import org.apache.commons.io.IOUtils
+import scalaz.zio.blocking.Blocking
 
 final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher) extends TestCaseRunnerCompilePhase {
 
@@ -32,13 +33,13 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
     )
   )
 
-  override protected def getProgramOutput(compOutput: CompilationOutputText[ZIO, File]): IO[NonEmptyList[CompilationError], Either[Throwable, String]] = for {
+  override protected def getProgramOutput(compOutput: CompilationOutputText[ZIO, Blocking, File]): ZIO[Blocking, NonEmptyList[CompilationError], Either[Throwable, String]] = for {
     compiledFile <- compOutput.textStream.foldLeft(stringConcatTrans)
     output <- runJSOutput(references)(compiledFile).either
   } yield output
 
 
-  override def runTest(testCase: TestCase): IO[Throwable, TestCaseResult] =
+  override def runTest(testCase: TestCase): ZIO[Blocking, Throwable, TestCaseResult] =
     compileTestCase(testCase, references)
 
   private def runJSOutput(files: Vector[File])(compiledFile: String): IO[Throwable, String] = for {

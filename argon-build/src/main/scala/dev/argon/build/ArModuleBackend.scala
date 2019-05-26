@@ -14,7 +14,7 @@ import toml.Codecs._
 import shapeless.{Id => _, _}
 
 object ArModuleBackend extends Backend {
-  override type TCompilationOutput[F[-_, +_, +_], I] = CompilationOutput[F, I]
+  override type TCompilationOutput[F[-_, +_, +_], R, I] = CompilationOutput[F, R, I]
   override type BackendOptions[F[_], I] = ModuleBackendOptions[F, I]
 
 
@@ -38,18 +38,18 @@ object ArModuleBackend extends Backend {
     toml.Toml.parseAs[ModuleBackendOptions[Option, String]](table)
 
 
-  override def compile[F[-_, +_, +_]: CompilationRE, I: Show, A](input: CompilerInput[I, ModuleBackendOptions[Id, I]])(f: CompilationOutput[F, I] => F[Any, NonEmptyList[CompilationError], A])(implicit res: ResourceAccess[F, I]): F[Any, NonEmptyList[CompilationError], A] = {
-    val context = new ModuleContext[F, I](input)
-    val emitter = new ModuleEmitter[F, context.type](context)
+  override def compile[F[-_, +_, +_], R, I: Show, A](input: CompilerInput[I, ModuleBackendOptions[Id, I]])(f: CompilationOutput[F, R, I] => F[R, NonEmptyList[CompilationError], A])(implicit compInstance: CompilationRE[F, R], res: ResourceAccess[F, R, I]): F[R, NonEmptyList[CompilationError], A] = {
+    val context = new ModuleContext[F, R, I](input)
+    val emitter = new ModuleEmitter[F, R, context.type](context)
 
     context.createModule { module =>
       f(createOutput(input.backendOptions.referenceModule)(emitter.emitModule(module)))
     }
   }
 
-  private def createOutput[F[-_, +_, +_]: CompilationRE, I](outputFile: I)(moduleStream: ArStream[F, Any, NonEmptyList[CompilationError], (String, GeneratedMessage)]): CompilationOutput[F, I] = new CompilationOutput[F, I] {
+  private def createOutput[F[-_, +_, +_], R, I](outputFile: I)(moduleStream: ArStream[F, R, NonEmptyList[CompilationError], (String, GeneratedMessage)])(implicit compInstance: CompilationRE[F, R]): CompilationOutput[F, R, I] = new CompilationOutput[F, R, I] {
 
-    override def write(implicit resourceAccess: ResourceAccess[F, I]): F[Any, NonEmptyList[CompilationError], Unit] =
+    override def write(implicit resourceAccess: ResourceAccess[F, R, I]): F[R, NonEmptyList[CompilationError], Unit] =
       resourceAccess.resourceSink(outputFile).use { sink =>
         resourceAccess.zipFromEntries(
           moduleStream.map { case (path, message) =>

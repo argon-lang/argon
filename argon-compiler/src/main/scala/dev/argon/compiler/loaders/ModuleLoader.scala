@@ -13,23 +13,23 @@ import scala.collection.immutable._
 
 trait ModuleLoader[TContext <: Context with Singleton] {
 
-  type ModuleData[I, TRes <: ResourceAccess[TContext#CompRE, I] with Singleton]
+  type ModuleData[I, TRes <: ResourceAccess[TContext#CompRE, TContext#Environment, I] with Singleton]
 
-  def loadResource[I, TRes <: ResourceAccess[TContext#CompRE, I] with Singleton, A](res: TRes)(id: I)(f: Option[ModuleData[I, res.type]] => TContext#Comp[A]): TContext#Comp[A]
-  def dataDescriptor[I, TRes <: ResourceAccess[TContext#CompRE, I] with Singleton](data: ModuleData[I, TRes]): ModuleDescriptor
-  def dataReferencedModules[I, TRes <: ResourceAccess[TContext#CompRE, I] with Singleton](data: ModuleData[I, TRes]): Vector[ModuleDescriptor]
-  def loadModuleReference[I, TRes <: ResourceAccess[TContext#CompRE, I] with Singleton](res: TRes)(data: ModuleData[I, res.type])(referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]]): TContext#Comp[ArModule[TContext, ReferencePayloadSpecifier]]
+  def loadResource[I, TRes <: ResourceAccess[TContext#CompRE, TContext#Environment, I] with Singleton, A](res: TRes)(id: I)(f: Option[ModuleData[I, res.type]] => TContext#Comp[A]): TContext#Comp[A]
+  def dataDescriptor[I, TRes <: ResourceAccess[TContext#CompRE, TContext#Environment, I] with Singleton](data: ModuleData[I, TRes]): ModuleDescriptor
+  def dataReferencedModules[I, TRes <: ResourceAccess[TContext#CompRE, TContext#Environment, I] with Singleton](data: ModuleData[I, TRes]): Vector[ModuleDescriptor]
+  def loadModuleReference[I, TRes <: ResourceAccess[TContext#CompRE, TContext#Environment, I] with Singleton](res: TRes)(data: ModuleData[I, res.type])(referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]]): TContext#Comp[ArModule[TContext, ReferencePayloadSpecifier]]
 
 }
 
 object ModuleLoader {
 
 
-  def loadReferencedModules[TCompRE[-_, +_, +_] : CompilationRE, I: Show, A]
-  (context: ContextCompRE[TCompRE])
+  def loadReferencedModules[TCompRE[-_, +_, +_], R, I: Show, A]
+  (context: ContextCompRE[TCompRE, R])
   (refFiles: Vector[I])
   (f: Vector[ArModule[context.type, ReferencePayloadSpecifier]] => context.Comp[A])
-  (implicit res: ResourceAccess[TCompRE, I])
+  (implicit compInstance: CompilationRE[TCompRE, R], res: ResourceAccess[TCompRE, R, I])
   : context.Comp[A] = {
 
     import context.Comp

@@ -10,10 +10,11 @@ import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
 import dev.argon.compiler.vtable._
 
-final class JSEmitter[TCompRE[-_, +_, +_] : CompilationRE, TContext <: JSContext[TCompRE, _] with Singleton](context: TContext, inject: JSInjectCode[Id]) {
+final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, _] with Singleton](context: TContext, inject: JSInjectCode[Id]) {
 
   private type TComp[+A] = context.Comp[A]
 
+  import context._
   import context.signatureContext.{ context => _, typeSystem => _, _ }
 
   private val moduleVarName = JSIdentifier("modules")

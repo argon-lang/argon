@@ -2,7 +2,12 @@ package dev.argon.util.stream
 
 import cats._
 
-final case class PureEffect[-R, +E, +A](run: R => Eval[Either[E, A]])
+final case class PureEffect[-R, +E, +A](run: R => Eval[Either[E, A]]) {
+
+  def mapLeft[E2](f: E => E2): PureEffect[R, E2, A] =
+    PureEffect(r => run(r).map { either => either.left.map(f) })
+
+}
 
 object PureEffect {
 

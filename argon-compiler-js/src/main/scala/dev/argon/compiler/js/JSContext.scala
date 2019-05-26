@@ -9,7 +9,12 @@ import dev.argon.compiler._
 import cats._
 import cats.implicits._
 
-final class JSContext[TCompRE[-_, +_, +_] : CompilationRE, I](override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]]) extends ContextCompRE[TCompRE] {
+final class JSContext[TCompRE[-_, +_, +_], R, I]
+(
+  override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]]
+)(
+  override implicit val compCompilationInstance: CompilationRE[TCompRE, R]
+) extends ContextCompRE[TCompRE, R] {
 
   override type TTraitMetadata = Unit
   override type TClassMetadata = Unit
@@ -50,9 +55,6 @@ final class JSContext[TCompRE[-_, +_, +_] : CompilationRE, I](override protected
       case Some(impl) => JSImpl.Method.JSExpressionBody(JSExpressionRaw(impl)).pure[Comp]
       case None => Compilation[Comp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
     }
-
-  override val compCompilationInstance: CompilationRE[CompRE] = implicitly
-
 
 
   private val referencePayloadLoader: ArgonModuleLoader.PayloadLoader[this.type, ReferencePayloadSpecifier] =

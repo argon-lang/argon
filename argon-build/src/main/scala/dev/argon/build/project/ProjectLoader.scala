@@ -1,12 +1,13 @@
 package dev.argon.build.project
 
-import java.io.{ File, IOException }
+import java.io.{File, IOException}
 import java.nio.file._
 
 import cats._
 import cats.implicits._
 import dev.argon.util.FilenameManip
 import scalaz.zio._
+import scalaz.zio.blocking.Blocking
 import scalaz.zio.interop.catz._
 import shapeless.{Path => _, _}
 
@@ -78,14 +79,15 @@ trait ProjectFileHandler[F[_], I] {
 
 object ProjectFileHandler {
 
-  def fileHandlerFile(dir: File): ProjectFileHandler[IO[IOException, ?], File] = new ProjectFileHandler[IO[IOException, ?], File] {
+  def fileHandlerFile(dir: File): ProjectFileHandler[ZIO[Blocking, IOException, ?], File] = new ProjectFileHandler[ZIO[Blocking, IOException, ?], File] {
 
-    override def loadSingleFile(file: String): IO[IOException, File] =
-      IO.effect { new File(dir, file) }.refineOrDie { case e: IOException => e }
+    override def loadSingleFile(file: String): ZIO[Blocking, IOException, File] =
+      ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { new File(dir, file) }).refineOrDie { case e: IOException => e }
 
-    override def loadFileGlob(glob: String): IO[IOException, List[File]] = IO.effect {
-      FilenameManip.findGlob(dir.toPath, Paths.get(glob)).map { _.toFile }.toList
-    }.refineOrDie { case e: IOException => e }
+    override def loadFileGlob(glob: String): ZIO[Blocking, IOException, List[File]] =
+      ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking {
+        FilenameManip.findGlob(dir.toPath, Paths.get(glob)).map { _.toFile }.toList
+      }).refineOrDie { case e: IOException => e }
 
   }
 

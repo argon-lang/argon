@@ -18,7 +18,7 @@ import dev.argon.util.stream.ArStream
 
 object JSBackend extends Backend {
 
-  override type TCompilationOutput[F[-_, +_, +_], I] = CompilationOutputText[F, I]
+  override type TCompilationOutput[F[-_, +_, +_], R, I] = CompilationOutputText[F, R, I]
   override type BackendOptions[F[_], I] = JSBackendOptions[F, I]
 
   override val id: String = "js"
@@ -52,27 +52,27 @@ object JSBackend extends Backend {
   override def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Codec.Error, JSBackendOptions[Option, String]] =
     toml.Toml.parseAs[JSBackendOptions[Option, String]](table)
 
-  override def compile[F[-_, +_, +_] : CompilationRE, I: Show, A]
+  override def compile[F[-_, +_, +_], R, I: Show, A]
   (input: CompilerInput[I, JSBackendOptions[Id, I]])
-  (f: CompilationOutputText[F, I] => F[Any, NonEmptyList[CompilationError], A])
-  (implicit res: ResourceAccess[F, I])
-  : F[Any, NonEmptyList[CompilationError], A] = {
-    val context = new JSContext[F, I](input)
-    val emitter = new JSEmitter[F, context.type](context, input.backendOptions.inject)
+  (f: CompilationOutputText[F, R, I] => F[R, NonEmptyList[CompilationError], A])
+  (implicit compInstance: CompilationRE[F, R], res: ResourceAccess[F, R, I])
+  : F[R, NonEmptyList[CompilationError], A] = {
+    val context = new JSContext[F, R, I](input)
+    val emitter = new JSEmitter[F, R, context.type](context, input.backendOptions.inject)
 
     context.createModule { module =>
-      implicitly[CompilationRE[F]].flatMap(emitter.emitModule(module)) { jsModule =>
+      compInstance.flatMap(emitter.emitModule(module)) { jsModule =>
         f(createOutput(input.backendOptions.outputFile)(jsModule))
       }
     }
   }
 
-  private def createOutput[F[-_, +_, +_], I](outputRes: I)(jsModule: JSModule)(implicit monadInstance: Monad[F[Any, NonEmptyList[CompilationError], ?]]) : CompilationOutputText[F, I] = new CompilationOutputText[F, I] {
+  private def createOutput[F[-_, +_, +_], R, I](outputRes: I)(jsModule: JSModule)(implicit monadInstance: Monad[F[R, NonEmptyList[CompilationError], ?]]) : CompilationOutputText[F, R, I] = new CompilationOutputText[F, R, I] {
 
     override def outputResource: I = outputRes
 
 
-    override def textStream: ArStream[F, Any, NonEmptyList[CompilationError], String] = {
+    override def textStream: ArStream[F, R, NonEmptyList[CompilationError], String] = {
       val strWriter = new StringWriter()
       JSAst.writeModule(jsModule)(new PrintWriter(strWriter))
       ArStream.fromVector(Vector(strWriter.toString))

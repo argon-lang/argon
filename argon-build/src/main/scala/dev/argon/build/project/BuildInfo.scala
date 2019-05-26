@@ -1,6 +1,6 @@
 package dev.argon.build.project
 
-import java.io.{ File, IOException }
+import java.io.{File, IOException}
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file._
 
@@ -15,6 +15,7 @@ import dev.argon.util.{FileOperations, FilenameManip}
 import toml.Toml
 import toml.Codecs._
 import dev.argon.util.AnyExtensions._
+import scalaz.zio.blocking.Blocking
 import shapeless.{Id => _, _}
 
 final case class ProjectInfoFormat[F[_], I]
@@ -50,7 +51,7 @@ object BuildInfo {
   private val projectKey = "project"
   private val compilerOptionsKey = "compiler-options"
 
-  def loadFile(file: File): IO[IOException, Option[Vector[BuildInfo[File]]]] =
+  def loadFile(file: File): ZIO[Blocking, IOException, Option[Vector[BuildInfo[File]]]] =
     IO.effect { file.getAbsoluteFile.getParentFile }
       .refineOrDie { case e: IOException => e }
       .flatMap { dir =>
@@ -113,15 +114,15 @@ object BuildInfo {
       }
     }
 
-  private def loadProjectFile(dir: File)(build: BuildInfo[String]): IO[IOException, BuildInfo[File]] = {
+  private def loadProjectFile(dir: File)(build: BuildInfo[String]): ZIO[Blocking, IOException, BuildInfo[File]] = {
     import ProjectLoader.Implicits._
 
     type ProjFormat[A] = ProjectInfoFormat[Id, A]
     implicit val fileHandler = ProjectFileHandler.fileHandlerFile(dir)
 
     for {
-      resolvedProj <-ProjectLoader[ProjFormat[String], ProjFormat[File], File].loadProject[IO[IOException, ?]](build.project)
-      resolvedBackendOpts <- build.backend.projectLoader[File].loadProject[IO[IOException, ?]](build.backendOptions)
+      resolvedProj <-ProjectLoader[ProjFormat[String], ProjFormat[File], File].loadProject[ZIO[Blocking, IOException, ?]](build.project)
+      resolvedBackendOpts <- build.backend.projectLoader[File].loadProject[ZIO[Blocking, IOException, ?]](build.backendOptions)
     } yield BuildInfo(build.backend)(
       project = resolvedProj,
       compilerOptions = build.compilerOptions,

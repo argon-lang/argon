@@ -35,6 +35,7 @@ sealed trait Context {
   def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[TFunctionImplementation]
   def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[TMethodImplementation]
 
+  type Environment
   type CompRE[-_, +_, +_]
   type CompE[+_, +_]
   type Comp[+_]
@@ -59,7 +60,7 @@ sealed trait Context {
   type ResIndicator
   protected val compilerInput: CompilerInput[ResIndicator, BackendOptions]
 
-  def createModule[A](f: ArModule[this.type, DeclarationPayloadSpecifier] => Comp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[CompRE, ResIndicator]): Comp[A]
+  def createModule[A](f: ArModule[this.type, DeclarationPayloadSpecifier] => Comp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[CompRE, Environment, ResIndicator]): Comp[A]
 
 
 }
@@ -74,10 +75,11 @@ trait ContextCompE[TCompE[+_, +_]] extends ContextComp[TCompE[NonEmptyList[Compi
   override implicit val compCompilationInstance: CompilationE[CompE]
 }
 
-trait ContextCompRE[TCompRE[-_, +_, +_]] extends ContextCompE[TCompRE[Any, +?, +?]] {
-  override type CompRE[-R, +E, +A] = TCompRE[R, E, A]
-  override implicit val compCompilationInstance: CompilationRE[CompRE]
+trait ContextCompRE[TCompRE[-_, +_, +_], R] extends ContextCompE[TCompRE[R, +?, +?]] {
+  override type Environment = R
+  override type CompRE[-R2, +E, +A] = TCompRE[R2, E, A]
+  override implicit val compCompilationInstance: CompilationRE[CompRE, R]
 
-  override def createModule[A](f: ArModule[this.type, DeclarationPayloadSpecifier] => Comp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[TCompRE, ResIndicator]): Comp[A] =
-    SourceModuleCreator.createModule[CompRE, ResIndicator, A](this)(compilerInput)(f)(compCompilationInstance, showRes, res)
+  override def createModule[A](f: ArModule[this.type, DeclarationPayloadSpecifier] => Comp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[TCompRE, Environment, ResIndicator]): Comp[A] =
+    SourceModuleCreator.createModule[CompRE, R, ResIndicator, A](this)(compilerInput)(f)(showRes, compCompilationInstance, res)
 }

@@ -13,64 +13,73 @@ import scalaz.zio.interop.catz._
 import FileOperations.fileShow
 import cats.data.NonEmptyList
 import com.google.protobuf.InvalidProtocolBufferException
-import dev.argon.util.stream.{ArStream, OutputStreamTransformation, OutputStreamWriterStream, Resource, StreamTransformation, ZipEntryInfo, ZipEntryStreamTransformation}
+import dev.argon.util.stream.{ArStream, OutputStreamTransformation, OutputStreamWriterStream, PureEffect, Resource, StreamTransformation, ZipEntryInfo, ZipEntryStreamTransformation}
 import scalaz.zio
+import scalaz.zio.blocking.Blocking
 
-trait IOCompilation extends CompilationExec[ZIO, UIO]
+trait IOCompilation[R] extends CompilationExec[ZIO, R]
 
 object IOCompilation {
 
-  val compilationInstance: UIO[IOCompilation] = IO.succeed(new IOCompilation {
+  def compilationInstance[R]: UIO[IOCompilation[R]] = IO.succeed(new IOCompilation[R] {
 
     type E = ErrorType
+    type F[+A] = ZIO[R, E, A]
 
-    override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[Nothing]): IO[E, A] =
+    override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[Nothing]): F[A] =
       IO.fail(errors)
 
-    override def createCache[A]: IO[E, IO[E, A] => IO[E, A]] =
-      RefM.make(Option.empty[Promise[E, A]]).map { ref => createValue =>
-        ref.modify {
-          case value @ Some(promise) => IO.succeed((promise, value))
-          case None =>
-            for {
-              promise <- Promise.make[E, A]
-              _ <- promise.done(createValue).fork
-            } yield (promise, Some(promise))
-        }
-          .flatMap { promise => promise.await }
-      }
-
-    override def createMemo[A, B]: IO[E, (A => IO[E, B]) => A => IO[E, B]] =
-      RefM.make(Map[A, Promise[E, B]]()).map { ref => createValue => a =>
-        ref.modify { map =>
-          map.get(a) match {
-            case Some(promise) => IO.succeed((promise, map))
+    override def createCache[A]: F[F[A] => F[A]] =
+      ZIO.environment[R].flatMap { env =>
+        RefM.make(Option.empty[Promise[E, A]]).map { ref => createValue =>
+          ref.modify {
+            case value @ Some(promise) => IO.succeed((promise, value))
             case None =>
               for {
-                promise <- Promise.make[E, B]
-                _ <- promise.done(createValue(a)).fork
-              } yield (promise, map + (a -> promise))
+                promise <- Promise.make[E, A]
+                _ <- promise.done(createValue.provide(env)).fork
+              } yield (promise, Some(promise))
           }
+            .flatMap[Any, E, A] { promise => promise.await }
         }
-          .flatMap { promise => promise.await }
+      }
+
+    override def createMemo[A, B]: F[(A => F[B]) => A => F[B]] =
+      ZIO.environment[R].flatMap { env =>
+        RefM.make(Map[A, Promise[E, B]]()).map { ref => createValue => a =>
+          ref.modify { map =>
+            map.get(a) match {
+              case Some(promise) => IO.succeed((promise, map))
+              case None =>
+                for {
+                  promise <- Promise.make[E, B]
+                  _ <- promise.done(createValue(a).provide(env)).fork
+                } yield (promise, map + (a -> promise))
+            }
+          }
+            .flatMap[Any, E, B] { promise => promise.await }
+        }
       }
 
 
-    override def flatMap[A, B](fa: IO[NonEmptyList[CompilationError], A])(f: A => IO[NonEmptyList[CompilationError], B]): IO[NonEmptyList[CompilationError], B] =
+    override def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B] =
       fa.flatMap(f)
 
-    override def tailRecM[A, B](a: A)(f: A => IO[NonEmptyList[CompilationError], Either[A, B]]): IO[NonEmptyList[CompilationError], B] =
-      implicitly[Monad[IO[NonEmptyList[CompilationError], ?]]].tailRecM(a)(f)
+    override def tailRecM[A, B](a: A)(f: A => F[Either[A, B]]): F[B] =
+      implicitly[Monad[F]].tailRecM(a)(f)
 
-    override def pure[A](x: A): IO[NonEmptyList[CompilationError], A] = IO.succeed(x)
+    override def pure[A](x: A): F[A] = IO.succeed(x)
 
-    override def getResult[A](fa: IO[E, A]): UIO[(Vector[CompilationMessageNonFatal], Either[E, A])] = for {
+    override def fromPureEffect[A](pa: PureEffect[R, E, A]): ZIO[R, E, A] =
+      ZIO.environment[R].flatMap { r => IO.fromEither(pa.run(r).value) }
+
+    override def getResult[A](fa: F[A]): ZIO[R, Nothing, (Vector[CompilationMessageNonFatal], Either[E, A])] = for {
       eitherRes <- fa.either
     } yield (Vector(), eitherRes)
 
   })
 
-  trait IOResourceAccess extends ResourceAccess[ZIO, io.File] {
+  trait IOResourceAccess extends ResourceAccess[ZIO, Blocking, io.File] {
     override type InputStream = io.InputStream
     override type ZipReader = zip.ZipFile
   }
@@ -81,44 +90,40 @@ object IOCompilation {
       private def ioExceptionToError(ex: io.IOException): NonEmptyList[CompilationError] =
         NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex)))
 
-      private def handleIOException[A](value: IO[io.IOException, Either[NonEmptyList[CompilationError], A]]): IO[NonEmptyList[CompilationError], A] =
-        value.either.flatMap { either =>
-          IO.fromEither(
-            either.left.map(ioExceptionToError)
-              .flatMap(identity)
-          )
-        }
-
       override def getExtension(id: io.File): UIO[String] = IO.effectTotal {
         FilenameManip.getExtension(id)
       }
 
-      override def resourceSink(id: File): Resource[ZIO, Any, NonEmptyList[CompilationError], StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]] =
-        new Resource[ZIO, Any, NonEmptyList[CompilationError], StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]] {
-          override def use[R2 <: Any, E2 >: NonEmptyList[CompilationError], B](f: StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit] => ZIO[R2, E2, B]): ZIO[R2, E2, B] =
-            IO.effect { new io.FileOutputStream(id) }.refineOrDie {
+      override def resourceSink(id: File): Resource[ZIO, Blocking, NonEmptyList[CompilationError], StreamTransformation[ZIO, Blocking, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]] =
+        new Resource[ZIO, Blocking, NonEmptyList[CompilationError], StreamTransformation[ZIO, Blocking, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]] {
+          override def use[R2 <: Blocking, E2 >: NonEmptyList[CompilationError], B](f: StreamTransformation[ZIO, Blocking, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit] => ZIO[R2, E2, B]): ZIO[R2, E2, B] =
+            ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { new io.FileOutputStream(id) }).refineOrDie {
               case ex: io.IOException => ioExceptionToError(ex)
             }.bracketAuto { outputStream =>
               f(OutputStreamTransformation(ioExceptionToError)(outputStream))
             }
         }
 
-      override def zipFromEntries(entryStream: ArStream[ZIO, Any, NonEmptyList[CompilationError], ZipEntryInfo[ZIO, Any, NonEmptyList[CompilationError]]]): ArStream[ZIO, Any, NonEmptyList[CompilationError], Byte] =
+      override def zipFromEntries(entryStream: ArStream[ZIO, Blocking, NonEmptyList[CompilationError], ZipEntryInfo[ZIO, Blocking, NonEmptyList[CompilationError]]]): ArStream[ZIO, Blocking, NonEmptyList[CompilationError], Byte] =
         ZipEntryStreamTransformation(ioExceptionToError)(entryStream)
 
-      override def getZipReader[A](id: io.File)(f: ZipReader => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
-        handleIOException(FileOperations.createZipFile(id)(zipFile => f(zipFile).either))
+      override def getZipReader[A](id: io.File)(f: ZipReader => ZIO[Blocking, NonEmptyList[CompilationError], A]): ZIO[Blocking, NonEmptyList[CompilationError], A] =
+        ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { new zip.ZipFile(id) })
+          .refineOrDie { case e: io.IOException => ioExceptionToError(e) }
+          .bracketAuto(f)
 
-      override def getZipEntryInputStream[A](zip: ZipReader, name: String)(f: InputStream => IO[NonEmptyList[CompilationError], A]): IO[NonEmptyList[CompilationError], A] =
-        handleIOException(FileOperations.getZipEntryStream(zip, name)(stream => f(stream).either))
+      override def getZipEntryInputStream[A](zip: ZipReader, name: String)(f: InputStream => ZIO[Blocking, NonEmptyList[CompilationError], A]): ZIO[Blocking, NonEmptyList[CompilationError], A] =
+        ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { zip.getInputStream(zip.getEntry(name)) })
+          .refineOrDie { case e: io.IOException => ioExceptionToError(e) }
+          .bracketAuto(f)
 
-      override def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): IO[NonEmptyList[CompilationError], A] =
-        IO.effect { companion.parseFrom(stream) }.refineOrDie {
+      override def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): ZIO[Blocking, NonEmptyList[CompilationError], A] =
+        ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { companion.parseFrom(stream) }).refineOrDie {
           case ex: io.IOException => ioExceptionToError(ex)
         }
 
-      override def protocolBufferStream(message: GeneratedMessage): ArStream[ZIO, Any, NonEmptyList[CompilationError], Byte] =
-        OutputStreamWriterStream(stream => IO.effect { message.writeTo(stream) }.refineOrDie {
+      override def protocolBufferStream(message: GeneratedMessage): ArStream[ZIO, Blocking, NonEmptyList[CompilationError], Byte] =
+        OutputStreamWriterStream(stream => ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { message.writeTo(stream) }).refineOrDie {
           case ex: io.IOException => ioExceptionToError(ex)
         })
     }

@@ -12,6 +12,7 @@ import scalaz.zio._
 import dev.argon.util.FileOperations.fileShow
 import IOCompilation.fileSystemResourceAccess
 import cats.data.NonEmptyList
+import scalaz.zio.blocking.Blocking
 
 private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParsePhase {
 
@@ -19,18 +20,18 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
 
   protected val backend: Backend
 
-  protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[IOException, backend.BackendOptions[Id, File]]
+  protected def backendOptions(compilerOptions: CompilerOptions[Id]): ZIO[Blocking, IOException, backend.BackendOptions[Id, File]]
 
-  protected def getProgramOutput(compOutput: backend.TCompilationOutput[ZIO, File]): IO[NonEmptyList[CompilationError], Either[Throwable, String]]
+  protected def getProgramOutput(compOutput: backend.TCompilationOutput[ZIO, Blocking, File]): ZIO[Blocking, NonEmptyList[CompilationError], Either[Throwable, String]]
 
   protected def normalizeOutput(output: String): String =
     output.split("\n").map { _.trim }.filter { _.nonEmpty }.mkString("\n")
 
 
-  def compileTestCase(testCase: TestCase, references: Vector[File]): UIO[TestCaseResult] =
-    IOCompilation.compilationInstance.flatMap { implicit ioComp =>
+  def compileTestCase(testCase: TestCase, references: Vector[File]): ZIO[Blocking, Nothing, TestCaseResult] =
+    IOCompilation.compilationInstance[Blocking].flatMap { implicit ioComp =>
 
-      val result: UIO[(Vector[CompilationMessageNonFatal], Either[NonEmptyList[CompilationError], Either[Throwable, String]])] =
+      val result: ZIO[Blocking, Nothing, (Vector[CompilationMessageNonFatal], Either[NonEmptyList[CompilationError], Either[Throwable, String]])] =
         ioComp.getResult(
           parseTestCaseSource(testCase)
             .flatMap { parsedSource =>
