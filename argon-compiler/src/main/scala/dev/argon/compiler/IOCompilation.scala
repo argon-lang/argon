@@ -3,6 +3,7 @@ package dev.argon.compiler
 import java.io
 import java.io.File
 import java.util.zip
+import java.util.zip.ZipFile
 
 import dev.argon.util.{FileOperations, FilenameManip}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
@@ -13,7 +14,7 @@ import scalaz.zio.interop.catz._
 import FileOperations.fileShow
 import cats.data.NonEmptyList
 import com.google.protobuf.InvalidProtocolBufferException
-import dev.argon.util.stream.{ArStream, OutputStreamTransformation, OutputStreamWriterStream, PureEffect, Resource, StreamTransformation, ZipEntryInfo, ZipEntryStreamTransformation}
+import dev.argon.util.stream.{ArStream, InputStreamReaderTransformation, InputStreamStream, OutputStreamTransformation, OutputStreamWriterStream, PureEffect, Resource, StreamTransformation, ZipEntryInfo, ZipEntryStreamTransformation}
 import scalaz.zio
 import scalaz.zio.blocking.Blocking
 
@@ -80,7 +81,6 @@ object IOCompilation {
   })
 
   trait IOResourceAccess extends ResourceAccess[ZIO, Blocking, io.File] {
-    override type InputStream = io.InputStream
     override type ZipReader = zip.ZipFile
   }
 
@@ -112,20 +112,43 @@ object IOCompilation {
           .refineOrDie { case e: io.IOException => ioExceptionToError(e) }
           .bracketAuto(f)
 
-      override def getZipEntryInputStream[A](zip: ZipReader, name: String)(f: InputStream => ZIO[Blocking, NonEmptyList[CompilationError], A]): ZIO[Blocking, NonEmptyList[CompilationError], A] =
-        ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { zip.getInputStream(zip.getEntry(name)) })
-          .refineOrDie { case e: io.IOException => ioExceptionToError(e) }
-          .bracketAuto(f)
+      override def zipEntryStream(zip: ZipFile, name: String): ArStream[ZIO, Blocking, NonEmptyList[CompilationError], Byte] =
+        new InputStreamStream(ioExceptionToError)(
+          Resource.fromZManaged(
+            ZManaged.make(
+              ZIO.environment[Blocking]
+                .flatMap(_.blocking.effectBlocking {
+                  zip.getInputStream(zip.getEntry(name))
+                })
+                .refineOrDie {
+                  case ex: io.IOException => ioExceptionToError(ex)
+                }
 
-      override def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): ZIO[Blocking, NonEmptyList[CompilationError], A] =
-        ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { companion.parseFrom(stream) }).refineOrDie {
-          case ex: io.IOException => ioExceptionToError(ex)
+            )(_.closeIO())
+          )
+        )
+
+      override def protocolBufferSink[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A]): StreamTransformation[ZIO, Blocking, NonEmptyList[CompilationError], Byte, Unit, Nothing, A] =
+        InputStreamReaderTransformation { stream =>
+          ZIO.environment[Blocking]
+            .flatMap(_.blocking.effectBlocking {
+              companion.parseFrom(stream)
+            })
+            .refineOrDie {
+              case ex: io.IOException => ioExceptionToError(ex)
+            }
         }
 
       override def protocolBufferStream(message: GeneratedMessage): ArStream[ZIO, Blocking, NonEmptyList[CompilationError], Byte] =
-        OutputStreamWriterStream(stream => ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { message.writeTo(stream) }).refineOrDie {
-          case ex: io.IOException => ioExceptionToError(ex)
-        })
+        OutputStreamWriterStream { stream =>
+          ZIO.environment[Blocking]
+            .flatMap(_.blocking.effectBlocking {
+              message.writeTo(stream)
+            })
+            .refineOrDie {
+              case ex: io.IOException => ioExceptionToError(ex)
+            }
+        }
     }
 
 }

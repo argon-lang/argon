@@ -56,7 +56,7 @@ object InputStreamReaderTransformation {
   }
 
   @SuppressWarnings(Array("org.wartremover.warts.Null"))
-  def apply[R <: Blocking, E, X](errorHandler: IOException => E)(readHandler: InputStream => ZIO[R, E, X]): InputStreamReaderTransformation[R, E, X] =
+  def apply[R <: Blocking, E, X](readHandler: InputStream => ZIO[R, E, X]): InputStreamReaderTransformation[R, E, X] =
     new InputStreamReaderTransformation[R, E, X] {
       override def readDirectly[R2 <: R, E2 >: E](inputStream: InputStream): ZIO[R2, E2, X] =
         readHandler(inputStream)

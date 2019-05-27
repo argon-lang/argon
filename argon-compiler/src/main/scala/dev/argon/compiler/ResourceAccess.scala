@@ -6,8 +6,6 @@ import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 
 trait ResourceAccess[F[-_, +_, +_], R, I] {
 
-  type InputStream
-
   def getExtension(id: I): F[R, NonEmptyList[CompilationError], String]
 
   def resourceSink(id: I): Resource[F, R, NonEmptyList[CompilationError], StreamTransformation[F, R, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]]
@@ -15,8 +13,8 @@ trait ResourceAccess[F[-_, +_, +_], R, I] {
 
   type ZipReader
   def getZipReader[A](id: I)(f: ZipReader => F[R, NonEmptyList[CompilationError], A]): F[R, NonEmptyList[CompilationError], A]
-  def getZipEntryInputStream[A](zip: ZipReader, name: String)(f: InputStream => F[R, NonEmptyList[CompilationError], A]): F[R, NonEmptyList[CompilationError], A]
+  def zipEntryStream(zip: ZipReader, name: String): ArStream[F, R, NonEmptyList[CompilationError], Byte]
 
-  def readProtocolBufferMessage[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(stream: InputStream): F[R, NonEmptyList[CompilationError], A]
+  def protocolBufferSink[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A]): StreamTransformation[F, R, NonEmptyList[CompilationError], Byte, Unit, Nothing, A]
   def protocolBufferStream(message: GeneratedMessage): ArStream[F, R, NonEmptyList[CompilationError], Byte]
 }

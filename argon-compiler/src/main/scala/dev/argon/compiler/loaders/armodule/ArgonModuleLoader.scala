@@ -32,7 +32,7 @@ object ArgonModuleLoader {
       res.getExtension(id).flatMap {
         case "armodule" =>
           res.getZipReader(id) { zip =>
-            res.getZipEntryInputStream(zip, ModulePaths.metadata)(res.readProtocolBufferMessage(ArgonModule.Metadata))
+            res.zipEntryStream(zip, ModulePaths.metadata).foldLeft(res.protocolBufferSink(ArgonModule.Metadata))
               .flatMap { metadata =>
                 f(Some(ResAndMetadata(zip, metadata)))
               }
@@ -277,7 +277,7 @@ object ArgonModuleLoader {
               val zip = zipFile
 
               if(id < 0)
-                res.getZipEntryInputStream(zip, refPathFunction(id.abs))(res.readProtocolBufferMessage(refCompanion))
+                res.zipEntryStream(zip, refPathFunction(id.abs)).foldLeft(res.protocolBufferSink(refCompanion))
                   .flatMap { refValue =>
                     refModuleMap.get(refModuleIdLens(refValue)) match {
                       case Some(ModuleReference(moduleRef)) =>
@@ -303,7 +303,7 @@ object ArgonModuleLoader {
                     }
                   }
               else
-                res.getZipEntryInputStream(zip, defPathFunction(id))(res.readProtocolBufferMessage(defCompanion))
+                res.zipEntryStream(zip, defPathFunction(id)).foldLeft(res.protocolBufferSink(defCompanion))
                   .flatMap { defValue =>
                     parseDescriptor(currentModuleDescriptor)(defDescriptorLens(defValue)) match {
                       case Some(Left(descriptor)) =>

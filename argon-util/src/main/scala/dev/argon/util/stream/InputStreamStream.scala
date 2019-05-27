@@ -7,9 +7,9 @@ import cats.data.NonEmptyVector
 import scalaz.zio.{IO, ZIO}
 import scalaz.zio.stream.ZStream
 
-final class InputStreamStream[E](errorHandler: IOException => E)(inputStreamResource: Resource[ZIO, Any, E, InputStream]) extends ArStream[ZIO, Any, E, Byte] {
+final class InputStreamStream[R, E](errorHandler: IOException => E)(inputStreamResource: Resource[ZIO, R, E, InputStream]) extends ArStream[ZIO, R, E, Byte] {
 
-  override def foldLeft[R2 <: Any, E2 >: E, A2 >: Byte, X](trans: StreamTransformation[ZIO, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[ZIO[R2, E2, ?]]): ZIO[R2, E2, X] =
+  override def foldLeft[R2 <: R, E2 >: E, A2 >: Byte, X](trans: StreamTransformation[ZIO, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[ZIO[R2, E2, ?]]): ZIO[R2, E2, X] =
     trans match {
       case trans: InputStreamReaderTransformation[R2, E2, X] =>
         inputStreamResource.use(trans.readDirectly)
@@ -41,5 +41,5 @@ final class InputStreamStream[E](errorHandler: IOException => E)(inputStreamReso
     }
 
 
-  override def toZStream(toIO: ArStream.EffectConverter[ZIO, ZIO]): ZStream[Any, E, Byte] = ???
+  override def toZStream(toIO: ArStream.EffectConverter[ZIO, ZIO]): ZStream[R, E, Byte] = ???
 }
