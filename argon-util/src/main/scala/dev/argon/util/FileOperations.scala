@@ -27,8 +27,4 @@ object FileOperations {
   def fileFromName(fileName: String): UIO[io.File] =
     IO.effectTotal { new io.File(fileName) }
 
-  def getZipEntryStream[E >: IOException, A](zip: ZipFile, name: String)(f: io.InputStream => IO[E, A]): IO[E, A] =
-    IO.effect { zip.getInputStream(zip.getEntry(name)) }
-      .refineOrDie { case e: IOException => e }
-      .bracketAuto(f)
 }
