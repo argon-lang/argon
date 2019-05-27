@@ -107,10 +107,15 @@ object IOCompilation {
       override def zipFromEntries(entryStream: ArStream[ZIO, Blocking, NonEmptyList[CompilationError], ZipEntryInfo[ZIO, Blocking, NonEmptyList[CompilationError]]]): ArStream[ZIO, Blocking, NonEmptyList[CompilationError], Byte] =
         ZipEntryStreamTransformation(ioExceptionToError)(entryStream)
 
-      override def getZipReader[A](id: io.File)(f: ZipReader => ZIO[Blocking, NonEmptyList[CompilationError], A]): ZIO[Blocking, NonEmptyList[CompilationError], A] =
-        ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { new zip.ZipFile(id) })
-          .refineOrDie { case e: io.IOException => ioExceptionToError(e) }
-          .bracketAuto(f)
+      override def getZipReader[A](id: io.File): Resource[ZIO, Blocking, NonEmptyList[CompilationError], ZipReader] =
+        Resource.fromZManaged(
+          ZManaged.make(
+            ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { new zip.ZipFile(id) })
+              .refineOrDie { case e: io.IOException => ioExceptionToError(e) }
+          )(
+            _.closeIO()
+          )
+        )
 
       override def zipEntryStream(zip: ZipFile, name: String): ArStream[ZIO, Blocking, NonEmptyList[CompilationError], Byte] =
         new InputStreamStream(ioExceptionToError)(

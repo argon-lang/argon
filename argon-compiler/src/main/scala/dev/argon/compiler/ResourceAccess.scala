@@ -12,7 +12,7 @@ trait ResourceAccess[F[-_, +_, +_], R, I] {
   def zipFromEntries(entryStream: ArStream[F, R, NonEmptyList[CompilationError], ZipEntryInfo[F, R, NonEmptyList[CompilationError]]]): ArStream[F, R, NonEmptyList[CompilationError], Byte]
 
   type ZipReader
-  def getZipReader[A](id: I)(f: ZipReader => F[R, NonEmptyList[CompilationError], A]): F[R, NonEmptyList[CompilationError], A]
+  def getZipReader[A](id: I): Resource[F, R, NonEmptyList[CompilationError], ZipReader]
   def zipEntryStream(zip: ZipReader, name: String): ArStream[F, R, NonEmptyList[CompilationError], Byte]
 
   def protocolBufferSink[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A]): StreamTransformation[F, R, NonEmptyList[CompilationError], Byte, Unit, Nothing, A]

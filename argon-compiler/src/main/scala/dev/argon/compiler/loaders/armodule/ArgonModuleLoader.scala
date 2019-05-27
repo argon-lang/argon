@@ -31,7 +31,7 @@ object ArgonModuleLoader {
     override def loadResource[I, TRes <: ResourceAccess[TCompRE, R, I] with Singleton, A](res: TRes)(id: I)(f: Option[ResAndMetadata[I, res.type]] => Comp[A]): Comp[A] =
       res.getExtension(id).flatMap {
         case "armodule" =>
-          res.getZipReader(id) { zip =>
+          res.getZipReader(id).use { zip =>
             res.zipEntryStream(zip, ModulePaths.metadata).foldLeft(res.protocolBufferSink(ArgonModule.Metadata))
               .flatMap { metadata =>
                 f(Some(ResAndMetadata(zip, metadata)))
