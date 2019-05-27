@@ -75,7 +75,7 @@ final case class OutputStreamWriterStream[R, E](f: OutputStream => ZIO[R, E, Uni
       case trans: OutputStreamTransformation[R2, E2, X] => trans.writeDirectly(f)
       case _ =>
         runOutputFunc[R2, E2, X] { takeNext =>
-          trans.initial.flatMap { state =>
+          trans.initial.use { state =>
 
             def feed(state: trans.State): ZIO[R2, E2, X] =
               takeNext.flatMap {

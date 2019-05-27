@@ -13,7 +13,7 @@ import scalaz.zio.interop.catz._
 import dev.argon.build.testrunner.node.ExternalApi._
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
 import dev.argon.compiler.js.{JSBackendOptions, JSInjectCode}
-import dev.argon.util.stream.{Step, StreamTransformation}
+import dev.argon.util.stream.{Resource, Step, StreamTransformation}
 import dev.argon.util.{FileOperations, FilenameManip}
 import org.apache.commons.io.IOUtils
 import scalaz.zio.blocking.Blocking
@@ -63,7 +63,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
     new StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], String, Unit, Nothing, String] {
       override type State = String
 
-      override def initial: ZIO[Any, NonEmptyList[CompilationError], String] = IO.succeed("")
+      override def initial: Resource[ZIO, Any, NonEmptyList[CompilationError], String] = Resource.pure("")
 
       override def step(s: String, ca: NonEmptyVector[String]): ZIO[Any, NonEmptyList[CompilationError], Step[String, String, Nothing, String]] =
         IO.succeed(Step.Continue(s + ca.toVector.mkString))

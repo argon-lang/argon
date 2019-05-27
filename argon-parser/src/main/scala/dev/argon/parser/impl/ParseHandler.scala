@@ -10,16 +10,16 @@ import dev.argon.util.stream._
 
 object ParseHandler {
 
-  def parse(fileSpec: FileSpec): StreamTransformation[PureEffect, Any, NonEmptyVector[SyntaxError], Char, Unit, SourceAST, Unit] =
-    (Characterizer.characterize : StreamTransformation[PureEffect, Any, NonEmptyVector[SyntaxError], Char, Unit, WithSource[String], FilePosition])
+  def parse[F[-_, +_, +_]](fileSpec: FileSpec)(implicit monadErrorNothing: MonadError[F[Any, Nothing, ?], Nothing], monadError: MonadError[F[Any, NonEmptyVector[SyntaxError], ?], NonEmptyVector[SyntaxError]]): StreamTransformation[F, Any, NonEmptyVector[SyntaxError], Char, Unit, SourceAST, Unit] =
+    (Characterizer.characterize : StreamTransformation[F, Any, NonEmptyVector[SyntaxError], Char, Unit, WithSource[String], FilePosition])
       .buffer(1024 * 8)
       .into(Lexer.lex)
       .buffer(1024 * 2)
       .into(ArgonParser.parse)
       .into(buildSourceAST(fileSpec))
 
-  private def buildSourceAST(fileSpec: FileSpec): StreamTransformation[PureEffect, Any, NonEmptyVector[SyntaxError], TopLevelStatement, Unit, SourceAST, Unit] =
-    new StreamTransformation.PureSingle[NonEmptyVector[SyntaxError], TopLevelStatement, Unit, SourceAST, Unit] {
+  private def buildSourceAST[F[-_, +_, +_]](fileSpec: FileSpec)(implicit monadError: MonadError[F[Any, NonEmptyVector[SyntaxError], ?], NonEmptyVector[SyntaxError]]): StreamTransformation[F, Any, NonEmptyVector[SyntaxError], TopLevelStatement, Unit, SourceAST, Unit] =
+    new StreamTransformation.PureSingle[F, NonEmptyVector[SyntaxError], TopLevelStatement, Unit, SourceAST, Unit] {
       override type State = NSAndImports
 
 

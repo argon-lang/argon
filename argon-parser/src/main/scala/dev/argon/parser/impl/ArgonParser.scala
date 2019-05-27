@@ -697,8 +697,8 @@ object ArgonParser {
 
   private[impl] def grammarFactory: GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] = ArgonGrammarFactory
 
-  def parse: StreamTransformation[PureEffect, Any, NonEmptyVector[SyntaxError], WithSource[Token], FilePosition, TopLevelStatement, Unit] =
-    Grammar.parseAll[Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)
+  def parse[F[-_, +_, +_]](implicit monadError: MonadError[F[Any, NonEmptyVector[SyntaxError], ?], NonEmptyVector[SyntaxError]]): StreamTransformation[F, Any, NonEmptyVector[SyntaxError], WithSource[Token], FilePosition, TopLevelStatement, Unit] =
+    Grammar.parseAll[F, Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)
       .mapResult(const(()))
 
 }

@@ -85,7 +85,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
         (implicit monadInstance: Monad[F[R3, E2, ?]])
         : F[R3, E2, X] =
           (fromComp(armodule.globalNamespace) : F[R3, E2, Namespace[context.type, DeclarationPayloadSpecifier]]).flatMap { ns =>
-            trans.initial.flatMap { state =>
+            trans.initial.use { state =>
               processNamespace(trans)(state, ns).flatMap {
                 case Step.Produce(_, value, _) => value
                 case Step.Continue(state) => trans.end(state, ()).flatMap { case (_, fr2) => fr2 }
@@ -142,7 +142,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
         type E = NonEmptyList[CompilationError]
         type FE[+X] = F[R, E, X]
 
-        override def initial: FE[ModuleIds] = ModuleIds().pure[FE]
+        override def initial: Resource[F, R, E, ModuleIds] = Resource.pure(ModuleIds())
 
         def fromEmit[A](e: Emit[A]): EmitF[FE, A] =
           e.mapK[FE](fromComp.toFunctionK[R, E])

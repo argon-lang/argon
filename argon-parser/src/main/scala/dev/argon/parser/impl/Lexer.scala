@@ -265,7 +265,7 @@ object Lexer {
   type ErrorEffect[F[_], A] = EitherT[F, NonEmptyList[SyntaxError], A]
 
 
-  def lex: StreamTransformation[PureEffect, Any, NonEmptyVector[SyntaxError], WithSource[String], FilePosition, WithSource[Token], FilePosition] =
+  def lex[F[-_, +_, +_]](implicit monadError: MonadError[F[Any, NonEmptyVector[SyntaxError], ?], NonEmptyVector[SyntaxError]]): StreamTransformation[F, Any, NonEmptyVector[SyntaxError], WithSource[String], FilePosition, WithSource[Token], FilePosition] =
     Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken).collect {
       case WithSource(Some(value), loc) => WithSource(value, loc)
     }

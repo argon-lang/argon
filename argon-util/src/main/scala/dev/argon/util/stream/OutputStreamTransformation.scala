@@ -16,7 +16,7 @@ object OutputStreamTransformation {
 
     override type State = Unit
 
-    override def initial: IO[E, Unit] = IO.succeed(())
+    override def initial: Resource[ZIO, Any, E, Unit] = Resource.pure(())
 
     override def step(s: Unit, ca: NonEmptyVector[Byte]): ZIO[Blocking, E, Step[Unit, Byte, Nothing, Unit]] =
       ZIO.environment[Blocking].flatMap { env =>

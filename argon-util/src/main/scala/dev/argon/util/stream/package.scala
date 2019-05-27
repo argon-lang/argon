@@ -12,6 +12,11 @@ import scalaz.zio.stream.ZSink
 
 package object stream {
 
+  implicit val zioMapErrorInstance: MapError[ZIO] = new MapError[ZIO] {
+    override def mapError[R, E, E2, A](fe: ZIO[R, E, A])(f: E => E2): ZIO[R, E2, A] = fe.mapError(f)
+  }
+
+
   implicit final class StreamTransformationExtensions[F[-_, +_, +_], R, E, A, X, B, Y](private val sink: StreamTransformation[F, R, E, A, X, B, Y]) {
 
 
@@ -19,7 +24,7 @@ package object stream {
 
       override type State = (Vector[A], sink.State)
 
-      override def initial: F[R, E, State] = for {
+      override def initial: Resource[F, R, E, State] = for {
         s <- sink.initial
       } yield (Vector.empty, s)
 
@@ -55,7 +60,7 @@ package object stream {
 
       override type State = sink.State
 
-      override def initial: F[R, E, sink.State] = sink.initial
+      override def initial: Resource[F, R, E, sink.State] = sink.initial
 
       override def step(s: sink.State, ca: NonEmptyVector[A]): F[R, E, Step[sink.State, A, C, Y]] =
         sink.step(s, ca).flatMap {
@@ -79,7 +84,7 @@ package object stream {
 
       override type State = sink.State
 
-      override def initial: F[R, E, sink.State] = sink.initial
+      override def initial: Resource[F, R, E, sink.State] = sink.initial
 
       override def step(s: sink.State, ca: NonEmptyVector[A]): F[R, E, Step[sink.State, A, C, Y]] =
         sink.step(s, ca).map {
@@ -97,7 +102,7 @@ package object stream {
 
       override type State = sink.State
 
-      override def initial: F[R, E, sink.State] = sink.initial
+      override def initial: Resource[F, R, E, sink.State] = sink.initial
 
       override def step(s: sink.State, ca: NonEmptyVector[A]): F[R, E, Step[sink.State, A, B, Z]] =
         sink.step(s, ca).map {
@@ -111,43 +116,18 @@ package object stream {
 
     }
 
-    def translate[G[-_, +_, +_], R2, E2](f: F[R, E, ?] ~> G[R2, E2, ?])(implicit functor: Functor[G[R2, E2, ?]]): StreamTransformation[G, R2, E2, A, X, B, Y] = new StreamTransformation[G, R2, E2, A, X, B, Y] {
+    def mapError[E2](f: E => E2)(implicit mapError: MapError[F], functor: Functor[F[R, E2, ?]]): StreamTransformation[F, R, E2, A, X, B, Y] = new StreamTransformation[F, R, E2, A, X, B, Y] {
+
       override type State = sink.State
 
-      override def initial: G[R2, E2, sink.State] = f(sink.initial)
+      override def initial: Resource[F, R, E2, sink.State] = sink.initial.mapError(f)
 
-      override def step(s: sink.State, ca: NonEmptyVector[A]): G[R2, E2, Step[sink.State, A, B, Y]] =
-        f(sink.step(s, ca))
+      override def step(s: sink.State, ca: NonEmptyVector[A]): F[R, E2, Step[sink.State, A, B, Y]] =
+        mapError.mapError(sink.step(s, ca))(f)
 
-      override def end(s: sink.State, result: X): G[R2, E2, (Vector[B], G[R2, E2, Y])] =
-        f(sink.end(s, result)).map { case (restB, fr2) => (restB, f(fr2)) }
-    }
+      override def end(s: sink.State, result: X): F[R, E2, (Vector[B], F[R, E2, Y])] =
+        mapError.mapError(sink.end(s, result))(f).map { case (lastB, r2) => (lastB, mapError.mapError(r2)(f)) }
 
-  }
-
-  implicit final class StreamTransformationSinkExtensions[R, E, A, X](private val sink: StreamTransformation[ZIO, R, E, A, Unit, Nothing, X]) {
-
-    def toZSink: ZSink[R, E, A, A, X] = new ZSink[R, E, A, A, X] {
-      override type State = Either[X, sink.State]
-
-      override def initial: ZIO[R, E, ZSink.Step[Either[X, sink.State], Nothing]] =
-        sink.initial.map { s => ZSink.Step.more(Right(s)) }
-
-      override def step(state: Either[X, sink.State], a: A): ZIO[R, E, ZSink.Step[Either[X, sink.State], A]] =
-        state match {
-          case Left(_) => IO.succeed(ZSink.Step.done(state, Chunk()))
-          case Right(state) => sink.step(state, NonEmptyVector.of(a)).map {
-            case Step.Produce(_, value, _) => value
-            case Step.Continue(state) => ZSink.Step.more(Right(state))
-            case Step.Stop(result) => ZSink.Step.done(Left(result), Chunk())
-          }
-        }
-
-      override def extract(state: Either[X, sink.State]): ZIO[R, E, X] =
-        state match {
-          case Left(value) => IO.succeed(value)
-          case Right(state) => sink.end(state, ()).flatMap { case (_, fr) => fr }
-        }
     }
 
   }
@@ -184,7 +164,7 @@ package object stream {
             }
 
           stream.fold[R2, E2, A, (Option[trans.State], S)].flatMap { f0 =>
-            fToIO(trans.initial).flatMap { initialState =>
+            trans.initial.useIO { initialState =>
               f0((Some(initialState), s2), {
                 case (Some(_), s2) => cont(s2)
                 case (None, _) => false
@@ -232,7 +212,7 @@ package object stream {
       stream.foldLeft(new StreamTransformation.Single[F, R2, E2, A, Unit, Nothing, Unit] {
         override type State = Unit
 
-        override def initial: F[R2, E2, Unit] = ().pure[F[R2, E2, ?]]
+        override def initial: Resource[F, R2, E2, Unit] = Resource.pure(())
 
         override def stepSingle(s: Unit, a: A): F[R2, E2, Step[Unit, A, Nothing, Unit]] =
           f(a).map { _ => Step.Continue(()) }
@@ -247,7 +227,7 @@ package object stream {
         stream.foldLeft(new StreamTransformation.Single[F, R2, E2, A, Unit, Nothing, X] {
           override type State = trans.State
 
-          override def initial: F[R2, E2, State] = trans.initial
+          override def initial: Resource[F, R2, E2, State] = trans.initial
 
           override def stepSingle(s: State, a: A): F[R2, E2, Step[State, A, Nothing, X]] =
             trans.step(s, NonEmptyVector.of(f(a))).map {
@@ -271,13 +251,13 @@ package object stream {
         stream.foldLeft(new StreamTransformation.Single[F, R2, E2, A, Unit, Nothing, X] {
           override type State = trans.State
 
-          override def initial: F[R2, E2, State] = trans.initial
+          override def initial: Resource[F, R2, E2, State] = trans.initial
 
           override def stepSingle(s: State, a: A): F[R2, E2, Step[State, A, Nothing, X]] =
             f(a).foldLeft(new StreamTransformation[F, R2, E2, B2, Unit, Nothing, Either[X, trans.State]] {
               override type State = trans.State
 
-              override def initial: F[R2, E2, State] = s.pure[F[R2, E2, ?]]
+              override def initial: Resource[F, R2, E2, State] = Resource.pure(s)
 
               override def step(s: State, ca: NonEmptyVector[B2]): F[R2, E2, Step[State, B2, Nothing, Either[X, trans.State]]] =
                 trans.step(s, ca).map {
@@ -323,5 +303,6 @@ package object stream {
     }
 
   }
+
 
 }

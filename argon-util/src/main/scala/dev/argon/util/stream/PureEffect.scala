@@ -4,6 +4,15 @@ import cats._
 
 final case class PureEffect[-R, +E, +A](run: R => Eval[Either[E, A]]) {
 
+  def flatMap[R2 <: R, E2 >: E, B](f: A => PureEffect[R2, E2, B]): PureEffect[R2, E2, B] =
+    PureEffect(r => run(r).flatMap {
+      case Right(a) => f(a).run(r)
+      case Left(e) => Eval.now(Left(e))
+    })
+
+  def map[B](f: A => B): PureEffect[R, E, B] =
+    PureEffect(r => run(r).map { either => either.map(f) })
+
   def mapLeft[E2](f: E => E2): PureEffect[R, E2, A] =
     PureEffect(r => run(r).map { either => either.left.map(f) })
 
@@ -20,13 +29,12 @@ object PureEffect {
 
   implicit def pureEffectMonadInstance[R, E]: Monad[PureEffect[R, E, ?]] = new StackSafeMonad[PureEffect[R, E, ?]] {
     override def flatMap[A, B](fa: PureEffect[R, E, A])(f: A => PureEffect[R, E, B]): PureEffect[R, E, B] =
-      PureEffect(r => fa.run(r).flatMap {
-        case Right(a) => f(a).run(r)
-        case Left(e) => Eval.now(Left(e))
-      })
+      fa.flatMap(f)
 
     override def pure[A](x: A): PureEffect[R, E, A] =
       PureEffect(x)
+
+    override def map[A, B](fa: PureEffect[R, E, A])(f: A => B): PureEffect[R, E, B] = fa.map(f)
   }
 
 }

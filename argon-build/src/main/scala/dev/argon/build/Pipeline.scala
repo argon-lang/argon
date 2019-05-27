@@ -66,7 +66,10 @@ object Pipeline {
   (f: buildInfo.backend.TCompilationOutput[ZIO, Blocking, File] => ZIO[Blocking, NonEmptyList[CompilationError], A])
   (implicit compInstance: IOCompilation[Blocking])
   : ZIO[Blocking, NonEmptyList[CompilationError], A] =
-    BuildProcess.parseInput[ZIO, Blocking](findInputFiles(buildInfo)).foldLeft(StreamTransformation.toVector[ZIO, Blocking, NonEmptyList[CompilationError], SourceAST]).flatMap { parsedInput =>
+    {
+      import scalaz.zio.interop.catz._
+      BuildProcess.parseInput[ZIO, Blocking](findInputFiles(buildInfo))
+    }.foldLeft(StreamTransformation.toVector[ZIO, Blocking, NonEmptyList[CompilationError], SourceAST]).flatMap { parsedInput =>
       BuildProcess.compile(
         buildInfo.backend
       )(

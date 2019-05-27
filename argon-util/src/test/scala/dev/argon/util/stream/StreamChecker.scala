@@ -12,7 +12,7 @@ trait StreamChecker {
     stream.foldLeft(new StreamTransformation.Single[F, Any, Int, A, Unit, Nothing, Unit] {
       override type State = (Int, Vector[A])
 
-      override def initial: F[Any, Int, State] = (0, values).pure[F[Any, Int, ?]]
+      override def initial: Resource[F, Any, Int, State] = Resource.pure((0, values))
 
       override def stepSingle(s: State, a: A): F[Any, Int, Step[State, A, Nothing, Unit]] =
         s match {

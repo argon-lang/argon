@@ -308,11 +308,12 @@ object Grammar {
   : Grammar[TToken, TSyntaxError, TLabel, Result] =
     TokenGrammar(category, tokenMatcher)
 
-  def parseAll[TToken, TSyntaxError, TLabel <: RuleLabel, T]
+  def parseAll[F[-_, +_, +_], TToken, TSyntaxError, TLabel <: RuleLabel, T]
   (factory: GrammarFactory[TToken, TSyntaxError, TLabel])
   (label: TLabel { type RuleType = T })
-  : StreamTransformation[PureEffect, Any, NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] =
-    new StreamTransformation.Pure[NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] {
+  (implicit monadError: MonadError[F[Any, NonEmptyVector[TSyntaxError], ?], NonEmptyVector[TSyntaxError]])
+  : StreamTransformation[F, Any, NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] =
+    new StreamTransformation.Pure[F, NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] {
 
       private val defaultParseOptions: ParseOptions[TToken, TSyntaxError, TLabel] = ParseOptions(Set.empty, None, factory)
       private val rule = factory(label)

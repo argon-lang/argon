@@ -10,22 +10,30 @@ import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.parser.impl.ParseHandler
 import dev.argon.util.FileSpec
 import dev.argon.util.stream._
+import dev.argon.util.AnyExtensions._
 
 object BuildProcess {
 
-  def parseInput[F[-_, +_, +_], R](inputFiles: ArStream[F, R, NonEmptyList[CompilationError], InputFileInfo[F, R]])(implicit compInstance: CompilationRE[F, R]): ArStream[F, R, NonEmptyList[CompilationError], SourceAST] =
+  def parseInput[F[-_, +_, +_], R]
+  (inputFiles: ArStream[F, R, NonEmptyList[CompilationError], InputFileInfo[F, R]])
+  (implicit
+    monadErrorNothing: MonadError[F[Any, Nothing, ?], Nothing],
+    monadError: MonadError[F[Any, NonEmptyVector[SyntaxError], ?], NonEmptyVector[SyntaxError]],
+    mapError: MapError[F],
+    compInstance: CompilationRE[F, R]
+  )
+  : ArStream[F, R, NonEmptyList[CompilationError], SourceAST] =
     inputFiles.flatMap { fileInfo =>
+      def toCompileError(error: SyntaxError): CompilationError =
+        CompilationError.SyntaxCompilerError(SyntaxErrorData(fileInfo.fileSpec, error))
+
+      def convertErrors(errors: NonEmptyVector[SyntaxError]): NonEmptyList[CompilationError] =
+        NonEmptyList(toCompileError(errors.head), errors.tail.map(toCompileError).toList)
+
       fileInfo.dataStream.transformWith(
-        ParseHandler.parse(fileInfo.fileSpec).translate(new (PureEffect[Any, NonEmptyVector[SyntaxError], ?] ~> F[R, NonEmptyList[CompilationError], ?]) {
-
-          private def toCompileError(error: SyntaxError): CompilationError =
-            CompilationError.SyntaxCompilerError(SyntaxErrorData(fileInfo.fileSpec, error))
-
-          override def apply[A](fa: PureEffect[Any, NonEmptyVector[SyntaxError], A]): F[R, NonEmptyList[CompilationError], A] =
-            compInstance.fromPureEffect(fa.mapLeft { errors =>
-              NonEmptyList(toCompileError(errors.head), errors.tail.map(toCompileError).toList)
-            })
-        })
+        ParseHandler.parse(fileInfo.fileSpec)
+          .upcast[StreamTransformation[F, R, NonEmptyVector[SyntaxError], Char, Unit, SourceAST, Unit]]
+          .mapError(convertErrors)
       )
     }
 

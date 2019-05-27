@@ -95,14 +95,14 @@ object IOCompilation {
       }
 
       override def resourceSink(id: File): Resource[ZIO, Blocking, NonEmptyList[CompilationError], StreamTransformation[ZIO, Blocking, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]] =
-        new Resource[ZIO, Blocking, NonEmptyList[CompilationError], StreamTransformation[ZIO, Blocking, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]] {
-          override def use[R2 <: Blocking, E2 >: NonEmptyList[CompilationError], B](f: StreamTransformation[ZIO, Blocking, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit] => ZIO[R2, E2, B]): ZIO[R2, E2, B] =
-            ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { new io.FileOutputStream(id) }).refineOrDie {
-              case ex: io.IOException => ioExceptionToError(ex)
-            }.bracketAuto { outputStream =>
-              f(OutputStreamTransformation(ioExceptionToError)(outputStream))
-            }
-        }
+        Resource.fromZManaged(ZManaged.make(
+          ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { new io.FileOutputStream(id) }).refineOrDie {
+            case ex: io.IOException => ioExceptionToError(ex)
+          }
+        )(
+          _.closeIO()
+        ))
+          .map { outputStream => OutputStreamTransformation(ioExceptionToError)(outputStream) }
 
       override def zipFromEntries(entryStream: ArStream[ZIO, Blocking, NonEmptyList[CompilationError], ZipEntryInfo[ZIO, Blocking, NonEmptyList[CompilationError]]]): ArStream[ZIO, Blocking, NonEmptyList[CompilationError], Byte] =
         ZipEntryStreamTransformation(ioExceptionToError)(entryStream)
