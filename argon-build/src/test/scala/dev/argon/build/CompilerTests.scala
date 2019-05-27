@@ -38,7 +38,7 @@ class CompilerTests extends FunSpec with DefaultRuntime with Matchers with Befor
 
     val runners = Vector(
       "Parsing" -> ParseTestCaseRunner,
-    ) ++ Backend.allBackends.map { backend =>
+    ) ++ Backends.allBackends.map { backend =>
       s"Compilation (${backend.name})" -> new BuildTestCaseRunner(backend, references)
     } ++ Vector(
       "Node Execution" -> new NodeTestCaseRunner(references, nodeLauncher)

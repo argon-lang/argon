@@ -3,7 +3,6 @@ package dev.argon.build.testrunner.node
 import java.io.{File, FileInputStream, IOException, PrintWriter, StringWriter}
 import java.nio.charset.StandardCharsets
 
-import dev.argon.build.{Backend, CompilationOutputText, JSBackend}
 import dev.argon.build.testrunner._
 import cats._
 import cats.data.{NonEmptyList, NonEmptyVector}
@@ -11,8 +10,9 @@ import cats.instances._
 import scalaz.zio._
 import scalaz.zio.interop.catz._
 import dev.argon.build.testrunner.node.ExternalApi._
+import dev.argon.compiler.backend.CompilationOutputText
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
-import dev.argon.compiler.js.{JSBackendOptions, JSInjectCode}
+import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.util.stream.{Resource, Step, StreamTransformation}
 import dev.argon.util.{FileOperations, FilenameManip}
 import org.apache.commons.io.IOUtils

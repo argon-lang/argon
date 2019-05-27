@@ -7,6 +7,7 @@ import dev.argon.parser.{SourceAST, SyntaxError, SyntaxErrorData}
 import cats._
 import cats.implicits._
 import cats.data.{NonEmptyList, NonEmptyVector}
+import dev.argon.compiler.backend.Backend
 import dev.argon.parser.impl.ParseHandler
 import dev.argon.util.FileSpec
 import dev.argon.util.stream._

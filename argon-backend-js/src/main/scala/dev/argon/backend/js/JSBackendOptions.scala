@@ -1,4 +1,4 @@
-package dev.argon.compiler.js
+package dev.argon.backend.js
 
 final case class JSBackendOptions[F[_], I]
 (

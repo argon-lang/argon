@@ -6,10 +6,11 @@ import java.nio.file._
 
 import cats._
 import cats.implicits._
-import dev.argon.build.Backend
+import dev.argon.build.Backends
 import scalaz.zio._
 import scalaz.zio.interop.catz._
 import dev.argon.compiler._
+import dev.argon.compiler.backend.{Backend, ProjectFileHandler, ProjectLoader}
 import dev.argon.compiler.core._
 import dev.argon.util.{FileOperations, FilenameManip}
 import toml.Toml
@@ -92,7 +93,7 @@ object BuildInfo {
     Toml.parseAs[CompilerOptions[Option]](opts).toOption
 
   private def loadBuildInfo(file: File, backendName: String, table: toml.Value.Tbl, globalProj: ProjectInfoFormat[Option, String], globalOptions: CompilerOptions[Option]): Option[BuildInfo[String]] =
-    Backend.find(backendName).flatMap { backend =>
+    Backends.find(backendName).flatMap { backend =>
       val proj = loadProjectOpt(table.values.get(projectKey))
       val compOpts = loadCompilerOptionsOpt(table.values.get(compilerOptionsKey))
 
@@ -115,7 +116,7 @@ object BuildInfo {
     }
 
   private def loadProjectFile(dir: File)(build: BuildInfo[String]): ZIO[Blocking, IOException, BuildInfo[File]] = {
-    import ProjectLoader.Implicits._
+    import dev.argon.compiler.backend.ProjectLoader.Implicits._
 
     type ProjFormat[A] = ProjectInfoFormat[Id, A]
     implicit val fileHandler = ProjectFileHandler.fileHandlerFile(dir)

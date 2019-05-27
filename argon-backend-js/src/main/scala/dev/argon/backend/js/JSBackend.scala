@@ -1,20 +1,19 @@
-package dev.argon.build
+package dev.argon.backend.js
 
 import java.io.{File, PrintWriter, StringWriter}
 import java.nio.charset.StandardCharsets
 
-import dev.argon.compiler.js._
 import dev.argon.compiler._
-import dev.argon.util.FileOperations
 import cats._
 import cats.instances._
 import cats.data.NonEmptyList
-import dev.argon.build.project.ProjectLoader
+import dev.argon.compiler.backend.{Backend, CompilationOutputText, ProjectLoader}
 import scalaz.zio.{IO, ZIO}
 import toml.Codecs._
 import shapeless.{Id => _, _}
 import dev.argon.util.ExtraTomlCodecs._
 import dev.argon.util.stream.ArStream
+
 
 object JSBackend extends Backend {
 
@@ -43,7 +42,6 @@ object JSBackend extends Backend {
     )
 
   override def projectLoader[I]: ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I] = {
-    import shapeless._
     import ProjectLoader.Implicits._
 
     ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I]

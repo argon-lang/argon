@@ -1,4 +1,4 @@
-package dev.argon.compiler.module
+package dev.argon.backend.module
 
 import dev.argon.compiler._
 import dev.argon.compiler.core._

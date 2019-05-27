@@ -1,4 +1,4 @@
-package dev.argon.build.project
+package dev.argon.compiler.backend
 
 import java.io.{File, IOException}
 import java.nio.file._
@@ -8,7 +8,6 @@ import cats.implicits._
 import dev.argon.util.FilenameManip
 import scalaz.zio._
 import scalaz.zio.blocking.Blocking
-import scalaz.zio.interop.catz._
 import shapeless.{Path => _, _}
 
 trait ProjectLoader[A, B, I] {

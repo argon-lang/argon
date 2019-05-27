@@ -116,7 +116,7 @@ lazy val cli = project.in(file("argon-cli"))
   )
 
 lazy val argon_build = project.in(file("argon-build"))
-  .dependsOn(util, parser, argon_compiler, compiler_js, compiler_module, gcrpcRuntime)
+  .dependsOn(util, parser, argon_compiler, backend_js, backend_module, gcrpcRuntime)
   .settings(
     commonSettings,
     compilerOptions,
@@ -160,7 +160,7 @@ lazy val argon_compiler = project.in(file("argon-compiler"))
     name := "argon-compiler",
   )
 
-lazy val compiler_js = project.in(file("argon-compiler-js"))
+lazy val backend_js = project.in(file("argon-backend-js"))
   .dependsOn(util, modulefmt, parser_data, argon_compiler)
   .settings(
     commonSettings,
@@ -169,7 +169,7 @@ lazy val compiler_js = project.in(file("argon-compiler-js"))
     name := "argon-compiler-js",
   )
 
-lazy val compiler_module = project.in(file("argon-compiler-module"))
+lazy val backend_module = project.in(file("argon-backend-module"))
   .dependsOn(util, modulefmt, parser_data, argon_compiler)
   .settings(
     commonSettings,

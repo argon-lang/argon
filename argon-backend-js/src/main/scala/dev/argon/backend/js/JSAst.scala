@@ -1,4 +1,4 @@
-package dev.argon.compiler.js
+package dev.argon.backend.js
 
 import java.io.PrintWriter
 

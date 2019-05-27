@@ -8,10 +8,10 @@ import java.io.{File, IOException}
 
 import cats.data.NonEmptyList
 import dev.argon.compiler.{CompilationError, CompilerOptions}
-import dev.argon.build.project.ProjectFileHandler
 import scalaz.zio._
 import shapeless.{Id => _, _}
-import dev.argon.build.project.ProjectLoader.Implicits._
+import dev.argon.compiler.backend.ProjectLoader.Implicits._
+import dev.argon.compiler.backend.{Backend, ProjectFileHandler}
 import scalaz.zio.blocking.Blocking
 
 final class BuildTestCaseRunner(protected val backend: Backend, references: Vector[File]) extends TestCaseRunnerCompilePhase {

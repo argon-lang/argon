@@ -1,12 +1,10 @@
-package dev.argon.build
+package dev.argon.compiler.backend
 
-import java.io.{OutputStream, PrintWriter}
 import java.nio.charset.StandardCharsets
 
-import dev.argon.compiler.{CompilationError, ResourceAccess}
 import cats._
 import cats.data.NonEmptyList
-import cats.instances._
+import dev.argon.compiler.{CompilationError, ResourceAccess}
 import dev.argon.util.stream.{ArStream, StringToByteStreamTransformation}
 
 trait CompilationOutput[F[-_, +_, +_], R, I] {

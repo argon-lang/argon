@@ -1,12 +1,9 @@
-package dev.argon.build
+package dev.argon.compiler.backend
 
-import java.io.File
-
-import dev.argon.compiler._
 import cats._
 import cats.data.NonEmptyList
 import cats.implicits._
-import dev.argon.build.project.{ProjectFileHandler, ProjectLoader}
+import dev.argon.compiler._
 
 trait Backend {
 
@@ -27,14 +24,5 @@ trait Backend {
   (f: TCompilationOutput[F, R, I] => F[R, NonEmptyList[CompilationError], A])
   (implicit compInstance: CompilationRE[F, R], res: ResourceAccess[F, R, I])
   : F[R, NonEmptyList[CompilationError], A]
-
-}
-
-object Backend {
-
-  val allBackends = Vector(ArModuleBackend, JSBackend)
-
-  def find(id: String): Option[Backend] =
-    allBackends.find { _.id === id }
 
 }

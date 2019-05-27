@@ -1,4 +1,4 @@
-package dev.argon.compiler.module
+package dev.argon.backend.module
 
 final case class ModuleBackendOptionsFileFormat
 (
