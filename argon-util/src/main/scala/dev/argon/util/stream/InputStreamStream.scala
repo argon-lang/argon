@@ -40,6 +40,4 @@ final class InputStreamStream[R, E](errorHandler: IOException => E)(inputStreamR
         }
     }
 
-
-  override def toZStream(toIO: ArStream.EffectConverter[ZIO, ZIO]): ZStream[R, E, Byte] = ???
 }

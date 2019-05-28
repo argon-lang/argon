@@ -202,10 +202,6 @@ package object stream {
         stream.foldLeft(trans.into(trans2))
 
 
-      override def toZStream(toIO: ArStream.EffectConverter[F, ZIO]): zstream.ZStream[R, E, B] =
-        stream.toZStream(toIO).transform[F, R, E, B](toIO)(trans)
-
-
     }
 
     def forEach[R2 <: R, E2 >: E](f: A => F[R2, E2, Unit])(implicit monadInstance: Monad[F[R2, E2, ?]]): F[R2, E2, Unit] =
@@ -239,9 +235,6 @@ package object stream {
           override def end(s: State, result: Unit): F[R2, E2, (Vector[Nothing], F[R2, E2, X])] =
             trans.end(s, result)
         })
-
-      override def toZStream(toIO: EffectConverter[F, ZIO]): zstream.ZStream[R, E, B] =
-        stream.toZStream(toIO).map(f)
 
     }
 
@@ -277,9 +270,6 @@ package object stream {
             trans.end(s, result)
         })
 
-      override def toZStream(toIO: EffectConverter[F, ZIO]): zstream.ZStream[R, E, B] =
-        stream.toZStream(toIO).flatMap { a => f(a).toZStream(toIO) }
-
     }
 
   }
@@ -289,9 +279,6 @@ package object stream {
     def flattenVector(implicit monadInstance: Monad[F[R, E, ?]]): ArStream[F, R, E, A] = new ArStream[F, R, E, A] {
       override def foldLeft[R2 <: R, E2 >: E, A2 >: A, X](trans: StreamTransformation[F, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[F[R2, E2, ?]]): F[R2, E2, X] =
         stream.foldLeft(StreamTransformation.flattenVector[F, R2, E2, A2, Unit].into(trans))
-
-      override def toZStream(toIO: EffectConverter[F, ZIO]): zstream.ZStream[R, E, A] =
-        stream.toZStream(toIO).flatMap(zstream.ZStream.fromIterable)
     }
 
   }

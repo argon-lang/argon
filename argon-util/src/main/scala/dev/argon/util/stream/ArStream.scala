@@ -11,37 +11,6 @@ trait ArStream[F[-_, +_, +_], -R, +E, +A] {
 
   def foldLeft[R2 <: R, E2 >: E, A2 >: A, X](trans: StreamTransformation[F, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[F[R2, E2, ?]]): F[R2, E2, X]
 
-  def toZStream(toIO: ArStream.EffectConverter[F, ZIO]): zstream.ZStream[R, E, A]
-
-}
-
-trait ArStreamTranslatable[F[-_, +_, +_], -R, +E, +A] extends ArStream[F, R, E, A] {
-
-  def translate[G[-_, +_, +_]](f: ArStream.EffectConverter[F, G]): ArStream[G, R, E, A]
-
-
-  override def toZStream(toIO: ArStream.EffectConverter[F, ZIO]): zstream.ZStream[R, E, A] =
-    new zstream.ZStream[R, E, A] {
-      override def fold[R1 <: R, E2 >: E, A1 >: A, S]: Fold[R1, E2, A1, S] =
-        ZIO.succeedLazy { (s, cont, f) =>
-
-          val toZIO = new ArStream.EffectConverter[F, ZIO] {
-            override def apply[R2, E3, A2](fea: F[R2, E3, A2]): ZIO[R2, E3, A2] = toIO(fea)
-          }
-
-          translate[ZIO](toZIO).foldLeft(new StreamTransformation.Single[ZIO, R1, E2, A1, Unit, Nothing, S] {
-            override type State = S
-            override def initial: Resource[ZIO, R1, E2, S] = Resource.pure(s)
-            override def stepSingle(s: S, a: A1): ZIO[R1, E2, Step[S, A1, Nothing, S]] =
-              if(cont(s))
-                f(s, a).map { Step.Continue(_) }
-              else
-                IO.succeed(Step.Stop(s))
-            override def end(s: S, result: Unit): ZIO[R1, E2, (Vector[Nothing], ZIO[R1, E2, S])] =
-              IO.succeed((Vector.empty, IO.succeed(s)))
-          })
-        }
-    }
 }
 
 object ArStream {
@@ -82,8 +51,6 @@ object ArStream {
             }
         }
       }
-
-    override def toZStream(toIO: EffectConverter[ZIO, ZIO]): zstream.ZStream[R, E, A] = stream
   }
 
   def fromVector[F[-_, +_, +_], R, E, A](coll: Vector[A]): ArStream[F, R, E, A] = new ArStream[F, R, E, A] {
@@ -107,7 +74,6 @@ object ArStream {
       }
     }
 
-    override def toZStream(toIO: EffectConverter[F, ZIO]): zstream.ZStream[R, E, A] = zstream.Stream.fromIterable(coll)
   }
 
 }

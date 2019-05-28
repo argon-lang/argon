@@ -76,7 +76,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
     implicit val fromCompRefl: TComp ~> TComp = arrow.FunctionK.id
 
     def moduleBindingStream[F[-_, +_, +_], R2 <: R, E >: NonEmptyList[CompilationError]](fromComp: ArStream.EffectConverter[TCompRE, F])(armodule: ArModule[context.type, DeclarationPayloadSpecifier]): ArStream[F, R2, E, GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] =
-      new ArStreamTranslatable[F, R2, E, GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] {
+      new ArStream[F, R2, E, GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] {
 
         type FE[+A] = F[R, E, A]
 
@@ -93,9 +93,6 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
               }
             }
           }
-
-        override def translate[G[-_, +_, +_]](f: ArStream.EffectConverter[F, G]): ArStream[G, R2, E, GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] =
-          moduleBindingStream[G, R2, E](fromComp.andThen(f))(armodule)
 
 
         private def processNamespace[R3 <: R2, E2 >: E, A2 >: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier], X]

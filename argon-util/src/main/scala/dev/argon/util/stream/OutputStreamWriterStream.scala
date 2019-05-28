@@ -94,28 +94,6 @@ final case class OutputStreamWriterStream[R, E](f: OutputStream => ZIO[R, E, Uni
         }
     }
 
-  override def toZStream(toIO: ArStream.EffectConverter[ZIO, ZIO]): stream.ZStream[R with Blocking, E, Byte] =
-    new stream.ZStream[R with Blocking, E, Byte] {
-      override def fold[R1 <: R with Blocking, E1 >: E, A2 >: Byte, S]: Fold[R1, E1, A2, S] =
-        IO.succeedLazy { (s, cont, feed) =>
-
-          runOutputFunc[R1, E1, S] { takeNext =>
-            def iter(s: S, chunk: Vector[A2]): ZIO[R1, E1, S] =
-              chunk match {
-                case _ if !cont(s) => IO.succeed(s)
-                case h +: t => feed(s, h).flatMap { s => iter(s, t) }
-                case Vector() =>
-                  takeNext.flatMap {
-                    case Some(data) => iter(s, data.toVector)
-                    case None => IO.succeed(s)
-                  }
-              }
-
-            iter(s, Vector())
-          }
-        }
-    }
-
 }
 
 object OutputStreamWriterStream {
