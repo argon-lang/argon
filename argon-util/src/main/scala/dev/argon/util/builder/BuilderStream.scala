@@ -61,4 +61,14 @@ object BuilderStream {
 
     }
 
+  implicit def builderStreamBuilderInstance[F[_], S](implicit monad: Monad[F]): Builder[BuilderStream[F, S, ?], S] =
+    new Builder[BuilderStream[F, S, ?], S] with StackSafeMonad[BuilderStream[F, S, ?]] {
+      override def append(value: S): BuilderStream[F, S, Unit] = Emit(value, Result(()))
+
+      override def flatMap[A, B](fa: BuilderStream[F, S, A])(f: A => BuilderStream[F, S, B]): BuilderStream[F, S, B] =
+        fa.flatMap(f)
+
+      override def pure[A](x: A): BuilderStream[F, S, A] = Result(x)
+    }
+
 }

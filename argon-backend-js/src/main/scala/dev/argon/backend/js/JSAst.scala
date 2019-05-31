@@ -3,7 +3,10 @@ package dev.argon.backend.js
 import java.io.PrintWriter
 
 import org.apache.commons.text.StringEscapeUtils
+import cats._
+import cats.implicits._
 import cats.data.NonEmptyList
+import dev.argon.util.builder.Builder
 
 final case class JSModule(statements: Vector[JSModuleStatement])
 
@@ -73,263 +76,334 @@ case object JSThis extends JSExpression
 
 object JSAst {
 
-  def writeModule(module: JSModule)(writer: PrintWriter): Unit =
-    new WriteImpl(writer).writeModule(module)
+  def writeModule[F[_]](module: JSModule)(implicit builder: Builder[F, String]): F[Unit] =
+    new WriteImpl[F].writeModule(module)
 
-  private class WriteImpl(writer: PrintWriter) {
+  private class WriteImpl[F[_]](implicit builder: Builder[F, String]) {
 
-    def writeModule(module: JSModule): Unit =
-      module.statements foreach writeModuleStatement
+    def write(s: String): F[Unit] = builder.append(s)
+    
+    def writeModule(module: JSModule): F[Unit] =
+      module.statements.traverse_(writeModuleStatement)
 
-    def writeModuleStatement(stmt: JSModuleStatement): Unit =
+    def writeModuleStatement(stmt: JSModuleStatement): F[Unit] =
       stmt match {
         case JSExportDeclaration(declaration) =>
-          writer.print("export ")
-          writeStatement(declaration)
+          for {
+            _ <- write("export ")
+            _ <- writeStatement(declaration) 
+          } yield ()
 
         case JSExportDefaultStatement(expr) =>
-          writer.print("export default")
-          writeExprParen(expr)
-          writer.print(";")
+          for {
+            _ <- write("export default")
+            _ <- writeExprParen(expr)
+            _ <- write(";")
+          } yield ()
 
         case JSImportDefaultStatement(defaultExport, moduleName) =>
-          writer.print("import ")
-          writeIdentifier(defaultExport)
-          writer.print(" from ")
-          writeString(moduleName)
-          writer.print(";")
+          for {
+            _ <- write("import ")
+            _ <- writeIdentifier(defaultExport)
+            _ <- write(" from ")
+            _ <- writeString(moduleName)
+            _ <- write(";")
+          } yield ()
 
         case JSImportAllStatement(defaultExport, name, moduleName) =>
-          writer.print("import ")
-          defaultExport.foreach { defaultId =>
-            writeIdentifier(defaultId)
-            writer.print(", ")
-          }
-          writer.print("* as ")
-          writeIdentifier(name)
-          writer.print(" from ")
-          writeString(moduleName)
-          writer.print(";")
+          for {
+            _ <- write("import ")
+            _ <- defaultExport.traverse_ { defaultId =>
+              for {
+                _ <- writeIdentifier(defaultId)
+                _ <- write(", ")
+              } yield ()
+            }
+            _ <- write("* as ")
+            _ <- writeIdentifier(name)
+            _ <- write(" from ")
+            _ <- writeString(moduleName)
+            _ <- write(";")
+          } yield ()
 
         case JSModuleRaw(code) =>
-          writer.print(code)
+          write(code)
 
         case stmt: JSStatement =>
           writeStatement(stmt)
       }
 
-    def writeStatement(stmt: JSStatement): Unit =
+    def writeStatement(stmt: JSStatement): F[Unit] =
       stmt match {
         case JSConst(bindings) =>
-          writer.print("const ")
-          writeDeclaration(bindings.head)
-
-          for(binding <- bindings.tail.toVector) {
-            writer.print(", ")
-            writeDeclaration(binding)
-          }
-          writer.print(";")
+          for {
+            _ <- write("const ")
+            _ <- writeDeclaration(bindings.head)
+            _ <- bindings.tail.toVector.traverse { binding =>
+              for {
+                _ <- write(", ")
+                _ <- writeDeclaration(binding)
+              } yield ()
+            }
+            _ <- write(";")
+          } yield ()
 
         case JSLet(bindings) =>
-          writer.print("let ")
-          writeDeclaration(bindings.head)
+          for {
+            _ <- write("let ")
+            _ <- writeDeclaration(bindings.head)
 
-          for(binding <- bindings.tail.toVector) {
-            writer.print(", ")
-            writeDeclaration(binding)
-          }
-          writer.print(";")
+            _ <- bindings.tail.toVector.traverse_ { binding =>
+              for {
+                _ <- write(", ")
+                _ <- writeDeclaration(binding)
+              } yield ()
+            }
+            _ <- write(";")
+          } yield ()
 
         case JSFunctionStatement(name, parameters, body) =>
-          writer.print("function ")
-          writeIdentifier(name)
-          writer.print("(")
-          writeParameterList(parameters)
-          writer.print("){")
-          body.foreach(writeStatement)
-          writer.print("}")
+          for {
+            _ <- write("function ")
+            _ <- writeIdentifier(name)
+            _ <- write("(")
+            _ <- writeParameterList(parameters)
+            _ <- write("){")
+            _ <- body.traverse_(writeStatement)
+            _ <- write("}")
+          } yield ()
 
         case JSIfElseStatement(condition, ifBody, elseBody) =>
-          writer.print("if(")
-          writeExpr(condition)
-          writer.print(") {")
-          ifBody.foreach(writeStatement)
-          writer.print("} else {")
-          elseBody.foreach(writeStatement)
-          writer.print("}")
+          for {
+            _ <- write("if(")
+            _ <- writeExpr(condition)
+            _ <- write(") {")
+            _ <- ifBody.traverse_(writeStatement)
+            _ <- write("} else {")
+            _ <- elseBody.traverse_(writeStatement)
+            _ <- write("}")
+          } yield ()
 
         case JSReturn(value) =>
-          writer.print("return ")
-          writeExprParen(value)
-          writer.print(";")
+          for {
+            _ <- write("return ")
+            _ <- writeExprParen(value)
+            _ <- write(";")
+          } yield ()
 
         case stmt: JSExpression =>
-          writeExprParen(stmt)
-          writer.print(";")
+          for {
+            _ <- writeExprParen(stmt)
+            _ <- write(";")
+          } yield ()
       }
 
-    def writeDeclaration(decl: JSDeclaration): Unit =
+    def writeDeclaration(decl: JSDeclaration): F[Unit] =
       decl match {
         case JSDeclareNewVariable(binding) =>
           writeBinding(binding)
 
         case JSDeclareInit(binding, value) =>
-          writeBinding(binding)
-          writer.print(" = ")
-          writeExprParen(value)
+          for {
+            _ <- writeBinding(binding)
+            _ <- write(" = ")
+            _ <- writeExprParen(value)
+          } yield ()
       }
 
-    def writeBinding(binding: JSBinding): Unit =
+    def writeBinding(binding: JSBinding): F[Unit] =
       binding match {
         case JSBindingIdentifier(id) =>
           writeIdentifier(id)
 
         case JSArrayDestructBinding(bindings) =>
-          writer.print("[")
-          for(binding <- bindings) {
-            writeBinding(binding)
-            writer.print(",")
-          }
-          writer.print("]")
+          for {
+            _ <- write("[")
+            _ <- bindings.traverse_ { binding =>
+              for {
+                _ <- writeBinding(binding)
+                _ <- write(",")
+              } yield ()
+            }
+            _ <- write("]")
+          } yield ()
       }
 
-    def writeExprParen(expr: JSExpression): Unit = {
-      writer.print("(")
-      writeExpr(expr)
-      writer.print(")")
-    }
+    def writeExprParen(expr: JSExpression): F[Unit] = for {
+      _ <- write("(")
+      _ <- writeExpr(expr)
+      _ <- write(")")
+    } yield ()
 
-    def writeExpr(expr: JSExpression): Unit =
+    def writeExpr(expr: JSExpression): F[Unit] =
       expr match {
         case JSExpressionRaw(code) =>
-          writer.print(code)
+          write(code)
 
         case JSObjectLiteral(members) =>
-          writer.print("{")
-          members.foreach {
-            case JSObjectProperty(name, value) =>
-              writeString(name)
-              writer.print(":")
-              writeExprParen(value)
-              writer.print(",")
-            case JSObjectGetProperty(name, value) =>
-              writer.write("get ")
-              writeString(name)
-              writer.print("() {")
-              value.foreach(writeStatement)
-              writer.print("},")
-            case JSObjectComputedProperty(name, value) =>
-              writer.print("[")
-              writeExpr(name)
-              writer.print("]:")
-              writeExprParen(value)
-              writer.print(",")
-          }
-          writer.print("}")
+          for {
+            _ <- write("{")
+            _ <- members.traverse_ {
+              case JSObjectProperty(name, value) =>
+                for {
+                  _ <- writeString(name)
+                  _ <- write(":")
+                  _ <- writeExprParen(value)
+                  _ <- write(",")
+                } yield ()
+              case JSObjectGetProperty(name, value) =>
+                for {
+                  _ <- write("get ")
+                  _ <- writeString(name)
+                  _ <- write("() {")
+                  _ <- value.traverse_(writeStatement)
+                  _ <- write("},")
+                } yield ()
+              case JSObjectComputedProperty(name, value) =>
+                for {
+                  _ <- write("[")
+                  _ <- writeExpr(name)
+                  _ <- write("]:")
+                  _ <- writeExprParen(value)
+                  _ <- write(",")
+                } yield ()
+            }
+            _ <- write("}")
+          } yield ()
 
         case expr: JSIdentifier =>
           writeIdentifier(expr)
 
         case JSAssignment(left, right) =>
-          writeExprParen(left)
-          writer.print("=")
-          writeExprParen(right)
+          for {
+            _ <- writeExprParen(left)
+            _ <- write("=")
+            _ <- writeExprParen(right)
+          } yield ()
 
         case JSPropertyAccessDot(expr, prop) =>
-          writeExprParen(expr)
-          writer.print(".")
-          writeIdentifier(prop)
+          for {
+            _ <- writeExprParen(expr)
+            _ <- write(".")
+            _ <- writeIdentifier(prop)
+          } yield ()
 
         case JSPropertyAccessBracket(expr, prop) =>
-          writeExprParen(expr)
-          writer.print("[")
-          writeExpr(prop)
-          writer.print("]")
+          for {
+            _ <- writeExprParen(expr)
+            _ <- write("[")
+            _ <- writeExpr(prop)
+            _ <- write("]")
+          } yield ()
 
         case JSString(value) =>
           writeString(value)
 
         case JSBigInt(i) =>
-          writer.print(i.toString)
-          writer.print("n")
+          for {
+            _ <- write(i.toString)
+            _ <- write("n")
+          } yield ()
 
         case JSFunctionCall(function, args) =>
-          writeExprParen(function)
-          writer.print("(")
-          for(arg <- args) {
-            writeExpr(arg)
-            writer.print(",")
-          }
-          writer.print(")")
+          for {
+            _ <- writeExprParen(function)
+            _ <- write("(")
+            _ <- args.traverse_ { arg =>
+              for {
+                _ <- writeExpr(arg)
+                _ <- write(",")
+              } yield ()
+            }
+            _ <- write(")")
+          } yield ()
 
         case JSNewCall(function, args) =>
-          writer.print("new ")
-          writeExprParen(function)
-          writer.print("(")
-          for(arg <- args) {
-            writeExpr(arg)
-            writer.print(",")
-          }
-          writer.print(")")
+          for {
+            _ <- write("new ")
+            _ <- writeExprParen(function)
+            _ <- write("(")
+            _ <- args.traverse_ { arg =>
+              for {
+                _ <- writeExpr(arg)
+                _ <- write(",")
+              } yield ()
+            }
+            _ <- write(")")
+          } yield ()
 
         case JSFunctionExpression(name, parameters, body) =>
-          writer.print("function ")
-          name.foreach(writeIdentifier)
-          writer.print("(")
-          writeParameterList(parameters)
-          writer.print("){")
-          body.foreach(writeStatement)
-          writer.print("}")
+          for {
+            _ <- write("function ")
+            _ <- name.traverse_(writeIdentifier)
+            _ <- write("(")
+            _ <- writeParameterList(parameters)
+            _ <- write("){")
+            _ <- body.traverse_(writeStatement)
+            _ <- write("}")
+          } yield ()
 
         case JSArrowFunctionExpr(parameters, body) =>
-          writer.print("(")
-          writeParameterList(parameters)
-          writer.print(") => ")
-          writeExprParen(body)
+          for {
+            _ <- write("(")
+            _ <- writeParameterList(parameters)
+            _ <- write(") => ")
+            _ <- writeExprParen(body)
+          } yield ()
 
         case JSArrowFunctionStmts(parameters, body) =>
-          writer.print("(")
-          writeParameterList(parameters)
-          writer.print(") => {")
-          body.foreach(writeStatement)
-          writer.print("}")
+          for {
+            _ <- write("(")
+            _ <- writeParameterList(parameters)
+            _ <- write(") => {")
+            _ <- body.traverse_(writeStatement)
+            _ <- write("}")
+          } yield ()
 
 
         case JSArrayLiteral(values) =>
-          writer.print("[")
-          for(value <- values) {
-            writeExpr(value)
-            writer.print(",")
-          }
-          writer.print("]")
+          for {
+            _ <- write("[")
+            _ <- values.traverse_ { value =>
+              for {
+                _ <- writeExpr(value)
+                _ <- write(",")
+              } yield ()
+            }
+            _ <- write("]")
+          } yield ()
 
         case JSNull =>
-          writer.print("null")
+          write("null")
 
         case JSThis =>
-          writer.print("this")
+          write("this")
       }
 
-    def writeIdentifier(identifier: JSIdentifier): Unit =
-      writer.print(identifier.id)
+    def writeIdentifier(identifier: JSIdentifier): F[Unit] =
+      write(identifier.id)
 
-    def writeString(str: String): Unit = {
-      writer.print("\"")
-      StringEscapeUtils.ESCAPE_ECMASCRIPT.translate(str, writer)
-      writer.print("\"")
-    }
+    def writeString(str: String): F[Unit] = for {
+      _ <- write("\"")
+      _ <- write(StringEscapeUtils.ESCAPE_ECMASCRIPT.translate(str))
+      _ <- write("\"")
+    } yield ()
 
-    def writeParameterList(params: JSFunctionParameterList): Unit =
+    def writeParameterList(params: JSFunctionParameterList): F[Unit] =
       params match {
-        case JSFunctionEmptyParameterList => ()
+        case JSFunctionEmptyParameterList => ().pure[F]
         case JSFunctionParameter(binding, next) =>
-          writeBinding(binding)
-          writer.print(",")
-          writeParameterList(next)
+          for {
+            _ <- writeBinding(binding)
+            _ <- write(",")
+            _ <- writeParameterList(next)
+          } yield ()
 
         case JSFunctionRestParameters(binding) =>
-          writer.print("...")
-          writeBinding(binding)
+          for {
+            _ <- write("...")
+            _ <- writeBinding(binding)
+          } yield ()
       }
 
   }

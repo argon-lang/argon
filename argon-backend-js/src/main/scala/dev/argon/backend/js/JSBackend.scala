@@ -12,6 +12,7 @@ import scalaz.zio.{IO, ZIO}
 import toml.Codecs._
 import shapeless.{Id => _, _}
 import dev.argon.util.ExtraTomlCodecs._
+import dev.argon.util.builder.BuilderStream
 import dev.argon.util.stream.ArStream
 
 
@@ -70,11 +71,10 @@ object JSBackend extends Backend {
     override def outputResource: I = outputRes
 
 
-    override def textStream: ArStream[F, R, NonEmptyList[CompilationError], String] = {
-      val strWriter = new StringWriter()
-      JSAst.writeModule(jsModule)(new PrintWriter(strWriter))
-      ArStream.fromVector(Vector(strWriter.toString))
-    }
+    override def textStream: ArStream[F, R, NonEmptyList[CompilationError], String] =
+      BuilderStream.toStream(
+        JSAst.writeModule[BuilderStream[F[R, NonEmptyList[CompilationError], ?], String, ?]](jsModule)
+      )
 
   }
 }
