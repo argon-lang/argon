@@ -22,12 +22,11 @@ object InputStreamReaderTransformation {
   @SuppressWarnings(Array(
     "org.wartremover.warts.Equals",
     "org.wartremover.warts.NonUnitStatements",
-    "org.wartremover.warts.Null",
     "org.wartremover.warts.Var",
   ))
-  private final class TransformInputStream(queue: BlockingQueue[Vector[Byte]]) extends InputStream {
+  private final class TransformInputStream(queue: BlockingQueue[Option[Vector[Byte]]]) extends InputStream {
 
-    private var remainingData: Vector[Byte] = _
+    private var remainingData: Option[Vector[Byte]] = None
 
     override def read(): Int = {
       val buff = new Array[Byte](1)
@@ -42,14 +41,13 @@ object InputStreamReaderTransformation {
       if(len == 0)
         0
       else {
-        val data = if(remainingData eq null) queue.take() else remainingData
-        if(data eq null)
-          -1
-        else {
-          data.copyToArray(b, off, len)
+        (if (remainingData.isEmpty) queue.take() else remainingData) match {
+          case None => -1
+          case Some(data) =>
+            data.copyToArray(b, off, len)
 
-          remainingData = if(len >= data.size) null else data.drop(len)
-          Math.min(len, data.size)
+            remainingData = if(len >= data.size) None else Some(data.drop(len))
+            Math.min(len, data.size)
         }
       }
     }
@@ -61,13 +59,13 @@ object InputStreamReaderTransformation {
       override def readDirectly[R2 <: R, E2 >: E](inputStream: InputStream): ZIO[R2, E2, X] =
         readHandler(inputStream)
 
-      override type State = (BlockingQueue[Vector[Byte]], Ref[Boolean], Fiber[E, X])
+      override type State = (BlockingQueue[Option[Vector[Byte]]], Ref[Boolean], Fiber[E, X])
 
       override def initial: Resource[ZIO, R, E, State] =
         Resource.fromZManaged(ZManaged.make(
           for {
             env <- ZIO.environment[Blocking]
-            queue <- IO.effectTotal { new ArrayBlockingQueue[Vector[Byte]](32) }
+            queue <- IO.effectTotal { new ArrayBlockingQueue[Option[Vector[Byte]]](32) }
             inputStream <- IO.effectTotal { new TransformInputStream(queue) }
 
             doneReading <- Ref.make(false)
@@ -87,7 +85,7 @@ object InputStreamReaderTransformation {
             ZIO.environment[Blocking].flatMap { env =>
               doneReading.get.flatMap {
                 case true => IO.succeed(())
-                case false => IO.effectTotal { queue.put(null) }
+                case false => IO.effectTotal { queue.put(None) }
               }
             }
         })
@@ -96,7 +94,7 @@ object InputStreamReaderTransformation {
         s._2.get.flatMap {
           case true => s._3.join.map(Step.Stop.apply)
           case false => IO.effectTotal {
-            s._1.put(ca.toVector)
+            s._1.put(Some(ca.toVector))
             Step.Continue(s)
           }
         }
