@@ -18,9 +18,9 @@ lazy val commonSettings = Seq(
     "org.typelevel" %% "cats-effect" % "1.3.0",
     "org.typelevel" %% "cats-mtl-core" % "0.4.0",
     "org.typelevel" %% "kittens" % "1.2.1",
-    "org.scalaz" %% "scalaz-zio" % "1.0-RC4",
-    "org.scalaz" %% "scalaz-zio-streams" % "1.0-RC4",
-    "org.scalaz" %% "scalaz-zio-interop-cats" % "1.0-RC4",
+    "org.scalaz" %% "scalaz-zio" % "1.0-RC5",
+    "org.scalaz" %% "scalaz-zio-streams" % "1.0-RC5",
+    "org.scalaz" %% "scalaz-zio-interop-cats" % "1.0-RC5",
 
 
     "com.chuusai" %% "shapeless" % "2.3.3",

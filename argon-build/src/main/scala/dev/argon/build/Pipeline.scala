@@ -31,14 +31,16 @@ object Pipeline {
       )(
         reader => ZIO.environment[Blocking].flatMap(_.blocking.blocking(IO.effectTotal { reader.close() }))
       )
-    ) { reader =>
-      IO.effect {
-        val b = reader.read()
-        if(b < 0)
-          None
-        else
-          Some(b.toChar)
-      }.refineOrDie(refineIOToCompilationError(file))
+    ).flatMap { reader =>
+      stream.ZStream.unfoldM(()) { _ =>
+        IO.effect {
+          val b = reader.read()
+          if(b < 0)
+            None
+          else
+            Some((b.toChar, ()))
+        }.refineOrDie(refineIOToCompilationError(file))
+      }
     }
 
   private def findInputFiles(buildInfo: BuildInfo[File]): ArStream[ZIO, Blocking, NonEmptyList[CompilationError], InputFileInfo[ZIO, Blocking]] = {

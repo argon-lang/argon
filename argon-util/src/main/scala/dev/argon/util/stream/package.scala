@@ -147,7 +147,7 @@ package object stream {
 
     def transform[F[-_, +_, +_], R1 <: R, E1 >: E, B](fToIO: ArStream.EffectConverter[F, ZIO])(trans: StreamTransformation[F, R1, E1, A, Unit, B, Unit]): zstream.ZStream[R1, E1, B] = new zstream.ZStream[R1, E1, B] {
       override def fold[R2 <: R1, E2 >: E1, B1 >: B, S]: Fold[R2, E2, B1, S] =
-        IO.succeedLazy { (s2, cont, f) =>
+        ZManaged.succeed { (s2: S, cont: S => Boolean, f: (S, B1) => ZIO[R2, E2, S]) =>
 
           def feed(s1: trans.State, s2: S, chunk: NonEmptyVector[A]): ZIO[R2, E2, (Option[trans.State], S)] =
             fToIO(trans.step(s1, chunk)).flatMap {
@@ -163,7 +163,7 @@ package object stream {
               case Step.Stop(_) => IO.succeed((None, s2))
             }
 
-          stream.fold[R2, E2, A, (Option[trans.State], S)].flatMap { f0 =>
+          stream.fold[R2, E2, A, (Option[trans.State], S)].mapM { f0 =>
             trans.initial.useIO { initialState =>
               f0((Some(initialState), s2), {
                 case (Some(_), s2) => cont(s2)
@@ -171,7 +171,7 @@ package object stream {
               }, {
                 case ((Some(s1), s2), a) => feed(s1, s2, NonEmptyVector.of(a))
                 case ((None, s2), a) => IO.succeed((None, s2))
-              }).flatMap {
+              }).use {
                 case (Some(s1), s2) =>
                   fToIO(trans.end(s1, ())).flatMap {
                     case (lastB, result) =>
