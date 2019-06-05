@@ -1,12 +1,13 @@
 package dev.argon.backend.module
 
 import dev.argon.compiler._
-import dev.argon.util.stream._
+import dev.argon.stream._
 import scalapb.GeneratedMessage
 import cats._
 import cats.instances._
 import cats.data.NonEmptyList
 import dev.argon.compiler.backend.{Backend, CompilationOutput, ProjectLoader}
+import dev.argon.stream.{ArStream, ZipEntryInfo}
 import toml.Codecs._
 import shapeless.{Id => _, _}
 

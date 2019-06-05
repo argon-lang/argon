@@ -8,12 +8,12 @@ import cats._
 import cats.instances._
 import cats.data.NonEmptyList
 import dev.argon.compiler.backend.{Backend, CompilationOutputText, ProjectLoader}
+import dev.argon.stream.ArStream
 import scalaz.zio.{IO, ZIO}
 import toml.Codecs._
 import shapeless.{Id => _, _}
 import dev.argon.util.ExtraTomlCodecs._
-import dev.argon.util.builder.BuilderStream
-import dev.argon.util.stream.ArStream
+import dev.argon.stream.builder.BuilderStream
 
 
 object JSBackend extends Backend {

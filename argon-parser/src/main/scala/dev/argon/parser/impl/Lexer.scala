@@ -10,7 +10,7 @@ import cats.implicits._
 import dev.argon.grammar.{Grammar, GrammarError}
 import Grammar.Operators._
 import dev.argon.parser.impl.Lexer.LexerGrammarFactory
-import dev.argon.util.stream.{PureEffect, StreamTransformation}
+import dev.argon.stream.StreamTransformation
 
 import Function.const
 

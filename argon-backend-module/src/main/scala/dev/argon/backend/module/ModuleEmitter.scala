@@ -3,7 +3,7 @@ package dev.argon.backend.module
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
-import dev.argon.util.stream._
+import dev.argon.stream._
 import scalapb.GeneratedMessage
 import cats._
 import cats.data._
@@ -12,6 +12,7 @@ import dev.argon.compiler.loaders.armodule.{ModuleFormatVersion, ModulePaths}
 import dev.argon.compiler.types.TypeSystem
 import dev.argon.util.FileID
 import dev.argon.module
+import dev.argon.stream.{ArStream, Resource, Step, StreamTransformation}
 import shapeless._
 import dev.argon.util.AnyExtensions._
 import scalaz.zio.stream.ZStream.Fold

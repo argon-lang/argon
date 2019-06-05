@@ -1,4 +1,4 @@
-package dev.argon.util.stream
+package dev.argon.stream
 
 import cats._
 

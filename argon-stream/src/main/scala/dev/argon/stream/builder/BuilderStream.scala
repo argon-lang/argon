@@ -1,12 +1,11 @@
-package dev.argon.util.builder
+package dev.argon.stream.builder
 
 import cats._
 import cats.implicits._
 import cats.data.NonEmptyVector
-import dev.argon.util.stream._
+import dev.argon.stream._
 import dev.argon.util.AnyExtensions._
-import scalaz.zio.ZIO
-import scalaz.zio.stream.ZStream
+import scalaz.zio._
 
 sealed trait BuilderStream[F[_], S, A] {
 

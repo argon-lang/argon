@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets
 import cats._
 import cats.data.NonEmptyList
 import dev.argon.compiler.{CompilationError, ResourceAccess}
-import dev.argon.util.stream.{ArStream, StringToByteStreamTransformation}
+import dev.argon.stream._
 
 trait CompilationOutput[F[-_, +_, +_], R, I] {
   def write(implicit resourceAccess: ResourceAccess[F, R, I]): F[R, NonEmptyList[CompilationError], Unit]

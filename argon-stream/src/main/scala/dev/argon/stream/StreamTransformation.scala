@@ -1,9 +1,9 @@
-package dev.argon.util.stream
+package dev.argon.stream
 
 import cats._
 import cats.data._
 import cats.implicits._
-import dev.argon.util.stream.StreamTransformation.IntoResource
+import dev.argon.stream.StreamTransformation.IntoResource
 import scalaz.zio._
 import scalaz.zio.stream.ZSink
 

@@ -6,7 +6,7 @@ import org.apache.commons.text.StringEscapeUtils
 import cats._
 import cats.implicits._
 import cats.data.NonEmptyList
-import dev.argon.util.builder.Builder
+import dev.argon.stream.builder.Builder
 
 final case class JSModule(statements: Vector[JSModuleStatement])
 

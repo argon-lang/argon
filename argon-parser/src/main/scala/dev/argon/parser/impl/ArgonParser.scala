@@ -12,7 +12,8 @@ import cats.implicits._
 import dev.argon.grammar.{Grammar, GrammarError, TokenMatcher}
 import Grammar.Operators._
 import Grammar.{GrammarFactory, UnionGrammar}
-import dev.argon.util.stream._
+import dev.argon.stream.StreamTransformation
+import dev.argon.stream._
 
 import Function.const
 

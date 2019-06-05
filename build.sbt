@@ -116,7 +116,7 @@ lazy val cli = project.in(file("argon-cli"))
   )
 
 lazy val argon_build = project.in(file("argon-build"))
-  .dependsOn(util, parser, argon_compiler, backend_js, backend_module, gcrpcRuntime)
+  .dependsOn(arstream, util, parser, argon_compiler, backend_js, backend_module, gcrpcRuntime)
   .settings(
     commonSettings,
     compilerOptions,
@@ -125,7 +125,7 @@ lazy val argon_build = project.in(file("argon-build"))
   )
 
 lazy val grammar = project.in(file("argon-grammar"))
-  .dependsOn(util)
+  .dependsOn(arstream, util)
   .settings(
     commonSettings,
     compilerOptions,
@@ -134,7 +134,7 @@ lazy val grammar = project.in(file("argon-grammar"))
   )
 
 lazy val parser = project.in(file("argon-parser"))
-  .dependsOn(util, parser_data, grammar)
+  .dependsOn(arstream, util, parser_data, grammar)
   .settings(
     commonSettings,
     compilerOptions,
@@ -143,7 +143,7 @@ lazy val parser = project.in(file("argon-parser"))
   )
 
 lazy val parser_data = project.in(file("argon-parser-data"))
-  .dependsOn(util, grammar)
+  .dependsOn(arstream, util, grammar)
   .settings(
     commonSettings,
     compilerOptions,
@@ -152,7 +152,7 @@ lazy val parser_data = project.in(file("argon-parser-data"))
   )
 
 lazy val argon_compiler = project.in(file("argon-compiler"))
-  .dependsOn(util, modulefmt, parser_data)
+  .dependsOn(arstream, util, modulefmt, parser_data)
   .settings(
     commonSettings,
     compilerOptions,
@@ -161,7 +161,7 @@ lazy val argon_compiler = project.in(file("argon-compiler"))
   )
 
 lazy val backend_js = project.in(file("argon-backend-js"))
-  .dependsOn(util, modulefmt, parser_data, argon_compiler)
+  .dependsOn(arstream, util, modulefmt, parser_data, argon_compiler)
   .settings(
     commonSettings,
     compilerOptions,
@@ -170,7 +170,7 @@ lazy val backend_js = project.in(file("argon-backend-js"))
   )
 
 lazy val backend_module = project.in(file("argon-backend-module"))
-  .dependsOn(util, modulefmt, parser_data, argon_compiler)
+  .dependsOn(arstream, util, modulefmt, parser_data, argon_compiler)
   .settings(
     commonSettings,
     compilerOptions,
@@ -184,6 +184,15 @@ lazy val util = project.in(file("argon-util"))
     compilerOptions,
 
     name := "argon-util",
+  )
+
+lazy val arstream = project.in(file("argon-stream"))
+  .dependsOn(util)
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-stream",
   )
 
 lazy val modulefmt = project.in(file("argon-modulefmt"))

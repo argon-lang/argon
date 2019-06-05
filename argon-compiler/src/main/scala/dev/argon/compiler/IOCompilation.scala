@@ -14,7 +14,8 @@ import scalaz.zio.interop.catz._
 import FileOperations.fileShow
 import cats.data.NonEmptyList
 import com.google.protobuf.InvalidProtocolBufferException
-import dev.argon.util.stream.{ArStream, InputStreamReaderTransformation, InputStreamStream, OutputStreamTransformation, OutputStreamWriterStream, PureEffect, Resource, StreamTransformation, ZipEntryInfo, ZipEntryStreamTransformation}
+import dev.argon.stream.{ArStream, InputStreamStream, OutputStreamWriterStream, PureEffect, Resource, StreamTransformation, ZipEntryInfo, ZipEntryStreamTransformation}
+import dev.argon.stream.{InputStreamReaderTransformation, InputStreamStream, OutputStreamTransformation, OutputStreamWriterStream, PureEffect, Resource, StreamTransformation, ZipEntryInfo, ZipEntryStreamTransformation}
 import scalaz.zio
 import scalaz.zio.blocking.Blocking
 

@@ -1,6 +1,5 @@
-package dev.argon.util.stream
+package dev.argon.stream
 
-import cats._
 import scalaz.zio._
 
 trait Resource[F[-_, +_, +_], -R, +E, +A] {

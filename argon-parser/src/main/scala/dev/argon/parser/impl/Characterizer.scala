@@ -3,7 +3,8 @@ package dev.argon.parser.impl
 import cats._
 import cats.data._
 import cats.implicits._
-import dev.argon.util.stream._
+import dev.argon.stream.{Step, StepPure, StreamTransformation}
+import dev.argon.util._
 import dev.argon.util.{FilePosition, SourceLocation, WithSource}
 
 

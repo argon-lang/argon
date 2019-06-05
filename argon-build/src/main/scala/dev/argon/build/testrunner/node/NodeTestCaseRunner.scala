@@ -13,7 +13,8 @@ import dev.argon.build.testrunner.node.ExternalApi._
 import dev.argon.compiler.backend.CompilationOutputText
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
-import dev.argon.util.stream.{Resource, Step, StreamTransformation}
+import dev.argon.stream.{Resource, Step, StreamTransformation}
+import dev.argon.stream.{Step, StreamTransformation}
 import dev.argon.util.{FileOperations, FilenameManip}
 import org.apache.commons.io.IOUtils
 import scalaz.zio.blocking.Blocking

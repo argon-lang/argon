@@ -1,13 +1,10 @@
-package dev.argon.util.stream
+package dev.argon.stream
 
 import java.io.IOException
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import cats.Monad
-import dev.argon.util.FileOperations
-import scalaz.zio
-import scalaz.zio._
 import scalaz.zio.blocking.Blocking
+import scalaz.zio._
 import scalaz.zio.interop._
 import scalaz.zio.interop.catz._
 

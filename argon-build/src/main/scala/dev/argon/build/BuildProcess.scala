@@ -9,8 +9,9 @@ import cats.implicits._
 import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.compiler.backend.Backend
 import dev.argon.parser.impl.ParseHandler
+import dev.argon.stream.{ArStream, MapError, StreamTransformation}
 import dev.argon.util.FileSpec
-import dev.argon.util.stream._
+import dev.argon.stream._
 import dev.argon.util.AnyExtensions._
 
 object BuildProcess {

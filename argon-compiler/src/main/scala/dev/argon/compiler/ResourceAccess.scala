@@ -1,7 +1,8 @@
 package dev.argon.compiler
 
 import cats.data.NonEmptyList
-import dev.argon.util.stream.{ArStream, Resource, StreamTransformation, ZipEntryInfo}
+import dev.argon.stream.{ArStream, Resource, StreamTransformation, ZipEntryInfo}
+import dev.argon.stream.{Resource, StreamTransformation, ZipEntryInfo}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 
 trait ResourceAccess[F[-_, +_, +_], R, I] {

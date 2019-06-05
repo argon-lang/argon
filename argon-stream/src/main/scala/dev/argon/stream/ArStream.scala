@@ -1,11 +1,9 @@
-package dev.argon.util.stream
+package dev.argon.stream
 
 import cats._
 import cats.data._
 import cats.implicits._
 import scalaz.zio.{stream => zstream, _}
-import scalaz.zio.interop.catz._
-import scalaz.zio.stream.ZStream.Fold
 
 trait ArStream[F[-_, +_, +_], -R, +E, +A] {
 

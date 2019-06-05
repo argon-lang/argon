@@ -1,14 +1,10 @@
-package dev.argon.util
+package dev.argon
 
+import cats.data.NonEmptyVector
 import cats._
-import cats.data._
 import cats.implicits._
 import scalaz.zio.{stream => zstream, _}
 import scalaz.zio.stream.ZStream.Fold
-import AnyExtensions._
-import cats.evidence.Is
-import dev.argon.util.stream.ArStream.EffectConverter
-import scalaz.zio.stream.ZSink
 
 package object stream {
 

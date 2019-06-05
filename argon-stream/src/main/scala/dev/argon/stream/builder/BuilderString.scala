@@ -1,4 +1,4 @@
-package dev.argon.util.builder
+package dev.argon.stream.builder
 
 import cats._
 

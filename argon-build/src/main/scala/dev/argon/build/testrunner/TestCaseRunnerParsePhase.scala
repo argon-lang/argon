@@ -2,7 +2,7 @@ package dev.argon.build.testrunner
 
 import dev.argon.build._
 import dev.argon.parser.SourceAST
-import dev.argon.util.stream._
+import dev.argon.stream._
 import dev.argon.util.{FileID, FileSpec}
 import dev.argon.compiler.{CompilationError, IOCompilation}
 import cats._

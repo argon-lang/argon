@@ -1,4 +1,4 @@
-package dev.argon.util.stream
+package dev.argon.stream
 
 sealed trait StepPure[+S, +E, +A, +B, +R]
 sealed trait Step[+S, +A, +B, +R] extends StepPure[S, Nothing, A, B, R]

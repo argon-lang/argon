@@ -1,15 +1,12 @@
-package dev.argon.util.stream
+package dev.argon.stream
 
-import java.io.{IOException, InputStream, OutputStream, PipedInputStream, PipedOutputStream}
+import java.io.InputStream
 import java.util.Objects
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
 
 import cats.data.NonEmptyVector
-import dev.argon.util.stream
-import scalaz.zio
-import scalaz.zio.{Exit, Fiber, IO, Ref, ZIO, ZManaged}
 import scalaz.zio.blocking.Blocking
-import scalaz.zio.interop._
+import scalaz.zio._
 
 trait InputStreamReaderTransformation[-R, +E, +X] extends StreamTransformation[ZIO, R, E, Byte, Unit, Nothing, X] {
 

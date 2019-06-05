@@ -1,17 +1,15 @@
-package dev.argon.util.stream
+package dev.argon.stream
 
 import java.io.{IOException, OutputStream}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
 
-import cats.Monad
 import cats.data.NonEmptyVector
-import dev.argon.util.stream.OutputStreamWriterStream.{TransformOutputStreamState, TransformOutputStreamStopException}
-import scalaz.zio
+import cats._
+import cats.implicits._
+import dev.argon.stream.OutputStreamWriterStream.TransformOutputStreamStopException
+import scalaz.zio._
 import scalaz.zio.blocking.Blocking
-import scalaz.zio.stream.ZStream.Fold
-import scalaz.zio.{Chunk, Exit, Fiber, IO, UIO, ZIO, stream}
-
 
 final case class OutputStreamWriterStream[R, E](f: OutputStream => ZIO[R, E, Unit]) extends ArStream[ZIO, R with Blocking, E, Byte] {
 

@@ -6,7 +6,8 @@ import cats._
 import cats.data._
 import cats.implicits._
 import dev.argon.parser.impl.TopLevelStatement.NSAndImports
-import dev.argon.util.stream._
+import dev.argon.stream.{Step, StepPure, StreamTransformation}
+import dev.argon.stream._
 
 object ParseHandler {
 

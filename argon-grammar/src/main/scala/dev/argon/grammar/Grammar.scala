@@ -8,7 +8,8 @@ import scala.language.postfixOps
 import cats._
 import cats.data._
 import cats.implicits._
-import dev.argon.util.stream._
+import dev.argon.stream.{Step, StepPure, StreamTransformation}
+import dev.argon.util._
 
 sealed trait Grammar[TToken, TSyntaxError, TLabel <: RuleLabel, +T] {
 

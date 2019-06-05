@@ -4,7 +4,7 @@ import java.io
 import java.io.File
 
 import dev.argon.compiler._
-import dev.argon.util.stream._
+import dev.argon.stream._
 import cats._
 import cats.implicits._
 import dev.argon.build.project.{BuildInfo, FileWithSpec}
@@ -16,6 +16,7 @@ import dev.argon.util.FileOperations.fileShow
 import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.parser.SourceAST
 import IOCompilation.fileSystemResourceAccess
+import dev.argon.stream.ArStream
 import scalaz.zio.blocking.Blocking
 
 object Pipeline {

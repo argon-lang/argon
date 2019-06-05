@@ -1,6 +1,6 @@
 package dev.argon.compiler
 
-import dev.argon.util.stream.PureEffect
+import dev.argon.stream.PureEffect
 
 trait CompilationRE[TCompRE[_, _, _], R] extends CompilationE[TCompRE[R, ?, ?]] {
 
