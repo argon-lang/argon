@@ -29,7 +29,7 @@ class CompilerTests extends FunSpec with DefaultRuntime with Matchers with Befor
     "Argon.Core",
   )
 
-  private val nodeLauncher = unsafeRun(NodeLauncher("external-api/node-api/bin/index.js"))
+  private val nodeLauncher = unsafeRun(NodeLauncher(this, "external-api/node-api/bin/index.js"))
 
   private val references = libraries.map { name => new File(s"libraries/$name/$name.armodule") }
 

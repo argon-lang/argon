@@ -222,7 +222,7 @@ object CompilationError {
   }
 
   final case class UnsupportedModuleFormatVersion(version: Int, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"Unsupported module format version $version"
+    override def message: String = s"Unsupported module format version ${version.toString}"
   }
 
   final case class ReferencedModuleNotFound(ref: module.ModuleReference, source: CompilationMessageSource) extends CompilationError {
@@ -234,7 +234,14 @@ object CompilationError {
   }
 
   final case class NamespaceElementNotFound(module: ModuleDescriptor, namespacePath: NamespacePath, name: GlobalName, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"Could not find '$name' under namespace '${formatNamespace(namespacePath)}' in module '${module.name}'"
+
+    private def nameStr: String =
+      name match {
+        case GlobalName.Normal(name) => s"'$name'"
+        case GlobalName.Unnamed => "[unnamed]"
+      }
+
+    override def message: String = s"Could not find $nameStr under namespace '${formatNamespace(namespacePath)}' in module '${module.name}'"
   }
 
   final case class ExpressionNotTypeError(source: CompilationMessageSource) extends CompilationError {
@@ -242,7 +249,14 @@ object CompilationError {
   }
 
   final case class MutableVariableNotPureError(name: VariableName, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"Declaring mutable variable '$name' does not meet purity requirements"
+
+    private def nameStr: String =
+      name match {
+        case VariableName.Normal(name) => s"'$name'"
+        case VariableName.Unnamed => "[unnamed]"
+      }
+
+    override def message: String = s"Declaring mutable variable $nameStr does not meet purity requirements"
   }
 
   final case class ImpureFunctionCalledError(source: CompilationMessageSource) extends CompilationError {
@@ -269,31 +283,31 @@ object CompilationError {
   }
 
   final case class ModuleObjectInvalidDescriptor(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"Invalid descriptor for ${objectType.name} #$id."
+    override def message: String = s"Invalid descriptor for ${objectType.name} #${id.toString}."
   }
 
   final case class ModuleObjectModuleNotLoaded(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"Reference is in unloaded module for ${objectType.name} #$id."
+    override def message: String = s"Reference is in unloaded module for ${objectType.name} #${id.toString}."
   }
 
   final case class ModuleObjectNotFound(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"${objectType.name} #$id could not be found in specified module."
+    override def message: String = s"${objectType.name} #${id.toString} could not be found in specified module."
   }
 
   final case class ModuleObjectUndefined(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"${objectType.name} #$id is undefined."
+    override def message: String = s"${objectType.name} #${id.toString} is undefined."
   }
 
   final case class ModuleObjectInvalidId(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"${objectType.name} ID #$id is invalid."
+    override def message: String = s"${objectType.name} ID #${id.toString} is invalid."
   }
 
   final case class ModuleObjectMustBeDefinition(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"${objectType.name} #$id was expected to be a definition."
+    override def message: String = s"${objectType.name} #${id.toString} was expected to be a definition."
   }
 
   final case class MetaClassNotSpecified(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"Meta class for ${objectType.name} #$id was not specified."
+    override def message: String = s"Meta class for ${objectType.name} #${id.toString} was not specified."
   }
 
   final case class CouldNotFindCompatibleModuleLoader(source: CompilationMessageSource) extends CompilationError {
@@ -450,7 +464,7 @@ object CompilationMessageSource {
 
   final case class SourceFile(file: FileSpec, location: SourceLocation) extends CompilationMessageSource {
     override def formatted: String =
-      s"${file.name} ${location.start.line}.${location.start.position}-${location.end.line}.${location.end.position}"
+      s"${file.name} ${location.start.line.toString}.${location.start.position.toString}-${location.end.line.toString}.${location.end.position.toString}"
   }
 
   final case class ReferencedModule(moduleDescriptor: ModuleDescriptor) extends CompilationMessageSource {

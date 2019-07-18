@@ -1,7 +1,7 @@
 
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.12.8",
+  scalaVersion := "2.13.0",
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
@@ -11,15 +11,14 @@ lazy val commonSettings = Seq(
 
   libraryDependencies ++= Seq(
     "org.scala-lang.modules" %% "scala-xml" % "1.2.0",
-    "org.scala-lang.modules" %% "scala-java8-compat" % "0.9.0",
     
-    "org.typelevel" %% "cats-core" % "1.6.0",
-    "org.typelevel" %% "cats-effect" % "1.3.0",
-    "org.typelevel" %% "cats-mtl-core" % "0.4.0",
-    "org.typelevel" %% "kittens" % "1.2.1",
+    "org.typelevel" %% "cats-core" % "2.0.0-M4",
+    "org.typelevel" %% "cats-effect" % "2.0.0-M4",
+    "org.typelevel" %% "cats-mtl-core" % "0.6.0",
+    "org.typelevel" %% "kittens" % "2.0.0-M1",
     "dev.zio" %% "zio" % "1.0.0-RC10-1",
     "dev.zio" %% "zio-streams" % "1.0.0-RC10-1",
-    "dev.zio" %% "zio-interop-cats" % "1.0.0-RC8-10",
+    "dev.zio" %% "zio-interop-cats" % "2.0.0.0-RC1",
 
 
     "com.chuusai" %% "shapeless" % "2.3.3",
@@ -29,9 +28,9 @@ lazy val commonSettings = Seq(
     "commons-io" % "commons-io" % "2.6",
     
     
-    "org.scalatest" %% "scalatest" % "3.0.7" % "test",
+    "org.scalatest" %% "scalatest" % "3.0.8" % "test",
     "org.scalacheck" %% "scalacheck" % "1.14.0" % "test",
-    "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test",
+    "com.github.alexarchambault" %% "scalacheck-shapeless_1.14" % "1.2.3" % "test",
 
     "com.github.ghik" %% "silencer-lib" % "1.4.1" % Provided,
   )
@@ -44,15 +43,12 @@ lazy val compilerOptions = Seq(
     "-encoding", "UTF-8",
     "-unchecked",
     "-deprecation",
-    "-Xfuture",
     "-Xlint",
     "-Xfatal-warnings",
-    "-Yno-adapted-args",
     "-Ywarn-numeric-widen",
     "-Ywarn-value-discard",
     "-Ywarn-unused:-implicits,-explicits,-imports",
     "-Ypatmat-exhaust-depth", "500",
-    "-Ypartial-unification",
     "-Yrangepos",
     "-feature",
     "-language:higherKinds",
@@ -71,6 +67,7 @@ lazy val compilerOptions = Seq(
     Wart.Nothing,
     Wart.Product,
     Wart.Serializable,
+    Wart.JavaSerializable,
     Wart.LeakingSealed,
     Wart.Overloading,
     Wart.ImplicitConversion,
@@ -87,7 +84,7 @@ lazy val compilerOptions = Seq(
 
 lazy val buildArgonLibs = taskKey[Unit]("Compile Argon libraries")
 
-lazy val gcrpcRuntime = RootProject(file("gcrpc/runtime/scala"))
+lazy val identityRPCRuntime = RootProject(file("gcrpc/runtime/scala"))
 
 lazy val cli = project.in(file("argon-cli"))
   .dependsOn(argon_build)
@@ -115,7 +112,7 @@ lazy val cli = project.in(file("argon-cli"))
   )
 
 lazy val argon_build = project.in(file("argon-build"))
-  .dependsOn(arstream, util, parser, argon_compiler, backend_js, backend_module, gcrpcRuntime)
+  .dependsOn(arstream, util, parser, argon_compiler, backend_js, backend_module, identityRPCRuntime)
   .settings(
     commonSettings,
     compilerOptions,
@@ -202,7 +199,6 @@ lazy val modulefmt = project.in(file("argon-modulefmt"))
       "-encoding", "UTF-8",
       "-unchecked",
       "-deprecation",
-      "-Xfuture",
       "-Xfatal-warnings",
       "-Ypatmat-exhaust-depth", "500",
       "-language:higherKinds",

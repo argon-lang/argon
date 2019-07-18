@@ -5,7 +5,10 @@ import cats.data.NonEmptyList
 
 import scala.collection.immutable.Seq
 
-sealed trait Stmt
+sealed trait Stmt {
+  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+  def dumpInfo: String = toString
+}
 final case class TraitDeclarationStmt
 (
   baseType: Option[WithSource[Expr]],

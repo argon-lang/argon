@@ -38,7 +38,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
 
     val modulePairs = module.referencedModules
       .zipWithIndex
-      .map { case (refModule, i) => (refModule, JSIdentifier(s"module_$i")) }
+      .map { case (refModule, i) => (refModule, JSIdentifier(s"module_${i.toString}")) }
 
 
     for {
@@ -254,7 +254,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
 
           sigVarMapping = parameterVarMapping(ctor.descriptor)(sig)
 
-          sigVarMemberMapping = sigVarMapping.mapValues(StatementConverterDataCtorFieldBinding(descString).fieldVarExpr)
+          sigVarMemberMapping = sigVarMapping.view.mapValues(StatementConverterDataCtorFieldBinding(descString).fieldVarExpr).toMap
 
           (ctorFunc, methodVarMap) <- createDataCtorBody(ctor, sig, ctorImpl, sigVarMapping, sigVarMemberMapping, StatementConverterDataCtorFieldBinding(descString))
 
@@ -744,13 +744,13 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
 
 
   private def getParameterName(descriptor: ParameterDescriptor): JSIdentifier =
-    JSIdentifier(s"param_${descriptor.index}")
+    JSIdentifier(s"param_${descriptor.index.toString}")
 
   private def getDeconstructedParameterName(descriptor: DeconstructedParameterDescriptor): JSIdentifier =
-    JSIdentifier(s"param_${descriptor.index}_${descriptor.tupleIndex}")
+    JSIdentifier(s"param_${descriptor.index.toString}_${descriptor.tupleIndex.toString}")
 
   private def getVariableName(descriptor: VariableDescriptor): JSIdentifier =
-    JSIdentifier(s"local_${descriptor.index}")
+    JSIdentifier(s"local_${descriptor.index.toString}")
 
   private def getFieldVariableExpr(moduleDescriptor: ModuleDescriptor, variable: context.typeSystem.FieldVariable): TComp[JSExpression] = for {
     sig <- variable.ownerClass.value.signature

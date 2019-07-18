@@ -43,7 +43,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
   override def runTest(testCase: TestCase): ZIO[Blocking, Throwable, TestCaseResult] =
     compileTestCase(testCase, references)
 
-  private def runJSOutput(files: Vector[File])(compiledFile: String): IO[Throwable, String] = for {
+  private def runJSOutput(files: Vector[File])(compiledFile: String): ZIO[Blocking, Throwable, String] = for {
     modules <- IO.effect {
       (
         files.map { file =>
@@ -57,7 +57,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
     }
 
     serverFuncs <- launcher.serverFunctions
-    output <- IO.fromFuture { _ => serverFuncs.executeJS(moduleName, modules) }
+    output <- serverFuncs.executeJS(moduleName, modules)
   } yield output
 
   private def stringConcatTrans: StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], String, Unit, Nothing, String] =

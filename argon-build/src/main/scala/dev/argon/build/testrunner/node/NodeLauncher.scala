@@ -1,56 +1,56 @@
 package dev.argon.build.testrunner.node
 
 import dev.argon.build.testrunner.node.ExternalApi.{MethodCallHandler, ServerFunctionCallClient, ServerFunctions}
-import com.mi3software.gcrpc.runtime.{BinaryProtocol, RpcConnection, RpcStreamTransport, StandardRpcConnection}
+import com.mi3software.identityrpc.runtime.{BinaryProtocol, RpcConnection, RpcStreamTransport, StandardRpcConnection}
 import cats._
 import cats.instances._
 import zio._
+import zio.blocking.Blocking
 import zio.interop.catz._
 
 trait NodeLauncher {
-  def serverFunctions: Task[ServerFunctions]
-  def close: UIO[Unit]
+  def serverFunctions: TaskR[Blocking, ServerFunctions]
+  def close: ZIO[Blocking, Nothing, Unit]
 }
 
 object NodeLauncher {
 
-  def apply(file: String): UIO[NodeLauncher] = for {
+  def apply(runtime: Runtime[Any], file: String): UIO[NodeLauncher] = for {
     connOpt <- RefM.make[Option[Fiber[Throwable, (RpcConnection, ServerFunctions)]]](None)
   } yield new NodeLauncher {
 
-    def serverFunctions: Task[ServerFunctions] =
+    def serverFunctions: TaskR[Blocking, ServerFunctions] =
       connOpt
         .modify {
           case conn @ Some(fiber) => IO.succeed((fiber, conn))
           case None =>
-            IO.effect {
-              val child = new ProcessBuilder("node", "--no-warnings", "--experimental-vm-modules", "--", file)
-                .redirectInput(ProcessBuilder.Redirect.PIPE)
-                .redirectOutput(ProcessBuilder.Redirect.PIPE)
-                .start()
+            (
+              for {
+                child <- IO.effect {
+                  new ProcessBuilder("node", "--no-warnings", "--experimental-vm-modules", "--", file)
+                    .redirectInput(ProcessBuilder.Redirect.PIPE)
+                    .redirectOutput(ProcessBuilder.Redirect.PIPE)
+                    .start()
+                }
 
-              val transport = new RpcStreamTransport(child.getInputStream, child.getOutputStream)
-              val protocol = new BinaryProtocol()
-              val conn = new StandardRpcConnection(transport, protocol, MethodCallHandler)
-              conn.startBackground()
+                transport <- RpcStreamTransport(child.getInputStream, child.getOutputStream)
+                protocol = new BinaryProtocol()
+                conn <- StandardRpcConnection(runtime, transport, protocol, MethodCallHandler)
+                _ <- conn.startBackground
 
-              val serverFunctions = ServerFunctionCallClient(conn)
-
-              (conn, serverFunctions)
-            }.fork.map(fiber => (fiber, Some(fiber)))
+                serverFunctions = ServerFunctionCallClient(conn)
+              } yield (conn, serverFunctions)
+            ).fork.map(fiber => (fiber, Some(fiber)))
         }
         .flatMap { _.join }
         .map { case (_, serverFuncs) => serverFuncs }
 
-    def close: UIO[Unit] =
+    def close: ZIO[Blocking, Nothing, Unit] =
       connOpt.modify {
         case Some(fiber) =>
           fiber.await.flatMap {
             case Exit.Success((conn, _)) =>
-              IO.effectTotal {
-                conn.close()
-                ((), None)
-              }
+              conn.close.map { _ => ((), None) }
 
             case _ =>
               IO.succeed(((), None))

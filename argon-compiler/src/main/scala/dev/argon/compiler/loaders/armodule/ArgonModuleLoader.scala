@@ -139,7 +139,8 @@ object ArgonModuleLoader {
                   }
 
                 i + 1 -> moduleLoadRes
-              }(collection.breakOut)
+              }
+              .toMap
 
           private def lookupNamespaceValue[T]
           (refModule: ArModule[context.type, ReferencePayloadSpecifier])
@@ -918,9 +919,9 @@ object ArgonModuleLoader {
                 override val descriptor: ModuleDescriptor = currentModuleDescriptor
                 override lazy val globalNamespace: context.Comp[Namespace[context.type, TPayloadSpec]] = globalNamespaceCache(globalNamespaceComp)
                 override val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]] =
-                  refModuleMap.values.collect {
+                  refModuleMap.values.toVector.collect {
                     case ModuleReference(moduleRef) => moduleRef
-                  }(collection.breakOut)
+                  }
               }
             )
 

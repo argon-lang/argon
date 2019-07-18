@@ -288,7 +288,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               }
         }
 
-      case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented: $e")
+      case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented: ${e.dumpInfo}")
     }
 
   def createIfExpr[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(cond: WithSource[parser.Expr], ifBody: WithSource[Vector[WithSource[parser.Stmt]]], elseBody: WithSource[Vector[WithSource[parser.Stmt]]]) =

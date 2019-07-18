@@ -11,7 +11,7 @@ import cats.implicits._
 
 object SourceSignatureCreator {
 
-  def fromParameters[TComp[+_] : Compilation, TResult[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton] : SignatureResultConverter]
+  def fromParameters[TComp[+_], TResult[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton] : SignatureResultConverter]
   (context: ContextComp[TComp])
   (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
   (paramOwner: ParameterOwnerDescriptor)
