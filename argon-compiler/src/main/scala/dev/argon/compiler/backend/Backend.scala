@@ -4,10 +4,12 @@ import cats._
 import cats.data.NonEmptyList
 import cats.implicits._
 import dev.argon.compiler._
+import dev.argon.compiler.backend.Backend.ContextWithComp
+import dev.argon.compiler.core.Context
 
 trait Backend {
 
-  type TCompilationOutput[F[-_, +_, +_], R, I] <: CompilationOutput[F, R, I]
+  type TCompilationOutput <: CompilationOutput
   type BackendOptions[_[_], _]
   type BackendOptionsId[A] = BackendOptions[Id, A]
 
@@ -21,8 +23,16 @@ trait Backend {
 
   def compile[F[-_, +_, +_], R, I: Show, A]
   (input: CompilerInput[I, BackendOptions[Id, I]])
-  (f: TCompilationOutput[F, R, I] => F[R, NonEmptyList[CompilationError], A])
-  (implicit compInstance: CompilationRE[F, R], res: ResourceAccess[F, R, I])
+  (f: TCompilationOutput { val context: ContextWithComp[F, R, I] } => F[R, NonEmptyList[CompilationError], A])
+  (implicit compInstance: CompilationRE[F, R], resFactory: ResourceAccessFactory[ContextWithComp[F, R, I]])
   : F[R, NonEmptyList[CompilationError], A]
 
+}
+
+object Backend {
+  type ContextWithComp[F[-_, +_, +_], R, I] = Context {
+    type CompRE[-R2, +E, +A] = F[R2, E, A]
+    type Environment = R
+    type ResIndicator = I
+  }
 }

@@ -4,23 +4,31 @@ import java.nio.charset.StandardCharsets
 
 import cats._
 import cats.data.NonEmptyList
+import dev.argon.compiler.core.Context
 import dev.argon.compiler.{CompilationError, ResourceAccess}
 import dev.argon.stream._
 
-trait CompilationOutput[F[-_, +_, +_], R, I] {
-  def write(implicit resourceAccess: ResourceAccess[F, R, I]): F[R, NonEmptyList[CompilationError], Unit]
+trait CompilationOutput {
+  val context: Context
+
+  def write: context.Comp[Unit]
 }
 
-abstract class CompilationOutputText[F[-_, +_, +_], R, I](implicit monadInstance: Monad[F[R, NonEmptyList[CompilationError], ?]]) extends CompilationOutput[F, R, I] {
+abstract class CompilationOutputText extends CompilationOutput {
 
-  override def write(implicit resourceAccess: ResourceAccess[F, R, I]): F[R, NonEmptyList[CompilationError], Unit] =
+  import context._
+
+  implicit val resourceAccess: ResourceAccess[context.type]
+
+  override def write: context.Comp[Unit] =
     resourceAccess.resourceSink(outputResource).use { sink =>
       textStream.foldLeft(StringToByteStreamTransformation(StandardCharsets.UTF_8).into(sink))
     }
 
-  def outputResource: I
 
-  def textStream: ArStream[F, R, NonEmptyList[CompilationError], String]
+  def outputResource: context.ResIndicator
+
+  def textStream: ArStream[context.CompRE, context.Environment, NonEmptyList[CompilationError], String]
 
 
 }

@@ -31,7 +31,7 @@ final class BuildTestCaseRunner(protected val backend: Backend, references: Vect
     )
 
 
-  override protected def getProgramOutput(compOutput: backend.TCompilationOutput[ZIO, Blocking, File]): ZIO[Blocking, NonEmptyList[CompilationError], Either[Throwable, String]] =
+  override protected def getProgramOutput(compOutput: backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, Blocking, File] }): ZIO[Blocking, NonEmptyList[CompilationError], Either[Throwable, String]] =
     IO.succeed(Right(""))
 
   override def runTest(testCase: TestCase): ZIO[Blocking, Throwable, TestCaseResult] =

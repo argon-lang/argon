@@ -26,155 +26,161 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     classCtors: Vector[WithSource[parser.ClassConstructorDeclarationStmt]],
   )
 
-  def apply[TComp[+_] : Compilation]
-  (context2: ContextComp[TComp])
+  def apply
+  (context2: Context)
   (env: EnvCreator[context2.type])
   (stmt: ClassDeclarationStmt)
   (desc: ClassDescriptor)
-  : TComp[ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type }] = for {
-    sigCache <- Compilation[TComp].createCache[context2.signatureContext.Signature[ArClass.ResultInfo]]
+  : context2.Comp[ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type }] = {
+    import context2._
 
-    groupedStaticCache <- Compilation[TComp].createCache[GroupedStaticStatements]
-    groupedInstCache <- Compilation[TComp].createCache[GroupedInstanceStatements]
+    for {
+      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ArClass.ResultInfo]]
 
-    fieldCache <- Compilation[TComp].createCache[Vector[context2.typeSystem.FieldVariable]]
-    methodCache <- Compilation[TComp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
-    staticMethodCache <- Compilation[TComp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
-    classCtorCache <- Compilation[TComp].createCache[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]]
+      groupedStaticCache <- Compilation[Comp].createCache[GroupedStaticStatements]
+      groupedInstCache <- Compilation[Comp].createCache[GroupedInstanceStatements]
 
-  } yield new ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] with OpenSealedCheck {
-    override val context: context2.type = context2
-    import context.signatureContext.Signature
+      fieldCache <- Compilation[Comp].createCache[Vector[context2.typeSystem.FieldVariable]]
+      methodCache <- Compilation[Comp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      staticMethodCache <- Compilation[Comp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      classCtorCache <- Compilation[Comp].createCache[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]]
 
-    override val contextProof: context.type Is context2.type = Is.refl
+    } yield new ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] with OpenSealedCheck {
+      override val context: context2.type = context2
+      import context.signatureContext.Signature
 
-    override val descriptor: desc.type = desc
-    override val fileId: FileID = env.fileSpec.fileID
-    override val classMessageSource: CompilationMessageSource = CompilationMessageSource.SourceFile(env.fileSpec, stmt.name.location)
+      override val contextProof: context.type Is context2.type = Is.refl
 
-    override val isSealed: Boolean = stmt.modifiers.exists {
-      case WithSource(parser.SealedModifier, _) => true
-      case _ => false
-    }
-    override val isOpen: Boolean = stmt.modifiers.exists {
-      case WithSource(parser.OpenModifier, _) => true
-      case _ => false
-    }
-    override val isAbstract: Boolean = stmt.modifiers.exists {
-      case WithSource(parser.AbstractModifier, _) => true
-      case _ => false
-    }
+      override val descriptor: desc.type = desc
+      override val fileId: FileID = env.fileSpec.fileID
+      override val classMessageSource: CompilationMessageSource = CompilationMessageSource.SourceFile(env.fileSpec, stmt.name.location)
 
-    private val groupedStatic =
-      groupedStaticCache(
-        stmt.body.foldLeftM(GroupedStaticStatements(Vector.empty)) {
-          case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
-            group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)).pure[TComp]
+      override val isSealed: Boolean = stmt.modifiers.exists {
+        case WithSource(parser.SealedModifier, _) => true
+        case _ => false
+      }
+      override val isOpen: Boolean = stmt.modifiers.exists {
+        case WithSource(parser.OpenModifier, _) => true
+        case _ => false
+      }
+      override val isAbstract: Boolean = stmt.modifiers.exists {
+        case WithSource(parser.AbstractModifier, _) => true
+        case _ => false
+      }
 
-          case (_, WithSource(_, location)) =>
-            Compilation[TComp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-        }
-      )
+      private val groupedStatic =
+        groupedStaticCache(
+          stmt.body.foldLeftM(GroupedStaticStatements(Vector.empty)) {
+            case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
+              group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)).pure[Comp]
 
-    private val groupedInst =
-      groupedInstCache(
-        stmt.instanceBody.foldLeftM(GroupedInstanceStatements(Vector.empty, Vector.empty, Vector.empty)) {
-          case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
-            group.copy(methods = group.methods :+ WithSource(stmt, location)).pure[TComp]
+            case (_, WithSource(_, location)) =>
+              Compilation[Comp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          }
+        )
 
-          case (group, WithSource(stmt: parser.FieldDeclarationStmt, location)) =>
-            group.copy(fields = group.fields :+ WithSource(stmt, location)).pure[TComp]
+      private val groupedInst =
+        groupedInstCache(
+          stmt.instanceBody.foldLeftM(GroupedInstanceStatements(Vector.empty, Vector.empty, Vector.empty)) {
+            case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
+              group.copy(methods = group.methods :+ WithSource(stmt, location)).pure[Comp]
 
-          case (group, WithSource(stmt: parser.ClassConstructorDeclarationStmt, location)) =>
-            group.copy(classCtors = group.classCtors :+ WithSource(stmt, location)).pure[TComp]
+            case (group, WithSource(stmt: parser.FieldDeclarationStmt, location)) =>
+              group.copy(fields = group.fields :+ WithSource(stmt, location)).pure[Comp]
 
-          case (_, WithSource(_, location)) =>
-            Compilation[TComp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-        }
-      )
+            case (group, WithSource(stmt: parser.ClassConstructorDeclarationStmt, location)) =>
+              group.copy(classCtors = group.classCtors :+ WithSource(stmt, location)).pure[Comp]
 
-    override val signature: TComp[Signature[ArClass.ResultInfo]] =
-      sigCache(
-        SourceSignatureCreator.fromParameters[TComp, ArClass.ResultInfo](context2)(
-          env(context)(EffectInfo.pure, descriptor)
-        )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType)(this))
-      )
+            case (_, WithSource(_, location)) =>
+              Compilation[Comp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          }
+        )
 
-    override val fields: TComp[Vector[context.typeSystem.FieldVariable]] =
-      fieldCache(groupedInst.flatMap { inst =>
-        inst.fields.traverse { field =>
-          field.value.name match {
-            case Some(fieldName) =>
-              ExpressionConverter.convertTypeExpression(context)(env(context)(EffectInfo.pure, descriptor))(field.value.fieldType).map { fieldType =>
-                context.typeSystem.FieldVariable(
-                  FieldDescriptor(descriptor, fieldName),
-                  AbsRef(this),
-                  VariableName.Normal(fieldName),
-                  Mutability.fromIsMutable(field.value.isMutable),
-                  fieldType
-                )
+      override val signature: Comp[Signature[ArClass.ResultInfo]] =
+        sigCache(
+          SourceSignatureCreator.fromParameters[ArClass.ResultInfo](context2)(
+            env(context)(EffectInfo.pure, descriptor)
+          )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType)(this))
+        )
+
+      override val fields: Comp[Vector[context.typeSystem.FieldVariable]] =
+        fieldCache(groupedInst.flatMap { inst =>
+          inst.fields.traverse { field =>
+            field.value.name match {
+              case Some(fieldName) =>
+                ExpressionConverter.convertTypeExpression(context)(env(context)(EffectInfo.pure, descriptor))(field.value.fieldType).map { fieldType =>
+                  context.typeSystem.FieldVariable(
+                    FieldDescriptor(descriptor, fieldName),
+                    AbsRef(this),
+                    VariableName.Normal(fieldName),
+                    Mutability.fromIsMutable(field.value.isMutable),
+                    fieldType
+                  )
+                }
+
+              case None =>
+                Compilation[Comp].forErrors(CompilationError.FieldMustHaveName(CompilationMessageSource.SourceFile(env.fileSpec, field.location)))
+            }
+          }
+        })
+
+      override val methods: Comp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
+        methodCache(groupedInst.flatMap { inst =>
+          inst.methods.zipWithIndex.traverse { case (method, i) =>
+            parseAccessModifier[Comp](env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
+              val memberName = method.value.name match {
+                case Some(name) => MemberName.Normal(name)
+                case None => MemberName.Unnamed
               }
 
-            case None =>
-              Compilation[TComp].forErrors(CompilationError.FieldMustHaveName(CompilationMessageSource.SourceFile(env.fileSpec, field.location)))
-          }
-        }
-      })
-
-    override val methods: TComp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
-      methodCache(groupedInst.flatMap { inst =>
-        inst.methods.zipWithIndex.traverse { case (method, i) =>
-          parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
-            val memberName = method.value.name match {
-              case Some(name) => MemberName.Normal(name)
-              case None => MemberName.Unnamed
+              fields.flatMap { fieldVars =>
+                val env2 = env.addVariables(context)(fieldVars)
+                val desc = MethodDescriptor(descriptor, i, memberName)
+                SourceMethod(context)(env2)(method.value, method.location)(desc)(ArMethod.ClassOwner(this))
+                  .map(MethodBinding(memberName, i, modifiers, _))
+              }
             }
+          }
+        })
 
-            fields.flatMap { fieldVars =>
-              val env2 = env.addVariables(context)(fieldVars)
-              val desc = MethodDescriptor(descriptor, i, memberName)
-              SourceMethod(context)(env2)(method.value, method.location)(desc)(ArMethod.ClassOwner(this))
+      override val staticMethods: Comp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
+        staticMethodCache(groupedStatic.flatMap { statics =>
+          statics.staticMethods.zipWithIndex.traverse { case (method, i) =>
+            parseAccessModifier[Comp](env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
+              val memberName = method.value.name match {
+                case Some(name) => MemberName.Normal(name)
+                case None => MemberName.Unnamed
+              }
+
+              val desc = MethodDescriptor(ClassObjectDescriptor(descriptor), i, memberName)
+              SourceMethod(context)(env)(method.value, method.location)(desc)(ArMethod.ClassObjectOwner(this))
                 .map(MethodBinding(memberName, i, modifiers, _))
             }
           }
-        }
-      })
+        })
 
-    override val staticMethods: TComp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
-      staticMethodCache(groupedStatic.flatMap { statics =>
-        statics.staticMethods.zipWithIndex.traverse { case (method, i) =>
-          parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
-            val memberName = method.value.name match {
-              case Some(name) => MemberName.Normal(name)
-              case None => MemberName.Unnamed
+      override val classConstructors: Comp[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]] =
+        classCtorCache(groupedInst.flatMap { inst =>
+          inst.classCtors.zipWithIndex.traverse { case (classCtor, i) =>
+            parseAccessModifier[Comp](env.fileSpec, classCtor.location, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
+              val desc = ClassConstructorDescriptor(descriptor, i)
+              SourceClassConstructor(context)(env)(this)(classCtor.value)(desc).map(ClassConstructorBinding(i, modifiers, _))
             }
-
-            val desc = MethodDescriptor(ClassObjectDescriptor(descriptor), i, memberName)
-            SourceMethod(context)(env)(method.value, method.location)(desc)(ArMethod.ClassObjectOwner(this))
-              .map(MethodBinding(memberName, i, modifiers, _))
           }
-        }
-      })
-
-    override val classConstructors: TComp[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]] =
-      classCtorCache(groupedInst.flatMap { inst =>
-        inst.classCtors.zipWithIndex.traverse { case (classCtor, i) =>
-          parseAccessModifier(env.fileSpec, classCtor.location, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
-            val desc = ClassConstructorDescriptor(descriptor, i)
-            SourceClassConstructor(context)(env)(this)(classCtor.value)(desc).map(ClassConstructorBinding(i, modifiers, _))
-          }
-        }
-      })
+        })
 
 
-    override val payload: Unit = ()
+      override val payload: Unit = ()
+    }
   }
 
   private def resultCreator(baseTypeExpr: Option[WithSource[parser.Expr]])(osCheck: OpenSealedCheck): ResultCreator[ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
-    override def createResult[TComp[+ _] : Compilation]
-    (context: ContextComp[TComp])
+    override def createResult
+    (context: Context)
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    : TComp[ArClass.ResultInfo[context.type, context.typeSystem.type]] =
+    : context.Comp[ArClass.ResultInfo[context.type, context.typeSystem.type]] = {
+      import context._
+
       (baseTypeExpr match {
         case Some(baseTypeExpr) =>
           ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
@@ -183,36 +189,38 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
               val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
               baseTypes.baseClass.traverse_ { baseClass =>
-                osCheck.checkExtendClass(baseClass.arClass.value)(messageSource)
+                osCheck.checkExtendClass[Comp, context.type, baseClass.arClass.PayloadSpec](baseClass.arClass.value)(messageSource)
               }
                 .flatMap { _ =>
                   baseTypes.baseTraits.traverse_ { baseTrait =>
-                    osCheck.checkExtendTrait(baseTrait.arTrait.value)(messageSource)
+                    osCheck.checkExtendTrait[Comp, context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
                   }
                 }
                 .map { _ => baseTypes }
             }
         case None =>
-          context.typeSystem.BaseTypeInfoClass(None, Vector()).pure[TComp]
+          context.typeSystem.BaseTypeInfoClass(None, Vector()).pure[Comp]
       })
         .map { baseTypes => ArClass.ResultInfo(context.typeSystem)(baseTypes) }
+    }
 
-    private def typeToBaseTypes[TComp[+ _] : Compilation]
-    (context: ContextComp[TComp])
+    private def typeToBaseTypes
+    (context: Context)
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
     (t: context.typeSystem.TType)
     (location: SourceLocation)
     (acc: context.typeSystem.BaseTypeInfoClass)
-    : TComp[context.typeSystem.BaseTypeInfoClass] =
+    : context.Comp[context.typeSystem.BaseTypeInfoClass] = {
+      import context._
       t match {
         case t: context.typeSystem.ClassType =>
           if(acc.baseClass.isDefined)
-            Compilation[TComp].forErrors(CompilationError.MultipleBaseClasses(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+            Compilation[Comp].forErrors(CompilationError.MultipleBaseClasses(CompilationMessageSource.SourceFile(env.fileSpec, location)))
           else
-            acc.copy(baseClass = Some(t)).pure[TComp]
+            acc.copy(baseClass = Some(t)).pure[Comp]
 
         case t: context.typeSystem.TraitType =>
-          acc.copy(baseTraits = acc.baseTraits :+ t).pure[TComp]
+          acc.copy(baseTraits = acc.baseTraits :+ t).pure[Comp]
 
         case context.typeSystem.IntersectionType(first, second) =>
           typeToBaseTypes(context)(env)(first)(location)(acc).flatMap { acc2 =>
@@ -220,8 +228,9 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           }
 
         case _ =>
-          Compilation[TComp].forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          Compilation[Comp].forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
       }
+    }
   }
 
 }

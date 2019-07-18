@@ -14,7 +14,7 @@ final class JSContext[TCompRE[-_, +_, +_], R, I]
   override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]]
 )(
   override implicit val compCompilationInstance: CompilationRE[TCompRE, R]
-) extends ContextCompRE[TCompRE, R] {
+) extends Context {
 
   override type TTraitMetadata = Unit
   override type TClassMetadata = Unit
@@ -27,6 +27,11 @@ final class JSContext[TCompRE[-_, +_, +_], R, I]
   override type TMethodImplementation = JSImpl.Method
   override type TClassConstructorImplementation = JSImpl.ClassConstructor
   override type TDataConstructorImplementation = JSImpl.DataConstructor
+
+
+  override type CompRE[-R2, +E, +A] = TCompRE[R2, E, A]
+  override type Environment = R
+
 
   override type BackendOptions = JSBackendOptions[Id, I]
 

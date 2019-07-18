@@ -19,16 +19,16 @@ import scala.collection.immutable.{Map, Vector}
 
 object ArgonModuleLoader {
 
-  def apply[TCompRE[-_, +_, +_], R](context: ContextCompRE[TCompRE, R])(referencePayloadLoader: PayloadLoader[context.type, ReferencePayloadSpecifier]): ModuleLoader[context.type] = new ModuleLoader[context.type] {
+  def apply(context: Context)(referencePayloadLoader: PayloadLoader[context.type, ReferencePayloadSpecifier]): ModuleLoader[context.type] = new ModuleLoader[context.type] {
 
     import context._, typeSystem.{ context => _, _ }, signatureContext.{ context => _, typeSystem => _, _ }
     
-    final case class ResAndMetadata[I, TRes <: ResourceAccess[TCompRE, R, I] with Singleton](zip: TRes#ZipReader, metadata: ArgonModule.Metadata)
+    final case class ResAndMetadata[TRes <: ResourceAccess[context.type] with Singleton](zip: TRes#ZipReader, metadata: ArgonModule.Metadata)
 
-    type ModuleData[I, TRes <: ResourceAccess[TCompRE, R, I] with Singleton] = ResAndMetadata[I, TRes]
+    type ModuleData[TRes <: ResourceAccess[context.type] with Singleton] = ResAndMetadata[TRes]
 
 
-    override def loadResource[I, TRes <: ResourceAccess[TCompRE, R, I] with Singleton, A](res: TRes)(id: I)(f: Option[ResAndMetadata[I, res.type]] => Comp[A]): Comp[A] =
+    override def loadResource[TRes <: ResourceAccess[context.type] with Singleton, A](res: TRes)(id: ResIndicator)(f: Option[ResAndMetadata[res.type]] => Comp[A]): Comp[A] =
       res.getExtension(id).flatMap {
         case "armodule" =>
           res.getZipReader(id).use { zip =>
@@ -41,28 +41,28 @@ object ArgonModuleLoader {
         case _ => f(None)
       }
 
-    override def dataDescriptor[I, TRes <: ResourceAccess[TCompRE, R, I] with Singleton](data: ResAndMetadata[I, TRes]): ModuleDescriptor =
+    override def dataDescriptor[TRes <: ResourceAccess[context.type] with Singleton](data: ResAndMetadata[TRes]): ModuleDescriptor =
       ModuleDescriptor(data.metadata.name)
 
-    override def dataReferencedModules[I, TRes <: ResourceAccess[TCompRE, R, I] with Singleton](data: ResAndMetadata[I, TRes]): Vector[ModuleDescriptor] =
+    override def dataReferencedModules[TRes <: ResourceAccess[context.type] with Singleton](data: ResAndMetadata[TRes]): Vector[ModuleDescriptor] =
       data.metadata.references.map {
         case ArgonModule.ModuleReference(name) => ModuleDescriptor(name)
       }
 
 
-    override def loadModuleReference[I, TRes <: ResourceAccess[TCompRE, R, I] with Singleton]
+    override def loadModuleReference[TRes <: ResourceAccess[context.type] with Singleton]
     (res: TRes)
-    (data: ResAndMetadata[I, res.type])
+    (data: ResAndMetadata[res.type])
     (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
     : Comp[ArModule[context.type, ReferencePayloadSpecifier]] =
-      loadModule[ReferencePayloadSpecifier, I, TRes](res)(data.zip)(data.metadata)(referencedModules)(referencePayloadLoader)
+      loadModule[ReferencePayloadSpecifier, TRes](res)(data.zip)(data.metadata)(referencedModules)(referencePayloadLoader)
 
 
     private trait ModuleCreator[TPayloadSpec[_, _]] {
       val module: Comp[ArModule[context.type, TPayloadSpec]]
     }
 
-    private def loadModule[TPayloadSpec[_, _], I, TRes <: ResourceAccess[TCompRE, R, I] with Singleton]
+    private def loadModule[TPayloadSpec[_, _], TRes <: ResourceAccess[context.type] with Singleton]
     (res: TRes)
     (zipFile: res.ZipReader)
     (metadata: ArgonModule.Metadata)
@@ -683,7 +683,7 @@ object ArgonModuleLoader {
                     case GlobalBinding.GlobalDataConstructor(_, _, dataCtor) => dataCtor
                   }
                     .flatMap {
-                      _.flatTraverse { dataCtor =>
+                      _.flatTraverse[Comp, ArMethod[context.type, ReferencePayloadSpecifier]] { dataCtor =>
                         dataCtor.methods.map { methods =>
                           methods
                             .find { binding =>

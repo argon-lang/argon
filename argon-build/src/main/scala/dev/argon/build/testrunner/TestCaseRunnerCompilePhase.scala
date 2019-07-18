@@ -10,7 +10,7 @@ import cats.implicits._
 import dev.argon.compiler.backend.ProjectFileHandler
 import zio._
 import dev.argon.util.FileOperations.fileShow
-import IOCompilation.fileSystemResourceAccess
+import IOCompilation.fileSystemResourceAccessFactory
 import cats.data.NonEmptyList
 import dev.argon.compiler.backend.Backend
 import zio.blocking.Blocking
@@ -23,7 +23,7 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
 
   protected def backendOptions(compilerOptions: CompilerOptions[Id]): ZIO[Blocking, IOException, backend.BackendOptions[Id, File]]
 
-  protected def getProgramOutput(compOutput: backend.TCompilationOutput[ZIO, Blocking, File]): ZIO[Blocking, NonEmptyList[CompilationError], Either[Throwable, String]]
+  protected def getProgramOutput(compOutput: backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, Blocking, File] }): ZIO[Blocking, NonEmptyList[CompilationError], Either[Throwable, String]]
 
   protected def normalizeOutput(output: String): String =
     output.split("\n").map { _.trim }.filter { _.nonEmpty }.mkString("\n")
@@ -46,7 +46,7 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
                   case Left(ex) => IO.succeed(Left(ex))
                   case Right(backendOpts) =>
                     BuildProcess.compile(
-                      backend
+                      backend : backend.type
                     )(
                       parsedSource,
                       references,

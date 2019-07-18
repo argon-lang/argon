@@ -10,7 +10,7 @@ import cats.instances._
 import zio._
 import zio.interop.catz._
 import dev.argon.build.testrunner.node.ExternalApi._
-import dev.argon.compiler.backend.CompilationOutputText
+import dev.argon.compiler.backend.{Backend, CompilationOutputText}
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.stream.{Resource, Step, StreamTransformation}
@@ -34,7 +34,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
     )
   )
 
-  override protected def getProgramOutput(compOutput: CompilationOutputText[ZIO, Blocking, File]): ZIO[Blocking, NonEmptyList[CompilationError], Either[Throwable, String]] = for {
+  override protected def getProgramOutput(compOutput: CompilationOutputText { val context: Backend.ContextWithComp[ZIO, Blocking, File] }): ZIO[Blocking, NonEmptyList[CompilationError], Either[Throwable, String]] = for {
     compiledFile <- compOutput.textStream.foldLeft(stringConcatTrans)
     output <- runJSOutput(references)(compiledFile).either
   } yield output

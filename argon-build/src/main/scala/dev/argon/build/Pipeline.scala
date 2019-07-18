@@ -15,7 +15,8 @@ import zio.console._
 import dev.argon.util.FileOperations.fileShow
 import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.parser.SourceAST
-import IOCompilation.fileSystemResourceAccess
+import IOCompilation.fileSystemResourceAccessFactory
+import dev.argon.compiler.backend.Backend
 import dev.argon.stream.ArStream
 import zio.blocking.Blocking
 
@@ -66,22 +67,22 @@ object Pipeline {
 
   def compileResult[A]
   (buildInfo: BuildInfo[File])
-  (f: buildInfo.backend.TCompilationOutput[ZIO, Blocking, File] => ZIO[Blocking, NonEmptyList[CompilationError], A])
+  (f: buildInfo.backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, Blocking, File] } => ZIO[Blocking, NonEmptyList[CompilationError], A])
   (implicit compInstance: IOCompilation[Blocking])
   : ZIO[Blocking, NonEmptyList[CompilationError], A] =
     {
       import zio.interop.catz._
       BuildProcess.parseInput[ZIO, Blocking](findInputFiles(buildInfo))
     }.foldLeft(StreamTransformation.toVector[ZIO, Blocking, NonEmptyList[CompilationError], SourceAST]).flatMap { parsedInput =>
-      BuildProcess.compile(
-        buildInfo.backend
+      BuildProcess.compile[ZIO, Blocking, File, A](
+        buildInfo.backend : buildInfo.backend.type
       )(
         parsedInput,
         buildInfo.project.references.toVector,
         CompilerOptions(
           moduleName = buildInfo.compilerOptions.moduleName
         ),
-        buildInfo.backendOptions,
+        buildInfo.backendOptions : buildInfo.backend.BackendOptions[Id, File],
       )(f)
     }
 

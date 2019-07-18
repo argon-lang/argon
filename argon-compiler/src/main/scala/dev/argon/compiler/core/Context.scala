@@ -10,7 +10,7 @@ import cats._
 import cats.data.NonEmptyList
 
 
-sealed trait Context {
+trait Context {
 
   type TFunctionImplementation
   type TMethodImplementation
@@ -37,9 +37,9 @@ sealed trait Context {
 
   type Environment
   type CompRE[-_, +_, +_]
-  type CompE[+_, +_]
-  type Comp[+_]
-  implicit val compCompilationInstance: Compilation[Comp]
+  type CompE[+E, +A] = CompRE[Environment, E, A]
+  type Comp[+A] = CompE[NonEmptyList[CompilationError], A]
+  implicit val compCompilationInstance: CompilationRE[CompRE, Environment]
 
   object ContextTypeSystem extends ArgonTypeSystem[this.type] {
     override val context: Context.this.type = Context.this
@@ -60,26 +60,7 @@ sealed trait Context {
   type ResIndicator
   protected val compilerInput: CompilerInput[ResIndicator, BackendOptions]
 
-  def createModule[A](f: ArModule[this.type, DeclarationPayloadSpecifier] => Comp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[CompRE, Environment, ResIndicator]): Comp[A]
+  def createModule[A](f: ArModule[this.type, DeclarationPayloadSpecifier] => Comp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[this.type]): Comp[A] =
+    SourceModuleCreator.createModule[A](this)(compilerInput)(f)
 
-
-}
-
-trait ContextComp[TComp[+_]] extends Context {
-  override type Comp[+A] = TComp[A]
-
-}
-
-trait ContextCompE[TCompE[+_, +_]] extends ContextComp[TCompE[NonEmptyList[CompilationError], +?]] {
-  override type CompE[+E, +A] = TCompE[E, A]
-  override implicit val compCompilationInstance: CompilationE[CompE]
-}
-
-trait ContextCompRE[TCompRE[-_, +_, +_], R] extends ContextCompE[TCompRE[R, +?, +?]] {
-  override type Environment = R
-  override type CompRE[-R2, +E, +A] = TCompRE[R2, E, A]
-  override implicit val compCompilationInstance: CompilationRE[CompRE, R]
-
-  override def createModule[A](f: ArModule[this.type, DeclarationPayloadSpecifier] => Comp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[TCompRE, Environment, ResIndicator]): Comp[A] =
-    SourceModuleCreator.createModule[CompRE, R, ResIndicator, A](this)(compilerInput)(f)(showRes, compCompilationInstance, res)
 }

@@ -12,14 +12,15 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 
 private[compiler] object SourceFunction {
 
-  def apply[TComp[+_] : Compilation]
-  (context2: ContextComp[TComp])
+  def apply
+  (context2: Context)
   (env: EnvCreator[context2.type])
   (stmt: parser.FunctionDeclarationStmt)
   (desc: FuncDescriptor)
   : ArFunc[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type } =
     new ArFunc[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
+      import context._
 
       import context.scopeContext.ScopeExtensions
 
@@ -28,12 +29,12 @@ private[compiler] object SourceFunction {
 
       override val effectInfo: EffectInfo = EffectInfo(stmt.purity)
 
-      override lazy val signature: TComp[context.signatureContext.Signature[FunctionResultInfo]] =
-        SourceSignatureCreator.fromParameters[TComp, FunctionResultInfo](context2)(
+      override lazy val signature: Comp[context.signatureContext.Signature[FunctionResultInfo]] =
+        SourceSignatureCreator.fromParameters[FunctionResultInfo](context2)(
           env(context)(effectInfo, descriptor)
         )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType))
 
-      override lazy val payload: TComp[context.TFunctionImplementation] = stmt.body match {
+      override lazy val payload: Comp[context.TFunctionImplementation] = stmt.body match {
         case WithSource(Vector(WithSource(parser.ExternExpr(specifier), location)), _) =>
           context.createExternFunctionImplementation(specifier, CompilationMessageSource.SourceFile(env.fileSpec, location))
 
@@ -50,12 +51,14 @@ private[compiler] object SourceFunction {
     }
 
   def resultCreator(returnTypeExpr: WithSource[parser.Expr]): ResultCreator[FunctionResultInfo] =  new ResultCreator[FunctionResultInfo] {
-    override def createResult[TComp[+ _] : Compilation]
-    (context: ContextComp[TComp])
+    override def createResult
+    (context: Context)
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    : TComp[FunctionResultInfo[context.type, context.typeSystem.type]] =
+    : context.Comp[FunctionResultInfo[context.type, context.typeSystem.type]] = {
+      import context._
       ExpressionConverter.convertTypeExpression(context)(env)(returnTypeExpr)
         .map { t => FunctionResultInfo(context.typeSystem)(t) }
+    }
   }
 
 }

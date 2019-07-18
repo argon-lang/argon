@@ -11,9 +11,11 @@ class Verifier {
 
   def passes: Set[VerifyPass] = Set()
 
-  def verifyModule[TComp[+_] : Compilation](context: ContextComp[TComp])(module: ArModule[context.type, DeclarationPayloadSpecifier]): TComp[Unit] =
+  def verifyModule(context: Context)(module: ArModule[context.type, DeclarationPayloadSpecifier]): context.Comp[Unit] = {
+    import context._
     module.globalNamespace.flatMap { globalNamespace =>
       passes.toVector.traverse_ { _.verifyNamespace(context)(globalNamespace) }
     }
+  }
 
 }

@@ -11,13 +11,13 @@ import cats.implicits._
 
 object SourceSignatureCreator {
 
-  def fromParameters[TComp[+_], TResult[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton] : SignatureResultConverter]
-  (context: ContextComp[TComp])
+  def fromParameters[TResult[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton] : SignatureResultConverter]
+  (context: Context)
   (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
   (paramOwner: ParameterOwnerDescriptor)
   (params: Vector[WithSource[parser.FunctionParameterList]])
   (resultCreator: ResultCreator[TResult])
-  : TComp[context.signatureContext.Signature[TResult]] = {
+  : context.Comp[context.signatureContext.Signature[TResult]] = {
 
     import context._
     import typeSystem.{ ParameterElementVariable, Parameter }
@@ -28,7 +28,7 @@ object SourceSignatureCreator {
     (env: ExpressionConverter.Env[context.type, Scope])
     (params: Vector[WithSource[parser.FunctionParameterList]])
     (paramIndex: Int)
-    : TComp[Signature[TResult]] =
+    : Comp[Signature[TResult]] =
       params match {
         case WithSource(parser.FunctionParameterList(listType, Vector()), location) +: tail =>
           for {
@@ -47,10 +47,10 @@ object SourceSignatureCreator {
               case (WithSource(parser.FunctionParameter(paramTypeOpt, _, paramName), loc), tupleIndex) =>
                 (paramTypeOpt match {
                   case Some(paramType) =>
-                    ExpressionConverter.convertTypeExpression[TComp](context)(env)(paramType)
+                    ExpressionConverter.convertTypeExpression(context)(env)(paramType)
 
                   case None =>
-                    Compilation[TComp].forErrors(CompilationError.ParameterTypeAnnotationRequired(paramName, CompilationMessageSource.SourceFile(env.fileSpec, loc)))
+                    Compilation[Comp].forErrors(CompilationError.ParameterTypeAnnotationRequired(paramName, CompilationMessageSource.SourceFile(env.fileSpec, loc)))
 
                 })
                 .map { t =>
@@ -91,10 +91,10 @@ object SourceSignatureCreator {
   }
 
   trait ResultCreator[TResultInfo[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton]] {
-    def createResult[TComp[+_] : Compilation]
-    (context: ContextComp[TComp])
+    def createResult
+    (context: Context)
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    : TComp[TResultInfo[context.type, context.typeSystem.type]]
+    : context.Comp[TResultInfo[context.type, context.typeSystem.type]]
   }
 
 

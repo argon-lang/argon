@@ -9,9 +9,10 @@ import cats.implicits._
 
 trait VerifyPass {
 
-  def verifyGlobal[TComp[+_] : Compilation](context: ContextComp[TComp])(binding: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): TComp[Unit]
+  def verifyGlobal(context: Context)(binding: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): context.Comp[Unit]
 
-  final def verifyNamespace[TComp[+_] : Compilation](context: ContextComp[TComp])(ns: Namespace[context.type, DeclarationPayloadSpecifier]): TComp[Unit] =
+  final def verifyNamespace(context: Context)(ns: Namespace[context.type, DeclarationPayloadSpecifier]): context.Comp[Unit] = {
+    import context._
     ns.bindings.traverse_ {
       case GlobalBinding.NestedNamespace(_, nested) =>
         verifyNamespace(context)(nested)
@@ -19,5 +20,6 @@ trait VerifyPass {
       case nonNS: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier] =>
         verifyGlobal(context)(nonNS)
     }
+  }
 
 }

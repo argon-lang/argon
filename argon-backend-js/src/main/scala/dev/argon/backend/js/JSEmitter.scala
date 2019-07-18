@@ -10,9 +10,7 @@ import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
 import dev.argon.compiler.vtable._
 
-final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, _] with Singleton](context: TContext, inject: JSInjectCode[Id]) {
-
-  private type TComp[+A] = context.Comp[A]
+final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _] with Singleton](val context: TContext, inject: JSInjectCode[Id]) {
 
   import context._
   import context.signatureContext.{ context => _, typeSystem => _, _ }
@@ -33,7 +31,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
 
   private final case class EmitParams(owner: ParameterOwnerDescriptor, varMapping: VarMap)
 
-  def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): TComp[JSModule] = {
+  def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): Comp[JSModule] = {
 
 
     val modulePairs = module.referencedModules
@@ -43,7 +41,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
 
     for {
       globalNamespace <- module.globalNamespace
-      vtableBuilder <- VTableBuilder[TComp, context.type](context)
+      vtableBuilder <- VTableBuilder(context)
       topLevelStmts <- allNamespaceElements(globalNamespace).toVector.traverse(createObjectsForScopeValue(vtableBuilder))
     } yield JSModule(
       Vector(
@@ -123,14 +121,14 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
 
 
 
-  private def createObjectsForScopeValue(vtableBuilder: VTableBuilder[TComp, context.type])(value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): TComp[JSStatement] =
+  private def createObjectsForScopeValue(vtableBuilder: VTableBuilder[context.type])(value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): Comp[JSStatement] =
     value match {
       case GlobalBinding.GlobalFunction(_, _, func) =>
         for {
           sig <- func.signature
-          impl <- func.payload : TComp[context.JSImpl.Function]
+          impl <- func.payload : Comp[context.JSImpl.Function]
           body <- impl match {
-            case context.JSImpl.Function.JSExpressionBody(expr) => expr.pure[TComp]
+            case context.JSImpl.Function.JSExpressionBody(expr) => expr.pure[Comp]
             case context.JSImpl.Function.ExpressionBody(expr) =>
               createExpressionImpl(EmitParams(
                 owner = func.descriptor,
@@ -248,7 +246,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
         for {
           sig <- ctor.signature
           methods <- ctor.methods
-          ctorImpl <- ctor.payload : TComp[context.JSImpl.DataConstructor]
+          ctorImpl <- ctor.payload : Comp[context.JSImpl.DataConstructor]
 
           descString = JSString(DescriptorId.forDataConstructor(ctor.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))
 
@@ -305,29 +303,29 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
 
     }
 
-  private def createMethodObject(ownerVarMapping: VarMap)(method: ArMethod[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): TComp[JSExpression] =
+  private def createMethodObject(ownerVarMapping: VarMap)(method: ArMethod[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): Comp[JSExpression] =
     for {
       sig <- method.signature
-      impl <- method.payload : TComp[context.JSImpl.Method]
+      impl <- method.payload : Comp[context.JSImpl.Method]
       body <- impl match {
-        case context.JSImpl.Method.JSExpressionBody(expr) => expr.pure[TComp]
+        case context.JSImpl.Method.JSExpressionBody(expr) => expr.pure[Comp]
         case context.JSImpl.Method.ExpressionBody(expr) =>
           createExpressionImpl(EmitParams(
             owner = method.descriptor,
             varMapping = ownerVarMapping ++ parameterVarMapping(method.descriptor)(sig),
           ))(sig)(expr)
-        case context.JSImpl.Method.Abstract => JSNull.pure[TComp]
+        case context.JSImpl.Method.Abstract => JSNull.pure[Comp]
       }
     } yield JSObjectLiteral(Vector(
       JSObjectProperty("descriptor", JSString(DescriptorId.forMethod(method.descriptor, ErasedSignature.fromSignature(context)(sig)))),
       JSObjectProperty("value", body),
     ))
 
-  private def createClassCtorObject(ctor: ClassConstructor[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): TComp[JSExpression] =
+  private def createClassCtorObject(ctor: ClassConstructor[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): Comp[JSExpression] =
     for {
       sig <- ctor.signature
       descriptorId = DescriptorId.forClassConstructor(ErasedSignature.fromSignatureParameters(context)(sig))
-      impl <- ctor.payload : TComp[context.JSImpl.ClassConstructor]
+      impl <- ctor.payload : Comp[context.JSImpl.ClassConstructor]
       body <- impl match {
         case context.JSImpl.ClassConstructor.StatementBody(body) =>
           val paramVarMapping: VarMap = parameterVarMapping(ctor.descriptor)(sig)
@@ -410,7 +408,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
       JSObjectProperty("value", func),
     ))
 
-  private def createDataCtorBody(ctor: DataConstructor[context.type, DeclarationPayloadSpecifier], sig: Signature[DataConstructor.ResultInfo], ctorImpl: context.JSImpl.DataConstructor, sigVarMapping: VarMap, sigVarMemberMapping: VarMap, statementConverter: StatementConverter): TComp[(JSExpression, VarMap)] =
+  private def createDataCtorBody(ctor: DataConstructor[context.type, DeclarationPayloadSpecifier], sig: Signature[DataConstructor.ResultInfo], ctorImpl: context.JSImpl.DataConstructor, sigVarMapping: VarMap, sigVarMemberMapping: VarMap, statementConverter: StatementConverter): Comp[(JSExpression, VarMap)] =
     ctorImpl match {
       case context.JSImpl.DataConstructor.ExpressionBody(expr) =>
 
@@ -434,7 +432,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
         } yield (ctorFunc, varMap)
     }
 
-  private def createVTableObject(vtable: VTable[context.type], descriptor: MethodOwnerDescriptor): TComp[JSExpression] =
+  private def createVTableObject(vtable: VTable[context.type], descriptor: MethodOwnerDescriptor): Comp[JSExpression] =
     vtable.methodMap.toVector
       .traverse {
         case (slotMethod, VTableEntryMethod(method, _)) =>
@@ -460,7 +458,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
     .map(JSArrayLiteral(_))
 
 
-  private def createExpressionImpl(params: EmitParams)(sig: context.signatureContext.Signature[FunctionResultInfo])(expr: context.typeSystem.ArExpr): TComp[JSExpression] =
+  private def createExpressionImpl(params: EmitParams)(sig: context.signatureContext.Signature[FunctionResultInfo])(expr: context.typeSystem.ArExpr): Comp[JSExpression] =
     for {
       body <- convertStmt(params)(useReturn = true)(expr)
     } yield JSFunctionExpression(
@@ -489,12 +487,12 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
 
     protected def initializeLetBinding(variable: context.typeSystem.LocalVariable, valueExpr: JSExpression): (Vector[JSStatement], JSExpression)
 
-    final def wrapStatement(params: EmitParams)(expr: context.typeSystem.ArExpr): TComp[JSExpression] =
+    final def wrapStatement(params: EmitParams)(expr: context.typeSystem.ArExpr): Comp[JSExpression] =
       for {
         (stmts, _) <- convertStmt(params)(useReturn = true)(expr)
       } yield JSFunctionCall(JSArrowFunctionStmts(JSFunctionEmptyParameterList, stmts), Vector())
 
-    final def convertStmt(params: EmitParams)(useReturn: Boolean)(expr: context.typeSystem.ArExpr): TComp[(Vector[JSStatement], VarMap)] = expr match {
+    final def convertStmt(params: EmitParams)(useReturn: Boolean)(expr: context.typeSystem.ArExpr): Comp[(Vector[JSStatement], VarMap)] = expr match {
       case context.typeSystem.LetBinding(variable, value, next) =>
         for {
           valueExpr <- convertExpr(params)(value)
@@ -543,7 +541,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
     }
   }
 
-  def convertStmt(params: EmitParams)(useReturn: Boolean)(expr: context.typeSystem.ArExpr): TComp[Vector[JSStatement]] =
+  def convertStmt(params: EmitParams)(useReturn: Boolean)(expr: context.typeSystem.ArExpr): Comp[Vector[JSStatement]] =
     StatementConverterLocalBinding.convertStmt(params)(useReturn)(expr).map { case (convBody, _) => convBody }
 
   private trait StatementConverterFieldBinding extends StatementConverter {
@@ -578,7 +576,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
   }
 
 
-  def convertExpr(params: EmitParams)(expr: context.typeSystem.ArExpr): TComp[JSExpression] = {
+  def convertExpr(params: EmitParams)(expr: context.typeSystem.ArExpr): Comp[JSExpression] = {
     import context.typeSystem. { context => _, _ }
     expr match {
       case ClassConstructorCall(classType, ctor, args) =>
@@ -649,13 +647,13 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
         JSFunctionCall(
           coreLibExport(params.owner.moduleDescriptor, "createInt"),
           Vector(JSBigInt(i))
-        ).pure[TComp]
+        ).pure[Comp]
 
       case LoadConstantString(str, _) =>
         JSFunctionCall(
           coreLibExport(params.owner.moduleDescriptor, "createString"),
           Vector(JSString(str))
-        ).pure[TComp]
+        ).pure[Comp]
 
       case LoadLambda(argVariable, body) =>
         val varName = getVariableName(argVariable.descriptor)
@@ -672,10 +670,10 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
         } yield JSArrayLiteral(values)
 
       case LoadUnit(_) =>
-        coreLibExport(params.owner.moduleDescriptor, "unitValue").pure[TComp]
+        coreLibExport(params.owner.moduleDescriptor, "unitValue").pure[Comp]
 
       case LoadVariable(variable) =>
-        params.varMapping(variable.descriptor).pure[TComp]
+        params.varMapping(variable.descriptor).pure[Comp]
 
       case MethodCall(method, instance, args, _) =>
         for {
@@ -724,7 +722,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
     }
   }
 
-  def getMethodObject(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): TComp[JSExpression] = for {
+  def getMethodObject(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): Comp[JSExpression] = for {
     sig <- method.value.signature
     ownerObj <- getClassLikeJSObject(moduleDescriptor, method.value.owner)
   } yield JSPropertyAccessBracket(
@@ -735,7 +733,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
     JSString(DescriptorId.forMethod(method.value.descriptor, ErasedSignature.fromSignature(context)(sig)))
   )
 
-  def getMethodSymbol(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): TComp[JSExpression] = for {
+  def getMethodSymbol(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): Comp[JSExpression] = for {
     methodObj <- getMethodObject(moduleDescriptor)(method)
   } yield JSPropertyAccessDot(
     methodObj,
@@ -752,7 +750,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
   private def getVariableName(descriptor: VariableDescriptor): JSIdentifier =
     JSIdentifier(s"local_${descriptor.index.toString}")
 
-  private def getFieldVariableExpr(moduleDescriptor: ModuleDescriptor, variable: context.typeSystem.FieldVariable): TComp[JSExpression] = for {
+  private def getFieldVariableExpr(moduleDescriptor: ModuleDescriptor, variable: context.typeSystem.FieldVariable): Comp[JSExpression] = for {
     sig <- variable.ownerClass.value.signature
     erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
   } yield JSPropertyAccessBracket(
@@ -812,7 +810,7 @@ final class JSEmitter[TCompRE[-_, +_, +_], R, TContext <: JSContext[TCompRE, R, 
     JSPropertyAccessBracket(dataCtorsObj, JSString(DescriptorId.forDataConstructor(descriptor, sig)))
   }
 
-  private def getClassLikeJSObject[TPayloadSpec[_, _]](moduleDescriptor: ModuleDescriptor, methodOwner: ArMethod.Owner[context.type, TPayloadSpec]): TComp[JSExpression] =
+  private def getClassLikeJSObject[TPayloadSpec[_, _]](moduleDescriptor: ModuleDescriptor, methodOwner: ArMethod.Owner[context.type, TPayloadSpec]): Comp[JSExpression] =
     methodOwner match {
       case ArMethod.TraitOwner(ownerTrait) => ownerTrait.signature.map { sig => getTraitJSObject(moduleDescriptor, ownerTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)) }
       case ArMethod.TraitObjectOwner(ownerTrait) => ownerTrait.signature.map { sig => JSPropertyAccessDot(getTraitJSObject(moduleDescriptor, ownerTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)), JSIdentifier("static")) }

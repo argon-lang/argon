@@ -48,9 +48,9 @@ object BuildProcess {
     compilerOptions: CompilerOptions[Id],
     backendOptions: backend.BackendOptions[Id, I]
   )(
-    f: backend.TCompilationOutput[F, R, I] => F[R, NonEmptyList[CompilationError], A]
+    f: backend.TCompilationOutput { val context: Backend.ContextWithComp[F, R, I] } => F[R, NonEmptyList[CompilationError], A]
   )
-  (implicit compInstance: CompilationRE[F, R], res: ResourceAccess[F, R, I])
+  (implicit compInstance: CompilationRE[F, R], res: ResourceAccessFactory[Backend.ContextWithComp[F, R, I]])
   : F[R, NonEmptyList[CompilationError], A] = {
     val input = CompilerInput(
       source = sourceASTs,

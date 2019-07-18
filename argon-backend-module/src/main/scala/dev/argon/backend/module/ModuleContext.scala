@@ -13,7 +13,7 @@ class ModuleContext[TCompRE[-_, +_, +_], R, I]
   override protected val compilerInput: CompilerInput[I, ModuleBackendOptions[Id, I]]
 )(implicit
   override implicit val compCompilationInstance: CompilationRE[TCompRE, R]
-) extends ContextCompRE[TCompRE, R] {
+) extends Context {
   override type TFunctionMetadata = Unit
   override type TMethodMetadata = Unit
   override type TTraitMetadata = Unit
@@ -25,6 +25,10 @@ class ModuleContext[TCompRE[-_, +_, +_], R, I]
   override type TMethodImplementation = Option[typeSystem.ArExpr]
   override type TClassConstructorImplementation = typeSystem.ClassConstructorBody
   override type TDataConstructorImplementation = typeSystem.ArExpr
+
+
+  override type CompRE[-R2, +E2, +A] = TCompRE[R2, E2, A]
+  override type Environment = R
 
 
   override type BackendOptions = ModuleBackendOptions[Id, I]

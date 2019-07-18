@@ -15,45 +15,51 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
 
-  def createModule[TCompRE[-_, +_, +_], R, I: Show, A]
-  (context: ContextCompRE[TCompRE, R])
-  (input: CompilerInput[I, context.BackendOptions])
+  def createModule[A]
+  (context: Context)
+  (input: CompilerInput[context.ResIndicator, context.BackendOptions])
   (f: ArModule[context.type, DeclarationPayloadSpecifier] => context.Comp[A])
-  (implicit compInstance: CompilationRE[TCompRE, R], res: ResourceAccess[TCompRE, R, I])
+  (implicit resShow: Show[context.ResIndicator], res: ResourceAccess[context.type])
   : context.Comp[A] =
     ModuleLoader.loadReferencedModules(context)(input.references) { refModules =>
-      createModuleWithRefs[context.Comp, I](context)(input)(refModules).flatMap(f)
+      import context._
+      createModuleWithRefs(context)(input)(refModules).flatMap(f)
     }
 
-  private def createModuleWithRefs[TComp[+_] : Compilation, I]
-  (context2: ContextComp[TComp])
-  (input: CompilerInput[I, context2.BackendOptions])
+  private def createModuleWithRefs
+  (context2: Context)
+  (input: CompilerInput[context2.ResIndicator, context2.BackendOptions])
   (referencedModules2: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
-    : TComp[ArModule[context2.type, DeclarationPayloadSpecifier]] = for {
-    globalNamespaceCache <- Compilation[TComp].createCache[Namespace[context2.type, DeclarationPayloadSpecifier]]
-  } yield new ArModule[context2.type, DeclarationPayloadSpecifier] {
+    : context2.Comp[ArModule[context2.type, DeclarationPayloadSpecifier]] = {
+    import context2._
+    for {
+      globalNamespaceCache <- context2.compCompilationInstance.createCache[Namespace[context2.type, DeclarationPayloadSpecifier]]
+    } yield new ArModule[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
+
       override val descriptor: ModuleDescriptor = ModuleDescriptor(input.options.moduleName)
-      override val globalNamespace: TComp[Namespace[context.type, DeclarationPayloadSpecifier]] =
+      override val globalNamespace: Comp[Namespace[context.type, DeclarationPayloadSpecifier]] =
         globalNamespaceCache(
           input.source
             .traverse { ast =>
-              createNamespaceElementFromAST[TComp](context2)(input.options)(this)(referencedModules2)(ast)
+              createNamespaceElementFromAST(context2)(input.options)(this)(referencedModules2)(ast)
             }
             .map(NamespaceBuilder.createNamespace[context.type, DeclarationPayloadSpecifier])
         )
 
       override val referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]] = referencedModules2
     }
+  }
 
-  private def createNamespaceElementFromAST[TComp[+_] : Compilation]
-  (context2: ContextComp[TComp])
+  private def createNamespaceElementFromAST
+  (context2: Context)
   (options: CompilerOptions[Id])
   (currentModule: ArModule[context2.type, DeclarationPayloadSpecifier])
   (referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
-  : TComp[ModuleElement[context2.type, DeclarationPayloadSpecifier]] =
-    createScope[TComp](context2)(currentModule)(referencedModules)(sourceAST).flatMap { scope =>
+  : context2.Comp[ModuleElement[context2.type, DeclarationPayloadSpecifier]] = {
+    import context2._
+    createScope(context2)(currentModule)(referencedModules)(sourceAST).flatMap { scope =>
 
       import context2.scopeContext.ScopeExtensions
 
@@ -82,17 +88,18 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
       }
 
       val envF = (envFileSpec: FileSpec) => new EnvCreatorInstance(envFileSpec, scope)
-      createNamespaceElementFromASTWithScope[TComp](context2)(options)(envF)(sourceAST).map { binding =>
+      createNamespaceElementFromASTWithScope(context2)(options)(envF)(sourceAST).map { binding =>
         ModuleElement(sourceAST.currentNamespace, binding)
       }
     }
+  }
 
-  private def createScope[TComp[+_] : Compilation]
-  (context: ContextComp[TComp])
+  private def createScope
+  (context: Context)
   (currentModule: ArModule[context.type, DeclarationPayloadSpecifier])
   (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
-  : TComp[context.scopeContext.Scope] =
+  : context.Comp[context.scopeContext.Scope] =
     GlobalScope.createNSScope(context)(
       Vector(
         Vector(sourceAST.currentNamespace),
@@ -114,18 +121,20 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
     (a + b) * (a + b + 1) / 2 + b
   }
 
-  private def createNamespaceElementFromASTWithScope[TComp[+_] : Monad : Compilation]
-  (context: ContextComp[TComp])
+  private def createNamespaceElementFromASTWithScope
+  (context: Context)
   (options: CompilerOptions[Id])
   (envF: FileSpec => EnvCreator[context.type])
   (sourceAST: SourceAST)
-  : TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] = {
+  : context.Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] = {
+
+    import context._
 
     val env = envF(sourceAST.fileSpec)
     val moduleDescriptor = ModuleDescriptor(options.moduleName)
 
-    def createBinding(name: Option[String], modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): TComp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
-      parseGlobalAccessModifier[TComp](sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
+    def createBinding(name: Option[String], modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
+      parseGlobalAccessModifier[Comp](sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
         val globalName = name match {
           case Some(n) => GlobalName.Normal(n)
           case None => GlobalName.Unnamed
@@ -140,7 +149,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           val desc = TraitDescriptor.InNamespace(moduleDescriptor, createId(sourceAST), sourceAST.currentNamespace, globalName)
 
           for {
-            arTrait <- SourceTrait[TComp](context)(env)(traitDeclarationStmt)(desc)
+            arTrait <- SourceTrait(context)(env)(traitDeclarationStmt)(desc)
           } yield GlobalBinding.GlobalTrait(globalName, accessModifier, arTrait)
         }
 
@@ -149,7 +158,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           val desc = ClassDescriptor.InNamespace(moduleDescriptor, createId(sourceAST), sourceAST.currentNamespace, globalName)
 
           for {
-            arClass <- SourceClass[TComp](context)(env)(classDeclarationStmt)(desc)
+            arClass <- SourceClass(context)(env)(classDeclarationStmt)(desc)
           } yield GlobalBinding.GlobalClass(globalName, accessModifier, arClass)
         }
 
@@ -159,8 +168,8 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
           GlobalBinding.GlobalFunction(
             globalName, accessModifier,
-            SourceFunction[TComp](context)(env)(funcDeclarationStmt)(desc)
-          ).pure[TComp]
+            SourceFunction(context)(env)(funcDeclarationStmt)(desc)
+          ).pure[Comp]
         }
 
       case dataCtorDeclarationStmt @ parser.DataConstructorDeclarationStmt(WithSource(name, _), _, _, _, modifiers) =>
@@ -169,7 +178,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
 
           for {
-            ctor <- SourceDataConstructor[TComp](context)(env)(dataCtorDeclarationStmt)(desc)
+            ctor <- SourceDataConstructor(context)(env)(dataCtorDeclarationStmt)(desc)
           } yield GlobalBinding.GlobalDataConstructor(globalName, accessModifier, ctor)
         }
 
