@@ -8,7 +8,7 @@
   },
   "author": "",
   "dependencies": {
-    "gcrpc-runtime": "file:../../gcrpc/runtime/node",
+    "identityrpc-runtime": "file:../../identityrpc/runtime/node",
     "memory-streams": "^0.1.3"
   },
   "devDependencies": {

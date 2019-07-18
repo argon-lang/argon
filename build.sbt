@@ -84,7 +84,7 @@ lazy val compilerOptions = Seq(
 
 lazy val buildArgonLibs = taskKey[Unit]("Compile Argon libraries")
 
-lazy val identityRPCRuntime = RootProject(file("gcrpc/runtime/scala"))
+lazy val identityRPCRuntime = RootProject(file("identityrpc/runtime/scala"))
 
 lazy val cli = project.in(file("argon-cli"))
   .dependsOn(argon_build)

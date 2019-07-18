@@ -1,4 +1,4 @@
-import { rpcStreamTransport, standardRpcConnection, binaryProtocol } from "gcrpc-runtime";
+import { rpcStreamTransport, standardRpcConnection, binaryProtocol } from "identityrpc-runtime";
 import { ServerFunctions, FileInfo, ServerFunctionCallHandler, MethodCallHandler } from "./api.gen";
 import { WritableStream } from "memory-streams";
 import * as vm from "vm";
