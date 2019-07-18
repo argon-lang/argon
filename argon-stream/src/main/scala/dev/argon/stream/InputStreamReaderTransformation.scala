@@ -5,8 +5,8 @@ import java.util.Objects
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
 
 import cats.data.NonEmptyVector
-import scalaz.zio.blocking.Blocking
-import scalaz.zio._
+import zio.blocking.Blocking
+import zio._
 
 trait InputStreamReaderTransformation[-R, +E, +X] extends StreamTransformation[ZIO, R, E, Byte, Unit, Nothing, X] {
 

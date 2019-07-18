@@ -4,7 +4,7 @@ import java.io.{IOException, InputStream}
 
 import cats.Monad
 import cats.data.NonEmptyVector
-import scalaz.zio.{IO, ZIO}
+import zio.{IO, ZIO}
 
 final class InputStreamStream[R, E](errorHandler: IOException => E)(inputStreamResource: Resource[ZIO, R, E, InputStream]) extends ArStream[ZIO, R, E, Byte] {
 

@@ -5,8 +5,8 @@ import java.io.File
 import scala.xml.XML
 import cats._
 import cats.implicits._
-import scalaz.zio._
-import scalaz.zio.interop.catz._
+import zio._
+import zio.interop.catz._
 
 object TestCaseLoader {
 

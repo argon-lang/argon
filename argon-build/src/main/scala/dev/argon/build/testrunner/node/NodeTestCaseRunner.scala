@@ -7,8 +7,8 @@ import dev.argon.build.testrunner._
 import cats._
 import cats.data.{NonEmptyList, NonEmptyVector}
 import cats.instances._
-import scalaz.zio._
-import scalaz.zio.interop.catz._
+import zio._
+import zio.interop.catz._
 import dev.argon.build.testrunner.node.ExternalApi._
 import dev.argon.compiler.backend.CompilationOutputText
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
@@ -17,7 +17,7 @@ import dev.argon.stream.{Resource, Step, StreamTransformation}
 import dev.argon.stream.{Step, StreamTransformation}
 import dev.argon.util.{FileOperations, FilenameManip}
 import org.apache.commons.io.IOUtils
-import scalaz.zio.blocking.Blocking
+import zio.blocking.Blocking
 
 final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher) extends TestCaseRunnerCompilePhase {
 

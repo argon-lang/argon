@@ -6,8 +6,8 @@ import java.nio.file._
 import cats._
 import cats.implicits._
 import dev.argon.util.FilenameManip
-import scalaz.zio._
-import scalaz.zio.blocking.Blocking
+import zio._
+import zio.blocking.Blocking
 import shapeless.{Path => _, _}
 
 trait ProjectLoader[A, B, I] {

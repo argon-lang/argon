@@ -8,12 +8,12 @@ import dev.argon.compiler.core.ModuleDescriptor
 import cats._
 import cats.implicits._
 import dev.argon.compiler.backend.ProjectFileHandler
-import scalaz.zio._
+import zio._
 import dev.argon.util.FileOperations.fileShow
 import IOCompilation.fileSystemResourceAccess
 import cats.data.NonEmptyList
 import dev.argon.compiler.backend.Backend
-import scalaz.zio.blocking.Blocking
+import zio.blocking.Blocking
 
 private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParsePhase {
 

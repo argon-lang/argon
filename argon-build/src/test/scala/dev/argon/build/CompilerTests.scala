@@ -5,7 +5,7 @@ import java.io.File
 import dev.argon.build.testrunner._
 import dev.argon.build.testrunner.node.{NodeLauncher, NodeTestCaseRunner}
 import org.scalatest.{BeforeAndAfterAll, FunSpec, Matchers}
-import scalaz.zio.DefaultRuntime
+import zio.DefaultRuntime
 
 class CompilerTests extends FunSpec with DefaultRuntime with Matchers with BeforeAndAfterAll {
 

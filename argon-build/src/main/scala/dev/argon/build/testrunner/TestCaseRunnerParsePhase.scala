@@ -8,8 +8,8 @@ import dev.argon.compiler.{CompilationError, IOCompilation}
 import cats._
 import cats.data.NonEmptyList
 import cats.instances._
-import scalaz.zio._
-import scalaz.zio.blocking.Blocking
+import zio._
+import zio.blocking.Blocking
 
 private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
 
@@ -25,7 +25,7 @@ private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
       }
 
     {
-      import scalaz.zio.interop.catz._
+      import zio.interop.catz._
       BuildProcess.parseInput[ZIO, Blocking](inputFiles)
     }.foldLeft(StreamTransformation.toVector[ZIO, Blocking, NonEmptyList[CompilationError], SourceAST])
   }

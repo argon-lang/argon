@@ -7,8 +7,8 @@ import java.nio.file.Files
 import java.util.zip.{ZipEntry, ZipFile, ZipOutputStream}
 
 import cats._
-import scalaz.zio._
-import scalaz.zio.interop._
+import zio._
+import zio.interop._
 
 object FileOperations {
 

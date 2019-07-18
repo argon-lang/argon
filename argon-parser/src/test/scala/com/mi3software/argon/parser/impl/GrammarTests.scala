@@ -1,7 +1,6 @@
 package dev.argon.parser.impl
 
 import org.scalatest.{FlatSpec, Matchers}
-import scalaz._
 import dev.argon.grammar.Grammar
 import Grammar.Operators._
 import cats.data.NonEmptyVector

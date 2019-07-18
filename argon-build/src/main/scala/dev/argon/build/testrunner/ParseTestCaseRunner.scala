@@ -1,9 +1,8 @@
 package dev.argon.build.testrunner
 
 import dev.argon.compiler.IOCompilation
-import scalaz._
-import scalaz.zio.blocking.Blocking
-import scalaz.zio.{IO, Runtime, ZIO}
+import zio.blocking.Blocking
+import zio.{IO, Runtime, ZIO}
 
 object ParseTestCaseRunner extends TestCaseRunner with TestCaseRunnerParsePhase {
 

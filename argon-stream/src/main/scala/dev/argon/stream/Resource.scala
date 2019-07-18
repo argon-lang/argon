@@ -1,6 +1,6 @@
 package dev.argon.stream
 
-import scalaz.zio._
+import zio._
 
 trait Resource[F[-_, +_, +_], -R, +E, +A] {
   def use[R2 <: R, E2 >: E, B](f: A => F[R2, E2, B]): F[R2, E2, B]

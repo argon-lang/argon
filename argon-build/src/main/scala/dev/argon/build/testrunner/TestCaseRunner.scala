@@ -4,8 +4,8 @@ import dev.argon.compiler.CompilationError
 import cats._
 import cats.data.NonEmptyList
 import cats.implicits._
-import scalaz.zio.blocking.Blocking
-import scalaz.zio.{IO, Runtime, ZIO}
+import zio.blocking.Blocking
+import zio.{IO, Runtime, ZIO}
 
 trait TestCaseRunner {
   def runTest(testCase: TestCase): ZIO[Blocking, Throwable, TestCaseResult]

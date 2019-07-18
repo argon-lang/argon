@@ -3,10 +3,10 @@ package dev.argon.stream
 import java.io.IOException
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
-import scalaz.zio.blocking.Blocking
-import scalaz.zio._
-import scalaz.zio.interop._
-import scalaz.zio.interop.catz._
+import zio.blocking.Blocking
+import zio._
+import zio.interop._
+import zio.interop.catz._
 
 object ZipEntryStreamTransformation {
 

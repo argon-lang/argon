@@ -4,8 +4,8 @@ import dev.argon.build.testrunner.node.ExternalApi.{MethodCallHandler, ServerFun
 import com.mi3software.gcrpc.runtime.{BinaryProtocol, RpcConnection, RpcStreamTransport, StandardRpcConnection}
 import cats._
 import cats.instances._
-import scalaz.zio._
-import scalaz.zio.interop.catz._
+import zio._
+import zio.interop.catz._
 
 trait NodeLauncher {
   def serverFunctions: Task[ServerFunctions]

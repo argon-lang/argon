@@ -10,14 +10,14 @@ import cats.implicits._
 import dev.argon.build.project.{BuildInfo, FileWithSpec}
 import dev.argon.compiler.core.ModuleDescriptor
 import dev.argon.util.{FileID, FileOperations, FileSpec}
-import scalaz.zio._
-import scalaz.zio.console._
+import zio._
+import zio.console._
 import dev.argon.util.FileOperations.fileShow
 import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.parser.SourceAST
 import IOCompilation.fileSystemResourceAccess
 import dev.argon.stream.ArStream
-import scalaz.zio.blocking.Blocking
+import zio.blocking.Blocking
 
 object Pipeline {
 
@@ -45,7 +45,7 @@ object Pipeline {
     }
 
   private def findInputFiles(buildInfo: BuildInfo[File]): ArStream[ZIO, Blocking, NonEmptyList[CompilationError], InputFileInfo[ZIO, Blocking]] = {
-    import scalaz.zio.interop.catz._
+    import zio.interop.catz._
 
     ArStream.fromVector[ZIO, Blocking, NonEmptyList[CompilationError], (File, Int)](buildInfo.project.inputFiles.toVector.zipWithIndex)
       .map { case (file, id) =>
@@ -56,7 +56,7 @@ object Pipeline {
   }
 
   def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): TaskR[Console, Unit] = {
-    import scalaz.zio.interop.catz._
+    import zio.interop.catz._
 
     msgs
       .traverse_ { msg =>
@@ -70,7 +70,7 @@ object Pipeline {
   (implicit compInstance: IOCompilation[Blocking])
   : ZIO[Blocking, NonEmptyList[CompilationError], A] =
     {
-      import scalaz.zio.interop.catz._
+      import zio.interop.catz._
       BuildProcess.parseInput[ZIO, Blocking](findInputFiles(buildInfo))
     }.foldLeft(StreamTransformation.toVector[ZIO, Blocking, NonEmptyList[CompilationError], SourceAST]).flatMap { parsedInput =>
       BuildProcess.compile(

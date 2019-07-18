@@ -5,7 +5,7 @@ import cats.implicits._
 import cats.data.NonEmptyVector
 import dev.argon.stream._
 import dev.argon.util.AnyExtensions._
-import scalaz.zio._
+import zio._
 
 sealed trait BuilderStream[F[_], S, A] {
 

@@ -4,8 +4,8 @@ import cats._
 import cats.data._
 import cats.implicits._
 import dev.argon.stream.StreamTransformation.IntoResource
-import scalaz.zio._
-import scalaz.zio.stream.ZSink
+import zio._
+import zio.stream.ZSink
 
 trait StreamTransformation[F[-_, +_, +_], -R, +E, A, -X, +B, +Y] {
 

@@ -3,8 +3,8 @@ package dev.argon
 import cats.data.NonEmptyVector
 import cats._
 import cats.implicits._
-import scalaz.zio.{stream => zstream, _}
-import scalaz.zio.stream.ZStream.Fold
+import zio.{stream => zstream, _}
+import zio.stream.ZStream.Fold
 
 package object stream {
 

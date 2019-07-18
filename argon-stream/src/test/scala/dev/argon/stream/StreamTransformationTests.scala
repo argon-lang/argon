@@ -3,9 +3,9 @@ package dev.argon.stream
 import org.scalatest.{FlatSpec, Matchers}
 import cats._
 import cats.implicits._
-import scalaz.zio._
-import scalaz.zio.stream.ZStream
-import scalaz.zio.interop.catz._
+import zio._
+import zio.stream.ZStream
+import zio.interop.catz._
 
 class StreamTransformationTests extends FlatSpec with Matchers with DefaultRuntime with SampleValues with StreamChecker {
 

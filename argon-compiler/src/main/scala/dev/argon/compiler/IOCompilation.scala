@@ -8,16 +8,15 @@ import java.util.zip.ZipFile
 import dev.argon.util.{FileOperations, FilenameManip}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import cats._
-import scalaz.zio._
-import scalaz.zio.interop._
-import scalaz.zio.interop.catz._
+import zio._
+import zio.interop._
+import zio.interop.catz._
 import FileOperations.fileShow
 import cats.data.NonEmptyList
 import com.google.protobuf.InvalidProtocolBufferException
 import dev.argon.stream.{ArStream, InputStreamStream, OutputStreamWriterStream, PureEffect, Resource, StreamTransformation, ZipEntryInfo, ZipEntryStreamTransformation}
 import dev.argon.stream.{InputStreamReaderTransformation, InputStreamStream, OutputStreamTransformation, OutputStreamWriterStream, PureEffect, Resource, StreamTransformation, ZipEntryInfo, ZipEntryStreamTransformation}
-import scalaz.zio
-import scalaz.zio.blocking.Blocking
+import zio.blocking.Blocking
 
 trait IOCompilation[R] extends CompilationExec[ZIO, R]
 
@@ -96,12 +95,10 @@ object IOCompilation {
       }
 
       override def resourceSink(id: File): Resource[ZIO, Blocking, NonEmptyList[CompilationError], StreamTransformation[ZIO, Blocking, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]] =
-        Resource.fromZManaged(ZManaged.make(
+        Resource.fromZManaged(ZManaged.fromAutoCloseable(
           ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { new io.FileOutputStream(id) }).refineOrDie {
             case ex: io.IOException => ioExceptionToError(ex)
           }
-        )(
-          _.closeIO()
         ))
           .map { outputStream => OutputStreamTransformation(ioExceptionToError)(outputStream) }
 
@@ -110,18 +107,16 @@ object IOCompilation {
 
       override def getZipReader[A](id: io.File): Resource[ZIO, Blocking, NonEmptyList[CompilationError], ZipReader] =
         Resource.fromZManaged(
-          ZManaged.make(
+          ZManaged.fromAutoCloseable(
             ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { new zip.ZipFile(id) })
               .refineOrDie { case e: io.IOException => ioExceptionToError(e) }
-          )(
-            _.closeIO()
           )
         )
 
       override def zipEntryStream(zip: ZipFile, name: String): ArStream[ZIO, Blocking, NonEmptyList[CompilationError], Byte] =
         new InputStreamStream(ioExceptionToError)(
           Resource.fromZManaged(
-            ZManaged.make(
+            ZManaged.fromAutoCloseable(
               ZIO.environment[Blocking]
                 .flatMap(_.blocking.effectBlocking {
                   zip.getInputStream(zip.getEntry(name))
@@ -130,7 +125,7 @@ object IOCompilation {
                   case ex: io.IOException => ioExceptionToError(ex)
                 }
 
-            )(_.closeIO())
+            )
           )
         )
 

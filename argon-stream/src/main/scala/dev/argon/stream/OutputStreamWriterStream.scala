@@ -8,8 +8,8 @@ import cats.data.NonEmptyVector
 import cats._
 import cats.implicits._
 import dev.argon.stream.OutputStreamWriterStream.TransformOutputStreamStopException
-import scalaz.zio._
-import scalaz.zio.blocking.Blocking
+import zio._
+import zio.blocking.Blocking
 
 final case class OutputStreamWriterStream[R, E](f: OutputStream => ZIO[R, E, Unit]) extends ArStream[ZIO, R with Blocking, E, Byte] {
 

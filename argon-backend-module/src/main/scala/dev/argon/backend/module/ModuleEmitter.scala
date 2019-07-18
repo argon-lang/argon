@@ -15,8 +15,8 @@ import dev.argon.module
 import dev.argon.stream.{ArStream, Resource, Step, StreamTransformation}
 import shapeless._
 import dev.argon.util.AnyExtensions._
-import scalaz.zio.stream.ZStream.Fold
-import scalaz.zio.{IO, ZIO, stream => zstream}
+import zio.stream.ZStream.Fold
+import zio.{IO, ZIO, stream => zstream}
 
 final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCompRE, R, _] with Singleton](val context: TContext) {
 

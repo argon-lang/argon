@@ -3,8 +3,8 @@ package dev.argon.stream
 import java.io.{IOException, OutputStream}
 
 import cats.data.NonEmptyVector
-import scalaz.zio._
-import scalaz.zio.blocking.Blocking
+import zio._
+import zio.blocking.Blocking
 
 trait OutputStreamTransformation[-R, +E, +X] extends StreamTransformation[ZIO, R, E, Byte, Unit, Nothing, X] {
   def writeDirectly[R2 <: R, E2 >: E](f: OutputStream => ZIO[R2, E2, Unit]): ZIO[R2, E2, X]

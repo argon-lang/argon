@@ -2,17 +2,17 @@ package dev.argon.build.testrunner
 
 import cats._
 import cats.implicits._
-import scalaz.zio.interop.catz._
+import zio.interop.catz._
 import dev.argon.build._
 import java.io.{File, IOException}
 
 import cats.data.NonEmptyList
 import dev.argon.compiler.{CompilationError, CompilerOptions}
-import scalaz.zio._
+import zio._
 import shapeless.{Id => _, _}
 import dev.argon.compiler.backend.ProjectLoader.Implicits._
 import dev.argon.compiler.backend.{Backend, ProjectFileHandler}
-import scalaz.zio.blocking.Blocking
+import zio.blocking.Blocking
 
 final class BuildTestCaseRunner(protected val backend: Backend, references: Vector[File]) extends TestCaseRunnerCompilePhase {
 

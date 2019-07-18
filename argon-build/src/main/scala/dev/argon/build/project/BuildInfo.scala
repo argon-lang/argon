@@ -7,8 +7,8 @@ import java.nio.file._
 import cats._
 import cats.implicits._
 import dev.argon.build.Backends
-import scalaz.zio._
-import scalaz.zio.interop.catz._
+import zio._
+import zio.interop.catz._
 import dev.argon.compiler._
 import dev.argon.compiler.backend.{Backend, ProjectFileHandler, ProjectLoader}
 import dev.argon.compiler.core._
@@ -16,7 +16,7 @@ import dev.argon.util.{FileOperations, FilenameManip}
 import toml.Toml
 import toml.Codecs._
 import dev.argon.util.AnyExtensions._
-import scalaz.zio.blocking.Blocking
+import zio.blocking.Blocking
 import shapeless.{Id => _, _}
 
 final case class ProjectInfoFormat[F[_], I]

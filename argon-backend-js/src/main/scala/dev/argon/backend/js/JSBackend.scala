@@ -9,7 +9,7 @@ import cats.instances._
 import cats.data.NonEmptyList
 import dev.argon.compiler.backend.{Backend, CompilationOutputText, ProjectLoader}
 import dev.argon.stream.ArStream
-import scalaz.zio.{IO, ZIO}
+import zio.{IO, ZIO}
 import toml.Codecs._
 import shapeless.{Id => _, _}
 import dev.argon.util.ExtraTomlCodecs._
