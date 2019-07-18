@@ -5,10 +5,9 @@ lazy val commonSettings = Seq(
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
-  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.0"),
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
-  addCompilerPlugin("com.github.ghik" %% "silencer-plugin" % "1.3.3"),
-  addCompilerPlugin("org.scalaz" %% "deriving-plugin" % "1.0.0"),
+  addCompilerPlugin("com.github.ghik" %% "silencer-plugin" % "1.4.1"),
 
   libraryDependencies ++= Seq(
     "org.scala-lang.modules" %% "scala-xml" % "1.2.0",
@@ -24,7 +23,7 @@ lazy val commonSettings = Seq(
 
 
     "com.chuusai" %% "shapeless" % "2.3.3",
-    "tech.sparse" %%  "toml-scala" % "0.2.0",
+    "tech.sparse" %%  "toml-scala" % "0.2.1",
 
     "org.apache.commons" % "commons-text" % "1.6",
     "commons-io" % "commons-io" % "2.6",
@@ -34,7 +33,7 @@ lazy val commonSettings = Seq(
     "org.scalacheck" %% "scalacheck" % "1.14.0" % "test",
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % "1.1.8" % "test",
 
-    "com.github.ghik" %% "silencer-lib" % "1.2" % Provided,
+    "com.github.ghik" %% "silencer-lib" % "1.4.1" % Provided,
   )
 
 )
