@@ -2,10 +2,12 @@ package dev.argon.compiler.types
 
 import dev.argon.compiler._
 import dev.argon.compiler.core._
+import dev.argon.util.AnyExtensions._
 import cats._
 import cats.implicits._
 import cats.data._
 import Compilation.Operators._
+import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
 
 import scala.collection.immutable.Vector
 
@@ -67,7 +69,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final case class Parameter(tupleVars: Vector[ParameterElementVariable], paramType: TType)
 
 
-  trait ArExpr {
+  sealed trait ArExpr {
     val exprType: TType
     val universe: Universe
   }
@@ -123,23 +125,15 @@ trait TypeSystem[TContext <: Context with Singleton] {
     override val exprType: TType = returnType
     override lazy val universe: Universe = universeOfType(returnType).prev
   }
+  final case class PrimitiveOp(operation: PrimitiveOperation, left: ArExpr, right: ArExpr, exprType: TType) extends ArExpr {
+    override val universe: Universe = universeOfType(exprType).prev
+  }
   final case class Sequence(first: ArExpr, second: ArExpr) extends ArExpr {
     override lazy val exprType: TType = second.exprType
     override lazy val universe: Universe = second.universe
   }
   final case class StoreVariable(variable: Variable, value: ArExpr, exprType: TType) extends ArExpr {
     override val universe: Universe = ValueUniverse
-  }
-  final case class PrimitiveOp(operation: PrimitiveOperation, left: ArExpr, right: ArExpr, exprType: TType) extends ArExpr {
-    override val universe: Universe = universeOfType(exprType).prev
-  }
-
-  sealed trait PrimitiveOperation
-  object PrimitiveOperation {
-    case object AddInt extends PrimitiveOperation
-    case object SubInt extends PrimitiveOperation
-    case object MulInt extends PrimitiveOperation
-    case object IntEqual extends PrimitiveOperation
   }
 
 
@@ -150,14 +144,20 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   sealed trait TypeWithMethods extends SimpleType
 
+  sealed trait TypeArgument
+  object TypeArgument {
+    final case class Expr(expr: WrapExpr) extends TypeArgument
+    case object Wildcard extends TypeArgument
+  }
+
   final case class TypeOfType(inner: TType, universe: TypeUniverse) extends SimpleType
-  final case class TraitType(arTrait: WrapRef[ArTrait], args: Vector[TType], baseTypes: BaseTypeInfoTrait) extends TypeWithMethods {
+  final case class TraitType(arTrait: WrapRef[ArTrait], args: Vector[TypeArgument], baseTypes: BaseTypeInfoTrait) extends TypeWithMethods {
     override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
-  final case class ClassType(arClass: WrapRef[ArClass], args: Vector[TType], baseTypes: BaseTypeInfoClass) extends TypeWithMethods {
+  final case class ClassType(arClass: WrapRef[ArClass], args: Vector[TypeArgument], baseTypes: BaseTypeInfoClass) extends TypeWithMethods {
     override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
-  final case class DataConstructorType(ctor: WrapRef[DataConstructor], args: Vector[TType], instanceType: TraitType) extends TypeWithMethods {
+  final case class DataConstructorType(ctor: WrapRef[DataConstructor], args: Vector[TypeArgument], instanceType: TraitType) extends TypeWithMethods {
     override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
 
@@ -240,7 +240,16 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
     val notSubType = Option.empty[TSubTypeInfo].pure[F]
 
-    def invariant(a: TType, b: TType): F[Option[Vector[TSubTypeInfo]]] =
+    def compareTypeArg(a: TypeArgument, b: TypeArgument): F[Option[Vector[TSubTypeInfo]]] =
+      (a, b) match {
+        case (TypeArgument.Wildcard, _) => Some(Vector.empty).upcast[Option[Vector[TSubTypeInfo]]].pure[F]
+        case (_, TypeArgument.Wildcard) => Option.empty[Vector[TSubTypeInfo]].pure[F]
+
+        case (TypeArgument.Expr(a), TypeArgument.Expr(b)) =>
+          ???
+      }
+
+    /*
       isSubType[F](a, b).flatMap {
         case Some(left) =>
           isSubType[F](b, a).map { _.map {
@@ -249,12 +258,12 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
         case None => Option.empty[Vector[TSubTypeInfo]].pure[F]
       }
+*/
 
-
-    def compareArguments(aType: TType, bType: TType)(a: Vector[TType])(b: Vector[TType]): F[Option[TSubTypeInfo]] =
+    def compareArguments(aType: TType, bType: TType)(a: Vector[TypeArgument])(b: Vector[TypeArgument]): F[Option[TSubTypeInfo]] =
       if(a.size === b.size)
         a.zip(b)
-          .traverse { case (aArg, bArg) => OptionT(invariant(aArg, bArg)) }
+          .traverse { case (aArg, bArg) => OptionT(compareTypeArg(aArg, bArg)) }
           .map { args => SubTypeInfo(aType, bType, args.flatten) }
           .value
       else
@@ -368,6 +377,14 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
 object TypeSystem {
 
+  sealed trait PrimitiveOperation
+  object PrimitiveOperation {
+    case object AddInt extends PrimitiveOperation
+    case object SubInt extends PrimitiveOperation
+    case object MulInt extends PrimitiveOperation
+    case object IntEqual extends PrimitiveOperation
+  }
+
   def convertTypeSystem[F[_]: Monad]
   (context: Context)
   (ts: TypeSystem[context.type])
@@ -378,6 +395,18 @@ object TypeSystem {
     ts.traverseTypeWrapper(t1)(convertSimpleTypeSystem(context)(ts)(otherTS)(converter)(_))
       .flatMap(converter.convertType(ts)(otherTS)(identity)(_))
 
+  def convertTypeArg[F[_]: Monad]
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
+  (t1: ts.TypeArgument)
+  : F[otherTS.TypeArgument] =
+    t1 match {
+      case ts.TypeArgument.Expr(expr) => convertWrapExprTypeSystem(context)(ts)(otherTS)(converter)(expr).map(otherTS.TypeArgument.Expr)
+      case ts.TypeArgument.Wildcard => otherTS.TypeArgument.Wildcard.upcast[otherTS.TypeArgument].pure[F]
+    }
+
   def convertTraitType[F[_]: Monad]
   (context: Context)
   (ts: TypeSystem[context.type])
@@ -385,7 +414,7 @@ object TypeSystem {
   (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
   (traitType: ts.TraitType)
   : F[otherTS.TraitType] = for {
-    newArgs <- traitType.args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+    newArgs <- traitType.args.traverse(convertTypeArg(context)(ts)(otherTS)(converter)(_))
     newBaseTraits <- traitType.baseTypes.baseTraits.traverse(convertTraitType(context)(ts)(otherTS)(converter)(_))
   } yield otherTS.TraitType(
     traitType.arTrait,
@@ -400,7 +429,7 @@ object TypeSystem {
   (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
   (classType: ts.ClassType)
   : F[otherTS.ClassType] = for {
-    newArgs <- classType.args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+    newArgs <- classType.args.traverse(convertTypeArg(context)(ts)(otherTS)(converter)(_))
     newBaseClass <- classType.baseTypes.baseClass.traverse(convertClassType(context)(ts)(otherTS)(converter)(_))
     newBaseTraits <- classType.baseTypes.baseTraits.traverse(convertTraitType(context)(ts)(otherTS)(converter)(_))
   } yield otherTS.ClassType(
@@ -420,7 +449,7 @@ object TypeSystem {
   (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
   (dataCtorType: ts.DataConstructorType)
   : F[otherTS.DataConstructorType] = for {
-    newArgs <- dataCtorType.args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+    newArgs <- dataCtorType.args.traverse(convertTypeArg(context)(ts)(otherTS)(converter)(_))
     newInstanceType <- convertTraitType(context)(ts)(otherTS)(converter)(dataCtorType.instanceType)
   } yield otherTS.DataConstructorType(
     dataCtorType.ctor,
@@ -566,6 +595,13 @@ object TypeSystem {
         newReturnType <- convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
       } yield otherTS.FunctionCall(function, newArgs, newReturnType)
 
+    case ts.FunctionObjectCall(function, args, returnType) =>
+      for {
+        newFunction <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(function)
+        newArgs <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(args)
+        newReturnType <- convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
+      } yield otherTS.FunctionObjectCall(newFunction, newArgs, newReturnType)
+
     case ts.IfElse(condition, ifBody, elseBody) =>
       for {
         newCondition <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(condition)
@@ -606,12 +642,24 @@ object TypeSystem {
         newVar <- convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
       } yield otherTS.LoadVariable(newVar)
 
+    case ts.LoadUnit(exprType) =>
+      for {
+        newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
+      } yield otherTS.LoadUnit(newType)
+
     case ts.MethodCall(method, instance, args, returnType) =>
       for {
         newInstance <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(instance)
         newArgs <- args.traverse(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
         newReturnType <- convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
       } yield otherTS.MethodCall(method, newInstance, newArgs, newReturnType)
+
+    case ts.PrimitiveOp(operation, left, right, exprType) =>
+      for {
+        newLeft <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(left)
+        newRight <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(right)
+        newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
+      } yield otherTS.PrimitiveOp(operation, newLeft, newRight, newType)
 
     case ts.Sequence(first, second) =>
       for {

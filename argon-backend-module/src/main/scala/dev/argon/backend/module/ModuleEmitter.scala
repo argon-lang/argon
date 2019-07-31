@@ -467,17 +467,17 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
 
     def convertClassType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], classType: typeSystem.ClassType): Emit[module.ClassType] = for {
       id <- getClassId[TComp](armodule, classType.arClass.value.descriptor)
-      args <- classType.args.traverse(convertType(armodule, _))
+      args <- classType.args.traverse(convertTypeArg(armodule, _))
     } yield module.ClassType(id, args)
 
     def convertTraitType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], traitType: typeSystem.TraitType): Emit[module.TraitType] = for {
       id <- getTraitId[TComp](armodule, traitType.arTrait.value.descriptor)
-      args <- traitType.args.traverse(convertType(armodule, _))
+      args <- traitType.args.traverse(convertTypeArg(armodule, _))
     } yield module.TraitType(id, args)
 
     def convertDataCtorType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], dataCtorType: typeSystem.DataConstructorType): Emit[module.DataConstructorType] = for {
       id <- getDataCtorId[TComp](armodule, dataCtorType.ctor.value.descriptor)
-      args <- dataCtorType.args.traverse(convertType(armodule, _))
+      args <- dataCtorType.args.traverse(convertTypeArg(armodule, _))
     } yield module.DataConstructorType(id, args)
 
     def convertType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.SimpleType): Emit[module.Type] =
@@ -488,6 +488,18 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
         case _ => ???
       }) : Emit[module.Type.TypeInfo])
         .map(module.Type.apply)
+
+    def convertTypeArg(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.TypeArgument): Emit[module.TypeArg] =
+      t match {
+        case typeSystem.TypeArgument.Expr(t: typeSystem.SimpleType) =>
+          convertType(armodule, t)
+            .map { modType => module.TypeArg(module.TypeArg.TypeInfo.Type(modType)) }
+
+        case typeSystem.TypeArgument.Expr(_) => ???
+
+        case typeSystem.TypeArgument.Wildcard =>
+          module.TypeArg(module.TypeArg.TypeInfo.Wildcard(module.Wildcard())).pure[Emit]
+      }
 
     def convertInNamespaceDescriptor(descriptor: InNamespaceDescriptor): module.InNamespaceDescriptor =
       module.InNamespaceDescriptor(

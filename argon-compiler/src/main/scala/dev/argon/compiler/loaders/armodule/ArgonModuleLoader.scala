@@ -853,10 +853,29 @@ object ArgonModuleLoader {
               sigResult => if(args.nonEmpty) ??? else f(convArgs, sigResult.result).pure[Comp]
             )
 
+          def resolveSignatureTypeArgs[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], T]
+          (sig: Signature[TResult], args: Vector[ArgonModule.TypeArg], convArgs: Vector[TypeArgument])
+          (f: (Vector[TypeArgument], TResult[context.type, context.typeSystem.type]) => T)
+          : Comp[T] =
+            sig.visit(
+              sigParams => args match {
+                case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Type(head)) +: tail =>
+                  resolveType(head).flatMap { argType =>
+                    sigParams.next[Comp](argType).flatMap(resolveSignatureTypeArgs(_, tail, convArgs :+ TypeArgument.Expr(argType))(f))
+                  }
+
+                case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Wildcard(ArgonModule.Wildcard())) +: tail =>
+                  resolveSignatureTypeArgs(sigParams.nextUnsubstituted, tail, convArgs :+ TypeArgument.Wildcard)(f)
+
+                case _ => ???
+              },
+              sigResult => if(args.nonEmpty) ??? else f(convArgs, sigResult.result).pure[Comp]
+            )
+
           def resolveTraitType(traitType: ArgonModule.TraitType): Comp[TraitType] =
             findTrait(traitType.traitId).flatMap { arTrait =>
               arTrait.value.signature.flatMap { sig =>
-                resolveSignature(sig, traitType.typeArguments, Vector.empty) {
+                resolveSignatureTypeArgs(sig, traitType.typeArguments, Vector.empty) {
                   (args, result) => TraitType(arTrait, args, result.baseTypes)
                 }
               }
@@ -865,7 +884,7 @@ object ArgonModuleLoader {
           def resolveClassType(classType: ArgonModule.ClassType): Comp[ClassType] =
             findClass(classType.classId).flatMap { arClass =>
               arClass.value.signature.flatMap { sig =>
-                resolveSignature(sig, classType.typeArguments, Vector.empty) {
+                resolveSignatureTypeArgs(sig, classType.typeArguments, Vector.empty) {
                   (args, result) => ClassType(arClass, args, result.baseTypes)
                 }
               }

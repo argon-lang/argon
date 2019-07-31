@@ -249,17 +249,17 @@ message ClassConstructorDescriptor {
 // Types
 message TraitType {
     required sint32 traitId = 1;
-    repeated Type typeArguments = 2;
+    repeated TypeArg typeArguments = 2;
 }
 
 message ClassType {
     required sint32 classId = 1;
-    repeated Type typeArguments = 2;
+    repeated TypeArg typeArguments = 2;
 }
 
 message DataConstructorType {
     required sint32 constructorId = 1;
-    repeated Type typeArguments = 2;
+    repeated TypeArg typeArguments = 2;
 }
 
 message Type {
@@ -269,6 +269,15 @@ message Type {
         DataConstructorType dataConstructorType = 3;
     }
 }
+
+message TypeArg {
+    oneof typeInfo {
+        Type type = 1;
+        Wildcard wildcard = 2;
+    }
+}
+
+message Wildcard {}
 
 // Signature
 message ParameterElement {

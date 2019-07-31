@@ -8,6 +8,7 @@ import dev.argon.compiler.core.PayloadSpecifiers._
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
+import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
 import dev.argon.compiler.vtable._
 
 final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _] with Singleton](val context: TContext, inject: JSInjectCode[Id]) {
@@ -712,7 +713,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
           classObj = getClassJSObject(getParamOwnerModule(params.owner), arClass.value.descriptor, erasedSig)
 
-          argExprs <- args.traverse(convertExpr(params)(_))
+          argExprs <- args.traverse(convertTypeArg(params)(_))
         } yield JSFunctionCall(
           JSPropertyAccessDot(classObj, classCreateMethodName),
           argExprs
@@ -721,6 +722,12 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
       case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
     }
   }
+
+  def convertTypeArg(params: EmitParams)(arg: context.typeSystem.TypeArgument): Comp[JSExpression] =
+    arg match {
+      case context.typeSystem.TypeArgument.Expr(expr) => convertExpr(params)(expr)
+      case context.typeSystem.TypeArgument.Wildcard => JSNull.pure[Comp]
+    }
 
   def getMethodObject(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): Comp[JSExpression] = for {
     sig <- method.value.signature
