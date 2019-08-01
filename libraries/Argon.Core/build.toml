@@ -142,7 +142,7 @@ export function createDataConstructor(creator) {
 		implementMethods(func.prototype, vtable);
 
 		Object.freeze(func.prototype);
-		Object.freeze(func);
+		return Object.freeze(func);
 	});
 
 

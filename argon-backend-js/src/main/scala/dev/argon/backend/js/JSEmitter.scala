@@ -603,6 +603,14 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
 
         } yield JSNewCall(JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")), baseCtorSymbol +: argExprs)
 
+      case DataConstructorCall(dataCtorInstanceType, args) =>
+        for {
+          sig <- dataCtorInstanceType.ctor.value.signature
+
+          ownerObj = getDataCtorJSObject(getParamOwnerModule(params.owner), dataCtorInstanceType.ctor.value.descriptor, ErasedSignature.fromSignatureParameters(context)(sig))
+
+          argExprs <- args.traverse(convertExpr(params)(_))
+        } yield JSNewCall(JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")), argExprs)
 
       case FunctionCall(func, args, _) =>
         for {

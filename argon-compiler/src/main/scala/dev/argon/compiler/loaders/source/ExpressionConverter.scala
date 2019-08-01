@@ -881,6 +881,13 @@ object ExpressionConverter {
         (newArgs, _) <- fillSignatureArgs(context)(ts)(sig)(args)
       } yield context.typeSystem.ClassConstructorCall(newClassType, ctor, newArgs)
 
+    case ts.DataConstructorCall(dataCtorInstanceType, args) =>
+      for {
+        newCtorType <- fillHolesDataCtorType(context)(ts)(dataCtorInstanceType)
+        sig <- tcInstance.fromContextComp(dataCtorInstanceType.ctor.value.signature)
+        (newArgs, _) <- fillSignatureArgs(context)(ts)(sig)(args)
+      } yield context.typeSystem.DataConstructorCall(newCtorType, newArgs)
+
     case ts.PrimitiveOp(PrimitiveOperation.AddInt, left, right, intType) =>
       for {
         newIntType <- fillHolesTypeChildren(context)(ts)(intType)
@@ -1096,6 +1103,17 @@ object ExpressionConverter {
       sig <- tcInstance.fromContextComp(t.arClass.value.signature)
       (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(t.args)
     } yield context.typeSystem.ClassType(t.arClass, filledArgs, resultInfo.baseTypes)
+
+  private def fillHolesDataCtorType[TComp[_]]
+  (context: Context)
+  (ts: HoleTypeSystem[context.type])
+  (t: ts.DataConstructorType)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[context.typeSystem.DataConstructorType] =
+    for {
+      sig <- tcInstance.fromContextComp(t.ctor.value.signature)
+      (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(t.args)
+    } yield context.typeSystem.DataConstructorType(t.ctor, filledArgs, resultInfo.instanceType)
 
   private def fillSignatureArgs[TComp[_], TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
   (context: Context)
