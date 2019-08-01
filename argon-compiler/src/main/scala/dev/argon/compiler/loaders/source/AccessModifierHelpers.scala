@@ -43,7 +43,7 @@ trait AccessModifierHelpers {
         Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.PrivateModifier, _) :: Nil =>
-        AccessModifier.Protected.pure[TComp]
+        AccessModifier.Private.pure[TComp]
 
       case WithSource(parser.PrivateModifier, _) :: WithSource(parser.InternalModifier, _) :: Nil =>
         AccessModifier.PrivateInternal.pure[TComp]
@@ -52,7 +52,7 @@ trait AccessModifierHelpers {
         Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.InternalModifier, _) :: Nil =>
-        AccessModifier.Protected.pure[TComp]
+        AccessModifier.Internal.pure[TComp]
 
       case WithSource(parser.InternalModifier, _) :: WithSource(parser.ProtectedModifier, _) :: Nil =>
         AccessModifier.ProtectedInternal.pure[TComp]

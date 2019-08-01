@@ -8,7 +8,7 @@ import cats.implicits._
 
 object AccessCheck {
 
-  def checkInstance[TComp[+_] : Compilation, TContext <: Context with Singleton, TPayloadSpec[_, _]]
+  def checkInstance[TComp[_] : Compilation, TContext <: Context with Singleton, TPayloadSpec[_, _]]
   (
     callerDescriptor: Descriptor,
     fileSpec: FileSpec,

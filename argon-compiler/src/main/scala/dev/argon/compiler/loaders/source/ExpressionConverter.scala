@@ -94,7 +94,12 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
                     case methodName: MethodName =>
                       implicitly[TypeCheck[TComp]].fromContextComp(t.arClass.value.staticMethods)
-                        .map { _.filter { binding => binding.name === methodName } }
+                        .flatMap {
+                          _.filter { binding => binding.name === methodName }
+                            .filterA { binding =>
+                              AccessCheck.checkInstance[TComp, context.type, t.arClass.PayloadSpec](env.descriptor, env.fileSpec, binding)
+                            }
+                        }
                         .flatMap {
                           case Vector(MethodBinding(_, _, _, method)) =>
                             for {
@@ -102,6 +107,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                               sig <- implicitly[TypeCheck[TComp]].fromContextComp(method.signature)
                               convSig = convertSignature(sig)
                             } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(AbsRef(method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
+
+                          case Vector() =>
+                            Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, methodName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
                           case _ => ???
                         }
@@ -113,7 +121,12 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                     case MemberName.New => ???
                     case methodName: MethodName =>
                       implicitly[TypeCheck[TComp]].fromContextComp(t.arTrait.value.staticMethods)
-                        .map { _.filter { binding => binding.name === methodName } }
+                        .flatMap {
+                          _.filter { binding => binding.name === methodName }
+                            .filterA { binding =>
+                              AccessCheck.checkInstance[TComp, context.type, t.arTrait.PayloadSpec](env.descriptor, env.fileSpec, binding)
+                            }
+                        }
                         .flatMap {
                           case Vector(MethodBinding(_, _, _, method)) =>
                             for {
@@ -121,6 +134,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                               sig <- implicitly[TypeCheck[TComp]].fromContextComp(method.signature)
                               convSig = convertSignature(sig)
                             } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(AbsRef(method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
+
+                          case Vector() =>
+                            Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, methodName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
                           case _ => ???
                         }
