@@ -68,6 +68,10 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           JSExportDeclaration(JSConst(NonEmptyList.of(
             JSDeclareInit(JSBindingIdentifier(classesVarName), create_empty_obj)
           ))),
+
+          JSExportDeclaration(JSConst(NonEmptyList.of(
+            JSDeclareInit(JSBindingIdentifier(dataCtorsVarName), create_empty_obj)
+          ))),
         ),
 
         modulePairs.map { case (refModule, importId) =>
@@ -295,7 +299,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
         } yield JSAssignment(
           JSPropertyAccessBracket(dataCtorsVarName, descString),
           JSFunctionCall(
-            coreLibExport(ctor.descriptor.moduleDescriptor, "createClass"),
+            coreLibExport(ctor.descriptor.moduleDescriptor, "createDataConstructor"),
             Vector(classSpec)
           )
         )
@@ -560,18 +564,18 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
   private final case class StatementConverterDataCtorFieldBinding(descString: JSString) extends StatementConverterFieldBinding {
 
     override def fieldVarExpr(id: JSIdentifier): JSExpression =
-      JSPropertyAccessDot(
-        JSPropertyAccessBracket(
-          JSPropertyAccessDot(
-            JSPropertyAccessBracket(
-              JSThis,
-              JSPropertyAccessBracket(dataCtorsVarName, descString)
+      JSPropertyAccessBracket(
+        JSThis,
+        JSPropertyAccessDot(
+          JSPropertyAccessBracket(
+            JSPropertyAccessDot(
+              JSPropertyAccessBracket(dataCtorsVarName, descString),
+              JSIdentifier("properties")
             ),
-            JSIdentifier("properties")
+            JSString(id.id)
           ),
-          id
-        ),
-        JSIdentifier("symbol")
+          JSIdentifier("symbol")
+        )
       )
 
   }
