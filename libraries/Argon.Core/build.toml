@@ -57,6 +57,21 @@ export function createTrait(creator) {
 	if(creator.methods) createMethods(creator.methods, methods);
 	trait.methods = Object.freeze(methods);
 
+	const traitStatic = Object.create(null);
+	const staticMethods = Object.create(null);
+	if(creator.staticMethods) createMethods(creator.staticMethods, staticMethods);
+	traitStatic.methods = Object.freeze(staticMethods);
+	trait.static = traitStatic;
+
+	trait.create = function() {
+		const traitObj = Object.create(null);
+		for(const desc in this.static.methods) {
+			const methodInfo = this.static.methods[desc];
+			traitObj[methodInfo.symbol] = methodInfo.value;
+		}
+		return traitObj;
+	};
+
 	return Object.freeze(trait);
 }
 

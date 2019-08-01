@@ -24,6 +24,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
   private val methodsPropName = JSIdentifier("methods")
   private val constructorsPropName = JSIdentifier("constructors")
   private val classCreateMethodName = JSIdentifier("create")
+  private val traitCreateMethodName = JSIdentifier("create")
 
   private val create_empty_obj = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("create")), Vector(JSNull))
   private def freeze_obj(varName: JSIdentifier) = JSFunctionCall(JSPropertyAccessDot(JSIdentifier("Object"), JSIdentifier("freeze")), Vector(varName))
@@ -151,7 +152,10 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
         for {
           sig <- arTrait.signature
           methods <- arTrait.methods
+          staticMethods <- arTrait.staticMethods
           methodObjects <- methods.traverse { method => createMethodObject(Map.empty)(method.method) }
+          staticMethodObjects <- staticMethods.traverse { method => createMethodObject(Map.empty)(method.method) }
+
         } yield JSAssignment(
           JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))),
           JSFunctionCall(
@@ -160,6 +164,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
               JSObjectLiteral(Vector(
                 JSObjectProperty("symbol", JSFunctionCall(JSIdentifier("Symbol"), Vector())),
                 JSObjectProperty("methods", JSArrayLiteral(methodObjects)),
+                JSObjectProperty("staticMethods", JSArrayLiteral(staticMethodObjects)),
               ))
             )
           )
@@ -728,6 +733,18 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           argExprs <- args.traverse(convertTypeArg(params)(_))
         } yield JSFunctionCall(
           JSPropertyAccessDot(classObj, classCreateMethodName),
+          argExprs
+        )
+
+      case TraitType(arTrait, args, _) =>
+        for {
+          sig <- arTrait.value.signature
+          erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
+          traitObj = getTraitJSObject(getParamOwnerModule(params.owner), arTrait.value.descriptor, erasedSig)
+
+          argExprs <- args.traverse(convertTypeArg(params)(_))
+        } yield JSFunctionCall(
+          JSPropertyAccessDot(traitObj, traitCreateMethodName),
           argExprs
         )
 

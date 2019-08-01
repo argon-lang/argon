@@ -108,6 +108,25 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
                   }
 
+                case Some(t: TraitType) =>
+                  memberName match {
+                    case MemberName.New => ???
+                    case methodName: MethodName =>
+                      implicitly[TypeCheck[TComp]].fromContextComp(t.arTrait.value.staticMethods)
+                        .map { _.filter { binding => binding.name === methodName } }
+                        .flatMap {
+                          case Vector(MethodBinding(_, _, _, method)) =>
+                            for {
+                              _ <- Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                              sig <- implicitly[TypeCheck[TComp]].fromContextComp(method.signature)
+                              convSig = convertSignature(sig)
+                            } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(AbsRef(method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
+
+                          case _ => ???
+                        }
+
+                  }
+
                 case _ => ???
               }
 
