@@ -287,6 +287,12 @@ trait TypeSystem[TContext <: Context with Singleton] {
         () => b.baseTypes.baseClass.collectFirstSomeM(classImplementsTrait(a)),
       ).collectFirstSomeM(_())
 
+    def isSameDataCtor(a: DataConstructorType)(b: DataConstructorType): F[Option[TSubTypeInfo]] =
+      if(a.ctor.value.descriptor === b.ctor.value.descriptor)
+        compareArguments(fromSimpleType(a), fromSimpleType(b))(a.args)(b.args)
+      else
+        Option.empty[TSubTypeInfo].pure[F]
+
     Vector(
       () => a match {
         case a: UnionType =>
@@ -340,6 +346,13 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case (aClass: ClassType, bClass: ClassType) => isSubClass(aClass)(bClass)
         case (aTrait: TraitType, bClass: ClassType) => classImplementsTrait(aTrait)(bClass)
         case (_: ClassType, _: TraitType) => notSubType
+
+        case (aDataCtor: DataConstructorType, bDataCtor: DataConstructorType) =>
+          isSameDataCtor(aDataCtor)(bDataCtor)
+
+        case (aTrait: TraitType, bDataCtor: DataConstructorType) =>
+          isSubTrait(aTrait)(bDataCtor.instanceType)
+
 
         case (aTuple: LoadTupleType, bTuple: LoadTupleType) =>
           if(aTuple.typeValues.size =!= bTuple.typeValues.size)
