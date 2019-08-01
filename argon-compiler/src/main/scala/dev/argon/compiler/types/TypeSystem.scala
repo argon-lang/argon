@@ -151,6 +151,8 @@ trait TypeSystem[TContext <: Context with Singleton] {
   }
 
   final case class TypeOfType(inner: TType, universe: TypeUniverse) extends SimpleType
+  final case class TypeN(universe: TypeUniverse, subtypeConstraint: Option[TType], supertypeConstraint: Option[TType]) extends SimpleType
+
   final case class TraitType(arTrait: WrapRef[ArTrait], args: Vector[TypeArgument], baseTypes: BaseTypeInfoTrait) extends TypeWithMethods {
     override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
@@ -381,6 +383,31 @@ trait TypeSystem[TContext <: Context with Singleton] {
             } yield SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(c1, c2))
           ).value
 
+        case (TypeOfType(innerA, uA), TypeN(uB, subtypeConstraint, supertypeConstraint)) if uB.toBigInt >= uA.toBigInt =>
+          (
+            subtypeConstraint.map { sub => OptionT(isSubType(sub, innerA)) }.toList ++
+              supertypeConstraint.map { sup => OptionT(isSubType(innerA, sup)) }.toList
+          ).toVector.sequence.value
+            .map { _.map {
+              SubTypeInfo(fromSimpleType(a), fromSimpleType(b), _)
+            } }
+
+        case (TypeN(uA, subA, supA), TypeN(uB, subB, supB)) if uB.toBigInt >= uA.toBigInt =>
+          (
+            ((subA, subB) match {
+              case (Some(subA), Some(subB)) => Vector(OptionT(isSubType(subA, subB)))
+              case _ => Vector()
+            }) ++
+              ((supA, supB) match {
+                case (Some(supA), Some(supB)) => Vector(OptionT(isSubType(supB, supA)))
+                case _ => Vector()
+              })
+          ).sequence.value
+            .map { _.map {
+              SubTypeInfo(fromSimpleType(a), fromSimpleType(b), _)
+            } }
+
+
         case (_, _) => notSubType
       },
     ).collectFirstSomeM(_())
@@ -485,6 +512,12 @@ object TypeSystem {
       for {
         newInner <- convertTypeSystem(context)(ts)(otherTS)(converter)(inner)
       } yield (otherTS.TypeOfType(newInner, universe) : otherTS.SimpleType)
+
+    case ts.TypeN(universe, subtypeConstraint, supertypeConstraint) =>
+      for {
+        newSub <- subtypeConstraint.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+        newSup <- supertypeConstraint.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+      } yield (otherTS.TypeN(universe, newSub, newSup) : otherTS.SimpleType)
 
     case t1: ts.LoadTupleType =>
       t1.typeValues

@@ -324,6 +324,20 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               }
         }
 
+      case parser.TypeExpr(instanceType, subtypeOf, supertypeOf) =>
+        compFactory(
+          for {
+            inst <- instanceType.traverse(evaluateTypeExprAST(env)(_))
+            sub <- subtypeOf.traverse(evaluateTypeExprAST(env)(_))
+            sup <- supertypeOf.traverse(evaluateTypeExprAST(env)(_))
+            universe = (sub.toList ++ sup.toList).map(universeOfType).foldLeft(TypeUniverse(ValueUniverse))(Universe.union)
+            typeN = TypeN(universe, sub, sup)
+          } yield factoryForExpr(env)(expr.location)(
+            inst.foldLeft[SimpleType](typeN) { (a, b) => IntersectionType(fromSimpleType(a), b)}
+          )
+        )
+
+
       case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented: ${e.dumpInfo}")
     }
 
@@ -1124,6 +1138,13 @@ object ExpressionConverter {
       for {
         newInner <- fillHolesTypeChildren(context)(ts)(inner)
       } yield context.typeSystem.TypeOfType(newInner, universe)
+
+    case ts.TypeN(universe, subtypeConstraint, supertypeConstraint) =>
+      for {
+        sub <- subtypeConstraint.traverse(fillHolesTypeChildren(context)(ts)(_))
+        sup <- supertypeConstraint.traverse(fillHolesTypeChildren(context)(ts)(_))
+      } yield context.typeSystem.TypeN(universe, sub, sup)
+
 
     case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
   }
