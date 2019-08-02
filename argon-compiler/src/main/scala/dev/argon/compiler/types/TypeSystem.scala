@@ -293,6 +293,16 @@ trait TypeSystem[TContext <: Context with Singleton] {
             .map { _.map { info => SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(info)) } }
         case _ => notSubType
       },
+      () => a match {
+        case LoadTuple(NonEmptyList(TupleElement(a), Nil)) =>
+          isSubType(a, fromSimpleType(b))
+        case _ => notSubType
+      },
+      () => b match {
+        case LoadTuple(NonEmptyList(TupleElement(b), Nil)) =>
+          isSubType(fromSimpleType(a), b)
+        case _ => notSubType
+      },
       () => (a, b) match {
 
         case (aTrait: TraitType, bTrait: TraitType) => isSubTrait(aTrait)(bTrait)

@@ -656,18 +656,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def convertExprTypeDelay[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(exprType: typeSystem.TType)(t: typeSystem.TType): TComp[ArExpr => ArExpr] =
     typeSystem.isSubType[TComp](t, exprType).flatMap {
       case Some(info) => implicitly[TypeCheck[TComp]].recordConstraint(info).map(const(identity))
-      case None =>
-        implicitly[TypeCheck[TComp]].createHole.flatMap { newHole =>
-          typeSystem.isSubType(t, fromSimpleType(LoadTuple(NonEmptyList.of(TupleElement(newHole))))).flatMap {
-            case Some(stTupleInfo) =>
-              convertExprTypeDelay(env)(location)(exprType)(newHole).map { innerConverter =>
-                expr => LoadTuple(NonEmptyList.of(TupleElement(wrapType(innerConverter(expr)))))
-              }
-
-            case None =>
-              Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(exprType, t)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-          }
-        }
+      case None => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(exprType, t)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
     }
 
   def evaluateTypeExprFactory[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(factory: ExprFactory[TComp]): TComp[TType] =

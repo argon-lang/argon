@@ -115,13 +115,18 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
   private def parameterVarMapping[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: Signature[TResult]): Map[VariableLikeDescriptor, JSIdentifier] =
     sig.unsubstitutedParameters.zipWithIndex.flatMap {
       case (param, paramIndex) =>
-        if(param.tupleVars.nonEmpty)
-          param.tupleVars.map { tupleVar =>
-            tupleVar.descriptor -> getDeconstructedParameterName(tupleVar.descriptor)
-          }
-        else {
-          val desc = ParameterDescriptor(owner, paramIndex)
-          Vector(desc -> getParameterName(desc))
+        param.tupleVars match {
+          case Vector() =>
+            val desc = ParameterDescriptor(owner, paramIndex)
+            Vector(desc -> getParameterName(desc))
+
+          case Vector(tupleVar) =>
+            Vector(tupleVar.descriptor -> getDeconstructedParameterName(tupleVar.descriptor))
+
+          case _ =>
+            param.tupleVars.map { tupleVar =>
+              tupleVar.descriptor -> getDeconstructedParameterName(tupleVar.descriptor)
+            }
         }
     }.toMap
 
@@ -480,14 +485,20 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
   def createParameterList[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: context.signatureContext.Signature[TResult]): JSFunctionParameterList =
     sig.unsubstitutedParameters.zipWithIndex.foldRight[JSFunctionParameterList](JSFunctionEmptyParameterList) { case ((param, paramIndex), list) =>
       JSFunctionParameter(
-        if(param.tupleVars.nonEmpty)
-          JSArrayDestructBinding(
-            param.tupleVars.map { tupleVar =>
-              JSBindingIdentifier(getDeconstructedParameterName(tupleVar.descriptor))
-            }
-          )
-        else
-          JSBindingIdentifier(getParameterName(ParameterDescriptor(owner, paramIndex))),
+        param.tupleVars match {
+          case Vector() =>
+            JSBindingIdentifier(getParameterName(ParameterDescriptor(owner, paramIndex)))
+
+          case Vector(tupleVar) =>
+            JSBindingIdentifier(getDeconstructedParameterName(tupleVar.descriptor))
+
+          case _ =>
+            JSArrayDestructBinding(
+              param.tupleVars.map { tupleVar =>
+                JSBindingIdentifier(getDeconstructedParameterName(tupleVar.descriptor))
+              }
+            )
+        },
 
         list
       )
@@ -681,6 +692,9 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           JSFunctionParameter(JSBindingIdentifier(varName), JSFunctionEmptyParameterList),
           bodyExpr
         )
+
+      case LoadTuple(NonEmptyList(TupleElement(value), Nil)) =>
+        convertExpr(params)(value)
 
       case expr: LoadTuple =>
         for {

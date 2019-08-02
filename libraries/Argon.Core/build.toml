@@ -22,7 +22,7 @@ function() {
 
 puts = """
 
-function ([s]) {
+function (s) {
 	console.log(s[stringValueSymbol]);
 	return unitValue;
 }
