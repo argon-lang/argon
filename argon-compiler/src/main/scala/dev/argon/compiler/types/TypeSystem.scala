@@ -358,6 +358,8 @@ trait TypeSystem[TContext <: Context with Singleton] {
               SubTypeInfo(fromSimpleType(a), fromSimpleType(b), _)
             } }
 
+        case (LoadVariable(varA), LoadVariable(varB)) if varA.descriptor === varB.descriptor =>
+          SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector.empty).pure[Option].pure[F]
 
         case (_, _) => notSubType
       },
