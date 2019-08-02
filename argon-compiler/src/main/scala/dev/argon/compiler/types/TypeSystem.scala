@@ -343,6 +343,10 @@ trait TypeSystem[TContext <: Context with Singleton] {
               SubTypeInfo(fromSimpleType(a), fromSimpleType(b), _)
             } }
 
+        case (a @ LoadTuple(_), TypeN(uB, _, _)) if uB.toBigInt >= a.universe.toBigInt =>
+          SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector.empty).pure[Option].pure[F]
+
+
         case (TypeN(uA, subA, supA), TypeN(uB, subB, supB)) if uB.toBigInt >= uA.toBigInt =>
           (
             ((subA, subB) match {
