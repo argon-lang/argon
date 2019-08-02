@@ -444,9 +444,9 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
       def impl(sig: Signature[TResult], prevParams: Vector[module.Parameter]): Emit[A] =
         sig.visit(
           sigParams =>
-            sigParams.parameter.tupleVars
+            sigParams.parameter.elements
               .traverse { elem =>
-                convertType(armodule, elem.varType).map { paramType =>
+                convertType(armodule, elem.elemType).map { paramType =>
                   module.ParameterElement(
                     elem.name match {
                       case VariableName.Normal(name) => Some(name)

@@ -100,10 +100,6 @@ final case class ParameterDescriptor(owner: ParameterOwnerDescriptor, index: Int
   override def moduleDescriptor: ModuleDescriptor = owner.moduleDescriptor
 }
 
-final case class DeconstructedParameterDescriptor(owner: ParameterOwnerDescriptor, index: Int, tupleIndex: Int) extends VariableLikeDescriptor {
-  override def moduleDescriptor: ModuleDescriptor = owner.moduleDescriptor
-}
-
 final case class VariableDescriptor(owner: VariableOwnerDescriptor, index: Int) extends VariableLikeDescriptor {
   override def moduleDescriptor: ModuleDescriptor = owner.moduleDescriptor
 }

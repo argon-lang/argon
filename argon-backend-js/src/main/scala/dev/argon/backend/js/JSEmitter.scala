@@ -113,21 +113,9 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
       )
 
   private def parameterVarMapping[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: Signature[TResult]): Map[VariableLikeDescriptor, JSIdentifier] =
-    sig.unsubstitutedParameters.zipWithIndex.flatMap {
-      case (param, paramIndex) =>
-        param.tupleVars match {
-          case Vector() =>
-            val desc = ParameterDescriptor(owner, paramIndex)
-            Vector(desc -> getParameterName(desc))
-
-          case Vector(tupleVar) =>
-            Vector(tupleVar.descriptor -> getDeconstructedParameterName(tupleVar.descriptor))
-
-          case _ =>
-            param.tupleVars.map { tupleVar =>
-              tupleVar.descriptor -> getDeconstructedParameterName(tupleVar.descriptor)
-            }
-        }
+    sig.unsubstitutedParameters.map { param =>
+      val desc = param.paramVar.descriptor
+      desc -> getParameterName(desc)
     }.toMap
 
 
@@ -288,7 +276,6 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           propObjects = methodVarMap.keys
             .collect {
               case desc: ParameterDescriptor => getParameterName(desc)
-              case desc: DeconstructedParameterDescriptor => getDeconstructedParameterName(desc)
               case desc: VariableDescriptor => getVariableName(desc)
             }
             .map { case JSIdentifier(id) =>
@@ -483,23 +470,9 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
     )
 
   def createParameterList[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: context.signatureContext.Signature[TResult]): JSFunctionParameterList =
-    sig.unsubstitutedParameters.zipWithIndex.foldRight[JSFunctionParameterList](JSFunctionEmptyParameterList) { case ((param, paramIndex), list) =>
+    sig.unsubstitutedParameters.foldRight[JSFunctionParameterList](JSFunctionEmptyParameterList) { case (param, list) =>
       JSFunctionParameter(
-        param.tupleVars match {
-          case Vector() =>
-            JSBindingIdentifier(getParameterName(ParameterDescriptor(owner, paramIndex)))
-
-          case Vector(tupleVar) =>
-            JSBindingIdentifier(getDeconstructedParameterName(tupleVar.descriptor))
-
-          case _ =>
-            JSArrayDestructBinding(
-              param.tupleVars.map { tupleVar =>
-                JSBindingIdentifier(getDeconstructedParameterName(tupleVar.descriptor))
-              }
-            )
-        },
-
+        JSBindingIdentifier(getParameterName(param.paramVar.descriptor)),
         list
       )
     }
@@ -701,6 +674,11 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           values <- expr.values.toList.toVector.traverse { elem => convertExpr(params)(elem.value) }
         } yield JSArrayLiteral(values)
 
+      case LoadTupleElement(tupleValue, _, index) =>
+        for {
+          tuple <- convertExpr(params)(tupleValue)
+        } yield JSPropertyAccessBracket(tuple, JSBigInt(index))
+
       case LoadUnit(_) =>
         coreLibExport(params.owner.moduleDescriptor, "unitValue").pure[Comp]
 
@@ -793,9 +771,6 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
 
   private def getParameterName(descriptor: ParameterDescriptor): JSIdentifier =
     JSIdentifier(s"param_${descriptor.index.toString}")
-
-  private def getDeconstructedParameterName(descriptor: DeconstructedParameterDescriptor): JSIdentifier =
-    JSIdentifier(s"param_${descriptor.index.toString}_${descriptor.tupleIndex.toString}")
 
   private def getVariableName(descriptor: VariableDescriptor): JSIdentifier =
     JSIdentifier(s"local_${descriptor.index.toString}")

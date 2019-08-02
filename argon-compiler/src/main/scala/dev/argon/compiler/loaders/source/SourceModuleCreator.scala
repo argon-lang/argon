@@ -82,6 +82,9 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
         override def addVariables(context: context2.type)(variables: Vector[context.typeSystem.Variable]): EnvCreator[context2.type] =
           new EnvCreatorInstance(envFileSpec, scope.addVariables(variables))
 
+        override def addParameters(context: context2.type)(params: Vector[context.typeSystem.Parameter]): EnvCreator[context2.type] =
+          new EnvCreatorInstance(envFileSpec, scope.addParameters(params))
+
         override val fileSpec: FileSpec = envFileSpec
         override val currentModule: ArModule[context2.type, DeclarationPayloadSpecifier] = currentModule2
         override val referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]] = referencedModules2

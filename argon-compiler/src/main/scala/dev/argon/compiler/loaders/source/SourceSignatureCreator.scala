@@ -20,7 +20,7 @@ object SourceSignatureCreator {
   : context.Comp[context.signatureContext.Signature[TResult]] = {
 
     import context._
-    import typeSystem.{ ParameterElementVariable, Parameter }
+    import typeSystem.{ ParameterElement, Parameter, ParameterVariable }
     import scopeContext.{ Scope, ScopeExtensions }
     import signatureContext.{ Signature, SignatureParameters, SignatureResult }
 
@@ -35,7 +35,7 @@ object SourceSignatureCreator {
             unitType <- ExpressionConverter.resolveUnitType(context)(env)(location)
             restSig <- impl(env)(tail)(paramIndex + 1)
           } yield SignatureParameters[TResult](
-            Parameter(Vector(), unitType),
+            Parameter(ParameterVariable(ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, unitType), Vector()),
             restSig
           )
 
@@ -53,33 +53,41 @@ object SourceSignatureCreator {
                     Compilation[Comp].forErrors(CompilationError.ParameterTypeAnnotationRequired(paramName, CompilationMessageSource.SourceFile(env.fileSpec, loc)))
 
                 })
-                .map { t =>
-                  ParameterElementVariable(
-                    DeconstructedParameterDescriptor(paramOwner, paramIndex, tupleIndex),
-                    VariableName.Normal(paramName),
-                    Mutability.NonMutable,
-                    t
-                  )
-                }
-
+                .map { t => (t, paramName) }
             }
-            .flatMap { variables: NonEmptyList[ParameterElementVariable] =>
+            .flatMap {
+              case NonEmptyList((t, name), Nil) =>
 
-              val variablesVec = variables.toList.toVector
+                val paramVar = ParameterVariable(ParameterDescriptor(paramOwner, paramIndex), VariableName.Normal(name), Mutability.NonMutable, t)
 
-              val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTuple(
-                variables.map { v => context.typeSystem.TupleElement(v.varType) }
-              ))
+                for {
+                  restSig <- impl(env.copy(scope = env.scope.addVariable(paramVar)))(tail)(paramIndex + 1)
+                } yield SignatureParameters[TResult](
+                  Parameter(paramVar, Vector(ParameterElement(paramVar, VariableName.Normal(name), t, 0))),
+                  restSig
+                )
 
-              impl(
-                env.copy(scope = env.scope.addVariables(variablesVec))
-              )(tail)(paramIndex + 1)
-                .map { restSig =>
-                  SignatureParameters[TResult](
-                    Parameter(variablesVec, paramType),
-                    restSig
-                  )
-                }
+              case elems =>
+
+                val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTuple(
+                  elems.map { case (t, _) => context.typeSystem.TupleElement(t) }
+                ))
+
+                val paramVar = ParameterVariable(ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, paramType)
+
+                val paramElems = elems.toList.toVector.zipWithIndex.map { case ((t, name), i) => ParameterElement(paramVar, VariableName.Normal(name), t, i) }
+
+                val param = Parameter(paramVar, paramElems)
+
+                impl(
+                  env.copy(scope = env.scope.addParameter(param))
+                )(tail)(paramIndex + 1)
+                  .map { restSig =>
+                    SignatureParameters[TResult](
+                      param,
+                      restSig
+                    )
+                  }
             }
 
         case Vector() =>

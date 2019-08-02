@@ -65,8 +65,8 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
 
       private def paramEnv = for {
         sig <- signature
-      } yield env.addVariables(context)(
-        sig.unsubstitutedParameters.flatMap(_.tupleVars)
+      } yield env.addParameters(context)(
+        sig.unsubstitutedParameters
       )
 
       private val bodyStmt =

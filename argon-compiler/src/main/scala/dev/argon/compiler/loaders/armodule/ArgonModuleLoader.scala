@@ -900,12 +900,11 @@ object ArgonModuleLoader {
 
           def resolveParameter(ownerDescriptor: ParameterOwnerDescriptor)(index: Int)(parameter: ArgonModule.Parameter): Comp[Parameter] =
             parameter.elements
-              .zipWithIndex
-              .traverse { case (ArgonModule.ParameterElement(name, paramType), tupleIndex) =>
+              .traverse { case ArgonModule.ParameterElement(name, paramType) =>
                 val varName = name.map(VariableName.Normal).getOrElse(VariableName.Unnamed)
 
                 resolveType(paramType)
-                  .map(ParameterElementVariable(DeconstructedParameterDescriptor(ownerDescriptor, index, tupleIndex), varName, Mutability.Mutable, _))
+                  .map { t => (t, varName) }
               }
               .flatMap {
                 case Vector() =>
@@ -915,18 +914,24 @@ object ArgonModuleLoader {
                       CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
                     )(currentModule)(referencedModules)
 
-                  } yield Parameter(Vector(), unitType)
+                  } yield Parameter(ParameterVariable(ParameterDescriptor(ownerDescriptor, index), VariableName.Unnamed, Mutability.NonMutable, unitType), Vector())
 
+                case Vector((t, varName)) =>
+                  Parameter(
+                    ParameterVariable(ParameterDescriptor(ownerDescriptor, index), varName, Mutability.NonMutable, t),
+                    Vector()
+                  ).pure[Comp]
 
-
-
-                case variables @ head +: tail =>
+                case elems @ head +: tail =>
 
                   val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTuple(
-                    NonEmptyList(head, tail.toList).map { v => context.typeSystem.TupleElement(v.varType) }
+                    NonEmptyList(head, tail.toList).map { case (t, _) => context.typeSystem.TupleElement(t) }
                   ))
 
-                  Parameter(variables, paramType).pure[Comp]
+                  val paramVar = ParameterVariable(ParameterDescriptor(ownerDescriptor, index), VariableName.Unnamed, Mutability.NonMutable, paramType)
+                  val paramElems = elems.zipWithIndex.map { case ((t, name), elemIndex) => ParameterElement(paramVar, name, t, elemIndex) }
+
+                  Parameter(paramVar, paramElems).pure[Comp]
               }
 
           override lazy val module: Comp[ArModule[context.type, TPayloadSpec]] =

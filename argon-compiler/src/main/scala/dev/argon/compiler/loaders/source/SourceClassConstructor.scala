@@ -51,8 +51,8 @@ object SourceClassConstructor {
         for {
           sig <- signature
           env2 = env(context)(effectInfo, descriptor)
-          env3 = env2.copy(scope = env2.scope.addVariables(
-            sig.unsubstitutedParameters.flatMap(_.tupleVars)
+          env3 = env2.copy(scope = env2.scope.addParameters(
+            sig.unsubstitutedParameters
           ))
 
           unitType <- StandardTypeLoaders.loadUnitType(context)(

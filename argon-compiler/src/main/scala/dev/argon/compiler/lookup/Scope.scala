@@ -12,7 +12,7 @@ trait ScopeContext[TContext <: Context with Singleton] {
   val context: TContext
   val typeSystem: TypeSystem[context.type]
 
-  import typeSystem.Variable
+  import typeSystem.{Variable, ParameterElement, Parameter}
 
   sealed trait Scope {
 
@@ -57,6 +57,33 @@ trait ScopeContext[TContext <: Context with Singleton] {
     def addVariables(variables: Vector[Variable]): Scope =
       variables.foldLeft(scope) { (scope, variable) => scope.addVariable(variable) }
 
+    def addParameter(param: Parameter): Scope = {
+      def addParamElement(scope: Scope, paramElem: ParameterElement): Scope =
+        new Scope {
+          override def nextVariable: Int = scope.nextVariable
+
+          override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): context.Comp[LookupResult] =
+            if(paramElem.name === VariableName.Normal(name)) {
+              val value = ParameterElementScopeValue(paramElem)
+              context.compCompilationInstance.point(
+                LookupResult.ValuesResult(OverloadResult.List(Vector(value), OverloadResult.End))
+              )
+            }
+            else {
+              scope.findIdentifier(name, fileSpec, sourceLocation)
+            }
+
+        }
+
+      if(param.elements.size > 1)
+        param.elements.foldLeft(scope) { (scope, variable) => addParamElement(scope, variable) }
+      else
+        addVariable(param.paramVar)
+    }
+
+    def addParameters(params: Vector[Parameter]): Scope =
+      params.foldLeft(scope) { (scope, param) => scope.addParameter(param) }
+
   }
 
   sealed trait NamespacesOnlyScope extends Scope {
@@ -93,6 +120,10 @@ trait ScopeContext[TContext <: Context with Singleton] {
   final case class VariableScopeValue(variable: Variable) extends ScopeValue {
     override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
       other.VariableScopeValue(TypeSystem.convertVariableTypeSystem(context)(typeSystem)(other.typeSystem)(converter)(variable))
+  }
+  final case class ParameterElementScopeValue(paramElem: ParameterElement) extends ScopeValue {
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
+      other.ParameterElementScopeValue(TypeSystem.convertParameterElementTypeSystem(context)(typeSystem)(other.typeSystem)(converter)(paramElem))
   }
   final case class FunctionScopeValue(func: AbsRef[context.type, ArFunc]) extends ScopeValue {
     override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =

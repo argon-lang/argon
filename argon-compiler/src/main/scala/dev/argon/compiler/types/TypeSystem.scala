@@ -56,10 +56,12 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   final case class LocalVariable(descriptor: VariableDescriptor, name: VariableName, mutability: Mutability, varType: TType) extends Variable
   final case class ParameterVariable(descriptor: ParameterDescriptor, name: VariableName, mutability: Mutability, varType: TType) extends Variable
-  final case class ParameterElementVariable(descriptor: DeconstructedParameterDescriptor, name: VariableName, mutability: Mutability, varType: TType) extends Variable
   final case class FieldVariable(descriptor: FieldDescriptor, ownerClass: AbsRef[context.type, ArClass], name: VariableName.Normal, mutability: Mutability, varType: TType) extends Variable
 
-  final case class Parameter(tupleVars: Vector[ParameterElementVariable], paramType: TType)
+  final case class ParameterElement(paramVar: ParameterVariable, name: VariableName, elemType: TType, index: Int)
+  final case class Parameter(paramVar: ParameterVariable, elements: Vector[ParameterElement]) {
+    def paramType: TType = paramVar.varType
+  }
 
 
   sealed trait ArExpr {
@@ -113,6 +115,10 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final case class LoadTuple(values: NonEmptyList[TupleElement]) extends ArExpr {
     override lazy val exprType: TType = fromSimpleType(LoadTuple(values.map { _.elementTypeElement }))
     override lazy val universe: Universe = largestUniverse1(values.map { elem => universeOfExpr(elem.value) })
+  }
+  final case class LoadTupleElement(tupleValue: ArExpr, elemType: TType, index: Int) extends ArExpr {
+    override val exprType: TType = elemType
+    override val universe: Universe = universeOfExpr(elemType).prevUnsafe
   }
   final case class LoadUnit(exprType: TType) extends ArExpr {
     override val universe: Universe = ValueUniverse
@@ -475,16 +481,16 @@ object TypeSystem {
       newType <- TypeSystem.convertTypeSystem(context)(ts)(otherTS)(converter)(v.varType)
     } yield otherTS.LocalVariable(v.descriptor, v.name, v.mutability, newType)
 
-  final def convertParameterElementVariableTypeSystem[F[_]: Monad]
+  final def convertParamVariableTypeSystem[F[_]: Monad]
   (context: Context)
   (ts: TypeSystem[context.type])
   (otherTS: TypeSystem[context.type])
   (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
-  (v: ts.ParameterElementVariable)
-  : F[otherTS.ParameterElementVariable] =
+  (v: ts.ParameterVariable)
+  : F[otherTS.ParameterVariable] =
     for {
       newType <- TypeSystem.convertTypeSystem(context)(ts)(otherTS)(converter)(v.varType)
-    } yield otherTS.ParameterElementVariable(v.descriptor, v.name, v.mutability, newType)
+    } yield otherTS.ParameterVariable(v.descriptor, v.name, v.mutability, newType)
 
   final def convertVariableTypeSystem[F[_]: Monad]
   (context: Context)
@@ -497,13 +503,8 @@ object TypeSystem {
       case v @ ts.LocalVariable(_, _, _, _) =>
         convertLocalVariableTypeSystem(context)(ts)(otherTS)(converter)(v).map(identity)
 
-      case ts.ParameterVariable(descriptor, name, mutability, varType) =>
-        for {
-          newType <- TypeSystem.convertTypeSystem(context)(ts)(otherTS)(converter)(varType)
-        } yield otherTS.ParameterVariable(descriptor, name, mutability, newType)
-
-      case v @ ts.ParameterElementVariable(_, _, _, _) =>
-        convertParameterElementVariableTypeSystem(context)(ts)(otherTS)(converter)(v).map(identity)
+      case v @ ts.ParameterVariable(_, _, _, _) =>
+        convertParamVariableTypeSystem(context)(ts)(otherTS)(converter)(v).map(identity)
 
       case ts.FieldVariable(descriptor, ownerClass, name, mutability, varType) =>
         for {
@@ -511,6 +512,18 @@ object TypeSystem {
         } yield otherTS.FieldVariable(descriptor, ownerClass, name, mutability, newType)
 
     }
+
+  final def convertParameterElementTypeSystem[F[_]: Monad, Desc <: VariableLikeDescriptor]
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
+  (p: ts.ParameterElement)
+  : F[otherTS.ParameterElement] =
+    for {
+      newParamVar <- convertParamVariableTypeSystem(context)(ts)(otherTS)(converter)(p.paramVar)
+      newElemType <- convertTypeSystem(context)(ts)(otherTS)(converter)(p.elemType)
+    } yield otherTS.ParameterElement(newParamVar, p.name, newElemType, p.index)
 
   final def convertParameterTypeSystem[F[_]: Monad, Desc <: VariableLikeDescriptor]
   (context: Context)
@@ -520,9 +533,9 @@ object TypeSystem {
   (p: ts.Parameter)
   : F[otherTS.Parameter] =
     for {
-      newVars <- p.tupleVars.traverse(convertParameterElementVariableTypeSystem(context)(ts)(otherTS)(converter)(_))
-      newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(p.paramType)
-    } yield otherTS.Parameter(newVars, newType)
+      newParamVar <- convertParamVariableTypeSystem(context)(ts)(otherTS)(converter)(p.paramVar)
+      newElems <- p.elements.traverse(convertParameterElementTypeSystem(context)(ts)(otherTS)(converter)(_))
+    } yield otherTS.Parameter(newParamVar, newElems)
 
   def convertExprTypeSystem[F[_]: Monad]
   (context: Context)
@@ -538,13 +551,6 @@ object TypeSystem {
         newClassType <- convertClassType(context)(ts)(otherTS)(converter)(classType)
         newArgs <- args.traverse(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
       } yield otherTS.ClassConstructorCall(newClassType, classCtor, newArgs)
-
-    case expr: ts.LoadTuple =>
-      expr.values
-        .traverse { case ts.TupleElement(elementType) =>
-          convertTypeSystem(context)(ts)(otherTS)(converter)(elementType).map(otherTS.TupleElement(_))
-        }
-        .map(otherTS.LoadTuple(_))
 
     case ts.DataConstructorCall(dataCtor, args) =>
       for {
@@ -600,15 +606,28 @@ object TypeSystem {
         newBody <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(body)
       } yield otherTS.LoadLambda(newVar, newBody)
 
-    case ts.LoadVariable(variable) =>
+    case expr: ts.LoadTuple =>
+      expr.values
+        .traverse { case ts.TupleElement(elementType) =>
+          convertTypeSystem(context)(ts)(otherTS)(converter)(elementType).map(otherTS.TupleElement(_))
+        }
+        .map(otherTS.LoadTuple(_))
+
+    case ts.LoadTupleElement(tupleValue, elemType, index) =>
       for {
-        newVar <- convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
-      } yield otherTS.LoadVariable(newVar)
+        newValue <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(tupleValue)
+        newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(elemType)
+      } yield otherTS.LoadTupleElement(newValue, newType, index)
 
     case ts.LoadUnit(exprType) =>
       for {
         newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
       } yield otherTS.LoadUnit(newType)
+
+    case ts.LoadVariable(variable) =>
+      for {
+        newVar <- convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
+      } yield otherTS.LoadVariable(newVar)
 
     case ts.MethodCall(method, instance, args, returnType) =>
       for {

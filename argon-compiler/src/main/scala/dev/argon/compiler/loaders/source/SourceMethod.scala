@@ -81,8 +81,8 @@ object SourceMethod {
                 for {
                   sig <- signature
                   env2 = env(context)(effectInfo, descriptor)
-                  env3 = env2.copy(scope = env2.scope.addVariables(
-                    sig.unsubstitutedParameters.flatMap(_.tupleVars)
+                  env3 = env2.copy(scope = env2.scope.addParameters(
+                    sig.unsubstitutedParameters
                   ))
                   expr <- ExpressionConverter.convertStatementList(context)(env3)(sig.unsubstitutedResult.returnType)(body)
                 } yield context.createExprMethodImplementation(expr)

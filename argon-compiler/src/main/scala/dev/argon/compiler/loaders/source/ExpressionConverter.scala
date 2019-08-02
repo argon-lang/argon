@@ -507,6 +507,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           case VariableScopeValue(variable) =>
             factoryForExpr(env)(location)(LoadVariable(variable))
 
+          case ParameterElementScopeValue(paramElem) =>
+            factoryForExpr(env)(location)(LoadTupleElement(LoadVariable(paramElem.paramVar), paramElem.elemType, paramElem.index))
+
           case FunctionScopeValue(func) =>
             compFactory(
               for {
@@ -727,6 +730,8 @@ object ExpressionConverter {
     def addVariables(context: TContext)(variables: Vector[context.typeSystem.Variable]): EnvCreator[TContext]
     def addVariable(context: TContext)(variable: context.typeSystem.Variable): EnvCreator[TContext] =
       addVariables(context)(Vector(variable))
+
+    def addParameters(context: TContext)(params: Vector[context.typeSystem.Parameter]): EnvCreator[TContext]
 
     val fileSpec: FileSpec
     val currentModule: ArModule[TContext, DeclarationPayloadSpecifier]
@@ -1047,17 +1052,17 @@ object ExpressionConverter {
         newVar = context.typeSystem.ParameterVariable(descriptor, name, mutability, newVarType)
       } yield context.typeSystem.LoadVariable(newVar)
 
-    case ts.LoadVariable(ts.ParameterElementVariable(descriptor, name, mutability, varType)) =>
-      for {
-        newVarType <- fillHolesWrapExprChildren(context)(ts)(varType)
-        newVar = context.typeSystem.ParameterElementVariable(descriptor, name, mutability, newVarType)
-      } yield context.typeSystem.LoadVariable(newVar)
-
     case ts.LoadVariable(ts.FieldVariable(descriptor, ownerClass, name, mutability, varType)) =>
       for {
         newVarType <- fillHolesWrapExprChildren(context)(ts)(varType)
         newVar = context.typeSystem.FieldVariable(descriptor, ownerClass, name, mutability, newVarType)
       } yield context.typeSystem.LoadVariable(newVar)
+
+    case ts.LoadTupleElement(tupleValue, elemType, index) =>
+      for {
+        newTupleValue <- fillHolesExprChildren(context)(ts)(tupleValue)
+        newElemType <- fillHolesWrapExprChildren(context)(ts)(elemType)
+      } yield context.typeSystem.LoadTupleElement(newTupleValue, newElemType, index)
 
     case ts.LoadUnit(unitType) =>
       for {
