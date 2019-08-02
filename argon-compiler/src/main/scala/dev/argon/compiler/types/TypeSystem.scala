@@ -17,14 +17,14 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   type TTypeWrapper[+_]
 
-  type TType = TTypeWrapper[SimpleType]
   type WrapExpr = TTypeWrapper[ArExpr]
+  type TType = WrapExpr
   
   type WrapRef[T[_ <: Context with Singleton, _[_, _]]] = AbsRef[context.type, T]
   type TSubTypeInfo = SubTypeInfo[TType]
 
 
-  final def fromSimpleType(simpleType: SimpleType): TType = wrapType(simpleType)
+  final def fromSimpleType(simpleType: ArExpr): TType = wrapType(simpleType)
 
   def wrapType[A](a: A): TTypeWrapper[A]
   def unwrapType[A](t: TTypeWrapper[A]): Option[A]
@@ -36,7 +36,6 @@ trait TypeSystem[TContext <: Context with Singleton] {
   def isSubTypeWrapper[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[SubTypeInfo[TType]]]
 
   def universeOfExpr(expr: WrapExpr): Universe
-  def universeOfType(t: TType): TypeUniverse
 
   final def largestUniverse[U <: Universe](default: U)(universes: Vector[U]): U =
     universes.foldLeft(default)(Universe.union)
@@ -46,12 +45,6 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   final def isSubType[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[TSubTypeInfo]] =
     isSubTypeWrapper(a, b)
-
-  final def exprIsType(expr: WrapExpr): Option[TType] =
-    traverseTypeWrapper(expr) {
-      case t: SimpleType => Some(t)
-      case _ => None
-    }
 
 
   sealed trait Variable {
@@ -84,11 +77,11 @@ trait TypeSystem[TContext <: Context with Singleton] {
   }
   final case class FunctionCall(function: AbsRef[context.type, ArFunc], args: Vector[ArExpr], returnType: TType) extends ArExpr {
     override val exprType: TType = returnType
-    override lazy val universe: Universe = universeOfType(returnType).prev
+    override lazy val universe: Universe = universeOfExpr(returnType).prevUnsafe
   }
   final case class FunctionObjectCall(function: ArExpr, arg: ArExpr, returnType: TType) extends ArExpr {
     override val exprType: TType = returnType
-    override lazy val universe: Universe = universeOfType(returnType).prev
+    override lazy val universe: Universe = universeOfExpr(returnType).prevUnsafe
   }
   final case class IfElse(condition: ArExpr, ifBody: ArExpr, elseBody: ArExpr) extends ArExpr {
     override lazy val exprType: TType = fromSimpleType(UnionType(ifBody.exprType, elseBody.exprType))
@@ -110,23 +103,30 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final case class LoadLambda(argVariable: LocalVariable, body: ArExpr) extends ArExpr {
     override lazy val exprType: TType = fromSimpleType(FunctionType(argVariable.varType, body.exprType))
     override lazy val universe: Universe = Universe.union(
-      universeOfType(argVariable.varType).prev,
-      universeOfType(body.exprType).prev
+      universeOfExpr(argVariable.varType).prevUnsafe,
+      universeOfExpr(body.exprType).prevUnsafe
     )
+  }
+  final case class TupleElement(value: WrapExpr) {
+    lazy val elementTypeElement: TupleElement = TupleElement(wrapExprType(value))
+  }
+  final case class LoadTuple(values: NonEmptyList[TupleElement]) extends ArExpr {
+    override lazy val exprType: TType = fromSimpleType(LoadTuple(values.map { _.elementTypeElement }))
+    override lazy val universe: Universe = largestUniverse1(values.map { elem => universeOfExpr(elem.value) })
   }
   final case class LoadUnit(exprType: TType) extends ArExpr {
     override val universe: Universe = ValueUniverse
   }
   final case class LoadVariable(variable: Variable) extends ArExpr {
-    override val exprType: TType = variable.varType
-    override lazy val universe: Universe = universeOfType(variable.varType).prev
+    override lazy val exprType: TType = variable.varType
+    override lazy val universe: Universe = universeOfExpr(variable.varType).prevUnsafe
   }
   final case class MethodCall(method: AbsRef[context.type, ArMethod], instance: ArExpr, args: Vector[ArExpr], returnType: TType) extends ArExpr {
     override val exprType: TType = returnType
-    override lazy val universe: Universe = universeOfType(returnType).prev
+    override lazy val universe: Universe = universeOfExpr(returnType).prevUnsafe
   }
   final case class PrimitiveOp(operation: PrimitiveOperation, left: ArExpr, right: ArExpr, exprType: TType) extends ArExpr {
-    override val universe: Universe = universeOfType(exprType).prev
+    override val universe: Universe = universeOfExpr(exprType).prevUnsafe
   }
   final case class Sequence(first: ArExpr, second: ArExpr) extends ArExpr {
     override lazy val exprType: TType = second.exprType
@@ -136,13 +136,11 @@ trait TypeSystem[TContext <: Context with Singleton] {
     override val universe: Universe = ValueUniverse
   }
 
-
-  sealed trait SimpleType extends ArExpr {
+  sealed trait TypeIsTypeOfTypeExpr extends ArExpr {
     override lazy val exprType: TType = fromSimpleType(TypeOfType(fromSimpleType(this), TypeUniverse(universe)))
-    override val universe: TypeUniverse
   }
 
-  sealed trait TypeWithMethods extends SimpleType
+  sealed trait TypeWithMethods extends TypeIsTypeOfTypeExpr
 
   sealed trait TypeArgument
   object TypeArgument {
@@ -150,8 +148,8 @@ trait TypeSystem[TContext <: Context with Singleton] {
     case object Wildcard extends TypeArgument
   }
 
-  final case class TypeOfType(inner: TType, universe: TypeUniverse) extends SimpleType
-  final case class TypeN(universe: TypeUniverse, subtypeConstraint: Option[TType], supertypeConstraint: Option[TType]) extends SimpleType
+  final case class TypeOfType(inner: TType, universe: TypeUniverse) extends TypeIsTypeOfTypeExpr
+  final case class TypeN(universe: TypeUniverse, subtypeConstraint: Option[TType], supertypeConstraint: Option[TType]) extends TypeIsTypeOfTypeExpr
 
   final case class TraitType(arTrait: WrapRef[ArTrait], args: Vector[TypeArgument], baseTypes: BaseTypeInfoTrait) extends TypeWithMethods {
     override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
@@ -163,58 +161,22 @@ trait TypeSystem[TContext <: Context with Singleton] {
     override val universe: TypeUniverse = TypeUniverse(ValueUniverse)
   }
 
-  final case class TupleElement[+A <: ArExpr](value: TTypeWrapper[A]) {
-    lazy val elementTypeElement: TupleElement[SimpleType] = TupleElement[SimpleType](wrapExprType(value))
-  }
-
-  sealed trait LoadTuple extends ArExpr {
-    val values: NonEmptyList[TupleElement[ArExpr]]
-
-    override lazy val exprType: TType = fromSimpleType(LoadTupleType(values.map { _.elementTypeElement }))
-    override lazy val universe: Universe = largestUniverse1(values.map { elem => universeOfExpr(elem.value) })
-  }
-
-  object LoadTuple {
-    def apply(elems: NonEmptyList[TupleElement[ArExpr]]): LoadTuple =
-      elems.traverse {
-        case TupleElement(value) => exprIsType(value).map(TupleElement.apply)
-      } match {
-        case Some(typeElems) => LoadTupleType(typeElems)
-        case None => new LoadTuple {
-          override val values: NonEmptyList[TupleElement[ArExpr]] = elems
-        }
-      }
-  }
-
-  sealed trait LoadTupleType extends LoadTuple with SimpleType {
-    val typeValues: NonEmptyList[TupleElement[SimpleType]]
-    override lazy val universe: TypeUniverse = largestUniverse1(typeValues.map { elem => universeOfType(elem.value) })
-  }
-
-  object LoadTupleType {
-    def apply(elems: NonEmptyList[TupleElement[SimpleType]]): LoadTupleType =
-      new LoadTupleType {
-        override val typeValues: NonEmptyList[TupleElement[SimpleType]] = elems
-        override val values: NonEmptyList[TupleElement[ArExpr]] = elems.map(identity)
-      }
-  }
-
-  final case class FunctionType(argumentType: TType, resultType: TType) extends SimpleType {
-    override lazy val universe: TypeUniverse = Universe.union(
-      universeOfType(argumentType),
-      universeOfType(resultType)
+  final case class FunctionType(argumentType: TType, resultType: TType) extends TypeIsTypeOfTypeExpr {
+    override lazy val universe: Universe = Universe.union(
+      universeOfExpr(argumentType),
+      universeOfExpr(resultType)
     )
   }
-  final case class UnionType(first: TType, second: TType) extends SimpleType {
-    override lazy val universe: TypeUniverse = Universe.union(
-      universeOfType(first),
-      universeOfType(second)
+  final case class UnionType(first: TType, second: TType) extends TypeIsTypeOfTypeExpr {
+    override lazy val universe: Universe = Universe.union(
+      universeOfExpr(first),
+      universeOfExpr(second)
     )
   }
-  final case class IntersectionType(first: TType, second: TType) extends SimpleType {
-    override lazy val universe: TypeUniverse = Universe.union(
-      universeOfType(first),
-      universeOfType(second)
+  final case class IntersectionType(first: TType, second: TType) extends TypeIsTypeOfTypeExpr {
+    override lazy val universe: Universe = Universe.union(
+      universeOfExpr(first),
+      universeOfExpr(second)
     )
   }
 
@@ -238,7 +200,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
 
 
-  protected final def isSimpleSubType[F[_] : Compilation](a: SimpleType, b: SimpleType): F[Option[TSubTypeInfo]] = {
+  protected final def isSimpleSubType[F[_] : Compilation](a: ArExpr, b: ArExpr): F[Option[TSubTypeInfo]] = {
 
     val notSubType = Option.empty[TSubTypeInfo].pure[F]
 
@@ -250,17 +212,6 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case (TypeArgument.Expr(a), TypeArgument.Expr(b)) =>
           ???
       }
-
-    /*
-      isSubType[F](a, b).flatMap {
-        case Some(left) =>
-          isSubType[F](b, a).map { _.map {
-            right => Vector(left, right)
-          } }
-
-        case None => Option.empty[Vector[TSubTypeInfo]].pure[F]
-      }
-*/
 
     def compareArguments(aType: TType, bType: TType)(a: Vector[TypeArgument])(b: Vector[TypeArgument]): F[Option[TSubTypeInfo]] =
       if(a.size === b.size)
@@ -356,11 +307,11 @@ trait TypeSystem[TContext <: Context with Singleton] {
           isSubTrait(aTrait)(bDataCtor.instanceType)
 
 
-        case (aTuple: LoadTupleType, bTuple: LoadTupleType) =>
-          if(aTuple.typeValues.size =!= bTuple.typeValues.size)
+        case (aTuple: LoadTuple, bTuple: LoadTuple) =>
+          if(aTuple.values.size =!= bTuple.values.size)
             notSubType
           else
-            aTuple.typeValues.toList.toVector.zip(bTuple.typeValues.toList.toVector)
+            aTuple.values.toList.toVector.zip(bTuple.values.toList.toVector)
               .traverse { case (aElem, bElem) =>
                 OptionT(isSubType(aElem.value, bElem.value))
               }
@@ -432,7 +383,7 @@ object TypeSystem {
   (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
   (t1: ts.TType)
   : F[otherTS.TType] =
-    ts.traverseTypeWrapper(t1)(convertSimpleTypeSystem(context)(ts)(otherTS)(converter)(_))
+    ts.traverseTypeWrapper(t1)(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
       .flatMap(converter.convertType(ts)(otherTS)(identity)(_))
 
   def convertTypeArg[F[_]: Monad]
@@ -443,7 +394,7 @@ object TypeSystem {
   (t1: ts.TypeArgument)
   : F[otherTS.TypeArgument] =
     t1 match {
-      case ts.TypeArgument.Expr(expr) => convertWrapExprTypeSystem(context)(ts)(otherTS)(converter)(expr).map(otherTS.TypeArgument.Expr)
+      case ts.TypeArgument.Expr(expr) => convertTypeSystem(context)(ts)(otherTS)(converter)(expr).map(otherTS.TypeArgument.Expr)
       case ts.TypeArgument.Wildcard => otherTS.TypeArgument.Wildcard.upcast[otherTS.TypeArgument].pure[F]
     }
 
@@ -496,55 +447,6 @@ object TypeSystem {
     newArgs,
     newInstanceType
   )
-
-  final def convertSimpleTypeSystem[F[_]: Monad]
-  (context: Context)
-  (ts: TypeSystem[context.type])
-  (otherTS: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
-  (t1: ts.SimpleType)
-  : F[otherTS.SimpleType] = t1 match {
-    case t1: ts.TraitType => convertTraitType(context)(ts)(otherTS)(converter)(t1).map(identity)
-    case t1: ts.ClassType => convertClassType(context)(ts)(otherTS)(converter)(t1).map(identity)
-    case t1: ts.DataConstructorType => convertDataConstructorType(context)(ts)(otherTS)(converter)(t1).map(identity)
-
-    case ts.TypeOfType(inner, universe) =>
-      for {
-        newInner <- convertTypeSystem(context)(ts)(otherTS)(converter)(inner)
-      } yield (otherTS.TypeOfType(newInner, universe) : otherTS.SimpleType)
-
-    case ts.TypeN(universe, subtypeConstraint, supertypeConstraint) =>
-      for {
-        newSub <- subtypeConstraint.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
-        newSup <- supertypeConstraint.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
-      } yield (otherTS.TypeN(universe, newSub, newSup) : otherTS.SimpleType)
-
-    case t1: ts.LoadTupleType =>
-      t1.typeValues
-        .traverse { case ts.TupleElement(elementType) =>
-          convertTypeSystem(context)(ts)(otherTS)(converter)(elementType).map(otherTS.TupleElement(_))
-        }
-        .map(otherTS.LoadTupleType(_))
-
-    case ts.FunctionType(argumentType, resultType) =>
-      for {
-        newArgType <- convertTypeSystem(context)(ts)(otherTS)(converter)(argumentType)
-        newResultType <- convertTypeSystem(context)(ts)(otherTS)(converter)(resultType)
-      } yield otherTS.FunctionType(newArgType, newResultType)
-
-    case ts.UnionType(first, second) =>
-      for {
-        newFirst <- convertTypeSystem(context)(ts)(otherTS)(converter)(first)
-        newSecond <- convertTypeSystem(context)(ts)(otherTS)(converter)(second)
-      } yield otherTS.UnionType(newFirst, newSecond)
-
-    case ts.IntersectionType(first, second) =>
-      for {
-        newFirst <- convertTypeSystem(context)(ts)(otherTS)(converter)(first)
-        newSecond <- convertTypeSystem(context)(ts)(otherTS)(converter)(second)
-      } yield otherTS.IntersectionType(newFirst, newSecond)
-
-  }
 
   final def convertLocalVariableTypeSystem[F[_]: Monad]
   (context: Context)
@@ -613,8 +515,7 @@ object TypeSystem {
   (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
   (expr: ts.ArExpr)
   : F[otherTS.ArExpr] = expr match {
-    case t: ts.SimpleType =>
-      convertSimpleTypeSystem(context)(ts)(otherTS)(converter)(t).map(identity)
+
 
     case ts.ClassConstructorCall(classType, classCtor, args) =>
       for {
@@ -625,7 +526,7 @@ object TypeSystem {
     case expr: ts.LoadTuple =>
       expr.values
         .traverse { case ts.TupleElement(elementType) =>
-          convertWrapExprTypeSystem(context)(ts)(otherTS)(converter)(elementType).map(otherTS.TupleElement(_))
+          convertTypeSystem(context)(ts)(otherTS)(converter)(elementType).map(otherTS.TupleElement(_))
         }
         .map(otherTS.LoadTuple(_))
 
@@ -720,18 +621,44 @@ object TypeSystem {
         newUnitType <- convertTypeSystem(context)(ts)(otherTS)(converter)(unitType)
       } yield otherTS.StoreVariable(newVar, newValue, newUnitType)
 
+    case t1: ts.TraitType => convertTraitType(context)(ts)(otherTS)(converter)(t1).map(identity)
+    case t1: ts.ClassType => convertClassType(context)(ts)(otherTS)(converter)(t1).map(identity)
+    case t1: ts.DataConstructorType => convertDataConstructorType(context)(ts)(otherTS)(converter)(t1).map(identity)
+
+    case ts.TypeOfType(inner, universe) =>
+      for {
+        newInner <- convertTypeSystem(context)(ts)(otherTS)(converter)(inner)
+      } yield (otherTS.TypeOfType(newInner, universe) : otherTS.ArExpr)
+
+    case ts.TypeN(universe, subtypeConstraint, supertypeConstraint) =>
+      for {
+        newSub <- subtypeConstraint.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+        newSup <- supertypeConstraint.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
+      } yield (otherTS.TypeN(universe, newSub, newSup) : otherTS.ArExpr)
+
+    case ts.LoadVariable(variable) =>
+      for {
+        newVar <- convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
+      } yield otherTS.LoadVariable(newVar)
+
+    case ts.FunctionType(argumentType, resultType) =>
+      for {
+        newArgType <- convertTypeSystem(context)(ts)(otherTS)(converter)(argumentType)
+        newResultType <- convertTypeSystem(context)(ts)(otherTS)(converter)(resultType)
+      } yield otherTS.FunctionType(newArgType, newResultType)
+
+    case ts.UnionType(first, second) =>
+      for {
+        newFirst <- convertTypeSystem(context)(ts)(otherTS)(converter)(first)
+        newSecond <- convertTypeSystem(context)(ts)(otherTS)(converter)(second)
+      } yield otherTS.UnionType(newFirst, newSecond)
+
+    case ts.IntersectionType(first, second) =>
+      for {
+        newFirst <- convertTypeSystem(context)(ts)(otherTS)(converter)(first)
+        newSecond <- convertTypeSystem(context)(ts)(otherTS)(converter)(second)
+      } yield otherTS.IntersectionType(newFirst, newSecond)
   }
-
-
-  def convertWrapExprTypeSystem[F[_]: Monad]
-  (context: Context)
-  (ts: TypeSystem[context.type])
-  (otherTS: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
-  (expr: ts.WrapExpr)
-  : F[otherTS.WrapExpr] =
-    ts.traverseTypeWrapper(expr)(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
-      .flatMap(converter.convertType[otherTS.ArExpr](ts)(otherTS)(t => t)(_))
 
 
 

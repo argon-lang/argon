@@ -922,7 +922,7 @@ object ArgonModuleLoader {
 
                 case variables @ head +: tail =>
 
-                  val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTupleType(
+                  val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTuple(
                     NonEmptyList(head, tail.toList).map { v => context.typeSystem.TupleElement(v.varType) }
                   ))
 

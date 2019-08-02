@@ -39,7 +39,7 @@ object ErasedSignature {
       case t: context.typeSystem.ClassType => ClassType(t.arClass)
       case t: context.typeSystem.TraitType => TraitType(t.arTrait)
       case t: context.typeSystem.DataConstructorType => DataConstructorType(t.ctor)
-      case t: context.typeSystem.LoadTupleType => TupleType(t.typeValues.map { elem => typeToSigType(context)(elem.value) })
+      case t: context.typeSystem.LoadTuple => TupleType(t.values.map { elem => typeToSigType(context)(elem.value) })
       case t: context.typeSystem.FunctionType => FunctionType(typeToSigType(context)(t.argumentType), typeToSigType(context)(t.resultType))
       case _ => BlankType()
     }

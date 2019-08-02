@@ -309,12 +309,12 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 }
               }
               .flatMap { elemPairs =>
-                val tupleType = fromSimpleType(LoadTupleType(elemPairs.map { case (_, elemHole) => TupleElement[SimpleType](elemHole) }))
+                val tupleType = fromSimpleType(LoadTuple(elemPairs.map { case (_, elemHole) => TupleElement(elemHole) }))
                 convertExprTypeDelay(env)(expr.location)(tupleType)(expectedType).flatMap { exprTypeConv =>
                   elemPairs
                     .traverse { case (elem, elemHole) =>
                         convertExpr(env)(elem).forExpectedType(elemHole).map { elemExpr =>
-                          TupleElement[ArExpr](wrapType(exprTypeConv(elemExpr)))
+                          TupleElement(wrapType(exprTypeConv(elemExpr)))
                         }
                     }
                     .map { tupleElements =>
@@ -330,10 +330,13 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             inst <- instanceType.traverse(evaluateTypeExprAST(env)(_))
             sub <- subtypeOf.traverse(evaluateTypeExprAST(env)(_))
             sup <- supertypeOf.traverse(evaluateTypeExprAST(env)(_))
-            universe = (sub.toList ++ sup.toList).map(universeOfType).foldLeft(TypeUniverse(ValueUniverse))(Universe.union)
+            universe = (sub.toList ++ sup.toList).map(universeOfExpr).foldLeft[Universe](TypeUniverse(ValueUniverse))(Universe.union) match {
+              case ValueUniverse => TypeUniverse(ValueUniverse)
+              case universe @ TypeUniverse(prev) => universe
+            }
             typeN = TypeN(universe, sub, sup)
           } yield factoryForExpr(env)(expr.location)(
-            inst.foldLeft[SimpleType](typeN) { (a, b) => IntersectionType(fromSimpleType(a), b)}
+            inst.foldLeft[ArExpr](typeN) { (a, b) => IntersectionType(fromSimpleType(a), b)}
           )
         )
 
@@ -655,7 +658,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case Some(info) => implicitly[TypeCheck[TComp]].recordConstraint(info).map(const(identity))
       case None =>
         implicitly[TypeCheck[TComp]].createHole.flatMap { newHole =>
-          typeSystem.isSubType(t, fromSimpleType(LoadTupleType(NonEmptyList.of(TupleElement(newHole))))).flatMap {
+          typeSystem.isSubType(t, fromSimpleType(LoadTuple(NonEmptyList.of(TupleElement(newHole))))).flatMap {
             case Some(stTupleInfo) =>
               convertExprTypeDelay(env)(location)(exprType)(newHole).map { innerConverter =>
                 expr => LoadTuple(NonEmptyList.of(TupleElement(wrapType(innerConverter(expr)))))
@@ -669,14 +672,36 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
   def evaluateTypeExprFactory[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(factory: ExprFactory[TComp]): TComp[TType] =
     inferExprType(factory).flatMap { expr =>
-      evaluateTypeExpr(env)(location)(expr)
+      validateTypeExpr(env)(location)(expr).map { _ => fromSimpleType(expr) }
     }
 
-  def evaluateTypeExpr[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr): TComp[TType] =
+  def validateTypeExpr[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr): TComp[Unit] = {
+    def invalidType[A]: TComp[A] = Compilation[TComp].forErrors(CompilationError.ExpressionNotTypeError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+
     expr match {
-      case t: SimpleType => typeSystem.fromSimpleType(t).pure[TComp]
-      case _ => Compilation[TComp].forErrors(CompilationError.ExpressionNotTypeError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+
+      case _: TypeOfType | _: TypeN |
+           _: TraitType | _: ClassType |
+           _: DataConstructorType | _: FunctionType |
+           _: UnionType | _: IntersectionType => ().pure[TComp]
+
+      case expr @ LoadVariable(variable) =>
+        (variable.mutability, variable.varType) match {
+          case (Mutability.Mutable, _) => invalidType
+          case (Mutability.NonMutable, TypeOfType(_, _) | TypeN(_, _, _)) => ().pure[TComp]
+          case (Mutability.NonMutable, _) => invalidType
+        }
+
+      case LoadTuple(values) =>
+        values
+          .traverse_ {
+            case TupleElement(value) =>
+              traverseTypeWrapper(value)(validateTypeExpr(env)(location)(_))
+          }
+
+      case _ => invalidType
     }
+  }
 
   def evaluateTypeArg[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr): TComp[TypeArgument] =
     TypeArgument.Expr(typeSystem.wrapType(expr)).upcast[TypeArgument].pure[TComp]
@@ -893,7 +918,7 @@ object ExpressionConverter {
             resolveHoles(context)(ts)(state.nextHoleId)
           }
           .flatMap { _ =>
-            fillHolesTypeChildren(context)(ts)(t)
+            fillHolesWrapExprChildren(context)(ts)(t)
           }
       }
       .runA(TypeCheckState.default)
@@ -921,8 +946,6 @@ object ExpressionConverter {
   (expr: ts.ArExpr)
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
   : TComp[context.typeSystem.ArExpr] = expr match {
-    case t: ts.SimpleType => fillHolesSimpleTypeChildren(context)(ts)(t).map(identity)
-
     case ts.ClassConstructorCall(classType, ctor, args) =>
       for {
         newClassType <-  fillHolesClassType(context)(ts)(classType)
@@ -939,28 +962,28 @@ object ExpressionConverter {
 
     case ts.PrimitiveOp(PrimitiveOperation.AddInt, left, right, intType) =>
       for {
-        newIntType <- fillHolesTypeChildren(context)(ts)(intType)
+        newIntType <- fillHolesWrapExprChildren(context)(ts)(intType)
         newLeft <- fillHolesExpr(context)(ts)(left)(newIntType)
         newRight <- fillHolesExpr(context)(ts)(right)(newIntType)
       } yield context.typeSystem.PrimitiveOp(PrimitiveOperation.AddInt, newLeft, newRight, newIntType)
 
     case ts.PrimitiveOp(PrimitiveOperation.SubInt, left, right, intType) =>
       for {
-        newIntType <- fillHolesTypeChildren(context)(ts)(intType)
+        newIntType <- fillHolesWrapExprChildren(context)(ts)(intType)
         newLeft <- fillHolesExpr(context)(ts)(left)(newIntType)
         newRight <- fillHolesExpr(context)(ts)(right)(newIntType)
       } yield context.typeSystem.PrimitiveOp(PrimitiveOperation.SubInt, newLeft, newRight, newIntType)
 
     case ts.PrimitiveOp(PrimitiveOperation.MulInt, left, right, intType) =>
       for {
-        newIntType <- fillHolesTypeChildren(context)(ts)(intType)
+        newIntType <- fillHolesWrapExprChildren(context)(ts)(intType)
         newLeft <- fillHolesExpr(context)(ts)(left)(newIntType)
         newRight <- fillHolesExpr(context)(ts)(right)(newIntType)
       } yield context.typeSystem.PrimitiveOp(PrimitiveOperation.MulInt, newLeft, newRight, newIntType)
 
     case ts.PrimitiveOp(PrimitiveOperation.IntEqual, left, right, boolType) =>
       for {
-        newBoolType <- fillHolesTypeChildren(context)(ts)(boolType)
+        newBoolType <- fillHolesWrapExprChildren(context)(ts)(boolType)
         newLeft <- fillHolesExprChildren(context)(ts)(left)
         newRight <- fillHolesExprChildren(context)(ts)(right)
       } yield context.typeSystem.PrimitiveOp(PrimitiveOperation.IntEqual, newLeft, newRight, newBoolType)
@@ -991,7 +1014,7 @@ object ExpressionConverter {
 
     case ts.LetBinding(variable, value, next) =>
       for {
-        newVarType <- fillHolesTypeChildren(context)(ts)(variable.varType)
+        newVarType <- fillHolesWrapExprChildren(context)(ts)(variable.varType)
         newVar = context.typeSystem.LocalVariable(variable.descriptor, variable.name, variable.mutability, newVarType)
 
         newValue <- fillHolesExpr(context)(ts)(value)(newVarType)
@@ -1000,17 +1023,17 @@ object ExpressionConverter {
 
     case ts.LoadConstantInt(i, intType) =>
       for {
-        newIntType <- fillHolesTypeChildren(context)(ts)(intType)
+        newIntType <- fillHolesWrapExprChildren(context)(ts)(intType)
       } yield context.typeSystem.LoadConstantInt(i, newIntType)
 
     case ts.LoadConstantString(str, stringType) =>
       for {
-        newStringType <- fillHolesTypeChildren(context)(ts)(stringType)
+        newStringType <- fillHolesWrapExprChildren(context)(ts)(stringType)
       } yield context.typeSystem.LoadConstantString(str, newStringType)
 
     case ts.LoadLambda(argVariable, body) =>
       for {
-        newVarType <- fillHolesTypeChildren(context)(ts)(argVariable.varType)
+        newVarType <- fillHolesWrapExprChildren(context)(ts)(argVariable.varType)
         newVar = context.typeSystem.LocalVariable(argVariable.descriptor, argVariable.name, argVariable.mutability, newVarType)
         newBody <- fillHolesExprChildren(context)(ts)(body)
       } yield context.typeSystem.LoadLambda(newVar, newBody)
@@ -1023,34 +1046,34 @@ object ExpressionConverter {
         }
       } yield context.typeSystem.LoadTuple(elems)
 
-    case ts.LoadUnit(unitType) =>
-      for {
-        newUnitType <- fillHolesTypeChildren(context)(ts)(unitType)
-      } yield context.typeSystem.LoadUnit(newUnitType)
-
     case ts.LoadVariable(ts.LocalVariable(descriptor, name, mutability, varType)) =>
       for {
-        newVarType <- fillHolesTypeChildren(context)(ts)(varType)
+        newVarType <- fillHolesWrapExprChildren(context)(ts)(varType)
         newVar = context.typeSystem.LocalVariable(descriptor, name, mutability, newVarType)
       } yield context.typeSystem.LoadVariable(newVar)
 
     case ts.LoadVariable(ts.ParameterVariable(descriptor, name, mutability, varType)) =>
       for {
-        newVarType <- fillHolesTypeChildren(context)(ts)(varType)
+        newVarType <- fillHolesWrapExprChildren(context)(ts)(varType)
         newVar = context.typeSystem.ParameterVariable(descriptor, name, mutability, newVarType)
       } yield context.typeSystem.LoadVariable(newVar)
 
     case ts.LoadVariable(ts.ParameterElementVariable(descriptor, name, mutability, varType)) =>
       for {
-        newVarType <- fillHolesTypeChildren(context)(ts)(varType)
+        newVarType <- fillHolesWrapExprChildren(context)(ts)(varType)
         newVar = context.typeSystem.ParameterElementVariable(descriptor, name, mutability, newVarType)
       } yield context.typeSystem.LoadVariable(newVar)
 
     case ts.LoadVariable(ts.FieldVariable(descriptor, ownerClass, name, mutability, varType)) =>
       for {
-        newVarType <- fillHolesTypeChildren(context)(ts)(varType)
+        newVarType <- fillHolesWrapExprChildren(context)(ts)(varType)
         newVar = context.typeSystem.FieldVariable(descriptor, ownerClass, name, mutability, newVarType)
       } yield context.typeSystem.LoadVariable(newVar)
+
+    case ts.LoadUnit(unitType) =>
+      for {
+        newUnitType <- fillHolesWrapExprChildren(context)(ts)(unitType)
+      } yield context.typeSystem.LoadUnit(newUnitType)
 
     case ts.MethodCall(method, instance, args, _) =>
       for {
@@ -1065,6 +1088,44 @@ object ExpressionConverter {
         newSecond <- fillHolesExprChildren(context)(ts)(second)
       } yield context.typeSystem.Sequence(newFirst, newSecond)
 
+
+    case t: ts.ClassType => fillHolesClassType(context)(ts)(t).map(identity)
+
+    case ts.TraitType(arTrait, args, baseTypes) =>
+      for {
+        sig <- tcInstance.fromContextComp(arTrait.value.signature)
+        (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(args)
+      } yield context.typeSystem.TraitType(arTrait, filledArgs, resultInfo.baseTypes)
+
+    case ts.FunctionType(argumentType, resultType) =>
+      for {
+        newArgType <- fillHolesWrapExprChildren(context)(ts)(argumentType)
+        newResultType <- fillHolesWrapExprChildren(context)(ts)(resultType)
+      } yield context.typeSystem.FunctionType(newArgType, newResultType)
+
+    case ts.UnionType(first, second) =>
+      for {
+        newFirst <- fillHolesWrapExprChildren(context)(ts)(first)
+        newSecond <- fillHolesWrapExprChildren(context)(ts)(second)
+      } yield context.typeSystem.UnionType(newFirst, newSecond)
+
+    case ts.IntersectionType(first, second) =>
+      for {
+        newFirst <- fillHolesWrapExprChildren(context)(ts)(first)
+        newSecond <- fillHolesWrapExprChildren(context)(ts)(second)
+      } yield context.typeSystem.IntersectionType(newFirst, newSecond)
+
+    case ts.TypeOfType(inner, universe) =>
+      for {
+        newInner <- fillHolesWrapExprChildren(context)(ts)(inner)
+      } yield context.typeSystem.TypeOfType(newInner, universe)
+
+    case ts.TypeN(universe, subtypeConstraint, supertypeConstraint) =>
+      for {
+        sub <- subtypeConstraint.traverse(fillHolesWrapExprChildren(context)(ts)(_))
+        sup <- supertypeConstraint.traverse(fillHolesWrapExprChildren(context)(ts)(_))
+      } yield context.typeSystem.TypeN(universe, sub, sup)
+
     case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
   }
 
@@ -1076,77 +1137,11 @@ object ExpressionConverter {
   : TComp[context.typeSystem.ArExpr] = expr match {
     case HoleTypeHole(id) =>
       tcInstance.resolveType(HoleTypeHole(id))
-        .flatMap(fillHolesTypeChildren(context)(ts)(_))
+        .flatMap(fillHolesWrapExprChildren(context)(ts)(_))
         .map(identity)
 
     case HoleTypeType(e) =>
       fillHolesExprChildren(context)(ts)(e).map(context.typeSystem.wrapType(_))
-  }
-
-  private def fillHolesTypeChildren[TComp[_]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (t: ts.TType)
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.TType] = t match {
-    case HoleTypeHole(_) => tcInstance.resolveType(t).flatMap(fillHolesTypeChildren(context)(ts)(_))
-    case HoleTypeType(t) => fillHolesSimpleTypeChildren(context)(ts)(t).map(context.typeSystem.fromSimpleType(_))
-  }
-
-
-  private def fillHolesSimpleTypeChildren[TComp[_]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (t: ts.SimpleType)
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.SimpleType] = t match {
-    case t: ts.ClassType => fillHolesClassType(context)(ts)(t).map(identity)
-
-    case ts.TraitType(arTrait, args, baseTypes) =>
-      for {
-        sig <- tcInstance.fromContextComp(arTrait.value.signature)
-        (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(args)
-      } yield context.typeSystem.TraitType(arTrait, filledArgs, resultInfo.baseTypes)
-
-    case ts.FunctionType(argumentType, resultType) =>
-      for {
-        newArgType <- fillHolesTypeChildren(context)(ts)(argumentType)
-        newResultType <- fillHolesTypeChildren(context)(ts)(resultType)
-      } yield context.typeSystem.FunctionType(newArgType, newResultType)
-
-    case t: ts.LoadTupleType =>
-      t.typeValues
-        .traverse { case ts.TupleElement(elemType) =>
-            fillHolesTypeChildren(context)(ts)(elemType)
-              .map(context.typeSystem.TupleElement(_))
-        }
-        .map(context.typeSystem.LoadTupleType(_))
-
-    case ts.UnionType(first, second) =>
-      for {
-        newFirst <- fillHolesTypeChildren(context)(ts)(first)
-        newSecond <- fillHolesTypeChildren(context)(ts)(second)
-      } yield context.typeSystem.UnionType(newFirst, newSecond)
-
-    case ts.IntersectionType(first, second) =>
-      for {
-        newFirst <- fillHolesTypeChildren(context)(ts)(first)
-        newSecond <- fillHolesTypeChildren(context)(ts)(second)
-      } yield context.typeSystem.IntersectionType(newFirst, newSecond)
-
-    case ts.TypeOfType(inner, universe) =>
-      for {
-        newInner <- fillHolesTypeChildren(context)(ts)(inner)
-      } yield context.typeSystem.TypeOfType(newInner, universe)
-
-    case ts.TypeN(universe, subtypeConstraint, supertypeConstraint) =>
-      for {
-        sub <- subtypeConstraint.traverse(fillHolesTypeChildren(context)(ts)(_))
-        sup <- supertypeConstraint.traverse(fillHolesTypeChildren(context)(ts)(_))
-      } yield context.typeSystem.TypeN(universe, sub, sup)
-
-
-    case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
   }
 
   private def fillHolesClassType[TComp[_]]
@@ -1277,9 +1272,7 @@ object ExpressionConverter {
         case (_, _) => (Some(SubTypeInfo(a, b, Vector.empty)) : Option[SubTypeInfo[TType]]).pure[TComp]
       }
 
-    override def universeOfExpr(expr: WrapExpr): Universe = ???
-
-    override def universeOfType(t: TType): TypeUniverse = t match {
+    override def universeOfExpr(expr: WrapExpr): Universe = expr match {
       case HoleTypeHole(_) => ???
       case HoleTypeType(t) => t.universe
     }
@@ -1293,7 +1286,7 @@ object ExpressionConverter {
   })
   : TypeSystemConverter[context.type, innerTS.type, holeTS.type, Id] =
     new TypeSystemConverter[context.type, innerTS.type, holeTS.type, Id] {
-      override def convertType[A](ts1: innerTS.type)(ts2: holeTS.type)(fromSimpleType: ts2.SimpleType => A)(t: ts1.TTypeWrapper[A]): HoleType[innerTS.TTypeWrapper[A]] =
+      override def convertType[A](ts1: innerTS.type)(ts2: holeTS.type)(fromExpr: ts2.ArExpr => A)(t: ts1.TTypeWrapper[A]): HoleType[innerTS.TTypeWrapper[A]] =
         HoleTypeType(t)
     }
 
@@ -1414,7 +1407,7 @@ object ExpressionConverter {
         cats.data.IndexedStateT.catsDataMonadForIndexedStateT[HoleTypeCheckComp[Comp, ts.TType, ?], Set[Int]]
 
       private final class ResolverConverter extends TypeSystemConverter[context.type, ts.type, ts.type, ResolverState] {
-        override def convertType[A](ts1: ts.type)(ts2: ts.type)(fromSimpleType: ts2.SimpleType => A)(t: HoleType[A]): ResolverState[HoleType[A]] =
+        override def convertType[A](ts1: ts.type)(ts2: ts.type)(fromExpr: ts2.ArExpr => A)(t: HoleType[A]): ResolverState[HoleType[A]] =
           t match {
             case HoleTypeType(_) => t.pure[ResolverState]
             case HoleTypeHole(id) =>
@@ -1429,7 +1422,7 @@ object ExpressionConverter {
 
                 resolvedOuter <- StateT((s: Set[Int]) => resolveOuterHole(id).map { a => (s, a) })
                 resolvedType <- TypeSystem.convertTypeSystem(context)(ts)(ts)(this)(resolvedOuter)
-              } yield ts.mapTypeWrapper(resolvedType)(fromSimpleType)
+              } yield ts.mapTypeWrapper(resolvedType)(fromExpr)
           }
 
       }

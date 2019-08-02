@@ -480,7 +480,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
       args <- dataCtorType.args.traverse(convertTypeArg(armodule, _))
     } yield module.DataConstructorType(id, args)
 
-    def convertType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.SimpleType): Emit[module.Type] =
+    def convertType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.ArExpr): Emit[module.Type] =
       ((t match {
         case t: typeSystem.ClassType => convertClassType(armodule, t).map(module.Type.TypeInfo.ClassType)
         case t: typeSystem.TraitType => convertTraitType(armodule, t).map(module.Type.TypeInfo.TraitType)
@@ -491,11 +491,9 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
 
     def convertTypeArg(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.TypeArgument): Emit[module.TypeArg] =
       t match {
-        case typeSystem.TypeArgument.Expr(t: typeSystem.SimpleType) =>
+        case typeSystem.TypeArgument.Expr(t) =>
           convertType(armodule, t)
             .map { modType => module.TypeArg(module.TypeArg.TypeInfo.Type(modType)) }
-
-        case typeSystem.TypeArgument.Expr(_) => ???
 
         case typeSystem.TypeArgument.Wildcard =>
           module.TypeArg(module.TypeArg.TypeInfo.Wildcard(module.Wildcard())).pure[Emit]

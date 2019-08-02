@@ -57,7 +57,7 @@ object MethodLookup {
 
     }
 
-  private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem[context.type])(t: ts.SimpleType): Option[MethodOwnerDescriptor] =
+  private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem[context.type])(t: ts.ArExpr): Option[MethodOwnerDescriptor] =
     t match {
       case ts.ClassType(arClass, _, _) => Some(arClass.value.descriptor)
       case ts.TraitType(arTrait, _, _) => Some(arTrait.value.descriptor)

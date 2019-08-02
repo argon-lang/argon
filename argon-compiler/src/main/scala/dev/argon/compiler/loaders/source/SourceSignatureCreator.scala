@@ -67,7 +67,7 @@ object SourceSignatureCreator {
 
               val variablesVec = variables.toList.toVector
 
-              val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTupleType(
+              val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTuple(
                 variables.map { v => context.typeSystem.TupleElement(v.varType) }
               ))
 

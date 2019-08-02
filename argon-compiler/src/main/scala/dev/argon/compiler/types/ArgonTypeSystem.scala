@@ -23,6 +23,4 @@ trait ArgonTypeSystem[TContext <: Context with Singleton] extends TypeSystem[TCo
     isSimpleSubType(a, b)
 
   override def universeOfExpr(expr: WrapExpr): Universe = expr.universe
-
-  override def universeOfType(t: TType): TypeUniverse = t.universe
 }
