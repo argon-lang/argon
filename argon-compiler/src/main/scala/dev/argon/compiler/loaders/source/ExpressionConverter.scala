@@ -686,9 +686,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
            _: UnionType | _: IntersectionType => ().pure[TComp]
 
       case expr @ LoadVariable(variable) =>
-        (variable.mutability, variable.varType) match {
+        (variable.mutability, unwrapType(variable.varType)) match {
           case (Mutability.Mutable, _) => invalidType
-          case (Mutability.NonMutable, TypeOfType(_, _) | TypeN(_, _, _)) => ().pure[TComp]
+          case (Mutability.NonMutable, Some(TypeOfType(_, _) | TypeN(_, _, _))) => ().pure[TComp]
           case (Mutability.NonMutable, _) => invalidType
         }
 
