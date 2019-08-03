@@ -23,12 +23,15 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   val context: TContext
   val typeSystem: TypeSystem[context.type]
   val scopeContext: ScopeContext[context.type] { val typeSystem: ExpressionConverter.this.typeSystem.type }
-  val signatureContext: SignatureContext[context.type] { val typeSystem: ExpressionConverter.this.typeSystem.type }
+  val signatureContext: SignatureContext {
+    val context: ExpressionConverter.this.context.type
+    val typeSystem: ExpressionConverter.this.typeSystem.type
+  }
 
   import ExpressionConverter.{ HoleType, TypeCheck => TypeCheckA, TypeConstraint }
   import typeSystem.{ context => _, _ }
   import scopeContext.{ context => _, _ }
-  import signatureContext.Signature
+  import signatureContext.{ Signature, SignatureParameters }
 
 
 
@@ -598,6 +601,55 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   (f: (Vector[ArExpr], TResult[context.type, typeSystem.type]) => TComp[ArExpr])
   : ExprFactory[TComp] = {
 
+    def isExprPure(expr: ArExpr): Boolean =
+      expr match {
+        case ClassConstructorCall(_, _, args) => args.forall(isExprPure)
+        case DataConstructorCall(_, args) => args.forall(isExprPure)
+        case FunctionCall(_, args, _) => args.forall(isExprPure)
+        case FunctionObjectCall(_, _, _) => ???
+        case IfElse(condition, ifBody, elseBody) => isExprPure(condition) && isExprPure(ifBody) && isExprPure(elseBody)
+        case LetBinding(_, value, next) => isExprPure(value) && isExprPure(next)
+        case LoadConstantBool(_, _) => true
+        case LoadConstantInt(_, _) => true
+        case LoadConstantString(_, _) => true
+        case LoadLambda(_, _) => true
+        case LoadTuple(values) => values.forall { case TupleElement(value) => isWrapExprPure(value) }
+        case LoadTupleElement(tupleValue, _, _) => isExprPure(tupleValue)
+        case LoadUnit(_) => true
+        case LoadVariable(variable) => Mutability.toIsMutable(variable.mutability)
+        case MethodCall(_, instance, args, _) => isExprPure(instance) && args.forall(isExprPure)
+        case PrimitiveOp(_, left, right, _) => isExprPure(left) && isExprPure(right)
+        case Sequence(first, second) => isExprPure(first) && isExprPure(second)
+        case StoreVariable(_, _, _) => false
+        case TraitType(_, args, _) => args.forall(isTypeArgPure)
+        case ClassType(_, args, _) => args.forall(isTypeArgPure)
+        case DataConstructorType(_, args, _) => args.forall(isTypeArgPure)
+        case TypeOfType(inner, _) => isWrapExprPure(inner)
+        case TypeN(_, subtypeConstraint, supertypeConstraint) => subtypeConstraint.forall(isWrapExprPure) && supertypeConstraint.forall(isWrapExprPure)
+        case FunctionType(argumentType, resultType) => isWrapExprPure(argumentType) && isWrapExprPure(resultType)
+        case UnionType(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
+        case IntersectionType(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
+      }
+
+    def isWrapExprPure(expr: WrapExpr): Boolean =
+      traverseTypeWrapper(expr) { t =>
+        if(isExprPure(t)) Some(()) else None
+      }.isDefined
+
+    def isTypeArgPure(arg: TypeArgument): Boolean =
+      arg match {
+        case TypeArgument.Expr(expr) => isWrapExprPure(expr)
+        case TypeArgument.Wildcard => true
+      }
+
+    def signatureNextPart(sig: SignatureParameters[TResult])(arg: typeSystem.ArExpr): TComp[Signature[TResult]] =
+      if(isExprPure(arg))
+        sig.next(arg).pure[TComp]
+      else if(!sig.nextUnsubstituted.referencesParameter(sig.parameter))
+        sig.nextUnsubstituted.pure[TComp]
+      else
+        Compilation[TComp].forErrors(CompilationError.ArgumentToSignatureDependencyNotPureError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+
     final class SigFactory(env: Env)(signature: Signature[TResult])(prevArgs: Vector[ArExpr]) extends ExprFactory[TComp] {
       override def forExpectedType(expectedType: TType): TComp[ArExpr] =
         signature.visit(
@@ -616,7 +668,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             compFactory(
               for {
                 argExpr <- argInfo.argFactory.forExpectedType(sigParams.parameter.paramType)
-                next <- sigParams.next(argExpr)
+                next <- signatureNextPart(sigParams)(argExpr)
               } yield new SigFactory(env)(next)(prevArgs :+ argExpr)
             ),
           _ => super.forArguments(argInfo)
@@ -630,7 +682,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             val newVar = LocalVariable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
             val env2 = env.copy(scope = env.scope.addVariable(newVar))
             val newVarExpr = LoadVariable(newVar)
-            sigParams.next(newVarExpr).flatMap { nextSig =>
+            signatureNextPart(sigParams)(newVarExpr).flatMap { nextSig =>
               partiallyApply(env2, prevArgs, argVariables :+ newVarExpr, nextSig, inner => wrapInLambda(LoadLambda(newVar, inner)))
             }
 
@@ -638,7 +690,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             val newVar = LocalVariable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
             val env2 = env.copy(scope = env.scope.addVariable(newVar))
             val newVarExpr = LoadVariable(newVar)
-            sigParams.next(newVarExpr).flatMap { nextSig =>
+            signatureNextPart(sigParams)(newVarExpr).flatMap { nextSig =>
               partiallyApply(env2, tail, argVariables :+ newVarExpr, nextSig, inner => wrapInLambda(LetBinding(newVar, head, inner)))
             }
         },
@@ -753,8 +805,8 @@ object ExpressionConverter {
           override val typeSystem: ts.type = ts
         }
 
-      override val signatureContext: SignatureContext[context.type] { val typeSystem: ts.type } =
-        new SignatureContext[context.type] {
+      override val signatureContext: SignatureContext { val context: ctx.type; val typeSystem: ts.type } =
+        new SignatureContext {
           override val context: ctx.type = ctx
           override val typeSystem: ts.type = ts
         }
@@ -943,15 +995,13 @@ object ExpressionConverter {
     case ts.ClassConstructorCall(classType, ctor, args) =>
       for {
         newClassType <-  fillHolesClassType(context)(ts)(classType)
-        sig <- tcInstance.fromContextComp(ctor.value.signature)
-        (newArgs, _) <- fillSignatureArgs(context)(ts)(sig)(args)
+        newArgs <- args.traverse(fillHolesExprChildren(context)(ts)(_))
       } yield context.typeSystem.ClassConstructorCall(newClassType, ctor, newArgs)
 
     case ts.DataConstructorCall(dataCtorInstanceType, args) =>
       for {
         newCtorType <- fillHolesDataCtorType(context)(ts)(dataCtorInstanceType)
-        sig <- tcInstance.fromContextComp(dataCtorInstanceType.ctor.value.signature)
-        (newArgs, _) <- fillSignatureArgs(context)(ts)(sig)(args)
+        newArgs <- args.traverse(fillHolesExprChildren(context)(ts)(_))
       } yield context.typeSystem.DataConstructorCall(newCtorType, newArgs)
 
     case ts.PrimitiveOp(PrimitiveOperation.AddInt, left, right, intType) =>
@@ -982,11 +1032,11 @@ object ExpressionConverter {
         newRight <- fillHolesExprChildren(context)(ts)(right)
       } yield context.typeSystem.PrimitiveOp(PrimitiveOperation.IntEqual, newLeft, newRight, newBoolType)
 
-    case ts.FunctionCall(function, args, _) =>
+    case ts.FunctionCall(function, args, returnType) =>
       for {
-        sig <- tcInstance.fromContextComp(function.value.signature)
-        (newArgs, result) <- fillSignatureArgs(context)(ts)(sig)(args)
-      } yield context.typeSystem.FunctionCall(function, newArgs, result.returnType)
+        newArgs <- args.traverse(fillHolesExprChildren(context)(ts)(_))
+        newReturnType <- fillHolesWrapExprChildren(context)(ts)(returnType)
+      } yield context.typeSystem.FunctionCall(function, newArgs, newReturnType)
 
     case ts.FunctionObjectCall(funcExpr, args, _) =>
       for {
@@ -1069,12 +1119,12 @@ object ExpressionConverter {
         newUnitType <- fillHolesWrapExprChildren(context)(ts)(unitType)
       } yield context.typeSystem.LoadUnit(newUnitType)
 
-    case ts.MethodCall(method, instance, args, _) =>
+    case ts.MethodCall(method, instance, args, returnType) =>
       for {
         newInstance <- fillHolesExprChildren(context)(ts)(instance)
-        sig <- tcInstance.fromContextComp(method.value.signature)
-        (newArgs, result) <- fillSignatureArgs(context)(ts)(sig)(args)
-      } yield context.typeSystem.MethodCall(method, newInstance, newArgs, result.returnType)
+        newArgs <- args.traverse(fillHolesExprChildren(context)(ts)(_))
+        newReturnType <- fillHolesWrapExprChildren(context)(ts)(returnType)
+      } yield context.typeSystem.MethodCall(method, newInstance, newArgs, newReturnType)
 
     case ts.Sequence(first, second) =>
       for {
@@ -1084,12 +1134,7 @@ object ExpressionConverter {
 
 
     case t: ts.ClassType => fillHolesClassType(context)(ts)(t).map(identity)
-
-    case ts.TraitType(arTrait, args, baseTypes) =>
-      for {
-        sig <- tcInstance.fromContextComp(arTrait.value.signature)
-        (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(args)
-      } yield context.typeSystem.TraitType(arTrait, filledArgs, resultInfo.baseTypes)
+    case t: ts.TraitType => fillHolesTraitType(context)(ts)(t).map(identity)
 
     case ts.FunctionType(argumentType, resultType) =>
       for {
@@ -1145,9 +1190,21 @@ object ExpressionConverter {
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
   : TComp[context.typeSystem.ClassType] =
     for {
-      sig <- tcInstance.fromContextComp(t.arClass.value.signature)
-      (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(t.args)
-    } yield context.typeSystem.ClassType(t.arClass, filledArgs, resultInfo.baseTypes)
+      args <- t.args.traverse(fillHolesTypeArgument(context)(ts)(_))
+      baseClass <- t.baseTypes.baseClass.traverse(fillHolesClassType(context)(ts)(_))
+      baseTraits <- t.baseTypes.baseTraits.traverse(fillHolesTraitType(context)(ts)(_))
+    } yield context.typeSystem.ClassType(t.arClass, args, context.typeSystem.BaseTypeInfoClass(baseClass, baseTraits))
+
+  private def fillHolesTraitType[TComp[_]]
+  (context: Context)
+  (ts: HoleTypeSystem[context.type])
+  (t: ts.TraitType)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[context.typeSystem.TraitType] =
+    for {
+      args <- t.args.traverse(fillHolesTypeArgument(context)(ts)(_))
+      baseTraits <- t.baseTypes.baseTraits.traverse(fillHolesTraitType(context)(ts)(_))
+    } yield context.typeSystem.TraitType(t.arTrait, args, context.typeSystem.BaseTypeInfoTrait(baseTraits))
 
   private def fillHolesDataCtorType[TComp[_]]
   (context: Context)
@@ -1156,72 +1213,20 @@ object ExpressionConverter {
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
   : TComp[context.typeSystem.DataConstructorType] =
     for {
-      sig <- tcInstance.fromContextComp(t.ctor.value.signature)
-      (filledArgs, resultInfo) <- fillSignatureArgsTypes(context)(ts)(sig)(t.args)
-    } yield context.typeSystem.DataConstructorType(t.ctor, filledArgs, resultInfo.instanceType)
+      args <- t.args.traverse(fillHolesTypeArgument(context)(ts)(_))
+      instanceType <- fillHolesTraitType(context)(ts)(t.instanceType)
+    } yield context.typeSystem.DataConstructorType(t.ctor, args, instanceType)
 
-  private def fillSignatureArgs[TComp[_], TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
+  private def fillHolesTypeArgument[TComp[_]]
   (context: Context)
   (ts: HoleTypeSystem[context.type])
-  (sig: context.signatureContext.Signature[TResult])
-  (args: Vector[ts.ArExpr])
+  (t: ts.TypeArgument)
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[(Vector[context.typeSystem.ArExpr], TResult[context.type, context.typeSystem.type])] = {
-
-    def impl
-    (sig: context.signatureContext.Signature[TResult])
-    (args: Vector[ts.ArExpr])
-    (newArgs: Vector[context.typeSystem.ArExpr])
-    : TComp[(Vector[context.typeSystem.ArExpr], TResult[context.type, context.typeSystem.type])] =
-      sig.visit(
-        sigParam => args match {
-          case Vector() => ???
-          case arg +: tailArgs =>
-            fillHolesExpr(context)(ts)(arg)(sigParam.parameter.paramType).flatMap { convArg =>
-              sigParam.next(convArg).flatMap { next =>
-                impl(next)(tailArgs)(newArgs :+ convArg)
-              }
-            }
-        },
-        sigResult => if(args.nonEmpty) ??? else (newArgs, sigResult.result).pure[TComp]
-      )
-
-    impl(sig)(args)(Vector.empty)
-  }
-
-  private def fillSignatureArgsTypes[TComp[_], TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (sig: context.signatureContext.Signature[TResult])
-  (args: Vector[ts.TypeArgument])
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[(Vector[context.typeSystem.TypeArgument], TResult[context.type, context.typeSystem.type])] = {
-
-    def impl
-    (sig: context.signatureContext.Signature[TResult])
-    (args: Vector[ts.TypeArgument])
-    (newArgs: Vector[context.typeSystem.TypeArgument])
-    : TComp[(Vector[context.typeSystem.TypeArgument], TResult[context.type, context.typeSystem.type])] =
-      sig.visit(
-        sigParam => args match {
-          case Vector() => ???
-          case ts.TypeArgument.Expr(arg) +: tailArgs =>
-            fillHolesWrapExprChildren(context)(ts)(arg).flatMap { convArg =>
-              sigParam.next(convArg).flatMap { next =>
-                impl(next)(tailArgs)(newArgs :+ context.typeSystem.TypeArgument.Expr(convArg))
-              }
-            }
-
-          case ts.TypeArgument.Wildcard +: tailArgs =>
-            impl(sigParam.nextUnsubstituted)(tailArgs)(newArgs :+ context.typeSystem.TypeArgument.Wildcard)
-        },
-        sigResult => if(args.nonEmpty) ??? else (newArgs, sigResult.result).pure[TComp]
-      )
-
-    impl(sig)(args)(Vector.empty)
-
-  }
-
+  : TComp[context.typeSystem.TypeArgument] =
+    t match {
+      case ts.TypeArgument.Expr(expr) => fillHolesWrapExprChildren(context)(ts)(expr).map(context.typeSystem.TypeArgument.Expr)
+      case ts.TypeArgument.Wildcard => (context.typeSystem.TypeArgument.Wildcard : context.typeSystem.TypeArgument).pure[TComp]
+    }
 
 
   sealed trait HoleType[+T]

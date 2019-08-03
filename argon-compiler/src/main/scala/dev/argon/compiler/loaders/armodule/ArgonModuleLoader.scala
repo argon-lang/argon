@@ -846,7 +846,8 @@ object ArgonModuleLoader {
               sigParams => args match {
                 case head +: tail =>
                   resolveType(head).flatMap { argType =>
-                    sigParams.next[Comp](argType).flatMap(resolveSignature(_, tail, convArgs :+ argType)(f))
+                    val nextSig = sigParams.next(argType)
+                    resolveSignature(nextSig, tail, convArgs :+ argType)(f)
                   }
                 case _ => ???
               },
@@ -861,7 +862,8 @@ object ArgonModuleLoader {
               sigParams => args match {
                 case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Type(head)) +: tail =>
                   resolveType(head).flatMap { argType =>
-                    sigParams.next[Comp](argType).flatMap(resolveSignatureTypeArgs(_, tail, convArgs :+ TypeArgument.Expr(argType))(f))
+                    val nextSig = sigParams.next(argType)
+                    resolveSignatureTypeArgs(nextSig, tail, convArgs :+ TypeArgument.Expr(argType))(f)
                   }
 
                 case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Wildcard(ArgonModule.Wildcard())) +: tail =>

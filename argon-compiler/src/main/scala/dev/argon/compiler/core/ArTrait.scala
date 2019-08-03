@@ -61,6 +61,22 @@ object ArTrait {
         for {
           baseTraits <- result.baseTypes.baseTraits.traverse(TypeSystem.convertTraitType(context)(ts1)(ts2)(converter)(_))
         } yield ResultInfo(ts2)(ts2.BaseTypeInfoTrait(baseTraits))
+
+      override def referencesParameter
+      (signatureContext: SignatureContext)
+      (refChecker: signatureContext.RefChecker)
+      (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
+      : Boolean =
+        result.baseTypes.baseTraits.exists(refChecker.checkArExpr)
+
+      override def substitute
+      (signatureContext: SignatureContext)
+      (subst: signatureContext.Substitutions)
+      (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
+      : ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] =
+        ResultInfo(signatureContext.typeSystem)(signatureContext.typeSystem.BaseTypeInfoTrait(
+          result.baseTypes.baseTraits.map(subst.substTraitType(_))
+        ))
     }
   }
 

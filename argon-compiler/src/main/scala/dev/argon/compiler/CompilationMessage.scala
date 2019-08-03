@@ -406,6 +406,10 @@ object CompilationError {
     override def message: String = "A field was not initialized."
   }
 
+  final case class ArgumentToSignatureDependencyNotPureError(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "The argument to a parameter used in a dependent manner must be pure."
+  }
+
   final case class InvalidProtocolBufferMessage(source: CompilationMessageSource) extends CompilationError {
     override def message: String = "Invalid protocol buffer message."
   }

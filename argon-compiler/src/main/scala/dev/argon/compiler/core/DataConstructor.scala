@@ -52,6 +52,21 @@ object DataConstructor {
       : F[ResultInfo[context.type, ts2.type]] = for {
         instanceType <- TypeSystem.convertTraitType(context)(ts1)(ts2)(converter)(result.instanceType)
       } yield ResultInfo(ts2)(instanceType)
+
+      override def referencesParameter
+      (signatureContext: SignatureContext)
+      (refChecker: signatureContext.RefChecker)
+      (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
+      : Boolean =
+        refChecker.checkArExpr(result.instanceType)
+
+
+      override def substitute
+      (signatureContext: SignatureContext)
+      (subst: signatureContext.Substitutions)
+      (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
+      : ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] =
+        ResultInfo(result.typeSystem)(subst.substTraitType(result.instanceType))
     }
   }
 

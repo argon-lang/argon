@@ -36,7 +36,22 @@ object ClassConstructor {
       (result: ResultInfo[context.type, ts1.type])
       : F[ResultInfo[context.type, ts2.type]] =
         ResultInfo[context.type, ts2.type]().pure[F]
+
+      override def referencesParameter
+      (signatureContext: SignatureContext)
+      (refChecker: signatureContext.RefChecker)
+      (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
+      : Boolean =
+        false
+
+      override def substitute
+      (signatureContext: SignatureContext)
+      (subst: signatureContext.Substitutions)
+      (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
+      : ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] =
+        ResultInfo()
     }
+
   }
 
 }

@@ -26,6 +26,22 @@ object FunctionResultInfo {
     : F[FunctionResultInfo[context.type, ts2.type]] = for {
       returnType <- TypeSystem.convertTypeSystem(context)(ts1)(ts2)(converter)(result.returnType)
     } yield FunctionResultInfo(ts2)(returnType)
+
+    override def referencesParameter
+    (signatureContext: SignatureContext)
+    (refChecker: signatureContext.RefChecker)
+    (result: FunctionResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
+    : Boolean =
+      refChecker.checkWrapExpr(result.returnType)
+
+    override def substitute
+    (signatureContext: SignatureContext)
+    (subst: signatureContext.Substitutions)
+    (result: FunctionResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
+    : FunctionResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] =
+      FunctionResultInfo(signatureContext.typeSystem)(
+        subst.substWrapExpr(result.returnType)
+      )
   }
 
 }

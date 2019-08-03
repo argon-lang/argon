@@ -50,7 +50,10 @@ trait Context {
     override val context: Context.this.type = Context.this
     override lazy val typeSystem: Context.this.typeSystem.type = Context.this.typeSystem
   }
-  final lazy val signatureContext: SignatureContext[this.type] { val typeSystem: Context.this.typeSystem.type } = new SignatureContext[this.type] {
+  final lazy val signatureContext: SignatureContext {
+    val context: Context.this.type
+    val typeSystem: Context.this.typeSystem.type
+  } = new SignatureContext {
     override val context: Context.this.type = Context.this
     override lazy val typeSystem: Context.this.typeSystem.type = Context.this.typeSystem
   }
