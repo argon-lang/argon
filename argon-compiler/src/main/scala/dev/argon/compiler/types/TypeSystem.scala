@@ -350,27 +350,27 @@ trait TypeSystem[TContext <: Context with Singleton] {
             } yield SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector(c1, c2))
           ).value
 
-        case (TypeOfType(innerA, uA), TypeN(uB, subtypeConstraint, supertypeConstraint)) if uB.toBigInt >= uA.toBigInt =>
+        case (TypeN(uA, subtypeConstraint, supertypeConstraint), TypeOfType(innerB, uB)) if uA.toBigInt >= uB.toBigInt =>
           (
-            subtypeConstraint.map { sub => OptionT(isSubType(sub, innerA)) }.toList ++
-              supertypeConstraint.map { sup => OptionT(isSubType(innerA, sup)) }.toList
+            subtypeConstraint.map { sub => OptionT(isSubType(innerB, sub)) }.toList ++
+              supertypeConstraint.map { sup => OptionT(isSubType(sup, innerB)) }.toList
           ).toVector.sequence.value
             .map { _.map {
               SubTypeInfo(fromSimpleType(a), fromSimpleType(b), _)
             } }
 
-        case (a @ LoadTuple(_), TypeN(uB, _, _)) if uB.toBigInt >= a.universe.toBigInt =>
+        case (TypeN(uA, _, _), b @ LoadTuple(_)) if uA.toBigInt >= b.universe.toBigInt =>
           SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector.empty).pure[Option].pure[F]
 
 
-        case (TypeN(uA, subA, supA), TypeN(uB, subB, supB)) if uB.toBigInt >= uA.toBigInt =>
+        case (TypeN(uA, subA, supA), TypeN(uB, subB, supB)) if uA.toBigInt >= uB.toBigInt =>
           (
             ((subA, subB) match {
-              case (Some(subA), Some(subB)) => Vector(OptionT(isSubType(subA, subB)))
+              case (Some(subA), Some(subB)) => Vector(OptionT(isSubType(subB, subA)))
               case _ => Vector()
             }) ++
               ((supA, supB) match {
-                case (Some(supA), Some(supB)) => Vector(OptionT(isSubType(supB, supA)))
+                case (Some(supA), Some(supB)) => Vector(OptionT(isSubType(supA, supB)))
                 case _ => Vector()
               })
           ).sequence.value
