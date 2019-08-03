@@ -333,9 +333,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             inst <- instanceType.traverse(evaluateTypeExprAST(env)(_))
             sub <- subtypeOf.traverse(evaluateTypeExprAST(env)(_))
             sup <- supertypeOf.traverse(evaluateTypeExprAST(env)(_))
-            universe = (sub.toList ++ sup.toList).map(universeOfExpr).foldLeft[Universe](TypeUniverse(ValueUniverse))(Universe.union) match {
-              case ValueUniverse => TypeUniverse(ValueUniverse)
-              case universe @ TypeUniverse(prev) => universe
+            universe = (sub.toList ++ sup.toList).map(universeOfExpr).foldLeft[Universe](TypeUniverse(TypeUniverse(ValueUniverse)))(Universe.union) match {
+              case ValueUniverse => TypeUniverse(TypeUniverse(ValueUniverse))
+              case universe @ TypeUniverse(_) => universe
             }
             typeN = TypeN(universe, sub, sup)
           } yield factoryForExpr(env)(expr.location)(
