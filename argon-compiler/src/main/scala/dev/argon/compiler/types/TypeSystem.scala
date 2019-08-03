@@ -216,7 +216,12 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case (_, TypeArgument.Wildcard) => Option.empty[Vector[TSubTypeInfo]].pure[F]
 
         case (TypeArgument.Expr(a), TypeArgument.Expr(b)) =>
-          ???
+          (
+            for {
+              proof1 <- OptionT(isSubType(a, b))
+              proof2 <- OptionT(isSubType(b, a))
+            } yield Vector(SubTypeInfo(a, b, Vector(proof1, proof2)))
+          ).value
       }
 
     def compareArguments(aType: TType, bType: TType)(a: Vector[TypeArgument])(b: Vector[TypeArgument]): F[Option[TSubTypeInfo]] =

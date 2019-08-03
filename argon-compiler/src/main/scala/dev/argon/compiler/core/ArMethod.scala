@@ -73,6 +73,10 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
     case other: ArMethod[_, _] => other.descriptor === descriptor
     case _ => false
   }
+
+  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+  override def toString: String =
+    descriptor.toString
 }
 
 object ArMethod {

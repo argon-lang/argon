@@ -37,6 +37,8 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     for {
       sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ArClass.ResultInfo]]
 
+      paramsEnvCache <- Compilation[Comp].createCache[EnvCreator[context2.type]]
+
       groupedStaticCache <- Compilation[Comp].createCache[GroupedStaticStatements]
       groupedInstCache <- Compilation[Comp].createCache[GroupedInstanceStatements]
 
@@ -103,6 +105,13 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType)(this))
         )
 
+      private val paramsEnv: Comp[EnvCreator[context.type]] =
+        paramsEnvCache(
+          signature.map { sig =>
+            env.addParameters(context)(sig.unsubstitutedParameters)
+          }
+        )
+
       override val fields: Comp[Vector[context.typeSystem.FieldVariable]] =
         fieldCache(groupedInst.flatMap { inst =>
           inst.fields.traverse { field =>
@@ -133,11 +142,13 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
                 case None => MemberName.Unnamed
               }
 
-              fields.flatMap { fieldVars =>
-                val env2 = env.addVariables(context)(fieldVars)
-                val desc = MethodDescriptor(descriptor, i, memberName)
-                SourceMethod(context)(env2)(method.value, method.location)(desc)(ArMethod.ClassOwner(this))
-                  .map(MethodBinding(memberName, i, modifiers, _))
+              paramsEnv.flatMap { env2 =>
+                fields.flatMap { fieldVars =>
+                  val env3 = env2.addVariables(context)(fieldVars)
+                  val desc = MethodDescriptor(descriptor, i, memberName)
+                  SourceMethod(context)(env3)(method.value, method.location)(desc)(ArMethod.ClassOwner(this))
+                    .map(MethodBinding(memberName, i, modifiers, _))
+                }
               }
             }
           }
@@ -151,10 +162,13 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
                 case Some(name) => MemberName.Normal(name)
                 case None => MemberName.Unnamed
               }
-
               val desc = MethodDescriptor(ClassObjectDescriptor(descriptor), i, memberName)
-              SourceMethod(context)(env)(method.value, method.location)(desc)(ArMethod.ClassObjectOwner(this))
-                .map(MethodBinding(memberName, i, modifiers, _))
+
+              paramsEnv.flatMap { env2 =>
+                SourceMethod(context)(env2)(method.value, method.location)(desc)(ArMethod.ClassObjectOwner(this))
+                  .map(MethodBinding(memberName, i, modifiers, _))
+
+              }
             }
           }
         })
@@ -164,7 +178,10 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           inst.classCtors.zipWithIndex.traverse { case (classCtor, i) =>
             parseAccessModifier[Comp](env.fileSpec, classCtor.location, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
               val desc = ClassConstructorDescriptor(descriptor, i)
-              SourceClassConstructor(context)(env)(this)(classCtor.value)(desc).map(ClassConstructorBinding(i, modifiers, _))
+
+              paramsEnv.flatMap { env2 =>
+                SourceClassConstructor(context)(env2)(this)(classCtor.value)(desc).map(ClassConstructorBinding(i, modifiers, _))
+              }
             }
           }
         })

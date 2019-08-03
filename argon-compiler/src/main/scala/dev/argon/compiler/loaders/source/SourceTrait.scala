@@ -36,6 +36,8 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
     for {
       sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ArTrait.ResultInfo]]
 
+      paramsEnvCache <- Compilation[Comp].createCache[EnvCreator[context2.type]]
+
       groupedStaticCache <- Compilation[Comp].createCache[GroupedStaticStatements]
       groupedInstCache <- Compilation[Comp].createCache[GroupedInstanceStatements]
 
@@ -62,6 +64,13 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
           SourceSignatureCreator.fromParameters[ArTrait.ResultInfo](context2)(
             env(context)(EffectInfo.pure, descriptor)
           )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType)(this))
+        )
+
+      private val paramsEnv: Comp[EnvCreator[context.type]] =
+        paramsEnvCache(
+          signature.map { sig =>
+            env.addParameters(context)(sig.unsubstitutedParameters)
+          }
         )
 
       private val groupedStatic =
@@ -97,9 +106,11 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
                 case None => MemberName.Unnamed
               }
 
-              val desc = MethodDescriptor(descriptor, i, memberName)
-              SourceMethod(context)(env)(method.value, method.location)(desc)(ArMethod.TraitOwner(this))
-                .map(MethodBinding(memberName, i, modifiers, _))
+              paramsEnv.flatMap { env2 =>
+                val desc = MethodDescriptor(descriptor, i, memberName)
+                SourceMethod(context)(env2)(method.value, method.location)(desc)(ArMethod.TraitOwner(this))
+                  .map(MethodBinding(memberName, i, modifiers, _))
+              }
             }
           }
         })
@@ -113,9 +124,11 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
                 case None => MemberName.Unnamed
               }
 
-              val desc = MethodDescriptor(TraitObjectDescriptor(descriptor), i, memberName)
-              SourceMethod(context)(env)(method.value, method.location)(desc)(ArMethod.TraitObjectOwner(this))
-                .map(MethodBinding(memberName, i, modifiers, _))
+              paramsEnv.flatMap { env2 =>
+                val desc = MethodDescriptor(TraitObjectDescriptor(descriptor), i, memberName)
+                SourceMethod(context)(env2)(method.value, method.location)(desc)(ArMethod.TraitObjectOwner(this))
+                  .map(MethodBinding(memberName, i, modifiers, _))
+              }
             }
           }
         })

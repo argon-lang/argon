@@ -276,7 +276,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 Mutability.NonMutable,
                 argHole
               )
-              env2 = env.copy(scope = env.scope.addVariable(argVar))
+              env2 = env.copy(scope = env.scope.addVariable(argVar), effectInfo = EffectInfo.pure)
 
               bodyExpr <- convertExpr(env2)(body).forExpectedType(resultHole)
 
@@ -609,7 +609,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         case ClassConstructorCall(_, _, args) => args.forall(isExprPure)
         case DataConstructorCall(_, args) => args.forall(isExprPure)
         case FunctionCall(_, args, _) => args.forall(isExprPure)
-        case FunctionObjectCall(_, _, _) => ???
+        case FunctionObjectCall(function, arg, _) => isExprPure(function) && isExprPure(arg)
         case IfElse(condition, ifBody, elseBody) => isExprPure(condition) && isExprPure(ifBody) && isExprPure(elseBody)
         case LetBinding(_, value, next) => isExprPure(value) && isExprPure(next)
         case LoadConstantBool(_, _) => true
@@ -619,7 +619,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         case LoadTuple(values) => values.forall { case TupleElement(value) => isWrapExprPure(value) }
         case LoadTupleElement(tupleValue, _, _) => isExprPure(tupleValue)
         case LoadUnit(_) => true
-        case LoadVariable(variable) => Mutability.toIsMutable(variable.mutability)
+        case LoadVariable(variable) => !Mutability.toIsMutable(variable.mutability)
         case MethodCall(_, instance, args, _) => isExprPure(instance) && args.forall(isExprPure)
         case PrimitiveOp(_, left, right, _) => isExprPure(left) && isExprPure(right)
         case Sequence(first, second) => isExprPure(first) && isExprPure(second)

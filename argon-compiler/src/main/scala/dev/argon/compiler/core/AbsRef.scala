@@ -19,6 +19,9 @@ object AbsRef {
         case other: AbsRef[_, _] => value.equals(other.value)
         case _ => false
       }
+
+      @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+      override def toString: String = value.toString
     }
 
 }
