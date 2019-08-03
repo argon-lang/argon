@@ -52,9 +52,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 case OverloadResult.List(Vector(MemberValue.Method(method)), _) =>
                   for {
                     _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                    sig <- implicitly[TypeCheck[TComp]].fromContextComp(method.value.method.signature)
-                    convSig = convertSignature(sig)
-                  } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(AbsRef(method.value.method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
+                    sig <- implicitly[TypeCheck[TComp]].fromContextComp(
+                      method.value.method.signature(signatureContext)(resolvedTypeWithMethods)
+                    )
+                  } yield signatureFactory(env)(location)(sig) { (args, result) => MethodCall(AbsRef(method.value.method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
 
                 case methods => ???
               }
@@ -107,9 +108,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                           case Vector(MethodBinding(_, _, _, method)) =>
                             for {
                               _ <- Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                              sig <- implicitly[TypeCheck[TComp]].fromContextComp(method.signature)
-                              convSig = convertSignature(sig)
-                            } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(AbsRef(method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
+                              sig <- implicitly[TypeCheck[TComp]].fromContextComp(
+                                method.signature(signatureContext)(t)
+                              )
+                            } yield signatureFactory(env)(location)(sig) { (args, result) => MethodCall(AbsRef(method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
 
                           case Vector() =>
                             Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, methodName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
@@ -134,9 +136,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                           case Vector(MethodBinding(_, _, _, method)) =>
                             for {
                               _ <- Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                              sig <- implicitly[TypeCheck[TComp]].fromContextComp(method.signature)
-                              convSig = convertSignature(sig)
-                            } yield signatureFactory(env)(location)(convSig) { (args, result) => MethodCall(AbsRef(method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
+                              sig <- implicitly[TypeCheck[TComp]].fromContextComp(
+                                method.signature(signatureContext)(t)
+                              )
+                            } yield signatureFactory(env)(location)(sig) { (args, result) => MethodCall(AbsRef(method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
 
                           case Vector() =>
                             Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, methodName), CompilationMessageSource.SourceFile(env.fileSpec, location)))

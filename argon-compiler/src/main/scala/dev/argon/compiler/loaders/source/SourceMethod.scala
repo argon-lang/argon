@@ -59,7 +59,7 @@ object SourceMethod {
 
       override val owner: ArMethod.Owner[context.type, DeclarationPayloadSpecifier] = methodOwner
 
-      override lazy val signature: Comp[context.signatureContext.Signature[FunctionResultInfo]] =
+      override lazy val signatureUnsubstituted: Comp[context.signatureContext.Signature[FunctionResultInfo]] =
         sigCache(
           SourceSignatureCreator.fromParameters[FunctionResultInfo](context2)(
             env(context)(effectInfo, descriptor)
@@ -79,7 +79,7 @@ object SourceMethod {
 
               case Some(body) =>
                 for {
-                  sig <- signature
+                  sig <- signatureUnsubstituted
                   env2 = env(context)(effectInfo, descriptor)
                   env3 = env2.copy(scope = env2.scope.addParameters(
                     sig.unsubstitutedParameters

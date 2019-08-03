@@ -307,7 +307,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
 
   private def createMethodObject(ownerVarMapping: VarMap)(method: ArMethod[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): Comp[JSExpression] =
     for {
-      sig <- method.signature
+      sig <- method.signatureUnsubstituted
       impl <- method.payload : Comp[context.JSImpl.Method]
       body <- impl match {
         case context.JSImpl.Method.JSExpressionBody(expr) => expr.pure[Comp]
@@ -751,7 +751,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
     }
 
   def getMethodObject(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): Comp[JSExpression] = for {
-    sig <- method.value.signature
+    sig <- method.value.signatureUnsubstituted
     ownerObj <- getClassLikeJSObject(moduleDescriptor, method.value.owner)
   } yield JSPropertyAccessBracket(
     JSPropertyAccessDot(

@@ -725,7 +725,7 @@ object ArgonModuleLoader {
 
                     override val owner: ArMethod.Owner[context.type, TPayloadSpec] = methodOwner
 
-                    override val signature: context.Comp[Signature[FunctionResultInfo]] =
+                    override val signatureUnsubstituted: context.Comp[Signature[FunctionResultInfo]] =
                       definition.signature match {
                         case ArgonModule.MethodSignature(parameters, returnType) =>
                           for {

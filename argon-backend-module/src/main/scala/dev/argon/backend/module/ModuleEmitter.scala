@@ -732,7 +732,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
 
     def createMethodDefMessage(armodule: ArModule[context.type, DeclarationPayloadSpecifier], method: ArMethod[context.type, DeclarationPayloadSpecifier]): Emit[(String, module.MethodDefinition)] =
       for {
-        sig <- emitComp(method.signature)
+        sig <- emitComp(method.signatureUnsubstituted)
         id <- getMethodId[TComp, DeclarationPayloadSpecifier](armodule, method)
         convSig <- convertSignature(armodule)(sig) { (params, result) =>
           for {

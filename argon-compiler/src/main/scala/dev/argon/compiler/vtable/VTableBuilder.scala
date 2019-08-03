@@ -50,8 +50,8 @@ object VTableBuilder {
             )
           )
 
-        method.signature.flatMap { sig =>
-          slotMethod.signature.flatMap { slotSig =>
+        method.signatureUnsubstituted.flatMap { sig =>
+          slotMethod.signatureUnsubstituted.flatMap { slotSig =>
             impl(sig, slotSig)
           }
         }
