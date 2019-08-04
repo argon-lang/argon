@@ -601,47 +601,6 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   (f: (Vector[ArExpr], TResult[context.type, typeSystem.type]) => TComp[ArExpr])
   : ExprFactory[TComp] = {
 
-    def isExprPure(expr: ArExpr): Boolean =
-      expr match {
-        case ClassConstructorCall(_, _, args) => args.forall(isExprPure)
-        case DataConstructorCall(_, args) => args.forall(isExprPure)
-        case FunctionCall(_, args, _) => args.forall(isExprPure)
-        case FunctionObjectCall(function, arg, _) => isExprPure(function) && isExprPure(arg)
-        case IfElse(condition, ifBody, elseBody) => isExprPure(condition) && isExprPure(ifBody) && isExprPure(elseBody)
-        case LetBinding(_, value, next) => isExprPure(value) && isExprPure(next)
-        case LoadConstantBool(_, _) => true
-        case LoadConstantInt(_, _) => true
-        case LoadConstantString(_, _) => true
-        case LoadLambda(_, _) => true
-        case LoadTuple(values) => values.forall { case TupleElement(value) => isWrapExprPure(value) }
-        case LoadTupleElement(tupleValue, _, _) => isExprPure(tupleValue)
-        case LoadUnit(_) => true
-        case LoadVariable(variable) => !Mutability.toIsMutable(variable.mutability)
-        case MethodCall(_, instance, args, _) => isExprPure(instance) && args.forall(isExprPure)
-        case PrimitiveOp(_, left, right, _) => isExprPure(left) && isExprPure(right)
-        case Sequence(first, second) => isExprPure(first) && isExprPure(second)
-        case StoreVariable(_, _, _) => false
-        case TraitType(_, args, _) => args.forall(isTypeArgPure)
-        case ClassType(_, args, _) => args.forall(isTypeArgPure)
-        case DataConstructorType(_, args, _) => args.forall(isTypeArgPure)
-        case TypeOfType(inner, _) => isWrapExprPure(inner)
-        case TypeN(_, subtypeConstraint, supertypeConstraint) => subtypeConstraint.forall(isWrapExprPure) && supertypeConstraint.forall(isWrapExprPure)
-        case FunctionType(argumentType, resultType) => isWrapExprPure(argumentType) && isWrapExprPure(resultType)
-        case UnionType(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
-        case IntersectionType(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
-      }
-
-    def isWrapExprPure(expr: WrapExpr): Boolean =
-      traverseTypeWrapper(expr) { t =>
-        if(isExprPure(t)) Some(()) else None
-      }.isDefined
-
-    def isTypeArgPure(arg: TypeArgument): Boolean =
-      arg match {
-        case TypeArgument.Expr(expr) => isWrapExprPure(expr)
-        case TypeArgument.Wildcard => true
-      }
-
     def signatureNextPart(sig: SignatureParameters[TResult])(arg: typeSystem.ArExpr): TComp[Signature[TResult]] =
       if(isExprPure(arg))
         sig.next(arg).pure[TComp]
@@ -729,19 +688,18 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
            _: DataConstructorType | _: FunctionType |
            _: UnionType | _: IntersectionType => ().pure[TComp]
 
-      case expr @ LoadVariable(variable) =>
-        (variable.mutability, unwrapType(variable.varType)) match {
-          case (Mutability.Mutable, _) => invalidType
-          case (Mutability.NonMutable, Some(TypeOfType(_, _) | TypeN(_, _, _))) => ().pure[TComp]
-          case (Mutability.NonMutable, _) => invalidType
-        }
-
       case LoadTuple(values) =>
         values
           .traverse_ {
             case TupleElement(value) =>
               traverseTypeWrapper(value)(validateTypeExpr(env)(location)(_))
           }
+
+      case expr if isExprPure(expr) =>
+        unwrapType(expr.exprType) match {
+          case Some(TypeOfType(_, _) | TypeN(_, _, _)) => ().pure[TComp]
+          case _ => invalidType
+        }
 
       case _ => invalidType
     }
@@ -760,6 +718,51 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       expr <- factory.forExpectedType(hole)
       _ <- implicitly[TypeCheck[TComp]].resolveType(hole)
     } yield expr
+
+
+
+  def isExprPure(expr: ArExpr): Boolean =
+    expr match {
+      case ClassConstructorCall(_, _, args) => args.forall(isExprPure)
+      case DataConstructorCall(_, args) => args.forall(isExprPure)
+      case FunctionCall(_, args, _) => args.forall(isExprPure)
+      case FunctionObjectCall(function, arg, _) => isExprPure(function) && isExprPure(arg)
+      case IfElse(condition, ifBody, elseBody) => isExprPure(condition) && isExprPure(ifBody) && isExprPure(elseBody)
+      case LetBinding(_, value, next) => isExprPure(value) && isExprPure(next)
+      case LoadConstantBool(_, _) => true
+      case LoadConstantInt(_, _) => true
+      case LoadConstantString(_, _) => true
+      case LoadLambda(_, _) => true
+      case LoadTuple(values) => values.forall { case TupleElement(value) => isWrapExprPure(value) }
+      case LoadTupleElement(tupleValue, _, _) => isExprPure(tupleValue)
+      case LoadUnit(_) => true
+      case LoadVariable(variable) => !Mutability.toIsMutable(variable.mutability)
+      case MethodCall(_, instance, args, _) => isExprPure(instance) && args.forall(isExprPure)
+      case PrimitiveOp(_, left, right, _) => isExprPure(left) && isExprPure(right)
+      case Sequence(first, second) => isExprPure(first) && isExprPure(second)
+      case StoreVariable(_, _, _) => false
+      case TraitType(_, args, _) => args.forall(isTypeArgPure)
+      case ClassType(_, args, _) => args.forall(isTypeArgPure)
+      case DataConstructorType(_, args, _) => args.forall(isTypeArgPure)
+      case TypeOfType(inner, _) => isWrapExprPure(inner)
+      case TypeN(_, subtypeConstraint, supertypeConstraint) => subtypeConstraint.forall(isWrapExprPure) && supertypeConstraint.forall(isWrapExprPure)
+      case FunctionType(argumentType, resultType) => isWrapExprPure(argumentType) && isWrapExprPure(resultType)
+      case UnionType(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
+      case IntersectionType(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
+    }
+
+  def isWrapExprPure(expr: WrapExpr): Boolean =
+    traverseTypeWrapper(expr) { t =>
+      if(isExprPure(t)) Some(()) else None
+    }.isDefined
+
+  def isTypeArgPure(arg: TypeArgument): Boolean =
+    arg match {
+      case TypeArgument.Expr(expr) => isWrapExprPure(expr)
+      case TypeArgument.Wildcard => true
+    }
+
+
 
 }
 
