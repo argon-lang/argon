@@ -210,10 +210,27 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
     val notSubType = Option.empty[TSubTypeInfo].pure[F]
 
-    def compareTypeArg(a: TypeArgument, b: TypeArgument): F[Option[Vector[TSubTypeInfo]]] =
+    def compareTypeArg(a: TypeArgument, b: TypeArgument): F[Option[Vector[TSubTypeInfo]]] = {
+      def fromIsSame(b: Boolean): F[Option[Vector[TSubTypeInfo]]] =
+        if(b)
+          Some(Vector.empty).upcast[Option[Vector[TSubTypeInfo]]].pure[F]
+        else
+          Option.empty[Vector[TSubTypeInfo]].pure[F]
+
       (a, b) match {
-        case (TypeArgument.Wildcard, _) => Some(Vector.empty).upcast[Option[Vector[TSubTypeInfo]]].pure[F]
-        case (_, TypeArgument.Wildcard) => Option.empty[Vector[TSubTypeInfo]].pure[F]
+        case (TypeArgument.Wildcard, _) => fromIsSame(true)
+        case (_, TypeArgument.Wildcard) => fromIsSame(false)
+
+        case (TypeArgument.Expr(LoadConstantString(a, _)), TypeArgument.Expr(LoadConstantString(b, _))) =>
+          fromIsSame(a === b)
+
+        case (TypeArgument.Expr(LoadConstantInt(a, _)), TypeArgument.Expr(LoadConstantInt(b, _))) =>
+          fromIsSame(a === b)
+
+        case (TypeArgument.Expr(LoadConstantBool(a, _)), TypeArgument.Expr(LoadConstantBool(b, _))) =>
+          fromIsSame(a === b)
+
+        case (TypeArgument.Expr(LoadUnit(_)), TypeArgument.Expr(LoadUnit(_))) => fromIsSame(true)
 
         case (TypeArgument.Expr(a), TypeArgument.Expr(b)) =>
           (
@@ -223,6 +240,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
             } yield Vector(SubTypeInfo(a, b, Vector(proof1, proof2)))
           ).value
       }
+    }
 
     def compareArguments(aType: TType, bType: TType)(a: Vector[TypeArgument])(b: Vector[TypeArgument]): F[Option[TSubTypeInfo]] =
       if(a.size === b.size)
