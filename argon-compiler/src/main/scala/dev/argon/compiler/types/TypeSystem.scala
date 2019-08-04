@@ -406,25 +406,15 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
         case (_, _) => notSubType
       },
-      () => b match {
-        case LoadVariable(varB) =>
-          unwrapType(varB.varType) match {
-            case Some(TypeN(_, Some(subtypeConstraint), _)) =>
-              isSubType(fromSimpleType(a), subtypeConstraint)
-
-            case _ => notSubType
-          }
+      () => unwrapType(b.exprType) match {
+        case Some(TypeN(_, Some(subtypeConstraint), _)) =>
+          isSubType(fromSimpleType(a), subtypeConstraint)
 
         case _ => notSubType
       },
-      () => a match {
-        case LoadVariable(varA) =>
-          unwrapType(varA.varType) match {
-            case Some(TypeN(_, _, Some(supertypeConstraint))) =>
-              isSubType(supertypeConstraint, fromSimpleType(b))
-
-            case _ => notSubType
-          }
+      () => unwrapType(a.exprType) match {
+        case Some(TypeN(_, _, Some(supertypeConstraint))) =>
+          isSubType(supertypeConstraint, fromSimpleType(b))
 
         case _ => notSubType
       },
