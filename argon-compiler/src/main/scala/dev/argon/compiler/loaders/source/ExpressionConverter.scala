@@ -1138,6 +1138,7 @@ object ExpressionConverter {
 
     case t: ts.ClassType => fillHolesClassType(context)(ts)(t).map(identity)
     case t: ts.TraitType => fillHolesTraitType(context)(ts)(t).map(identity)
+    case t: ts.DataConstructorType => fillHolesDataCtorType(context)(ts)(t).map(identity)
 
     case ts.FunctionType(argumentType, resultType) =>
       for {
