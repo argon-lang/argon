@@ -44,7 +44,7 @@ object VTableBuilder {
 
       import context.typeSystem.{ context => _, _ }
 
-      private def signatureMatches[PS[_, _], PSSlot[_, _]](method: ArMethod[context.type, PS])(slotMethod: ArMethod[context.type, PSSlot]): Comp[Boolean] = {
+      private def signatureMatches[PS[_, _], PSSlot[_, _]](method: ArMethod[context.type, PS])(slotMethod: ArMethod[context.type, PSSlot], slotSig: EntrySignature): Comp[Boolean] = {
 
         import context.signatureContext.{ context => _, _ }
 
@@ -57,7 +57,7 @@ object VTableBuilder {
                   case false => false.pure[Comp]
                 }
                 .flatMap {
-                  case true => impl(aParam.nextUnsubstituted, bParam.nextUnsubstituted)
+                  case true => impl(aParam.nextUnsubstituted, bParam.next(LoadVariable(aParam.parameter.paramVar)))
                   case false => false.pure[Comp]
                 },
               _ => false.pure[Comp]
@@ -69,9 +69,7 @@ object VTableBuilder {
           )
 
         method.signatureUnsubstituted.flatMap { sig =>
-          slotMethod.signatureUnsubstituted.flatMap { slotSig =>
-            impl(sig, slotSig)
-          }
+          impl(sig, slotSig)
         }
       }
 
@@ -85,23 +83,27 @@ object VTableBuilder {
 
         for {
           sig <- method.method.signatureUnsubstituted
-          newEntry = VTableEntry(sig, source, newEntryImpl)
 
           VTable(methodMap) <-
             if(method.method.isImplicitOverride)
               baseTypeVTable.methodMap
-                .keys
-                .filter { slotMethod =>
+                .toSeq
+                .filter { case (slotMethod, _) =>
                   slotMethod.value.isVirtual &&
                     !slotMethod.value.isFinal &&
                     slotMethod.value.descriptor.name === method.name &&
                     slotMethod.value.descriptor.name =!= MemberName.Unnamed
                 }
                 .toVector
-                .filterA { slotMethod => signatureMatches(method.method)(slotMethod.value) }
+                .filterA { case (slotMethod, VTableEntry(slotSig, _, _)) => signatureMatches(method.method)(slotMethod.value, slotSig) }
                 .map { slotMethods =>
                   VTable(
-                    methodMap = slotMethods.map { slotMethod => slotMethod -> newEntry }.toMap[AbsRef[context.type, ArMethod], VTableEntry]
+                    methodMap = slotMethods
+                      .map {
+                        case (slotMethod, VTableEntry(slotSig, _, _)) =>
+                          slotMethod -> VTableEntry(slotSig, source, newEntryImpl)
+                      }
+                      .toMap[AbsRef[context.type, ArMethod], VTableEntry]
                   )
                 }
             else
@@ -111,7 +113,7 @@ object VTableBuilder {
 
 
         } yield VTable(
-          methodMap = methodMap + (AbsRef(method.method) -> newEntry)
+          methodMap = methodMap + (AbsRef(method.method) -> VTableEntry(sig, source, newEntryImpl))
         )
       }
 
@@ -151,6 +153,18 @@ object VTableBuilder {
           case VTableEntry(_, _, VTableEntryAmbiguous(_)) => ???
         }
 
+      private def getBaseTraitVTable(bt: TraitType): Comp[VT] =
+        for {
+          btSig <- bt.arTrait.value.signature
+          baseTraitVTable <- fromTrait(bt.arTrait.value)
+        } yield VTable(
+          baseTraitVTable.methodMap.view.mapValues {
+            case VTableEntry(signature, entrySource, impl) =>
+              val newSig = signature.substituteTypeArguments(btSig.unsubstitutedParameters)(bt.args)
+              VTableEntry(newSig, entrySource, impl)
+          }.toMap
+        )
+
       override def fromClass[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[VT] =
         classVtableCache { arClassWrap =>
           val arClass = arClassWrap.value
@@ -159,8 +173,22 @@ object VTableBuilder {
             sig <- arClass.signature
             baseClass = sig.unsubstitutedResult.baseTypes.baseClass
             baseTraits = sig.unsubstitutedResult.baseTypes.baseTraits
-            baseClassVTable <- baseClass.traverse(bc => fromClass(bc.arClass.value))
-            baseTraitVTables <- baseTraits.traverse(bt => fromTrait(bt.arTrait.value))
+            baseClassVTable <- baseClass.traverse[Comp, VT] { bc =>
+              for {
+                bcSig <- bc.arClass.value.signature
+                baseClassVTable <- fromClass(bc.arClass.value)
+              } yield VTable(
+                baseClassVTable.methodMap.view.mapValues {
+                  case VTableEntry(signature, entrySource, impl) =>
+                    VTableEntry(
+                      signature.substituteTypeArguments(bcSig.unsubstitutedParameters)(bc.args),
+                      entrySource,
+                      impl
+                    )
+                }.toMap
+              )
+            }
+            baseTraitVTables <- baseTraits.traverse(getBaseTraitVTable(_))
 
             baseTypeOnlyVTable = baseClassVTable.combineAll |+| baseTraitVTables.combineAll
 
@@ -180,7 +208,7 @@ object VTableBuilder {
           for {
             sig <- arTrait.signature
             baseTraits = sig.unsubstitutedResult.baseTypes.baseTraits
-            baseTraitVTables <- baseTraits.traverse(bt => fromTrait(bt.arTrait.value))
+            baseTraitVTables <- baseTraits.traverse(getBaseTraitVTable(_))
 
             baseTraitOnlyVTable = baseTraitVTables.combineAll
 
@@ -198,7 +226,7 @@ object VTableBuilder {
           for {
             sig <- ctor.signature
             baseTrait = sig.unsubstitutedResult.instanceType
-            baseTraitVTable <- fromTrait(baseTrait.arTrait.value)
+            baseTraitVTable <- getBaseTraitVTable(baseTrait)
 
             methods <- ctor.methods
             source = EntrySourceDataCtor(AbsRef(ctor), findAllBaseTraits(Vector(baseTrait)))
