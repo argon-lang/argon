@@ -705,10 +705,18 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           }
 
       case expr if isExprPure(expr) =>
-        unwrapType(expr.exprType) match {
-          case Some(TypeOfType(_, _) | TypeN(_, _, _)) => ().pure[TComp]
-          case _ => invalidType
+        def isMetaType(t: TType): Boolean = unwrapType(t) match {
+          case Some(TypeOfType(_, _) | TypeN(_, _, _)) => true
+          case Some(LoadTuple(values)) =>
+            values.forall { elem => isMetaType(elem.value) }
+
+          case _ => false
         }
+
+        if(isMetaType(expr.exprType))
+          ().pure[TComp]
+        else
+          invalidType
 
       case _ => invalidType
     }
