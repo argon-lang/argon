@@ -343,6 +343,15 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           )
         )
 
+      case parser.TypeOfExpr(ofExpr) =>
+        compFactory(
+          inferExprType(convertExpr(env)(ofExpr)).map { convExpr =>
+            unwrapType(convExpr.exprType) match {
+              case Some(t) => factoryForExpr(env)(expr.location)(t)
+              case None => ???
+            }
+          }
+        )
 
       case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented: ${e.dumpInfo}")
     }
