@@ -437,7 +437,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
   private def createVTableObject(vtableContext: VTableContext.Aux[context.type])(vtable: vtableContext.VTable, descriptor: MethodOwnerDescriptor): Comp[JSExpression] =
     vtable.methodMap.toVector
       .traverse {
-        case (slotMethod, vtableContext.VTableEntryMethod(method, _)) =>
+        case (slotMethod, vtableContext.VTableEntry(_, _, vtableContext.VTableEntryMethod(method))) =>
           for {
             slotSym <- getMethodSymbol(getParamOwnerModule(descriptor))(slotMethod)
             implObj <- getMethodObject(getParamOwnerModule(descriptor))(method)

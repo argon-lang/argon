@@ -77,38 +77,42 @@ object VTableBuilder {
 
       private def overrideMethod[TPayloadSpec[_, _]](method: MethodBinding[context.type, TPayloadSpec])(source: EntrySource)(baseTypeVTable: VT): Comp[VT] = {
 
-        val newEntry =
+        val newEntryImpl =
           if(method.method.isAbstract)
-            VTableEntryAbstract(source)
+            VTableEntryAbstract
           else
-            VTableEntryMethod(AbsRef(method.method), source)
+            VTableEntryMethod(AbsRef(method.method))
 
-        (
-          if(method.method.isImplicitOverride)
-            baseTypeVTable.methodMap
-              .keys
-              .filter { slotMethod =>
-                slotMethod.value.isVirtual &&
-                  !slotMethod.value.isFinal &&
-                  slotMethod.value.descriptor.name === method.name &&
-                  slotMethod.value.descriptor.name =!= MemberName.Unnamed
-              }
-              .toVector
-              .filterA { slotMethod => signatureMatches(method.method)(slotMethod.value) }
-              .map { slotMethods =>
-                VTable(
-                  methodMap = slotMethods.map { slotMethod => slotMethod -> newEntry }.toMap[AbsRef[context.type, ArMethod], VTableEntry]
-                )
-              }
-          else
-            VTable(
-              methodMap = Map.empty
-            ).pure[Comp]
-          ).map { case VTable(methodMap) =>
-          VTable(
-            methodMap = methodMap + (AbsRef(method.method) -> newEntry)
-          )
-        }
+        for {
+          sig <- method.method.signatureUnsubstituted
+          newEntry = VTableEntry(sig, source, newEntryImpl)
+
+          VTable(methodMap) <-
+            if(method.method.isImplicitOverride)
+              baseTypeVTable.methodMap
+                .keys
+                .filter { slotMethod =>
+                  slotMethod.value.isVirtual &&
+                    !slotMethod.value.isFinal &&
+                    slotMethod.value.descriptor.name === method.name &&
+                    slotMethod.value.descriptor.name =!= MemberName.Unnamed
+                }
+                .toVector
+                .filterA { slotMethod => signatureMatches(method.method)(slotMethod.value) }
+                .map { slotMethods =>
+                  VTable(
+                    methodMap = slotMethods.map { slotMethod => slotMethod -> newEntry }.toMap[AbsRef[context.type, ArMethod], VTableEntry]
+                  )
+                }
+            else
+              VTable(
+                methodMap = Map.empty
+              ).pure[Comp]
+
+
+        } yield VTable(
+          methodMap = methodMap + (AbsRef(method.method) -> newEntry)
+        )
       }
 
       private def addNewMethods[TPayloadSpec[_, _]](methods: Vector[MethodBinding[context.type, TPayloadSpec]])(source: EntrySource)(baseTypeVTable: VT): Comp[VT] =
@@ -140,11 +144,11 @@ object VTableBuilder {
 
       private def ensureNonAbstract(vtable: VT, source: CompilationMessageSource): Comp[Unit] =
         vtable.methodMap.values.toVector.traverse_ {
-          case VTableEntryMethod(_, _) => ().pure[Comp]
-          case VTableEntryAbstract(_) =>
+          case VTableEntry(_, _, VTableEntryMethod(_)) => ().pure[Comp]
+          case VTableEntry(_, _, VTableEntryAbstract) =>
             Compilation[Comp].forErrors(CompilationError.AbstractMethodNotImplementedError(source))
 
-          case VTableEntryAmbiguous(_, _) => ???
+          case VTableEntry(_, _, VTableEntryAmbiguous(_)) => ???
         }
 
       override def fromClass[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[VT] =

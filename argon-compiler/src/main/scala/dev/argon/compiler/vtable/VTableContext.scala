@@ -10,13 +10,15 @@ trait VTableContext {
 
   val context: Context
 
-  sealed trait VTableEntry {
-    val entrySource: EntrySource
-  }
+  type EntrySignature = context.signatureContext.Signature[FunctionResultInfo]
 
-  final case class VTableEntryMethod(method: AbsRef[context.type, ArMethod], entrySource: EntrySource) extends VTableEntry
-  final case class VTableEntryAmbiguous(methods: Set[AbsRef[context.type, ArMethod]], entrySource: EntrySource) extends VTableEntry
-  final case class VTableEntryAbstract(entrySource: EntrySource) extends VTableEntry
+  final case class VTableEntry(signature: EntrySignature, entrySource: EntrySource, impl: VTableEntryImpl)
+
+  sealed trait VTableEntryImpl
+
+  final case class VTableEntryMethod(method: AbsRef[context.type, ArMethod]) extends VTableEntryImpl
+  final case class VTableEntryAmbiguous(methods: Set[AbsRef[context.type, ArMethod]]) extends VTableEntryImpl
+  case object VTableEntryAbstract extends VTableEntryImpl
 
   sealed trait EntrySource
   final case class EntrySourceClass(arClass: AbsRef[context.type, ArClass], baseClasses: Vector[AbsRef[context.type, ArClass]], baseTraits: Vector[AbsRef[context.type, ArTrait]]) extends EntrySource
@@ -55,16 +57,25 @@ trait VTableContext {
 
     implicit def semigroupInstance: Semigroup[VTableEntry] = new Semigroup[VTableEntry] {
       override def combine(x: VTableEntry, y: VTableEntry): VTableEntry = (x, y) match {
-        case (a, b) if sameSource(a.entrySource, b.entrySource) => a
-        case (a, b) if moreSpecificSource(a.entrySource, b.entrySource) => a
-        case (a, b) if moreSpecificSource(b.entrySource, a.entrySource) => b
-        case (VTableEntryAbstract(sourceA), VTableEntryAbstract(sourceB)) => VTableEntryAbstract(EntrySourceMulti(sourceA, sourceB))
-        case (VTableEntryAbstract(_), right) => right
-        case (left, VTableEntryAbstract(_)) => left
-        case (VTableEntryAmbiguous(a, sourceA), VTableEntryAmbiguous(b, sourceB)) => VTableEntryAmbiguous(a ++ b, EntrySourceMulti(sourceA, sourceB))
-        case (VTableEntryAmbiguous(a, sourceA), VTableEntryMethod(b, sourceB)) => VTableEntryAmbiguous(a + b, EntrySourceMulti(sourceA, sourceB))
-        case (VTableEntryMethod(a, sourceA), VTableEntryAmbiguous(b, sourceB)) => VTableEntryAmbiguous(b + a, EntrySourceMulti(sourceA, sourceB))
-        case (VTableEntryMethod(a, sourceA), VTableEntryMethod(b, sourceB)) => VTableEntryAmbiguous(Set(a, b), EntrySourceMulti(sourceA, sourceB))
+        case (VTableEntry(_, a, _), VTableEntry(_, b, _)) if sameSource(a, b) => x
+        case (VTableEntry(_, a, _), VTableEntry(_, b, _)) if moreSpecificSource(a, b) => x
+        case (VTableEntry(_, a, _), VTableEntry(_, b, _)) if moreSpecificSource(b, a) => y
+        case (VTableEntry(sigA, sourceA, VTableEntryAbstract), VTableEntry(_, sourceB, VTableEntryAbstract)) =>
+          VTableEntry(sigA, EntrySourceMulti(sourceA, sourceB), VTableEntryAbstract)
+
+        case (VTableEntry(_, _, VTableEntryAbstract), right) => right
+        case (left, VTableEntry(_, _, VTableEntryAbstract)) => left
+        case (VTableEntry(sigA, sourceA, VTableEntryAmbiguous(a)), VTableEntry(_, sourceB, VTableEntryAmbiguous(b))) =>
+          VTableEntry(sigA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(a ++ b))
+
+        case (VTableEntry(sigA, sourceA, VTableEntryAmbiguous(a)), VTableEntry(_, sourceB, VTableEntryMethod(b))) =>
+          VTableEntry(sigA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(a + b))
+
+        case (VTableEntry(sigA, sourceA, VTableEntryMethod(a)), VTableEntry(_, sourceB, VTableEntryAmbiguous(b))) =>
+          VTableEntry(sigA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(b + a))
+
+        case (VTableEntry(sigA, sourceA, VTableEntryMethod(a)), VTableEntry(_, sourceB, VTableEntryMethod(b))) =>
+          VTableEntry(sigA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(Set(a, b)))
       }
     }
 
