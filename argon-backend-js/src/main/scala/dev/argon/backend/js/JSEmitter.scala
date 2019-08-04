@@ -120,7 +120,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
 
 
 
-  private def createObjectsForScopeValue(vtableBuilder: VTableBuilder[context.type])(value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): Comp[JSStatement] =
+  private def createObjectsForScopeValue(vtableBuilder: VTableBuilder.Aux[context.type])(value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): Comp[JSStatement] =
     value match {
       case GlobalBinding.GlobalFunction(_, _, func) =>
         for {
@@ -191,7 +191,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           ctorObjects <- classConstructors.traverse { ctor => createClassCtorObject(ctor.ctor) }
 
           vtable <- vtableBuilder.fromClass(arClass)
-          vtableObject <- createVTableObject(vtable, arClass.descriptor)
+          vtableObject <- createVTableObject(vtableBuilder.vtableContext)(vtable, arClass.descriptor)
 
           baseClassExpr <- sig.unsubstitutedResult.baseTypes.baseClass.traverse { baseClass =>
             baseClass.arClass.value.signature.map { sig =>
@@ -264,7 +264,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           }
 
           vtable <- vtableBuilder.fromDataConstructor(ctor)
-          vtableObject <- createVTableObject(vtable, ctor.descriptor)
+          vtableObject <- createVTableObject(vtableBuilder.vtableContext)(vtable, ctor.descriptor)
 
           instanceTypeSig <- sig.unsubstitutedResult.instanceType.arTrait.value.signature
           instanceTypeExpr = getTraitJSObject(
@@ -434,10 +434,10 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
         } yield (ctorFunc, varMap)
     }
 
-  private def createVTableObject(vtable: VTable[context.type], descriptor: MethodOwnerDescriptor): Comp[JSExpression] =
+  private def createVTableObject(vtableContext: VTableContext.Aux[context.type])(vtable: vtableContext.VTable, descriptor: MethodOwnerDescriptor): Comp[JSExpression] =
     vtable.methodMap.toVector
       .traverse {
-        case (slotMethod, VTableEntryMethod(method, _)) =>
+        case (slotMethod, vtableContext.VTableEntryMethod(method, _)) =>
           for {
             slotSym <- getMethodSymbol(getParamOwnerModule(descriptor))(slotMethod)
             implObj <- getMethodObject(getParamOwnerModule(descriptor))(method)

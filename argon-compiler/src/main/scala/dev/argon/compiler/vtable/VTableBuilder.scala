@@ -5,24 +5,42 @@ import dev.argon.compiler.core._
 import cats._
 import cats.implicits._
 
-sealed abstract class VTableBuilder[TContext <: Context with Singleton] {
-  def fromClass[TPayloadSpec[_, _]](arClass: ArClass[TContext, TPayloadSpec]): TContext#Comp[VTable[TContext]]
-  def fromTrait[TPayloadSpec[_, _]](arTrait: ArTrait[TContext, TPayloadSpec]): TContext#Comp[VTable[TContext]]
-  def fromDataConstructor[TPayloadSpec[_, _]](ctor: DataConstructor[TContext, TPayloadSpec]): TContext#Comp[VTable[TContext]]
+sealed abstract class VTableBuilder {
+
+  val vtableContext: VTableContext
+  import vtableContext._
+
+  def fromClass[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): context.Comp[VTable]
+  def fromTrait[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): context.Comp[VTable]
+  def fromDataConstructor[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): context.Comp[VTable]
 }
 
 object VTableBuilder {
 
-  def apply(context: Context): context.Comp[VTableBuilder[context.type]] = {
-    import context._
-    for {
-      classVtableCache <- Compilation[Comp].createMemo[AbsRef[context.type, ArClass], VTable[context.type]]
-      traitVtableCache <- Compilation[Comp].createMemo[AbsRef[context.type, ArTrait], VTable[context.type]]
-      dataCtorVtableCache <- Compilation[Comp].createMemo[AbsRef[context.type, DataConstructor], VTable[context.type]]
-    } yield new VTableBuilder[context.type] {
+  type Aux[TContext <: Context with Singleton] = VTableBuilder {
+    val vtableContext: VTableContext.Aux[TContext]
+  }
 
-      type VT = VTable[context.type]
-      type Entry = VTableEntry[context.type]
+  def apply(context: Context): context.Comp[VTableBuilder.Aux[context.type]] = {
+    import context._
+    val ctx: context.type = context
+
+    val vtableCtx: VTableContext.Aux[ctx.type] = new VTableContext {
+      override val context: ctx.type = ctx
+    }
+
+    import vtableCtx.{ context => _, _ }
+
+    for {
+      classVtableCache <- Compilation[Comp].createMemo[AbsRef[context.type, ArClass], VTable]
+      traitVtableCache <- Compilation[Comp].createMemo[AbsRef[context.type, ArTrait], VTable]
+      dataCtorVtableCache <- Compilation[Comp].createMemo[AbsRef[context.type, DataConstructor], VTable]
+    } yield new VTableBuilder {
+
+      override val vtableContext: vtableCtx.type = vtableCtx
+
+      type VT = VTable
+      type Entry = VTableEntry
 
       import context.typeSystem.{ context => _, _ }
 
@@ -57,7 +75,7 @@ object VTableBuilder {
         }
       }
 
-      private def overrideMethod[TPayloadSpec[_, _]](method: MethodBinding[context.type, TPayloadSpec])(source: EntrySource[context.type])(baseTypeVTable: VT): Comp[VT] = {
+      private def overrideMethod[TPayloadSpec[_, _]](method: MethodBinding[context.type, TPayloadSpec])(source: EntrySource)(baseTypeVTable: VT): Comp[VT] = {
 
         val newEntry =
           if(method.method.isAbstract)
@@ -79,11 +97,11 @@ object VTableBuilder {
               .filterA { slotMethod => signatureMatches(method.method)(slotMethod.value) }
               .map { slotMethods =>
                 VTable(
-                  methodMap = slotMethods.map { slotMethod => slotMethod -> newEntry }.toMap[AbsRef[context.type, ArMethod], VTableEntry[context.type]]
+                  methodMap = slotMethods.map { slotMethod => slotMethod -> newEntry }.toMap[AbsRef[context.type, ArMethod], VTableEntry]
                 )
               }
           else
-            VTable[context.type](
+            VTable(
               methodMap = Map.empty
             ).pure[Comp]
           ).map { case VTable(methodMap) =>
@@ -93,7 +111,7 @@ object VTableBuilder {
         }
       }
 
-      private def addNewMethods[TPayloadSpec[_, _]](methods: Vector[MethodBinding[context.type, TPayloadSpec]])(source: EntrySource[context.type])(baseTypeVTable: VT): Comp[VT] =
+      private def addNewMethods[TPayloadSpec[_, _]](methods: Vector[MethodBinding[context.type, TPayloadSpec]])(source: EntrySource)(baseTypeVTable: VT): Comp[VT] =
         methods
           .traverse { method => overrideMethod(method)(source)(baseTypeVTable) }
           .map { baseTypeVTable |+| _.combineAll }
