@@ -21,6 +21,27 @@ trait SignatureContext
     def referencesParameter(parameter: Parameter): Boolean
     def substitute(parameter: Parameter)(replacement: typeSystem.ArExpr): Signature[TResult]
 
+    final def substituteTypeArguments(parameters: Vector[Parameter])(replacements: Vector[typeSystem.TypeArgument]): Signature[TResult] = {
+
+      def handleNonReplaceableParam(sig: Signature[TResult])(param: typeSystem.Parameter): Signature[TResult] =
+        if(!sig.referencesParameter(param))
+          sig
+        else
+          ???
+
+      parameters.zip(replacements).foldLeft(this) {
+        case (sig, (param, typeSystem.TypeArgument.Expr(arg))) =>
+          typeSystem.unwrapType(arg) match {
+            case Some(arg) => sig.substitute(param)(arg)
+            case None => handleNonReplaceableParam(sig)(param)
+          }
+
+        case (sig, (param, typeSystem.TypeArgument.Wildcard)) =>
+          handleNonReplaceableParam(sig)(param)
+      }
+
+    }
+
     def visit[A](fParam: SignatureParameters[TResult] => A, fResult: SignatureResult[TResult] => A): A
 
   }

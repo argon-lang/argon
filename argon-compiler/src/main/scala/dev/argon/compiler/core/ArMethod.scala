@@ -25,7 +25,7 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
 
   val signatureUnsubstituted: Comp[Signature[FunctionResultInfo]]
 
-  def signature[TComp[_]: Compilation]
+  final def signature[TComp[_]: Compilation]
   (newSigContext: SignatureContext.Aux[context.type])
   (instanceType: newSigContext.typeSystem.TypeWithMethods)
   : Comp[newSigContext.Signature[FunctionResultInfo]] = for {
@@ -47,22 +47,7 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
     }
     val convSig = sig.convertTypeSystem(newSigContext)(converter)
 
-    def handleNonReplacableParam(sig: newSigContext.Signature[FunctionResultInfo])(param: newSigContext.typeSystem.Parameter): newSigContext.Signature[FunctionResultInfo] =
-      if(!sig.referencesParameter(param))
-        sig
-      else
-        ???
-
-    ownerSig.unsubstitutedParameters.zip(instTypeArgs).foldLeft(convSig) {
-      case (sig, (param, newSigContext.typeSystem.TypeArgument.Expr(arg))) =>
-        newSigContext.typeSystem.unwrapType(arg) match {
-          case Some(arg) => sig.substitute(param)(arg)
-          case None => handleNonReplacableParam(sig)(param)
-        }
-
-      case (sig, (param, newSigContext.typeSystem.TypeArgument.Wildcard)) =>
-        handleNonReplacableParam(sig)(param)
-    }
+    convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instTypeArgs)
   }
 
   val payload: TPayloadSpec[Comp[TMethodImplementation], TMethodMetadata]
