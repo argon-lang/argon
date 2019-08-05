@@ -15,6 +15,7 @@ import cats.implicits._
 import cats.mtl._
 import PayloadSpecifiers._
 import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
+import shapeless.{ Id => _, _ }
 
 import Function.const
 
@@ -28,7 +29,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     val typeSystem: ExpressionConverter.this.typeSystem.type
   }
 
-  import ExpressionConverter.{ HoleType, TypeCheck => TypeCheckA, TypeConstraint }
+  import ExpressionConverter.{ HoleType, TypeCheck => TypeCheckA }
   import typeSystem.{ context => _, _ }
   import scopeContext.{ context => _, _ }
   import signatureContext.{ Signature, SignatureParameters }
@@ -1313,11 +1314,7 @@ object ExpressionConverter {
 
   sealed trait HoleConstraint[TType]
   private final case class HoleResolved[TType](t: TType) extends HoleConstraint[TType]
-  private final case class HoleBounds[TType](bounds: Set[TypeConstraint[TType]]) extends HoleConstraint[TType]
-
-  private sealed trait TypeConstraint[TType]
-  private final case class SuperTypeConstraint[TType](superType: TType) extends TypeConstraint[TType]
-  private final case class SubTypeConstraint[TType](subType: TType) extends TypeConstraint[TType]
+  private final case class HoleBounds[TType](superTypeBounds: Set[TType], subTypeBounds: Set[TType]) extends HoleConstraint[TType]
 
   private trait TypeCheck[TContext <: Context with Singleton, TType, TComp[_]] extends Compilation[TComp] {
     def fromContextComp[A](comp: TContext#Comp[A]): TComp[A]
@@ -1359,27 +1356,37 @@ object ExpressionConverter {
           _ <- StateT.set[Comp, TypeCheckState[ts.TType]](state.copy(nextHoleId = state.nextHoleId + 1))
         } yield HoleTypeHole(state.nextHoleId)
 
-      private def addConstraint(id: Int, constraint: TypeConstraint[ts.TType]): HoleTypeCheckComp[Comp, ts.TType, Unit] =
+      private def addConstraint(id: Int, prop: Lens[HoleBounds[ts.TType], Set[ts.TType]], constraint: ts.TType): HoleTypeCheckComp[Comp, ts.TType, Unit] =
         StateT.modify[Comp, TypeCheckState[ts.TType]] { state =>
-          state.constraints.getOrElse(id, HoleBounds(Set.empty[TypeConstraint[ts.TType]])) match {
+          state.constraints.getOrElse(id, HoleBounds(Set.empty, Set.empty)) match {
             case HoleResolved(_) => state
-            case HoleBounds(bounds) =>
-              state.copy(constraints = state.constraints.updated(id, HoleBounds(bounds + constraint)))
+            case bounds @ HoleBounds(_, _) =>
+              state.copy(constraints = state.constraints.updated(id, prop.modify(bounds){ _ + constraint }))
           }
         }
+
+      private val subTypeBoundsLens: Lens[HoleBounds[ts.TType], Set[ts.TType]] = new Lens[HoleBounds[ts.TType], Set[ts.TType]] {
+        override def get(s: HoleBounds[ts.TType]): Set[ts.TType] = s.subTypeBounds
+        override def set(s: HoleBounds[ts.TType])(a: Set[ts.TType]): HoleBounds[ts.TType] = s.copy(subTypeBounds = a)
+      }
+
+      private val superTypeBoundsLens: Lens[HoleBounds[ts.TType], Set[ts.TType]] = new Lens[HoleBounds[ts.TType], Set[ts.TType]] {
+        override def get(s: HoleBounds[ts.TType]): Set[ts.TType] = s.superTypeBounds
+        override def set(s: HoleBounds[ts.TType])(a: Set[ts.TType]): HoleBounds[ts.TType] = s.copy(superTypeBounds = a)
+      }
 
       override def recordConstraint(info: SubTypeInfo[ts.TType]): HoleTypeCheckComp[Comp, ts.TType, Unit] =
         (info.subType, info.superType) match {
           case (a @ HoleTypeHole(idA), b @ HoleTypeHole(idB)) =>
-            addConstraint(idA, SuperTypeConstraint(b)).flatMap { _ =>
-              addConstraint(idB, SubTypeConstraint(a))
+            addConstraint(idA, superTypeBoundsLens, b).flatMap { _ =>
+              addConstraint(idB, subTypeBoundsLens, a)
             }
 
           case (HoleTypeHole(idA), b) =>
-            addConstraint(idA, SuperTypeConstraint(b))
+            addConstraint(idA, superTypeBoundsLens, b)
 
           case (a, HoleTypeHole(idB)) =>
-            addConstraint(idB, SubTypeConstraint(a))
+            addConstraint(idB, subTypeBoundsLens, a)
 
           case (HoleTypeType(_), HoleTypeType(_)) =>
             info.args.traverse_(recordConstraint(_))(this)
@@ -1388,34 +1395,50 @@ object ExpressionConverter {
       override def resolveType(t: ts.TType): HoleTypeCheckComp[Comp, ts.TType, ts.TType] =
         TypeSystem.convertTypeSystem(context)(ts)(ts)(new ResolverConverter)(t).runA(Set.empty)
 
+      private def getConstraints(id: Int): HoleTypeCheckComp[Comp, ts.TType, HoleConstraint[ts.TType]] =
+        StateT.get[Comp, TypeCheckState[ts.TType]].map { state =>
+          state.constraints.getOrElse(id, HoleBounds(Set.empty, Set.empty))
+        }
+
+      private def updateConstraints(id: Int, constraints: HoleConstraint[ts.TType]): HoleTypeCheckComp[Comp, ts.TType, Unit] =
+        StateT.modify[Comp, TypeCheckState[ts.TType]] { state =>
+          state.copy(constraints = state.constraints.updated(id, constraints))
+        }
+
       private def resolveOuterHole(id: Int): HoleTypeCheckComp[Comp, ts.TType, ts.TType] =
-        StateT.get[Comp, TypeCheckState[ts.TType]].flatMap { state =>
-          state.constraints.getOrElse(id, HoleBounds(Set.empty[TypeConstraint[ts.TType]])) match {
-            case HoleResolved(hole) => hole.pure[HoleTypeCheckComp[Comp, ts.TType, ?]]
-            case HoleBounds(bounds) =>
-              def superTypeConstraints = NonEmptyList.fromList(bounds.collect {
-                case SuperTypeConstraint(superType) => superType
-              }.toList)
+        getConstraints(id).flatMap  {
+          case HoleResolved(hole) => hole.pure[HoleTypeCheckComp[Comp, ts.TType, ?]]
+          case bounds @ HoleBounds(_, _) =>
 
-              def subTypeConstraints = NonEmptyList.fromList(bounds.collect {
-                case SubTypeConstraint(subType) => subType
-              }.toList)
+            def resolveConstraints
+            (pick: Lens[HoleBounds[ts.TType], Set[ts.TType]], otherSide: Lens[HoleBounds[ts.TType], Set[ts.TType]])
+            (combine: (ts.TType, ts.TType) => ts.ArExpr)
+            : Option[HoleTypeCheckComp[Comp, ts.TType, ts.TType]] =
+              NonEmptyList.fromList(pick.get(bounds).toList).map {
+                _.traverse[HoleTypeCheckComp[Comp, ts.TType, ?], ts.TType] {
+                  case t @ HoleTypeType(_) => (t : ts.TType).pure[HoleTypeCheckComp[Comp, ts.TType, ?]]
+                  case t @ HoleTypeHole(constraintHoleId) =>
+                    getConstraints(constraintHoleId)
+                      .flatMap {
+                        case HoleResolved(_) => ().pure[HoleTypeCheckComp[Comp, ts.TType, ?]]
+                        case resBounds @ HoleBounds(_, _) =>
+                          val newBounds = otherSide.set(resBounds)(
+                            otherSide.get(resBounds).excl(HoleTypeHole(id)) ++ otherSide.get(bounds).excl(t)
+                          )
+                          updateConstraints(constraintHoleId, newBounds).map { _ =>  }
+                      }
+                      .map { _ => t }
+                }
+                  .map { _.reduceLeft { (a, b) => ts.fromSimpleType(combine(a, b)) } }
+              }
 
-              def resolveConstraints(combine: (ts.TType, ts.TType) => ts.ArExpr)(constraints: NonEmptyList[ts.TType]): ts.TType =
-                constraints.reduceLeft { (a, b) => ts.fromSimpleType(combine(a, b)) }
+            for {
+              resolvedType <- resolveConstraints(subTypeBoundsLens, superTypeBoundsLens)(ts.IntersectionType)
+                .orElse { resolveConstraints(superTypeBoundsLens, subTypeBoundsLens)(ts.UnionType) }
+                .getOrElse { ??? }
 
-              val resolvedType =
-                superTypeConstraints.map(resolveConstraints(ts.IntersectionType)(_))
-                  .orElse { subTypeConstraints.map(resolveConstraints(ts.UnionType)(_)) }
-                  .getOrElse { ??? }
-
-
-              for {
-                _ <- StateT.set[Comp, TypeCheckState[ts.TType]](
-                  state.copy(constraints = state.constraints.updated(id, HoleResolved(resolvedType)))
-                )
-              } yield resolvedType
-          }
+              _ <- updateConstraints(id, HoleResolved(resolvedType))
+            } yield resolvedType
         }
 
       type ResolverState[A] = StateT[HoleTypeCheckComp[Comp, ts.TType, ?], Set[Int], A]
