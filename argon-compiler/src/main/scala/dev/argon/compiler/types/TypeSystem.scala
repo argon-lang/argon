@@ -226,24 +226,33 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case (TypeArgument.Wildcard, _) => fromIsSame(true)
         case (_, TypeArgument.Wildcard) => fromIsSame(false)
 
-        case (TypeArgument.Expr(LoadConstantString(a, _)), TypeArgument.Expr(LoadConstantString(b, _))) =>
-          fromIsSame(a === b)
-
-        case (TypeArgument.Expr(LoadConstantInt(a, _)), TypeArgument.Expr(LoadConstantInt(b, _))) =>
-          fromIsSame(a === b)
-
-        case (TypeArgument.Expr(LoadConstantBool(a, _)), TypeArgument.Expr(LoadConstantBool(b, _))) =>
-          fromIsSame(a === b)
-
-        case (TypeArgument.Expr(LoadUnit(_)), TypeArgument.Expr(LoadUnit(_))) => fromIsSame(true)
-
         case (TypeArgument.Expr(a), TypeArgument.Expr(b)) =>
-          (
-            for {
-              proof1 <- OptionT(isSubType(a, b))
-              proof2 <- OptionT(isSubType(b, a))
-            } yield Vector(SubTypeInfo(a, b, Vector(proof1, proof2)))
-          ).value
+          (unwrapType(a), unwrapType(b)) match {
+
+            case (Some(LoadConstantString(a, _)), Some(LoadConstantString(b, _))) =>
+              fromIsSame(a === b)
+
+            case (Some(LoadConstantInt(a, _)), Some(LoadConstantInt(b, _))) =>
+              fromIsSame(a === b)
+
+            case (Some(LoadConstantBool(a, _)), Some(LoadConstantBool(b, _))) =>
+              fromIsSame(a === b)
+
+            case (Some(LoadUnit(_)), Some(LoadUnit(_))) => fromIsSame(true)
+
+            case (Some(LoadLambda(aVar, aBody)), Some(LoadLambda(bVar, bBody))) =>
+              @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+              def isSameLambda = aBody == Substitutions(this)(bVar, LoadVariable(aVar)).substArExpr(bBody)
+              fromIsSame(isSameLambda)
+
+            case _ =>
+              (
+                for {
+                  proof1 <- OptionT(isSubType(a, b))
+                  proof2 <- OptionT(isSubType(b, a))
+                } yield Vector(SubTypeInfo(a, b, Vector(proof1, proof2)))
+              ).value
+          }
       }
     }
 
