@@ -13,7 +13,11 @@ trait TestCaseRunner {
   protected def isExpectedError(errors: NonEmptyList[CompilationError], errorName: String): Boolean =
     errors match {
       case NonEmptyList(error, Nil) =>
-        error.getClass.getName === CompilationError.getClass.getName + errorName
+        val realName = error.getClass.getName
+        val expectedName = CompilationError.getClass.getName + errorName
+
+        realName.startsWith(expectedName) &&
+          (expectedName.length === realName.length || realName.charAt(expectedName.length) === '$')
 
       case _ => false
     }

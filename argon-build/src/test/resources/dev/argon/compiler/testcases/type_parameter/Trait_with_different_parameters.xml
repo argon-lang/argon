@@ -17,6 +17,6 @@
 
     ]]></InputSource>
 
-    <ExpectedError>CouldNotConvertTypeError</ExpectedError>
+    <ExpectedError>CouldNotConvertType</ExpectedError>
 
 </ArgonTest>
