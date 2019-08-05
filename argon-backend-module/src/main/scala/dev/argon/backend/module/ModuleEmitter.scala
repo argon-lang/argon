@@ -772,7 +772,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
 
     def createClassCtorDefMessage(armodule: ArModule[context.type, DeclarationPayloadSpecifier], ctor: ClassConstructor[context.type, DeclarationPayloadSpecifier]): Emit[(String, module.ClassConstructorDefinition)] =
       for {
-        sig <- emitComp(ctor.signature)
+        sig <- emitComp(ctor.signatureUnsubstituted)
         id <- getClassCtorId[TComp](ctor.descriptor)
         convSig <- convertSignature(armodule)(sig) { (params, _) =>
           module.ClassConstructorSignature(params).pure[Emit]

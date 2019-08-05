@@ -40,7 +40,7 @@ object SourceClassConstructor {
 
       override val ownerClass: ArClass[context.type, DeclarationPayloadSpecifier] = ownerClass2
 
-      override lazy val signature: Comp[context.signatureContext.Signature[ClassConstructor.ResultInfo]] =
+      override lazy val signatureUnsubstituted: Comp[context.signatureContext.Signature[ClassConstructor.ResultInfo]] =
         sigCache(
           SourceSignatureCreator.fromParameters[ClassConstructor.ResultInfo](context2)(
             env(context)(effectInfo, descriptor)
@@ -49,7 +49,7 @@ object SourceClassConstructor {
 
       override lazy val payload: Comp[context.TClassConstructorImplementation] =
         for {
-          sig <- signature
+          sig <- signatureUnsubstituted
           env2 = env(context)(effectInfo, descriptor)
           env3 = env2.copy(scope = env2.scope.addParameters(
             sig.unsubstitutedParameters

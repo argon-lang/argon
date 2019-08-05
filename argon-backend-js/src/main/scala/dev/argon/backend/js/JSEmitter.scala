@@ -325,7 +325,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
 
   private def createClassCtorObject(ctor: ClassConstructor[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): Comp[JSExpression] =
     for {
-      sig <- ctor.signature
+      sig <- ctor.signatureUnsubstituted
       descriptorId = DescriptorId.forClassConstructor(ErasedSignature.fromSignatureParameters(context)(sig))
       impl <- ctor.payload : Comp[context.JSImpl.ClassConstructor]
       body <- impl match {
@@ -575,7 +575,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
     expr match {
       case ClassConstructorCall(classType, ctor, args) =>
         for {
-          sig <- ctor.value.signature
+          sig <- ctor.value.signatureUnsubstituted
           ownerClassSig <- ctor.value.ownerClass.signature
 
           ownerObj = getClassJSObject(getParamOwnerModule(params.owner), ctor.value.descriptor.ownerClass, ErasedSignature.fromSignatureParameters(context)(ownerClassSig))

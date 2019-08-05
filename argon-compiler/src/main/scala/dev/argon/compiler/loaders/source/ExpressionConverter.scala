@@ -91,9 +91,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                           case Vector(ClassConstructorBinding(_, _, classCtor)) =>
                             for {
                               _ <- Compilation[TComp].require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                              sig <- implicitly[TypeCheck[TComp]].fromContextComp(classCtor.signature)
-                              convSig = convertSignature(sig)
-                            } yield signatureFactory(env)(location)(convSig) { (args, result) => ClassConstructorCall(t, AbsRef(classCtor), args).upcast[ArExpr].pure[TComp] }
+                              sig <- implicitly[TypeCheck[TComp]].fromContextComp(
+                                classCtor.signature(signatureContext)(t)
+                              )
+                            } yield signatureFactory(env)(location)(sig) { (args, result) => ClassConstructorCall(t, AbsRef(classCtor), args).upcast[ArExpr].pure[TComp] }
 
                           case _ => ???
                         }

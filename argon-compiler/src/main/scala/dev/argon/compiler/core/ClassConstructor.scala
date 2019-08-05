@@ -16,7 +16,22 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   val fileId: FileID
 
   val ownerClass: ArClass[context.type, TPayloadSpec]
-  val signature: context.Comp[Signature[ClassConstructor.ResultInfo]]
+  val signatureUnsubstituted: context.Comp[Signature[ClassConstructor.ResultInfo]]
+
+  final def signature[TComp[_]: Compilation]
+  (newSigContext: SignatureContext.Aux[context.type])
+  (instanceType: newSigContext.typeSystem.ClassType)
+  : Comp[newSigContext.Signature[ClassConstructor.ResultInfo]] = for {
+    sig <- signatureUnsubstituted
+    ownerSigUnConv <- ownerClass.signature
+  } yield {
+    val converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
+    val ownerSig = ownerSigUnConv.convertTypeSystem(newSigContext)(converter)
+    val convSig = sig.convertTypeSystem(newSigContext)(converter)
+
+    convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instanceType.args)
+  }
+
 
   val payload: TPayloadSpec[Comp[TClassConstructorImplementation], TClassConstructorMetadata]
 }
