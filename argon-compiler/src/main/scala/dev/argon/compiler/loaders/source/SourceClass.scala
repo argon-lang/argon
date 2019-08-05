@@ -117,15 +117,16 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           inst.fields.traverse { field =>
             field.value.name match {
               case Some(fieldName) =>
-                ExpressionConverter.convertTypeExpression(context)(env(context)(EffectInfo.pure, descriptor))(field.value.fieldType).map { fieldType =>
-                  context.typeSystem.FieldVariable(
-                    FieldDescriptor(descriptor, fieldName),
-                    AbsRef(this),
-                    VariableName.Normal(fieldName),
-                    Mutability.fromIsMutable(field.value.isMutable),
-                    fieldType
-                  )
-                }
+                for {
+                  env2 <- paramsEnv
+                  fieldType <- ExpressionConverter.convertTypeExpression(context)(env2(context)(EffectInfo.pure, descriptor))(field.value.fieldType)
+                } yield context.typeSystem.FieldVariable(
+                  FieldDescriptor(descriptor, fieldName),
+                  AbsRef(this),
+                  VariableName.Normal(fieldName),
+                  Mutability.fromIsMutable(field.value.isMutable),
+                  fieldType
+                )
 
               case None =>
                 Compilation[Comp].forErrors(CompilationError.FieldMustHaveName(CompilationMessageSource.SourceFile(env.fileSpec, field.location)))
