@@ -16,6 +16,7 @@ import cats.mtl._
 import PayloadSpecifiers._
 import cats.evidence.{===, Is}
 import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
+import dev.argon.parser.{BindingPattern, DeconstructPattern, DiscardPattern, TuplePattern, TypeTestPattern}
 import shapeless.{Id => _, _}
 
 import Function.const
@@ -293,6 +294,52 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             resultTypeValue <- evaluateTypeExprAST(env)(resultType)
           } yield factoryForExpr(env)(expr.location)(FunctionType(argTypeValue, resultTypeValue))
         )
+
+      case parser.MatchExpr(value, cases) =>
+        new ExprFactory[TComp] {
+          override def forExpectedType(expectedType: TType): TComp[ArExpr] =
+            for {
+              valueExpr <- inferExprType(convertExpr(env)(value))
+              casesNE = NonEmptyList.fromList(cases.toList).getOrElse { ??? }
+              patternCases <- casesNE.traverse {
+                case WithSource(parser.MatchExprCase(pattern, body), _) =>
+                  for {
+                    (patternExpr, env2) <- convertPattern(env)(valueExpr.exprType)(pattern)
+                    bodyExpr <- convertStmts(env2)(body).forExpectedType(expectedType)
+                  } yield PatternCase(patternExpr, bodyExpr)
+              }
+            } yield PatternMatch(valueExpr, patternCases)
+
+          private def convertPattern(env: Env)(t: TType)(pattern: WithSource[parser.Pattern]): TComp[(PatternExpr, Env)] =
+            pattern.value match {
+              case DeconstructPattern(constructor, args) => ???
+              case TuplePattern(values) => ???
+              case DiscardPattern =>
+                val variable = LocalVariable(
+                  VariableDescriptor(env.descriptor, env.scope.nextVariable),
+                  VariableName.Unnamed,
+                  Mutability.NonMutable,
+                  t
+                )
+                val env2 = env.copy(scope = env.scope.addVariable(variable))
+
+                (PatternExpr.Binding(variable), env2).upcast[(PatternExpr, Env)].pure[TComp]
+
+              case BindingPattern(name) =>
+                val variable = LocalVariable(
+                  VariableDescriptor(env.descriptor, env.scope.nextVariable),
+                  VariableName.Normal(name),
+                  Mutability.NonMutable,
+                  t
+                )
+                val env2 = env.copy(scope = env.scope.addVariable(variable))
+
+                (PatternExpr.Binding(variable), env2).upcast[(PatternExpr, Env)].pure[TComp]
+
+              case TypeTestPattern(name, patternType) => ???
+            }
+
+        }
 
       case parser.StringValueExpr(str) =>
         compFactory(
@@ -1150,6 +1197,18 @@ object ExpressionConverter {
         newReturnType <- fillHolesWrapExprChildren(context)(ts)(returnType)
       } yield context.typeSystem.MethodCall(method, newInstance, newArgs, newReturnType)
 
+    case ts.PatternMatch(value, cases) =>
+      for {
+        newValue <- fillHolesExprChildren(context)(ts)(value)
+        newCases <- cases.traverse {
+          case ts.PatternCase(pattern, body) =>
+            for {
+              newPattern <- fillHolesPattern(context)(ts)(pattern)
+              newBody <- fillHolesExprChildren(context)(ts)(body)
+            } yield context.typeSystem.PatternCase(newPattern, newBody)
+        }
+      } yield context.typeSystem.PatternMatch(newValue, newCases)
+
     case ts.Sequence(first, second) =>
       for {
         newFirst <- fillHolesExprChildren(context)(ts)(first)
@@ -1251,6 +1310,25 @@ object ExpressionConverter {
     t match {
       case ts.TypeArgument.Expr(expr) => fillHolesWrapExprChildren(context)(ts)(expr).map(context.typeSystem.TypeArgument.Expr)
       case ts.TypeArgument.Wildcard => (context.typeSystem.TypeArgument.Wildcard : context.typeSystem.TypeArgument).pure[TComp]
+    }
+
+  private def fillHolesPattern[TComp[_]]
+  (context: Context)
+  (ts: HoleTypeSystem[context.type])
+  (pattern: ts.PatternExpr)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[context.typeSystem.PatternExpr] =
+    pattern match {
+      case ts.PatternExpr.DataDeconstructor(ctor, args) =>
+        for {
+          newArgs <- args.traverse(fillHolesPattern(context)(ts)(_))
+        } yield context.typeSystem.PatternExpr.DataDeconstructor(ctor, newArgs)
+
+      case ts.PatternExpr.Binding(variable) =>
+        for {
+          newVarType <- fillHolesWrapExprChildren(context)(ts)(variable.varType)
+          newVar = context.typeSystem.LocalVariable(variable.descriptor, variable.name, variable.mutability, newVarType)
+        } yield context.typeSystem.PatternExpr.Binding(newVar)
     }
 
 

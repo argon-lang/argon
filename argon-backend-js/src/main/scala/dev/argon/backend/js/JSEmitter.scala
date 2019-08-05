@@ -696,6 +696,35 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
 
         } yield JSFunctionCall(methodExpr, argExprs)
 
+      case PatternMatch(expr, cases) =>
+
+        def convertPattern(params: EmitParams)(patternValue: JSExpression)(pattern: PatternExpr): Comp[(Vector[JSStatement] => Vector[JSStatement], EmitParams)] =
+          pattern match {
+            case PatternExpr.DataDeconstructor(ctor, args) =>  ???
+            case PatternExpr.Binding(variable) =>
+              val (bindStmts, varExpr) = StatementConverterLocalBinding.initializeLetBinding(variable, patternValue)
+              val params2 = params.copy(varMapping = params.varMapping + (variable.descriptor -> varExpr))
+              ((body: Vector[JSStatement]) => bindStmts ++ body, params2).pure[Comp]
+          }
+
+        val matchValueIdentifier = JSIdentifier("matchValue")
+
+        for {
+          jsExpr <- convertExpr(params)(expr)
+          casesBody <- cases.traverse {
+            case PatternCase(pattern, body) =>
+              for {
+                (patternStmtsFunc, params2) <- convertPattern(params)(matchValueIdentifier)(pattern)
+                (bodyStmts, _) <- StatementConverterLocalBinding.convertStmt(params2)(useReturn = true)(body)
+              } yield patternStmtsFunc(bodyStmts)
+          }
+        } yield JSFunctionCall(
+          JSArrowFunctionStmts(
+            JSFunctionParameter(JSBindingIdentifier(matchValueIdentifier), JSFunctionEmptyParameterList),
+            casesBody.toList.toVector.flatten
+          ),
+          Vector(jsExpr)
+        )
 
       case PrimitiveOp(op, left, right, _) =>
         for {
