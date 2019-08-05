@@ -20,7 +20,7 @@ trait SignatureResultConverter[TResult[TContext <: Context with Singleton, _ <: 
 
   def substitute
   (signatureContext: SignatureContext)
-  (subst: signatureContext.Substitutions)
+  (subst: signatureContext.Subst)
   (result: TResult[signatureContext.context.type, signatureContext.typeSystem.type])
   : TResult[signatureContext.context.type, signatureContext.typeSystem.type]
 }

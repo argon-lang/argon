@@ -8,6 +8,7 @@ import dev.argon.compiler.lookup._
 import dev.argon.compiler.types.{ArgonTypeSystem, TypeSystem, TypeSystemConverter}
 import cats._
 import cats.data.NonEmptyList
+import cats.evidence.{===, Is}
 
 
 trait Context {
@@ -43,6 +44,7 @@ trait Context {
 
   object ContextTypeSystem extends ArgonTypeSystem[this.type] {
     override val context: Context.this.type = Context.this
+    override val contextProof: Context.this.type === this.context.type = Is.refl
   }
 
   final lazy val typeSystem: ContextTypeSystem.type = ContextTypeSystem

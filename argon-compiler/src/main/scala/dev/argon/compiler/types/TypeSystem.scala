@@ -7,6 +7,7 @@ import cats._
 import cats.implicits._
 import cats.data._
 import Compilation.Operators._
+import cats.evidence.===
 import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
 
 import scala.collection.immutable.Vector
@@ -14,6 +15,7 @@ import scala.collection.immutable.Vector
 trait TypeSystem[TContext <: Context with Singleton] {
 
   val context: TContext
+  val contextProof: TContext === context.type
 
   type TTypeWrapper[+_]
 
@@ -43,8 +45,11 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final def largestUniverse1[U <: Universe](universes: NonEmptyList[U]): U =
     universes.reduceLeft[U](Universe.union)
 
-  final def isSubType[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[TSubTypeInfo]] =
-    isSubTypeWrapper(a, b)
+  final def isSubType[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[TSubTypeInfo]] = for {
+    a2 <- traverseTypeWrapper(a)(reduceExprToValue[TComp])
+    b2 <- traverseTypeWrapper(b)(reduceExprToValue[TComp])
+    res <- isSubTypeWrapper(a2, b2)
+  } yield res
 
 
   sealed trait Variable {
@@ -420,6 +425,45 @@ trait TypeSystem[TContext <: Context with Singleton] {
       },
     ).collectFirstSomeM(_())
   }
+
+  
+  protected final def reduceExprToValue[TComp[_] : Compilation](expr: ArExpr): TComp[ArExpr] =
+    expr match {
+      // Already reduced, has a constructor at the top level
+      case ClassConstructorCall(_, _, _) | DataConstructorCall(_, _) |
+           LoadConstantBool(_, _) |
+           LoadConstantInt(_, _) |
+           LoadConstantString(_, _) |
+           LoadLambda(_, _) |
+           LoadTuple(_) |
+           LoadUnit(_) |
+           LoadVariable(_) |
+           _: TypeIsTypeOfTypeExpr =>
+        expr.pure[TComp]
+
+        
+      // Potentially reducible after adding inline support
+      case FunctionCall(_, _, _) => expr.pure[TComp]
+      case MethodCall(_, _, _, _) => expr.pure[TComp]
+
+      case FunctionObjectCall(function, arg, _) =>
+        reduceExprToValue(function).flatMap {
+          case LoadLambda(argVariable, body) =>
+            for {
+              argValue <- reduceExprToValue(arg)
+            } yield Substitutions(this)(argVariable, argValue).substArExpr(body)
+
+          case _ => expr.pure[TComp]
+        }
+      
+      case IfElse(_, _, _) => ???
+      
+      case LetBinding(_, _, _) => ???
+      case LoadTupleElement(_, _, _) => ???
+      case PrimitiveOp(_, _, _, _) => ???
+      case Sequence(_, second) => reduceExprToValue(second)
+      case StoreVariable(_, _, _) => ???
+    }
 
 }
 

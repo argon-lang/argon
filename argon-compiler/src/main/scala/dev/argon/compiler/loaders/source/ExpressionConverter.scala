@@ -14,8 +14,9 @@ import cats.data._
 import cats.implicits._
 import cats.mtl._
 import PayloadSpecifiers._
+import cats.evidence.{===, Is}
 import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
-import shapeless.{ Id => _, _ }
+import shapeless.{Id => _, _}
 
 import Function.const
 
@@ -842,7 +843,7 @@ object ExpressionConverter {
   : context.Comp[context.typeSystem.ArExpr] = {
     import context._
 
-    val ts = new HoleTypeSystem[context.type](context)
+    val ts = HoleTypeSystem(context)
     val converter = createConverter(context)(ts)
 
     implicit val tcInstance = typeCheckHoleTypeInstance(context)(ts)
@@ -884,7 +885,7 @@ object ExpressionConverter {
   : context.Comp[context.typeSystem.TType] = {
     import context._
 
-    val ts = new HoleTypeSystem[context.type](context)
+    val ts = HoleTypeSystem(context)
     val converter = createConverter(context)(ts)
 
     implicit val tcInstance = typeCheckHoleTypeInstance(context)(ts)
@@ -912,7 +913,7 @@ object ExpressionConverter {
   (env: Env[context.type, context.scopeContext.Scope])
   (location: SourceLocation): context.Comp[context.typeSystem.TType] = {
     import context._
-    val ts = new HoleTypeSystem[context.type](context)
+    val ts = HoleTypeSystem(context)
     val converter = createConverter(context)(ts)
 
     implicit val tcInstance = typeCheckHoleTypeInstance(context)(ts)
@@ -1257,7 +1258,8 @@ object ExpressionConverter {
 
 
 
-  private final class HoleTypeSystem[TContext <: Context with Singleton](override val context: TContext) extends TypeSystem[TContext] {
+  trait HoleTypeSystem[TContext <: Context with Singleton] extends TypeSystem[TContext] {
+
     override type TTypeWrapper[+A] = HoleType[A]
 
     override def wrapType[A](a: A): HoleType[A] =
@@ -1297,6 +1299,15 @@ object ExpressionConverter {
       case HoleTypeHole(_) => ???
       case HoleTypeType(t) => t.universe
     }
+  }
+
+  object HoleTypeSystem {
+
+    def apply(ctx: Context): HoleTypeSystem[ctx.type] = new HoleTypeSystem[ctx.type] {
+      override val context: ctx.type = ctx
+      override val contextProof: ctx.type === context.type = Is.refl
+    }
+
   }
 
   private def holeTypeConverter

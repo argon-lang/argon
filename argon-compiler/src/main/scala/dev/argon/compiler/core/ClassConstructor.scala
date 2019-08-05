@@ -46,7 +46,7 @@ object ClassConstructor {
 
       override def substitute
       (signatureContext: SignatureContext)
-      (subst: signatureContext.Substitutions)
+      (subst: signatureContext.Subst)
       (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
       : ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] =
         ResultInfo()

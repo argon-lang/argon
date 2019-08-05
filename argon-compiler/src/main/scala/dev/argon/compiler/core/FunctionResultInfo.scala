@@ -36,7 +36,7 @@ object FunctionResultInfo {
 
     override def substitute
     (signatureContext: SignatureContext)
-    (subst: signatureContext.Substitutions)
+    (subst: signatureContext.Subst)
     (result: FunctionResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
     : FunctionResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] =
       FunctionResultInfo(signatureContext.typeSystem)(
