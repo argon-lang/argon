@@ -409,6 +409,13 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case (LoadVariable(varA), LoadVariable(varB)) if varA.descriptor === varB.descriptor =>
           SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector.empty).pure[Option].pure[F]
 
+        case (FunctionObjectCall(functionA, argA, _), FunctionObjectCall(functionB, argB, _)) =>
+          compareArguments(fromSimpleType(a), fromSimpleType(b))(
+            Vector(TypeArgument.Expr(fromSimpleType(functionA)), TypeArgument.Expr(fromSimpleType(argA)))
+          )(
+            Vector(TypeArgument.Expr(fromSimpleType(functionB)), TypeArgument.Expr(fromSimpleType(argB)))
+          )
+
         case (_, _) => notSubType
       },
       () => unwrapType(b.exprType) match {
