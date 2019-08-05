@@ -1393,26 +1393,22 @@ object ExpressionConverter {
           state.constraints.getOrElse(id, HoleBounds(Set.empty[TypeConstraint[ts.TType]])) match {
             case HoleResolved(hole) => hole.pure[HoleTypeCheckComp[Comp, ts.TType, ?]]
             case HoleBounds(bounds) =>
-              val superTypeConstraints = bounds.collect {
+              def superTypeConstraints = NonEmptyList.fromList(bounds.collect {
                 case SuperTypeConstraint(superType) => superType
-              }
+              }.toList)
 
-              val resolvedType = superTypeConstraints.toVector match {
-                case head +: tail =>
-                  tail.fold(head) { (a, b) => ts.fromSimpleType(ts.IntersectionType(a, b)) }
+              def subTypeConstraints = NonEmptyList.fromList(bounds.collect {
+                case SubTypeConstraint(subType) => subType
+              }.toList)
 
-                case _ =>
-                  val subTypeConstraints = bounds.collect {
-                    case SubTypeConstraint(subType) => subType
-                  }
+              def resolveConstraints(combine: (ts.TType, ts.TType) => ts.ArExpr)(constraints: NonEmptyList[ts.TType]): ts.TType =
+                constraints.reduceLeft { (a, b) => ts.fromSimpleType(combine(a, b)) }
 
-                  subTypeConstraints.toVector match {
-                    case head +: tail =>
-                      tail.fold(head) { (a, b) => ts.fromSimpleType(ts.UnionType(a, b)) }
+              val resolvedType =
+                superTypeConstraints.map(resolveConstraints(ts.IntersectionType)(_))
+                  .orElse { subTypeConstraints.map(resolveConstraints(ts.UnionType)(_)) }
+                  .getOrElse { ??? }
 
-                    case _ => ???
-                  }
-              }
 
               for {
                 _ <- StateT.set[Comp, TypeCheckState[ts.TType]](
@@ -1435,7 +1431,11 @@ object ExpressionConverter {
                 seenHoles <- StateT.get[HoleTypeCheckComp[Comp, ts.TType, ?], Set[Int]]
                 _ <-
                   if(seenHoles.contains(id))
-                    ???
+                    StateT.liftF[HoleTypeCheckComp[Comp, ts.TType, ?], Set[Int], Unit](
+                      StateT.get[Comp, TypeCheckState[ts.TType]].map { tcState =>
+                        println(tcState)
+                      }
+                    )
                   else
                     StateT.set[HoleTypeCheckComp[Comp, ts.TType, ?], Set[Int]](seenHoles + id)
 
