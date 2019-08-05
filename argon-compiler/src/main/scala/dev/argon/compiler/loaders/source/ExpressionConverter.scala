@@ -758,6 +758,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case LoadUnit(_) => true
       case LoadVariable(variable) => !Mutability.toIsMutable(variable.mutability)
       case MethodCall(_, instance, args, _) => isExprPure(instance) && args.forall(isExprPure)
+      case PatternMatch(expr, cases) => isExprPure(expr) && cases.forall { case PatternCase(_, body) => isExprPure(body) }
       case PrimitiveOp(_, left, right, _) => isExprPure(left) && isExprPure(right)
       case Sequence(first, second) => isExprPure(first) && isExprPure(second)
       case StoreVariable(_, _, _) => false

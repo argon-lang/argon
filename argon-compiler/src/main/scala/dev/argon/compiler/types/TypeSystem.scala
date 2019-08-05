@@ -136,6 +136,21 @@ trait TypeSystem[TContext <: Context with Singleton] {
     override val exprType: TType = returnType
     override lazy val universe: Universe = universeOfExpr(returnType).prevUnsafe
   }
+
+
+  sealed trait PatternExpr
+  object PatternExpr {
+    final case class DataDeconstructor(ctor: AbsRef[context.type, DataConstructor], args: Vector[PatternExpr]) extends PatternExpr
+    final case class Binding(variable: LocalVariable) extends PatternExpr
+  }
+
+  final case class PatternCase(pattern: PatternExpr, body: ArExpr)
+
+  final case class PatternMatch(expr: ArExpr, cases: NonEmptyList[PatternCase]) extends ArExpr {
+    override lazy val exprType: TType = cases.map { _.body.exprType }.reduceLeft { (a, b) => fromSimpleType(UnionType(a, b)) }
+    override lazy val universe: Universe = cases.map { _.body.universe }.reduceLeft(Universe.union[Universe])
+  }
+
   final case class PrimitiveOp(operation: PrimitiveOperation, left: ArExpr, right: ArExpr, exprType: TType) extends ArExpr {
     override val universe: Universe = universeOfExpr(exprType).prevUnsafe
   }
@@ -473,6 +488,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
         }
       
       case IfElse(_, _, _) => ???
+      case PatternMatch(_, _) => ???
       
       case LetBinding(_, _, _) => ???
       case LoadTupleElement(_, _, _) => ???
@@ -632,6 +648,25 @@ object TypeSystem {
       newElems <- p.elements.traverse(convertParameterElementTypeSystem(context)(ts)(otherTS)(converter)(_))
     } yield otherTS.Parameter(newParamVar, newElems)
 
+  def convertPatternExprTypeSystem[F[_]: Monad]
+  (context: Context)
+  (ts: TypeSystem[context.type])
+  (otherTS: TypeSystem[context.type])
+  (converter: TypeSystemConverter[context.type, ts.type, otherTS.type, F])
+  (pattern: ts.PatternExpr)
+  : F[otherTS.PatternExpr] =
+    pattern match {
+      case ts.PatternExpr.DataDeconstructor(ctor, args) =>
+        for {
+          newArgs <- args.traverse(convertPatternExprTypeSystem(context)(ts)(otherTS)(converter)(_))
+        } yield otherTS.PatternExpr.DataDeconstructor(ctor, newArgs)
+
+      case ts.PatternExpr.Binding(variable) =>
+        for {
+          newVar <- convertLocalVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
+        } yield otherTS.PatternExpr.Binding(newVar)
+    }
+
   def convertExprTypeSystem[F[_]: Monad]
   (context: Context)
   (ts: TypeSystem[context.type])
@@ -730,6 +765,18 @@ object TypeSystem {
         newArgs <- args.traverse(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
         newReturnType <- convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
       } yield otherTS.MethodCall(method, newInstance, newArgs, newReturnType)
+
+    case ts.PatternMatch(expr, cases) =>
+      for {
+        newExpr <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(expr)
+        newCases <- cases.traverse {
+          case ts.PatternCase(pattern, body) =>
+            for {
+              newPattern <- convertPatternExprTypeSystem(context)(ts)(otherTS)(converter)(pattern)
+              newBody <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(body)
+            } yield otherTS.PatternCase(newPattern, newBody)
+        }
+      } yield otherTS.PatternMatch(newExpr, newCases)
 
     case ts.PrimitiveOp(operation, left, right, exprType) =>
       for {
