@@ -705,6 +705,24 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
               val (bindStmts, varExpr) = StatementConverterLocalBinding.initializeLetBinding(variable, patternValue)
               val params2 = params.copy(varMapping = params.varMapping + (variable.descriptor -> varExpr))
               ((body: Vector[JSStatement]) => bindStmts ++ body, params2).pure[Comp]
+
+            case PatternExpr.CastBinding(variable) =>
+              val (bindStmts, varExpr) = StatementConverterLocalBinding.initializeLetBinding(variable, patternValue)
+              val params2 = params.copy(varMapping = params.varMapping + (variable.descriptor -> varExpr))
+
+
+              for {
+                typeExpr <- convertExpr(params)(variable.varType)
+              } yield ((body: Vector[JSStatement]) => Vector(
+                JSIfElseStatement(
+                  JSFunctionCall(
+                    coreLibExport(params.owner.moduleDescriptor, "isInstanceOf"),
+                    Vector(patternValue, typeExpr),
+                  ),
+                  bindStmts ++ body,
+                  Vector(),
+                )
+              ), params2)
           }
 
         val matchValueIdentifier = JSIdentifier("matchValue")

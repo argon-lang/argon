@@ -336,7 +336,18 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
                 (PatternExpr.Binding(variable), env2).upcast[(PatternExpr, Env)].pure[TComp]
 
-              case TypeTestPattern(name, patternType) => ???
+              case TypeTestPattern(name, patternType) =>
+                for {
+                  patT <- evaluateTypeExprAST(env)(patternType)
+                  variable = LocalVariable(
+                    VariableDescriptor(env.descriptor, env.scope.nextVariable),
+                    name.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
+                    Mutability.NonMutable,
+                    patT
+                  )
+                  env2 = env.copy(scope = env.scope.addVariable(variable))
+                } yield (PatternExpr.Binding(variable), env2).upcast[(PatternExpr, Env)]
+
             }
 
         }
@@ -1329,6 +1340,12 @@ object ExpressionConverter {
           newVarType <- fillHolesWrapExprChildren(context)(ts)(variable.varType)
           newVar = context.typeSystem.LocalVariable(variable.descriptor, variable.name, variable.mutability, newVarType)
         } yield context.typeSystem.PatternExpr.Binding(newVar)
+
+      case ts.PatternExpr.CastBinding(variable) =>
+        for {
+          newVarType <- fillHolesWrapExprChildren(context)(ts)(variable.varType)
+          newVar = context.typeSystem.LocalVariable(variable.descriptor, variable.name, variable.mutability, newVarType)
+        } yield context.typeSystem.PatternExpr.CastBinding(newVar)
     }
 
 

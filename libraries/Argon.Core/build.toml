@@ -34,6 +34,10 @@ before = """
 
 export const classConstructorSymbol = Symbol();
 
+const classPrototypeSymbol = Symbol();
+const typeArgumentsSymbol = Symbol();
+const traitMarkerSymbol = Symbol();
+
 function createMethods(methodDescriptions, methods) {
 	for(const description of methodDescriptions) {
 		const methodInfo = Object.create(null);
@@ -65,6 +69,7 @@ export function createTrait(creator) {
 
 	trait.create = function() {
 		const traitObj = Object.create(null);
+		traitObj[traitMarkerSymbol] = trait.marker;
 		for(const desc in this.static.methods) {
 			const methodInfo = this.static.methods[desc];
 			traitObj[methodInfo.symbol] = methodInfo.value;
@@ -127,13 +132,14 @@ export function createClass(creator) {
 	clsStatic.methods = Object.freeze(staticMethods);
 	cls.static = clsStatic;
 
-	cls.create = function() {
+	cls.create = function(...classArgs) {
 		const clsObj = Object.create(null);
+		clsObj[classPrototypeSymbol] = cls.constructor;
 		for(const desc in this.static.methods) {
 			const methodInfo = this.static.methods[desc];
 			clsObj[methodInfo.symbol] = methodInfo.value;
 		}
-		return clsObj;
+		return Object.freeze(clsObj);
 	};
 
 	return Object.freeze(cls);
@@ -218,6 +224,51 @@ function implementMethods(obj, vtable) {
 	for(const entry of vtable) {
 		obj[entry.symbol] = entry.value;
 	}
+}
+
+export function isInstanceOf(obj, t) {
+	if(typeof(t) === "object") {
+		if(t instanceof Array) {
+			if(t.length === 1) {
+				return isInstanceOf(obj, t[0]);
+			}
+			else {
+				if(!(obj instanceof Array) || obj.length !== t.length) {
+					return false;
+				}
+				for(let i = 0; i < t.length; ++i) {
+					if(!isInstanceOf(obj[i], t[i])) {
+						return false;
+					}
+				}
+				return true;
+			}
+		}
+		else if(classPrototypeSymbol in t) {
+			if(!(obj instanceof t[classPrototypeSymbol])) {
+				return false;
+			}
+
+			if(t[typeArgumentsSymbol].length !== 0) {
+				throw new Error("class arguments not implemented");
+			}
+
+			return true;
+		}
+		else if(traitMarkerSymbol in t) {
+			if(!(t[traitMarkerSymbol] in obj)) {
+				return false;
+			}
+
+			if(t[typeArgumentsSymbol].length !== 0) {
+				throw new Error("trait arguments not implemented");
+			}
+
+			return true;
+		}
+	}
+
+	throw new Error("Unexpected type");
 }
 
 

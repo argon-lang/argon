@@ -142,6 +142,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   object PatternExpr {
     final case class DataDeconstructor(ctor: AbsRef[context.type, DataConstructor], args: Vector[PatternExpr]) extends PatternExpr
     final case class Binding(variable: LocalVariable) extends PatternExpr
+    final case class CastBinding(variable: LocalVariable) extends PatternExpr
   }
 
   final case class PatternCase(pattern: PatternExpr, body: ArExpr)
@@ -665,6 +666,11 @@ object TypeSystem {
         for {
           newVar <- convertLocalVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
         } yield otherTS.PatternExpr.Binding(newVar)
+
+      case ts.PatternExpr.CastBinding(variable) =>
+        for {
+          newVar <- convertLocalVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
+        } yield otherTS.PatternExpr.CastBinding(newVar)
     }
 
   def convertExprTypeSystem[F[_]: Monad]
