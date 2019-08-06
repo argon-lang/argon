@@ -46,6 +46,8 @@ final case class JSFunctionRestParameters(name: JSBindingNonEmpty) extends JSFun
 final case class JSIfElseStatement(condition: JSExpression, ifBody: Vector[JSStatement], elseBody: Vector[JSStatement]) extends JSStatement
 final case class JSReturn(value: JSExpression) extends JSStatement
 
+final case class JSBlockStatement(body: Vector[JSStatement]) extends JSStatement
+
 sealed trait JSExpression extends JSStatement
 
 final case class JSExpressionRaw(code: String) extends JSExpression
@@ -190,6 +192,14 @@ object JSAst {
             _ <- writeExprParen(value)
             _ <- write(";")
           } yield ()
+
+        case JSBlockStatement(body) =>
+          for {
+            _ <- write("{")
+            _ <- body.traverse_(writeStatement)
+            _ <- write("}")
+          } yield ()
+
 
         case stmt: JSExpression =>
           for {

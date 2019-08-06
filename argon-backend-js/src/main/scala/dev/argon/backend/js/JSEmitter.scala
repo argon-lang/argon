@@ -734,12 +734,12 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
               for {
                 (patternStmtsFunc, params2) <- convertPattern(params)(matchValueIdentifier)(pattern)
                 (bodyStmts, _) <- StatementConverterLocalBinding.convertStmt(params2)(useReturn = true)(body)
-              } yield patternStmtsFunc(bodyStmts)
+              } yield JSBlockStatement(patternStmtsFunc(bodyStmts))
           }
         } yield JSFunctionCall(
           JSArrowFunctionStmts(
             JSFunctionParameter(JSBindingIdentifier(matchValueIdentifier), JSFunctionEmptyParameterList),
-            casesBody.toList.toVector.flatten
+            casesBody.toList.toVector
           ),
           Vector(jsExpr)
         )
