@@ -37,7 +37,7 @@ export const classConstructorSymbol = Symbol();
 const classPrototypeSymbol = Symbol();
 const dataCtorPrototypeSymbol = Symbol();
 const typeArgumentsSymbol = Symbol();
-const traitMarkerSymbol = Symbol();
+const markerSymbol = Symbol();
 
 function createMethods(methodDescriptions, methods) {
 	for(const description of methodDescriptions) {
@@ -70,7 +70,7 @@ export function createTrait(creator) {
 
 	trait.create = function(...traitArgs) {
 		const traitObj = Object.create(null);
-		traitObj[traitMarkerSymbol] = trait.marker;
+		traitObj[markerSymbol] = trait.marker;
 		traitObj[typeArgumentsSymbol] = Object.freeze(traitArgs);
 		for(const desc in this.static.methods) {
 			const methodInfo = this.static.methods[desc];
@@ -108,6 +108,7 @@ export function createClass(creator) {
 		for(const ctor of creator.constructors) {
 			const ctorInfo = Object.create(null);
 			ctorInfo.symbol = Symbol();
+			ctorInfo.function = ctor.value;
 			ctors[ctor.descriptor] = Object.freeze(ctorInfo);
 			ctorMap[ctorInfo.symbol] = ctor.value;
 		}
@@ -138,6 +139,7 @@ export function createClass(creator) {
 	cls.create = function(...classArgs) {
 		const clsObj = Object.create(null);
 		clsObj[classPrototypeSymbol] = cls.constructor;
+		clsObj[markerSymbol] = cls.marker;
 		clsObj[typeArgumentsSymbol] = Object.freeze(classArgs);
 		for(const desc in this.static.methods) {
 			const methodInfo = this.static.methods[desc];
@@ -160,7 +162,7 @@ export function createDataConstructor(creator) {
 		const ctor = creator.constructor;
 
 		function func(...args) {
-			this[dataCtor.marker] = dataCtor.create(...args);
+			this[dataCtor.marker] = function() { return dataCtor.create(...args) };
 			ctor.call(this, ...args);
 		}
 
@@ -192,6 +194,7 @@ export function createDataConstructor(creator) {
 		const ctorObj = Object.create(null);
 		ctorObj[dataCtorPrototypeSymbol] = dataCtor.constructor;
 		ctorObj[typeArgumentsSymbol] = Object.freeze(args);
+		return Object.freeze(ctorObj);
 	};
 
 	return Object.freeze(dataCtor);
@@ -210,14 +213,15 @@ function lazyProperty(obj, name, valueFunc) {
 }
 
 function createClassConstructor(cls, baseClass, ctors, init) {
-	const func = function(ctorId, ...args) {
+	const func = function(classType, ctorId, ...args) {
+		this[cls.marker] = function() { return classType };
 		ctors[ctorId].call(this, ...args);
 	};
 
 	if(baseClass) {
 		func.prototype = Object.create(baseClass.class.constructor);
 		func.prototype[baseClass.class.marker] = function() {
-			return baseClass.createClassObj(this[cls.marker]());
+			return baseClass.createClassObj(this[cls.marker]()[typeArgumentsSymbol]);
 		};
 	}
 	else func.prototype = Object.create(null);
@@ -233,7 +237,7 @@ function implementTrait(obj, childType, trait) {
 	}
 
 	obj[trait.trait.marker] = function() {
-		return trait.createTraitObj(this[childType.marker]());
+		return trait.createTraitObj(this[childType.marker]()[typeArgumentsSymbol]);
 	};
 
 	for(const baseTrait of trait.trait.baseTraits) {
@@ -244,6 +248,48 @@ function implementTrait(obj, childType, trait) {
 function implementMethods(obj, vtable) {
 	for(const entry of vtable) {
 		obj[entry.symbol] = entry.value;
+	}
+}
+
+function isSameArgValue(a, b) {
+	if(a instanceof Array && a.length === 1) {
+		return isSameArgValue(a[0], b);
+	}
+
+	if(typeof(b) === "object") {
+		if(b instanceof Array) {
+			if(b.length === 1) {
+				return isSameArgValue(a, b[0]);
+			}
+
+			if(!(b instanceof Array)) {
+				return false;
+			}
+
+			for(let i = 0; i < t.length; ++i) {
+				if(!isSameArgValue(obj[i], t[i])) {
+					return false;
+				}
+			}
+			return true;
+		}
+		else if(markerSymbol in b) {
+			if(typeof(a) !== "object" || !(markerSymbol in a) || a[markerSymbol] !== b[markerSymbol]) {
+				return false;
+			}
+
+			if(b[typeArgumentsSymbol].length !== a[typeArgumentsSymbol].length) {
+				return false;
+			}
+
+			for(let i = 0; i < b[typeArgumentsSymbol].length; ++i) {
+				if(!isSameArgValue(a[typeArgumentsSymbol][i], b[typeArgumentsSymbol][i])) {
+					return false;
+				}
+			}
+
+			return true;
+		}
 	}
 }
 
@@ -265,24 +311,21 @@ export function isInstanceOf(obj, t) {
 				return true;
 			}
 		}
-		else if(classPrototypeSymbol in t) {
-			if(!(obj instanceof t[classPrototypeSymbol])) {
+		else if(markerSymbol in t) {
+			if(!(t[markerSymbol] in obj)) {
 				return false;
 			}
 
-			if(t[typeArgumentsSymbol].length !== 0) {
-				throw new Error("class arguments not implemented");
-			}
+			const instT = obj[t[markerSymbol]]();
 
-			return true;
-		}
-		else if(traitMarkerSymbol in t) {
-			if(!(t[traitMarkerSymbol] in obj)) {
+			if(instT[typeArgumentsSymbol].length !== t[typeArgumentsSymbol].length) {
 				return false;
 			}
 
-			if(t[typeArgumentsSymbol].length !== 0) {
-				throw new Error("trait arguments not implemented");
+			for(let i = 0; i < instT[typeArgumentsSymbol].length; ++i) {
+				if(!isSameArgValue(instT[typeArgumentsSymbol][i], t[typeArgumentsSymbol][i])) {
+					return false;
+				}
 			}
 
 			return true;

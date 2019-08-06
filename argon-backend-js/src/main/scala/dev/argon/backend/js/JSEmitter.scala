@@ -157,9 +157,9 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
             coreLibExport(arTrait.descriptor.moduleDescriptor, "createTrait"),
             Vector(
               JSObjectLiteral(Vector(
-                JSObjectProperty("symbol", JSFunctionCall(JSIdentifier("Symbol"), Vector())),
                 JSObjectProperty("methods", JSArrayLiteral(methodObjects)),
                 JSObjectProperty("staticMethods", JSArrayLiteral(staticMethodObjects)),
+                JSObjectProperty("baseTraits", JSArrayLiteral(baseTraitExprs)),
               ))
             )
           )
@@ -204,7 +204,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
                 .zipWithIndex
                 .map {
                   case (param, i) =>
-                    param.paramVar.descriptor -> JSPropertyAccessBracket(JSIdentifier("classObj"), JSBigInt(i))
+                    param.paramVar.descriptor -> JSPropertyAccessBracket(JSIdentifier("args"), JSBigInt(i))
                 }
                 .toMap
                 : VarMap
@@ -224,7 +224,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
                       "createClassObj",
                       JSFunctionExpression(
                         None,
-                        JSFunctionParameter(JSBindingIdentifier(JSIdentifier("classObj")), JSFunctionEmptyParameterList),
+                        JSFunctionParameter(JSBindingIdentifier(JSIdentifier("args")), JSFunctionEmptyParameterList),
                         baseClassObjExpr
                       )
                     ),
@@ -336,7 +336,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
         .zipWithIndex
         .map {
           case (param, i) =>
-            param.paramVar.descriptor -> JSPropertyAccessBracket(JSIdentifier("traitObj"), JSBigInt(i))
+            param.paramVar.descriptor -> JSPropertyAccessBracket(JSIdentifier("args"), JSBigInt(i))
         }
         .toMap
         : VarMap
@@ -352,7 +352,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
         "createTraitObj",
         JSFunctionExpression(
           None,
-          JSFunctionParameter(JSBindingIdentifier(JSIdentifier("traitObj")), JSFunctionEmptyParameterList),
+          JSFunctionParameter(JSBindingIdentifier(JSIdentifier("args")), JSFunctionEmptyParameterList),
           baseTraitObjExpr
         )
       ),
@@ -422,7 +422,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
                 baseCtorDescriptorId = DescriptorId.forClassConstructor(ErasedSignature.fromSignatureParameters(context)(baseCtorSig))
                 ownerObj = getClassJSObject(getParamOwnerModule(ctor.descriptor), ownerClass.descriptor, ownerClassErasedSig)
 
-                baseCtorSymbol = JSPropertyAccessDot(
+                baseCtorFunc = JSPropertyAccessDot(
                   JSPropertyAccessBracket(
                     JSPropertyAccessDot(
                       ownerObj,
@@ -430,7 +430,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
                     ),
                     JSString(baseCtorDescriptorId)
                   ),
-                  JSIdentifier("symbol")
+                  JSIdentifier("function")
                 )
 
                 emitParams = EmitParams(
@@ -441,10 +441,10 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
                 argExprs <- baseCallExpr.args.traverse(convertExpr(emitParams)(_))
               } yield JSFunctionCall(
                 JSPropertyAccessDot(
-                  JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")),
+                  baseCtorFunc,
                   JSIdentifier("call")
                 ),
-                JSThis +: baseCtorSymbol +: argExprs
+                JSThis +: argExprs
               )
             }
 
@@ -651,7 +651,9 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
 
           argExprs <- args.traverse(convertExpr(params)(_))
 
-        } yield JSNewCall(JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")), baseCtorSymbol +: argExprs)
+          classTypeObj <- convertExpr(params)(classType)
+
+        } yield JSNewCall(JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")), classTypeObj +: baseCtorSymbol +: argExprs)
 
       case DataConstructorCall(dataCtorInstanceType, args) =>
         for {
