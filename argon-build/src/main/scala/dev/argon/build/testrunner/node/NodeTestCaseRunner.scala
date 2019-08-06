@@ -60,7 +60,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
     result <- serverFuncs.executeJS(moduleName, modules)
     output <- result match {
       case ExecutionResult.Success(output) => IO.succeed(output)
-      case ExecutionResult.Failure(error) => IO.fail(new RuntimeException(error))
+      case ExecutionResult.Failure(error) => IO.fail(new RuntimeException(error + "\nCompiled output:\n" + compiledFile + "\n"))
     }
   } yield output
 
