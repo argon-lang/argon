@@ -34,11 +34,6 @@ before = """
 
 export const classConstructorSymbol = Symbol();
 
-const classPrototypeSymbol = Symbol();
-const dataCtorPrototypeSymbol = Symbol();
-const typeArgumentsSymbol = Symbol();
-const markerSymbol = Symbol();
-
 function createMethods(methodDescriptions, methods) {
 	for(const description of methodDescriptions) {
 		const methodInfo = Object.create(null);
@@ -70,8 +65,8 @@ export function createTrait(creator) {
 
 	trait.create = function(...traitArgs) {
 		const traitObj = Object.create(null);
-		traitObj[markerSymbol] = trait.marker;
-		traitObj[typeArgumentsSymbol] = Object.freeze(traitArgs);
+		traitObj.marker = trait.marker;
+		traitObj.typeArguments = Object.freeze(traitArgs);
 		for(const desc in this.static.methods) {
 			const methodInfo = this.static.methods[desc];
 			traitObj[methodInfo.symbol] = methodInfo.value;
@@ -138,9 +133,9 @@ export function createClass(creator) {
 
 	cls.create = function(...classArgs) {
 		const clsObj = Object.create(null);
-		clsObj[classPrototypeSymbol] = cls.constructor;
-		clsObj[markerSymbol] = cls.marker;
-		clsObj[typeArgumentsSymbol] = Object.freeze(classArgs);
+		clsObj.classPrototype = cls.constructor;
+		clsObj.marker = cls.marker;
+		clsObj.typeArguments = Object.freeze(classArgs);
 		for(const desc in this.static.methods) {
 			const methodInfo = this.static.methods[desc];
 			clsObj[methodInfo.symbol] = methodInfo.value;
@@ -192,8 +187,8 @@ export function createDataConstructor(creator) {
 
 	dataCtor.create = function(...args) {
 		const ctorObj = Object.create(null);
-		ctorObj[dataCtorPrototypeSymbol] = dataCtor.constructor;
-		ctorObj[typeArgumentsSymbol] = Object.freeze(args);
+		ctorObj.dataCtorPrototype = dataCtor.constructor;
+		ctorObj.typeArguments = Object.freeze(args);
 		return Object.freeze(ctorObj);
 	};
 
@@ -221,7 +216,7 @@ function createClassConstructor(cls, baseClass, ctors, init) {
 	if(baseClass) {
 		func.prototype = Object.create(baseClass.class.constructor);
 		func.prototype[baseClass.class.marker] = function() {
-			return baseClass.createClassObj(this[cls.marker]()[typeArgumentsSymbol]);
+			return baseClass.createClassObj(this[cls.marker]().typeArguments);
 		};
 	}
 	else func.prototype = Object.create(null);
@@ -237,7 +232,7 @@ function implementTrait(obj, childType, trait) {
 	}
 
 	obj[trait.trait.marker] = function() {
-		return trait.createTraitObj(this[childType.marker]()[typeArgumentsSymbol]);
+		return trait.createTraitObj(this[childType.marker]().typeArguments);
 	};
 
 	for(const baseTrait of trait.trait.baseTraits) {
@@ -273,17 +268,17 @@ function isSameArgValue(a, b) {
 			}
 			return true;
 		}
-		else if(markerSymbol in b) {
-			if(typeof(a) !== "object" || !(markerSymbol in a) || a[markerSymbol] !== b[markerSymbol]) {
+		else if("marker" in b) {
+			if(typeof(a) !== "object" || !("marker" in a) || a.marker !== b.marker) {
 				return false;
 			}
 
-			if(b[typeArgumentsSymbol].length !== a[typeArgumentsSymbol].length) {
+			if(b.typeArguments.length !== a.typeArguments.length) {
 				return false;
 			}
 
-			for(let i = 0; i < b[typeArgumentsSymbol].length; ++i) {
-				if(!isSameArgValue(a[typeArgumentsSymbol][i], b[typeArgumentsSymbol][i])) {
+			for(let i = 0; i < b.typeArguments.length; ++i) {
+				if(!isSameArgValue(a.typeArguments[i], b.typeArguments[i])) {
 					return false;
 				}
 			}
@@ -311,19 +306,19 @@ export function isInstanceOf(obj, t) {
 				return true;
 			}
 		}
-		else if(markerSymbol in t) {
-			if(!(t[markerSymbol] in obj)) {
+		else if("marker" in t) {
+			if(!(t.marker in obj)) {
 				return false;
 			}
 
-			const instT = obj[t[markerSymbol]]();
+			const instT = obj[t.marker]();
 
-			if(instT[typeArgumentsSymbol].length !== t[typeArgumentsSymbol].length) {
+			if(instT.typeArguments.length !== t.typeArguments.length) {
 				return false;
 			}
 
-			for(let i = 0; i < instT[typeArgumentsSymbol].length; ++i) {
-				if(!isSameArgValue(instT[typeArgumentsSymbol][i], t[typeArgumentsSymbol][i])) {
+			for(let i = 0; i < instT.typeArguments.length; ++i) {
+				if(!isSameArgValue(instT.typeArguments[i], t.typeArguments[i])) {
 					return false;
 				}
 			}
