@@ -216,7 +216,7 @@ function createClassConstructor(cls, baseClass, ctors, init) {
 	if(baseClass) {
 		func.prototype = Object.create(baseClass.class.constructor);
 		func.prototype[baseClass.class.marker] = function() {
-			return baseClass.createClassObj(this[cls.marker]().typeArguments);
+			return baseClass.createClassObj(this[cls.marker]());
 		};
 	}
 	else func.prototype = Object.create(null);
@@ -232,7 +232,7 @@ function implementTrait(obj, childType, trait) {
 	}
 
 	obj[trait.trait.marker] = function() {
-		return trait.createTraitObj(this[childType.marker]().typeArguments);
+		return trait.createTraitObj(this[childType.marker]());
 	};
 
 	for(const baseTrait of trait.trait.baseTraits) {

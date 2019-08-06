@@ -204,7 +204,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
                 .zipWithIndex
                 .map {
                   case (param, i) =>
-                    param.paramVar.descriptor -> JSPropertyAccessBracket(JSIdentifier("args"), JSBigInt(i))
+                    param.paramVar.descriptor -> JSPropertyAccessBracket(JSPropertyAccessDot(JSIdentifier("classObj"), JSIdentifier("typeArguments")), JSBigInt(i))
                 }
                 .toMap
                 : VarMap
@@ -224,7 +224,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
                       "createClassObj",
                       JSFunctionExpression(
                         None,
-                        JSFunctionParameter(JSBindingIdentifier(JSIdentifier("args")), JSFunctionEmptyParameterList),
+                        JSFunctionParameter(JSBindingIdentifier(JSIdentifier("classObj")), JSFunctionEmptyParameterList),
                         baseClassObjExpr
                       )
                     ),
@@ -336,7 +336,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
         .zipWithIndex
         .map {
           case (param, i) =>
-            param.paramVar.descriptor -> JSPropertyAccessBracket(JSIdentifier("args"), JSBigInt(i))
+            param.paramVar.descriptor -> JSPropertyAccessBracket(JSPropertyAccessDot(JSIdentifier("traitObj"), JSIdentifier("typeArguments")), JSBigInt(i))
         }
         .toMap
         : VarMap
@@ -352,7 +352,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
         "createTraitObj",
         JSFunctionExpression(
           None,
-          JSFunctionParameter(JSBindingIdentifier(JSIdentifier("args")), JSFunctionEmptyParameterList),
+          JSFunctionParameter(JSBindingIdentifier(JSIdentifier("traitObj")), JSFunctionEmptyParameterList),
           baseTraitObjExpr
         )
       ),
