@@ -7,9 +7,9 @@
             
         import Ar._
         
-        trait MyTrait(str: String) <: Any
+        trait MyTrait(str: String) <: Object
         static
-            public proc _.printMessage(): () =
+            public proc _.printMessage(): Unit =
                 puts str
 
         end

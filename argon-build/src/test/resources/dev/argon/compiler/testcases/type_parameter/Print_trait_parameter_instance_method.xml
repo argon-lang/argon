@@ -1,24 +1,21 @@
 <ArgonTest>
 
-    <Name>Print trait parameter instance method base trait</Name>
+    <Name>Print trait parameter instance method</Name>
 
 
     <InputSource name="test.ar"><![CDATA[
             
         import Ar._
         
-        trait MyTrait1(str: String) <: Any
+        trait MyTrait(str: String) <: Object
 
 
-            public proc _.printMessage(): () =
+            public proc _.printMessage(): Unit =
                 puts str
 
         end
 
-        trait MyTrait2(str: String) <: MyTrait1(str)
-        end
-
-        constructor MyCtor(str: String): MyTrait2(str)
+        constructor MyCtor(str: String): MyTrait(str)
         end
         
         proc main(): () do

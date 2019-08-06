@@ -7,10 +7,10 @@
             
         import Ar._
         
-        trait MyTrait1(str: String) <: Any
+        trait MyTrait1(str: String) <: Object
 
 
-            public proc _.printMessage(): () =
+            public proc _.printMessage(): Unit =
                 puts str
 
         end
