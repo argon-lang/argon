@@ -57,7 +57,11 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
     }
 
     serverFuncs <- launcher.serverFunctions
-    output <- serverFuncs.executeJS(moduleName, modules)
+    result <- serverFuncs.executeJS(moduleName, modules)
+    output <- result match {
+      case ExecutionResult.Success(output) => IO.succeed(output)
+      case ExecutionResult.Failure(error) => IO.fail(new RuntimeException(error))
+    }
   } yield output
 
   private def stringConcatTrans: StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], String, Unit, Nothing, String] =

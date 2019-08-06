@@ -118,6 +118,7 @@ lazy val argon_build = project.in(file("argon-build"))
     compilerOptions,
 
     name := "argon-build",
+    wartremoverExcluded += sourceDirectory.value / "main" / "scala" / "dev" / "argon" / "build" / "testrunner" / "node" / "api.gen.scala",
   )
 
 lazy val grammar = project.in(file("argon-grammar"))
