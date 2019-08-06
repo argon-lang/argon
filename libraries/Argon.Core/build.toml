@@ -67,9 +67,10 @@ export function createTrait(creator) {
 	traitStatic.methods = Object.freeze(staticMethods);
 	trait.static = traitStatic;
 
-	trait.create = function() {
+	trait.create = function(...traitArgs) {
 		const traitObj = Object.create(null);
 		traitObj[traitMarkerSymbol] = trait.marker;
+		traitObj[typeArgumentsSymbol] = Object.freeze(traitArgs);
 		for(const desc in this.static.methods) {
 			const methodInfo = this.static.methods[desc];
 			traitObj[methodInfo.symbol] = methodInfo.value;
@@ -135,6 +136,7 @@ export function createClass(creator) {
 	cls.create = function(...classArgs) {
 		const clsObj = Object.create(null);
 		clsObj[classPrototypeSymbol] = cls.constructor;
+		clsObj[typeArgumentsSymbol] = Object.freeze(classArgs);
 		for(const desc in this.static.methods) {
 			const methodInfo = this.static.methods[desc];
 			clsObj[methodInfo.symbol] = methodInfo.value;
