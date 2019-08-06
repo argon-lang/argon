@@ -149,6 +149,8 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           methodObjects <- methods.traverse { method => createMethodObject(Map.empty)(method.method) }
           staticMethodObjects <- staticMethods.traverse { method => createMethodObject(Map.empty)(method.method) }
 
+          baseTraitExprs <- sig.unsubstitutedResult.baseTypes.baseTraits.traverse(createBaseTraitObject(arTrait.descriptor)(sig)(_))
+
         } yield JSAssignment(
           JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))),
           JSFunctionCall(
@@ -194,24 +196,45 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           vtableObject <- createVTableObject(vtableBuilder.vtableContext)(vtable, arClass.descriptor)
 
           baseClassExpr <- sig.unsubstitutedResult.baseTypes.baseClass.traverse { baseClass =>
-            baseClass.arClass.value.signature.map { sig =>
-              val erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
+            for {
+              baseSig <- baseClass.arClass.value.signature
+              erasedBaseSig = ErasedSignature.fromSignatureParameters(context)(baseSig)
 
-              JSObjectGetProperty(
-                "baseClass",
-                Vector(
-                  JSReturn(getClassJSObject(getParamOwnerModule(arClass.descriptor), baseClass.arClass.value.descriptor, erasedSig))
+              varMap = sig.unsubstitutedParameters
+                .zipWithIndex
+                .map {
+                  case (param, i) =>
+                    param.paramVar.descriptor -> JSPropertyAccessBracket(JSIdentifier("classObj"), JSBigInt(i))
+                }
+                .toMap
+                : VarMap
+
+              baseClassObjExpr <- convertStmt(EmitParams(arClass.descriptor, varMap))(useReturn = true)(baseClass)
+
+            } yield JSObjectGetProperty(
+              "baseClass",
+              Vector(
+                JSReturn(
+                  JSObjectLiteral(Vector(
+                    JSObjectProperty(
+                      "class",
+                      getClassJSObject(getParamOwnerModule(arClass.descriptor), baseClass.arClass.value.descriptor, erasedBaseSig)
+                    ),
+                    JSObjectProperty(
+                      "createClassObj",
+                      JSFunctionExpression(
+                        None,
+                        JSFunctionParameter(JSBindingIdentifier(JSIdentifier("classObj")), JSFunctionEmptyParameterList),
+                        baseClassObjExpr
+                      )
+                    ),
+                  ))
                 )
               )
-            }
+            )
           }
 
-          baseTraitExprs <- sig.unsubstitutedResult.baseTypes.baseTraits.traverse { baseTrait =>
-            baseTrait.arTrait.value.signature.map { sig =>
-              val erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
-              getTraitJSObject(getParamOwnerModule(arClass.descriptor), baseTrait.arTrait.value.descriptor, erasedSig)
-            }
-          }
+          baseTraitExprs <- sig.unsubstitutedResult.baseTypes.baseTraits.traverse(createBaseTraitObject(arClass.descriptor)(sig)(_))
 
           classSpec = JSObjectLiteral(Vector(
 
@@ -266,12 +289,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           vtable <- vtableBuilder.fromDataConstructor(ctor)
           vtableObject <- createVTableObject(vtableBuilder.vtableContext)(vtable, ctor.descriptor)
 
-          instanceTypeSig <- sig.unsubstitutedResult.instanceType.arTrait.value.signature
-          instanceTypeExpr = getTraitJSObject(
-            getParamOwnerModule(ctor.descriptor),
-            sig.unsubstitutedResult.instanceType.arTrait.value.descriptor,
-            ErasedSignature.fromSignatureParameters(context)(instanceTypeSig)
-          )
+          instanceTypeExpr <- createBaseTraitObject(ctor.descriptor)(sig)(sig.unsubstitutedResult.instanceType)
 
           propObjects = methodVarMap.keys
             .collect {
@@ -304,6 +322,42 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
 
 
     }
+
+  private def createBaseTraitObject[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
+  (ownerDescriptor: ParameterOwnerDescriptor)
+  (ownerSig: Signature[TResult])
+  (baseTrait: typeSystem.TraitType)
+  : Comp[JSExpression] =
+    for {
+      baseSig <- baseTrait.arTrait.value.signature
+      erasedBaseSig = ErasedSignature.fromSignatureParameters(context)(baseSig)
+
+      varMap = ownerSig.unsubstitutedParameters
+        .zipWithIndex
+        .map {
+          case (param, i) =>
+            param.paramVar.descriptor -> JSPropertyAccessBracket(JSIdentifier("traitObj"), JSBigInt(i))
+        }
+        .toMap
+        : VarMap
+
+      baseTraitObjExpr <- convertStmt(EmitParams(ownerDescriptor, varMap))(useReturn = true)(baseTrait)
+
+    } yield JSObjectLiteral(Vector(
+      JSObjectProperty(
+        "trait",
+        getTraitJSObject(getParamOwnerModule(ownerDescriptor), baseTrait.arTrait.value.descriptor, erasedBaseSig)
+      ),
+      JSObjectProperty(
+        "createTraitObj",
+        JSFunctionExpression(
+          None,
+          JSFunctionParameter(JSBindingIdentifier(JSIdentifier("traitObj")), JSFunctionEmptyParameterList),
+          baseTraitObjExpr
+        )
+      ),
+    ))
+
 
   private def createMethodObject(ownerVarMapping: VarMap)(method: ArMethod[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): Comp[JSExpression] =
     for {
