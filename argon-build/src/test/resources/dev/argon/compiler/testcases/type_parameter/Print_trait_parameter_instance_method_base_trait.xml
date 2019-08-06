@@ -21,7 +21,7 @@
         constructor MyCtor(str: String): MyTrait2(str)
         end
         
-        proc main(): () do
+        proc main(): Unit do
             MyCtor('Hello World').printMessage()
         end
         

@@ -14,7 +14,7 @@
 
         end
         
-        proc main(): () do
+        proc main(): Unit do
             MyTrait('Hello World').printMessage()
         end
         
