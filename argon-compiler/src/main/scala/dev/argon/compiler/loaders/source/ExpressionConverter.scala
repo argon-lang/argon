@@ -346,7 +346,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                     patT
                   )
                   env2 = env.copy(scope = env.scope.addVariable(variable))
-                } yield (PatternExpr.Binding(variable), env2).upcast[(PatternExpr, Env)]
+                } yield (PatternExpr.CastBinding(variable), env2).upcast[(PatternExpr, Env)]
 
             }
 
