@@ -359,36 +359,39 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
 
             baseCall <- body.baseConstructorCall.traverse { baseCallExpr =>
               val ownerClass = baseCallExpr.classCtor.value.ownerClass
-              baseCallExpr.classCtor.value.ownerClass.signature.flatMap { ownerClassSig =>
-                val ownerClassErasedSig = ErasedSignature.fromSignatureParameters(context)(ownerClassSig)
-                val ownerObj = getClassJSObject(getParamOwnerModule(ctor.descriptor), ownerClass.descriptor, ownerClassErasedSig)
 
-                val baseCtorSymbol = JSPropertyAccessDot(
+              for {
+                ownerClassSig <- ownerClass.signature
+                baseCtorSig <- baseCallExpr.classCtor.value.signatureUnsubstituted
+
+                ownerClassErasedSig = ErasedSignature.fromSignatureParameters(context)(ownerClassSig)
+                baseCtorDescriptorId = DescriptorId.forClassConstructor(ErasedSignature.fromSignatureParameters(context)(baseCtorSig))
+                ownerObj = getClassJSObject(getParamOwnerModule(ctor.descriptor), ownerClass.descriptor, ownerClassErasedSig)
+
+                baseCtorSymbol = JSPropertyAccessDot(
                   JSPropertyAccessBracket(
                     JSPropertyAccessDot(
                       ownerObj,
                       constructorsPropName
                     ),
-                    JSString(descriptorId)
+                    JSString(baseCtorDescriptorId)
                   ),
                   JSIdentifier("symbol")
                 )
 
-                val emitParams = EmitParams(
+                emitParams = EmitParams(
                   owner = ctor.descriptor,
                   varMapping = initVarMapping,
                 )
 
-                baseCallExpr.args.traverse(convertExpr(emitParams)(_)).map { argExprs =>
-                  JSFunctionCall(
-                    JSPropertyAccessDot(
-                      JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")),
-                      JSIdentifier("call")
-                    ),
-                    JSThis +: baseCtorSymbol +: argExprs
-                  )
-                }
-              }
+                argExprs <- baseCallExpr.args.traverse(convertExpr(emitParams)(_))
+              } yield JSFunctionCall(
+                JSPropertyAccessDot(
+                  JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")),
+                  JSIdentifier("call")
+                ),
+                JSThis +: baseCtorSymbol +: argExprs
+              )
             }
 
             endExpr <- convertStmt(EmitParams(
