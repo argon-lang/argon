@@ -144,15 +144,56 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
       case GlobalBinding.GlobalTrait(_, _, arTrait) =>
         for {
           sig <- arTrait.signature
+          erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
+
+          traitObj = getTraitJSObject(getParamOwnerModule(arTrait.descriptor), arTrait.descriptor, erasedSig)
+          instanceParamVarMap = sig.unsubstitutedParameters
+            .zipWithIndex
+            .map {
+              case (param, i) =>
+                param.paramVar.descriptor -> JSPropertyAccessBracket(
+                  JSPropertyAccessDot(
+                    JSFunctionCall(
+                      JSPropertyAccessBracket(
+                        JSThis,
+                        JSPropertyAccessDot(
+                          traitObj,
+                          JSIdentifier("marker")
+                        )
+                      ),
+                      Vector.empty
+                    ),
+                    JSIdentifier("typeArguments")
+                  ),
+                  JSBigInt(i)
+                )
+            }
+            .toMap
+            : VarMap
+          staticParamVarMap = sig.unsubstitutedParameters
+            .zipWithIndex
+            .map {
+              case (param, i) =>
+                param.paramVar.descriptor -> JSPropertyAccessBracket(
+                  JSPropertyAccessDot(
+                    JSThis,
+                    JSIdentifier("typeArguments")
+                  ),
+                  JSBigInt(i)
+                )
+            }
+            .toMap
+            : VarMap
+
           methods <- arTrait.methods
           staticMethods <- arTrait.staticMethods
-          methodObjects <- methods.traverse { method => createMethodObject(Map.empty)(method.method) }
-          staticMethodObjects <- staticMethods.traverse { method => createMethodObject(Map.empty)(method.method) }
+          methodObjects <- methods.traverse { method => createMethodObject(instanceParamVarMap)(method.method) }
+          staticMethodObjects <- staticMethods.traverse { method => createMethodObject(staticParamVarMap)(method.method) }
 
           baseTraitExprs <- sig.unsubstitutedResult.baseTypes.baseTraits.traverse(createBaseTraitObject(arTrait.descriptor)(sig)(_))
 
         } yield JSAssignment(
-          JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))),
+          JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor, erasedSig))),
           JSFunctionCall(
             coreLibExport(arTrait.descriptor.moduleDescriptor, "createTrait"),
             Vector(
@@ -168,10 +209,36 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
       case GlobalBinding.GlobalClass(_, _, arClass) =>
         for {
           sig <- arClass.signature
+          erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
           fields <- arClass.fields
           methods <- arClass.methods
           staticMethods <- arClass.staticMethods
           classConstructors <- arClass.classConstructors
+
+          classObj = getClassJSObject(getParamOwnerModule(arClass.descriptor), arClass.descriptor, erasedSig)
+          paramVarMap = sig.unsubstitutedParameters
+            .zipWithIndex
+            .map {
+              case (param, i) =>
+                param.paramVar.descriptor -> JSPropertyAccessBracket(
+                  JSPropertyAccessDot(
+                    JSFunctionCall(
+                      JSPropertyAccessBracket(
+                        JSThis,
+                        JSPropertyAccessDot(
+                          classObj,
+                          JSIdentifier("marker")
+                        )
+                      ),
+                      Vector.empty
+                    ),
+                    JSIdentifier("typeArguments")
+                  ),
+                  JSBigInt(i)
+                )
+            }
+            .toMap
+            : VarMap
 
           fieldObjects = fields.map { field =>
             JSObjectLiteral(Vector(
@@ -186,10 +253,10 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
                 }
               }
               .flatMap { fieldVarMap =>
-                createMethodObject(fieldVarMap.toMap)(method.method)
+                createMethodObject(paramVarMap ++ fieldVarMap.toMap)(method.method)
               }
           }
-          staticMethodObjects <- staticMethods.traverse { method => createMethodObject(Map.empty)(method.method) }
+          staticMethodObjects <- staticMethods.traverse { method => createMethodObject(paramVarMap)(method.method) }
           ctorObjects <- classConstructors.traverse { ctor => createClassCtorObject(ctor.ctor) }
 
           vtable <- vtableBuilder.fromClass(arClass)
@@ -260,7 +327,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           ).flatten)
 
         } yield JSAssignment(
-          JSPropertyAccessBracket(classesVarName, JSString(DescriptorId.forClass(arClass.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)))),
+          JSPropertyAccessBracket(classesVarName, JSString(DescriptorId.forClass(arClass.descriptor, erasedSig))),
           JSFunctionCall(
             coreLibExport(arClass.descriptor.moduleDescriptor, "createClass"),
             Vector(classSpec)
