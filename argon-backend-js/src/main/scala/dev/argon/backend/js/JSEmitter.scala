@@ -216,7 +216,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
           classConstructors <- arClass.classConstructors
 
           classObj = getClassJSObject(getParamOwnerModule(arClass.descriptor), arClass.descriptor, erasedSig)
-          paramVarMap = sig.unsubstitutedParameters
+          instanceParamVarMap = sig.unsubstitutedParameters
             .zipWithIndex
             .map {
               case (param, i) =>
@@ -240,6 +240,21 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
             .toMap
             : VarMap
 
+          staticParamVarMap = sig.unsubstitutedParameters
+            .zipWithIndex
+            .map {
+              case (param, i) =>
+                param.paramVar.descriptor -> JSPropertyAccessBracket(
+                  JSPropertyAccessDot(
+                    JSThis,
+                    JSIdentifier("typeArguments")
+                  ),
+                  JSBigInt(i)
+                )
+            }
+            .toMap
+            : VarMap
+
           fieldObjects = fields.map { field =>
             JSObjectLiteral(Vector(
               JSObjectProperty("name", JSString(field.descriptor.name))
@@ -253,10 +268,10 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
                 }
               }
               .flatMap { fieldVarMap =>
-                createMethodObject(paramVarMap ++ fieldVarMap.toMap)(method.method)
+                createMethodObject(instanceParamVarMap ++ fieldVarMap.toMap)(method.method)
               }
           }
-          staticMethodObjects <- staticMethods.traverse { method => createMethodObject(paramVarMap)(method.method) }
+          staticMethodObjects <- staticMethods.traverse { method => createMethodObject(staticParamVarMap)(method.method) }
           ctorObjects <- classConstructors.traverse { ctor => createClassCtorObject(ctor.ctor) }
 
           vtable <- vtableBuilder.fromClass(arClass)
