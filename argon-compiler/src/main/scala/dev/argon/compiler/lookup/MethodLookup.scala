@@ -12,9 +12,11 @@ object MethodLookup {
   def lookupMethods(context: Context)(ts: TypeSystem[context.type])(instanceType: ts.TypeWithMethods)(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName): context.Comp[OverloadResult[MemberValue[context.type]]] =
     lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(Vector(instanceType))(Set.empty)
 
-  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName)(instanceTypes: Vector[ts.TypeWithMethods])(seenTypes: Set[MethodOwnerDescriptor]): context.Comp[OverloadResult[MemberValue[context.type]]] =
+  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName)(instanceTypes: Vector[ts.TypeWithMethods])(seenTypes: Set[MethodOwnerDescriptor]): context.Comp[OverloadResult[MemberValue[context.type]]] = {
+    import context._
+
     if(instanceTypes.isEmpty)
-      context.compCompilationInstance.point(OverloadResult.End)
+      OverloadResult.End.pure[Comp]
     else {
       val newSeenTypes = seenTypes ++ instanceTypes.flatMap(getDescriptor(context)(ts)(_).toList.toVector)
 
@@ -26,15 +28,13 @@ object MethodLookup {
         case ts.DataConstructorType(_, _, instanceType) => Vector(instanceType)
       }
 
-      context.compCompilationInstance.flatMap(
-        unseenInstanceTypes
-          .flatTraverse {
-            case ts.ClassType(arClass, _, _) => context.compCompilationInstance.map(arClass.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
-            case ts.TraitType(arTrait, _, _) => context.compCompilationInstance.map(arTrait.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
-            case ts.DataConstructorType(ctor, _, _) => context.compCompilationInstance.map(ctor.value.methods) { _.map { method => MemberValue.Method(AbsRef(method)) } }
-          }(context.compCompilationInstance, implicitly)
-      ) { memberValues =>
-        context.compCompilationInstance.flatMap(
+      unseenInstanceTypes
+        .flatTraverse[Comp, MemberValue.Method[context.type]] {
+          case ts.ClassType(arClass, _, _) => arClass.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+          case ts.TraitType(arTrait, _, _) => arTrait.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+          case ts.DataConstructorType(ctor, _, _) => ctor.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+        }
+        .flatMap { memberValues =>
           memberValues
             .filter { method =>
               val methodName = method.arMethod.value.name
@@ -42,20 +42,19 @@ object MethodLookup {
             }
             .filterA { method =>
               AccessCheck.checkInstance[context.Comp, context.type, method.arMethod.PayloadSpec](callerDescriptor, fileSpec, method.arMethod.value)(context.compCompilationInstance)
-            }(context.compCompilationInstance)
-        ) { filteredMembers =>
-            context.compCompilationInstance.map(
-              lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(newBaseTypes)(newSeenTypes)
-            ) { baseTypeOverloads =>
-              if(filteredMembers.nonEmpty)
-                OverloadResult.List(filteredMembers, baseTypeOverloads)
-              else
-                baseTypeOverloads
             }
-          }
-      }
-
+              .flatMap { filteredMembers =>
+                lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(newBaseTypes)(newSeenTypes)
+                  .map { baseTypeOverloads =>
+                    if(filteredMembers.nonEmpty)
+                      OverloadResult.List(filteredMembers, baseTypeOverloads)
+                    else
+                      baseTypeOverloads
+                  }
+              }
+        }
     }
+  }
 
   private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem[context.type])(t: ts.ArExpr): Option[MethodOwnerDescriptor] =
     t match {
