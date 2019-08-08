@@ -37,6 +37,7 @@ object MethodLookup {
         }
         .flatMap { memberValues =>
           memberValues
+            .distinctBy { _.arMethod.value.method.descriptor }
             .filter { method =>
               val methodName = method.arMethod.value.name
               methodName =!= MemberName.Unnamed && memberName === methodName
