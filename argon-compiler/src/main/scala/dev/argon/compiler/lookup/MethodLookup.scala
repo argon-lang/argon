@@ -4,6 +4,7 @@ import dev.argon.compiler.core._
 import dev.argon.util.FileSpec
 import dev.argon.compiler.types.TypeSystem
 import cats._
+import cats.data.NonEmptyVector
 import cats.implicits._
 import dev.argon.compiler.Compilation
 
@@ -46,10 +47,10 @@ object MethodLookup {
               .flatMap { filteredMembers =>
                 lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(newBaseTypes)(newSeenTypes)
                   .map { baseTypeOverloads =>
-                    if(filteredMembers.nonEmpty)
-                      OverloadResult.List(filteredMembers, baseTypeOverloads)
-                    else
-                      baseTypeOverloads
+                    NonEmptyVector.fromVector(filteredMembers) match {
+                      case Some(filteredMembers) => OverloadResult.List(filteredMembers, baseTypeOverloads)
+                      case None => baseTypeOverloads
+                    }
                   }
               }
         }

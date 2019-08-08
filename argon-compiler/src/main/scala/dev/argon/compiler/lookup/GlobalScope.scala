@@ -3,8 +3,10 @@ package dev.argon.compiler.lookup
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
 import dev.argon.util.{FileSpec, NamespacePath, SourceLocation}
+
 import scala.collection.Set
 import cats._
+import cats.data.NonEmptyVector
 import cats.implicits._
 
 object GlobalScope {
@@ -176,10 +178,10 @@ object GlobalScope {
         }
       }
       .map { overloads =>
-        if(overloads.isEmpty)
-          nextResult
-        else
-          OverloadResult.List(overloads, nextResult)
+        NonEmptyVector.fromVector(overloads) match {
+          case Some(overloads) => OverloadResult.List(overloads, nextResult)
+          case None => nextResult
+        }
       }
   }
 

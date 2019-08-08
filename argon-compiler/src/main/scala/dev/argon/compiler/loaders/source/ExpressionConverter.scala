@@ -52,7 +52,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           unwrapType(resolvedType) match {
             case Some(resolvedTypeWithMethods: TypeWithMethods) =>
               implicitly[TypeCheck[TComp]].fromContextComp(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.descriptor, env.fileSpec)(memberName)).flatMap {
-                case OverloadResult.List(Vector(MemberValue.Method(method)), _) =>
+                case OverloadResult.List(NonEmptyVector(MemberValue.Method(method), Vector()), _) =>
                   for {
                     _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
                     sig <- implicitly[TypeCheck[TComp]].fromContextComp(
@@ -615,7 +615,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case LookupResult.SingleValueResult(ParameterElementScopeValue(paramElem)) =>
         factoryForExpr(env)(location)(LoadTupleElement(LoadVariable(paramElem.paramVar), paramElem.elemType, paramElem.index))
 
-      case LookupResult.ValuesResult(OverloadResult.List(Vector(result), _)) =>
+      case LookupResult.ValuesResult(OverloadResult.List(NonEmptyVector(result, Vector()), _)) =>
         result match {
           case FunctionScopeValue(func) =>
             compFactory(
