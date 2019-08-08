@@ -124,7 +124,7 @@ object GlobalScope {
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[Vector[AbsRef[context.type, ArModule]]])
   (name: String)
-  : context.Comp[OverloadResult[context.scopeContext.ScopeValue]] = modules match {
+  : context.Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] = modules match {
     case Vector() => context.compCompilationInstance.point(OverloadResult.End)
     case head +: tail =>
       context.compCompilationInstance.flatMap(
@@ -137,8 +137,8 @@ object GlobalScope {
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[AbsRef[context.type, ArModule]])
   (name: String)
-  (nextResult: OverloadResult[context.scopeContext.ScopeValue])
-  : context.Comp[OverloadResult[context.scopeContext.ScopeValue]] = imports match {
+  (nextResult: OverloadResult[context.scopeContext.ScopeValueOverload])
+  : context.Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] = imports match {
     case Vector() => context.compCompilationInstance.point(nextResult)
     case head +: tail =>
       context.compCompilationInstance.flatMap(
@@ -151,8 +151,8 @@ object GlobalScope {
   (imports: Vector[NamespacePath])
   (modules: Vector[AbsRef[context.type, ArModule]])
   (name: String)
-  (nextResult: OverloadResult[context.scopeContext.ScopeValue])
-  : context.Comp[OverloadResult[context.scopeContext.ScopeValue]] =
+  (nextResult: OverloadResult[context.scopeContext.ScopeValueOverload])
+  : context.Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] =
     context.compCompilationInstance.map(
       imports.flatTraverse { importNS =>
         modules.flatTraverse { module =>
@@ -173,7 +173,7 @@ object GlobalScope {
   private def getScopeValue[TPayloadSpec[_, _]]
   (context: Context)
   (binding: GlobalBinding.NonNamespace[context.type, TPayloadSpec])
-  : context.scopeContext.ScopeValue = binding match {
+  : context.scopeContext.ScopeValueOverload = binding match {
     case GlobalBinding.GlobalClass(_, _, arClass) => context.scopeContext.ClassScopeValue(AbsRef(arClass))
     case GlobalBinding.GlobalTrait(_, _, arTrait) => context.scopeContext.TraitScopeValue(AbsRef(arTrait))
     case GlobalBinding.GlobalFunction(_, _, func) => context.scopeContext.FunctionScopeValue(AbsRef(func))

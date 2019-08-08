@@ -45,7 +45,7 @@ trait ScopeContext[TContext <: Context with Singleton] {
           if(variable.name === VariableName.Normal(name)) {
             val value = VariableScopeValue(variable)
             context.compCompilationInstance.point(
-              LookupResult.ValuesResult(OverloadResult.List(Vector(value), OverloadResult.End))
+              LookupResult.SingleValueResult(value)
             )
           }
           else {
@@ -66,7 +66,7 @@ trait ScopeContext[TContext <: Context with Singleton] {
             if(paramElem.name === VariableName.Normal(name)) {
               val value = ParameterElementScopeValue(paramElem)
               context.compCompilationInstance.point(
-                LookupResult.ValuesResult(OverloadResult.List(Vector(value), OverloadResult.End))
+                LookupResult.SingleValueResult(value)
               )
             }
             else {
@@ -117,28 +117,34 @@ trait ScopeContext[TContext <: Context with Singleton] {
   sealed trait ScopeValue {
     def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue
   }
-  final case class VariableScopeValue(variable: Variable) extends ScopeValue {
-    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
+  sealed trait ScopeValueSingle extends ScopeValue {
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValueSingle
+  }
+  sealed trait ScopeValueOverload extends ScopeValue {
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValueOverload
+  }
+  final case class VariableScopeValue(variable: Variable) extends ScopeValueSingle {
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValueSingle =
       other.VariableScopeValue(TypeSystem.convertVariableTypeSystem(context)(typeSystem)(other.typeSystem)(converter)(variable))
   }
-  final case class ParameterElementScopeValue(paramElem: ParameterElement) extends ScopeValue {
-    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
+  final case class ParameterElementScopeValue(paramElem: ParameterElement) extends ScopeValueSingle {
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValueSingle =
       other.ParameterElementScopeValue(TypeSystem.convertParameterElementTypeSystem(context)(typeSystem)(other.typeSystem)(converter)(paramElem))
   }
-  final case class FunctionScopeValue(func: AbsRef[context.type, ArFunc]) extends ScopeValue {
-    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
+  final case class FunctionScopeValue(func: AbsRef[context.type, ArFunc]) extends ScopeValueOverload {
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValueOverload =
       other.FunctionScopeValue(func)
   }
-  final case class TraitScopeValue(arTrait: AbsRef[context.type, ArTrait]) extends ScopeValue {
-    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
+  final case class TraitScopeValue(arTrait: AbsRef[context.type, ArTrait]) extends ScopeValueOverload {
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValueOverload =
       other.TraitScopeValue(arTrait)
   }
-  final case class ClassScopeValue(arClass: AbsRef[context.type, ArClass]) extends ScopeValue {
-    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
+  final case class ClassScopeValue(arClass: AbsRef[context.type, ArClass]) extends ScopeValueOverload {
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValueOverload =
       other.ClassScopeValue(arClass)
   }
-  final case class DataConstructorScopeValue(ctor: AbsRef[context.type, DataConstructor]) extends ScopeValue {
-    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValue =
+  final case class DataConstructorScopeValue(ctor: AbsRef[context.type, DataConstructor]) extends ScopeValueOverload {
+    override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.ScopeValueOverload =
       other.DataConstructorScopeValue(ctor)
   }
 
@@ -150,7 +156,11 @@ trait ScopeContext[TContext <: Context with Singleton] {
       override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult =
         other.LookupResult.ScopeResult(scope.convertScopeContext(other)(converter))
     }
-    final case class ValuesResult(overloads: OverloadResult[ScopeValue]) extends LookupResult {
+    final case class SingleValueResult(value: ScopeValueSingle) extends LookupResult {
+      override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult =
+        other.LookupResult.SingleValueResult(value.convertScopeContext(other)(converter))
+    }
+    final case class ValuesResult(overloads: OverloadResult[ScopeValueOverload]) extends LookupResult {
       override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult =
         other.LookupResult.ValuesResult(overloads.map { _.convertScopeContext(other)(converter) })
     }

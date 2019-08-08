@@ -609,14 +609,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             Compilation[TComp].forErrors(CompilationError.NamespaceUsedAsValueError(description, CompilationMessageSource.SourceFile(env.fileSpec, location)))
         }
 
+      case LookupResult.SingleValueResult(VariableScopeValue(variable)) =>
+        factoryForExpr(env)(location)(LoadVariable(variable))
+
+      case LookupResult.SingleValueResult(ParameterElementScopeValue(paramElem)) =>
+        factoryForExpr(env)(location)(LoadTupleElement(LoadVariable(paramElem.paramVar), paramElem.elemType, paramElem.index))
+
       case LookupResult.ValuesResult(OverloadResult.List(Vector(result), _)) =>
         result match {
-          case VariableScopeValue(variable) =>
-            factoryForExpr(env)(location)(LoadVariable(variable))
-
-          case ParameterElementScopeValue(paramElem) =>
-            factoryForExpr(env)(location)(LoadTupleElement(LoadVariable(paramElem.paramVar), paramElem.elemType, paramElem.index))
-
           case FunctionScopeValue(func) =>
             compFactory(
               for {
