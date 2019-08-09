@@ -558,32 +558,37 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   (args: Vector[ArgumentInfo[TComp]])
   : ExprFactory[TComp] = {
 
-    def resolveClass[ClassPS[_, _]](arClassOptComp: context.Comp[Option[ArClass[context.type, ClassPS]]]): ExprFactory[TComp] =
+    def resolveClass[ClassPS[_, _]](arClassOptComp: context.Comp[Vector[ArClass[context.type, ClassPS]]]): ExprFactory[TComp] =
       compFactory(
         for {
-          arClassOpt <- implicitly[TypeCheck[TComp]].fromContextComp(arClassOptComp)
-          arClass <- Compilation[TComp].requireSome(
-            arClassOpt
+          classesVec <- implicitly[TypeCheck[TComp]].fromContextComp(arClassOptComp)
+          classes <- Compilation[TComp].requireSome(
+            NonEmptyVector.fromVector(classesVec)
           )(CompilationError.NamespaceElementNotFound(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
-          classSig <- implicitly[TypeCheck[TComp]].fromContextComp(arClass.signature)
 
-          classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(location)(arClass.descriptor)(
-            convertSignature(classSig)
-          ) { (args, classResult) =>
+          classFactories <- classes.traverse { arClass =>
             for {
-              argsAsTypes <- args.traverse(evaluateTypeArg(env)(location)(_))
-            } yield ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), argsAsTypes, classResult.baseTypes)
+              classSig <- implicitly[TypeCheck[TComp]].fromContextComp(arClass.signature)
+
+              classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(location)(arClass.descriptor)(
+                convertSignature(classSig)
+              ) { (args, classResult) =>
+                for {
+                  argsAsTypes <- args.traverse(evaluateTypeArg(env)(location)(_))
+                } yield ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), argsAsTypes, classResult.baseTypes)
+              }
+
+              overloadFactory <- args.foldLeftM(classFactory) { (factory, arg) => factory.forArguments(arg) }
+            } yield overloadFactory
           }
 
-          overloadFactory <- args.foldLeftM(classFactory) { (factory, arg) => factory.forArguments(arg) }
-
-        } yield overloadFactory.toExprFactory
+        } yield overloadSelectionFactory(env)(location)(NonEmptyList.of(classFactories))
       )
 
     if(moduleDesc === env.currentModule.descriptor)
-      resolveClass(ModuleLookup.lookupNamespaceValue(context)(env.currentModule)(namespacePath, name)(ModuleLookup.lookupGlobalClass))
+      resolveClass(ModuleLookup.lookupNamespaceValues(context)(env.currentModule)(namespacePath, name)(ModuleLookup.lookupGlobalClass))
     else
-      resolveClass(ModuleLookup.lookupValue(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass))
+      resolveClass(ModuleLookup.lookupValues(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass))
   }
 
   def resolveModuleClass[TComp[_] : TypeCheck]

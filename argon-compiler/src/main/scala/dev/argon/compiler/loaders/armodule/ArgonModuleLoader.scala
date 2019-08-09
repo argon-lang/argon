@@ -147,7 +147,11 @@ object ArgonModuleLoader {
           (namespace: NamespacePath, name: GlobalName)
           (f: PartialFunction[GlobalBinding[context.type, ReferencePayloadSpecifier], T])
           : Comp[Option[T]] =
-            ModuleLookup.lookupNamespaceValue(context)(refModule)(namespace, name)(f)
+            ModuleLookup.lookupNamespaceValues(context)(refModule)(namespace, name)(f).map {
+              case Vector(single) => Some(single)
+              case Vector() => None
+              case _ => ???
+            }
 
           private def parseTraitDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.TraitDescriptor): Option[Either[TraitDescriptor, TraitDescriptor.InNamespace]] =
             desc.descriptor match {

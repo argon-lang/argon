@@ -10,16 +10,19 @@ import dev.argon.compiler.Compilation
 
 object ModuleLookup {
 
-  def lookupValue[T, TPayloadSpec[_, _]]
+  def lookupValues[T, TPayloadSpec[_, _]]
   (context: Context)
   (referencedModules: Vector[ArModule[context.type, TPayloadSpec]])
   (moduleDesc: ModuleDescriptor)
   (namespace: NamespacePath, name: GlobalName)
   (f: PartialFunction[GlobalBinding[context.type, TPayloadSpec], T])
-  : context.Comp[Option[T]] =
-    findModule(context)(referencedModules)(moduleDesc).flatTraverse { module =>
-      lookupNamespaceValue(context)(module)(namespace, name)(f)
-    }(context.compCompilationInstance, implicitly)
+  : context.Comp[Vector[T]] = {
+    import context._
+
+    findModule(context)(referencedModules)(moduleDesc).toList.toVector.flatTraverse { module =>
+      lookupNamespaceValues(context)(module)(namespace, name)(f)
+    }
+  }
 
   def findModule[TPayloadSpec[_, _]]
   (context: Context)
@@ -28,28 +31,23 @@ object ModuleLookup {
   : Option[ArModule[context.type, TPayloadSpec]] =
     referencedModules.find { _.descriptor === moduleDesc }
 
-  def lookupNamespaceValue[T, TPayloadSpec[_, _]]
+  def lookupNamespaceValues[T, TPayloadSpec[_, _]]
   (context: Context)
   (module: ArModule[context.type, TPayloadSpec])
   (namespace: NamespacePath, name: GlobalName)
   (f: PartialFunction[GlobalBinding[context.type, TPayloadSpec], T])
-  : context.Comp[Option[T]] = {
-    def impl(namespaceParts: Vector[String])(namespaceValues: Namespace[context.type, TPayloadSpec]): Option[T] =
+  : context.Comp[Vector[T]] = {
+    def impl(namespaceParts: Vector[String])(namespaceValues: Namespace[context.type, TPayloadSpec]): Vector[T] =
       namespaceParts match {
         case head +: tail =>
-          namespaceValues.bindings.find(_.name === GlobalName.Normal(head)) match {
-            case Some(binding) =>
-              binding match {
-                case GlobalBinding.NestedNamespace(_, nestedNS) => impl(tail)(nestedNS)
-                case _ => None
-              }
-
-            case None => None
+          namespaceValues.bindings.filter(_.name === GlobalName.Normal(head)).flatMap {
+            case GlobalBinding.NestedNamespace(_, nestedNS) => impl(tail)(nestedNS)
+            case _ => Vector()
           }
 
         case Vector() =>
           namespaceValues.bindings
-            .find { _.name === name }
+            .filter { _.name === name }
             .collect(f)
       }
 
