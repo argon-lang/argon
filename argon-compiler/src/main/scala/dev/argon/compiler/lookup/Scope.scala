@@ -160,7 +160,7 @@ trait ScopeContext[TContext <: Context with Singleton] {
       override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult =
         other.LookupResult.SingleValueResult(value.convertScopeContext(other)(converter))
     }
-    final case class ValuesResult(overloads: OverloadResult[ScopeValueOverload]) extends LookupResult {
+    final case class ValuesResult(overloads: OverloadResult.List[ScopeValueOverload]) extends LookupResult {
       override def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, other.typeSystem.type, Id]): other.LookupResult =
         other.LookupResult.ValuesResult(overloads.map { _.convertScopeContext(other)(converter) })
     }

@@ -45,8 +45,13 @@ object GlobalScope {
         context.scopeContext.LookupResult.Failed.pure[Comp]
 
       case FoundOverloadable =>
-        overloadResult(context)(imports)(modules)(name)
-          .map(context.scopeContext.LookupResult.ValuesResult)
+        overloadResult(context)(imports)(modules)(name).map {
+          case overloads @ OverloadResult.List(_, _) =>
+            context.scopeContext.LookupResult.ValuesResult(overloads)
+
+          case OverloadResult.End =>
+            context.scopeContext.LookupResult.Failed
+        }
 
       case NestedNamespaces(paths) =>
         createNSScope(context)(Vector(paths.toVector))(modules)(context.scopeContext.EmptyScope)

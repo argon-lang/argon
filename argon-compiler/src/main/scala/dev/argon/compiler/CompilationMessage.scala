@@ -13,6 +13,7 @@ import dev.argon.module
 import dev.argon.compiler.core._
 import dev.argon.compiler.types.TypeSystem
 import cats._
+import cats.data.{NonEmptyList, NonEmptyVector}
 
 sealed trait CompilationMessage {
   val source: CompilationMessageSource
@@ -213,8 +214,12 @@ object CompilationError {
     override def message: String = "Could not find identifier"
   }
 
-  final case class AmbiguousLookupError(description: LookupDescription, source: CompilationMessageSource) extends CompilationError {
+  final case class AmbiguousLookupError(alternatives: NonEmptyVector[ParameterOwnerDescriptor], source: CompilationMessageSource) extends CompilationError {
     override def message: String = "Lookup is ambiguous"
+  }
+
+  final case class OverloadedLookupFailed(alternatives: NonEmptyVector[(ParameterOwnerDescriptor, NonEmptyList[CompilationError])], source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Overloaded lookup failed"
   }
 
   final case class NamespaceUsedAsValueError(description: LookupDescription, source: CompilationMessageSource) extends CompilationError {

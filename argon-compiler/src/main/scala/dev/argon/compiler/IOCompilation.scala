@@ -63,6 +63,8 @@ object IOCompilation {
         }
       }
 
+    override def attempt[A](action: ZIO[R, NonEmptyList[CompilationError], A]): ZIO[R, NonEmptyList[CompilationError], Either[NonEmptyList[CompilationError], ZIO[R, NonEmptyList[CompilationError], A]]] =
+      action.map(IO.succeed).either
 
     override def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B] =
       fa.flatMap(f)

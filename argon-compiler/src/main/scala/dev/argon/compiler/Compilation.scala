@@ -13,6 +13,7 @@ trait Compilation[F[_]] extends Monad[F] {
   def createCache[A]: F[F[A] => F[A]]
   def createMemo[A, B]: F[(A => F[B]) => A => F[B]]
 
+  def attempt[A](action: F[A]): F[Either[NonEmptyList[CompilationError], F[A]]]
 
   final def require(value: Boolean)(head: CompilationError, tail: CompilationError*): F[Unit] =
     if(value) point(())
