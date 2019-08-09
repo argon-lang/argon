@@ -154,12 +154,15 @@ object GlobalScope {
   (modules: Vector[AbsRef[context.type, ArModule]])
   (name: String)
   (nextResult: OverloadResult[context.scopeContext.ScopeValueOverload])
-  : context.Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] = imports match {
-    case Vector() => context.compCompilationInstance.point(nextResult)
-    case head +: tail =>
-      context.compCompilationInstance.flatMap(
+  : context.Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] = {
+    import context._
+
+    imports match {
+      case Vector() => nextResult.pure[Comp]
+      case head +: tail =>
         overloadResultStage1(context)(tail)(modules)(name)(nextResult)
-      )(overloadResultStage2(context)(head)(modules)(name)(_))
+          .flatMap(overloadResultStage2(context)(head)(modules)(name)(_))
+    }
   }
 
   private def overloadResultStage2
@@ -175,11 +178,11 @@ object GlobalScope {
     imports
       .flatTraverse { importNS =>
         modules.flatTraverse { module =>
-          context.compCompilationInstance.map(
-            ModuleLookup.lookupNamespaceValue(context)(module.value)(importNS, GlobalName.Normal(name)) {
-              case binding: GlobalBinding.NonNamespace[context.type, module.PayloadSpec] =>
-                getScopeValue(context)(binding)
-            }) { _.toList.toVector }
+          ModuleLookup.lookupNamespaceValue(context)(module.value)(importNS, GlobalName.Normal(name)) {
+            case binding: GlobalBinding.NonNamespace[context.type, module.PayloadSpec] =>
+              getScopeValue(context)(binding)
+          }
+            .map { _.toList.toVector }
         }
       }
       .map { overloads =>
