@@ -814,6 +814,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               attemptOverloads(Ior.Both(prevFailed ++: failed, NonEmptyList(thead, ttail)))(expectedType)
             }
 
+          case Ior.Left(NonEmptyVector((_, errors), Vector())) =>
+              Compilation[TComp].forErrors(errors)
+
           case Ior.Left(failed) =>
             Compilation[TComp].forErrors(CompilationError.OverloadedLookupFailed(
               failed,
