@@ -198,16 +198,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     def overloadUsedArgCount: Int
 
     def forExpectedType(expectedType: TType): TComp[ArExpr]
-    def forArguments(argInfo: ArgumentInfo[TComp]): TComp[OverloadExprFactory[TComp]]
+    def forArguments(argInfo: ArgumentInfo[TComp]): OverloadExprFactory[TComp]
 
     def toExprFactory: ExprFactory[TComp] = new ExprFactory[TComp] {
       override def forExpectedType(expectedType: TType): TComp[ArExpr] =
         OverloadExprFactory.this.forExpectedType(expectedType)
 
       override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
-        compFactory(
-          OverloadExprFactory.this.forArguments(argInfo).map { _.toExprFactory }
-        )
+        OverloadExprFactory.this.forArguments(argInfo).toExprFactory
     }
 
     protected final def wrapNonOverloadFactory(factory: ExprFactory[TComp]): OverloadExprFactory[TComp] =
@@ -219,8 +217,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
           factory.forExpectedType(expectedType)
 
-        override def forArguments(argInfo: ArgumentInfo[TComp]): TComp[OverloadExprFactory[TComp]] =
-          wrapNonOverloadFactory(factory.forArguments(argInfo)).pure[TComp]
+        override def forArguments(argInfo: ArgumentInfo[TComp]): OverloadExprFactory[TComp] =
+          wrapNonOverloadFactory(factory.forArguments(argInfo))
       }
 
   }
@@ -578,8 +576,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 } yield ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), argsAsTypes, classResult.baseTypes)
               }
 
-              overloadFactory <- args.foldLeftM(classFactory) { (factory, arg) => factory.forArguments(arg) }
-            } yield overloadFactory
+            } yield args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
           }
 
         } yield overloadSelectionFactory(env)(location)(NonEmptyList.of(classFactories))
@@ -831,11 +828,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         }
 
       override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
-        compFactory(
-          overloads
-            .traverse { _.traverse { _.forArguments(argInfo) } }
-            .map { overloads => new OverloadSelectionFactory(argCount + 1)(overloads) }
-        )
+        new OverloadSelectionFactory(argCount + 1)(overloads.map { _.map { _.forArguments(argInfo) } })
 
     }
 
@@ -874,7 +867,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       else
         Compilation[TComp].forErrors(CompilationError.ArgumentToSignatureDependencyNotPureError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
-    final class SigFactory(env: Env)(signature: Signature[TResult])(argCount: Int)(prevArgs: Vector[ArExpr]) extends OverloadExprFactory[TComp] {
+    final class SigFactory(env: Env)(unsubSig: Signature[TResult])(argCount: Int)(acc: TComp[(Signature[TResult], Vector[ArExpr])]) extends OverloadExprFactory[TComp] {
 
 
       override def overloadDescriptor: ParameterOwnerDescriptor = descriptor
@@ -882,26 +875,38 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       override def overloadUsedArgCount: Int = argCount
 
       override def forExpectedType(expectedType: TType): TComp[ArExpr] =
-        signature.visit(
-          sigParams => partiallyApply(env, prevArgs, Vector(), fullSignature, identity).flatMap { expr =>
-            convertExprType(env)(location)(expr)(expectedType)
-          },
-          sigResult =>
-            f(prevArgs, sigResult.result).flatMap { expr =>
-              convertExprType(env)(location)(expr)(expectedType)
-            }
-        )
+        acc.flatMap {
+          case (sig, args) =>
+            sig.visit(
+              _ => partiallyApply(env, args, Vector(), fullSignature, identity).flatMap { expr =>
+                convertExprType(env)(location)(expr)(expectedType)
+              },
+              sigResult =>
+                f(args, sigResult.result).flatMap { expr =>
+                  convertExprType(env)(location)(expr)(expectedType)
+                }
+            )
+        }
 
-      override def forArguments(argInfo: ArgumentInfo[TComp]): TComp[OverloadExprFactory[TComp]] =
-        signature.visit(
-          sigParams =>
-            for {
-              argExpr <- argInfo.argFactory.forExpectedType(sigParams.parameter.paramType)
-              next <- signatureNextPart(sigParams)(argExpr)
-            } yield new SigFactory(env)(next)(argCount + 1)(prevArgs :+ argExpr),
+      override def forArguments(argInfo: ArgumentInfo[TComp]): OverloadExprFactory[TComp] =
+        unsubSig.visit(
+          unsubSigParams =>
+            new SigFactory(env)(unsubSigParams.nextUnsubstituted)(argCount + 1)(
+              acc.flatMap {
+                case (sig, prevArgs) =>
+                  sig.visit(
+                    sigParams =>
+                      for {
+                        argExpr <- argInfo.argFactory.forExpectedType(sigParams.parameter.paramType)
+                        next <- signatureNextPart(sigParams)(argExpr)
+                      } yield (next, prevArgs :+ argExpr),
+                    _ => ???
+                  )
+              }
+            ),
           _ => wrapNonOverloadFactory(
             toExprFactory.memberAccessExpr(MemberName.Call, argInfo.env, argInfo.location).forArguments(argInfo)
-          ).pure[TComp]
+          )
         )
     }
 
@@ -927,7 +932,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         sigResult => f(argVariables, sigResult.result).map(wrapInLambda)
       )
 
-    new SigFactory(env)(fullSignature)(0)(Vector.empty)
+    new SigFactory(env)(fullSignature)(0)((fullSignature, Vector.empty[ArExpr]).pure[TComp])
   }
 
   def convertSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
