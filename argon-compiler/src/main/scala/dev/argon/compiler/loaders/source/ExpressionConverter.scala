@@ -195,7 +195,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   abstract class OverloadExprFactory[TComp[_]: TypeCheck] {
 
     def overloadDescriptor: ParameterOwnerDescriptor
-    def overloadUsedArgCount: Int
+    def usedParamTypes: Vector[TType]
+    def remainingParameterTypes: Vector[TType]
 
     def forExpectedType(expectedType: TType): TComp[ArExpr]
     def forArguments(argInfo: ArgumentInfo[TComp]): OverloadExprFactory[TComp]
@@ -212,7 +213,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       new OverloadExprFactory[TComp] {
 
         override def overloadDescriptor: ParameterOwnerDescriptor = OverloadExprFactory.this.overloadDescriptor
-        override def overloadUsedArgCount: Int = OverloadExprFactory.this.overloadUsedArgCount
+
+        override def usedParamTypes: Vector[TType] = OverloadExprFactory.this.usedParamTypes
+        override def remainingParameterTypes: Vector[typeSystem.TType] = OverloadExprFactory.this.remainingParameterTypes
 
         override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
           factory.forExpectedType(expectedType)
@@ -739,7 +742,26 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
       // a is better than b
       private def isBetterThan(a: OverloadExprFactory[TComp], b: OverloadExprFactory[TComp]): TComp[Boolean] =
-        ???
+        if(a.usedParamTypes.size === argCount && (b.usedParamTypes.size =!= argCount || b.remainingParameterTypes.nonEmpty))
+          true.pure[TComp]
+        else if(a.usedParamTypes.size > b.usedParamTypes.size)
+          true.pure[TComp]
+        else if(a.remainingParameterTypes.size < b.remainingParameterTypes.size)
+          true.pure[TComp]
+        else {
+          val typePairs = (a.usedParamTypes ++ a.remainingParameterTypes)
+            .zip(b.usedParamTypes ++ b.remainingParameterTypes)
+
+          typePairs.existsM {
+            case (aType, bType) => isSubType(aType, bType).map { _.isDefined }
+          }.flatMap {
+            case true => false.pure[TComp]
+            case false =>
+              typePairs.existsM {
+                case (aType, bType) => isSubType(bType, aType).map { _.isDefined }
+              }
+          }
+        }
 
       private def runSameLevelOverloads
       (overloads: NonEmptyVector[OverloadExprFactory[TComp]])
@@ -870,12 +892,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       else
         Compilation[TComp].forErrors(CompilationError.ArgumentToSignatureDependencyNotPureError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
-    final class SigFactory(env: Env)(unsubSig: Signature[TResult])(argCount: Int)(acc: TComp[(Signature[TResult], Vector[ArExpr])]) extends OverloadExprFactory[TComp] {
+    final class SigFactory(env: Env)(unsubSig: Signature[TResult])(prevParamTypes: Vector[TType])(acc: TComp[(Signature[TResult], Vector[ArExpr])]) extends OverloadExprFactory[TComp] {
 
 
       override def overloadDescriptor: ParameterOwnerDescriptor = descriptor
 
-      override def overloadUsedArgCount: Int = argCount
+
+      override def usedParamTypes: Vector[TType] = prevParamTypes
+      override lazy val remainingParameterTypes: Vector[TType] = unsubSig.unsubstitutedParameters.map { _.paramType }
 
       override def forExpectedType(expectedType: TType): TComp[ArExpr] =
         acc.flatMap {
@@ -894,7 +918,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       override def forArguments(argInfo: ArgumentInfo[TComp]): OverloadExprFactory[TComp] =
         unsubSig.visit(
           unsubSigParams =>
-            new SigFactory(env)(unsubSigParams.nextUnsubstituted)(argCount + 1)(
+            new SigFactory(env)(unsubSigParams.nextUnsubstituted)(prevParamTypes :+ unsubSigParams.parameter.paramType)(
               acc.flatMap {
                 case (sig, prevArgs) =>
                   sig.visit(
@@ -935,7 +959,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         sigResult => f(argVariables, sigResult.result).map(wrapInLambda)
       )
 
-    new SigFactory(env)(fullSignature)(0)((fullSignature, Vector.empty[ArExpr]).pure[TComp])
+    new SigFactory(env)(fullSignature)(Vector.empty)((fullSignature, Vector.empty[ArExpr]).pure[TComp])
   }
 
   def convertSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
