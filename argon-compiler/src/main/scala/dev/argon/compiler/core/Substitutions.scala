@@ -15,7 +15,7 @@ trait Substitutions {
 
   def substTypeArg(arg: TypeArgument): TypeArgument = arg match {
     case TypeArgument.Expr(argExpr) => TypeArgument.Expr(substWrapExpr(argExpr))
-    case TypeArgument.Wildcard => TypeArgument.Wildcard
+    case TypeArgument.Wildcard(u) => TypeArgument.Wildcard(u)
   }
 
   def substClassType(expr: ClassType): ClassType =
@@ -115,7 +115,7 @@ trait Substitutions {
       case expr: TraitType => substTraitType(expr)
       case expr: ClassType => substClassType(expr)
       case expr: DataConstructorType => substDataCtorType(expr)
-      case TypeOfType(inner, universe) => TypeOfType(substWrapExpr(inner), universe)
+      case TypeOfType(inner) => TypeOfType(substWrapExpr(inner))
       case TypeN(universe, subtypeConstraint, supertypeConstraint) =>
         TypeN(
           universe,

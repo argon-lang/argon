@@ -49,142 +49,144 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     def forExpectedType(expectedType: TType): TComp[ArExpr]
     def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] =
       compFactory(inferExprType(ExprFactory.this).flatMap { thisExpr =>
-        implicitly[TypeCheck[TComp]].resolveType(thisExpr.exprType).flatMap { resolvedType =>
-          unwrapType(resolvedType) match {
-            case Some(resolvedTypeWithMethods: TypeWithMethods) =>
-              implicitly[TypeCheck[TComp]].fromContextComp(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.descriptor, env.fileSpec)(memberName)).flatMap {
-                case overloads @ OverloadResult.List(_, _) =>
-                  overloads
-                    .toNonEmptyList
-                    .traverse { _.traverse {
-                      case MemberValue.Method(method) =>
-                        for {
-                          _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                          sig <- implicitly[TypeCheck[TComp]].fromContextComp(
-                            method.value.method.signature(signatureContext)(resolvedTypeWithMethods)
-                          )
-                        } yield signatureFactory(env)(location)(method.value.method.descriptor)(sig) { (args, result) => MethodCall(AbsRef(method.value.method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
-                    } }
-                    .map(overloadSelectionFactory(env)(location)(_))
+        getExprType(thisExpr)
+          .flatMap { thisExprType => implicitly[TypeCheck[TComp]].resolveType(thisExprType) }
+          .flatMap { resolvedType =>
+            unwrapType(resolvedType) match {
+              case Some(resolvedTypeWithMethods: TypeWithMethods) =>
+                implicitly[TypeCheck[TComp]].fromContextComp(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.descriptor, env.fileSpec)(memberName)).flatMap {
+                  case overloads @ OverloadResult.List(_, _) =>
+                    overloads
+                      .toNonEmptyList
+                      .traverse { _.traverse {
+                        case MemberValue.Method(method) =>
+                          for {
+                            _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                            sig <- implicitly[TypeCheck[TComp]].fromContextComp(
+                              method.value.method.signature(signatureContext)(resolvedTypeWithMethods)
+                            )
+                          } yield signatureFactory(env)(location)(method.value.method.descriptor)(sig) { (args, result) => MethodCall(AbsRef(method.value.method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
+                      } }
+                      .map(overloadSelectionFactory(env)(location)(_))
 
-                case OverloadResult.End =>
-                  Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, memberName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                  case OverloadResult.End =>
+                    Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, memberName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
-              }
+                }
 
-            case Some(funcType @ FunctionType(argType, resultType)) if memberName === MemberName.Call =>
-              new ExprFactory[TComp] {
-                override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
-                  ExprFactory.this.forExpectedType(expectedType)
+              case Some(funcType @ FunctionType(argType, resultType)) if memberName === MemberName.Call =>
+                new ExprFactory[TComp] {
+                  override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
+                    ExprFactory.this.forExpectedType(expectedType)
 
-                override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] =
-                  ???
+                  override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] =
+                    ???
 
-                override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
-                  compFactory(
-                    for {
-                      funcExpr <- ExprFactory.this.forExpectedType(fromSimpleType(funcType))
-                      argExpr <- argInfo.argFactory.forExpectedType(argType)
-                    } yield factoryForExpr(argInfo.env)(argInfo.location)(FunctionObjectCall(funcExpr, argExpr, resultType))
-                  )
-              }.pure[TComp]
+                  override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
+                    compFactory(
+                      for {
+                        funcExpr <- ExprFactory.this.forExpectedType(fromSimpleType(funcType))
+                        argExpr <- argInfo.argFactory.forExpectedType(argType)
+                      } yield factoryForExpr(argInfo.env)(argInfo.location)(FunctionObjectCall(funcExpr, argExpr, resultType))
+                    )
+                }.pure[TComp]
 
-            case Some(TypeOfType(thisType, _)) =>
-              unwrapType(thisType) match {
-                case Some(t: ClassType) =>
-                  memberName match {
-                    case MemberName.New =>
-                      if(!env.allowAbstractConstructor && t.arClass.value.isAbstract)
-                        Compilation[TComp].forErrors(CompilationError.AbstractClassConstructorCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                      else
-                        implicitly[TypeCheck[TComp]].fromContextComp(t.arClass.value.classConstructors).flatMap { constructors =>
-                          NonEmptyVector.fromVector(constructors) match {
-                            case Some(constructors) =>
-                              constructors
-                                .traverse {
-                                  case ClassConstructorBinding(_, _, classCtor) =>
-                                    for {
-                                      _ <- Compilation[TComp].require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                                      sig <- implicitly[TypeCheck[TComp]].fromContextComp(
-                                        classCtor.signature(signatureContext)(t)
-                                      )
-                                    } yield signatureFactory(env)(location)(classCtor.descriptor)(sig) { (args, _) => ClassConstructorCall(t, AbsRef(classCtor), args).upcast[ArExpr].pure[TComp] }
-                                }
-                                .map { overloads => overloadSelectionFactory(env)(location)(NonEmptyList.of(overloads)) }
+              case Some(TypeOfType(thisType)) =>
+                unwrapType(thisType) match {
+                  case Some(t: ClassType) =>
+                    memberName match {
+                      case MemberName.New =>
+                        if(!env.allowAbstractConstructor && t.arClass.value.isAbstract)
+                          Compilation[TComp].forErrors(CompilationError.AbstractClassConstructorCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                        else
+                          implicitly[TypeCheck[TComp]].fromContextComp(t.arClass.value.classConstructors).flatMap { constructors =>
+                            NonEmptyVector.fromVector(constructors) match {
+                              case Some(constructors) =>
+                                constructors
+                                  .traverse {
+                                    case ClassConstructorBinding(_, _, classCtor) =>
+                                      for {
+                                        _ <- Compilation[TComp].require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                                        sig <- implicitly[TypeCheck[TComp]].fromContextComp(
+                                          classCtor.signature(signatureContext)(t)
+                                        )
+                                      } yield signatureFactory(env)(location)(classCtor.descriptor)(sig) { (args, _) => ClassConstructorCall(t, AbsRef(classCtor), args).upcast[ArExpr].pure[TComp] }
+                                  }
+                                  .map { overloads => overloadSelectionFactory(env)(location)(NonEmptyList.of(overloads)) }
 
-                            case None =>
-                              Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, memberName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                          }
-                        }
-
-                    case methodName: MethodName =>
-                      implicitly[TypeCheck[TComp]].fromContextComp(t.arClass.value.staticMethods)
-                        .flatMap {
-                          _.filter { binding => binding.name === methodName }
-                            .filterA { binding =>
-                              AccessCheck.checkInstance[TComp, context.type, t.arClass.PayloadSpec](env.descriptor, env.fileSpec, binding)
+                              case None =>
+                                Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, memberName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
                             }
-                        }
-                        .flatMap { methods =>
-                          NonEmptyVector.fromVector(methods) match {
-                            case Some(methods) =>
-                              methods
-                                .traverse {
-                                  case MethodBinding(_, _, _, method) =>
-                                    for {
-                                      _ <- Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                                      sig <- implicitly[TypeCheck[TComp]].fromContextComp(
-                                        method.signature(signatureContext)(t)
-                                      )
-                                    } yield signatureFactory(env)(location)(method.descriptor)(sig) { (args, result) => MethodCall(AbsRef(method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
-                                }
-                                .map { overloads => overloadSelectionFactory(env)(location)(NonEmptyList.of(overloads)) }
-
-                            case None =>
-                              Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, methodName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
                           }
-                        }
 
-                  }
+                      case methodName: MethodName =>
+                        implicitly[TypeCheck[TComp]].fromContextComp(t.arClass.value.staticMethods)
+                          .flatMap {
+                            _.filter { binding => binding.name === methodName }
+                              .filterA { binding =>
+                                AccessCheck.checkInstance[TComp, context.type, t.arClass.PayloadSpec](env.descriptor, env.fileSpec, binding)
+                              }
+                          }
+                          .flatMap { methods =>
+                            NonEmptyVector.fromVector(methods) match {
+                              case Some(methods) =>
+                                methods
+                                  .traverse {
+                                    case MethodBinding(_, _, _, method) =>
+                                      for {
+                                        _ <- Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                                        sig <- implicitly[TypeCheck[TComp]].fromContextComp(
+                                          method.signature(signatureContext)(t)
+                                        )
+                                      } yield signatureFactory(env)(location)(method.descriptor)(sig) { (args, result) => MethodCall(AbsRef(method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
+                                  }
+                                  .map { overloads => overloadSelectionFactory(env)(location)(NonEmptyList.of(overloads)) }
 
-                case Some(t: TraitType) =>
-                  memberName match {
-                    case MemberName.New => ???
-                    case methodName: MethodName =>
-                      implicitly[TypeCheck[TComp]].fromContextComp(t.arTrait.value.staticMethods)
-                        .flatMap {
-                          _.filter { binding => binding.name === methodName }
-                            .filterA { binding =>
-                              AccessCheck.checkInstance[TComp, context.type, t.arTrait.PayloadSpec](env.descriptor, env.fileSpec, binding)
+                              case None =>
+                                Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, methodName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
                             }
-                        }
-                        .flatMap { methods =>
-                          NonEmptyVector.fromVector(methods) match {
-                            case Some(methods) =>
-                              methods
-                                .traverse {
-                                  case MethodBinding(_, _, _, method) =>
-                                    for {
-                                      _ <- Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                                      sig <- implicitly[TypeCheck[TComp]].fromContextComp(
-                                        method.signature(signatureContext)(t)
-                                      )
-                                    } yield signatureFactory(env)(location)(method.descriptor)(sig) { (args, result) => MethodCall(AbsRef(method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
-                                }
-                                .map { overloads => overloadSelectionFactory(env)(location)(NonEmptyList.of(overloads)) }
-
-                            case None =>
-                              Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, methodName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
                           }
-                        }
-                  }
 
-                case _ => ???
-              }
+                    }
 
-            case _ => ???
+                  case Some(t: TraitType) =>
+                    memberName match {
+                      case MemberName.New => ???
+                      case methodName: MethodName =>
+                        implicitly[TypeCheck[TComp]].fromContextComp(t.arTrait.value.staticMethods)
+                          .flatMap {
+                            _.filter { binding => binding.name === methodName }
+                              .filterA { binding =>
+                                AccessCheck.checkInstance[TComp, context.type, t.arTrait.PayloadSpec](env.descriptor, env.fileSpec, binding)
+                              }
+                          }
+                          .flatMap { methods =>
+                            NonEmptyVector.fromVector(methods) match {
+                              case Some(methods) =>
+                                methods
+                                  .traverse {
+                                    case MethodBinding(_, _, _, method) =>
+                                      for {
+                                        _ <- Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                                        sig <- implicitly[TypeCheck[TComp]].fromContextComp(
+                                          method.signature(signatureContext)(t)
+                                        )
+                                      } yield signatureFactory(env)(location)(method.descriptor)(sig) { (args, result) => MethodCall(AbsRef(method), thisExpr, args, result.returnType).upcast[ArExpr].pure[TComp] }
+                                  }
+                                  .map { overloads => overloadSelectionFactory(env)(location)(NonEmptyList.of(overloads)) }
+
+                              case None =>
+                                Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, methodName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                            }
+                          }
+                    }
+
+                  case _ => ???
+                }
+
+              case _ => ???
+            }
           }
-        }
       })
 
     def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
@@ -361,11 +363,12 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           override def forExpectedType(expectedType: TType): TComp[ArExpr] =
             for {
               valueExpr <- inferExprType(convertExpr(env)(value))
+              valueExprType <- getExprType(valueExpr)
               casesNE = NonEmptyList.fromList(cases.toList).getOrElse { ??? }
               patternCases <- casesNE.traverse {
                 case WithSource(parser.MatchExprCase(pattern, body), _) =>
                   for {
-                    (patternExpr, env2) <- convertPattern(env)(valueExpr.exprType)(pattern)
+                    (patternExpr, env2) <- convertPattern(env)(valueExprType)(pattern)
                     bodyExpr <- convertStmts(env2)(body).forExpectedType(expectedType)
                   } yield PatternCase(patternExpr, bodyExpr)
               }
@@ -458,8 +461,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             inst <- instanceType.traverse(evaluateTypeExprAST(env)(_))
             sub <- subtypeOf.traverse(evaluateTypeExprAST(env)(_))
             sup <- supertypeOf.traverse(evaluateTypeExprAST(env)(_))
-            universe = (sub.toList ++ sup.toList).map(universeOfExpr).foldLeft[Universe](TypeUniverse(ValueUniverse))(Universe.union)
-            typeN = TypeN(TypeUniverse(universe), sub, sup)
+            universe <- (sub.toList ++ sup.toList)
+              .traverse(universeOfWrapExpr[TComp])
+              .map { _.foldLeft[UniverseExpr](FixedUniverse(1))(LargestUniverse) }
+            typeN = TypeN(NextLargestUniverse(universe), sub, sup)
           } yield factoryForExpr(env)(expr.location)(
             inst.foldLeft[ArExpr](typeN) { (a, b) => IntersectionType(fromSimpleType(a), b)}
           )
@@ -467,10 +472,12 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
       case parser.TypeOfExpr(ofExpr) =>
         compFactory(
-          inferExprType(convertExpr(env)(ofExpr)).map { convExpr =>
-            unwrapType(convExpr.exprType) match {
-              case Some(t) => factoryForExpr(env)(expr.location)(t)
-              case None => ???
+          inferExprType(convertExpr(env)(ofExpr)).flatMap { convExpr =>
+            getExprType(convExpr).map { convExprType =>
+              unwrapType(convExprType) match {
+                case Some(t) => factoryForExpr(env)(expr.location)(t)
+                case None => ???
+              }
             }
           }
         )
@@ -968,7 +975,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     sig.convertTypeSystem(signatureContext)(ArTypeSystemConverter(context)(typeSystem))
 
   def convertExprType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr)(t: typeSystem.TType): TComp[ArExpr] =
-    convertExprTypeDelay(env)(location)(expr.exprType)(t).map { f => f(expr) }
+    getExprType(expr).flatMap { exprType =>
+      convertExprTypeDelay(env)(location)(exprType)(t)
+        .map { f => f(expr) }
+    }
 
   def convertExprTypeDelay[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(exprType: typeSystem.TType)(t: typeSystem.TType): TComp[ArExpr => ArExpr] =
     typeSystem.isSubType[TComp](t, exprType).flatMap {
@@ -1000,17 +1010,19 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
       case expr if isExprPure(expr) =>
         def isMetaType(t: TType): Boolean = unwrapType(t) match {
-          case Some(TypeOfType(_, _) | TypeN(_, _, _)) => true
+          case Some(TypeOfType(_) | TypeN(_, _, _)) => true
           case Some(LoadTuple(values)) =>
             values.forall { elem => isMetaType(elem.value) }
 
           case _ => false
         }
 
-        if(isMetaType(expr.exprType))
-          ().pure[TComp]
-        else
-          invalidType
+        getExprType(expr).flatMap { exprType =>
+          if(isMetaType(exprType))
+            ().pure[TComp]
+          else
+            invalidType
+        }
 
       case _ => invalidType
     }
@@ -1056,7 +1068,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case TraitType(_, args, _) => args.forall(isTypeArgPure)
       case ClassType(_, args, _) => args.forall(isTypeArgPure)
       case DataConstructorType(_, args, _) => args.forall(isTypeArgPure)
-      case TypeOfType(inner, _) => isWrapExprPure(inner)
+      case TypeOfType(inner) => isWrapExprPure(inner)
       case TypeN(_, subtypeConstraint, supertypeConstraint) => subtypeConstraint.forall(isWrapExprPure) && supertypeConstraint.forall(isWrapExprPure)
       case FunctionType(argumentType, resultType) => isWrapExprPure(argumentType) && isWrapExprPure(resultType)
       case UnionType(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
@@ -1071,7 +1083,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def isTypeArgPure(arg: TypeArgument): Boolean =
     arg match {
       case TypeArgument.Expr(expr) => isWrapExprPure(expr)
-      case TypeArgument.Wildcard => true
+      case TypeArgument.Wildcard(_) => true
     }
 
 
@@ -1293,10 +1305,11 @@ object ExpressionConverter {
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
   : TComp[context.typeSystem.ArExpr] = for {
     convExpr <- fillHolesExprChildren(context)(ts)(expr)
-    stInfo <- context.typeSystem.isSubType(expectedType, convExpr.exprType)
+    convExprType <- context.typeSystem.getExprType(convExpr)
+    stInfo <- context.typeSystem.isSubType(expectedType, convExprType)
     _ <- stInfo match {
       case Some(_) => ().pure[TComp]
-      case None => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(context.typeSystem)(convExpr.exprType, expectedType)(???))
+      case None => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(context.typeSystem)(convExprType, expectedType)(???))
     }
   } yield convExpr
 
@@ -1356,7 +1369,8 @@ object ExpressionConverter {
     case ts.FunctionObjectCall(funcExpr, args, _) =>
       for {
         newFuncExpr <- fillHolesExprChildren(context)(ts)(funcExpr)
-        newFuncType = newFuncExpr.exprType match {
+        newFuncExprType <- context.typeSystem.getExprType(newFuncExpr)
+        newFuncType = newFuncExprType match {
           case t @ context.typeSystem.FunctionType(_, _) => t
           case _ => ???
         }
@@ -1482,18 +1496,45 @@ object ExpressionConverter {
         newSecond <- fillHolesWrapExprChildren(context)(ts)(second)
       } yield context.typeSystem.IntersectionType(newFirst, newSecond)
 
-    case ts.TypeOfType(inner, universe) =>
+    case ts.TypeOfType(inner) =>
       for {
         newInner <- fillHolesWrapExprChildren(context)(ts)(inner)
-      } yield context.typeSystem.TypeOfType(newInner, universe)
+      } yield context.typeSystem.TypeOfType(newInner)
 
     case ts.TypeN(universe, subtypeConstraint, supertypeConstraint) =>
       for {
+        newUniv <- fillHolesUniverse(context)(ts)(universe)
         sub <- subtypeConstraint.traverse(fillHolesWrapExprChildren(context)(ts)(_))
         sup <- supertypeConstraint.traverse(fillHolesWrapExprChildren(context)(ts)(_))
-      } yield context.typeSystem.TypeN(universe, sub, sup)
+      } yield context.typeSystem.TypeN(newUniv, sub, sup)
 
     case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
+  }
+
+
+  private def fillHolesUniverse[TComp[_]]
+  (context: Context)
+  (ts: HoleTypeSystem[context.type])
+  (expr: ts.UniverseExpr)
+  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
+  : TComp[context.typeSystem.UniverseExpr] = expr match {
+    case ts.FixedUniverse(u) =>
+      context.typeSystem.FixedUniverse(u).upcast[context.typeSystem.UniverseExpr].pure[TComp]
+    case ts.AbstractUniverse() =>
+      context.typeSystem.AbstractUniverse().upcast[context.typeSystem.UniverseExpr].pure[TComp]
+    case ts.LargestUniverse(a, b) =>
+      for {
+        newA <- fillHolesUniverse(context)(ts)(a)
+        newB <- fillHolesUniverse(context)(ts)(b)
+      } yield context.typeSystem.LargestUniverse(newA, newB)
+    case ts.NextLargestUniverse(a) =>
+      for {
+        newA <- fillHolesUniverse(context)(ts)(a)
+      } yield context.typeSystem.NextLargestUniverse(newA)
+    case ts.PreviousUniverse(a) =>
+      for {
+        newA <- fillHolesUniverse(context)(ts)(a)
+      } yield context.typeSystem.PreviousUniverse(newA)
   }
 
   private def fillHolesWrapExprChildren[TComp[_]]
@@ -1552,8 +1593,11 @@ object ExpressionConverter {
   (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
   : TComp[context.typeSystem.TypeArgument] =
     t match {
-      case ts.TypeArgument.Expr(expr) => fillHolesWrapExprChildren(context)(ts)(expr).map(context.typeSystem.TypeArgument.Expr)
-      case ts.TypeArgument.Wildcard => (context.typeSystem.TypeArgument.Wildcard : context.typeSystem.TypeArgument).pure[TComp]
+      case ts.TypeArgument.Expr(expr) =>
+        fillHolesWrapExprChildren(context)(ts)(expr).map(context.typeSystem.TypeArgument.Expr)
+
+      case ts.TypeArgument.Wildcard(u) =>
+        fillHolesUniverse(context)(ts)(u).map(context.typeSystem.TypeArgument.Wildcard)
     }
 
   private def fillHolesPattern[TComp[_]]
@@ -1613,11 +1657,11 @@ object ExpressionConverter {
         case HoleTypeHole(id) => (HoleTypeHole(id) : TTypeWrapper[B]).pure[F]
       }
 
-    override def wrapExprType(expr: WrapExpr): TType = expr match {
-      case HoleTypeType(t) => t.exprType
-      case HoleTypeHole(_) => ???
-    }
-
+    override def wrapExprType[TComp[_] : Compilation](expr: WrapExpr): TComp[TType] =
+      expr match {
+        case HoleTypeType(t) => getExprType(t)
+        case HoleTypeHole(_) => fromSimpleType(TypeOfType(expr)).pure[TComp]
+      }
 
     override def isSubTypeWrapper[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[SubTypeInfo[TType]]] =
       (a, b) match {
@@ -1625,10 +1669,12 @@ object ExpressionConverter {
         case (_, _) => (Some(SubTypeInfo(a, b, Vector.empty)) : Option[SubTypeInfo[TType]]).pure[TComp]
       }
 
-    override def universeOfExpr(expr: WrapExpr): Universe = expr match {
-      case HoleTypeHole(_) => ???
-      case HoleTypeType(t) => t.universe
-    }
+    override def universeOfWrapExpr[TComp[_] : Compilation](expr: WrapExpr): TComp[UniverseExpr] =
+      expr match {
+        case HoleTypeHole(_) => AbstractUniverse().upcast[UniverseExpr].pure[TComp]
+        case HoleTypeType(t) => universeOfExpr(t)
+      }
+
   }
 
   object HoleTypeSystem {

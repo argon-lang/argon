@@ -935,7 +935,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
   def convertTypeArg(params: EmitParams)(arg: context.typeSystem.TypeArgument): Comp[JSExpression] =
     arg match {
       case context.typeSystem.TypeArgument.Expr(expr) => convertExpr(params)(expr)
-      case context.typeSystem.TypeArgument.Wildcard => JSNull.pure[Comp]
+      case context.typeSystem.TypeArgument.Wildcard(_) => JSNull.pure[Comp]
     }
 
   def getMethodObject(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): Comp[JSExpression] = for {

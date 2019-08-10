@@ -871,7 +871,7 @@ object ArgonModuleLoader {
                   }
 
                 case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Wildcard(ArgonModule.Wildcard())) +: tail =>
-                  resolveSignatureTypeArgs(sigParams.nextUnsubstituted, tail, convArgs :+ TypeArgument.Wildcard)(f)
+                  ??? //resolveSignatureTypeArgs(sigParams.nextUnsubstituted, tail, convArgs :+ TypeArgument.Wildcard)(f)
 
                 case _ => ???
               },

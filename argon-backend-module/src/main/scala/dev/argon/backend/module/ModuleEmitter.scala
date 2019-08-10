@@ -495,7 +495,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
           convertType(armodule, t)
             .map { modType => module.TypeArg(module.TypeArg.TypeInfo.Type(modType)) }
 
-        case typeSystem.TypeArgument.Wildcard =>
+        case typeSystem.TypeArgument.Wildcard(_) =>
           module.TypeArg(module.TypeArg.TypeInfo.Wildcard(module.Wildcard())).pure[Emit]
       }
 

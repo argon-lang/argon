@@ -17,10 +17,12 @@ trait ArgonTypeSystem[TContext <: Context with Singleton] extends TypeSystem[TCo
   override def traverseTypeWrapper[A, B, F[_] : Applicative](t: A)(f: A => F[B]): F[B] =
     f(t)
 
-  override def wrapExprType(expr: WrapExpr): TType = expr.exprType
+  override def wrapExprType[TComp[_] : Compilation](expr: WrapExpr): TComp[TType] =
+    getExprType(expr)
 
   override def isSubTypeWrapper[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[SubTypeInfo[TType]]] =
     isSimpleSubType(a, b)
 
-  override def universeOfExpr(expr: WrapExpr): Universe = expr.universe
+  override def universeOfWrapExpr[TComp[_] : Compilation](expr: WrapExpr): TComp[UniverseExpr] =
+    universeOfExpr(expr)
 }

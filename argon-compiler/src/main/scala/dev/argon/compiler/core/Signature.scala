@@ -36,7 +36,7 @@ trait SignatureContext
             case None => handleNonReplaceableParam(sig)(param)
           }
 
-        case (sig, (param, typeSystem.TypeArgument.Wildcard)) =>
+        case (sig, (param, typeSystem.TypeArgument.Wildcard(_))) =>
           handleNonReplaceableParam(sig)(param)
       }
 
@@ -109,7 +109,7 @@ trait SignatureContext
 
     def checkTypeArg(arg: TypeArgument): Boolean = arg match {
       case TypeArgument.Expr(argExpr) => checkWrapExpr(argExpr)
-      case TypeArgument.Wildcard => false
+      case TypeArgument.Wildcard(_) => false
     }
 
     def checkVariable(variable: Variable): Boolean =
@@ -167,7 +167,7 @@ trait SignatureContext
         case DataConstructorType(_, args, instanceType) =>
           args.exists(checkTypeArg) || checkArExpr(instanceType)
 
-        case TypeOfType(inner, _) => checkWrapExpr(inner)
+        case TypeOfType(inner) => checkWrapExpr(inner)
         case TypeN(_, subtypeConstraint, supertypeConstraint) =>
           subtypeConstraint.exists(checkWrapExpr) || supertypeConstraint.exists(checkWrapExpr)
 
