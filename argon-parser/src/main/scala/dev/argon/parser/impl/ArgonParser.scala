@@ -310,11 +310,12 @@ object ArgonParser {
 
         case Rule.ConstrainedTypeExpr =>
           matchToken(KW_TYPE) ++!
+            ((matchToken(OP_OPENBRACKET) ++ rule(Rule.Expression).observeSource ++ matchToken(OP_CLOSEBRACKET) --> { case (_, level, _) => level })?) ++
             ((matchToken(OP_SUBTYPE) ++ rule(Rule.UnaryExpr).observeSource --> second)?) ++
             ((matchToken(OP_SUPERTYPE) ++ rule(Rule.UnaryExpr).observeSource --> second)?) ++
             ((matchToken(OP_COLON) ++ rule(Rule.UnaryExpr).observeSource --> second)?) --> {
-              case (_, subtypeOf, supertypeOf, instanceType) =>
-                TypeExpr(instanceType, subtypeOf, supertypeOf)
+              case (_, level, subtypeOf, supertypeOf, instanceType) =>
+                TypeExpr(level, instanceType, subtypeOf, supertypeOf)
             }
 
         case Rule.IntersectionExpr =>

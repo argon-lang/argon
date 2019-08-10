@@ -95,13 +95,15 @@ final case class FunctionCallExpr(func: WithSource[Expr], arg: WithSource[Expr])
 final case class IdentifierExpr(name: String) extends Expr
 final case class IfExpr(condition: WithSource[Expr], body: WithSource[Vector[WithSource[Stmt]]]) extends Expr
 final case class IfElseExpr(condition: WithSource[Expr], ifBody: WithSource[Vector[WithSource[Stmt]]], elseBody: WithSource[Vector[WithSource[Stmt]]]) extends Expr
-final case class IntValueExpr(sign: Int, base: BigInt, digits: Vector[BigInt]) extends Expr
+final case class IntValueExpr(sign: Int, base: BigInt, digits: Vector[BigInt]) extends Expr {
+  def value: BigInt = sign * digits.foldLeft(0 : BigInt) { (acc, digit) => acc * base + digit }
+}
 final case class LambdaTypeExpr(argType: WithSource[Expr], resultType: WithSource[Expr]) extends Expr
 final case class LambdaExpr(name: Option[String], body: WithSource[Expr]) extends Expr
 final case class MatchExpr(value: WithSource[Expr], cases: Seq[WithSource[MatchExprCase]]) extends Expr
 final case class StringValueExpr(value: String) extends Expr
 final case class TupleExpr(values: NonEmptyList[WithSource[Expr]]) extends Expr
-final case class TypeExpr(instanceType: Option[WithSource[Expr]], subtypeOf: Option[WithSource[Expr]], supertypeOf: Option[WithSource[Expr]]) extends Expr
+final case class TypeExpr(level: Option[WithSource[Expr]], instanceType: Option[WithSource[Expr]], subtypeOf: Option[WithSource[Expr]], supertypeOf: Option[WithSource[Expr]]) extends Expr
 final case class TypeOfExpr(ofExpr: WithSource[Expr]) extends Expr
 final case class UnaryOperatorExpr(op: UnaryOperator, inner: WithSource[Expr]) extends Expr
 case object UnitLiteral extends Expr

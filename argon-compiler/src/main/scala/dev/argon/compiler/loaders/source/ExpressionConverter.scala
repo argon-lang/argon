@@ -319,13 +319,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.IfElseExpr(cond, ifBody, elseBody) =>
         createIfExpr(env)(expr.location)(cond, ifBody, elseBody)
 
-      case parser.IntValueExpr(sign, base, digits) =>
-        val value = sign * digits.foldLeft(0 : BigInt) { (acc, digit) => acc * base + digit }
-
+      case intExpr @ parser.IntValueExpr(_, _, _) =>
         compFactory(
           for {
             intType <- resolveIntType(env)(expr.location)
-          } yield factoryForExpr(env)(expr.location)(LoadConstantInt(value, intType))
+          } yield factoryForExpr(env)(expr.location)(LoadConstantInt(intExpr.value, intType))
         )
 
       case parser.LambdaExpr(varName, body) =>
@@ -455,15 +453,28 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               }
         }
 
-      case parser.TypeExpr(instanceType, subtypeOf, supertypeOf) =>
+      case parser.TypeExpr(level, instanceType, subtypeOf, supertypeOf) =>
         compFactory(
           for {
             inst <- instanceType.traverse(evaluateTypeExprAST(env)(_))
             sub <- subtypeOf.traverse(evaluateTypeExprAST(env)(_))
             sup <- supertypeOf.traverse(evaluateTypeExprAST(env)(_))
-            universe <- (sub.toList ++ sup.toList)
+            inferredUniverse <- (sub.toList ++ sup.toList)
               .traverse(universeOfWrapExpr[TComp])
-              .map { _.foldLeft[UniverseExpr](FixedUniverse(1))(LargestUniverse) }
+              .map { _.foldLeft[UniverseExpr](FixedUniverse(0))(LargestUniverse) }
+
+            universe <- level match {
+              case Some(WithSource(levelExpr @ parser.IntValueExpr(_, _, _), _)) =>
+                val declaredUniverse = FixedUniverse(levelExpr.value)
+                universeSubsumes(declaredUniverse, inferredUniverse).flatMap {
+                  case true => declaredUniverse.upcast[UniverseExpr].pure[TComp]
+                  case false => ???
+                }
+
+              case Some(_) => ???
+              case None => inferredUniverse.pure[TComp]
+            }
+
             typeN = TypeN(NextLargestUniverse(universe), sub, sup)
           } yield factoryForExpr(env)(expr.location)(
             inst.foldLeft[ArExpr](typeN) { (a, b) => IntersectionType(fromSimpleType(a), b)}
