@@ -1211,7 +1211,8 @@ object ExpressionConverter {
       converter
         .convertStmts[HoleTypeCheckComp[Comp, ts.TType, ?]](env2)(stmts)(tcInstance)
         .forExpectedType(TypeSystem.convertTypeSystem(context)(context.typeSystem)(ts)(tsConverter)(expectedType))
-    )(expectedType)
+        .map(ts.wrapType)
+    )
   }
 
   def convertExpression
@@ -1251,7 +1252,7 @@ object ExpressionConverter {
 
     val tcExpr = converter.evaluateTypeExprAST[HoleTypeCheckComp[Comp, ts.TType, ?]](env2)(expr)(tcInstance)
 
-    fillHolesType(context)(ts)(tcExpr)
+    fillHoles(context)(ts)(tcExpr)
   }
 
 
@@ -1279,7 +1280,7 @@ object ExpressionConverter {
 
     val tcExpr = converter.resolveUnitType[HoleTypeCheckComp[Comp, ts.TType, ?]](env2)(location)(tcInstance)
 
-    fillHolesType(context)(ts)(tcExpr)
+    fillHoles(context)(ts)(tcExpr)
   }
 
 
@@ -1298,11 +1299,30 @@ object ExpressionConverter {
   private def fillHoles
   (context: Context)
   (ts: HoleTypeSystem[context.type])
-  (expr: HoleTypeCheckComp[context.Comp, ts.TType, ts.ArExpr])
-  (expectedType: context.typeSystem.TType)
+  (expr: HoleTypeCheckComp[context.Comp, ts.TType, ts.WrapExpr])
   (implicit tcInstance: TypeCheck[context.type, ts.TType, HoleTypeCheckComp[context.Comp, ts.TType, ?]])
   : context.Comp[context.typeSystem.ArExpr] = {
     import context._
+
+    type TCComp[A] = HoleTypeCheckComp[Comp, ts.TType, A]
+
+    final class FillConverter extends TypeSystemConverter[context.type, ts.type, context.typeSystem.type, TCComp] {
+
+      override def convertType[A](ts1: ts.type)(ts2: context.typeSystem.type)(fromExpr: ts2.ArExpr => A)(t: HoleType[A]): TCComp[A] =
+        t match {
+          case HoleTypeType(t) => t.pure[TCComp]
+
+          case HoleTypeHole(id) =>
+            tcInstance.resolveType(HoleTypeHole(id)).flatMap {
+              case HoleTypeType(t) =>
+                TypeSystem.convertExprTypeSystem(context)(ts)(context.typeSystem)(this)(t)
+                  .map(fromExpr)
+
+              case HoleTypeHole(_) => ???
+            }
+        }
+
+    }
 
     expr
       .flatMap { e =>
@@ -1311,361 +1331,12 @@ object ExpressionConverter {
             resolveHoles(context)(ts)(state.nextHoleId)
           }
           .flatMap { _ =>
-            fillHolesExpr(context)(ts)(e)(expectedType)
+            TypeSystem.convertTypeSystem(context)(ts)(context.typeSystem)(new FillConverter)(e)
           }
       }
       .runA(TypeCheckState.default)
   }
 
-
-  private def fillHolesType
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (t: HoleTypeCheckComp[context.Comp, ts.TType, ts.TType])
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, HoleTypeCheckComp[context.Comp, ts.TType, ?]])
-  : context.Comp[context.typeSystem.TType] = {
-    import context._
-
-    t
-      .flatMap { t =>
-        StateT.get[Comp, TypeCheckState[ts.TType]]
-          .flatMap { state =>
-            resolveHoles(context)(ts)(state.nextHoleId)
-          }
-          .flatMap { _ =>
-            fillHolesWrapExprChildren(context)(ts)(t)
-          }
-      }
-      .runA(TypeCheckState.default)
-  }
-
-  private def fillHolesExpr[TComp[_]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (expr: ts.ArExpr)
-  (expectedType: context.typeSystem.TType)
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.ArExpr] = for {
-    convExpr <- fillHolesExprChildren(context)(ts)(expr)
-    convExprType <- context.typeSystem.getExprType(convExpr, includeExtraTypeOfType = false)
-    stInfo <- context.typeSystem.isSubType(expectedType, convExprType)
-    _ <- stInfo match {
-      case Some(_) => ().pure[TComp]
-      case None => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(context.typeSystem)(convExprType, expectedType)(???))
-    }
-  } yield convExpr
-
-
-  private def fillHolesExprChildren[TComp[_]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (expr: ts.ArExpr)
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.ArExpr] = expr match {
-    case ts.ClassConstructorCall(classType, ctor, args) =>
-      for {
-        newClassType <-  fillHolesClassType(context)(ts)(classType)
-        newArgs <- args.traverse(fillHolesExprChildren(context)(ts)(_))
-      } yield context.typeSystem.ClassConstructorCall(newClassType, ctor, newArgs)
-
-    case ts.DataConstructorCall(dataCtorInstanceType, args) =>
-      for {
-        newCtorType <- fillHolesDataCtorType(context)(ts)(dataCtorInstanceType)
-        newArgs <- args.traverse(fillHolesExprChildren(context)(ts)(_))
-      } yield context.typeSystem.DataConstructorCall(newCtorType, newArgs)
-
-    case ts.PrimitiveOp(PrimitiveOperation.AddInt, left, right, intType) =>
-      for {
-        newIntType <- fillHolesWrapExprChildren(context)(ts)(intType)
-        newLeft <- fillHolesExpr(context)(ts)(left)(newIntType)
-        newRight <- fillHolesExpr(context)(ts)(right)(newIntType)
-      } yield context.typeSystem.PrimitiveOp(PrimitiveOperation.AddInt, newLeft, newRight, newIntType)
-
-    case ts.PrimitiveOp(PrimitiveOperation.SubInt, left, right, intType) =>
-      for {
-        newIntType <- fillHolesWrapExprChildren(context)(ts)(intType)
-        newLeft <- fillHolesExpr(context)(ts)(left)(newIntType)
-        newRight <- fillHolesExpr(context)(ts)(right)(newIntType)
-      } yield context.typeSystem.PrimitiveOp(PrimitiveOperation.SubInt, newLeft, newRight, newIntType)
-
-    case ts.PrimitiveOp(PrimitiveOperation.MulInt, left, right, intType) =>
-      for {
-        newIntType <- fillHolesWrapExprChildren(context)(ts)(intType)
-        newLeft <- fillHolesExpr(context)(ts)(left)(newIntType)
-        newRight <- fillHolesExpr(context)(ts)(right)(newIntType)
-      } yield context.typeSystem.PrimitiveOp(PrimitiveOperation.MulInt, newLeft, newRight, newIntType)
-
-    case ts.PrimitiveOp(PrimitiveOperation.IntEqual, left, right, boolType) =>
-      for {
-        newBoolType <- fillHolesWrapExprChildren(context)(ts)(boolType)
-        newLeft <- fillHolesExprChildren(context)(ts)(left)
-        newRight <- fillHolesExprChildren(context)(ts)(right)
-      } yield context.typeSystem.PrimitiveOp(PrimitiveOperation.IntEqual, newLeft, newRight, newBoolType)
-
-    case ts.FunctionCall(function, args, returnType) =>
-      for {
-        newArgs <- args.traverse(fillHolesExprChildren(context)(ts)(_))
-        newReturnType <- fillHolesWrapExprChildren(context)(ts)(returnType)
-      } yield context.typeSystem.FunctionCall(function, newArgs, newReturnType)
-
-    case ts.FunctionObjectCall(funcExpr, args, _) =>
-      for {
-        newFuncExpr <- fillHolesExprChildren(context)(ts)(funcExpr)
-        newFuncExprType <- context.typeSystem.getExprType(newFuncExpr, includeExtraTypeOfType = false)
-        newFuncType = newFuncExprType match {
-          case t @ context.typeSystem.FunctionType(_, _) => t
-          case _ => ???
-        }
-
-        newArgs <- fillHolesExpr(context)(ts)(args)(newFuncType.argumentType)
-      } yield context.typeSystem.FunctionObjectCall(newFuncExpr, newArgs, newFuncType.resultType)
-
-    case ts.IfElse(condition, ifBody, elseBody) =>
-      for {
-        newCondition <- fillHolesExprChildren(context)(ts)(condition)
-        newIfBody <- fillHolesExprChildren(context)(ts)(ifBody)
-        newElseBody <- fillHolesExprChildren(context)(ts)(elseBody)
-      } yield context.typeSystem.IfElse(newCondition, newIfBody, newElseBody)
-
-    case ts.LetBinding(variable, value, next) =>
-      for {
-        newVarType <- fillHolesWrapExprChildren(context)(ts)(variable.varType)
-        newVar = context.typeSystem.LocalVariable(variable.descriptor, variable.name, variable.mutability, newVarType)
-
-        newValue <- fillHolesExpr(context)(ts)(value)(newVarType)
-        newNext <- fillHolesExprChildren(context)(ts)(next)
-      } yield context.typeSystem.LetBinding(newVar, newValue, newNext)
-
-    case ts.LoadConstantInt(i, intType) =>
-      for {
-        newIntType <- fillHolesWrapExprChildren(context)(ts)(intType)
-      } yield context.typeSystem.LoadConstantInt(i, newIntType)
-
-    case ts.LoadConstantString(str, stringType) =>
-      for {
-        newStringType <- fillHolesWrapExprChildren(context)(ts)(stringType)
-      } yield context.typeSystem.LoadConstantString(str, newStringType)
-
-    case ts.LoadLambda(argVariable, body) =>
-      for {
-        newVarType <- fillHolesWrapExprChildren(context)(ts)(argVariable.varType)
-        newVar = context.typeSystem.LocalVariable(argVariable.descriptor, argVariable.name, argVariable.mutability, newVarType)
-        newBody <- fillHolesExprChildren(context)(ts)(body)
-      } yield context.typeSystem.LoadLambda(newVar, newBody)
-
-    case t: ts.LoadTuple =>
-      for {
-        elems <- t.values.traverse { elem =>
-          fillHolesWrapExprChildren(context)(ts)(elem.value)
-            .map(context.typeSystem.TupleElement(_))
-        }
-      } yield context.typeSystem.LoadTuple(elems)
-
-    case ts.LoadVariable(ts.LocalVariable(descriptor, name, mutability, varType)) =>
-      for {
-        newVarType <- fillHolesWrapExprChildren(context)(ts)(varType)
-        newVar = context.typeSystem.LocalVariable(descriptor, name, mutability, newVarType)
-      } yield context.typeSystem.LoadVariable(newVar)
-
-    case ts.LoadVariable(ts.ParameterVariable(descriptor, name, mutability, varType)) =>
-      for {
-        newVarType <- fillHolesWrapExprChildren(context)(ts)(varType)
-        newVar = context.typeSystem.ParameterVariable(descriptor, name, mutability, newVarType)
-      } yield context.typeSystem.LoadVariable(newVar)
-
-    case ts.LoadVariable(ts.FieldVariable(descriptor, ownerClass, name, mutability, varType)) =>
-      for {
-        newVarType <- fillHolesWrapExprChildren(context)(ts)(varType)
-        newVar = context.typeSystem.FieldVariable(descriptor, ownerClass, name, mutability, newVarType)
-      } yield context.typeSystem.LoadVariable(newVar)
-
-    case ts.LoadTupleElement(tupleValue, elemType, index) =>
-      for {
-        newTupleValue <- fillHolesExprChildren(context)(ts)(tupleValue)
-        newElemType <- fillHolesWrapExprChildren(context)(ts)(elemType)
-      } yield context.typeSystem.LoadTupleElement(newTupleValue, newElemType, index)
-
-    case ts.LoadUnit(unitType) =>
-      for {
-        newUnitType <- fillHolesWrapExprChildren(context)(ts)(unitType)
-      } yield context.typeSystem.LoadUnit(newUnitType)
-
-    case ts.MethodCall(method, instance, args, returnType) =>
-      for {
-        newInstance <- fillHolesExprChildren(context)(ts)(instance)
-        newArgs <- args.traverse(fillHolesExprChildren(context)(ts)(_))
-        newReturnType <- fillHolesWrapExprChildren(context)(ts)(returnType)
-      } yield context.typeSystem.MethodCall(method, newInstance, newArgs, newReturnType)
-
-    case ts.PatternMatch(value, cases) =>
-      for {
-        newValue <- fillHolesExprChildren(context)(ts)(value)
-        newCases <- cases.traverse {
-          case ts.PatternCase(pattern, body) =>
-            for {
-              newPattern <- fillHolesPattern(context)(ts)(pattern)
-              newBody <- fillHolesExprChildren(context)(ts)(body)
-            } yield context.typeSystem.PatternCase(newPattern, newBody)
-        }
-      } yield context.typeSystem.PatternMatch(newValue, newCases)
-
-    case ts.Sequence(first, second) =>
-      for {
-        newFirst <- fillHolesExprChildren(context)(ts)(first)
-        newSecond <- fillHolesExprChildren(context)(ts)(second)
-      } yield context.typeSystem.Sequence(newFirst, newSecond)
-
-
-    case t: ts.ClassType => fillHolesClassType(context)(ts)(t).map(identity)
-    case t: ts.TraitType => fillHolesTraitType(context)(ts)(t).map(identity)
-    case t: ts.DataConstructorType => fillHolesDataCtorType(context)(ts)(t).map(identity)
-
-    case ts.FunctionType(argumentType, resultType) =>
-      for {
-        newArgType <- fillHolesWrapExprChildren(context)(ts)(argumentType)
-        newResultType <- fillHolesWrapExprChildren(context)(ts)(resultType)
-      } yield context.typeSystem.FunctionType(newArgType, newResultType)
-
-    case ts.UnionType(first, second) =>
-      for {
-        newFirst <- fillHolesWrapExprChildren(context)(ts)(first)
-        newSecond <- fillHolesWrapExprChildren(context)(ts)(second)
-      } yield context.typeSystem.UnionType(newFirst, newSecond)
-
-    case ts.IntersectionType(first, second) =>
-      for {
-        newFirst <- fillHolesWrapExprChildren(context)(ts)(first)
-        newSecond <- fillHolesWrapExprChildren(context)(ts)(second)
-      } yield context.typeSystem.IntersectionType(newFirst, newSecond)
-
-    case ts.TypeOfType(inner) =>
-      for {
-        newInner <- fillHolesWrapExprChildren(context)(ts)(inner)
-      } yield context.typeSystem.TypeOfType(newInner)
-
-    case ts.TypeN(universe, subtypeConstraint, supertypeConstraint) =>
-      for {
-        newUniv <- fillHolesUniverse(context)(ts)(universe)
-        sub <- subtypeConstraint.traverse(fillHolesWrapExprChildren(context)(ts)(_))
-        sup <- supertypeConstraint.traverse(fillHolesWrapExprChildren(context)(ts)(_))
-      } yield context.typeSystem.TypeN(newUniv, sub, sup)
-
-    case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
-  }
-
-
-  private def fillHolesUniverse[TComp[_]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (expr: ts.UniverseExpr)
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.UniverseExpr] = expr match {
-    case ts.FixedUniverse(u) =>
-      context.typeSystem.FixedUniverse(u).upcast[context.typeSystem.UniverseExpr].pure[TComp]
-    case ts.AbstractUniverse() =>
-      context.typeSystem.AbstractUniverse().upcast[context.typeSystem.UniverseExpr].pure[TComp]
-    case ts.LargestUniverse(a, b) =>
-      for {
-        newA <- fillHolesUniverse(context)(ts)(a)
-        newB <- fillHolesUniverse(context)(ts)(b)
-      } yield context.typeSystem.LargestUniverse(newA, newB)
-    case ts.NextLargestUniverse(a) =>
-      for {
-        newA <- fillHolesUniverse(context)(ts)(a)
-      } yield context.typeSystem.NextLargestUniverse(newA)
-    case ts.PreviousUniverse(a) =>
-      for {
-        newA <- fillHolesUniverse(context)(ts)(a)
-      } yield context.typeSystem.PreviousUniverse(newA)
-  }
-
-  private def fillHolesWrapExprChildren[TComp[_]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (expr: ts.WrapExpr)
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.ArExpr] = expr match {
-    case HoleTypeHole(id) =>
-      tcInstance.resolveType(HoleTypeHole(id))
-        .flatMap(fillHolesWrapExprChildren(context)(ts)(_))
-        .map(identity)
-
-    case HoleTypeType(e) =>
-      fillHolesExprChildren(context)(ts)(e).map(context.typeSystem.wrapType(_))
-  }
-
-  private def fillHolesClassType[TComp[_]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (t: ts.ClassType)
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.ClassType] =
-    for {
-      args <- t.args.traverse(fillHolesTypeArgument(context)(ts)(_))
-      baseClass <- t.baseTypes.baseClass.traverse(fillHolesClassType(context)(ts)(_))
-      baseTraits <- t.baseTypes.baseTraits.traverse(fillHolesTraitType(context)(ts)(_))
-    } yield context.typeSystem.ClassType(t.arClass, args, context.typeSystem.BaseTypeInfoClass(baseClass, baseTraits))
-
-  private def fillHolesTraitType[TComp[_]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (t: ts.TraitType)
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.TraitType] =
-    for {
-      args <- t.args.traverse(fillHolesTypeArgument(context)(ts)(_))
-      baseTraits <- t.baseTypes.baseTraits.traverse(fillHolesTraitType(context)(ts)(_))
-    } yield context.typeSystem.TraitType(t.arTrait, args, context.typeSystem.BaseTypeInfoTrait(baseTraits))
-
-  private def fillHolesDataCtorType[TComp[_]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (t: ts.DataConstructorType)
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.DataConstructorType] =
-    for {
-      args <- t.args.traverse(fillHolesTypeArgument(context)(ts)(_))
-      instanceType <- fillHolesTraitType(context)(ts)(t.instanceType)
-    } yield context.typeSystem.DataConstructorType(t.ctor, args, instanceType)
-
-  private def fillHolesTypeArgument[TComp[_]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (t: ts.TypeArgument)
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.TypeArgument] =
-    t match {
-      case ts.TypeArgument.Expr(expr) =>
-        fillHolesWrapExprChildren(context)(ts)(expr).map(context.typeSystem.TypeArgument.Expr)
-
-      case ts.TypeArgument.Wildcard(u) =>
-        fillHolesUniverse(context)(ts)(u).map(context.typeSystem.TypeArgument.Wildcard)
-    }
-
-  private def fillHolesPattern[TComp[_]]
-  (context: Context)
-  (ts: HoleTypeSystem[context.type])
-  (pattern: ts.PatternExpr)
-  (implicit tcInstance: TypeCheck[context.type, ts.TType, TComp])
-  : TComp[context.typeSystem.PatternExpr] =
-    pattern match {
-      case ts.PatternExpr.DataDeconstructor(ctor, args) =>
-        for {
-          newArgs <- args.traverse(fillHolesPattern(context)(ts)(_))
-        } yield context.typeSystem.PatternExpr.DataDeconstructor(ctor, newArgs)
-
-      case ts.PatternExpr.Binding(variable) =>
-        for {
-          newVarType <- fillHolesWrapExprChildren(context)(ts)(variable.varType)
-          newVar = context.typeSystem.LocalVariable(variable.descriptor, variable.name, variable.mutability, newVarType)
-        } yield context.typeSystem.PatternExpr.Binding(newVar)
-
-      case ts.PatternExpr.CastBinding(variable) =>
-        for {
-          newVarType <- fillHolesWrapExprChildren(context)(ts)(variable.varType)
-          newVar = context.typeSystem.LocalVariable(variable.descriptor, variable.name, variable.mutability, newVarType)
-        } yield context.typeSystem.PatternExpr.CastBinding(newVar)
-    }
 
 
   sealed trait HoleType[+T]
@@ -1765,6 +1436,9 @@ object ExpressionConverter {
   type HoleTypeCheckComp[TComp[_], TType, A] = StateT[TComp, TypeCheckState[TType], A]
   implicit def holeTypeCheckMonad[TComp[_]: Monad, TType]: Monad[HoleTypeCheckComp[TComp, TType, ?]] =
     cats.data.IndexedStateT.catsDataMonadForIndexedStateT[TComp, TypeCheckState[TType]]
+
+
+
 
   private def typeCheckHoleTypeInstance
   (context: Context)
