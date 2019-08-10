@@ -8,6 +8,7 @@ import cats.implicits._
 import cats.data._
 import Compilation.Operators._
 import cats.evidence.===
+import dev.argon.compiler.core.ErasedSignature.TupleType
 import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
 
 import scala.collection.immutable.Vector
@@ -227,9 +228,31 @@ trait TypeSystem[TContext <: Context with Singleton] {
       else
         Option.empty[TSubTypeInfo].pure[F]
 
+    def unMetaType(t: ArExpr): Vector[TType] =
+      t match {
+        case TypeOfType(inner) =>
+          Vector(inner)
+
+        case IntersectionType(b1, b2) =>
+          unMetaTypeWrapped(b1) ++ unMetaTypeWrapped(b2)
+
+        case LoadTuple(values) =>
+          values
+            .traverse {
+              case TupleElement(value) =>
+                unMetaTypeWrapped(value).map(TupleElement)
+            }
+            .map { newValues => fromSimpleType(LoadTuple(newValues)) }
+
+        case _ => Vector()
+      }
+
+    def unMetaTypeWrapped(t: TType): Vector[TType] =
+      unwrapType(t).toList.toVector.flatMap(unMetaType)
+
     Vector(
       () => a match {
-        case a: UnionType =>
+        case a: IntersectionType =>
           isSubType[F](a.first, fromSimpleType(b)).flatMap {
             case Some(left) =>
               isSubType[F](a.second, fromSimpleType(b)).map { _.map { right =>
@@ -241,7 +264,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case _ => notSubType
       },
       () => b match {
-        case b: IntersectionType =>
+        case b: UnionType =>
           isSubType[F](fromSimpleType(a), b.first).flatMap {
             case Some(left) =>
               isSubType[F](fromSimpleType(a), b.second).map { _.map { right =>
@@ -254,7 +277,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case _ => notSubType
       },
       () => b match {
-        case b: UnionType =>
+        case b: IntersectionType =>
           Vector(
             () => isSubType[F](fromSimpleType(a), b.first),
             () => isSubType[F](fromSimpleType(a), b.second),
@@ -265,7 +288,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case _ => notSubType
       },
       () => a match {
-        case a: IntersectionType =>
+        case a: UnionType =>
           Vector(
             () => isSubType[F](a.first, fromSimpleType(b)),
             () => isSubType[F](a.second, fromSimpleType(b)),
@@ -383,7 +406,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case (_, _) => notSubType
       },
       () => b match {
-        case _: TypeIsTypeOfTypeExpr => notSubType
+        case _: TypeIsTypeOfTypeExpr | _: LoadTuple => notSubType
         case _ =>
           def handleBType(bType: TType): F[Option[TSubTypeInfo]] =
             unwrapType(bType) match {
@@ -400,14 +423,19 @@ trait TypeSystem[TContext <: Context with Singleton] {
                 )
                   .collectFirstSomeM(_())
 
+              case Some(t @ LoadTuple(_)) =>
+                unMetaType(t).collectFirstSomeM { t =>
+                  isSubType(fromSimpleType(a), t)
+                }
+
 
               case _ => notSubType
             }
 
-          getExprType(b).flatMap(handleBType)
+          getExprType(b, includeExtraTypeOfType = false).flatMap(handleBType)
       },
       () => a match {
-        case _: TypeIsTypeOfTypeExpr => notSubType
+        case _: TypeIsTypeOfTypeExpr | _: LoadTuple => notSubType
         case _ =>
           def handleAType(aType: TType): F[Option[TSubTypeInfo]] =
             unwrapType(aType) match {
@@ -424,17 +452,22 @@ trait TypeSystem[TContext <: Context with Singleton] {
                 )
                   .collectFirstSomeM(_())
 
+              case Some(t @ LoadTuple(_)) =>
+                unMetaType(t).collectFirstSomeM { t =>
+                  isSubType(t, fromSimpleType(b))
+                }
+
 
               case _ => notSubType
             }
 
-          getExprType(a).flatMap(handleAType)
+          getExprType(a, includeExtraTypeOfType = false).flatMap(handleAType)
       },
     ).collectFirstSomeM(_())
   }
 
 
-  protected final def reduceExprToValue[TComp[_] : Compilation](expr: ArExpr): TComp[ArExpr] =
+  final def reduceExprToValue[TComp[_] : Compilation](expr: ArExpr): TComp[ArExpr] =
     expr match {
       // Already reduced, has a constructor at the top level
       case ClassConstructorCall(_, _, _) | DataConstructorCall(_, _) |
@@ -473,12 +506,18 @@ trait TypeSystem[TContext <: Context with Singleton] {
       case StoreVariable(_, _, _) => ???
     }
 
-  final def getExprType[TComp[_] : Compilation](expr: ArExpr): TComp[TType] =
+  final def getExprType[TComp[_] : Compilation](expr: ArExpr, includeExtraTypeOfType: Boolean = true): TComp[TType] = {
+    def withTypeOfExpr(result: TComp[TType]): TComp[TType] =
+      if(includeExtraTypeOfType)
+        result.map { t => fromSimpleType(IntersectionType(t, fromSimpleType(TypeOfType(fromSimpleType(expr))))) }
+      else
+        result
+
     expr match {
       case ClassConstructorCall(classType, _, _) => fromSimpleType(classType).pure[TComp]
       case DataConstructorCall(dataCtorInstanceType, _) => fromSimpleType(dataCtorInstanceType).pure[TComp]
-      case FunctionCall(_, _, returnType) => returnType.pure[TComp]
-      case FunctionObjectCall(_, _, returnType) => returnType.pure[TComp]
+      case FunctionCall(_, _, returnType) => withTypeOfExpr(returnType.pure[TComp])
+      case FunctionObjectCall(_, _, returnType) => withTypeOfExpr(returnType.pure[TComp])
       case IfElse(_, ifBody, elseBody) =>
         for {
           ifType <- getExprType(ifBody)
@@ -498,8 +537,8 @@ trait TypeSystem[TContext <: Context with Singleton] {
           .map { elems => fromSimpleType(LoadTuple(elems)) }
       case LoadTupleElement(_, elemType, _) => elemType.pure[TComp]
       case LoadUnit(exprType) => exprType.pure[TComp]
-      case LoadVariable(variable) => variable.varType.pure[TComp]
-      case MethodCall(_, _, _, returnType) => returnType.pure[TComp]
+      case LoadVariable(variable) => withTypeOfExpr(variable.varType.pure[TComp])
+      case MethodCall(_, _, _, returnType) => withTypeOfExpr(returnType.pure[TComp])
       case PatternMatch(_, cases) =>
         cases
           .traverse { patCase => getExprType(patCase.body) }
@@ -509,6 +548,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
       case StoreVariable(_, _, exprType) => exprType.pure[TComp]
       case expr: TypeIsTypeOfTypeExpr => fromSimpleType(TypeOfType(fromSimpleType(expr))).pure[TComp]
     }
+  }
 
   def universeOfExpr[TComp[_] : Compilation](expr: ArExpr): TComp[UniverseExpr] = {
     def universeOfTypeArgs(args: Vector[TypeArgument]): TComp[UniverseExpr] =

@@ -23,7 +23,9 @@ object VariableOwnerDescriptor {
   implicit val eqInstance: Eq[VariableOwnerDescriptor] = cats.derived.semi.eq
 }
 
-sealed trait ParameterOwnerDescriptor extends VariableOwnerDescriptor
+sealed trait CallableDescriptor
+case object FunctionTypeCallDescriptor extends CallableDescriptor
+sealed trait ParameterOwnerDescriptor extends VariableOwnerDescriptor with CallableDescriptor
 object ParameterOwnerDescriptor {
   implicit val eqInstance: Eq[Descriptor] = cats.derived.semi.eq
 }
