@@ -382,21 +382,53 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
         case (_, _) => notSubType
       },
-      () => getExprType(b).flatMap { bType =>
-        unwrapType(bType) match {
-          case Some(TypeN(_, Some(subtypeConstraint), _)) =>
-            isSubType(fromSimpleType(a), subtypeConstraint)
+      () => b match {
+        case _: TypeIsTypeOfTypeExpr => notSubType
+        case _ =>
+          def handleBType(bType: TType): F[Option[TSubTypeInfo]] =
+            unwrapType(bType) match {
+              case Some(TypeN(_, Some(subtypeConstraint), _)) =>
+                isSubType(fromSimpleType(a), subtypeConstraint)
 
-          case _ => notSubType
-        }
+              case Some(TypeOfType(inner)) =>
+                isSubType(fromSimpleType(a), inner)
+
+              case Some(IntersectionType(b1, b2)) =>
+                Vector(
+                  () => handleBType(b1),
+                  () => handleBType(b2),
+                )
+                  .collectFirstSomeM(_())
+
+
+              case _ => notSubType
+            }
+
+          getExprType(b).flatMap(handleBType)
       },
-      () => getExprType(a).flatMap { aType =>
-        unwrapType(aType) match {
-          case Some(TypeN(_, _, Some(supertypeConstraint))) =>
-            isSubType(supertypeConstraint, fromSimpleType(b))
+      () => a match {
+        case _: TypeIsTypeOfTypeExpr => notSubType
+        case _ =>
+          def handleAType(aType: TType): F[Option[TSubTypeInfo]] =
+            unwrapType(aType) match {
+              case Some(TypeN(_, _, Some(supertypeConstraint))) =>
+                isSubType(supertypeConstraint, fromSimpleType(b))
 
-          case _ => notSubType
-        }
+              case Some(TypeOfType(inner)) =>
+                isSubType(inner, fromSimpleType(b))
+
+              case Some(IntersectionType(a1, a2)) =>
+                Vector(
+                  () => handleAType(a1),
+                  () => handleAType(a2),
+                )
+                  .collectFirstSomeM(_())
+
+
+              case _ => notSubType
+            }
+
+          getExprType(a).flatMap(handleAType)
       },
     ).collectFirstSomeM(_())
   }
