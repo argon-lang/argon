@@ -34,7 +34,7 @@ class CompilerTests extends FunSpec with DefaultRuntime with Matchers with Befor
   private val references = libraries.map { name => new File(s"libraries/$name/$name.armodule") }
 
   private def generateTestCases(): Unit = {
-    val testCases = unsafeRun(TestCaseLoader.findTestCases(new File(getClass.getResource("/dev/argon/compiler/testcases/").toURI)))
+    val testCases = unsafeRun(TestCaseLoader.findTestCases(new File(getClass.getResource("/dev/argon/compiler/testcases").toURI)))
 
     val runners = Vector(
       "Parsing" -> ParseTestCaseRunner,
