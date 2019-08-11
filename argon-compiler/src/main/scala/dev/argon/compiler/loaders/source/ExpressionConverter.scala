@@ -205,7 +205,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             case (_, _) => b
           }
 
-        getExprType(thisExpr)
+        getExprType(thisExpr, includeExtraTypeOfType = false)
           .flatMap(overloadsOfType)
           .flatMap { overloads =>
             val mergedOverloads =
