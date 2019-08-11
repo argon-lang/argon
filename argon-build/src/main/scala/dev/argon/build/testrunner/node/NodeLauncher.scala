@@ -9,7 +9,7 @@ import zio.blocking.Blocking
 import zio.interop.catz._
 
 trait NodeLauncher {
-  def serverFunctions: TaskR[Blocking, ServerFunctions]
+  def serverFunctions: RIO[Blocking, ServerFunctions]
   def close: ZIO[Blocking, Nothing, Unit]
 }
 
@@ -19,7 +19,7 @@ object NodeLauncher {
     connOpt <- RefM.make[Option[Fiber[Throwable, (RpcConnection, ServerFunctions)]]](None)
   } yield new NodeLauncher {
 
-    def serverFunctions: TaskR[Blocking, ServerFunctions] =
+    def serverFunctions: RIO[Blocking, ServerFunctions] =
       connOpt
         .modify {
           case conn @ Some(fiber) => IO.succeed((fiber, conn))

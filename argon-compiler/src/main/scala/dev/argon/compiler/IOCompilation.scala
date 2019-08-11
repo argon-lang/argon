@@ -39,7 +39,7 @@ object IOCompilation {
             case None =>
               for {
                 promise <- Promise.make[E, A]
-                _ <- promise.done(createValue.provide(env)).fork
+                _ <- promise.complete(createValue.provide(env)).fork
               } yield (promise, Some(promise))
           }
             .flatMap[Any, E, A] { promise => promise.await }
@@ -55,7 +55,7 @@ object IOCompilation {
               case None =>
                 for {
                   promise <- Promise.make[E, B]
-                  _ <- promise.done(createValue(a).provide(env)).fork
+                  _ <- promise.complete(createValue(a).provide(env)).fork
                 } yield (promise, map + (a -> promise))
             }
           }

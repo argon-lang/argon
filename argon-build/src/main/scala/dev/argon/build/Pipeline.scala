@@ -56,7 +56,7 @@ object Pipeline {
       }
   }
 
-  def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): TaskR[Console, Unit] = {
+  def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): RIO[Console, Unit] = {
     import zio.interop.catz._
 
     msgs
@@ -86,7 +86,7 @@ object Pipeline {
       )(f)
     }
 
-  def run(buildInfo: BuildInfo[File]): TaskR[Console with Blocking, Int] =
+  def run(buildInfo: BuildInfo[File]): RIO[Console with Blocking, Int] =
     IOCompilation.compilationInstance[Blocking]
       .flatMap { implicit compInstance =>
         compInstance.getResult(
