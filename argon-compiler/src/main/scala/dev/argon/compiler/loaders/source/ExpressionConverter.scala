@@ -1503,7 +1503,7 @@ object ExpressionConverter {
         }
 
       override def resolveType(t: ts.TType): HoleTypeCheckComp[Comp, ts.TType, ts.TType] =
-        TypeSystem.convertTypeSystem(context)(ts)(ts)(new ResolverConverter)(t).runA(Set.empty)
+        TypeSystem.convertTypeSystem(context)(ts)(ts)(new ResolverConverter)(t)
 
       private def getConstraints(id: Int): HoleTypeCheckComp[Comp, ts.TType, HoleConstraint[ts.TType]] =
         StateT.get[Comp, TypeCheckState[ts.TType]].map { state =>
@@ -1551,9 +1551,7 @@ object ExpressionConverter {
             } yield resolvedType
         }
 
-      type ResolverState[A] = StateT[HoleTypeCheckComp[Comp, ts.TType, ?], Set[Int], A]
-      implicit val resolverStateMonad: Monad[ResolverState] =
-        cats.data.IndexedStateT.catsDataMonadForIndexedStateT[HoleTypeCheckComp[Comp, ts.TType, ?], Set[Int]]
+      type ResolverState[A] = HoleTypeCheckComp[Comp, ts.TType, A]
 
       private final class ResolverConverter extends TypeSystemConverter[context.type, ts.type, ts.type, ResolverState] {
         override def convertType[A](ts1: ts.type)(ts2: ts.type)(fromExpr: ts2.ArExpr => A)(t: HoleType[A]): ResolverState[HoleType[A]] =
@@ -1561,19 +1559,7 @@ object ExpressionConverter {
             case HoleTypeType(_) => t.pure[ResolverState]
             case HoleTypeHole(id) =>
               for {
-                seenHoles <- StateT.get[HoleTypeCheckComp[Comp, ts.TType, ?], Set[Int]]
-                _ <-
-                  if(seenHoles.contains(id))
-                    StateT.liftF[HoleTypeCheckComp[Comp, ts.TType, ?], Set[Int], Unit](
-                      StateT.get[Comp, TypeCheckState[ts.TType]].map { tcState =>
-                        println(tcState)
-                      }
-                    )
-                  else
-                    StateT.set[HoleTypeCheckComp[Comp, ts.TType, ?], Set[Int]](seenHoles + id)
-
-
-                resolvedOuter <- StateT((s: Set[Int]) => resolveOuterHole(id).map { a => (s, a) })
+                resolvedOuter <- resolveOuterHole(id)
                 resolvedType <- TypeSystem.convertTypeSystem(context)(ts)(ts)(this)(resolvedOuter)
               } yield ts.mapTypeWrapper(resolvedType)(fromExpr)
           }
