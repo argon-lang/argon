@@ -7,7 +7,6 @@ import cats._
 import cats.implicits._
 import dev.argon.io.{FileIO, FilenameManip}
 import zio._
-import zio.blocking.Blocking
 import shapeless.{Path => _, _}
 import zio.stream.ZSink
 

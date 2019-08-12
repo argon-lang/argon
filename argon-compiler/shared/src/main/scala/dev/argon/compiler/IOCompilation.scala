@@ -16,7 +16,6 @@ import dev.argon.compiler.backend.Backend
 import dev.argon.compiler.core._
 import dev.argon.io.{FileIO, FilenameManip, ZipEntryInfo, ZipFileReader}
 import dev.argon.stream._
-import zio.blocking.Blocking
 
 trait IOCompilation[R] extends CompilationExec[ZIO, R]
 

@@ -7,7 +7,6 @@ lazy val commonSettings = Seq(
 
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
-  addCompilerPlugin("com.github.ghik" %% "silencer-plugin" % "1.4.1"),
 
   libraryDependencies ++= Seq(
     "org.scala-lang.modules" %%% "scala-xml" % "1.2.0",
@@ -34,7 +33,8 @@ lazy val commonSettings = Seq(
     "org.scalacheck" %%% "scalacheck" % "1.14.0" % "test",
     "com.github.alexarchambault" %%% "scalacheck-shapeless_1.14" % "1.2.3" % "test",
 
-    "com.github.ghik" %%% "silencer-lib" % "1.4.1" % Provided,
+    compilerPlugin("com.github.ghik" % "silencer-plugin" % "1.4.3" cross CrossVersion.full),
+    "com.github.ghik" %%% "silencer-lib" % "1.4.3" % Provided cross CrossVersion.full,
   )
 
 )
@@ -140,6 +140,7 @@ lazy val grammar = crossProject(JVMPlatform, JSPlatform).in(file("argon-grammar"
   )
 
 lazy val grammarJVM = grammar.jvm
+lazy val grammarJS = grammar.js
 
 lazy val parser = crossProject(JVMPlatform, JSPlatform).in(file("argon-parser"))
   .dependsOn(arstream, util, parser_data, grammar)
@@ -151,6 +152,7 @@ lazy val parser = crossProject(JVMPlatform, JSPlatform).in(file("argon-parser"))
   )
 
 lazy val parserJVM = parser.jvm
+lazy val parserJS = parser.js
 
 lazy val parser_data = crossProject(JVMPlatform, JSPlatform).in(file("argon-parser-data"))
   .dependsOn(arstream, util, grammar)
@@ -162,6 +164,7 @@ lazy val parser_data = crossProject(JVMPlatform, JSPlatform).in(file("argon-pars
   )
 
 lazy val parser_dataJVM = parser_data.jvm
+lazy val parser_dataJS = parser_data.js
 
 lazy val argon_compiler = crossProject(JVMPlatform, JSPlatform).in(file("argon-compiler"))
   .dependsOn(arstream, util, argonio, modulefmt, parser_data)
@@ -173,6 +176,7 @@ lazy val argon_compiler = crossProject(JVMPlatform, JSPlatform).in(file("argon-c
   )
 
 lazy val argon_compilerJVM = argon_compiler.jvm
+
 
 lazy val backend_js = crossProject(JVMPlatform, JSPlatform).in(file("argon-backend-js"))
   .dependsOn(arstream, util, modulefmt, parser_data, argon_compiler)
@@ -205,6 +209,7 @@ lazy val util = crossProject(JVMPlatform, JSPlatform).in(file("argon-util"))
   )
 
 lazy val utilJVM = util.jvm
+lazy val utilJS = util.js
 
 lazy val arstream = crossProject(JVMPlatform, JSPlatform).in(file("argon-stream"))
   .settings(
@@ -215,6 +220,7 @@ lazy val arstream = crossProject(JVMPlatform, JSPlatform).in(file("argon-stream"
   )
 
 lazy val arstreamJVM = arstream.jvm
+lazy val arstreamJS = arstream.js
 
 lazy val argonio = crossProject(JVMPlatform, JSPlatform).in(file("argon-io"))
   .dependsOn(arstream)
@@ -226,6 +232,7 @@ lazy val argonio = crossProject(JVMPlatform, JSPlatform).in(file("argon-io"))
   )
 
 lazy val argonioJVM = argonio.jvm
+lazy val argonioJS = argonio.js
 
 lazy val modulefmt = crossProject(JVMPlatform, JSPlatform).in(file("argon-modulefmt"))
   .settings(
@@ -250,4 +257,5 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform).in(file("argon-module
   )
 
 lazy val modulefmtJVM = modulefmt.jvm
+lazy val modulefmtJS = modulefmt.js
 
