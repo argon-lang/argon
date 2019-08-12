@@ -285,7 +285,13 @@ message ParameterElement {
     required Type paramType = 2;
 }
 
+enum ParameterStyle {
+	Normal = 1;
+	Inferrable = 2;
+}
+
 message Parameter {
+	optional ParameterStyle style = 2;
     repeated ParameterElement elements = 1;
 }
 

@@ -70,7 +70,7 @@ trait Substitutions {
     )
 
   def substParameter(parameter: Parameter): Parameter =
-    Parameter(substParamVariable(parameter.paramVar), parameter.elements.map(substParamElement))
+    Parameter(parameter.style, substParamVariable(parameter.paramVar), parameter.elements.map(substParamElement))
 
   def substArExpr(expr: ArExpr): ArExpr =
     expr match {

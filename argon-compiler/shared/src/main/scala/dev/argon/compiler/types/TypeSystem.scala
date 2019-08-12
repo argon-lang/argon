@@ -61,7 +61,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final case class FieldVariable(descriptor: FieldDescriptor, ownerClass: AbsRef[context.type, ArClass], name: VariableName.Normal, mutability: Mutability, varType: TType) extends Variable
 
   final case class ParameterElement(paramVar: ParameterVariable, name: VariableName, elemType: TType, index: Int)
-  final case class Parameter(paramVar: ParameterVariable, elements: Vector[ParameterElement]) {
+  final case class Parameter(style: ParameterStyle, paramVar: ParameterVariable, elements: Vector[ParameterElement]) {
     def paramType: TType = paramVar.varType
   }
 
@@ -831,7 +831,7 @@ object TypeSystem {
     for {
       newParamVar <- convertParamVariableTypeSystem(context)(ts)(otherTS)(converter)(p.paramVar)
       newElems <- p.elements.traverse(convertParameterElementTypeSystem(context)(ts)(otherTS)(converter)(_))
-    } yield otherTS.Parameter(newParamVar, newElems)
+    } yield otherTS.Parameter(p.style, newParamVar, newElems)
 
   def convertPatternExprTypeSystem[F[_]: Monad]
   (context: Context)

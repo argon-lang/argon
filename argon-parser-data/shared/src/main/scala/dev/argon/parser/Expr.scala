@@ -91,7 +91,7 @@ final case class BoolValueExpr(value: Boolean) extends Expr
 final case class ClassConstructorExpr(classExpr: WithSource[Expr]) extends Expr
 final case class DotExpr(left: WithSource[Expr], right: String) extends Expr
 final case class ExternExpr(specifier: String) extends Expr
-final case class FunctionCallExpr(func: WithSource[Expr], arg: WithSource[Expr]) extends Expr
+final case class FunctionCallExpr(func: WithSource[Expr], listType: FunctionParameterListType, arg: WithSource[Expr]) extends Expr
 final case class IdentifierExpr(name: String) extends Expr
 final case class IfExpr(condition: WithSource[Expr], body: WithSource[Vector[WithSource[Stmt]]]) extends Expr
 final case class IfElseExpr(condition: WithSource[Expr], ifBody: WithSource[Vector[WithSource[Stmt]]], elseBody: WithSource[Vector[WithSource[Stmt]]]) extends Expr

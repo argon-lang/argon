@@ -9,7 +9,7 @@ import cats._
 import cats.data._
 import cats.implicits._
 import dev.argon.compiler.loaders.armodule.{ModuleFormatVersion, ModulePaths}
-import dev.argon.compiler.types.TypeSystem
+import dev.argon.compiler.types.{ParameterStyle, TypeSystem}
 import dev.argon.util.FileID
 import dev.argon.module
 import dev.argon.stream.{ArStream, Resource, Step, StreamTransformation}
@@ -457,7 +457,12 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
                 }
               }
               .flatMap { elems =>
-                impl(sigParams.nextUnsubstituted, prevParams :+ module.Parameter(elems))
+                val style = sigParams.parameter.style match {
+                  case ParameterStyle.Normal => None
+                  case ParameterStyle.Inferrable => Some(module.ParameterStyle.Inferrable)
+                }
+
+                impl(sigParams.nextUnsubstituted, prevParams :+ module.Parameter(style, elems))
               },
           sigResult => f(prevParams, sigResult.result),
         )

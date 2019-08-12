@@ -35,7 +35,11 @@ object SourceSignatureCreator {
             unitType <- ExpressionConverter.resolveUnitType(context)(env)(location)
             restSig <- impl(env)(tail)(paramIndex + 1)
           } yield SignatureParameters[TResult](
-            Parameter(ParameterVariable(ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, unitType), Vector()),
+            Parameter(
+              ParameterStyle.fromParser(listType),
+              ParameterVariable(ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, unitType),
+              Vector()
+            ),
             restSig
           )
 
@@ -63,7 +67,11 @@ object SourceSignatureCreator {
                 for {
                   restSig <- impl(env.copy(scope = env.scope.addVariable(paramVar)))(tail)(paramIndex + 1)
                 } yield SignatureParameters[TResult](
-                  Parameter(paramVar, Vector(ParameterElement(paramVar, VariableName.Normal(name), t, 0))),
+                  Parameter(
+                    ParameterStyle.fromParser(listType),
+                    paramVar,
+                    Vector(ParameterElement(paramVar, VariableName.Normal(name), t, 0))
+                  ),
                   restSig
                 )
 
@@ -77,7 +85,7 @@ object SourceSignatureCreator {
 
                 val paramElems = elems.toList.toVector.zipWithIndex.map { case ((t, name), i) => ParameterElement(paramVar, VariableName.Normal(name), t, i) }
 
-                val param = Parameter(paramVar, paramElems)
+                val param = Parameter(ParameterStyle.fromParser(listType), paramVar, paramElems)
 
                 impl(
                   env.copy(scope = env.scope.addParameter(param))

@@ -58,7 +58,7 @@ object ArgonParser {
     final case class PrimaryExpr(parenAllowed: ParenAllowedState) extends ArgonRuleNameTyped[Expr]
     final case class PostfixExpr(parenAllowed: ParenAllowedState) extends ArgonRuleNameTyped[Expr]
     case object CurryCallExpr extends ArgonRuleNameTyped[Expr]
-    case object ParenArgList extends ArgonRuleNameTyped[Expr]
+    case object ParenArgList extends ArgonRuleNameTyped[(FunctionParameterListType, Expr)]
     case object MemberAccess extends ArgonRuleNameTyped[WithSource[Expr] => Expr]
     case object UnaryExpr extends ArgonRuleNameTyped[Expr]
     case object ConstrainedTypeExpr extends ArgonRuleNameTyped[Expr]
@@ -268,7 +268,10 @@ object ArgonParser {
             rule(Rule.PrimaryExpr(Rule.ParenAllowed))
           )(
             postfixExprMemberAccess |
-              rule(Rule.ParenArgList).observeSource --> { argList => (funcExpr: WithSource[Expr]) => FunctionCallExpr(funcExpr, argList) }
+              rule(Rule.ParenArgList).observeSource --> {
+                case WithSource((listType, argList), location) =>
+                  (funcExpr: WithSource[Expr]) => FunctionCallExpr(funcExpr, listType, WithSource(argList, location))
+              }
           )
 
         case Rule.PostfixExpr(Rule.ParenDisallowed) =>
@@ -276,8 +279,8 @@ object ArgonParser {
 
         case Rule.ParenArgList =>
           matchToken(OP_OPENPAREN) ++ (rule(Rule.Expression)?) ++ matchToken(OP_CLOSEPAREN) --> {
-            case (_, Some(argList), _) => argList
-            case (_, None, _) => UnitLiteral
+            case (_, Some(argList), _) => (FunctionParameterListType.NormalList, argList)
+            case (_, None, _) => (FunctionParameterListType.NormalList, UnitLiteral)
           }
 
         case Rule.MemberAccess =>
@@ -290,10 +293,10 @@ object ArgonParser {
             rule(Rule.PostfixExpr(Rule.ParenAllowed))
           )(
             rule(Rule.PostfixExpr(Rule.ParenDisallowed)).observeSource --> {
-              argExpr => (funcExpr: WithSource[Expr]) => FunctionCallExpr(funcExpr, argExpr)
+              argExpr => (funcExpr: WithSource[Expr]) => FunctionCallExpr(funcExpr, FunctionParameterListType.NormalList, argExpr)
             } |
               rule(Rule.ParenArgList).observeSource --> {
-                argExpr => (funcExpr: WithSource[Expr]) => FunctionCallExpr(funcExpr, argExpr)
+                case WithSource((listType, argExpr), location) => (funcExpr: WithSource[Expr]) => FunctionCallExpr(funcExpr, listType, WithSource(argExpr, location))
               }
           )
 

@@ -43,7 +43,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   private type TypeCheckT[TCType, TComp[_]] = TypeCheckA[context.type, TCType, TComp]
   private type TypeCheck[TComp[_]] = TypeCheckT[typeSystem.TType, TComp]
 
-  final case class ArgumentInfo[TComp[_]](argFactory: ExprFactory[TComp], env: Env, location: SourceLocation)
+  final case class ArgumentInfo[TComp[_]](argFactory: ExprFactory[TComp], env: Env, location: SourceLocation, style: ParameterStyle)
 
   abstract class ExprFactory[TComp[_]: TypeCheck] {
     def forExpectedType(expectedType: TType): TComp[ArExpr]
@@ -340,8 +340,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.DotExpr(obj, member) =>
         convertExpr(env)(obj).memberAccessExpr(MemberName.Normal(member), env, expr.location)
 
-      case parser.FunctionCallExpr(func, arg) =>
-        convertExpr[TComp](env)(func).forArguments(ArgumentInfo[TComp](convertExpr(env)(arg), env, arg.location))
+      case parser.FunctionCallExpr(func, listType, arg) =>
+        convertExpr[TComp](env)(func).forArguments(ArgumentInfo[TComp](convertExpr(env)(arg), env, arg.location, ParameterStyle.fromParser(listType)))
 
       case parser.IdentifierExpr(name) =>
         compFactory(
