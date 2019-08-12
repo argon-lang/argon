@@ -412,27 +412,29 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case _: TypeIsTypeOfTypeExpr | _: LoadTuple => notSubType
         case _ =>
           def handleBType(bType: TType): F[Option[TSubTypeInfo]] =
-            unwrapType(bType) match {
-              case Some(TypeN(_, Some(subtypeConstraint), _)) =>
-                isSubType(fromSimpleType(a), subtypeConstraint)
+            reduceWrapExprToValue(bType).flatMap { bType =>
+              unwrapType(bType) match {
+                case Some(TypeN(_, Some(subtypeConstraint), _)) =>
+                  isSubType(fromSimpleType(a), subtypeConstraint)
 
-              case Some(TypeOfType(inner)) =>
-                isSubType(fromSimpleType(a), inner)
+                case Some(TypeOfType(inner)) =>
+                  isSubType(fromSimpleType(a), inner)
 
-              case Some(IntersectionType(b1, b2)) =>
-                Vector(
-                  () => handleBType(b1),
-                  () => handleBType(b2),
-                )
-                  .collectFirstSomeM(_())
+                case Some(IntersectionType(b1, b2)) =>
+                  Vector(
+                    () => handleBType(b1),
+                    () => handleBType(b2),
+                  )
+                    .collectFirstSomeM(_())
 
-              case Some(t @ LoadTuple(_)) =>
-                unMetaType(t).collectFirstSomeM { t =>
-                  isSubType(fromSimpleType(a), t)
-                }
+                case Some(t @ LoadTuple(_)) =>
+                  unMetaType(t).collectFirstSomeM { t =>
+                    isSubType(fromSimpleType(a), t)
+                  }
 
 
-              case _ => notSubType
+                case _ => notSubType
+              }
             }
 
           getExprType(b, includeExtraTypeOfType = false).flatMap(handleBType)
@@ -441,27 +443,29 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case _: TypeIsTypeOfTypeExpr | _: LoadTuple => notSubType
         case _ =>
           def handleAType(aType: TType): F[Option[TSubTypeInfo]] =
-            unwrapType(aType) match {
-              case Some(TypeN(_, _, Some(supertypeConstraint))) =>
-                isSubType(supertypeConstraint, fromSimpleType(b))
+            reduceWrapExprToValue(aType).flatMap { aType =>
+              unwrapType(aType) match {
+                case Some(TypeN(_, _, Some(supertypeConstraint))) =>
+                  isSubType(supertypeConstraint, fromSimpleType(b))
 
-              case Some(TypeOfType(inner)) =>
-                isSubType(inner, fromSimpleType(b))
+                case Some(TypeOfType(inner)) =>
+                  isSubType(inner, fromSimpleType(b))
 
-              case Some(IntersectionType(a1, a2)) =>
-                Vector(
-                  () => handleAType(a1),
-                  () => handleAType(a2),
-                )
-                  .collectFirstSomeM(_())
+                case Some(IntersectionType(a1, a2)) =>
+                  Vector(
+                    () => handleAType(a1),
+                    () => handleAType(a2),
+                  )
+                    .collectFirstSomeM(_())
 
-              case Some(t @ LoadTuple(_)) =>
-                unMetaType(t).collectFirstSomeM { t =>
-                  isSubType(t, fromSimpleType(b))
-                }
+                case Some(t @ LoadTuple(_)) =>
+                  unMetaType(t).collectFirstSomeM { t =>
+                    isSubType(t, fromSimpleType(b))
+                  }
 
 
-              case _ => notSubType
+                case _ => notSubType
+              }
             }
 
           getExprType(a, includeExtraTypeOfType = false).flatMap(handleAType)
