@@ -10,7 +10,6 @@ import cats.data.NonEmptyList
 import cats.instances._
 import dev.argon.io.FileIO
 import zio._
-import zio.blocking.Blocking
 import dev.argon.build._
 
 private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
@@ -22,7 +21,7 @@ private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
         case (InputSourceData(filename, data), i) =>
           InputFileInfo(
             FileSpec(FileID(i), filename),
-            ArStream.fromVector[ZIO, Blocking, NonEmptyList[CompilationError], Char](data.toVector)
+            ArStream.fromVector[ZIO, BuildEnvironment, NonEmptyList[CompilationError], Char](data.toVector)
           )
       }
 

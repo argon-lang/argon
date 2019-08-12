@@ -2,7 +2,6 @@ package dev.argon.build.testrunner
 
 import dev.argon.compiler.IOCompilation
 import dev.argon.io.FileIO
-import zio.blocking.Blocking
 import zio.{IO, Runtime, ZIO}
 import dev.argon.build._
 

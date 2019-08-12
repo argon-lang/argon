@@ -7,14 +7,18 @@ import cats._
 import cats.implicits._
 import zio._
 import zio.interop.catz._
+import dev.argon.build._
+import dev.argon.io.FileIO
 
 object TestCaseLoader {
 
-  def findTestCases(dir: File): Task[TestCaseStructure] = for {
-    testCaseFiles <- IO.effect { dir.listFiles.sortBy(f => f.getName).toVector }
+  def findTestCases(dir: File): RIO[FileIO, TestCaseStructure] = for {
+    env <- ZIO.environment[FileIO]
+    testCaseFilesUnsorted <- env.fileIO.listDirectory(dir.toPath).map { _.toFile }.runCollect
+    testCaseFiles = testCaseFilesUnsorted.sortBy(f => f.getName).toVector
 
     subDirCases <- testCaseFiles
-      .filterA { f => IO.effect { f.isDirectory } }
+      .filterA { f => env.fileIO.isDirectory(f.toPath) }
       .flatMap {
         _.traverse { f =>
           findTestCases(f).map(f.getName.->)
@@ -22,7 +26,7 @@ object TestCaseLoader {
       }
 
     fileCases <- testCaseFiles
-      .filterA { f => IO.effect { f.isFile && f.getName.endsWith(".xml") } }
+      .filterA { f => env.fileIO.isDirectory(f.toPath).map { !_ && f.getName.endsWith(".xml") } }
       .flatMap { _.traverse(loadTestCase) }
 
   } yield TestCaseStructure(

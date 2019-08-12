@@ -12,7 +12,6 @@ import zio._
 import shapeless.{Id => _, _}
 import dev.argon.compiler.backend.ProjectLoader.Implicits._
 import dev.argon.compiler.backend.{Backend, ProjectFileHandler}
-import zio.blocking.Blocking
 import dev.argon.build._
 
 final class BuildTestCaseRunner(protected val backend: Backend, references: Vector[File]) extends TestCaseRunnerCompilePhase {

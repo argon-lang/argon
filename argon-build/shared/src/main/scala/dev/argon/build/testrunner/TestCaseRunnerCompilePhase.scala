@@ -13,7 +13,6 @@ import dev.argon.io.FileOperations.fileShow
 import cats.data.NonEmptyList
 import dev.argon.compiler.backend.Backend
 import dev.argon.io.FileIO
-import zio.blocking.Blocking
 import dev.argon.build._
 
 private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParsePhase {
