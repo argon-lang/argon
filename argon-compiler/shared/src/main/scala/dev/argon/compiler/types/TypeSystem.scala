@@ -494,13 +494,15 @@ trait TypeSystem[TContext <: Context with Singleton] {
       case MethodCall(_, _, _, _) => fromSimpleType(expr).pure[TComp]
 
       case FunctionObjectCall(function, arg, _) =>
-        reduceWrapExprToValue(function).flatMap {
-          case LoadLambda(argVariable, body) =>
-            for {
-              argValue <- reduceWrapExprToValue(arg)
-            } yield Substitutions(this)(argVariable, argValue).substWrapExpr(body)
+        reduceWrapExprToValue(function).flatMap { func =>
+          unwrapType(func) match {
+            case Some(LoadLambda(argVariable, body)) =>
+              for {
+                argValue <- reduceWrapExprToValue(arg)
+              } yield Substitutions(this)(argVariable, argValue).substWrapExpr(body)
 
-          case _ => fromSimpleType(expr).pure[TComp]
+            case _ => fromSimpleType(expr).pure[TComp]
+          }
         }
 
       case IfElse(_, _, _) => ???
