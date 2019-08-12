@@ -11,7 +11,7 @@ trait Substitutions {
   import typeSystem._
 
   val oldVariable: Variable
-  val replacement: ArExpr
+  val replacement: WrapExpr
 
   def substTypeArg(arg: TypeArgument): TypeArgument = arg match {
     case TypeArgument.Expr(argExpr) => TypeArgument.Expr(substWrapExpr(argExpr))
@@ -72,78 +72,78 @@ trait Substitutions {
   def substParameter(parameter: Parameter): Parameter =
     Parameter(parameter.style, substParamVariable(parameter.paramVar), parameter.elements.map(substParamElement))
 
-  def substArExpr(expr: ArExpr): ArExpr =
+  def substArExpr(expr: ArExpr): WrapExpr =
     expr match {
       case ClassConstructorCall(classType, classCtor, args) =>
-        ClassConstructorCall(substClassType(classType), classCtor, args.map(substArExpr))
+        fromSimpleType(ClassConstructorCall(substClassType(classType), classCtor, args.map(substWrapExpr)))
 
       case DataConstructorCall(dataCtorInstanceType, args) =>
-        DataConstructorCall(substDataCtorType(dataCtorInstanceType), args.map(substArExpr))
+        fromSimpleType(DataConstructorCall(substDataCtorType(dataCtorInstanceType), args.map(substWrapExpr)))
 
       case FunctionCall(function, args, returnType) =>
-        FunctionCall(function, args.map(substArExpr), substWrapExpr(returnType))
+        fromSimpleType(FunctionCall(function, args.map(substWrapExpr), substWrapExpr(returnType)))
 
       case FunctionObjectCall(function, arg, returnType) =>
-        FunctionObjectCall(substArExpr(function), substArExpr(arg), substWrapExpr(returnType))
+        fromSimpleType(FunctionObjectCall(substWrapExpr(function), substWrapExpr(arg), substWrapExpr(returnType)))
 
       case IfElse(condition, ifBody, elseBody) =>
-        IfElse(substArExpr(condition), substArExpr(ifBody), substArExpr(elseBody))
+        fromSimpleType(IfElse(substWrapExpr(condition), substWrapExpr(ifBody), substWrapExpr(elseBody)))
 
       case LetBinding(variable, value, next) =>
-        LetBinding(substLocalVariable(variable), substArExpr(value), substArExpr(next))
+        fromSimpleType(LetBinding(substLocalVariable(variable), substWrapExpr(value), substWrapExpr(next)))
 
-      case LoadConstantBool(value, exprType) => LoadConstantBool(value, substWrapExpr(exprType))
-      case LoadConstantInt(value, exprType) => LoadConstantInt(value, substWrapExpr(exprType))
-      case LoadConstantString(value, exprType) => LoadConstantString(value, substWrapExpr(exprType))
-      case LoadLambda(argVariable, body) => LoadLambda(substLocalVariable(argVariable), substArExpr(body))
-      case LoadTuple(values) => LoadTuple(values.map { case TupleElement(value) => TupleElement(substWrapExpr(value)) })
-      case LoadUnit(exprType) => LoadUnit(substWrapExpr(exprType))
+      case LoadConstantBool(value, exprType) => fromSimpleType(LoadConstantBool(value, substWrapExpr(exprType)))
+      case LoadConstantInt(value, exprType) => fromSimpleType(LoadConstantInt(value, substWrapExpr(exprType)))
+      case LoadConstantString(value, exprType) => fromSimpleType(LoadConstantString(value, substWrapExpr(exprType)))
+      case LoadLambda(argVariable, body) => fromSimpleType(LoadLambda(substLocalVariable(argVariable), substWrapExpr(body)))
+      case LoadTuple(values) => fromSimpleType(LoadTuple(values.map { case TupleElement(value) => TupleElement(substWrapExpr(value)) }))
+      case LoadUnit(exprType) => fromSimpleType(LoadUnit(substWrapExpr(exprType)))
       case LoadVariable(variable) if variable.descriptor === oldVariable.descriptor => replacement
-      case LoadVariable(variable) => LoadVariable(substVariable(variable))
+      case LoadVariable(variable) => fromSimpleType(LoadVariable(substVariable(variable)))
       case MethodCall(method, instance, args, returnType) =>
-        MethodCall(method, substArExpr(instance), args.map(substArExpr), substWrapExpr(returnType))
+        fromSimpleType(MethodCall(method, substWrapExpr(instance), args.map(substWrapExpr), substWrapExpr(returnType)))
 
       case PrimitiveOp(operation, left, right, exprType) =>
-        PrimitiveOp(operation, substArExpr(left), substArExpr(right), substWrapExpr(exprType))
+        fromSimpleType(PrimitiveOp(operation, substWrapExpr(left), substWrapExpr(right), substWrapExpr(exprType)))
 
       case Sequence(first, second) =>
-        Sequence(substArExpr(first), substArExpr(second))
+        fromSimpleType(Sequence(substWrapExpr(first), substWrapExpr(second)))
 
       case StoreVariable(variable, value, exprType) =>
-        StoreVariable(substVariable(variable), substArExpr(value), substWrapExpr(exprType))
+        fromSimpleType(StoreVariable(substVariable(variable), substWrapExpr(value), substWrapExpr(exprType)))
 
-      case expr: TraitType => substTraitType(expr)
-      case expr: ClassType => substClassType(expr)
-      case expr: DataConstructorType => substDataCtorType(expr)
-      case TypeOfType(inner) => TypeOfType(substWrapExpr(inner))
+      case expr: TraitType => fromSimpleType(substTraitType(expr))
+      case expr: ClassType => fromSimpleType(substClassType(expr))
+      case expr: DataConstructorType => fromSimpleType(substDataCtorType(expr))
+      case TypeOfType(inner) => fromSimpleType(TypeOfType(substWrapExpr(inner)))
       case TypeN(universe, subtypeConstraint, supertypeConstraint) =>
-        TypeN(
+        fromSimpleType(TypeN(
           universe,
           subtypeConstraint.map(substWrapExpr),
           supertypeConstraint.map(substWrapExpr)
-        )
+        ))
 
       case FunctionType(argumentType, resultType) =>
-        FunctionType(
+        fromSimpleType(FunctionType(
           substWrapExpr(argumentType),
           substWrapExpr(resultType)
-        )
+        ))
 
       case UnionType(first, second) =>
-        UnionType(
+        fromSimpleType(UnionType(
           substWrapExpr(first),
           substWrapExpr(second)
-        )
+        ))
 
       case IntersectionType(first, second) =>
-        IntersectionType(
+        fromSimpleType(IntersectionType(
           substWrapExpr(first),
           substWrapExpr(second)
-        )
+        ))
     }
 
   def substWrapExpr(expr: TType): TType =
-    mapTypeWrapper(expr)(substArExpr)
+    flatMapTypeWrapper(expr)(substArExpr)
 
 
 }
@@ -155,14 +155,14 @@ object Substitutions {
     val typeSystem: TS
   }
 
-  def apply[TCtx <: Context with Singleton](ts: TypeSystem[TCtx])(oldVar: ts.Variable, newExpr: ts.ArExpr): Substitutions.Aux[TCtx, ts.type] =
+  def apply[TCtx <: Context with Singleton](ts: TypeSystem[TCtx])(oldVar: ts.Variable, newExpr: ts.WrapExpr): Substitutions.Aux[TCtx, ts.type] =
     new Substitutions {
       override type TContext = TCtx
       override val typeSystem: ts.type = ts
       import typeSystem._
 
       override val oldVariable: Variable = oldVar
-      override val replacement: ArExpr = newExpr
+      override val replacement: WrapExpr = newExpr
     }
 
 }

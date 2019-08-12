@@ -32,7 +32,10 @@ trait TypeSystem[TContext <: Context with Singleton] {
   def wrapType[A](a: A): TTypeWrapper[A]
   def unwrapType[A](t: TTypeWrapper[A]): Option[A]
   def mapTypeWrapper[A, B](t: TTypeWrapper[A])(f: A => B): TTypeWrapper[B]
+  def flatMapTypeWrapper[A, B](t: TTypeWrapper[A])(f: A => TTypeWrapper[B]): TTypeWrapper[B]
   def traverseTypeWrapper[A, B, F[_] : Applicative](t: TTypeWrapper[A])(f: A => F[B]): F[TTypeWrapper[B]]
+  def flatTraverseTypeWrapper[A, B, F[_] : Applicative](t: TTypeWrapper[A])(f: A => F[TTypeWrapper[B]]): F[TTypeWrapper[B]] =
+    traverseTypeWrapper(t)(f).map(flatMapTypeWrapper(_)(identity))
 
   def wrapExprType[TComp[_] : Compilation](expr: WrapExpr): TComp[TType]
 
@@ -41,8 +44,8 @@ trait TypeSystem[TContext <: Context with Singleton] {
   def universeOfWrapExpr[TComp[_] : Compilation](expr: WrapExpr): TComp[UniverseExpr]
 
   final def isSubType[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[TSubTypeInfo]] = for {
-    a2 <- traverseTypeWrapper(a)(reduceExprToValue[TComp])
-    b2 <- traverseTypeWrapper(b)(reduceExprToValue[TComp])
+    a2 <- flatTraverseTypeWrapper(a)(reduceExprToValue[TComp])
+    b2 <- flatTraverseTypeWrapper(b)(reduceExprToValue[TComp])
     res <- isSubTypeWrapper(a2, b2)
   } yield res
   
@@ -68,22 +71,22 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   sealed trait ArExpr
 
-  final case class ClassConstructorCall(classType: ClassType, classCtor: AbsRef[context.type, ClassConstructor], args: Vector[ArExpr]) extends ArExpr
-  final case class DataConstructorCall(dataCtorInstanceType: DataConstructorType, args: Vector[ArExpr]) extends ArExpr
-  final case class FunctionCall(function: AbsRef[context.type, ArFunc], args: Vector[ArExpr], returnType: TType) extends ArExpr
-  final case class FunctionObjectCall(function: ArExpr, arg: ArExpr, returnType: TType) extends ArExpr
-  final case class IfElse(condition: ArExpr, ifBody: ArExpr, elseBody: ArExpr) extends ArExpr
-  final case class LetBinding(variable: LocalVariable, value: ArExpr, next: ArExpr) extends ArExpr
+  final case class ClassConstructorCall(classType: ClassType, classCtor: AbsRef[context.type, ClassConstructor], args: Vector[WrapExpr]) extends ArExpr
+  final case class DataConstructorCall(dataCtorInstanceType: DataConstructorType, args: Vector[WrapExpr]) extends ArExpr
+  final case class FunctionCall(function: AbsRef[context.type, ArFunc], args: Vector[WrapExpr], returnType: TType) extends ArExpr
+  final case class FunctionObjectCall(function: WrapExpr, arg: WrapExpr, returnType: TType) extends ArExpr
+  final case class IfElse(condition: WrapExpr, ifBody: WrapExpr, elseBody: WrapExpr) extends ArExpr
+  final case class LetBinding(variable: LocalVariable, value: WrapExpr, next: WrapExpr) extends ArExpr
   final case class LoadConstantBool(value: Boolean, exprType: TType) extends ArExpr
   final case class LoadConstantInt(value: BigInt, exprType: TType) extends ArExpr
   final case class LoadConstantString(value: String, exprType: TType) extends ArExpr
-  final case class LoadLambda(argVariable: LocalVariable, body: ArExpr) extends ArExpr
+  final case class LoadLambda(argVariable: LocalVariable, body: WrapExpr) extends ArExpr
   final case class TupleElement(value: WrapExpr)
   final case class LoadTuple(values: NonEmptyList[TupleElement]) extends ArExpr
-  final case class LoadTupleElement(tupleValue: ArExpr, elemType: TType, index: Int) extends ArExpr
+  final case class LoadTupleElement(tupleValue: WrapExpr, elemType: TType, index: Int) extends ArExpr
   final case class LoadUnit(exprType: TType) extends ArExpr
   final case class LoadVariable(variable: Variable) extends ArExpr
-  final case class MethodCall(method: AbsRef[context.type, ArMethod], instance: ArExpr, args: Vector[ArExpr], returnType: TType) extends ArExpr
+  final case class MethodCall(method: AbsRef[context.type, ArMethod], instance: WrapExpr, args: Vector[WrapExpr], returnType: TType) extends ArExpr
 
 
   sealed trait PatternExpr
@@ -93,13 +96,13 @@ trait TypeSystem[TContext <: Context with Singleton] {
     final case class CastBinding(variable: LocalVariable) extends PatternExpr
   }
 
-  final case class PatternCase(pattern: PatternExpr, body: ArExpr)
+  final case class PatternCase(pattern: PatternExpr, body: WrapExpr)
 
-  final case class PatternMatch(expr: ArExpr, cases: NonEmptyList[PatternCase]) extends ArExpr
+  final case class PatternMatch(expr: WrapExpr, cases: NonEmptyList[PatternCase]) extends ArExpr
 
-  final case class PrimitiveOp(operation: PrimitiveOperation, left: ArExpr, right: ArExpr, exprType: TType) extends ArExpr
-  final case class Sequence(first: ArExpr, second: ArExpr) extends ArExpr
-  final case class StoreVariable(variable: Variable, value: ArExpr, exprType: TType) extends ArExpr
+  final case class PrimitiveOp(operation: PrimitiveOperation, left: WrapExpr, right: WrapExpr, exprType: TType) extends ArExpr
+  final case class Sequence(first: WrapExpr, second: WrapExpr) extends ArExpr
+  final case class StoreVariable(variable: Variable, value: WrapExpr, exprType: TType) extends ArExpr
 
   sealed trait TypeIsTypeOfTypeExpr extends ArExpr
 
@@ -181,7 +184,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
             case (Some(LoadLambda(aVar, aBody)), Some(LoadLambda(bVar, bBody))) =>
               @SuppressWarnings(Array("org.wartremover.warts.Equals"))
-              def isSameLambda = aBody == Substitutions(this)(bVar, LoadVariable(aVar)).substArExpr(bBody)
+              def isSameLambda = aBody == Substitutions(this)(bVar, fromSimpleType(LoadVariable(aVar))).substWrapExpr(bBody)
               fromIsSame(isSameLambda)
 
             case _ =>
@@ -398,9 +401,9 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
         case (FunctionObjectCall(functionA, argA, _), FunctionObjectCall(functionB, argB, _)) =>
           compareArguments(fromSimpleType(a), fromSimpleType(b))(
-            Vector(TypeArgument.Expr(fromSimpleType(functionA)), TypeArgument.Expr(fromSimpleType(argA)))
+            Vector(TypeArgument.Expr(functionA), TypeArgument.Expr(argA))
           )(
-            Vector(TypeArgument.Expr(fromSimpleType(functionB)), TypeArgument.Expr(fromSimpleType(argB)))
+            Vector(TypeArgument.Expr(functionB), TypeArgument.Expr(argB))
           )
 
         case (_, _) => notSubType
@@ -467,7 +470,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   }
 
 
-  final def reduceExprToValue[TComp[_] : Compilation](expr: ArExpr): TComp[ArExpr] =
+  final def reduceExprToValue[TComp[_] : Compilation](expr: ArExpr): TComp[WrapExpr] =
     expr match {
       // Already reduced, has a constructor at the top level
       case ClassConstructorCall(_, _, _) | DataConstructorCall(_, _) |
@@ -479,21 +482,21 @@ trait TypeSystem[TContext <: Context with Singleton] {
            LoadUnit(_) |
            LoadVariable(_) |
            _: TypeIsTypeOfTypeExpr =>
-        expr.pure[TComp]
+        fromSimpleType(expr).pure[TComp]
 
 
       // Potentially reducible after adding inline support
-      case FunctionCall(_, _, _) => expr.pure[TComp]
-      case MethodCall(_, _, _, _) => expr.pure[TComp]
+      case FunctionCall(_, _, _) => fromSimpleType(expr).pure[TComp]
+      case MethodCall(_, _, _, _) => fromSimpleType(expr).pure[TComp]
 
       case FunctionObjectCall(function, arg, _) =>
-        reduceExprToValue(function).flatMap {
+        reduceWrapExprToValue(function).flatMap {
           case LoadLambda(argVariable, body) =>
             for {
-              argValue <- reduceExprToValue(arg)
-            } yield Substitutions(this)(argVariable, argValue).substArExpr(body)
+              argValue <- reduceWrapExprToValue(arg)
+            } yield Substitutions(this)(argVariable, argValue).substWrapExpr(body)
 
-          case _ => expr.pure[TComp]
+          case _ => fromSimpleType(expr).pure[TComp]
         }
 
       case IfElse(_, _, _) => ???
@@ -502,9 +505,12 @@ trait TypeSystem[TContext <: Context with Singleton] {
       case LetBinding(_, _, _) => ???
       case LoadTupleElement(_, _, _) => ???
       case PrimitiveOp(_, _, _, _) => ???
-      case Sequence(_, second) => reduceExprToValue(second)
+      case Sequence(_, second) => reduceWrapExprToValue(second)
       case StoreVariable(_, _, _) => ???
     }
+
+  final def reduceWrapExprToValue[TComp[_]: Compilation](expr: WrapExpr): TComp[WrapExpr] =
+    flatTraverseTypeWrapper(expr)(reduceExprToValue[TComp])
 
   final def getExprType[TComp[_] : Compilation](expr: ArExpr, includeExtraTypeOfType: Boolean = true): TComp[TType] = {
     def withTypeOfExpr(result: TComp[TType]): TComp[TType] =
@@ -520,16 +526,16 @@ trait TypeSystem[TContext <: Context with Singleton] {
       case FunctionObjectCall(_, _, returnType) => withTypeOfExpr(returnType.pure[TComp])
       case IfElse(_, ifBody, elseBody) =>
         for {
-          ifType <- getExprType(ifBody)
-          elseType <- getExprType(elseBody)
+          ifType <- getWrapExprType(ifBody)
+          elseType <- getWrapExprType(elseBody)
         } yield fromSimpleType(UnionType(ifType, elseType))
-      case LetBinding(_, _, next) => getExprType(next)
+      case LetBinding(_, _, next) => getWrapExprType(next)
       case LoadConstantBool(_, exprType) => exprType.pure[TComp]
       case LoadConstantInt(_, exprType) => exprType.pure[TComp]
       case LoadConstantString(_, exprType) => exprType.pure[TComp]
       case LoadLambda(argVariable, body) =>
         for {
-          bodyType <- getExprType(body)
+          bodyType <- getWrapExprType(body)
         } yield fromSimpleType(FunctionType(argVariable.varType, bodyType))
       case LoadTuple(values) =>
         values
@@ -541,14 +547,20 @@ trait TypeSystem[TContext <: Context with Singleton] {
       case MethodCall(_, _, _, returnType) => withTypeOfExpr(returnType.pure[TComp])
       case PatternMatch(_, cases) =>
         cases
-          .traverse { patCase => getExprType(patCase.body) }
+          .traverse { patCase => getWrapExprType(patCase.body) }
           .map { _.reduceLeft { (a, b) => fromSimpleType(UnionType(a, b)) } }
       case PrimitiveOp(_, _, _, exprType) => exprType.pure[TComp]
-      case Sequence(_, second) => getExprType(second)
+      case Sequence(_, second) => getWrapExprType(second)
       case StoreVariable(_, _, exprType) => exprType.pure[TComp]
       case expr: TypeIsTypeOfTypeExpr => fromSimpleType(TypeOfType(fromSimpleType(expr))).pure[TComp]
     }
   }
+
+  final def getWrapExprType[TComp[_] : Compilation](expr: WrapExpr, includeExtraTypeOfType: Boolean = true): TComp[TType] =
+    unwrapType(expr) match {
+      case Some(expr) => getExprType(expr, includeExtraTypeOfType)
+      case None => fromSimpleType(TypeOfType(expr)).pure[TComp]
+    }
 
   def universeOfExpr[TComp[_] : Compilation](expr: ArExpr): TComp[UniverseExpr] = {
     def universeOfTypeArgs(args: Vector[TypeArgument]): TComp[UniverseExpr] =
@@ -566,17 +578,17 @@ trait TypeSystem[TContext <: Context with Singleton] {
       case FunctionObjectCall(_, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse)
       case IfElse(_, ifBody, elseBody) =>
         for {
-          ifUniv <- universeOfExpr(ifBody)
-          elseUniv <- universeOfExpr(elseBody)
+          ifUniv <- universeOfWrapExpr(ifBody)
+          elseUniv <- universeOfWrapExpr(elseBody)
         } yield LargestUniverse(ifUniv, elseUniv)
-      case LetBinding(_, _, next) => universeOfExpr(next)
+      case LetBinding(_, _, next) => universeOfWrapExpr(next)
       case LoadConstantBool(_, _) => FixedUniverse(0).upcast[UniverseExpr].pure[TComp]
       case LoadConstantInt(_, _) => FixedUniverse(0).upcast[UniverseExpr].pure[TComp]
       case LoadConstantString(_, _) => FixedUniverse(0).upcast[UniverseExpr].pure[TComp]
       case LoadLambda(argVariable, body) =>
         for {
           argUniv <- universeOfWrapExpr(argVariable.varType)
-          resUniv <- universeOfExpr(body)
+          resUniv <- universeOfWrapExpr(body)
         } yield LargestUniverse(argUniv, resUniv)
       case LoadTuple(values) =>
         values
@@ -588,10 +600,10 @@ trait TypeSystem[TContext <: Context with Singleton] {
       case MethodCall(_, _, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse)
       case PatternMatch(_, cases) =>
         cases
-          .traverse { patCase => universeOfExpr(patCase.body) }
+          .traverse { patCase => universeOfWrapExpr(patCase.body) }
           .map { _.reduceLeft(LargestUniverse) }
       case PrimitiveOp(_, _, _, exprType) => universeOfWrapExpr(exprType).map(PreviousUniverse)
-      case Sequence(_, second) => universeOfExpr(second)
+      case Sequence(_, second) => universeOfWrapExpr(second)
       case StoreVariable(_, _, exprType) => universeOfWrapExpr(exprType).map(PreviousUniverse)
       case TraitType(_, args, _) => universeOfTypeArgs(args)
       case ClassType(_, args, _) => universeOfTypeArgs(args)
@@ -896,40 +908,40 @@ object TypeSystem {
     case ts.ClassConstructorCall(classType, classCtor, args) =>
       for {
         newClassType <- convertClassType(context)(ts)(otherTS)(converter)(classType)
-        newArgs <- args.traverse(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
+        newArgs <- args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
       } yield otherTS.ClassConstructorCall(newClassType, classCtor, newArgs)
 
     case ts.DataConstructorCall(dataCtor, args) =>
       for {
         newType <- convertDataConstructorType(context)(ts)(otherTS)(converter)(dataCtor)
-        newArgs <- args.traverse(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
+        newArgs <- args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
       } yield otherTS.DataConstructorCall(newType, newArgs)
 
     case ts.FunctionCall(function, args, returnType) =>
       for {
-        newArgs <- args.traverse(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
+        newArgs <- args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
         newReturnType <- convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
       } yield otherTS.FunctionCall(function, newArgs, newReturnType)
 
     case ts.FunctionObjectCall(function, args, returnType) =>
       for {
-        newFunction <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(function)
-        newArgs <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(args)
+        newFunction <- convertTypeSystem(context)(ts)(otherTS)(converter)(function)
+        newArgs <- convertTypeSystem(context)(ts)(otherTS)(converter)(args)
         newReturnType <- convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
       } yield otherTS.FunctionObjectCall(newFunction, newArgs, newReturnType)
 
     case ts.IfElse(condition, ifBody, elseBody) =>
       for {
-        newCondition <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(condition)
-        newIfBody <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(ifBody)
-        newElseBody <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(elseBody)
+        newCondition <- convertTypeSystem(context)(ts)(otherTS)(converter)(condition)
+        newIfBody <- convertTypeSystem(context)(ts)(otherTS)(converter)(ifBody)
+        newElseBody <- convertTypeSystem(context)(ts)(otherTS)(converter)(elseBody)
       } yield otherTS.IfElse(newCondition, newIfBody, newElseBody)
 
     case ts.LetBinding(variable, value, next) =>
       for {
         newVar <- convertLocalVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
-        newValue <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(value)
-        newNext <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(next)
+        newValue <- convertTypeSystem(context)(ts)(otherTS)(converter)(value)
+        newNext <- convertTypeSystem(context)(ts)(otherTS)(converter)(next)
       } yield otherTS.LetBinding(newVar, newValue, newNext)
 
     case ts.LoadConstantBool(value, exprType) =>
@@ -950,7 +962,7 @@ object TypeSystem {
     case ts.LoadLambda(variable, body) =>
       for {
         newVar <- convertLocalVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
-        newBody <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(body)
+        newBody <- convertTypeSystem(context)(ts)(otherTS)(converter)(body)
       } yield otherTS.LoadLambda(newVar, newBody)
 
     case expr: ts.LoadTuple =>
@@ -962,7 +974,7 @@ object TypeSystem {
 
     case ts.LoadTupleElement(tupleValue, elemType, index) =>
       for {
-        newValue <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(tupleValue)
+        newValue <- convertTypeSystem(context)(ts)(otherTS)(converter)(tupleValue)
         newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(elemType)
       } yield otherTS.LoadTupleElement(newValue, newType, index)
 
@@ -978,40 +990,40 @@ object TypeSystem {
 
     case ts.MethodCall(method, instance, args, returnType) =>
       for {
-        newInstance <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(instance)
-        newArgs <- args.traverse(convertExprTypeSystem(context)(ts)(otherTS)(converter)(_))
+        newInstance <- convertTypeSystem(context)(ts)(otherTS)(converter)(instance)
+        newArgs <- args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
         newReturnType <- convertTypeSystem(context)(ts)(otherTS)(converter)(returnType)
       } yield otherTS.MethodCall(method, newInstance, newArgs, newReturnType)
 
     case ts.PatternMatch(expr, cases) =>
       for {
-        newExpr <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(expr)
+        newExpr <- convertTypeSystem(context)(ts)(otherTS)(converter)(expr)
         newCases <- cases.traverse {
           case ts.PatternCase(pattern, body) =>
             for {
               newPattern <- convertPatternExprTypeSystem(context)(ts)(otherTS)(converter)(pattern)
-              newBody <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(body)
+              newBody <- convertTypeSystem(context)(ts)(otherTS)(converter)(body)
             } yield otherTS.PatternCase(newPattern, newBody)
         }
       } yield otherTS.PatternMatch(newExpr, newCases)
 
     case ts.PrimitiveOp(operation, left, right, exprType) =>
       for {
-        newLeft <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(left)
-        newRight <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(right)
+        newLeft <- convertTypeSystem(context)(ts)(otherTS)(converter)(left)
+        newRight <- convertTypeSystem(context)(ts)(otherTS)(converter)(right)
         newType <- convertTypeSystem(context)(ts)(otherTS)(converter)(exprType)
       } yield otherTS.PrimitiveOp(operation, newLeft, newRight, newType)
 
     case ts.Sequence(first, second) =>
       for {
-        newFirst <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(first)
-        newSecond <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(second)
+        newFirst <- convertTypeSystem(context)(ts)(otherTS)(converter)(first)
+        newSecond <- convertTypeSystem(context)(ts)(otherTS)(converter)(second)
       } yield otherTS.Sequence(newFirst, newSecond)
 
     case ts.StoreVariable(variable, value, unitType) =>
       for {
         newVar <- convertVariableTypeSystem(context)(ts)(otherTS)(converter)(variable)
-        newValue <- convertExprTypeSystem(context)(ts)(otherTS)(converter)(value)
+        newValue <- convertTypeSystem(context)(ts)(otherTS)(converter)(value)
         newUnitType <- convertTypeSystem(context)(ts)(otherTS)(converter)(unitType)
       } yield otherTS.StoreVariable(newVar, newValue, newUnitType)
 
