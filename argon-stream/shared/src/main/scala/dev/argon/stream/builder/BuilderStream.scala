@@ -4,7 +4,6 @@ import cats._
 import cats.implicits._
 import cats.data.NonEmptyVector
 import dev.argon.stream._
-import dev.argon.util.AnyExtensions._
 import zio._
 
 sealed trait BuilderStream[F[_], S, A] {
@@ -49,7 +48,7 @@ object BuilderStream {
                 case Step.Stop(result) => monadInstance.pure(result)
               }
 
-            case Effect(fa) => fa.upcast[F[R2, E2, BuilderStream[F[R, E, ?], S, Unit]]].flatMap { builder => feed(state, builder) }
+            case Effect(fa) => (fa : F[R2, E2, BuilderStream[F[R, E, ?], S, Unit]]).flatMap { builder => feed(state, builder) }
             case Result(value) => trans.end(state, value).flatMap { case (_, fx) => fx }
           }
 

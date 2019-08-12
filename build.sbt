@@ -207,7 +207,6 @@ lazy val util = crossProject(JVMPlatform, JSPlatform).in(file("argon-util"))
 lazy val utilJVM = util.jvm
 
 lazy val arstream = crossProject(JVMPlatform, JSPlatform).in(file("argon-stream"))
-  .dependsOn(util)
   .settings(
     commonSettings,
     compilerOptions,
