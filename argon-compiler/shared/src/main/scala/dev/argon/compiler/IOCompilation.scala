@@ -68,7 +68,10 @@ object IOCompilation {
       fa.flatMap(f)
 
     override def tailRecM[A, B](a: A)(f: A => F[Either[A, B]]): F[B] =
-      implicitly[Monad[F]].tailRecM(a)(f)
+      ZIO.effectSuspendTotal(f(a)).flatMap {
+        case Left(l)  => tailRecM(l)(f)
+        case Right(r) => ZIO.succeed(r)
+      }
 
     override def pure[A](x: A): F[A] = IO.succeed(x)
 
