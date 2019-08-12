@@ -74,4 +74,10 @@ object ArStream {
 
   }
 
+  def fromWrapped[F[-_, +_, +_], R, E, A](value: F[R, E, ArStream[F, R, E, A]]): ArStream[F, R, E, A] =
+    new ArStream[F, R, E, A] {
+      override def foldLeft[R2 <: R, E2 >: E, A2 >: A, X](trans: StreamTransformation[F, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[F[R2, E2, ?]]): F[R2, E2, X] =
+        (value : F[R2, E2, ArStream[F, R, E, A]]).flatMap { _.foldLeft(trans) }
+    }
+
 }

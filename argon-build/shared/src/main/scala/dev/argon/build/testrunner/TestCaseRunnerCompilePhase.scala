@@ -9,11 +9,12 @@ import cats._
 import cats.implicits._
 import dev.argon.compiler.backend.ProjectFileHandler
 import zio._
-import dev.argon.util.FileOperations.fileShow
-import IOCompilation.fileSystemResourceAccessFactory
+import dev.argon.io.FileOperations.fileShow
 import cats.data.NonEmptyList
 import dev.argon.compiler.backend.Backend
+import dev.argon.io.FileIO
 import zio.blocking.Blocking
+import dev.argon.build._
 
 private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParsePhase {
 
@@ -21,41 +22,44 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
 
   protected val backend: Backend
 
-  protected def backendOptions(compilerOptions: CompilerOptions[Id]): ZIO[Blocking, IOException, backend.BackendOptions[Id, File]]
+  protected def backendOptions(compilerOptions: CompilerOptions[Id]): ZIO[BuildEnvironment, IOException, backend.BackendOptions[Id, File]]
 
-  protected def getProgramOutput(compOutput: backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, Blocking, File] }): ZIO[Blocking, NonEmptyList[CompilationError], Either[Throwable, String]]
+  protected def getProgramOutput(compOutput: backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, File] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]]
 
   protected def normalizeOutput(output: String): String =
     output.split("\n").map { _.trim }.filter { _.nonEmpty }.mkString("\n")
 
 
-  def compileTestCase(testCase: TestCase, references: Vector[File]): ZIO[Blocking, Nothing, TestCaseResult] =
-    IOCompilation.compilationInstance[Blocking].flatMap { implicit ioComp =>
+  def compileTestCase(testCase: TestCase, references: Vector[File]): ZIO[BuildEnvironment, Nothing, TestCaseResult] =
+    IOCompilation.compilationInstance[BuildEnvironment].flatMap { implicit ioComp =>
 
-      val result: ZIO[Blocking, Nothing, (Vector[CompilationMessageNonFatal], Either[NonEmptyList[CompilationError], Either[Throwable, String]])] =
-        ioComp.getResult(
-          parseTestCaseSource(testCase)
-            .flatMap { parsedSource =>
-              val compilerOptions = CompilerOptions[Id](
-                moduleName = moduleName
-              )
+      val result: ZIO[BuildEnvironment, Nothing, (Vector[CompilationMessageNonFatal], Either[NonEmptyList[CompilationError], Either[Throwable, String]])] =
+        ZIO.access[FileIO] { env => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](env.fileIO) }
+          .flatMap { implicit resFactory =>
+            ioComp.getResult(
+              parseTestCaseSource(testCase)
+                .flatMap { parsedSource =>
+                  val compilerOptions = CompilerOptions[Id](
+                    moduleName = moduleName
+                  )
 
-              backendOptions(compilerOptions)
-                .either
-                .flatMap {
-                  case Left(ex) => IO.succeed(Left(ex))
-                  case Right(backendOpts) =>
-                    BuildProcess.compile(
-                      backend : backend.type
-                    )(
-                      parsedSource,
-                      references,
-                      compilerOptions,
-                      backendOpts,
-                    )(getProgramOutput)
+                  backendOptions(compilerOptions)
+                    .either
+                    .flatMap {
+                      case Left(ex) => IO.succeed(Left(ex))
+                      case Right(backendOpts) =>
+                        BuildProcess.compile(
+                          backend : backend.type
+                        )(
+                          parsedSource,
+                          references,
+                          compilerOptions,
+                          backendOpts,
+                        )(getProgramOutput)
+                    }
                 }
-            }
-        )
+            )
+          }
 
       result
         .map {

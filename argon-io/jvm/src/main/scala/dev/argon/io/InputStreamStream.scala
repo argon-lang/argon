@@ -1,12 +1,14 @@
-package dev.argon.stream
+package dev.argon.io
 
+import dev.argon.stream._
 import java.io.{IOException, InputStream}
 
 import cats.Monad
 import cats.data.NonEmptyVector
+import zio.blocking.Blocking
 import zio.{IO, ZIO}
 
-final class InputStreamStream[R, E](errorHandler: IOException => E)(inputStreamResource: Resource[ZIO, R, E, InputStream]) extends ArStream[ZIO, R, E, Byte] {
+final class InputStreamStream[R, E](errorHandler: IOException => E, blocking: Blocking.Service[Any])(inputStreamResource: Resource[ZIO, R, E, InputStream]) extends ArStream[ZIO, R, E, Byte] {
 
   override def foldLeft[R2 <: R, E2 >: E, A2 >: Byte, X](trans: StreamTransformation[ZIO, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[ZIO[R2, E2, ?]]): ZIO[R2, E2, X] =
     trans match {
@@ -17,7 +19,7 @@ final class InputStreamStream[R, E](errorHandler: IOException => E)(inputStreamR
         inputStreamResource.use { inputStream =>
           trans.initial.use { s =>
             def feed(s: trans.State): ZIO[R2, E2, X] =
-              IO.effect {
+              blocking.effectBlocking {
                 val buffer = new Array[Byte](2049)
                 val bytesRead = inputStream.read(buffer)
                 buffer.take(bytesRead).toVector

@@ -1,5 +1,6 @@
-package dev.argon.stream
+package dev.argon.io
 
+import dev.argon.stream._
 import java.io.{IOException, OutputStream}
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
@@ -7,11 +8,11 @@ import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
 import cats.data.NonEmptyVector
 import cats._
 import cats.implicits._
-import dev.argon.stream.OutputStreamWriterStream.TransformOutputStreamStopException
+import dev.argon.io.OutputStreamWriterStream.TransformOutputStreamStopException
 import zio._
 import zio.blocking.Blocking
 
-final case class OutputStreamWriterStream[R, E](f: OutputStream => ZIO[R, E, Unit]) extends ArStream[ZIO, R with Blocking, E, Byte] {
+final case class OutputStreamWriterStream[R, E](blocking: Blocking.Service[Any])(f: OutputStream => ZIO[R, E, Unit]) extends ArStream[ZIO, R, E, Byte] {
 
 
   private final class TransformOutputStream(queue: BlockingQueue[Option[Vector[Byte]]]) extends OutputStream {
@@ -35,7 +36,7 @@ final case class OutputStreamWriterStream[R, E](f: OutputStream => ZIO[R, E, Uni
 
 
   @SuppressWarnings(Array("org.wartremover.warts.Null"))
-  private def runOutputFunc[R2 <: R with Blocking, E2 >: E, X](consumer: ZIO[R2, E2, Option[NonEmptyVector[Byte]]] => ZIO[R2, E2, X]): ZIO[R2, E2, X] =
+  private def runOutputFunc[R2 <: R, E2 >: E, X](consumer: ZIO[R2, E2, Option[NonEmptyVector[Byte]]] => ZIO[R2, E2, X]): ZIO[R2, E2, X] =
     IO.effectTotal { new ArrayBlockingQueue[Option[Vector[Byte]]](32) }.flatMap { queue =>
       IO.effectTotal { new TransformOutputStream(queue) }.flatMap { outputStream =>
         val producer = f(outputStream)
@@ -49,8 +50,8 @@ final case class OutputStreamWriterStream[R, E](f: OutputStream => ZIO[R, E, Uni
 
         producer.fork.flatMap { producerFiber =>
 
-          def takeNext: ZIO[R with Blocking, E, Option[NonEmptyVector[Byte]]] =
-            ZIO.environment[Blocking].flatMap(_.blocking.blocking(IO.effectTotal { queue.take() })).flatMap {
+          def takeNext: ZIO[R, E, Option[NonEmptyVector[Byte]]] =
+            blocking.effectBlocking { queue.take() }.orDie.flatMap {
               case None => producerFiber.join.const(None)
               case Some(data) => NonEmptyVector.fromVector(data) match {
                 case Some(data) => IO.succeed(Some(data))
@@ -68,7 +69,7 @@ final case class OutputStreamWriterStream[R, E](f: OutputStream => ZIO[R, E, Uni
     }
 
 
-  override def foldLeft[R2 <: R with Blocking, E2 >: E, A2 >: Byte, X](trans: StreamTransformation[ZIO, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[ZIO[R2, E2, ?]]): ZIO[R2, E2, X] =
+  override def foldLeft[R2 <: R, E2 >: E, A2 >: Byte, X](trans: StreamTransformation[ZIO, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[ZIO[R2, E2, ?]]): ZIO[R2, E2, X] =
     trans match {
       case trans: OutputStreamTransformation[R2, E2, X] => trans.writeDirectly(f)
       case _ =>

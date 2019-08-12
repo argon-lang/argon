@@ -6,55 +6,54 @@ import java.nio.charset.StandardCharsets
 import dev.argon.build.testrunner._
 import cats._
 import cats.data.{NonEmptyList, NonEmptyVector}
-import cats.instances._
+import cats.implicits._
 import zio._
 import zio.interop.catz._
 import dev.argon.build.testrunner.node.ExternalApi._
 import dev.argon.compiler.backend.{Backend, CompilationOutputText}
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
+import dev.argon.io.{FileIO, FilenameManip}
 import dev.argon.stream.{Resource, Step, StreamTransformation}
 import dev.argon.stream.{Step, StreamTransformation}
-import dev.argon.util.{FileOperations, FilenameManip}
 import org.apache.commons.io.IOUtils
 import zio.blocking.Blocking
+import dev.argon.build._
 
 final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher) extends TestCaseRunnerCompilePhase {
 
   override protected val backend: JSBackend.type = JSBackend
 
-  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[IOException, JSBackendOptions[Id, File]] = for {
-    outFile <- FileOperations.fileFromName(compilerOptions.moduleName + ".js")
-  } yield JSBackendOptions[Id, File](
-    outputFile = outFile,
-    extern = Map.empty,
-    inject = JSInjectCode[Id](
-      before = None,
-      after = None,
+  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[IOException, JSBackendOptions[Id, File]] =
+    IO.succeed(
+      JSBackendOptions[Id, File](
+        outputFile = new File(compilerOptions.moduleName + ".js"),
+        extern = Map.empty,
+        inject = JSInjectCode[Id](
+          before = None,
+          after = None,
+        )
+      )
     )
-  )
 
-  override protected def getProgramOutput(compOutput: CompilationOutputText { val context: Backend.ContextWithComp[ZIO, Blocking, File] }): ZIO[Blocking, NonEmptyList[CompilationError], Either[Throwable, String]] = for {
+  override protected def getProgramOutput(compOutput: CompilationOutputText { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, File] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]] = for {
     compiledFile <- compOutput.textStream.foldLeft(stringConcatTrans)
     output <- runJSOutput(references)(compiledFile).either
   } yield output
 
 
-  override def runTest(testCase: TestCase): ZIO[Blocking, Throwable, TestCaseResult] =
+  override def runTest(testCase: TestCase): ZIO[BuildEnvironment, Throwable, TestCaseResult] =
     compileTestCase(testCase, references)
 
-  private def runJSOutput(files: Vector[File])(compiledFile: String): ZIO[Blocking, Throwable, String] = for {
-    modules <- IO.effect {
-      (
-        files.map { file =>
-          val libName = FilenameManip.getBasename(file)
-          val libFile = new File(new File(file.getParentFile, "js"), libName + ".js")
-          val content = IOUtils.toString(new FileInputStream(libFile), StandardCharsets.UTF_8)
-          FileInfo(libName, content)
-        }
-        :+ FileInfo(moduleName, compiledFile)
-      ).toArray
+  private def runJSOutput(files: Vector[File])(compiledFile: String): ZIO[BuildEnvironment, Throwable, String] = for {
+    referenceLibs <- files.traverse { file =>
+      val libName = FilenameManip.getBasename(file)
+      val libFile = new File(new File(file.getParentFile, "js"), libName + ".js")
+      ZIO.accessM[FileIO] { _.fileIO.readAllText(libFile.toPath) }
+        .map(FileInfo(libName, _))
     }
+
+    modules = (referenceLibs :+ FileInfo(moduleName, compiledFile)).toArray
 
     serverFuncs <- launcher.serverFunctions
     result <- serverFuncs.executeJS(moduleName, modules)

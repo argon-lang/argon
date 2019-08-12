@@ -1,5 +1,6 @@
-package dev.argon.stream
+package dev.argon.io
 
+import dev.argon.stream._
 import java.io.{IOException, OutputStream}
 
 import cats.data.NonEmptyVector
@@ -12,20 +13,18 @@ trait OutputStreamTransformation[-R, +E, +X] extends StreamTransformation[ZIO, R
 
 object OutputStreamTransformation {
 
-  def apply[E](errorHandler: IOException => E)(outputStream: OutputStream): OutputStreamTransformation[Blocking, E, Unit] = new OutputStreamTransformation[Blocking, E, Unit] {
+  def apply[E](errorHandler: IOException => E, blocking: Blocking.Service[Any])(outputStream: OutputStream): OutputStreamTransformation[Any, E, Unit] = new OutputStreamTransformation[Any, E, Unit] {
 
     override type State = Unit
 
     override def initial: Resource[ZIO, Any, E, Unit] = Resource.pure(())
 
-    override def step(s: Unit, ca: NonEmptyVector[Byte]): ZIO[Blocking, E, Step[Unit, Byte, Nothing, Unit]] =
-      ZIO.environment[Blocking].flatMap { env =>
-        env.blocking.effectBlocking {
-          outputStream.write(ca.toVector.toArray)
-          Step.Continue(())
-        }.refineOrDie {
-          case ex: IOException => errorHandler(ex)
-        }
+    override def step(s: Unit, ca: NonEmptyVector[Byte]): ZIO[Any, E, Step[Unit, Byte, Nothing, Unit]] =
+      blocking.effectBlocking {
+        outputStream.write(ca.toVector.toArray)
+        Step.Continue(())
+      }.refineOrDie {
+        case ex: IOException => errorHandler(ex)
       }
 
     override def end(s: Unit, result: Unit): IO[E, (Vector[Nothing], IO[E, Unit])] =

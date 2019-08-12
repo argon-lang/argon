@@ -13,28 +13,29 @@ import shapeless.{Id => _, _}
 import dev.argon.compiler.backend.ProjectLoader.Implicits._
 import dev.argon.compiler.backend.{Backend, ProjectFileHandler}
 import zio.blocking.Blocking
+import dev.argon.build._
 
 final class BuildTestCaseRunner(protected val backend: Backend, references: Vector[File]) extends TestCaseRunnerCompilePhase {
 
-  private implicit val dummyFileHandler: ProjectFileHandler[ZIO[Blocking, Nothing, ?], File] = new ProjectFileHandler[ZIO[Blocking, Nothing, ?], File] {
-    override def loadSingleFile(file: String): ZIO[Blocking, Nothing, File] =
+  private implicit val dummyFileHandler: ProjectFileHandler[ZIO[BuildEnvironment, Nothing, ?], File] = new ProjectFileHandler[ZIO[BuildEnvironment, Nothing, ?], File] {
+    override def loadSingleFile(file: String): ZIO[BuildEnvironment, Nothing, File] =
       IO.effectTotal { new File(file) }
 
-    override def loadFileGlob(glob: String): ZIO[Blocking, Nothing, List[File]] =
+    override def loadFileGlob(glob: String): ZIO[BuildEnvironment, Nothing, List[File]] =
       IO.succeed(Nil)
   }
 
 
-  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): ZIO[Blocking, IOException, backend.BackendOptions[Id, File]] =
-    backend.projectLoader.loadProject[ZIO[Blocking, Nothing, ?]](
+  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): ZIO[BuildEnvironment, IOException, backend.BackendOptions[Id, File]] =
+    backend.projectLoader.loadProject[ZIO[BuildEnvironment, Nothing, ?]](
       backend.inferBackendOptions(compilerOptions, backend.emptyBackendOptions)
     )
 
 
-  override protected def getProgramOutput(compOutput: backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, Blocking, File] }): ZIO[Blocking, NonEmptyList[CompilationError], Either[Throwable, String]] =
+  override protected def getProgramOutput(compOutput: backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, File] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]] =
     IO.succeed(Right(""))
 
-  override def runTest(testCase: TestCase): ZIO[Blocking, Throwable, TestCaseResult] =
+  override def runTest(testCase: TestCase): ZIO[BuildEnvironment, Throwable, TestCaseResult] =
     compileTestCase(testCase, references)
 
   override protected def normalizeOutput(output: String): String = ""

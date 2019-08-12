@@ -4,11 +4,13 @@ import dev.argon.compiler.CompilationError
 import cats._
 import cats.data.NonEmptyList
 import cats.implicits._
+import dev.argon.io.FileIO
 import zio.blocking.Blocking
 import zio.{IO, Runtime, ZIO}
+import dev.argon.build._
 
 trait TestCaseRunner {
-  def runTest(testCase: TestCase): ZIO[Blocking, Throwable, TestCaseResult]
+  def runTest(testCase: TestCase): ZIO[BuildEnvironment, Throwable, TestCaseResult]
 
   protected def isExpectedError(errors: NonEmptyList[CompilationError], errorName: String): Boolean =
     errors match {

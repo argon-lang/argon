@@ -2,8 +2,8 @@ package dev.argon.compiler
 
 import cats.data.NonEmptyList
 import dev.argon.compiler.core._
-import dev.argon.stream.{ArStream, Resource, StreamTransformation, ZipEntryInfo}
-import dev.argon.stream.{Resource, StreamTransformation, ZipEntryInfo}
+import dev.argon.io.ZipEntryInfo
+import dev.argon.stream.{ArStream, Resource, StreamTransformation}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 
 trait ResourceAccess[TContext <: Context with Singleton] {

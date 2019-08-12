@@ -4,10 +4,16 @@ import java.io.File
 
 import dev.argon.build.testrunner._
 import dev.argon.build.testrunner.node.{NodeLauncher, NodeTestCaseRunner}
+import dev.argon.io.IOEnvironment
 import org.scalatest.{BeforeAndAfterAll, FunSpec, Matchers}
-import zio.DefaultRuntime
+import zio._
 
 class CompilerTests extends FunSpec with DefaultRuntime with Matchers with BeforeAndAfterAll {
+
+  private def unsafeRunBuild[E, A](action: ZIO[BuildEnvironment, E, A]): A =
+    unsafeRun(
+      action.provideSome(new IOEnvironment(_))
+    )
 
   private def processTestCases(runner: TestCaseRunner, structure: TestCaseStructure): Unit = {
 
@@ -19,7 +25,7 @@ class CompilerTests extends FunSpec with DefaultRuntime with Matchers with Befor
 
     for(testCase <- structure.tests) {
       it(testCase.name) {
-        unsafeRun(runner.runTest(testCase)) shouldBe TestCaseResult.Success
+        unsafeRunBuild(runner.runTest(testCase)) shouldBe TestCaseResult.Success
       }
     }
 
@@ -29,12 +35,12 @@ class CompilerTests extends FunSpec with DefaultRuntime with Matchers with Befor
     "Argon.Core",
   )
 
-  private val nodeLauncher = unsafeRun(NodeLauncher(this, "external-api/node-api/bin/index.js"))
+  private val nodeLauncher = unsafeRunBuild(NodeLauncher(this, "external-api/node-api/bin/index.js"))
 
   private val references = libraries.map { name => new File(s"libraries/$name/$name.armodule") }
 
   private def generateTestCases(): Unit = {
-    val testCases = unsafeRun(TestCaseLoader.findTestCases(new File(getClass.getResource("/dev/argon/compiler/testcases").toURI)))
+    val testCases = unsafeRunBuild(TestCaseLoader.findTestCases(new File(getClass.getResource("/dev/argon/compiler/testcases").toURI)))
 
     val runners = Vector(
       "Parsing" -> ParseTestCaseRunner,
@@ -54,6 +60,6 @@ class CompilerTests extends FunSpec with DefaultRuntime with Matchers with Befor
   generateTestCases()
 
   override protected def afterAll(): Unit = {
-    unsafeRun(nodeLauncher.close)
+    unsafeRunBuild(nodeLauncher.close)
   }
 }

@@ -5,10 +5,11 @@ import java.nio.file._
 
 import cats._
 import cats.implicits._
-import dev.argon.util.FilenameManip
+import dev.argon.io.{FileIO, FilenameManip}
 import zio._
 import zio.blocking.Blocking
 import shapeless.{Path => _, _}
+import zio.stream.ZSink
 
 trait ProjectLoader[A, B, I] {
   def loadProject[F[_]](a: A)(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[B]
@@ -78,15 +79,15 @@ trait ProjectFileHandler[F[_], I] {
 
 object ProjectFileHandler {
 
-  def fileHandlerFile(dir: File): ProjectFileHandler[ZIO[Blocking, IOException, ?], File] = new ProjectFileHandler[ZIO[Blocking, IOException, ?], File] {
+  def fileHandlerFile(dir: File): ProjectFileHandler[ZIO[FileIO, IOException, ?], File] = new ProjectFileHandler[ZIO[FileIO, IOException, ?], File] {
 
-    override def loadSingleFile(file: String): ZIO[Blocking, IOException, File] =
-      ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking { new File(dir, file) }).refineOrDie { case e: IOException => e }
+    override def loadSingleFile(file: String): ZIO[FileIO, IOException, File] =
+      IO.succeed(new File(dir, file))
 
-    override def loadFileGlob(glob: String): ZIO[Blocking, IOException, List[File]] =
-      ZIO.environment[Blocking].flatMap(_.blocking.effectBlocking {
-        FilenameManip.findGlob(dir.toPath, Paths.get(glob)).map { _.toFile }.toList
-      }).refineOrDie { case e: IOException => e }
+    override def loadFileGlob(glob: String): ZIO[FileIO, IOException, List[File]] =
+      FilenameManip.findGlob(dir.toPath, Paths.get(glob))
+        .map { _.toFile }
+        .run[FileIO, IOException, File, File, List[File]](ZSink.collectAll)
 
   }
 

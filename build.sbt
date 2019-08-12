@@ -23,6 +23,8 @@ lazy val commonSettings = Seq(
 
     "com.chuusai" %%% "shapeless" % "2.3.3",
     "tech.sparse" %%%  "toml-scala" % "0.2.1",
+    "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
+    "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 
     "org.apache.commons" % "commons-text" % "1.6",
     "commons-io" % "commons-io" % "2.6",
@@ -162,7 +164,7 @@ lazy val parser_data = crossProject(JVMPlatform, JSPlatform).in(file("argon-pars
 lazy val parser_dataJVM = parser_data.jvm
 
 lazy val argon_compiler = crossProject(JVMPlatform, JSPlatform).in(file("argon-compiler"))
-  .dependsOn(arstream, util, modulefmt, parser_data)
+  .dependsOn(arstream, util, argonio, modulefmt, parser_data)
   .settings(
     commonSettings,
     compilerOptions,
@@ -215,6 +217,17 @@ lazy val arstream = crossProject(JVMPlatform, JSPlatform).in(file("argon-stream"
 
 lazy val arstreamJVM = arstream.jvm
 
+lazy val argonio = crossProject(JVMPlatform, JSPlatform).in(file("argon-io"))
+  .dependsOn(arstream)
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-io",
+  )
+
+lazy val argonioJVM = argonio.jvm
+
 lazy val modulefmt = crossProject(JVMPlatform, JSPlatform).in(file("argon-modulefmt"))
   .settings(
     commonSettings,
@@ -229,8 +242,6 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform).in(file("argon-module
       "-language:existentials",
       "-language:implicitConversions",
     ),
-
-    libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 
     PB.protoSources in Compile := Seq(file("argon-modulefmt/src/main/protobuf")),
 

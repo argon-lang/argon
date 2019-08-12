@@ -1,15 +1,15 @@
 package dev.argon
 
-import dev.argon.build.Pipeline
+import dev.argon.build.{BuildEnvironment, Pipeline}
 import dev.argon.build.project.BuildInfo
 import cats._
 import cats.implicits._
-import zio.{ BuildInfo => _, _ }
+import dev.argon.io.{FileOperations, IOEnvironment}
+import zio.{BuildInfo => _, _}
 import zio.console._
 import zio.interop.catz._
-import dev.argon.util.FileOperations
 import org.apache.commons.lang3.exception.ExceptionUtils
-import shapeless.{ BuildInfo => _, Id => _, _ }
+import shapeless.{BuildInfo => _, Id => _, _}
 import CommandLineParser.Implicits._
 
 object Program extends App {
@@ -19,6 +19,7 @@ object Program extends App {
     CommandLineParser.parse(CommandLineArguments.parser)(args) match {
       case Some(CommandLineArguments(cmd: CompileCommand[Id])) =>
         runCompilation(cmd)
+          .provideSome(new IOEnvironment(_))
           .catchAll { ex =>
             IO.effectTotal {
               ExceptionUtils.printRootCauseStackTrace(ex)
@@ -32,7 +33,7 @@ object Program extends App {
         } yield 1
     }
 
-  private def runCompilation(args: CompileCommand[Id]): ZIO[Environment, Throwable, Int] =
+  private def runCompilation(args: CompileCommand[Id]): ZIO[BuildEnvironment with Console, Throwable, Int] =
     args match {
       case CompileCommand(buildInfoFileName) =>
         FileOperations.fileFromName(buildInfoFileName)

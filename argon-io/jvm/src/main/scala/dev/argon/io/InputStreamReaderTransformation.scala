@@ -1,5 +1,6 @@
-package dev.argon.stream
+package dev.argon.io
 
+import dev.argon.stream._
 import java.io.InputStream
 import java.util.Objects
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
@@ -51,7 +52,7 @@ object InputStreamReaderTransformation {
   }
 
   @SuppressWarnings(Array("org.wartremover.warts.Null"))
-  def apply[R <: Blocking, E, X](readHandler: InputStream => ZIO[R, E, X]): InputStreamReaderTransformation[R, E, X] =
+  def apply[R, E, X](readHandler: InputStream => ZIO[R, E, X]): InputStreamReaderTransformation[R, E, X] =
     new InputStreamReaderTransformation[R, E, X] {
       override def readDirectly[R2 <: R, E2 >: E](inputStream: InputStream): ZIO[R2, E2, X] =
         readHandler(inputStream)
@@ -61,7 +62,6 @@ object InputStreamReaderTransformation {
       override def initial: Resource[ZIO, R, E, State] =
         Resource.fromZManaged(ZManaged.make(
           for {
-            env <- ZIO.environment[Blocking]
             queue <- IO.effectTotal { new ArrayBlockingQueue[Option[Vector[Byte]]](32) }
             inputStream <- IO.effectTotal { new TransformInputStream(queue) }
 
@@ -79,11 +79,9 @@ object InputStreamReaderTransformation {
 
         ) {
           case (queue, doneReading, _) =>
-            ZIO.environment[Blocking].flatMap { env =>
-              doneReading.get.flatMap {
-                case true => IO.succeed(())
-                case false => IO.effectTotal { queue.put(None) }
-              }
+            doneReading.get.flatMap {
+              case true => IO.succeed(())
+              case false => IO.effectTotal { queue.put(None) }
             }
         })
 

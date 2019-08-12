@@ -12,7 +12,7 @@ import zio.interop.catz._
 import dev.argon.compiler._
 import dev.argon.compiler.backend.{Backend, ProjectFileHandler, ProjectLoader}
 import dev.argon.compiler.core._
-import dev.argon.util.{FileOperations, FilenameManip}
+import dev.argon.io.{FileIO, FilenameManip}
 import toml.Toml
 import toml.Codecs._
 import dev.argon.util.AnyExtensions._
@@ -52,27 +52,28 @@ object BuildInfo {
   private val projectKey = "project"
   private val compilerOptionsKey = "compiler-options"
 
-  def loadFile(file: File): ZIO[Blocking, IOException, Option[Vector[BuildInfo[File]]]] =
-    IO.effect { file.getAbsoluteFile.getParentFile }
-      .refineOrDie { case e: IOException => e }
-      .flatMap { dir =>
-        FileOperations.readAllText(file).flatMap { buildFile =>
-          Toml.parse(buildFile)
-            .toOption
-            .flatMap { rootTable =>
-              val proj = loadProjectOpt(rootTable.values.get(projectKey))
-              val compOpts = loadCompilerOptionsOpt(rootTable.values.get(compilerOptionsKey))
+  def loadFile(file: File): ZIO[FileIO, IOException, Option[Vector[BuildInfo[File]]]] =
+    ZIO.accessM[FileIO] { env =>
+      for {
+        absoluteFile <- env.fileIO.getAbsolutePath(file.toPath)
+        dir = absoluteFile.getParent
+        buildFile <- env.fileIO.readAllText(file.toPath)
+        result <- Toml.parse(buildFile)
+          .toOption
+          .flatMap { rootTable =>
+            val proj = loadProjectOpt(rootTable.values.get(projectKey))
+            val compOpts = loadCompilerOptionsOpt(rootTable.values.get(compilerOptionsKey))
 
-              (rootTable.values - projectKey - compilerOptionsKey).toVector.traverse {
-                case (key, value: toml.Value.Tbl) =>
-                  loadBuildInfo(file, key, value, proj, compOpts)
+            (rootTable.values - projectKey - compilerOptionsKey).toVector.traverse {
+              case (key, value: toml.Value.Tbl) =>
+                loadBuildInfo(file, key, value, proj, compOpts)
 
-                case (_, _) => None
-              }
+              case (_, _) => None
             }
-            .traverse { _.traverse(loadProjectFile(dir)) }
-        }
-      }
+          }
+          .traverse { _.traverse(loadProjectFile(dir.toFile)) }
+      } yield result
+    }
 
   private def loadProjectOpt(proj: Option[toml.Value]): ProjectInfoFormat[Option, String] =
     proj
@@ -115,15 +116,15 @@ object BuildInfo {
       }
     }
 
-  private def loadProjectFile(dir: File)(build: BuildInfo[String]): ZIO[Blocking, IOException, BuildInfo[File]] = {
+  private def loadProjectFile(dir: File)(build: BuildInfo[String]): ZIO[FileIO, IOException, BuildInfo[File]] = {
     import dev.argon.compiler.backend.ProjectLoader.Implicits._
 
     type ProjFormat[A] = ProjectInfoFormat[Id, A]
     implicit val fileHandler = ProjectFileHandler.fileHandlerFile(dir)
 
     for {
-      resolvedProj <-ProjectLoader[ProjFormat[String], ProjFormat[File], File].loadProject[ZIO[Blocking, IOException, ?]](build.project)
-      resolvedBackendOpts <- build.backend.projectLoader[File].loadProject[ZIO[Blocking, IOException, ?]](build.backendOptions)
+      resolvedProj <-ProjectLoader[ProjFormat[String], ProjFormat[File], File].loadProject[ZIO[FileIO, IOException, ?]](build.project)
+      resolvedBackendOpts <- build.backend.projectLoader[File].loadProject[ZIO[FileIO, IOException, ?]](build.backendOptions)
     } yield BuildInfo(build.backend)(
       project = resolvedProj,
       compilerOptions = build.compilerOptions,
