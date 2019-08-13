@@ -31,7 +31,7 @@ object InputStreamReaderTransformation {
       if(read(buff) < 0)
         -1
       else
-        buff(0).toInt
+        buff(0) & 0xFF
     }
 
     override def read(b: Array[Byte], off: Int, len: Int): Int = {
