@@ -52,7 +52,7 @@ object InputStreamReaderTransformation {
   }
 
   @SuppressWarnings(Array("org.wartremover.warts.Null"))
-  def apply[R, E, X](readHandler: InputStream => ZIO[R, E, X]): InputStreamReaderTransformation[R, E, X] =
+  def apply[R, E, X](blocking: Blocking.Service[Any])(readHandler: InputStream => ZIO[R, E, X]): InputStreamReaderTransformation[R, E, X] =
     new InputStreamReaderTransformation[R, E, X] {
       override def readDirectly[R2 <: R, E2 >: E](inputStream: InputStream): ZIO[R2, E2, X] =
         readHandler(inputStream)
@@ -88,14 +88,19 @@ object InputStreamReaderTransformation {
       override def step(s: State, ca: NonEmptyVector[Byte]): ZIO[R, E, Step[State, Byte, Nothing, X]] =
         s._2.get.flatMap {
           case true => s._3.join.map(Step.Stop.apply)
-          case false => IO.effectTotal {
+          case false => blocking.effectBlocking {
             s._1.put(Some(ca.toVector))
             Step.Continue(s)
-          }
+          }.orDie
         }
 
       override def end(s: State, result: Unit): ZIO[R, E, (Vector[Nothing], ZIO[R, E, X])] =
-        IO.succeed((Vector(), s._3.join))
+        IO.succeed((Vector(),
+          for {
+            _ <- blocking.effectBlocking { s._1.put(None)  }.orDie
+            result <- s._3.join
+          } yield result
+        ))
     }
 
 }
