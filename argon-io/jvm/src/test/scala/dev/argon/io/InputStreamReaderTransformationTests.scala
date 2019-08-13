@@ -52,29 +52,26 @@ class InputStreamReaderTransformationTests extends FlatSpec with Matchers with D
       allData.toSeq
     } }
 
-  def createTrans[A](f: InputStream => RIO[Blocking, A]): RIO[Blocking, InputStreamReaderTransformation[Blocking, Throwable, A]] =
-    ZIO.access { env => InputStreamReaderTransformation(env.blocking)(f) }
-
   "InputStreamReaderTransformation" should "readDirectly using single byte read" in {
-    unsafeRun(createTrans(usingSingleByteRead).flatMap { _.readDirectly(sampleInputStream) }) shouldBe streamContent
+    unsafeRun(InputStreamReaderTransformation(usingSingleByteRead).readDirectly(sampleInputStream)) shouldBe streamContent
   }
 
   it should "readDirectly using buffer reads" in {
-    unsafeRun(createTrans(usingBufferReader).flatMap { _.readDirectly(sampleInputStream) }) shouldBe streamContent
+    unsafeRun(InputStreamReaderTransformation(usingBufferReader).readDirectly(sampleInputStream)) shouldBe streamContent
   }
 
   it should "transform stream using single byte read" in {
-    unsafeRun(createTrans(usingSingleByteRead).flatMap(sampleArStream.foldLeft)) shouldBe streamContent
+    unsafeRun(sampleArStream.foldLeft(InputStreamReaderTransformation(usingSingleByteRead))) shouldBe streamContent
   }
 
   it should "transform stream using buffer reads" in {
-    unsafeRun(createTrans(usingBufferReader).flatMap(sampleArStream.foldLeft)) shouldBe streamContent
+    unsafeRun(sampleArStream.foldLeft(InputStreamReaderTransformation(usingBufferReader))) shouldBe streamContent
   }
 
   val retryCount = 10
 
   it should "handle extra single byte reads" in {
-    unsafeRun(createTrans { inputStream =>
+    unsafeRun(sampleArStream.foldLeft(InputStreamReaderTransformation { inputStream =>
       ZIO.accessM[Blocking] { _.blocking.effectBlocking {
         var eofCount = 0
         while(inputStream.read() >= 0) {}
@@ -85,11 +82,11 @@ class InputStreamReaderTransformationTests extends FlatSpec with Matchers with D
         }
         eofCount
       } }
-    }.flatMap(sampleArStream.foldLeft)) shouldBe retryCount
+    })) shouldBe retryCount
   }
 
   it should "handle extra buffer reads" in {
-    unsafeRun(createTrans { inputStream =>
+    unsafeRun(sampleArStream.foldLeft(InputStreamReaderTransformation { inputStream =>
       ZIO.accessM[Blocking] { _.blocking.effectBlocking {
         var eofCount = 0
         val buff = new Array[Byte](1024)
@@ -101,7 +98,7 @@ class InputStreamReaderTransformationTests extends FlatSpec with Matchers with D
         }
         eofCount
       } }
-    }.flatMap(sampleArStream.foldLeft)) shouldBe retryCount
+    })) shouldBe retryCount
   }
 
 }

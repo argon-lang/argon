@@ -93,7 +93,7 @@ class IOEnvironment(otherEnv: Blocking with Console with System) extends FileIO 
         }
 
     override def protocolBufferSink[E, A <: GeneratedMessage with Message[A]](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A]): StreamTransformation[ZIO, Any, E, Byte, Unit, Nothing, A] =
-      InputStreamReaderTransformation(blocking) { stream =>
+      InputStreamReaderTransformation { stream =>
         blocking.effectBlocking {
           companion.parseFrom(stream)
         }
