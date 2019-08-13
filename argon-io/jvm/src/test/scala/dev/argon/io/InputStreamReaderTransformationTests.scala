@@ -10,6 +10,7 @@ import zio.blocking.Blocking
 
 import scala.collection.mutable.ArrayBuffer
 
+@SuppressWarnings(Array("org.wartremover.warts.Var"))
 class InputStreamReaderTransformationTests extends FlatSpec with Matchers with DefaultRuntime {
 
   private val streamContent = Seq[Byte](0, 7, 5, 9, 4, -1)
@@ -68,6 +69,39 @@ class InputStreamReaderTransformationTests extends FlatSpec with Matchers with D
 
   it should "transform stream using buffer reads" in {
     unsafeRun(createTrans(usingBufferReader).flatMap(sampleArStream.foldLeft)) shouldBe streamContent
+  }
+
+  val retryCount = 10
+
+  it should "handle extra single byte reads" in {
+    unsafeRun(createTrans { inputStream =>
+      ZIO.accessM[Blocking] { _.blocking.effectBlocking {
+        var eofCount = 0
+        while(inputStream.read() >= 0) {}
+        for(_ <- 0 until retryCount) {
+          if(inputStream.read() < 0) {
+            eofCount += 1
+          }
+        }
+        eofCount
+      } }
+    }.flatMap(sampleArStream.foldLeft)) shouldBe retryCount
+  }
+
+  it should "handle extra buffer reads" in {
+    unsafeRun(createTrans { inputStream =>
+      ZIO.accessM[Blocking] { _.blocking.effectBlocking {
+        var eofCount = 0
+        val buff = new Array[Byte](1024)
+        while(inputStream.read(buff, 0, buff.length) >= 0) {}
+        for(_ <- 0 until retryCount) {
+          if(inputStream.read(buff, 0, buff.length) < 0) {
+            eofCount += 1
+          }
+        }
+        eofCount
+      } }
+    }.flatMap(sampleArStream.foldLeft)) shouldBe retryCount
   }
 
 }

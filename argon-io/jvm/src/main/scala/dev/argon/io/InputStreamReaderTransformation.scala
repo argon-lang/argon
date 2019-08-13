@@ -24,6 +24,7 @@ object InputStreamReaderTransformation {
   ))
   private final class TransformInputStream(queue: BlockingQueue[Option[Vector[Byte]]]) extends InputStream {
 
+    private var hitEof: Boolean = false
     private var remainingData: Option[Vector[Byte]] = None
 
     override def read(): Int = {
@@ -39,8 +40,10 @@ object InputStreamReaderTransformation {
       if(len == 0)
         0
       else {
-        (if (remainingData.isEmpty) queue.take() else remainingData) match {
-          case None => -1
+        (if (remainingData.isEmpty && !hitEof) queue.take() else remainingData) match {
+          case None =>
+            hitEof = true
+            -1
           case Some(data) =>
             data.copyToArray(b, off, len)
 
