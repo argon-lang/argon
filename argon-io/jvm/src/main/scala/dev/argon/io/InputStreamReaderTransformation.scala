@@ -84,7 +84,7 @@ object InputStreamReaderTransformation {
           case (queue, doneReading, _) =>
             doneReading.get.flatMap {
               case true => IO.succeed(())
-              case false => IO.effectTotal { queue.put(None) }
+              case false => blocking.effectBlocking { queue.put(None) }.orDie
             }
         })
 
