@@ -1,6 +1,6 @@
 package dev.argon.io
 
-import java.io.{ByteArrayInputStream, InputStream}
+import java.io.{ByteArrayInputStream, InputStream, OutputStream}
 
 import dev.argon.stream.ArStream
 import zio._
@@ -14,6 +14,10 @@ trait StreamCommon {
   val streamContent = Seq[Byte](0, 7, 5, 9, 4, -1)
   def sampleInputStream: InputStream = new ByteArrayInputStream(streamContent.toArray)
   def sampleArStream: ArStream[ZIO, Blocking, Throwable, Byte] = ArStream.fromVector(streamContent.toVector)
+  def emptyArStream: ArStream[ZIO, Blocking, Throwable, Byte] = ArStream.fromVector(Vector.empty)
+
+  def noReads(inputStream: InputStream): RIO[Blocking, Unit] =
+    IO.succeed(())
 
   def usingSingleByteRead(inputStream: InputStream): RIO[Blocking, Seq[Byte]] =
     ZIO.accessM[Blocking] { _.blocking.effectBlocking {
@@ -75,5 +79,12 @@ trait StreamCommon {
         }
       }
       eofCount
+    } }
+
+  def usingSingleByteWrite(outputStream: OutputStream): RIO[Blocking, Unit] =
+    ZIO.accessM[Blocking] { _.blocking.effectBlocking {
+      for(b <- streamContent) {
+        outputStream.write(b.toInt)
+      }
     } }
 }

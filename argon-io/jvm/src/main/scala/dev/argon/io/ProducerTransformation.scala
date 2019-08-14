@@ -9,6 +9,7 @@ private[io] abstract class ProducerTransformation[R, E, A, B] extends StreamTran
 
   trait Producer {
     private[ProducerTransformation] def suspend(value: Vector[A]): IO[E, Option[B]]
+    private[ProducerTransformation] val initialValue: Option[B]
   }
 
   private trait Consumer {
@@ -47,6 +48,7 @@ private[io] abstract class ProducerTransformation[R, E, A, B] extends StreamTran
             )
             .fork
 
+          initValue <- initialTrigger.await
 
 
         } yield new Producer {
@@ -55,14 +57,21 @@ private[io] abstract class ProducerTransformation[R, E, A, B] extends StreamTran
             _ <- queue.offer((value, trigger))
             result <- trigger.await
           } yield result
+
+          override private[ProducerTransformation] val initialValue = initValue
         }
       )
     )
 
   override def step(s: Producer, ca: NonEmptyVector[A]): ZIO[R, E, Step[Producer, A, Nothing, B]] =
-    s.suspend(ca.toVector).map {
-      case Some(b) => Step.Stop(b)
-      case None => Step.Continue(s)
+    s.initialValue match {
+      case None =>
+        s.suspend(ca.toVector).map {
+          case Some(b) => Step.Stop(b)
+          case None => Step.Continue(s)
+        }
+
+      case Some(b) => IO.succeed(Step.Stop(b))
     }
 
   private def sendEOF(producer: Producer): ZIO[R, E, B] =

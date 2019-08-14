@@ -36,4 +36,16 @@ class InputStreamReaderTransformationTests extends FlatSpec with Matchers with D
     unsafeRun(sampleArStream.foldLeft(InputStreamReaderTransformation(usingBufferReaderExtra))) shouldBe retryCount
   }
 
+  it should "handle empty single byte reads" in {
+    unsafeRun(emptyArStream.foldLeft(InputStreamReaderTransformation(usingSingleByteRead))) shouldBe Seq()
+  }
+
+  it should "handle empty buffer reads" in {
+    unsafeRun(emptyArStream.foldLeft(InputStreamReaderTransformation(usingBufferReader))) shouldBe Seq()
+  }
+
+  it should "handle no reads" in {
+    unsafeRun(sampleArStream.foldLeft(InputStreamReaderTransformation(noReads)))
+  }
+
 }
