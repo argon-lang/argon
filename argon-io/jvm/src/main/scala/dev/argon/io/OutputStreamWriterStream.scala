@@ -2,6 +2,7 @@ package dev.argon.io
 
 import dev.argon.stream._
 import java.io.{IOException, OutputStream}
+import java.util.Objects
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{ArrayBlockingQueue, BlockingQueue}
 
@@ -15,81 +16,53 @@ import zio.blocking.Blocking
 final case class OutputStreamWriterStream[R, E](blocking: Blocking.Service[Any])(f: OutputStream => ZIO[R, E, Unit]) extends ArStream[ZIO, R, E, Byte] {
 
 
-  private final class TransformOutputStream(queue: BlockingQueue[Option[Vector[Byte]]]) extends OutputStream {
+  @SuppressWarnings(Array(
+    "org.wartremover.warts.NonUnitStatements",
+    "org.wartremover.warts.Var",
+  ))
+  private final class TransformOutputStream[R2 <: R, E2 >: E, A2 >: Byte, X, S]
+  (
+    runtime: Runtime[R2],
+    trans: StreamTransformation[ZIO, R2, E2, A2, Unit, Nothing, X] { type State = S },
+    var state: S,
+  ) extends OutputStream {
 
-    val isStopped: AtomicBoolean = new AtomicBoolean()
+    var result: Option[X] = None
 
-    override def write(b: Int): Unit =
-      if(isStopped.get())
-        throw new TransformOutputStreamStopException()
-      else
-        queue.put(Some(Vector(b.toByte)))
+    override def write(b: Int): Unit = write(Array(b.toByte))
 
-    override def write(b: Array[Byte], off: Int, len: Int): Unit =
-      if(isStopped.get())
-        throw new TransformOutputStreamStopException()
-      else
-        queue.put(Some(b.slice(off, off + len).toVector))
+    override def write(b: Array[Byte], off: Int, len: Int): Unit = {
+      Objects.checkFromIndexSize(off, len, b.length)
 
-  }
+      if(result.isDefined) throw new IOException("Consumer does not expect any more data.")
 
-
-
-  @SuppressWarnings(Array("org.wartremover.warts.Null"))
-  private def runOutputFunc[R2 <: R, E2 >: E, X](consumer: ZIO[R2, E2, Option[NonEmptyVector[Byte]]] => ZIO[R2, E2, X]): ZIO[R2, E2, X] =
-    IO.effectTotal { new ArrayBlockingQueue[Option[Vector[Byte]]](32) }.flatMap { queue =>
-      IO.effectTotal { new TransformOutputStream(queue) }.flatMap { outputStream =>
-        val producer = f(outputStream)
-          .onTermination(_ => IO.effectTotal { queue.put(None) })
-          .sandbox
-          .catchSome {
-            case Exit.Cause.Die(_: TransformOutputStreamStopException) => IO.succeed(())
-            case Exit.Cause.Fail(_: TransformOutputStreamStopException) => IO.succeed(())
-          }
-          .unsandbox
-
-        producer.fork.flatMap { producerFiber =>
-
-          def takeNext: ZIO[R, E, Option[NonEmptyVector[Byte]]] =
-            blocking.effectBlocking { queue.take() }.orDie.flatMap {
-              case None => producerFiber.join.const(None)
-              case Some(data) => NonEmptyVector.fromVector(data) match {
-                case Some(data) => IO.succeed(Some(data))
-                case None => takeNext
-              }
-            }
-
-          consumer(takeNext)
-            .onTermination(_ => IO.effectTotal { outputStream.isStopped.set(true) })
-            .flatMap { x =>
-              producerFiber.join.const(x)
-            }
+      NonEmptyVector.fromVector(b.slice(off, off + len).toVector).foreach { data =>
+        runtime.unsafeRun(trans.step(state, data)) match {
+          case Step.Produce(_, value, _) => value
+          case Step.Continue(state) => this.state = state
+          case Step.Stop(result) => this.result = Some(result)
         }
       }
     }
+  }
 
 
   override def foldLeft[R2 <: R, E2 >: E, A2 >: Byte, X](trans: StreamTransformation[ZIO, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[ZIO[R2, E2, ?]]): ZIO[R2, E2, X] =
     trans match {
       case trans: OutputStreamTransformation[R2, E2, X] => trans.writeDirectly(f)
       case _ =>
-        runOutputFunc[R2, E2, X] { takeNext =>
-          trans.initial.use { state =>
-
-            def feed(state: trans.State): ZIO[R2, E2, X] =
-              takeNext.flatMap {
-                case Some(data) => trans.step(state, data).flatMap {
-                  case Step.Produce(_, value, _) => value
-                  case Step.Continue(state) => feed(state)
-                  case Step.Stop(result) => IO.succeed(result)
+        trans.initial.use { state =>
+          ZIO.runtime[R2].flatMap { runtime => IO.effectTotal { new TransformOutputStream[R2, E2, A2, X, trans.State](runtime, trans, state) } }
+            .flatMap { outputStream =>
+              f(outputStream).flatMap { _ =>
+                outputStream.result match {
+                  case Some(result) => IO.succeed(result)
+                  case None =>
+                    trans.end(outputStream.state, ())
+                      .flatMap { case (_, resultIO) => resultIO }
                 }
-
-                case None =>
-                  trans.end(state, ()).flatMap { case (_, fx) => fx }
               }
-
-            feed(state)
-          }
+            }
         }
     }
 

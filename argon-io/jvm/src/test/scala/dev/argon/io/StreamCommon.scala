@@ -87,4 +87,9 @@ trait StreamCommon {
         outputStream.write(b.toInt)
       }
     } }
+
+  def usingBufferWriter(outputStream: OutputStream): RIO[Blocking, Unit] =
+    ZIO.accessM[Blocking] { _.blocking.effectBlocking {
+      outputStream.write(streamContent.toArray)
+    } }
 }

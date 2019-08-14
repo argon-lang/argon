@@ -4,6 +4,8 @@ import dev.argon.stream._
 import java.io.InputStream
 import java.util.Objects
 
+import cats._
+import cats.implicits._
 import cats.data.NonEmptyVector
 import zio.blocking.Blocking
 import zio._
@@ -17,7 +19,6 @@ trait InputStreamReaderTransformation[-R, +E, +X] extends StreamTransformation[Z
 object InputStreamReaderTransformation {
 
   @SuppressWarnings(Array(
-    "org.wartremover.warts.Equals",
     "org.wartremover.warts.NonUnitStatements",
     "org.wartremover.warts.Var",
   ))
@@ -35,7 +36,7 @@ object InputStreamReaderTransformation {
 
     override def read(b: Array[Byte], off: Int, len: Int): Int = {
       Objects.checkFromIndexSize(off, len, b.length)
-      if(len == 0)
+      if(len === 0)
         0
       else {
         (if(remainingData.nonEmpty) remainingData else getNext()) match {
