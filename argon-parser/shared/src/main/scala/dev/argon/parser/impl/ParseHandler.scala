@@ -5,39 +5,28 @@ import dev.argon.util._
 import cats._
 import cats.data._
 import cats.implicits._
+import dev.argon.grammar.ParseErrorHandler
 import dev.argon.parser.impl.TopLevelStatement.NSAndImports
-import dev.argon.stream.{Step, StepPure, StreamTransformation}
 import dev.argon.stream._
+import dev.argon.stream.builder.{Builder, Generator, Iter}
 
 object ParseHandler {
 
-  def parse[F[-_, +_, +_]](fileSpec: FileSpec)(implicit monadErrorNothing: MonadError[F[Any, Nothing, ?], Nothing], monadError: MonadError[F[Any, NonEmptyVector[SyntaxError], ?], NonEmptyVector[SyntaxError]]): StreamTransformation[F, Any, NonEmptyVector[SyntaxError], Char, Unit, SourceAST, Unit] =
-    (Characterizer.characterize : StreamTransformation[F, Any, NonEmptyVector[SyntaxError], Char, Unit, WithSource[String], FilePosition])
-      .buffer(1024 * 8)
-      .into(Lexer.lex)
-      .buffer(1024 * 2)
-      .into(ArgonParser.parse)
-      .into(buildSourceAST(fileSpec))
+  def parse[F[_]: Monad, L[_, _]](fileSpec: FileSpec)(chars: L[Char, Unit])(implicit errorHandler: ParseErrorHandler[F, NonEmptyVector[SyntaxError]], iter: Iter[F, L, Unit]): Generator[F, SourceAST, Unit] =
+    Characterizer.characterize[F, L](chars)
+      .buffer(1024 * 4)
+      .into(Lexer.lex(_))
+      .buffer(1024)
+      .into(ArgonParser.parse(_))
+      .into(buildSourceAST(fileSpec)(_))
 
-  private def buildSourceAST[F[-_, +_, +_]](fileSpec: FileSpec)(implicit monadError: MonadError[F[Any, NonEmptyVector[SyntaxError], ?], NonEmptyVector[SyntaxError]]): StreamTransformation[F, Any, NonEmptyVector[SyntaxError], TopLevelStatement, Unit, SourceAST, Unit] =
-    new StreamTransformation.PureSingle[F, NonEmptyVector[SyntaxError], TopLevelStatement, Unit, SourceAST, Unit] {
-      override type State = NSAndImports
-
-
-      override def initialPure: NSAndImports = TopLevelStatement.defaultNSAndImports
-
-      override def stepSinglePure(state: NSAndImports, item: TopLevelStatement): StepPure[NSAndImports, Nothing, TopLevelStatement, SourceAST, Unit] = {
-        val (newState, opt) = TopLevelStatement.accumulate(fileSpec)(state, item)
-
-        opt match {
-          case Some(value) => Step.Produce(newState, value, Vector.empty)
-          case None => Step.Continue(newState)
-        }
-      }
-
-      override def endPure(s: NSAndImports, result: Unit): (Vector[SourceAST], Either[Nothing, Unit]) =
-        (Vector.empty, Right(()))
-
+  private def buildSourceAST[F[_], L[_, _]](fileSpec: FileSpec)(stmts: L[TopLevelStatement, Unit])(implicit iter: Iter[F, L, Unit]): Generator[F, SourceAST, Unit] =
+    new Generator[F, SourceAST, Unit] {
+      override def create[G[_]](convert: F ~> G)(implicit builder: Builder[G, SourceAST]): G[Unit] =
+        iter.foldLeftM(convert)(stmts)(TopLevelStatement.defaultNSAndImports) { (state, stmt) =>
+          val (newState, opt) = TopLevelStatement.accumulate(fileSpec)(state, stmt)
+          opt.fold(builder.pure(()))(builder.append).map { _ => newState }
+        }.map { _ => }
     }
 
 }

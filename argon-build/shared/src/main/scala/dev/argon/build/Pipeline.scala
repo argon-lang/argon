@@ -6,6 +6,7 @@ import java.io.{File, FileInputStream, IOException}
 import dev.argon.compiler._
 import dev.argon.stream._
 import cats._
+import cats.arrow.FunctionK
 import cats.implicits._
 import dev.argon.build.project.{BuildInfo, FileWithSpec}
 import dev.argon.compiler.core.ModuleDescriptor
@@ -19,6 +20,9 @@ import dev.argon.io.FileIO
 import dev.argon.stream.ArStream
 import dev.argon.io.FileOperations.fileShow
 import dev.argon.build._
+import dev.argon.stream.builder.{Generator, Iter}
+import zio.stream.ZStream
+import dev.argon.stream.builder.ZStreamIter._
 
 object Pipeline {
 
@@ -30,16 +34,15 @@ object Pipeline {
       ZIO.access[FileIO] { _.fileIO.readText(ioToCompilationError)(file.toPath) }
     ))
 
-  private def findInputFiles(buildInfo: BuildInfo[File]): ArStream[ZIO, FileIO, NonEmptyList[CompilationError], InputFileInfo[ZIO, FileIO]] = {
-    import zio.interop.catz._
+  private type IterStream[A, X] = (ZStream[FileIO, NonEmptyList[CompilationError], A], X)
 
-    ArStream.fromVector[ZIO, FileIO, NonEmptyList[CompilationError], (File, Int)](buildInfo.project.inputFiles.toVector.zipWithIndex)
+  private def findInputFiles(buildInfo: BuildInfo[File]): ZStream[FileIO, NonEmptyList[CompilationError], InputFileInfo[IterStream]] =
+    ZStream.fromIterable(buildInfo.project.inputFiles.view.zipWithIndex)
       .map { case (file, id) =>
-        InputFileInfo(FileSpec(FileID(id), file.getPath),
-          ArStream.fromZStream(createFileDataStream(file))
+        InputFileInfo[IterStream](FileSpec(FileID(id), file.getPath),
+          (createFileDataStream(file), ())
         )
       }
-  }
 
   def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): RIO[Console, Unit] = {
     import zio.interop.catz._
@@ -56,21 +59,28 @@ object Pipeline {
   (implicit compInstance: IOCompilation[BuildEnvironment])
   : ZIO[BuildEnvironment, NonEmptyList[CompilationError], A] =
     ZIO.access[FileIO] { res => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](res.fileIO) }.flatMap { implicit resFactory =>
-      {
+
+      type F[B] = ZIO[BuildEnvironment, NonEmptyList[CompilationError], B]
+
+      val parsedInputStream = {
         import zio.interop.catz._
-        BuildProcess.parseInput[ZIO, BuildEnvironment](findInputFiles(buildInfo))
-        }.foldLeft(StreamTransformation.toVector[ZIO, BuildEnvironment, NonEmptyList[CompilationError], SourceAST]).flatMap { parsedInput =>
-        BuildProcess.compile[ZIO, BuildEnvironment, File, A](
-          buildInfo.backend : buildInfo.backend.type
-        )(
-          parsedInput,
-          buildInfo.project.references.toVector,
-          CompilerOptions(
-            moduleName = buildInfo.compilerOptions.moduleName
-          ),
-          buildInfo.backendOptions : buildInfo.backend.BackendOptions[Id, File],
-        )(f)
+        BuildProcess.parseInput[F, IterStream]((findInputFiles(buildInfo), ()))
       }
+
+      Iter[F, Generator[F, ?, ?], Unit].foldLeftM(FunctionK.id)(parsedInputStream)(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
+        .flatMap {
+          case (parsedInput, _) =>
+            BuildProcess.compile[ZIO, BuildEnvironment, File, A](
+              buildInfo.backend : buildInfo.backend.type
+            )(
+              parsedInput,
+              buildInfo.project.references.toVector,
+              CompilerOptions(
+                moduleName = buildInfo.compilerOptions.moduleName
+              ),
+              buildInfo.backendOptions : buildInfo.backend.BackendOptions[Id, File],
+            )(f)
+        }
     }
 
   def run(buildInfo: BuildInfo[File]): RIO[Console with BuildEnvironment, Int] =

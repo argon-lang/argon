@@ -9,11 +9,12 @@ import scala.language.postfixOps
 import cats._
 import cats.data._
 import cats.implicits._
-import dev.argon.grammar.{Grammar, GrammarError, TokenMatcher}
+import dev.argon.grammar.{Grammar, GrammarError, ParseErrorHandler, TokenMatcher}
 import Grammar.Operators._
 import Grammar.{GrammarFactory, UnionGrammar}
 import dev.argon.stream.StreamTransformation
 import dev.argon.stream._
+import dev.argon.stream.builder.Generator
 
 import Function.const
 
@@ -711,8 +712,8 @@ object ArgonParser {
 
   private[impl] def grammarFactory: GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] = ArgonGrammarFactory
 
-  def parse[F[-_, +_, +_]](implicit monadError: MonadError[F[Any, NonEmptyVector[SyntaxError], ?], NonEmptyVector[SyntaxError]]): StreamTransformation[F, Any, NonEmptyVector[SyntaxError], WithSource[Token], FilePosition, TopLevelStatement, Unit] =
-    Grammar.parseAll[F, Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)
+  def parse[F[_]: Monad](tokens: Generator[F, NonEmptyVector[WithSource[Token]], FilePosition])(implicit errorHandler: ParseErrorHandler[F, NonEmptyVector[SyntaxError]]): Generator[F, TopLevelStatement, Unit] =
+    Grammar.parseAll[F, Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)(tokens)
       .mapResult(const(()))
 
 }

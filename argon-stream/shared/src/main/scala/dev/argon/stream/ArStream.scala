@@ -3,6 +3,7 @@ package dev.argon.stream
 import cats._
 import cats.data._
 import cats.implicits._
+import dev.argon.stream.builder.Iter
 import zio.{stream => zstream, _}
 
 trait ArStream[F[-_, +_, +_], -R, +E, +A] {

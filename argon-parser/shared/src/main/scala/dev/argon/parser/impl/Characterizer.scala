@@ -3,68 +3,40 @@ package dev.argon.parser.impl
 import cats._
 import cats.data._
 import cats.implicits._
+import dev.argon.stream.builder._
 import dev.argon.stream.{Step, StepPure, StreamTransformation}
 import dev.argon.util._
-import dev.argon.util.{FilePosition, SourceLocation, WithSource}
 
 
 object Characterizer {
 
-  private def toCodePoints[F[-_, +_, +_]](implicit monadError: MonadError[F[Any, Nothing, ?], Nothing])
-  : StreamTransformation[F, Any, Nothing, Char, Unit, Int, Unit] =
-    new StreamTransformation.PureSingle[F, Nothing, Char, Unit, Int, Unit] {
-      override type State = Option[Char]
+  private def toCodePoints[F[_], L[_, _]](chars: L[Char, Unit])(implicit iter: Iter[F, L, Unit]): Generator[F, Int, Unit] = new Generator[F, Int, Unit] {
+    override def create[G[_]](convert: F ~> G)(implicit builder: Builder[G, Int]): G[Unit] =
+      iter.foldLeftM(convert)(chars)(Option.empty[Char]) {
+        case (Some(prevCh), ch) => builder.append(Character.toCodePoint(prevCh, ch)).map { _ => None }
+        case (None, ch) if Character.isHighSurrogate(ch) => builder.pure(Some(ch))
+        case (None, ch) => builder.append(ch.toInt).map { _ => None }
+      }.flatMap {
+        case (Some(ch), _) => builder.append(ch.toInt)
+        case (None, _) => builder.pure(())
+      }
+  }
 
+  private def toGraphemes[F[_], L[_, _]](codepoints: L[Int, Unit])(implicit iter: Iter[F, L, Unit]): Generator[F, String, Unit] = new Generator[F, String, Unit] {
+    override def create[G[_]](convert: F ~> G)(implicit builder: Builder[G, String]): G[Unit] =
+      iter.foldLeftM(convert)(codepoints)(Option.empty[String]) {
+        case (Some(str), cp) if isCombiningChar(cp) => builder.pure(Some(str + codePointToString(cp)))
+        case (Some(str), cp) => builder.append(str).map { _ => Some(codePointToString(cp)) }
+        case (None, cp) => builder.pure(Some(codePointToString(cp)))
+      }.flatMap {
+        case (Some(str), _) => builder.append(str)
+        case (None, _) => builder.pure(())
+      }
+  }
 
-      override def initialPure: Option[Char] = None
-
-
-      override def stepSinglePure(s: Option[Char], a: Char): StepPure[Option[Char], Nothing, Nothing, Int, Unit] =
-        s match {
-          case Some(prevCh) => Step.Produce(None, Character.toCodePoint(prevCh, a), Vector.empty)
-
-          case None =>
-            if(Character.isHighSurrogate(a))
-              Step.Continue(Some(a))
-            else
-              Step.Produce(None, a.toInt, Vector.empty)
-        }
-
-
-      override def endPure(s: Option[Char], result: Unit): (Vector[Int], Either[Nothing, Unit]) =
-        (s.map { _.toInt }.toList.toVector, Right(()))
-
-    }
-
-  private def toGraphemes[F[-_, +_, +_]](implicit monadError: MonadError[F[Any, Nothing, ?], Nothing])
-  : StreamTransformation[F, Any, Nothing, Int, Unit, String, Unit] =
-    new StreamTransformation.PureSingle[F, Nothing, Int, Unit, String, Unit] {
-      override type State = Option[String]
-
-
-      override def initialPure: Option[String] = None
-
-      override def stepSinglePure(s: Option[String], a: Int): StepPure[Option[String], Nothing, Int, String, Unit] =
-        s match {
-          case Some(str) if isCombiningChar(a) => Step.Continue(Some(str + codePointToString(a)))
-          case Some(str) => Step.Produce(None, str, Vector(a))
-          case None => Step.Continue(Some(codePointToString(a)))
-        }
-
-      override def endPure(s: Option[String], result: Unit): (Vector[String], Either[Nothing, Unit]) =
-        (s.toList.toVector, Right(()))
-
-    }
-
-
-  private def withSource[F[-_, +_, +_]](implicit monadError: MonadError[F[Any, Nothing, ?], Nothing])
-  : StreamTransformation[F, Any, Nothing, String, Unit, WithSource[String], FilePosition] =
-    new StreamTransformation.PureSingle[F, Nothing, String, Unit, WithSource[String], FilePosition] {
-      override type State = FilePosition
-
-      override def initialPure: FilePosition = FilePosition(1, 1)
-
-      override def stepSinglePure(pos: FilePosition, item: String): StepPure[FilePosition, Nothing, String, WithSource[String], FilePosition] = {
+  private def withSource[F[_], L[_, _]](graphemes: L[String, Unit])(implicit iter: Iter[F, L, Unit]): Generator[F, WithSource[String], FilePosition] = new Generator[F, WithSource[String], FilePosition] {
+    override def create[G[_]](convert: F ~> G)(implicit builder: Builder[G, WithSource[String]]): G[FilePosition] =
+      iter.foldLeftM(convert)(graphemes)(FilePosition(1, 1)) { (pos, item) =>
         val nextPos =
           if(item === "\n")
             FilePosition(pos.line + 1, 1)
@@ -73,14 +45,9 @@ object Characterizer {
 
         val newItem = WithSource(item, SourceLocation(pos, nextPos))
 
-        Step.Produce(nextPos, newItem, Vector.empty)
-      }
-
-      override def endPure(s: FilePosition, result: Unit): (Vector[WithSource[String]], Either[Nothing, FilePosition]) =
-        (Vector.empty, Right(s))
-
-    }
-
+        builder.append(newItem).map { _ => nextPos }
+      }.map { case (pos, _) => pos }
+  }
 
   private def isCombiningChar(cp: Int): Boolean =
     Character.getType(cp) match {
@@ -92,7 +59,7 @@ object Characterizer {
     new String(Character.toChars(cp))
 
 
-  def characterize[F[-_, +_, +_]](implicit monadError: MonadError[F[Any, Nothing, ?], Nothing]): StreamTransformation[F, Any, Nothing, Char, Unit, WithSource[String], FilePosition] =
-    toCodePoints.into(toGraphemes).into(withSource)
+  def characterize[F[_]: Monad, L[_, _]](chars: L[Char, Unit])(implicit iter: Iter[F, L, Unit]): Generator[F, WithSource[String], FilePosition] =
+    toCodePoints(chars).into(toGraphemes(_)).into(withSource(_))
 
 }

@@ -7,10 +7,11 @@ import scala.language.postfixOps
 import cats._
 import cats.data._
 import cats.implicits._
-import dev.argon.grammar.{Grammar, GrammarError}
+import dev.argon.grammar.{Grammar, GrammarError, ParseErrorHandler}
 import Grammar.Operators._
 import dev.argon.parser.impl.Lexer.LexerGrammarFactory
 import dev.argon.stream.StreamTransformation
+import dev.argon.stream.builder.Generator
 
 import Function.const
 
@@ -265,8 +266,8 @@ object Lexer {
   type ErrorEffect[F[_], A] = EitherT[F, NonEmptyList[SyntaxError], A]
 
 
-  def lex[F[-_, +_, +_]](implicit monadError: MonadError[F[Any, NonEmptyVector[SyntaxError], ?], NonEmptyVector[SyntaxError]]): StreamTransformation[F, Any, NonEmptyVector[SyntaxError], WithSource[String], FilePosition, WithSource[Token], FilePosition] =
-    Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken).collect {
+  def lex[F[_]: Monad](chars: Generator[F, NonEmptyVector[WithSource[String]], FilePosition])(implicit errorHandler: ParseErrorHandler[F, NonEmptyVector[SyntaxError]]): Generator[F, WithSource[Token], FilePosition] =
+    Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken)(chars).collect {
       case WithSource(Some(value), loc) => WithSource(value, loc)
     }
 
