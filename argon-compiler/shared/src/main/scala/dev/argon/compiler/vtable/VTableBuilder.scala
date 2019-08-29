@@ -4,6 +4,7 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import cats._
 import cats.implicits._
+import shapeless.Nat
 
 sealed abstract class VTableBuilder {
 
@@ -48,10 +49,10 @@ object VTableBuilder {
 
         import context.signatureContext.{ context => _, _ }
 
-        def impl(sig: Signature[FunctionResultInfo], slotSig: Signature[FunctionResultInfo]): Comp[Boolean] =
-          sig.visit(
-            aParam => slotSig.visit(
-              bParam => isSubType[Comp](aParam.parameter.paramType, bParam.parameter.paramType).map { _.isDefined }
+        def impl(sig: Signature[FunctionResultInfo, _ <: Nat], slotSig: Signature[FunctionResultInfo, _ <: Nat]): Comp[Boolean] =
+          (sig, slotSig) match {
+            case (aParam @ SignatureParameters(_, _), bParam @ SignatureParameters(_, _)) =>
+              isSubType[Comp](aParam.parameter.paramType, bParam.parameter.paramType).map { _.isDefined }
                 .flatMap {
                   case true => isSubType[Comp](bParam.parameter.paramType, aParam.parameter.paramType).map { _.isDefined }
                   case false => false.pure[Comp]
@@ -59,14 +60,13 @@ object VTableBuilder {
                 .flatMap {
                   case true => impl(aParam.nextUnsubstituted, bParam.next(LoadVariable(aParam.parameter.paramVar)))
                   case false => false.pure[Comp]
-                },
-              _ => false.pure[Comp]
-            ),
-            aResult => slotSig.visit(
-              _ => false.pure[Comp],
-              bResult => isSubType[Comp](aResult.result.returnType, bResult.result.returnType).map { _.isDefined }
-            )
-          )
+                }
+
+            case (SignatureResult(aResult), SignatureResult(bResult)) =>
+              isSubType[Comp](aResult.returnType, bResult.returnType).map { _.isDefined }
+
+            case _ => false.pure[Comp]
+          }
 
         method.signatureUnsubstituted.flatMap { sig =>
           impl(sig, slotSig)

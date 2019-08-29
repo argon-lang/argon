@@ -10,6 +10,7 @@ import cats._
 import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
+import shapeless.Nat
 
 object SourceMethod {
   def apply
@@ -22,7 +23,7 @@ object SourceMethod {
     import context2._
     
     for {
-      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[FunctionResultInfo]]
+      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[FunctionResultInfo, _ <: Nat]]
       implCache <- Compilation[Comp].createCache[context2.TMethodImplementation]
     } yield new ArMethod[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
@@ -59,7 +60,7 @@ object SourceMethod {
 
       override val owner: ArMethod.Owner[context.type, DeclarationPayloadSpecifier] = methodOwner
 
-      override lazy val signatureUnsubstituted: Comp[context.signatureContext.Signature[FunctionResultInfo]] =
+      override lazy val signatureUnsubstituted: Comp[context.signatureContext.Signature[FunctionResultInfo, _ <: Nat]] =
         sigCache(
           SourceSignatureCreator.fromParameters[FunctionResultInfo](context2)(
             env(context)(effectInfo, descriptor)

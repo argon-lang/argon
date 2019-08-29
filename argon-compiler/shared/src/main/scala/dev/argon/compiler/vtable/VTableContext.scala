@@ -4,13 +4,14 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import cats._
 import cats.implicits._
+import shapeless.Nat
 
 
 trait VTableContext {
 
   val context: Context
 
-  type EntrySignature = context.signatureContext.Signature[FunctionResultInfo]
+  type EntrySignature = context.signatureContext.Signature[FunctionResultInfo, _ <: Nat]
 
   final case class VTableEntry(signature: EntrySignature, entrySource: EntrySource, impl: VTableEntryImpl)
 

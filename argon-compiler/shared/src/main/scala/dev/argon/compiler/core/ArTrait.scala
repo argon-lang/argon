@@ -6,6 +6,7 @@ import dev.argon.util.FileID
 import cats._
 import cats.evidence.Is
 import cats.implicits._
+import shapeless.Nat
 
 import scala.collection.immutable._
 
@@ -19,7 +20,7 @@ trait ArTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
 
   val isSealed: Boolean
 
-  val signature: Comp[Signature[ArTrait.ResultInfo]]
+  val signature: Comp[Signature[ArTrait.ResultInfo, _ <: Nat]]
 
   val methods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]
   val staticMethods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]

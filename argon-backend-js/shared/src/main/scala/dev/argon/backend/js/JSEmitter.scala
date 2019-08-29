@@ -112,8 +112,8 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
         JSIdentifier(name)
       )
 
-  private def parameterVarMapping[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: Signature[TResult]): Map[VariableLikeDescriptor, JSIdentifier] =
-    sig.unsubstitutedParameters.map { param =>
+  private def parameterVarMapping[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: Signature[TResult, _]): Map[VariableLikeDescriptor, JSIdentifier] =
+    sig.unsubstitutedParameters.unsized.map { param =>
       val desc = param.paramVar.descriptor
       desc -> getParameterName(desc)
     }.toMap
@@ -407,7 +407,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
 
   private def createBaseTraitObject[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
   (ownerDescriptor: ParameterOwnerDescriptor)
-  (ownerSig: Signature[TResult])
+  (ownerSig: Signature[TResult, _])
   (baseTrait: typeSystem.TraitType)
   : Comp[JSExpression] =
     for {
@@ -549,7 +549,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
       JSObjectProperty("value", func),
     ))
 
-  private def createDataCtorBody(ctor: DataConstructor[context.type, DeclarationPayloadSpecifier], sig: Signature[DataConstructor.ResultInfo], ctorImpl: context.JSImpl.DataConstructor, sigVarMapping: VarMap, sigVarMemberMapping: VarMap, statementConverter: StatementConverter): Comp[(JSExpression, VarMap)] =
+  private def createDataCtorBody(ctor: DataConstructor[context.type, DeclarationPayloadSpecifier], sig: Signature[DataConstructor.ResultInfo, _], ctorImpl: context.JSImpl.DataConstructor, sigVarMapping: VarMap, sigVarMemberMapping: VarMap, statementConverter: StatementConverter): Comp[(JSExpression, VarMap)] =
     ctorImpl match {
       case context.JSImpl.DataConstructor.ExpressionBody(expr) =>
 
@@ -599,7 +599,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
     .map(JSArrayLiteral(_))
 
 
-  private def createExpressionImpl(params: EmitParams)(sig: context.signatureContext.Signature[FunctionResultInfo])(expr: context.typeSystem.ArExpr): Comp[JSExpression] =
+  private def createExpressionImpl(params: EmitParams)(sig: context.signatureContext.Signature[FunctionResultInfo, _])(expr: context.typeSystem.ArExpr): Comp[JSExpression] =
     for {
       body <- convertStmt(params)(useReturn = true)(expr)
     } yield JSFunctionExpression(
@@ -608,7 +608,7 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
       body
     )
 
-  def createParameterList[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: context.signatureContext.Signature[TResult]): JSFunctionParameterList =
+  def createParameterList[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: context.signatureContext.Signature[TResult, _]): JSFunctionParameterList =
     sig.unsubstitutedParameters.foldRight[JSFunctionParameterList](JSFunctionEmptyParameterList) { case (param, list) =>
       JSFunctionParameter(
         JSBindingIdentifier(getParameterName(param.paramVar.descriptor)),

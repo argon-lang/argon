@@ -6,6 +6,7 @@ import cats.implicits._
 import dev.argon.compiler.Compilation
 import dev.argon.compiler.types.{ArTypeSystemConverter, TypeSystem, TypeSystemConverter}
 import dev.argon.util.FileID
+import shapeless.Nat
 
 abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
@@ -23,12 +24,12 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
   val isImplicitOverride: Boolean
   val isFinal: Boolean
 
-  val signatureUnsubstituted: Comp[Signature[FunctionResultInfo]]
+  val signatureUnsubstituted: Comp[Signature[FunctionResultInfo, _ <: Nat]]
 
   final def signature[TComp[_]: Compilation]
   (newSigContext: SignatureContext.Aux[context.type])
   (instanceType: newSigContext.typeSystem.TypeWithMethods)
-  : Comp[newSigContext.Signature[FunctionResultInfo]] = for {
+  : Comp[newSigContext.Signature[FunctionResultInfo, _]] = for {
     sig <- signatureUnsubstituted
     converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
     ownerSig <- owner match {

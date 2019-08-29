@@ -11,6 +11,7 @@ import cats._
 import cats.implicits._
 import cats.evidence.Is
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
+import shapeless.Nat
 
 private[compiler] object SourceClass extends AccessModifierHelpers {
 
@@ -35,7 +36,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     import context2._
 
     for {
-      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ArClass.ResultInfo]]
+      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ArClass.ResultInfo, _ <: Nat]]
 
       paramsEnvCache <- Compilation[Comp].createCache[EnvCreator[context2.type]]
 
@@ -98,7 +99,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           }
         )
 
-      override val signature: Comp[Signature[ArClass.ResultInfo]] =
+      override val signature: Comp[Signature[ArClass.ResultInfo, _ <: Nat]] =
         sigCache(
           SourceSignatureCreator.fromParameters[ArClass.ResultInfo](context2)(
             env(context)(EffectInfo.pure, descriptor)

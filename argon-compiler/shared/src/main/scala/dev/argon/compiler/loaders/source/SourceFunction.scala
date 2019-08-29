@@ -9,6 +9,7 @@ import dev.argon.util.{FileID, FileSpec, WithSource}
 import cats._
 import cats.implicits._
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
+import shapeless.Nat
 
 private[compiler] object SourceFunction {
 
@@ -29,7 +30,7 @@ private[compiler] object SourceFunction {
 
       override val effectInfo: EffectInfo = EffectInfo(stmt.purity)
 
-      override lazy val signature: Comp[context.signatureContext.Signature[FunctionResultInfo]] =
+      override lazy val signature: Comp[context.signatureContext.Signature[FunctionResultInfo, _ <: Nat]] =
         SourceSignatureCreator.fromParameters[FunctionResultInfo](context2)(
           env(context)(effectInfo, descriptor)
         )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType))

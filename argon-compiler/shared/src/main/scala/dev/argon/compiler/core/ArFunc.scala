@@ -3,6 +3,7 @@ package dev.argon.compiler.core
 import cats._
 import cats.implicits._
 import dev.argon.util.FileID
+import shapeless.Nat
 
 trait ArFunc[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
@@ -12,7 +13,7 @@ trait ArFunc[TContext <: Context, TPayloadSpec[_, _]] {
   val fileId: FileID
   val effectInfo: EffectInfo
 
-  val signature: Comp[Signature[FunctionResultInfo]]
+  val signature: Comp[Signature[FunctionResultInfo, _ <: Nat]]
 
   val payload: TPayloadSpec[Comp[TFunctionImplementation], TFunctionMetadata]
 

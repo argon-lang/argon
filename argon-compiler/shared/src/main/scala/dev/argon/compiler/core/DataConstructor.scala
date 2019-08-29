@@ -8,6 +8,7 @@ import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.CompilationMessageSource
 import dev.argon.util.FileID
+import shapeless.Nat
 
 
 trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
@@ -19,7 +20,7 @@ trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val fileId: FileID
   val ctorMessageSource: CompilationMessageSource
 
-  val signature: Comp[Signature[DataConstructor.ResultInfo]]
+  val signature: Comp[Signature[DataConstructor.ResultInfo, _ <: Nat]]
 
   val methods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]
 

@@ -8,6 +8,7 @@ import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.CompilationMessageSource
 import dev.argon.util.FileID
+import shapeless.Nat
 
 abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
@@ -22,7 +23,7 @@ abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val isSealed: Boolean
   val isAbstract: Boolean
 
-  val signature: Comp[Signature[ArClass.ResultInfo]]
+  val signature: Comp[Signature[ArClass.ResultInfo, _ <: Nat]]
 
   val fields: Comp[Vector[typeSystem.FieldVariable]]
   val methods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]

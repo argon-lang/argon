@@ -8,6 +8,7 @@ import dev.argon.util.WithSource
 import cats._
 import cats.data.NonEmptyList
 import cats.implicits._
+import shapeless.Nat
 
 object SourceSignatureCreator {
 
@@ -17,7 +18,7 @@ object SourceSignatureCreator {
   (paramOwner: ParameterOwnerDescriptor)
   (params: Vector[WithSource[parser.FunctionParameterList]])
   (resultCreator: ResultCreator[TResult])
-  : context.Comp[context.signatureContext.Signature[TResult]] = {
+  : context.Comp[context.signatureContext.Signature[TResult, _ <: Nat]] = {
 
     import context._
     import typeSystem.{ ParameterElement, Parameter, ParameterVariable }
@@ -28,20 +29,24 @@ object SourceSignatureCreator {
     (env: ExpressionConverter.Env[context.type, Scope])
     (params: Vector[WithSource[parser.FunctionParameterList]])
     (paramIndex: Int)
-    : Comp[Signature[TResult]] =
+    : Comp[Signature[TResult, _ <: Nat]] =
       params match {
         case WithSource(parser.FunctionParameterList(listType, Vector()), location) +: tail =>
-          for {
-            unitType <- ExpressionConverter.resolveUnitType(context)(env)(location)
-            restSig <- impl(env)(tail)(paramIndex + 1)
-          } yield SignatureParameters[TResult](
-            Parameter(
-              ParameterStyle.fromParser(listType),
-              ParameterVariable(ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, unitType),
-              Vector()
-            ),
-            restSig
-          )
+          ExpressionConverter.resolveUnitType(context)(env)(location)
+            .flatMap { unitType =>
+              impl(env)(tail)(paramIndex + 1)
+                .map {
+                  case restSig: Signature[TResult, len] =>
+                    SignatureParameters[TResult, len](
+                      Parameter(
+                        ParameterStyle.fromParser(listType),
+                        ParameterVariable(ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, unitType),
+                        Vector()
+                      ),
+                      restSig
+                    )
+                }
+            }
 
         case WithSource(parser.FunctionParameterList(listType, headH +: headT), location) +: tail =>
 
@@ -64,16 +69,18 @@ object SourceSignatureCreator {
 
                 val paramVar = ParameterVariable(ParameterDescriptor(paramOwner, paramIndex), VariableName.Normal(name), Mutability.NonMutable, t)
 
-                for {
-                  restSig <- impl(env.copy(scope = env.scope.addVariable(paramVar)))(tail)(paramIndex + 1)
-                } yield SignatureParameters[TResult](
-                  Parameter(
-                    ParameterStyle.fromParser(listType),
-                    paramVar,
-                    Vector(ParameterElement(paramVar, VariableName.Normal(name), t, 0))
-                  ),
-                  restSig
-                )
+                impl(env.copy(scope = env.scope.addVariable(paramVar)))(tail)(paramIndex + 1)
+                  .map {
+                    case restSig: Signature[TResult, len] =>
+                      SignatureParameters[TResult, len](
+                        Parameter(
+                          ParameterStyle.fromParser(listType),
+                          paramVar,
+                          Vector(ParameterElement(paramVar, VariableName.Normal(name), t, 0))
+                        ),
+                        restSig
+                      )
+                  }
 
               case elems =>
 
@@ -90,11 +97,12 @@ object SourceSignatureCreator {
                 impl(
                   env.copy(scope = env.scope.addParameter(param))
                 )(tail)(paramIndex + 1)
-                  .map { restSig =>
-                    SignatureParameters[TResult](
-                      param,
-                      restSig
-                    )
+                  .map {
+                    case restSig: Signature[TResult, len] =>
+                      SignatureParameters[TResult, len](
+                        param,
+                        restSig
+                      )
                   }
             }
 

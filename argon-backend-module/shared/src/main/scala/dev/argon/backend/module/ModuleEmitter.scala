@@ -7,6 +7,7 @@ import dev.argon.stream._
 import scalapb.GeneratedMessage
 import cats._
 import cats.data._
+import cats.evidence.===
 import cats.implicits._
 import dev.argon.compiler.loaders.armodule.{ModuleFormatVersion, ModulePaths}
 import dev.argon.compiler.types.{ParameterStyle, TypeSystem}
@@ -15,6 +16,7 @@ import dev.argon.module
 import dev.argon.stream.{ArStream, Resource, Step, StreamTransformation}
 import shapeless._
 import dev.argon.util.AnyExtensions._
+import shapeless.ops.nat.{Pred, LT}
 import zio.stream.ZStream.Fold
 import zio.{IO, ZIO, stream => zstream}
 
@@ -24,7 +26,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
   type TComp[+A] = context.Comp[A]
 
   import context._
-  import context.signatureContext.Signature
+  import context.signatureContext.{ Signature, SignatureResult, SignatureParameters, SignatureVisitor }
 
   private object Implementation {
 
@@ -437,13 +439,13 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
 
     def convertSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], A]
     (armodule: ArModule[context.type, DeclarationPayloadSpecifier])
-    (sig: Signature[TResult])
+    (sig: Signature[TResult, _ <: Nat])
     (f: (Vector[module.Parameter], TResult[context.type, context.typeSystem.type]) => Emit[A])
     : Emit[A] = {
 
-      def impl(sig: Signature[TResult], prevParams: Vector[module.Parameter]): Emit[A] =
-        sig.visit(
-          sigParams =>
+      def impl[Len <: Nat](sig: Signature[TResult, Len], prevParams: Vector[module.Parameter]): Emit[A] =
+        sig.visit(new SignatureVisitor[TResult, Len, Emit[A]] {
+          override def visitParameters[RestLen <: Nat](sigParams: SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): Emit[A] =
             sigParams.parameter.elements
               .traverse { elem =>
                 convertType(armodule, elem.elemType).map { paramType =>
@@ -463,9 +465,12 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
                 }
 
                 impl(sigParams.nextUnsubstituted, prevParams :+ module.Parameter(style, elems))
-              },
-          sigResult => f(prevParams, sigResult.result),
-        )
+              }
+
+          override def visitResult(sigResult: SignatureResult[TResult])(implicit lenEq: Len === _0): Emit[A] =
+            f(prevParams, sigResult.result)
+
+        })
 
       impl(sig, Vector.empty)
     }

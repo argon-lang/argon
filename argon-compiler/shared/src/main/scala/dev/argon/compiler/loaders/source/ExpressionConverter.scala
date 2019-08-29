@@ -18,6 +18,7 @@ import cats.evidence.{===, Is}
 import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
 import dev.argon.parser.{BindingPattern, DeconstructPattern, DiscardPattern, TuplePattern, TypeTestPattern}
 import shapeless.{:: => _, Id => _, _}
+import shapeless.ops.nat.{LT, Pred}
 
 import Function.const
 import scala.collection.immutable
@@ -35,7 +36,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   import ExpressionConverter.{ HoleType, TypeCheck => TypeCheckA }
   import typeSystem.{ context => _, _ }
   import scopeContext.{ context => _, _ }
-  import signatureContext.{ Signature, SignatureParameters }
+  import signatureContext.{ Signature, SignatureParameters, SignatureVisitor }
 
 
 
@@ -67,12 +68,18 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                     .toList
                     .traverse { _.traverse {
                       case MemberValue.Method(method) =>
-                        for {
-                          _ <- Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                          sig <- implicitly[TypeCheck[TComp]].fromContextComp(
-                            method.value.method.signature(signatureContext)(resolvedTypeWithMethods)
-                          )
-                        } yield signatureFactory(env)(location)(method.value.method.descriptor)(sig) { (args, result) => MethodCall(AbsRef(method.value.method), fromSimpleType(thisExpr), args, result.returnType) }
+                        Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                          .flatMap { _ =>
+                            implicitly[TypeCheck[TComp]].fromContextComp(
+                              method.value.method.signature(signatureContext)(resolvedTypeWithMethods)
+                            )
+                          }
+                          .map {
+                            case sig: Signature[FunctionResultInfo, len] =>
+                              signatureFactory[TComp, FunctionResultInfo, len](env)(location)(method.value.method.descriptor)(sig) { (args, result) =>
+                                MethodCall(AbsRef(method.value.method), fromSimpleType(thisExpr), args, result.returnType)
+                              }
+                          }
                     } }
                     .map { Vector(_) }
                 }
@@ -126,12 +133,18 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                                 constructors
                                   .traverse {
                                     case ClassConstructorBinding(_, _, classCtor) =>
-                                      for {
-                                        _ <- Compilation[TComp].require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                                        sig <- implicitly[TypeCheck[TComp]].fromContextComp(
-                                          classCtor.signature(signatureContext)(t)
-                                        )
-                                      } yield signatureFactory(env)(location)(classCtor.descriptor)(sig) { (args, _) => ClassConstructorCall(t, AbsRef(classCtor), args)  }
+                                      Compilation[TComp].require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                                        .flatMap { _ =>
+                                          implicitly[TypeCheck[TComp]].fromContextComp(
+                                            classCtor.signature(signatureContext)(t)
+                                          )
+                                        }
+                                        .map {
+                                          case sig: Signature[ClassConstructor.ResultInfo, len] =>
+                                            signatureFactory[TComp, ClassConstructor.ResultInfo, len](env)(location)(classCtor.descriptor)(sig) { (args, _) =>
+                                              ClassConstructorCall(t, AbsRef(classCtor), args)
+                                            }
+                                        }
                                   }
                                   .map { overloads => Vector(NonEmptyVector.fromVector(overloads).toList) }
                               }
@@ -148,12 +161,18 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                                 methods
                                   .traverse {
                                     case MethodBinding(_, _, _, method) =>
-                                      for {
-                                        _ <- Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                                        sig <- implicitly[TypeCheck[TComp]].fromContextComp(
-                                          method.signature(signatureContext)(t)
-                                        )
-                                      } yield signatureFactory(env)(location)(method.descriptor)(sig) { (args, result) => MethodCall(AbsRef(method), fromSimpleType(thisExpr), args, result.returnType) }
+                                      Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                                        .flatMap { _ =>
+                                          implicitly[TypeCheck[TComp]].fromContextComp(
+                                            method.signature(signatureContext)(t)
+                                          )
+                                        }
+                                      .map {
+                                        case sig: Signature[FunctionResultInfo, len] =>
+                                          signatureFactory[TComp, FunctionResultInfo, len](env)(location)(method.descriptor)(sig) { (args, result) =>
+                                            MethodCall(AbsRef(method), fromSimpleType(thisExpr), args, result.returnType)
+                                          }
+                                      }
                                   }
                                   .map { overloads => Vector(NonEmptyVector.fromVector(overloads).toList) }
                               }
@@ -175,12 +194,18 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                                 methods
                                   .traverse {
                                     case MethodBinding(_, _, _, method) =>
-                                      for {
-                                        _ <- Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                                        sig <- implicitly[TypeCheck[TComp]].fromContextComp(
-                                          method.signature(signatureContext)(t)
-                                        )
-                                      } yield signatureFactory(env)(location)(method.descriptor)(sig) { (args, result) => MethodCall(AbsRef(method), fromSimpleType(thisExpr), args, result.returnType) }
+                                      Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                                        .flatMap { _ =>
+                                          implicitly[TypeCheck[TComp]].fromContextComp(
+                                            method.signature(signatureContext)(t)
+                                          )
+                                        }
+                                      .map {
+                                        case sig: Signature[FunctionResultInfo, len] =>
+                                          signatureFactory[TComp, FunctionResultInfo, len](env)(location)(method.descriptor)(sig) { (args, result) =>
+                                            MethodCall(AbsRef(method), fromSimpleType(thisExpr), args, result.returnType)
+                                          }
+                                      }
                                   }
                                   .map { overloads => Vector(NonEmptyVector.fromVector(overloads).toList) }
                               }
@@ -627,16 +652,19 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           )(CompilationError.NamespaceElementNotFound(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
           classFactories <- classes.traverse { arClass =>
-            for {
-              classSig <- implicitly[TypeCheck[TComp]].fromContextComp(arClass.signature)
+            implicitly[TypeCheck[TComp]].fromContextComp(arClass.signature)
+              .map {
+                case classSig: context.signatureContext.Signature[ArClass.ResultInfo, len] =>
 
-              classFactory = signatureFactory[TComp, ArClass.ResultInfo](env)(location)(arClass.descriptor)(
-                convertSignature(classSig)
-              ) { (args, classResult) =>
-                ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), args.map(TypeArgument.Expr), classResult.baseTypes)
+                  val classFactory =
+                    signatureFactory[TComp, ArClass.ResultInfo, len](env)(location)(arClass.descriptor)(
+                      convertSignature[ArClass.ResultInfo, len](classSig)
+                    ) { (args, classResult) =>
+                      ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), args.map(TypeArgument.Expr), classResult.baseTypes)
+                    }
+
+                  args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
               }
-
-            } yield args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
           }
 
         } yield overloadSelectionFactory(env)(location)(NonEmptyList.of(classFactories))
@@ -711,44 +739,54 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             .toNonEmptyList
             .traverse { _.traverse[TComp, OverloadExprFactory[TComp]] {
               case FunctionScopeValue(func) =>
-                for {
-                  _ <- Compilation[TComp].require(env.effectInfo.canCall(func.value.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                  sig <- implicitly[TypeCheck[TComp]].fromContextComp(func.value.signature)
-                  convSig = convertSignature(sig)
-                } yield signatureFactory(env)(location)(func.value.descriptor)(convSig) { (args, result) =>
-                  FunctionCall(func, args, result.returnType)
-                }
+                Compilation[TComp].require(env.effectInfo.canCall(func.value.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                  .flatMap { _ =>
+                    implicitly[TypeCheck[TComp]].fromContextComp(func.value.signature)
+                  }
+                  .map {
+                    case sig: context.signatureContext.Signature[FunctionResultInfo, len] =>
+                      val convSig = convertSignature[FunctionResultInfo, len](sig)
+                      signatureFactory[TComp, FunctionResultInfo, len](env)(location)(func.value.descriptor)(convSig) { (args, result) =>
+                        FunctionCall(func, args, result.returnType)
+                      }
+                  }
 
               case TraitScopeValue(arTrait) =>
-                for {
-                  sig <- implicitly[TypeCheck[TComp]].fromContextComp(arTrait.value.signature)
-                  convSig = convertSignature(sig)
-                } yield signatureFactory(env)(location)(arTrait.value.descriptor)(convSig) { (args, result) =>
-                  TraitType(arTrait, args.map(TypeArgument.Expr), result.baseTypes)
-                }
+                implicitly[TypeCheck[TComp]].fromContextComp(arTrait.value.signature)
+                  .map {
+                    case sig: context.signatureContext.Signature[ArTrait.ResultInfo, len] =>
+                      val convSig = convertSignature[ArTrait.ResultInfo, len](sig)
+                      signatureFactory(env)(location)(arTrait.value.descriptor)(convSig) { (args, result) =>
+                        TraitType(arTrait, args.map(TypeArgument.Expr), result.baseTypes)
+                      }
+                  }
 
               case ClassScopeValue(arClass) =>
-                for {
-                  sig <- implicitly[TypeCheck[TComp]].fromContextComp(arClass.value.signature)
-                  convSig = convertSignature(sig)
-                } yield signatureFactory(env)(location)(arClass.value.descriptor)(convSig) { (args, result) =>
-                  ClassType(arClass, args.map(TypeArgument.Expr), result.baseTypes)
-                }
+                implicitly[TypeCheck[TComp]].fromContextComp(arClass.value.signature)
+                  .map {
+                    case sig: context.signatureContext.Signature[ArClass.ResultInfo, len] =>
+                      val convSig = convertSignature[ArClass.ResultInfo, len](sig)
+                      signatureFactory(env)(location)(arClass.value.descriptor)(convSig) { (args, result) =>
+                        ClassType(arClass, args.map(TypeArgument.Expr), result.baseTypes)
+                      }
+                  }
 
               case DataConstructorScopeValue(ctor) =>
-                for {
-                  sig <- implicitly[TypeCheck[TComp]].fromContextComp(ctor.value.signature)
-                  convSig = convertSignature(sig)
-                } yield signatureFactory(env)(location)(ctor.value.descriptor)(convSig) { (args, result) =>
-                  DataConstructorCall(
-                    DataConstructorType(
-                      ctor,
-                      args.map(TypeArgument.Expr),
-                      result.instanceType
-                    ),
-                    args
-                  )
-                }
+                implicitly[TypeCheck[TComp]].fromContextComp(ctor.value.signature)
+                  .map {
+                    case sig: context.signatureContext.Signature[DataConstructor.ResultInfo, len] =>
+                      val convSig = convertSignature[DataConstructor.ResultInfo, len](sig)
+                      signatureFactory(env)(location)(ctor.value.descriptor)(convSig) { (args, result) =>
+                        DataConstructorCall(
+                          DataConstructorType(
+                            ctor,
+                            args.map(TypeArgument.Expr),
+                            result.instanceType
+                          ),
+                          args
+                        )
+                      }
+                  }
 
             } }
             .map { overloads => overloadSelectionFactory(env)(location)(overloads) }
@@ -927,15 +965,15 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         )
     }
 
-  def signatureFactory[TComp[_] : TypeCheck, TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
+  def signatureFactory[TComp[_] : TypeCheck, TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], FullLen <: Nat]
   (env: Env)
   (location: SourceLocation)
   (descriptor: ParameterOwnerDescriptor)
-  (fullSignature: Signature[TResult])
+  (fullSignature: Signature[TResult, FullLen])
   (f: (Vector[WrapExpr], TResult[context.type, typeSystem.type]) => ArExpr)
   : OverloadExprFactory[TComp] = {
 
-    def signatureNextPart(sig: SignatureParameters[TResult])(arg: WrapExpr): TComp[Signature[TResult]] =
+    def signatureNextPart[RestLen <: Nat](sig: SignatureParameters[TResult, RestLen])(arg: WrapExpr): TComp[Signature[TResult, RestLen]] =
       if(isWrapExprPure(arg))
         sig.next(arg).pure[TComp]
       else if(!sig.nextUnsubstituted.referencesParameter(sig.parameter))
@@ -943,42 +981,42 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       else
         Compilation[TComp].forErrors(CompilationError.ArgumentToSignatureDependencyNotPureError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
-    final class SigFactory(env: Env)(unsubSig: Signature[TResult])(prevParamTypes: Vector[TType])(acc: TComp[(Signature[TResult], Vector[WrapExpr])]) extends OverloadExprFactory[TComp] {
+    final class SigFactory[Len <: Nat](env: Env)(unsubSig: Signature[TResult, Len])(prevParamTypes: Vector[TType])(acc: TComp[(Signature[TResult, Len], Vector[WrapExpr])]) extends OverloadExprFactory[TComp] {
 
 
       override def overloadDescriptor: ParameterOwnerDescriptor = descriptor
 
 
       override def usedParamTypes: Vector[TType] = prevParamTypes
-      override lazy val remainingParameterTypes: Vector[TType] = unsubSig.unsubstitutedParameters.map { _.paramType }
+      override lazy val remainingParameterTypes: Vector[TType] = unsubSig.unsubstitutedParameters.unsized.map { _.paramType }
 
       override def forExpectedType(expectedType: TType): TComp[ArExpr] =
         acc.flatMap {
           case (sig, args) =>
-            sig.visit(
-              _ => partiallyApply(env, args, Vector(), fullSignature, identity).flatMap { expr =>
-                convertExprType(env)(location)(expr)(expectedType)
-              },
-              sigResult =>
+            sig.visit(new SignatureVisitor[TResult, Len, TComp[ArExpr]] {
+              override def visitParameters[RestLen <: Nat](sigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): TComp[ArExpr] =
+                partiallyApply(env, args, Vector(), fullSignature, identity).flatMap { expr =>
+                  convertExprType(env)(location)(expr)(expectedType)
+                }
+
+              override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenEq: Len === _0): TComp[ArExpr] =
                 convertExprType(env)(location)(f(args, sigResult.result))(expectedType)
-            )
+            })
         }
 
       override def forArguments(argInfo: ArgumentInfo[TComp]): OverloadExprFactory[TComp] =
-        unsubSig.visit(
-          unsubSigParams => {
+        unsubSig.visit(new SignatureVisitor[TResult, Len, OverloadExprFactory[TComp]] {
+          override def visitParameters[RestLen <: Nat](unsubSigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): OverloadExprFactory[TComp] = {
             def createFactory(createExpr: TType => TComp[WrapExpr]) =
               new SigFactory(env)(unsubSigParams.nextUnsubstituted)(prevParamTypes :+ unsubSigParams.parameter.paramType)(
                 acc.flatMap {
                   case (sig, prevArgs) =>
-                    sig.visit(
-                      sigParams =>
-                        for {
-                          argExpr <- createExpr(sigParams.parameter.paramType)
-                          next <- signatureNextPart(sigParams)(argExpr)
-                        } yield (next, prevArgs :+ argExpr),
-                      _ => ???
-                    )
+                    val sigParams = sig.toSignatureParameters
+
+                    for {
+                      argExpr <- createExpr(sigParams.parameter.paramType)
+                      next <- signatureNextPart(sigParams)(argExpr)
+                    } yield (next, prevArgs :+ argExpr)
                 }
               )
 
@@ -993,41 +1031,47 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
               case (_, _) => ???
             }
-          },
-          _ => wrapNonOverloadFactory(
-            toExprFactory.memberAccessExpr(MemberName.Call, argInfo.env, argInfo.location).forArguments(argInfo)
-          )
+          }
+
+          override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenEq: Len === _0): OverloadExprFactory[TComp] =
+            wrapNonOverloadFactory(
+              toExprFactory.memberAccessExpr(MemberName.Call, argInfo.env, argInfo.location).forArguments(argInfo)
+            )
+        }
         )
     }
 
-    def partiallyApply(env: Env, prevArgs: Vector[WrapExpr], argVariables: Vector[WrapExpr], signature: Signature[TResult], wrapInLambda: ArExpr => ArExpr): TComp[ArExpr] =
-      signature.visit(
-        sigParams => prevArgs match {
-          case Vector() =>
-            val newVar = LocalVariable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
-            val env2 = env.copy(scope = env.scope.addVariable(newVar))
-            val newVarExpr = LoadVariable(newVar)
-            signatureNextPart(sigParams)(fromSimpleType(newVarExpr)).flatMap { nextSig =>
-              partiallyApply(env2, prevArgs, argVariables :+ fromSimpleType(newVarExpr), nextSig, inner => wrapInLambda(LoadLambda(newVar, fromSimpleType(inner))))
-            }
+    def partiallyApply[Len <: Nat](env: Env, prevArgs: Vector[WrapExpr], argVariables: Vector[WrapExpr], signature: Signature[TResult, Len], wrapInLambda: ArExpr => ArExpr): TComp[ArExpr] =
+      signature.visit(new SignatureVisitor[TResult, Len, TComp[ArExpr]] {
+        override def visitParameters[RestLen <: Nat](sigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): TComp[typeSystem.ArExpr] =
+          prevArgs match {
+            case Vector() =>
+              val newVar = LocalVariable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+              val env2 = env.copy(scope = env.scope.addVariable(newVar))
+              val newVarExpr = LoadVariable(newVar)
+              signatureNextPart(sigParams)(fromSimpleType(newVarExpr)).flatMap { nextSig =>
+                partiallyApply(env2, prevArgs, argVariables :+ fromSimpleType(newVarExpr), nextSig, inner => wrapInLambda(LoadLambda(newVar, fromSimpleType(inner))))
+              }
 
-          case head +: tail =>
-            val newVar = LocalVariable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
-            val env2 = env.copy(scope = env.scope.addVariable(newVar))
-            val newVarExpr = LoadVariable(newVar)
-            signatureNextPart(sigParams)(fromSimpleType(newVarExpr)).flatMap { nextSig =>
-              partiallyApply(env2, tail, argVariables :+ fromSimpleType(newVarExpr), nextSig, inner => wrapInLambda(LetBinding(newVar, head, fromSimpleType(inner))))
-            }
-        },
-        sigResult => wrapInLambda(f(argVariables, sigResult.result)).pure[TComp]
-      )
+            case head +: tail =>
+              val newVar = LocalVariable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+              val env2 = env.copy(scope = env.scope.addVariable(newVar))
+              val newVarExpr = LoadVariable(newVar)
+              signatureNextPart(sigParams)(fromSimpleType(newVarExpr)).flatMap { nextSig =>
+                partiallyApply(env2, tail, argVariables :+ fromSimpleType(newVarExpr), nextSig, inner => wrapInLambda(LetBinding(newVar, head, fromSimpleType(inner))))
+              }
+          }
+
+        override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenEq: Len === _0): TComp[typeSystem.ArExpr] =
+          wrapInLambda(f(argVariables, sigResult.result)).pure[TComp]
+      })
 
     new SigFactory(env)(fullSignature)(Vector.empty)((fullSignature, Vector.empty[WrapExpr]).pure[TComp])
   }
 
-  def convertSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
-  (sig: context.signatureContext.Signature[TResult])
-  : Signature[TResult] =
+  def convertSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], Len <: Nat]
+  (sig: context.signatureContext.Signature[TResult, Len])
+  : Signature[TResult, Len] =
     sig.convertTypeSystem(signatureContext)(ArTypeSystemConverter(context)(typeSystem))
 
   def convertExprType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr)(t: typeSystem.TType): TComp[ArExpr] =

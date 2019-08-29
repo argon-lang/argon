@@ -12,6 +12,7 @@ import dev.argon.util.{FileID, SourceLocation, WithSource}
 import cats._
 import cats.implicits._
 import cats.evidence.Is
+import shapeless.Nat
 
 private[compiler] object SourceTrait extends AccessModifierHelpers {
 
@@ -34,7 +35,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
     import context2._
     
     for {
-      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ArTrait.ResultInfo]]
+      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ArTrait.ResultInfo, _ <: Nat]]
 
       paramsEnvCache <- Compilation[Comp].createCache[EnvCreator[context2.type]]
 
@@ -59,7 +60,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
         case _ => false
       }
 
-      override lazy val signature: Comp[Signature[ArTrait.ResultInfo]] =
+      override lazy val signature: Comp[Signature[ArTrait.ResultInfo, _ <: Nat]] =
         sigCache(
           SourceSignatureCreator.fromParameters[ArTrait.ResultInfo](context2)(
             env(context)(EffectInfo.pure, descriptor)

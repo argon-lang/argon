@@ -9,11 +9,14 @@ import dev.argon.compiler.types._
 import dev.argon.{module => ArgonModule}
 import dev.argon.util._
 import cats._
-import cats.evidence.Is
+import cats.evidence.{===, Is}
 import cats.data.NonEmptyList
 import cats.implicits._
 import dev.argon.module.{ClassDefinition, DataConstructorDefinition, FunctionDefinition, MethodDefinition, TraitDefinition}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
+import shapeless.ops.nat.{LT, Pred, ToInt}
+import shapeless.{Nat, Sized, Succ, _0}
+import shapeless.syntax.sized._
 
 import scala.collection.immutable.{Map, Vector}
 
@@ -384,7 +387,7 @@ object ArgonModuleLoader {
 
                     override val isSealed: Boolean = definition.isSealed.getOrElse(false)
 
-                    override lazy val signature: context.Comp[Signature[ArTrait.ResultInfo]] =
+                    override lazy val signature: context.Comp[Signature[ArTrait.ResultInfo, _ <: Nat]] =
                       definition.signature match {
                         case ArgonModule.TraitSignature(parameters, baseTraits) =>
                           for {
@@ -395,7 +398,10 @@ object ArgonModuleLoader {
                               ArTrait.ResultInfo(typeSystem)(BaseTypeInfoTrait(baseTraitsResolved))
                             )
 
-                          } yield parametersResolved.foldRight[Signature[ArTrait.ResultInfo]](result)(SignatureParameters[ArTrait.ResultInfo](_, _))
+                          } yield parametersResolved.foldRight[Signature[ArTrait.ResultInfo, _ <: Nat]](result) {
+                            case (param, prevSig: Signature[ArTrait.ResultInfo, len]) =>
+                              SignatureParameters[ArTrait.ResultInfo, len](param, prevSig)
+                          }
                       }
 
                     override lazy val methods: context.Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =
@@ -457,7 +463,7 @@ object ArgonModuleLoader {
                     override val isOpen: Boolean = definition.isOpen.getOrElse(false)
                     override val isAbstract: Boolean = definition.isAbstract.getOrElse(false)
 
-                    override lazy val signature: context.Comp[Signature[ArClass.ResultInfo]] =
+                    override lazy val signature: context.Comp[Signature[ArClass.ResultInfo, _ <: Nat]] =
                       definition.signature match {
                         case ArgonModule.ClassSignature(parameters, baseClass, baseTraits) =>
                           for {
@@ -469,7 +475,10 @@ object ArgonModuleLoader {
                               ArClass.ResultInfo(typeSystem)(BaseTypeInfoClass(baseClassResolved, baseTraitsResolved))
                             )
 
-                          } yield parametersResolved.foldRight[Signature[ArClass.ResultInfo]](result)(SignatureParameters[ArClass.ResultInfo](_, _))
+                          } yield parametersResolved.foldRight[Signature[ArClass.ResultInfo, _ <: Nat]](result) {
+                            case (param, prevSig: Signature[ArClass.ResultInfo, len]) =>
+                              SignatureParameters[ArClass.ResultInfo, len](param, prevSig)
+                          }
                       }
 
                     override val fields: context.Comp[Vector[FieldVariable]] =
@@ -582,7 +591,7 @@ object ArgonModuleLoader {
                     override val effectInfo: EffectInfo = EffectInfo(
                       isPure = definition.effects.isPure,
                     )
-                    override val signature: context.Comp[Signature[FunctionResultInfo]] =
+                    override val signature: context.Comp[Signature[FunctionResultInfo, _ <: Nat]] =
                       definition.signature match {
                         case ArgonModule.FunctionSignature(parameters, returnType) =>
                           for {
@@ -593,7 +602,10 @@ object ArgonModuleLoader {
                               FunctionResultInfo(typeSystem)(returnTypeResolved)
                             )
 
-                          } yield parametersResolved.foldRight[Signature[FunctionResultInfo]](result)(SignatureParameters[FunctionResultInfo](_, _))
+                          } yield parametersResolved.foldRight[Signature[FunctionResultInfo, _ <: Nat]](result) {
+                            case (param, prevSig: Signature[FunctionResultInfo, len]) =>
+                              SignatureParameters[FunctionResultInfo, len](param, prevSig)
+                          }
                       }
 
                     override val payload: TPayloadSpec[context.Comp[context.TFunctionImplementation], context.TFunctionMetadata] =
@@ -729,7 +741,7 @@ object ArgonModuleLoader {
 
                     override val owner: ArMethod.Owner[context.type, TPayloadSpec] = methodOwner
 
-                    override val signatureUnsubstituted: context.Comp[Signature[FunctionResultInfo]] =
+                    override val signatureUnsubstituted: Comp[Signature[FunctionResultInfo, _ <: Nat]] =
                       definition.signature match {
                         case ArgonModule.MethodSignature(parameters, returnType) =>
                           for {
@@ -740,7 +752,10 @@ object ArgonModuleLoader {
                               FunctionResultInfo(typeSystem)(returnTypeResolved)
                             )
 
-                          } yield parametersResolved.foldRight[Signature[FunctionResultInfo]](result)(SignatureParameters[FunctionResultInfo](_, _))
+                          } yield parametersResolved.foldRight[Signature[FunctionResultInfo, _ <: Nat]](result) {
+                            case (param, prevSig: Signature[FunctionResultInfo, len]) =>
+                              SignatureParameters[FunctionResultInfo, len](param, prevSig)
+                          }
                       }
 
                     override val payload: TPayloadSpec[context.Comp[context.TMethodImplementation], context.TMethodMetadata] =
@@ -842,58 +857,59 @@ object ArgonModuleLoader {
                 )
             }
 
-          def resolveSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], T]
-          (sig: Signature[TResult], args: Vector[ArgonModule.Type], convArgs: Vector[TType])
-          (f: (Vector[TType], TResult[context.type, context.typeSystem.type]) => T)
-          : Comp[T] =
-            sig.visit(
-              sigParams => args match {
-                case head +: tail =>
-                  resolveType(head).flatMap { argType =>
-                    val nextSig = sigParams.next(argType)
-                    resolveSignature(nextSig, tail, convArgs :+ argType)(f)
-                  }
-                case _ => ???
-              },
-              sigResult => if(args.nonEmpty) ??? else f(convArgs, sigResult.result).pure[Comp]
-            )
-
-          def resolveSignatureTypeArgs[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], T]
-          (sig: Signature[TResult], args: Vector[ArgonModule.TypeArg], convArgs: Vector[TypeArgument])
+          def resolveSignatureTypeArgs[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], Len <: Nat, T]
+          (sig: Signature[TResult, Len], args: Sized[Vector[ArgonModule.TypeArg], Len], convArgs: Vector[TypeArgument])
           (f: (Vector[TypeArgument], TResult[context.type, context.typeSystem.type]) => T)
           : Comp[T] =
-            sig.visit(
-              sigParams => args match {
-                case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Type(head)) +: tail =>
-                  resolveType(head).flatMap { argType =>
-                    val nextSig = sigParams.next(argType)
-                    resolveSignatureTypeArgs(nextSig, tail, convArgs :+ TypeArgument.Expr(argType))(f)
-                  }
+            sig.visit(new SignatureVisitor[TResult, Len, Comp[T]] {
 
-                case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Wildcard(ArgonModule.Wildcard())) +: tail =>
-                  ??? //resolveSignatureTypeArgs(sigParams.nextUnsubstituted, tail, convArgs :+ TypeArgument.Wildcard)(f)
+              override def visitParameters[RestLen <: Nat](sigParams: SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): Comp[T] = {
+                args.head match {
+                  case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Type(head)) =>
+                    resolveType(head).flatMap { argType =>
+                      val nextSig = sigParams.next(argType)
+                      resolveSignatureTypeArgs(nextSig, args.tail, convArgs :+ TypeArgument.Expr(argType))(f)
+                    }
 
-                case _ => ???
-              },
-              sigResult => if(args.nonEmpty) ??? else f(convArgs, sigResult.result).pure[Comp]
-            )
+                  case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Wildcard(ArgonModule.Wildcard())) =>
+                    ??? //resolveSignatureTypeArgs(sigParams.nextUnsubstituted, tail, convArgs :+ TypeArgument.Wildcard)(f)
+
+                  case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Empty) => ???
+                }
+              }
+
+              override def visitResult(sigResult: SignatureResult[TResult])(implicit lenEq: Len === _0): Comp[T] =
+                f(convArgs, sigResult.result).pure[Comp]
+            })
 
           def resolveTraitType(traitType: ArgonModule.TraitType): Comp[TraitType] =
             findTrait(traitType.traitId).flatMap { arTrait =>
-              arTrait.value.signature.flatMap { sig =>
-                resolveSignatureTypeArgs(sig, traitType.typeArguments, Vector.empty) {
-                  (args, result) => TraitType(arTrait, args, result.baseTypes)
-                }
+              arTrait.value.signature.flatMap {
+                case sig: Signature[ArTrait.ResultInfo, len] =>
+                  traitType.typeArguments.sized((sig : Signature[ArTrait.ResultInfo, len]).parameterCountToInt) match {
+                    case Some(typeArgs) =>
+                      resolveSignatureTypeArgs[ArTrait.ResultInfo, len, TraitType](sig, typeArgs, Vector.empty) {
+                        (args, result) => TraitType(arTrait, args, result.baseTypes)
+                      }
+
+                    case None => ???
+                  }
               }
             }
 
           def resolveClassType(classType: ArgonModule.ClassType): Comp[ClassType] =
             findClass(classType.classId).flatMap { arClass =>
-              arClass.value.signature.flatMap { sig =>
-                resolveSignatureTypeArgs(sig, classType.typeArguments, Vector.empty) {
-                  (args, result) => ClassType(arClass, args, result.baseTypes)
-                }
-              }
+              arClass.value.signature.flatMap {
+                case sig: Signature[ArClass.ResultInfo, len] =>
+                  classType.typeArguments.sized((sig : Signature[ArClass.ResultInfo, len]).parameterCountToInt) match {
+                    case Some(typeArgs) =>
+                      resolveSignatureTypeArgs[ArClass.ResultInfo, len, ClassType](sig, typeArgs, Vector.empty) {
+                        (args, result) => ClassType(arClass, args, result.baseTypes)
+                      }
+
+
+                    case None => ???
+                  }              }
             }
 
           def resolveType(t: ArgonModule.Type): Comp[TType] =

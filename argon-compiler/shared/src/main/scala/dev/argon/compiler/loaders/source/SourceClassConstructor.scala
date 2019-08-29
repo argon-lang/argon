@@ -10,6 +10,7 @@ import cats._
 import cats.implicits._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.StandardTypeLoaders
+import shapeless.Nat
 
 object SourceClassConstructor {
 
@@ -23,7 +24,7 @@ object SourceClassConstructor {
     import context2._
 
     for {
-      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ClassConstructor.ResultInfo]]
+      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ClassConstructor.ResultInfo, _ <: Nat]]
 
     } yield new ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
@@ -40,7 +41,7 @@ object SourceClassConstructor {
 
       override val ownerClass: ArClass[context.type, DeclarationPayloadSpecifier] = ownerClass2
 
-      override lazy val signatureUnsubstituted: Comp[context.signatureContext.Signature[ClassConstructor.ResultInfo]] =
+      override lazy val signatureUnsubstituted: Comp[context.signatureContext.Signature[ClassConstructor.ResultInfo, _ <: Nat]] =
         sigCache(
           SourceSignatureCreator.fromParameters[ClassConstructor.ResultInfo](context2)(
             env(context)(effectInfo, descriptor)

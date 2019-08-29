@@ -5,6 +5,7 @@ import dev.argon.compiler.types._
 import cats._
 import cats.implicits._
 import dev.argon.util.FileID
+import shapeless.Nat
 
 trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
@@ -16,12 +17,12 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   val fileId: FileID
 
   val ownerClass: ArClass[context.type, TPayloadSpec]
-  val signatureUnsubstituted: context.Comp[Signature[ClassConstructor.ResultInfo]]
+  val signatureUnsubstituted: context.Comp[Signature[ClassConstructor.ResultInfo, _ <: Nat]]
 
   final def signature[TComp[_]: Compilation]
   (newSigContext: SignatureContext.Aux[context.type])
   (instanceType: newSigContext.typeSystem.ClassType)
-  : Comp[newSigContext.Signature[ClassConstructor.ResultInfo]] = for {
+  : Comp[newSigContext.Signature[ClassConstructor.ResultInfo, _]] = for {
     sig <- signatureUnsubstituted
     ownerSigUnConv <- ownerClass.signature
   } yield {

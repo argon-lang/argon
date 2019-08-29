@@ -22,16 +22,20 @@ object ErasedSignature {
 
   final case class ParameterOnlySignature[TContext <: Context with Singleton](paramTypes: Vector[SigType[TContext]])
 
-  def fromSignature(context: Context)(sig: context.signatureContext.Signature[FunctionResultInfo]): ErasedSignature[context.type] =
-    sig.visit(
-      sigParams => ErasedSignature.Parameter(
-        typeToSigType(context)(sigParams.parameter.paramType),
-        fromSignature(context)(sigParams.nextUnsubstituted)
-      ),
-      sigResult => ErasedSignature.Result(typeToSigType(context)(sigResult.result.returnType))
-    )
+  def fromSignature(context: Context)(sig: context.signatureContext.Signature[FunctionResultInfo, _]): ErasedSignature[context.type] = {
+    import context.signatureContext.{ context => _, typeSystem => _, _ }
+    sig match {
+      case SignatureParameters(parameter, nextUnsubstituted) =>
+        ErasedSignature.Parameter(
+          typeToSigType(context)(parameter.paramType),
+          fromSignature(context)(nextUnsubstituted)
+        )
 
-  def fromSignatureParameters[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](context: Context)(sig: context.signatureContext.Signature[TResult]): ParameterOnlySignature[context.type] =
+      case SignatureResult(result) => ErasedSignature.Result(typeToSigType(context)(result.returnType))
+    }
+  }
+
+  def fromSignatureParameters[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](context: Context)(sig: context.signatureContext.Signature[TResult, _]): ParameterOnlySignature[context.type] =
     ParameterOnlySignature(sig.unsubstitutedParameters.map { param => typeToSigType(context)(param.paramType) })
 
   private def typeToSigType(context: Context)(t: context.signatureContext.typeSystem.TType): SigType[context.type] =
