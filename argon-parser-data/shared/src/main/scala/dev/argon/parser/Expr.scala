@@ -47,7 +47,7 @@ final case class FunctionDeclarationStmt
 final case class MethodDeclarationStmt
 (
   instanceName: Option[String],
-  name: Option[String],
+  name: MethodNameSpecifier,
   parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
   body: Option[WithSource[Vector[WithSource[Stmt]]]],
@@ -159,3 +159,10 @@ object FunctionParameterListType {
 }
 
 final case class MatchExprCase(pattern: WithSource[Pattern], body: WithSource[Vector[WithSource[Stmt]]])
+
+sealed trait MethodNameSpecifier
+object MethodNameSpecifier {
+  case object Unnamed extends MethodNameSpecifier
+  final case class Named(name: String) extends MethodNameSpecifier
+  final case class Mutator(name: String) extends MethodNameSpecifier
+}

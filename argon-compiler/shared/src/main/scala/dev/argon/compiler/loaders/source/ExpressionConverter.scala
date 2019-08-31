@@ -59,30 +59,36 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               }
             }
 
-        def overloadsOfType(t: TType): TComp[Vector[List[NonEmptyVector[OverloadExprFactory[TComp]]]]] =
+        def resolveMethodOverloads(instanceType: TypeWithMethods)(methods: TComp[OverloadResult[MemberValue[context.type]]]) =
+          methods
+            .flatMap { overloads =>
+              overloads
+                .toList
+                .traverse { _.traverse {
+                  case MemberValue.Method(method) =>
+                    Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                      .flatMap { _ =>
+                        implicitly[TypeCheck[TComp]].fromContextComp(
+                          method.value.method.signature(signatureContext)(instanceType)
+                        )
+                      }
+                      .map {
+                        case sig: Signature[FunctionResultInfo, len] =>
+                          signatureFactory[TComp, FunctionResultInfo, len](env)(location)(method.value.method.descriptor)(sig) { (args, result) =>
+                            MethodCall(AbsRef(method.value.method), fromSimpleType(thisExpr), args, result.returnType)
+                          }
+                      }
+                } }
+                .map { Vector(_) }
+            }
+
+
+        def overloadsOfType(memberName: MemberName)(t: TType): TComp[Vector[List[NonEmptyVector[OverloadExprFactory[TComp]]]]] =
           simplifyInstanceType(t).flatMap {
             case Some(resolvedTypeWithMethods: TypeWithMethods) =>
-              implicitly[TypeCheck[TComp]].fromContextComp(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.descriptor, env.fileSpec)(memberName))
-                .flatMap { overloads =>
-                  overloads
-                    .toList
-                    .traverse { _.traverse {
-                      case MemberValue.Method(method) =>
-                        Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                          .flatMap { _ =>
-                            implicitly[TypeCheck[TComp]].fromContextComp(
-                              method.value.method.signature(signatureContext)(resolvedTypeWithMethods)
-                            )
-                          }
-                          .map {
-                            case sig: Signature[FunctionResultInfo, len] =>
-                              signatureFactory[TComp, FunctionResultInfo, len](env)(location)(method.value.method.descriptor)(sig) { (args, result) =>
-                                MethodCall(AbsRef(method.value.method), fromSimpleType(thisExpr), args, result.returnType)
-                              }
-                          }
-                    } }
-                    .map { Vector(_) }
-                }
+              resolveMethodOverloads(resolvedTypeWithMethods)(
+                implicitly[TypeCheck[TComp]].fromContextComp(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.descriptor, env.fileSpec)(memberName))
+              )
 
             case Some(funcType @ FunctionType(argType, resultType)) if memberName === MemberName.Call =>
               Vector(List(NonEmptyVector.of(new OverloadExprFactory[TComp] {
@@ -122,6 +128,22 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               simplifyInstanceType(thisType).flatMap {
                 _.toList.toVector.flatTraverse { t =>
                   reduceExprToValue(t).flatMap { t =>
+
+                    def methodBindingsToOverloads
+                    [TPayloadSpec[_, _]]
+                    (bindings: Vector[MethodBinding[context.type, TPayloadSpec]])
+                    : OverloadResult[MemberValue[context.type]] =
+                      NonEmptyVector.fromVector(bindings) match {
+                        case Some(bindings) =>
+                          OverloadResult.List(
+                            bindings.map { binding => MemberValue.Method(AbsRef(binding)) },
+                            OverloadResult.End
+                          )
+
+                        case None =>
+                          OverloadResult.End
+                      }
+
                     unwrapType(t).collect[TComp[Vector[List[NonEmptyVector[OverloadExprFactory[TComp]]]]]] {
                       case t: ClassType =>
                         memberName match {
@@ -150,32 +172,16 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                               }
 
                           case methodName: MethodName =>
-                            implicitly[TypeCheck[TComp]].fromContextComp(t.arClass.value.staticMethods)
-                              .flatMap {
-                                _.filter { binding => binding.name === methodName }
-                                  .filterA { binding =>
-                                    AccessCheck.checkInstance[TComp, context.type, t.arClass.PayloadSpec](env.descriptor, env.fileSpec, binding)
-                                  }
-                              }
-                              .flatMap { methods =>
-                                methods
-                                  .traverse {
-                                    case MethodBinding(_, _, _, method) =>
-                                      Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                                        .flatMap { _ =>
-                                          implicitly[TypeCheck[TComp]].fromContextComp(
-                                            method.signature(signatureContext)(t)
-                                          )
-                                        }
-                                      .map {
-                                        case sig: Signature[FunctionResultInfo, len] =>
-                                          signatureFactory[TComp, FunctionResultInfo, len](env)(location)(method.descriptor)(sig) { (args, result) =>
-                                            MethodCall(AbsRef(method), fromSimpleType(thisExpr), args, result.returnType)
-                                          }
-                                      }
-                                  }
-                                  .map { overloads => Vector(NonEmptyVector.fromVector(overloads).toList) }
-                              }
+                            resolveMethodOverloads(t)(
+                              implicitly[TypeCheck[TComp]].fromContextComp(t.arClass.value.staticMethods)
+                                .flatMap {
+                                  _.filter { binding => binding.name === methodName }
+                                    .filterA { binding =>
+                                      AccessCheck.checkInstance[TComp, context.type, t.arClass.PayloadSpec](env.descriptor, env.fileSpec, binding)
+                                    }
+                                }
+                                .map(methodBindingsToOverloads)
+                            )
 
                         }
 
@@ -183,32 +189,17 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                         memberName match {
                           case MemberName.New => Vector.empty[List[NonEmptyVector[OverloadExprFactory[TComp]]]].pure[TComp]
                           case methodName: MethodName =>
-                            implicitly[TypeCheck[TComp]].fromContextComp(t.arTrait.value.staticMethods)
-                              .flatMap {
-                                _.filter { binding => binding.name === methodName }
-                                  .filterA { binding =>
-                                    AccessCheck.checkInstance[TComp, context.type, t.arTrait.PayloadSpec](env.descriptor, env.fileSpec, binding)
-                                  }
-                              }
-                              .flatMap { methods =>
-                                methods
-                                  .traverse {
-                                    case MethodBinding(_, _, _, method) =>
-                                      Compilation[TComp].require(env.effectInfo.canCall(method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
-                                        .flatMap { _ =>
-                                          implicitly[TypeCheck[TComp]].fromContextComp(
-                                            method.signature(signatureContext)(t)
-                                          )
-                                        }
-                                      .map {
-                                        case sig: Signature[FunctionResultInfo, len] =>
-                                          signatureFactory[TComp, FunctionResultInfo, len](env)(location)(method.descriptor)(sig) { (args, result) =>
-                                            MethodCall(AbsRef(method), fromSimpleType(thisExpr), args, result.returnType)
-                                          }
-                                      }
-                                  }
-                                  .map { overloads => Vector(NonEmptyVector.fromVector(overloads).toList) }
-                              }
+                            resolveMethodOverloads(t)(
+                              implicitly[TypeCheck[TComp]].fromContextComp(t.arTrait.value.staticMethods)
+                                .flatMap {
+                                  _.filter { binding => binding.name === methodName }
+                                    .filterA { binding =>
+                                      AccessCheck.checkInstance[TComp, context.type, t.arTrait.PayloadSpec](env.descriptor, env.fileSpec, binding)
+                                    }
+                                }
+                                .map(methodBindingsToOverloads)
+                            )
+
                         }
                     }
                       .getOrElse {
@@ -220,8 +211,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
             case Some(IntersectionType(a, b)) =>
               for {
-                aOverloads <- overloadsOfType(a)
-                bOverloads <- overloadsOfType(b)
+                aOverloads <- overloadsOfType(memberName)(a)
+                bOverloads <- overloadsOfType(memberName)(b)
               } yield aOverloads ++ bOverloads
 
 
@@ -235,22 +226,43 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             case (_, _) => b
           }
 
-        getExprType(thisExpr, includeExtraTypeOfType = false)
-          .flatMap(overloadsOfType)
-          .flatMap { overloads =>
-            val mergedOverloads =
-              overloads
-                .reduceOption(mergeOverloadLists)
-                .toList
-                .flatten
-                .map { overloadList => NonEmptyVector.fromVectorUnsafe(overloadList.toVector.distinctBy { _.overloadDescriptor }) }
+        def overloadsForName(memberName: MemberName): TComp[ExprFactory[TComp]] =
+          getExprType(thisExpr, includeExtraTypeOfType = false)
+            .flatMap(overloadsOfType(memberName))
+            .flatMap { overloads =>
+              val mergedOverloads =
+                overloads
+                  .reduceOption(mergeOverloadLists)
+                  .toList
+                  .flatten
+                  .map { overloadList => NonEmptyVector.fromVectorUnsafe(overloadList.toVector.distinctBy { _.overloadDescriptor }) }
 
-            NonEmptyList.fromList(mergedOverloads) match {
-              case Some(mergedOverloads) => overloadSelectionFactory(env)(location)(mergedOverloads).pure[TComp]
-              case None =>
-                Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, memberName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              NonEmptyList.fromList(mergedOverloads) match {
+                case Some(mergedOverloads) => overloadSelectionFactory(env)(location)(mergedOverloads).pure[TComp]
+                case None =>
+                  Compilation[TComp].forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, memberName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              }
             }
-          }
+
+        memberName match {
+          case MemberName.Normal(name) =>
+            new ExprFactory[TComp] {
+              override def forExpectedType(expectedType: TType): TComp[typeSystem.ArExpr] =
+                overloadsForName(memberName).flatMap { _.forExpectedType(expectedType) }
+
+              override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] =
+                compFactory(overloadsForName(memberName).map { _.memberAccessExpr(memberName, env, location) })
+
+              override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
+                compFactory(overloadsForName(memberName).map { _.forArguments(argInfo) })
+
+              override def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory[TComp]): ExprFactory[TComp] =
+                compFactory(overloadsForName(MemberName.Mutator(name))).forArguments(ArgumentInfo(newValue, env, location, ParameterStyle.Normal))
+            }.pure[TComp]
+
+          case _ =>
+            overloadsForName(memberName)
+        }
       })
 
 

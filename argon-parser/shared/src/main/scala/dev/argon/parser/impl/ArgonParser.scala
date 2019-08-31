@@ -32,6 +32,7 @@ object ArgonParser {
     }
 
     case object Identifier extends ArgonRuleNameTyped[Option[String]]
+    case object MethodName extends ArgonRuleNameTyped[MethodNameSpecifier]
     case object NewLines extends ArgonRuleNameTyped[Unit]
     case object StatementSeparator extends ArgonRuleNameTyped[Unit]
     case object ImportNamespace extends ArgonRuleNameTyped[TopLevelStatement]
@@ -162,6 +163,13 @@ object ArgonParser {
         case Rule.Identifier =>
           tokenUnderscore --> const(None : Option[String]) |
             tokenIdentifier --> Some.apply
+
+        case Rule.MethodName =>
+          tokenUnderscore --> const(MethodNameSpecifier.Unnamed : MethodNameSpecifier) |
+            (tokenIdentifier ++ matchToken(OP_ASSIGN).?) --> {
+              case (name, None) => MethodNameSpecifier.Named(name)
+              case (name, Some(_)) => MethodNameSpecifier.Mutator(name)
+            }
 
         case Rule.NewLines => (matchToken(NewLine)*).discard
         case Rule.StatementSeparator => matchToken(NewLine).discard | matchToken(Semicolon).discard
@@ -547,7 +555,7 @@ object ArgonParser {
             rule(Rule.NewLines) ++
             matchToken(OP_DOT) ++
             rule(Rule.NewLines) ++
-            rule(Rule.Identifier) ++! (
+            rule(Rule.MethodName) ++! (
               rule(Rule.NewLines) ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_COLON) ++

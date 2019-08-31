@@ -139,10 +139,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         methodCache(groupedInst.flatMap { inst =>
           inst.methods.zipWithIndex.traverse { case (method, i) =>
             parseAccessModifier[Comp](env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
-              val memberName = method.value.name match {
-                case Some(name) => MemberName.Normal(name)
-                case None => MemberName.Unnamed
-              }
+              val memberName = MethodName.fromMethodNameSpecifier(method.value.name)
 
               paramsEnv.flatMap { env2 =>
                 fields.flatMap { fieldVars =>
@@ -160,10 +157,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         staticMethodCache(groupedStatic.flatMap { statics =>
           statics.staticMethods.zipWithIndex.traverse { case (method, i) =>
             parseAccessModifier[Comp](env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
-              val memberName = method.value.name match {
-                case Some(name) => MemberName.Normal(name)
-                case None => MemberName.Unnamed
-              }
+              val memberName = MethodName.fromMethodNameSpecifier(method.value.name)
               val desc = MethodDescriptor(ClassObjectDescriptor(descriptor), i, memberName)
 
               paramsEnv.flatMap { env2 =>

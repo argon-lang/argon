@@ -221,6 +221,9 @@ object ArgonModuleLoader {
               case ArgonModule.MethodDescriptor.MemberName.Name(name) =>
                 Some(MemberName.Normal(name))
 
+              case ArgonModule.MethodDescriptor.MemberName.Mutator(name) =>
+                Some(MemberName.Mutator(name))
+
               case ArgonModule.MethodDescriptor.MemberName.SpecialMethodName(ArgonModule.SpecialMethodName.Unnamed) =>
                 Some(MemberName.Unnamed)
 

@@ -8,7 +8,7 @@ import cats.implicits._
 
 object DescriptorId {
 
-  private val specialChars = Vector("\\", ".", ",", ":", "-", "@", "#", "$", "?", "(", ")", "[", "]", "{", "}", "<", ">")
+  private val specialChars = Vector("\\", ".", ",", ":", "-", "@", "#", "$", "?", "(", ")", "[", "]", "{", "}", "<", ">", "=")
 
   private def encodeIdentifier(id: String): String =
     specialChars.foldLeft(id) { (id, ch) => id.replace(ch, "\\" + ch) }
@@ -57,6 +57,7 @@ object DescriptorId {
   private def encodeMethodName[TContext <: Context with Singleton](methodName: MethodName): String =
     methodName match {
       case MemberName.Normal(name) => encodeIdentifier(name)
+      case MemberName.Mutator(name) => encodeIdentifier(name) + ":="
       case MemberName.Unnamed => "$_"
       case MemberName.Call => "$call"
     }

@@ -98,10 +98,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
             for {
               modifiers <- parseAccessModifier[Comp](env.fileSpec, method.location, getAccessModifiers(method.value.modifiers))
 
-              memberName = method.value.name match {
-                case Some(name) => MemberName.Normal(name)
-                case None => MemberName.Unnamed
-              }
+              memberName = MethodName.fromMethodNameSpecifier(method.value.name)
 
               desc = MethodDescriptor(descriptor, i, memberName)
 

@@ -597,6 +597,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
         instanceTypeId = parentId,
         memberName = descriptor.name match {
           case MemberName.Normal(name) => module.MethodDescriptor.MemberName.Name(name)
+          case MemberName.Mutator(name) => module.MethodDescriptor.MemberName.Mutator(name)
           case MemberName.Unnamed => module.MethodDescriptor.MemberName.SpecialMethodName(module.SpecialMethodName.Unnamed)
           case MemberName.Call => module.MethodDescriptor.MemberName.SpecialMethodName(module.SpecialMethodName.Call)
         },

@@ -224,6 +224,7 @@ message MethodDescriptor {
     required int32 index = 1;
     oneof memberName {
         string name = 3;
+        string mutator = 12;
         SpecialMethodName specialMethodName = 4;
     }
     required int32 instanceTypeId = 5;
