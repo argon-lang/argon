@@ -2,6 +2,7 @@ package dev.argon.build
 
 import java.io
 import java.io.{File, FileInputStream, IOException}
+import java.nio.file.Path
 
 import dev.argon.compiler._
 import dev.argon.stream._
@@ -16,12 +17,12 @@ import zio.console._
 import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.parser.SourceAST
 import dev.argon.compiler.backend.Backend
-import dev.argon.io.FileIO
+import dev.argon.io.{FileIO, FilenameManip}
 import dev.argon.stream.ArStream
-import dev.argon.io.FileOperations.fileShow
+import dev.argon.io.FileOperations.pathShow
 import dev.argon.build._
 import dev.argon.stream.builder.{Generator, Iter}
-import zio.stream.ZStream
+import zio.stream.{ZSink, ZStream}
 import dev.argon.stream.builder.ZStreamIter._
 
 object Pipeline {
@@ -29,18 +30,30 @@ object Pipeline {
   private def ioToCompilationError(ex: IOException): NonEmptyList[CompilationError] =
     NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex)))
 
-  private def createFileDataStream(file: File): stream.ZStream[FileIO, NonEmptyList[CompilationError], Char] =
+  private def createFileDataStream(path: Path): stream.ZStream[FileIO, NonEmptyList[CompilationError], Char] =
     stream.ZStream.flatten(stream.ZStream.fromEffect(
-      ZIO.access[FileIO] { _.fileIO.readText(ioToCompilationError)(file.toPath) }
+      ZIO.access[FileIO] { _.fileIO.readText(ioToCompilationError)(path) }
     ))
 
   private type IterStream[A, X] = (ZStream[FileIO, NonEmptyList[CompilationError], A], X)
 
-  private def findInputFiles(buildInfo: BuildInfo[File]): ZStream[FileIO, NonEmptyList[CompilationError], InputFileInfo[IterStream]] =
-    ZStream.fromIterable(buildInfo.project.inputFiles.view.zipWithIndex)
-      .map { case (file, id) =>
-        InputFileInfo[IterStream](FileSpec(FileID(id), file.getPath),
-          (createFileDataStream(file), ())
+  private def resolveGlob(globs: List[Path]): ZStream[FileIO, NonEmptyList[CompilationError], Path] =
+    ZStream.fromIterable(globs)
+      .flatMap { glob =>
+        ZStream.fromEffect(
+          FilenameManip.findGlob(glob).runCollect
+            .mapError { ex => NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex))) }
+        )
+          .flatMap(ZStream.fromIterable)
+      }
+
+  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+  private def findInputFiles(buildInfo: BuildInfo.Resolved): ZStream[FileIO, NonEmptyList[CompilationError], InputFileInfo[IterStream]] =
+    resolveGlob(buildInfo.project.inputFiles)
+      .zipWithIndex
+      .map { case (path, id) =>
+        InputFileInfo[IterStream](FileSpec(FileID(id), path.toString),
+          (createFileDataStream(path), ())
         )
       }
 
@@ -54,8 +67,8 @@ object Pipeline {
   }
 
   def compileResult[A]
-  (buildInfo: BuildInfo[File])
-  (f: buildInfo.backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, File] } => ZIO[BuildEnvironment, NonEmptyList[CompilationError], A])
+  (buildInfo: BuildInfo.Resolved)
+  (f: buildInfo.backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, Path] } => ZIO[BuildEnvironment, NonEmptyList[CompilationError], A])
   (implicit compInstance: IOCompilation[BuildEnvironment])
   : ZIO[BuildEnvironment, NonEmptyList[CompilationError], A] =
     ZIO.access[FileIO] { res => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](res.fileIO) }.flatMap { implicit resFactory =>
@@ -70,20 +83,22 @@ object Pipeline {
       Iter[F, Generator[F, ?, ?], Unit].foldLeftM(parsedInputStream)(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
         .flatMap {
           case (parsedInput, _) =>
-            BuildProcess.compile[ZIO, BuildEnvironment, File, A](
-              buildInfo.backend : buildInfo.backend.type
-            )(
-              parsedInput,
-              buildInfo.project.references.toVector,
-              CompilerOptions(
-                moduleName = buildInfo.compilerOptions.moduleName
-              ),
-              buildInfo.backendOptions : buildInfo.backend.BackendOptions[Id, File],
-            )(f)
+            resolveGlob(buildInfo.project.references).runCollect.flatMap { references =>
+              BuildProcess.compile[ZIO, BuildEnvironment, Path, A](
+                buildInfo.backend : buildInfo.backend.type
+              )(
+                parsedInput,
+                references.toVector,
+                CompilerOptions(
+                  moduleName = buildInfo.compilerOptions.moduleName
+                ),
+                buildInfo.backendOptions,
+              )(f)
+            }
         }
     }
 
-  def run(buildInfo: BuildInfo[File]): RIO[Console with BuildEnvironment, Int] =
+  def run(buildInfo: BuildInfo.Resolved): RIO[Console with BuildEnvironment, Int] =
     IOCompilation.compilationInstance[BuildEnvironment]
       .flatMap { implicit compInstance =>
         compInstance.getResult(

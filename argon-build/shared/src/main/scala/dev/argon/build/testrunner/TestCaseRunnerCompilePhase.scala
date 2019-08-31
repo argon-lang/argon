@@ -1,6 +1,7 @@
 package dev.argon.build.testrunner
 
 import java.io.{File, IOException}
+import java.nio.file.Path
 
 import dev.argon.build.BuildProcess
 import dev.argon.compiler._
@@ -9,7 +10,7 @@ import cats._
 import cats.implicits._
 import dev.argon.compiler.backend.ProjectFileHandler
 import zio._
-import dev.argon.io.FileOperations.fileShow
+import dev.argon.io.FileOperations.pathShow
 import cats.data.NonEmptyList
 import dev.argon.compiler.backend.Backend
 import dev.argon.io.FileIO
@@ -21,15 +22,15 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
 
   protected val backend: Backend
 
-  protected def backendOptions(compilerOptions: CompilerOptions[Id]): ZIO[BuildEnvironment, IOException, backend.BackendOptions[Id, File]]
+  protected def backendOptions(compilerOptions: CompilerOptions[Id]): ZIO[BuildEnvironment, IOException, backend.BackendOptions[Id, Path]]
 
-  protected def getProgramOutput(compOutput: backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, File] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]]
+  protected def getProgramOutput(compOutput: backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, Path] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]]
 
   protected def normalizeOutput(output: String): String =
     output.split("\n").map { _.trim }.filter { _.nonEmpty }.mkString("\n")
 
 
-  def compileTestCase(testCase: TestCase, references: Vector[File]): ZIO[BuildEnvironment, Nothing, TestCaseResult] =
+  def compileTestCase(testCase: TestCase, references: Vector[Path]): ZIO[BuildEnvironment, Nothing, TestCaseResult] =
     IOCompilation.compilationInstance[BuildEnvironment].flatMap { implicit ioComp =>
 
       val result: ZIO[BuildEnvironment, Nothing, (Vector[CompilationMessageNonFatal], Either[NonEmptyList[CompilationError], Either[Throwable, String]])] =

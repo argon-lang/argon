@@ -1,7 +1,7 @@
 package dev.argon.compiler
 
 import java.io
-import java.io.File
+import java.nio.file.Path
 import java.util.zip
 import java.util.zip.ZipFile
 
@@ -84,7 +84,7 @@ object IOCompilation {
 
   })
 
-  type IOContext[R] = Backend.ContextWithComp[ZIO, R, io.File]
+  type IOContext[R] = Backend.ContextWithComp[ZIO, R, Path]
 
   trait IOResourceAccess[R, TContext <: IOContext[R] with Singleton] extends ResourceAccess[TContext] {
     override type ZipReader = ZipFileReader[NonEmptyList[CompilationError]]
@@ -99,20 +99,20 @@ object IOCompilation {
         private def ioExceptionToError(ex: io.IOException): NonEmptyList[CompilationError] =
           NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex)))
 
-        override def getExtension(id: io.File): UIO[String] =
-          IO.succeed(FilenameManip.getExtension(id.toPath))
+        override def getExtension(id: Path): UIO[String] =
+          IO.succeed(FilenameManip.getExtension(id))
 
-        override def resourceSink(id: File): Resource[ZIO, R, NonEmptyList[CompilationError], StreamTransformation[ZIO, R, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]] =
+        override def resourceSink(id: Path): Resource[ZIO, R, NonEmptyList[CompilationError], StreamTransformation[ZIO, R, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]] =
           Resource.fromZManaged(
-            fileIO.fileOutputTransformation(ioExceptionToError)(id.toPath)
+            fileIO.fileOutputTransformation(ioExceptionToError)(id)
           )
 
         override def zipFromEntries(entryStream: ArStream[ZIO, R, NonEmptyList[CompilationError], ZipEntryInfo[ZIO, R, NonEmptyList[CompilationError]]]): ArStream[ZIO, R, NonEmptyList[CompilationError], Byte] =
           fileIO.zipEntries(ioExceptionToError)(entryStream)
 
-        override def getZipReader[A](id: io.File): Resource[ZIO, R, NonEmptyList[CompilationError], ZipReader] =
+        override def getZipReader[A](id: Path): Resource[ZIO, R, NonEmptyList[CompilationError], ZipReader] =
           Resource.fromZManaged(
-            fileIO.openZipFile(ioExceptionToError)(id.toPath)
+            fileIO.openZipFile(ioExceptionToError)(id)
           )
 
         override def zipEntryStream(zip: ZipReader, name: String): ArStream[ZIO, R, NonEmptyList[CompilationError], Byte] =

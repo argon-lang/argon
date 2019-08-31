@@ -1,6 +1,6 @@
 package dev.argon.build
 
-import java.io.File
+import java.nio.file.Paths
 
 import dev.argon.build.testrunner._
 import dev.argon.build.testrunner.node.{NodeLauncher, NodeTestCaseRunner}
@@ -37,10 +37,10 @@ class CompilerTests extends FunSpec with DefaultRuntime with Matchers with Befor
 
   private val nodeLauncher = unsafeRunBuild(NodeLauncher(this, "external-api/node-api/bin/index.js"))
 
-  private val references = libraries.map { name => new File(s"libraries/$name/$name.armodule") }
+  private val references = libraries.map { name => Paths.get(s"libraries/$name/$name.armodule") }
 
   private def generateTestCases(): Unit = {
-    val testCases = unsafeRunBuild(TestCaseLoader.findTestCases(new File(getClass.getResource("/dev/argon/compiler/testcases").toURI)))
+    val testCases = unsafeRunBuild(TestCaseLoader.findTestCases(Paths.get(getClass.getResource("/dev/argon/compiler/testcases").toURI)))
 
     val runners = Vector(
       "Parsing" -> ParseTestCaseRunner,

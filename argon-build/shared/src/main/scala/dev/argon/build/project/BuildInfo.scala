@@ -16,7 +16,7 @@ import dev.argon.io.{FileIO, FilenameManip}
 import toml.Toml
 import toml.Codecs._
 import dev.argon.util.AnyExtensions._
-import shapeless.{Id => _, _}
+import shapeless.{Id => _, Path => _, _}
 
 
 final case class ProjectInfoFormat[F[_], I]
@@ -33,6 +33,8 @@ trait BuildInfo[I] {
 }
 
 object BuildInfo {
+
+  type Resolved = BuildInfo[Path]
 
 
   def apply[I](backend: Backend)(project: ProjectInfoFormat[Id, I], compilerOptions: CompilerOptions[Id], backendOptions: backend.BackendOptions[Id, I]): BuildInfo[I] = {
@@ -52,7 +54,7 @@ object BuildInfo {
   private val projectKey = "project"
   private val compilerOptionsKey = "compiler-options"
 
-  def loadFile(file: File): ZIO[FileIO, IOException, Option[Vector[BuildInfo[File]]]] =
+  def loadFile(file: File): ZIO[FileIO, IOException, Option[Vector[Resolved]]] =
     ZIO.accessM[FileIO] { env =>
       for {
         absoluteFile <- env.fileIO.getAbsolutePath(file.toPath)
@@ -102,7 +104,7 @@ object BuildInfo {
 
       backend.parseBackendOptions(table2).toOption.map { backendOptions =>
         val compilerOpts = CompilerOptions[Id](
-          moduleName = compOpts.moduleName.orElse(globalOptions.moduleName).getOrElse(FilenameManip.getBasename(file)),
+          moduleName = compOpts.moduleName.orElse(globalOptions.moduleName).getOrElse(FilenameManip.getBasename(file.toPath)),
         )
 
         BuildInfo(backend)(
@@ -116,15 +118,15 @@ object BuildInfo {
       }
     }
 
-  private def loadProjectFile(dir: File)(build: BuildInfo[String]): ZIO[FileIO, IOException, BuildInfo[File]] = {
+  private def loadProjectFile(dir: File)(build: BuildInfo[String]): ZIO[FileIO, IOException, Resolved] = {
     import dev.argon.compiler.backend.ProjectLoader.Implicits._
 
     type ProjFormat[A] = ProjectInfoFormat[Id, A]
-    implicit val fileHandler = ProjectFileHandler.fileHandlerFile(dir)
+    implicit val fileHandler = ProjectFileHandler.fileHandlerPath(dir)
 
     for {
-      resolvedProj <-ProjectLoader[ProjFormat[String], ProjFormat[File], File].loadProject[ZIO[FileIO, IOException, ?]](build.project)
-      resolvedBackendOpts <- build.backend.projectLoader[File].loadProject[ZIO[FileIO, IOException, ?]](build.backendOptions)
+      resolvedProj <-ProjectLoader[ProjFormat[String], ProjFormat[Path], Path].loadProject[ZIO[FileIO, IOException, ?]](build.project)
+      resolvedBackendOpts <- build.backend.projectLoader[Path].loadProject[ZIO[FileIO, IOException, ?]](build.backendOptions)
     } yield BuildInfo(build.backend)(
       project = resolvedProj,
       compilerOptions = build.compilerOptions,

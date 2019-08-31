@@ -2,6 +2,7 @@ package dev.argon.build.testrunner.node
 
 import java.io.{File, FileInputStream, IOException, PrintWriter, StringWriter}
 import java.nio.charset.StandardCharsets
+import java.nio.file.Path
 
 import dev.argon.build.testrunner._
 import cats._
@@ -20,14 +21,14 @@ import org.apache.commons.io.IOUtils
 import zio.blocking.Blocking
 import dev.argon.build._
 
-final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher) extends TestCaseRunnerCompilePhase {
+final class NodeTestCaseRunner(references: Vector[Path], launcher: NodeLauncher) extends TestCaseRunnerCompilePhase {
 
   override protected val backend: JSBackend.type = JSBackend
 
-  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[IOException, JSBackendOptions[Id, File]] =
+  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[IOException, JSBackendOptions[Id, Path]] =
     IO.succeed(
-      JSBackendOptions[Id, File](
-        outputFile = new File(compilerOptions.moduleName + ".js"),
+      JSBackendOptions[Id, Path](
+        outputFile = Path.of(compilerOptions.moduleName + ".js"),
         extern = Map.empty,
         inject = JSInjectCode[Id](
           before = None,
@@ -36,7 +37,7 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
       )
     )
 
-  override protected def getProgramOutput(compOutput: CompilationOutputText { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, File] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]] = for {
+  override protected def getProgramOutput(compOutput: CompilationOutputText { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, Path] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]] = for {
     compiledFile <- compOutput.textStream.foldLeft(stringConcatTrans)
     output <- runJSOutput(references)(compiledFile).either
   } yield output
@@ -45,11 +46,12 @@ final class NodeTestCaseRunner(references: Vector[File], launcher: NodeLauncher)
   override def runTest(testCase: TestCase): ZIO[BuildEnvironment, Throwable, TestCaseResult] =
     compileTestCase(testCase, references)
 
-  private def runJSOutput(files: Vector[File])(compiledFile: String): ZIO[BuildEnvironment, Throwable, String] = for {
-    referenceLibs <- files.traverse { file =>
-      val libName = FilenameManip.getBasename(file)
-      val libFile = new File(new File(file.getParentFile, "js"), libName + ".js")
-      ZIO.accessM[FileIO] { _.fileIO.readAllText(libFile.toPath) }
+  private def runJSOutput(files: Vector[Path])(compiledFile: String): ZIO[BuildEnvironment, Throwable, String] = for {
+    referenceLibs <- files.traverse { path =>
+      val libName = FilenameManip.getBasename(path)
+      val libFile = Option(path.getParent).getOrElse(Path.of("")).resolve("js").resolve(libName + ".js")
+
+      ZIO.accessM[FileIO] { _.fileIO.readAllText(libFile) }
         .map(FileInfo(libName, _))
     }
 

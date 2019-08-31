@@ -13,26 +13,31 @@ import scala.jdk.StreamConverters._
 
 object FilenameManip {
 
-  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
-  def getExtension(path: Path): String =
-    path.asScala.lastOption.map { namePart =>
-      val name = namePart.toString
-      val index = name.lastIndexOf(".")
+  def getExtension(path: Path): String = {
+    val name = getFileName(path)
+    val index = name.lastIndexOf(".")
 
-      if(index > 1) name.substring(index + 1)
-      else ""
-    }.getOrElse("")
+    if(index > 1) name.substring(index + 1)
+    else ""
+  }
 
-  def getBasename(file: File): String = {
-    val name = file.getName
+  def getBasename(path: Path): String = {
+    val name = getFileName(path)
     val index = name.lastIndexOf(".")
 
     if(index > 1) name.substring(0, index)
     else name
   }
 
+  def getFileName(path: Path): String =
+    Option(path.getFileName).fold("")(pathToString)
+
+  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+  def pathToString(path: Path): String =
+    path.toString
+
   @SuppressWarnings(Array("org.wartremover.warts.ToString", "org.wartremover.warts.Equals"))
-  def findGlob(baseDir: Path, path: Path): ZStream[FileIO, IOException, Path] = {
+  def findGlob(path: Path): ZStream[FileIO, IOException, Path] = {
 
     def globSegmentMatches(glob: String)(path: Path): Boolean =
       FileSystems.getDefault.getPathMatcher("glob:" + glob).matches(path.getFileName)
@@ -80,7 +85,7 @@ object FilenameManip {
 
     ZStream.fromEffect(
       if(pathRoot eq null)
-        ZIO.accessM[FileIO] { _.fileIO.getAbsolutePath(baseDir) }
+        ZIO.accessM[FileIO] { _.fileIO.getAbsolutePath(Path.of("")) }
       else
         IO.succeed(pathRoot)
     )

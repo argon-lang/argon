@@ -32,7 +32,7 @@ object ProjectLoader {
 
     implicit def fileListLoader[I]: ProjectLoader[List[String], List[I], I] = new ProjectLoader[List[String], List[I], I] {
       override def loadProject[F[_]](a: List[String])(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[List[I]] =
-        a.flatTraverse(fileHandler.loadFileGlob)
+        a.traverse(fileHandler.loadSingleFile)
     }
 
     implicit def hconsLoader[AHead, ATail <: HList, BHead, BTail <: HList, I](implicit headLoader: ProjectLoader[AHead, BHead, I], tailLoader: ProjectLoader[ATail, BTail, I]): ProjectLoader[AHead :: ATail, BHead :: BTail, I] =
@@ -73,20 +73,15 @@ object ProjectLoader {
 
 trait ProjectFileHandler[F[_], I] {
   def loadSingleFile(file: String): F[I]
-  def loadFileGlob(glob: String): F[List[I]]
 }
 
 object ProjectFileHandler {
 
-  def fileHandlerFile(dir: File): ProjectFileHandler[ZIO[FileIO, IOException, ?], File] = new ProjectFileHandler[ZIO[FileIO, IOException, ?], File] {
+  def fileHandlerPath(dir: File): ProjectFileHandler[ZIO[FileIO, IOException, ?], Path] = new ProjectFileHandler[ZIO[FileIO, IOException, ?], Path] {
 
-    override def loadSingleFile(file: String): ZIO[FileIO, IOException, File] =
-      IO.succeed(new File(dir, file))
-
-    override def loadFileGlob(glob: String): ZIO[FileIO, IOException, List[File]] =
-      FilenameManip.findGlob(dir.toPath, Paths.get(glob))
-        .map { _.toFile }
-        .run[FileIO, IOException, File, File, List[File]](ZSink.collectAll)
+    override def loadSingleFile(file: String): ZIO[FileIO, IOException, Path] =
+      IO.effect { dir.toPath.resolve(file) }
+        .refineOrDie { case ex: IOException => ex }
 
   }
 

@@ -1,7 +1,5 @@
 package dev.argon.build
 
-import java.io.File
-
 import dev.argon.compiler._
 import dev.argon.parser.{SourceAST, SyntaxError, SyntaxErrorData}
 import cats._
