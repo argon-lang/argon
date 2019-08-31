@@ -1,6 +1,5 @@
 package dev.argon.build.testrunner
 
-import java.io.File
 import java.nio.file.Path
 
 import scala.xml.XML

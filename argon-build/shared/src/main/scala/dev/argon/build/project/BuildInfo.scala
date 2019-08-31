@@ -1,6 +1,6 @@
 package dev.argon.build.project
 
-import java.io.{File, IOException}
+import java.io.IOException
 import java.nio.file.attribute.BasicFileAttributes
 import java.nio.file._
 
@@ -54,12 +54,12 @@ object BuildInfo {
   private val projectKey = "project"
   private val compilerOptionsKey = "compiler-options"
 
-  def loadFile(file: File): ZIO[FileIO, IOException, Option[Vector[Resolved]]] =
+  def loadFile(file: Path): ZIO[FileIO, IOException, Option[Vector[Resolved]]] =
     ZIO.accessM[FileIO] { env =>
       for {
-        absoluteFile <- env.fileIO.getAbsolutePath(file.toPath)
+        absoluteFile <- env.fileIO.getAbsolutePath(file)
         dir = absoluteFile.getParent
-        buildFile <- env.fileIO.readAllText(file.toPath)
+        buildFile <- env.fileIO.readAllText(file)
         result <- Toml.parse(buildFile)
           .toOption
           .flatMap { rootTable =>
@@ -73,7 +73,7 @@ object BuildInfo {
               case (_, _) => None
             }
           }
-          .traverse { _.traverse(loadProjectFile(dir.toFile)) }
+          .traverse { _.traverse(loadProjectFile(dir)) }
       } yield result
     }
 
@@ -95,7 +95,7 @@ object BuildInfo {
   private def loadCompilerOptions(opts: toml.Value.Tbl): Option[CompilerOptions[Option]] =
     Toml.parseAs[CompilerOptions[Option]](opts).toOption
 
-  private def loadBuildInfo(file: File, backendName: String, table: toml.Value.Tbl, globalProj: ProjectInfoFormat[Option, String], globalOptions: CompilerOptions[Option]): Option[BuildInfo[String]] =
+  private def loadBuildInfo(file: Path, backendName: String, table: toml.Value.Tbl, globalProj: ProjectInfoFormat[Option, String], globalOptions: CompilerOptions[Option]): Option[BuildInfo[String]] =
     Backends.find(backendName).flatMap { backend =>
       val proj = loadProjectOpt(table.values.get(projectKey))
       val compOpts = loadCompilerOptionsOpt(table.values.get(compilerOptionsKey))
@@ -104,7 +104,7 @@ object BuildInfo {
 
       backend.parseBackendOptions(table2).toOption.map { backendOptions =>
         val compilerOpts = CompilerOptions[Id](
-          moduleName = compOpts.moduleName.orElse(globalOptions.moduleName).getOrElse(FilenameManip.getBasename(file.toPath)),
+          moduleName = compOpts.moduleName.orElse(globalOptions.moduleName).getOrElse(FilenameManip.getBasename(file)),
         )
 
         BuildInfo(backend)(
@@ -118,7 +118,7 @@ object BuildInfo {
       }
     }
 
-  private def loadProjectFile(dir: File)(build: BuildInfo[String]): ZIO[FileIO, IOException, Resolved] = {
+  private def loadProjectFile(dir: Path)(build: BuildInfo[String]): ZIO[FileIO, IOException, Resolved] = {
     import dev.argon.compiler.backend.ProjectLoader.Implicits._
 
     type ProjFormat[A] = ProjectInfoFormat[Id, A]

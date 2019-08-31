@@ -4,7 +4,7 @@ import cats._
 import cats.implicits._
 import zio.interop.catz._
 import dev.argon.build._
-import java.io.{File, IOException}
+import java.io.IOException
 import java.nio.file.Path
 
 import cats.data.NonEmptyList

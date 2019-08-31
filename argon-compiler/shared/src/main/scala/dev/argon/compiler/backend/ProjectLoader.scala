@@ -1,6 +1,6 @@
 package dev.argon.compiler.backend
 
-import java.io.{File, IOException}
+import java.io.IOException
 import java.nio.file._
 
 import cats._
@@ -77,10 +77,10 @@ trait ProjectFileHandler[F[_], I] {
 
 object ProjectFileHandler {
 
-  def fileHandlerPath(dir: File): ProjectFileHandler[ZIO[FileIO, IOException, ?], Path] = new ProjectFileHandler[ZIO[FileIO, IOException, ?], Path] {
+  def fileHandlerPath(dir: Path): ProjectFileHandler[ZIO[FileIO, IOException, ?], Path] = new ProjectFileHandler[ZIO[FileIO, IOException, ?], Path] {
 
     override def loadSingleFile(file: String): ZIO[FileIO, IOException, Path] =
-      IO.effect { dir.toPath.resolve(file) }
+      IO.effect { dir.resolve(file) }
         .refineOrDie { case ex: IOException => ex }
 
   }

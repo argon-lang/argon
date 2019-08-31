@@ -1,8 +1,5 @@
 package dev.argon.backend.js
 
-import java.io.{File, PrintWriter, StringWriter}
-import java.nio.charset.StandardCharsets
-
 import dev.argon.compiler._
 import cats._
 import cats.instances._

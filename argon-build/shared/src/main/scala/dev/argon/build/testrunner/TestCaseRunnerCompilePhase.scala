@@ -1,6 +1,6 @@
 package dev.argon.build.testrunner
 
-import java.io.{File, IOException}
+import java.io.IOException
 import java.nio.file.Path
 
 import dev.argon.build.BuildProcess

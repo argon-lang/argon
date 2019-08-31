@@ -1,6 +1,5 @@
 package dev.argon.compiler
 
-import java.io.{File, IOException}
 import java.nio.charset.StandardCharsets
 
 import dev.argon.compiler.core.GlobalName

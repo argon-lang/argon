@@ -36,7 +36,7 @@ object Program extends App {
   private def runCompilation(args: CompileCommand[Id]): ZIO[BuildEnvironment with Console, Throwable, Int] =
     args match {
       case CompileCommand(buildInfoFileName) =>
-        FileOperations.fileFromName(buildInfoFileName)
+        FileOperations.pathFromName(buildInfoFileName)
           .flatMap(BuildInfo.loadFile)
           .flatMap {
             case Some(buildInfos) => buildInfos.foldLeftM(0) { (exitCode, buildInfo) =>

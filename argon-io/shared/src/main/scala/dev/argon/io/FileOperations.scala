@@ -10,7 +10,7 @@ object FileOperations {
 
   implicit val pathShow: Show[Path] = FilenameManip.pathToString _
 
-  def fileFromName(fileName: String): UIO[io.File] =
-    IO.effectTotal { new io.File(fileName) }
+  def pathFromName(fileName: String): UIO[Path] =
+    IO.effectTotal { Path.of(fileName) }
 
 }

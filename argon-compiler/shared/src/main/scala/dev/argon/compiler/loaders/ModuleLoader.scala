@@ -1,7 +1,5 @@
 package dev.argon.compiler.loaders
 
-import java.io.File
-
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler._
 import dev.argon.compiler.core._

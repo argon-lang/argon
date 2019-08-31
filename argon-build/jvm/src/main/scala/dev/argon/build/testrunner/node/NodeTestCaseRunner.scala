@@ -1,7 +1,6 @@
 package dev.argon.build.testrunner.node
 
-import java.io.{File, FileInputStream, IOException, PrintWriter, StringWriter}
-import java.nio.charset.StandardCharsets
+import java.io.{IOException}
 import java.nio.file.Path
 
 import dev.argon.build.testrunner._
@@ -17,8 +16,6 @@ import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.io.{FileIO, FilenameManip}
 import dev.argon.stream.{Resource, Step, StreamTransformation}
 import dev.argon.stream.{Step, StreamTransformation}
-import org.apache.commons.io.IOUtils
-import zio.blocking.Blocking
 import dev.argon.build._
 
 final class NodeTestCaseRunner(references: Vector[Path], launcher: NodeLauncher) extends TestCaseRunnerCompilePhase {

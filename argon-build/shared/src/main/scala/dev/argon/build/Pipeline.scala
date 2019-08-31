@@ -1,7 +1,6 @@
 package dev.argon.build
 
-import java.io
-import java.io.{File, FileInputStream, IOException}
+import java.io.IOException
 import java.nio.file.Path
 
 import dev.argon.compiler._
@@ -9,7 +8,7 @@ import dev.argon.stream._
 import cats._
 import cats.arrow.FunctionK
 import cats.implicits._
-import dev.argon.build.project.{BuildInfo, FileWithSpec}
+import dev.argon.build.project.BuildInfo
 import dev.argon.compiler.core.ModuleDescriptor
 import dev.argon.util.{FileID, FileSpec}
 import zio._
@@ -47,12 +46,11 @@ object Pipeline {
           .flatMap(ZStream.fromIterable)
       }
 
-  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
   private def findInputFiles(buildInfo: BuildInfo.Resolved): ZStream[FileIO, NonEmptyList[CompilationError], InputFileInfo[IterStream]] =
     resolveGlob(buildInfo.project.inputFiles)
       .zipWithIndex
       .map { case (path, id) =>
-        InputFileInfo[IterStream](FileSpec(FileID(id), path.toString),
+        InputFileInfo[IterStream](FileSpec(FileID(id), FilenameManip.pathToString(path)),
           (createFileDataStream(path), ())
         )
       }

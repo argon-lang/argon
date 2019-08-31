@@ -1,6 +1,6 @@
 package dev.argon.io
 
-import java.io.{File, FileNotFoundException, IOException}
+import java.io.{FileNotFoundException, IOException}
 import java.nio.file._
 
 import zio._
