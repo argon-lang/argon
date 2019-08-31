@@ -423,6 +423,10 @@ object CompilationError {
     override def message: String = "An IO error occurred."
   }
 
+  final case class InvalidLValue(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Invalid LValue"
+  }
+
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context
     val typeSystem: TypeSystem[context.type]

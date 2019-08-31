@@ -904,6 +904,14 @@ final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _]
       case e @ Sequence(_, _) =>
         StatementConverterLocalBinding.wrapStatement(params)(e)
 
+      case StoreVariable(variable, value, _) =>
+        for {
+          jsValue <- convertExpr(params)(value)
+        } yield JSAssignment(
+          params.varMapping(variable.descriptor),
+          jsValue
+        )
+
       case ClassType(arClass, args, _) =>
         for {
           sig <- arClass.value.signature

@@ -258,6 +258,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
       memberAccessExpr(MemberName.Call, argInfo.env, argInfo.location).forArguments(argInfo)
 
+    def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory[TComp]): ExprFactory[TComp] =
+      compFactory(
+        Compilation[TComp].forErrors(CompilationError.InvalidLValue(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+      )
+
   }
 
   abstract class OverloadExprFactory[TComp[_]: TypeCheck] {
@@ -356,6 +361,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             rightExpr <- evaluateTypeExprAST(env)(right)
           } yield factoryForExpr(env)(expr.location)(IntersectionType(leftExpr, rightExpr))
         )
+
+      case parser.BinaryOperatorExpr(parser.BinaryOperator.Assign, left, right) =>
+        convertExpr(env)(left).mutateValue(env, expr.location, convertExpr(env)(right))
 
       case parser.BoolValueExpr(b) =>
         compFactory(
@@ -728,7 +736,23 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         }
 
       case LookupResult.SingleValueResult(VariableScopeValue(variable)) =>
-        factoryForExpr(env)(location)(LoadVariable(variable))
+        new ExprFactory[TComp] {
+          override def forExpectedType(expectedType: TType): TComp[typeSystem.ArExpr] =
+            convertExprType(env)(location)(LoadVariable(variable))(expectedType)
+
+          override def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory[TComp]): ExprFactory[TComp] =
+            variable.mutability match {
+              case Mutability.Mutable =>
+                compFactory(
+                  for {
+                    unitType <- resolveUnitType(env)(location)
+                    newValueExpr <- newValue.forExpectedType(variable.varType)
+                  } yield factoryForExpr(env)(location)(StoreVariable(variable, fromSimpleType(newValueExpr), unitType))
+                )
+
+              case Mutability.NonMutable => super.mutateValue(env, location, newValue)
+            }
+        }
 
       case LookupResult.SingleValueResult(ParameterElementScopeValue(paramElem)) =>
         factoryForExpr(env)(location)(LoadTupleElement(fromSimpleType(LoadVariable(paramElem.paramVar)), paramElem.elemType, paramElem.index))
@@ -962,6 +986,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
         compFactory(
           compFac.map { _.forArguments(argInfo) }
+        )
+
+      override def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory[TComp]): ExprFactory[TComp] =
+        compFactory(
+          compFac.map { _.mutateValue(env, location, newValue) }
         )
     }
 
