@@ -91,6 +91,9 @@ object MethodDescriptor {
 final case class ClassConstructorDescriptor(ownerClass: ClassDescriptor, index: Int) extends ParameterOwnerDescriptor {
   override def moduleDescriptor: ModuleDescriptor = ownerClass.moduleDescriptor
 }
+object ClassConstructorDescriptor {
+  implicit val eqInstance: Eq[ClassConstructorDescriptor] = cats.derived.semi.eq
+}
 
 
 sealed trait VariableLikeDescriptor extends Descriptor

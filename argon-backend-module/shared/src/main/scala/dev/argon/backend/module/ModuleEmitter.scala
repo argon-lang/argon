@@ -522,6 +522,9 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
       } yield module.ClassConstructorDescriptor(
         ownerClass = ownerClass,
         index = descriptor.index,
+        instanceClassId = descriptor.ownerClass match {
+          case ClassDescriptor.InNamespace(_, id, _, _) => id.toInt
+        },
       )
 
     def createTraitDefMessage(armodule: ArModule[context.type, DeclarationPayloadSpecifier], arTrait: ArTrait[context.type, DeclarationPayloadSpecifier]): Emit[module.TraitDefinition] =
@@ -586,7 +589,7 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
         classCtors <- emitComp(arClass.classConstructors)
         ctors <- classCtors.traverse { ctor =>
           convertClassCtorDescriptor(armodule, ctor.ctor.descriptor).map { convDesc =>
-            module.ClassConstructorMember(convDesc, ctor.index)
+            module.ClassConstructorMember(convDesc, ctor.index, convertAccessModifier(ctor.accessModifier))
           }
         }
 

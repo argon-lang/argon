@@ -285,6 +285,9 @@ object CompilationError {
   case object ModuleObjectMethod extends ModuleObjectType {
     override def name: String = "method"
   }
+  case object ModuleObjectClassConstructor extends ModuleObjectType {
+    override def name: String = "class constructor"
+  }
 
   final case class ModuleObjectInvalidDescriptor(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
     override def message: String = s"Invalid descriptor for ${objectType.name} #${id.toString}."

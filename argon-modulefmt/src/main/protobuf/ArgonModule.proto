@@ -118,6 +118,7 @@ message ClassField {
 message ClassConstructorMember {
     required ClassConstructorDescriptor descriptor = 1;
     required int32 id = 2;
+    required AccessModifier accessModifier = 3;
 }
 
 message DataConstructorDefinition {
@@ -245,6 +246,7 @@ enum SpecialMethodName {
 message ClassConstructorDescriptor {
     required ClassDescriptor ownerClass = 1;
     required int32 index = 2;
+    required int32 instanceClassId = 3;
 }
 
 // Types
