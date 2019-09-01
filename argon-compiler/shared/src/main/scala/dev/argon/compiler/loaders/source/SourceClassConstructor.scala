@@ -37,7 +37,7 @@ object SourceClassConstructor {
       override val descriptor: ClassConstructorDescriptor = desc
       override val fileId: FileID = env.fileSpec.fileID
 
-      override val effectInfo: EffectInfo = EffectInfo.pure
+      override val effectInfo: EffectInfo = EffectInfo(stmt.purity)
 
       override val ownerClass: ArClass[context.type, DeclarationPayloadSpecifier] = ownerClass2
 
@@ -95,6 +95,8 @@ object SourceClassConstructor {
               findField(name, location).flatMap { field =>
                 if(initializedFields.contains(field.descriptor))
                   Compilation[Comp].forErrors(CompilationError.FieldReinitializedError(CompilationMessageSource.SourceFile(env2.fileSpec, location)))
+                else if(Mutability.toIsMutable(field.mutability) && effectInfo.isPure)
+                  Compilation[Comp].forErrors(CompilationError.MutableVariableNotPureError(field.name, CompilationMessageSource.SourceFile(env2.fileSpec, location)))
                 else
                   ExpressionConverter.convertExpression(context)(env2)(field.varType)(value).flatMap { valueExpr =>
                     val initStmt = typeSystem.InitializeFieldStatement(field, valueExpr)

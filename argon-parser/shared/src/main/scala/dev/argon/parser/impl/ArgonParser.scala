@@ -570,14 +570,15 @@ object ArgonParser {
 
         case Rule.ClassConstructorDefinitionStmt =>
           rule(Rule.Modifiers) ++
+            rule(Rule.MethodPurity).? ++
             matchToken(KW_NEW) ++! (
               rule(Rule.MethodParameters) ++
                 rule(Rule.StatementSeparator) ++
                 rule(Rule.StatementList).observeSource ++
                 matchToken(KW_END)
             ) --> {
-              case (modifiers, _, (params, _, body, _)) =>
-                ClassConstructorDeclarationStmt(params, body, modifiers)
+              case (modifiers, purity, _, (params, _, body, _)) =>
+                ClassConstructorDeclarationStmt(params, body, modifiers, purity.getOrElse(true))
             }
 
         case Rule.StaticInstanceBody =>
