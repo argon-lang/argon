@@ -380,12 +380,22 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.BlockExpr(body, Vector(), None, None) =>
         convertStmts(env)(body)
 
-      case parser.BlockExpr(_, Vector(), Some(_), None) =>
+      case parser.BlockExpr(_, Vector(), Some(_), _) =>
         compFactory(
           Compilation[TComp].forErrors(
             CompilationError.ElseClauseWithoutRescue(CompilationMessageSource.SourceFile(env.fileSpec, expr.location))
           )
         )
+
+      case parser.BlockExpr(body, Vector(), None, Some(ensureBody)) =>
+        new ExprFactory[TComp] {
+          override def forExpectedType(expectedType: TType): TComp[ArExpr] =
+            for {
+              bodyExpr <- convertStmts(env)(body).forExpectedType(expectedType)
+              unitType <- resolveUnitType(env)(expr.location)
+              ensureExpr <- convertStmts(env)(ensureBody).forExpectedType(unitType)
+            } yield EnsureExecuted(fromSimpleType(bodyExpr), fromSimpleType(ensureExpr))
+        }
 
       case parser.BoolValueExpr(b) =>
         compFactory(
@@ -1198,6 +1208,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     expr match {
       case ClassConstructorCall(_, _, args) => args.forall(isWrapExprPure)
       case DataConstructorCall(_, args) => args.forall(isWrapExprPure)
+      case EnsureExecuted(body, ensuring) => isWrapExprPure(body) && isWrapExprPure(ensuring)
       case FunctionCall(_, args, _) => args.forall(isWrapExprPure)
       case FunctionObjectCall(function, arg, _) => isWrapExprPure(function) && isWrapExprPure(arg)
       case IfElse(condition, ifBody, elseBody) => isWrapExprPure(condition) && isWrapExprPure(ifBody) && isWrapExprPure(elseBody)

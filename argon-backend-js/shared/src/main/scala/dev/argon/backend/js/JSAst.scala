@@ -44,6 +44,7 @@ final case class JSFunctionParameter(name: JSBindingNonEmpty, next: JSFunctionPa
 final case class JSFunctionRestParameters(name: JSBindingNonEmpty) extends JSFunctionParameterList
 
 final case class JSIfElseStatement(condition: JSExpression, ifBody: Vector[JSStatement], elseBody: Vector[JSStatement]) extends JSStatement
+final case class JSTryStatement(body: Vector[JSStatement], catchClause: Option[(JSIdentifier, Vector[JSStatement])], finallyBody: Option[Vector[JSStatement]]) extends JSStatement
 final case class JSReturn(value: JSExpression) extends JSStatement
 
 final case class JSBlockStatement(body: Vector[JSStatement]) extends JSStatement
@@ -188,6 +189,30 @@ object JSAst {
             _ <- write("} else {")
             _ <- elseBody.traverse_(writeStatement)
             _ <- write("}")
+          } yield ()
+
+        case JSTryStatement(body, catchClause, finallyBody) =>
+          for {
+            _ <- write("try {")
+            _ <- body.traverse_(writeStatement)
+            _ <- write("} ")
+            _ <- catchClause.traverse_ {
+              case (id, catchBody) =>
+                for {
+                  _ <- write("catch(")
+                  _ <- writeIdentifier(id)
+                  _ <- write(") {")
+                  _ <- catchBody.traverse_(writeStatement)
+                  _ <- write("} ")
+                } yield ()
+            }
+            _ <- finallyBody.traverse_ { finallyBody =>
+                for {
+                  _ <- write("finally {")
+                  _ <- finallyBody.traverse_(writeStatement)
+                  _ <- write("} ")
+                } yield ()
+            }
           } yield ()
 
         case JSReturn(value) =>

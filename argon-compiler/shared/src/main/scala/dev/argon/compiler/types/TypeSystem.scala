@@ -73,6 +73,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
   final case class ClassConstructorCall(classType: ClassType, classCtor: AbsRef[context.type, ClassConstructor], args: Vector[WrapExpr]) extends ArExpr
   final case class DataConstructorCall(dataCtorInstanceType: DataConstructorType, args: Vector[WrapExpr]) extends ArExpr
+  final case class EnsureExecuted(body: WrapExpr, ensuring: WrapExpr) extends ArExpr
   final case class FunctionCall(function: AbsRef[context.type, ArFunc], args: Vector[WrapExpr], returnType: TType) extends ArExpr
   final case class FunctionObjectCall(function: WrapExpr, arg: WrapExpr, returnType: TType) extends ArExpr
   final case class IfElse(condition: WrapExpr, ifBody: WrapExpr, elseBody: WrapExpr) extends ArExpr
@@ -505,6 +506,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
           }
         }
 
+      case EnsureExecuted(body, _) => reduceWrapExprToValue(body)
       case IfElse(_, _, _) => ???
       case PatternMatch(_, _) => ???
 
@@ -528,6 +530,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
     expr match {
       case ClassConstructorCall(classType, _, _) => fromSimpleType(classType).pure[TComp]
       case DataConstructorCall(dataCtorInstanceType, _) => fromSimpleType(dataCtorInstanceType).pure[TComp]
+      case EnsureExecuted(body, _) => getWrapExprType(body)
       case FunctionCall(_, _, returnType) => withTypeOfExpr(returnType.pure[TComp])
       case FunctionObjectCall(_, _, returnType) => withTypeOfExpr(returnType.pure[TComp])
       case IfElse(_, ifBody, elseBody) =>
@@ -580,6 +583,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
     expr match {
       case ClassConstructorCall(classType, _, _) => universeOfTypeArgs(classType.args).map(NextLargestUniverse)
       case DataConstructorCall(dataCtorInstanceType, _) => universeOfTypeArgs(dataCtorInstanceType.args).map(NextLargestUniverse)
+      case EnsureExecuted(body, _) => universeOfWrapExpr(body)
       case FunctionCall(_, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse)
       case FunctionObjectCall(_, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse)
       case IfElse(_, ifBody, elseBody) =>
@@ -922,6 +926,12 @@ object TypeSystem {
         newType <- convertDataConstructorType(context)(ts)(otherTS)(converter)(dataCtor)
         newArgs <- args.traverse(convertTypeSystem(context)(ts)(otherTS)(converter)(_))
       } yield otherTS.DataConstructorCall(newType, newArgs)
+
+    case ts.EnsureExecuted(body, ensuring) =>
+      for {
+        newBody <- convertTypeSystem(context)(ts)(otherTS)(converter)(body)
+        newEnsuring <- convertTypeSystem(context)(ts)(otherTS)(converter)(ensuring)
+      } yield otherTS.EnsureExecuted(newBody, newEnsuring)
 
     case ts.FunctionCall(function, args, returnType) =>
       for {

@@ -746,6 +746,12 @@ final class JSEmitter[TComp[+_], TContext <: JSContext[TComp, _] with Singleton]
           argExprs <- args.traverse(convertExpr(params)(_))
         } yield JSNewCall(JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")), argExprs)
 
+      case EnsureExecuted(body, ensuring) =>
+        for {
+          jsBody <- convertStmt(params)(useReturn = true)(body)
+          jsEnsuring <- convertStmt(params)(useReturn = false)(ensuring)
+        } yield JSFunctionCall(JSFunctionExpression(None, JSFunctionEmptyParameterList, Vector(JSTryStatement(jsBody, None, Some(jsEnsuring)))), Vector())
+
       case FunctionCall(func, args, _) =>
         for {
           sig <- func.value.signature
