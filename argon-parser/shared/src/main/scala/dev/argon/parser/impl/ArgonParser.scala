@@ -264,6 +264,9 @@ object ArgonParser {
             rule(Rule.MatchExpr) |
             (matchToken(KW_EXTERN) ++! matchTokenFactory(Identifier)) --> {
               case (_, Identifier(id)) => ExternExpr(id)
+            } |
+            (matchToken(KW_BEGIN) ++! (rule(Rule.BlockBody) ++ matchToken(KW_END))) --> {
+              case (_, (block, _)) => block
             }
 
         case Rule.PrimaryExpr(Rule.ParenAllowed) =>
