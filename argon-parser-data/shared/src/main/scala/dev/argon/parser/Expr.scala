@@ -40,7 +40,7 @@ final case class FunctionDeclarationStmt
   name: Option[String],
   parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
-  body: WithSource[Vector[WithSource[Stmt]]],
+  body: WithSource[Expr],
   modifiers: Vector[WithSource[Modifier]],
   purity: Boolean,
 ) extends Stmt
@@ -50,7 +50,7 @@ final case class MethodDeclarationStmt
   name: MethodNameSpecifier,
   parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
-  body: Option[WithSource[Vector[WithSource[Stmt]]]],
+  body: Option[WithSource[Expr]],
   modifiers: Vector[WithSource[Modifier]],
   purity: Boolean,
 ) extends Stmt
@@ -88,6 +88,13 @@ final case class FieldInitializationStmt
 sealed trait Expr extends Stmt
 final case class AsExpr(value: WithSource[Expr], valueType: WithSource[Expr]) extends Expr
 final case class BinaryOperatorExpr(op: BinaryOperator, left: WithSource[Expr], right: WithSource[Expr]) extends Expr
+final case class BlockExpr
+(
+  body: WithSource[Vector[WithSource[Stmt]]],
+  rescueClauses: Vector[MatchExprCase],
+  elseBody: Option[WithSource[Vector[WithSource[Stmt]]]],
+  ensureBody: Option[WithSource[Vector[WithSource[Stmt]]]],
+) extends Expr
 final case class BoolValueExpr(value: Boolean) extends Expr
 final case class ClassConstructorExpr(classExpr: WithSource[Expr]) extends Expr
 final case class DotExpr(left: WithSource[Expr], right: String) extends Expr
@@ -102,6 +109,7 @@ final case class IntValueExpr(sign: Int, base: BigInt, digits: Vector[BigInt]) e
 final case class LambdaTypeExpr(argType: WithSource[Expr], resultType: WithSource[Expr]) extends Expr
 final case class LambdaExpr(name: Option[String], body: WithSource[Expr]) extends Expr
 final case class MatchExpr(value: WithSource[Expr], cases: Seq[WithSource[MatchExprCase]]) extends Expr
+final case class RaiseExpr(exception: Expr) extends Expr
 final case class StringValueExpr(value: String) extends Expr
 final case class TupleExpr(values: NonEmptyList[WithSource[Expr]]) extends Expr
 final case class TypeExpr(level: Option[WithSource[Expr]], instanceType: Option[WithSource[Expr]], subtypeOf: Option[WithSource[Expr]], supertypeOf: Option[WithSource[Expr]]) extends Expr

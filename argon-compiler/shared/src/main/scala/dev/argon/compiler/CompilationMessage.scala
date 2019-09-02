@@ -119,6 +119,10 @@ object CompilationError {
       case TokenCategory.KW_ANY => "any"
       case TokenCategory.KW_VALUETYPE => "valuetype"
       case TokenCategory.KW_EXTERN => "extern"
+      case TokenCategory.KW_RAISE => "raise"
+      case TokenCategory.KW_BEGIN => "begin"
+      case TokenCategory.KW_RESCUE => "rescue"
+      case TokenCategory.KW_ENSURE => "ensure"
 
       case TokenCategory.OP_BOOLAND => "&&"
       case TokenCategory.OP_BOOLOR => "||"

@@ -62,6 +62,10 @@ object TokenCategory {
   case object KW_ANY extends TokenCategory
   case object KW_VALUETYPE extends TokenCategory
   case object KW_EXTERN extends TokenCategory
+  case object KW_RAISE extends TokenCategory
+  case object KW_BEGIN extends TokenCategory
+  case object KW_RESCUE extends TokenCategory
+  case object KW_ENSURE extends TokenCategory
 
   case object OP_BOOLAND extends TokenCategory
   case object OP_BOOLOR extends TokenCategory

@@ -75,7 +75,7 @@ object SourceMethod {
             context.abstractMethodImplementation.pure[Comp]
           else
             stmt.body match {
-              case Some(WithSource(Vector(WithSource(parser.ExternExpr(specifier), location)), _)) =>
+              case Some(WithSource(parser.ExternExpr(specifier), location)) =>
                 context.createExternMethodImplementation(specifier, CompilationMessageSource.SourceFile(env.fileSpec, location))
 
               case Some(body) =>
@@ -85,7 +85,7 @@ object SourceMethod {
                   env3 = env2.copy(scope = env2.scope.addParameters(
                     sig.unsubstitutedParameters
                   ))
-                  expr <- ExpressionConverter.convertStatementList(context)(env3)(sig.unsubstitutedResult.returnType)(body)
+                  expr <- ExpressionConverter.convertExpression(context)(env3)(sig.unsubstitutedResult.returnType)(body)
                 } yield context.createExprMethodImplementation(expr)
 
               case None =>

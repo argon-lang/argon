@@ -99,7 +99,8 @@ object ArgonParser {
     case object MethodParameter extends ArgonRuleNameTyped[FunctionParameter]
     case object MethodParameterList extends ArgonRuleNameTyped[Vector[WithSource[FunctionParameter]]]
     case object MethodParameters extends ArgonRuleNameTyped[Vector[WithSource[FunctionParameterList]]]
-    case object MethodBody extends ArgonRuleNameTyped[Vector[WithSource[Stmt]]]
+    case object MethodBody extends ArgonRuleNameTyped[Expr]
+    case object BlockBody extends ArgonRuleNameTyped[BlockExpr]
     case object MethodPurity extends ArgonRuleNameTyped[Boolean]
     case object FunctionDefinitionStmt extends ArgonRuleNameTyped[Stmt]
     case object MethodDefinitionStmt extends ArgonRuleNameTyped[Stmt]
@@ -525,8 +526,25 @@ object ArgonParser {
           ).observeSource*) --> { _.toVector }
 
         case Rule.MethodBody =>
-          matchToken(KW_DO) ++! (rule(Rule.StatementList) ++ matchToken(KW_END)) --> { case (_, (body, _)) => body } |
-            matchToken(OP_EQUALS) ++! (rule(Rule.NewLines) ++ rule(Rule.Expression).observeSource) --> { case (_, (_, expr)) => Vector(expr) }
+          matchToken(KW_DO) ++! (rule(Rule.BlockBody) ++ matchToken(KW_END)) --> { case (_, (body, _)) => body : T } |
+            matchToken(OP_EQUALS) ++! (rule(Rule.NewLines) ++ rule(Rule.Expression)) --> { case (_, (_, expr)) => expr }
+
+        case Rule.BlockBody =>
+          rule(Rule.StatementList).observeSource ++
+            (matchToken(KW_RESCUE) ++! (rule(Rule.NewLines) ++ rule(Rule.PatternSpec).observeSource ++ rule(Rule.StatementList).observeSource)).* ++
+            (matchToken(KW_ELSE) ++! rule(Rule.StatementList).observeSource).? ++
+            (matchToken(KW_ENSURE) ++! rule(Rule.StatementList).observeSource).? --> {
+            case (body, rescueCases, elseBody, ensureBody) =>
+              BlockExpr(
+                body,
+                rescueCases.map {
+                  case (_, (_, pattern, rescueBody)) =>
+                    MatchExprCase(pattern, rescueBody)
+                },
+                elseBody.map { case (_, stmts) => stmts },
+                ensureBody.map { case (_, stmts) => stmts }
+              )
+          }
 
         case Rule.MethodPurity =>
           matchToken(KW_DEF) --> const(true) |

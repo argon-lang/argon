@@ -36,7 +36,7 @@ private[compiler] object SourceFunction {
         )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType))
 
       override lazy val payload: Comp[context.TFunctionImplementation] = stmt.body match {
-        case WithSource(Vector(WithSource(parser.ExternExpr(specifier), location)), _) =>
+        case WithSource(parser.ExternExpr(specifier), location) =>
           context.createExternFunctionImplementation(specifier, CompilationMessageSource.SourceFile(env.fileSpec, location))
 
         case _ =>
@@ -46,7 +46,7 @@ private[compiler] object SourceFunction {
             env3 = env2.copy(scope = env2.scope.addParameters(
               sig.unsubstitutedParameters
             ))
-            expr <- ExpressionConverter.convertStatementList(context)(env3)(sig.unsubstitutedResult.returnType)(stmt.body)
+            expr <- ExpressionConverter.convertExpression(context)(env3)(sig.unsubstitutedResult.returnType)(stmt.body)
           } yield context.createExprFunctionImplementation(expr)
       }
     }

@@ -377,6 +377,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.BinaryOperatorExpr(parser.BinaryOperator.Assign, left, right) =>
         convertExpr(env)(left).mutateValue(env, expr.location, convertExpr(env)(right))
 
+      case parser.BlockExpr(body, Vector(), None, None) =>
+        convertStmts(env)(body)
+
       case parser.BoolValueExpr(b) =>
         compFactory(
           for {
