@@ -433,6 +433,10 @@ object CompilationError {
     override def message: String = "Invalid LValue"
   }
 
+  final case class ElseClauseWithoutRescue(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Else without rescue is useless."
+  }
+
   sealed trait CouldNotConvertType extends CompilationError {
     val context: Context
     val typeSystem: TypeSystem[context.type]

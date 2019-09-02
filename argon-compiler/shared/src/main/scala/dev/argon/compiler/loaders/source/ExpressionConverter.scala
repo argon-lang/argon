@@ -380,6 +380,13 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.BlockExpr(body, Vector(), None, None) =>
         convertStmts(env)(body)
 
+      case parser.BlockExpr(_, Vector(), Some(_), None) =>
+        compFactory(
+          Compilation[TComp].forErrors(
+            CompilationError.ElseClauseWithoutRescue(CompilationMessageSource.SourceFile(env.fileSpec, expr.location))
+          )
+        )
+
       case parser.BoolValueExpr(b) =>
         compFactory(
           for {
