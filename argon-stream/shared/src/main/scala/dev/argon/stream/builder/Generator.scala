@@ -6,14 +6,14 @@ import cats.data.NonEmptyVector
 import cats.implicits._
 
 trait Generator[F[_], A, X] {
-  def create[G[_]](convert: F ~> G)(implicit builder: Builder[G, A]): G[X]
+  def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, A]): G[X]
 
   def into[B, Y](f: Generator[F, A, X] => Generator[F, B, Y]): Generator[F, B, Y] = f(this)
 
 
   def buffer(count: Int)(implicit monad: Monad[F]): Generator[F, NonEmptyVector[A], X] = new Generator[F, NonEmptyVector[A], X] {
-    override def create[G[_]](convert: F ~> G)(implicit builder: Builder[G, NonEmptyVector[A]]): G[X] =
-      Iter[F, Generator[F, ?, ?], X].foldLeftM(convert)(Generator.this)(Vector.empty[A]) { (prev, a) =>
+    override def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, NonEmptyVector[A]]): G[X] =
+      Iter[G, Generator[G, ?, ?], X].foldLeftM(Generator.this.translateEffect[G])(Vector.empty[A]) { (prev, a) =>
         val newBuff = prev :+ a
         if(prev.size + 1 >= count)
           builder.append(NonEmptyVector.fromVectorUnsafe(newBuff)).map { _ => Vector.empty }
@@ -27,8 +27,8 @@ trait Generator[F[_], A, X] {
 
   def collect[B](f: PartialFunction[A, B])(implicit monad: Monad[F]): Generator[F, B, X] =
     new Generator[F, B, X] {
-      override def create[G[_]](convert: F ~> G)(implicit builder: Builder[G, B]): G[X] =
-        Iter[F, Generator[F, ?, ?], X].foreach(convert)(Generator.this) { a =>
+      override def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, B]): G[X] =
+        Iter[G, Generator[G, ?, ?], X].foreach(Generator.this.translateEffect[G]) { a =>
           f.lift(a) match {
             case Some(value) => builder.append(value)
             case None => builder.pure(())
@@ -38,19 +38,22 @@ trait Generator[F[_], A, X] {
 
   def mapResult[Y](f: X => Y): Generator[F, A, Y] =
     new Generator[F, A, Y] {
-      override def create[G[_]](convert: F ~> G)(implicit builder: Builder[G, A]): G[Y] =
-        Generator.this.create(convert).map(f)
+      override def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, A]): G[Y] =
+        Generator.this.create.map(f)
     }
 
-  def translateEffect[G[_]](convert: F ~> G): Generator[G, A, X] = new Generator[G, A, X] {
-    override def create[H[_]](convert2: G ~> H)(implicit builder: Builder[H, A]): H[X] =
-      Generator.this.create(convert.andThen(convert2))
+
+  def translateEffect[G[_]](implicit genEffect: GenEffect[F, G]): Generator[G, A, X] = new Generator[G, A, X] {
+    override def create[H[_]](implicit genEffect2: GenEffect[G, H], builder: Builder[H, A]): H[X] = {
+      implicit val composedEffect = GenEffect.genEffectComposed[F, G, H]
+      Generator.this.create[H]
+    }
   }
 
   def flatMap[B, Y](f: A => Generator[F, B, Unit])(implicit monad: Monad[F]): Generator[F, B, X] = new Generator[F, B, X] {
-    override def create[G[_]](convert: F ~> G)(implicit builder: Builder[G, B]): G[X] =
-      Iter[F, Generator[F, ?, ?], X].foreach(convert)(Generator.this) { a =>
-        Iter[F, Generator[F, ?, ?], Unit].foreach(convert)(f(a))(builder.append)
+    override def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, B]): G[X] =
+      Iter[G, Generator[G, ?, ?], X].foreach(Generator.this.translateEffect[G]) { a =>
+        Iter[G, Generator[G, ?, ?], Unit].foreach(f(a).translateEffect[G])(builder.append)
       }
   }
 }
@@ -60,9 +63,9 @@ object Generator {
 
 
   implicit def generatorIterInstance[F[_]: Monad, X0]: Iter[F, Generator[F, ?, ?], X0] = new Iter[F, Generator[F, ?, ?], X0] {
-    override def foldLeftM[G[_]: Monad, A, X <: X0, S](convert: F ~> G)(data: Generator[F, A, X])(value: S)(f: (S, A) => G[S]): G[(S, X)] =
-      convert(data.create(StepBuilder.lift[F, A])(StepBuilder.stepBuilderBuilderInstance[F, A])).flatMap { sb =>
-        StepBuilder.stepBuilderIterInstance[F, X].foldLeftM(convert)(sb)(value)(f)
+    override def foldLeftM[A, X <: X0, S](data: Generator[F, A, X])(value: S)(f: (S, A) => F[S]): F[(S, X)] =
+      data.create(StepBuilder.stepBuilderGenEffectInstance[F, A], StepBuilder.stepBuilderBuilderInstance[F, A]).flatMap { sb =>
+        StepBuilder.stepBuilderIterInstance[F, X].foldLeftM(sb)(value)(f)
       }
 
   }

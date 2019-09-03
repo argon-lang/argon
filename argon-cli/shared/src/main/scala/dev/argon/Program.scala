@@ -45,7 +45,7 @@ object Program extends App {
                 else exitCode
               }
             }
-            case None => putStrLn("Could not load build info file.").const(1)
+            case None => putStrLn("Could not load build info file.").as(1)
           }
     }
 

@@ -4,14 +4,18 @@ import cats._
 import cats.implicits._
 
 trait Iter[F[_], -L[_, _], X0] {
-  def foldLeftM[G[_]: Monad, A, X <: X0, S](convert: F ~> G)(data: L[A, X])(state: S)(f: (S, A) => G[S]): G[(S, X)]
-  def foreach[G[_]: Monad, A, X <: X0](convert: F ~> G)(data: L[A, X])(f: A => G[Unit]): G[X] =
-    foldLeftM(convert)(data)(()) { (_, a) => f(a) }.map { case (_, x) => x }
+  def foldLeftM[A, X <: X0, S](data: L[A, X])(state: S)(f: (S, A) => F[S]): F[(S, X)]
+  def foreach[A, X <: X0](data: L[A, X])(f: A => F[Unit])(implicit functor: Functor[F]): F[X] =
+    foldLeftM(data)(()) { (_, a) => f(a) }.map { case (_, x) => x }
 
-  def translateEffect[G[_]](convert: F ~> G): Iter[G, L, X0] = new Iter[G, L, X0] {
-    override def foldLeftM[H[_] : Monad, A, X <: X0, S](convert2: G ~> H)(data: L[A, X])(state: S)(f: (S, A) => H[S]): H[(S, X)] =
-      Iter.this.foldLeftM(convert.andThen(convert2))(data)(state)(f)
-  }
+  def foldLeftMHandlerFunc[A, X <: X0](data: L[A, X]): GenEffect.HandlerFunctionState[F, A, X] =
+    new GenEffect.HandlerFunctionState[F, A, X] {
+      override def apply[S](state: S)(f: (S, A) => F[S]): F[(S, X)] =
+        foldLeftM(data)(state)(f)
+    }
+
+  def foreachG[G[_], A, X <: X0](data: L[A, X])(f: A => G[Unit])(implicit functor: Functor[G], genEffect: GenEffect[F, G]): G[X] =
+    genEffect.liftFuncState(foldLeftMHandlerFunc(data))(()) { (_, a) => f(a) }.map { case (_, x) => x }
 }
 
 object Iter {

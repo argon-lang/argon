@@ -67,7 +67,7 @@ object Pipeline {
         BuildProcess.parseInput[F, IterStream]((findInputFiles(buildInfo), ()))
       }
 
-      Iter[F, Generator[F, ?, ?], Unit].foldLeftM(FunctionK.id)(parsedInputStream)(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
+      Iter[F, Generator[F, ?, ?], Unit].foldLeftM(parsedInputStream)(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
         .flatMap {
           case (parsedInput, _) =>
             BuildProcess.compile[ZIO, BuildEnvironment, File, A](

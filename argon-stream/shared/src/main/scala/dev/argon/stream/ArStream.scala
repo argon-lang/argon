@@ -34,21 +34,19 @@ object ArStream {
   def fromZStream[R, E, A](stream: zstream.ZStream[R, E, A]): ArStream[ZIO, R, E, A] = new ArStream[ZIO, R, E, A] {
 
     override def foldLeft[R2 <: R, E2 >: E, A2 >: A, X](trans: StreamTransformation[ZIO, R2, E2, A2, Unit, Nothing, X])(implicit monadInstance: Monad[ZIO[R2, E2, ?]]): ZIO[R2, E2, X] =
-      stream.fold[R2, E2, A2, Either[X, trans.State]].use { f0 =>
-        trans.initial.use { initial =>
-          f0(Right(initial), s => s.isRight, {
-            case (result @ Left(_), _) => IO.succeed(result)
-            case (Right(s), a) => trans.step(s, NonEmptyVector.of(a)).map {
-              case Step.Produce(_, value, _) => value
-              case Step.Continue(s) => Right(s)
-              case Step.Stop(result) => Left(result)
-            }
-          })
-            .use {
-              case Left(result) => IO.succeed(result)
-              case Right(s) => trans.end(s, ()).flatMap { case (_, res) => res }
-            }
+      trans.initial.use { initial =>
+        stream.fold[R2, E2, A2, Either[X, trans.State]](Right(initial))(s => s.isRight) {
+          case (result @ Left(_), _) => IO.succeed(result)
+          case (Right(s), a) => trans.step(s, NonEmptyVector.of(a)).map {
+            case Step.Produce(_, value, _) => value
+            case Step.Continue(s) => Right(s)
+            case Step.Stop(result) => Left(result)
+          }
         }
+          .flatMap {
+            case Left(result) => IO.succeed(result)
+            case Right(s) => trans.end(s, ()).flatMap { case (_, res) => res }
+          }
       }
   }
 

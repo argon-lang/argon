@@ -37,7 +37,7 @@ private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
       BuildProcess.parseInput[F, IterStream]((inputFiles, ()))
     }
 
-    Iter[F, Generator[F, ?, ?], Unit].foldLeftM(FunctionK.id)(parsedInputStream)(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
+    Iter[F, Generator[F, ?, ?], Unit].foldLeftM(parsedInputStream)(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
       .map {
         case (parsedInput, _) => parsedInput
       }

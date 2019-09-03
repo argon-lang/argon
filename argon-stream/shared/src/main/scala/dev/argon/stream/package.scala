@@ -4,7 +4,6 @@ import cats.data.NonEmptyVector
 import cats._
 import cats.implicits._
 import zio.{stream => zstream, _}
-import zio.stream.ZStream.Fold
 
 package object stream {
 
@@ -124,68 +123,6 @@ package object stream {
       override def end(s: sink.State, result: X): F[R, E2, (Vector[B], F[R, E2, Y])] =
         mapError.mapError(sink.end(s, result))(f).map { case (lastB, r2) => (lastB, mapError.mapError(r2)(f)) }
 
-    }
-
-  }
-
-  implicit final class ZStreamExtensions[R, E, A](private val stream: zstream.ZStream[R, E, A]) extends AnyVal {
-
-    private def pureToIO: ArStream.EffectConverter[PureEffect, ZIO] = new ArStream.EffectConverter[PureEffect, ZIO] {
-      override def apply[R1, E1, X](fea: PureEffect[R1, E1, X]): ZIO[R1, E1, X] = ZIO.accessM(r => ZIO.fromEither(fea.run(r).value))
-    }
-
-    def transformPure[R1 <: R, E1 >: E, B](trans: StreamTransformation[PureEffect, R1, E1, A, Unit, B, Unit]): zstream.ZStream[R1, E1, B] =
-      transform[PureEffect, R1, E1, B](pureToIO)(trans)
-
-    def transformIO[R1 <: R, E1 >: E, B](trans: StreamTransformation[ZIO, R1, E1, A, Unit, B, Unit]): zstream.ZStream[R1, E1, B] =
-      transform[ZIO, R1, E1, B](ArStream.EffectConverter.id)(trans)
-
-
-    def transform[F[-_, +_, +_], R1 <: R, E1 >: E, B](fToIO: ArStream.EffectConverter[F, ZIO])(trans: StreamTransformation[F, R1, E1, A, Unit, B, Unit]): zstream.ZStream[R1, E1, B] = new zstream.ZStream[R1, E1, B] {
-      override def fold[R2 <: R1, E2 >: E1, B1 >: B, S]: Fold[R2, E2, B1, S] =
-        ZManaged.succeed { (s2: S, cont: S => Boolean, f: (S, B1) => ZIO[R2, E2, S]) =>
-
-          def feed(s1: trans.State, s2: S, chunk: NonEmptyVector[A]): ZIO[R2, E2, (Option[trans.State], S)] =
-            fToIO(trans.step(s1, chunk)).flatMap {
-              case Step.Produce(s1, value, chunk) =>
-                f(s2, value).flatMap { s2 =>
-                  NonEmptyVector.fromVector(chunk) match {
-                    case Some(chunk) => feed(s1, s2, chunk)
-                    case None => IO.succeed((Some(s1), s2))
-                  }
-                }
-
-              case Step.Continue(s1) => IO.succeed((Some(s1), s2))
-              case Step.Stop(_) => IO.succeed((None, s2))
-            }
-
-          stream.fold[R2, E2, A, (Option[trans.State], S)].mapM { f0 =>
-            trans.initial.useIO { initialState =>
-              f0((Some(initialState), s2), {
-                case (Some(_), s2) => cont(s2)
-                case (None, _) => false
-              }, {
-                case ((Some(s1), s2), a) => feed(s1, s2, NonEmptyVector.of(a))
-                case ((None, s2), a) => IO.succeed((None, s2))
-              }).use {
-                case (Some(s1), s2) =>
-                  fToIO(trans.end(s1, ())).flatMap {
-                    case (lastB, result) =>
-
-                      def iterLastB(s2: S, lastB: Vector[B]): ZIO[R2, E2, S] =
-                        lastB match {
-                          case Vector() => fToIO(result).const(s2)
-                          case head +: tail => f(s2, head).flatMap { s2 => iterLastB(s2, tail) }
-                        }
-
-                      iterLastB(s2, lastB)
-                  }
-
-                case (None, s2) => IO.succeed(s2)
-              }
-            }
-          }
-        }
     }
 
   }

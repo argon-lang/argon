@@ -8,7 +8,7 @@ import cats.implicits._
 import dev.argon.grammar.ParseErrorHandler
 import dev.argon.parser.impl.TopLevelStatement.NSAndImports
 import dev.argon.stream._
-import dev.argon.stream.builder.{Builder, Generator, Iter}
+import dev.argon.stream.builder.{Builder, GenEffect, Generator, Iter}
 
 object ParseHandler {
 
@@ -22,8 +22,8 @@ object ParseHandler {
 
   private def buildSourceAST[F[_], L[_, _]](fileSpec: FileSpec)(stmts: L[TopLevelStatement, Unit])(implicit iter: Iter[F, L, Unit]): Generator[F, SourceAST, Unit] =
     new Generator[F, SourceAST, Unit] {
-      override def create[G[_]](convert: F ~> G)(implicit builder: Builder[G, SourceAST]): G[Unit] =
-        iter.foldLeftM(convert)(stmts)(TopLevelStatement.defaultNSAndImports) { (state, stmt) =>
+      override def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, SourceAST]): G[Unit] =
+        genEffect.liftFuncState(iter.foldLeftMHandlerFunc(stmts))(TopLevelStatement.defaultNSAndImports) { (state, stmt) =>
           val (newState, opt) = TopLevelStatement.accumulate(fileSpec)(state, stmt)
           opt.fold(builder.pure(()))(builder.append).map { _ => newState }
         }.map { _ => }

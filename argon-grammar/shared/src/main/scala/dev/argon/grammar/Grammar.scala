@@ -8,7 +8,7 @@ import scala.language.postfixOps
 import cats._
 import cats.data._
 import cats.implicits._
-import dev.argon.stream.builder.{Builder, Generator, Iter}
+import dev.argon.stream.builder.{Builder, GenEffect, Generator, Iter}
 import dev.argon.stream.{Step, StepPure, StreamTransformation}
 import dev.argon.util._
 
@@ -320,8 +320,8 @@ object Grammar {
     case object ParseStepReady extends ParseStep
     final case class ParseStepPartial(suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T]) extends ParseStep
 
-    override def create[G[_]](convert: F ~> G)(implicit builder: Builder[G, T]): G[FilePosition] =
-      Iter[F, Generator[F, ?, ?], FilePosition].foldLeftM(convert)(input)(ParseStepReady : ParseStep) { (s, tokens) =>
+    override def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, T]): G[FilePosition] =
+      Iter[G, Generator[G, ?, ?], FilePosition].foldLeftM(input.translateEffect)(ParseStepReady : ParseStep) { (s, tokens) =>
 
         def runParseStepMulti(s: ParseStep, tokens: NonEmptyVector[WithSource[TToken]]): G[ParseStep] =
           runParseStep(s, tokens) match {
@@ -333,8 +333,8 @@ object Grammar {
                 }
               }
 
-            case GrammarResultFailure(failure) => convert(errorHandler.raiseError(failure))
-            case GrammarResultError(error) => convert(errorHandler.raiseError(error))
+            case GrammarResultFailure(failure) => genEffect(errorHandler.raiseError(failure))
+            case GrammarResultError(error) => genEffect(errorHandler.raiseError(error))
             case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] =>
               builder.pure(ParseStepPartial(suspend))
           }
@@ -353,8 +353,8 @@ object Grammar {
                   }
                 }
 
-              case GrammarResultFailure(failure) => convert(errorHandler.raiseError(failure))
-              case GrammarResultError(error) => convert(errorHandler.raiseError(error))
+              case GrammarResultFailure(failure) => genEffect(errorHandler.raiseError(failure))
+              case GrammarResultError(error) => genEffect(errorHandler.raiseError(error))
             }
 
           parseEnd(suspend.completeResult(end))

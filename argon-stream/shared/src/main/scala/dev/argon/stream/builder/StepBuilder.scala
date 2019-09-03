@@ -14,6 +14,29 @@ object StepBuilder {
       fa.map(Result.apply)
   }
 
+  implicit def stepBuilderGenEffectInstance[F[_]: Monad, A]: GenEffect[F, Lambda[X => F[StepBuilder[F, A, X]]]] = new GenEffect[F, Lambda[X => F[StepBuilder[F, A, X]]]] {
+    override def apply[B](fa: F[B]): F[StepBuilder[F, A, B]] = fa.map(Result.apply)
+    override def liftFunc[B](f: GenEffect.HandlerFunction[F, B]): GenEffect.HandlerFunction[Lambda[X => F[StepBuilder[F, A, X]]], B] =
+      new GenEffect.HandlerFunction[Lambda[X => F[StepBuilder[F, A, X]]], B] {
+        override def apply[C](g: B => F[StepBuilder[F, A, C]]): F[StepBuilder[F, A, C]] =
+          f(g)
+      }
+
+    override def liftFuncState[B, X](f: GenEffect.HandlerFunctionState[F, B, X]): GenEffect.HandlerFunctionState[Lambda[X => F[StepBuilder[F, A, X]]], B, X] =
+      new GenEffect.HandlerFunctionState[Lambda[X => F[StepBuilder[F, A, X]]], B, X] {
+        override def apply[S](state: S)(g: (S, B) => F[StepBuilder[F, A, S]]): F[StepBuilder[F, A, (S, X)]] =
+          f(Result(state) : StepBuilder[F, A, S]) { (step, b) =>
+            stepBuilderBuilderInstance[F, A].flatMap(step.pure[F]) { s =>
+              g(s, b)
+            }
+          }
+            .map {
+              case (Produce(value, next), x) => Produce(value, stepBuilderBuilderInstance[F, A].map(next) { s => (s, x) })
+              case (Result(s), x) => Result((s, x))
+            }
+      }
+  }
+
   implicit def stepBuilderBuilderInstance[F[_]: Monad, A]: Builder[Lambda[X => F[StepBuilder[F, A, X]]], A] = new Builder[Lambda[X => F[StepBuilder[F, A, X]]], A] {
     override def append(value: A): F[StepBuilder[F, A, Unit]] =
       Monad[F].pure(Produce(value, pure(())))
@@ -38,17 +61,17 @@ object StepBuilder {
       }
   }
 
-  implicit def stepBuilderIterInstance[F[_], X0]: Iter[F, StepBuilder[F, ?, ?], X0] = new Iter[F, StepBuilder[F, ?, ?], X0] {
+  implicit def stepBuilderIterInstance[F[_]: Monad, X0]: Iter[F, StepBuilder[F, ?, ?], X0] = new Iter[F, StepBuilder[F, ?, ?], X0] {
 
-    override def foldLeftM[G[_] : Monad, A, X <: X0, S](convert: F ~> G)(data: StepBuilder[F, A, X])(state: S)(f: (S, A) => G[S]): G[(S, X)] =
+    override def foldLeftM[A, X <: X0, S](data: StepBuilder[F, A, X])(state: S)(f: (S, A) => F[S]): F[(S, X)] =
       data match {
         case Produce(value, next) =>
           f(state, value).flatMap { newState =>
-            convert(next).flatMap(foldLeftM(convert)(_)(newState)(f))
+            next.flatMap(foldLeftM(_)(newState)(f))
           }
 
         case Result(x) =>
-          (state, x).pure[G]
+          (state, x).pure[F]
       }
   }
 
