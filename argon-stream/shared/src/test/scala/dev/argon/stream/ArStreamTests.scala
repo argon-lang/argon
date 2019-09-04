@@ -1,60 +1,56 @@
 package dev.argon.stream
 
-import org.scalatest.{FlatSpec, Matchers}
 import cats._
-import cats.implicits._
 import zio._
 import zio.stream.ZStream
-import zio.interop.catz._
+import zio.interop.catz.monadErrorInstance
+import zio.test._
+import zio.test.Assertion._
+import zio.test.mock._
 
-class ArStreamTests extends FlatSpec with Matchers with DefaultRuntime with SampleValues with StreamChecker {
+object ArStreamTests extends DefaultRunnableSpec({
+  import SampleValues._
+  import StreamChecker._
 
-  "A stream from a ZStream" should "match" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromZStream(ZStream.fromIterable(sampleValues))))
-  }
+  suite("ArStreamTests")(
+    testM("A stream from a ZStream matches") {
+      assertM(runStream(ArStream.fromZStream(ZStream.fromIterable(sampleValues))), equalTo(sampleValues))
+    },
+    testM("Handle identity transformation (from ZStream)") {
+      assertM(runStream(
+        ArStream.fromZStream(ZStream.fromIterable(sampleValues)).transformWith(StreamTransformation.identity[ZIO, Any, Nothing, Int, Unit])
+      ), equalTo(sampleValues))
+    },
+    testM("Handle flattenVector transformation (from ZStream)") {
+      assertM(runStream(
+        ArStream.fromZStream(ZStream.fromIterable(Vector(sampleValues))).transformWith(StreamTransformation.flattenVector[ZIO, Any, Nothing, Int, Unit])
+      ), equalTo(sampleValues))
+    },
+    testM("A stream from a Vector matches") {
+      assertM(runStream(
+        ArStream.fromVector[ZIO, Any, Nothing, Int](sampleValues)
+      ), equalTo(sampleValues))
+    },
+    testM("Handle identity transformation (from Vector)") {
+      assertM(runStream(
+        ArStream.fromVector[ZIO, Any, Nothing, Int](sampleValues).transformWith(StreamTransformation.identity[ZIO, Any, Nothing, Int, Unit])
+      ), equalTo(sampleValues))
+    },
+    testM("Handle flattenVector transformation (from Vector)") {
+      assertM(runStream(
+        ArStream.fromVector[ZIO, Any, Nothing, Vector[Int]](Vector(sampleValues)).transformWith(StreamTransformation.flattenVector[ZIO, Any, Nothing, Int, Unit])
+      ), equalTo(sampleValues))
+    },
+    testM("map") {
+      assertM(runStream(
+        ArStream.fromVector[ZIO, Any, Nothing, Int](sampleValues).map { _ + 1 }
+      ), equalTo(sampleValues.map { _ + 1 }))
+    },
+    testM("flatMap") {
+      assertM(runStream(
+        ArStream.fromVector[ZIO, Any, Nothing, Vector[Int]](Vector(sampleValues)).flatMap(ArStream.fromVector[ZIO, Any, Nothing, Int])
+      ), equalTo(sampleValues))
+    },
+  )
 
-  it should "convert to ZStream" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromZStream(ZStream.fromIterable(sampleValues))))
-  }
-
-  it should "handle identity transformation" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromZStream(ZStream.fromIterable(sampleValues)).transformWith(StreamTransformation.identity[ZIO, Any, Int, Int, Unit])))
-  }
-
-  it should "handle flattenVector transformation" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromZStream(ZStream.fromIterable(Vector(sampleValues))).transformWith(StreamTransformation.flattenVector[ZIO, Any, Int, Int, Unit])))
-  }
-
-  it should "handle toVector transformation" in {
-    unsafeRun(ArStream.fromZStream(ZStream.fromIterable(sampleValues)).foldLeft(StreamTransformation.toVector[ZIO, Any, Int, Int])) shouldEqual sampleValues
-  }
-
-
-  "A stream from a Vector" should "match" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromVector[ZIO, Any, Int, Int](sampleValues)))
-  }
-
-  it should "convert to ZStream" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromVector[ZIO, Any, Int, Int](sampleValues)))
-  }
-
-  it should "handle identity transformation" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromVector[ZIO, Any, Int, Int](sampleValues).transformWith(StreamTransformation.identity[ZIO, Any, Int, Int, Unit])))
-  }
-
-  it should "handle flattenVector transformation" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromVector[ZIO, Any, Int, Vector[Int]](Vector(sampleValues)).transformWith(StreamTransformation.flattenVector[ZIO, Any, Int, Int, Unit])))
-  }
-
-  it should "handle toVector transformation" in {
-    unsafeRun(ArStream.fromVector[ZIO, Any, Int, Int](sampleValues).foldLeft(StreamTransformation.toVector[ZIO, Any, Int, Int])) shouldEqual sampleValues
-  }
-
-  it should "map" in {
-    unsafeRun(checkStream(sampleValues.map { _ + 1 }, ArStream.fromVector[ZIO, Any, Int, Int](sampleValues).map { _ + 1 }))
-  }
-
-  it should "flatMap" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromVector[ZIO, Any, Int, Vector[Int]](Vector(sampleValues)).flatMap(ArStream.fromVector[ZIO, Any, Int, Int])))
-  }
-}
+})

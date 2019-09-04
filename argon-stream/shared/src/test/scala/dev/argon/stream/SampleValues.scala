@@ -1,6 +1,6 @@
 package dev.argon.stream
 
-trait SampleValues {
+object SampleValues {
 
   def sampleValues: Vector[Int] = Vector.range(0, 2000)
 

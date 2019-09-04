@@ -8,6 +8,8 @@ lazy val commonSettings = Seq(
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
 
+  testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
+
   libraryDependencies ++= Seq(
     "org.scala-lang.modules" %%% "scala-xml" % "1.2.0",
 
@@ -31,6 +33,9 @@ lazy val commonSettings = Seq(
 
     "org.scalatest" %%% "scalatest" % "3.0.8" % "test",
     "org.scalacheck" %%% "scalacheck" % "1.14.0" % "test",
+    "dev.zio" %%% "zio-test" % "1.0.0-RC12-1" % "test",
+    "dev.zio" %%% "zio-test-sbt" % "1.0.0-RC12-1" % "test",
+    "io.github.cquiroz" %%% "scala-java-time" % "2.0.0-RC3" % "test",
     "com.github.alexarchambault" %%% "scalacheck-shapeless_1.14" % "1.2.3" % "test",
 
     compilerPlugin("com.github.ghik" % "silencer-plugin" % "1.4.3" cross CrossVersion.full),

@@ -6,7 +6,10 @@ import zio.{stream => zstream, _}
 import zio.interop.catz._
 import zio.stream.ZSink
 
-trait StreamChecker {
+object StreamChecker {
+
+  def runStream[E, A](stream: ArStream[ZIO, Any, E, A]): IO[E, Vector[A]] =
+    stream.foldLeft(StreamTransformation.toVector[ZIO, Any, E, A])
 
   def checkStream[F[-_, +_, +_], A: Eq](values: Vector[A], stream: ArStream[F, Any, Int, A])(implicit monadInstance: MonadError[F[Any, Int, ?], Int]): F[Any, Int, Unit] =
     stream.foldLeft(new StreamTransformation.Single[F, Any, Int, A, Unit, Nothing, Unit] {

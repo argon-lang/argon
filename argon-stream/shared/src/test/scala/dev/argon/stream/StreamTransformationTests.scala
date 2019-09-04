@@ -1,49 +1,57 @@
 package dev.argon.stream
 
-import org.scalatest.{FlatSpec, Matchers}
 import cats._
 import cats.implicits._
 import zio._
 import zio.stream.ZStream
-import zio.interop.catz._
+import zio.interop.catz.monadErrorInstance
+import SampleValues._
+import StreamChecker._
+import zio.test._
+import zio.test.Assertion._
+import zio.test.mock._
 
-class StreamTransformationTests extends FlatSpec with Matchers with DefaultRuntime with SampleValues with StreamChecker {
-
-  "A stream transformation" should "handle into" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromVector[ZIO, Any, Int, Int](sampleValues).transformWith(
-      StreamTransformation.identity[ZIO, Any, Int, Int, Unit].into(StreamTransformation.identity[ZIO, Any, Int, Int, Unit])
-    )))
-  }
-
-  it should "handle buffer" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromVector[ZIO, Any, Int, Int](sampleValues).transformWith(
-      StreamTransformation.identity[ZIO, Any, Int, Int, Unit].buffer(10)
-    )))
-  }
-
-  it should "handle buffer twice" in {
-    unsafeRun(checkStream(sampleValues, ArStream.fromVector[ZIO, Any, Int, Int](sampleValues).transformWith(
-      StreamTransformation.identity[ZIO, Any, Int, Int, Unit]
-        .buffer(10)
-        .into(StreamTransformation.identity[ZIO, Any, Int, Int, Unit])
-        .buffer(10)
-    )))
-  }
-
-  it should "handle collect" in {
-    unsafeRun(checkStream(sampleValues.filter { _ =!= 100 }.map { _ + 1 }, ArStream.fromVector[ZIO, Any, Int, Int](sampleValues).transformWith(
-      StreamTransformation.identity[ZIO, Any, Int, Int, Unit].collect {
-        case x if x =!= 100 => x + 1
-      }
-    )))
-  }
-
-  it should "handle map" in {
-    unsafeRun(checkStream(sampleValues.map { _ + 1 }, ArStream.fromVector[ZIO, Any, Int, Int](sampleValues).transformWith(
-      StreamTransformation.identity[ZIO, Any, Int, Int, Unit].map { _ + 1 }
-    )))
-  }
-
-
-
-}
+object StreamTransformationTests extends DefaultRunnableSpec(
+  suite("StreamTransformationTests")(
+    testM("into") {
+      assertM(runStream(
+        ArStream.fromVector[ZIO, Any, Nothing, Int](sampleValues).transformWith(
+          StreamTransformation.identity[ZIO, Any, Nothing, Int, Unit].into(StreamTransformation.identity[ZIO, Any, Nothing, Int, Unit])
+        )
+      ), equalTo(sampleValues))
+    },
+    testM("buffer") {
+      assertM(runStream(
+        ArStream.fromVector[ZIO, Any, Nothing, Int](sampleValues).transformWith(
+          StreamTransformation.identity[ZIO, Any, Nothing, Int, Unit].buffer(10)
+        )
+      ), equalTo(sampleValues))
+    },
+    testM("buffer twice") {
+      assertM(runStream(
+        ArStream.fromVector[ZIO, Any, Nothing, Int](sampleValues).transformWith(
+          StreamTransformation.identity[ZIO, Any, Nothing, Int, Unit]
+            .buffer(10)
+            .into(StreamTransformation.identity[ZIO, Any, Nothing, Int, Unit])
+            .buffer(10)
+        )
+      ), equalTo(sampleValues))
+    },
+    testM("collect") {
+      assertM(runStream(
+        ArStream.fromVector[ZIO, Any, Nothing, Int](sampleValues).transformWith(
+          StreamTransformation.identity[ZIO, Any, Nothing, Int, Unit].collect {
+            case x if x =!= 100 => x + 1
+          }
+        )
+      ), equalTo(sampleValues.filter { _ =!= 100 }.map { _ + 1 }))
+    },
+    testM("map") {
+      assertM(runStream(
+        ArStream.fromVector[ZIO, Any, Nothing, Int](sampleValues).transformWith(
+          StreamTransformation.identity[ZIO, Any, Nothing, Int, Unit].map { _ + 1 }
+        )
+      ), equalTo(sampleValues.map { _ + 1 }))
+    },
+  )
+)
