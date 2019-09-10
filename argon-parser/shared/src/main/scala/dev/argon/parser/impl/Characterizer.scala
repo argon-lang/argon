@@ -10,33 +10,42 @@ import dev.argon.util._
 
 object Characterizer {
 
-  private def toCodePoints[F[_], L[_, _]](chars: L[Char, Unit])(implicit iter: Iter[F, L, Unit]): Generator[F, Int, Unit] = new Generator[F, Int, Unit] {
-    override def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, Int]): G[Unit] =
-      genEffect.liftFuncState(iter.foldLeftMHandlerFunc(chars))(Option.empty[Char]) {
-        case (Some(prevCh), ch) => builder.append(Character.toCodePoint(prevCh, ch)).map { _ => None }
-        case (None, ch) if Character.isHighSurrogate(ch) => builder.pure(Some(ch))
-        case (None, ch) => builder.append(ch.toInt).map { _ => None }
+  private def toCodePoints[F[_]: Monad](chars: Source[F, Char, Unit]): Source[F, Int, Unit] = new Source[F, Int, Unit] {
+
+    override protected val monadF: Monad[F] = implicitly
+
+    override def generate[G[_] : Monad](sink: Sink[G, Int])(implicit genEffect: GenEffect[F, G]): G[Unit] =
+      chars.foldLeftG(Option.empty[Char]) {
+        case (Some(prevCh), ch) => sink.consume(Character.toCodePoint(prevCh, ch)).map { _ => Option.empty[Char] }
+        case (None, ch) if Character.isHighSurrogate(ch) => (Some(ch) : Option[Char]).pure[G]
+        case (None, ch) => sink.consume(ch.toInt).map { _ => Option.empty[Char] }
       }.flatMap {
-        case (Some(ch), _) => builder.append(ch.toInt)
-        case (None, _) => builder.pure(())
+        case (Some(ch), _) => sink.consume(ch.toInt)
+        case (None, _) => Monad[G].pure(())
       }
   }
 
-  private def toGraphemes[F[_], L[_, _]](codepoints: L[Int, Unit])(implicit iter: Iter[F, L, Unit]): Generator[F, String, Unit] = new Generator[F, String, Unit] {
-    override def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, String]): G[Unit] =
-      genEffect.liftFuncState(iter.foldLeftMHandlerFunc(codepoints))(Option.empty[String]) {
-        case (Some(str), cp) if isCombiningChar(cp) => builder.pure(Some(str + codePointToString(cp)))
-        case (Some(str), cp) => builder.append(str).map { _ => Some(codePointToString(cp)) }
-        case (None, cp) => builder.pure(Some(codePointToString(cp)))
+  private def toGraphemes[F[_]: Monad](codepoints: Source[F, Int, Unit]): Source[F, String, Unit] = new Source[F, String, Unit] {
+
+    override protected val monadF: Monad[F] = implicitly
+
+    override def generate[G[_] : Monad](sink: Sink[G, String])(implicit genEffect: GenEffect[F, G]): G[Unit] =
+      codepoints.foldLeftG[G, Option[String]](Option.empty[String]) {
+        case (Some(str), cp) if isCombiningChar(cp) => Monad[G].pure(Some(str + codePointToString(cp)))
+        case (Some(str), cp) => sink.consume(str).map { _ => Some(codePointToString(cp)) }
+        case (None, cp) => Monad[G].pure(Some(codePointToString(cp)))
       }.flatMap {
-        case (Some(str), _) => builder.append(str)
-        case (None, _) => builder.pure(())
+        case (Some(str), _) => sink.consume(str)
+        case (None, _) => Monad[G].pure(())
       }
   }
 
-  private def withSource[F[_], L[_, _]](graphemes: L[String, Unit])(implicit iter: Iter[F, L, Unit]): Generator[F, WithSource[String], FilePosition] = new Generator[F, WithSource[String], FilePosition] {
-    override def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, WithSource[String]]): G[FilePosition] =
-      genEffect.liftFuncState(iter.foldLeftMHandlerFunc(graphemes))(FilePosition(1, 1)) { (pos, item) =>
+  private def withSource[F[_]: Monad](graphemes: Source[F, String, Unit]): Source[F, WithSource[String], FilePosition] = new Source[F, WithSource[String], FilePosition] {
+
+    override protected val monadF: Monad[F] = implicitly
+
+    override def generate[G[_] : Monad](sink: Sink[G, WithSource[String]])(implicit genEffect: GenEffect[F, G]): G[FilePosition] =
+      graphemes.foldLeftG(FilePosition(1, 1)) { (pos, item) =>
         val nextPos =
           if(item === "\n")
             FilePosition(pos.line + 1, 1)
@@ -45,7 +54,7 @@ object Characterizer {
 
         val newItem = WithSource(item, SourceLocation(pos, nextPos))
 
-        builder.append(newItem).map { _ => nextPos }
+        sink.consume(newItem).map { _ => nextPos }
       }.map { case (pos, _) => pos }
   }
 
@@ -59,7 +68,7 @@ object Characterizer {
     new String(Character.toChars(cp))
 
 
-  def characterize[F[_]: Monad, L[_, _]](chars: L[Char, Unit])(implicit iter: Iter[F, L, Unit]): Generator[F, WithSource[String], FilePosition] =
-    toCodePoints(chars).into(toGraphemes(_)).into(withSource(_))
+  def characterize[F[_]: Monad](chars: Source[F, Char, Unit]): Source[F, WithSource[String], FilePosition] =
+    chars.into(toCodePoints(_)).into(toGraphemes(_)).into(withSource(_))
 
 }

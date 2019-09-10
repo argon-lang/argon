@@ -20,9 +20,8 @@ import dev.argon.io.{FileIO, FilenameManip}
 import dev.argon.stream.ArStream
 import dev.argon.io.FileOperations.pathShow
 import dev.argon.build._
-import dev.argon.stream.builder.{Generator, Iter}
+import dev.argon.stream.builder.ZStreamSource
 import zio.stream.{ZSink, ZStream}
-import dev.argon.stream.builder.ZStreamIter._
 
 object Pipeline {
 
@@ -34,7 +33,7 @@ object Pipeline {
       ZIO.access[FileIO] { _.fileIO.readText(ioToCompilationError)(path) }
     ))
 
-  private type IterStream[A, X] = (ZStream[FileIO, NonEmptyList[CompilationError], A], X)
+  private type FIO[A] = ZIO[FileIO, NonEmptyList[CompilationError], A]
 
   private def resolveGlob(globs: List[Path]): ZStream[FileIO, NonEmptyList[CompilationError], Path] =
     ZStream.fromIterable(globs)
@@ -46,12 +45,12 @@ object Pipeline {
           .flatMap(ZStream.fromIterable)
       }
 
-  private def findInputFiles(buildInfo: BuildInfo.Resolved): ZStream[FileIO, NonEmptyList[CompilationError], InputFileInfo[IterStream]] =
+  private def findInputFiles(buildInfo: BuildInfo.Resolved): ZStream[FileIO, NonEmptyList[CompilationError], InputFileInfo[FIO]] =
     resolveGlob(buildInfo.project.inputFiles)
       .zipWithIndex
       .map { case (path, id) =>
-        InputFileInfo[IterStream](FileSpec(FileID(id), FilenameManip.pathToString(path)),
-          (createFileDataStream(path), ())
+        InputFileInfo[FIO](FileSpec(FileID(id), FilenameManip.pathToString(path)),
+          ZStreamSource(createFileDataStream(path))
         )
       }
 
@@ -71,14 +70,12 @@ object Pipeline {
   : ZIO[BuildEnvironment, NonEmptyList[CompilationError], A] =
     ZIO.access[FileIO] { res => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](res.fileIO) }.flatMap { implicit resFactory =>
 
-      type F[B] = ZIO[BuildEnvironment, NonEmptyList[CompilationError], B]
-
       val parsedInputStream = {
         import zio.interop.catz._
-        BuildProcess.parseInput[F, IterStream]((findInputFiles(buildInfo), ()))
+        BuildProcess.parseInput[FIO](ZStreamSource(findInputFiles(buildInfo)))
       }
 
-      Iter[F, Generator[F, ?, ?], Unit].foldLeftM(parsedInputStream)(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
+      parsedInputStream.foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
         .flatMap {
           case (parsedInput, _) =>
             resolveGlob(buildInfo.project.references).runCollect.flatMap { references =>

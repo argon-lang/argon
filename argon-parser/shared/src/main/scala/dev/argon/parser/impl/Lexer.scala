@@ -11,7 +11,7 @@ import dev.argon.grammar.{Grammar, GrammarError, ParseErrorHandler}
 import Grammar.Operators._
 import dev.argon.parser.impl.Lexer.LexerGrammarFactory
 import dev.argon.stream.StreamTransformation
-import dev.argon.stream.builder.Generator
+import dev.argon.stream.builder.Source
 
 import Function.const
 
@@ -266,7 +266,7 @@ object Lexer {
   type ErrorEffect[F[_], A] = EitherT[F, NonEmptyList[SyntaxError], A]
 
 
-  def lex[F[_]: Monad](chars: Generator[F, NonEmptyVector[WithSource[String]], FilePosition])(implicit errorHandler: ParseErrorHandler[F, NonEmptyVector[SyntaxError]]): Generator[F, WithSource[Token], FilePosition] =
+  def lex[F[_]: Monad](chars: Source[F, NonEmptyVector[WithSource[String]], FilePosition])(implicit errorHandler: ParseErrorHandler[F, NonEmptyVector[SyntaxError]]): Source[F, WithSource[Token], FilePosition] =
     Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken)(chars).collect {
       case WithSource(Some(value), loc) => WithSource(value, loc)
     }

@@ -5,6 +5,7 @@ import java.io.{ByteArrayInputStream, InputStream, OutputStream}
 import dev.argon.stream.ArStream
 import zio._
 import zio.blocking.Blocking
+import zio.stream.ZStream
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -14,7 +15,9 @@ trait StreamCommon {
   val streamContent = Seq[Byte](0, 7, 5, 9, 4, -1)
   def sampleInputStream: InputStream = new ByteArrayInputStream(streamContent.toArray)
   def sampleArStream: ArStream[ZIO, Blocking, Throwable, Byte] = ArStream.fromVector(streamContent.toVector)
+  def sampleZStream: ZStream[Blocking, Throwable, Chunk[Byte]] = ZStream(Chunk.fromIterable(streamContent))
   def emptyArStream: ArStream[ZIO, Blocking, Throwable, Byte] = ArStream.fromVector(Vector.empty)
+  def emptyZStream: ZStream[Blocking, Throwable, Chunk[Byte]] = ZStream.empty
 
   def noReads(inputStream: InputStream): RIO[Blocking, Unit] =
     IO.succeed(())

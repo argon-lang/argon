@@ -3,8 +3,10 @@ package dev.argon.compiler
 import cats.data.NonEmptyList
 import dev.argon.compiler.core._
 import dev.argon.io.ZipEntryInfo
+import dev.argon.stream.builder.Source
 import dev.argon.stream.{ArStream, Resource, StreamTransformation}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
+import zio.Chunk
 
 trait ResourceAccess[TContext <: Context with Singleton] {
 
@@ -14,15 +16,18 @@ trait ResourceAccess[TContext <: Context with Singleton] {
 
   def getExtension(id: ResIndicator): CompE[NonEmptyList[CompilationError], String]
 
-  def resourceSink(id: ResIndicator): Resource[CompRE, Environment, NonEmptyList[CompilationError], StreamTransformation[CompRE, Environment, NonEmptyList[CompilationError], Byte, Unit, Nothing, Unit]]
-  def zipFromEntries(entryStream: ArStream[CompRE, Environment, NonEmptyList[CompilationError], ZipEntryInfo[CompRE, Environment, NonEmptyList[CompilationError]]]): ArStream[CompRE, Environment, NonEmptyList[CompilationError], Byte]
+  def writeToResource[X](id: ResIndicator)(data: Source[Comp, Chunk[Byte], X]): Comp[X]
+  def zipFromEntries(entries: Source[Comp, ZipEntryInfo[Comp], Unit]): Source[Comp, Chunk[Byte], Unit]
 
   type ZipReader
   def getZipReader[A](id: ResIndicator): Resource[CompRE, Environment, NonEmptyList[CompilationError], ZipReader]
-  def zipEntryStream(zip: ZipReader, name: String): ArStream[CompRE, Environment, NonEmptyList[CompilationError], Byte]
+  def zipEntryStream(zip: ZipReader, name: String): Source[Comp, Chunk[Byte], Unit]
 
-  def protocolBufferSink[A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A]): StreamTransformation[CompRE, Environment, NonEmptyList[CompilationError], Byte, Unit, Nothing, A]
-  def protocolBufferStream(message: GeneratedMessage): ArStream[CompRE, Environment, NonEmptyList[CompilationError], Byte]
+  def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage with Message[A]]
+  (companion: GeneratedMessageCompanion[A])
+  (data: Source[Comp, Chunk[Byte], Unit])
+  : Comp[A]
+  def serializeProtocolBuffer(message: GeneratedMessage): Source[Comp, Chunk[Byte], Unit]
 }
 
 trait ResourceAccessFactory[-TContext <: Context] {

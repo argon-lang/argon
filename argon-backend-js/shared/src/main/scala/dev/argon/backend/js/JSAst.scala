@@ -6,7 +6,7 @@ import org.apache.commons.text.StringEscapeUtils
 import cats._
 import cats.implicits._
 import cats.data.NonEmptyList
-import dev.argon.stream.builder.Builder
+import dev.argon.stream.builder.{GenEffect, Sink, Source}
 
 final case class JSModule(statements: Vector[JSModuleStatement])
 
@@ -78,12 +78,16 @@ case object JSThis extends JSExpression
 
 object JSAst {
 
-  def writeModule[F[_]](module: JSModule)(implicit builder: Builder[F, String]): F[Unit] =
-    new WriteImpl[F].writeModule(module)
+  def writeModule[F[_]: Monad](module: JSModule): Source[F, String, Unit] = new Source[F, String, Unit] {
+    override protected val monadF: Monad[F] = implicitly[Monad[F]]
 
-  private class WriteImpl[F[_]](implicit builder: Builder[F, String]) {
+    override def generate[G[_] : Monad](sink: Sink[G, String])(implicit genEffect: GenEffect[F, G]): G[Unit] =
+      new WriteImpl[G](sink).writeModule(module)
+  }
 
-    def write(s: String): F[Unit] = builder.append(s)
+  private class WriteImpl[F[_]: Monad](sink: Sink[F, String]) {
+
+    def write(s: String): F[Unit] = sink.consume(s)
     
     def writeModule(module: JSModule): F[Unit] =
       module.statements.traverse_(writeModuleStatement)

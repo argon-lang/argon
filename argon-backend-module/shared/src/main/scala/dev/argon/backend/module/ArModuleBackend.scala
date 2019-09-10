@@ -11,6 +11,7 @@ import dev.argon.compiler.backend.{Backend, CompilationOutput, ProjectLoader}
 import dev.argon.compiler.core.Context
 import dev.argon.io.ZipEntryInfo
 import dev.argon.stream.ArStream
+import dev.argon.stream.builder.Source
 import toml.Codecs._
 import shapeless.{Id => _, _}
 
@@ -57,22 +58,22 @@ object ArModuleBackend extends Backend {
   private def createOutput
   (context2: Context)
   (outputFile: context2.ResIndicator)
-  (moduleStream: ArStream[context2.CompRE, context2.Environment, NonEmptyList[CompilationError], (String, GeneratedMessage)])
+  (moduleGen: Source[context2.Comp, (String, GeneratedMessage), Unit])
   (implicit resourceAccess: ResourceAccess[context2.type])
   : CompilationOutput { val context: context2.type } = new CompilationOutput {
 
     override val context: context2.type = context2
     import context._
 
-    override def write: context.Comp[Unit] =
-      resourceAccess.resourceSink(outputFile).use { sink =>
-        resourceAccess.zipFromEntries(
-          moduleStream.map { case (path, message) =>
-            ZipEntryInfo(path, resourceAccess.protocolBufferStream(message))
-          }
-        )
-          .foldLeft(sink)
-      }
+    override def write: Comp[Unit] = {
+      val zipData = resourceAccess.zipFromEntries(
+        moduleGen.map { case (path, message) =>
+          ZipEntryInfo(path, resourceAccess.serializeProtocolBuffer(message))
+        }
+      )
+
+      resourceAccess.writeToResource(outputFile)(zipData)
+    }
 
 
   }

@@ -15,25 +15,23 @@ class InputStreamStreamTests extends FlatSpec with Matchers with DefaultRuntime 
 
   private def createInputStreamStream: RIO[Blocking, InputStreamStream[Blocking, Throwable]] =
     ZIO.access[Blocking] { res =>
-      new InputStreamStream[Blocking, Throwable](identity, res.blocking)(
-        Resource.fromZManaged(
-          ZManaged.fromAutoCloseable(
-            IO.effectTotal { sampleInputStream }
-          )
+      InputStreamStream[Blocking, Throwable](identity)(
+        ZManaged.fromAutoCloseable(
+          IO.effectTotal { sampleInputStream }
         )
       )
     }
 
   "InputStreamStream" should "readDirectly using single byte read" in {
-    unsafeRun(createInputStreamStream.flatMap { _.foldLeft(InputStreamReaderTransformation(usingSingleByteRead)) }) shouldBe streamContent
+    unsafeRun(createInputStreamStream.flatMap { InputStreamReaderTransformation(_)(usingSingleByteRead) }) shouldBe streamContent
   }
 
   it should "readDirectly using buffer reads" in {
-    unsafeRun(createInputStreamStream.flatMap { _.foldLeft(InputStreamReaderTransformation(usingBufferReader)) }) shouldBe streamContent
+    unsafeRun(createInputStreamStream.flatMap { InputStreamReaderTransformation(_)(usingBufferReader) }) shouldBe streamContent
   }
 
   it should "transform stream using toVector" in {
-    unsafeRun(createInputStreamStream.flatMap { _.foldLeft(StreamTransformation.toVector[ZIO, Blocking, Throwable, Byte]) }) shouldBe streamContent
+    unsafeRun(createInputStreamStream.flatMap { _.runCollect }) shouldBe streamContent
   }
 
 }

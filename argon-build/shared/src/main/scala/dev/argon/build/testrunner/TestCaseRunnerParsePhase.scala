@@ -12,32 +12,30 @@ import cats.instances._
 import dev.argon.io.FileIO
 import zio._
 import dev.argon.build._
-import dev.argon.stream.builder.{Generator, Iter}
+import dev.argon.stream.builder.ZStreamSource
 import zio.stream.ZStream
-import dev.argon.stream.builder.ZStreamIter._
 
 private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
 
   private type F[A] = ZIO[BuildEnvironment, NonEmptyList[CompilationError], A]
-  private type IterStream[A, X] = (ZStream[BuildEnvironment, NonEmptyList[CompilationError], A], X)
 
   protected final def parseTestCaseSource(testCase: TestCase)(implicit ioComp: IOCompilation[BuildEnvironment]): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Vector[SourceAST]] = {
 
     val inputFiles = ZStream.fromIterable[(InputSourceData, Int)](testCase.sourceCode.zipWithIndex)
       .map {
         case (InputSourceData(filename, data), i) =>
-          InputFileInfo[IterStream](
+          InputFileInfo[F](
             FileSpec(FileID(i), filename),
-            (ZStream.fromIterable(data.toVector), ())
+            ZStreamSource(ZStream.fromIterable(data.toVector))
           )
       }
 
     val parsedInputStream = {
       import zio.interop.catz._
-      BuildProcess.parseInput[F, IterStream]((inputFiles, ()))
+      BuildProcess.parseInput[F](ZStreamSource(inputFiles))
     }
 
-    Iter[F, Generator[F, ?, ?], Unit].foldLeftM(parsedInputStream)(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
+    parsedInputStream.foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
       .map {
         case (parsedInput, _) => parsedInput
       }

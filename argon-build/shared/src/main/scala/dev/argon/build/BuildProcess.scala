@@ -12,21 +12,23 @@ import dev.argon.parser.impl.ParseHandler
 import dev.argon.stream.{ArStream, MapError, StreamTransformation}
 import dev.argon.util.FileSpec
 import dev.argon.stream._
-import dev.argon.stream.builder.{Builder, GenEffect, Generator, Iter}
+import dev.argon.stream.builder.{GenEffect, Sink, Source}
 import dev.argon.util.AnyExtensions._
 
 object BuildProcess {
 
-  def parseInput[F[_], L[_, _]]
-  (inputFiles: L[InputFileInfo[L], Unit])
+  def parseInput[F[_]]
+  (inputFiles: Source[F, InputFileInfo[F], Unit])
   (implicit
     monadError: MonadError[F, NonEmptyList[CompilationError]],
-    iterInstance: Iter[F, L, Unit],
   )
-  : Generator[F, SourceAST, Unit] =
-    new Generator[F, SourceAST, Unit] {
-      override def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, SourceAST]): G[Unit] =
-        Iter[F, L, Unit].foreachG(inputFiles) { fileInfo =>
+  : Source[F, SourceAST, Unit] =
+    new Source[F, SourceAST, Unit] {
+
+      override protected val monadF: Monad[F] = monadError
+
+      override def generate[G[_] : Monad](sink: Sink[G, SourceAST])(implicit genEffect: GenEffect[F, G]): G[Unit] =
+        inputFiles.foreachG { fileInfo =>
           def toCompileError(error: SyntaxError): CompilationError =
             CompilationError.SyntaxCompilerError(SyntaxErrorData(fileInfo.fileSpec, error))
 
@@ -36,9 +38,9 @@ object BuildProcess {
                 monadError.raiseError(NonEmptyList(toCompileError(errors.head), errors.tail.map(toCompileError).toList))
             }
 
-          val parsed = ParseHandler.parse[F, L](fileInfo.fileSpec)(fileInfo.dataStream)
+          val parsed = ParseHandler.parse[F](fileInfo.fileSpec)(fileInfo.dataStream)
 
-          Iter[F, Generator[F, ?, ?], Unit].foreachG(parsed)(builder.append)
+          parsed.foreachG(sink.consume)
         }
     }
 

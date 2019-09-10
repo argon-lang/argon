@@ -1,5 +1,6 @@
 package dev.argon.io
 
-import dev.argon.stream.ArStream
+import dev.argon.stream.builder.Source
+import zio.Chunk
 
-final case class ZipEntryInfo[F[-_, +_, +_], -R, +E](path: String, dataStream: ArStream[F, R, E, Byte])
+final case class ZipEntryInfo[F[_]](path: String, dataStream: Source[F, Chunk[Byte], Unit])

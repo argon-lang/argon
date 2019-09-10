@@ -7,20 +7,16 @@ import org.scalatest.{FlatSpec, Matchers}
 import zio._
 import zio.blocking.Blocking
 import zio.interop.catz._
+import zio.stream.ZStream
 
 class OutputStreamWriterStreamTests extends FlatSpec with Matchers with DefaultRuntime with StreamCommon {
 
-  def createStream(f: OutputStream => ZIO[Blocking, Throwable, Unit]): RIO[Blocking, OutputStreamWriterStream[Blocking, Throwable]] =
-    ZIO.access[Blocking] { env =>
-      OutputStreamWriterStream(env.blocking)(f)
-    }
-
   "OutputStreamWriterStream" should "stream using single byte write" in {
-    unsafeRun(createStream(usingSingleByteWrite).flatMap { _.foldLeft(StreamTransformation.toVector[ZIO, Blocking, Throwable, Byte]) }) shouldBe streamContent
+    unsafeRun(OutputStreamWriterStream(usingSingleByteWrite).runCollect) shouldBe streamContent
   }
 
   it should "stream using buffer writes" in {
-    unsafeRun(createStream(usingBufferWriter).flatMap { _.foldLeft(StreamTransformation.toVector[ZIO, Blocking, Throwable, Byte]) }) shouldBe streamContent
+    unsafeRun(OutputStreamWriterStream(usingBufferWriter).runCollect) shouldBe streamContent
   }
 
 }

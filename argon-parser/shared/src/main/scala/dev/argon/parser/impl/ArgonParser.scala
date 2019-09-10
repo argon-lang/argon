@@ -14,7 +14,7 @@ import Grammar.Operators._
 import Grammar.{GrammarFactory, UnionGrammar}
 import dev.argon.stream.StreamTransformation
 import dev.argon.stream._
-import dev.argon.stream.builder.Generator
+import dev.argon.stream.builder.Source
 
 import Function.const
 
@@ -712,7 +712,7 @@ object ArgonParser {
 
   private[impl] def grammarFactory: GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] = ArgonGrammarFactory
 
-  def parse[F[_]: Monad](tokens: Generator[F, NonEmptyVector[WithSource[Token]], FilePosition])(implicit errorHandler: ParseErrorHandler[F, NonEmptyVector[SyntaxError]]): Generator[F, TopLevelStatement, Unit] =
+  def parse[F[_]: Monad](tokens: Source[F, NonEmptyVector[WithSource[Token]], FilePosition])(implicit errorHandler: ParseErrorHandler[F, NonEmptyVector[SyntaxError]]): Source[F, TopLevelStatement, Unit] =
     Grammar.parseAll[F, Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)(tokens)
       .mapResult(const(()))
 

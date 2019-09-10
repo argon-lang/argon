@@ -8,8 +8,7 @@ import scala.language.postfixOps
 import cats._
 import cats.data._
 import cats.implicits._
-import dev.argon.stream.builder.{Builder, GenEffect, Generator, Iter}
-import dev.argon.stream.{Step, StepPure, StreamTransformation}
+import dev.argon.stream.builder.{GenEffect, Sink, Source}
 import dev.argon.util._
 
 sealed trait Grammar[TToken, TSyntaxError, TLabel <: RuleLabel, +T] {
@@ -313,48 +312,50 @@ object Grammar {
   def parseAll[F[_]: Monad, TToken, TSyntaxError, TLabel <: RuleLabel, T]
   (factory: GrammarFactory[TToken, TSyntaxError, TLabel])
   (label: TLabel { type RuleType = T })
-  (input: Generator[F, NonEmptyVector[WithSource[TToken]], FilePosition])
+  (input: Source[F, NonEmptyVector[WithSource[TToken]], FilePosition])
   (implicit errorHandler: ParseErrorHandler[F, NonEmptyVector[TSyntaxError]])
-  : Generator[F, T, FilePosition] = new Generator[F, T, FilePosition] {
+  : Source[F, T, FilePosition] = new Source[F, T, FilePosition] {
     sealed trait ParseStep
     case object ParseStepReady extends ParseStep
     final case class ParseStepPartial(suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T]) extends ParseStep
 
-    override def create[G[_]](implicit genEffect: GenEffect[F, G], builder: Builder[G, T]): G[FilePosition] =
-      Iter[G, Generator[G, ?, ?], FilePosition].foldLeftM(input.translateEffect)(ParseStepReady : ParseStep) { (s, tokens) =>
+    override protected val monadF: Monad[F] = implicitly[Monad[F]]
+
+    override def generate[G[_] : Monad](sink: Sink[G, T])(implicit genEffect: GenEffect[F, G]): G[FilePosition] =
+      input.foldLeftG[G, ParseStep](ParseStepReady) { (s, tokens) =>
 
         def runParseStepMulti(s: ParseStep, tokens: NonEmptyVector[WithSource[TToken]]): G[ParseStep] =
           runParseStep(s, tokens) match {
             case GrammarResultSuccess(remaining, WithSource(value, _)) =>
-              builder.append(value).flatMap { _ =>
+              sink.consume(value).flatMap { _ =>
                 NonEmptyVector.fromVector(remaining) match {
                   case Some(remaining) => runParseStepMulti(ParseStepReady, remaining)
-                  case None => builder.pure(ParseStepReady)
+                  case None => (ParseStepReady : ParseStep).pure[G]
                 }
               }
 
-            case GrammarResultFailure(failure) => genEffect(errorHandler.raiseError(failure))
-            case GrammarResultError(error) => genEffect(errorHandler.raiseError(error))
+            case GrammarResultFailure(failure) => genEffect.liftF(errorHandler.raiseError(failure))
+            case GrammarResultError(error) => genEffect.liftF(errorHandler.raiseError(error))
             case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] =>
-              builder.pure(ParseStepPartial(suspend))
+              (ParseStepPartial(suspend) : ParseStep).pure[G]
           }
 
         runParseStepMulti(s, tokens)
       }.flatMap {
-        case (ParseStepReady, end) => builder.pure(end)
+        case (ParseStepReady, end) => Monad[G].pure(end)
         case (ParseStepPartial(suspend), end) =>
           def parseEnd(result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T]): G[FilePosition] =
             result match {
               case GrammarResultSuccess(remaining, WithSource(value, _)) =>
-                builder.append(value).flatMap { _ =>
+                sink.consume(value).flatMap { _ =>
                   NonEmptyVector.fromVector(remaining) match {
                     case Some(tokens) => parseEnd(rule.parseTokens(tokens, defaultParseOptions).completeResult(end))
-                    case None => builder.pure(end)
+                    case None => Monad[G].pure(end)
                   }
                 }
 
-              case GrammarResultFailure(failure) => genEffect(errorHandler.raiseError(failure))
-              case GrammarResultError(error) => genEffect(errorHandler.raiseError(error))
+              case GrammarResultFailure(failure) => genEffect.liftF(errorHandler.raiseError(failure))
+              case GrammarResultError(error) => genEffect.liftF(errorHandler.raiseError(error))
             }
 
           parseEnd(suspend.completeResult(end))

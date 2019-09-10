@@ -8,11 +8,11 @@ import dev.argon.compiler.backend.Backend.ContextWithComp
 import dev.argon.compiler.backend.{Backend, CompilationOutputText, ProjectLoader}
 import dev.argon.compiler.core.Context
 import dev.argon.stream.ArStream
+import dev.argon.stream.builder.Source
 import zio.{IO, ZIO}
 import toml.Codecs._
 import shapeless.{Id => _, _}
 import dev.argon.util.ExtraTomlCodecs._
-import dev.argon.stream.builder.BuilderStream
 
 
 object JSBackend extends Backend {
@@ -74,14 +74,11 @@ object JSBackend extends Backend {
 
     import context._
 
-    override def outputResource: context.ResIndicator = outputRes
+    override def outputResource: ResIndicator = outputRes
 
-    override def textStream: ArStream[context.CompRE, context.Environment, NonEmptyList[CompilationError], String] = {
-      import context._
-      BuilderStream.toStream(
-        JSAst.writeModule[BuilderStream[CompRE[Environment, NonEmptyList[CompilationError], ?], String, ?]](jsModule)
-      )
-    }
+    override val textStream: Source[Comp, String, Unit] =
+      JSAst.writeModule(jsModule)
+
   }
 
 }

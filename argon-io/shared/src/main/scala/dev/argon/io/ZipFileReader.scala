@@ -1,8 +1,8 @@
 package dev.argon.io
 
-import dev.argon.stream._
+import dev.argon.stream.builder.Source
 import zio._
 
-trait ZipFileReader[E] {
-  def getEntryStream(name: String): ArStream[ZIO, Any, E, Byte]
+trait ZipFileReader[F[_]] {
+  def getEntryStream(name: String): Source[F, Chunk[Byte], Unit]
 }

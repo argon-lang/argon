@@ -13,10 +13,11 @@ import dev.argon.compiler.loaders.armodule.{ModuleFormatVersion, ModulePaths}
 import dev.argon.compiler.types.{ParameterStyle, TypeSystem}
 import dev.argon.util.FileID
 import dev.argon.module
+import dev.argon.stream.builder.{GenEffect, Sink, Source}
 import dev.argon.stream.{ArStream, Resource, Step, StreamTransformation}
 import shapeless._
 import dev.argon.util.AnyExtensions._
-import shapeless.ops.nat.{Pred, LT}
+import shapeless.ops.nat.{LT, Pred}
 import zio.{IO, ZIO, stream => zstream}
 
 final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCompRE, R, _] with Singleton](val context: TContext) {
@@ -26,6 +27,8 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
 
   import context._
   import context.signatureContext.{ Signature, SignatureResult, SignatureParameters, SignatureVisitor }
+
+  type StreamElem = (String, GeneratedMessage)
 
   private object Implementation {
 
@@ -77,282 +80,195 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
 
     implicit val fromCompRefl: TComp ~> TComp = arrow.FunctionK.id
 
-    def moduleBindingStream[F[-_, +_, +_], R2 <: R, E >: NonEmptyList[CompilationError]](fromComp: ArStream.EffectConverter[TCompRE, F])(armodule: ArModule[context.type, DeclarationPayloadSpecifier]): ArStream[F, R2, E, GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] =
-      new ArStream[F, R2, E, GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] {
+    def processModule[G[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier])(sink: Sink[G, StreamElem])(implicit genEffect: GenEffect[Emit, G]): G[Unit] = {
 
-        type FE[+A] = F[R, E, A]
+      def addEmitId(id: String): Emit[Unit] =
+        StateT.modify[Comp, ModuleIds](s => s.copy(emittedPaths = s.emittedPaths + id))
 
-        override def foldLeft[R3 <: R2, E2 >: E, A2 >: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier], X]
-        (trans: StreamTransformation[F, R3, E2, A2, Unit, Nothing, X])
-        (implicit monadInstance: Monad[F[R3, E2, ?]])
-        : F[R3, E2, X] =
-          (fromComp(armodule.globalNamespace) : F[R3, E2, Namespace[context.type, DeclarationPayloadSpecifier]]).flatMap { ns =>
-            trans.initial.use { state =>
-              processNamespace(trans)(state, ns).flatMap {
-                case Step.Produce(_, value, _) => value
-                case Step.Continue(state) => trans.end(state, ()).flatMap { case (_, fr2) => fr2 }
-                case Step.Stop(r2) => r2.pure[F[R3, E2, ?]]
-              }
-            }
+      def addGlobalDecl(g: module.GlobalDeclaration): Emit[Unit] =
+        StateT.modify[Comp, ModuleIds](s => s.copy(globals = s.globals :+ g))
+
+      def bindingCommon[V, M <: GeneratedMessage]
+      (access: AccessModifierGlobal)
+      (value: V)
+      (getId: Emit[Int])
+      (getPath: Int => String)
+      (createMessage: (ArModule[context.type, DeclarationPayloadSpecifier], V) => Emit[M])
+      (descriptor: module.GlobalDeclaration.Descriptor)
+      (emitExtra: G[Unit])
+      : G[Unit] =
+        genEffect.liftF(getId).flatMap { id =>
+          val path = getPath(id)
+
+          genEffect.liftF(StateT.get[Comp, ModuleIds]).flatMap { state =>
+            if(state.emittedPaths.contains(path))
+              ().pure[G]
+            else
+              for {
+                result <- genEffect.liftF(createMessage(armodule, value))
+                _ <- genEffect.liftF(addEmitId(path))
+                _ <- sink.consume(path -> result)
+                _ <- emitExtra
+
+                _ <- genEffect.liftF(addGlobalDecl(module.GlobalDeclaration(id, convertAccessModifier(access), descriptor)))
+
+              } yield ()
           }
-
-
-        private def processNamespace[R3 <: R2, E2 >: E, A2 >: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier], X]
-        (trans: StreamTransformation[F, R3, E2, A2, Unit, Nothing, X])
-        (state: trans.State, ns: Namespace[context.type, DeclarationPayloadSpecifier])
-        (implicit monadInstance: Monad[F[R3, E2, ?]])
-        : F[R3, E2, Step[trans.State, A2, Nothing, X]] = {
-
-          def feed(bindings: Vector[GlobalBinding[context.type, DeclarationPayloadSpecifier]], state: trans.State): F[R3, E2, Step[trans.State, A2, Nothing, X]] =
-            bindings match {
-              case Vector() => Monad[F[R3, E2, ?]].pure(Step.Continue(state))
-              case head +: tail =>
-                processBinding[R3, E2, A2, X](trans)(state, head).flatMap {
-                  case Step.Produce(_, value, _) => value
-                  case Step.Continue(state) => feed(tail, state)
-                  case stop @ Step.Stop(_) => Monad[F[R3, E2, ?]].pure(stop)
-                }
-            }
-
-          feed(ns.bindings, state)
         }
 
-        private def processBinding[R3 <: R2, E2 >: E, A2 >: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier], X]
-        (trans: StreamTransformation[F, R3, E2, A2, Unit, Nothing, X])
-        (state: trans.State, binding: GlobalBinding[context.type, DeclarationPayloadSpecifier])
-        (implicit monadInstance: Monad[F[R3, E2, ?]])
-        : F[R3, E2, Step[trans.State, A2, Nothing, X]] =
-          binding match {
-            case binding: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier] => trans.step(state, NonEmptyVector.of(binding)).map(identity)
-            case GlobalBinding.NestedNamespace(_, namespace) => processNamespace(trans)(state, namespace)
-          }
+      def processNamespace(ns: Namespace[context.type, DeclarationPayloadSpecifier]): G[Unit] =
+        ns.bindings.traverse_ {
+          case GlobalBinding.NestedNamespace(_, nestedNS) => processNamespace(nestedNS)
+          case GlobalBinding.GlobalTrait(_, access, arTrait) =>
+            bindingCommon(access)(arTrait)(getTraitId(armodule, arTrait.descriptor))(ModulePaths.traitDef)(createTraitDefMessage)(
+              module.GlobalDeclaration.Descriptor.TraitDescriptor(convertInNamespaceDescriptor(arTrait.descriptor))
+            )(
+              for {
+                instMethods <- genEffect.liftF(emitComp(arTrait.methods))
+                _ <- processMethods(instMethods)
 
+                staticMethods <- genEffect.liftF(emitComp(arTrait.staticMethods))
+                _ <- processMethods(staticMethods)
+              } yield ()
+            )
 
-      }
+          case GlobalBinding.GlobalClass(_, access, arClass) =>
+            bindingCommon(access)(arClass)(getClassId(armodule, arClass.descriptor))(ModulePaths.classDef)(createClassDefMessage)(
+              module.GlobalDeclaration.Descriptor.ClassDescriptor(convertInNamespaceDescriptor(arClass.descriptor))
+            )(
+              for {
+                instMethods <- genEffect.liftF(emitComp(arClass.methods))
+                _ <- processMethods(instMethods)
 
-    def moduleEmitTransform[F[-_, +_, +_]]
-    (fromComp: ArStream.EffectConverter[TCompRE, F])
-    (armodule: ArModule[context.type, DeclarationPayloadSpecifier])
-    (implicit monadInstance: Monad[F[R, NonEmptyList[CompilationError], ?]])
-    : StreamTransformation[F, R, NonEmptyList[CompilationError], GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier], Unit, Vector[(String, GeneratedMessage)], Unit] =
-      new StreamTransformation.Single[F, R, NonEmptyList[CompilationError], GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier], Unit, Vector[(String, GeneratedMessage)], Unit] {
-        override type State = ModuleIds
+                staticMethods <- genEffect.liftF(emitComp(arClass.staticMethods))
+                _ <- processMethods(staticMethods)
 
-        type E = NonEmptyList[CompilationError]
-        type FE[+X] = F[R, E, X]
+                ctors <- genEffect.liftF(emitComp(arClass.classConstructors))
+                _ <- processClassCtors(ctors)
+              } yield ()
+            )
 
-        override def initial: Resource[F, R, E, ModuleIds] = Resource.pure(ModuleIds())
+          case GlobalBinding.GlobalDataConstructor(_, access, dataCtor) =>
+            bindingCommon(access)(dataCtor)(getDataCtorId(armodule, dataCtor.descriptor))(ModulePaths.dataCtorDef)(createDataCtorDefMessage)(
+              module.GlobalDeclaration.Descriptor.DataConstructorDescriptor(convertInNamespaceDescriptor(dataCtor.descriptor))
+            )(
+              for {
+                instMethods <- genEffect.liftF(emitComp(dataCtor.methods))
+                instEntries <- processMethods(instMethods)
+              } yield instEntries
+            )
 
-        def fromEmit[A](e: Emit[A]): EmitF[FE, A] =
-          e.mapK[FE](fromComp.toFunctionK[R, E])
+          case GlobalBinding.GlobalFunction(_, access, func) =>
+            bindingCommon(access)(func)(getFuncId(armodule, func.descriptor))(ModulePaths.funcDef)(createFuncDefMessage)(
+              module.GlobalDeclaration.Descriptor.FunctionDescriptor(convertInNamespaceDescriptor(func.descriptor))
+            )(
+              ().pure[G]
+            )
 
-        def emitF[A](fa: FE[A]): EmitF[FE, A] =
-          StateT.liftF(fa)
+        }
 
-        def addEmitId(id: String): EmitF[FE, Unit] =
-          StateT.modify[FE, ModuleIds](s => s.copy(emittedPaths = s.emittedPaths + id))
-
-        override def stepSingle
-        (s: ModuleIds, a: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier])
-        : FE[Step[ModuleIds, GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier], Vector[(String, GeneratedMessage)], Unit]] =
-          processBinding(a).run(s).map {
-            case (s, result) => Step.Produce(s, result, Vector.empty)
-          }
-
-
-        override def end(s: ModuleIds, result: Unit): FE[(Vector[Vector[(String, GeneratedMessage)]], FE[Unit])] =
-          (
+      def processMethods(methods: Vector[MethodBinding[context.type, DeclarationPayloadSpecifier]]): G[Unit] =
+        methods.traverse_ {
+          case MethodBinding(_, _, _, method) =>
             for {
-              (moduleRefs, refEntries) <- emitAllRefs(
-                emitRefs(_.methodRefIds)({ case (id, _) => ModulePaths.methodRef(id) })(convertMethodDescriptor[FE]) {
-                  case (moduleId, desc, (_, owner)) =>
-                    module.MethodReference(moduleId, desc, owner)
-                },
-                emitRefsSimple(_.classCtorRefIds)(ModulePaths.classCtorRef)(convertClassCtorDescriptor[FE])(module.ClassConstructorReference.apply),
-                emitRefsSimple(_.traitRefIds)(ModulePaths.traitRef)(convertTraitDescriptor[FE])(module.TraitReference.apply),
-                emitRefsSimple(_.classRefIds)(ModulePaths.classRef)(convertClassDescriptor[FE])(module.ClassReference.apply),
-                emitRefsSimple(_.dataCtorRefIds)(ModulePaths.dataCtorRef)(convertDataCtorDescriptor[FE])(module.DataConstructorReference.apply),
-                emitRefsSimple(_.functionRefIds)(ModulePaths.funcRef)(convertFuncDescriptor[FE])(module.FunctionReference.apply),
-              )
+              result <- genEffect.liftF(createMethodDefMessage(armodule, method))
+              _ <- genEffect.liftF(addEmitId(result._1))
+              _ <- sink.consume(result)
+            } yield ()
+        }
 
-              moduleIds <- StateT.get[FE, ModuleIds]
-              metadataEntry = Vector(ModulePaths.metadata -> module.Metadata(
-                formatVersion = ModuleFormatVersion.currentVersion,
-                name = armodule.descriptor.name,
-                references =
-                  moduleRefs.moduleRefIds
-                    .toVector
-                    .sortBy { case (_, id) => id }
-                    .map { case (ModuleDescriptor(name), _) => module.ModuleReference(name) },
-                globals = moduleIds.globals
-              ))
-            } yield (refEntries :+ metadataEntry, ().pure[FE])
-          ).runA(s)
+      def processClassCtors(ctors: Vector[ClassConstructorBinding[context.type, DeclarationPayloadSpecifier]]): G[Unit] =
+        ctors.traverse_ {
+          case ClassConstructorBinding(_, _, ctor) =>
+            for {
+              result <- genEffect.liftF(createClassCtorDefMessage(armodule, ctor))
+              _ <- genEffect.liftF(addEmitId(result._1))
+              _ <- sink.consume(result)
+            } yield ()
+        }
 
+      def emitRefsSimple[D1 <: Descriptor, D2, M <: GeneratedMessage]
+      (refIds: ModuleIds => Map[D1, Int])
+      (createPath: Int => String)
+      (convertDescriptor: (ArModule[context.type, DeclarationPayloadSpecifier], D1) => Emit[D2])
+      (createRef: (Int, D2) => M)
+      : ModuleRefs => G[(ModuleRefs, Boolean)] =
+        emitRefs(refIds)(createPath)(convertDescriptor)((moduleId, d2, _) => createRef(moduleId, d2))
 
+      def emitRefs[D1 <: Descriptor, ID, D2, M <: GeneratedMessage]
+      (refIds: ModuleIds => Map[D1, ID])
+      (createPath: ID => String)
+      (convertDescriptor: (ArModule[context.type, DeclarationPayloadSpecifier], D1) => Emit[D2])
+      (createRef: (Int, D2, ID) => M)
+      : ModuleRefs => G[(ModuleRefs, Boolean)] = moduleRefs =>
+        genEffect.liftF(StateT.get[TComp, ModuleIds]).flatMap { moduleIds =>
+          refIds(moduleIds).toVector.foldLeftM((moduleRefs, false)) {
+            case ((moduleRefs, hasEmitted), (desc, id)) =>
+              val path = createPath(id)
 
-        def addGlobalDecl(g: module.GlobalDeclaration): EmitF[FE, Unit] =
-          StateT.modify[FE, ModuleIds](s => s.copy(globals = s.globals :+ g))
-
-        def bindingCommon[V, M <: GeneratedMessage]
-        (access: AccessModifierGlobal)
-        (value: V)
-        (getId: EmitF[FE, Int])
-        (getPath: Int => String)
-        (createMessage: (ArModule[context.type, DeclarationPayloadSpecifier], V) => Emit[M])
-        (descriptor: module.GlobalDeclaration.Descriptor)
-        (emitExtra: EmitF[FE, Vector[(String, GeneratedMessage)]])
-        : EmitF[FE, Vector[(String, GeneratedMessage)]] =
-          getId.flatMap { id =>
-            val path = getPath(id)
-
-            StateT.get[FE, ModuleIds].flatMap { state =>
-              if(state.emittedPaths.contains(path))
-                StateT.pure[FE, ModuleIds, Vector[(String, GeneratedMessage)]](Vector.empty)
+              if(moduleIds.emittedPaths.contains(path))
+                (moduleRefs, hasEmitted).pure[G]
               else
                 for {
-                  result <- fromEmit(createMessage(armodule, value))
-                  _ <- addEmitId(path)
-                  extra <- emitExtra
+                  _ <- genEffect.liftF(addEmitId(path))
+                  (moduleRefs, moduleId) <- genEffect.liftF(emitComp(getModuleId(desc.moduleDescriptor).run(moduleRefs)))
 
-                  _ <- addGlobalDecl(module.GlobalDeclaration(id, convertAccessModifier(access), descriptor))
-
-                } yield (path -> result) +: extra
-            }
+                  convDesc <- genEffect.liftF(convertDescriptor(armodule, desc))
+                  _ <- sink.consume(path -> createRef(moduleId, convDesc, id))
+                } yield (moduleRefs.copy(moduleRefIds = moduleRefs.moduleRefIds + (desc.moduleDescriptor -> moduleId)), true)
           }
-
-
-        def processBinding(binding: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): EmitF[FE, Vector[(String, GeneratedMessage)]] =
-          binding match {
-            case GlobalBinding.GlobalTrait(_, access, arTrait) =>
-              bindingCommon(access)(arTrait)(getTraitId[FE](armodule, arTrait.descriptor))(ModulePaths.traitDef)(createTraitDefMessage)(
-                module.GlobalDeclaration.Descriptor.TraitDescriptor(convertInNamespaceDescriptor(arTrait.descriptor))
-              )(
-                for {
-                  instMethods <- emitF(fromComp(arTrait.methods))
-                  instEntries <- processMethods(instMethods)
-
-                  staticMethods <- emitF(fromComp(arTrait.staticMethods))
-                  staticEntries <- processMethods(staticMethods)
-                } yield instEntries ++ staticEntries
-              )
-
-            case GlobalBinding.GlobalClass(_, access, arClass) =>
-              bindingCommon(access)(arClass)(getClassId[FE](armodule, arClass.descriptor))(ModulePaths.classDef)(createClassDefMessage)(
-                module.GlobalDeclaration.Descriptor.ClassDescriptor(convertInNamespaceDescriptor(arClass.descriptor))
-              )(
-                for {
-                  instMethods <- emitF(fromComp(arClass.methods))
-                  instEntries <- processMethods(instMethods)
-
-                  staticMethods <- emitF(fromComp(arClass.staticMethods))
-                  staticEntries <- processMethods(staticMethods)
-
-                  ctors <- emitF(fromComp(arClass.classConstructors))
-                  ctorEntries <- processClassCtors(ctors)
-                } yield instEntries ++ staticEntries ++ ctorEntries
-              )
-
-            case GlobalBinding.GlobalDataConstructor(_, access, dataCtor) =>
-              bindingCommon(access)(dataCtor)(getDataCtorId[FE](armodule, dataCtor.descriptor))(ModulePaths.dataCtorDef)(createDataCtorDefMessage)(
-                module.GlobalDeclaration.Descriptor.DataConstructorDescriptor(convertInNamespaceDescriptor(dataCtor.descriptor))
-              )(
-                for {
-                  instMethods <- emitF(fromComp(dataCtor.methods))
-                  instEntries <- processMethods(instMethods)
-                } yield instEntries
-              )
-
-            case GlobalBinding.GlobalFunction(_, access, func) =>
-              bindingCommon(access)(func)(getFuncId[FE](armodule, func.descriptor))(ModulePaths.funcDef)(createFuncDefMessage)(
-                module.GlobalDeclaration.Descriptor.FunctionDescriptor(convertInNamespaceDescriptor(func.descriptor))
-              )(
-                StateT.pure[FE, ModuleIds, Vector[(String, GeneratedMessage)]](Vector.empty)
-              )
-          }
-
-        def processMethods(methods: Vector[MethodBinding[context.type, DeclarationPayloadSpecifier]]): EmitF[FE, Vector[(String, GeneratedMessage)]] =
-          methods.foldMapM { case MethodBinding(_, _, _, method) =>
-            for {
-              result <- fromEmit(createMethodDefMessage(armodule, method))
-              _ <- addEmitId(result._1)
-            } yield Vector(result)
-          }
-
-        def processClassCtors(ctors: Vector[ClassConstructorBinding[context.type, DeclarationPayloadSpecifier]]): EmitF[FE, Vector[(String, GeneratedMessage)]] =
-          ctors.foldMapM { case ClassConstructorBinding(_, _, ctor) =>
-            for {
-              result <- fromEmit(createClassCtorDefMessage(armodule, ctor))
-              _ <- addEmitId(result._1)
-            } yield Vector(result)
-          }
-
-
-
-        private type RefEmitHandler = StateT[FE, (ModuleIds, ModuleRefs), Vector[(String, GeneratedMessage)]]
-
-        private def lensState[A, B, C](s: StateT[FE, A, C])(lens: Lens[B, A]): StateT[FE, B, C] =
-          StateT[FE, B, C] { b =>
-            s.run(lens.get(b)).map { case (a, c) =>
-              (lens.set(b)(a), c)
-            }
-          }
-
-        private def emitRefsSimple[D1 <: Descriptor, D2, M <: GeneratedMessage]
-        (refIds: ModuleIds => Map[D1, Int])
-        (createPath: Int => String)
-        (convertDescriptor: (ArModule[context.type, DeclarationPayloadSpecifier], D1) => EmitF[FE, D2])
-        (createRef: (Int, D2) => M)
-        : RefEmitHandler =
-          emitRefs(refIds)(createPath)(convertDescriptor)((moduleId, d2, _) => createRef(moduleId, d2))
-
-        private def emitRefs[D1 <: Descriptor, ID, D2, M <: GeneratedMessage]
-        (refIds: ModuleIds => Map[D1, ID])
-        (createPath: ID => String)
-        (convertDescriptor: (ArModule[context.type, DeclarationPayloadSpecifier], D1) => EmitF[FE, D2])
-        (createRef: (Int, D2, ID) => M)
-        : RefEmitHandler =
-          StateT.get[FE, (ModuleIds, ModuleRefs)].flatMap { case (moduleIds, _) =>
-            refIds(moduleIds).toVector.traverse { case (desc, id) =>
-                for {
-                  moduleId <- lensState(getModuleId[FE](desc.moduleDescriptor))(lens[(ModuleIds, ModuleRefs)]._2)
-                  _ <- StateT.modify[FE, (ModuleIds, ModuleRefs)] { case (moduleIds, moduleRefs) =>
-                    (moduleIds, moduleRefs.copy(moduleRefIds = moduleRefs.moduleRefIds + (desc.moduleDescriptor -> moduleId)))
-                  }
-
-                  convDesc <- lensState(convertDescriptor(armodule, desc))(lens[(ModuleIds, ModuleRefs)]._1)
-                  ref = createRef(moduleId, convDesc, id)
-
-                } yield createPath(id) -> ref
-              }
-          }
-
-        private def emitAllRefs
-        (emitHandlers: RefEmitHandler*)
-        : StateT[FE, ModuleIds, (ModuleRefs, Vector[Vector[(String, GeneratedMessage)]])] = {
-
-          def impl(moduleRefs: ModuleRefs, acc: Vector[Vector[(String, GeneratedMessage)]]): StateT[FE, ModuleIds, (ModuleRefs, Vector[Vector[(String, GeneratedMessage)]])] =
-            StateT[FE, ModuleIds, (ModuleRefs, Vector[Vector[(String, GeneratedMessage)]])](origState =>
-              emitHandlers.toVector.sequence.run((origState, moduleRefs)).map {
-                case ((moduleIds, moduleRefs), entries) =>
-                  (moduleIds, (moduleRefs, entries))
-              }
-            )
-              .flatMap { case (moduleRefs, entries) =>
-                StateT.get[FE, ModuleIds].flatMap { newState =>
-                  val newEntries = entries.flatten
-                  if(newEntries.nonEmpty)
-                    impl(moduleRefs, acc :+ newEntries)
-                  else
-                    (moduleRefs, acc).pure[StateT[FE, ModuleIds, ?]]
-                }
-              }
-
-          impl(ModuleRefs(), Vector())
         }
 
 
+      def processReferences: G[Unit] =
+        for {
+          moduleRefs <- emitAllRefs(
+            emitRefs(_.methodRefIds)({ case (id, _) => ModulePaths.methodRef(id) })(convertMethodDescriptor) {
+              case (moduleId, desc, (_, owner)) =>
+                module.MethodReference(moduleId, desc, owner)
+            },
+            emitRefsSimple(_.classCtorRefIds)(ModulePaths.classCtorRef)(convertClassCtorDescriptor)(module.ClassConstructorReference.apply),
+            emitRefsSimple(_.traitRefIds)(ModulePaths.traitRef)(convertTraitDescriptor)(module.TraitReference.apply),
+            emitRefsSimple(_.classRefIds)(ModulePaths.classRef)(convertClassDescriptor)(module.ClassReference.apply),
+            emitRefsSimple(_.dataCtorRefIds)(ModulePaths.dataCtorRef)(convertDataCtorDescriptor)(module.DataConstructorReference.apply),
+            emitRefsSimple(_.functionRefIds)(ModulePaths.funcRef)(convertFuncDescriptor)(module.FunctionReference.apply),
+          )
+
+          moduleIds <- genEffect.liftF(StateT.get[TComp, ModuleIds])
+          _ <- sink.consume(ModulePaths.metadata -> module.Metadata(
+            formatVersion = ModuleFormatVersion.currentVersion,
+            name = armodule.descriptor.name,
+            references =
+            moduleRefs.moduleRefIds
+              .toVector
+              .sortBy { case (_, id) => id }
+              .map { case (ModuleDescriptor(name), _) => module.ModuleReference(name) },
+            globals = moduleIds.globals
+          ))
+        } yield ()
+
+      def emitAllRefs
+      (emitHandlers: (ModuleRefs => G[(ModuleRefs, Boolean)])*)
+      : G[ModuleRefs] = {
+
+        def impl(moduleRefs: ModuleRefs): G[ModuleRefs] =
+          emitHandlers.toVector.foldLeftM((moduleRefs, false)) {
+            case ((moduleRefs, hasEmitted), emitRefs) =>
+              emitRefs(moduleRefs).map { case (moduleRefs, hasEmittedPart) => (moduleRefs, hasEmitted || hasEmittedPart) }
+          }
+            .flatMap {
+              case (moduleRefs, true) => impl(moduleRefs)
+              case (moduleRefs, false) => moduleRefs.pure[G]
+            }
+
+        impl(ModuleRefs())
       }
+
+
+      genEffect.liftF(emitComp(armodule.globalNamespace))
+        .flatMap(processNamespace(_))
+        .flatMap { _ => processReferences }
+    }
 
     def getObjId[F[_]: Monad, O, T, D, ID](value: T)(getDesc: T => D)(nextId: Lens[O, Int], idMap: Lens[O, Map[D, ID]])(createId: => StateT[F, O, Int => ID]): StateT[F, O, ID] =
       StateT.get[F, O].flatMap { ids =>
@@ -373,66 +289,66 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
         }
       }
 
-    def getObjIdInt[F[_]: Monad, O, D](descriptor: D)(nextId: Lens[O, Int], idMap: Lens[O, Map[D, Int]]): StateT[F, O, Int] =
-      getObjId(descriptor)(identity)(nextId, idMap)((identity[Int] _).pure[StateT[F, O, ?]])
+    def getObjIdInt[O, D](descriptor: D)(nextId: Lens[O, Int], idMap: Lens[O, Map[D, Int]]): StateT[TComp, O, Int] =
+      getObjId(descriptor)(identity)(nextId, idMap)((identity[Int] _).pure[StateT[TComp, O, ?]])
 
-    def getModuleId[F[_]: Monad](descriptor: ModuleDescriptor): StateT[F, ModuleRefs, Int] =
+    def getModuleId(descriptor: ModuleDescriptor): StateT[TComp, ModuleRefs, Int] =
       getObjIdInt(descriptor)(lens[ModuleRefs].nextModuleId, lens[ModuleRefs].moduleRefIds)
 
-    def getTraitId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: TraitDescriptor): EmitF[F, Int] =
+    def getTraitId(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: TraitDescriptor): Emit[Int] =
       if(descriptor.moduleDescriptor === armodule.descriptor)
         getObjIdInt(descriptor)(lens[ModuleIds].nextTraitId, lens[ModuleIds].traitIds)
       else
-        getObjIdInt(descriptor)(lens[ModuleIds].nextTraitRefId, lens[ModuleIds].traitRefIds)(implicitly[Monad[F]]).map(-_)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextTraitRefId, lens[ModuleIds].traitRefIds).map(-_)
 
 
-    def getClassId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: ClassDescriptor): EmitF[F, Int] =
+    def getClassId(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: ClassDescriptor): Emit[Int] =
       if(descriptor.moduleDescriptor === armodule.descriptor)
         getObjIdInt(descriptor)(lens[ModuleIds].nextClassId, lens[ModuleIds].classIds)
       else
-        getObjIdInt(descriptor)(lens[ModuleIds].nextClassRefId, lens[ModuleIds].classRefIds)(implicitly[Monad[F]]).map(-_)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextClassRefId, lens[ModuleIds].classRefIds).map(-_)
 
-    def getDataCtorId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: DataConstructorDescriptor): EmitF[F, Int] =
+    def getDataCtorId(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: DataConstructorDescriptor): Emit[Int] =
       if(descriptor.moduleDescriptor === armodule.descriptor)
         getObjIdInt(descriptor)(lens[ModuleIds].nextDataCtorId, lens[ModuleIds].dataCtorIds)
       else
-        getObjIdInt(descriptor)(lens[ModuleIds].nextDataCtorRefId, lens[ModuleIds].dataCtorRefIds)(implicitly[Monad[F]]).map(-_)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextDataCtorRefId, lens[ModuleIds].dataCtorRefIds).map(-_)
 
-    def getFuncId[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: FuncDescriptor): EmitF[F, Int] =
+    def getFuncId(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: FuncDescriptor): Emit[Int] =
       if(descriptor.moduleDescriptor === armodule.descriptor)
         getObjIdInt(descriptor)(lens[ModuleIds].nextFunctionId, lens[ModuleIds].functionIds)
       else
-        getObjIdInt(descriptor)(lens[ModuleIds].nextFunctionRefId, lens[ModuleIds].functionRefIds)(implicitly[Monad[F]]).map(-_)
+        getObjIdInt(descriptor)(lens[ModuleIds].nextFunctionRefId, lens[ModuleIds].functionRefIds).map(-_)
 
-    def getMethodId[F[_]: Monad, TPayloadSpec[_, _]](armodule: ArModule[context.type, DeclarationPayloadSpecifier], method: ArMethod[context.type, TPayloadSpec])(implicit fromComp: TComp ~> F): EmitF[F, Int] =
+    def getMethodId[TPayloadSpec[_, _]](armodule: ArModule[context.type, DeclarationPayloadSpecifier], method: ArMethod[context.type, TPayloadSpec]): Emit[Int] =
       if(method.descriptor.moduleDescriptor === armodule.descriptor)
         getObjIdInt(method.descriptor)(lens[ModuleIds].nextMethodId, lens[ModuleIds].methodIds)
       else
         getObjId(method)(_.descriptor)(lens[ModuleIds].nextMethodRefId, lens[ModuleIds].methodRefIds)(
           method.owner match {
             case ArMethod.ClassOwner(ownerClass) =>
-              getClassId[F](armodule, ownerClass.descriptor)
+              getClassId(armodule, ownerClass.descriptor)
                 .map { classId => id => (id, module.MethodReference.MethodOwner.OwnerClassId(classId)) }
 
             case ArMethod.ClassObjectOwner(ownerClass) =>
-              getClassId[F](armodule, ownerClass.descriptor)
+              getClassId(armodule, ownerClass.descriptor)
                 .map { classId => id => (id, module.MethodReference.MethodOwner.OwnerClassObjectId(classId)) }
 
             case ArMethod.TraitOwner(ownerTrait) =>
-              getTraitId[F](armodule, ownerTrait.descriptor)
+              getTraitId(armodule, ownerTrait.descriptor)
                 .map { traitId => id => (id, module.MethodReference.MethodOwner.OwnerTraitId(traitId)) }
 
             case ArMethod.TraitObjectOwner(ownerTrait) =>
-              getTraitId[F](armodule, ownerTrait.descriptor)
+              getTraitId(armodule, ownerTrait.descriptor)
                 .map { traitId => id => (id, module.MethodReference.MethodOwner.OwnerTraitObjectId(traitId)) }
 
             case ArMethod.DataCtorOwner(dataCtor) =>
-              getDataCtorId[F](armodule, dataCtor.descriptor)
+              getDataCtorId(armodule, dataCtor.descriptor)
                 .map { ctorId => id => (id, module.MethodReference.MethodOwner.OwnerConstructorId(ctorId)) }
           }
-        )(implicitly[Monad[F]]).map { case (id, _) => -id }
+        ).map { case (id, _) => -id }
 
-    def getClassCtorId[F[_]: Monad](descriptor: ClassConstructorDescriptor): EmitF[F, Int] =
+    def getClassCtorId(descriptor: ClassConstructorDescriptor): Emit[Int] =
       getObjIdInt(descriptor)(lens[ModuleIds].nextClassCtorId, lens[ModuleIds].classCtorIds)
 
 
@@ -475,17 +391,17 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
     }
 
     def convertClassType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], classType: typeSystem.ClassType): Emit[module.ClassType] = for {
-      id <- getClassId[TComp](armodule, classType.arClass.value.descriptor)
+      id <- getClassId(armodule, classType.arClass.value.descriptor)
       args <- classType.args.traverse(convertTypeArg(armodule, _))
     } yield module.ClassType(id, args)
 
     def convertTraitType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], traitType: typeSystem.TraitType): Emit[module.TraitType] = for {
-      id <- getTraitId[TComp](armodule, traitType.arTrait.value.descriptor)
+      id <- getTraitId(armodule, traitType.arTrait.value.descriptor)
       args <- traitType.args.traverse(convertTypeArg(armodule, _))
     } yield module.TraitType(id, args)
 
     def convertDataCtorType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], dataCtorType: typeSystem.DataConstructorType): Emit[module.DataConstructorType] = for {
-      id <- getDataCtorId[TComp](armodule, dataCtorType.ctor.value.descriptor)
+      id <- getDataCtorId(armodule, dataCtorType.ctor.value.descriptor)
       args <- dataCtorType.args.traverse(convertTypeArg(armodule, _))
     } yield module.DataConstructorType(id, args)
 
@@ -530,65 +446,65 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
     def convertFileId(id: FileID): module.FileID =
       module.FileID(id.id)
 
-    def convertTraitDescriptor[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: TraitDescriptor): EmitF[F, module.TraitDescriptor] =
+    def convertTraitDescriptor(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: TraitDescriptor): Emit[module.TraitDescriptor] =
       module.TraitDescriptor(module.TraitDescriptor.Descriptor.InNamespace(
         descriptor match {
           case descriptor @ TraitDescriptor.InNamespace(_, _, _, _) => convertInNamespaceDescriptor(descriptor)
         }
-      )).pure[EmitF[F, ?]]
+      )).pure[Emit]
 
-    def convertClassDescriptor[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: ClassDescriptor): EmitF[F, module.ClassDescriptor] =
+    def convertClassDescriptor(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: ClassDescriptor): Emit[module.ClassDescriptor] =
       module.ClassDescriptor(module.ClassDescriptor.Descriptor.InNamespace(
         descriptor match {
           case descriptor @ ClassDescriptor.InNamespace(_, _, _, _) => convertInNamespaceDescriptor(descriptor)
         }
-      )).pure[EmitF[F, ?]]
+      )).pure[Emit]
 
-    def convertDataCtorDescriptor[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: DataConstructorDescriptor): EmitF[F, module.DataConstructorDescriptor] =
+    def convertDataCtorDescriptor(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: DataConstructorDescriptor): Emit[module.DataConstructorDescriptor] =
       module.DataConstructorDescriptor(module.DataConstructorDescriptor.Descriptor.InNamespace(
         descriptor match {
           case descriptor @ DataConstructorDescriptor.InNamespace(_, _, _, _) => convertInNamespaceDescriptor(descriptor)
         }
-      )).pure[EmitF[F, ?]]
+      )).pure[Emit]
 
-    def convertFuncDescriptor[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: FuncDescriptor): EmitF[F, module.FunctionDescriptor] =
+    def convertFuncDescriptor(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: FuncDescriptor): Emit[module.FunctionDescriptor] =
       module.FunctionDescriptor(module.FunctionDescriptor.Descriptor.InNamespace(
         descriptor match {
           case descriptor @ FuncDescriptor.InNamespace(_, _, _, _) => convertInNamespaceDescriptor(descriptor)
         }
-      )).pure[EmitF[F, ?]]
+      )).pure[Emit]
 
-    def convertMethodDescriptor[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: MethodDescriptor): EmitF[F, module.MethodDescriptor] =
+    def convertMethodDescriptor(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: MethodDescriptor): Emit[module.MethodDescriptor] =
       for {
         (instanceType, parentId) <- descriptor.typeDescriptor match {
           case descriptor: TraitDescriptor =>
             for {
-              desc <- convertTraitDescriptor[F](armodule, descriptor)
-              parentId <- getTraitId[F](armodule, descriptor)
+              desc <- convertTraitDescriptor(armodule, descriptor)
+              parentId <- getTraitId(armodule, descriptor)
             } yield (module.MethodDescriptor.InstanceType.TraitDescriptor(desc), parentId)
 
           case TraitObjectDescriptor(descriptor) =>
             for {
-              desc <- convertTraitDescriptor[F](armodule, descriptor)
-              parentId <- getTraitId[F](armodule, descriptor)
+              desc <- convertTraitDescriptor(armodule, descriptor)
+              parentId <- getTraitId(armodule, descriptor)
             } yield (module.MethodDescriptor.InstanceType.TraitObjectDescriptor(desc), parentId)
 
           case descriptor: ClassDescriptor =>
             for {
-              desc <- convertClassDescriptor[F](armodule, descriptor)
-              parentId <- getClassId[F](armodule, descriptor)
+              desc <- convertClassDescriptor(armodule, descriptor)
+              parentId <- getClassId(armodule, descriptor)
             } yield (module.MethodDescriptor.InstanceType.ClassDescriptor(desc), parentId)
 
           case ClassObjectDescriptor(descriptor) =>
             for {
-              desc <- convertClassDescriptor[F](armodule, descriptor)
-              parentId <- getClassId[F](armodule, descriptor)
+              desc <- convertClassDescriptor(armodule, descriptor)
+              parentId <- getClassId(armodule, descriptor)
             } yield (module.MethodDescriptor.InstanceType.ClassObjectDescriptor(desc), parentId)
 
           case descriptor: DataConstructorDescriptor =>
             for {
-              desc <- convertDataCtorDescriptor[F](armodule, descriptor)
-              parentId <- getDataCtorId[F](armodule, descriptor)
+              desc <- convertDataCtorDescriptor(armodule, descriptor)
+              parentId <- getDataCtorId(armodule, descriptor)
             } yield (module.MethodDescriptor.InstanceType.DataConstructorDescriptor(desc), parentId)
         }
       } yield module.MethodDescriptor(
@@ -603,9 +519,9 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
         instanceType = instanceType
       )
 
-    def convertClassCtorDescriptor[F[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: ClassConstructorDescriptor): EmitF[F, module.ClassConstructorDescriptor] =
+    def convertClassCtorDescriptor(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: ClassConstructorDescriptor): Emit[module.ClassConstructorDescriptor] =
       for {
-        ownerClass <- convertClassDescriptor[F](armodule, descriptor.ownerClass)
+        ownerClass <- convertClassDescriptor(armodule, descriptor.ownerClass)
       } yield module.ClassConstructorDescriptor(
         ownerClass = ownerClass,
         index = descriptor.index,
@@ -626,7 +542,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
         instMethods <- createMethodMembers(armodule, arTrait.methods)
         staticMethods <- createMethodMembers(armodule, arTrait.staticMethods)
 
-        convDesc <- convertTraitDescriptor[TComp](armodule, arTrait.descriptor)
+        convDesc <- convertTraitDescriptor(armodule, arTrait.descriptor)
 
       } yield module.TraitDefinition(
         descriptor = convDesc,
@@ -641,8 +557,8 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
       emitComp(methods).flatMap {
         _.traverse { method =>
           for {
-            convDesc <- convertMethodDescriptor[TComp](armodule, method.method.descriptor)
-            methodId <- getMethodId[TComp, DeclarationPayloadSpecifier](armodule, method.method)
+            convDesc <- convertMethodDescriptor(armodule, method.method.descriptor)
+            methodId <- getMethodId(armodule, method.method)
           } yield module.MethodMember(convDesc, methodId, convertAccessModifier(method.accessModifier))
         }
       }
@@ -672,12 +588,12 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
 
         classCtors <- emitComp(arClass.classConstructors)
         ctors <- classCtors.traverse { ctor =>
-          convertClassCtorDescriptor[TComp](armodule, ctor.ctor.descriptor).map { convDesc =>
+          convertClassCtorDescriptor(armodule, ctor.ctor.descriptor).map { convDesc =>
             module.ClassConstructorMember(convDesc, ctor.index)
           }
         }
 
-        convDesc <- convertClassDescriptor[TComp](armodule, arClass.descriptor)
+        convDesc <- convertClassDescriptor(armodule, arClass.descriptor)
 
       } yield module.ClassDefinition(
         descriptor = convDesc,
@@ -705,9 +621,8 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
         }
 
         methods <- createMethodMembers(armodule, dataCtor.methods)
-        instMethods <- emitComp(dataCtor.methods)
 
-        convDesc <- convertDataCtorDescriptor[TComp](armodule, dataCtor.descriptor)
+        convDesc <- convertDataCtorDescriptor(armodule, dataCtor.descriptor)
         ctorDef = module.DataConstructorDefinition(
           descriptor = convDesc,
           fileId = convertFileId(dataCtor.fileId),
@@ -729,7 +644,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
           )
         }
 
-        convDesc <- convertFuncDescriptor[TComp](armodule, func.descriptor)
+        convDesc <- convertFuncDescriptor(armodule, func.descriptor)
 
       } yield module.FunctionDefinition(
         descriptor = convDesc,
@@ -743,7 +658,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
     def createMethodDefMessage(armodule: ArModule[context.type, DeclarationPayloadSpecifier], method: ArMethod[context.type, DeclarationPayloadSpecifier]): Emit[(String, module.MethodDefinition)] =
       for {
         sig <- emitComp(method.signatureUnsubstituted)
-        id <- getMethodId[TComp, DeclarationPayloadSpecifier](armodule, method)
+        id <- getMethodId(armodule, method)
         convSig <- convertSignature(armodule)(sig) { (params, result) =>
           for {
             returnType <- convertType(armodule, result.returnType)
@@ -754,14 +669,14 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
         }
 
         methodOwner <- method.owner match {
-          case ArMethod.ClassOwner(ownerClass) => getClassId[TComp](armodule, ownerClass.descriptor).map(module.MethodDefinition.MethodOwner.OwnerClassId.apply)
-          case ArMethod.ClassObjectOwner(ownerClass) => getClassId[TComp](armodule, ownerClass.descriptor).map(module.MethodDefinition.MethodOwner.OwnerClassObjectId.apply)
-          case ArMethod.TraitOwner(ownerTrait) => getTraitId[TComp](armodule, ownerTrait.descriptor).map(module.MethodDefinition.MethodOwner.OwnerTraitId.apply)
-          case ArMethod.TraitObjectOwner(ownerTrait) => getTraitId[TComp](armodule, ownerTrait.descriptor).map(module.MethodDefinition.MethodOwner.OwnerTraitObjectId.apply)
-          case ArMethod.DataCtorOwner(dataCtor) => getDataCtorId[TComp](armodule, dataCtor.descriptor).map(module.MethodDefinition.MethodOwner.OwnerConstructorId.apply)
+          case ArMethod.ClassOwner(ownerClass) => getClassId(armodule, ownerClass.descriptor).map(module.MethodDefinition.MethodOwner.OwnerClassId.apply)
+          case ArMethod.ClassObjectOwner(ownerClass) => getClassId(armodule, ownerClass.descriptor).map(module.MethodDefinition.MethodOwner.OwnerClassObjectId.apply)
+          case ArMethod.TraitOwner(ownerTrait) => getTraitId(armodule, ownerTrait.descriptor).map(module.MethodDefinition.MethodOwner.OwnerTraitId.apply)
+          case ArMethod.TraitObjectOwner(ownerTrait) => getTraitId(armodule, ownerTrait.descriptor).map(module.MethodDefinition.MethodOwner.OwnerTraitObjectId.apply)
+          case ArMethod.DataCtorOwner(dataCtor) => getDataCtorId(armodule, dataCtor.descriptor).map(module.MethodDefinition.MethodOwner.OwnerConstructorId.apply)
         }
 
-        convDesc <- convertMethodDescriptor[TComp](armodule, method.descriptor)
+        convDesc <- convertMethodDescriptor(armodule, method.descriptor)
         methodDef = module.MethodDefinition(
           descriptor = convDesc,
           fileId = convertFileId(method.fileId),
@@ -783,12 +698,12 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
     def createClassCtorDefMessage(armodule: ArModule[context.type, DeclarationPayloadSpecifier], ctor: ClassConstructor[context.type, DeclarationPayloadSpecifier]): Emit[(String, module.ClassConstructorDefinition)] =
       for {
         sig <- emitComp(ctor.signatureUnsubstituted)
-        id <- getClassCtorId[TComp](ctor.descriptor)
+        id <- getClassCtorId(ctor.descriptor)
         convSig <- convertSignature(armodule)(sig) { (params, _) =>
           module.ClassConstructorSignature(params).pure[Emit]
         }
 
-        convDesc <- convertClassCtorDescriptor[TComp](armodule, ctor.descriptor)
+        convDesc <- convertClassCtorDescriptor(armodule, ctor.descriptor)
         classCtorDef = module.ClassConstructorDefinition(
           descriptor = convDesc,
           fileId = convertFileId(ctor.fileId),
@@ -803,12 +718,25 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
 
   }
 
-  def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): ArStream[TCompRE, R, NonEmptyList[CompilationError], (String, GeneratedMessage)] =
-    Implementation.moduleBindingStream[TCompRE, R, NonEmptyList[CompilationError]](ArStream.EffectConverter.id)(module)
-        .transformWith(
-          Implementation.moduleEmitTransform[TCompRE](ArStream.EffectConverter.id)(module)
-            .into(StreamTransformation.flattenVector[TCompRE, R, NonEmptyList[CompilationError], (String, GeneratedMessage), Unit])
-        )
+  def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): Source[TComp, StreamElem, Unit] =
+    new Source[TComp, StreamElem, Unit] {
+
+      import Implementation.{processModule, Emit, emitComp, ModuleIds}
+
+
+      override protected val monadF: Monad[TComp] = implicitly
+
+      override def generate[G[_] : Monad](sink: Sink[G, StreamElem])(implicit genEffect: GenEffect[TComp, G]): G[Unit] = {
+        import GenEffect._
+
+        processModule(module)(new Sink[StateT[G, ModuleIds, *], StreamElem] {
+          override def consume(value: StreamElem): StateT[G, Implementation.ModuleIds, Unit] =
+            StateT.liftF(sink.consume(value))
+        })
+          .runA(ModuleIds())
+      }
+
+    }
 
 
 }

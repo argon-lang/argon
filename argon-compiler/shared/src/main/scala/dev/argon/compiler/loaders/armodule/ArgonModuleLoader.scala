@@ -35,7 +35,8 @@ object ArgonModuleLoader {
       res.getExtension(id).flatMap {
         case "armodule" =>
           res.getZipReader(id).use { zip =>
-            res.zipEntryStream(zip, ModulePaths.metadata).foldLeft(res.protocolBufferSink(ArgonModule.Metadata))
+            val entry = res.zipEntryStream(zip, ModulePaths.metadata)
+            res.deserializeProtocolBuffer(ArgonModule.Metadata)(entry)
               .flatMap { metadata =>
                 f(Some(ResAndMetadata(zip, metadata)))
               }
@@ -287,8 +288,9 @@ object ArgonModuleLoader {
 
               val zip = zipFile
 
-              if(id < 0)
-                res.zipEntryStream(zip, refPathFunction(id.abs)).foldLeft(res.protocolBufferSink(refCompanion))
+              if(id < 0) {
+                val entry = res.zipEntryStream(zip, refPathFunction(id.abs))
+                res.deserializeProtocolBuffer(refCompanion)(entry)
                   .flatMap { refValue =>
                     refModuleMap.get(refModuleIdLens(refValue)) match {
                       case Some(ModuleReference(moduleRef)) =>
@@ -313,8 +315,10 @@ object ArgonModuleLoader {
                         ))
                     }
                   }
-              else
-                res.zipEntryStream(zip, defPathFunction(id)).foldLeft(res.protocolBufferSink(defCompanion))
+              }
+              else {
+                val entry = res.zipEntryStream(zip, defPathFunction(id))
+                res.deserializeProtocolBuffer(defCompanion)(entry)
                   .flatMap { defValue =>
                     parseDescriptor(currentModuleDescriptor)(defDescriptorLens(defValue)) match {
                       case Some(Left(descriptor)) =>
@@ -329,6 +333,7 @@ object ArgonModuleLoader {
                         ))
                     }
                   }
+              }
             }
 
           private def getMethodMembers(methods: Vector[ArgonModule.MethodMember]): Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =

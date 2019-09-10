@@ -9,6 +9,7 @@ import cats.implicits._
 import cats.data.NonEmptyVector
 import zio.blocking.Blocking
 import zio._
+import zio.stream.ZStream
 
 trait InputStreamReaderTransformation[-R, +E, +X] extends StreamTransformation[ZIO, R, E, Byte, Unit, Nothing, X] {
 
@@ -22,9 +23,10 @@ object InputStreamReaderTransformation {
     "org.wartremover.warts.NonUnitStatements",
     "org.wartremover.warts.Var",
   ))
-  private final class TransformInputStream[R](getNext: () => Vector[Byte]) extends InputStream {
+  private final class TransformInputStream[R](getNext: () => Chunk[Byte]) extends InputStream {
 
-    private var remainingData: Vector[Byte] = Vector.empty
+    private var remainingData: Chunk[Byte] = Chunk.empty
+    private var isEOF: Boolean = false
 
     override def read(): Int = {
       val buff = new Array[Byte](1)
@@ -38,31 +40,42 @@ object InputStreamReaderTransformation {
       Objects.checkFromIndexSize(off, len, b.length)
       if(len === 0)
         0
+      else if(isEOF)
+        -1
       else {
-        (if(remainingData.nonEmpty) remainingData else getNext()) match {
-          case Vector() => -1
+        (if(remainingData.isEmpty) getNext() else remainingData) match {
+          case data if data.isEmpty =>
+            isEOF = true
+            -1
           case data =>
-            data.copyToArray(b, off, len)
+            val len2 = Math.min(len, data.length)
+            Array.copy(data.toArray, 0, b, off, len2)
 
-            remainingData = data.drop(len)
-            Math.min(len, data.size)
+            remainingData = data.drop(len2)
+            len2
         }
       }
     }
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Null"))
-  def apply[R, E, X](readHandler: InputStream => ZIO[R, E, X]): InputStreamReaderTransformation[R, E, X] =
-    new ProducerTransformation[R, E, Byte, X] with InputStreamReaderTransformation[R, E, X] {
-      override def readDirectly[R2 <: R, E2 >: E](inputStream: InputStream): ZIO[R2, E2, X] =
-        readHandler(inputStream)
-
-      override protected def consumerHandler(getNext: IO[E, Vector[Byte]]): ZIO[R, E, X] =
-        ZIO.runtime[R].flatMap { runtime =>
-          IO.effectTotal { new TransformInputStream[R](() => runtime.unsafeRun(getNext)) }
-            .flatMap(readHandler)
+  def apply[R, E, L[_, _], A](data: ZStream[R, E, Chunk[Byte]])(readHandler: InputStream => ZIO[R, E, A]): ZIO[R, E, A] =
+    data.filterNot(_.isEmpty).process.use { pull =>
+      for {
+        runtime <- ZIO.runtime[R]
+        inputStream <- IO.effectTotal {
+          new TransformInputStream[R](() => runtime.unsafeRun(pull.foldCauseM(
+            failure = cause => cause.failureOrCause match {
+              case Left(None) =>  IO.succeed(Chunk.empty)
+              case _ => IO.halt(cause)
+            },
+            success = IO.succeed
+          )))
         }
+
+        result <- readHandler(inputStream)
+      } yield result
     }
+
 
 }
 

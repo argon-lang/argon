@@ -35,7 +35,7 @@ final class NodeTestCaseRunner(references: Vector[Path], launcher: NodeLauncher)
     )
 
   override protected def getProgramOutput(compOutput: CompilationOutputText { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, Path] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]] = for {
-    compiledFile <- compOutput.textStream.foldLeft(stringConcatTrans)
+    (compiledFile, _) <- compOutput.textStream.foldLeftM("") { (a, b) => IO.succeed(a + b) }
     output <- runJSOutput(references)(compiledFile).either
   } yield output
 
@@ -61,18 +61,5 @@ final class NodeTestCaseRunner(references: Vector[Path], launcher: NodeLauncher)
       case ExecutionResult.Failure(error) => IO.fail(new RuntimeException(error + "\nCompiled output:\n" + compiledFile + "\n"))
     }
   } yield output
-
-  private def stringConcatTrans: StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], String, Unit, Nothing, String] =
-    new StreamTransformation[ZIO, Any, NonEmptyList[CompilationError], String, Unit, Nothing, String] {
-      override type State = String
-
-      override def initial: Resource[ZIO, Any, NonEmptyList[CompilationError], String] = Resource.pure("")
-
-      override def step(s: String, ca: NonEmptyVector[String]): ZIO[Any, NonEmptyList[CompilationError], Step[String, String, Nothing, String]] =
-        IO.succeed(Step.Continue(s + ca.toVector.mkString))
-
-      override def end(s: String, result: Unit): ZIO[Any, NonEmptyList[CompilationError], (Vector[Nothing], ZIO[Any, NonEmptyList[CompilationError], String])] =
-        IO.succeed((Vector(), IO.succeed(s)))
-    }
 
 }

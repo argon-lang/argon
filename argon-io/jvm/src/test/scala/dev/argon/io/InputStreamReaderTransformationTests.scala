@@ -7,45 +7,38 @@ import org.scalatest.{FlatSpec, Matchers}
 import zio._
 import zio.interop.catz._
 import zio.blocking.Blocking
+import zio.stream.ZStream
 
 import scala.collection.mutable.ArrayBuffer
 
 class InputStreamReaderTransformationTests extends FlatSpec with Matchers with DefaultRuntime with StreamCommon {
 
-  "InputStreamReaderTransformation" should "readDirectly using single byte read" in {
-    unsafeRun(InputStreamReaderTransformation(usingSingleByteRead).readDirectly(sampleInputStream)) shouldBe streamContent
-  }
-
-  it should "readDirectly using buffer reads" in {
-    unsafeRun(InputStreamReaderTransformation(usingBufferReader).readDirectly(sampleInputStream)) shouldBe streamContent
-  }
-
-  it should "transform stream using single byte read" in {
-    unsafeRun(sampleArStream.foldLeft(InputStreamReaderTransformation(usingSingleByteRead))) shouldBe streamContent
+  "InputStreamReaderTransformation" should "transform stream using single byte read" in {
+    unsafeRun(InputStreamReaderTransformation(sampleZStream)(usingSingleByteRead)) shouldBe streamContent
   }
 
   it should "transform stream using buffer reads" in {
-    unsafeRun(sampleArStream.foldLeft(InputStreamReaderTransformation(usingBufferReader))) shouldBe streamContent
+    unsafeRun(InputStreamReaderTransformation(sampleZStream)(usingBufferReader)) shouldBe streamContent
   }
 
   it should "handle extra single byte reads" in {
-    unsafeRun(sampleArStream.foldLeft(InputStreamReaderTransformation(usingSingleByteReadExtra))) shouldBe retryCount
+    unsafeRun(InputStreamReaderTransformation(sampleZStream)(usingSingleByteReadExtra)) shouldBe retryCount
   }
 
   it should "handle extra buffer reads" in {
-    unsafeRun(sampleArStream.foldLeft(InputStreamReaderTransformation(usingBufferReaderExtra))) shouldBe retryCount
+    unsafeRun(InputStreamReaderTransformation(sampleZStream)(usingBufferReaderExtra)) shouldBe retryCount
   }
 
   it should "handle empty single byte reads" in {
-    unsafeRun(emptyArStream.foldLeft(InputStreamReaderTransformation(usingSingleByteRead))) shouldBe Seq()
+    unsafeRun(InputStreamReaderTransformation(emptyZStream)(usingSingleByteRead)) shouldBe Seq()
   }
 
   it should "handle empty buffer reads" in {
-    unsafeRun(emptyArStream.foldLeft(InputStreamReaderTransformation(usingBufferReader))) shouldBe Seq()
+    unsafeRun(InputStreamReaderTransformation(emptyZStream)(usingBufferReader)) shouldBe Seq()
   }
 
   it should "handle no reads" in {
-    unsafeRun(sampleArStream.foldLeft(InputStreamReaderTransformation(noReads)))
+    unsafeRun(InputStreamReaderTransformation(emptyZStream)(noReads)) shouldBe Seq()
   }
 
 }
