@@ -54,7 +54,7 @@ class IOEnvironment(otherEnv: Blocking with Console with System) extends FileIO 
 
     override def writeToFile[R, E, X](errorHandler: IOException => E)(path: Path)(data: Source[ZIO[R, E, *], Chunk[Byte], X]): ZIO[R, E, X] =
       ZManaged.fromAutoCloseable(
-        blocking.effectBlocking { Files.newOutputStream(path, StandardOpenOption.CREATE) }
+        blocking.effectBlocking { Files.newOutputStream(path, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING) }
       )
         .refineOrDie {
           case ex: IOException => errorHandler(ex)
