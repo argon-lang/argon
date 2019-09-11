@@ -27,7 +27,7 @@ object BuildProcess {
 
       override protected val monadF: Monad[F] = monadError
 
-      override def generate[G[_] : Monad](sink: Sink[G, SourceAST])(implicit genEffect: GenEffect[F, G]): G[Unit] =
+      override protected def generateImpl[G[_] : Monad](sink: Sink[G, SourceAST])(implicit genEffect: GenEffect[F, G]): G[Unit] =
         inputFiles.foreachG { fileInfo =>
           def toCompileError(error: SyntaxError): CompilationError =
             CompilationError.SyntaxCompilerError(SyntaxErrorData(fileInfo.fileSpec, error))

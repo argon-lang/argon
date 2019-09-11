@@ -81,7 +81,7 @@ object JSAst {
   def writeModule[F[_]: Monad](module: JSModule): Source[F, String, Unit] = new Source[F, String, Unit] {
     override protected val monadF: Monad[F] = implicitly[Monad[F]]
 
-    override def generate[G[_] : Monad](sink: Sink[G, String])(implicit genEffect: GenEffect[F, G]): G[Unit] =
+    override protected def generateImpl[G[_] : Monad](sink: Sink[G, String])(implicit genEffect: GenEffect[F, G]): G[Unit] =
       new WriteImpl[G](sink).writeModule(module)
   }
 

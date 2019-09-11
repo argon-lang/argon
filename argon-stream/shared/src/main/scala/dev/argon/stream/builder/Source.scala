@@ -4,26 +4,61 @@ import cats._
 import cats.arrow.FunctionK
 import cats.data.{NonEmptyVector, StateT}
 import cats.implicits._
-import GenEffect.genEffectStateTSecond
 
 trait Source[F[_], A, X] {
 
   protected implicit val monadF: Monad[F]
 
-  def generate[G[_]: Monad](sink: Sink[G, A])(implicit genEffect: GenEffect[F, G]): G[X]
+  final def generate[G[_]: Monad](sink: Sink[G, A])(implicit genEffect: GenEffect[F, G]): G[X] =
+    genEffect.statefully(
+      stateful = new GenEffect.StatefulHandler[F, G, Unit, A, X, X] {
 
-  def foldLeftG[G[_]: Monad, S](state: S)(f: (S, A) => G[S])(implicit genEffect: GenEffect[F, G]): G[(S, X)] =
+        override def apply[H[_] : Monad, S2](state: Unit, state2: S2)(consume: (Unit, S2, A) => H[(Unit, S2)])(implicit genEffect: GenEffect[F, H]): H[(Unit, S2, X)] =
+          foldLeftG[H, S2](state2) { (s, a) => consume((), s, a).map { case (_, s) => s } }.map { case (s, x) => ((), s, x) }
+
+        override def initialState: Unit = ()
+
+        override def foldState(state: Unit, value: A): G[Unit] = sink.consume(value)
+
+        override def consumeState(state: Unit, result: X): G[X] = result.pure[G]
+
+      },
+      stateless = generateImpl(sink)
+    )
+
+  protected def generateImpl[G[_]: Monad](sink: Sink[G, A])(implicit genEffect: GenEffect[F, G]): G[X]
+
+  final def foldLeftG[G[_]: Monad, S](state: S)(f: (S, A) => G[S])(implicit genEffect: GenEffect[F, G]): G[(S, X)] =
     genEffect.ifSame(
       sameHandler = unlift => foldLeftM(state) { (s, a) => unlift(f(s, a)) },
       notSameHandler =
-        generate[StateT[G, S, *]](new Sink[StateT[G, S, *], A] {
-          override def consume(value: A): StateT[G, S, Unit] =
-            StateT { state => f(state, value).map { (_, ()) } }
-        }).run(state)
+        genEffect.statefully(
+          stateful = new GenEffect.StatefulHandler[F, G, S, A, X, (S, X)] {
+            override def apply[H[_] : Monad, S2](state: S, state2: S2)(consume: (S, S2, A) => H[(S, S2)])(implicit genEffect: GenEffect[F, H]): H[(S, S2, X)] =
+              foldLeftGImpl((state, state2)) { case ((state, state2), a) =>
+                consume(state, state2, a)
+              }
+                .map { case ((state, state2), x) => (state, state2, x) }
+
+            override def initialState: S = state
+
+            override def foldState(state: S, value: A): G[S] = f(state, value)
+
+            override def consumeState(state: S, result: X): G[(S, X)] = (state, result).pure[G]
+          },
+          stateless = foldLeftGImpl(state)(f)
+        )
     )
 
+  protected def foldLeftGImpl[G[_]: Monad, S](state: S)(f: (S, A) => G[S])(implicit genEffect: GenEffect[F, G]): G[(S, X)] =
+    generateImpl[StateT[G, S, *]](new Sink[StateT[G, S, *], A] {
+      override def consume(value: A): StateT[G, S, Unit] =
+        StateT { state => f(state, value).map { (_, ()) } }
+    }).run(state)
+
+
   def foldLeftM[S](state: S)(f: (S, A) => F[S]): F[(S, X)] =
-    generate[StateT[F, S, *]](new Sink[StateT[F, S, *], A] {
+    generateImpl[StateT[F, S, *]](new Sink[StateT[F, S, *], A] {
       override def consume(value: A): StateT[F, S, Unit] =
         StateT { state => f(state, value).map { (_, ()) } }
     }).run(state)
@@ -54,7 +89,8 @@ trait Source[F[_], A, X] {
 
     override protected val monadF: Monad[F] = Source.this.monadF
 
-    override def generate[G[_] : Monad](sink: Sink[G, B])(implicit genEffect: GenEffect[F, G]): G[X] =
+
+    override protected def generateImpl[G[_] : Monad](sink: Sink[G, B])(implicit genEffect: GenEffect[F, G]): G[X] =
       Source.this.generate(new Sink[G, A] {
         override def consume(value: A): G[Unit] =
           f(value).generate(sink)
@@ -74,7 +110,8 @@ trait Source[F[_], A, X] {
   def map[B](f: A => B): Source[F, B, X] = new Source[F, B, X] {
     override protected val monadF: Monad[F] = Source.this.monadF
 
-    override def generate[G[_] : Monad](sink: Sink[G, B])(implicit genEffect: GenEffect[F, G]): G[X] =
+
+    override protected def generateImpl[G[_] : Monad](sink: Sink[G, B])(implicit genEffect: GenEffect[F, G]): G[X] =
       Source.this.generate(new Sink[G, A] {
         override def consume(value: A): G[Unit] =
           sink.consume(f(value))
@@ -90,7 +127,8 @@ trait Source[F[_], A, X] {
   def collect[B](f: PartialFunction[A, B]): Source[F, B, X] = new Source[F, B, X] {
     override protected val monadF: Monad[F] = Source.this.monadF
 
-    override def generate[G[_] : Monad](sink: Sink[G, B])(implicit genEffect: GenEffect[F, G]): G[X] =
+
+    override protected def generateImpl[G[_] : Monad](sink: Sink[G, B])(implicit genEffect: GenEffect[F, G]): G[X] =
       Source.this.generate(new Sink[G, A] {
         override def consume(value: A): G[Unit] =
           f.lift(value).fold(().pure[G])(sink.consume)
@@ -107,10 +145,11 @@ trait Source[F[_], A, X] {
   def mapResult[Y](f: X => Y): Source[F, A, Y] = new Source[F, A, Y] {
     override protected implicit val monadF: Monad[F] = Source.this.monadF
 
-    override def generate[G[_] : Monad](sink: Sink[G, A])(implicit genEffect: GenEffect[F, G]): G[Y] =
+
+    override protected def generateImpl[G[_] : Monad](sink: Sink[G, A])(implicit genEffect: GenEffect[F, G]): G[Y] =
       Source.this.generate(sink).map(f)
 
-    override def foldLeftG[G[_] : Monad, S](state: S)(g: (S, A) => G[S])(implicit genEffect: GenEffect[F, G]): G[(S, Y)] =
+    override def foldLeftGImpl[G[_] : Monad, S](state: S)(g: (S, A) => G[S])(implicit genEffect: GenEffect[F, G]): G[(S, Y)] =
       Source.this.foldLeftG(state)(g).map { case (state, x) => (state, f(x)) }
 
     override def foldLeftM[S](state: S)(g: (S, A) => F[S]): F[(S, Y)] =
@@ -126,7 +165,8 @@ trait Source[F[_], A, X] {
   def bufferVector(count: Int): Source[F, NonEmptyVector[A], X] = new Source[F, NonEmptyVector[A], X] {
     override protected implicit val monadF: Monad[F] = Source.this.monadF
 
-    override def generate[G[_] : Monad](sink: Sink[G, NonEmptyVector[A]])(implicit genEffect: GenEffect[F, G]): G[X] = {
+
+    override protected def generateImpl[G[_] : Monad](sink: Sink[G, NonEmptyVector[A]])(implicit genEffect: GenEffect[F, G]): G[X] =
       Source.this.generate(new Sink[StateT[G, Vector[A], *], A] {
         override def consume(value: A): StateT[G, Vector[A], Unit] =
           StateT { acc =>
@@ -145,7 +185,6 @@ trait Source[F[_], A, X] {
             }
         }
 
-    }
   }
 
 }

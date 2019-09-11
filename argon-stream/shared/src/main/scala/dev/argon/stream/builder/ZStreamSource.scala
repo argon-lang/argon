@@ -13,7 +13,7 @@ final case class ZStreamSource[R, E, A](stream: ZStream[R, E, A]) extends Source
 
   override def toZStream: ZStream[R, E, A] = stream
 
-  override def generate[G[_] : Monad](sink: Sink[G, A])(implicit genEffect: GenEffect[ZIO[R, E, *], G]): G[Unit] =
+  override def generateImpl[G[_] : Monad](sink: Sink[G, A])(implicit genEffect: GenEffect[ZIO[R, E, *], G]): G[Unit] =
     genEffect.useG(())(new UseFunc[ZIO[R, E, *], ZStream.Pull[R, E, A], Unit] {
 
       override def use[B](state: Unit)(f: (Unit, Pull[R, E, A]) => ZIO[R, E, (Unit, B)]): ZIO[R, E, (Unit, B)] =

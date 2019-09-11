@@ -321,7 +321,7 @@ object Grammar {
 
     override protected val monadF: Monad[F] = implicitly[Monad[F]]
 
-    override def generate[G[_] : Monad](sink: Sink[G, T])(implicit genEffect: GenEffect[F, G]): G[FilePosition] =
+    override def generateImpl[G[_] : Monad](sink: Sink[G, T])(implicit genEffect: GenEffect[F, G]): G[FilePosition] =
       input.foldLeftG[G, ParseStep](ParseStepReady) { (s, tokens) =>
 
         def runParseStepMulti(s: ParseStep, tokens: NonEmptyVector[WithSource[TToken]]): G[ParseStep] =

@@ -14,7 +14,7 @@ object Characterizer {
 
     override protected val monadF: Monad[F] = implicitly
 
-    override def generate[G[_] : Monad](sink: Sink[G, Int])(implicit genEffect: GenEffect[F, G]): G[Unit] =
+    override protected def generateImpl[G[_] : Monad](sink: Sink[G, Int])(implicit genEffect: GenEffect[F, G]): G[Unit] =
       chars.foldLeftG(Option.empty[Char]) {
         case (Some(prevCh), ch) => sink.consume(Character.toCodePoint(prevCh, ch)).map { _ => Option.empty[Char] }
         case (None, ch) if Character.isHighSurrogate(ch) => (Some(ch) : Option[Char]).pure[G]
@@ -29,7 +29,7 @@ object Characterizer {
 
     override protected val monadF: Monad[F] = implicitly
 
-    override def generate[G[_] : Monad](sink: Sink[G, String])(implicit genEffect: GenEffect[F, G]): G[Unit] =
+    override protected def generateImpl[G[_] : Monad](sink: Sink[G, String])(implicit genEffect: GenEffect[F, G]): G[Unit] =
       codepoints.foldLeftG[G, Option[String]](Option.empty[String]) {
         case (Some(str), cp) if isCombiningChar(cp) => Monad[G].pure(Some(str + codePointToString(cp)))
         case (Some(str), cp) => sink.consume(str).map { _ => Some(codePointToString(cp)) }
@@ -44,7 +44,7 @@ object Characterizer {
 
     override protected val monadF: Monad[F] = implicitly
 
-    override def generate[G[_] : Monad](sink: Sink[G, WithSource[String]])(implicit genEffect: GenEffect[F, G]): G[FilePosition] =
+    override protected def generateImpl[G[_] : Monad](sink: Sink[G, WithSource[String]])(implicit genEffect: GenEffect[F, G]): G[FilePosition] =
       graphemes.foldLeftG(FilePosition(1, 1)) { (pos, item) =>
         val nextPos =
           if(item === "\n")

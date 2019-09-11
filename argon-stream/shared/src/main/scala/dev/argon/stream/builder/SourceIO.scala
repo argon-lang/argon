@@ -36,10 +36,11 @@ object SourceIO {
       case source: SourceIO[R, E, A, X] => source
       case _ =>
         new SourceIO[R, E, A, X] {
-          override def generate[G[_] : Monad](sink: Sink[G, A])(implicit genEffect: GenEffect[ZIO[R, E, *], G]): G[X] =
+
+          override protected def generateImpl[G[_] : Monad](sink: Sink[G, A])(implicit genEffect: GenEffect[ZIO[R, E, *], G]): G[X] =
             source.generate(sink)
 
-          override def foldLeftG[G[_] : Monad, S](state: S)(f: (S, A) => G[S])(implicit genEffect: GenEffect[ZIO[R, E, *], G]): G[(S, X)] =
+          override def foldLeftGImpl[G[_] : Monad, S](state: S)(f: (S, A) => G[S])(implicit genEffect: GenEffect[ZIO[R, E, *], G]): G[(S, X)] =
             source.foldLeftG(state)(f)
 
           override def foldLeftM[S](state: S)(f: (S, A) => ZIO[R, E, S]): ZIO[R, E, (S, X)] =

@@ -4,8 +4,13 @@ import cats._
 import cats.arrow.FunctionK
 import cats.implicits._
 import cats.data.StateT
+import dev.argon.stream.builder.GenEffect.StatefulHandler
 
 trait GenEffect[F[_], G[_]] {
+
+  def liftF[A](fa: F[A]): G[A]
+  def useG[A, B, S](state: S)(resource: UseFunc[F, A, S])(g: (S, A) => G[(S, B)]): G[(S, B)]
+
 
   def ifSame[A]
   (
@@ -13,11 +18,25 @@ trait GenEffect[F[_], G[_]] {
     notSameHandler: => G[A]
   ): G[A] = notSameHandler
 
-  def liftF[A](fa: F[A]): G[A]
-  def useG[A, B, S](state: S)(resource: UseFunc[F, A, S])(g: (S, A) => G[(S, B)]): G[(S, B)]
+  def statefully[A, S, X0, X]
+  (
+    stateful: StatefulHandler[F, G, S, A, X0, X],
+    stateless: => G[X]
+  ): G[X] = stateless
+
 }
 
 object GenEffect {
+
+  trait StatefulHandler[F[_], G[_], S, A, X0, X] {
+    def apply[H[_]: Monad, S2](state: S, state2: S2)(consume: (S, S2, A) => H[(S, S2)])(implicit genEffect: GenEffect[F, H]): H[(S, S2, X0)]
+
+    def initialState: S
+
+    def foldState(state: S, value: A): G[S]
+
+    def consumeState(state: S, result: X0): G[X]
+  }
 
   implicit def genEffectIdentity[F[_]]: GenEffect[F, F] = new GenEffect[F, F] {
 
@@ -44,6 +63,17 @@ object GenEffect {
           .map { case (state2, (state, b)) => (state, (state2, b)) }
       }
 
+
+    override def statefully[A, S2, X0, X](stateful: StatefulHandler[F, StateT[G, S, *], S2, A, X0, X], stateless: => StateT[G, S, X]): StateT[G, S, X] =
+      StateT[G, S, X] { state =>
+        stateful[G, S](stateful.initialState, state) { (state, state2, a) =>
+          stateful.foldState(state, a).run(state2)
+            .map { case (state, state2) => (state2, state) }
+        }
+          .flatMap { case (state2, state, x) =>
+            stateful.consumeState(state2, x).run(state)
+          }
+      }
   }
 
   implicit def genEffectStateTBoth[F[_]: Monad, G[_]: Monad, S](implicit genEffect: GenEffect[F, G]): GenEffect[StateT[F, S, *], StateT[G, S, *]] =
@@ -73,7 +103,6 @@ object GenEffect {
           }
             .map { case ((state, state2), c) => (state, (state2, c)) }
         }
-
     }
 
 }

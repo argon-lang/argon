@@ -726,7 +726,7 @@ final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCom
 
       override protected val monadF: Monad[TComp] = implicitly
 
-      override def generate[G[_] : Monad](sink: Sink[G, StreamElem])(implicit genEffect: GenEffect[TComp, G]): G[Unit] = {
+      override protected def generateImpl[G[_] : Monad](sink: Sink[G, StreamElem])(implicit genEffect: GenEffect[TComp, G]): G[Unit] = {
         import GenEffect._
 
         processModule(module)(new Sink[StateT[G, ModuleIds, *], StreamElem] {

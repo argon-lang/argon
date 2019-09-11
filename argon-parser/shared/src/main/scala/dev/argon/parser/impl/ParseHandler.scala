@@ -25,7 +25,7 @@ object ParseHandler {
 
       override protected val monadF: Monad[F] = implicitly
 
-      override def generate[G[_] : Monad](sink: Sink[G, SourceAST])(implicit genEffect: GenEffect[F, G]): G[Unit] =
+      override protected def generateImpl[G[_] : Monad](sink: Sink[G, SourceAST])(implicit genEffect: GenEffect[F, G]): G[Unit] =
         stmts.foldLeftG(TopLevelStatement.defaultNSAndImports) { (state, stmt) =>
           val (newState, opt) = TopLevelStatement.accumulate(fileSpec)(state, stmt)
           opt.fold(().pure[G])(sink.consume).map { _ => newState }
