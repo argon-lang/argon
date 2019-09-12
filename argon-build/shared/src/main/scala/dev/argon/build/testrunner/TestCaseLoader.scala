@@ -2,7 +2,7 @@ package dev.argon.build.testrunner
 
 import java.nio.file.Path
 
-import scala.xml.XML
+import scala.xml.{Elem, XML}
 import cats._
 import cats.implicits._
 import zio._
@@ -12,34 +12,32 @@ import dev.argon.io.{FileIO, FilenameManip}
 
 object TestCaseLoader {
 
-  def findTestCases(dir: Path): RIO[FileIO, TestCaseStructure] = for {
-    env <- ZIO.environment[FileIO]
-    testCaseFilesUnsorted <- env.fileIO.listDirectory(dir).runCollect
-    testCaseFiles = testCaseFilesUnsorted.sortBy(FilenameManip.getFileName).toVector
-
-    subDirCases <- testCaseFiles
-      .filterA(env.fileIO.isDirectory)
-      .flatMap {
-        _.traverse { f =>
-          findTestCases(f).map(FilenameManip.getFileName(f).->)
-        }
+  def findTestCases(testCases: Seq[(Seq[String], TestCase)]): TestCaseStructure = {
+    val groupedTestCases = testCases
+      .map {
+        case (head +: tail, testCase) => (Some(head), tail, testCase)
+        case (Seq(), testCase) => (None, Seq(), testCase)
+      }
+      .groupMap {
+        case (key, _, _) => key
+      } {
+        case (_, path, testCase) => (path, testCase)
       }
 
-     fileCases <- testCaseFiles
-      .filterA { f => env.fileIO.isDirectory(f).map { !_ && FilenameManip.getFileName(f).endsWith(".xml") } }
-      .flatMap { _.traverse(loadTestCase) }
-
-  } yield TestCaseStructure(
-    nestedStructures = subDirCases.filter { case (_, nestedCases) => nestedCases.nestedStructures.nonEmpty || nestedCases.tests.nonEmpty },
-    tests = fileCases
-  )
-
-  def loadTestCase(path: Path): Task[TestCase] =
-    IO.effect { XML.loadFile(path.toFile) }
-      .flatMap { elem =>
-        TestCase.fromXml(elem)
-          .map { _.pure[IO[Throwable, ?]] }
-          .getOrElse(IO.effect { path.toAbsolutePath }.flatMap { path => IO.fail(new Exception(s"Invalid test case ${FilenameManip.pathToString(path)}")) })
+    val subDirCases = groupedTestCases
+      .collect {
+        case (Some(k), v) => (k, findTestCases(v))
       }
+      .toSeq
+      .sortBy { case (k, _) => k }
+
+    val fileCases = groupedTestCases
+      .getOrElse(None, Seq())
+      .map { case (_, testCase) => testCase }
+      .sortBy { _.name }
+
+    TestCaseStructure(subDirCases, fileCases)
+  }
+
 
 }

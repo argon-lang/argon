@@ -1,4 +1,5 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
+import sbt.internal.util.ManagedLogger
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.0",
@@ -131,7 +132,12 @@ lazy val argon_build = crossProject(JVMPlatform, JSPlatform).in(file("argon-buil
     compilerOptions,
 
     name := "argon-build",
-    wartremoverExcluded += sourceDirectory.value / "main" / "scala" / "dev" / "argon" / "build" / "testrunner" / "node" / "api.gen.scala",
+    wartremoverExcluded += sourceDirectory.value / "main" / "scala" / "dev" / "argon" / "build" / "testrunner" / "js" / "api.gen.scala",
+
+
+    sourceGenerators in Test += Def.task {
+      generateTestSources(streams.value.log)(file(".") / "testcases")((sourceManaged in Test).value / "testcases")
+    }.taskValue
   )
 
 lazy val argon_buildJVM = argon_build.jvm
@@ -268,4 +274,72 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform).in(file("argon-module
 
 lazy val modulefmtJVM = modulefmt.jvm
 lazy val modulefmtJS = modulefmt.js
+
+
+
+def generateTestSources(log: ManagedLogger)(xmlDir: File)(outDir: File): Seq[File] = {
+
+  def impl(inputFiles: Set[File]): Set[File] = {
+    import java.nio.charset.StandardCharsets
+    import org.apache.commons.text.StringEscapeUtils
+    import scala.xml.Elem
+
+    val outFile = outDir / "TestCases.scala"
+    log.info("Generating test cases in " + outFile.absolutePath)
+
+    val testCaseGen =
+      """
+        |package dev.argon.build
+        |
+        |object TestCases {
+        |  val all: Seq[(Seq[String], dev.argon.build.testrunner.TestCase)] = Seq(
+        |  """.stripMargin +
+      inputFiles.map { testCaseFile =>
+        val path = testCaseFile.relativeTo(xmlDir).get.getParentFile.toPath
+        val partParts = (0 until path.getNameCount).map(path.getName(_).toString)
+
+        val content = scala.xml.XML.loadFile(testCaseFile)
+
+        val name = (content \ "Name").head.text
+        val testFiles = (content \ "InputSource").map { inputSourceElem =>
+          val fileName = (inputSourceElem \ "@name").head.text
+          val fileData = inputSourceElem.text
+
+          s"""dev.argon.build.testrunner.InputSourceData("${StringEscapeUtils.escapeJava(fileName)}", "${StringEscapeUtils.escapeJava(fileData)}")"""
+        }
+
+        val expectedResult =
+          (content \ "ExpectedOutput")
+            .collectFirst { case outputElem: Elem => s"""dev.argon.build.testrunner.TestCaseExpectedOutput("${StringEscapeUtils.escapeJava(outputElem.text)}")""" }
+            .orElse {
+              (content \ "ExpectedError")
+                .collectFirst { case errorElem: Elem => s"""dev.argon.build.testrunner.TestCaseExpectedError("${StringEscapeUtils.escapeJava(errorElem.text)}")""" }
+            }
+            .get
+
+        val pathSeqArgs = partParts.map { part => "\"" + StringEscapeUtils.escapeJava(part) + "\"" }.mkString(", ")
+
+        s"""(Seq(${pathSeqArgs}), dev.argon.build.testrunner.TestCase("${StringEscapeUtils.escapeJava(name)}", Vector(${testFiles.mkString(", ")}), ${expectedResult})),"""
+      }.mkString("\n") +
+        """
+          |  )
+          |}
+          |""".stripMargin
+
+    IO.write(outFile, testCaseGen, StandardCharsets.UTF_8)
+
+
+    Set(outFile)
+  }
+
+  val cached = FileFunction.cached(outDir)(impl)
+
+  val inFiles = Path.allSubpaths(xmlDir)
+    .filter { case (_, str) => str.endsWith(".xml") }
+    .map { case (file, _) => file }
+
+  cached(inFiles.toSet).toSeq
+}
+
+
 
