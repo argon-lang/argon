@@ -10,7 +10,6 @@ import cats.implicits._
 import dev.argon.grammar.{Grammar, GrammarError, ParseErrorHandler}
 import Grammar.Operators._
 import dev.argon.parser.impl.Lexer.LexerGrammarFactory
-import dev.argon.stream.StreamTransformation
 import dev.argon.stream.builder.Source
 
 import Function.const

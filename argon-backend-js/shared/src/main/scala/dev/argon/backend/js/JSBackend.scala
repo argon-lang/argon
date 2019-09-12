@@ -7,7 +7,6 @@ import cats.data.NonEmptyList
 import dev.argon.compiler.backend.Backend.ContextWithComp
 import dev.argon.compiler.backend.{Backend, CompilationOutputText, ProjectLoader}
 import dev.argon.compiler.core.Context
-import dev.argon.stream.ArStream
 import dev.argon.stream.builder.Source
 import zio.{IO, ZIO}
 import toml.Codecs._

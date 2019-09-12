@@ -11,12 +11,6 @@ import zio.blocking.Blocking
 import zio._
 import zio.stream.ZStream
 
-trait InputStreamReaderTransformation[-R, +E, +X] extends StreamTransformation[ZIO, R, E, Byte, Unit, Nothing, X] {
-
-  def readDirectly[R2 <: R, E2 >: E](inputStream: InputStream): ZIO[R2, E2, X]
-
-}
-
 object InputStreamReaderTransformation {
 
   @SuppressWarnings(Array(

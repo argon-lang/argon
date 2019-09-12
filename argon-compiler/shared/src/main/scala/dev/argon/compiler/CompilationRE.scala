@@ -1,10 +1,7 @@
 package dev.argon.compiler
 
-import dev.argon.stream.PureEffect
 
 trait CompilationRE[TCompRE[_, _, _], R] extends CompilationE[TCompRE[R, ?, ?]] {
-
-  def fromPureEffect[A](pa: PureEffect[R, ErrorType, A]): TCompRE[R, ErrorType, A]
 
 }
 

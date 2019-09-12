@@ -10,7 +10,6 @@ import dev.argon.compiler.backend.Backend.ContextWithComp
 import dev.argon.compiler.backend.{Backend, CompilationOutput, ProjectLoader}
 import dev.argon.compiler.core.Context
 import dev.argon.io.ZipEntryInfo
-import dev.argon.stream.ArStream
 import dev.argon.stream.builder.Source
 import toml.Codecs._
 import shapeless.{Id => _, _}

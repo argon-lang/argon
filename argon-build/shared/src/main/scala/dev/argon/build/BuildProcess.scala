@@ -9,7 +9,6 @@ import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.compiler.backend.Backend
 import dev.argon.grammar.ParseErrorHandler
 import dev.argon.parser.impl.ParseHandler
-import dev.argon.stream.{ArStream, MapError, StreamTransformation}
 import dev.argon.util.FileSpec
 import dev.argon.stream._
 import dev.argon.stream.builder.{GenEffect, Sink, Source}

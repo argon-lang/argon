@@ -4,7 +4,7 @@ import cats.data.NonEmptyList
 import dev.argon.compiler.core._
 import dev.argon.io.ZipEntryInfo
 import dev.argon.stream.builder.Source
-import dev.argon.stream.{ArStream, Resource, StreamTransformation}
+import dev.argon.stream.Resource
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import zio.Chunk
 

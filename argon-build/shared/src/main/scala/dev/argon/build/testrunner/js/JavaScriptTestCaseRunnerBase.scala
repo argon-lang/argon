@@ -14,8 +14,6 @@ import dev.argon.compiler.backend.{Backend, CompilationOutputText}
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.io.{FileIO, FilenameManip}
-import dev.argon.stream.{Resource, Step, StreamTransformation}
-import dev.argon.stream.{Step, StreamTransformation}
 import dev.argon.build._
 
 abstract class JavaScriptTestCaseRunnerBase(referencePaths: UIO[Vector[Path]]) extends TestCaseRunnerCompilePhase {

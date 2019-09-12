@@ -17,7 +17,6 @@ import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.parser.SourceAST
 import dev.argon.compiler.backend.Backend
 import dev.argon.io.{FileIO, FilenameManip}
-import dev.argon.stream.ArStream
 import dev.argon.build._
 import dev.argon.stream.builder.ZStreamSource
 import zio.stream.{ZSink, ZStream}

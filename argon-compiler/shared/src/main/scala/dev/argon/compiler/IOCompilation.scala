@@ -73,9 +73,6 @@ object IOCompilation {
 
     override def pure[A](x: A): F[A] = IO.succeed(x)
 
-    override def fromPureEffect[A](pa: PureEffect[R, E, A]): ZIO[R, E, A] =
-      ZIO.environment[R].flatMap { r => IO.fromEither(pa.run(r).value) }
-
     override def getResult[A](fa: F[A]): ZIO[R, Nothing, (Vector[CompilationMessageNonFatal], Either[E, A])] = for {
       eitherRes <- fa.either
     } yield (Vector(), eitherRes)
