@@ -28,20 +28,34 @@ lazy val commonSettings = Seq(
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 
-    "org.apache.commons" % "commons-text" % "1.6",
-    "commons-io" % "commons-io" % "2.6",
-
-
     "org.scalatest" %%% "scalatest" % "3.0.8" % "test",
     "org.scalacheck" %%% "scalacheck" % "1.14.0" % "test",
     "dev.zio" %%% "zio-test" % "1.0.0-RC12-1" % "test",
     "dev.zio" %%% "zio-test-sbt" % "1.0.0-RC12-1" % "test",
-    "io.github.cquiroz" %%% "scala-java-time" % "2.0.0-RC3" % "test",
     "com.github.alexarchambault" %%% "scalacheck-shapeless_1.14" % "1.2.3" % "test",
 
     compilerPlugin("com.github.ghik" % "silencer-plugin" % "1.4.3" cross CrossVersion.full),
     "com.github.ghik" %%% "silencer-lib" % "1.4.3" % Provided cross CrossVersion.full,
   )
+
+)
+
+lazy val commonJVMSettings = Seq(
+
+  libraryDependencies ++= Seq(
+    "org.apache.commons" % "commons-text" % "1.6",
+    "commons-io" % "commons-io" % "2.6",
+  ),
+
+)
+
+lazy val commonJSSettings = Seq(
+
+  libraryDependencies ++= Seq(
+    "io.github.cquiroz" %%% "scala-java-time" % "2.0.0-RC3" % "test",
+  ),
+
+  scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 
 )
 
@@ -96,6 +110,12 @@ lazy val identityRPCRuntime = RootProject(file("identityrpc/runtime/scala"))
 
 lazy val cli = crossProject(JVMPlatform, JSPlatform).in(file("argon-cli"))
   .dependsOn(argon_build)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
   .settings(
     commonSettings,
     compilerOptions,
@@ -125,6 +145,10 @@ lazy val cliJS = cli.js
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform).in(file("argon-build"))
   .jvmConfigure(
     _.dependsOn(identityRPCRuntime)
+     .settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
   )
   .dependsOn(arstream, util, parser, argon_compiler, backend_js, backend_module)
   .settings(
@@ -145,6 +169,12 @@ lazy val argon_buildJS = argon_build.js
 
 lazy val grammar = crossProject(JVMPlatform, JSPlatform).in(file("argon-grammar"))
   .dependsOn(arstream, util)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
   .settings(
     commonSettings,
     compilerOptions,
@@ -157,6 +187,12 @@ lazy val grammarJS = grammar.js
 
 lazy val parser = crossProject(JVMPlatform, JSPlatform).in(file("argon-parser"))
   .dependsOn(arstream, util, parser_data, grammar)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
   .settings(
     commonSettings,
     compilerOptions,
@@ -169,6 +205,12 @@ lazy val parserJS = parser.js
 
 lazy val parser_data = crossProject(JVMPlatform, JSPlatform).in(file("argon-parser-data"))
   .dependsOn(arstream, util, grammar)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
   .settings(
     commonSettings,
     compilerOptions,
@@ -181,6 +223,12 @@ lazy val parser_dataJS = parser_data.js
 
 lazy val argon_compiler = crossProject(JVMPlatform, JSPlatform).in(file("argon-compiler"))
   .dependsOn(arstream, util, argonio, modulefmt, parser_data)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
   .settings(
     commonSettings,
     compilerOptions,
@@ -194,6 +242,12 @@ lazy val argon_compilerJS = argon_compiler.js
 
 lazy val backend_js = crossProject(JVMPlatform, JSPlatform).in(file("argon-backend-js"))
   .dependsOn(arstream, util, modulefmt, parser_data, argon_compiler)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
   .settings(
     commonSettings,
     compilerOptions,
@@ -206,6 +260,12 @@ lazy val backend_jsJS = backend_js.js
 
 lazy val backend_module = crossProject(JVMPlatform, JSPlatform).in(file("argon-backend-module"))
   .dependsOn(arstream, util, modulefmt, parser_data, argon_compiler)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
   .settings(
     commonSettings,
     compilerOptions,
@@ -217,6 +277,12 @@ lazy val backend_moduleJVM = backend_module.jvm
 lazy val backend_moduleJS = backend_module.js
 
 lazy val util = crossProject(JVMPlatform, JSPlatform).in(file("argon-util"))
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
   .settings(
     commonSettings,
     compilerOptions,
@@ -228,6 +294,12 @@ lazy val utilJVM = util.jvm
 lazy val utilJS = util.js
 
 lazy val arstream = crossProject(JVMPlatform, JSPlatform).in(file("argon-stream"))
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
   .settings(
     commonSettings,
     compilerOptions,
@@ -239,6 +311,12 @@ lazy val arstreamJVM = arstream.jvm
 lazy val arstreamJS = arstream.js
 
 lazy val argonio = crossProject(JVMPlatform, JSPlatform).in(file("argon-io"))
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
   .dependsOn(arstream)
   .settings(
     commonSettings,
@@ -251,6 +329,12 @@ lazy val argonioJVM = argonio.jvm
 lazy val argonioJS = argonio.js
 
 lazy val modulefmt = crossProject(JVMPlatform, JSPlatform).in(file("argon-modulefmt"))
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
   .settings(
     commonSettings,
 

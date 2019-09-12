@@ -2,11 +2,11 @@ package dev.argon.backend.js
 
 import java.io.PrintWriter
 
-import org.apache.commons.text.StringEscapeUtils
 import cats._
 import cats.implicits._
 import cats.data.NonEmptyList
 import dev.argon.stream.builder.{GenEffect, Sink, Source}
+import dev.argon.util.StringHelpers
 
 final case class JSModule(statements: Vector[JSModuleStatement])
 
@@ -399,7 +399,7 @@ object JSAst {
 
     def writeString(str: String): F[Unit] = for {
       _ <- write("\"")
-      _ <- write(StringEscapeUtils.ESCAPE_ECMASCRIPT.translate(str))
+      _ <- write(StringHelpers.escapeJSString(str))
       _ <- write("\"")
     } yield ()
 

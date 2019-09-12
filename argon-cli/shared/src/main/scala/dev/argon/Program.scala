@@ -7,7 +7,6 @@ import cats.implicits._
 import zio.{BuildInfo => _, _}
 import zio.console._
 import zio.interop.catz._
-import org.apache.commons.lang3.exception.ExceptionUtils
 import shapeless.{BuildInfo => _, Id => _, Path => _, _}
 import CommandLineParser.Implicits._
 import dev.argon.io.Path
@@ -20,12 +19,7 @@ object Program extends App {
       case Some(CommandLineArguments(cmd: CompileCommand[Id])) =>
         runCompilation(cmd)
           .provideSome(PlatformHelpers.ioEnvironment)
-          .catchAll { ex =>
-            IO.effectTotal {
-              ExceptionUtils.printRootCauseStackTrace(ex)
-              1
-            }
-          }
+          .orDie
 
       case None =>
         for {

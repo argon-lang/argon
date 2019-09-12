@@ -12,7 +12,7 @@ object PlatformHelpers {
   def ioEnvironment: Console with System => NodeIOEnvironment = new NodeIOEnvironment(_)
 
   def testCaseRunners(references: Vector[Path]): Seq[TestCaseRunner] =
-    Seq(ParseTestCaseRunner) ++
-      Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, references) } ++
-      Seq(JavaScriptTestCaseRunner(references))
+    Seq(ParseTestCaseRunner)// ++
+      //Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, references) } ++
+      //Seq(JavaScriptTestCaseRunner(references))
 }
