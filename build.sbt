@@ -93,7 +93,7 @@ lazy val buildArgonLibs = taskKey[Unit]("Compile Argon libraries")
 
 lazy val identityRPCRuntime = RootProject(file("identityrpc/runtime/scala"))
 
-lazy val cli = crossProject(JVMPlatform).in(file("argon-cli"))
+lazy val cli = crossProject(JVMPlatform, JSPlatform).in(file("argon-cli"))
   .dependsOn(argon_build)
   .settings(
     commonSettings,
@@ -119,6 +119,7 @@ lazy val cli = crossProject(JVMPlatform).in(file("argon-cli"))
   )
 
 lazy val cliJVM = cli.jvm
+lazy val cliJS = cli.js
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform).in(file("argon-build"))
   .jvmConfigure(
@@ -134,6 +135,7 @@ lazy val argon_build = crossProject(JVMPlatform, JSPlatform).in(file("argon-buil
   )
 
 lazy val argon_buildJVM = argon_build.jvm
+lazy val argon_buildJS = argon_build.js
 
 lazy val grammar = crossProject(JVMPlatform, JSPlatform).in(file("argon-grammar"))
   .dependsOn(arstream, util)
