@@ -3,42 +3,41 @@ package dev.argon.io
 import java.io.{ByteArrayInputStream, InputStream}
 
 import dev.argon.stream.ArStream
-import org.scalatest.{FlatSpec, Matchers}
 import zio._
 import zio.interop.catz._
 import zio.blocking.Blocking
 import zio.stream.ZStream
+import zio.test._
+import zio.test.Assertion._
 
 import scala.collection.mutable.ArrayBuffer
 
-class InputStreamReaderTransformationTests extends FlatSpec with Matchers with DefaultRuntime with StreamCommon {
+object InputStreamReaderTransformationTests extends DefaultRunnableSpec({
+  import StreamCommon._
 
-  "InputStreamReaderTransformation" should "transform stream using single byte read" in {
-    unsafeRun(InputStreamReaderTransformation(sampleZStream)(usingSingleByteRead)) shouldBe streamContent
-  }
+  suite("InputStreamReaderTransformationTests")(
+    testM("transform stream using single byte read") {
+      assertM(InputStreamReaderTransformation(sampleZStream)(usingSingleByteRead).orDie, equalTo(streamContent))
+    },
+    testM("transform stream using buffer reads") {
+      assertM(InputStreamReaderTransformation(sampleZStream)(usingBufferReader).orDie, equalTo(streamContent))
+    },
+    testM("handle extra single byte reads") {
+      assertM(InputStreamReaderTransformation(sampleZStream)(usingSingleByteReadExtra).orDie, equalTo(retryCount))
+    },
+    testM("handle extra buffer reads") {
+      assertM(InputStreamReaderTransformation(sampleZStream)(usingBufferReaderExtra).orDie, equalTo(retryCount))
+    },
+    testM("handle empty single byte reads") {
+      assertM(InputStreamReaderTransformation(emptyZStream)(usingSingleByteRead).orDie, equalTo(Seq[Byte]()))
+    },
+    testM("handle empty buffer reads") {
+      assertM(InputStreamReaderTransformation(emptyZStream)(usingBufferReader).orDie, equalTo(Seq[Byte]()))
+    },
+    testM("handle no reads") {
+      assertM(InputStreamReaderTransformation(emptyZStream)(noReads).orDie, equalTo(()))
+    },
+  )
 
-  it should "transform stream using buffer reads" in {
-    unsafeRun(InputStreamReaderTransformation(sampleZStream)(usingBufferReader)) shouldBe streamContent
-  }
 
-  it should "handle extra single byte reads" in {
-    unsafeRun(InputStreamReaderTransformation(sampleZStream)(usingSingleByteReadExtra)) shouldBe retryCount
-  }
-
-  it should "handle extra buffer reads" in {
-    unsafeRun(InputStreamReaderTransformation(sampleZStream)(usingBufferReaderExtra)) shouldBe retryCount
-  }
-
-  it should "handle empty single byte reads" in {
-    unsafeRun(InputStreamReaderTransformation(emptyZStream)(usingSingleByteRead)) shouldBe Seq()
-  }
-
-  it should "handle empty buffer reads" in {
-    unsafeRun(InputStreamReaderTransformation(emptyZStream)(usingBufferReader)) shouldBe Seq()
-  }
-
-  it should "handle no reads" in {
-    unsafeRun(InputStreamReaderTransformation(emptyZStream)(noReads)) shouldBe Seq()
-  }
-
-}
+})

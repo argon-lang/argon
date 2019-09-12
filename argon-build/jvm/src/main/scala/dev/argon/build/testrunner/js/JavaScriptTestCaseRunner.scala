@@ -18,7 +18,7 @@ import dev.argon.stream.{Resource, Step, StreamTransformation}
 import dev.argon.stream.{Step, StreamTransformation}
 import dev.argon.build._
 
-final class JavaScriptTestCaseRunner(references: Vector[Path], launcher: ZManaged[BuildEnvironment, Throwable, NodeLauncher]) extends JavaScriptTestCaseRunnerBase(references) {
+final class JavaScriptTestCaseRunner(referencePaths: UIO[Vector[Path]], launcher: ZManaged[BuildEnvironment, Throwable, NodeLauncher]) extends JavaScriptTestCaseRunnerBase(referencePaths) {
 
 
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): ZIO[BuildEnvironment, Throwable, String] =
@@ -38,7 +38,7 @@ final class JavaScriptTestCaseRunner(references: Vector[Path], launcher: ZManage
 
 object JavaScriptTestCaseRunner {
 
-  def apply(jsScriptFile: String)(references: Vector[Path]): JavaScriptTestCaseRunner =
+  def apply(jsScriptFile: String)(references: UIO[Vector[Path]]): JavaScriptTestCaseRunner =
     new JavaScriptTestCaseRunner(references, NodeLauncher(jsScriptFile))
 
 }

@@ -10,7 +10,7 @@ import zio.stream.ZStream
 import scala.collection.mutable.ArrayBuffer
 
 @SuppressWarnings(Array("org.wartremover.warts.Var"))
-trait StreamCommon {
+object StreamCommon {
 
   val streamContent = Seq[Byte](0, 7, 5, 9, 4, -1)
   def sampleInputStream: InputStream = new ByteArrayInputStream(streamContent.toArray)

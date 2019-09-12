@@ -15,8 +15,7 @@ import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.io.{FileIO, FilenameManip, JSIOException}
 import dev.argon.build._
 
-final class JavaScriptTestCaseRunner(references: Vector[Path]) extends JavaScriptTestCaseRunnerBase(references) {
-
+final class JavaScriptTestCaseRunner(references: UIO[Vector[Path]]) extends JavaScriptTestCaseRunnerBase(references) {
 
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): ZIO[BuildEnvironment, Throwable, String] = ???
 
@@ -24,7 +23,7 @@ final class JavaScriptTestCaseRunner(references: Vector[Path]) extends JavaScrip
 
 object JavaScriptTestCaseRunner {
 
-  def apply(references: Vector[Path]): JavaScriptTestCaseRunner =
+  def apply(references: UIO[Vector[Path]]): JavaScriptTestCaseRunner =
     new JavaScriptTestCaseRunner(references)
 
 }

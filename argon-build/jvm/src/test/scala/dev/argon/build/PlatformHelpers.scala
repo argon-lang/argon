@@ -5,7 +5,7 @@ import dev.argon.build.testrunner.js.JavaScriptTestCaseRunner
 import dev.argon.build.testrunner.{BuildTestCaseRunner, ParseTestCaseRunner, TestCaseRunner}
 import dev.argon.compiler.backend.Backend
 import dev.argon.io.{IOEnvironment, Path}
-import zio.ZManaged
+import zio.{UIO, ZManaged}
 import zio.blocking.Blocking
 import zio.console.Console
 import zio.system.System
@@ -13,7 +13,7 @@ import zio.system.System
 object PlatformHelpers {
   def ioEnvironment: Blocking with Console with System => IOEnvironment = new IOEnvironment(_)
 
-  def testCaseRunners(references: Vector[Path]): Seq[TestCaseRunner] =
+  def testCaseRunners(references: UIO[Vector[Path]]): Seq[TestCaseRunner] =
     Seq(ParseTestCaseRunner) ++
       Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, references) } ++
       Seq(JavaScriptTestCaseRunner("external-api/node-api/bin/index.js")(references))

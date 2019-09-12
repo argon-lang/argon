@@ -3,17 +3,18 @@ package dev.argon.io
 import java.io.{ByteArrayInputStream, InputStream}
 
 import dev.argon.stream.{ArStream, Resource, StreamTransformation}
-import org.scalatest.{FlatSpec, Matchers}
 import zio._
 import zio.interop.catz._
 import zio.blocking.Blocking
+import zio.test._
+import zio.test.Assertion._
 
 import scala.collection.mutable.ArrayBuffer
 
-@SuppressWarnings(Array("org.wartremover.warts.Var"))
-class InputStreamStreamTests extends FlatSpec with Matchers with DefaultRuntime with StreamCommon {
+object InputStreamStreamTests extends DefaultRunnableSpec({
+  import StreamCommon._
 
-  private def createInputStreamStream: RIO[Blocking, InputStreamStream[Blocking, Throwable]] =
+  def createInputStreamStream: RIO[Blocking, InputStreamStream[Blocking, Throwable]] =
     ZIO.access[Blocking] { res =>
       InputStreamStream[Blocking, Throwable](identity)(
         ZManaged.fromAutoCloseable(
@@ -22,16 +23,16 @@ class InputStreamStreamTests extends FlatSpec with Matchers with DefaultRuntime 
       )
     }
 
-  "InputStreamStream" should "readDirectly using single byte read" in {
-    unsafeRun(createInputStreamStream.flatMap { InputStreamReaderTransformation(_)(usingSingleByteRead) }) shouldBe streamContent
-  }
+  suite("InputStreamStreamTests")(
+    testM("readDirectly using single byte read") {
+      assertM(createInputStreamStream.flatMap { InputStreamReaderTransformation(_)(usingSingleByteRead) }.orDie, equalTo(streamContent))
+    },
+    testM("readDirectly using buffer reads") {
+      assertM(createInputStreamStream.flatMap { InputStreamReaderTransformation(_)(usingBufferReader) }.orDie, equalTo(streamContent))
+    },
+    testM("transform stream using toVector") {
+      assertM(createInputStreamStream.flatMap { _.runCollect }.map { l => l.flatMap(_.toSeq) }.orDie, equalTo(streamContent))
+    },
+  )
 
-  it should "readDirectly using buffer reads" in {
-    unsafeRun(createInputStreamStream.flatMap { InputStreamReaderTransformation(_)(usingBufferReader) }) shouldBe streamContent
-  }
-
-  it should "transform stream using toVector" in {
-    unsafeRun(createInputStreamStream.flatMap { _.runCollect }) shouldBe streamContent
-  }
-
-}
+})

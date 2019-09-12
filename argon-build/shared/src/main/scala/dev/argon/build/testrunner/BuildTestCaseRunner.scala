@@ -15,7 +15,7 @@ import dev.argon.compiler.backend.ProjectLoader.Implicits._
 import dev.argon.compiler.backend.{Backend, ProjectFileHandler}
 import dev.argon.build._
 
-final class BuildTestCaseRunner(protected val backend: Backend, references: Vector[Path]) extends TestCaseRunnerCompilePhase {
+final class BuildTestCaseRunner(protected val backend: Backend, referencePaths: UIO[Vector[Path]]) extends TestCaseRunnerCompilePhase {
 
   override val name: String = s"Compilation (${backend.name})"
 
@@ -35,7 +35,9 @@ final class BuildTestCaseRunner(protected val backend: Backend, references: Vect
     IO.succeed(Right(""))
 
   override def runTest(testCase: TestCase): ZIO[BuildEnvironment, Throwable, TestCaseResult] =
-    compileTestCase(testCase, references)
+    referencePaths.flatMap { references =>
+      compileTestCase(testCase, references)
+    }
 
   override protected def normalizeOutput(output: String): String = ""
 }

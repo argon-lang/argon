@@ -397,11 +397,8 @@ object JSAst {
     def writeIdentifier(identifier: JSIdentifier): F[Unit] =
       write(identifier.id)
 
-    def writeString(str: String): F[Unit] = for {
-      _ <- write("\"")
-      _ <- write(StringHelpers.escapeJSString(str))
-      _ <- write("\"")
-    } yield ()
+    def writeString(str: String): F[Unit] =
+      write(StringHelpers.escapeJSString(str))
 
     def writeParameterList(params: JSFunctionParameterList): F[Unit] =
       params match {
