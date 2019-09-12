@@ -1,7 +1,7 @@
 package dev.argon.build.testrunner
 
 import java.io.IOException
-import java.nio.file.Path
+import dev.argon.io.Path
 
 import dev.argon.build.BuildProcess
 import dev.argon.compiler._
@@ -10,7 +10,6 @@ import cats._
 import cats.implicits._
 import dev.argon.compiler.backend.ProjectFileHandler
 import zio._
-import dev.argon.io.FileOperations.pathShow
 import cats.data.NonEmptyList
 import dev.argon.compiler.backend.Backend
 import dev.argon.io.FileIO

@@ -4,13 +4,13 @@ import dev.argon.build.{BuildEnvironment, Pipeline}
 import dev.argon.build.project.BuildInfo
 import cats._
 import cats.implicits._
-import dev.argon.io.FileOperations
 import zio.{BuildInfo => _, _}
 import zio.console._
 import zio.interop.catz._
 import org.apache.commons.lang3.exception.ExceptionUtils
-import shapeless.{BuildInfo => _, Id => _, _}
+import shapeless.{BuildInfo => _, Id => _, Path => _, _}
 import CommandLineParser.Implicits._
+import dev.argon.io.Path
 
 object Program extends App {
 
@@ -36,7 +36,7 @@ object Program extends App {
   private def runCompilation(args: CompileCommand[Id]): ZIO[BuildEnvironment with Console, Throwable, Int] =
     args match {
       case CompileCommand(buildInfoFileName) =>
-        FileOperations.pathFromName(buildInfoFileName)
+        Path.of(buildInfoFileName)
           .flatMap(BuildInfo.loadFile)
           .flatMap {
             case Some(buildInfos) => buildInfos.foldLeftM(0) { (exitCode, buildInfo) =>

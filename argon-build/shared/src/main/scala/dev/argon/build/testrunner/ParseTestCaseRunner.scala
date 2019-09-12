@@ -7,6 +7,8 @@ import dev.argon.build._
 
 object ParseTestCaseRunner extends TestCaseRunner with TestCaseRunnerParsePhase {
 
+  override val name: String = "Parsing"
+
   override def runTest(testCase: TestCase): ZIO[BuildEnvironment, Throwable, TestCaseResult] =
     IOCompilation.compilationInstance[BuildEnvironment].flatMap { implicit ioComp =>
       ioComp.getResult(parseTestCaseSource(testCase))

@@ -2,7 +2,7 @@ package dev.argon.io
 
 import java.io.{FileReader, IOException}
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Path, StandardOpenOption}
+import java.nio.file.{Files, Path => NIOPath, StandardOpenOption}
 import java.util.zip.ZipFile
 
 import dev.argon.stream._
@@ -22,17 +22,17 @@ class IOEnvironment(otherEnv: Blocking with Console with System) extends FileIO 
   override val fileIO: FileIO.Service = new FileIO.Service {
 
     override def getAbsolutePath(path: Path): IO[IOException, Path] =
-      blocking.effectBlocking { path.toAbsolutePath }
+      blocking.effectBlocking { new Path(path.javaPath.toAbsolutePath) }
         .refineOrDie { case e: IOException => e }
 
     override def readAllText(path: Path): IO[IOException, String] =
-      blocking.effectBlocking { Files.readString(path, StandardCharsets.UTF_8) }
+      blocking.effectBlocking { Files.readString(path.javaPath, StandardCharsets.UTF_8) }
         .refineOrDie { case e: IOException => e }
 
     override def readText[E](errorHandler: IOException => E)(path: Path): Stream[E, Char] =
       stream.ZStream.managed(
         ZManaged.fromAutoCloseable(
-          blocking.effectBlocking { Files.newBufferedReader(path, StandardCharsets.UTF_8) }
+          blocking.effectBlocking { Files.newBufferedReader(path.javaPath, StandardCharsets.UTF_8) }
             .refineOrDie {
               case ex: IOException => errorHandler(ex)
             }
@@ -54,7 +54,7 @@ class IOEnvironment(otherEnv: Blocking with Console with System) extends FileIO 
 
     override def writeToFile[R, E, X](errorHandler: IOException => E)(path: Path)(data: Source[ZIO[R, E, *], Chunk[Byte], X]): ZIO[R, E, X] =
       ZManaged.fromAutoCloseable(
-        blocking.effectBlocking { Files.newOutputStream(path, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING) }
+        blocking.effectBlocking { Files.newOutputStream(path.javaPath, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING) }
       )
         .refineOrDie {
           case ex: IOException => errorHandler(ex)
@@ -69,15 +69,16 @@ class IOEnvironment(otherEnv: Blocking with Console with System) extends FileIO 
         }
 
     override def isDirectory(path: Path): IO[IOException, Boolean] =
-      blocking.effectBlocking { Files.isDirectory(path) }
+      blocking.effectBlocking { Files.isDirectory(path.javaPath) }
         .refineOrDie { case e: IOException => e }
 
     override def listDirectory(path: Path): Stream[IOException, Path] =
       Stream.fromEffect(
-        blocking.effectBlocking { Files.list(path).toScala(Iterable) }
+        blocking.effectBlocking { Files.list(path.javaPath).toScala(Iterable) }
           .refineOrDie { case e: IOException => e }
       )
         .flatMap(Stream.fromIterable)
+        .map(new Path(_))
 
     override def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, *]], Unit]): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
       ZStreamSource(
@@ -86,7 +87,7 @@ class IOEnvironment(otherEnv: Blocking with Console with System) extends FileIO 
 
     override def openZipFile[R, E](errorHandler: IOException => E)(path: Path): Managed[E, ZipFileReader[ZIO[R, E, *]]] =
       ZManaged.fromAutoCloseable(
-        blocking.effectBlocking { new ZipFile(path.toFile) }
+        blocking.effectBlocking { new ZipFile(path.javaPath.toFile) }
           .refineOrDie { case e: IOException => errorHandler(e) }
       )
         .map { zipFile =>

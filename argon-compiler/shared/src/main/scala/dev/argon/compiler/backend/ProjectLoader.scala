@@ -1,7 +1,7 @@
 package dev.argon.compiler.backend
 
 import java.io.IOException
-import java.nio.file._
+import dev.argon.io.Path
 
 import cats._
 import cats.implicits._
@@ -80,8 +80,7 @@ object ProjectFileHandler {
   def fileHandlerPath(dir: Path): ProjectFileHandler[ZIO[FileIO, IOException, ?], Path] = new ProjectFileHandler[ZIO[FileIO, IOException, ?], Path] {
 
     override def loadSingleFile(file: String): ZIO[FileIO, IOException, Path] =
-      IO.effect { dir.resolve(file) }
-        .refineOrDie { case ex: IOException => ex }
+      Path.of(file).map(dir.resolve)
 
   }
 

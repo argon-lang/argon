@@ -9,6 +9,9 @@ import zio.{IO, Runtime, ZIO}
 import dev.argon.build._
 
 trait TestCaseRunner {
+
+  val name: String
+
   def runTest(testCase: TestCase): ZIO[BuildEnvironment, Throwable, TestCaseResult]
 
   protected def isExpectedError(errors: NonEmptyList[CompilationError], errorName: String): Boolean =

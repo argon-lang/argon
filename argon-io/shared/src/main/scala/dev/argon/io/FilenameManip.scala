@@ -1,7 +1,7 @@
 package dev.argon.io
 
 import java.io.{FileNotFoundException, IOException}
-import java.nio.file._
+import java.nio.file.FileSystems
 
 import zio._
 import zio.stream._
@@ -13,34 +13,11 @@ import scala.jdk.StreamConverters._
 
 object FilenameManip {
 
-  def getExtension(path: Path): String = {
-    val name = getFileName(path)
-    val index = name.lastIndexOf(".")
-
-    if(index > 1) name.substring(index + 1)
-    else ""
-  }
-
-  def getBasename(path: Path): String = {
-    val name = getFileName(path)
-    val index = name.lastIndexOf(".")
-
-    if(index > 1) name.substring(0, index)
-    else name
-  }
-
-  def getFileName(path: Path): String =
-    Option(path.getFileName).fold("")(pathToString)
-
-  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
-  def pathToString(path: Path): String =
-    path.toString
-
   @SuppressWarnings(Array("org.wartremover.warts.ToString", "org.wartremover.warts.Equals"))
   def findGlob(path: Path): ZStream[FileIO, IOException, Path] = {
 
     def globSegmentMatches(glob: String)(path: Path): Boolean =
-      FileSystems.getDefault.getPathMatcher("glob:" + glob).matches(path.getFileName)
+      FileSystems.getDefault.getPathMatcher("glob:" + glob).matches(java.nio.file.Path.of(path.fileName))
 
     def findGlobImpl(globs: List[Path])(baseDir: Path): ZStream[FileIO, IOException, Path] =
       globs match {
@@ -81,15 +58,13 @@ object FilenameManip {
       }
 
 
-    val pathRoot = path.getRoot
-
     ZStream.fromEffect(
-      if(pathRoot eq null)
-        ZIO.accessM[FileIO] { _.fileIO.getAbsolutePath(Path.of("")) }
-      else
-        IO.succeed(pathRoot)
+      path.root match {
+        case Some(pathRoot) => IO.succeed(pathRoot)
+        case None => Path.of(".").flatMap { rootPath => ZIO.accessM[FileIO] { _.fileIO.getAbsolutePath(rootPath) } }
+      }
     )
-      .flatMap(findTrueBase(_, path.asScala.toList))
+      .flatMap(findTrueBase(_, path.toList))
   }
 
 }

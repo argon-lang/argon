@@ -5,7 +5,7 @@ import cats.implicits._
 import zio.interop.catz._
 import dev.argon.build._
 import java.io.IOException
-import java.nio.file.Path
+import dev.argon.io.Path
 
 import cats.data.NonEmptyList
 import dev.argon.compiler.{CompilationError, CompilerOptions}
@@ -17,9 +17,11 @@ import dev.argon.build._
 
 final class BuildTestCaseRunner(protected val backend: Backend, references: Vector[Path]) extends TestCaseRunnerCompilePhase {
 
+  override val name: String = s"Compilation (${backend.name})"
+
   private implicit val dummyFileHandler: ProjectFileHandler[ZIO[BuildEnvironment, Nothing, ?], Path] = new ProjectFileHandler[ZIO[BuildEnvironment, Nothing, ?], Path] {
     override def loadSingleFile(file: String): ZIO[BuildEnvironment, Nothing, Path] =
-      IO.effectTotal { Path.of(file) }
+      Path.of(file)
   }
 
 

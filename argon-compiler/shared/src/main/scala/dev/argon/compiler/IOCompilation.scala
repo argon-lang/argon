@@ -1,7 +1,7 @@
 package dev.argon.compiler
 
 import java.io
-import java.nio.file.Path
+import dev.argon.io.Path
 import java.util.zip
 import java.util.zip.ZipFile
 
@@ -100,7 +100,7 @@ object IOCompilation {
           NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex)))
 
         override def getExtension(id: Path): UIO[String] =
-          IO.succeed(FilenameManip.getExtension(id))
+          IO.succeed(id.extension)
 
         override def writeToResource[X](id: Path)(data: Source[Comp, Chunk[Byte], X]): Comp[X] =
           fileIO.writeToFile(ioExceptionToError)(id)(data)

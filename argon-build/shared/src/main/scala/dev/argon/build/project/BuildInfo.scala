@@ -1,8 +1,7 @@
 package dev.argon.build.project
 
 import java.io.IOException
-import java.nio.file.attribute.BasicFileAttributes
-import java.nio.file._
+import dev.argon.io.Path
 
 import cats._
 import cats.implicits._
@@ -58,7 +57,9 @@ object BuildInfo {
     ZIO.accessM[FileIO] { env =>
       for {
         absoluteFile <- env.fileIO.getAbsolutePath(file)
-        dir = absoluteFile.getParent
+        currentDir <- Path.of(".")
+        currentDirAbs <- env.fileIO.getAbsolutePath(currentDir)
+        dir = absoluteFile.parent.getOrElse(currentDir)
         buildFile <- env.fileIO.readAllText(file)
         result <- Toml.parse(buildFile)
           .toOption
@@ -104,7 +105,7 @@ object BuildInfo {
 
       backend.parseBackendOptions(table2).toOption.map { backendOptions =>
         val compilerOpts = CompilerOptions[Id](
-          moduleName = compOpts.moduleName.orElse(globalOptions.moduleName).getOrElse(FilenameManip.getBasename(file)),
+          moduleName = compOpts.moduleName.orElse(globalOptions.moduleName).getOrElse(file.fileNameWithoutExtension),
         )
 
         BuildInfo(backend)(

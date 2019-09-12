@@ -2,7 +2,6 @@ package dev.argon.io
 
 import dev.argon.stream._
 import java.io._
-import java.nio.file.Path
 
 import dev.argon.stream.builder.Source
 import zio._
@@ -16,7 +15,7 @@ trait FileIO {
 object FileIO {
 
   trait Service {
-    def getAbsolutePath(path: Path): IO[IOException, Path]
+    def getAbsolutePath(path: dev.argon.io.Path): IO[IOException, Path]
 
     def readAllText(path: Path): IO[IOException, String]
     def readText[E](errorHandler: IOException => E)(path: Path): Stream[E, Char]

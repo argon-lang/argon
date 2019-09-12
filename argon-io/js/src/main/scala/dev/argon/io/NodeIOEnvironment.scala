@@ -5,7 +5,6 @@ import cats.implicits._
 import java.io.IOException
 import java.nio.charset.CharsetDecoder
 import java.nio.{ByteBuffer, CharBuffer}
-import java.nio.file.{Path, Paths}
 
 import dev.argon.stream.builder.Source
 import dev.argon.stream.{ArStream, StreamTransformation}
@@ -23,7 +22,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
 
   override val fileIO: FileIO.Service = new FileIO.Service {
     override def getAbsolutePath(path: Path): IO[IOException, Path] =
-      IO.effect { path.toAbsolutePath }
+      IO.effect { new Path(JSPath.resolve(path.pathName)) }
         .refineOrDie { case e: IOException => e }
 
     override def readAllText(path: Path): IO[IOException, String] =
@@ -112,7 +111,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
               if(err != null)
                 IO.fail(JSIOException(err))
               else
-                IO.succeed(files.map(Paths.get(_)).toVector)
+                IO.succeed(files.map(new Path(_)).toVector)
             )
           )
         }

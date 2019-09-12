@@ -1,11 +1,12 @@
 package dev.argon.build
 
-import java.nio.file.Paths
-
+import cats._
+import cats.implicits._
 import dev.argon.build.testrunner._
-//import dev.argon.build.testrunner.node.{NodeLauncher, NodeTestCaseRunner}
+import dev.argon.io.Path
 import org.scalatest.{BeforeAndAfterAll, FunSpec, Matchers}
 import zio._
+import zio.interop.catz._
 
 class CompilerTests extends FunSpec with DefaultRuntime with Matchers with BeforeAndAfterAll {
 
@@ -34,31 +35,19 @@ class CompilerTests extends FunSpec with DefaultRuntime with Matchers with Befor
     "Argon.Core",
   )
 
-  //private val nodeLauncher = unsafeRunBuild(NodeLauncher(this, "external-api/node-api/bin/index.js"))
-
-  private val references = libraries.map { name => Paths.get(s"libraries/$name/$name.armodule") }
+  private val references = unsafeRun(libraries.traverse { name => Path.of(s"libraries/$name/$name.armodule") })
 
   private def generateTestCases(): Unit = {
     val testCases = TestCaseLoader.findTestCases(TestCases.all)
 
-    val runners = Vector(
-      "Parsing" -> ParseTestCaseRunner,
-    ) ++ Backends.allBackends.filterNot(_.id === "argon-module").map { backend =>
-      s"Compilation (${backend.name})" -> new BuildTestCaseRunner(backend, references)
-    }// ++ Vector(
-    //  "Node Execution" -> new NodeTestCaseRunner(references, nodeLauncher)
-    //)
+    val runners = PlatformHelpers.testCaseRunners(references)
 
-    runners foreach { case (desc, runner) =>
-      describe(desc) {
+    runners foreach { runner =>
+      describe(runner.name) {
         processTestCases(runner, testCases)
       }
     }
   }
 
   generateTestCases()
-
-  override protected def afterAll(): Unit = {
-    //unsafeRunBuild(nodeLauncher.close)
-  }
 }

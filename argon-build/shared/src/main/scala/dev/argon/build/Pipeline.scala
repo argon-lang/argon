@@ -1,7 +1,7 @@
 package dev.argon.build
 
 import java.io.IOException
-import java.nio.file.Path
+import dev.argon.io.Path
 
 import dev.argon.compiler._
 import dev.argon.stream._
@@ -18,7 +18,6 @@ import dev.argon.parser.SourceAST
 import dev.argon.compiler.backend.Backend
 import dev.argon.io.{FileIO, FilenameManip}
 import dev.argon.stream.ArStream
-import dev.argon.io.FileOperations.pathShow
 import dev.argon.build._
 import dev.argon.stream.builder.ZStreamSource
 import zio.stream.{ZSink, ZStream}
@@ -49,7 +48,7 @@ object Pipeline {
     resolveGlob(buildInfo.project.inputFiles)
       .zipWithIndex
       .map { case (path, id) =>
-        InputFileInfo[FIO](FileSpec(FileID(id), FilenameManip.pathToString(path)),
+        InputFileInfo[FIO](FileSpec(FileID(id), path.toString),
           ZStreamSource(createFileDataStream(path))
         )
       }
