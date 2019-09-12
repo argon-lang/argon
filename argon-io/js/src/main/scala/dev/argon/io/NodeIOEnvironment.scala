@@ -19,7 +19,7 @@ import zio.system.System
 import scala.scalajs.js.typedarray.Uint8Array
 
 @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.ToString", "org.wartremover.warts.Null"))
-class IOEnvironment(otherEnv: Console with System) extends FileIO with Console with System {
+class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Console with System {
 
   override val fileIO: FileIO.Service = new FileIO.Service {
     override def getAbsolutePath(path: Path): IO[IOException, Path] =

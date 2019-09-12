@@ -4,7 +4,7 @@ import dev.argon.build.{BuildEnvironment, Pipeline}
 import dev.argon.build.project.BuildInfo
 import cats._
 import cats.implicits._
-import dev.argon.io.{FileOperations, IOEnvironment}
+import dev.argon.io.FileOperations
 import zio.{BuildInfo => _, _}
 import zio.console._
 import zio.interop.catz._
@@ -19,7 +19,7 @@ object Program extends App {
     CommandLineParser.parse(CommandLineArguments.parser)(args) match {
       case Some(CommandLineArguments(cmd: CompileCommand[Id])) =>
         runCompilation(cmd)
-          .provideSome(new IOEnvironment(_))
+          .provideSome(PlatformHelpers.ioEnvironment)
           .catchAll { ex =>
             IO.effectTotal {
               ExceptionUtils.printRootCauseStackTrace(ex)
