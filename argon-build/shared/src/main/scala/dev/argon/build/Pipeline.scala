@@ -63,7 +63,7 @@ object Pipeline {
 
   def compileResult[A]
   (buildInfo: BuildInfo.Resolved)
-  (f: buildInfo.backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, Path] } => ZIO[BuildEnvironment, NonEmptyList[CompilationError], A])
+  (f: buildInfo.backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO[BuildEnvironment, NonEmptyList[CompilationError], +*], Path] } => ZIO[BuildEnvironment, NonEmptyList[CompilationError], A])
   (implicit compInstance: IOCompilation[BuildEnvironment])
   : ZIO[BuildEnvironment, NonEmptyList[CompilationError], A] =
     ZIO.access[FileIO] { res => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](res.fileIO) }.flatMap { implicit resFactory =>
@@ -77,7 +77,7 @@ object Pipeline {
         .flatMap {
           case (parsedInput, _) =>
             resolveGlob(buildInfo.project.references).runCollect.flatMap { references =>
-              BuildProcess.compile[ZIO, BuildEnvironment, Path, A](
+              BuildProcess.compile[ZIO[BuildEnvironment, NonEmptyList[CompilationError], +*], Path, A](
                 buildInfo.backend : buildInfo.backend.type
               )(
                 parsedInput,

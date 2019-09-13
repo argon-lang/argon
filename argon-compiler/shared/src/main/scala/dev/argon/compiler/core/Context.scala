@@ -36,11 +36,8 @@ trait Context {
   def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[TFunctionImplementation]
   def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[TMethodImplementation]
 
-  type Environment
-  type CompRE[-_, +_, +_]
-  type CompE[+E, +A] = CompRE[Environment, E, A]
-  type Comp[+A] = CompE[NonEmptyList[CompilationError], A]
-  implicit val compCompilationInstance: CompilationRE[CompRE, Environment]
+  type Comp[+A]
+  implicit val compCompilationInstance: Compilation[Comp]
 
   object ContextTypeSystem extends ArgonTypeSystem[this.type] {
     override val context: Context.this.type = Context.this

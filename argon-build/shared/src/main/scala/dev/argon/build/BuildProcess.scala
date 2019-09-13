@@ -43,7 +43,7 @@ object BuildProcess {
         }
     }
 
-  def compile[F[-_, +_, +_], R, I: Show, A]
+  def compile[F[+_], I: Show, A]
   (
     backend: Backend
   )(
@@ -52,10 +52,10 @@ object BuildProcess {
     compilerOptions: CompilerOptions[Id],
     backendOptions: backend.BackendOptions[Id, I]
   )(
-    f: backend.TCompilationOutput { val context: Backend.ContextWithComp[F, R, I] } => F[R, NonEmptyList[CompilationError], A]
+    f: backend.TCompilationOutput { val context: Backend.ContextWithComp[F, I] } => F[A]
   )
-  (implicit compInstance: CompilationRE[F, R], res: ResourceAccessFactory[Backend.ContextWithComp[F, R, I]])
-  : F[R, NonEmptyList[CompilationError], A] = {
+  (implicit compInstance: Compilation[F], res: ResourceAccessFactory[Backend.ContextWithComp[F, I]])
+  : F[A] = {
     val input = CompilerInput(
       source = sourceASTs,
       references = references,
@@ -63,7 +63,7 @@ object BuildProcess {
       backendOptions = backendOptions,
     )
 
-    backend.compile[F, R, I, A](input)(f)
+    backend.compile[F, I, A](input)(f)
   }
 
 

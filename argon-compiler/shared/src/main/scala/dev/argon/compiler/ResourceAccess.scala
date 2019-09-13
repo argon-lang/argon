@@ -14,13 +14,13 @@ trait ResourceAccess[TContext <: Context with Singleton] {
 
   import context._
 
-  def getExtension(id: ResIndicator): CompE[NonEmptyList[CompilationError], String]
+  def getExtension(id: ResIndicator): Comp[String]
 
   def writeToResource[X](id: ResIndicator)(data: Source[Comp, Chunk[Byte], X]): Comp[X]
   def zipFromEntries(entries: Source[Comp, ZipEntryInfo[Comp], Unit]): Source[Comp, Chunk[Byte], Unit]
 
   type ZipReader
-  def getZipReader[A](id: ResIndicator): Resource[CompRE, Environment, NonEmptyList[CompilationError], ZipReader]
+  def getZipReader[A](id: ResIndicator): Resource[Comp, ZipReader]
   def zipEntryStream(zip: ZipReader, name: String): Source[Comp, Chunk[Byte], Unit]
 
   def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage with Message[A]]

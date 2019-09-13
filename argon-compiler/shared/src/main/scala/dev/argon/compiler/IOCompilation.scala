@@ -18,13 +18,15 @@ import dev.argon.io.{FileIO, FilenameManip, ZipEntryInfo, ZipFileReader}
 import dev.argon.stream._
 import dev.argon.stream.builder.Source
 
-trait IOCompilation[R] extends CompilationExec[ZIO, R]
+trait IOCompilation[R] extends Compilation[ZIO[R, NonEmptyList[CompilationError], *]] {
+  def getResult[A](fa: ZIO[R, NonEmptyList[CompilationError], A]): ZIO[R, Nothing, (Vector[CompilationMessageNonFatal], Either[NonEmptyList[CompilationError], A])]
+}
 
 object IOCompilation {
 
   def compilationInstance[R]: UIO[IOCompilation[R]] = IO.succeed(new IOCompilation[R] {
 
-    type E = ErrorType
+    type E = NonEmptyList[CompilationError]
     type F[+A] = ZIO[R, E, A]
 
     override def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[Nothing]): F[A] =
@@ -79,7 +81,7 @@ object IOCompilation {
 
   })
 
-  type IOContext[R] = Backend.ContextWithComp[ZIO, R, Path]
+  type IOContext[R] = Backend.ContextWithComp[ZIO[R, NonEmptyList[CompilationError], +*], Path]
 
   trait IOResourceAccess[R, TContext <: IOContext[R] with Singleton] extends ResourceAccess[TContext] {
     override type ZipReader = ZipFileReader[ZIO[R, NonEmptyList[CompilationError], ?]]
@@ -105,7 +107,7 @@ object IOCompilation {
         override def zipFromEntries(entries: Source[Comp, ZipEntryInfo[Comp], Unit]): Source[Comp, Chunk[Byte], Unit] =
           fileIO.zipEntries(ioExceptionToError)(entries)
 
-        override def getZipReader[A](id: Path): Resource[ZIO, R, NonEmptyList[CompilationError], ZipReader] =
+        override def getZipReader[A](id: Path): Resource[ZIO[R, NonEmptyList[CompilationError], *], ZipReader] =
           Resource.fromZManaged(
             fileIO.openZipFile(ioExceptionToError)(id)
           )

@@ -9,11 +9,11 @@ import dev.argon.compiler._
 import cats._
 import cats.implicits._
 
-final class JSContext[TCompRE[-_, +_, +_], R, I]
+final class JSContext[TComp[+_], I]
 (
   override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]]
 )(
-  override implicit val compCompilationInstance: CompilationRE[TCompRE, R]
+  override implicit val compCompilationInstance: Compilation[TComp]
 ) extends Context {
 
   override type TTraitMetadata = Unit
@@ -29,9 +29,7 @@ final class JSContext[TCompRE[-_, +_, +_], R, I]
   override type TDataConstructorImplementation = JSImpl.DataConstructor
 
 
-  override type CompRE[-R2, +E, +A] = TCompRE[R2, E, A]
-  override type Environment = R
-
+  override type Comp[+A] = TComp[A]
 
   override type BackendOptions = JSBackendOptions[Id, I]
 

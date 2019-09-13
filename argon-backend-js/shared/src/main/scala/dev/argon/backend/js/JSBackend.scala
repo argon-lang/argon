@@ -50,13 +50,13 @@ object JSBackend extends Backend {
     toml.Toml.parseAs[JSBackendOptions[Option, String]](table)
 
 
-  override def compile[F[-_, +_, +_], R, I: Show, A]
+  override def compile[F[+_], I: Show, A]
   (input: CompilerInput[I, JSBackendOptions[Id, I]])
-  (f: CompilationOutputText { val context: ContextWithComp[F, R, I] } => F[R, NonEmptyList[CompilationError], A])
-  (implicit compInstance: CompilationRE[F, R], resFactory: ResourceAccessFactory[ContextWithComp[F, R, I]])
-  : F[R, NonEmptyList[CompilationError], A] = {
-    val context = new JSContext[F, R, I](input)
-    val emitter = new JSEmitter[F, R, context.type](context, input.backendOptions.inject)
+  (f: CompilationOutputText { val context: ContextWithComp[F, I] } => F[A])
+  (implicit compInstance: Compilation[F], resFactory: ResourceAccessFactory[ContextWithComp[F, I]])
+  : F[A] = {
+    val context = new JSContext[F, I](input)
+    val emitter = new JSEmitter[F, context.type](context, input.backendOptions.inject)
     implicit val res = resFactory.create(context)
 
     context.createModule { module =>

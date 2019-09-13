@@ -31,7 +31,7 @@ final class BuildTestCaseRunner(protected val backend: Backend, referencePaths: 
     )
 
 
-  override protected def getProgramOutput(compOutput: backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO, BuildEnvironment, Path] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]] =
+  override protected def getProgramOutput(compOutput: backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO[BuildEnvironment, NonEmptyList[CompilationError], +*], Path] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]] =
     IO.succeed(Right(""))
 
   override def runTest(testCase: TestCase): ZIO[BuildEnvironment, Throwable, TestCaseResult] =

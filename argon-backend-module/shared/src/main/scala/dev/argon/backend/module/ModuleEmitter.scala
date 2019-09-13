@@ -20,10 +20,7 @@ import dev.argon.util.AnyExtensions._
 import shapeless.ops.nat.{LT, Pred}
 import zio.{IO, ZIO, stream => zstream}
 
-final class ModuleEmitter[TCompRE[-_, +_, +_], R, TContext <: ModuleContext[TCompRE, R, _] with Singleton](val context: TContext) {
-
-  type TCompE[+E, +A] = context.CompE[E, A]
-  type TComp[+A] = context.Comp[A]
+final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Singleton](val context: TContext) {
 
   import context._
   import context.signatureContext.{ Signature, SignatureResult, SignatureParameters, SignatureVisitor }

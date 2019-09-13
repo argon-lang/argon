@@ -11,7 +11,7 @@ import dev.argon.compiler.types.TypeSystem
 import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
 import dev.argon.compiler.vtable._
 
-final class JSEmitter[CompRE[-_, +_, +_], R, TContext <: JSContext[CompRE, R, _] with Singleton](val context: TContext, inject: JSInjectCode[Id]) {
+final class JSEmitter[TComp[+_], TContext <: JSContext[TComp, _] with Singleton](val context: TContext, inject: JSInjectCode[Id]) {
 
   import context._
   import context.signatureContext.{ context => _, typeSystem => _, _ }

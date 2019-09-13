@@ -8,11 +8,11 @@ import dev.argon.compiler.loaders.armodule.ArgonModuleLoader
 import cats._
 import cats.implicits._
 
-class ModuleContext[TCompRE[-_, +_, +_], R, I]
+class ModuleContext[TComp[+_], I]
 (
   override protected val compilerInput: CompilerInput[I, ModuleBackendOptions[Id, I]]
 )(implicit
-  override implicit val compCompilationInstance: CompilationRE[TCompRE, R]
+  override implicit val compCompilationInstance: Compilation[TComp]
 ) extends Context {
   override type TFunctionMetadata = Unit
   override type TMethodMetadata = Unit
@@ -27,9 +27,7 @@ class ModuleContext[TCompRE[-_, +_, +_], R, I]
   override type TDataConstructorImplementation = typeSystem.ArExpr
 
 
-  override type CompRE[-R2, +E2, +A] = TCompRE[R2, E2, A]
-  override type Environment = R
-
+  override type Comp[+A] = TComp[A]
 
   override type BackendOptions = ModuleBackendOptions[Id, I]
 
