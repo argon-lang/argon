@@ -156,23 +156,36 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
       )
         .flatMap(ZStream.fromIterable(_))
 
+    private def dataStreamToArray[R, E](dataStream: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, Uint8Array] =
+      IO.effectTotal { new ByteArrayOutputStream() }
+        .flatMap { outputStream =>
+          dataStream.foreach { chunk =>
+            IO.effectTotal { outputStream.write(chunk.toArray) }
+          }
+            .flatMap { _ =>
+              IO.effectTotal { new Uint8Array(outputStream.toByteArray.toJSArray) }
+            }
+        }
+
+    private def promiseToIO[E, A](errorHandler: IOException => E)(promise: => js.Promise[A]): IO[E, A] =
+      IO.effectAsync { register =>
+        val _ = promise
+          .`then`[Unit](
+            onFulfilled = data => register(IO.succeed(data)),
+            onRejected = {
+              case e: js.Error => register(IO.fail(errorHandler(JSIOException(e))))
+              case _ => register(IO.fail(errorHandler(new IOException("An unknown error occurred"))))
+            } : js.Function1[Any, Unit | js.Thenable[Unit]]
+          )
+      }
+
+
     override def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, *]], Unit]): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
       ZStreamSource(
         ZStream.flatten(
           ZStream.fromEffect(
             IO.effectTotal { new JSZip() }
               .flatMap { zip =>
-                def dataStreamToArray(dataStream: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, Uint8Array] =
-                  IO.effectTotal { new ByteArrayOutputStream() }
-                    .flatMap { outputStream =>
-                      dataStream.foreach { chunk =>
-                        IO.effectTotal { outputStream.write(chunk.toArray) }
-                      }
-                        .flatMap { _ =>
-                          IO.effectTotal { new Uint8Array(outputStream.toByteArray.toJSArray) }
-                        }
-                    }
-
                 entries.foreach { entry =>
                   dataStreamToArray(entry.dataStream).flatMap { buffer =>
                     IO.effect { zip.file(entry.path, buffer) }
@@ -181,24 +194,41 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
                   }
                 }
                   .flatMap { _ =>
-                    IO.effectAsync { register =>
-                      val _ = zip.generateAsync(JSZip.JSZipGeneratorOptions("uint8array"))
-                        .`then`[Unit](
-                          onFulfilled = data => register(IO.succeed(ZStream(Chunk.fromArray(data.toArray.map { _.toByte })))),
-                          onRejected = {
-                            case e: js.Error => register(IO.fail(errorHandler(JSIOException(e))))
-                            case _ => register(IO.fail(errorHandler(new IOException("An unknown error occurred"))))
-                          } : js.Function1[Any, Unit | js.Thenable[Unit]]
-                        )
-                    }
+                    promiseToIO(errorHandler)(zip.generateAsync(JSZip.JSZipGeneratorOptions("uint8array")))
+                        .map { data => ZStream(Chunk.fromArray(data.toArray.map { _.toByte })) }
                   }
-
               }
           )
         )
       )
 
-    override def openZipFile[R, E](errorHandler: IOException => E)(path: Path): Managed[E, ZipFileReader[ZIO[R, E, *]]] = ???
+    override def openZipFile[R, E](errorHandler: IOException => E)(path: Path): Managed[E, ZipFileReader[ZIO[R, E, *]]] =
+      ZManaged.fromEffect(
+        dataStreamToArray[Any, E](ZStreamSource(
+          readByteChunks[E](errorHandler)(path)
+            .map { data => Chunk.fromArray(data.toArray.map { _.toByte }) }
+        ))
+          .flatMap { data =>
+            IO.effect { new JSZip(data) }
+              .refineOrDie {
+                case js.JavaScriptException(e: js.Error) => errorHandler(JSIOException(e))
+              }
+          }
+          .map { zip =>
+            new ZipFileReader[ZIO[R, E, *]] {
+              override def getEntryStream(name: String): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
+                ZStreamSource(
+                  ZStream.flatten(
+                    ZStream.fromEffect(
+                      promiseToIO(errorHandler)(zip.file(name).async("uint8array"))
+                        .map { data => ZStream(Chunk.fromArray(data.toArray.map { _.toByte })) }
+                    )
+                  )
+                )
+
+            }
+          }
+      )
 
     override def deserializeProtocolBuffer[R, E, A <: GeneratedMessage with Message[A]](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, A] = ???
 
