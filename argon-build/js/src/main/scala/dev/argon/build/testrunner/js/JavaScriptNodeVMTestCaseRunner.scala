@@ -18,12 +18,12 @@ import dev.argon.build._
 import scala.scalajs.js
 import scala.scalajs.js.{JSON, |}
 
-final class JavaScriptTestCaseRunner(references: UIO[Vector[Path]]) extends JavaScriptTestCaseRunnerBase(references) {
+final class JavaScriptNodeVMTestCaseRunner(references: UIO[Vector[Path]]) extends JavaScriptTestCaseRunnerBase(references) {
 
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null", "org.wartremover.warts.ToString"))
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): ZIO[BuildEnvironment, Throwable, String] =
     IO.effectAsync { register =>
-      val stdout = new JSMemoryWritableStream()
+      val stdout = new MemoryWritableStream()
       val sandboxConsole = new NodeConsole(stdout)
 
       val sandbox = js.Object.create(null).asInstanceOf[js.Object with js.Dynamic]
@@ -80,9 +80,9 @@ final class JavaScriptTestCaseRunner(references: UIO[Vector[Path]]) extends Java
 
 }
 
-object JavaScriptTestCaseRunner {
+object JavaScriptNodeVMTestCaseRunner {
 
-  def apply(references: UIO[Vector[Path]]): JavaScriptTestCaseRunner =
-    new JavaScriptTestCaseRunner(references)
+  def apply(references: UIO[Vector[Path]]): JavaScriptNodeVMTestCaseRunner =
+    new JavaScriptNodeVMTestCaseRunner(references)
 
 }

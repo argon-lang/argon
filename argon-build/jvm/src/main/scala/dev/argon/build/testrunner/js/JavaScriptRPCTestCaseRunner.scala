@@ -16,7 +16,7 @@ import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.io.{FileIO, FilenameManip}
 import dev.argon.build._
 
-final class JavaScriptTestCaseRunner(referencePaths: UIO[Vector[Path]], launcher: ZManaged[BuildEnvironment, Throwable, NodeLauncher]) extends JavaScriptTestCaseRunnerBase(referencePaths) {
+final class JavaScriptRPCTestCaseRunner(referencePaths: UIO[Vector[Path]], launcher: ZManaged[BuildEnvironment, Throwable, NodeLauncher]) extends JavaScriptTestCaseRunnerBase(referencePaths) {
 
 
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): ZIO[BuildEnvironment, Throwable, String] =
@@ -34,9 +34,9 @@ final class JavaScriptTestCaseRunner(referencePaths: UIO[Vector[Path]], launcher
 
 }
 
-object JavaScriptTestCaseRunner {
+object JavaScriptRPCTestCaseRunner {
 
-  def apply(jsScriptFile: String)(references: UIO[Vector[Path]]): JavaScriptTestCaseRunner =
-    new JavaScriptTestCaseRunner(references, NodeLauncher(jsScriptFile))
+  def apply(jsScriptFile: String)(references: UIO[Vector[Path]]): JavaScriptRPCTestCaseRunner =
+    new JavaScriptRPCTestCaseRunner(references, NodeLauncher(jsScriptFile))
 
 }

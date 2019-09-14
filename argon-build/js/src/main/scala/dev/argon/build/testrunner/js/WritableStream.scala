@@ -5,7 +5,7 @@ import scalajs.js
 
 @js.native
 @JSImport("memory-streams", "WritableStream")
-class JSMemoryWritableStream() extends NodeWritableStream
+class MemoryWritableStream() extends NodeWritableStream
 
 @js.native
 trait NodeWritableStream extends js.Object {

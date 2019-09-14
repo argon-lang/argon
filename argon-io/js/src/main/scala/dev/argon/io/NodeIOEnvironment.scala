@@ -29,7 +29,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
 
     override def readAllText(path: Path): IO[IOException, String] =
       IO.effectAsync { register =>
-        JSFileSystem.readFile(path.toString, "utf-8", (error, data) =>
+        NodeFileSystem.readFile(path.toString, "utf-8", (error, data) =>
           register(
             if(error != null)
               IO.fail(JSIOException(error))
@@ -44,7 +44,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
       ZStream[Any, E, Uint8Array](
         ZManaged.make(
           IO.effectAsync[E, Integer] { register =>
-            JSFileSystem.open(path.toString, "r", (error, fd) =>
+            NodeFileSystem.open(path.toString, "r", (error, fd) =>
               register(
                 if(error != null)
                   IO.fail(errorHandler(JSIOException(error)))
@@ -55,7 +55,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
           }
         )(
           fd => IO.effectAsync[IOException, Unit] { register =>
-            JSFileSystem.close(fd, error =>
+            NodeFileSystem.close(fd, error =>
               register(
                 if(error != null)
                   IO.fail(JSIOException(error))
@@ -67,7 +67,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
         ).map { fd =>
           IO.effectAsync[Option[E], Uint8Array] { register =>
             val buffer = new Uint8Array(4096)
-            JSFileSystem.read(fd, buffer, 0, buffer.length, null, (err, bytesRead, _) =>
+            NodeFileSystem.read(fd, buffer, 0, buffer.length, null, (err, bytesRead, _) =>
               register(
                 if(err != null)
                   IO.fail(Some(errorHandler(JSIOException(err))))
@@ -93,7 +93,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
 
     override def writeToFile[R, E, X](errorHandler: IOException => E)(path: Path)(data: Source[ZIO[R, E, *], Chunk[Byte], X]): ZIO[R, E, X] =
       IO.effectAsync[E, Integer] { register =>
-        JSFileSystem.open(path.toString, "r", (error, fd) =>
+        NodeFileSystem.open(path.toString, "r", (error, fd) =>
           register(
             if(error != null)
               IO.fail(errorHandler(JSIOException(error)))
@@ -104,7 +104,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
       }
         .bracket(fd =>
           IO.effectAsync[IOException, Unit] { register =>
-            JSFileSystem.close(fd, error =>
+            NodeFileSystem.close(fd, error =>
               register(
                 if(error != null)
                   IO.fail(JSIOException(error))
@@ -116,7 +116,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
         ) { fd =>
           data.foreach { chunk =>
             IO.effectAsync[E, Unit] { register =>
-              JSFileSystem.write(fd, new Uint8Array(chunk.toArray.toJSArray), (err, _, _) =>
+              NodeFileSystem.write(fd, new Uint8Array(chunk.toArray.toJSArray), (err, _, _) =>
                 register(
                   if(err != null)
                     IO.fail(errorHandler(JSIOException(err)))
@@ -131,7 +131,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
 
     override def isDirectory(path: Path): IO[IOException, Boolean] =
       IO.effectAsync { register =>
-        JSFileSystem.stat(path.toString, (err, stat) =>
+        NodeFileSystem.stat(path.toString, (err, stat) =>
           register(
             if(err != null)
               IO.fail(JSIOException(err))
@@ -144,7 +144,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
     override def listDirectory(path: Path): Stream[IOException, Path] =
       Stream.fromEffect(
         IO.effectAsync[IOException, Vector[Path]] { register =>
-          JSFileSystem.readdir(path.toString, (err, files) =>
+          NodeFileSystem.readdir(path.toString, (err, files) =>
             register(
               if(err != null)
                 IO.fail(JSIOException(err))

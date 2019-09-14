@@ -1,7 +1,7 @@
 package dev.argon.build
 
 import dev.argon.backend.js.JSBackend
-import dev.argon.build.testrunner.js.JavaScriptTestCaseRunner
+import dev.argon.build.testrunner.js.JavaScriptRPCTestCaseRunner
 import dev.argon.build.testrunner.{BuildTestCaseRunner, ParseTestCaseRunner, TestCaseRunner}
 import dev.argon.compiler.backend.Backend
 import dev.argon.io.{IOEnvironment, Path}
@@ -16,6 +16,6 @@ object PlatformHelpers {
   def testCaseRunners(references: UIO[Vector[Path]]): Seq[TestCaseRunner] =
     Seq(ParseTestCaseRunner) ++
       Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, references) } ++
-      Seq(JavaScriptTestCaseRunner("external-api/node-api/bin/index.js")(references))
+      Seq(JavaScriptRPCTestCaseRunner("external-api/node-api/bin/index.js")(references))
 
 }

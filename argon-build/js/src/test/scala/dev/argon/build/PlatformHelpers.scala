@@ -2,7 +2,7 @@ package dev.argon.build
 
 import dev.argon.backend.js.JSBackend
 import dev.argon.build.testrunner.{BuildTestCaseRunner, ParseTestCaseRunner, TestCaseRunner}
-import dev.argon.build.testrunner.js.JavaScriptTestCaseRunner
+import dev.argon.build.testrunner.js.JavaScriptNodeVMTestCaseRunner
 import dev.argon.io.{NodeIOEnvironment, Path}
 import zio.{UIO, ZManaged}
 import zio.console.Console
@@ -14,5 +14,5 @@ object PlatformHelpers {
   def testCaseRunners(referencePaths: UIO[Vector[Path]]): Seq[TestCaseRunner] =
     Seq(ParseTestCaseRunner) ++
       Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, referencePaths) } ++
-      Seq(JavaScriptTestCaseRunner(referencePaths))
+      Seq(JavaScriptNodeVMTestCaseRunner(referencePaths))
 }

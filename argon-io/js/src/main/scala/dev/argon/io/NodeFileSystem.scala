@@ -7,10 +7,10 @@ import scala.scalajs.js.|
 
 @js.native
 @JSImport("fs", JSImport.Namespace)
-private[io] object JSFileSystem extends js.Any {
+private[io] object NodeFileSystem extends js.Any {
 
   def readFile(path: String, encoding: String, callback: js.Function2[js.Error, String, Any]): Unit = js.native
-  def stat(path: String, callback: js.Function2[js.Error, JSStats, Unit]): Unit = js.native
+  def stat(path: String, callback: js.Function2[js.Error, NodeStats, Unit]): Unit = js.native
   def readdir(path: String, callback: js.Function2[js.Error, js.Array[String], Unit]): Unit = js.native
 
 
