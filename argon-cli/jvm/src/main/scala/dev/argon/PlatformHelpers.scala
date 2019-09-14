@@ -8,4 +8,7 @@ import dev.argon.io.IOEnvironment
 
 object PlatformHelpers {
   def ioEnvironment: Blocking with Console with System => IOEnvironment = new IOEnvironment(_)
+
+  def getCommandLineArgs(args: List[String]): List[String] =
+    args
 }

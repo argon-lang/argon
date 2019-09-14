@@ -90,7 +90,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
 
     override def writeToFile[R, E, X](errorHandler: IOException => E)(path: Path)(data: Source[ZIO[R, E, *], Chunk[Byte], X]): ZIO[R, E, X] =
       IO.effectAsync[E, Integer] { register =>
-        NodeFileSystem.open(path.toString, "r", (error, fd) =>
+        NodeFileSystem.open(path.toString, "w", (error, fd) =>
           register(
             if(error != null)
               IO.fail(errorHandler(JSIOException(error)))
@@ -146,7 +146,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
               if(err != null)
                 IO.fail(JSIOException(err))
               else
-                IO.succeed(files.map(new Path(_)).toVector)
+                IO.succeed(files.map { fileName => new Path(JSPath.join(path.pathName, fileName)) }.toVector)
             )
           )
         }

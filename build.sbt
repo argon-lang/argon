@@ -118,7 +118,12 @@ lazy val cli = crossProject(JVMPlatform, JSPlatform).in(file("argon-cli"))
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonJSSettings)
+    _.settings(
+      commonJSSettings,
+
+      scalaJSUseMainModuleInitializer := true,
+
+    )
   )
   .settings(
     commonSettings,

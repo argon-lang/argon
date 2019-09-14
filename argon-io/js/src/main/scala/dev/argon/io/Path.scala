@@ -7,7 +7,11 @@ import scala.jdk.CollectionConverters._
 import scala.jdk.StreamConverters._
 
 final class Path(private[io] val pathName: String) extends AnyVal {
-  def root: Option[Path] = ???
+  def root: Option[Path] = {
+    val rootPath = JSPath.parse(pathName).root
+
+    Option.when(rootPath.nonEmpty)(new Path(rootPath))
+  }
 
   def fileName: String = JSPath.basename(pathName)
 

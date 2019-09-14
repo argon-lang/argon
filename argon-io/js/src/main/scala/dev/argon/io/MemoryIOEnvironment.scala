@@ -20,7 +20,7 @@ class MemoryIOEnvironment(fileSystem: Ref[Map[String, Chunk[Byte]]]) extends Fil
     private def readFileBytes(path: Path): IO[IOException, Chunk[Byte]] =
       fileSystem.get.flatMap { fs =>
         getAbsolutePath(path).flatMap { fileName =>
-          IO.fromEither(fs.get(fileName.pathName).toRight { new FileNotFoundException() })
+          IO.fromEither(fs.get(fileName.pathName).toRight { new FileNotFoundException(fileName.pathName) })
         }
       }
 
@@ -71,12 +71,13 @@ class MemoryIOEnvironment(fileSystem: Ref[Map[String, Chunk[Byte]]]) extends Fil
                     val restName = name.substring(fileNameStr.length)
                     val slash = restName.indexOf("/")
 
-                    new Path(
+                    val nextPart =
                       if(slash < 0)
                         restName
                       else
                         restName.substring(0, slash)
-                    )
+
+                    new Path(JSPath.join(path.pathName, nextPart))
                   }
                   .toSet
                   .toSeq

@@ -10,6 +10,7 @@ import cats.implicits._
 
 import scala.jdk.CollectionConverters._
 import scala.jdk.StreamConverters._
+import scala.util.matching.Regex
 
 object FilenameManip {
 
@@ -17,7 +18,7 @@ object FilenameManip {
   def findGlob(path: Path): ZStream[FileIO, IOException, Path] = {
 
     def globSegmentMatches(glob: String)(path: Path): Boolean =
-      FileSystems.getDefault.getPathMatcher("glob:" + glob).matches(java.nio.file.Path.of(path.fileName))
+      glob.split("\\*").map(Regex.quote).mkString(".*").r.matches(path.toString)
 
     def findGlobImpl(globs: List[Path])(baseDir: Path): ZStream[FileIO, IOException, Path] =
       globs match {
