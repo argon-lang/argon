@@ -2,6 +2,7 @@
   "name": "argon-build-test",
   "version": "1.0.0",
   "dependencies": {
-    "jszip": "^3.2.2"
+    "jszip": "^3.2.2",
+    "memory-streams": "^0.1.3"
   }
 }

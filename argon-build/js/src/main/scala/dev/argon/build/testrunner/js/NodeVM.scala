@@ -20,8 +20,20 @@ object NodeVM extends js.Any {
     def link(linker: js.Function2[String, SourceTextModule, js.Promise[SourceTextModule]]): js.Promise[Unit] = js.native
     def instantiate(): Unit = js.native
     def evaluate(): js.Promise[js.Any] = js.native
+    val context: js.Any = js.native
   }
 
 
+
+}
+
+@SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+object NodeVMUtil {
+  import NodeVM.SourceTextModuleOptions
+
+  object SourceTextModuleOptions {
+    def apply(context: js.Any): SourceTextModuleOptions =
+      js.Dynamic.literal(context = context).asInstanceOf[SourceTextModuleOptions]
+  }
 
 }

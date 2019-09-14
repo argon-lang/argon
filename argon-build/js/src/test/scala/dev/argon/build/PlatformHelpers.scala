@@ -13,6 +13,6 @@ object PlatformHelpers {
 
   def testCaseRunners(referencePaths: UIO[Vector[Path]]): Seq[TestCaseRunner] =
     Seq(ParseTestCaseRunner) ++
-      Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, referencePaths) }// ++
-      //Seq(JavaScriptTestCaseRunner(referencePaths))
+      Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, referencePaths) } ++
+      Seq(JavaScriptTestCaseRunner(referencePaths))
 }

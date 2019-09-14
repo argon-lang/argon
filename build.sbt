@@ -1,5 +1,6 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 import sbt.internal.util.ManagedLogger
+import org.scalajs.jsenv.nodejs.NodeJSEnv
 
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.0",
@@ -54,6 +55,11 @@ lazy val commonJSSettings = Seq(
   ),
 
   scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+
+  jsEnv := new NodeJSEnv(
+    NodeJSEnv.Config()
+      .withArgs(List("--no-warnings", "--experimental-vm-modules"))
+  )
 
 )
 
