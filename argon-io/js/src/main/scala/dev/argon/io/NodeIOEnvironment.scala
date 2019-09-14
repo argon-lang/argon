@@ -91,7 +91,43 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
         }
         .flatMap(ZStream.fromIterable(_))
 
-    override def writeToFile[R, E, X](errorHandler: IOException => E)(path: Path)(data: Source[ZIO[R, E, *], Chunk[Byte], X]): ZIO[R, E, X] = ???
+    override def writeToFile[R, E, X](errorHandler: IOException => E)(path: Path)(data: Source[ZIO[R, E, *], Chunk[Byte], X]): ZIO[R, E, X] =
+      IO.effectAsync[E, Integer] { register =>
+        JSFileSystem.open(path.toString, "r", (error, fd) =>
+          register(
+            if(error != null)
+              IO.fail(errorHandler(JSIOException(error)))
+            else
+              IO.succeed(fd)
+          )
+        )
+      }
+        .bracket(fd =>
+          IO.effectAsync[IOException, Unit] { register =>
+            JSFileSystem.close(fd, error =>
+              register(
+                if(error != null)
+                  IO.fail(JSIOException(error))
+                else
+                  IO.succeed(())
+              )
+            )
+          }.orDie
+        ) { fd =>
+          data.foreach { chunk =>
+            IO.effectAsync[E, Unit] { register =>
+              JSFileSystem.write(fd, new Uint8Array(chunk.toArray.toJSArray), (err, _, _) =>
+                register(
+                  if(err != null)
+                    IO.fail(errorHandler(JSIOException(err)))
+                  else
+                    IO.succeed(())
+                )
+              )
+            }
+          }
+        }
+
 
     override def isDirectory(path: Path): IO[IOException, Boolean] =
       IO.effectAsync { register =>

@@ -16,6 +16,7 @@ private[io] object JSFileSystem extends js.Any {
 
   def open(path: String, flags: String | Double, callback: js.Function2[js.Error, Integer, Any]): Unit = js.native
   def read(fd: Integer, buffer: Uint8Array, offset: Int, length: Int, position: Integer, callback: js.Function3[js.Error, Integer, Any, Any]): Unit = js.native
+  def write(fd: Integer, buffer: Uint8Array, callback: js.Function3[js.Error, Integer, Any, Any]): Unit = js.native
   def close(fd: Integer, callback: js.Function1[js.Error, Any]): Unit = js.native
 
 }
