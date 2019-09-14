@@ -6,7 +6,7 @@ import java.io.{ByteArrayOutputStream, IOException}
 import java.nio.charset.CharsetDecoder
 import java.nio.{ByteBuffer, CharBuffer}
 
-import dev.argon.stream.builder.{Source, ZStreamSource}
+import dev.argon.stream.builder.{Source, SourceIO, ZStreamSource}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import zio._
 import zio.stream._
@@ -230,9 +230,30 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
           }
       )
 
-    override def deserializeProtocolBuffer[R, E, A <: GeneratedMessage with Message[A]](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, A] = ???
+    override def deserializeProtocolBuffer[R, E, A <: GeneratedMessage with Message[A]](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, A] =
+      SourceIO.fromSource(data).toZStream.foldLeft[Chunk[Byte], Chunk[Byte]](Chunk.empty) { _ ++ _ }
+        .flatMap { data =>
+          IO.effect {
+            companion.parseFrom(data.toArray)
+          }
+            .refineOrDie {
+              case ex: IOException => errorHandler(ex)
+            }
+        }
 
-    override def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): Source[ZIO[R, E, *], Chunk[Byte], Unit] = ???
+    override def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
+      ZStreamSource(
+        ZStream.fromEffect(
+          IO.effect {
+            message.toByteArray
+          }
+            .refineOrDie {
+              case ex: IOException => errorHandler(ex)
+            }
+            .map { data => Chunk.fromArray(data) }
+        )
+      )
+
   }
   override val console: Console.Service[Any] = otherEnv.console
   override val system: System.Service[Any] = otherEnv.system
