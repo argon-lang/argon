@@ -19,13 +19,10 @@ import scala.scalajs.js.typedarray.Uint8Array
 import scala.scalajs.js.JSConverters._
 import scala.scalajs.js.|
 
-@SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.ToString", "org.wartremover.warts.Null"))
+@SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null"))
 class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Console with System {
 
-  override val fileIO: FileIO.Service = new FileIO.Service {
-    override def getAbsolutePath(path: Path): IO[IOException, Path] =
-      IO.effect { new Path(JSPath.resolve(path.pathName)) }
-        .refineOrDie { case e: IOException => e }
+  override val fileIO: FileIO.Service = new FileIOServiceCommon {
 
     override def readAllText(path: Path): IO[IOException, String] =
       IO.effectAsync { register =>
@@ -156,51 +153,6 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
       )
         .flatMap(ZStream.fromIterable(_))
 
-    private def dataStreamToArray[R, E](dataStream: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, Uint8Array] =
-      IO.effectTotal { new ByteArrayOutputStream() }
-        .flatMap { outputStream =>
-          dataStream.foreach { chunk =>
-            IO.effectTotal { outputStream.write(chunk.toArray) }
-          }
-            .flatMap { _ =>
-              IO.effectTotal { new Uint8Array(outputStream.toByteArray.toJSArray) }
-            }
-        }
-
-    private def promiseToIO[E, A](errorHandler: IOException => E)(promise: => js.Promise[A]): IO[E, A] =
-      IO.effectAsync { register =>
-        val _ = promise
-          .`then`[Unit](
-            onFulfilled = data => register(IO.succeed(data)),
-            onRejected = {
-              case e: js.Error => register(IO.fail(errorHandler(JSIOException(e))))
-              case _ => register(IO.fail(errorHandler(new IOException("An unknown error occurred"))))
-            } : js.Function1[Any, Unit | js.Thenable[Unit]]
-          )
-      }
-
-
-    override def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, *]], Unit]): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
-      ZStreamSource(
-        ZStream.flatten(
-          ZStream.fromEffect(
-            IO.effectTotal { new JSZip() }
-              .flatMap { zip =>
-                entries.foreach { entry =>
-                  dataStreamToArray(entry.dataStream).flatMap { buffer =>
-                    IO.effect { zip.file(entry.path, buffer) }
-                      .orDie
-                      .unit
-                  }
-                }
-                  .flatMap { _ =>
-                    promiseToIO(errorHandler)(zip.generateAsync(JSZip.JSZipGeneratorOptions("uint8array")))
-                        .map { data => ZStream(Chunk.fromArray(data.toArray.map { _.toByte })) }
-                  }
-              }
-          )
-        )
-      )
 
     override def openZipFile[R, E](errorHandler: IOException => E)(path: Path): Managed[E, ZipFileReader[ZIO[R, E, *]]] =
       ZManaged.fromEffect(
@@ -225,30 +177,6 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
 
             }
           }
-      )
-
-    override def deserializeProtocolBuffer[R, E, A <: GeneratedMessage with Message[A]](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, A] =
-      SourceIO.fromSource(data).toZStream.foldLeft[Chunk[Byte], Chunk[Byte]](Chunk.empty) { _ ++ _ }
-        .flatMap { data =>
-          IO.effect {
-            companion.parseFrom(data.toArray)
-          }
-            .refineOrDie {
-              case ex: IOException => errorHandler(ex)
-            }
-        }
-
-    override def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
-      ZStreamSource(
-        ZStream.fromEffect(
-          IO.effect {
-            message.toByteArray
-          }
-            .refineOrDie {
-              case ex: IOException => errorHandler(ex)
-            }
-            .map { data => Chunk.fromArray(data) }
-        )
       )
 
   }
