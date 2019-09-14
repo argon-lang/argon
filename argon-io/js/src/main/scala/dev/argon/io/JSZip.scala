@@ -7,10 +7,12 @@ import scala.scalajs.js.typedarray.Uint8Array
 
 @js.native
 @JSImport("jszip", JSImport.Default)
-class JSZip(data: js.UndefOr[Uint8Array] = js.undefined) extends js.Object {
+class JSZip() extends js.Object {
 
   def file(path: String, data: Uint8Array): this.type = js.native
   def file(path: String): JSZip.JSZipObject = js.native
+
+  def loadAsync(data: Uint8Array): Promise[JSZip] = js.native
   def generateAsync(options: JSZip.JSZipGeneratorOptions): Promise[Uint8Array] = js.native
 
 }

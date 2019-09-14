@@ -209,10 +209,7 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
             .map { data => Chunk.fromArray(data.toArray.map { _.toByte }) }
         ))
           .flatMap { data =>
-            IO.effect { new JSZip(data) }
-              .refineOrDie {
-                case js.JavaScriptException(e: js.Error) => errorHandler(JSIOException(e))
-              }
+            promiseToIO(errorHandler)(new JSZip().loadAsync(data))
           }
           .map { zip =>
             new ZipFileReader[ZIO[R, E, *]] {
