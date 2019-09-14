@@ -1,6 +1,8 @@
 import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 import sbt.internal.util.ManagedLogger
 
+enablePlugins(ScalaJSBundlerPlugin)
+
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.0",
 
@@ -54,6 +56,10 @@ lazy val commonJSSettings = Seq(
   ),
 
   scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+
+  npmDependencies in Compile := Seq(
+    "jszip" -> "3.2.2"
+  ),
 
 )
 

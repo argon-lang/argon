@@ -1,0 +1,44 @@
+package dev.argon.io
+
+import scala.scalajs.js
+import scala.scalajs.js.{Promise, |}
+import scala.scalajs.js.annotation.JSImport
+import scala.scalajs.js.typedarray.Uint8Array
+
+@js.native
+@JSImport("jszip", JSImport.Default)
+class JSZip(data: js.UndefOr[Uint8Array] = js.undefined) extends js.Object {
+
+  def file(path: String, data: Uint8Array): this.type = js.native
+  def file(path: String): JSZip.JSZipObject = js.native
+  def generateAsync(options: JSZip.JSZipGeneratorOptions): Promise[Uint8Array] = js.native
+
+}
+
+object JSZip {
+
+  @js.native
+  trait JSZipObject extends js.Object {
+    val name: String
+    val dir: Boolean
+    val date: js.Date
+    val comment: String;
+    val unixPermissions: Double | String
+    val dosPermissions: Double | Null
+    def async(t: "uint8array"): Promise[Uint8Array]
+  }
+
+  @js.native
+  trait JSZipGeneratorOptions extends js.Object {
+    val `type`: "uint8array"
+  }
+  object JSZipGeneratorOptions {
+
+    @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+    def apply(`type`: "uint8array"): JSZipGeneratorOptions =
+      js.Dynamic.literal(
+        `type` = `type`,
+      ).asInstanceOf[JSZipGeneratorOptions]
+  }
+
+}
