@@ -16,15 +16,12 @@ import dev.argon.util.AnyExtensions._
 
 object BuildProcess {
 
-  def parseInput[F[_]]
+  def parseInput[F[_]: Compilation]
   (inputFiles: Source[F, InputFileInfo[F], Unit])
-  (implicit
-    monadError: MonadError[F, NonEmptyList[CompilationError]],
-  )
   : Source[F, SourceAST, Unit] =
     new Source[F, SourceAST, Unit] {
 
-      override protected val monadF: Monad[F] = monadError
+      override protected val monadF: Monad[F] = Compilation[F]
 
       override protected def generateImpl[G[_] : Monad](sink: Sink[G, SourceAST])(implicit genEffect: GenEffect[F, G]): G[Unit] =
         inputFiles.foreachG { fileInfo =>
@@ -34,7 +31,7 @@ object BuildProcess {
           implicit val errorHandler: ParseErrorHandler[F, NonEmptyVector[SyntaxError]] =
             new ParseErrorHandler[F, NonEmptyVector[SyntaxError]] {
               override def raiseError[A](errors: NonEmptyVector[SyntaxError]): F[A] =
-                monadError.raiseError(NonEmptyList(toCompileError(errors.head), errors.tail.map(toCompileError).toList))
+                Compilation[F].forErrors(NonEmptyList(toCompileError(errors.head), errors.tail.map(toCompileError).toList))
             }
 
           val parsed = ParseHandler.parse[F](fileInfo.fileSpec)(fileInfo.dataStream)

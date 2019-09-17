@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Argon Demo</title>
+</head>
+<body>
+
+<script>var worker = new Worker("/worker.ab30da2c.js");
+
+worker.onmessage = function (e) {
+  console.log("Web page received message");
+};
+
+worker.postMessage({
+  entryPoint: "Test",
+  modules: [{
+    name: "Argon.Core",
+    code: "Hi"
+  }]
+});
+console.log("postMessage called");</script>
+
+</body>
+</html>

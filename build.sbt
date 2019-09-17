@@ -151,6 +151,19 @@ lazy val cli = crossProject(JVMPlatform, JSPlatform).in(file("argon-cli"))
 lazy val cliJVM = cli.jvm
 lazy val cliJS = cli.js
 
+lazy val webDemo = project.in(file("argon-web-demo"))
+  .enablePlugins(ScalaJSPlugin)
+  .dependsOn(argon_buildJS)
+  .settings(
+    commonSettings,
+    commonJSSettings,
+    compilerOptions,
+
+    name := "argon-web-demo",
+
+    libraryDependencies += "org.scala-js" %%% "scalajs-dom" % "0.9.7",
+  )
+
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform).in(file("argon-build"))
   .jvmConfigure(
     _.dependsOn(identityRPCRuntime)

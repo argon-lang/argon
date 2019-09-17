@@ -31,7 +31,7 @@ object Pipeline {
       ZIO.access[FileIO] { _.fileIO.readText(ioToCompilationError)(path) }
     ))
 
-  private type FIO[A] = ZIO[FileIO, NonEmptyList[CompilationError], A]
+  private type CIO[+A] = ZIO[BuildEnvironment, NonEmptyList[CompilationError], A]
 
   private def resolveGlob(globs: List[Path]): ZStream[FileIO, NonEmptyList[CompilationError], Path] =
     ZStream.fromIterable(globs)
@@ -43,11 +43,11 @@ object Pipeline {
           .flatMap(ZStream.fromIterable)
       }
 
-  private def findInputFiles(buildInfo: BuildInfo.Resolved): ZStream[FileIO, NonEmptyList[CompilationError], InputFileInfo[FIO]] =
+  private def findInputFiles(buildInfo: BuildInfo.Resolved): ZStream[FileIO, NonEmptyList[CompilationError], InputFileInfo[CIO]] =
     resolveGlob(buildInfo.project.inputFiles)
       .zipWithIndex
       .map { case (path, id) =>
-        InputFileInfo[FIO](FileSpec(FileID(id), path.toString),
+        InputFileInfo[CIO](FileSpec(FileID(id), path.toString),
           ZStreamSource(createFileDataStream(path))
         )
       }
@@ -68,16 +68,12 @@ object Pipeline {
   : ZIO[BuildEnvironment, NonEmptyList[CompilationError], A] =
     ZIO.access[FileIO] { res => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](res.fileIO) }.flatMap { implicit resFactory =>
 
-      val parsedInputStream = {
-        import zio.interop.catz._
-        BuildProcess.parseInput[FIO](ZStreamSource(findInputFiles(buildInfo)))
-      }
-
-      parsedInputStream.foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
+      BuildProcess.parseInput[CIO](ZStreamSource(findInputFiles(buildInfo)))
+        .foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
         .flatMap {
           case (parsedInput, _) =>
             resolveGlob(buildInfo.project.references).runCollect.flatMap { references =>
-              BuildProcess.compile[ZIO[BuildEnvironment, NonEmptyList[CompilationError], +*], Path, A](
+              BuildProcess.compile[CIO, Path, A](
                 buildInfo.backend : buildInfo.backend.type
               )(
                 parsedInput,
