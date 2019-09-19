@@ -17,16 +17,19 @@ trait FileIOServiceCommon extends FileIO.Service {
     IO.effect { new Path(JSPath.resolve(path.pathName)) }
       .refineOrDie { case e: IOException => e }
 
-  protected def dataStreamToArray[R, E](dataStream: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, Uint8Array] =
+
+  protected def dataStreamToArray[R, E](dataStream: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, Array[Byte]] =
     IO.effectTotal { new ByteArrayOutputStream() }
       .flatMap { outputStream =>
         dataStream.foreach { chunk =>
           IO.effectTotal { outputStream.write(chunk.toArray) }
         }
           .flatMap { _ =>
-            IO.effectTotal { new Uint8Array(outputStream.toByteArray.toJSArray) }
+            IO.effectTotal { outputStream.toByteArray }
           }
       }
+  protected def dataStreamToUint8Array[R, E](dataStream: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, Uint8Array] =
+    dataStreamToArray(dataStream).map { arr => new Uint8Array(arr.toJSArray) }
 
   protected def promiseToIO[E, A](errorHandler: IOException => E)(promise: => js.Promise[A]): IO[E, A] =
     IO.effectAsync { register =>
@@ -48,7 +51,7 @@ trait FileIOServiceCommon extends FileIO.Service {
           IO.effectTotal { new JSZip() }
             .flatMap { zip =>
               entries.foreach { entry =>
-                dataStreamToArray(entry.dataStream).flatMap { buffer =>
+                dataStreamToUint8Array(entry.dataStream).flatMap { buffer =>
                   IO.effect { zip.file(entry.path, buffer) }
                     .orDie
                     .unit
@@ -64,11 +67,9 @@ trait FileIOServiceCommon extends FileIO.Service {
     )
 
   override def deserializeProtocolBuffer[R, E, A <: GeneratedMessage with Message[A]](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, A] =
-    SourceIO.fromSource(data).toZStream.foldLeft[Chunk[Byte], Chunk[Byte]](Chunk.empty) { _ ++ _ }
+    dataStreamToArray(SourceIO.fromSource(data))
       .flatMap { data =>
-        IO.effect {
-          companion.parseFrom(data.toArray)
-        }
+        IO.effect { companion.parseFrom(data) }
           .refineOrDie {
             case ex: IOException => errorHandler(ex)
           }

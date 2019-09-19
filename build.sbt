@@ -59,7 +59,11 @@ lazy val commonJSSettings = Seq(
   jsEnv := new NodeJSEnv(
     NodeJSEnv.Config()
       .withArgs(List("--no-warnings", "--experimental-vm-modules"))
-  )
+  ),
+
+  scalacOptions ++= Seq(
+    "-P:scalajs:sjsDefinedByDefault",
+  ),
 
 )
 

@@ -155,30 +155,41 @@ class NodeIOEnvironment(otherEnv: Console with System) extends FileIO with Conso
 
 
     override def openZipFile[R, E](errorHandler: IOException => E)(path: Path): Managed[E, ZipFileReader[ZIO[R, E, *]]] =
-      ZManaged.fromEffect(
-        dataStreamToArray[Any, E](ZStreamSource(
-          readByteChunks[E](errorHandler)(path)
-            .map { data => Chunk.fromArray(data.toArray.map { _.toByte }) }
-        ))
-          .flatMap { data =>
-            promiseToIO(errorHandler)(new JSZip().loadAsync(data))
-          }
-          .map { zip =>
-            new ZipFileReader[ZIO[R, E, *]] {
-              override def getEntryStream(name: String): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
-                ZStreamSource(
-                  ZStream.flatten(
-                    ZStream.fromEffect(
-                      promiseToIO(errorHandler)(zip.file(name).async("uint8array"))
-                        .map { data => ZStream(Chunk.fromArray(data.toArray.map { _.toByte })) }
-                    )
-                  )
-                )
-
-            }
-          }
-      )
-
+      Managed.make(
+        IO.effectAsync[E, NodeStreamZip] { register =>
+          val zip = new NodeStreamZip(NodeStreamZip.Options(path.pathName))
+          zip.on("ready", () => register(IO.succeed(zip)))
+          zip.on("error", err => register(IO.fail(errorHandler(JSIOException(err)))))
+        }
+      ) { zip =>
+        IO.effectTotal { zip.close() }
+      }
+      .map { zip =>
+        new ZipFileReader[ZIO[R, E, *]] {
+          override def getEntryStream(name: String): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
+            ZStreamSource(
+              ZStream.fromEffect(
+                IO.effectAsync[E, NodeReadable] { register =>
+                  zip.stream(name, (err, stream) => register(
+                    if(err == null)
+                      IO.succeed(stream)
+                    else
+                      IO.fail(errorHandler(JSIOException(err)))
+                  ))
+                }
+              )
+                .flatMap { stream =>
+                  WritableZStream { wzs =>
+                    IO.effectAsync { register =>
+                      stream.pipe(wzs)
+                      stream.on("end", () => register(IO.succeed(())))
+                    }
+                  }
+                    .mapError { err => errorHandler(JSIOException(err)) }
+                }
+            )
+        }
+      }
   }
   override val console: Console.Service[Any] = otherEnv.console
   override val system: System.Service[Any] = otherEnv.system
