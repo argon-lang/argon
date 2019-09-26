@@ -21,7 +21,7 @@ object FunctionResultInfo {
     (context: Context)
     (ts1: TypeSystem[context.type])
     (ts2: TypeSystem[context.type])
-    (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type, F])
+    (converter: TypeSystemConverterEffect.Aux[context.type, ts1.type, ts2.type, F])
     (result: FunctionResultInfo[context.type, ts1.type])
     : F[FunctionResultInfo[context.type, ts2.type]] = for {
       returnType <- converter.convertTypeSystem(result.returnType)
@@ -30,9 +30,10 @@ object FunctionResultInfo {
     override def referencesParameter
     (signatureContext: SignatureContext)
     (refChecker: signatureContext.RefChecker)
-    (result: FunctionResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
-    : Boolean =
-      refChecker.checkWrapExpr(result.returnType)
+    (result: FunctionResultInfo[signatureContext.context.type, signatureContext.typeSystem.type]): signatureContext.typeSystem.TSComp[Boolean] = {
+      import signatureContext.typeSystem.{ TSComp, tscompCompilationInstance }
+      refChecker.checkWrapExpr(result.returnType).pure[TSComp]
+    }
 
     override def substitute
     (signatureContext: SignatureContext)

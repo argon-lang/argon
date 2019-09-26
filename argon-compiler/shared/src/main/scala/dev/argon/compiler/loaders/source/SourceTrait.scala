@@ -36,6 +36,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
     
     for {
       sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ArTrait.ResultInfo, _ <: Nat]]
+      sigResultCache <- Compilation[Comp].createCache[context2.typeSystem.BaseTypeInfoTrait]
 
       paramsEnvCache <- Compilation[Comp].createCache[EnvCreator[context2.type]]
 
@@ -64,7 +65,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
         sigCache(
           SourceSignatureCreator.fromParameters[ArTrait.ResultInfo](context2)(
             env(context)(EffectInfo.pure, descriptor)
-          )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType)(this))
+          )(descriptor)(stmt.parameters)(resultCreator(context)(stmt.baseType, sigResultCache)(this))
         )
 
       private val paramsEnv: Comp[EnvCreator[context.type]] =
@@ -134,29 +135,33 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
   }
 
 
-  private def resultCreator(baseTypeExpr: Option[WithSource[parser.Expr]])(osCheck: OpenSealedCheck): ResultCreator[ArTrait.ResultInfo] = new ResultCreator[ArTrait.ResultInfo] {
+  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ctx.Comp[ctx.typeSystem.BaseTypeInfoTrait] => ctx.Comp[ctx.typeSystem.BaseTypeInfoTrait])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArTrait.ResultInfo] = new ResultCreator[ArTrait.ResultInfo] {
+
+    override val context: ctx.type = ctx
+
     override def createResult
-    (context: Context)
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
     : context.Comp[ArTrait.ResultInfo[context.type, context.typeSystem.type]] = {
       import context._
 
-      (baseTypeExpr match {
-        case Some(baseTypeExpr) =>
-          ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
-            .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoTrait(Vector())))
-            .flatMap { baseTypes =>
-              val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
+      ArTrait.ResultInfo(context.typeSystem)(
+        cache(baseTypeExpr match {
+          case Some(baseTypeExpr) =>
+            ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
+              .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoTrait(Vector())))
+              .flatMap { baseTypes =>
+                val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
-              baseTypes.baseTraits.traverse_ { baseTrait =>
-                osCheck.checkExtendTrait[Comp, context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
+                baseTypes.baseTraits.traverse_ { baseTrait =>
+                  osCheck.checkExtendTrait[Comp, context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
+                }
+                  .map { _ => baseTypes }
               }
-                .map { _ => baseTypes }
-            }
-        case None =>
-          context.typeSystem.BaseTypeInfoTrait(Vector()).pure[Comp]
-      })
-        .map { baseTypes => ArTrait.ResultInfo(context.typeSystem)(baseTypes) }
+          case None =>
+            context.typeSystem.BaseTypeInfoTrait(Vector()).pure[Comp]
+        })
+      ).pure[Comp]
+
     }
   }
 

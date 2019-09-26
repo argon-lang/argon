@@ -19,17 +19,22 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   val ownerClass: ArClass[context.type, TPayloadSpec]
   val signatureUnsubstituted: context.Comp[Signature[ClassConstructor.ResultInfo, _ <: Nat]]
 
-  final def signature[TComp[_]: Compilation]
+  final def signature
   (newSigContext: SignatureContext.Aux[context.type])
   (instanceType: newSigContext.typeSystem.ClassType)
-  : Comp[newSigContext.Signature[ClassConstructor.ResultInfo, _]] = for {
-    sig <- signatureUnsubstituted
-    ownerSigUnConv <- ownerClass.signature
-    converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
-    ownerSig <- ownerSigUnConv.convertTypeSystem(newSigContext)(converter)
-    convSig <- sig.convertTypeSystem(newSigContext)(converter)
-  } yield
-    convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instanceType.args)
+  : newSigContext.typeSystem.TSComp[newSigContext.Signature[ClassConstructor.ResultInfo, _]] = {
+    import newSigContext.typeSystem.tscompCompilationInstance
+
+    for {
+      sig <- newSigContext.typeSystem.liftComp(signatureUnsubstituted)
+      ownerSigUnConv <- newSigContext.typeSystem.liftComp(ownerClass.signature)
+      converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
+      ownerSig <- newSigContext.typeSystem.liftComp(ownerSigUnConv.convertTypeSystem(newSigContext)(converter))
+      convSig <- newSigContext.typeSystem.liftComp(sig.convertTypeSystem(newSigContext)(converter))
+      newSig <- convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instanceType.args)
+    } yield newSig
+
+  }
 
 
   val payload: TPayloadSpec[Comp[TClassConstructorImplementation], TClassConstructorMetadata]
@@ -42,11 +47,12 @@ object ClassConstructor {
   object ResultInfo {
 
     implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
+
       override def convertTypeSystem[F[_]: Monad]
       (context: Context)
       (ts1: TypeSystem[context.type])
       (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type, F])
+      (converter: TypeSystemConverterEffect.Aux[context.type, ts1.type, ts2.type, F])
       (result: ResultInfo[context.type, ts1.type])
       : F[ResultInfo[context.type, ts2.type]] =
         ResultInfo[context.type, ts2.type]().pure[F]
@@ -55,8 +61,8 @@ object ClassConstructor {
       (signatureContext: SignatureContext)
       (refChecker: signatureContext.RefChecker)
       (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
-      : Boolean =
-        false
+      : signatureContext.typeSystem.TSComp[Boolean] =
+        signatureContext.typeSystem.tscompCompilationInstance.pure(false)
 
       override def substitute
       (signatureContext: SignatureContext)

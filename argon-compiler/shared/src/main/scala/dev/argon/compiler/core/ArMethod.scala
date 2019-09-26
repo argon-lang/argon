@@ -26,31 +26,34 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
 
   val signatureUnsubstituted: Comp[Signature[FunctionResultInfo, _ <: Nat]]
 
-  final def signature[TComp[_]: Compilation]
+  final def signature
   (newSigContext: SignatureContext.Aux[context.type])
   (instanceType: newSigContext.typeSystem.TypeWithMethods)
-  : Comp[newSigContext.Signature[FunctionResultInfo, _]] = for {
-    sig <- signatureUnsubstituted
-    converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
-    ownerSig <- owner match {
-      case ArMethod.ClassOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
-      case ArMethod.ClassObjectOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
-      case ArMethod.TraitOwner(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
-      case ArMethod.TraitObjectOwner(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
-      case ArMethod.DataCtorOwner(dataCtor) => dataCtor.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
-    }
+  : newSigContext.typeSystem.TSComp[newSigContext.Signature[FunctionResultInfo, _]] = {
+    import newSigContext.typeSystem.tscompCompilationInstance
 
-    convSig <- sig.convertTypeSystem(newSigContext)(converter)
-  } yield {
+    for {
+      sig <- newSigContext.typeSystem.liftComp(signatureUnsubstituted)
+      converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
+      ownerSig <- newSigContext.typeSystem.liftComp(owner match {
+        case ArMethod.ClassOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+        case ArMethod.ClassObjectOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+        case ArMethod.TraitOwner(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+        case ArMethod.TraitObjectOwner(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+        case ArMethod.DataCtorOwner(dataCtor) => dataCtor.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+      })
 
-    val instTypeArgs = instanceType match {
-      case newSigContext.typeSystem.TraitType(_, args) => args
-      case newSigContext.typeSystem.ClassType(_, args) => args
-      case newSigContext.typeSystem.DataConstructorType(_, args, _) => args
-    }
+      convSig <- newSigContext.typeSystem.liftComp(sig.convertTypeSystem(newSigContext)(converter))
 
+      instTypeArgs = instanceType match {
+        case newSigContext.typeSystem.TraitType(_, args) => args
+        case newSigContext.typeSystem.ClassType(_, args) => args
+        case newSigContext.typeSystem.DataConstructorType(_, args, _) => args
+      }
 
-    convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instTypeArgs)
+      newSig <- convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instTypeArgs)
+
+    } yield newSig
   }
 
   val payload: TPayloadSpec[Comp[TMethodImplementation], TMethodMetadata]

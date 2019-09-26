@@ -223,7 +223,8 @@ trait TypeSystem[TContext <: Context with Singleton] {
         for {
           sig <- liftComp(b.arTrait.value.signature)
           resultInfo <- liftSignatureResult(sig, b.args)
-          result <- resultInfo.baseTypes.baseTraits.collectFirstSomeM(isSubTrait(a))
+          baseTypes <- resultInfo.baseTypes
+          result <- baseTypes.baseTraits.collectFirstSomeM(isSubTrait(a))
         } yield result
 
     def isSubClass(a: ClassType)(b: ClassType): TSComp[Option[TSubTypeInfo]] =
@@ -233,16 +234,18 @@ trait TypeSystem[TContext <: Context with Singleton] {
         for {
           sig <- liftComp(b.arClass.value.signature)
           resultInfo <- liftSignatureResult(sig, b.args)
-          result <- resultInfo.baseTypes.baseClass.collectFirstSomeM(isSubClass(a))
+          baseTypes <- resultInfo.baseTypes
+          result <- baseTypes.baseClass.collectFirstSomeM(isSubClass(a))
         } yield result
 
     def classImplementsTrait(a: TraitType)(b: ClassType): TSComp[Option[TSubTypeInfo]] = for {
       sig <- liftComp(b.arClass.value.signature)
       resultInfo <- liftSignatureResult(sig, b.args)
+      baseTypes <- resultInfo.baseTypes
       result <-
         Vector(
-          () => resultInfo.baseTypes.baseTraits.collectFirstSomeM(isSubTrait(a)),
-          () => resultInfo.baseTypes.baseClass.collectFirstSomeM(classImplementsTrait(a)),
+          () => baseTypes.baseTraits.collectFirstSomeM(isSubTrait(a)),
+          () => baseTypes.baseClass.collectFirstSomeM(classImplementsTrait(a)),
         ).collectFirstSomeM(_())
 
     } yield result

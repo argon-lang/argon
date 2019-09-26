@@ -532,7 +532,8 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
         sig <- emitComp(arTrait.signature)
         convSig <- convertSignature(armodule)(sig) { (params, result) =>
           for {
-            baseTraits <- result.baseTypes.baseTraits.traverse(convertTraitType(armodule, _))
+            baseTypes <- emitComp(result.baseTypes)
+            baseTraits <- baseTypes.baseTraits.traverse(convertTraitType(armodule, _))
           } yield module.TraitSignature(
             parameters = params,
             baseTraits = baseTraits,
@@ -568,8 +569,9 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
         sig <- emitComp(arClass.signature)
         convSig <- convertSignature(armodule)(sig) { (params, result) =>
           for {
-            baseClass <- result.baseTypes.baseClass.traverse(convertClassType(armodule, _))
-            baseTraits <- result.baseTypes.baseTraits.traverse(convertTraitType(armodule, _))
+            baseTypes <- emitComp(result.baseTypes)
+            baseClass <- baseTypes.baseClass.traverse(convertClassType(armodule, _))
+            baseTraits <- baseTypes.baseTraits.traverse(convertTraitType(armodule, _))
           } yield module.ClassSignature(
             parameters = params,
             baseClass = baseClass,

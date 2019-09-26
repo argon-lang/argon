@@ -92,17 +92,21 @@ object SourceMethod {
                 Compilation[Comp].forErrors(CompilationError.NonAbstractMethodNotImplemented(descriptor, CompilationMessageSource.SourceFile(env.fileSpec, location)))
             }
         )
-    }
-  }
 
-  def resultCreator(returnTypeExpr: WithSource[parser.Expr]): ResultCreator[FunctionResultInfo] =  new ResultCreator[FunctionResultInfo] {
-    override def createResult
-    (context: Context)
-    (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    : context.Comp[FunctionResultInfo[context.type, context.typeSystem.type]] = {
-      import context._
-      ExpressionConverter.convertTypeExpression(context)(env)(returnTypeExpr)
-        .map { t => FunctionResultInfo(context.typeSystem)(t) }
+
+      private def resultCreator(returnTypeExpr: WithSource[parser.Expr]): ResultCreator.Aux[context2.type, FunctionResultInfo] =  new ResultCreator[FunctionResultInfo] {
+
+        override val context: context2.type = context2
+
+        override def createResult
+        (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
+        : context.Comp[FunctionResultInfo[context.type, context.typeSystem.type]] = {
+          import context._
+          ExpressionConverter.convertTypeExpression(context)(env)(returnTypeExpr)
+            .map { t => FunctionResultInfo(context.typeSystem)(t) }
+        }
+      }
+
     }
   }
 

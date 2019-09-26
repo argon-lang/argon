@@ -47,13 +47,13 @@ object ArClass {
 
   sealed trait ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
     val typeSystem: TS
-    def baseTypes: typeSystem.BaseTypeInfoClass
+    def baseTypes: typeSystem.TSComp[typeSystem.BaseTypeInfoClass]
   }
 
   object ResultInfo {
-    def apply[TContext <: Context with Singleton](ts: TypeSystem[TContext])(bt: => ts.BaseTypeInfoClass): ResultInfo[TContext, ts.type] = new ResultInfo[TContext, ts.type] {
+    def apply[TContext <: Context with Singleton](ts: TypeSystem[TContext])(bt: => ts.TSComp[ts.BaseTypeInfoClass]): ResultInfo[TContext, ts.type] = new ResultInfo[TContext, ts.type] {
       override val typeSystem: ts.type = ts
-      override lazy val baseTypes: typeSystem.BaseTypeInfoClass = bt
+      override lazy val baseTypes: typeSystem.TSComp[typeSystem.BaseTypeInfoClass] = bt
     }
 
     implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
@@ -61,30 +61,50 @@ object ArClass {
       (context: Context)
       (ts1: TypeSystem[context.type])
       (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type, F])
+      (converter: TypeSystemConverterEffect.Aux[context.type, ts1.type, ts2.type, F])
       (result: ResultInfo[context.type, ts1.type])
-      : F[ResultInfo[context.type, ts2.type]] = for {
-        baseClass <- result.baseTypes.baseClass.traverse(converter.convertClassType(_))
-        baseTraits <- result.baseTypes.baseTraits.traverse(converter.convertTraitType(_))
-      } yield ResultInfo(ts2)(ts2.BaseTypeInfoClass(baseClass, baseTraits))
+      : F[ResultInfo[context.type, ts2.type]] = {
+        import ts2.tscompCompilationInstance
+
+        ResultInfo(ts2)(
+          for {
+            baseTypes <- converter.convertEffect(result.baseTypes)
+            baseClass <- converter.conversionEffectToResultTS(baseTypes.baseClass.traverse(converter.convertClassType(_)))
+            baseTraits <- converter.conversionEffectToResultTS(baseTypes.baseTraits.traverse(converter.convertTraitType(_)))
+          } yield ts2.BaseTypeInfoClass(baseClass, baseTraits)
+        ).pure[F]
+      }
+
 
       override def referencesParameter
       (signatureContext: SignatureContext)
       (refChecker: signatureContext.RefChecker)
       (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
-      : Boolean =
-        result.baseTypes.baseClass.exists(refChecker.checkArExpr) ||
-          result.baseTypes.baseTraits.exists(refChecker.checkArExpr)
+      : signatureContext.typeSystem.TSComp[Boolean] = {
+        import signatureContext.typeSystem.tscompCompilationInstance
+
+        result.baseTypes.map { baseTypes =>
+          baseTypes.baseClass.exists(refChecker.checkArExpr) ||
+            baseTypes.baseTraits.exists(refChecker.checkArExpr)
+        }
+      }
 
       override def substitute
       (signatureContext: SignatureContext)
       (subst: signatureContext.Subst)
       (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
-      : ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] =
-        ResultInfo(signatureContext.typeSystem)(signatureContext.typeSystem.BaseTypeInfoClass(
-          result.baseTypes.baseClass.map(subst.substClassType(_)),
-          result.baseTypes.baseTraits.map(subst.substTraitType(_))
-        ))
+      : ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] = {
+        import signatureContext.typeSystem.tscompCompilationInstance
+
+        ResultInfo(signatureContext.typeSystem)(
+          result.baseTypes.map { baseTypes =>
+            signatureContext.typeSystem.BaseTypeInfoClass(
+              baseTypes.baseClass.map(subst.substClassType(_)),
+              baseTypes.baseTraits.map(subst.substTraitType(_))
+            )
+          }
+        )
+      }
     }
 
   }

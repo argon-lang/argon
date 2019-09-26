@@ -9,10 +9,10 @@ object ArTypeSystemConverter {
   def apply
   (context2: Context)
   (ts2_outer: TypeSystem[context2.type])
-  : TypeSystemConverter.Aux[context2.type, context2.typeSystem.type, ts2_outer.type, context2.Comp] = {
+  : TypeSystemConverterEffect.Aux[context2.type, context2.typeSystem.type, ts2_outer.type, context2.Comp] = {
     import context2.{ Comp, compCompilationInstance }
 
-    new TypeSystemConverter[Comp] {
+    new TypeSystemConverterEffect[Comp] {
 
 
       override val context: context2.type = context2
@@ -23,6 +23,11 @@ object ArTypeSystemConverter {
       override protected def convertType[A](fromExpr: otherTS.ArExpr => A)(t: A): Comp[otherTS.TTypeWrapper[A]] =
         otherTS.wrapType(t).pure[Comp]
 
+      override def convertEffect[A](fa: ts.context.Comp[A]): otherTS.TSComp[A] =
+        otherTS.liftComp(fa)
+
+      override def conversionEffectToResultTS[A](fa: context2.Comp[A]): otherTS.TSComp[A] =
+        otherTS.liftComp(fa)
     }
   }
 

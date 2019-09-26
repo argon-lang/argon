@@ -32,9 +32,10 @@ object MethodLookup {
               .flatMap { sig =>
                 ts.liftSignatureResult(sig, args)
               }
-              .map { result =>
-                val baseTypes = result.baseTypes
-                baseTypes.baseClass.toList.toVector ++ baseTypes.baseTraits
+              .flatMap { result =>
+                result.baseTypes.map { baseTypes =>
+                  baseTypes.baseClass.toList.toVector ++ baseTypes.baseTraits
+                }
               }
 
           case ts.TraitType(arTrait, args) =>
@@ -42,8 +43,8 @@ object MethodLookup {
               .flatMap { sig =>
                 ts.liftSignatureResult(sig, args)
               }
-              .map { result =>
-                result.baseTypes.baseTraits
+              .flatMap { result =>
+                result.baseTypes.map { baseTypes => baseTypes.baseTraits }
               }
 
 

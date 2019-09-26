@@ -13,7 +13,6 @@ abstract class TypeSystemConverter[F[_]: Monad] {
   protected def liftFromComp[A](compA: context.Comp[A]): F[A]
   protected def convertType[A](fromExpr: otherTS.ArExpr => A)(t: ts.TTypeWrapper[A]): F[otherTS.TTypeWrapper[A]]
 
-
   def convertTypeSystem
   (t1: ts.TType)
   : F[otherTS.TType] =

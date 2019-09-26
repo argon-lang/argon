@@ -44,11 +44,12 @@ object DataConstructor {
     }
 
     implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
+
       override def convertTypeSystem[F[_]: Monad]
       (context: Context)
       (ts1: TypeSystem[context.type])
       (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type, F])
+      (converter: TypeSystemConverterEffect.Aux[context.type, ts1.type, ts2.type, F])
       (result: ResultInfo[context.type, ts1.type])
       : F[ResultInfo[context.type, ts2.type]] = for {
         instanceType <- converter.convertTraitType(result.instanceType)
@@ -58,8 +59,10 @@ object DataConstructor {
       (signatureContext: SignatureContext)
       (refChecker: signatureContext.RefChecker)
       (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
-      : Boolean =
-        refChecker.checkArExpr(result.instanceType)
+      : signatureContext.typeSystem.TSComp[Boolean] = {
+        import signatureContext.typeSystem.{ TSComp, tscompCompilationInstance }
+        refChecker.checkArExpr(result.instanceType).pure[TSComp]
+      }
 
 
       override def substitute

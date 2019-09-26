@@ -52,7 +52,7 @@ trait Context {
 
     override def liftComp[A](value: context.Comp[A]): context.Comp[A] = value
     override def liftSignatureResult[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](sig: context.signatureContext.Signature[TResult, _ <: Nat], args: Vector[TypeArgument]): context.Comp[TResult[Context.this.type, ContextTypeSystem.type]] =
-      sig.substituteTypeArguments(sig.unsubstitutedParameters)(args).unsubstitutedResult.pure[context.Comp]
+      sig.substituteTypeArguments(sig.unsubstitutedParameters)(args).map { _.unsubstitutedResult }
 
     final override def wrapType[A](a: A): A = a
 

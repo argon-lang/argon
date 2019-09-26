@@ -190,7 +190,8 @@ final class JSEmitter[TComp[+_], TContext <: JSContext[TComp, _] with Singleton]
           methodObjects <- methods.traverse { method => createMethodObject(instanceParamVarMap)(method.method) }
           staticMethodObjects <- staticMethods.traverse { method => createMethodObject(staticParamVarMap)(method.method) }
 
-          baseTraitExprs <- sig.unsubstitutedResult.baseTypes.baseTraits.traverse(createBaseTraitObject(arTrait.descriptor)(sig)(_))
+          baseTypes <- sig.unsubstitutedResult.baseTypes
+          baseTraitExprs <- baseTypes.baseTraits.traverse(createBaseTraitObject(arTrait.descriptor)(sig)(_))
 
         } yield JSAssignment(
           JSPropertyAccessBracket(traitsVarName, JSString(DescriptorId.forTrait(arTrait.descriptor, erasedSig))),
@@ -277,7 +278,8 @@ final class JSEmitter[TComp[+_], TContext <: JSContext[TComp, _] with Singleton]
           vtable <- vtableBuilder.fromClass(arClass)
           vtableObject <- createVTableObject(vtableBuilder.vtableContext)(vtable, arClass.descriptor)
 
-          baseClassExpr <- sig.unsubstitutedResult.baseTypes.baseClass.traverse { baseClass =>
+          baseTypes <- sig.unsubstitutedResult.baseTypes
+          baseClassExpr <- baseTypes.baseClass.traverse { baseClass =>
             for {
               baseSig <- baseClass.arClass.value.signature
               erasedBaseSig = ErasedSignature.fromSignatureParameters(context)(baseSig)
@@ -316,7 +318,8 @@ final class JSEmitter[TComp[+_], TContext <: JSContext[TComp, _] with Singleton]
             )
           }
 
-          baseTraitExprs <- sig.unsubstitutedResult.baseTypes.baseTraits.traverse(createBaseTraitObject(arClass.descriptor)(sig)(_))
+          baseTraits <- sig.unsubstitutedResult.baseTypes
+          baseTraitExprs <- baseTypes.baseTraits.traverse(createBaseTraitObject(arClass.descriptor)(sig)(_))
 
           classSpec = JSObjectLiteral(Vector(
 

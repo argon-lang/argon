@@ -115,35 +115,41 @@ object SourceClassConstructor {
                 Compilation[Comp].forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
               else
                 convertUnconverted.flatMap { case (newConverted, env2) =>
-                  ownerClass.signature.flatMap { ownerSig =>
-                    ((baseCtorExprOpt, ownerSig.unsubstitutedResult.baseTypes.baseClass) match {
-                      case (None, Some(_)) =>
-                        Compilation[Comp].forErrors(
-                          CompilationError.BaseConstructorNotCalled(CompilationMessageSource.SourceFile(env.fileSpec, location))
-                        )
+                  ownerClass.signature
+                    .flatMap { ownerSig =>
+                      ownerSig.unsubstitutedResult.baseTypes
+                    }
+                    .flatMap { baseTypes =>
+                      ((baseCtorExprOpt, baseTypes.baseClass) match {
+                        case (None, Some(_)) =>
+                          Compilation[Comp].forErrors(
+                            CompilationError.BaseConstructorNotCalled(CompilationMessageSource.SourceFile(env.fileSpec, location))
+                          )
 
-                      case (Some(_), None) =>
-                        Compilation[Comp].forErrors(
-                          CompilationError.InvalidBaseConstructorCall(CompilationMessageSource.SourceFile(env.fileSpec, location))
-                        )
+                        case (Some(_), None) =>
+                          Compilation[Comp].forErrors(
+                            CompilationError.InvalidBaseConstructorCall(CompilationMessageSource.SourceFile(env.fileSpec, location))
+                          )
 
-                      case (None, None) =>
-                        None.pure[Comp]
+                        case (None, None) =>
+                          None.pure[Comp]
 
-                      case (Some(baseCtorExpr), Some(baseClass)) =>
-                        ExpressionConverter.convertExpression(context)(env2.copy(allowAbstractConstructor = true))(typeSystem.fromSimpleType(baseClass))(baseCtorExpr).flatMap {
-                          case baseCall: typeSystem.ClassConstructorCall => Some(baseCall).pure[Comp]
-                          case _ =>
-                            Compilation[Comp].forErrors(
-                              CompilationError.InvalidBaseConstructorCall(CompilationMessageSource.SourceFile(env.fileSpec, location))
-                            )
-                        }
-                    }).flatMap { baseCall =>
+                        case (Some(baseCtorExpr), Some(baseClass)) =>
+                          ExpressionConverter.convertExpression(context)(env2.copy(allowAbstractConstructor = true))(typeSystem.fromSimpleType(baseClass))(baseCtorExpr).flatMap {
+                            case baseCall: typeSystem.ClassConstructorCall => Some(baseCall).pure[Comp]
+                            case _ =>
+                              Compilation[Comp].forErrors(
+                                CompilationError.InvalidBaseConstructorCall(CompilationMessageSource.SourceFile(env.fileSpec, location))
+                              )
+                          }
+                      })
+                    }
+                    .flatMap { baseCall =>
                       ExpressionConverter.convertStatementList(context)(env2)(unitType)(nextBody(tail)).map { endExpr =>
                         typeSystem.ClassConstructorBody(newConverted, baseCall, endExpr)
                       }
                     }
-                  }
+
                 }
             }
 
@@ -156,19 +162,21 @@ object SourceClassConstructor {
 
           case Vector() =>
             ownerClass.signature.flatMap { ownerSig =>
-              if(ownerSig.unsubstitutedResult.baseTypes.baseClass.isDefined)
-                Compilation[Comp].forErrors(
-                  CompilationError.BaseConstructorNotCalled(CompilationMessageSource.SourceFile(env.fileSpec, body.location))
-                )
-              else
-                ownerClass.fields.flatMap { fields =>
-                  if(fields.size =!= initializedFields.size)
-                    Compilation[Comp].forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, unconverted.location)))
-                  else
-                    ExpressionConverter.convertStatementList(context)(env)(unitType)(unconverted).map { endExpr =>
-                      typeSystem.ClassConstructorBody(converted, None, endExpr)
-                    }
-                }
+              ownerSig.unsubstitutedResult.baseTypes.flatMap { baseTypes =>
+                if(baseTypes.baseClass.isDefined)
+                  Compilation[Comp].forErrors(
+                    CompilationError.BaseConstructorNotCalled(CompilationMessageSource.SourceFile(env.fileSpec, body.location))
+                  )
+                else
+                  ownerClass.fields.flatMap { fields =>
+                    if(fields.size =!= initializedFields.size)
+                      Compilation[Comp].forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, unconverted.location)))
+                    else
+                      ExpressionConverter.convertStatementList(context)(env)(unitType)(unconverted).map { endExpr =>
+                        typeSystem.ClassConstructorBody(converted, None, endExpr)
+                      }
+                  }
+              }
             }
 
         }
@@ -181,16 +189,20 @@ object SourceClassConstructor {
           )
         }
 
-    }
-  }
 
-  val resultCreator: ResultCreator[ClassConstructor.ResultInfo] =  new ResultCreator[ClassConstructor.ResultInfo] {
-    override def createResult
-    (context: Context)
-    (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    : context.Comp[ClassConstructor.ResultInfo[context.type, context.typeSystem.type]] = {
-      import context._
-      ClassConstructor.ResultInfo[context.type, context.typeSystem.type]().pure[Comp]
+      private def resultCreator: ResultCreator.Aux[context2.type, ClassConstructor.ResultInfo] =  new ResultCreator[ClassConstructor.ResultInfo] {
+
+        override val context: context2.type = context2
+
+        override def createResult
+        (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
+        : context.Comp[ClassConstructor.ResultInfo[context.type, context.typeSystem.type]] = {
+          import context._
+          ClassConstructor.ResultInfo[context.type, context.typeSystem.type]().pure[Comp]
+        }
+      }
+
     }
+
   }
 }

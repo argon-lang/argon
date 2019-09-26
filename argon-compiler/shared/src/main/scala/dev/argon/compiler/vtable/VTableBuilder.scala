@@ -130,7 +130,8 @@ object VTableBuilder {
           else
             for {
               sig <- baseClass.arClass.value.signature
-              classes <- sig.unsubstitutedResult.baseTypes.baseClass.foldLeftM(acc :+ baseClass.arClass)(addClass(_, _))
+              baseTypes <- sig.unsubstitutedResult.baseTypes
+              classes <- baseTypes.baseClass.foldLeftM(acc :+ baseClass.arClass)(addClass(_, _))
             } yield classes
 
         baseClass.foldLeftM(Vector.empty[AbsRef[context.type, ArClass]])(addClass(_, _))
@@ -144,13 +145,15 @@ object VTableBuilder {
           else
             for {
               sig <- baseTrait.arTrait.value.signature
-              traits <- sig.unsubstitutedResult.baseTypes.baseTraits.foldLeftM(acc :+ baseTrait.arTrait)(addTrait(_, _))
+              baseTypes <- sig.unsubstitutedResult.baseTypes
+              traits <- baseTypes.baseTraits.foldLeftM(acc :+ baseTrait.arTrait)(addTrait(_, _))
             } yield traits
 
         def addTraitsFromClass(acc: Vector[AbsRef[context.type, ArTrait]], baseClass: AbsRef[context.type, ArClass]): Comp[Vector[AbsRef[context.type, ArTrait]]] =
           for {
             sig <- baseClass.value.signature
-            traits <- sig.unsubstitutedResult.baseTypes.baseTraits.foldLeftM(acc)(addTrait(_, _))
+            baseTypes <- sig.unsubstitutedResult.baseTypes
+            traits <- baseTypes.baseTraits.foldLeftM(acc)(addTrait(_, _))
           } yield traits
 
         val acc = Vector.empty[AbsRef[context.type, ArTrait]]
@@ -173,13 +176,13 @@ object VTableBuilder {
         for {
           btSig <- bt.arTrait.value.signature
           baseTraitVTable <- fromTrait(bt.arTrait.value)
-        } yield VTable(
-          baseTraitVTable.methodMap.view.mapValues {
-            case VTableEntry(signature, entrySource, impl) =>
-              val newSig = signature.substituteTypeArguments(btSig.unsubstitutedParameters)(bt.args)
-              VTableEntry(newSig, entrySource, impl)
-          }.toMap
-        )
+          newMap <- baseTraitVTable.methodMap.toVector.traverse {
+            case (key, VTableEntry(signature, entrySource, impl)) =>
+              signature.substituteTypeArguments(btSig.unsubstitutedParameters)(bt.args).map { newSig =>
+                key -> VTableEntry(newSig, entrySource, impl)
+              }
+          }
+        } yield VTable(newMap.toMap)
 
       override def fromClass[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[VT] =
         classVtableCache { arClassWrap =>
@@ -187,22 +190,24 @@ object VTableBuilder {
 
           for {
             sig <- arClass.signature
-            baseClass = sig.unsubstitutedResult.baseTypes.baseClass
-            baseTraits = sig.unsubstitutedResult.baseTypes.baseTraits
+            baseTypes <- sig.unsubstitutedResult.baseTypes
+            baseClass = baseTypes.baseClass
+            baseTraits = baseTypes.baseTraits
             baseClassVTable <- baseClass.traverse[Comp, VT] { bc =>
               for {
                 bcSig <- bc.arClass.value.signature
                 baseClassVTable <- fromClass(bc.arClass.value)
-              } yield VTable(
-                baseClassVTable.methodMap.view.mapValues {
-                  case VTableEntry(signature, entrySource, impl) =>
-                    VTableEntry(
-                      signature.substituteTypeArguments(bcSig.unsubstitutedParameters)(bc.args),
-                      entrySource,
-                      impl
-                    )
-                }.toMap
-              )
+                newMap <- baseClassVTable.methodMap.toVector.traverse {
+                  case (key, VTableEntry(signature, entrySource, impl)) =>
+                    signature.substituteTypeArguments(bcSig.unsubstitutedParameters)(bc.args).map { substSig =>
+                      key -> VTableEntry(
+                        substSig,
+                        entrySource,
+                        impl
+                      )
+                    }
+                }
+              } yield VTable(newMap.toMap)
             }
             baseTraitVTables <- baseTraits.traverse(getBaseTraitVTable(_))
 
@@ -225,7 +230,8 @@ object VTableBuilder {
 
           for {
             sig <- arTrait.signature
-            baseTraits = sig.unsubstitutedResult.baseTypes.baseTraits
+            baseTypes <- sig.unsubstitutedResult.baseTypes
+            baseTraits = baseTypes.baseTraits
             baseTraitVTables <- baseTraits.traverse(getBaseTraitVTable(_))
 
             baseTraitOnlyVTable = baseTraitVTables.combineAll

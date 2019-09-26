@@ -37,6 +37,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
     for {
       sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ArClass.ResultInfo, _ <: Nat]]
+      sigResultCache <- Compilation[Comp].createCache[context2.typeSystem.BaseTypeInfoClass]
 
       paramsEnvCache <- Compilation[Comp].createCache[EnvCreator[context2.type]]
 
@@ -103,7 +104,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         sigCache(
           SourceSignatureCreator.fromParameters[ArClass.ResultInfo](context2)(
             env(context)(EffectInfo.pure, descriptor)
-          )(descriptor)(stmt.parameters)(resultCreator(stmt.baseType)(this))
+          )(descriptor)(stmt.parameters)(resultCreator(context)(stmt.baseType, sigResultCache)(this))
         )
 
       private val paramsEnv: Comp[EnvCreator[context.type]] =
@@ -187,34 +188,37 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     }
   }
 
-  private def resultCreator(baseTypeExpr: Option[WithSource[parser.Expr]])(osCheck: OpenSealedCheck): ResultCreator[ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
+  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ctx.Comp[ctx.typeSystem.BaseTypeInfoClass] => ctx.Comp[ctx.typeSystem.BaseTypeInfoClass])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
+
+    override val context: ctx.type = ctx
+
     override def createResult
-    (context: Context)
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
     : context.Comp[ArClass.ResultInfo[context.type, context.typeSystem.type]] = {
       import context._
 
-      (baseTypeExpr match {
-        case Some(baseTypeExpr) =>
-          ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
-            .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoClass(None, Vector())))
-            .flatMap { baseTypes =>
-              val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
+      ArClass.ResultInfo(context.typeSystem)(
+        cache(baseTypeExpr match {
+          case Some(baseTypeExpr) =>
+            ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
+              .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoClass(None, Vector())))
+              .flatMap { baseTypes =>
+                val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
-              baseTypes.baseClass.traverse_ { baseClass =>
-                osCheck.checkExtendClass[Comp, context.type, baseClass.arClass.PayloadSpec](baseClass.arClass.value)(messageSource)
-              }
-                .flatMap { _ =>
-                  baseTypes.baseTraits.traverse_ { baseTrait =>
-                    osCheck.checkExtendTrait[Comp, context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
-                  }
+                baseTypes.baseClass.traverse_ { baseClass =>
+                  osCheck.checkExtendClass[Comp, context.type, baseClass.arClass.PayloadSpec](baseClass.arClass.value)(messageSource)
                 }
-                .map { _ => baseTypes }
-            }
-        case None =>
-          context.typeSystem.BaseTypeInfoClass(None, Vector()).pure[Comp]
-      })
-        .map { baseTypes => ArClass.ResultInfo(context.typeSystem)(baseTypes) }
+                  .flatMap { _ =>
+                    baseTypes.baseTraits.traverse_ { baseTrait =>
+                      osCheck.checkExtendTrait[Comp, context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
+                    }
+                  }
+                  .map { _ => baseTypes }
+              }
+          case None =>
+            context.typeSystem.BaseTypeInfoClass(None, Vector()).pure[Comp]
+        })
+      ).pure[context.Comp]
     }
 
     private def typeToBaseTypes

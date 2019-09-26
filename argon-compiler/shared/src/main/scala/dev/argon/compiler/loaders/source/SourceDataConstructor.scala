@@ -113,40 +113,45 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
       override lazy val payload: Comp[context.TDataConstructorImplementation] = for {
         stmt <- bodyStmt
       } yield context.createDataConstructorImplementation(stmt)
-    }
-  }
 
-  private def resultCreator(baseTypeExpr: WithSource[parser.Expr])(osCheck: OpenSealedCheck): ResultCreator[DataConstructor.ResultInfo] = new ResultCreator[DataConstructor.ResultInfo] {
-    override def createResult
-    (context: Context)
-    (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    : context.Comp[DataConstructor.ResultInfo[context.type, context.typeSystem.type]] = {
-      import context._
 
-      ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
-        .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location))
-        .flatMap { baseTrait =>
-          val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
-          osCheck.checkExtendTrait[Comp, context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
-            .map { _ => DataConstructor.ResultInfo(context.typeSystem)(baseTrait) }
+      private def resultCreator(baseTypeExpr: WithSource[parser.Expr])(osCheck: OpenSealedCheck): ResultCreator.Aux[context.type, DataConstructor.ResultInfo] = new ResultCreator[DataConstructor.ResultInfo] {
+
+        override val context: context2.type = context2
+
+        override def createResult
+        (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
+        : context.Comp[DataConstructor.ResultInfo[context.type, context.typeSystem.type]] = {
+          import context._
+
+          ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
+            .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location))
+            .flatMap { baseTrait =>
+              val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
+
+              osCheck.checkExtendTrait[Comp, context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
+                .map { _ => DataConstructor.ResultInfo(context.typeSystem)(baseTrait) }
+            }
         }
-    }
 
-    private def typeToBaseTypes
-    (context: Context)
-    (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    (t: context.typeSystem.TType)
-    (location: SourceLocation)
-    : context.Comp[context.typeSystem.TraitType] = {
-      import context._
-      t match {
-        case t: context.typeSystem.TraitType =>
-          t.pure[Comp]
+        private def typeToBaseTypes
+        (context: Context)
+        (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
+        (t: context.typeSystem.TType)
+        (location: SourceLocation)
+        : context.Comp[context.typeSystem.TraitType] = {
+          import context._
+          t match {
+            case t: context.typeSystem.TraitType =>
+              t.pure[Comp]
 
-        case _ =>
-          Compilation[Comp].forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+            case _ =>
+              Compilation[Comp].forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          }
+        }
       }
+
     }
   }
 

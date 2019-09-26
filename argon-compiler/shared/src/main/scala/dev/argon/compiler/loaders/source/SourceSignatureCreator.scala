@@ -17,7 +17,7 @@ object SourceSignatureCreator {
   (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
   (paramOwner: ParameterOwnerDescriptor)
   (params: Vector[WithSource[parser.FunctionParameterList]])
-  (resultCreator: ResultCreator[TResult])
+  (resultCreator: ResultCreator.Aux[context.type, TResult])
   : context.Comp[context.signatureContext.Signature[TResult, _ <: Nat]] = {
 
     import context._
@@ -107,7 +107,7 @@ object SourceSignatureCreator {
             }
 
         case Vector() =>
-          resultCreator.createResult(context)(env)
+          resultCreator.createResult(env)
               .map(result => SignatureResult[TResult](result))
       }
 
@@ -115,10 +115,20 @@ object SourceSignatureCreator {
   }
 
   trait ResultCreator[TResultInfo[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton]] {
+    val context: Context
+
     def createResult
-    (context: Context)
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
     : context.Comp[TResultInfo[context.type, context.typeSystem.type]]
+  }
+
+  object ResultCreator {
+
+    type Aux[TContext <: Context with Singleton, TResultInfo[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton]] =
+      ResultCreator[TResultInfo] {
+        val context: TContext
+      }
+
   }
 
 

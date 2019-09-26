@@ -411,7 +411,7 @@ object ArgonModuleLoader {
                             parametersResolved <- parameters.zipWithIndex.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
 
                             result = SignatureResult[ArTrait.ResultInfo](
-                              ArTrait.ResultInfo(typeSystem)(BaseTypeInfoTrait(baseTraitsResolved))
+                              ArTrait.ResultInfo(typeSystem)(BaseTypeInfoTrait(baseTraitsResolved).pure[Comp])
                             )
 
                           } yield parametersResolved.foldRight[Signature[ArTrait.ResultInfo, _ <: Nat]](result) {
@@ -488,7 +488,7 @@ object ArgonModuleLoader {
                             parametersResolved <- parameters.zipWithIndex.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
 
                             result = SignatureResult[ArClass.ResultInfo](
-                              ArClass.ResultInfo(typeSystem)(BaseTypeInfoClass(baseClassResolved, baseTraitsResolved))
+                              ArClass.ResultInfo(typeSystem)(BaseTypeInfoClass(baseClassResolved, baseTraitsResolved).pure[Comp])
                             )
 
                           } yield parametersResolved.foldRight[Signature[ArClass.ResultInfo, _ <: Nat]](result) {

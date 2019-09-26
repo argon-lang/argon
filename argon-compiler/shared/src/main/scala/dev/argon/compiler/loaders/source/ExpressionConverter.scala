@@ -69,9 +69,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   case MemberValue.Method(method) =>
                     Compilation[TComp].require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
                       .flatMap { _ =>
-                        implicitly[TypeCheck[TComp]].fromContextComp(
-                          method.value.method.signature(signatureContext)(instanceType)
-                        )
+                        method.value.method.signature(signatureContext)(instanceType)
                       }
                       .map {
                         case sig: Signature[FunctionResultInfo, len] =>
@@ -158,9 +156,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                                     case ClassConstructorBinding(_, _, classCtor) =>
                                       Compilation[TComp].require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
                                         .flatMap { _ =>
-                                          implicitly[TypeCheck[TComp]].fromContextComp(
-                                            classCtor.signature(signatureContext)(t)
-                                          )
+                                          classCtor.signature(signatureContext)(t)
                                         }
                                         .map {
                                           case sig: Signature[ClassConstructor.ResultInfo, len] =>
@@ -1041,10 +1037,12 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     def signatureNextPart[RestLen <: Nat](sig: SignatureParameters[TResult, RestLen])(arg: WrapExpr): TComp[Signature[TResult, RestLen]] =
       if(isWrapExprPure(arg))
         sig.next(arg).pure[TComp]
-      else if(!sig.nextUnsubstituted.referencesParameter(sig.parameter))
-        sig.nextUnsubstituted.pure[TComp]
       else
-        Compilation[TComp].forErrors(CompilationError.ArgumentToSignatureDependencyNotPureError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+      sig.nextUnsubstituted.referencesParameter(sig.parameter).flatMap {
+        case false => sig.nextUnsubstituted.pure[TComp]
+        case true =>
+          Compilation[TComp].forErrors(CompilationError.ArgumentToSignatureDependencyNotPureError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+      }
 
     final class SigFactory[Len <: Nat](env: Env)(unsubSig: Signature[TResult, Len])(prevParamTypes: Vector[TType])(acc: TComp[(Signature[TResult, Len], Vector[WrapExpr])]) extends OverloadExprFactory {
 
@@ -1575,7 +1573,8 @@ object ExpressionConverter {
         for {
           convSig <- liftComp(sig.convertTypeSystem[context.Comp](sigContext)(conv))
           convParams <- liftComp(sig.unsubstitutedParameters.unsized.traverse(conv.convertParameterTypeSystem))
-        } yield convSig.substituteTypeArguments(convParams)(args).unsubstitutedResult
+          substSig <- convSig.substituteTypeArguments(convParams)(args)
+        } yield substSig.unsubstitutedResult
       }
     }
 
@@ -1583,15 +1582,19 @@ object ExpressionConverter {
 
   private def holeTypeConverter
   (context: Context)
-  (innerTS: TypeSystem[context.type])
+  (innerTS: TypeSystem[context.type] {
+    type TSComp[A] = context.Comp[A]
+  })
   (holeTS: TypeSystem[context.type] {
+    type TType
+    type TSComp[A] = HoleTypeCheckComp[context.Comp, TType, A]
     type TTypeWrapper[A] = HoleType[innerTS.TTypeWrapper[A]]
   })
-  : TypeSystemConverter.Aux[context.type, innerTS.type, holeTS.type, context.Comp] = {
+  : TypeSystemConverterEffect.Aux[context.type, innerTS.type, holeTS.type, context.Comp] = {
     import context.{ Comp, compCompilationInstance }
     val context2: context.type = context
 
-    new TypeSystemConverter[Comp] {
+    new TypeSystemConverterEffect[Comp] {
 
       override val context: context2.type = context2
       override val ts: innerTS.type = innerTS
@@ -1601,6 +1604,12 @@ object ExpressionConverter {
 
       override protected def convertType[A](fromExpr: otherTS.ArExpr => A)(t: ts.TTypeWrapper[A]): Comp[otherTS.TTypeWrapper[A]] =
         HoleTypeType(t).pure[Comp]
+
+      override def convertEffect[A](fa: ts.TSComp[A]): otherTS.TSComp[A] =
+        StateT.liftF(fa)
+
+      override def conversionEffectToResultTS[A](fa: context.Comp[A]): otherTS.TSComp[A] =
+        StateT.liftF(fa)
     }
   }
 
