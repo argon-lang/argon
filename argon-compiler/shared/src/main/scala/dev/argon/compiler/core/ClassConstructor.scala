@@ -25,13 +25,11 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   : Comp[newSigContext.Signature[ClassConstructor.ResultInfo, _]] = for {
     sig <- signatureUnsubstituted
     ownerSigUnConv <- ownerClass.signature
-  } yield {
-    val converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
-    val ownerSig = ownerSigUnConv.convertTypeSystem(newSigContext)(converter)
-    val convSig = sig.convertTypeSystem(newSigContext)(converter)
-
+    converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
+    ownerSig <- ownerSigUnConv.convertTypeSystem(newSigContext)(converter)
+    convSig <- sig.convertTypeSystem(newSigContext)(converter)
+  } yield
     convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instanceType.args)
-  }
 
 
   val payload: TPayloadSpec[Comp[TClassConstructorImplementation], TClassConstructorMetadata]
@@ -48,7 +46,7 @@ object ClassConstructor {
       (context: Context)
       (ts1: TypeSystem[context.type])
       (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverter[context.type, ts1.type, ts2.type, F])
+      (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type, F])
       (result: ResultInfo[context.type, ts1.type])
       : F[ResultInfo[context.type, ts2.type]] =
         ResultInfo[context.type, ts2.type]().pure[F]

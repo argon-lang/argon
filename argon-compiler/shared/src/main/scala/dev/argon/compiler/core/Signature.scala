@@ -27,7 +27,7 @@ trait SignatureContext
     def unsubstitutedParameters: Sized[Vector[Parameter], Len]
     def unsubstitutedResult: TResult[context.type, typeSystem.type]
 
-    def convertTypeSystem[F[_]: Monad](newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult, Len]]
+    def convertTypeSystem[F[_]: Monad](newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter.Aux[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult, Len]]
 
     def referencesParameter(parameter: Parameter): Boolean
     def substitute(parameter: Parameter)(replacement: typeSystem.WrapExpr): Signature[TResult, Len]
@@ -74,9 +74,9 @@ trait SignatureContext
     def next(expr: typeSystem.WrapExpr): Signature[TResult, RestLen] =
       nextUnsubstituted.substitute(parameter)(expr)
 
-    override def convertTypeSystem[F[_]: Monad](newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult, Len]] =
+    override def convertTypeSystem[F[_]: Monad](newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter.Aux[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult, Len]] =
       for {
-        newParam <- TypeSystem.convertParameterTypeSystem(context)(typeSystem)(newContext.typeSystem)(converter)(parameter)
+        newParam <- converter.convertParameterTypeSystem(parameter)
         newNext <- nextUnsubstituted.convertTypeSystem(newContext)(converter)
       } yield newContext.SignatureParameters(newParam, newNext)
 
@@ -111,7 +111,7 @@ trait SignatureContext
 
     override def unsubstitutedResult: TResult[context.type, typeSystem.type] = result
 
-    override def convertTypeSystem[F[_]: Monad](newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult, _0]] =
+    override def convertTypeSystem[F[_]: Monad](newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter.Aux[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult, _0]] =
       for {
         newResult <- implicitly[SignatureResultConverter[TResult]].convertTypeSystem(context)(typeSystem)(newContext.typeSystem)(converter)(result)
       } yield newContext.SignatureResult(newResult)
@@ -151,11 +151,11 @@ trait SignatureContext
         case DataConstructorCall(dataCtorInstanceType, args) =>
           checkArExpr(dataCtorInstanceType) || args.exists(checkWrapExpr)
 
-        case FunctionCall(_, args, returnType) =>
-          args.exists(checkWrapExpr) || checkWrapExpr(returnType)
+        case FunctionCall(_, args, _) =>
+          args.exists(checkWrapExpr)
 
-        case FunctionObjectCall(function, arg, returnType) =>
-          checkWrapExpr(function) || checkWrapExpr(arg) || checkWrapExpr(returnType)
+        case FunctionObjectCall(function, arg, _) =>
+          checkWrapExpr(function) || checkWrapExpr(arg)
 
         case IfElse(condition, ifBody, elseBody) =>
           checkWrapExpr(condition) || checkWrapExpr(ifBody) || checkWrapExpr(elseBody)
@@ -171,29 +171,26 @@ trait SignatureContext
         case LoadUnit(_) => false
         case LoadVariable(variable) if variable.descriptor === parameter.paramVar.descriptor => true
         case LoadVariable(variable) => checkVariable(variable)
-        case MethodCall(_, instance, args, returnType) =>
-          checkWrapExpr(instance) || args.exists(checkWrapExpr) || checkWrapExpr(returnType)
+        case MethodCall(_, instance, args, _) =>
+          checkWrapExpr(instance) || args.exists(checkWrapExpr)
 
-        case PrimitiveOp(_, left, right, exprType) =>
-          checkWrapExpr(left) || checkWrapExpr(right) || checkWrapExpr(exprType)
+        case PrimitiveOp(_, left, right, _) =>
+          checkWrapExpr(left) || checkWrapExpr(right)
 
         case Sequence(first, second) =>
-          checkWrapExpr(first) || checkWrapExpr(first)
+          checkWrapExpr(first) || checkWrapExpr(second)
 
         case StoreVariable(variable, value, exprType) =>
           checkVariable(variable) || checkWrapExpr(value) || checkWrapExpr(exprType)
 
-        case TraitType(_, args, baseTypes) =>
-          args.exists(checkTypeArg) ||
-            baseTypes.baseTraits.exists(checkArExpr)
+        case TraitType(_, args) =>
+          args.exists(checkTypeArg)
 
-        case ClassType(_, args, baseTypes) =>
-          args.exists(checkTypeArg) ||
-            baseTypes.baseClass.exists(checkArExpr) ||
-            baseTypes.baseTraits.exists(checkArExpr)
+        case ClassType(_, args) =>
+          args.exists(checkTypeArg)
 
-        case DataConstructorType(_, args, instanceType) =>
-          args.exists(checkTypeArg) || checkArExpr(instanceType)
+        case DataConstructorType(_, args, _) =>
+          args.exists(checkTypeArg)
 
         case TypeOfType(inner) => checkWrapExpr(inner)
         case TypeN(_, subtypeConstraint, supertypeConstraint) =>

@@ -38,24 +38,25 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   import scopeContext.{ context => _, _ }
   import signatureContext.{ Signature, SignatureParameters, SignatureVisitor }
 
+  type TComp[A] = typeSystem.TSComp[A]
+  type TypeCheck[F[_]] = TypeCheckA[context.type, TType, F]
 
+  implicit val tcompTypeCheckInstance: TypeCheckA[context.type, TType, TComp]
 
   type Env = ExpressionConverter.Env[context.type, Scope]
-  private type TypeCheckT[TCType, TComp[_]] = TypeCheckA[context.type, TCType, TComp]
-  private type TypeCheck[TComp[_]] = TypeCheckT[typeSystem.TType, TComp]
 
-  final case class ArgumentInfo[TComp[_]](argFactory: ExprFactory[TComp], env: Env, location: SourceLocation, style: ParameterStyle)
+  final case class ArgumentInfo(argFactory: ExprFactory, env: Env, location: SourceLocation, style: ParameterStyle)
 
-  abstract class ExprFactory[TComp[_]: TypeCheck] {
+  abstract class ExprFactory {
     def forExpectedType(expectedType: TType): TComp[ArExpr]
-    def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] =
+    def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory =
       compFactory(inferExprType(ExprFactory.this).flatMap { thisExpr =>
 
         def simplifyInstanceType(t: TType): TComp[Option[ArExpr]] =
           implicitly[TypeCheck[TComp]].resolveType(t)
             .flatMap { t =>
               unwrapType(t).flatTraverse { t =>
-                reduceExprToValue[TComp](t).map(unwrapType)
+                reduceExprToValue(t).map(unwrapType)
               }
             }
 
@@ -74,7 +75,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                       }
                       .map {
                         case sig: Signature[FunctionResultInfo, len] =>
-                          signatureFactory[TComp, FunctionResultInfo, len](env)(location)(method.value.method.descriptor)(sig) { (args, result) =>
+                          signatureFactory[FunctionResultInfo, len](env)(location)(method.value.method.descriptor)(sig) { (args, result) =>
                             MethodCall(AbsRef(method.value.method), fromSimpleType(thisExpr), args, result.returnType)
                           }
                       }
@@ -83,15 +84,15 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             }
 
 
-        def overloadsOfType(memberName: MemberName)(t: TType): TComp[Vector[List[NonEmptyVector[OverloadExprFactory[TComp]]]]] =
+        def overloadsOfType(memberName: MemberName)(t: TType): TComp[Vector[List[NonEmptyVector[OverloadExprFactory]]]] =
           simplifyInstanceType(t).flatMap {
             case Some(resolvedTypeWithMethods: TypeWithMethods) =>
               resolveMethodOverloads(resolvedTypeWithMethods)(
-                implicitly[TypeCheck[TComp]].fromContextComp(MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.descriptor, env.fileSpec)(memberName))
+                MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.descriptor, env.fileSpec)(memberName)
               )
 
             case Some(funcType @ FunctionType(argType, resultType)) if memberName === MemberName.Call =>
-              Vector(List(NonEmptyVector.of(new OverloadExprFactory[TComp] {
+              Vector(List(NonEmptyVector.of(new OverloadExprFactory {
 
                 override def overloadDescriptor: CallableDescriptor = FunctionTypeCallDescriptor
 
@@ -101,14 +102,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 override def forExpectedType(expectedType: TType): TComp[ArExpr] =
                   ExprFactory.this.forExpectedType(expectedType)
 
-                override def forArguments(argInfo: ArgumentInfo[TComp]): OverloadExprFactory[TComp] =
-                  new OverloadExprFactory[TComp] {
+                override def forArguments(argInfo: ArgumentInfo): OverloadExprFactory =
+                  new OverloadExprFactory {
                     override def overloadDescriptor: CallableDescriptor = FunctionTypeCallDescriptor
 
                     override def usedParamTypes: Vector[TType] = Vector(argType)
                     override def remainingParameterTypes: Vector[TType] = Vector()
 
-                    private def result: ExprFactory[TComp] =
+                    private def result: ExprFactory =
                       compFactory(
                         for {
                           funcExpr <- ExprFactory.this.forExpectedType(fromSimpleType(funcType))
@@ -119,7 +120,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                     override def forExpectedType(expectedType: TType): TComp[ArExpr] =
                       result.forExpectedType(expectedType)
 
-                    override def forArguments(argInfo: ArgumentInfo[TComp]): OverloadExprFactory[TComp] =
+                    override def forArguments(argInfo: ArgumentInfo): OverloadExprFactory =
                       wrapNonOverloadFactory(result.forArguments(argInfo))
                   }
               }))).pure[TComp]
@@ -144,7 +145,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                           OverloadResult.End
                       }
 
-                    unwrapType(t).collect[TComp[Vector[List[NonEmptyVector[OverloadExprFactory[TComp]]]]]] {
+                    unwrapType(t).collect[TComp[Vector[List[NonEmptyVector[OverloadExprFactory]]]]] {
                       case t: ClassType =>
                         memberName match {
                           case MemberName.New =>
@@ -163,7 +164,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                                         }
                                         .map {
                                           case sig: Signature[ClassConstructor.ResultInfo, len] =>
-                                            signatureFactory[TComp, ClassConstructor.ResultInfo, len](env)(location)(classCtor.descriptor)(sig) { (args, _) =>
+                                            signatureFactory[ClassConstructor.ResultInfo, len](env)(location)(classCtor.descriptor)(sig) { (args, _) =>
                                               ClassConstructorCall(t, AbsRef(classCtor), args)
                                             }
                                         }
@@ -187,7 +188,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
                       case t: TraitType =>
                         memberName match {
-                          case MemberName.New => Vector.empty[List[NonEmptyVector[OverloadExprFactory[TComp]]]].pure[TComp]
+                          case MemberName.New => Vector.empty[List[NonEmptyVector[OverloadExprFactory]]].pure[TComp]
                           case methodName: MethodName =>
                             resolveMethodOverloads(t)(
                               implicitly[TypeCheck[TComp]].fromContextComp(t.arTrait.value.staticMethods)
@@ -203,7 +204,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                         }
                     }
                       .getOrElse {
-                        Vector.empty[List[NonEmptyVector[OverloadExprFactory[TComp]]]].pure[TComp]
+                        Vector.empty[List[NonEmptyVector[OverloadExprFactory]]].pure[TComp]
                       }
                   }
                 }
@@ -216,17 +217,17 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               } yield aOverloads ++ bOverloads
 
 
-            case _ => Vector.empty[List[NonEmptyVector[OverloadExprFactory[TComp]]]].pure[TComp]
+            case _ => Vector.empty[List[NonEmptyVector[OverloadExprFactory]]].pure[TComp]
           }
 
-        def mergeOverloadLists(a: List[NonEmptyVector[OverloadExprFactory[TComp]]], b: List[NonEmptyVector[OverloadExprFactory[TComp]]]): List[NonEmptyVector[OverloadExprFactory[TComp]]] =
+        def mergeOverloadLists(a: List[NonEmptyVector[OverloadExprFactory]], b: List[NonEmptyVector[OverloadExprFactory]]): List[NonEmptyVector[OverloadExprFactory]] =
           (a, b) match {
             case (aHead :: aTail, bHead :: bTail) => (aHead ++: bHead) :: mergeOverloadLists(aTail, bTail)
             case (_, Nil) => a
             case (_, _) => b
           }
 
-        def overloadsForName(memberName: MemberName): TComp[ExprFactory[TComp]] =
+        def overloadsForName(memberName: MemberName): TComp[ExprFactory] =
           getExprType(thisExpr, includeExtraTypeOfType = false)
             .flatMap(overloadsOfType(memberName))
             .flatMap { overloads =>
@@ -246,17 +247,17 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
         memberName match {
           case MemberName.Normal(name) =>
-            new ExprFactory[TComp] {
+            new ExprFactory {
               override def forExpectedType(expectedType: TType): TComp[typeSystem.ArExpr] =
                 overloadsForName(memberName).flatMap { _.forExpectedType(expectedType) }
 
-              override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] =
+              override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory =
                 compFactory(overloadsForName(memberName).map { _.memberAccessExpr(memberName, env, location) })
 
-              override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
+              override def forArguments(argInfo: ArgumentInfo): ExprFactory =
                 compFactory(overloadsForName(memberName).map { _.forArguments(argInfo) })
 
-              override def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory[TComp]): ExprFactory[TComp] =
+              override def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory): ExprFactory =
                 compFactory(overloadsForName(MemberName.Mutator(name))).forArguments(ArgumentInfo(newValue, env, location, ParameterStyle.Normal))
             }.pure[TComp]
 
@@ -267,35 +268,35 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
 
 
-    def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
+    def forArguments(argInfo: ArgumentInfo): ExprFactory =
       memberAccessExpr(MemberName.Call, argInfo.env, argInfo.location).forArguments(argInfo)
 
-    def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory[TComp]): ExprFactory[TComp] =
+    def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory): ExprFactory =
       compFactory(
         Compilation[TComp].forErrors(CompilationError.InvalidLValue(CompilationMessageSource.SourceFile(env.fileSpec, location)))
       )
 
   }
 
-  abstract class OverloadExprFactory[TComp[_]: TypeCheck] {
+  abstract class OverloadExprFactory {
 
     def overloadDescriptor: CallableDescriptor
     def usedParamTypes: Vector[TType]
     def remainingParameterTypes: Vector[TType]
 
     def forExpectedType(expectedType: TType): TComp[ArExpr]
-    def forArguments(argInfo: ArgumentInfo[TComp]): OverloadExprFactory[TComp]
+    def forArguments(argInfo: ArgumentInfo): OverloadExprFactory
 
-    def toExprFactory: ExprFactory[TComp] = new ExprFactory[TComp] {
+    def toExprFactory: ExprFactory = new ExprFactory {
       override def forExpectedType(expectedType: TType): TComp[ArExpr] =
         OverloadExprFactory.this.forExpectedType(expectedType)
 
-      override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
+      override def forArguments(argInfo: ArgumentInfo): ExprFactory =
         OverloadExprFactory.this.forArguments(argInfo).toExprFactory
     }
 
-    protected final def wrapNonOverloadFactory(factory: ExprFactory[TComp]): OverloadExprFactory[TComp] =
-      new OverloadExprFactory[TComp] {
+    protected final def wrapNonOverloadFactory(factory: ExprFactory): OverloadExprFactory =
+      new OverloadExprFactory {
 
         override def overloadDescriptor: CallableDescriptor = OverloadExprFactory.this.overloadDescriptor
 
@@ -305,13 +306,13 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
           factory.forExpectedType(expectedType)
 
-        override def forArguments(argInfo: ArgumentInfo[TComp]): OverloadExprFactory[TComp] =
+        override def forArguments(argInfo: ArgumentInfo): OverloadExprFactory =
           wrapNonOverloadFactory(factory.forArguments(argInfo))
       }
 
   }
 
-  def convertExpr[TComp[_] : TypeCheck](env: Env)(expr: WithSource[parser.Expr]): ExprFactory[TComp] =
+  def convertExpr(env: Env)(expr: WithSource[parser.Expr]): ExprFactory =
     expr.value match {
       case parser.AsExpr(value, valueTypeExpr) =>
         compFactory(
@@ -388,7 +389,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         )
 
       case parser.BlockExpr(body, Vector(), None, Some(ensureBody)) =>
-        new ExprFactory[TComp] {
+        new ExprFactory {
           override def forExpectedType(expectedType: TType): TComp[ArExpr] =
             for {
               bodyExpr <- convertStmts(env)(body).forExpectedType(expectedType)
@@ -411,7 +412,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         convertExpr(env)(obj).memberAccessExpr(MemberName.Normal(member), env, expr.location)
 
       case parser.FunctionCallExpr(func, listType, arg) =>
-        convertExpr[TComp](env)(func).forArguments(ArgumentInfo[TComp](convertExpr(env)(arg), env, arg.location, ParameterStyle.fromParser(listType)))
+        convertExpr(env)(func).forArguments(ArgumentInfo(convertExpr(env)(arg), env, arg.location, ParameterStyle.fromParser(listType)))
 
       case parser.IdentifierExpr(name) =>
         compFactory(
@@ -433,7 +434,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         )
 
       case parser.LambdaExpr(varName, body) =>
-        new ExprFactory[TComp] {
+        new ExprFactory {
           override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
             for {
               argHole <- implicitly[TypeCheck[TComp]].createHole
@@ -463,7 +464,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         )
 
       case parser.MatchExpr(value, cases) =>
-        new ExprFactory[TComp] {
+        new ExprFactory {
           override def forExpectedType(expectedType: TType): TComp[ArExpr] =
             for {
               valueExpr <- inferExprType(convertExpr(env)(value))
@@ -535,7 +536,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         )
 
       case parser.TupleExpr(values) =>
-        new ExprFactory[TComp] {
+        new ExprFactory {
           override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
             values
               .traverse { elem =>
@@ -566,7 +567,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             sub <- subtypeOf.traverse(evaluateTypeExprAST(env)(_))
             sup <- supertypeOf.traverse(evaluateTypeExprAST(env)(_))
             inferredUniverse <- (sub.toList ++ sup.toList)
-              .traverse(universeOfWrapExpr[TComp])
+              .traverse(universeOfWrapExpr)
               .map { _.foldLeft[UniverseExpr](FixedUniverse(0))(LargestUniverse) }
 
             universe <- level match {
@@ -602,8 +603,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented: ${e.dumpInfo}")
     }
 
-  def createIfExpr[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(cond: WithSource[parser.Expr], ifBody: WithSource[Vector[WithSource[parser.Stmt]]], elseBody: WithSource[Vector[WithSource[parser.Stmt]]]) =
-    new ExprFactory[TComp] {
+  def createIfExpr(env: Env)(location: SourceLocation)(cond: WithSource[parser.Expr], ifBody: WithSource[Vector[WithSource[parser.Stmt]]], elseBody: WithSource[Vector[WithSource[parser.Stmt]]]) =
+    new ExprFactory {
       override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
         for {
           boolType <- resolveBoolClass(env)(location)
@@ -613,12 +614,12 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         } yield IfElse(fromSimpleType(condTC), fromSimpleType(ifBodyTC), fromSimpleType(elseBodyTC))
     }
 
-  def convertStmts[TComp[_] : TypeCheck](env: Env)(stmts: WithSource[Vector[WithSource[parser.Stmt]]]): ExprFactory[TComp] =
+  def convertStmts(env: Env)(stmts: WithSource[Vector[WithSource[parser.Stmt]]]): ExprFactory =
     stmts.value match {
       case Vector() => loadUnitLiteral(env)(stmts.location)
 
       case WithSource(stmt: parser.VariableDeclarationStmt, location) +: tail =>
-        new ExprFactory[TComp] {
+        new ExprFactory {
           override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] = {
             val mutability = Mutability.fromIsMutable(stmt.isMutable)
             val varName = stmt.name match {
@@ -655,10 +656,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
       case Vector(stmt) => convertStmt(env)(stmt)
       case head +: tail =>
-        new ExprFactory[TComp] {
+        new ExprFactory {
           override def forExpectedType(expectedType: typeSystem.TType): TComp[typeSystem.ArExpr] =
             for {
-              unitType <- resolveUnitType[TComp](env)(head.location)
+              unitType <- resolveUnitType(env)(head.location)
               first <- convertStmt(env)(head).forExpectedType(unitType)
 
               secondStartPos = tail.headOption.map { _.location.start }.getOrElse(stmts.location.end)
@@ -667,7 +668,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         }
     }
 
-  def convertStmt[TComp[_] : TypeCheck](env: Env)(stmt: WithSource[parser.Stmt]): ExprFactory[TComp] =
+  def convertStmt(env: Env)(stmt: WithSource[parser.Stmt]): ExprFactory =
     stmt.value match {
       case expr: parser.Expr =>
         convertExpr(env)(WithSource(expr, stmt.location))
@@ -675,15 +676,15 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case _ => ???
     }
 
-  def resolveModuleClassFactory[TComp[_] : TypeCheck]
+  def resolveModuleClassFactory
   (env: Env)
   (location: SourceLocation)
   (moduleDesc: ModuleDescriptor)
   (namespacePath: NamespacePath, name: GlobalName)
-  (args: Vector[ArgumentInfo[TComp]])
-  : ExprFactory[TComp] = {
+  (args: Vector[ArgumentInfo])
+  : ExprFactory = {
 
-    def resolveClass[ClassPS[_, _]](arClassOptComp: context.Comp[Vector[ArClass[context.type, ClassPS]]]): ExprFactory[TComp] =
+    def resolveClass[ClassPS[_, _]](arClassOptComp: context.Comp[Vector[ArClass[context.type, ClassPS]]]): ExprFactory =
       compFactory(
         for {
           classesVec <- implicitly[TypeCheck[TComp]].fromContextComp(arClassOptComp)
@@ -693,17 +694,16 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
           classFactories <- classes.traverse { arClass =>
             implicitly[TypeCheck[TComp]].fromContextComp(arClass.signature)
-              .map {
+              .flatMap {
                 case classSig: context.signatureContext.Signature[ArClass.ResultInfo, len] =>
+                  convertSignature[ArClass.ResultInfo, len](classSig).map { convSig =>
+                    val classFactory =
+                      signatureFactory[ArClass.ResultInfo, len](env)(location)(arClass.descriptor)(convSig) { (args, classResult) =>
+                        ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), args.map(TypeArgument.Expr))
+                      }
 
-                  val classFactory =
-                    signatureFactory[TComp, ArClass.ResultInfo, len](env)(location)(arClass.descriptor)(
-                      convertSignature[ArClass.ResultInfo, len](classSig)
-                    ) { (args, classResult) =>
-                      ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), args.map(TypeArgument.Expr), classResult.baseTypes)
-                    }
-
-                  args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
+                    args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
+                  }
               }
           }
 
@@ -716,7 +716,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       resolveClass(ModuleLookup.lookupValues(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass))
   }
 
-  def resolveModuleClass[TComp[_] : TypeCheck]
+  def resolveModuleClass
   (env: Env)
   (location: SourceLocation)
   (moduleDesc: ModuleDescriptor)
@@ -724,55 +724,55 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   : TComp[TType] =
     evaluateTypeExprFactory(env)(location)(resolveModuleClassFactory(env)(location)(moduleDesc)(namespacePath, name)(Vector.empty))
 
-  def resolveBoolClass[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
+  def resolveBoolClass(env: Env)(location: SourceLocation): TComp[TType] =
     resolveModuleClass(env)(location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))
 
-  def resolveUnitType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
+  def resolveUnitType(env: Env)(location: SourceLocation): TComp[TType] =
     resolveModuleClass(env)(location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))
 
-  def resolveIntType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): TComp[TType] =
+  def resolveIntType(env: Env)(location: SourceLocation): TComp[TType] =
     resolveModuleClass(env)(location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Int"))
 
-  def loadUnitLiteral[TComp[_] : TypeCheck](env: Env)(location: SourceLocation): ExprFactory[TComp] =
+  def loadUnitLiteral(env: Env)(location: SourceLocation): ExprFactory =
     compFactory(
       for {
         unitType <- resolveUnitType(env)(location)
       } yield factoryForExpr(env)(location)(LoadUnit(unitType))
     )
 
-  def factoryForExpr[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr): ExprFactory[TComp] =
-    new ExprFactory[TComp] {
+  def factoryForExpr(env: Env)(location: SourceLocation)(expr: ArExpr): ExprFactory =
+    new ExprFactory {
       override def forExpectedType(expectedType: typeSystem.TType): TComp[ArExpr] =
         convertExprType(env)(location)(expr)(expectedType)
     }
 
-  def createLookupFactory[TComp[_] : TypeCheck](env: Env)(description: LookupDescription)(location: SourceLocation)(lookupResult: LookupResult): ExprFactory[TComp] =
+  def createLookupFactory(env: Env)(description: LookupDescription)(location: SourceLocation)(lookupResult: LookupResult): ExprFactory =
     lookupResult match {
       case LookupResult.ScopeResult(scope) =>
-        new ExprFactory[TComp] {
+        new ExprFactory {
           private def error[A]: TComp[A] = Compilation[TComp].forErrors(CompilationError.NamespaceUsedAsValueError(description, CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
           override def forExpectedType(expectedType: typeSystem.TType): TComp[ArExpr] =
             error
 
-          override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] =
+          override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory =
             compFactory(
               (memberName match {
                 case MemberName.Normal(name) => implicitly[TypeCheck[TComp]].fromContextComp(scope.findIdentifier(name, env.fileSpec, location))
                 case _ => LookupResult.Failed.upcast[LookupResult].pure[TComp]
-              }).map(createLookupFactory(env)(LookupDescription.Member(description, memberName))(location)(_)(implicitly[TypeCheck[TComp]]))
+              }).map(createLookupFactory(env)(LookupDescription.Member(description, memberName))(location)(_))
             )
 
-          override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
+          override def forArguments(argInfo: ArgumentInfo): ExprFactory =
             compFactory(error)
         }
 
       case LookupResult.SingleValueResult(VariableScopeValue(variable)) =>
-        new ExprFactory[TComp] {
+        new ExprFactory {
           override def forExpectedType(expectedType: TType): TComp[typeSystem.ArExpr] =
             convertExprType(env)(location)(LoadVariable(variable))(expectedType)
 
-          override def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory[TComp]): ExprFactory[TComp] =
+          override def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory): ExprFactory =
             variable.mutability match {
               case Mutability.Mutable =>
                 compFactory(
@@ -793,54 +793,58 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         compFactory(
           overloads
             .toNonEmptyList
-            .traverse { _.traverse[TComp, OverloadExprFactory[TComp]] {
+            .traverse { _.traverse[TComp, OverloadExprFactory] {
               case FunctionScopeValue(func) =>
                 Compilation[TComp].require(env.effectInfo.canCall(func.value.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
                   .flatMap { _ =>
                     implicitly[TypeCheck[TComp]].fromContextComp(func.value.signature)
                   }
-                  .map {
+                  .flatMap {
                     case sig: context.signatureContext.Signature[FunctionResultInfo, len] =>
-                      val convSig = convertSignature[FunctionResultInfo, len](sig)
-                      signatureFactory[TComp, FunctionResultInfo, len](env)(location)(func.value.descriptor)(convSig) { (args, result) =>
-                        FunctionCall(func, args, result.returnType)
+                      convertSignature[FunctionResultInfo, len](sig).map { convSig =>
+                        signatureFactory[FunctionResultInfo, len](env)(location)(func.value.descriptor)(convSig) { (args, result) =>
+                          FunctionCall(func, args, result.returnType)
+                        }
                       }
                   }
 
               case TraitScopeValue(arTrait) =>
                 implicitly[TypeCheck[TComp]].fromContextComp(arTrait.value.signature)
-                  .map {
+                  .flatMap {
                     case sig: context.signatureContext.Signature[ArTrait.ResultInfo, len] =>
-                      val convSig = convertSignature[ArTrait.ResultInfo, len](sig)
-                      signatureFactory(env)(location)(arTrait.value.descriptor)(convSig) { (args, result) =>
-                        TraitType(arTrait, args.map(TypeArgument.Expr), result.baseTypes)
+                      convertSignature[ArTrait.ResultInfo, len](sig).map { convSig =>
+                        signatureFactory(env)(location)(arTrait.value.descriptor)(convSig) { (args, result) =>
+                          TraitType(arTrait, args.map(TypeArgument.Expr))
+                        }
                       }
                   }
 
               case ClassScopeValue(arClass) =>
                 implicitly[TypeCheck[TComp]].fromContextComp(arClass.value.signature)
-                  .map {
+                  .flatMap {
                     case sig: context.signatureContext.Signature[ArClass.ResultInfo, len] =>
-                      val convSig = convertSignature[ArClass.ResultInfo, len](sig)
-                      signatureFactory(env)(location)(arClass.value.descriptor)(convSig) { (args, result) =>
-                        ClassType(arClass, args.map(TypeArgument.Expr), result.baseTypes)
+                      convertSignature[ArClass.ResultInfo, len](sig).map { convSig =>
+                        signatureFactory(env)(location)(arClass.value.descriptor)(convSig) { (args, result) =>
+                          ClassType(arClass, args.map(TypeArgument.Expr))
+                        }
                       }
                   }
 
               case DataConstructorScopeValue(ctor) =>
                 implicitly[TypeCheck[TComp]].fromContextComp(ctor.value.signature)
-                  .map {
+                  .flatMap {
                     case sig: context.signatureContext.Signature[DataConstructor.ResultInfo, len] =>
-                      val convSig = convertSignature[DataConstructor.ResultInfo, len](sig)
-                      signatureFactory(env)(location)(ctor.value.descriptor)(convSig) { (args, result) =>
-                        DataConstructorCall(
-                          DataConstructorType(
-                            ctor,
-                            args.map(TypeArgument.Expr),
-                            result.instanceType
-                          ),
-                          args
-                        )
+                      convertSignature[DataConstructor.ResultInfo, len](sig).map { convSig =>
+                        signatureFactory(env)(location)(ctor.value.descriptor)(convSig) { (args, result) =>
+                          DataConstructorCall(
+                            DataConstructorType(
+                              ctor,
+                              args.map(TypeArgument.Expr),
+                              result.instanceType
+                            ),
+                            args
+                          )
+                        }
                       }
                   }
 
@@ -849,26 +853,26 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         )
 
       case LookupResult.Failed =>
-        new ExprFactory[TComp] {
+        new ExprFactory {
           private def error[A]: TComp[A] =
             Compilation[TComp].forErrors(CompilationError.LookupFailedError(description, CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
           override def forExpectedType(expectedType: typeSystem.TType): TComp[ArExpr] = error
 
-          override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] = this
-          override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
+          override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory = this
+          override def forArguments(argInfo: ArgumentInfo): ExprFactory =
             this
 
         }
     }
 
-  def overloadSelectionFactory[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(overloads: NonEmptyList[NonEmptyVector[OverloadExprFactory[TComp]]]): ExprFactory[TComp] = {
+  def overloadSelectionFactory(env: Env)(location: SourceLocation)(overloads: NonEmptyList[NonEmptyVector[OverloadExprFactory]]): ExprFactory = {
 
-    final class OverloadSelectionFactory(argCount: Int)(overloads: NonEmptyList[NonEmptyVector[OverloadExprFactory[TComp]]]) extends ExprFactory[TComp] {
+    final class OverloadSelectionFactory(argCount: Int)(overloads: NonEmptyList[NonEmptyVector[OverloadExprFactory]]) extends ExprFactory {
 
-      private def prioritizedOverloads: TComp[NonEmptyList[NonEmptyVector[OverloadExprFactory[TComp]]]] = {
+      private def prioritizedOverloads: TComp[NonEmptyList[NonEmptyVector[OverloadExprFactory]]] = {
 
-        def insert(acc: NonEmptyList[NonEmptyVector[OverloadExprFactory[TComp]]], item: OverloadExprFactory[TComp]): TComp[NonEmptyList[NonEmptyVector[OverloadExprFactory[TComp]]]] =
+        def insert(acc: NonEmptyList[NonEmptyVector[OverloadExprFactory]], item: OverloadExprFactory): TComp[NonEmptyList[NonEmptyVector[OverloadExprFactory]]] =
           acc.head.existsM(isBetterThan(_, item)).flatMap {
             case false => NonEmptyList(acc.head :+ item, acc.tail).pure[TComp]
             case true =>
@@ -886,7 +890,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
 
       // a is better than b
-      private def isBetterThan(a: OverloadExprFactory[TComp], b: OverloadExprFactory[TComp]): TComp[Boolean] =
+      private def isBetterThan(a: OverloadExprFactory, b: OverloadExprFactory): TComp[Boolean] =
         if(a.usedParamTypes.size === argCount && (b.usedParamTypes.size =!= argCount || b.remainingParameterTypes.nonEmpty))
           true.pure[TComp]
         else if(a.usedParamTypes.size > b.usedParamTypes.size)
@@ -909,7 +913,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         }
 
       private def runSameLevelOverloads
-      (overloads: NonEmptyVector[OverloadExprFactory[TComp]])
+      (overloads: NonEmptyVector[OverloadExprFactory])
       (expectedType: TType)
       : TComp[NonEmptyVector[(CallableDescriptor, Either[NonEmptyList[CompilationError], TComp[ArExpr]])]] =
         overloads.traverse { overload =>
@@ -943,9 +947,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         }
       }
 
-      private def attemptOverloads(remaining: Ior[NonEmptyVector[FailedOverload], NonEmptyList[NonEmptyVector[OverloadExprFactory[TComp]]]])(expectedType: TType): TComp[ArExpr] = {
+      private def attemptOverloads(remaining: Ior[NonEmptyVector[FailedOverload], NonEmptyList[NonEmptyVector[OverloadExprFactory]]])(expectedType: TType): TComp[ArExpr] = {
 
-        def attemptHead(head: NonEmptyVector[OverloadExprFactory[TComp]])(fallback: NonEmptyVector[FailedOverload] => TComp[ArExpr]): TComp[ArExpr] =
+        def attemptHead(head: NonEmptyVector[OverloadExprFactory])(fallback: NonEmptyVector[FailedOverload] => TComp[ArExpr]): TComp[ArExpr] =
           runSameLevelOverloads(head)(expectedType)
             .map(splitCallsAndErrors)
             .flatMap {
@@ -997,7 +1001,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           attemptOverloads(Ior.Right(overloads))(expectedType)
         }
 
-      override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
+      override def forArguments(argInfo: ArgumentInfo): ExprFactory =
         new OverloadSelectionFactory(argCount + 1)(overloads.map { _.map { _.forArguments(argInfo) } })
 
     }
@@ -1005,34 +1009,34 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     new OverloadSelectionFactory(argCount = 0)(overloads)
   }
 
-  def compFactory[TComp[_] : TypeCheck](compFac: TComp[ExprFactory[TComp]]): ExprFactory[TComp] =
-    new ExprFactory[TComp] {
+  def compFactory(compFac: TComp[ExprFactory]): ExprFactory =
+    new ExprFactory {
       override def forExpectedType(expectedType: typeSystem.TType): TComp[ArExpr] =
         compFac.flatMap { _.forExpectedType(expectedType) }
 
-      override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory[TComp] =
+      override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory =
         compFactory(
           compFac.map { _.memberAccessExpr(memberName, env, location) }
         )
 
-      override def forArguments(argInfo: ArgumentInfo[TComp]): ExprFactory[TComp] =
+      override def forArguments(argInfo: ArgumentInfo): ExprFactory =
         compFactory(
           compFac.map { _.forArguments(argInfo) }
         )
 
-      override def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory[TComp]): ExprFactory[TComp] =
+      override def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory): ExprFactory =
         compFactory(
           compFac.map { _.mutateValue(env, location, newValue) }
         )
     }
 
-  def signatureFactory[TComp[_] : TypeCheck, TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], FullLen <: Nat]
+  def signatureFactory[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], FullLen <: Nat]
   (env: Env)
   (location: SourceLocation)
   (descriptor: ParameterOwnerDescriptor)
   (fullSignature: Signature[TResult, FullLen])
   (f: (Vector[WrapExpr], TResult[context.type, typeSystem.type]) => ArExpr)
-  : OverloadExprFactory[TComp] = {
+  : OverloadExprFactory = {
 
     def signatureNextPart[RestLen <: Nat](sig: SignatureParameters[TResult, RestLen])(arg: WrapExpr): TComp[Signature[TResult, RestLen]] =
       if(isWrapExprPure(arg))
@@ -1042,7 +1046,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       else
         Compilation[TComp].forErrors(CompilationError.ArgumentToSignatureDependencyNotPureError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
-    final class SigFactory[Len <: Nat](env: Env)(unsubSig: Signature[TResult, Len])(prevParamTypes: Vector[TType])(acc: TComp[(Signature[TResult, Len], Vector[WrapExpr])]) extends OverloadExprFactory[TComp] {
+    final class SigFactory[Len <: Nat](env: Env)(unsubSig: Signature[TResult, Len])(prevParamTypes: Vector[TType])(acc: TComp[(Signature[TResult, Len], Vector[WrapExpr])]) extends OverloadExprFactory {
 
 
       override def overloadDescriptor: ParameterOwnerDescriptor = descriptor
@@ -1065,9 +1069,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             })
         }
 
-      override def forArguments(argInfo: ArgumentInfo[TComp]): OverloadExprFactory[TComp] =
-        unsubSig.visit(new SignatureVisitor[TResult, Len, OverloadExprFactory[TComp]] {
-          override def visitParameters[RestLen <: Nat](unsubSigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): OverloadExprFactory[TComp] = {
+      override def forArguments(argInfo: ArgumentInfo): OverloadExprFactory =
+        unsubSig.visit(new SignatureVisitor[TResult, Len, OverloadExprFactory] {
+          override def visitParameters[RestLen <: Nat](unsubSigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): OverloadExprFactory = {
             def createFactory(createExpr: TType => TComp[WrapExpr]) =
               new SigFactory(env)(unsubSigParams.nextUnsubstituted)(prevParamTypes :+ unsubSigParams.parameter.paramType)(
                 acc.flatMap {
@@ -1094,7 +1098,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             }
           }
 
-          override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenEq: Len === _0): OverloadExprFactory[TComp] =
+          override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenEq: Len === _0): OverloadExprFactory =
             wrapNonOverloadFactory(
               toExprFactory.memberAccessExpr(MemberName.Call, argInfo.env, argInfo.location).forArguments(argInfo)
             )
@@ -1132,27 +1136,29 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
   def convertSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], Len <: Nat]
   (sig: context.signatureContext.Signature[TResult, Len])
-  : Signature[TResult, Len] =
-    sig.convertTypeSystem(signatureContext)(ArTypeSystemConverter(context)(typeSystem))
+  : TComp[Signature[TResult, Len]] = {
+    import context.compCompilationInstance
+    liftComp(sig.convertTypeSystem(signatureContext)(ArTypeSystemConverter(context)(typeSystem)))
+  }
 
-  def convertExprType[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr)(t: typeSystem.TType): TComp[ArExpr] =
+  def convertExprType(env: Env)(location: SourceLocation)(expr: ArExpr)(t: typeSystem.TType): TComp[ArExpr] =
     getExprType(expr).flatMap { exprType =>
       convertExprTypeDelay(env)(location)(exprType)(t)
         .map { f => f(expr) }
     }
 
-  def convertExprTypeDelay[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(exprType: typeSystem.TType)(t: typeSystem.TType): TComp[ArExpr => ArExpr] =
-    typeSystem.isSubType[TComp](t, exprType).flatMap {
+  def convertExprTypeDelay(env: Env)(location: SourceLocation)(exprType: typeSystem.TType)(t: typeSystem.TType): TComp[ArExpr => ArExpr] =
+    typeSystem.isSubType(t, exprType).flatMap {
       case Some(info) => implicitly[TypeCheck[TComp]].recordConstraint(info).map(const(identity))
       case None => Compilation[TComp].forErrors(CompilationError.CouldNotConvertType(context)(typeSystem)(exprType, t)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
     }
 
-  def evaluateTypeExprFactory[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(factory: ExprFactory[TComp]): TComp[TType] =
+  def evaluateTypeExprFactory(env: Env)(location: SourceLocation)(factory: ExprFactory): TComp[TType] =
     inferExprType(factory).flatMap { expr =>
       validateTypeExpr(env)(location)(expr).map { _ => fromSimpleType(expr) }
     }
 
-  def validateTypeExpr[TComp[_] : TypeCheck](env: Env)(location: SourceLocation)(expr: ArExpr): TComp[Unit] = {
+  def validateTypeExpr(env: Env)(location: SourceLocation)(expr: ArExpr): TComp[Unit] = {
     def invalidType[A]: TComp[A] = Compilation[TComp].forErrors(CompilationError.ExpressionNotTypeError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
 
     expr match {
@@ -1191,11 +1197,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     }
   }
 
-  def evaluateTypeExprAST[TComp[_] : TypeCheck](env: Env)(expr: WithSource[parser.Expr]): TComp[TType] =
+  def evaluateTypeExprAST(env: Env)(expr: WithSource[parser.Expr]): TComp[TType] =
     evaluateTypeExprFactory(env)(expr.location)(convertExpr(env)(expr))
 
 
-  private def inferExprType[TComp[_] : TypeCheck](factory: ExprFactory[TComp]): TComp[ArExpr] =
+  private def inferExprType(factory: ExprFactory): TComp[ArExpr] =
     for {
       hole <- implicitly[TypeCheck[TComp]].createHole
       expr <- factory.forExpectedType(hole)
@@ -1226,8 +1232,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case PrimitiveOp(_, left, right, _) => isWrapExprPure(left) && isWrapExprPure(right)
       case Sequence(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
       case StoreVariable(_, _, _) => false
-      case TraitType(_, args, _) => args.forall(isTypeArgPure)
-      case ClassType(_, args, _) => args.forall(isTypeArgPure)
+      case TraitType(_, args) => args.forall(isTypeArgPure)
+      case ClassType(_, args) => args.forall(isTypeArgPure)
       case DataConstructorType(_, args, _) => args.forall(isTypeArgPure)
       case TypeOfType(inner) => isWrapExprPure(inner)
       case TypeN(_, subtypeConstraint, supertypeConstraint) => subtypeConstraint.forall(isWrapExprPure) && supertypeConstraint.forall(isWrapExprPure)
@@ -1278,7 +1284,7 @@ object ExpressionConverter {
     val referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]]
   }
 
-  private def createConverter(context: Context)(ts: TypeSystem[context.type]): ExpressionConverter[context.type] {
+  private def createConverter(context: Context)(ts: TypeSystem[context.type])(implicit tcInstance: TypeCheck[context.type, ts.TType, ts.TSComp]): ExpressionConverter[context.type] {
     val typeSystem: ts.type
   } = {
     val ctx: context.type = context
@@ -1286,6 +1292,8 @@ object ExpressionConverter {
     new ExpressionConverter[ctx.type] {
       override val context: ctx.type = ctx
       override val typeSystem: ts.type = ts
+
+      override implicit val tcompTypeCheckInstance: ExpressionConverter.TypeCheck[context.type, typeSystem.TType, TComp] = tcInstance
 
       override val scopeContext: ScopeContext[context.type] { val typeSystem: ts.type } =
         new ScopeContext[context.type] {
@@ -1310,9 +1318,9 @@ object ExpressionConverter {
     import context._
 
     val ts = HoleTypeSystem(context)
+    implicit val tcInstance = typeCheckHoleTypeInstance(context)(ts)
     val converter = createConverter(context)(ts)
 
-    implicit val tcInstance = typeCheckHoleTypeInstance(context)(ts)
 
     val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
 
@@ -1326,12 +1334,14 @@ object ExpressionConverter {
       allowAbstractConstructor = env.allowAbstractConstructor,
     )
 
-    fillHoles(context)(ts)(
-      converter
-        .convertStmts[HoleTypeCheckComp[Comp, ts.TType, ?]](env2)(stmts)(tcInstance)
-        .forExpectedType(TypeSystem.convertTypeSystem(context)(context.typeSystem)(ts)(tsConverter)(expectedType))
-        .map(ts.wrapType)
-    )
+    tsConverter.convertTypeSystem(expectedType).flatMap { convExpectedType =>
+      fillHoles(context)(ts)(
+        converter
+          .convertStmts(env2)(stmts)
+          .forExpectedType(convExpectedType)
+          .map(ts.wrapType)
+      )
+    }
   }
 
   def convertExpression
@@ -1353,9 +1363,8 @@ object ExpressionConverter {
     import context._
 
     val ts = HoleTypeSystem(context)
-    val converter = createConverter(context)(ts)
-
     implicit val tcInstance = typeCheckHoleTypeInstance(context)(ts)
+    val converter = createConverter(context)(ts)
 
     val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
 
@@ -1369,7 +1378,7 @@ object ExpressionConverter {
       allowAbstractConstructor = env.allowAbstractConstructor,
     )
 
-    val tcExpr = converter.evaluateTypeExprAST[HoleTypeCheckComp[Comp, ts.TType, ?]](env2)(expr)(tcInstance)
+    val tcExpr = converter.evaluateTypeExprAST(env2)(expr)
 
     fillHoles(context)(ts)(tcExpr)
   }
@@ -1381,9 +1390,8 @@ object ExpressionConverter {
   (location: SourceLocation): context.Comp[context.typeSystem.TType] = {
     import context._
     val ts = HoleTypeSystem(context)
-    val converter = createConverter(context)(ts)
-
     implicit val tcInstance = typeCheckHoleTypeInstance(context)(ts)
+    val converter = createConverter(context)(ts)
 
     val tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
 
@@ -1397,7 +1405,7 @@ object ExpressionConverter {
       allowAbstractConstructor = env.allowAbstractConstructor,
     )
 
-    val tcExpr = converter.resolveUnitType[HoleTypeCheckComp[Comp, ts.TType, ?]](env2)(location)(tcInstance)
+    val tcExpr = converter.resolveUnitType(env2)(location)
 
     fillHoles(context)(ts)(tcExpr)
   }
@@ -1422,19 +1430,29 @@ object ExpressionConverter {
   (implicit tcInstance: TypeCheck[context.type, ts.TType, HoleTypeCheckComp[context.Comp, ts.TType, ?]])
   : context.Comp[context.typeSystem.ArExpr] = {
     import context._
+    val context2: context.type = context
+    val ts1: ts.type = ts
 
     type TCComp[A] = HoleTypeCheckComp[Comp, ts.TType, A]
 
-    final class FillConverter extends TypeSystemConverter[context.type, ts.type, context.typeSystem.type, TCComp] {
+    final class FillConverter extends TypeSystemConverter[TCComp] {
 
-      override def convertType[A](ts1: ts.type)(ts2: context.typeSystem.type)(fromExpr: ts2.ArExpr => A)(t: HoleType[A]): TCComp[A] =
+      override val context: context2.type = context2
+      override val ts: ts1.type = ts1
+      override val otherTS: context.typeSystem.type = context.typeSystem
+
+
+      override protected def liftFromComp[A](compA: Comp[A]): TCComp[A] =
+        StateT.liftF(compA)
+
+      override protected def convertType[A](fromExpr: otherTS.ArExpr => A)(t: ts.TTypeWrapper[A]): TCComp[otherTS.TTypeWrapper[A]] =
         t match {
           case HoleTypeType(t) => t.pure[TCComp]
 
           case HoleTypeHole(id) =>
             tcInstance.resolveType(HoleTypeHole(id)).flatMap {
               case HoleTypeType(t) =>
-                TypeSystem.convertExprTypeSystem(context)(ts)(context.typeSystem)(this)(t)
+                convertExprTypeSystem(t)
                   .map(fromExpr)
 
               case HoleTypeHole(_) => ???
@@ -1450,7 +1468,7 @@ object ExpressionConverter {
             resolveHoles(context)(ts)(state.nextHoleId)
           }
           .flatMap { _ =>
-            TypeSystem.convertTypeSystem(context)(ts)(context.typeSystem)(new FillConverter)(e)
+            (new FillConverter).convertTypeSystem(e)
           }
       }
       .runA(TypeCheckState.default)
@@ -1465,6 +1483,13 @@ object ExpressionConverter {
 
 
   trait HoleTypeSystem[TContext <: Context with Singleton] extends TypeSystem[TContext] {
+
+    override type TSComp[A] = HoleTypeCheckComp[context.Comp, TType, A]
+
+    import context.compCompilationInstance
+
+    override def liftComp[A](value: context.Comp[A]): HoleTypeCheckComp[context.Comp, TType, A] =
+      StateT.liftF(value)
 
     override type TTypeWrapper[+A] = HoleType[A]
 
@@ -1501,21 +1526,21 @@ object ExpressionConverter {
         case HoleTypeHole(id) => (HoleTypeHole(id) : TTypeWrapper[B]).pure[F]
       }
 
-    override def wrapExprType[TComp[_] : Compilation](expr: WrapExpr): TComp[TType] =
+    override def wrapExprType(expr: WrapExpr): TSComp[TType] =
       expr match {
         case HoleTypeType(t) => getExprType(t)
-        case HoleTypeHole(_) => fromSimpleType(TypeOfType(expr)).pure[TComp]
+        case HoleTypeHole(_) => fromSimpleType(TypeOfType(expr)).pure[TSComp]
       }
 
-    override def isSubTypeWrapper[TComp[_] : Compilation](a: TType, b: TType): TComp[Option[SubTypeInfo[TType]]] =
+    override def isSubTypeWrapper(a: TType, b: TType): TSComp[Option[SubTypeInfo[TType]]] =
       (a, b) match {
         case (HoleTypeType(aInner), HoleTypeType(bInner)) => isSimpleSubType(aInner, bInner)
-        case (_, _) => (Some(SubTypeInfo(a, b, Vector.empty)) : Option[SubTypeInfo[TType]]).pure[TComp]
+        case (_, _) => (Some(SubTypeInfo(a, b, Vector.empty)) : Option[SubTypeInfo[TType]]).pure[TSComp]
       }
 
-    override def universeOfWrapExpr[TComp[_] : Compilation](expr: WrapExpr): TComp[UniverseExpr] =
+    override def universeOfWrapExpr(expr: WrapExpr): TSComp[UniverseExpr] =
       expr match {
-        case HoleTypeHole(_) => AbstractUniverse().upcast[UniverseExpr].pure[TComp]
+        case HoleTypeHole(_) => AbstractUniverse().upcast[UniverseExpr].pure[TSComp]
         case HoleTypeType(t) => universeOfExpr(t)
       }
 
@@ -1526,6 +1551,32 @@ object ExpressionConverter {
     def apply(ctx: Context): HoleTypeSystem[ctx.type] = new HoleTypeSystem[ctx.type] {
       override val context: ctx.type = ctx
       override val contextProof: ctx.type === context.type = Is.refl
+
+      override implicit lazy val tscompCompilationInstance: Compilation[TSComp] =
+        typeCheckHoleTypeInstance(ctx)(this)
+
+      override def liftSignatureResult[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](sig: context.signatureContext.Signature[TResult, _ <: Nat], args: Vector[TypeArgument]): TSComp[TResult[ctx.type, this.type]] = {
+
+        val self: this.type = this
+
+        val sigContext: SignatureContext {
+          val context: ctx.type
+          val typeSystem: self.type
+        } =
+          new SignatureContext {
+            override val context: ctx.type = ctx
+            override val typeSystem: self.type = self
+          }
+
+        val conv = holeTypeConverter(context)(context.typeSystem)(this)
+
+        import context.compCompilationInstance
+
+        for {
+          convSig <- liftComp(sig.convertTypeSystem[context.Comp](sigContext)(conv))
+          convParams <- liftComp(sig.unsubstitutedParameters.unsized.traverse(conv.convertParameterTypeSystem))
+        } yield convSig.substituteTypeArguments(convParams)(args).unsubstitutedResult
+      }
     }
 
   }
@@ -1536,18 +1587,29 @@ object ExpressionConverter {
   (holeTS: TypeSystem[context.type] {
     type TTypeWrapper[A] = HoleType[innerTS.TTypeWrapper[A]]
   })
-  : TypeSystemConverter[context.type, innerTS.type, holeTS.type, Id] =
-    new TypeSystemConverter[context.type, innerTS.type, holeTS.type, Id] {
-      override def convertType[A](ts1: innerTS.type)(ts2: holeTS.type)(fromExpr: ts2.ArExpr => A)(t: ts1.TTypeWrapper[A]): HoleType[innerTS.TTypeWrapper[A]] =
-        HoleTypeType(t)
+  : TypeSystemConverter.Aux[context.type, innerTS.type, holeTS.type, context.Comp] = {
+    import context.{ Comp, compCompilationInstance }
+    val context2: context.type = context
+
+    new TypeSystemConverter[Comp] {
+
+      override val context: context2.type = context2
+      override val ts: innerTS.type = innerTS
+      override val otherTS: holeTS.type = holeTS
+
+      override protected def liftFromComp[A](compA: Comp[A]): Comp[A] = compA
+
+      override protected def convertType[A](fromExpr: otherTS.ArExpr => A)(t: ts.TTypeWrapper[A]): Comp[otherTS.TTypeWrapper[A]] =
+        HoleTypeType(t).pure[Comp]
     }
+  }
 
 
   sealed trait HoleConstraint[TType]
   private final case class HoleResolved[TType](t: TType) extends HoleConstraint[TType]
   private final case class HoleBounds[TType](superTypeBounds: Set[TType], subTypeBounds: Set[TType]) extends HoleConstraint[TType]
 
-  private trait TypeCheck[TContext <: Context with Singleton, TType, TComp[_]] extends Compilation[TComp] {
+  trait TypeCheck[TContext <: Context with Singleton, TType, TComp[_]] extends Compilation[TComp] {
     def fromContextComp[A](comp: TContext#Comp[A]): TComp[A]
     def createHole: TComp[TType]
     def recordConstraint(info: SubTypeInfo[TType]): TComp[Unit]
@@ -1627,7 +1689,7 @@ object ExpressionConverter {
         }
 
       override def resolveType(t: ts.TType): HoleTypeCheckComp[Comp, ts.TType, ts.TType] =
-        TypeSystem.convertTypeSystem(context)(ts)(ts)(new ResolverConverter)(t)
+        (new ResolverConverter).convertTypeSystem(t)
 
       private def getConstraints(id: Int): HoleTypeCheckComp[Comp, ts.TType, HoleConstraint[ts.TType]] =
         StateT.get[Comp, TypeCheckState[ts.TType]].map { state =>
@@ -1677,14 +1739,25 @@ object ExpressionConverter {
 
       type ResolverState[A] = HoleTypeCheckComp[Comp, ts.TType, A]
 
-      private final class ResolverConverter extends TypeSystemConverter[context.type, ts.type, ts.type, ResolverState] {
-        override def convertType[A](ts1: ts.type)(ts2: ts.type)(fromExpr: ts2.ArExpr => A)(t: HoleType[A]): ResolverState[HoleType[A]] =
+      val context2: context.type = context
+      val ts1: ts.type = ts
+
+      private final class ResolverConverter extends TypeSystemConverter[ResolverState] {
+
+        override val context: context2.type = context2
+        override val ts: ts1.type = ts1
+        override val otherTS: ts1.type = ts1
+
+        override protected def liftFromComp[A](compA: Comp[A]): ResolverState[A] =
+          StateT.liftF(compA)
+
+        override protected def convertType[A](fromExpr: otherTS.ArExpr => A)(t: ts.TTypeWrapper[A]): ResolverState[otherTS.TTypeWrapper[A]] =
           t match {
             case HoleTypeType(_) => t.pure[ResolverState]
             case HoleTypeHole(id) =>
               for {
                 resolvedOuter <- resolveOuterHole(id)
-                resolvedType <- TypeSystem.convertTypeSystem(context)(ts)(ts)(this)(resolvedOuter)
+                resolvedType <- convertTypeSystem(resolvedOuter)
               } yield ts.mapTypeWrapper(resolvedType)(fromExpr)
           }
 

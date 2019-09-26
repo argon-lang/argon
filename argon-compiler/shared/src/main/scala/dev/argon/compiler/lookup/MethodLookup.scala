@@ -10,60 +10,84 @@ import dev.argon.compiler.Compilation
 
 object MethodLookup {
 
-  def lookupMethods(context: Context)(ts: TypeSystem[context.type])(instanceType: ts.TypeWithMethods)(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName): context.Comp[OverloadResult[MemberValue[context.type]]] =
+  def lookupMethods(context: Context)(ts: TypeSystem[context.type])(instanceType: ts.TypeWithMethods)(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName): ts.TSComp[OverloadResult[MemberValue[context.type]]] =
     lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(Vector(instanceType))(Set.empty)
 
-  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName)(instanceTypes: Vector[ts.TypeWithMethods])(seenTypes: Set[MethodOwnerDescriptor]): context.Comp[OverloadResult[MemberValue[context.type]]] = {
+  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName)(instanceTypes: Vector[ts.TypeWithMethods])(seenTypes: Set[MethodOwnerDescriptor]): ts.TSComp[OverloadResult[MemberValue[context.type]]] = {
     import context._
 
+    import ts.{ TSComp, tscompCompilationInstance }
+
     if(instanceTypes.isEmpty)
-      OverloadResult.End.pure[Comp]
+      tscompCompilationInstance.pure(OverloadResult.End)
     else {
-      val newSeenTypes = seenTypes ++ instanceTypes.flatMap(getDescriptor(context)(ts)(_).toList.toVector)
+      val newSeenTypes = seenTypes ++ instanceTypes.map(getDescriptor(context)(ts)(_))
 
-      val unseenInstanceTypes = instanceTypes.filterNot { t => getDescriptor(context)(ts)(t).exists(seenTypes.contains) }
-
-      val newBaseTypes = unseenInstanceTypes.flatMap {
-        case ts.ClassType(_, _, baseTypes) => baseTypes.baseClass.toList.toVector ++ baseTypes.baseTraits
-        case ts.TraitType(_, _, baseTypes) => baseTypes.baseTraits
-        case ts.DataConstructorType(_, _, instanceType) => Vector(instanceType)
-      }
+      val unseenInstanceTypes = instanceTypes.filterNot { t => seenTypes.contains(getDescriptor(context)(ts)(t)) }
 
       unseenInstanceTypes
-        .flatTraverse[Comp, MemberValue.Method[context.type]] {
-          case ts.ClassType(arClass, _, _) => arClass.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
-          case ts.TraitType(arTrait, _, _) => arTrait.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
-          case ts.DataConstructorType(ctor, _, _) => ctor.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+        .flatTraverse[TSComp, ts.TypeWithMethods] {
+          case ts.ClassType(arClass, args) =>
+            ts.liftComp(arClass.value.signature)
+              .flatMap { sig =>
+                ts.liftSignatureResult(sig, args)
+              }
+              .map { result =>
+                val baseTypes = result.baseTypes
+                baseTypes.baseClass.toList.toVector ++ baseTypes.baseTraits
+              }
+
+          case ts.TraitType(arTrait, args) =>
+            ts.liftComp(arTrait.value.signature)
+              .flatMap { sig =>
+                ts.liftSignatureResult(sig, args)
+              }
+              .map { result =>
+                result.baseTypes.baseTraits
+              }
+
+
+          case ts.DataConstructorType(_, _, instanceType) =>
+            tscompCompilationInstance.pure(Vector(instanceType))
         }
-        .flatMap { memberValues =>
-          memberValues
-            .distinctBy { _.arMethod.value.method.descriptor }
-            .filter { method =>
-              val methodName = method.arMethod.value.name
-              methodName =!= MemberName.Unnamed && memberName === methodName
-            }
-            .filterA { method =>
-              AccessCheck.checkInstance[context.Comp, context.type, method.arMethod.PayloadSpec](callerDescriptor, fileSpec, method.arMethod.value)(context.compCompilationInstance)
-            }
-              .flatMap { filteredMembers =>
-                lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(newBaseTypes)(newSeenTypes)
-                  .map { baseTypeOverloads =>
-                    NonEmptyVector.fromVector(filteredMembers) match {
-                      case Some(filteredMembers) => OverloadResult.List(filteredMembers, baseTypeOverloads)
-                      case None => baseTypeOverloads
-                    }
+          .flatMap { newBaseTypes =>
+            ts.liftComp(
+              unseenInstanceTypes
+                .flatTraverse[Comp, MemberValue.Method[context.type]] {
+                  case ts.ClassType(arClass, _) => arClass.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+                  case ts.TraitType(arTrait, _) => arTrait.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+                  case ts.DataConstructorType(ctor, _, _) => ctor.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+                }
+            )
+              .flatMap { memberValues =>
+                memberValues
+                  .distinctBy { _.arMethod.value.method.descriptor }
+                  .filter { method =>
+                    val methodName = method.arMethod.value.name
+                    methodName =!= MemberName.Unnamed && memberName === methodName
+                  }
+                  .filterA { method =>
+                    AccessCheck.checkInstance[TSComp, context.type, method.arMethod.PayloadSpec](callerDescriptor, fileSpec, method.arMethod.value)
+                  }
+                  .flatMap { filteredMembers =>
+                    lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(newBaseTypes)(newSeenTypes)
+                      .map { baseTypeOverloads =>
+                        NonEmptyVector.fromVector(filteredMembers) match {
+                          case Some(filteredMembers) => OverloadResult.List(filteredMembers, baseTypeOverloads)
+                          case None => baseTypeOverloads
+                        }
+                      }
                   }
               }
-        }
+          }
     }
   }
 
-  private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem[context.type])(t: ts.ArExpr): Option[MethodOwnerDescriptor] =
+  private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem[context.type])(t: ts.TypeWithMethods): MethodOwnerDescriptor =
     t match {
-      case ts.ClassType(arClass, _, _) => Some(arClass.value.descriptor)
-      case ts.TraitType(arTrait, _, _) => Some(arTrait.value.descriptor)
-      case ts.DataConstructorType(ctor, _, _) => Some(ctor.value.descriptor)
-      case _ => None
+      case ts.ClassType(arClass, _) => arClass.value.descriptor
+      case ts.TraitType(arTrait, _) => arTrait.value.descriptor
+      case ts.DataConstructorType(ctor, _, _) => ctor.value.descriptor
     }
 
 }

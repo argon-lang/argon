@@ -21,10 +21,10 @@ object FunctionResultInfo {
     (context: Context)
     (ts1: TypeSystem[context.type])
     (ts2: TypeSystem[context.type])
-    (converter: TypeSystemConverter[context.type, ts1.type, ts2.type, F])
+    (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type, F])
     (result: FunctionResultInfo[context.type, ts1.type])
     : F[FunctionResultInfo[context.type, ts2.type]] = for {
-      returnType <- TypeSystem.convertTypeSystem(context)(ts1)(ts2)(converter)(result.returnType)
+      returnType <- converter.convertTypeSystem(result.returnType)
     } yield FunctionResultInfo(ts2)(returnType)
 
     override def referencesParameter

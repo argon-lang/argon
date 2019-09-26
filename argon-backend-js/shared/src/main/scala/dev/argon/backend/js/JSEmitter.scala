@@ -918,7 +918,7 @@ final class JSEmitter[TComp[+_], TContext <: JSContext[TComp, _] with Singleton]
           jsValue
         )
 
-      case ClassType(arClass, args, _) =>
+      case ClassType(arClass, args) =>
         for {
           sig <- arClass.value.signature
           erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
@@ -930,7 +930,7 @@ final class JSEmitter[TComp[+_], TContext <: JSContext[TComp, _] with Singleton]
           argExprs
         )
 
-      case TraitType(arTrait, args, _) =>
+      case TraitType(arTrait, args) =>
         for {
           sig <- arTrait.value.signature
           erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)

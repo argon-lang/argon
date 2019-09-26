@@ -43,7 +43,7 @@ object StandardTypeLoaders {
       .flatMap { unitClass =>
         unitClass.value.signature
           .map { sig =>
-            context.typeSystem.fromSimpleType(context.typeSystem.ClassType(unitClass, Vector(), sig.unsubstitutedResult.baseTypes))
+            context.typeSystem.fromSimpleType(context.typeSystem.ClassType(unitClass, Vector()))
           }
       }
   }

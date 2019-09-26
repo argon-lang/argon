@@ -990,7 +990,7 @@ object ArgonModuleLoader {
                   traitType.typeArguments.sized((sig : Signature[ArTrait.ResultInfo, len]).parameterCountToInt) match {
                     case Some(typeArgs) =>
                       resolveSignatureTypeArgs[ArTrait.ResultInfo, len, TraitType](sig, typeArgs, Vector.empty) {
-                        (args, result) => TraitType(arTrait, args, result.baseTypes)
+                        (args, result) => TraitType(arTrait, args)
                       }
 
                     case None => ???
@@ -1005,7 +1005,7 @@ object ArgonModuleLoader {
                   classType.typeArguments.sized((sig : Signature[ArClass.ResultInfo, len]).parameterCountToInt) match {
                     case Some(typeArgs) =>
                       resolveSignatureTypeArgs[ArClass.ResultInfo, len, ClassType](sig, typeArgs, Vector.empty) {
-                        (args, result) => ClassType(arClass, args, result.baseTypes)
+                        (args, result) => ClassType(arClass, args)
                       }
 
 

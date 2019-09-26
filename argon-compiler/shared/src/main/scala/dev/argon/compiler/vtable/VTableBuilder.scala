@@ -52,9 +52,9 @@ object VTableBuilder {
         def impl(sig: Signature[FunctionResultInfo, _ <: Nat], slotSig: Signature[FunctionResultInfo, _ <: Nat]): Comp[Boolean] =
           (sig, slotSig) match {
             case (aParam @ SignatureParameters(_, _), bParam @ SignatureParameters(_, _)) =>
-              isSubType[Comp](aParam.parameter.paramType, bParam.parameter.paramType).map { _.isDefined }
+              isSubType(aParam.parameter.paramType, bParam.parameter.paramType).map { _.isDefined }
                 .flatMap {
-                  case true => isSubType[Comp](bParam.parameter.paramType, aParam.parameter.paramType).map { _.isDefined }
+                  case true => isSubType(bParam.parameter.paramType, aParam.parameter.paramType).map { _.isDefined }
                   case false => false.pure[Comp]
                 }
                 .flatMap {
@@ -63,7 +63,7 @@ object VTableBuilder {
                 }
 
             case (SignatureResult(aResult), SignatureResult(bResult)) =>
-              isSubType[Comp](aResult.returnType, bResult.returnType).map { _.isDefined }
+              isSubType(aResult.returnType, bResult.returnType).map { _.isDefined }
 
             case _ => false.pure[Comp]
           }
@@ -122,26 +122,42 @@ object VTableBuilder {
           .traverse { method => overrideMethod(method)(source)(baseTypeVTable) }
           .map { baseTypeVTable |+| _.combineAll }
 
-      private def findAllBaseClasses(baseClass: Option[ClassType]): Vector[AbsRef[context.type, ArClass]] = {
+      private def findAllBaseClasses(baseClass: Option[ClassType]): Comp[Vector[AbsRef[context.type, ArClass]]] = {
 
-        def addClass(acc: Vector[AbsRef[context.type, ArClass]], baseClass: ClassType): Vector[AbsRef[context.type, ArClass]] =
+        def addClass(acc: Vector[AbsRef[context.type, ArClass]], baseClass: ClassType): Comp[Vector[AbsRef[context.type, ArClass]]] =
           if(acc.exists { _.value.descriptor === baseClass.arClass.value.descriptor })
-            acc
+            acc.pure[Comp]
           else
-            baseClass.baseTypes.baseClass.foldLeft(acc :+ baseClass.arClass)(addClass(_, _))
+            for {
+              sig <- baseClass.arClass.value.signature
+              classes <- sig.unsubstitutedResult.baseTypes.baseClass.foldLeftM(acc :+ baseClass.arClass)(addClass(_, _))
+            } yield classes
 
-        baseClass.foldLeft(Vector.empty[AbsRef[context.type, ArClass]])(addClass(_, _))
+        baseClass.foldLeftM(Vector.empty[AbsRef[context.type, ArClass]])(addClass(_, _))
       }
 
-      private def findAllBaseTraits(baseTraits: Vector[TraitType]): Vector[AbsRef[context.type, ArTrait]] = {
+      private def findAllBaseTraits(baseClasses: Vector[AbsRef[context.type, ArClass]], baseTraits: Vector[TraitType]): Comp[Vector[AbsRef[context.type, ArTrait]]] = {
 
-        def addTrait(acc: Vector[AbsRef[context.type, ArTrait]], baseTrait: TraitType): Vector[AbsRef[context.type, ArTrait]] =
+        def addTrait(acc: Vector[AbsRef[context.type, ArTrait]], baseTrait: TraitType): Comp[Vector[AbsRef[context.type, ArTrait]]] =
           if(acc.exists { _.value.descriptor === baseTrait.arTrait.value.descriptor })
-            acc
+            acc.pure[Comp]
           else
-            baseTrait.baseTypes.baseTraits.foldLeft(acc :+ baseTrait.arTrait)(addTrait(_, _))
+            for {
+              sig <- baseTrait.arTrait.value.signature
+              traits <- sig.unsubstitutedResult.baseTypes.baseTraits.foldLeftM(acc :+ baseTrait.arTrait)(addTrait(_, _))
+            } yield traits
 
-        baseTraits.foldLeft(Vector.empty[AbsRef[context.type, ArTrait]])(addTrait(_, _))
+        def addTraitsFromClass(acc: Vector[AbsRef[context.type, ArTrait]], baseClass: AbsRef[context.type, ArClass]): Comp[Vector[AbsRef[context.type, ArTrait]]] =
+          for {
+            sig <- baseClass.value.signature
+            traits <- sig.unsubstitutedResult.baseTypes.baseTraits.foldLeftM(acc)(addTrait(_, _))
+          } yield traits
+
+        val acc = Vector.empty[AbsRef[context.type, ArTrait]]
+        for {
+          acc <- baseTraits.foldLeftM(acc)(addTrait(_, _))
+          acc <- baseClasses.foldLeftM(acc)(addTraitsFromClass(_, _))
+        } yield acc
       }
 
       private def ensureNonAbstract(vtable: VT, source: CompilationMessageSource): Comp[Unit] =
@@ -193,7 +209,9 @@ object VTableBuilder {
             baseTypeOnlyVTable = baseClassVTable.combineAll |+| baseTraitVTables.combineAll
 
             methods <- arClass.methods
-            source = EntrySourceClass(AbsRef(arClass), findAllBaseClasses(baseClass), findAllBaseTraits(baseTraits))
+            allBaseClasses <- findAllBaseClasses(baseClass)
+            allBaseTraits <- findAllBaseTraits(allBaseClasses, baseTraits)
+            source = EntrySourceClass(AbsRef(arClass), allBaseClasses, allBaseTraits)
             newVTable <- addNewMethods(methods)(source)(baseTypeOnlyVTable)
 
             _ <- if(!arClass.isAbstract) ensureNonAbstract(newVTable, arClass.classMessageSource) else ().pure[Comp]
@@ -213,7 +231,8 @@ object VTableBuilder {
             baseTraitOnlyVTable = baseTraitVTables.combineAll
 
             methods <- arTrait.methods
-            source = EntrySourceTrait(AbsRef(arTrait), findAllBaseTraits(baseTraits))
+            allBaseTraits <- findAllBaseTraits(Vector.empty, baseTraits)
+            source = EntrySourceTrait(AbsRef(arTrait), allBaseTraits)
             newVTable <- addNewMethods(methods)(source)(baseTraitOnlyVTable)
 
           } yield newVTable
@@ -229,7 +248,8 @@ object VTableBuilder {
             baseTraitVTable <- getBaseTraitVTable(baseTrait)
 
             methods <- ctor.methods
-            source = EntrySourceDataCtor(AbsRef(ctor), findAllBaseTraits(Vector(baseTrait)))
+            allBaseTraits <- findAllBaseTraits(Vector.empty, Vector(baseTrait))
+            source = EntrySourceDataCtor(AbsRef(ctor), allBaseTraits)
             newVTable <- addNewMethods(methods)(source)(baseTraitVTable)
 
             _ <- ensureNonAbstract(newVTable, ctor.ctorMessageSource)

@@ -47,13 +47,13 @@ object ArClass {
 
   sealed trait ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
     val typeSystem: TS
-    val baseTypes: typeSystem.BaseTypeInfoClass
+    def baseTypes: typeSystem.BaseTypeInfoClass
   }
 
   object ResultInfo {
-    def apply[TContext <: Context with Singleton](ts: TypeSystem[TContext])(bt: ts.BaseTypeInfoClass): ResultInfo[TContext, ts.type] = new ResultInfo[TContext, ts.type] {
+    def apply[TContext <: Context with Singleton](ts: TypeSystem[TContext])(bt: => ts.BaseTypeInfoClass): ResultInfo[TContext, ts.type] = new ResultInfo[TContext, ts.type] {
       override val typeSystem: ts.type = ts
-      override val baseTypes: typeSystem.BaseTypeInfoClass = bt
+      override lazy val baseTypes: typeSystem.BaseTypeInfoClass = bt
     }
 
     implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
@@ -61,11 +61,11 @@ object ArClass {
       (context: Context)
       (ts1: TypeSystem[context.type])
       (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverter[context.type, ts1.type, ts2.type, F])
+      (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type, F])
       (result: ResultInfo[context.type, ts1.type])
       : F[ResultInfo[context.type, ts2.type]] = for {
-        baseClass <- result.baseTypes.baseClass.traverse(TypeSystem.convertClassType(context)(ts1)(ts2)(converter)(_))
-        baseTraits <- result.baseTypes.baseTraits.traverse(TypeSystem.convertTraitType(context)(ts1)(ts2)(converter)(_))
+        baseClass <- result.baseTypes.baseClass.traverse(converter.convertClassType(_))
+        baseTraits <- result.baseTypes.baseTraits.traverse(converter.convertTraitType(_))
       } yield ResultInfo(ts2)(ts2.BaseTypeInfoClass(baseClass, baseTraits))
 
       override def referencesParameter

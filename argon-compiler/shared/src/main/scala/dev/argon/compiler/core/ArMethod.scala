@@ -4,7 +4,7 @@ import cats._
 import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.Compilation
-import dev.argon.compiler.types.{ArTypeSystemConverter, TypeSystem, TypeSystemConverter}
+import dev.argon.compiler.types._
 import dev.argon.util.FileID
 import shapeless.Nat
 
@@ -33,20 +33,22 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
     sig <- signatureUnsubstituted
     converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
     ownerSig <- owner match {
-      case ArMethod.ClassOwner(ownerClass) => ownerClass.signature.map { _.convertTypeSystem(newSigContext)(converter) }
-      case ArMethod.ClassObjectOwner(ownerClass) => ownerClass.signature.map { _.convertTypeSystem(newSigContext)(converter) }
-      case ArMethod.TraitOwner(ownerTrait) => ownerTrait.signature.map { _.convertTypeSystem(newSigContext)(converter) }
-      case ArMethod.TraitObjectOwner(ownerTrait) => ownerTrait.signature.map { _.convertTypeSystem(newSigContext)(converter) }
-      case ArMethod.DataCtorOwner(dataCtor) => dataCtor.signature.map { _.convertTypeSystem(newSigContext)(converter) }
+      case ArMethod.ClassOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+      case ArMethod.ClassObjectOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+      case ArMethod.TraitOwner(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+      case ArMethod.TraitObjectOwner(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+      case ArMethod.DataCtorOwner(dataCtor) => dataCtor.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
     }
+
+    convSig <- sig.convertTypeSystem(newSigContext)(converter)
   } yield {
 
     val instTypeArgs = instanceType match {
-      case newSigContext.typeSystem.TraitType(_, args, _) => args
-      case newSigContext.typeSystem.ClassType(_, args, _) => args
+      case newSigContext.typeSystem.TraitType(_, args) => args
+      case newSigContext.typeSystem.ClassType(_, args) => args
       case newSigContext.typeSystem.DataConstructorType(_, args, _) => args
     }
-    val convSig = sig.convertTypeSystem(newSigContext)(converter)
+
 
     convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instTypeArgs)
   }

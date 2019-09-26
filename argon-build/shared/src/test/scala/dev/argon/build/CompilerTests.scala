@@ -10,32 +10,9 @@ import zio.test._
 import zio.test.Assertion._
 import zio.test.mock._
 
-object CompilerTests extends DefaultRunnableSpec({
+import CompilerTestSuiteFactory._
 
-  val libraries = Vector(
-    "Argon.Core",
-  )
-
-  val referencePaths = libraries.traverse { name => Path.of(s"libraries/$name/$name.armodule") }
-
-  val testCases = TestCaseLoader.findTestCases(TestCases.all)
-  val runners = PlatformHelpers.testCaseRunners(referencePaths)
-
-  def createSuites(runner: TestCaseRunner, structure: TestCaseStructure): Seq[ZSpec[MockEnvironment, Throwable, String, Any]] =
-    structure.nestedStructures.map { case (name, nested) =>
-      suite(name)(createSuites(runner, nested): _*)
-    } ++
-      structure.tests.map { testCase =>
-        testM[MockEnvironment, String, Any](testCase.name) {
-          assertM(
-            runner.runTest(testCase)
-              .provideSome(PlatformHelpers.ioEnvironment)
-              .orDie,
-            equalTo(TestCaseResult.Success : TestCaseResult)
-          )
-        }
-      }
-
+object CompilerTests extends DefaultRunnableSpec(
   suite("Compiler Tests")(
     runners.map { runner =>
       suite(runner.name)(
@@ -43,5 +20,4 @@ object CompilerTests extends DefaultRunnableSpec({
       )
     }: _*
   )
-
-})
+)

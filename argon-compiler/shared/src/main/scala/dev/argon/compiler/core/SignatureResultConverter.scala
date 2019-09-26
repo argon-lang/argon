@@ -1,6 +1,6 @@
 package dev.argon.compiler.core
 
-import dev.argon.compiler.types.{TypeSystem, TypeSystemConverter}
+import dev.argon.compiler.types._
 import cats.Monad
 
 trait SignatureResultConverter[TResult[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton]] {
@@ -8,7 +8,7 @@ trait SignatureResultConverter[TResult[TContext <: Context with Singleton, _ <: 
   (context: Context)
   (ts1: TypeSystem[context.type])
   (ts2: TypeSystem[context.type])
-  (converter: TypeSystemConverter[context.type, ts1.type, ts2.type, F])
+  (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type, F])
   (result: TResult[context.type, ts1.type])
   : F[TResult[context.type, ts2.type]]
 

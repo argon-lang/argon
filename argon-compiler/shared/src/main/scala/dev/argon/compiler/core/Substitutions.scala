@@ -21,20 +21,13 @@ trait Substitutions {
   def substClassType(expr: ClassType): ClassType =
     ClassType(
       expr.arClass,
-      expr.args.map(substTypeArg),
-      BaseTypeInfoClass(
-        expr.baseTypes.baseClass.map(substClassType),
-        expr.baseTypes.baseTraits.map(substTraitType)
-      )
+      expr.args.map(substTypeArg)
     )
 
   def substTraitType(expr: TraitType): TraitType =
     TraitType(
       expr.arTrait,
-      expr.args.map(substTypeArg),
-      BaseTypeInfoTrait(
-        expr.baseTypes.baseTraits.map(substTraitType)
-      )
+      expr.args.map(substTypeArg)
     )
 
   def substDataCtorType(expr: DataConstructorType): DataConstructorType =

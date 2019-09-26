@@ -48,10 +48,10 @@ object DataConstructor {
       (context: Context)
       (ts1: TypeSystem[context.type])
       (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverter[context.type, ts1.type, ts2.type, F])
+      (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type, F])
       (result: ResultInfo[context.type, ts1.type])
       : F[ResultInfo[context.type, ts2.type]] = for {
-        instanceType <- TypeSystem.convertTraitType(context)(ts1)(ts2)(converter)(result.instanceType)
+        instanceType <- converter.convertTraitType(result.instanceType)
       } yield ResultInfo(ts2)(instanceType)
 
       override def referencesParameter
