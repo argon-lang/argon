@@ -247,8 +247,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               override def forExpectedType(expectedType: TType): TComp[typeSystem.ArExpr] =
                 overloadsForName(memberName).flatMap { _.forExpectedType(expectedType) }
 
-              override def memberAccessExpr(memberName: MemberName, env: Env, location: SourceLocation): ExprFactory =
-                compFactory(overloadsForName(memberName).map { _.memberAccessExpr(memberName, env, location) })
+              override def memberAccessExpr(memberName2: MemberName, env: Env, location: SourceLocation): ExprFactory =
+                compFactory(overloadsForName(memberName).map { _.memberAccessExpr(memberName2, env, location) })
 
               override def forArguments(argInfo: ArgumentInfo): ExprFactory =
                 compFactory(overloadsForName(memberName).map { _.forArguments(argInfo) })
