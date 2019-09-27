@@ -21,8 +21,8 @@ object CompilerTestSuiteFactory {
   val testCases: TestCaseStructure = TestCaseLoader.findTestCases(TestCases.all)
   val runners: Seq[TestCaseRunner] = PlatformHelpers.testCaseRunners(referencePaths)
 
-  def createTest(runner: TestCaseRunner)(testCase: TestCase): ZSpec[MockEnvironment, Throwable, String, Any] =
-    testM[MockEnvironment, String, Any](testCase.name) {
+  def createTest(runner: TestCaseRunner)(testCase: TestCase): ZSpec[MockEnvironment, Throwable, String, Unit] =
+    testM[MockEnvironment, Throwable, String](testCase.name) {
       assertM(
         runner.runTest(testCase)
           .provideSome(PlatformHelpers.ioEnvironment)

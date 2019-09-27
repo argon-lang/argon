@@ -11,7 +11,6 @@ import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import zio._
 import zio.stream._
 import zio.console.Console
-import zio.stream.ZSink.Step
 import zio.system.System
 
 import scala.scalajs.js

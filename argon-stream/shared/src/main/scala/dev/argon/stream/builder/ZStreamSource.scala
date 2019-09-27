@@ -37,7 +37,7 @@ final case class ZStreamSource[R, E, A](stream: ZStream[R, E, A]) extends Source
       .map { _ => () }
 
   override def foldLeftM[S](state: S)(f: (S, A) => ZIO[R, E, S]): ZIO[R, E, (S, Unit)] =
-    stream.fold(state)(const(true))(f).map { (_, ()) }
+    stream.foldM(state)(f).map { (_, ()) }
 
   override def foreach(f: A => ZIO[R, E, Unit]): ZIO[R, E, Unit] =
     stream.foreach(f)

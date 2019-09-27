@@ -15,13 +15,13 @@ lazy val commonSettings = Seq(
   libraryDependencies ++= Seq(
     "org.scala-lang.modules" %%% "scala-xml" % "1.2.0",
 
-    "org.typelevel" %%% "cats-core" % "2.0.0-RC2",
-    "org.typelevel" %%% "cats-effect" % "2.0.0-RC2",
-    "org.typelevel" %%% "cats-mtl-core" % "0.6.0",
-    "org.typelevel" %%% "kittens" % "2.0.0-M1",
-    "dev.zio" %%% "zio" % "1.0.0-RC12-1",
-    "dev.zio" %%% "zio-streams" % "1.0.0-RC12-1",
-    "dev.zio" %%% "zio-interop-cats" % "2.0.0.0-RC3",
+    "org.typelevel" %%% "cats-core" % "2.0.0",
+    "org.typelevel" %%% "cats-effect" % "2.0.0",
+    "org.typelevel" %%% "cats-mtl-core" % "0.7.0",
+    "org.typelevel" %%% "kittens" % "2.0.0",
+    "dev.zio" %%% "zio" % "1.0.0-RC13",
+    "dev.zio" %%% "zio-streams" % "1.0.0-RC13",
+    "dev.zio" %%% "zio-interop-cats" % "2.0.0.0-RC4",
 
 
     "com.chuusai" %%% "shapeless" % "2.3.3",
@@ -29,8 +29,8 @@ lazy val commonSettings = Seq(
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 
-    "dev.zio" %%% "zio-test" % "1.0.0-RC12-1" % "test",
-    "dev.zio" %%% "zio-test-sbt" % "1.0.0-RC12-1" % "test",
+    "dev.zio" %%% "zio-test" % "1.0.0-RC13" % "test",
+    "dev.zio" %%% "zio-test-sbt" % "1.0.0-RC13" % "test",
     "com.github.alexarchambault" %%% "scalacheck-shapeless_1.14" % "1.2.3" % "test",
 
     compilerPlugin("com.github.ghik" % "silencer-plugin" % "1.4.3" cross CrossVersion.full),
