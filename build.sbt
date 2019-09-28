@@ -8,7 +8,7 @@ lazy val commonSettings = Seq(
   resolvers += Resolver.sonatypeRepo("releases"),
 
   addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
-  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.0"),
+  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
 
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
 
@@ -42,7 +42,7 @@ lazy val commonSettings = Seq(
 lazy val commonJVMSettings = Seq(
 
   libraryDependencies ++= Seq(
-    "org.apache.commons" % "commons-text" % "1.6",
+    "org.apache.commons" % "commons-text" % "1.8",
     "commons-io" % "commons-io" % "2.6",
   ),
 
@@ -51,7 +51,7 @@ lazy val commonJVMSettings = Seq(
 lazy val commonJSSettings = Seq(
 
   libraryDependencies ++= Seq(
-    "io.github.cquiroz" %%% "scala-java-time" % "2.0.0-RC3" % "test",
+    "io.github.cquiroz" %%% "scala-java-time" % "2.0.0-RC3",
   ),
 
   scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
