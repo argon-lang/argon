@@ -12,7 +12,6 @@ import scala.collection.immutable.Set
 import cats._
 import cats.data._
 import cats.implicits._
-import cats.mtl._
 import PayloadSpecifiers._
 import cats.evidence.{===, Is}
 import dev.argon.compiler.types.TypeSystem.PrimitiveOperation

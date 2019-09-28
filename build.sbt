@@ -17,7 +17,6 @@ lazy val commonSettings = Seq(
 
     "org.typelevel" %%% "cats-core" % "2.0.0",
     "org.typelevel" %%% "cats-effect" % "2.0.0",
-    "org.typelevel" %%% "cats-mtl-core" % "0.7.0",
     "org.typelevel" %%% "kittens" % "2.0.0",
     "dev.zio" %%% "zio" % "1.0.0-RC13",
     "dev.zio" %%% "zio-streams" % "1.0.0-RC13",
@@ -31,7 +30,6 @@ lazy val commonSettings = Seq(
 
     "dev.zio" %%% "zio-test" % "1.0.0-RC13" % "test",
     "dev.zio" %%% "zio-test-sbt" % "1.0.0-RC13" % "test",
-    "com.github.alexarchambault" %%% "scalacheck-shapeless_1.14" % "1.2.3" % "test",
 
     compilerPlugin("com.github.ghik" % "silencer-plugin" % "1.4.3" cross CrossVersion.full),
     "com.github.ghik" %%% "silencer-lib" % "1.4.3" % Provided cross CrossVersion.full,
@@ -43,7 +41,6 @@ lazy val commonJVMSettings = Seq(
 
   libraryDependencies ++= Seq(
     "org.apache.commons" % "commons-text" % "1.8",
-    "commons-io" % "commons-io" % "2.6",
   ),
 
 )

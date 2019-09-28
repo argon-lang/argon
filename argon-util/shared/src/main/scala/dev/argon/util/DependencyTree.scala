@@ -3,7 +3,6 @@ package dev.argon.util
 import cats._
 import cats.data._
 import cats.implicits._
-import cats.mtl._
 
 import scala.collection.immutable._
 
