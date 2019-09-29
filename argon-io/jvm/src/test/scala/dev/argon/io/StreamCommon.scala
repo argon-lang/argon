@@ -11,15 +11,10 @@ import scala.collection.mutable.ArrayBuffer
 @SuppressWarnings(Array("org.wartremover.warts.Var"))
 object StreamCommon {
 
-  val streamContent = Seq[Byte](0, 7, 5, 9, 4, -1)
-  def sampleInputStream: InputStream = new ByteArrayInputStream(streamContent.toArray)
-  def sampleZStream: ZStream[Blocking, Throwable, Chunk[Byte]] = ZStream(Chunk.fromIterable(streamContent))
-  def emptyZStream: ZStream[Blocking, Throwable, Chunk[Byte]] = ZStream.empty
-
   def noReads(inputStream: InputStream): RIO[Blocking, Unit] =
     IO.succeed(())
 
-  def usingSingleByteRead(inputStream: InputStream): RIO[Blocking, Seq[Byte]] =
+  def usingSingleByteRead(inputStream: InputStream): RIO[Blocking, List[Byte]] =
     ZIO.accessM[Blocking] { _.blocking.effectBlocking {
       val allData = new ArrayBuffer[Byte]()
 
@@ -33,7 +28,7 @@ object StreamCommon {
 
       readMore()
 
-      allData.toSeq
+      allData.toList
     } }
 
   val retryCount = 10
@@ -50,7 +45,7 @@ object StreamCommon {
       eofCount
     } }
 
-  def usingBufferReader(inputStream: InputStream): RIO[Blocking, Seq[Byte]] =
+  def usingBufferReader(inputStream: InputStream): RIO[Blocking, List[Byte]] =
     ZIO.accessM[Blocking] { _.blocking.effectBlocking {
       val allData = new ArrayBuffer[Byte]()
 
@@ -65,7 +60,7 @@ object StreamCommon {
 
       readMore()
 
-      allData.toSeq
+      allData.toList
     } }
 
   def usingBufferReaderExtra(inputStream: InputStream): RIO[Blocking, Int] =
@@ -81,15 +76,15 @@ object StreamCommon {
       eofCount
     } }
 
-  def usingSingleByteWrite(outputStream: OutputStream): RIO[Blocking, Unit] =
+  def usingSingleByteWrite(data: List[Byte])(outputStream: OutputStream): RIO[Blocking, Unit] =
     ZIO.accessM[Blocking] { _.blocking.effectBlocking {
-      for(b <- streamContent) {
+      for(b <- data) {
         outputStream.write(b.toInt)
       }
     } }
 
-  def usingBufferWriter(outputStream: OutputStream): RIO[Blocking, Unit] =
+  def usingBufferWriter(data: List[Byte])(outputStream: OutputStream): RIO[Blocking, Unit] =
     ZIO.accessM[Blocking] { _.blocking.effectBlocking {
-      outputStream.write(streamContent.toArray)
+      outputStream.write(data.toArray)
     } }
 }
