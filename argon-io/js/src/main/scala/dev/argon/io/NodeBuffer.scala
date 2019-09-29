@@ -7,7 +7,7 @@ import scala.scalajs.js.annotation.{JSBracketAccess, JSGlobal, JSImport}
 @JSGlobal("Buffer")
 class NodeBuffer extends js.Object {
   @JSBracketAccess
-  def apply(index: Int): Byte = js.native
+  def apply(index: Int): Short = js.native
 
   def length: Int = js.native
 }

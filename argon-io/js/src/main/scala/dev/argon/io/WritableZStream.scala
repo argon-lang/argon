@@ -16,7 +16,7 @@ class WritableZStream[R] private(runtime: Runtime[R], queue: Queue[Promise[Optio
   private def bufferToChunk(buffer: NodeBuffer): Chunk[Byte] = {
     val array = new Array[Byte](buffer.length)
     for(i <- array.indices) {
-      array(i) = buffer(i)
+      array(i) = buffer(i).toByte
     }
     Chunk.fromArray(array)
   }
@@ -26,7 +26,7 @@ class WritableZStream[R] private(runtime: Runtime[R], queue: Queue[Promise[Optio
     runtime.unsafeRunAsync(
       for {
         promise <- queue.take
-        _ <- promise.complete(IO.succeed(bufferToChunk(buffer)))
+        _ <- promise.complete(IO.effectTotal { bufferToChunk(buffer) })
       } yield ()
     ) {
       case Exit.Success(_) => callback(null)
@@ -67,7 +67,21 @@ object WritableZStream {
           runtime <- ZIO.runtime[R]
           queue <- Queue.bounded[Promise[Option[js.Error], Chunk[Byte]]](1)
           wzs <- IO.effectTotal { new WritableZStream[R](runtime, queue) }
-          _ <- (consume(wzs) *> IO.effectTotal { wzs.destroy() }).fork
+          _ <- (
+            consume(wzs).foldCauseM(
+              failure = cause => cause.failureOrCause match {
+                case Left(failure) => IO.effectTotal { wzs.destroy(failure) }
+                case Right(cause) => for {
+                  promise <- queue.take
+                  dummyPromise <- Promise.make[Option[js.Error], Chunk[Byte]]
+                  _ <- queue.offer(dummyPromise)
+                  _ <- IO.effectTotal { wzs.destroy() }
+                  _ <- promise.complete(IO.halt(cause))
+                } yield ()
+              },
+              success = _ => IO.effectTotal { wzs.destroy() }
+            )
+          ).fork
         } yield wzs
       )(wzs => wzs.close)
         .map { wzs =>
