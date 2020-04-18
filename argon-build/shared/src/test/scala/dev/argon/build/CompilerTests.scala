@@ -10,14 +10,8 @@ import zio.test._
 import zio.test.Assertion._
 import zio.test.mock._
 
-import CompilerTestSuiteFactory._
-
-object CompilerTests extends DefaultRunnableSpec(
-  suite("Compiler Tests")(
-    runners.map { runner =>
-      suite(runner.name)(
-        createSuites(runner, testCases): _*
-      )
-    }: _*
-  )
-)
+object CompilerTests extends CompilerTestSuiteBase {
+  override val suiteName: String = "Compiler Tests"
+  override val testCases: TestCaseStructure = TestCaseLoader.findTestCases(TestCases.all)
+  override val runners: Seq[TestCaseRunner] = PlatformHelpers.testCaseRunners(referencePaths)
+}

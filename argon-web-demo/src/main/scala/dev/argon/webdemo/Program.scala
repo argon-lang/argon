@@ -5,7 +5,8 @@ import cats.data.NonEmptyList
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.build.{BuildEnvironment, BuildProcess, InputFileInfo, Pipeline}
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
-import dev.argon.io.{FileIO, Path}
+import dev.argon.io.Path
+import dev.argon.io.fileio.FileIO
 import dev.argon.parser.SourceAST
 import dev.argon.stream.builder.{Source, ZStreamSource}
 import dev.argon.util.{FileID, FileSpec}
@@ -16,7 +17,7 @@ import org.scalajs.dom
 object Program extends App {
 
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
-  override def run(args: List[String]): URIO[Environment, Int] = (
+  override def run(args: List[String]): URIO[ZEnv, Int] = (
     for {
       queue <- Queue.bounded[DemoCommand](1000)
       state <- RefM.make[ExecutionStatus](ExecutionStatus.NotRun)
@@ -80,11 +81,11 @@ object Program extends App {
             success = _ => queue.offer(DemoCommand.ExecutionCompleteEvent).unit
           )
       )
-      .provideSomeM(DummyFileSystem.create)
+      .provideLayer(FileIO.memFSLayer)
 
   private def compileCode(code: String): CIO[String] =
     IOCompilation.compilationInstance[BuildEnvironment].flatMap { implicit ioComp =>
-      ZIO.access[FileIO] { env => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](env.fileIO) }
+      ZIO.access[FileIO] { env => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](env.get) }
         .flatMap { implicit resFactory =>
 
           val inputFiles: Source[CIO, InputFileInfo[CIO], Unit] =
@@ -121,6 +122,6 @@ object Program extends App {
         }
     }
 
-  private def executeJS(onOutput: String => UIO[Unit])(compiledCode: String): UIO[Unit] = ???
+  private def executeJS(onOutput: String => UIO[Unit])(compiledCode: String): Task[Unit] = ???
 
 }

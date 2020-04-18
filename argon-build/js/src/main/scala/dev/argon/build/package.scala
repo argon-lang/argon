@@ -1,6 +1,6 @@
 package dev.argon
 
-import dev.argon.io.FileIO
+import dev.argon.io.fileio.FileIO
 
 package object build {
 

@@ -12,7 +12,7 @@ import dev.argon.compiler.backend.ProjectFileHandler
 import zio._
 import cats.data.NonEmptyList
 import dev.argon.compiler.backend.Backend
-import dev.argon.io.FileIO
+import dev.argon.io.fileio.FileIO
 import dev.argon.build._
 
 private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParsePhase {
@@ -33,7 +33,7 @@ private[testrunner] trait TestCaseRunnerCompilePhase extends TestCaseRunnerParse
     IOCompilation.compilationInstance[BuildEnvironment].flatMap { implicit ioComp =>
 
       val result: ZIO[BuildEnvironment, Nothing, (Vector[CompilationMessageNonFatal], Either[NonEmptyList[CompilationError], Either[Throwable, String]])] =
-        ZIO.access[FileIO] { env => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](env.fileIO) }
+        ZIO.access[FileIO] { env => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](env.get) }
           .flatMap { implicit resFactory =>
             ioComp.getResult(
               parseTestCaseSource(testCase)

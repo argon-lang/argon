@@ -16,7 +16,7 @@ trait NodeLauncher {
 object NodeLauncher {
 
   def apply(file: String): ZManaged[Blocking, Throwable, NodeLauncher] =
-    ZManaged.make[Blocking, Throwable, NodeLauncher](
+    ZManaged.make[Blocking, Blocking, Throwable, NodeLauncher](
       for {
         runtime <- ZIO.runtime[Any]
 

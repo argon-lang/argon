@@ -4,7 +4,6 @@ import dev.argon.compiler.CompilationError
 import cats._
 import cats.data.NonEmptyList
 import cats.implicits._
-import dev.argon.io.FileIO
 import zio.{IO, Runtime, ZIO}
 import dev.argon.build._
 

@@ -5,7 +5,7 @@ import dev.argon.io.Path
 
 import cats._
 import cats.implicits._
-import dev.argon.io.{FileIO, FilenameManip}
+import dev.argon.io.fileio.FileIO
 import zio._
 import shapeless.{Path => _, _}
 import zio.stream.ZSink

@@ -62,7 +62,7 @@ object InputStreamReaderTransformation {
               case Left(None) =>  IO.succeed(Chunk.empty)
               case _ => IO.halt(cause)
             },
-            success = IO.succeed
+            success = IO.succeed(_)
           )))
         }
 

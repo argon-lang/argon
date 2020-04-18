@@ -13,7 +13,7 @@ import zio.interop.catz._
 import dev.argon.compiler.backend.{Backend, CompilationOutputText}
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
-import dev.argon.io.{FileIO, FilenameManip}
+import dev.argon.io.fileio.FileIO
 import dev.argon.build._
 
 abstract class JavaScriptTestCaseRunnerBase(referencePaths: UIO[Vector[Path]]) extends TestCaseRunnerCompilePhase {
@@ -53,7 +53,7 @@ abstract class JavaScriptTestCaseRunnerBase(referencePaths: UIO[Vector[Path]]) e
         currentDir <- Path.of(".")
         libFilePath <- Path.of("js", libName + ".js")
         libFile = path.parent.getOrElse(currentDir).resolve(libFilePath)
-        content <- ZIO.accessM[FileIO] { _.fileIO.readAllText(libFile) }
+        content <- ZIO.accessM[FileIO] { _.get.readAllText(libFile) }
       } yield FileInfo(libName, content)
     }
 

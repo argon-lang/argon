@@ -13,8 +13,10 @@ import zio.stream.{ZSink, ZStream}
 
 object ZipEntryStreamTransformation {
 
-  def apply[R, E](errorHandler: IOException => E, blocking: Blocking.Service[Any])(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, ?]], Unit]): ZStream[R, E, Chunk[Byte]] =
+  def apply[R, E](errorHandler: IOException => E, env: Blocking)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, *]], Unit]): ZStream[R, E, Chunk[Byte]] =
     OutputStreamWriterStream { outputStream =>
+      val blocking = env.get[Blocking.Service]
+
       blocking.effectBlocking { new ZipOutputStream(outputStream) }.orDie.bracketAuto { zipStream =>
         entries.foreach { case ZipEntryInfo(path, dataStream) =>
           blocking.effectBlocking {
@@ -26,13 +28,10 @@ object ZipEntryStreamTransformation {
             .bracket(_ =>
               blocking.blocking(IO.effectTotal { zipStream.closeEntry() })
             ) { _ =>
-              val blocking2 = blocking
               SourceIO.fromSource(dataStream).toZStream
                 .run(
                   ZSink.fromOutputStream(zipStream)
-                    .provideSome[Any](_ => new Blocking {
-                      override val blocking: Blocking.Service[Any] = blocking2
-                    })
+                    .provideSome[Any](_ => env)
                     .mapError(errorHandler)
                     .unit
                 )

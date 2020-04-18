@@ -16,7 +16,8 @@ import zio.console._
 import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.parser.SourceAST
 import dev.argon.compiler.backend.Backend
-import dev.argon.io.{FileIO, FilenameManip}
+import dev.argon.io.FilenameManip
+import dev.argon.io.fileio.FileIO
 import dev.argon.build._
 import dev.argon.stream.builder.ZStreamSource
 import zio.stream.{ZSink, ZStream}
@@ -28,7 +29,7 @@ object Pipeline {
 
   private def createFileDataStream(path: Path): stream.ZStream[FileIO, NonEmptyList[CompilationError], Char] =
     stream.ZStream.flatten(stream.ZStream.fromEffect(
-      ZIO.access[FileIO] { _.fileIO.readText(ioToCompilationError)(path) }
+      ZIO.access[FileIO] { _.get.readText(ioToCompilationError)(path) }
     ))
 
   private type CIO[+A] = ZIO[BuildEnvironment, NonEmptyList[CompilationError], A]
@@ -40,14 +41,14 @@ object Pipeline {
           FilenameManip.findGlob(glob).runCollect
             .mapError { ex => NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex))) }
         )
-          .flatMap(ZStream.fromIterable)
+          .flatMap(ZStream.fromIterable(_))
       }
 
   private def findInputFiles(buildInfo: BuildInfo.Resolved): ZStream[FileIO, NonEmptyList[CompilationError], InputFileInfo[CIO]] =
     resolveGlob(buildInfo.project.inputFiles)
       .zipWithIndex
       .map { case (path, id) =>
-        InputFileInfo[CIO](FileSpec(FileID(id), path.toString),
+        InputFileInfo[CIO](FileSpec(FileID(id.toInt), path.toString),
           ZStreamSource(createFileDataStream(path))
         )
       }
@@ -66,7 +67,7 @@ object Pipeline {
   (f: buildInfo.backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO[BuildEnvironment, NonEmptyList[CompilationError], +*], Path] } => ZIO[BuildEnvironment, NonEmptyList[CompilationError], A])
   (implicit compInstance: IOCompilation[BuildEnvironment])
   : ZIO[BuildEnvironment, NonEmptyList[CompilationError], A] =
-    ZIO.access[FileIO] { res => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](res.fileIO) }.flatMap { implicit resFactory =>
+    ZIO.access[FileIO] { res => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](res.get) }.flatMap { implicit resFactory =>
 
       BuildProcess.parseInput[CIO](ZStreamSource(findInputFiles(buildInfo)))
         .foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }

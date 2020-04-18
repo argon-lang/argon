@@ -9,7 +9,6 @@ import cats._
 import cats.arrow.FunctionK
 import cats.data.NonEmptyList
 import cats.instances._
-import dev.argon.io.FileIO
 import zio._
 import dev.argon.build._
 import dev.argon.stream.builder.ZStreamSource

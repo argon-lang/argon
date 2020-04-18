@@ -12,6 +12,8 @@ import scala.scalajs.js.typedarray.Uint8Array
 import scala.scalajs.js.JSConverters._
 import scala.scalajs.js.|
 
+import dev.argon.io.fileio.FileIO
+
 trait FileIOServiceCommon extends FileIO.Service {
   override def getAbsolutePath(path: Path): IO[IOException, Path] =
     IO.effect { new Path(JSPath.resolve(path.pathName)) }
@@ -66,7 +68,7 @@ trait FileIOServiceCommon extends FileIO.Service {
       )
     )
 
-  override def deserializeProtocolBuffer[R, E, A <: GeneratedMessage with Message[A]](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, A] =
+  override def deserializeProtocolBuffer[R, E, A <: GeneratedMessage](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, A] =
     dataStreamToArray(SourceIO.fromSource(data))
       .flatMap { data =>
         IO.effect { companion.parseFrom(data) }

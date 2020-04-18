@@ -107,7 +107,7 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
                 _ <- sink.consume(path -> result)
                 _ <- emitExtra
 
-                _ <- genEffect.liftF(addGlobalDecl(module.GlobalDeclaration(id, convertAccessModifier(access), descriptor)))
+                _ <- genEffect.liftF(addGlobalDecl(module.GlobalDeclaration(descriptor, id, convertAccessModifier(access))))
 
               } yield ()
           }
@@ -188,9 +188,9 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
       (refIds: ModuleIds => Map[D1, Int])
       (createPath: Int => String)
       (convertDescriptor: (ArModule[context.type, DeclarationPayloadSpecifier], D1) => Emit[D2])
-      (createRef: (Int, D2) => M)
+      (createRef: (Int, D2, scalapb.UnknownFieldSet) => M)
       : ModuleRefs => G[(ModuleRefs, Boolean)] =
-        emitRefs(refIds)(createPath)(convertDescriptor)((moduleId, d2, _) => createRef(moduleId, d2))
+        emitRefs(refIds)(createPath)(convertDescriptor)((moduleId, d2, _) => createRef(moduleId, d2, scalapb.UnknownFieldSet.empty))
 
       def emitRefs[D1 <: Descriptor, ID, D2, M <: GeneratedMessage]
       (refIds: ModuleIds => Map[D1, ID])
@@ -409,7 +409,7 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
         case t: typeSystem.DataConstructorType => convertDataCtorType(armodule, t).map(module.Type.TypeInfo.DataConstructorType)
         case _ => ???
       }) : Emit[module.Type.TypeInfo])
-        .map(module.Type.apply)
+        .map(module.Type(_))
 
     def convertTypeArg(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.TypeArgument): Emit[module.TypeArg] =
       t match {

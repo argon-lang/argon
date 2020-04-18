@@ -11,7 +11,7 @@ import zio.interop.catz._
 import dev.argon.compiler._
 import dev.argon.compiler.backend.{Backend, ProjectFileHandler, ProjectLoader}
 import dev.argon.compiler.core._
-import dev.argon.io.{FileIO, FilenameManip}
+import dev.argon.io.fileio.FileIO
 import toml.Toml
 import toml.Codecs._
 import dev.argon.util.AnyExtensions._
@@ -56,11 +56,11 @@ object BuildInfo {
   def loadFile(file: Path): ZIO[FileIO, IOException, Option[Vector[Resolved]]] =
     ZIO.accessM[FileIO] { env =>
       for {
-        absoluteFile <- env.fileIO.getAbsolutePath(file)
+        absoluteFile <- env.get.getAbsolutePath(file)
         currentDir <- Path.of(".")
-        currentDirAbs <- env.fileIO.getAbsolutePath(currentDir)
+        currentDirAbs <- env.get.getAbsolutePath(currentDir)
         dir = absoluteFile.parent.getOrElse(currentDir)
-        buildFile <- env.fileIO.readAllText(file)
+        buildFile <- env.get.readAllText(file)
         result <- Toml.parse(buildFile)
           .toOption
           .flatMap { rootTable =>

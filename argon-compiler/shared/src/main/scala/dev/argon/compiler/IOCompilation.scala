@@ -14,7 +14,8 @@ import cats.data.{NonEmptyList, NonEmptyVector}
 import com.google.protobuf.InvalidProtocolBufferException
 import dev.argon.compiler.backend.Backend
 import dev.argon.compiler.core._
-import dev.argon.io.{FileIO, FilenameManip, ZipEntryInfo, ZipFileReader}
+import dev.argon.io.{FilenameManip, ZipEntryInfo, ZipFileReader}
+import dev.argon.io.fileio.FileIO
 import dev.argon.stream._
 import dev.argon.stream.builder.Source
 
@@ -65,7 +66,7 @@ object IOCompilation {
       }
 
     override def attempt[A](action: ZIO[R, NonEmptyList[CompilationError], A]): ZIO[R, NonEmptyList[CompilationError], Either[NonEmptyList[CompilationError], ZIO[R, NonEmptyList[CompilationError], A]]] =
-      action.map(IO.succeed).either
+      action.map(IO.succeed(_)).either
 
     override def flatMap[A, B](fa: F[A])(f: A => F[B]): F[B] =
       fa.flatMap(f)
@@ -117,7 +118,7 @@ object IOCompilation {
           zip.getEntryStream(name)
 
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage with Message[A]](companion: GeneratedMessageCompanion[A])(data: Source[Comp, Chunk[Byte], Unit]): Comp[A] =
+        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Comp, Chunk[Byte], Unit]): Comp[A] =
           fileIO.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
 
         override def serializeProtocolBuffer(message: GeneratedMessage): Source[Comp, Chunk[Byte], Unit] =

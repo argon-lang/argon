@@ -12,6 +12,8 @@ import scala.jdk.CollectionConverters._
 import scala.jdk.StreamConverters._
 import scala.util.matching.Regex
 
+import dev.argon.io.fileio.FileIO
+
 object FilenameManip {
 
   @SuppressWarnings(Array("org.wartremover.warts.ToString", "org.wartremover.warts.Equals"))
@@ -25,16 +27,16 @@ object FilenameManip {
         case Nil => Stream(baseDir)
         case head :: tail =>
           ZStream.flatten(ZStream.fromEffect(
-            ZIO.accessM[FileIO] { _.fileIO.isDirectory(baseDir) }.flatMap {
+            ZIO.accessM[FileIO] { _.get.isDirectory(baseDir) }.flatMap {
               case false => IO.succeed(Stream.empty)
               case true if head.toString === "**" =>
-                ZIO.access[FileIO] { _.fileIO.listDirectory(baseDir) }
+                ZIO.access[FileIO] { _.get.listDirectory(baseDir) }
                   .map { dirEntries =>
                     dirEntries.flatMap(findGlobImpl(globs)) ++ findGlobImpl(tail)(baseDir)
                   }
 
               case true =>
-                ZIO.access[FileIO] { _.fileIO.listDirectory(baseDir) }
+                ZIO.access[FileIO] { _.get.listDirectory(baseDir) }
                   .map { dirEntries =>
                     dirEntries
                       .filter(globSegmentMatches(head.toString))
@@ -49,7 +51,7 @@ object FilenameManip {
     def findTrueBase(baseDir: Path, path: List[Path]): ZStream[FileIO, IOException, Path] =
       path match {
         case head :: _ if head.toString contains "*" =>
-          ZStream.fromEffect(ZIO.accessM[FileIO] { _.fileIO.isDirectory(baseDir) }).flatMap {
+          ZStream.fromEffect(ZIO.accessM[FileIO] { _.get.isDirectory(baseDir) }).flatMap {
             case false => Stream.fail(throw new FileNotFoundException(baseDir.toString))
             case true => findGlobImpl(path)(baseDir)
           }
@@ -62,7 +64,7 @@ object FilenameManip {
     ZStream.fromEffect(
       path.root match {
         case Some(pathRoot) => IO.succeed(pathRoot)
-        case None => Path.of(".").flatMap { rootPath => ZIO.accessM[FileIO] { _.fileIO.getAbsolutePath(rootPath) } }
+        case None => Path.of(".").flatMap { rootPath => ZIO.accessM[FileIO] { _.get.getAbsolutePath(rootPath) } }
       }
     )
       .flatMap(findTrueBase(_, path.toList))

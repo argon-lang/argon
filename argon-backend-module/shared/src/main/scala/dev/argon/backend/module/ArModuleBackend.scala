@@ -36,7 +36,7 @@ object ArModuleBackend extends Backend {
     ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I]
   }
 
-  override def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Codec.Error, ModuleBackendOptions[Option, String]] =
+  override def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Parse.Error, ModuleBackendOptions[Option, String]] =
     toml.Toml.parseAs[ModuleBackendOptions[Option, String]](table)
 
 

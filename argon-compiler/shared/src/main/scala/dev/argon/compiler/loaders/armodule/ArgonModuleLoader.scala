@@ -49,7 +49,7 @@ object ArgonModuleLoader {
 
     override def dataReferencedModules[TRes <: ResourceAccess[context.type] with Singleton](data: ResAndMetadata[TRes]): Vector[ModuleDescriptor] =
       data.metadata.references.map {
-        case ArgonModule.ModuleReference(name) => ModuleDescriptor(name)
+        case ArgonModule.ModuleReference(name, _) => ModuleDescriptor(name)
       }
 
 
@@ -163,6 +163,7 @@ object ArgonModuleLoader {
                 ArgonModule.InNamespaceDescriptor(
                   ns,
                   ValidGlobalName(name),
+                  _
                 )
               ) =>
                 Some(Right(TraitDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
@@ -177,6 +178,7 @@ object ArgonModuleLoader {
                 ArgonModule.InNamespaceDescriptor(
                   ns,
                   ValidGlobalName(name),
+                  _
                 )
               ) =>
                 Some(Right(ClassDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
@@ -191,6 +193,7 @@ object ArgonModuleLoader {
                 ArgonModule.InNamespaceDescriptor(
                   ns,
                   ValidGlobalName(name),
+                  _
                 )
               ) =>
                 Some(Right(DataConstructorDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
@@ -205,6 +208,7 @@ object ArgonModuleLoader {
                 ArgonModule.InNamespaceDescriptor(
                   ns,
                   ValidGlobalName(name),
+                  _
                 )
               ) =>
                 Some(Right(FuncDescriptor.InNamespace(module, id, parseNamespacePath(ns), name)))
@@ -235,7 +239,7 @@ object ArgonModuleLoader {
 
           private def parseMethodDescriptor(module: ModuleDescriptor)(desc: ArgonModule.MethodDescriptor): Option[Either[MethodDescriptor, Nothing]] =
             desc match {
-              case ArgonModule.MethodDescriptor(index, instanceTypeId, memberName, ownerDesc) =>
+              case ArgonModule.MethodDescriptor(index, memberName, instanceTypeId, ownerDesc, _) =>
                 for {
                   memberNameValue <- parseMemberName(memberName)
                   ownerDescValue <- ownerDesc match {
@@ -251,7 +255,7 @@ object ArgonModuleLoader {
 
           private def parseClassCtorDescriptor(module: ModuleDescriptor)(desc: ArgonModule.ClassConstructorDescriptor): Option[Either[ClassConstructorDescriptor, Nothing]] =
             desc match {
-              case ArgonModule.ClassConstructorDescriptor(ownerClass, index, instanceClassId) =>
+              case ArgonModule.ClassConstructorDescriptor(ownerClass, index, instanceClassId, _) =>
                 for {
                   ownerDescValue <- parseClassDescriptor(instanceClassId)(module)(ownerClass).map(_.merge)
                 } yield Left(ClassConstructorDescriptor(ownerDescValue, index))
@@ -266,8 +270,8 @@ object ArgonModuleLoader {
 
           private def handleModuleObjectLoading
           [
-            TRef <: GeneratedMessage with Message[TRef],
-            TDef <: GeneratedMessage with Message[TDef],
+            TRef <: GeneratedMessage,
+            TDef <: GeneratedMessage,
             TValueDescriptor,
             TResultDescriptor <: AnyRef,
             TGlobalDescriptor <: TResultDescriptor,
@@ -405,7 +409,7 @@ object ArgonModuleLoader {
 
                     override lazy val signature: context.Comp[Signature[ArTrait.ResultInfo, _ <: Nat]] =
                       definition.signature match {
-                        case ArgonModule.TraitSignature(parameters, baseTraits) =>
+                        case ArgonModule.TraitSignature(parameters, baseTraits, _) =>
                           for {
                             baseTraitsResolved <- baseTraits.traverse(resolveTraitType(_))
                             parametersResolved <- parameters.zipWithIndex.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
@@ -481,7 +485,7 @@ object ArgonModuleLoader {
 
                     override lazy val signature: context.Comp[Signature[ArClass.ResultInfo, _ <: Nat]] =
                       definition.signature match {
-                        case ArgonModule.ClassSignature(parameters, baseClass, baseTraits) =>
+                        case ArgonModule.ClassSignature(parameters, baseClass, baseTraits, _) =>
                           for {
                             baseClassResolved <- baseClass.traverse(resolveClassType(_))
                             baseTraitsResolved <- baseTraits.traverse(resolveTraitType(_))
@@ -618,7 +622,7 @@ object ArgonModuleLoader {
                     )
                     override val signature: context.Comp[Signature[FunctionResultInfo, _ <: Nat]] =
                       definition.signature match {
-                        case ArgonModule.FunctionSignature(parameters, returnType) =>
+                        case ArgonModule.FunctionSignature(parameters, returnType, _) =>
                           for {
                             returnTypeResolved <- resolveType(returnType)
                             parametersResolved <- parameters.zipWithIndex.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
@@ -768,7 +772,7 @@ object ArgonModuleLoader {
 
                     override val signatureUnsubstituted: Comp[Signature[FunctionResultInfo, _ <: Nat]] =
                       definition.signature match {
-                        case ArgonModule.MethodSignature(parameters, returnType) =>
+                        case ArgonModule.MethodSignature(parameters, returnType, _) =>
                           for {
                             returnTypeResolved <- resolveType(returnType)
                             parametersResolved <- parameters.zipWithIndex.toVector.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
@@ -845,7 +849,7 @@ object ArgonModuleLoader {
 
                       override lazy val signatureUnsubstituted: Comp[Signature[ClassConstructor.ResultInfo, _ <: Nat]] =
                         definition.signature match {
-                          case ArgonModule.ClassConstructorSignature(parameters) =>
+                          case ArgonModule.ClassConstructorSignature(parameters, _) =>
                             for {
                               parametersResolved <- parameters.zipWithIndex.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
 
@@ -877,7 +881,7 @@ object ArgonModuleLoader {
             createBinding: (GlobalName, AccessModifierGlobal, TElem) => GlobalBinding[context.type, TPayloadSpec]
           ): Comp[ModuleElement[context.type, TPayloadSpec]] =
             descriptor match {
-              case ArgonModule.InNamespaceDescriptor(ns, ValidGlobalName(name)) =>
+              case ArgonModule.InNamespaceDescriptor(ns, ValidGlobalName(name), _) =>
                 loadElement(id).flatMap {
                   case ModuleObjectGlobalDefinition(elem) =>
                     val nsPath = parseNamespacePath(ns)
@@ -891,19 +895,19 @@ object ArgonModuleLoader {
           private lazy val globalNamespaceComp: Comp[Namespace[context.type, TPayloadSpec]] =
             metadata.globals
               .traverse {
-                case ArgonModule.GlobalDeclaration(id, ParsedGlobalAccessModifier(accessModifier), ArgonModule.GlobalDeclaration.Descriptor.TraitDescriptor(descriptor)) =>
+                case ArgonModule.GlobalDeclaration(ArgonModule.GlobalDeclaration.Descriptor.TraitDescriptor(descriptor), id, ParsedGlobalAccessModifier(accessModifier), _) =>
                   convertNamespaceElement(id, accessModifier, descriptor)(getTrait(_), GlobalBinding.GlobalTrait.apply)
 
-                case ArgonModule.GlobalDeclaration(id, ParsedGlobalAccessModifier(accessModifier), ArgonModule.GlobalDeclaration.Descriptor.ClassDescriptor(descriptor)) =>
+                case ArgonModule.GlobalDeclaration(ArgonModule.GlobalDeclaration.Descriptor.ClassDescriptor(descriptor), id, ParsedGlobalAccessModifier(accessModifier), _) =>
                   convertNamespaceElement(id, accessModifier, descriptor)(getArClass(_), GlobalBinding.GlobalClass.apply)
 
-                case ArgonModule.GlobalDeclaration(id, ParsedGlobalAccessModifier(accessModifier), ArgonModule.GlobalDeclaration.Descriptor.DataConstructorDescriptor(descriptor)) =>
+                case ArgonModule.GlobalDeclaration(ArgonModule.GlobalDeclaration.Descriptor.DataConstructorDescriptor(descriptor), id, ParsedGlobalAccessModifier(accessModifier), _) =>
                   convertNamespaceElement(id, accessModifier, descriptor)(getDataCtor(_), GlobalBinding.GlobalDataConstructor.apply)
 
-                case ArgonModule.GlobalDeclaration(id, ParsedGlobalAccessModifier(accessModifier), ArgonModule.GlobalDeclaration.Descriptor.FunctionDescriptor(descriptor)) =>
+                case ArgonModule.GlobalDeclaration(ArgonModule.GlobalDeclaration.Descriptor.FunctionDescriptor(descriptor), id, ParsedGlobalAccessModifier(accessModifier), _) =>
                   convertNamespaceElement(id, accessModifier, descriptor)(getFunction(_), GlobalBinding.GlobalFunction.apply)
 
-                case ArgonModule.GlobalDeclaration(id, _, _) =>
+                case ArgonModule.GlobalDeclaration(id, _, _, _) =>
                   Compilation[Comp].forErrors(CompilationError.InvalidGlobal(CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
               }
               .map(NamespaceBuilder.createNamespace)
@@ -966,16 +970,16 @@ object ArgonModuleLoader {
 
               override def visitParameters[RestLen <: Nat](sigParams: SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): Comp[T] = {
                 args.head match {
-                  case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Type(head)) =>
+                  case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Type(head), _) =>
                     resolveType(head).flatMap { argType =>
                       val nextSig = sigParams.next(argType)
                       resolveSignatureTypeArgs(nextSig, args.tail, convArgs :+ TypeArgument.Expr(argType))(f)
                     }
 
-                  case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Wildcard(ArgonModule.Wildcard())) =>
+                  case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Wildcard(ArgonModule.Wildcard(_)), _) =>
                     ??? //resolveSignatureTypeArgs(sigParams.nextUnsubstituted, tail, convArgs :+ TypeArgument.Wildcard)(f)
 
-                  case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Empty) => ???
+                  case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Empty, _) => ???
                 }
               }
 
@@ -1030,7 +1034,7 @@ object ArgonModuleLoader {
               }
 
             parameter.elements
-              .traverse { case ArgonModule.ParameterElement(name, paramType) =>
+              .traverse { case ArgonModule.ParameterElement(name, paramType, _) =>
                 val varName = name.map(VariableName.Normal).getOrElse(VariableName.Unnamed)
 
                 resolveType(paramType)

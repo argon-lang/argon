@@ -12,7 +12,6 @@ import zio.interop.catz._
 import dev.argon.compiler.backend.{Backend, CompilationOutputText}
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
-import dev.argon.io.{FileIO, FilenameManip, JSIOException}
 import dev.argon.build._
 
 import scala.scalajs.js

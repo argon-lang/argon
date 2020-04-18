@@ -19,7 +19,7 @@ trait Backend {
   def emptyBackendOptions[I]: BackendOptions[Option, I]
   def inferBackendOptions(compilerOptions: CompilerOptions[Id], options: BackendOptions[Option, String]): BackendOptionsId[String]
   def projectLoader[I]: ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I]
-  def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Codec.Error, BackendOptions[Option, String]]
+  def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Parse.Error, BackendOptions[Option, String]]
 
   def compile[F[+_], I: Show, A]
   (input: CompilerInput[I, BackendOptions[Id, I]])

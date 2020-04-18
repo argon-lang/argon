@@ -46,7 +46,7 @@ object JSBackend extends Backend {
     ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I]
   }
 
-  override def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Codec.Error, JSBackendOptions[Option, String]] =
+  override def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Parse.Error, JSBackendOptions[Option, String]] =
     toml.Toml.parseAs[JSBackendOptions[Option, String]](table)
 
 

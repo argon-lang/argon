@@ -1,12 +1,10 @@
 package dev.argon
 
-import zio.console.Console
-import zio.system.System
-
-import dev.argon.io.NodeIOEnvironment
+import dev.argon.io.fileio.FileIO
+import zio.ZLayer
 
 object PlatformHelpers {
-  def ioEnvironment: Console with System => NodeIOEnvironment = new NodeIOEnvironment(_)
+  def fileIOLayer: ZLayer[Any, Nothing, FileIO] = ZLayer.succeed(FileIO.liveNode)
 
   def getCommandLineArgs(args: List[String]): List[String] =
     NodeProcess.argv.toArray.drop(2).toList

@@ -23,7 +23,7 @@ trait ResourceAccess[TContext <: Context with Singleton] {
   def getZipReader[A](id: ResIndicator): Resource[Comp, ZipReader]
   def zipEntryStream(zip: ZipReader, name: String): Source[Comp, Chunk[Byte], Unit]
 
-  def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage with Message[A]]
+  def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage]
   (companion: GeneratedMessageCompanion[A])
   (data: Source[Comp, Chunk[Byte], Unit])
   : Comp[A]

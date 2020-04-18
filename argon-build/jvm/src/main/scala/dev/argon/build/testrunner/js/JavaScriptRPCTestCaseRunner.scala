@@ -13,7 +13,6 @@ import dev.argon.build.testrunner.js.ExternalApi._
 import dev.argon.compiler.backend.{Backend, CompilationOutputText}
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
-import dev.argon.io.{FileIO, FilenameManip}
 import dev.argon.build._
 
 final class JavaScriptRPCTestCaseRunner(referencePaths: UIO[Vector[Path]], launcher: ZManaged[BuildEnvironment, Throwable, NodeLauncher]) extends JavaScriptTestCaseRunnerBase(referencePaths) {

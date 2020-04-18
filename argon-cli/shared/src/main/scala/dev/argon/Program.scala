@@ -14,11 +14,11 @@ import dev.argon.io.Path
 object Program extends App {
 
 
-  override def run(args: List[String]): ZIO[Environment, Nothing, Int] =
+  override def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
     CommandLineParser.parse(CommandLineArguments.parser)(PlatformHelpers.getCommandLineArgs(args)) match {
       case Some(CommandLineArguments(cmd: CompileCommand[Id])) =>
         runCompilation(cmd)
-          .provideSome(PlatformHelpers.ioEnvironment)
+          .provideCustomLayer(PlatformHelpers.fileIOLayer)
           .orDie
 
       case None =>
