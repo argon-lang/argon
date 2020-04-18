@@ -2,6 +2,8 @@ import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
 import sbt.internal.util.ManagedLogger
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 
+val graalVersion = "20.0.0"
+
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.0",
 
@@ -41,6 +43,8 @@ lazy val commonJVMSettings = Seq(
 
   libraryDependencies ++= Seq(
     "org.apache.commons" % "commons-text" % "1.8",
+    "org.apache.commons" % "commons-compress" % "1.20",
+    "commons-io" % "commons-io" % "2.6",
   ),
 
 )
@@ -167,8 +171,16 @@ lazy val webDemo = project.in(file("argon-web-demo"))
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform).in(file("argon-build"))
   .jvmConfigure(
-    _.dependsOn(identityRPCRuntime)
-     .settings(commonJVMSettings)
+    _.settings(commonJVMSettings)
+     .settings(
+       libraryDependencies ++= Seq(
+         "org.graalvm.sdk" % "graal-sdk" % graalVersion,
+         "org.graalvm.js" % "js" % graalVersion,
+         "org.graalvm.js" % "js-scriptengine" % graalVersion,
+         "org.graalvm.tools" % "profiler" % graalVersion,
+         "org.graalvm.tools" % "chromeinspector" % graalVersion,
+       )
+     )
   )
   .jsConfigure(
     _.settings(commonJSSettings)

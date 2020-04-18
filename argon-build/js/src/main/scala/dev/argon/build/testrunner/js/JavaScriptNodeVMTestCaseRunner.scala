@@ -53,7 +53,7 @@ final class JavaScriptNodeVMTestCaseRunner(references: UIO[Vector[Path]]) extend
       val mainModule = new NodeVM.SourceTextModule(
         s"""
           |import * as arCore from "Argon.Core";
-          |import * as mainModule from ${JSON.stringify(moduleName)}
+          |import * as mainModule from ${JSON.stringify(moduleName)};
           |
           |mainModule.functions["main:(Ar.Unit)->(Ar.Unit)"].value(arCore.unitValue)
           |""".stripMargin,
