@@ -81,16 +81,19 @@ final class GraalJSTestCaseRunner(references: UIO[Vector[Path]]) extends JavaScr
       val _ = getFileInfo(path)
     }
 
-    override def createDirectory(dir: file.Path, attrs: FileAttribute[_]*): Unit = ???
+    override def createDirectory(dir: file.Path, attrs: FileAttribute[_]*): Unit =
+      throw new UnsupportedOperationException()
 
-    override def delete(path: file.Path): Unit = ???
+    override def delete(path: file.Path): Unit =
+      throw new UnsupportedOperationException()
 
     override def newByteChannel(path: file.Path, options: util.Set[_ <: OpenOption], attrs: FileAttribute[_]*): SeekableByteChannel = {
       val bytes = getFileInfo(path).content.getBytes(StandardCharsets.UTF_8)
       new SeekableInMemoryByteChannel(bytes)
     }
 
-    override def newDirectoryStream(dir: file.Path, filter: DirectoryStream.Filter[_ >: file.Path]): DirectoryStream[file.Path] = ???
+    override def newDirectoryStream(dir: file.Path, filter: DirectoryStream.Filter[_ >: file.Path]): DirectoryStream[file.Path] =
+      throw new UnsupportedOperationException()
 
     override def toAbsolutePath(path: file.Path): file.Path = path
 
@@ -102,7 +105,8 @@ final class GraalJSTestCaseRunner(references: UIO[Vector[Path]]) extends JavaScr
         file.Path.of(p.toString + ".mjs")
     }
 
-    override def readAttributes(path: file.Path, attributes: String, options: LinkOption*): util.Map[String, AnyRef] = ???
+    override def readAttributes(path: file.Path, attributes: String, options: LinkOption*): util.Map[String, AnyRef] =
+      throw new UnsupportedOperationException()
   }
 
 }
