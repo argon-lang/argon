@@ -1,5 +1,7 @@
 package dev.argon.webdemo
 
+import java.io.{PrintWriter, StringWriter}
+
 import cats.Id
 import cats.data.NonEmptyList
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
@@ -49,13 +51,24 @@ object Program extends App {
           }
 
         case DemoCommand.CompileFailureEvent(errors) =>
-          ???
+          IO.effectTotal {
+            outputElem.value += errors.map(_.toString + "\n").toList.mkString
+          }.andThen(state.set(ExecutionStatus.CompileFailed(errors)))
 
         case DemoCommand.ExecutionFailedEvent(error) =>
-          ???
+          IO.effectTotal {
+            val writer = new StringWriter()
+            error.printStackTrace(new PrintWriter(writer))
+            val _ = writer.append('\n')
+            outputElem.value += writer.toString
+          }.andThen(state.set(ExecutionStatus.Failed(error)))
 
         case DemoCommand.ExecutionCompleteEvent =>
-          ???
+          for {
+            output <- IO.effectTotal { outputElem.value }
+            _ <- state.set(ExecutionStatus.Completed(output))
+            _ <- IO.effectTotal { outputElem.value += "Done\n" }
+          } yield ()
 
         case DemoCommand.ClearOutput =>
           IO.effectTotal { outputElem.value = "" }
@@ -122,6 +135,15 @@ object Program extends App {
         }
     }
 
-  private def executeJS(onOutput: String => UIO[Unit])(compiledCode: String): Task[Unit] = ???
+  private def executeJS(onOutput: String => UIO[Unit])(compiledCode: String): Task[Unit] =
+    ZIO.runtime[Any].flatMap { runtime =>
+      ZManaged.make(IO.effect {
+        val api = new SandboxApi(str => runtime.unsafeRun(onOutput(str)))
+        WebSandbox.create(api)
+      })(sandbox => IO.effectTotal { sandbox.destroy() })
+        .use { sandbox =>
+          ???
+        }
+    }
 
 }
