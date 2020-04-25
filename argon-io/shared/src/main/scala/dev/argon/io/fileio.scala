@@ -26,8 +26,8 @@ object fileio {
       def isDirectory(path: Path): IO[IOException, Boolean]
       def listDirectory(path: Path): Stream[IOException, Path]
 
-      def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, ?]], Unit]): Source[ZIO[R, E, ?], Chunk[Byte], Unit]
-      def openZipFile[R, E](errorHandler: IOException => E)(path: Path): Managed[E, ZipFileReader[ZIO[R, E, ?]]]
+      def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, *]], Unit]): Source[ZIO[R, E, *], Chunk[Byte], Unit]
+      def openZipFile[R, E](errorHandler: IOException => E)(path: Path): Managed[E, ZipFileReader[ZIO[R, E, *]]]
 
       def deserializeProtocolBuffer[R, E, A <: GeneratedMessage]
       (errorHandler: IOException => E)
@@ -35,7 +35,7 @@ object fileio {
       (data: Source[ZIO[R, E, *], Chunk[Byte], Unit])
       : ZIO[R, E, A]
 
-      def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): Source[ZIO[R, E, ?], Chunk[Byte], Unit]
+      def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): Source[ZIO[R, E, *], Chunk[Byte], Unit]
     }
 
   }
