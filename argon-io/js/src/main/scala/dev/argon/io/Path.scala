@@ -41,6 +41,7 @@ final class Path(private[io] val pathName: String) extends AnyVal {
 }
 
 object Path {
+  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   def of(first: String, more: String*): UIO[Path] =
     IO.effectTotal { new Path(JSPath.join(first +: more: _*)) }
 

@@ -15,36 +15,36 @@ import dev.argon.util.XmlParser
 object TestCaseLoader {
 
   private def loadTestCase(path: Path): ZIO[FileIO, Throwable, TestCase] =
-    ZIO.accessM[FileIO](_.get.readAllText(path)).flatMap { xmlData =>
-      IO.effect {
-        val content = XmlParser.parseString(xmlData)
+    ZIO.accessM[FileIO](_.get.readAllText(path))
+      .flatMap(XmlParser.parseString)
+      .flatMap { content =>
+        IO.fromEither(
+          (
+            for {
+              nameElem <- (content \ "Name").headOption
+              name = nameElem.text
 
-        (
-          for {
-            nameElem <- (content \ "Name").headOption
-            name = nameElem.text
+              testFiles <- (content \ "InputSource").toVector.traverse { inputSourceElem =>
+                for {
+                  nameAttr <- (inputSourceElem \ "@name").headOption
+                  fileName = nameAttr.text
+                  fileData = inputSourceElem.text
+                } yield InputSourceData(fileName, fileData)
+              }
 
-            testFiles <- (content \ "InputSource").toVector.traverse { inputSourceElem =>
-              for {
-                nameAttr <- (inputSourceElem \ "@name").headOption
-                fileName = nameAttr.text
-                fileData = inputSourceElem.text
-              } yield InputSourceData(fileName, fileData)
-            }
-
-            expectedResult <-
-              (content \ "ExpectedOutput")
-                .collectFirst { case outputElem: Elem => TestCaseExpectedOutput(outputElem.text) }
-                .orElse {
-                  (content \ "ExpectedError")
-                    .collectFirst { case errorElem: Elem => TestCaseExpectedError(errorElem.text) }
-                }
+              expectedResult <-
+                (content \ "ExpectedOutput")
+                  .collectFirst { case outputElem: Elem => TestCaseExpectedOutput(outputElem.text) }
+                  .orElse {
+                    (content \ "ExpectedError")
+                      .collectFirst { case errorElem: Elem => TestCaseExpectedError(errorElem.text) }
+                  }
 
 
-          } yield TestCase(name, testFiles.toVector, expectedResult)
-        ).getOrElse { throw new Exception(s"Invalid test case: ${content.toString}") }
+            } yield TestCase(name, testFiles.toVector, expectedResult)
+            ).toRight { new Exception(s"Invalid test case: ${content.toString}") }
+        )
       }
-    }
 
   def loadTestCases(path: Path): ZIO[FileIO, Throwable, TestCaseStructure] =
     ZIO.accessM[FileIO](_.get.listDirectory(path).foldM[FileIO, Throwable, Path, (Seq[(String, TestCaseStructure)], Seq[TestCase])](

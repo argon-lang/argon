@@ -19,7 +19,7 @@ import scala.scalajs.js.JSConverters._
 import scala.scalajs.js.|
 import dev.argon.util.NodeProcess
 
-@SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null"))
+@SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null", "dev.argon.warts.ZioEffect"))
 class NodeIOService extends FileIOServiceCommon {
 
   override def getEnv(name: String): UIO[Option[String]] =

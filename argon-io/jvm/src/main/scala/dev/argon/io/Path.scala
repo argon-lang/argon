@@ -43,6 +43,7 @@ final class Path(private[io] val javaPath: java.nio.file.Path) extends AnyVal {
 }
 
 object Path {
+  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   def of(first: String, more: String*): UIO[Path] =
     IO.effectTotal { new Path(java.nio.file.Path.of(first, more: _*)) }
 

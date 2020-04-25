@@ -1,9 +1,12 @@
 package dev.argon.util
 
-import scala.xml.{PrefixedAttribute, UnprefixedAttribute, Elem => SElem, MetaData => SMetaData, Node => SNode, Text => SText, Null => SAttrNull}
+import zio.{IO, Task}
+
+import scala.xml.{PrefixedAttribute, UnprefixedAttribute, Elem => SElem, MetaData => SMetaData, Node => SNode, Null => SAttrNull, Text => SText}
 
 object XmlParser {
-  def parseString(xml: String): SElem = {
+  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
+  def parseString(xml: String): Task[SElem] = IO.effect {
     val dom = new DOMParser()
     val doc = dom.parseFromString(xml, "text/xml")
     convertElem(doc.documentElement)

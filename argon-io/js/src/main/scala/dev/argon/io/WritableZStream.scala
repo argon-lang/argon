@@ -11,7 +11,7 @@ import zio.interop.catz._
 
 import scala.scalajs.js.annotation.ScalaJSDefined
 
-class WritableZStream[R] private(runtime: Runtime[R], queue: Queue[Promise[Option[js.Error], Chunk[Byte]]]) extends NodeWritable {
+private[io] class WritableZStream[R] private(runtime: Runtime[R], queue: Queue[Promise[Option[js.Error], Chunk[Byte]]]) extends NodeWritable {
 
   private def bufferToChunk(buffer: NodeBuffer): Chunk[Byte] = {
     val array = new Array[Byte](buffer.length)
@@ -21,7 +21,7 @@ class WritableZStream[R] private(runtime: Runtime[R], queue: Queue[Promise[Optio
     Chunk.fromArray(array)
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Null"))
+  @SuppressWarnings(Array("org.wartremover.warts.Null", "dev.argon.warts.ZioEffect"))
   override protected def _write(buffer: NodeBuffer, encoding: String, callback: js.Function1[Any, Unit]): Unit =
     runtime.unsafeRunAsync(
       for {
@@ -60,6 +60,7 @@ class WritableZStream[R] private(runtime: Runtime[R], queue: Queue[Promise[Optio
 
 object WritableZStream {
 
+  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   def apply[R](consume: NodeWritable => ZIO[R, js.Error, Unit]): ZStream[R, js.Error, Chunk[Byte]] =
     ZStream(
       ZManaged.make(

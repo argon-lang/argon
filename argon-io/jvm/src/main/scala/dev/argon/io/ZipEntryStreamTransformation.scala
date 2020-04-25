@@ -26,7 +26,7 @@ object ZipEntryStreamTransformation {
           }
             .refineOrDie { case e: IOException => errorHandler(e) }
             .bracket(_ =>
-              blocking.blocking(IO.effectTotal { zipStream.closeEntry() })
+              blocking.effectBlocking { zipStream.closeEntry() }.orDie
             ) { _ =>
               SourceIO.fromSource(dataStream).toZStream
                 .run(

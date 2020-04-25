@@ -77,6 +77,19 @@ lazy val commonJSSettings = Seq(
 
 )
 
+
+lazy val zioEffectWarts = project.in(file("zio-effect-warts"))
+  .settings(
+    scalaVersion := "2.13.0",
+    libraryDependencies ++= Seq(
+      "org.wartremover" % "wartremover" % wartremover.Wart.PluginVersion cross CrossVersion.full,
+      "dev.zio" %%% "zio" % "1.0.0-RC18-2",
+      "dev.zio" %%% "zio-streams" % "1.0.0-RC18-2",
+    ),
+
+
+  )
+
 lazy val compilerOptions = Seq(
 
   scalacOptions ++= Seq(
@@ -117,9 +130,15 @@ lazy val compilerOptions = Seq(
     Wart.PublicInference,
 
     Wart.Throw,
+  ) ++ Seq(
+    Wart.custom("dev.argon.warts.ZioEffect"),
   ),
 
   wartremoverExcluded += sourceManaged.value,
+
+  wartremoverClasspaths ++= {
+    (fullClasspath in (zioEffectWarts, Compile)).value.map(_.data.toURI.toString)
+  }
 )
 
 lazy val buildArgonLibs = taskKey[Unit]("Compile Argon libraries")
@@ -395,5 +414,4 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform).in(file("argon-module
 
 lazy val modulefmtJVM = modulefmt.jvm
 lazy val modulefmtJS = modulefmt.js
-
 

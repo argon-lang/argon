@@ -20,7 +20,7 @@ import scala.scalajs.js.{JSON, |}
 
 final class JavaScriptNodeVMTestCaseRunner(references: RIO[FileIO, Vector[Path]]) extends JavaScriptTestCaseRunnerBase(references) {
 
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null", "org.wartremover.warts.ToString"))
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null", "org.wartremover.warts.ToString", "dev.argon.warts.ZioEffect"))
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): ZIO[BuildEnvironment, Throwable, String] =
     IO.effectAsync { register =>
       val stdout = new MemoryWritableStream()

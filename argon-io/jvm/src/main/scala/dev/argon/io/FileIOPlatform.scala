@@ -17,6 +17,7 @@ import dev.argon.io.fileio.FileIO
 import scala.jdk.CollectionConverters._
 import scala.jdk.StreamConverters._
 
+@SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 trait FileIOPlatform {
 
   val live: ZLayer[Blocking, Nothing, FileIO] = ZLayer.fromFunction { env =>

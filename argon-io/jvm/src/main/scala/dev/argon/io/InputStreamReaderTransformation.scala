@@ -52,6 +52,7 @@ object InputStreamReaderTransformation {
     }
   }
 
+  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   def apply[R, E, L[_, _], A](data: ZStream[R, E, Chunk[Byte]])(readHandler: InputStream => ZIO[R, E, A]): ZIO[R, E, A] =
     data.filterNot(_.isEmpty).process.use { pull =>
       for {

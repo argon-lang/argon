@@ -18,7 +18,7 @@ import org.scalajs.dom
 
 object Program extends App {
 
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "dev.argon.warts.ZioEffect"))
   override def run(args: List[String]): URIO[ZEnv, Int] = (
     for {
       queue <- Queue.bounded[DemoCommand](1000)
@@ -135,6 +135,7 @@ object Program extends App {
         }
     }
 
+  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   private def executeJS(onOutput: String => UIO[Unit])(compiledCode: String): Task[Unit] =
     ZIO.runtime[Any].flatMap { runtime =>
       ZManaged.make(IO.effect {

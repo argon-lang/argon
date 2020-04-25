@@ -14,6 +14,7 @@ import scala.scalajs.js.|
 
 import dev.argon.io.fileio.FileIO
 
+@SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 trait FileIOServiceCommon extends FileIO.Service {
   override def getAbsolutePath(path: Path): IO[IOException, Path] =
     IO.effect { new Path(JSPath.resolve(path.pathName)) }

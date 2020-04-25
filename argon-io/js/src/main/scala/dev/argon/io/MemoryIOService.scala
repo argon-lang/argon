@@ -13,7 +13,7 @@ import scala.scalajs.js.typedarray.Uint8Array
 import scala.scalajs.js.JSConverters._
 import scala.scalajs.js.|
 
-@SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.ToString", "org.wartremover.warts.Null"))
+@SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.ToString", "org.wartremover.warts.Null", "dev.argon.warts.ZioEffect"))
 class MemoryIOService(fileSystem: Ref[Map[String, Chunk[Byte]]]) extends FileIOServiceCommon {
 
   override def getEnv(name: String): UIO[Option[String]] = IO.succeed(None)

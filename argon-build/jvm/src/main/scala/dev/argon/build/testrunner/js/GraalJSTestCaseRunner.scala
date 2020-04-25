@@ -28,6 +28,7 @@ import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.io.FileSystem
 
 final class GraalJSTestCaseRunner(references: RIO[FileIO, Vector[Path]]) extends JavaScriptTestCaseRunnerBase(references) {
+  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): ZIO[BuildEnvironment, Throwable, String] =
     IO.effect {
 
