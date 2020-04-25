@@ -13,11 +13,12 @@ import dev.argon.compiler.backend.{Backend, CompilationOutputText}
 import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.build._
+import dev.argon.io.fileio.FileIO
 
 import scala.scalajs.js
 import scala.scalajs.js.{JSON, |}
 
-final class JavaScriptNodeVMTestCaseRunner(references: UIO[Vector[Path]]) extends JavaScriptTestCaseRunnerBase(references) {
+final class JavaScriptNodeVMTestCaseRunner(references: RIO[FileIO, Vector[Path]]) extends JavaScriptTestCaseRunnerBase(references) {
 
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null", "org.wartremover.warts.ToString"))
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): ZIO[BuildEnvironment, Throwable, String] =
@@ -81,7 +82,7 @@ final class JavaScriptNodeVMTestCaseRunner(references: UIO[Vector[Path]]) extend
 
 object JavaScriptNodeVMTestCaseRunner {
 
-  def apply(references: UIO[Vector[Path]]): JavaScriptNodeVMTestCaseRunner =
+  def apply(references: RIO[FileIO, Vector[Path]]): JavaScriptNodeVMTestCaseRunner =
     new JavaScriptNodeVMTestCaseRunner(references)
 
 }

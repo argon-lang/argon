@@ -6,7 +6,7 @@ import dev.argon.build.testrunner.{BuildTestCaseRunner, ParseTestCaseRunner, Tes
 import dev.argon.compiler.backend.Backend
 import dev.argon.io.Path
 import dev.argon.io.fileio.FileIO
-import zio.{UIO, ZLayer, ZManaged}
+import zio.{IO, RIO, UIO, ZLayer, ZManaged}
 import zio.blocking.Blocking
 import zio.console.Console
 import zio.system.System
@@ -14,7 +14,7 @@ import zio.system.System
 object PlatformHelpers {
   def fileIOLayer: ZLayer[Blocking, Nothing, FileIO] = FileIO.live
 
-  def testCaseRunners(references: UIO[Vector[Path]]): Seq[TestCaseRunner] =
+  def testCaseRunners(references: RIO[FileIO, Vector[Path]]): Seq[TestCaseRunner] =
     Seq(ParseTestCaseRunner) ++
       Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, references) } ++
       Seq(new GraalJSTestCaseRunner(references))

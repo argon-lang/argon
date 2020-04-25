@@ -1,12 +1,11 @@
 package dev.argon.build.testrunner.js
 
 import java.io.IOException
+
 import dev.argon.io.Path
-
-
 import dev.argon.build.testrunner._
 import cats._
-import cats.data.{NonEmptyList, NonEmptyVector}
+import cats.data.{EitherT, NonEmptyList, NonEmptyVector}
 import cats.implicits._
 import zio._
 import zio.interop.catz._
@@ -16,7 +15,7 @@ import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.io.fileio.FileIO
 import dev.argon.build._
 
-abstract class JavaScriptTestCaseRunnerBase(referencePaths: UIO[Vector[Path]]) extends TestCaseRunnerCompilePhase {
+abstract class JavaScriptTestCaseRunnerBase(referencePaths: RIO[FileIO, Vector[Path]]) extends TestCaseRunnerCompilePhase {
 
   override val name: String = "JavaScript Execution"
   override protected val backend: JSBackend.type = JSBackend
@@ -33,11 +32,14 @@ abstract class JavaScriptTestCaseRunnerBase(referencePaths: UIO[Vector[Path]]) e
       )
     }
 
-  override protected def getProgramOutput(compOutput: CompilationOutputText { val context: Backend.ContextWithComp[ZIO[BuildEnvironment, NonEmptyList[CompilationError], +*], Path] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]] = for {
-    references <- referencePaths
-    (compiledFile, _) <- compOutput.textStream.foldLeftM("") { (a, b) => IO.succeed(a + b) }
-    output <- runJSOutput(references)(compiledFile).either
-  } yield output
+  override protected def getProgramOutput(compOutput: CompilationOutputText { val context: Backend.ContextWithComp[ZIO[BuildEnvironment, NonEmptyList[CompilationError], +*], Path] }): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]] =
+    (
+      for {
+        references <- EitherT[ZIO[BuildEnvironment, NonEmptyList[CompilationError], *], Throwable, Vector[Path]](referencePaths.either)
+        (compiledFile, _) <- EitherT.liftF(compOutput.textStream.foldLeftM("") { (a, b) => IO.succeed(a + b) })
+        output <- EitherT[ZIO[BuildEnvironment, NonEmptyList[CompilationError], *], Throwable, String](runJSOutput(references)(compiledFile).either)
+      } yield output
+    ).value
 
 
   override def runTest(testCase: TestCase): ZIO[BuildEnvironment, Throwable, TestCaseResult] =

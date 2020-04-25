@@ -7,7 +7,7 @@ import java.util.zip.ZipFile
 
 import dev.argon.stream.builder.{Source, SourceIO, ZStreamSource}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
-import zio.{Chunk, IO, Managed, ZIO, ZLayer, ZManaged, stream}
+import zio.{Chunk, IO, Managed, UIO, ZIO, ZLayer, ZManaged, stream}
 import zio.blocking.Blocking
 import zio.console.Console
 import zio.stream.{Stream, ZStream}
@@ -23,6 +23,9 @@ trait FileIOPlatform {
     val blocking = env.get[Blocking.Service]
 
     new FileIO.Service {
+
+      override def getEnv(name: String): UIO[Option[String]] =
+        IO.effectTotal { Option(java.lang.System.getenv(name)) }
 
       override def getAbsolutePath(path: Path): IO[IOException, Path] =
         blocking.effectBlocking { new Path(path.javaPath.toAbsolutePath) }

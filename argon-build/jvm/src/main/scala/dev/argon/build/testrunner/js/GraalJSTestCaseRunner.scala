@@ -20,13 +20,14 @@ import java.nio.file.attribute.FileAttribute
 import java.util
 import java.util.Locale
 
+import dev.argon.io.fileio.FileIO
 import org.apache.commons.compress.utils.SeekableInMemoryByteChannel
 import org.apache.commons.io.input.NullInputStream
 import org.apache.commons.text.StringEscapeUtils
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.io.FileSystem
 
-final class GraalJSTestCaseRunner(references: UIO[Vector[Path]]) extends JavaScriptTestCaseRunnerBase(references) {
+final class GraalJSTestCaseRunner(references: RIO[FileIO, Vector[Path]]) extends JavaScriptTestCaseRunnerBase(references) {
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): ZIO[BuildEnvironment, Throwable, String] =
     IO.effect {
 
@@ -56,11 +57,6 @@ final class GraalJSTestCaseRunner(references: UIO[Vector[Path]]) extends JavaScr
 
         output.toString(StandardCharsets.UTF_8)
       }
-      catch {
-        case ex: Exception =>
-          println(ex)
-          throw ex
-      }
       finally context.close()
     }
 
@@ -69,7 +65,6 @@ final class GraalJSTestCaseRunner(references: UIO[Vector[Path]]) extends JavaScr
 
     private def getFileInfo(path: file.Path): FileInfo =
       modules.find(f => f.name + ".mjs" === path.toString).getOrElse {
-        println(s"Not found: ${path.toString}, ${modules.toString()}")
         throw new FileNotFoundException()
       }
 

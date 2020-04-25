@@ -14,6 +14,9 @@ object fileio {
   object FileIO extends FileIOPlatform {
 
     trait Service {
+
+      def getEnv(name: String): UIO[Option[String]]
+
       def getAbsolutePath(path: dev.argon.io.Path): IO[IOException, Path]
 
       def readAllText(path: Path): IO[IOException, String]

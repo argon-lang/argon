@@ -1,12 +1,15 @@
 package dev.argon.build
 
+import java.io.IOException
+
 import dev.argon.build.testrunner._
 import dev.argon.io.Path
-import zio.UIO
+import zio.{IO, RIO, UIO, ZIO}
 import zio.test.Assertion.equalTo
 import zio.test._
 import cats._
 import cats.implicits._
+import dev.argon.io.fileio.FileIO
 import zio.interop.catz._
 
 abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
@@ -15,10 +18,16 @@ abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
     "Argon.Core",
   )
 
-  val referencePaths: UIO[Vector[Path]] = libraries.traverse { name => Path.of(s"libraries/$name/$name.armodule") }
+  val referencePaths: RIO[FileIO, Vector[Path]] = libraries.traverse { name =>
+    ZIO.accessM[FileIO](_.get.getEnv("ARGON_LIB_DIR"))
+      .flatMap {
+        case Some(libDir) => Path.of(libDir,name, name + ".armodule")
+        case None => IO.fail(new RuntimeException("ARGON_LIB_DIR was not set"))
+      }
+  }
 
   val suiteName: String
-  val testCases: TestCaseStructure
+  def testCases: ZIO[Environment, TestFailure[Failure], TestCaseStructure]
   val runners: Seq[TestCaseRunner]
 
   def createTest(runner: TestCaseRunner)(testCase: TestCase): ZSpec[Environment, Failure] =
@@ -39,11 +48,16 @@ abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
       structure.tests.map(createTest(runner))
 
   override def spec: ZSpec[Environment, Failure] =
-    suite(suiteName)(
-      runners.map { runner =>
-        suite(runner.name)(
-          createSuites(runner, testCases): _*
-        )
-      }: _*
+
+    Spec.suite(suiteName,
+      testCases
+        .map { loadedTestCases =>
+          runners.map { runner =>
+            suite(runner.name)(
+              createSuites(runner, loadedTestCases): _*
+            )
+          }.toVector
+        },
+      None
     )
 }

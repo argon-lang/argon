@@ -17,9 +17,13 @@ import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
 import scala.scalajs.js.JSConverters._
 import scala.scalajs.js.|
+import dev.argon.util.NodeProcess
 
 @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null"))
 class NodeIOService extends FileIOServiceCommon {
+
+  override def getEnv(name: String): UIO[Option[String]] =
+    IO.effectTotal { NodeProcess.env(name).toOption }
 
   override def readAllText(path: Path): IO[IOException, String] =
     IO.effectAsync { register =>

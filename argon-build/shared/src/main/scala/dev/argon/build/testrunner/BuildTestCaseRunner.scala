@@ -5,8 +5,8 @@ import cats.implicits._
 import zio.interop.catz._
 import dev.argon.build._
 import java.io.IOException
-import dev.argon.io.Path
 
+import dev.argon.io.Path
 import cats.data.NonEmptyList
 import dev.argon.compiler.{CompilationError, CompilerOptions}
 import zio._
@@ -14,8 +14,9 @@ import shapeless.{Id => _, Path => _, _}
 import dev.argon.compiler.backend.ProjectLoader.Implicits._
 import dev.argon.compiler.backend.{Backend, ProjectFileHandler}
 import dev.argon.build._
+import dev.argon.io.fileio.FileIO
 
-final class BuildTestCaseRunner(protected val backend: Backend, referencePaths: UIO[Vector[Path]]) extends TestCaseRunnerCompilePhase {
+final class BuildTestCaseRunner(protected val backend: Backend, referencePaths: RIO[FileIO, Vector[Path]]) extends TestCaseRunnerCompilePhase {
 
   override val name: String = s"Compilation (${backend.name})"
 

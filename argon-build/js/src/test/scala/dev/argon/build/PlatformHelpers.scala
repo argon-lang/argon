@@ -12,7 +12,7 @@ import zio.system.System
 object PlatformHelpers {
   def fileIOLayer: ZLayer[Any, Nothing, FileIO] = ZLayer.succeed(FileIO.liveNode)
 
-  def testCaseRunners(referencePaths: UIO[Vector[Path]]): Seq[TestCaseRunner] =
+  def testCaseRunners(referencePaths: RIO[FileIO, Vector[Path]]): Seq[TestCaseRunner] =
     Seq(ParseTestCaseRunner) ++
       Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, referencePaths) } ++
       Seq(JavaScriptNodeVMTestCaseRunner(referencePaths))

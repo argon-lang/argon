@@ -16,6 +16,8 @@ import scala.scalajs.js.|
 @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.ToString", "org.wartremover.warts.Null"))
 class MemoryIOService(fileSystem: Ref[Map[String, Chunk[Byte]]]) extends FileIOServiceCommon {
 
+  override def getEnv(name: String): UIO[Option[String]] = IO.succeed(None)
+
   private def readFileBytes(path: Path): IO[IOException, Chunk[Byte]] =
     fileSystem.get.flatMap { fs =>
       getAbsolutePath(path).flatMap { fileName =>
