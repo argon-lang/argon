@@ -6,13 +6,15 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.DataConstructorDeclarationStmt
-import dev.argon.util.{FileID, SourceLocation, WithSource}
+import dev.argon.util.{FileID, SourceLocation, ValueCache, WithSource}
 import cats._
 import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.loaders.StandardTypeLoaders
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import shapeless.Nat
+import zio.IO
+import zio.interop.catz._
 
 private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
 
@@ -27,16 +29,14 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
   (env: EnvCreator[context2.type])
   (stmt: DataConstructorDeclarationStmt)
   (desc: DataConstructorDescriptor)
-  : context2.Comp[DataConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type }] = {
-    import context2._
-
+  : Comp[DataConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type }] =
     for {
-      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[DataConstructor.ResultInfo, _ <: Nat]]
+      sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[DataConstructor.ResultInfo, _ <: Nat]]
 
-      bodyStmtCache <- Compilation[Comp].createCache[context2.typeSystem.ArExpr]
-      bodyEnvCache <- Compilation[Comp].createCache[EnvCreator[context2.type]]
+      bodyStmtCache <- ValueCache.make[ErrorList, context2.typeSystem.ArExpr]
+      bodyEnvCache <- ValueCache.make[ErrorList, EnvCreator[context2.type]]
 
-      methodCache <- Compilation[Comp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      methodCache <- ValueCache.make[ErrorList, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
 
     } yield new DataConstructor[context2.type, DeclarationPayloadSpecifier] with OpenSealedCheck {
       override val context: context2.type = context2
@@ -58,7 +58,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
         }
 
       override val signature: Comp[Signature[DataConstructor.ResultInfo, _ <: Nat]] =
-        sigCache(
+        sigCache.get(
           SourceSignatureCreator.fromParameters[DataConstructor.ResultInfo](context2)(
             env(context)(EffectInfo.pure, descriptor)
           )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType)(this))
@@ -71,7 +71,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
       )
 
       private val bodyStmt =
-        bodyStmtCache(
+        bodyStmtCache.get(
           for {
             pEnv <- paramEnv
 
@@ -84,7 +84,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
         )
 
       private val bodyEnv =
-        bodyEnvCache(
+        bodyEnvCache.get(
           for {
             pEnv <- paramEnv
             body <- bodyStmt
@@ -93,10 +93,10 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
 
 
       override val methods: Comp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
-        methodCache(
+        methodCache.get(
           groupedInst.methods.zipWithIndex.traverse { case (method, i) =>
             for {
-              modifiers <- parseAccessModifier[Comp](env.fileSpec, method.location, getAccessModifiers(method.value.modifiers))
+              modifiers <- parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers))
 
               memberName = MethodName.fromMethodNameSpecifier(method.value.name)
 
@@ -122,37 +122,31 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
 
         override def createResult
         (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-        : context.Comp[DataConstructor.ResultInfo[context.type, context.typeSystem.type]] = {
-          import context._
-
+        : Comp[DataConstructor.ResultInfo[context.type, context.typeSystem.type]] =
           ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
             .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location))
             .flatMap { baseTrait =>
               val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
-              osCheck.checkExtendTrait[Comp, context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
+              osCheck.checkExtendTrait[context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
                 .map { _ => DataConstructor.ResultInfo(context.typeSystem)(baseTrait) }
             }
-        }
 
         private def typeToBaseTypes
         (context: Context)
         (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
         (t: context.typeSystem.TType)
         (location: SourceLocation)
-        : context.Comp[context.typeSystem.TraitType] = {
-          import context._
+        : Comp[context.typeSystem.TraitType] =
           t match {
             case t: context.typeSystem.TraitType =>
-              t.pure[Comp]
+              IO.succeed(t)
 
             case _ =>
-              Compilation[Comp].forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              Compilation.forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
           }
-        }
       }
 
     }
-  }
 
 }

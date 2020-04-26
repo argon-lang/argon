@@ -11,6 +11,7 @@ import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import shapeless.Nat
+import zio.IO
 
 object SourceMethod {
   def apply
@@ -19,12 +20,12 @@ object SourceMethod {
   (stmt: parser.MethodDeclarationStmt, location: SourceLocation)
   (desc: MethodDescriptor)
   (methodOwner: ArMethod.Owner[context2.type, DeclarationPayloadSpecifier])
-  : context2.Comp[ArMethod[context2.type, DeclarationPayloadSpecifier]] = {
+  : Comp[ArMethod[context2.type, DeclarationPayloadSpecifier]] = {
     import context2._
     
     for {
-      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[FunctionResultInfo, _ <: Nat]]
-      implCache <- Compilation[Comp].createCache[context2.TMethodImplementation]
+      sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[FunctionResultInfo, _ <: Nat]]
+      implCache <- ValueCache.make[ErrorList, context2.TMethodImplementation]
     } yield new ArMethod[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
       override val contextProof: context.type Is context2.type = Is.refl
@@ -61,7 +62,7 @@ object SourceMethod {
       override val owner: ArMethod.Owner[context.type, DeclarationPayloadSpecifier] = methodOwner
 
       override lazy val signatureUnsubstituted: Comp[context.signatureContext.Signature[FunctionResultInfo, _ <: Nat]] =
-        sigCache(
+        sigCache.get(
           SourceSignatureCreator.fromParameters[FunctionResultInfo](context2)(
             env(context)(effectInfo, descriptor)
           )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType))
@@ -70,9 +71,9 @@ object SourceMethod {
 
 
       override lazy val payload: Comp[context.TMethodImplementation] =
-        implCache(
+        implCache.get(
           if(isAbstract)
-            context.abstractMethodImplementation.pure[Comp]
+            IO.succeed(context.abstractMethodImplementation)
           else
             stmt.body match {
               case Some(WithSource(parser.ExternExpr(specifier), location)) =>
@@ -89,7 +90,7 @@ object SourceMethod {
                 } yield context.createExprMethodImplementation(expr)
 
               case None =>
-                Compilation[Comp].forErrors(CompilationError.NonAbstractMethodNotImplemented(descriptor, CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                Compilation.forErrors(CompilationError.NonAbstractMethodNotImplemented(descriptor, CompilationMessageSource.SourceFile(env.fileSpec, location)))
             }
         )
 
@@ -100,8 +101,7 @@ object SourceMethod {
 
         override def createResult
         (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-        : context.Comp[FunctionResultInfo[context.type, context.typeSystem.type]] = {
-          import context._
+        : Comp[FunctionResultInfo[context.type, context.typeSystem.type]] = {
           ExpressionConverter.convertTypeExpression(context)(env)(returnTypeExpr)
             .map { t => FunctionResultInfo(context.typeSystem)(t) }
         }

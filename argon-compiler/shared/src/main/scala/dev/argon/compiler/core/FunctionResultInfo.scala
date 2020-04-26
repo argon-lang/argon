@@ -3,6 +3,8 @@ package dev.argon.compiler.core
 import dev.argon.compiler.types._
 import cats._
 import cats.implicits._
+import dev.argon.compiler.Comp
+import zio.IO
 
 sealed trait FunctionResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
   val typeSystem: TS
@@ -17,22 +19,21 @@ object FunctionResultInfo {
   }
 
   implicit val sigResConverterInstance: SignatureResultConverter[FunctionResultInfo] = new SignatureResultConverter[FunctionResultInfo] {
-    override def convertTypeSystem[F[_]: Monad]
+    override def convertTypeSystem
     (context: Context)
     (ts1: TypeSystem[context.type])
     (ts2: TypeSystem[context.type])
-    (converter: TypeSystemConverterEffect.Aux[context.type, ts1.type, ts2.type, F])
+    (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type])
     (result: FunctionResultInfo[context.type, ts1.type])
-    : F[FunctionResultInfo[context.type, ts2.type]] = for {
+    : Comp[FunctionResultInfo[context.type, ts2.type]] = for {
       returnType <- converter.convertTypeSystem(result.returnType)
     } yield FunctionResultInfo(ts2)(returnType)
 
     override def referencesParameter
     (signatureContext: SignatureContext)
     (refChecker: signatureContext.RefChecker)
-    (result: FunctionResultInfo[signatureContext.context.type, signatureContext.typeSystem.type]): signatureContext.typeSystem.TSComp[Boolean] = {
-      import signatureContext.typeSystem.{ TSComp, tscompCompilationInstance }
-      refChecker.checkWrapExpr(result.returnType).pure[TSComp]
+    (result: FunctionResultInfo[signatureContext.context.type, signatureContext.typeSystem.type]): Comp[Boolean] = {
+      IO.succeed(refChecker.checkWrapExpr(result.returnType))
     }
 
     override def substitute

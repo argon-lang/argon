@@ -1,5 +1,6 @@
 package dev.argon.compiler.core
 
+import dev.argon.compiler._
 import dev.argon.compiler.types._
 
 import scala.collection.immutable._
@@ -9,6 +10,8 @@ import cats.implicits._
 import dev.argon.compiler.CompilationMessageSource
 import dev.argon.util.FileID
 import shapeless.Nat
+import zio.IO
+import zio.interop.catz._
 
 abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
@@ -47,55 +50,47 @@ object ArClass {
 
   sealed trait ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
     val typeSystem: TS
-    def baseTypes: typeSystem.TSComp[typeSystem.BaseTypeInfoClass]
+    def baseTypes: Comp[typeSystem.BaseTypeInfoClass]
   }
 
   object ResultInfo {
-    def apply[TContext <: Context with Singleton](ts: TypeSystem[TContext])(bt: => ts.TSComp[ts.BaseTypeInfoClass]): ResultInfo[TContext, ts.type] = new ResultInfo[TContext, ts.type] {
+    def apply[TContext <: Context with Singleton](ts: TypeSystem[TContext])(bt: => Comp[ts.BaseTypeInfoClass]): ResultInfo[TContext, ts.type] = new ResultInfo[TContext, ts.type] {
       override val typeSystem: ts.type = ts
-      override lazy val baseTypes: typeSystem.TSComp[typeSystem.BaseTypeInfoClass] = bt
+      override lazy val baseTypes: Comp[typeSystem.BaseTypeInfoClass] = bt
     }
 
     implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
-      override def convertTypeSystem[F[_]: Monad]
+      override def convertTypeSystem
       (context: Context)
       (ts1: TypeSystem[context.type])
       (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverterEffect.Aux[context.type, ts1.type, ts2.type, F])
+      (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type])
       (result: ResultInfo[context.type, ts1.type])
-      : F[ResultInfo[context.type, ts2.type]] = {
-        import ts2.tscompCompilationInstance
-
-        ResultInfo(ts2)(
+      : Comp[ResultInfo[context.type, ts2.type]] =
+        IO.succeed(ResultInfo(ts2)(
           for {
-            baseTypes <- converter.convertEffect(result.baseTypes)
-            baseClass <- converter.conversionEffectToResultTS(baseTypes.baseClass.traverse(converter.convertClassType(_)))
-            baseTraits <- converter.conversionEffectToResultTS(baseTypes.baseTraits.traverse(converter.convertTraitType(_)))
+            baseTypes <- result.baseTypes
+            baseClass <- baseTypes.baseClass.traverse(converter.convertClassType(_))
+            baseTraits <- baseTypes.baseTraits.traverse(converter.convertTraitType(_))
           } yield ts2.BaseTypeInfoClass(baseClass, baseTraits)
-        ).pure[F]
-      }
+        ))
 
 
       override def referencesParameter
       (signatureContext: SignatureContext)
       (refChecker: signatureContext.RefChecker)
       (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
-      : signatureContext.typeSystem.TSComp[Boolean] = {
-        import signatureContext.typeSystem.tscompCompilationInstance
-
+      : Comp[Boolean] =
         result.baseTypes.map { baseTypes =>
           baseTypes.baseClass.exists(refChecker.checkArExpr) ||
             baseTypes.baseTraits.exists(refChecker.checkArExpr)
         }
-      }
 
       override def substitute
       (signatureContext: SignatureContext)
       (subst: signatureContext.Subst)
       (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
-      : ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] = {
-        import signatureContext.typeSystem.tscompCompilationInstance
-
+      : ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] =
         ResultInfo(signatureContext.typeSystem)(
           result.baseTypes.map { baseTypes =>
             signatureContext.typeSystem.BaseTypeInfoClass(
@@ -104,7 +99,6 @@ object ArClass {
             )
           }
         )
-      }
     }
 
   }

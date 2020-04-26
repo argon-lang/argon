@@ -4,11 +4,12 @@ import dev.argon.compiler._
 import cats._
 import cats.instances._
 import cats.data.NonEmptyList
-import dev.argon.compiler.backend.Backend.ContextWithComp
-import dev.argon.compiler.backend.{Backend, CompilationOutputText, ProjectLoader}
+import dev.argon.backend.{Backend, CompilationOutputText, ProjectLoader, ResourceAccess}
 import dev.argon.compiler.core.Context
+import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.stream.builder.Source
-import zio.{IO, ZIO}
+import zio.{IO, ZIO, ZManaged}
+import zio.interop.catz._
 import toml.Codecs._
 import shapeless.{Id => _, _}
 import dev.argon.util.ExtraTomlCodecs._
@@ -49,31 +50,20 @@ object JSBackend extends Backend {
   override def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Parse.Error, JSBackendOptions[Option, String]] =
     toml.Toml.parseAs[JSBackendOptions[Option, String]](table)
 
+  override def compile(input: CompilerInput[ResourceIndicator, JSBackendOptions[Id, ResourceIndicator]]): ZManaged[ResourceAccess, ErrorList, CompilationOutputText] = {
+    val context = new JSContext(input)
+    val emitter = new JSEmitter[context.type](context, input.backendOptions.inject)
 
-  override def compile[F[+_], I: Show, A]
-  (input: CompilerInput[I, JSBackendOptions[Id, I]])
-  (f: CompilationOutputText { val context: ContextWithComp[F, I] } => F[A])
-  (implicit compInstance: Compilation[F], resFactory: ResourceAccessFactory[ContextWithComp[F, I]])
-  : F[A] = {
-    val context = new JSContext[F, I](input)
-    val emitter = new JSEmitter[F, context.type](context, input.backendOptions.inject)
-    implicit val res = resFactory.create(context)
-
-    context.createModule { module =>
-      compInstance.flatMap(emitter.emitModule(module)) { jsModule =>
-        f(createOutput(context)(input.backendOptions.outputFile)(jsModule))
+    context.module[JSBackendLoadService].mapM { module =>
+      emitter.emitModule(module).map { jsModule =>
+        createOutput(input.backendOptions.outputFile)(jsModule)
       }
-    }
+    }.provideSomeLayer(JSBackendLoadService.uponResourceAccess)
   }
 
-  private def createOutput(context2: Context)(outputRes: context2.ResIndicator)(jsModule: JSModule)(implicit resAccess: ResourceAccess[context2.type]): CompilationOutputText { val context: context2.type } = new CompilationOutputText {
+  private def createOutput(outputRes: ResourceIndicator)(jsModule: JSModule): CompilationOutputText = new CompilationOutputText {
 
-    override val context: context2.type = context2
-    override implicit val resourceAccess: ResourceAccess[context.type] = resAccess
-
-    import context._
-
-    override def outputResource: ResIndicator = outputRes
+    override def outputResource: ResourceIndicator = outputRes
 
     override val textStream: Source[Comp, String, Unit] =
       JSAst.writeModule(jsModule)

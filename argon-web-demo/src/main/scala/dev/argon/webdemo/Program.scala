@@ -4,11 +4,14 @@ import java.io.{PrintWriter, StringWriter}
 
 import cats.Id
 import cats.data.NonEmptyList
+import dev.argon.backend.ResourceAccess
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.build.{BuildEnvironment, BuildProcess, InputFileInfo, Pipeline}
-import dev.argon.compiler.{CompilationError, CompilerOptions, IOCompilation}
+import dev.argon.compiler.loaders.ResourceIndicator
+import dev.argon.compiler.{CompilationError, CompilerOptions}
 import dev.argon.io.Path
 import dev.argon.io.fileio.FileIO
+import dev.argon.module.PathResourceIndicator
 import dev.argon.parser.SourceAST
 import dev.argon.stream.builder.{Source, ZStreamSource}
 import dev.argon.util.{FileID, FileSpec}
@@ -80,7 +83,7 @@ object Program extends App {
     } yield 0
   )
 
-  private def references = Vector(DummyFileSystem.argonCoreFileName)
+  private def references = Vector(PathResourceIndicator(DummyFileSystem.argonCoreFileName))
 
   type CIO[+A] = ZIO[BuildEnvironment, NonEmptyList[CompilationError], A]
 
@@ -96,44 +99,40 @@ object Program extends App {
       )
       .provideLayer(FileIO.memFSLayer)
 
-  private def compileCode(code: String): CIO[String] =
-    IOCompilation.compilationInstance[BuildEnvironment].flatMap { implicit ioComp =>
-      ZIO.access[FileIO] { env => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](env.get) }
-        .flatMap { implicit resFactory =>
+  private def compileCode(code: String): CIO[String] = {
+    val inputFiles: Source[CIO, InputFileInfo[CIO], Unit] =
+      ZStreamSource[BuildEnvironment, NonEmptyList[CompilationError], InputFileInfo[CIO]](ZStream(
+        InputFileInfo[CIO](FileSpec(FileID(0), "test.argon"), ZStreamSource(ZStream.fromIterable(code))),
+      ))
 
-          val inputFiles: Source[CIO, InputFileInfo[CIO], Unit] =
-            ZStreamSource[BuildEnvironment, NonEmptyList[CompilationError], InputFileInfo[CIO]](ZStream(
-              InputFileInfo[CIO](FileSpec(FileID(0), "test.argon"), ZStreamSource(ZStream.fromIterable(code))),
-            ))
-
-          BuildProcess.parseInput[CIO](inputFiles)
-            .foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
-            .flatMap {
-              case (parsedInput, _) =>
-                BuildProcess.compile[ZIO[BuildEnvironment, NonEmptyList[CompilationError], +*], Path, String](
-                  JSBackend
-                )(
-                  parsedInput,
-                  references,
-                  CompilerOptions[Id](
-                    moduleName = "Test"
-                  ),
-                  JSBackendOptions[Id, Path](
-                    outputFile = new Path("test.js"),
-                    extern = Map.empty,
-                    inject = JSInjectCode[Id](
-                      before = None,
-                      after = None,
-                    )
-                  ),
-                ) { output =>
-                  output.textStream
-                    .foldLeftM("") { (a, b) => IO.succeed(a + b) }
-                    .map { case (str, _) => str }
-                }
-            }
-        }
-    }
+    BuildProcess.parseInput(inputFiles)
+      .foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
+      .flatMap {
+        case (parsedInput, _) =>
+          BuildProcess.compile(
+            JSBackend
+          )(
+            parsedInput,
+            references,
+            CompilerOptions[Id](
+              moduleName = "Test"
+            ),
+            JSBackendOptions[Id, ResourceIndicator](
+              outputFile = PathResourceIndicator(new Path("test.js")),
+              extern = Map.empty,
+              inject = JSInjectCode[Id](
+                before = None,
+                after = None,
+              )
+            ),
+          ).use { output =>
+            output.textStream
+              .foldLeftM("") { (a, b) => IO.succeed(a + b) }
+              .map { case (str, _) => str }
+          }
+          .provideSomeLayer[BuildEnvironment](ResourceAccess.forFileIO)
+      }
+  }
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   private def executeJS(onOutput: String => UIO[Unit])(compiledCode: String): Task[Unit] =

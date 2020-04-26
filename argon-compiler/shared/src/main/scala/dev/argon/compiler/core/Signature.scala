@@ -7,12 +7,14 @@ import cats.evidence.===
 import cats.implicits._
 import shapeless.ops.nat.{LT, Pred, ToInt}
 import shapeless.{Nat, Sized, Succ, _0}
+import zio.IO
+import zio.interop.catz._
 
 trait SignatureContext
 {
   val context: Context
   val typeSystem: TypeSystem[context.type]
-  import typeSystem.{ Parameter, tscompCompilationInstance }
+  import typeSystem.Parameter
 
   trait SignatureVisitor[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], Len <: Nat, A] {
     def visitParameters[RestLen <: Nat](sigParams: SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): A
@@ -27,14 +29,14 @@ trait SignatureContext
     def unsubstitutedParameters: Sized[Vector[Parameter], Len]
     def unsubstitutedResult: TResult[context.type, typeSystem.type]
 
-    def convertTypeSystem[F[_]: Monad](newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverterEffect.Aux[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult, Len]]
+    def convertTypeSystem(newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter.Aux[context.type, typeSystem.type, newContext.typeSystem.type]): Comp[newContext.Signature[TResult, Len]]
 
-    def referencesParameter(parameter: Parameter): typeSystem.TSComp[Boolean]
+    def referencesParameter(parameter: Parameter): Comp[Boolean]
     def substitute(parameter: Parameter)(replacement: typeSystem.WrapExpr): Signature[TResult, Len]
 
-    final def substituteTypeArguments(parameters: Vector[Parameter])(replacements: Vector[typeSystem.TypeArgument]): typeSystem.TSComp[Signature[TResult, Len]] = {
+    final def substituteTypeArguments(parameters: Vector[Parameter])(replacements: Vector[typeSystem.TypeArgument]): Comp[Signature[TResult, Len]] = {
 
-      def handleNonReplaceableParam(sig: Signature[TResult, Len])(param: typeSystem.Parameter): typeSystem.TSComp[Signature[TResult, Len]] =
+      def handleNonReplaceableParam(sig: Signature[TResult, Len])(param: typeSystem.Parameter): Comp[Signature[TResult, Len]] =
         sig.referencesParameter(param).map {
           case false => sig
           case true => ???
@@ -42,7 +44,7 @@ trait SignatureContext
 
       parameters.zip(replacements).foldLeftM(this) {
         case (sig, (param, typeSystem.TypeArgument.Expr(arg))) =>
-          sig.substitute(param)(arg).pure[typeSystem.TSComp]
+          IO.succeed(sig.substitute(param)(arg))
 
         case (sig, (param, typeSystem.TypeArgument.Wildcard(_))) =>
           handleNonReplaceableParam(sig)(param)
@@ -74,14 +76,14 @@ trait SignatureContext
     def next(expr: typeSystem.WrapExpr): Signature[TResult, RestLen] =
       nextUnsubstituted.substitute(parameter)(expr)
 
-    override def convertTypeSystem[F[_]: Monad](newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverterEffect.Aux[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult, Len]] =
+    override def convertTypeSystem(newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter.Aux[context.type, typeSystem.type, newContext.typeSystem.type]): Comp[newContext.Signature[TResult, Len]] =
       for {
         newParam <- converter.convertParameterTypeSystem(parameter)
         newNext <- nextUnsubstituted.convertTypeSystem(newContext)(converter)
       } yield newContext.SignatureParameters(newParam, newNext)
 
-    override def referencesParameter(parameter: typeSystem.Parameter): typeSystem.TSComp[Boolean] =
-      new RefChecker(parameter).checkVariable(this.parameter.paramVar).pure[typeSystem.TSComp]
+    override def referencesParameter(parameter: typeSystem.Parameter): Comp[Boolean] =
+      new RefChecker(parameter).checkVariable(this.parameter.paramVar).pure[Comp]
 
     override def substitute(parameter: typeSystem.Parameter)(replacement: typeSystem.WrapExpr): Signature[TResult, Len] =
       SignatureParameters(
@@ -111,12 +113,12 @@ trait SignatureContext
 
     override def unsubstitutedResult: TResult[context.type, typeSystem.type] = result
 
-    override def convertTypeSystem[F[_]: Monad](newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverterEffect.Aux[context.type, typeSystem.type, newContext.typeSystem.type, F]): F[newContext.Signature[TResult, _0]] =
+    override def convertTypeSystem(newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter.Aux[context.type, typeSystem.type, newContext.typeSystem.type]): Comp[newContext.Signature[TResult, _0]] =
       for {
         newResult <- implicitly[SignatureResultConverter[TResult]].convertTypeSystem(context)(typeSystem)(newContext.typeSystem)(converter)(result)
       } yield newContext.SignatureResult(newResult)
 
-    override def referencesParameter(parameter: typeSystem.Parameter): typeSystem.TSComp[Boolean] =
+    override def referencesParameter(parameter: typeSystem.Parameter): Comp[Boolean] =
       implicitly[SignatureResultConverter[TResult]].referencesParameter(SignatureContext.this)(new RefChecker(parameter))(result)
 
     override def substitute(parameter: typeSystem.Parameter)(replacement: typeSystem.WrapExpr): Signature[TResult, _0] =

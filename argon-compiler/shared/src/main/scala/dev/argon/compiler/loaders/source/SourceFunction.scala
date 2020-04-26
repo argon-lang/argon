@@ -57,7 +57,7 @@ private[compiler] object SourceFunction {
 
         override def createResult
         (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-        : context.Comp[FunctionResultInfo[context.type, context.typeSystem.type]] = {
+        : Comp[FunctionResultInfo[context.type, context.typeSystem.type]] = {
           import context._
           ExpressionConverter.convertTypeExpression(context)(env)(returnTypeExpr)
             .map { t => FunctionResultInfo(context.typeSystem)(t) }

@@ -6,9 +6,10 @@ import scala.collection.immutable._
 import cats._
 import cats.evidence.Is
 import cats.implicits._
-import dev.argon.compiler.CompilationMessageSource
+import dev.argon.compiler.{Comp, CompilationMessageSource}
 import dev.argon.util.FileID
 import shapeless.Nat
+import zio.IO
 
 
 trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
@@ -45,13 +46,13 @@ object DataConstructor {
 
     implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
 
-      override def convertTypeSystem[F[_]: Monad]
+      override def convertTypeSystem
       (context: Context)
       (ts1: TypeSystem[context.type])
       (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverterEffect.Aux[context.type, ts1.type, ts2.type, F])
+      (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type])
       (result: ResultInfo[context.type, ts1.type])
-      : F[ResultInfo[context.type, ts2.type]] = for {
+      : Comp[ResultInfo[context.type, ts2.type]] = for {
         instanceType <- converter.convertTraitType(result.instanceType)
       } yield ResultInfo(ts2)(instanceType)
 
@@ -59,10 +60,8 @@ object DataConstructor {
       (signatureContext: SignatureContext)
       (refChecker: signatureContext.RefChecker)
       (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
-      : signatureContext.typeSystem.TSComp[Boolean] = {
-        import signatureContext.typeSystem.{ TSComp, tscompCompilationInstance }
-        refChecker.checkArExpr(result.instanceType).pure[TSComp]
-      }
+      : Comp[Boolean] =
+        IO.succeed(refChecker.checkArExpr(result.instanceType))
 
 
       override def substitute

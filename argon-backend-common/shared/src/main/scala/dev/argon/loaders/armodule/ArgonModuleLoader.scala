@@ -1,10 +1,10 @@
-package dev.argon.compiler.loaders.armodule
+package dev.argon.loaders.armodule
 
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup._
-import dev.argon.compiler.loaders.{ModuleLoader, NamespaceBuilder, StandardTypeLoaders}
+import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, ModuleMetadata, NamespaceBuilder, ResourceIndicator, StandardTypeLoaders}
 import dev.argon.compiler.types._
 import dev.argon.{module => ArgonModule}
 import dev.argon.util._
@@ -12,88 +12,81 @@ import cats._
 import cats.evidence.{===, Is}
 import cats.data.NonEmptyList
 import cats.implicits._
+import dev.argon.backend.ResourceAccess
+import dev.argon.module.Metadata
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import shapeless.ops.nat.{LT, Pred, ToInt}
 import shapeless.{Nat, Sized, Succ, _0}
 import shapeless.syntax.sized._
+import zio.{IO, Managed, ZIO, ZManaged}
+import zio.interop.catz._
 
 import scala.collection.immutable.{Map, Vector}
 
 object ArgonModuleLoader {
 
-  def apply(context: Context)(referencePayloadLoader: PayloadLoader[context.type, ReferencePayloadSpecifier]): ModuleLoader[context.type] = new ModuleLoader[context.type] {
+  def apply[TContext <: Context](res: ResourceAccess.Service)(implicit referencePayloadLoader: PayloadLoader[TContext, ReferencePayloadSpecifier]): ModuleLoad.Service[TContext] = new ModuleLoad.Service[TContext] {
 
-    import context._, typeSystem.{ context => _, _ }, signatureContext.{ context => _, typeSystem => _, _ }
-    
-    final case class ResAndMetadata[TRes <: ResourceAccess[context.type] with Singleton](zip: TRes#ZipReader, metadata: ArgonModule.Metadata)
-
-    type ModuleData[TRes <: ResourceAccess[context.type] with Singleton] = ResAndMetadata[TRes]
-
-
-    override def loadResource[TRes <: ResourceAccess[context.type] with Singleton, A](res: TRes)(id: ResIndicator)(f: Option[ResAndMetadata[res.type]] => Comp[A]): Comp[A] =
-      res.getExtension(id).flatMap {
+    override def loadResource(id: ResourceIndicator): Managed[ErrorList, Option[ModuleMetadata[TContext]]] =
+      id.extension match {
         case "armodule" =>
-          res.getZipReader(id).use { zip =>
+          res.getZipReader(id).mapM { zip =>
             val entry = res.zipEntryStream(zip, ModulePaths.metadata)
             res.deserializeProtocolBuffer(ArgonModule.Metadata)(entry)
-              .flatMap { metadata =>
-                f(Some(ResAndMetadata(zip, metadata)))
+              .map { metadata =>
+                Some(ArModuleMetadata(zip, metadata))
               }
           }
 
-        case _ => f(None)
+        case _ => ZManaged.succeed(None)
       }
 
-    override def dataDescriptor[TRes <: ResourceAccess[context.type] with Singleton](data: ResAndMetadata[TRes]): ModuleDescriptor =
-      ModuleDescriptor(data.metadata.name)
+    private final case class ArModuleMetadata(zip: res.ZipReader, metadata: Metadata) extends ModuleMetadata[TContext] {
+      override val descriptor: ModuleDescriptor = ModuleDescriptor(metadata.name)
+      override val referencedModules: Vector[ModuleDescriptor] =
+        metadata.references.map {
+          case ArgonModule.ModuleReference(name, _) => ModuleDescriptor(name)
+        }
 
-    override def dataReferencedModules[TRes <: ResourceAccess[context.type] with Singleton](data: ResAndMetadata[TRes]): Vector[ModuleDescriptor] =
-      data.metadata.references.map {
-        case ArgonModule.ModuleReference(name, _) => ModuleDescriptor(name)
-      }
-
-
-    override def loadModuleReference[TRes <: ResourceAccess[context.type] with Singleton]
-    (res: TRes)
-    (data: ResAndMetadata[res.type])
-    (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
-    : Comp[ArModule[context.type, ReferencePayloadSpecifier]] =
-      loadModule[ReferencePayloadSpecifier, TRes](res)(data.zip)(data.metadata)(referencedModules)(referencePayloadLoader)
-
-
-    private trait ModuleCreator[TPayloadSpec[_, _]] {
-      val module: Comp[ArModule[context.type, TPayloadSpec]]
+      override def loadReference(context: TContext)(referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]]): Comp[ArModule[context.type, ReferencePayloadSpecifier]] =
+        loadModule[ReferencePayloadSpecifier](context)(zip)(metadata)(referencedModules)(referencePayloadLoader)
     }
 
-    private def loadModule[TPayloadSpec[_, _], TRes <: ResourceAccess[context.type] with Singleton]
-    (res: TRes)
+    private def loadModule[TPayloadSpec[_, _]]
+    (context: TContext)
     (zipFile: res.ZipReader)
     (metadata: ArgonModule.Metadata)
     (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
-    (payloadLoader: PayloadLoader[context.type, TPayloadSpec])
+    (payloadLoader: PayloadLoader[TContext, TPayloadSpec])
     : Comp[ArModule[context.type, TPayloadSpec]] = {
 
       val context2: context.type = context
+      import context.{typeSystem, signatureContext}, typeSystem.{ context => _, _ }, signatureContext.{ context => _, typeSystem => _, _ }
 
       val currentModuleDescriptor = ModuleDescriptor(metadata.name)
 
+
+      trait ModuleCreator {
+        val module: Comp[ArModule[context.type, TPayloadSpec]]
+      }
+
       for {
 
-        _ <- Compilation[Comp].require(
+        _ <- Compilation.require(
           metadata.formatVersion > 0 && metadata.formatVersion <= ModuleFormatVersion.currentVersion
         )(
           CompilationError.UnsupportedModuleFormatVersion(metadata.formatVersion, CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
         )
 
-        moduleCache <- Compilation[Comp].createCache[ArModule[context.type, TPayloadSpec]]
-        traitCache <- Compilation[Comp].createMemo[Int, TraitLoadResult[context.type, TPayloadSpec]]
-        classCache <- Compilation[Comp].createMemo[Int, ClassLoadResult[context.type, TPayloadSpec]]
-        dataCtorCache <- Compilation[Comp].createMemo[Int, DataCtorLoadResult[context.type, TPayloadSpec]]
-        functionCache <- Compilation[Comp].createMemo[Int, FunctionLoadResult[context.type, TPayloadSpec]]
-        methodCache <- Compilation[Comp].createMemo[Int, MethodLoadResult[context.type, TPayloadSpec]]
-        classCtorCache <- Compilation[Comp].createMemo[Int, ClassCtorLoadResult[context.type, TPayloadSpec]]
+        moduleCache <- ValueCache.make[ErrorList, ArModule[context.type, TPayloadSpec]]
+        traitCache <- MemoCacheStore.make[ErrorList, Int, TraitLoadResult[context.type, TPayloadSpec]]
+        classCache <- MemoCacheStore.make[ErrorList, Int, ClassLoadResult[context.type, TPayloadSpec]]
+        dataCtorCache <- MemoCacheStore.make[ErrorList, Int, DataCtorLoadResult[context.type, TPayloadSpec]]
+        functionCache <- MemoCacheStore.make[ErrorList, Int, FunctionLoadResult[context.type, TPayloadSpec]]
+        methodCache <- MemoCacheStore.make[ErrorList, Int, MethodLoadResult[context.type, TPayloadSpec]]
+        classCtorCache <- MemoCacheStore.make[ErrorList, Int, ClassCtorLoadResult[context.type, TPayloadSpec]]
 
-        module <- new ModuleCreator[TPayloadSpec] {
+        module <- new ModuleCreator {
 
 
           private def parseNamespacePath(ns: ArgonModule.Namespace): NamespacePath =
@@ -278,7 +271,7 @@ object ArgonModuleLoader {
             TRefResult,
             TDefResult,
           ](
-           cache: (Int => Comp[ModuleObjectLoadResult[TDefResult, TDefResult { val descriptor: TGlobalDescriptor }, TRefResult]]) => Int => Comp[ModuleObjectLoadResult[TDefResult, TDefResult { val descriptor: TGlobalDescriptor }, TRefResult]]
+           cache: MemoCacheStore[ErrorList, Int, ModuleObjectLoadResult[TDefResult, TDefResult { val descriptor: TGlobalDescriptor }, TRefResult]]
           )(
             moduleObjectType: CompilationError.ModuleObjectType,
           )(
@@ -295,8 +288,8 @@ object ArgonModuleLoader {
           )(
             referenceHandler: ArModule[context.type, ReferencePayloadSpecifier] => TResultDescriptor => Comp[Option[TRefResult]],
             definitionHandler: ObjectDefinitionLoader[TDef, TResultDescriptor, TDefResult],
-          ): Int => Comp[ModuleObjectLoadResult[TDefResult, TDefResult { val descriptor: TGlobalDescriptor }, TRefResult]] =
-            cache { id =>
+          ): MemoCache[Any, ErrorList, Int, ModuleObjectLoadResult[TDefResult, TDefResult { val descriptor: TGlobalDescriptor }, TRefResult]] =
+            cache.usingCreate { id =>
 
               val zip = zipFile
 
@@ -309,20 +302,20 @@ object ArgonModuleLoader {
                         parseDescriptor(moduleRef.descriptor)(refDescriptorLens(refValue)) match {
                           case Some(descriptor) =>
                             referenceHandler(moduleRef)(descriptor.merge).flatMap {
-                              case Some(refResult) => ModuleObjectReference(refResult).pure[Comp]
-                              case None => Compilation[Comp].forErrors(CompilationError.ModuleObjectNotFound(
+                              case Some(refResult) => IO.succeed(ModuleObjectReference(refResult))
+                              case None => Compilation.forErrors(CompilationError.ModuleObjectNotFound(
                                 moduleObjectType, id, CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
                               ))
                             }
 
                           case None =>
-                            Compilation[Comp].forErrors(CompilationError.ModuleObjectInvalidDescriptor(
+                            Compilation.forErrors(CompilationError.ModuleObjectInvalidDescriptor(
                               moduleObjectType, id, CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
                             ))
                         }
 
                       case _ =>
-                        Compilation[Comp].forErrors(CompilationError.ModuleObjectModuleNotLoaded(
+                        Compilation.forErrors(CompilationError.ModuleObjectModuleNotLoaded(
                           moduleObjectType, id, CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
                         ))
                     }
@@ -340,7 +333,7 @@ object ArgonModuleLoader {
                         definitionHandler(id, defValue, descriptor).map(ModuleObjectGlobalDefinition.apply)
 
                       case None =>
-                        Compilation[Comp].forErrors(CompilationError.ModuleObjectInvalidDescriptor(
+                        Compilation.forErrors(CompilationError.ModuleObjectInvalidDescriptor(
                           moduleObjectType, id, CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
                         ))
                     }
@@ -407,7 +400,7 @@ object ArgonModuleLoader {
 
                     override val isSealed: Boolean = definition.isSealed.getOrElse(false)
 
-                    override lazy val signature: context.Comp[Signature[ArTrait.ResultInfo, _ <: Nat]] =
+                    override lazy val signature: Comp[Signature[ArTrait.ResultInfo, _ <: Nat]] =
                       definition.signature match {
                         case ArgonModule.TraitSignature(parameters, baseTraits, _) =>
                           for {
@@ -424,18 +417,16 @@ object ArgonModuleLoader {
                           }
                       }
 
-                    override lazy val methods: context.Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =
+                    override lazy val methods: Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =
                       getMethodMembers(definition.methods)
 
-                    override val staticMethods: context.Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =
+                    override val staticMethods: Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =
                       getMethodMembers(definition.staticMethods)
 
                     override lazy val payload: TPayloadSpec[Unit, context.TTraitMetadata] = payloadLoader.createTraitPayload(context)
                   }.pure[Comp]
               }
-            )(
-              id
-            )
+            ).get(id)
 
           private def lookupClass(module: ArModule[context.type, ReferencePayloadSpecifier]): ClassDescriptor => Comp[Option[ArClass[context.type, ReferencePayloadSpecifier]]] = {
             case ClassDescriptor.InNamespace(_, _, namespace, name) =>
@@ -483,7 +474,7 @@ object ArgonModuleLoader {
                     override val isOpen: Boolean = definition.isOpen.getOrElse(false)
                     override val isAbstract: Boolean = definition.isAbstract.getOrElse(false)
 
-                    override lazy val signature: context.Comp[Signature[ArClass.ResultInfo, _ <: Nat]] =
+                    override lazy val signature: Comp[Signature[ArClass.ResultInfo, _ <: Nat]] =
                       definition.signature match {
                         case ArgonModule.ClassSignature(parameters, baseClass, baseTraits, _) =>
                           for {
@@ -501,7 +492,7 @@ object ArgonModuleLoader {
                           }
                       }
 
-                    override val fields: context.Comp[Vector[FieldVariable]] =
+                    override val fields: Comp[Vector[FieldVariable]] =
                       definition.fields.traverse { field =>
                         for {
                           fieldType <- resolveType(field.fieldType)
@@ -514,15 +505,15 @@ object ArgonModuleLoader {
                         )
                       }
 
-                    override lazy val methods: context.Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =
+                    override lazy val methods: Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =
                       getMethodMembers(definition.methods)
 
-                    override lazy val staticMethods: context.Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =
+                    override lazy val staticMethods: Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =
                       getMethodMembers(definition.staticMethods)
 
                     override lazy val payload: TPayloadSpec[Unit, context.TClassMetadata] = payloadLoader.createClassPayload(context)
 
-                    override val classConstructors: context.Comp[Vector[ClassConstructorBinding[context.type, TPayloadSpec]]] =
+                    override val classConstructors: Comp[Vector[ClassConstructorBinding[context.type, TPayloadSpec]]] =
                       definition.constructors
                         .traverse { classCtor =>
                           getClassCtor(classCtor.id).map { (_, classCtor.accessModifier) }
@@ -536,9 +527,7 @@ object ArgonModuleLoader {
 
                   }.pure[Comp]
               }
-            )(
-              id
-            )
+            ).get(id)
 
           private def getDataCtor(id: Int): Comp[DataCtorLoadResult[context.type, TPayloadSpec]] =
             handleModuleObjectLoading
@@ -575,9 +564,7 @@ object ArgonModuleLoader {
               definitionHandler = new ObjectDefinitionLoader[ArgonModule.DataConstructorDefinition, DataConstructorDescriptor, DataConstructor[context.type, TPayloadSpec]] {
                 override def apply(id: Int, definition: ArgonModule.DataConstructorDefinition, desc: DataConstructorDescriptor): Comp[DataConstructor[context.type, TPayloadSpec] { val descriptor: desc.type }] = ???
               }
-            )(
-              id
-            )
+            ).get(id)
 
           private def getFunction(id: Int): Comp[FunctionLoadResult[context.type, TPayloadSpec]] =
             handleModuleObjectLoading
@@ -620,7 +607,7 @@ object ArgonModuleLoader {
                     override val effectInfo: EffectInfo = EffectInfo(
                       isPure = definition.effects.isPure,
                     )
-                    override val signature: context.Comp[Signature[FunctionResultInfo, _ <: Nat]] =
+                    override val signature: Comp[Signature[FunctionResultInfo, _ <: Nat]] =
                       definition.signature match {
                         case ArgonModule.FunctionSignature(parameters, returnType, _) =>
                           for {
@@ -637,13 +624,11 @@ object ArgonModuleLoader {
                           }
                       }
 
-                    override val payload: TPayloadSpec[context.Comp[context.TFunctionImplementation], context.TFunctionMetadata] =
+                    override val payload: TPayloadSpec[Comp[context.TFunctionImplementation], context.TFunctionMetadata] =
                       payloadLoader.createFunctionPayload(context)
                   }.pure[Comp]
               }
-            )(
-              id
-            )
+            ).get(id)
 
           private lazy val getMethod: Int => Comp[MethodLoadResult[context.type, TPayloadSpec]] =
             handleModuleObjectLoading
@@ -748,7 +733,7 @@ object ArgonModuleLoader {
                       case ArgonModule.MethodDefinition.MethodOwner.OwnerTraitId(ownerId) => findTraitDef(ownerId).map(ArMethod.TraitOwner.apply)
                       case ArgonModule.MethodDefinition.MethodOwner.OwnerTraitObjectId(ownerId) => findTraitDef(ownerId).map(ArMethod.TraitObjectOwner.apply)
                       case ArgonModule.MethodDefinition.MethodOwner.OwnerConstructorId(ownerId) => findDataConstructorDef(ownerId).map(ArMethod.DataCtorOwner.apply)
-                      case ArgonModule.MethodDefinition.MethodOwner.Empty => Compilation[Comp].forErrors(
+                      case ArgonModule.MethodDefinition.MethodOwner.Empty => Compilation.forErrors(
                         CompilationError.MethodMustHaveOwner(
                           CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
                         )
@@ -787,11 +772,11 @@ object ArgonModuleLoader {
                           }
                       }
 
-                    override val payload: TPayloadSpec[context.Comp[context.TMethodImplementation], context.TMethodMetadata] =
+                    override val payload: TPayloadSpec[Comp[context.TMethodImplementation], context.TMethodMetadata] =
                       payloadLoader.createMethodPayload(context)
                   }
               }
-            )
+            ).toFunction
 
           private lazy val getClassCtor: Int => Comp[ClassCtorLoadResult[context.type, TPayloadSpec]] =
             handleModuleObjectLoading
@@ -863,12 +848,12 @@ object ArgonModuleLoader {
                             }
                         }
 
-                      override lazy val payload: TPayloadSpec[Comp[TClassConstructorImplementation], context.TClassConstructorMetadata] =
+                      override lazy val payload: TPayloadSpec[Comp[context.TClassConstructorImplementation], context.TClassConstructorMetadata] =
                         payloadLoader.createClassConstructorPayload(context)
 
                     }
                 }
-              )
+              ).toFunction
 
 
           private def convertNamespaceElement[TElem]
@@ -888,7 +873,7 @@ object ArgonModuleLoader {
                     ModuleElement(nsPath, createBinding(name, accessModifier, elem)).pure[Comp]
 
                   case ModuleObjectDefinition(_) | ModuleObjectReference(_) =>
-                    Compilation[Comp].forErrors(CompilationError.InvalidGlobal(CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
+                    Compilation.forErrors(CompilationError.InvalidGlobal(CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
                 }
             }
 
@@ -908,7 +893,7 @@ object ArgonModuleLoader {
                   convertNamespaceElement(id, accessModifier, descriptor)(getFunction(_), GlobalBinding.GlobalFunction.apply)
 
                 case ArgonModule.GlobalDeclaration(id, _, _, _) =>
-                  Compilation[Comp].forErrors(CompilationError.InvalidGlobal(CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
+                  Compilation.forErrors(CompilationError.InvalidGlobal(CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
               }
               .map(NamespaceBuilder.createNamespace)
 
@@ -926,7 +911,7 @@ object ArgonModuleLoader {
               case ModuleObjectDefinition(arTrait) => arTrait.pure[Comp]
               case ModuleObjectGlobalDefinition(arTrait) => arTrait.pure[Comp]
               case ModuleObjectReference(_) =>
-                implicitly[Compilation[Comp]].forErrors(
+                Compilation.forErrors(
                   CompilationError.ModuleObjectMustBeDefinition(CompilationError.ModuleObjectTrait, traitId, CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
                 )
             }
@@ -945,7 +930,7 @@ object ArgonModuleLoader {
               case ModuleObjectGlobalDefinition(arClass) => arClass.pure[Comp]
 
               case ModuleObjectReference(_) =>
-                implicitly[Compilation[Comp]].forErrors(
+                Compilation.forErrors(
                   CompilationError.ModuleObjectMustBeDefinition(CompilationError.ModuleObjectClass, classId, CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
                 )
             }
@@ -957,7 +942,7 @@ object ArgonModuleLoader {
               case ModuleObjectGlobalDefinition(ctor) => ctor.pure[Comp]
 
               case ModuleObjectReference(_) =>
-                implicitly[Compilation[Comp]].forErrors(
+                Compilation.forErrors(
                   CompilationError.ModuleObjectMustBeDefinition(CompilationError.ModuleObjectDataConstructor, ctorId, CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
                 )
             }
@@ -1075,13 +1060,13 @@ object ArgonModuleLoader {
           }
 
           override lazy val module: Comp[ArModule[context.type, TPayloadSpec]] =
-            moduleCache(
+            moduleCache.get(
               for {
-                globalNamespaceCache <- Compilation[Comp].createCache[Namespace[context.type, TPayloadSpec]]
+                globalNamespaceCache <- ValueCache.make[ErrorList, Namespace[context.type, TPayloadSpec]]
               } yield new ArModule[context.type, TPayloadSpec] {
                 override val context: context2.type = context2
                 override val descriptor: ModuleDescriptor = currentModuleDescriptor
-                override lazy val globalNamespace: context.Comp[Namespace[context.type, TPayloadSpec]] = globalNamespaceCache(globalNamespaceComp)
+                override lazy val globalNamespace: Comp[Namespace[context.type, TPayloadSpec]] = globalNamespaceCache.get(globalNamespaceComp)
                 override val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]] =
                   refModuleMap.values.toVector.collect {
                     case ModuleReference(moduleRef) => moduleRef
@@ -1099,14 +1084,14 @@ object ArgonModuleLoader {
 
 
 
-  trait PayloadLoader[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+  trait PayloadLoader[TContext <: Context, TPayloadSpec[_, _]] {
 
     def createClassPayload(context: TContext): TPayloadSpec[Unit, context.TClassMetadata]
     def createTraitPayload(context: TContext): TPayloadSpec[Unit, context.TTraitMetadata]
-    def createDataConstructorPayload(context: TContext): TPayloadSpec[context.Comp[context.TDataConstructorImplementation], context.TDataConstructorMetadata]
-    def createFunctionPayload(context: TContext): TPayloadSpec[context.Comp[context.TFunctionImplementation], context.TFunctionMetadata]
-    def createMethodPayload(context: TContext): TPayloadSpec[context.Comp[context.TMethodImplementation], context.TMethodMetadata]
-    def createClassConstructorPayload(context: TContext): TPayloadSpec[context.Comp[context.TClassConstructorImplementation], context.TClassConstructorMetadata]
+    def createDataConstructorPayload(context: TContext): TPayloadSpec[Comp[context.TDataConstructorImplementation], context.TDataConstructorMetadata]
+    def createFunctionPayload(context: TContext): TPayloadSpec[Comp[context.TFunctionImplementation], context.TFunctionMetadata]
+    def createMethodPayload(context: TContext): TPayloadSpec[Comp[context.TMethodImplementation], context.TMethodMetadata]
+    def createClassConstructorPayload(context: TContext): TPayloadSpec[Comp[context.TClassConstructorImplementation], context.TClassConstructorMetadata]
 
   }
 

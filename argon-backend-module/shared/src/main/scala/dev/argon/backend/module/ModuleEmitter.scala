@@ -9,7 +9,7 @@ import cats._
 import cats.data._
 import cats.evidence.===
 import cats.implicits._
-import dev.argon.compiler.loaders.armodule.{ModuleFormatVersion, ModulePaths}
+import dev.argon.loaders.armodule.{ModuleFormatVersion, ModulePaths}
 import dev.argon.compiler.types.{ParameterStyle, TypeSystem}
 import dev.argon.util.FileID
 import dev.argon.module
@@ -19,10 +19,11 @@ import shapeless._
 import dev.argon.util.AnyExtensions._
 import shapeless.ops.nat.{LT, Pred}
 import zio.{IO, ZIO, stream => zstream}
+import zio.interop.catz._
 
-final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Singleton](val context: TContext) {
+final class ModuleEmitter[TContext <: ModuleContext with Singleton](val context: TContext) {
 
-  import context._
+  import context.typeSystem
   import context.signatureContext.{ Signature, SignatureResult, SignatureParameters, SignatureVisitor }
 
   type StreamElem = (String, GeneratedMessage)
@@ -71,11 +72,11 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
     )
 
     type EmitF[F[_], A] = StateT[F, ModuleIds, A]
-    type Emit[A] = EmitF[TComp, A]
+    type Emit[A] = EmitF[Comp, A]
 
-    def emitComp[A](comp: TComp[A]): Emit[A] = StateT.liftF[TComp, ModuleIds, A](comp)
+    def emitComp[A](comp: Comp[A]): Emit[A] = StateT.liftF[Comp, ModuleIds, A](comp)
 
-    implicit val fromCompRefl: TComp ~> TComp = arrow.FunctionK.id
+    implicit val fromCompRefl: Comp ~> Comp = arrow.FunctionK.id
 
     def processModule[G[_]: Monad](armodule: ArModule[context.type, DeclarationPayloadSpecifier])(sink: Sink[G, StreamElem])(implicit genEffect: GenEffect[Emit, G]): G[Unit] = {
 
@@ -198,7 +199,7 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
       (convertDescriptor: (ArModule[context.type, DeclarationPayloadSpecifier], D1) => Emit[D2])
       (createRef: (Int, D2, ID) => M)
       : ModuleRefs => G[(ModuleRefs, Boolean)] = moduleRefs =>
-        genEffect.liftF(StateT.get[TComp, ModuleIds]).flatMap { moduleIds =>
+        genEffect.liftF(StateT.get[Comp, ModuleIds]).flatMap { moduleIds =>
           refIds(moduleIds).toVector.foldLeftM((moduleRefs, false)) {
             case ((moduleRefs, hasEmitted), (desc, id)) =>
               val path = createPath(id)
@@ -231,7 +232,7 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
             emitRefsSimple(_.functionRefIds)(ModulePaths.funcRef)(convertFuncDescriptor)(module.FunctionReference.apply),
           )
 
-          moduleIds <- genEffect.liftF(StateT.get[TComp, ModuleIds])
+          moduleIds <- genEffect.liftF(StateT.get[Comp, ModuleIds])
           _ <- sink.consume(ModulePaths.metadata -> module.Metadata(
             formatVersion = ModuleFormatVersion.currentVersion,
             name = armodule.descriptor.name,
@@ -286,10 +287,10 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
         }
       }
 
-    def getObjIdInt[O, D](descriptor: D)(nextId: Lens[O, Int], idMap: Lens[O, Map[D, Int]]): StateT[TComp, O, Int] =
-      getObjId(descriptor)(identity)(nextId, idMap)((identity[Int] _).pure[StateT[TComp, O, ?]])
+    def getObjIdInt[O, D](descriptor: D)(nextId: Lens[O, Int], idMap: Lens[O, Map[D, Int]]): StateT[Comp, O, Int] =
+      getObjId(descriptor)(identity)(nextId, idMap)((identity[Int] _).pure[StateT[Comp, O, ?]])
 
-    def getModuleId(descriptor: ModuleDescriptor): StateT[TComp, ModuleRefs, Int] =
+    def getModuleId(descriptor: ModuleDescriptor): StateT[Comp, ModuleRefs, Int] =
       getObjIdInt(descriptor)(lens[ModuleRefs].nextModuleId, lens[ModuleRefs].moduleRefIds)
 
     def getTraitId(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: TraitDescriptor): Emit[Int] =
@@ -554,7 +555,7 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
         staticMethods = staticMethods,
       )
 
-    def createMethodMembers(armodule: ArModule[context.type, DeclarationPayloadSpecifier], methods: context.Comp[Vector[MethodBinding[context.type, DeclarationPayloadSpecifier]]]): Emit[Vector[module.MethodMember]] =
+    def createMethodMembers(armodule: ArModule[context.type, DeclarationPayloadSpecifier], methods: Comp[Vector[MethodBinding[context.type, DeclarationPayloadSpecifier]]]): Emit[Vector[module.MethodMember]] =
       emitComp(methods).flatMap {
         _.traverse { method =>
           for {
@@ -720,15 +721,15 @@ final class ModuleEmitter[TComp[+_], TContext <: ModuleContext[TComp, _] with Si
 
   }
 
-  def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): Source[TComp, StreamElem, Unit] =
-    new Source[TComp, StreamElem, Unit] {
+  def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): Source[Comp, StreamElem, Unit] =
+    new Source[Comp, StreamElem, Unit] {
 
       import Implementation.{processModule, Emit, emitComp, ModuleIds}
 
 
-      override protected val monadF: Monad[TComp] = implicitly
+      override protected val monadF: Monad[Comp] = implicitly
 
-      override protected def generateImpl[G[_] : Monad](sink: Sink[G, StreamElem])(implicit genEffect: GenEffect[TComp, G]): G[Unit] = {
+      override protected def generateImpl[G[_] : Monad](sink: Sink[G, StreamElem])(implicit genEffect: GenEffect[Comp, G]): G[Unit] = {
         import GenEffect._
 
         processModule(module)(new Sink[StateT[G, ModuleIds, *], StreamElem] {

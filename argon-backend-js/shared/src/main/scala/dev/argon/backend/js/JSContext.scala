@@ -2,17 +2,15 @@ package dev.argon.backend.js
 
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
-import dev.argon.compiler.loaders.ModuleLoader
-import dev.argon.compiler.loaders.armodule.ArgonModuleLoader
+import dev.argon.compiler.loaders.{ModuleLoader, ResourceIndicator}
 import dev.argon.compiler._
 import cats._
 import cats.implicits._
+import zio.IO
 
-final class JSContext[TComp[+_], I]
+final class JSContext
 (
-  override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]]
-)(
-  override implicit val compCompilationInstance: Compilation[TComp]
+  override protected val compilerInput: CompilerInput[ResourceIndicator, JSBackendOptions[Id, ResourceIndicator]]
 ) extends Context {
 
   override type TTraitMetadata = Unit
@@ -27,10 +25,7 @@ final class JSContext[TComp[+_], I]
   override type TClassConstructorImplementation = JSImpl.ClassConstructor
   override type TDataConstructorImplementation = JSImpl.DataConstructor
 
-
-  override type Comp[+A] = TComp[A]
-
-  override type BackendOptions = JSBackendOptions[Id, I]
+  override type BackendOptions = JSBackendOptions[Id, ResourceIndicator]
 
   override def createExprFunctionImplementation(expr: typeSystem.ArExpr): JSImpl.Function =
     JSImpl.Function.ExpressionBody(expr)
@@ -48,39 +43,15 @@ final class JSContext[TComp[+_], I]
 
   override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[JSImpl.Function] =
     compilerInput.backendOptions.extern.get(specifier) match {
-      case Some(impl) => JSImpl.Function.JSExpressionBody(JSExpressionRaw(impl)).pure[Comp]
-      case None => Compilation[Comp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+      case Some(impl) => IO.succeed(JSImpl.Function.JSExpressionBody(JSExpressionRaw(impl)))
+      case None => Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
     }
 
   override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[JSImpl.Method] =
     compilerInput.backendOptions.extern.get(specifier) match {
-      case Some(impl) => JSImpl.Method.JSExpressionBody(JSExpressionRaw(impl)).pure[Comp]
-      case None => Compilation[Comp].forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+      case Some(impl) => IO.succeed(JSImpl.Method.JSExpressionBody(JSExpressionRaw(impl)))
+      case None => Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
     }
-
-
-  private val referencePayloadLoader: ArgonModuleLoader.PayloadLoader[this.type, ReferencePayloadSpecifier] =
-    new ArgonModuleLoader.PayloadLoader[this.type, ReferencePayloadSpecifier] {
-
-      override def createClassPayload(context: JSContext.this.type): ReferencePayloadSpecifier[Unit, context.TClassMetadata] = ()
-
-      override def createTraitPayload(context: JSContext.this.type): ReferencePayloadSpecifier[Unit, context.TTraitMetadata] = ()
-
-      override def createDataConstructorPayload(context: JSContext.this.type): ReferencePayloadSpecifier[context.Comp[context.TDataConstructorImplementation], context.TDataConstructorMetadata] = ()
-
-      override def createFunctionPayload(context: JSContext.this.type): ReferencePayloadSpecifier[context.Comp[context.TFunctionImplementation], context.TFunctionMetadata] = ()
-
-      override def createMethodPayload(context: JSContext.this.type): ReferencePayloadSpecifier[context.Comp[context.TMethodImplementation], context.TMethodMetadata] = ()
-
-      override def createClassConstructorPayload(context: JSContext.this.type): ReferencePayloadSpecifier[context.Comp[context.TClassConstructorImplementation], context.TClassConstructorMetadata] = ()
-    }
-
-  override val moduleLoaders: Vector[ModuleLoader[this.type]] = Vector(ArgonModuleLoader(this)(referencePayloadLoader))
-
-
-  override type ResIndicator = I
-
-
 
   object JSImpl {
     import typeSystem._

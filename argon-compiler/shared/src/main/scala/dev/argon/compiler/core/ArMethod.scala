@@ -3,7 +3,7 @@ package dev.argon.compiler.core
 import cats._
 import cats.evidence.Is
 import cats.implicits._
-import dev.argon.compiler.Compilation
+import dev.argon.compiler.{Comp, Compilation}
 import dev.argon.compiler.types._
 import dev.argon.util.FileID
 import shapeless.Nat
@@ -29,21 +29,19 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
   final def signature
   (newSigContext: SignatureContext.Aux[context.type])
   (instanceType: newSigContext.typeSystem.TypeWithMethods)
-  : newSigContext.typeSystem.TSComp[newSigContext.Signature[FunctionResultInfo, _]] = {
-    import newSigContext.typeSystem.tscompCompilationInstance
-
+  : Comp[newSigContext.Signature[FunctionResultInfo, _]] =
     for {
-      sig <- newSigContext.typeSystem.liftComp(signatureUnsubstituted)
+      sig <- signatureUnsubstituted
       converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
-      ownerSig <- newSigContext.typeSystem.liftComp(owner match {
+      ownerSig <- owner match {
         case ArMethod.ClassOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
         case ArMethod.ClassObjectOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
         case ArMethod.TraitOwner(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
         case ArMethod.TraitObjectOwner(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
         case ArMethod.DataCtorOwner(dataCtor) => dataCtor.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
-      })
+      }
 
-      convSig <- newSigContext.typeSystem.liftComp(sig.convertTypeSystem(newSigContext)(converter))
+      convSig <- sig.convertTypeSystem(newSigContext)(converter)
 
       instTypeArgs = instanceType match {
         case newSigContext.typeSystem.TraitType(_, args) => args
@@ -54,7 +52,6 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
       newSig <- convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instTypeArgs)
 
     } yield newSig
-  }
 
   val payload: TPayloadSpec[Comp[TMethodImplementation], TMethodMetadata]
 

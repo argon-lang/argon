@@ -2,7 +2,7 @@ package dev.argon.compiler.core
 
 import PayloadSpecifiers._
 import dev.argon.compiler._
-import dev.argon.compiler.loaders.ModuleLoader
+import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, ResourceIndicator}
 import dev.argon.compiler.loaders.source.SourceModuleCreator
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types._
@@ -11,6 +11,7 @@ import cats.data.NonEmptyList
 import cats.evidence.{===, Is}
 import cats.implicits._
 import shapeless.Nat
+import zio._
 
 
 trait Context {
@@ -38,20 +39,13 @@ trait Context {
   def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[TFunctionImplementation]
   def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[TMethodImplementation]
 
-  type Comp[+A]
-  implicit val compCompilationInstance: Compilation[Comp]
-
   object ContextTypeSystem extends TypeSystem[this.type] {
     override val context: Context.this.type = Context.this
     override val contextProof: Context.this.type === this.context.type = Is.refl
 
     override type TTypeWrapper[+A] = A
 
-    override type TSComp[A] = context.Comp[A]
-    override val tscompCompilationInstance: Compilation[context.Comp] = context.compCompilationInstance
-
-    override def liftComp[A](value: context.Comp[A]): context.Comp[A] = value
-    override def liftSignatureResult[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](sig: context.signatureContext.Signature[TResult, _ <: Nat], args: Vector[TypeArgument]): context.Comp[TResult[Context.this.type, ContextTypeSystem.type]] =
+    override def liftSignatureResult[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](sig: context.signatureContext.Signature[TResult, _ <: Nat], args: Vector[TypeArgument]): Comp[TResult[Context.this.type, ContextTypeSystem.type]] =
       sig.substituteTypeArguments(sig.unsubstitutedParameters)(args).map { _.unsubstitutedResult }
 
     final override def wrapType[A](a: A): A = a
@@ -68,13 +62,13 @@ trait Context {
     override def flatTraverseTypeWrapper[A, B, F[_] : Applicative](t: A)(f: A => F[B]): F[B] =
       f(t)
 
-    override def wrapExprType(expr: WrapExpr): TSComp[TType] =
+    override def wrapExprType(expr: WrapExpr): Comp[TType] =
       getExprType(expr)
 
-    override def isSubTypeWrapper(a: TType, b: TType): TSComp[Option[SubTypeInfo[TType]]] =
+    override def isSubTypeWrapper(a: TType, b: TType): Comp[Option[SubTypeInfo[TType]]] =
       isSimpleSubType(a, b)
 
-    override def universeOfWrapExpr(expr: WrapExpr): TSComp[UniverseExpr] =
+    override def universeOfWrapExpr(expr: WrapExpr): Comp[UniverseExpr] =
       universeOfExpr(expr)
   }
 
@@ -91,12 +85,9 @@ trait Context {
 
   final lazy val signatureContext: ContextSignatureContext.type = ContextSignatureContext
 
-  val moduleLoaders: Vector[ModuleLoader[this.type]]
+  protected val compilerInput: CompilerInput[ResourceIndicator, BackendOptions]
 
-  type ResIndicator
-  protected val compilerInput: CompilerInput[ResIndicator, BackendOptions]
-
-  def createModule[A](f: ArModule[this.type, DeclarationPayloadSpecifier] => Comp[A])(implicit showRes: Show[ResIndicator], res: ResourceAccess[this.type]): Comp[A] =
-    SourceModuleCreator.createModule[A](this)(compilerInput)(f)
+  def module[TLoad <: ModuleLoad.Service[this.type] : Tagged]: ZManaged[Has[TLoad], ErrorList, ArModule[this.type, DeclarationPayloadSpecifier]] =
+    SourceModuleCreator.createModule(this)(compilerInput)
 
 }

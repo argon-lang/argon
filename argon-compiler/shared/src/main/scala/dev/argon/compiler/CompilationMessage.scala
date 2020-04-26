@@ -13,6 +13,7 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.types.TypeSystem
 import cats._
 import cats.data.{NonEmptyList, NonEmptyVector}
+import dev.argon.compiler.loaders.ResourceIndicator
 
 sealed trait CompilationMessage {
   val source: CompilationMessageSource
@@ -494,8 +495,8 @@ object CompilationMessageSource {
     override def formatted: String = s"module ${moduleDescriptor.name}"
   }
 
-  final case class ResourceIdentifier[I: Show](id: I) extends CompilationMessageSource {
-    override def formatted: String = Show[I].show(id)
+  final case class ResourceIdentifier(id: ResourceIndicator) extends CompilationMessageSource {
+    override def formatted: String = id.show
   }
 
   final case class ThrownException(ex: Exception) extends CompilationMessageSource {

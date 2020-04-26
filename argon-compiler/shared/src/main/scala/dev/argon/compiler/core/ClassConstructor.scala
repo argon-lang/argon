@@ -6,6 +6,7 @@ import cats._
 import cats.implicits._
 import dev.argon.util.FileID
 import shapeless.Nat
+import zio.IO
 
 trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   val context: TContext
@@ -17,24 +18,21 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
   val fileId: FileID
 
   val ownerClass: ArClass[context.type, TPayloadSpec]
-  val signatureUnsubstituted: context.Comp[Signature[ClassConstructor.ResultInfo, _ <: Nat]]
+  val signatureUnsubstituted: Comp[Signature[ClassConstructor.ResultInfo, _ <: Nat]]
 
   final def signature
   (newSigContext: SignatureContext.Aux[context.type])
   (instanceType: newSigContext.typeSystem.ClassType)
-  : newSigContext.typeSystem.TSComp[newSigContext.Signature[ClassConstructor.ResultInfo, _]] = {
-    import newSigContext.typeSystem.tscompCompilationInstance
-
+  : Comp[newSigContext.Signature[ClassConstructor.ResultInfo, _]] =
     for {
-      sig <- newSigContext.typeSystem.liftComp(signatureUnsubstituted)
-      ownerSigUnConv <- newSigContext.typeSystem.liftComp(ownerClass.signature)
+      sig <- signatureUnsubstituted
+      ownerSigUnConv <- ownerClass.signature
       converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
-      ownerSig <- newSigContext.typeSystem.liftComp(ownerSigUnConv.convertTypeSystem(newSigContext)(converter))
-      convSig <- newSigContext.typeSystem.liftComp(sig.convertTypeSystem(newSigContext)(converter))
+      ownerSig <- ownerSigUnConv.convertTypeSystem(newSigContext)(converter)
+      convSig <- sig.convertTypeSystem(newSigContext)(converter)
       newSig <- convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instanceType.args)
     } yield newSig
 
-  }
 
 
   val payload: TPayloadSpec[Comp[TClassConstructorImplementation], TClassConstructorMetadata]
@@ -48,21 +46,21 @@ object ClassConstructor {
 
     implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
 
-      override def convertTypeSystem[F[_]: Monad]
+      override def convertTypeSystem
       (context: Context)
       (ts1: TypeSystem[context.type])
       (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverterEffect.Aux[context.type, ts1.type, ts2.type, F])
+      (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type])
       (result: ResultInfo[context.type, ts1.type])
-      : F[ResultInfo[context.type, ts2.type]] =
-        ResultInfo[context.type, ts2.type]().pure[F]
+      : Comp[ResultInfo[context.type, ts2.type]] =
+        IO.succeed(ResultInfo[context.type, ts2.type]())
 
       override def referencesParameter
       (signatureContext: SignatureContext)
       (refChecker: signatureContext.RefChecker)
       (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
-      : signatureContext.typeSystem.TSComp[Boolean] =
-        signatureContext.typeSystem.tscompCompilationInstance.pure(false)
+      : Comp[Boolean] =
+        IO.succeed(false)
 
       override def substitute
       (signatureContext: SignatureContext)

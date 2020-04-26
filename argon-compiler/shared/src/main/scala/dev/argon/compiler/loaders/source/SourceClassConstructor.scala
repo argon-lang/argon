@@ -11,6 +11,7 @@ import cats.implicits._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.StandardTypeLoaders
 import shapeless.Nat
+import zio.IO
 
 object SourceClassConstructor {
 
@@ -20,11 +21,9 @@ object SourceClassConstructor {
   (ownerClass2: ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier])
   (stmt: parser.ClassConstructorDeclarationStmt)
   (desc: ClassConstructorDescriptor)
-  : context2.Comp[ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier]] = {
-    import context2._
-
+  : Comp[ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier]] =
     for {
-      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ClassConstructor.ResultInfo, _ <: Nat]]
+      sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[ClassConstructor.ResultInfo, _ <: Nat]]
 
     } yield new ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
@@ -42,7 +41,7 @@ object SourceClassConstructor {
       override val ownerClass: ArClass[context.type, DeclarationPayloadSpecifier] = ownerClass2
 
       override lazy val signatureUnsubstituted: Comp[context.signatureContext.Signature[ClassConstructor.ResultInfo, _ <: Nat]] =
-        sigCache(
+        sigCache.get(
           SourceSignatureCreator.fromParameters[ClassConstructor.ResultInfo](context2)(
             env(context)(effectInfo, descriptor)
           )(descriptor)(stmt.parameters)(resultCreator)
@@ -74,7 +73,7 @@ object SourceClassConstructor {
 
         def convertUnconverted: Comp[(Vector[typeSystem.ClassConstructorStatement], ExpressionConverter.Env[context.type, Scope])] =
           if(unconverted.value.isEmpty)
-            (converted, env).pure[Comp]
+            IO.succeed((converted, env))
           else
             ExpressionConverter.convertStatementList(context)(env)(unitType)(unconverted).map { newStmt =>
 
@@ -94,9 +93,9 @@ object SourceClassConstructor {
             convertUnconverted.flatMap { case (newConvertedNoInit, env2) =>
               findField(name, location).flatMap { field =>
                 if(initializedFields.contains(field.descriptor))
-                  Compilation[Comp].forErrors(CompilationError.FieldReinitializedError(CompilationMessageSource.SourceFile(env2.fileSpec, location)))
+                  Compilation.forErrors(CompilationError.FieldReinitializedError(CompilationMessageSource.SourceFile(env2.fileSpec, location)))
                 else if(Mutability.toIsMutable(field.mutability) && effectInfo.isPure)
-                  Compilation[Comp].forErrors(CompilationError.MutableVariableNotPureError(field.name, CompilationMessageSource.SourceFile(env2.fileSpec, location)))
+                  Compilation.forErrors(CompilationError.MutableVariableNotPureError(field.name, CompilationMessageSource.SourceFile(env2.fileSpec, location)))
                 else
                   ExpressionConverter.convertExpression(context)(env2)(field.varType)(value).flatMap { valueExpr =>
                     val initStmt = typeSystem.InitializeFieldStatement(field, valueExpr)
@@ -112,7 +111,7 @@ object SourceClassConstructor {
           case WithSource(parser.InitializeStmt(thisName, baseCtorExprOpt), location) +: tail =>
             ownerClass.fields.flatMap { fields =>
               if(fields.size =!= initializedFields.size)
-                Compilation[Comp].forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                Compilation.forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
               else
                 convertUnconverted.flatMap { case (newConverted, env2) =>
                   ownerClass.signature
@@ -122,23 +121,23 @@ object SourceClassConstructor {
                     .flatMap { baseTypes =>
                       ((baseCtorExprOpt, baseTypes.baseClass) match {
                         case (None, Some(_)) =>
-                          Compilation[Comp].forErrors(
+                          Compilation.forErrors(
                             CompilationError.BaseConstructorNotCalled(CompilationMessageSource.SourceFile(env.fileSpec, location))
                           )
 
                         case (Some(_), None) =>
-                          Compilation[Comp].forErrors(
+                          Compilation.forErrors(
                             CompilationError.InvalidBaseConstructorCall(CompilationMessageSource.SourceFile(env.fileSpec, location))
                           )
 
                         case (None, None) =>
-                          None.pure[Comp]
+                          IO.succeed(None)
 
                         case (Some(baseCtorExpr), Some(baseClass)) =>
                           ExpressionConverter.convertExpression(context)(env2.copy(allowAbstractConstructor = true))(typeSystem.fromSimpleType(baseClass))(baseCtorExpr).flatMap {
-                            case baseCall: typeSystem.ClassConstructorCall => Some(baseCall).pure[Comp]
+                            case baseCall: typeSystem.ClassConstructorCall => IO.succeed(Some(baseCall))
                             case _ =>
-                              Compilation[Comp].forErrors(
+                              Compilation.forErrors(
                                 CompilationError.InvalidBaseConstructorCall(CompilationMessageSource.SourceFile(env.fileSpec, location))
                               )
                           }
@@ -164,13 +163,13 @@ object SourceClassConstructor {
             ownerClass.signature.flatMap { ownerSig =>
               ownerSig.unsubstitutedResult.baseTypes.flatMap { baseTypes =>
                 if(baseTypes.baseClass.isDefined)
-                  Compilation[Comp].forErrors(
+                  Compilation.forErrors(
                     CompilationError.BaseConstructorNotCalled(CompilationMessageSource.SourceFile(env.fileSpec, body.location))
                   )
                 else
                   ownerClass.fields.flatMap { fields =>
                     if(fields.size =!= initializedFields.size)
-                      Compilation[Comp].forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, unconverted.location)))
+                      Compilation.forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, unconverted.location)))
                     else
                       ExpressionConverter.convertStatementList(context)(env)(unitType)(unconverted).map { endExpr =>
                         typeSystem.ClassConstructorBody(converted, None, endExpr)
@@ -184,7 +183,7 @@ object SourceClassConstructor {
 
       private def findField(name: String, location: SourceLocation): Comp[typeSystem.FieldVariable] =
         ownerClass.fields.flatMap { fields =>
-          Compilation[Comp].requireSome(fields.find { _.name.name === name })(
+          Compilation.requireSome(fields.find { _.name.name === name })(
             CompilationError.FieldNotFound(name, CompilationMessageSource.SourceFile(env.fileSpec, location))
           )
         }
@@ -196,13 +195,10 @@ object SourceClassConstructor {
 
         override def createResult
         (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-        : context.Comp[ClassConstructor.ResultInfo[context.type, context.typeSystem.type]] = {
-          import context._
-          ClassConstructor.ResultInfo[context.type, context.typeSystem.type]().pure[Comp]
-        }
+        : Comp[ClassConstructor.ResultInfo[context.type, context.typeSystem.type]] =
+          IO.succeed(ClassConstructor.ResultInfo[context.type, context.typeSystem.type]())
       }
 
     }
 
-  }
 }

@@ -16,18 +16,16 @@ object StandardTypeLoaders {
   (messageSource: => CompilationMessageSource)
   (currentModule: ArModule[context.type, TPayloadSpec])
   (referencedModules: Vector[ArModule[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]])
-  : context.Comp[context.typeSystem.TType] = {
+  : Comp[context.typeSystem.TType] = {
     import context._
 
     {
       if(currentModule.descriptor === arCore)
-        context.compCompilationInstance.map(
-          ModuleLookup.lookupNamespaceValues(context)(currentModule)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass)
-        ) { _.map(AbsRef.apply) }
+        ModuleLookup.lookupNamespaceValues(context)(currentModule)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass)
+            .map { _.map(AbsRef.apply) }
       else
-        context.compCompilationInstance.map(
-          ModuleLookup.lookupValues(context)(referencedModules)(arCore)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass)
-        )  { _.map(AbsRef.apply) }
+        ModuleLookup.lookupValues(context)(referencedModules)(arCore)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass)
+          .map { _.map(AbsRef.apply) }
 
     }
       .flatMap { foundClasses =>
@@ -36,7 +34,7 @@ object StandardTypeLoaders {
           case _ => None
         }
 
-        context.compCompilationInstance.requireSome(unitClassOpt)(
+        Compilation.requireSome(unitClassOpt)(
           CompilationError.NamespaceElementNotFound(arCore, NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"), messageSource)
         )
       }

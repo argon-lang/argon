@@ -1,16 +1,18 @@
 package dev.argon.build.project
 
 import java.io.IOException
-import dev.argon.io.Path
 
+import dev.argon.io.Path
 import cats._
 import cats.implicits._
+import dev.argon.backend.{Backend, ProjectFileHandler, ProjectLoader}
 import dev.argon.build._
 import zio._
 import zio.interop.catz._
 import dev.argon.compiler._
-import dev.argon.compiler.backend.{Backend, ProjectFileHandler, ProjectLoader}
+import dev.argon.backend.ProjectFileHandler
 import dev.argon.compiler.core._
+import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.fileio.FileIO
 import toml.Toml
 import toml.Codecs._
@@ -33,7 +35,7 @@ trait BuildInfo[I] {
 
 object BuildInfo {
 
-  type Resolved = BuildInfo[Path]
+  type Resolved = BuildInfo[ResourceIndicator]
 
 
   def apply[I](backend: Backend)(project: ProjectInfoFormat[Id, I], compilerOptions: CompilerOptions[Id], backendOptions: backend.BackendOptions[Id, I]): BuildInfo[I] = {
@@ -120,14 +122,14 @@ object BuildInfo {
     }
 
   private def loadProjectFile(dir: Path)(build: BuildInfo[String]): ZIO[FileIO, IOException, Resolved] = {
-    import dev.argon.compiler.backend.ProjectLoader.Implicits._
+    import dev.argon.backend.ProjectLoader.Implicits._
 
     type ProjFormat[A] = ProjectInfoFormat[Id, A]
     implicit val fileHandler = ProjectFileHandler.fileHandlerPath(dir)
 
     for {
-      resolvedProj <-ProjectLoader[ProjFormat[String], ProjFormat[Path], Path].loadProject[ZIO[FileIO, IOException, ?]](build.project)
-      resolvedBackendOpts <- build.backend.projectLoader[Path].loadProject[ZIO[FileIO, IOException, ?]](build.backendOptions)
+      resolvedProj <- ProjectLoader[ProjFormat[String], ProjFormat[ResourceIndicator], ResourceIndicator].loadProject[ZIO[FileIO, IOException, *]](build.project)
+      resolvedBackendOpts <- build.backend.projectLoader[ResourceIndicator].loadProject[ZIO[FileIO, IOException, *]](build.backendOptions)
     } yield BuildInfo(build.backend)(
       project = resolvedProj,
       compilerOptions = build.compilerOptions,

@@ -10,8 +10,9 @@ import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
 import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
 import dev.argon.compiler.vtable._
+import zio.interop.catz._
 
-final class JSEmitter[TComp[+_], TContext <: JSContext[TComp, _] with Singleton](val context: TContext, inject: JSInjectCode[Id]) {
+final class JSEmitter[TContext <: JSContext with Singleton](val context: TContext, inject: JSInjectCode[Id]) {
 
   import context._
   import context.signatureContext.{ context => _, typeSystem => _, _ }

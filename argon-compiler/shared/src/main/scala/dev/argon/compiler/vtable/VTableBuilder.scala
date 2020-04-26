@@ -4,16 +4,18 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import cats._
 import cats.implicits._
+import dev.argon.util.{MemoCache, MemoCacheStore}
 import shapeless.Nat
+import zio.interop.catz._
 
 sealed abstract class VTableBuilder {
 
   val vtableContext: VTableContext
   import vtableContext._
 
-  def fromClass[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): context.Comp[VTable]
-  def fromTrait[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): context.Comp[VTable]
-  def fromDataConstructor[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): context.Comp[VTable]
+  def fromClass[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[VTable]
+  def fromTrait[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): Comp[VTable]
+  def fromDataConstructor[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): Comp[VTable]
 }
 
 object VTableBuilder {
@@ -22,7 +24,7 @@ object VTableBuilder {
     val vtableContext: VTableContext.Aux[TContext]
   }
 
-  def apply(context: Context): context.Comp[VTableBuilder.Aux[context.type]] = {
+  def apply(context: Context): Comp[VTableBuilder.Aux[context.type]] = {
     import context._
     val ctx: context.type = context
 
@@ -33,9 +35,9 @@ object VTableBuilder {
     import vtableCtx.{ context => _, _ }
 
     for {
-      classVtableCache <- Compilation[Comp].createMemo[AbsRef[context.type, ArClass], VTable]
-      traitVtableCache <- Compilation[Comp].createMemo[AbsRef[context.type, ArTrait], VTable]
-      dataCtorVtableCache <- Compilation[Comp].createMemo[AbsRef[context.type, DataConstructor], VTable]
+      classVtableCache <- MemoCacheStore.make[ErrorList, AbsRef[context.type, ArClass], VTable]
+      traitVtableCache <- MemoCacheStore.make[ErrorList, AbsRef[context.type, ArTrait], VTable]
+      dataCtorVtableCache <- MemoCacheStore.make[ErrorList, AbsRef[context.type, DataConstructor], VTable]
     } yield new VTableBuilder {
 
       override val vtableContext: vtableCtx.type = vtableCtx
@@ -167,7 +169,7 @@ object VTableBuilder {
         vtable.methodMap.values.toVector.traverse_ {
           case VTableEntry(_, _, VTableEntryMethod(_)) => ().pure[Comp]
           case VTableEntry(_, _, VTableEntryAbstract) =>
-            Compilation[Comp].forErrors(CompilationError.AbstractMethodNotImplementedError(source))
+            Compilation.forErrors(CompilationError.AbstractMethodNotImplementedError(source))
 
           case VTableEntry(_, _, VTableEntryAmbiguous(_)) => ???
         }
@@ -185,7 +187,7 @@ object VTableBuilder {
         } yield VTable(newMap.toMap)
 
       override def fromClass[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[VT] =
-        classVtableCache { arClassWrap =>
+        classVtableCache.usingCreate { arClassWrap =>
           val arClass = arClassWrap.value
 
           for {
@@ -222,10 +224,10 @@ object VTableBuilder {
             _ <- if(!arClass.isAbstract) ensureNonAbstract(newVTable, arClass.classMessageSource) else ().pure[Comp]
 
           } yield newVTable
-        }(AbsRef(arClass))
+        }.get(AbsRef(arClass))
 
       override def fromTrait[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): Comp[VT] =
-        traitVtableCache { arTraitWrap =>
+        traitVtableCache.usingCreate { arTraitWrap =>
           val arTrait = arTraitWrap.value
 
           for {
@@ -242,10 +244,10 @@ object VTableBuilder {
             newVTable <- addNewMethods(methods)(source)(baseTraitOnlyVTable)
 
           } yield newVTable
-        }(AbsRef(arTrait))
+        }.get(AbsRef(arTrait))
 
       override def fromDataConstructor[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): Comp[VT] =
-        dataCtorVtableCache { dataCtorWrap =>
+        dataCtorVtableCache.usingCreate { dataCtorWrap =>
           val ctor = dataCtorWrap.value
 
           for {
@@ -261,7 +263,7 @@ object VTableBuilder {
             _ <- ensureNonAbstract(newVTable, ctor.ctorMessageSource)
 
           } yield newVTable
-        }(AbsRef(ctor))
+        }.get(AbsRef(ctor))
     }
   }
 

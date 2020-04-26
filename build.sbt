@@ -295,9 +295,27 @@ lazy val argon_compiler = crossProject(JVMPlatform, JSPlatform).in(file("argon-c
 lazy val argon_compilerJVM = argon_compiler.jvm
 lazy val argon_compilerJS = argon_compiler.js
 
+lazy val backend_common = crossProject(JVMPlatform, JSPlatform).in(file("argon-backend-common"))
+  .dependsOn(argon_compiler)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-backend-common",
+  )
+
+lazy val backend_commonJVM = backend_common.jvm
+lazy val backend_commonJS = backend_common.js
+
 
 lazy val backend_js = crossProject(JVMPlatform, JSPlatform).in(file("argon-backend-js"))
-  .dependsOn(arstream, util, modulefmt, parser_data, argon_compiler)
+  .dependsOn(backend_common)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -315,7 +333,7 @@ lazy val backend_jsJVM = backend_js.jvm
 lazy val backend_jsJS = backend_js.js
 
 lazy val backend_module = crossProject(JVMPlatform, JSPlatform).in(file("argon-backend-module"))
-  .dependsOn(arstream, util, modulefmt, parser_data, argon_compiler)
+  .dependsOn(backend_common)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )

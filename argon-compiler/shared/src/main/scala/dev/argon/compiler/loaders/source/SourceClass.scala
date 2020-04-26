@@ -6,12 +6,14 @@ import dev.argon.compiler.core.{ArClass, _}
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.ClassDeclarationStmt
-import dev.argon.util.{FileID, SourceLocation, WithSource}
+import dev.argon.util.{FileID, SourceLocation, ValueCache, WithSource}
 import cats._
 import cats.implicits._
 import cats.evidence.Is
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import shapeless.Nat
+import zio.IO
+import zio.interop.catz._
 
 private[compiler] object SourceClass extends AccessModifierHelpers {
 
@@ -32,22 +34,22 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
   (env: EnvCreator[context2.type])
   (stmt: ClassDeclarationStmt)
   (desc: ClassDescriptor)
-  : context2.Comp[ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type }] = {
+  : Comp[ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type }] = {
     import context2._
 
     for {
-      sigCache <- Compilation[Comp].createCache[context2.signatureContext.Signature[ArClass.ResultInfo, _ <: Nat]]
-      sigResultCache <- Compilation[Comp].createCache[context2.typeSystem.BaseTypeInfoClass]
+      sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[ArClass.ResultInfo, _ <: Nat]]
+      sigResultCache <- ValueCache.make[ErrorList, context2.typeSystem.BaseTypeInfoClass]
 
-      paramsEnvCache <- Compilation[Comp].createCache[EnvCreator[context2.type]]
+      paramsEnvCache <- ValueCache.make[ErrorList, EnvCreator[context2.type]]
 
-      groupedStaticCache <- Compilation[Comp].createCache[GroupedStaticStatements]
-      groupedInstCache <- Compilation[Comp].createCache[GroupedInstanceStatements]
+      groupedStaticCache <- ValueCache.make[ErrorList, GroupedStaticStatements]
+      groupedInstCache <- ValueCache.make[ErrorList, GroupedInstanceStatements]
 
-      fieldCache <- Compilation[Comp].createCache[Vector[context2.typeSystem.FieldVariable]]
-      methodCache <- Compilation[Comp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
-      staticMethodCache <- Compilation[Comp].createCache[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
-      classCtorCache <- Compilation[Comp].createCache[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]]
+      fieldCache <- ValueCache.make[ErrorList, Vector[context2.typeSystem.FieldVariable]]
+      methodCache <- ValueCache.make[ErrorList, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      staticMethodCache <- ValueCache.make[ErrorList, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      classCtorCache <- ValueCache.make[ErrorList, Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]]
 
     } yield new ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] with OpenSealedCheck {
       override val context: context2.type = context2
@@ -73,18 +75,18 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
       }
 
       private val groupedStatic =
-        groupedStaticCache(
+        groupedStaticCache.get(
           stmt.body.foldLeftM(GroupedStaticStatements(Vector.empty)) {
             case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
-              group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)).pure[Comp]
+              IO.succeed(group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)))
 
             case (_, WithSource(_, location)) =>
-              Compilation[Comp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              Compilation.forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
           }
         )
 
       private val groupedInst =
-        groupedInstCache(
+        groupedInstCache.get(
           stmt.instanceBody.foldLeftM(GroupedInstanceStatements(Vector.empty, Vector.empty, Vector.empty)) {
             case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
               group.copy(methods = group.methods :+ WithSource(stmt, location)).pure[Comp]
@@ -96,26 +98,26 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
               group.copy(classCtors = group.classCtors :+ WithSource(stmt, location)).pure[Comp]
 
             case (_, WithSource(_, location)) =>
-              Compilation[Comp].forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              Compilation.forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
           }
         )
 
       override val signature: Comp[Signature[ArClass.ResultInfo, _ <: Nat]] =
-        sigCache(
+        sigCache.get(
           SourceSignatureCreator.fromParameters[ArClass.ResultInfo](context2)(
             env(context)(EffectInfo.pure, descriptor)
           )(descriptor)(stmt.parameters)(resultCreator(context)(stmt.baseType, sigResultCache)(this))
         )
 
       private val paramsEnv: Comp[EnvCreator[context.type]] =
-        paramsEnvCache(
+        paramsEnvCache.get(
           signature.map { sig =>
             env.addParameters(context)(sig.unsubstitutedParameters)
           }
         )
 
       override val fields: Comp[Vector[context.typeSystem.FieldVariable]] =
-        fieldCache(groupedInst.flatMap { inst =>
+        fieldCache.get(groupedInst.flatMap { inst =>
           inst.fields.traverse { field =>
             field.value.name match {
               case Some(fieldName) =>
@@ -131,15 +133,15 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
                 )
 
               case None =>
-                Compilation[Comp].forErrors(CompilationError.FieldMustHaveName(CompilationMessageSource.SourceFile(env.fileSpec, field.location)))
+                Compilation.forErrors(CompilationError.FieldMustHaveName(CompilationMessageSource.SourceFile(env.fileSpec, field.location)))
             }
           }
         })
 
       override val methods: Comp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
-        methodCache(groupedInst.flatMap { inst =>
+        methodCache.get(groupedInst.flatMap { inst =>
           inst.methods.zipWithIndex.traverse { case (method, i) =>
-            parseAccessModifier[Comp](env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
+            parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
               val memberName = MethodName.fromMethodNameSpecifier(method.value.name)
 
               paramsEnv.flatMap { env2 =>
@@ -155,9 +157,9 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         })
 
       override val staticMethods: Comp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
-        staticMethodCache(groupedStatic.flatMap { statics =>
+        staticMethodCache.get(groupedStatic.flatMap { statics =>
           statics.staticMethods.zipWithIndex.traverse { case (method, i) =>
-            parseAccessModifier[Comp](env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
+            parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
               val memberName = MethodName.fromMethodNameSpecifier(method.value.name)
               val desc = MethodDescriptor(ClassObjectDescriptor(descriptor), i, memberName)
 
@@ -171,9 +173,9 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         })
 
       override val classConstructors: Comp[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]] =
-        classCtorCache(groupedInst.flatMap { inst =>
+        classCtorCache.get(groupedInst.flatMap { inst =>
           inst.classCtors.zipWithIndex.traverse { case (classCtor, i) =>
-            parseAccessModifier[Comp](env.fileSpec, classCtor.location, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
+            parseAccessModifier(env.fileSpec, classCtor.location, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
               val desc = ClassConstructorDescriptor(descriptor, i)
 
               paramsEnv.flatMap { env2 =>
@@ -188,17 +190,16 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     }
   }
 
-  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ctx.Comp[ctx.typeSystem.BaseTypeInfoClass] => ctx.Comp[ctx.typeSystem.BaseTypeInfoClass])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
+  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[ErrorList, ctx.typeSystem.BaseTypeInfoClass])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
 
     override val context: ctx.type = ctx
 
     override def createResult
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    : context.Comp[ArClass.ResultInfo[context.type, context.typeSystem.type]] = {
-      import context._
+    : Comp[ArClass.ResultInfo[context.type, context.typeSystem.type]] = {
 
       ArClass.ResultInfo(context.typeSystem)(
-        cache(baseTypeExpr match {
+        cache.get(baseTypeExpr match {
           case Some(baseTypeExpr) =>
             ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
               .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoClass(None, Vector())))
@@ -206,11 +207,11 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
                 val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
                 baseTypes.baseClass.traverse_ { baseClass =>
-                  osCheck.checkExtendClass[Comp, context.type, baseClass.arClass.PayloadSpec](baseClass.arClass.value)(messageSource)
+                  osCheck.checkExtendClass[context.type, baseClass.arClass.PayloadSpec](baseClass.arClass.value)(messageSource)
                 }
                   .flatMap { _ =>
                     baseTypes.baseTraits.traverse_ { baseTrait =>
-                      osCheck.checkExtendTrait[Comp, context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
+                      osCheck.checkExtendTrait[context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
                     }
                   }
                   .map { _ => baseTypes }
@@ -218,7 +219,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           case None =>
             context.typeSystem.BaseTypeInfoClass(None, Vector()).pure[Comp]
         })
-      ).pure[context.Comp]
+      ).pure[Comp]
     }
 
     private def typeToBaseTypes
@@ -227,12 +228,12 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     (t: context.typeSystem.TType)
     (location: SourceLocation)
     (acc: context.typeSystem.BaseTypeInfoClass)
-    : context.Comp[context.typeSystem.BaseTypeInfoClass] = {
+    : Comp[context.typeSystem.BaseTypeInfoClass] = {
       import context._
       t match {
         case t: context.typeSystem.ClassType =>
           if(acc.baseClass.isDefined)
-            Compilation[Comp].forErrors(CompilationError.MultipleBaseClasses(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+            Compilation.forErrors(CompilationError.MultipleBaseClasses(CompilationMessageSource.SourceFile(env.fileSpec, location)))
           else
             acc.copy(baseClass = Some(t)).pure[Comp]
 
@@ -245,7 +246,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           }
 
         case _ =>
-          Compilation[Comp].forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          Compilation.forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
       }
     }
   }

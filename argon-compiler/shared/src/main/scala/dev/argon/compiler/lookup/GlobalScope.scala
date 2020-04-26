@@ -8,6 +8,9 @@ import scala.collection.Set
 import cats._
 import cats.data.NonEmptyVector
 import cats.implicits._
+import dev.argon.compiler.Comp
+import zio.IO
+import zio.interop.catz._
 
 object GlobalScope {
 
@@ -21,7 +24,7 @@ object GlobalScope {
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[Vector[AbsRef[context.type, ArModule]]])
   (parentScope: context.scopeContext.NamespacesOnlyScope)
-  : context.Comp[context.scopeContext.Scope] =
+  : Comp[context.scopeContext.Scope] =
     context.scopeContext.NamespaceScope(
       (name, fileSpec, sourceLocation) => createLookupResult(context)(imports)(modules)(name, fileSpec, sourceLocation),
       parentScope
@@ -37,12 +40,10 @@ object GlobalScope {
     fileSpec: FileSpec,
     sourceLocation: SourceLocation,
   )
-  : context.Comp[context.scopeContext.LookupResult] = {
-    import context._
-
+  : Comp[context.scopeContext.LookupResult] =
     resolveName(context)(imports)(modules)(name)(NotFound).flatMap {
       case NotFound =>
-        context.scopeContext.LookupResult.Failed.pure[Comp]
+        IO.succeed(context.scopeContext.LookupResult.Failed)
 
       case FoundOverloadable =>
         overloadResult(context)(imports)(modules)(name).map {
@@ -57,7 +58,6 @@ object GlobalScope {
         createNSScope(context)(Vector(paths.toVector))(modules)(context.scopeContext.EmptyScope)
           .map(context.scopeContext.LookupResult.ScopeResult)
     }
-  }
 
   // First resolve from higher-precedence modules.
   // Then resolve from higher-precedence imports.
@@ -70,19 +70,16 @@ object GlobalScope {
   (modules: Vector[Vector[AbsRef[context.type, ArModule]]])
   (name: String)
   (acc: ResolvedName)
-  : context.Comp[ResolvedName] = {
-    import context._
-
+  : Comp[ResolvedName] =
     modules match {
-      case Vector() => acc.pure[Comp]
+      case Vector() => IO.succeed(acc)
       case head +: tail =>
         resolveNameStage1(context)(imports)(head)(name)(acc).flatMap {
           case NotFound => resolveName(context)(imports)(tail)(name)(NotFound)
-          case FoundOverloadable => FoundOverloadable.pure[Comp]
+          case FoundOverloadable => IO.succeed(FoundOverloadable)
           case next @ NestedNamespaces(_) => resolveName(context)(imports)(modules)(name)(next)
         }
     }
-  }
 
   private def resolveNameStage1
   (context: Context)
@@ -90,18 +87,15 @@ object GlobalScope {
   (modules: Vector[AbsRef[context.type, ArModule]])
   (name: String)
   (acc: ResolvedName)
-  : context.Comp[ResolvedName] = {
-    import context._
-
+  : Comp[ResolvedName] =
     imports match {
-      case Vector() => acc.pure[Comp]
+      case Vector() => IO.succeed(acc)
       case head +: tail =>
         resolveNameStage2(context)(head)(modules)(name)(acc).flatMap {
-          case FoundOverloadable => FoundOverloadable.pure[Comp]
+          case FoundOverloadable => IO.succeed(FoundOverloadable)
           case next => resolveNameStage1(context)(tail)(modules)(name)(next)
         }
     }
-  }
 
   private def resolveNameStage2
   (context: Context)
@@ -109,9 +103,7 @@ object GlobalScope {
   (modules: Vector[AbsRef[context.type, ArModule]])
   (name: String)
   (acc: ResolvedName)
-  : context.Comp[ResolvedName] = {
-    import context._
-
+  : Comp[ResolvedName] =
     imports
       .flatTraverse { importNS =>
         modules.flatTraverse { module =>
@@ -129,7 +121,6 @@ object GlobalScope {
           case (NestedNamespaces(paths1), NestedNamespaces(paths2)) => NestedNamespaces(paths1 ++ paths2)
         }
       }
-  }
 
 
   private def overloadResult
@@ -137,15 +128,13 @@ object GlobalScope {
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[Vector[AbsRef[context.type, ArModule]]])
   (name: String)
-  : context.Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] = {
-    import context._
+  : Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] =
     modules match {
-      case Vector() => OverloadResult.End.pure[Comp]
+      case Vector() => IO.succeed(OverloadResult.End)
       case head +: tail =>
         overloadResult(context)(imports)(tail)(name)
           .flatMap(overloadResultStage1(context)(imports)(head)(name)(_))
     }
-  }
 
   private def overloadResultStage1
   (context: Context)
@@ -153,16 +142,13 @@ object GlobalScope {
   (modules: Vector[AbsRef[context.type, ArModule]])
   (name: String)
   (nextResult: OverloadResult[context.scopeContext.ScopeValueOverload])
-  : context.Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] = {
-    import context._
-
+  : Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] =
     imports match {
-      case Vector() => nextResult.pure[Comp]
+      case Vector() => IO.succeed(nextResult)
       case head +: tail =>
         overloadResultStage1(context)(tail)(modules)(name)(nextResult)
           .flatMap(overloadResultStage2(context)(head)(modules)(name)(_))
     }
-  }
 
   private def overloadResultStage2
   (context: Context)
@@ -170,10 +156,7 @@ object GlobalScope {
   (modules: Vector[AbsRef[context.type, ArModule]])
   (name: String)
   (nextResult: OverloadResult[context.scopeContext.ScopeValueOverload])
-  : context.Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] = {
-    import context._
-
-
+  : Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] =
     imports
       .flatTraverse { importNS =>
         modules.flatTraverse { module =>
@@ -190,7 +173,6 @@ object GlobalScope {
           case None => nextResult
         }
       }
-  }
 
   private def getScopeValue[TPayloadSpec[_, _]]
   (context: Context)

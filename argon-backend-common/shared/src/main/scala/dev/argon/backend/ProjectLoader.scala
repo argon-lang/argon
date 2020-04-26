@@ -1,14 +1,15 @@
-package dev.argon.compiler.backend
+package dev.argon.backend
 
 import java.io.IOException
-import dev.argon.io.Path
 
 import cats._
 import cats.implicits._
+import dev.argon.compiler.loaders.ResourceIndicator
+import dev.argon.io.Path
 import dev.argon.io.fileio.FileIO
-import zio._
+import dev.argon.module.PathResourceIndicator
 import shapeless.{Path => _, _}
-import zio.stream.ZSink
+import zio._
 
 trait ProjectLoader[A, B, I] {
   def loadProject[F[_]](a: A)(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[B]
@@ -77,10 +78,10 @@ trait ProjectFileHandler[F[_], I] {
 
 object ProjectFileHandler {
 
-  def fileHandlerPath(dir: Path): ProjectFileHandler[ZIO[FileIO, IOException, ?], Path] = new ProjectFileHandler[ZIO[FileIO, IOException, ?], Path] {
+  def fileHandlerPath(dir: Path): ProjectFileHandler[ZIO[FileIO, IOException, *], ResourceIndicator] = new ProjectFileHandler[ZIO[FileIO, IOException, *], ResourceIndicator] {
 
-    override def loadSingleFile(file: String): ZIO[FileIO, IOException, Path] =
-      Path.of(file).map(dir.resolve)
+    override def loadSingleFile(file: String): ZIO[FileIO, IOException, ResourceIndicator] =
+      Path.of(file).map(dir.resolve).map(PathResourceIndicator.apply)
 
   }
 

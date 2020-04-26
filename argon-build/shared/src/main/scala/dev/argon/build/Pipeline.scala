@@ -1,8 +1,8 @@
 package dev.argon.build
 
 import java.io.IOException
-import dev.argon.io.Path
 
+import dev.argon.io.Path
 import dev.argon.compiler._
 import dev.argon.stream._
 import cats._
@@ -14,28 +14,35 @@ import dev.argon.util.{FileID, FileSpec}
 import zio._
 import zio.console._
 import cats.data.{NonEmptyList, NonEmptyVector}
+import dev.argon.backend.{Backend, ResourceAccess}
 import dev.argon.parser.SourceAST
-import dev.argon.compiler.backend.Backend
 import dev.argon.io.FilenameManip
 import dev.argon.io.fileio.FileIO
 import dev.argon.build._
+import dev.argon.compiler.loaders.ResourceIndicator
+import dev.argon.module.PathResourceIndicator
 import dev.argon.stream.builder.ZStreamSource
 import zio.stream.{ZSink, ZStream}
+import zio.interop.catz._
 
 object Pipeline {
 
-  private def ioToCompilationError(ex: IOException): NonEmptyList[CompilationError] =
+  private def ioToCompilationError(ex: IOException): ErrorList =
     NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex)))
 
-  private def createFileDataStream(path: Path): stream.ZStream[FileIO, NonEmptyList[CompilationError], Char] =
+  private def createFileDataStream(path: Path): stream.ZStream[FileIO, ErrorList, Char] =
     stream.ZStream.flatten(stream.ZStream.fromEffect(
       ZIO.access[FileIO] { _.get.readText(ioToCompilationError)(path) }
     ))
 
-  private type CIO[+A] = ZIO[BuildEnvironment, NonEmptyList[CompilationError], A]
+  private type CIO[+A] = ZIO[BuildEnvironment, ErrorList, A]
 
-  private def resolveGlob(globs: List[Path]): ZStream[FileIO, NonEmptyList[CompilationError], Path] =
+  private def resolveGlob(globs: List[ResourceIndicator]): ZStream[FileIO, ErrorList, Path] =
     ZStream.fromIterable(globs)
+      .mapM {
+        case PathResourceIndicator(path) => IO.succeed(path)
+        case _ => Compilation.forErrors(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(new IOException("Unexpected resource indicator"))))
+      }
       .flatMap { glob =>
         ZStream.fromEffect(
           FilenameManip.findGlob(glob).runCollect
@@ -44,7 +51,7 @@ object Pipeline {
           .flatMap(ZStream.fromIterable(_))
       }
 
-  private def findInputFiles(buildInfo: BuildInfo.Resolved): ZStream[FileIO, NonEmptyList[CompilationError], InputFileInfo[CIO]] =
+  private def findInputFiles(buildInfo: BuildInfo.Resolved): ZStream[FileIO, ErrorList, InputFileInfo[CIO]] =
     resolveGlob(buildInfo.project.inputFiles)
       .zipWithIndex
       .map { case (path, id) =>
@@ -53,7 +60,7 @@ object Pipeline {
         )
       }
 
-  def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): RIO[Console, Unit] = {
+  def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): URIO[Console, Unit] = {
     import zio.interop.catz._
 
     msgs
@@ -64,17 +71,20 @@ object Pipeline {
 
   def compileResult[A]
   (buildInfo: BuildInfo.Resolved)
-  (f: buildInfo.backend.TCompilationOutput { val context: Backend.ContextWithComp[ZIO[BuildEnvironment, NonEmptyList[CompilationError], +*], Path] } => ZIO[BuildEnvironment, NonEmptyList[CompilationError], A])
-  (implicit compInstance: IOCompilation[BuildEnvironment])
-  : ZIO[BuildEnvironment, NonEmptyList[CompilationError], A] =
-    ZIO.access[FileIO] { res => IOCompilation.fileSystemResourceAccessFactory[BuildEnvironment](res.get) }.flatMap { implicit resFactory =>
-
-      BuildProcess.parseInput[CIO](ZStreamSource(findInputFiles(buildInfo)))
+  : ZManaged[BuildEnvironment with ResourceAccess, ErrorList, buildInfo.backend.TCompilationOutput] =
+    ZManaged.fromEffect(
+      BuildProcess.parseInput(ZStreamSource(findInputFiles(buildInfo)))
         .foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
-        .flatMap {
-          case (parsedInput, _) =>
-            resolveGlob(buildInfo.project.references).runCollect.flatMap { references =>
-              BuildProcess.compile[CIO, Path, A](
+    )
+      .flatMap {
+        case (parsedInput, _) =>
+          ZManaged.fromEffect(
+            resolveGlob(buildInfo.project.references)
+              .map(PathResourceIndicator.apply)
+              .runCollect
+          )
+            .flatMap { references =>
+              BuildProcess.compile(
                 buildInfo.backend : buildInfo.backend.type
               )(
                 parsedInput,
@@ -83,28 +93,25 @@ object Pipeline {
                   moduleName = buildInfo.compilerOptions.moduleName
                 ),
                 buildInfo.backendOptions,
-              )(f)
+              )
             }
-        }
-    }
+      }
 
   def run(buildInfo: BuildInfo.Resolved): RIO[Console with BuildEnvironment, Int] =
-    IOCompilation.compilationInstance[BuildEnvironment]
-      .flatMap { implicit compInstance =>
-        compInstance.getResult(
-          compileResult(buildInfo) { output =>
-            output.write
-          }
-        )
+    compileResult(buildInfo)
+      .use { output =>
+        output.write
       }
-    .flatMap {
-      case (msgs, Left(errors)) =>
-        printMessages[Vector, CompilationMessage](errors.toList.toVector ++ msgs).map { _ => 1 }
-
-      case (msgs, Right(_)) =>
-        printMessages[Vector, CompilationMessage](msgs).map { _ => 0 }
-    }
-
+      .provideSomeLayer[BuildEnvironment](ResourceAccess.forFileIO)
+      .either
+      .map {
+        case Left(errors) => (errors.toList.toVector, 1)
+        case Right(_) => (Vector.empty, 0)
+      }
+      .flatMap {
+        case (messages, exitCode) =>
+          printMessages[Vector, CompilationMessage](messages).as(exitCode)
+      }
 
 }
 

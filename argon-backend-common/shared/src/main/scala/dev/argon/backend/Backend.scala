@@ -1,11 +1,9 @@
-package dev.argon.compiler.backend
+package dev.argon.backend
 
 import cats._
-import cats.data.NonEmptyList
-import cats.implicits._
 import dev.argon.compiler._
-import dev.argon.compiler.backend.Backend.ContextWithComp
-import dev.argon.compiler.core.Context
+import dev.argon.compiler.loaders.ResourceIndicator
+import zio.ZManaged
 
 trait Backend {
 
@@ -21,17 +19,8 @@ trait Backend {
   def projectLoader[I]: ProjectLoader[BackendOptionsId[String], BackendOptionsId[I], I]
   def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Parse.Error, BackendOptions[Option, String]]
 
-  def compile[F[+_], I: Show, A]
-  (input: CompilerInput[I, BackendOptions[Id, I]])
-  (f: TCompilationOutput { val context: ContextWithComp[F, I] } => F[A])
-  (implicit compInstance: Compilation[F], resFactory: ResourceAccessFactory[ContextWithComp[F, I]])
-  : F[A]
+  def compile
+  (input: CompilerInput[ResourceIndicator, BackendOptions[Id, ResourceIndicator]])
+  : ZManaged[ResourceAccess, ErrorList, TCompilationOutput]
 
-}
-
-object Backend {
-  type ContextWithComp[F[+_], I] = Context {
-    type Comp[+A] = F[A]
-    type ResIndicator = I
-  }
 }

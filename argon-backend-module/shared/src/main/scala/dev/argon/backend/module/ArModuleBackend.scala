@@ -6,13 +6,14 @@ import scalapb.GeneratedMessage
 import cats._
 import cats.instances._
 import cats.data.NonEmptyList
-import dev.argon.compiler.backend.Backend.ContextWithComp
-import dev.argon.compiler.backend.{Backend, CompilationOutput, ProjectLoader}
+import dev.argon.backend.{Backend, CompilationOutput, ProjectLoader, ResourceAccess}
 import dev.argon.compiler.core.Context
+import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.ZipEntryInfo
 import dev.argon.stream.builder.Source
 import toml.Codecs._
 import shapeless.{Id => _, _}
+import zio.{ZIO, ZManaged}
 
 
 
@@ -40,40 +41,32 @@ object ArModuleBackend extends Backend {
     toml.Toml.parseAs[ModuleBackendOptions[Option, String]](table)
 
 
-  override def compile[F[+_], I: Show, A]
-  (input: CompilerInput[I, ModuleBackendOptions[Id, I]])
-  (f: CompilationOutput { val context: ContextWithComp[F, I] } => F[A])
-  (implicit compInstance: Compilation[F], resFactory: ResourceAccessFactory[ContextWithComp[F, I]])
-  : F[A] = {
-    val context = new ModuleContext[F, I](input)
-    val emitter = new ModuleEmitter[F, context.type](context)
-    implicit val res = resFactory.create(context)
+  override def compile(input: CompilerInput[ResourceIndicator, ModuleBackendOptions[Id, ResourceIndicator]]): ZManaged[ResourceAccess, ErrorList, CompilationOutput] = {
+    val context = new ModuleContext(input)
+    val emitter = new ModuleEmitter[context.type](context)
 
-    context.createModule { module =>
-      f(createOutput(context)(input.backendOptions.referenceModule)(emitter.emitModule(module)))
-    }
+    context.module[ModuleBackendLoadService].map { module =>
+      createOutput(input.backendOptions.referenceModule)(emitter.emitModule(module))
+    }.provideSomeLayer(ModuleBackendLoadService.uponResourceAccess)
   }
 
   private def createOutput
-  (context2: Context)
-  (outputFile: context2.ResIndicator)
-  (moduleGen: Source[context2.Comp, (String, GeneratedMessage), Unit])
-  (implicit resourceAccess: ResourceAccess[context2.type])
-  : CompilationOutput { val context: context2.type } = new CompilationOutput {
+  (outputFile: ResourceIndicator)
+  (moduleGen: Source[Comp, (String, GeneratedMessage), Unit])
+  : CompilationOutput = new CompilationOutput {
 
-    override val context: context2.type = context2
-    import context._
+    override def write: RComp[ResourceAccess, Unit] =
+      ZIO.accessM[ResourceAccess] { env =>
+        val res = env.get
 
-    override def write: Comp[Unit] = {
-      val zipData = resourceAccess.zipFromEntries(
-        moduleGen.map { case (path, message) =>
-          ZipEntryInfo(path, resourceAccess.serializeProtocolBuffer(message))
+        val zipEntries = moduleGen.map { case (path, message) =>
+          ZipEntryInfo(path, res.serializeProtocolBuffer(message))
         }
-      )
 
-      resourceAccess.writeToResource(outputFile)(zipData)
-    }
+        val zipData = res.zipFromEntries(zipEntries)
 
+        res.writeToResource(outputFile)(zipData)
+      }
 
   }
 

@@ -9,6 +9,7 @@ import cats._
 import cats.data.NonEmptyList
 import cats.implicits._
 import shapeless.Nat
+import zio.interop.catz._
 
 object SourceSignatureCreator {
 
@@ -18,7 +19,7 @@ object SourceSignatureCreator {
   (paramOwner: ParameterOwnerDescriptor)
   (params: Vector[WithSource[parser.FunctionParameterList]])
   (resultCreator: ResultCreator.Aux[context.type, TResult])
-  : context.Comp[context.signatureContext.Signature[TResult, _ <: Nat]] = {
+  : Comp[context.signatureContext.Signature[TResult, _ <: Nat]] = {
 
     import context._
     import typeSystem.{ ParameterElement, Parameter, ParameterVariable }
@@ -59,7 +60,7 @@ object SourceSignatureCreator {
                     ExpressionConverter.convertTypeExpression(context)(env)(paramType)
 
                   case None =>
-                    Compilation[Comp].forErrors(CompilationError.ParameterTypeAnnotationRequired(paramName, CompilationMessageSource.SourceFile(env.fileSpec, loc)))
+                    Compilation.forErrors(CompilationError.ParameterTypeAnnotationRequired(paramName, CompilationMessageSource.SourceFile(env.fileSpec, loc)))
 
                 })
                 .map { t => (t, paramName) }
@@ -119,7 +120,7 @@ object SourceSignatureCreator {
 
     def createResult
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    : context.Comp[TResultInfo[context.type, context.typeSystem.type]]
+    : Comp[TResultInfo[context.type, context.typeSystem.type]]
   }
 
   object ResultCreator {

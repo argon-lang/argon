@@ -2,26 +2,27 @@ package dev.argon.compiler.types
 
 import cats._
 import cats.implicits._
+import dev.argon.compiler.Comp
 import dev.argon.compiler.core._
 import dev.argon.util.AnyExtensions._
+import zio.interop.catz._
 
-abstract class TypeSystemConverter[F[_]: Monad] {
+abstract class TypeSystemConverter {
   val context: Context
   val ts: TypeSystem[context.type]
   val otherTS: TypeSystem[context.type]
 
-  protected def liftFromComp[A](compA: context.Comp[A]): F[A]
-  protected def convertType[A](fromExpr: otherTS.ArExpr => A)(t: ts.TTypeWrapper[A]): F[otherTS.TTypeWrapper[A]]
+  protected def convertType[A](fromExpr: otherTS.ArExpr => A)(t: ts.TTypeWrapper[A]): Comp[otherTS.TTypeWrapper[A]]
 
   def convertTypeSystem
   (t1: ts.TType)
-  : F[otherTS.TType] =
+  : Comp[otherTS.TType] =
     ts.traverseTypeWrapper(t1)(convertExprTypeSystem(_))
       .flatMap(convertType(identity)(_))
 
   def convertTypeArg
   (t1: ts.TypeArgument)
-  : F[otherTS.TypeArgument] =
+  : Comp[otherTS.TypeArgument] =
     t1 match {
       case ts.TypeArgument.Expr(expr) =>
         convertTypeSystem(expr).map(otherTS.TypeArgument.Expr)
@@ -32,7 +33,7 @@ abstract class TypeSystemConverter[F[_]: Monad] {
 
   def convertTraitType
   (traitType: ts.TraitType)
-  : F[otherTS.TraitType] = for {
+  : Comp[otherTS.TraitType] = for {
     newArgs <- traitType.args.traverse(convertTypeArg(_))
   } yield otherTS.TraitType(
     traitType.arTrait,
@@ -41,7 +42,7 @@ abstract class TypeSystemConverter[F[_]: Monad] {
 
   def convertClassType
   (classType: ts.ClassType)
-  : F[otherTS.ClassType] = for {
+  : Comp[otherTS.ClassType] = for {
     newArgs <- classType.args.traverse(convertTypeArg(_))
   } yield otherTS.ClassType(
     classType.arClass,
@@ -51,7 +52,7 @@ abstract class TypeSystemConverter[F[_]: Monad] {
 
   def convertDataConstructorType
   (dataCtorType: ts.DataConstructorType)
-  : F[otherTS.DataConstructorType] = for {
+  : Comp[otherTS.DataConstructorType] = for {
     newArgs <- dataCtorType.args.traverse(convertTypeArg(_))
     newInstanceType <- convertTraitType(dataCtorType.instanceType)
   } yield otherTS.DataConstructorType(
@@ -62,21 +63,21 @@ abstract class TypeSystemConverter[F[_]: Monad] {
 
   final def convertLocalVariableTypeSystem
   (v: ts.LocalVariable)
-  : F[otherTS.LocalVariable] =
+  : Comp[otherTS.LocalVariable] =
     for {
       newType <- convertTypeSystem(v.varType)
     } yield otherTS.LocalVariable(v.descriptor, v.name, v.mutability, newType)
 
   final def convertParamVariableTypeSystem
   (v: ts.ParameterVariable)
-  : F[otherTS.ParameterVariable] =
+  : Comp[otherTS.ParameterVariable] =
     for {
       newType <- convertTypeSystem(v.varType)
     } yield otherTS.ParameterVariable(v.descriptor, v.name, v.mutability, newType)
 
   final def convertVariableTypeSystem
   (v: ts.Variable)
-  : F[otherTS.Variable] =
+  : Comp[otherTS.Variable] =
     v match {
       case v @ ts.LocalVariable(_, _, _, _) =>
         convertLocalVariableTypeSystem(v).map(identity)
@@ -93,7 +94,7 @@ abstract class TypeSystemConverter[F[_]: Monad] {
 
   final def convertParameterElementTypeSystem
   (p: ts.ParameterElement)
-  : F[otherTS.ParameterElement] =
+  : Comp[otherTS.ParameterElement] =
     for {
       newParamVar <- convertParamVariableTypeSystem(p.paramVar)
       newElemType <- convertTypeSystem(p.elemType)
@@ -101,7 +102,7 @@ abstract class TypeSystemConverter[F[_]: Monad] {
 
   final def convertParameterTypeSystem
   (p: ts.Parameter)
-  : F[otherTS.Parameter] =
+  : Comp[otherTS.Parameter] =
     for {
       newParamVar <- convertParamVariableTypeSystem(p.paramVar)
       newElems <- p.elements.traverse(convertParameterElementTypeSystem(_))
@@ -109,7 +110,7 @@ abstract class TypeSystemConverter[F[_]: Monad] {
 
   def convertPatternExprTypeSystem
   (pattern: ts.PatternExpr)
-  : F[otherTS.PatternExpr] =
+  : Comp[otherTS.PatternExpr] =
     pattern match {
       case ts.PatternExpr.DataDeconstructor(ctor, args) =>
         for {
@@ -129,9 +130,9 @@ abstract class TypeSystemConverter[F[_]: Monad] {
 
   def convertUniverseTypeSystem
   (expr: ts.UniverseExpr)
-  : F[otherTS.UniverseExpr] = expr match {
-    case ts.FixedUniverse(u) => otherTS.FixedUniverse(u).upcast[otherTS.UniverseExpr].pure[F]
-    case ts.AbstractUniverse() => otherTS.AbstractUniverse().upcast[otherTS.UniverseExpr].pure[F]
+  : Comp[otherTS.UniverseExpr] = expr match {
+    case ts.FixedUniverse(u) => otherTS.FixedUniverse(u).upcast[otherTS.UniverseExpr].pure[Comp]
+    case ts.AbstractUniverse() => otherTS.AbstractUniverse().upcast[otherTS.UniverseExpr].pure[Comp]
 
     case ts.LargestUniverse(a, b) =>
       for {
@@ -152,7 +153,7 @@ abstract class TypeSystemConverter[F[_]: Monad] {
 
   def convertExprTypeSystem
   (expr: ts.ArExpr)
-  : F[otherTS.ArExpr] = expr match {
+  : Comp[otherTS.ArExpr] = expr match {
 
 
     case ts.ClassConstructorCall(classType, classCtor, args) =>
@@ -329,8 +330,8 @@ abstract class TypeSystemConverter[F[_]: Monad] {
 
 object TypeSystemConverter {
 
-  type Aux[TContext <: Context with Singleton, TS1 <: TypeSystem[TContext], TS2 <: TypeSystem[TContext], F[_]] =
-    TypeSystemConverter[F] {
+  type Aux[TContext <: Context with Singleton, TS1 <: TypeSystem[TContext], TS2 <: TypeSystem[TContext]] =
+    TypeSystemConverter {
       val context: TContext
       val ts: TS1
       val otherTS: TS2

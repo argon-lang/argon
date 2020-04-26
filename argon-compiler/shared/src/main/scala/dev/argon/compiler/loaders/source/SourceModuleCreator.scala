@@ -2,7 +2,7 @@ package dev.argon.compiler.loaders.source
 
 import dev.argon.compiler._
 import dev.argon.compiler.core._
-import dev.argon.compiler.loaders.{ModuleLoader, NamespaceBuilder}
+import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, NamespaceBuilder, ResourceIndicator}
 import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.parser.SourceAST
@@ -11,35 +11,33 @@ import cats._
 import cats.implicits._
 import PayloadSpecifiers._
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
+import zio._
+import zio.interop.catz._
 
 private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
 
-  def createModule[A]
-  (context: Context)
-  (input: CompilerInput[context.ResIndicator, context.BackendOptions])
-  (f: ArModule[context.type, DeclarationPayloadSpecifier] => context.Comp[A])
-  (implicit resShow: Show[context.ResIndicator], res: ResourceAccess[context.type])
-  : context.Comp[A] =
-    ModuleLoader.loadReferencedModules(context)(input.references) { refModules =>
-      import context._
-      createModuleWithRefs(context)(input)(refModules).flatMap(f)
+  def createModule[TContext <: Context with Singleton, TLoad <: ModuleLoad.Service[TContext] : Tagged]
+  (context: TContext)
+  (input: CompilerInput[ResourceIndicator, context.BackendOptions])
+  : ZManaged[Has[TLoad], ErrorList, ArModule[context.type, DeclarationPayloadSpecifier]] =
+    ModuleLoader.loadReferencedModules(context)(input.references).mapM { refModules =>
+      createModuleWithRefs(context)(input)(refModules)
     }
 
   private def createModuleWithRefs
   (context2: Context)
-  (input: CompilerInput[context2.ResIndicator, context2.BackendOptions])
+  (input: CompilerInput[ResourceIndicator, context2.BackendOptions])
   (referencedModules2: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
-    : context2.Comp[ArModule[context2.type, DeclarationPayloadSpecifier]] = {
-    import context2._
+    : Comp[ArModule[context2.type, DeclarationPayloadSpecifier]] = {
     for {
-      globalNamespaceCache <- context2.compCompilationInstance.createCache[Namespace[context2.type, DeclarationPayloadSpecifier]]
+      globalNamespaceCache <- ValueCache.make[ErrorList, Namespace[context2.type, DeclarationPayloadSpecifier]]
     } yield new ArModule[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
 
       override val descriptor: ModuleDescriptor = ModuleDescriptor(input.options.moduleName)
       override val globalNamespace: Comp[Namespace[context.type, DeclarationPayloadSpecifier]] =
-        globalNamespaceCache(
+        globalNamespaceCache.get(
           input.source
             .traverse { ast =>
               createNamespaceElementFromAST(context2)(input.options)(this)(referencedModules2)(ast)
@@ -57,8 +55,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
   (currentModule: ArModule[context2.type, DeclarationPayloadSpecifier])
   (referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
-  : context2.Comp[ModuleElement[context2.type, DeclarationPayloadSpecifier]] = {
-    import context2._
+  : Comp[ModuleElement[context2.type, DeclarationPayloadSpecifier]] =
     createScope(context2)(currentModule)(referencedModules)(sourceAST).flatMap { scope =>
 
       import context2.scopeContext.ScopeExtensions
@@ -95,14 +92,13 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
         ModuleElement(sourceAST.currentNamespace, binding)
       }
     }
-  }
 
   private def createScope
   (context: Context)
   (currentModule: ArModule[context.type, DeclarationPayloadSpecifier])
   (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
-  : context.Comp[context.scopeContext.Scope] =
+  : Comp[context.scopeContext.Scope] =
     GlobalScope.createNSScope(context)(
       Vector(
         Vector(sourceAST.currentNamespace),
@@ -129,7 +125,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
   (options: CompilerOptions[Id])
   (envF: FileSpec => EnvCreator[context.type])
   (sourceAST: SourceAST)
-  : context.Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] = {
+  : Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] = {
 
     import context._
 
@@ -137,7 +133,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
     val moduleDescriptor = ModuleDescriptor(options.moduleName)
 
     def createBinding(name: Option[String], modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
-      parseGlobalAccessModifier[Comp](sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
+      parseGlobalAccessModifier(sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
         val globalName = name match {
           case Some(n) => GlobalName.Normal(n)
           case None => GlobalName.Unnamed

@@ -6,6 +6,7 @@ import dev.argon.util._
 import dev.argon.parser
 import cats._
 import cats.implicits._
+import zio.IO
 
 trait AccessModifierHelpers {
 
@@ -16,55 +17,55 @@ trait AccessModifierHelpers {
       }
       .toList
 
-  protected def parseGlobalAccessModifier[TComp[+_] : Compilation](fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): TComp[AccessModifierGlobal] =
-    parseAccessModifier[TComp](fileSpec, stmtLocation, access).flatMap {
-      case accessModifier: AccessModifierGlobal => accessModifier.pure[TComp]
-      case AccessModifier.Private => AccessModifier.PrivateInternal.pure[TComp]
+  protected def parseGlobalAccessModifier(fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): Comp[AccessModifierGlobal] =
+    parseAccessModifier(fileSpec, stmtLocation, access).flatMap {
+      case accessModifier: AccessModifierGlobal => IO.succeed(accessModifier)
+      case AccessModifier.Private => IO.succeed(AccessModifier.PrivateInternal)
       case accessModifier =>
         val loc = access.headOption.map(_.location).getOrElse(stmtLocation)
-        Compilation[TComp].forErrors(CompilationError.AccessModifierNotAllowedForGlobal(accessModifier, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation.forErrors(CompilationError.AccessModifierNotAllowedForGlobal(accessModifier, CompilationMessageSource.SourceFile(fileSpec, loc)))
     }
 
-  protected def parseAccessModifier[TComp[+_] : Compilation](fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): TComp[AccessModifier] =
+  protected def parseAccessModifier(fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): Comp[AccessModifier] =
     access match {
       case WithSource(parser.PublicModifier, _) :: Nil =>
-        AccessModifier.Public.pure[TComp]
+        IO.succeed(AccessModifier.Public)
 
       case WithSource(a @ parser.PublicModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation.forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.ProtectedModifier, _) :: Nil =>
-        AccessModifier.Protected.pure[TComp]
+        IO.succeed(AccessModifier.Protected)
 
       case WithSource(parser.ProtectedModifier, _) :: WithSource(parser.InternalModifier, _) :: Nil =>
-        AccessModifier.ProtectedInternal.pure[TComp]
+        IO.succeed(AccessModifier.ProtectedInternal)
 
       case WithSource(a @ parser.ProtectedModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation.forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.PrivateModifier, _) :: Nil =>
-        AccessModifier.Private.pure[TComp]
+        IO.succeed(AccessModifier.Private)
 
       case WithSource(parser.PrivateModifier, _) :: WithSource(parser.InternalModifier, _) :: Nil =>
-        AccessModifier.PrivateInternal.pure[TComp]
+        IO.succeed(AccessModifier.PrivateInternal)
 
       case WithSource(a @ parser.PrivateModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation.forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.InternalModifier, _) :: Nil =>
-        AccessModifier.Internal.pure[TComp]
+        IO.succeed(AccessModifier.Internal)
 
       case WithSource(parser.InternalModifier, _) :: WithSource(parser.ProtectedModifier, _) :: Nil =>
-        AccessModifier.ProtectedInternal.pure[TComp]
+        IO.succeed(AccessModifier.ProtectedInternal)
 
       case WithSource(parser.InternalModifier, _) :: WithSource(parser.PrivateModifier, _) :: Nil =>
-        AccessModifier.PrivateInternal.pure[TComp]
+        IO.succeed(AccessModifier.PrivateInternal)
 
       case WithSource(a @ parser.InternalModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation[TComp].forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation.forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
 
       case Nil =>
-        AccessModifier.Private.pure[TComp]
+        IO.succeed(AccessModifier.Private)
     }
 
 }
