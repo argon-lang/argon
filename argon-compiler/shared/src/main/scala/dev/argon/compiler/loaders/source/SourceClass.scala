@@ -12,7 +12,7 @@ import cats.implicits._
 import cats.evidence.Is
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import shapeless.Nat
-import zio.IO
+import zio.{IO, ZIO}
 import zio.interop.catz._
 
 private[compiler] object SourceClass extends AccessModifierHelpers {
@@ -76,7 +76,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
       private val groupedStatic =
         groupedStaticCache.get(
-          stmt.body.foldLeftM(GroupedStaticStatements(Vector.empty)) {
+          ZIO.foldLeft(stmt.body)(GroupedStaticStatements(Vector.empty)) {
             case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
               IO.succeed(group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)))
 
@@ -87,15 +87,15 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
       private val groupedInst =
         groupedInstCache.get(
-          stmt.instanceBody.foldLeftM(GroupedInstanceStatements(Vector.empty, Vector.empty, Vector.empty)) {
+          ZIO.foldLeft(stmt.instanceBody)(GroupedInstanceStatements(Vector.empty, Vector.empty, Vector.empty)) {
             case (group, WithSource(stmt: parser.MethodDeclarationStmt, location)) =>
-              group.copy(methods = group.methods :+ WithSource(stmt, location)).pure[Comp]
+              IO.succeed(group.copy(methods = group.methods :+ WithSource(stmt, location)))
 
             case (group, WithSource(stmt: parser.FieldDeclarationStmt, location)) =>
-              group.copy(fields = group.fields :+ WithSource(stmt, location)).pure[Comp]
+              IO.succeed(group.copy(fields = group.fields :+ WithSource(stmt, location)))
 
             case (group, WithSource(stmt: parser.ClassConstructorDeclarationStmt, location)) =>
-              group.copy(classCtors = group.classCtors :+ WithSource(stmt, location)).pure[Comp]
+              IO.succeed(group.copy(classCtors = group.classCtors :+ WithSource(stmt, location)))
 
             case (_, WithSource(_, location)) =>
               Compilation.forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))

@@ -10,8 +10,7 @@ import cats.implicits._
 import dev.argon.compiler.CompilationMessageSource
 import dev.argon.util.FileID
 import shapeless.Nat
-import zio.IO
-import zio.interop.catz._
+import zio.{IO, ZIO}
 
 abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
@@ -70,9 +69,9 @@ object ArClass {
         IO.succeed(ResultInfo(ts2)(
           for {
             baseTypes <- result.baseTypes
-            baseClass <- baseTypes.baseClass.traverse(converter.convertClassType(_))
-            baseTraits <- baseTypes.baseTraits.traverse(converter.convertTraitType(_))
-          } yield ts2.BaseTypeInfoClass(baseClass, baseTraits)
+            baseClass <- ZIO.foreach(baseTypes.baseClass)(converter.convertClassType(_))
+            baseTraits <- ZIO.foreach(baseTypes.baseTraits)(converter.convertTraitType(_))
+          } yield ts2.BaseTypeInfoClass(baseClass, baseTraits.toVector)
         ))
 
 

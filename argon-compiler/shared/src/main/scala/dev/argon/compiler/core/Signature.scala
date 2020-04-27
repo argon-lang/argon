@@ -7,8 +7,7 @@ import cats.evidence.===
 import cats.implicits._
 import shapeless.ops.nat.{LT, Pred, ToInt}
 import shapeless.{Nat, Sized, Succ, _0}
-import zio.IO
-import zio.interop.catz._
+import zio.{IO, ZIO}
 
 trait SignatureContext
 {
@@ -42,7 +41,7 @@ trait SignatureContext
           case true => ???
         }
 
-      parameters.zip(replacements).foldLeftM(this) {
+      ZIO.foldLeft(parameters.zip(replacements))(this) {
         case (sig, (param, typeSystem.TypeArgument.Expr(arg))) =>
           IO.succeed(sig.substitute(param)(arg))
 
@@ -83,7 +82,7 @@ trait SignatureContext
       } yield newContext.SignatureParameters(newParam, newNext)
 
     override def referencesParameter(parameter: typeSystem.Parameter): Comp[Boolean] =
-      new RefChecker(parameter).checkVariable(this.parameter.paramVar).pure[Comp]
+      IO.succeed(new RefChecker(parameter).checkVariable(this.parameter.paramVar))
 
     override def substitute(parameter: typeSystem.Parameter)(replacement: typeSystem.WrapExpr): Signature[TResult, Len] =
       SignatureParameters(

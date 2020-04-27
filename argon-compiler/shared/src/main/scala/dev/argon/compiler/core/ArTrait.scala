@@ -7,8 +7,7 @@ import cats._
 import cats.evidence.Is
 import cats.implicits._
 import shapeless.Nat
-import zio.IO
-import zio.interop.catz._
+import zio.{IO, ZIO}
 
 import scala.collection.immutable._
 
@@ -64,8 +63,8 @@ object ArTrait {
         IO.succeed(ResultInfo(ts2)(
           for {
             baseTypes <- result.baseTypes
-            baseTraits <- baseTypes.baseTraits.traverse(converter.convertTraitType(_))
-          } yield ts2.BaseTypeInfoTrait(baseTraits)
+            baseTraits <- ZIO.foreach(baseTypes.baseTraits)(converter.convertTraitType(_))
+          } yield ts2.BaseTypeInfoTrait(baseTraits.toVector)
         ))
 
       }
