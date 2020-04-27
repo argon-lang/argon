@@ -14,18 +14,18 @@ import dev.argon.build._
 import dev.argon.stream.builder.ZStreamSource
 import zio.stream.ZStream
 
-private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
+private[testrunner] trait TestCaseRunnerParsePhase[-R] extends TestCaseRunner[R] {
 
-  private type F[A] = ZIO[BuildEnvironment, NonEmptyList[CompilationError], A]
+  private type F[A] = IO[NonEmptyList[CompilationError], A]
 
-  protected final def parseTestCaseSource(testCase: TestCase): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Vector[SourceAST]] = {
+  protected final def parseTestCaseSource(testCase: TestCase): IO[TestCaseError, Vector[SourceAST]] = {
 
     val inputFiles = ZStream.fromIterable[(InputSourceData, Int)](testCase.sourceCode.zipWithIndex)
       .map {
         case (InputSourceData(filename, data), i) =>
           InputFileInfo[F](
             FileSpec(FileID(i), filename),
-            ZStreamSource(ZStream.fromIterable(data.toVector))
+            ZStreamSource(ZStream.fromChunk(Chunk.fromArray(data.toCharArray)))
           )
       }
 
@@ -36,7 +36,7 @@ private[testrunner] trait TestCaseRunnerParsePhase extends TestCaseRunner {
       .map {
         case (parsedInput, _) => parsedInput
       }
-
+      .mapError(compilationFailureResult)
   }
 
 }

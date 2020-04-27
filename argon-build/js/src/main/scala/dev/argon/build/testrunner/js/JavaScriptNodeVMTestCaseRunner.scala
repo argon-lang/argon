@@ -12,10 +12,10 @@ import dev.argon.io.fileio.FileIO
 import scala.scalajs.js
 import scala.scalajs.js.{JSON, |}
 
-final class JavaScriptNodeVMTestCaseRunner(references: RIO[FileIO, Vector[ResourceIndicator]]) extends JavaScriptTestCaseRunnerBase(references) {
+final class JavaScriptNodeVMTestCaseRunner(protected val references: Vector[ResourceIndicator]) extends JavaScriptTestCaseRunnerBase {
 
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null", "org.wartremover.warts.ToString", "dev.argon.warts.ZioEffect"))
-  override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): ZIO[BuildEnvironment, Throwable, String] =
+  override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): Task[String] =
     IO.effectAsync { register =>
       val stdout = new MemoryWritableStream()
       val sandboxConsole = new NodeConsole(stdout)
@@ -74,9 +74,3 @@ final class JavaScriptNodeVMTestCaseRunner(references: RIO[FileIO, Vector[Resour
 
 }
 
-object JavaScriptNodeVMTestCaseRunner {
-
-  def apply(references: RIO[FileIO, Vector[ResourceIndicator]]): JavaScriptNodeVMTestCaseRunner =
-    new JavaScriptNodeVMTestCaseRunner(references)
-
-}

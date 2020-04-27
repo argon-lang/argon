@@ -7,7 +7,7 @@ import dev.argon.build.testrunner._
 import cats._
 import cats.data.{EitherT, NonEmptyList, NonEmptyVector}
 import cats.implicits._
-import dev.argon.backend.CompilationOutputText
+import dev.argon.backend.{CompilationOutputText, ResourceAccess}
 import zio._
 import zio.interop.catz._
 import dev.argon.compiler.{CompilationError, CompilerOptions, ErrorList}
@@ -17,12 +17,12 @@ import dev.argon.build._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.module.PathResourceIndicator
 
-abstract class JavaScriptTestCaseRunnerBase(referencePaths: RIO[FileIO, Vector[ResourceIndicator]]) extends TestCaseRunnerCompilePhase {
+abstract class JavaScriptTestCaseRunnerBase extends TestCaseRunnerExecutionPhase[ResourceAccess with JSModuleLoad] {
 
   override val name: String = "JavaScript Execution"
   override protected val backend: JSBackend.type = JSBackend
 
-  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): IO[IOException, JSBackendOptions[Id, ResourceIndicator]] =
+  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): UIO[JSBackendOptions[Id, ResourceIndicator]] =
     Path.of(compilerOptions.moduleName + ".js").map { outputPath =>
       JSBackendOptions[Id, ResourceIndicator](
         outputFile = PathResourceIndicator(outputPath),
@@ -34,32 +34,16 @@ abstract class JavaScriptTestCaseRunnerBase(referencePaths: RIO[FileIO, Vector[R
       )
     }
 
-  override protected def getProgramOutput(compOutput: CompilationOutputText): ZIO[BuildEnvironment, NonEmptyList[CompilationError], Either[Throwable, String]] =
-    (
+  override protected def getProgramOutput(compOutput: CompilationOutputText): ZIO[JSModuleLoad, TestCaseError, String] =
+    for {
+      (compiledFile, _) <- compOutput.textStream.foldLeftM("") { (a, b) => IO.succeed(a + b) }.mapError(compilationFailureResult)
+      output <- runJSOutput(references)(compiledFile).mapError(executionFailureResult)
+    } yield output
+
+  private def runJSOutput(files: Vector[ResourceIndicator])(compiledFile: String): RIO[JSModuleLoad, String] = for {
+    referenceLibs <- files.traverse { id =>
       for {
-        references <- EitherT[ZIO[BuildEnvironment, NonEmptyList[CompilationError], *], Throwable, Vector[ResourceIndicator]](referencePaths.either)
-        (compiledFile, _) <- EitherT.liftF(compOutput.textStream.foldLeftM("") { (a, b) => IO.succeed(a + b) } : ZIO[BuildEnvironment, ErrorList, (String, Unit)])
-        output <- EitherT[ZIO[BuildEnvironment, NonEmptyList[CompilationError], *], Throwable, String](runJSOutput(references)(compiledFile).either)
-      } yield output
-    ).value
-
-
-  override def runTest(testCase: TestCase): ZIO[BuildEnvironment, Throwable, TestCaseResult] =
-    referencePaths.flatMap { references =>
-      compileTestCase(testCase, references)
-    }
-
-  private def runJSOutput(files: Vector[ResourceIndicator])(compiledFile: String): ZIO[BuildEnvironment, Throwable, String] = for {
-    referenceLibs <- files.traverse { path =>
-      for {
-        (libName, parentDir) <- path match {
-          case PathResourceIndicator(path) => IO.succeed((path.fileNameWithoutExtension, path.parent))
-          case _ => IO.fail(new IOException("Unexpected resource indicator"))
-        }
-        currentDir <- Path.of(".")
-        libFilePath <- Path.of("js", libName + ".js")
-        libFile = parentDir.getOrElse(currentDir).resolve(libFilePath)
-        content <- ZIO.accessM[FileIO] { _.get.readAllText(libFile) }
+        (libName, content) <- ZIO.accessM[JSModuleLoad] { _.get.loadJSForArgonModule(id) }
       } yield FileInfo(libName, content)
     }
 
@@ -68,7 +52,7 @@ abstract class JavaScriptTestCaseRunnerBase(referencePaths: RIO[FileIO, Vector[R
     output <- executeJS(compiledFile)(modules)
   } yield output
 
-  protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): ZIO[BuildEnvironment, Throwable, String]
+  protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): Task[String]
 
 }
 

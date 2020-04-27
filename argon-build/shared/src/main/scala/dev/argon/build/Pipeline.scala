@@ -73,7 +73,7 @@ object Pipeline {
   (buildInfo: BuildInfo.Resolved)
   : ZManaged[BuildEnvironment with ResourceAccess, ErrorList, buildInfo.backend.TCompilationOutput] =
     ZManaged.fromEffect(
-      BuildProcess.parseInput(ZStreamSource(findInputFiles(buildInfo)))
+      BuildProcess.parseInput[BuildEnvironment](ZStreamSource(findInputFiles(buildInfo)))
         .foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
     )
       .flatMap {

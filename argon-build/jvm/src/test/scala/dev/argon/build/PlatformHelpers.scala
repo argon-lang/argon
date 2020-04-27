@@ -1,26 +1,33 @@
 package dev.argon.build
 
-import dev.argon.backend.Backend
+import dev.argon.backend.{Backend, ResourceAccess}
 import dev.argon.backend.js.JSBackend
-import dev.argon.build.testrunner.js.GraalJSTestCaseRunner
+import dev.argon.build.testrunner.js.{GraalJSTestCaseRunner, JSModuleLoad}
 import dev.argon.build.testrunner.{BuildTestCaseRunner, ParseTestCaseRunner, TestCaseRunner}
+import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.Path
 import dev.argon.io.fileio.FileIO
 import dev.argon.module.PathResourceIndicator
-import zio.{IO, RIO, UIO, ZLayer, ZManaged}
+import zio.{Has, IO, RIO, UIO, ZLayer, ZManaged}
 import zio.blocking.Blocking
 import zio.console.Console
 import zio.system.System
 
 object PlatformHelpers {
+
+  type TestExecEnv = ResourceAccess with JSModuleLoad
+
   def fileIOLayer: ZLayer[Blocking, Nothing, FileIO] = FileIO.live
 
-  def testCaseRunners(references: RIO[FileIO, Vector[Path]]): Seq[TestCaseRunner] = {
-    val resRefs = references.map(_.map(PathResourceIndicator.apply))
+  def execEnvLayer: ZLayer[FileIO, Throwable, TestExecEnv] =
+    TestResourceAccess.layer.passthrough >>> (
+      ZLayer.fromFunction[Has[TestResourceAccess.Service], ResourceAccess.Service](_.get) ++
+        TestJSModuleLoad.layer
+      )
 
+  def testCaseRunners(references: Vector[ResourceIndicator]): Seq[TestCaseRunner[TestExecEnv]] =
     Seq(ParseTestCaseRunner) ++
-      Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, resRefs) } ++
-      Seq(new GraalJSTestCaseRunner(resRefs))
-  }
+      Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, references) } ++
+      Seq(new GraalJSTestCaseRunner(references))
 
 }

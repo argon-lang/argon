@@ -28,9 +28,10 @@ import org.apache.commons.text.StringEscapeUtils
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.io.FileSystem
 
-final class GraalJSTestCaseRunner(references: RIO[FileIO, Vector[ResourceIndicator]]) extends JavaScriptTestCaseRunnerBase(references) {
+final class GraalJSTestCaseRunner(protected val references: Vector[ResourceIndicator]) extends JavaScriptTestCaseRunnerBase {
+
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
-  override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): ZIO[BuildEnvironment, Throwable, String] =
+  override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): Task[String] =
     IO.effect {
 
       val output = new ByteArrayOutputStream()

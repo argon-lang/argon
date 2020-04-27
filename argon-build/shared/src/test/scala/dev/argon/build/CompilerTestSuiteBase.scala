@@ -4,13 +4,16 @@ import java.io.IOException
 
 import dev.argon.build.testrunner._
 import dev.argon.io.Path
-import zio.{IO, RIO, UIO, ZIO}
+import zio._
 import zio.test.Assertion.equalTo
 import zio.test._
 import cats._
 import cats.implicits._
+import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.fileio.FileIO
+import dev.argon.module.PathResourceIndicator
 import zio.interop.catz._
+import PlatformHelpers.TestExecEnv
 
 abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
 
@@ -18,46 +21,41 @@ abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
     "Argon.Core",
   )
 
-  val referencePaths: RIO[FileIO, Vector[Path]] = libraries.traverse { name =>
-    ZIO.accessM[FileIO](_.get.getEnv("ARGON_LIB_DIR"))
-      .flatMap {
-        case Some(libDir) => Path.of(libDir,name, name + ".armodule")
-        case None => IO.fail(new RuntimeException("ARGON_LIB_DIR was not set"))
-      }
-  }
+  private val references: Vector[ResourceIndicator] =
+    libraries.map(LibraryResourceIndicator.apply)
 
-  val suiteName: String
-  def testCases: ZIO[Environment, TestFailure[Failure], TestCaseStructure]
-  val runners: Seq[TestCaseRunner]
+  protected val suiteName: String
+  protected def testCases: ZIO[FileIO, TestFailure[Failure], TestCaseStructure]
+  protected def runners(references: Vector[ResourceIndicator]): Seq[TestCaseRunner[TestExecEnv]]
 
-  def createTest(runner: TestCaseRunner)(testCase: TestCase): ZSpec[Environment, Failure] =
-    testM(testCase.name) {
-      assertM(
-        runner.runTest(testCase)
-          .provideCustomLayer(PlatformHelpers.fileIOLayer)
-          .orDie
-      )(
-        equalTo(TestCaseResult.Success : TestCaseResult)
-      )
+  private def isExpectedResult(runner: TestCaseRunner[_])(expected: TestCaseExpectedResult): Assertion[TestCaseActualResult] =
+    Assertion.assertion("isExpectedResult")(Assertion.Render.param(expected)) { actual =>
+      runner.isResultExpected(actual, expected)
     }
 
-  def createSuites(runner: TestCaseRunner, structure: TestCaseStructure): Seq[ZSpec[Environment, Failure]] =
+  private def createTest(runner: TestCaseRunner[TestExecEnv])(testCase: TestCase): ZSpec[Environment, Failure] =
+    testM(testCase.name) {
+      runner.runTest(testCase)
+        .provideLayer(PlatformHelpers.fileIOLayer >>> PlatformHelpers.execEnvLayer)
+        .orDie
+        .map { result => assert(result)(isExpectedResult(runner)(testCase.expectedResult)) }
+    }
+
+  private def createSuites(runner: TestCaseRunner[TestExecEnv], structure: TestCaseStructure): Seq[ZSpec[Environment, Failure]] =
     structure.nestedStructures.map { case (name, nested) =>
       suite(name)(createSuites(runner, nested): _*)
     } ++
       structure.tests.map(createTest(runner))
 
   override def spec: ZSpec[Environment, Failure] =
-
     Spec.suite(suiteName,
-      testCases
-        .map { loadedTestCases =>
-          runners.map { runner =>
-            suite(runner.name)(
-              createSuites(runner, loadedTestCases): _*
-            )
-          }.toVector
-        },
+      for {
+        loadedTestCases <- testCases
+      } yield runners(references).map { runner =>
+        suite(runner.name)(
+          createSuites(runner, loadedTestCases): _*
+        )
+      }.toVector,
       None
-    )
+    ).provideSomeLayer[Environment](PlatformHelpers.fileIOLayer)
 }

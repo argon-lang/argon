@@ -19,25 +19,25 @@ import zio.interop.catz._
 
 object BuildProcess {
 
-  def parseInput
-  (inputFiles: Source[ZIO[BuildEnvironment, ErrorList, *], InputFileInfo[ZIO[BuildEnvironment, ErrorList, *]], Unit])
-  : Source[ZIO[BuildEnvironment, ErrorList, *], SourceAST, Unit] =
-    new Source[ZIO[BuildEnvironment, ErrorList, *], SourceAST, Unit] {
+  def parseInput[R]
+  (inputFiles: Source[ZIO[R, ErrorList, *], InputFileInfo[ZIO[R, ErrorList, *]], Unit])
+  : Source[ZIO[R, ErrorList, *], SourceAST, Unit] =
+    new Source[ZIO[R, ErrorList, *], SourceAST, Unit] {
 
-      override protected val monadF: Monad[ZIO[BuildEnvironment, ErrorList, *]] = implicitly[Monad[ZIO[BuildEnvironment, ErrorList, *]]]
+      override protected val monadF: Monad[ZIO[R, ErrorList, *]] = implicitly[Monad[ZIO[R, ErrorList, *]]]
 
-      override protected def generateImpl[G[_] : Monad](sink: Sink[G, SourceAST])(implicit genEffect: GenEffect[ZIO[BuildEnvironment, ErrorList, *], G]): G[Unit] =
+      override protected def generateImpl[G[_] : Monad](sink: Sink[G, SourceAST])(implicit genEffect: GenEffect[ZIO[R, ErrorList, *], G]): G[Unit] =
         inputFiles.foreachG { fileInfo =>
           def toCompileError(error: SyntaxError): CompilationError =
             CompilationError.SyntaxCompilerError(SyntaxErrorData(fileInfo.fileSpec, error))
 
-          implicit val errorHandler: ParseErrorHandler[ZIO[BuildEnvironment, ErrorList, *], NonEmptyVector[SyntaxError]] =
-            new ParseErrorHandler[ZIO[BuildEnvironment, ErrorList, *], NonEmptyVector[SyntaxError]] {
-              override def raiseError[A](errors: NonEmptyVector[SyntaxError]): ZIO[BuildEnvironment, ErrorList, A] =
+          implicit val errorHandler: ParseErrorHandler[ZIO[R, ErrorList, *], NonEmptyVector[SyntaxError]] =
+            new ParseErrorHandler[ZIO[R, ErrorList, *], NonEmptyVector[SyntaxError]] {
+              override def raiseError[A](errors: NonEmptyVector[SyntaxError]): ZIO[R, ErrorList, A] =
                 Compilation.forErrors(NonEmptyList(toCompileError(errors.head), errors.tail.map(toCompileError).toList))
             }
 
-          val parsed = ParseHandler.parse[ZIO[BuildEnvironment, ErrorList, *]](fileInfo.fileSpec)(fileInfo.dataStream)
+          val parsed = ParseHandler.parse[ZIO[R, ErrorList, *]](fileInfo.fileSpec)(fileInfo.dataStream)
 
           parsed.foreachG(sink.consume)
         }
