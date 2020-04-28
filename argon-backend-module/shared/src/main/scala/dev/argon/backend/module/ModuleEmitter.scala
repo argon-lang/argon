@@ -14,7 +14,6 @@ import dev.argon.compiler.types.{ParameterStyle, TypeSystem}
 import dev.argon.util.FileID
 import dev.argon.module
 import dev.argon.stream.builder.{GenEffect, Sink, Source}
-import dev.argon.stream.Resource
 import shapeless._
 import dev.argon.util.AnyExtensions._
 import shapeless.ops.nat.{LT, Pred}
