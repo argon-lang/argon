@@ -4,14 +4,14 @@ inputFiles = [ "src/**/*.argon" ]
 [compiler-options]
 moduleName = "Argon.Core"
 
-[argon-module]
+[backend.argon-module]
 referenceModule = "Argon.Core.armodule"
 
-[js]
+[backend.js]
 # referenceModule = "js/Argon.Core.armodule"
 outputFile = "js/Argon.Core.js"
 
-[js.extern]
+[backend.js.extern]
 Int_to_s = """
 
 function() {
@@ -29,7 +29,7 @@ function (s) {
 
 """
 
-[js.inject]
+[backend.js.inject]
 before = """
 
 export const classConstructorSymbol = Symbol();

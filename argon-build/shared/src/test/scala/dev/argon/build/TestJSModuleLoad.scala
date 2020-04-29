@@ -10,9 +10,9 @@ import zio.{Has, IO, ZLayer}
 
 object TestJSModuleLoad {
 
-  def layer: ZLayer[Has[TestResourceAccess.Service] with FileIO, Nothing, JSModuleLoad] = ZLayer.fromFunction { env =>
+  def layer: ZLayer[Has[TestResourceReader.Service] with FileIO, Nothing, JSModuleLoad] = ZLayer.fromFunction { env =>
     val fileIO = env.get[FileIO.Service]
-    val res = env.get[TestResourceAccess.Service]
+    val res = env.get[TestResourceReader.Service]
 
     new JSModuleLoad.Service {
 

@@ -8,21 +8,21 @@ import dev.argon.compiler.core.Context
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.stream._
 import dev.argon.stream.builder.Source
-import zio.ZIO
+import zio._
 import zio.interop.catz._
 
-trait CompilationOutput {
-  def write: RComp[ResourceAccess, Unit]
+trait CompilationOutput[OutputOptions[_]] {
+  def write[I <: ResourceIndicator: Tagged](options: OutputOptions[I]): RComp[ResourceWriter[I], Unit]
 }
 
-abstract class CompilationOutputText extends CompilationOutput {
+abstract class CompilationOutputText[OutputOptions[_]] extends CompilationOutput[OutputOptions] {
 
-  override def write: RComp[ResourceAccess, Unit] =
-    ZIO.accessM[ResourceAccess](_.get.writeToResource(outputResource)(
+  override def write[I <: ResourceIndicator: Tagged](options: OutputOptions[I]): RComp[ResourceWriter[I], Unit] =
+    ZIO.accessM[ResourceWriter[I]](_.get.writeToResource(outputResource(options))(
       StringToByteStreamTransformation.convert(StandardCharsets.UTF_8)(textStream)
     ))
 
-  def outputResource: ResourceIndicator
+  def outputResource[I](options: OutputOptions[I]): I
 
   val textStream: Source[Comp, String, Unit]
 

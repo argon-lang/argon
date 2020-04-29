@@ -1,11 +1,13 @@
 package dev.argon.backend.js
 
 import dev.argon.compiler._
-import cats._
+import cats.{Id => _, _}
 import cats.implicits._
 import cats.data.NonEmptyList
+import shapeless.Id
 import dev.argon.compiler.core.PayloadSpecifiers._
 import dev.argon.compiler.core._
+import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
 import dev.argon.compiler.types.TypeSystem.PrimitiveOperation

@@ -29,6 +29,6 @@ object CompilerTests extends CompilerTestSuiteBase {
       .catchAllCause { cause => IO.fail(TestFailure.halt[Failure](cause)) }
 
 
-  override protected def runners(references: Vector[ResourceIndicator]): Seq[TestCaseRunner[TestExecEnv]] =
+  override protected def runners(references: Vector[TestResourceIndicator]): Seq[TestCaseRunner[TestExecEnv]] =
     PlatformHelpers.testCaseRunners(references)
 }

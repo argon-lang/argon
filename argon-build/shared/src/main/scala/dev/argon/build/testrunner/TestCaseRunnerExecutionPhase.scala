@@ -1,12 +1,12 @@
 package dev.argon.build.testrunner
 
-import dev.argon.backend.ResourceAccess
+import dev.argon.backend.ResourceReader
 import dev.argon.compiler.loaders.ResourceIndicator
-import zio.{IO, URIO, ZIO}
+import zio._
 
-trait TestCaseRunnerExecutionPhase[-R <: ResourceAccess] extends TestCaseRunnerCompilePhase[R] {
+private[testrunner] abstract class TestCaseRunnerExecutionPhase[I <: ResourceIndicator: Tagged, -R <: ResourceReader[I]] extends TestCaseRunnerCompilePhase[I, R] {
 
-  protected val references: Vector[ResourceIndicator]
+  protected val references: Vector[I]
 
   override def runTest(testCase: TestCase): URIO[R, TestCaseActualResult] =
     compileTestCase(testCase, references)

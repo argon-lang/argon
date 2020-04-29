@@ -6,8 +6,8 @@ import zio._
 
 object ModuleLoad {
 
-  trait Service[-TContext <: Context] {
-    def loadResource(id: ResourceIndicator): Managed[ErrorList, Option[ModuleMetadata[TContext]]]
+  trait Service[I <: ResourceIndicator, -TContext <: Context] {
+    def loadResource(id: I): Managed[ErrorList, Option[ModuleMetadata[TContext]]]
   }
 
 }

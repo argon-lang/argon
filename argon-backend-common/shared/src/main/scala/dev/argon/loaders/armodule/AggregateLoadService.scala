@@ -7,10 +7,9 @@ import zio.Managed
 import cats.implicits._
 import zio.interop.catz._
 
-abstract class AggregateLoadService[TContext <: Context] extends ModuleLoad.Service[TContext] {
+final class AggregateLoadService[I <: ResourceIndicator, TContext <: Context.WithRes[I]](loadServices: Vector[ModuleLoad.Service[I, TContext]]) extends ModuleLoad.Service[I, TContext] {
 
-  override def loadResource(id: ResourceIndicator): Managed[ErrorList, Option[ModuleMetadata[TContext]]] =
+  override def loadResource(id: I): Managed[ErrorList, Option[ModuleMetadata[TContext]]] =
     loadServices.collectFirstSomeM { _.loadResource(id) }
 
-  protected val loadServices: Vector[ModuleLoad.Service[TContext]]
 }

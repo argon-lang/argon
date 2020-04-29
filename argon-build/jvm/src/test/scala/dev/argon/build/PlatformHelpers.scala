@@ -1,6 +1,6 @@
 package dev.argon.build
 
-import dev.argon.backend.{Backend, ResourceAccess}
+import dev.argon.backend.{ResourceReader, ResourceWriter}
 import dev.argon.backend.js.JSBackend
 import dev.argon.build.testrunner.js.{GraalJSTestCaseRunner, JSModuleLoad}
 import dev.argon.build.testrunner.{BuildTestCaseRunner, ParseTestCaseRunner, TestCaseRunner}
@@ -15,17 +15,18 @@ import zio.system.System
 
 object PlatformHelpers {
 
-  type TestExecEnv = ResourceAccess with JSModuleLoad
+  type TestExecEnv = ResourceReader[TestResourceIndicator] with ResourceWriter[Nothing] with JSModuleLoad
 
   def fileIOLayer: ZLayer[Blocking, Nothing, FileIO] = FileIO.live
 
   def execEnvLayer: ZLayer[FileIO, Throwable, TestExecEnv] =
-    TestResourceAccess.layer.passthrough >>> (
-      ZLayer.fromFunction[Has[TestResourceAccess.Service], ResourceAccess.Service](_.get) ++
+    TestResourceReader.layer.passthrough >>> (
+      ZLayer.fromFunction[Has[TestResourceReader.Service], ResourceReader.Service[TestResourceIndicator]](_.get) ++
+        ResourceWriter.forNothing ++
         TestJSModuleLoad.layer
       )
 
-  def testCaseRunners(references: Vector[ResourceIndicator]): Seq[TestCaseRunner[TestExecEnv]] =
+  def testCaseRunners(references: Vector[TestResourceIndicator]): Seq[TestCaseRunner[TestExecEnv]] =
     Seq(ParseTestCaseRunner) ++
       Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, references) } ++
       Seq(new GraalJSTestCaseRunner(references))

@@ -12,7 +12,7 @@ import cats._
 import cats.evidence.{===, Is}
 import cats.data.NonEmptyList
 import cats.implicits._
-import dev.argon.backend.ResourceAccess
+import dev.argon.backend.{ResourceAccess, ResourceReader}
 import dev.argon.module.Metadata
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import shapeless.ops.nat.{LT, Pred, ToInt}
@@ -25,9 +25,9 @@ import scala.collection.immutable.{Map, Vector}
 
 object ArgonModuleLoader {
 
-  def apply[TContext <: Context](res: ResourceAccess.Service)(implicit referencePayloadLoader: PayloadLoader[TContext, ReferencePayloadSpecifier]): ModuleLoad.Service[TContext] = new ModuleLoad.Service[TContext] {
+  def apply[I <: ResourceIndicator, TContext <: Context.WithRes[I]](res: ResourceReader.Service[I])(implicit referencePayloadLoader: PayloadLoader[TContext, ReferencePayloadSpecifier]): ModuleLoad.Service[I, TContext] = new ModuleLoad.Service[I, TContext] {
 
-    override def loadResource(id: ResourceIndicator): Managed[ErrorList, Option[ModuleMetadata[TContext]]] =
+    override def loadResource(id: I): Managed[ErrorList, Option[ModuleMetadata[TContext]]] =
       id.extension match {
         case "armodule" =>
           res.getZipReader(id).mapM { zip =>

@@ -17,17 +17,17 @@ import zio.interop.catz._
 private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
 
-  def createModule[TContext <: Context with Singleton, TLoad <: ModuleLoad.Service[TContext] : Tagged]
+  def createModule[I <: ResourceIndicator: Tagged, TContext <: Context.WithRes[I]: Tagged]
   (context: TContext)
-  (input: CompilerInput[ResourceIndicator, context.BackendOptions])
-  : ZManaged[Has[TLoad], ErrorList, ArModule[context.type, DeclarationPayloadSpecifier]] =
-    ModuleLoader.loadReferencedModules(context)(input.references).mapM { refModules =>
+  (input: CompilerInput[I, context.BackendOptions])
+  : ZManaged[ModuleLoad[I, TContext], ErrorList, ArModule[context.type, DeclarationPayloadSpecifier]] =
+    ModuleLoader.loadReferencedModules[I, TContext](context)(input.references).mapM { refModules =>
       createModuleWithRefs(context)(input)(refModules)
     }
 
   private def createModuleWithRefs
   (context2: Context)
-  (input: CompilerInput[ResourceIndicator, context2.BackendOptions])
+  (input: CompilerInput[context2.ResIndicator, context2.BackendOptions])
   (referencedModules2: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
     : Comp[ArModule[context2.type, DeclarationPayloadSpecifier]] = {
     for {

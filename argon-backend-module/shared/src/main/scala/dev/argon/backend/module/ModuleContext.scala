@@ -4,13 +4,11 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.loaders.ResourceIndicator
-import cats._
+import shapeless.Id
 import cats.implicits._
+import zio._
 
-class ModuleContext
-(
-  override protected val compilerInput: CompilerInput[ResourceIndicator, ModuleBackendOptions[Id, ResourceIndicator]]
-) extends Context {
+sealed abstract class ModuleContext extends Context {
   override type TFunctionMetadata = Unit
   override type TMethodMetadata = Unit
   override type TTraitMetadata = Unit
@@ -23,7 +21,7 @@ class ModuleContext
   override type TClassConstructorImplementation = typeSystem.ClassConstructorBody
   override type TDataConstructorImplementation = typeSystem.ArExpr
 
-  override type BackendOptions = ModuleBackendOptions[Id, ResourceIndicator]
+  override type BackendOptions = ModuleBackendOptions[Id, ResIndicator]
 
   override def createExprFunctionImplementation(expr: typeSystem.ArExpr): typeSystem.ArExpr = expr
   override def createExprMethodImplementation(expr: typeSystem.ArExpr): Option[typeSystem.ArExpr] = Some(expr)
@@ -39,3 +37,12 @@ class ModuleContext
     Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
 
 }
+
+object ModuleContext {
+  def apply[I <: ResourceIndicator: Tagged](input: CompilerInput[I, ModuleBackendOptions[Id, I]]): ModuleContext with Context.WithRes[I] = new ModuleContext {
+    override type ResIndicator = I
+    override val resIndicatorTag: Tagged[I] = implicitly
+    override protected val compilerInput: CompilerInput[I, ModuleBackendOptions[Id, I]] = input
+  }
+}
+

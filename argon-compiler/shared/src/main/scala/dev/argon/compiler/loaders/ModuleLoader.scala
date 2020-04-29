@@ -14,15 +14,15 @@ import scala.collection.immutable._
 
 object ModuleLoader {
 
-  def loadReferencedModules[TContext <: Context with Singleton, TLoad <: ModuleLoad.Service[TContext] : Tagged]
+  def loadReferencedModules[I <: ResourceIndicator: Tagged, TContext <: Context.WithRes[I]: Tagged]
   (context: TContext)
-  (refFiles: Vector[ResourceIndicator])
-  : ZManaged[Has[TLoad], ErrorList, Vector[ArModule[context.type, ReferencePayloadSpecifier]]] = {
+  (refFiles: Vector[I])
+  : ZManaged[ModuleLoad[I, TContext], ErrorList, Vector[ArModule[context.type, ReferencePayloadSpecifier]]] = {
 
     type ModInfo = ModuleMetadata[TContext]
 
-    def findWorkingLoader(id: ResourceIndicator): ZManaged[Has[TLoad], ErrorList, ModInfo] =
-      ZManaged.accessManaged[Has[TLoad]](_.get[TLoad].loadResource(id))
+    def findWorkingLoader(id: I): ZManaged[ModuleLoad[I, TContext], ErrorList, ModInfo] =
+      ZManaged.accessManaged[ModuleLoad[I, TContext]](_.get.loadResource(id))
         .map { _.toRight { NonEmptyList.of(CompilationError.CouldNotFindCompatibleModuleLoader(CompilationMessageSource.ResourceIdentifier(id))) } }
         .absolve
 
@@ -50,13 +50,13 @@ object ModuleLoader {
 
     def loadModuleRefFromData
     (refDataPairs: Vector[ModInfo])
-    : RComp[Has[TLoad], Vector[Either[CompilationError, PayloadResult]]] =
+    : RComp[ModuleLoad[I, TContext], Vector[Either[CompilationError, PayloadResult]]] =
       loadDependencies[Comp, ModInfo, ModuleDescriptor, PayloadResult, Either[CompilationError, *]](dependencyTreeOps)(refDataPairs)
 
 
 
 
-    def impl(refFiles: Vector[ResourceIndicator], loadedFiles: Vector[ModInfo]): ZManaged[Has[TLoad], ErrorList, Vector[ArModule[context.type, ReferencePayloadSpecifier]]] =
+    def impl(refFiles: Vector[I], loadedFiles: Vector[ModInfo]): ZManaged[ModuleLoad[I, TContext], ErrorList, Vector[ArModule[context.type, ReferencePayloadSpecifier]]] =
       refFiles match {
         case id +: tail =>
           findWorkingLoader(id).flatMap { loadedFile => impl(tail, loadedFiles :+ loadedFile) }

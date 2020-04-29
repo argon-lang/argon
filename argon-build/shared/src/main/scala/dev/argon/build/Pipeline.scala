@@ -69,9 +69,9 @@ object Pipeline {
       }
   }
 
-  def compileResult[A]
+  def compileResult
   (buildInfo: BuildInfo.Resolved)
-  : ZManaged[BuildEnvironment with ResourceAccess, ErrorList, buildInfo.backend.TCompilationOutput] =
+  : ZManaged[BuildEnvironment with ResourceAccess[PathResourceIndicator], ErrorList, buildInfo.backend.TCompilationOutput] =
     ZManaged.fromEffect(
       BuildProcess.parseInput[BuildEnvironment](ZStreamSource(findInputFiles(buildInfo)))
         .foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
@@ -100,7 +100,7 @@ object Pipeline {
   def run(buildInfo: BuildInfo.Resolved): RIO[Console with BuildEnvironment, Int] =
     compileResult(buildInfo)
       .use { output =>
-        output.write
+        output.write(buildInfo.outputOptions)
       }
       .provideSomeLayer[BuildEnvironment](ResourceAccess.forFileIO)
       .either

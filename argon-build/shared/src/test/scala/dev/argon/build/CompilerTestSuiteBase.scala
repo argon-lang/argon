@@ -21,12 +21,12 @@ abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
     "Argon.Core",
   )
 
-  private val references: Vector[ResourceIndicator] =
+  private val references: Vector[TestResourceIndicator] =
     libraries.map(LibraryResourceIndicator.apply)
 
   protected val suiteName: String
   protected def testCases: ZIO[FileIO, TestFailure[Failure], TestCaseStructure]
-  protected def runners(references: Vector[ResourceIndicator]): Seq[TestCaseRunner[TestExecEnv]]
+  protected def runners(references: Vector[TestResourceIndicator]): Seq[TestCaseRunner[TestExecEnv]]
 
   private def isExpectedResult(runner: TestCaseRunner[_])(expected: TestCaseExpectedResult): Assertion[TestCaseActualResult] =
     Assertion.assertion("isExpectedResult")(Assertion.Render.param(expected)) { actual =>

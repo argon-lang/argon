@@ -1,25 +1,22 @@
 package dev.argon.backend.js
 
-import dev.argon.backend.ResourceAccess
+import dev.argon.backend.ResourceReader
+import dev.argon.compiler.core.Context
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
-import dev.argon.compiler.loaders.ModuleLoad
+import dev.argon.compiler.loaders.{ModuleLoad, ResourceIndicator}
 import dev.argon.loaders.armodule.{AggregateLoadService, ArgonModuleLoader}
 import dev.argon.loaders.armodule.ArgonModuleLoader.PayloadLoader
-import zio.{Has, ZLayer}
-
-final class JSBackendLoadService(res: ResourceAccess.Service) extends AggregateLoadService[JSContext] {
-
-
-  implicit val payloadLoader: PayloadLoader[JSContext, ReferencePayloadSpecifier] = new JSPayloadLoader
-
-  override protected val loadServices: Vector[ModuleLoad.Service[JSContext]] =
-    Vector(ArgonModuleLoader(res))
-}
+import zio._
 
 object JSBackendLoadService {
 
-  val uponResourceAccess: ZLayer[ResourceAccess, Nothing, Has[JSBackendLoadService]] = ZLayer.fromFunction { env =>
-    new JSBackendLoadService(env.get)
+  def forResourceReader[I <: ResourceIndicator: Tagged, TContext <: JSContext with Context.WithRes[I]: Tagged]: ZLayer[ResourceReader[I], Nothing, ModuleLoad[I, TContext]] = ZLayer.fromFunction { env =>
+    val res = env.get
+    implicit val payloadLoader: PayloadLoader[TContext, ReferencePayloadSpecifier] = new JSPayloadLoader[TContext]
+
+    new AggregateLoadService[I, TContext](Vector(
+      ArgonModuleLoader[I, TContext](res)(payloadLoader)
+    ))
   }
 
 }

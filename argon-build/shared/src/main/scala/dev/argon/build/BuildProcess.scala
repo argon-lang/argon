@@ -6,7 +6,7 @@ import cats._
 import cats.arrow.FunctionK
 import cats.implicits._
 import cats.data.{NonEmptyList, NonEmptyVector}
-import dev.argon.backend.{Backend, ResourceAccess}
+import dev.argon.backend.{Backend, ResourceReader}
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.grammar.ParseErrorHandler
 import dev.argon.parser.impl.ParseHandler
@@ -14,7 +14,7 @@ import dev.argon.util.FileSpec
 import dev.argon.stream._
 import dev.argon.stream.builder.{GenEffect, Sink, Source}
 import dev.argon.util.AnyExtensions._
-import zio.{ZIO, ZManaged}
+import zio._
 import zio.interop.catz._
 
 object BuildProcess {
@@ -43,16 +43,16 @@ object BuildProcess {
         }
     }
 
-  def compile
+  def compile[I <: ResourceIndicator: Tagged]
   (
     backend: Backend
   )(
     sourceASTs: Vector[SourceAST],
-    references: Vector[ResourceIndicator],
+    references: Vector[I],
     compilerOptions: CompilerOptions[Id],
-    backendOptions: backend.BackendOptions[Id, ResourceIndicator]
+    backendOptions: backend.BackendOptions[Id, I]
   )
-  : ZManaged[ResourceAccess, ErrorList, backend.TCompilationOutput] = {
+  : ZManaged[ResourceReader[I], ErrorList, backend.TCompilationOutput] = {
     val input = CompilerInput(
       source = sourceASTs,
       references = references,

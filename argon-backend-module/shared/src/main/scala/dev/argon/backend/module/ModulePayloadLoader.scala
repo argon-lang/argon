@@ -4,18 +4,18 @@ import dev.argon.compiler.Comp
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.loaders.armodule.ArgonModuleLoader.PayloadLoader
 
-class ModulePayloadLoader extends PayloadLoader[ModuleContext, ReferencePayloadSpecifier] {
+class ModulePayloadLoader[TContext <: ModuleContext] extends PayloadLoader[TContext, ReferencePayloadSpecifier] {
 
-  override def createClassPayload(context: ModuleContext): ReferencePayloadSpecifier[Unit, context.TClassMetadata] = ()
+  override def createClassPayload(context: TContext): ReferencePayloadSpecifier[Unit, context.TClassMetadata] = ()
 
-  override def createTraitPayload(context: ModuleContext): ReferencePayloadSpecifier[Unit, context.TTraitMetadata] = ()
+  override def createTraitPayload(context: TContext): ReferencePayloadSpecifier[Unit, context.TTraitMetadata] = ()
 
-  override def createDataConstructorPayload(context: ModuleContext): ReferencePayloadSpecifier[Comp[context.TDataConstructorImplementation], context.TDataConstructorMetadata] = ()
+  override def createDataConstructorPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TDataConstructorImplementation], context.TDataConstructorMetadata] = ()
 
-  override def createFunctionPayload(context: ModuleContext): ReferencePayloadSpecifier[Comp[context.TFunctionImplementation], context.TFunctionMetadata] = ()
+  override def createFunctionPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TFunctionImplementation], context.TFunctionMetadata] = ()
 
-  override def createMethodPayload(context: ModuleContext): ReferencePayloadSpecifier[Comp[context.TMethodImplementation], context.TMethodMetadata] = ()
+  override def createMethodPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TMethodImplementation], context.TMethodMetadata] = ()
 
-  override def createClassConstructorPayload(context: ModuleContext): ReferencePayloadSpecifier[Comp[context.TClassConstructorImplementation], context.TClassConstructorMetadata] = ()
+  override def createClassConstructorPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TClassConstructorImplementation], context.TClassConstructorMetadata] = ()
 
 }

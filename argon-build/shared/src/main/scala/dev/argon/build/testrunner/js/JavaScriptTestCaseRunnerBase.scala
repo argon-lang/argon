@@ -7,7 +7,7 @@ import dev.argon.build.testrunner._
 import cats._
 import cats.data.{EitherT, NonEmptyList, NonEmptyVector}
 import cats.implicits._
-import dev.argon.backend.{CompilationOutputText, ResourceAccess}
+import dev.argon.backend.{ResourceReader, ResourceWriter}
 import zio._
 import zio.interop.catz._
 import dev.argon.compiler.{CompilationError, CompilerOptions, ErrorList}
@@ -17,24 +17,23 @@ import dev.argon.build._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.module.PathResourceIndicator
 
-abstract class JavaScriptTestCaseRunnerBase extends TestCaseRunnerExecutionPhase[ResourceAccess with JSModuleLoad] {
+abstract class JavaScriptTestCaseRunnerBase[I <: ResourceIndicator: Tagged] extends TestCaseRunnerExecutionPhase[I, ResourceReader[I] with ResourceWriter[Nothing] with JSModuleLoad] {
 
   override val name: String = "JavaScript Execution"
   override protected val backend: JSBackend.type = JSBackend
 
-  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): UIO[JSBackendOptions[Id, ResourceIndicator]] =
-    Path.of(compilerOptions.moduleName + ".js").map { outputPath =>
-      JSBackendOptions[Id, ResourceIndicator](
-        outputFile = PathResourceIndicator(outputPath),
+  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): UIO[JSBackendOptions[Id, I]] =
+    IO.succeed(
+      JSBackendOptions[Id, I](
         extern = Map.empty,
         inject = JSInjectCode[Id](
           before = None,
           after = None,
         )
       )
-    }
+    )
 
-  override protected def getProgramOutput(compOutput: CompilationOutputText): ZIO[JSModuleLoad, TestCaseError, String] =
+  override protected def getProgramOutput(compOutput: backend.TCompilationOutput): ZIO[JSModuleLoad, TestCaseError, String] =
     for {
       (compiledFile, _) <- compOutput.textStream.foldLeftM("") { (a, b) => IO.succeed(a + b) }.mapError(compilationFailureResult)
       output <- runJSOutput(references)(compiledFile).mapError(executionFailureResult)

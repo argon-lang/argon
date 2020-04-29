@@ -85,9 +85,15 @@ trait Context {
 
   final lazy val signatureContext: ContextSignatureContext.type = ContextSignatureContext
 
-  protected val compilerInput: CompilerInput[ResourceIndicator, BackendOptions]
+  type ResIndicator <: ResourceIndicator
+  implicit val resIndicatorTag: Tagged[ResIndicator]
+  protected val compilerInput: CompilerInput[ResIndicator, BackendOptions]
 
-  def module[TLoad <: ModuleLoad.Service[this.type] : Tagged]: ZManaged[Has[TLoad], ErrorList, ArModule[this.type, DeclarationPayloadSpecifier]] =
-    SourceModuleCreator.createModule(this)(compilerInput)
+  def module[TContext >: this.type <: Context.WithRes[ResIndicator]: Tagged]: ZManaged[ModuleLoad[ResIndicator, TContext], ErrorList, ArModule[this.type, DeclarationPayloadSpecifier]] =
+    SourceModuleCreator.createModule[ResIndicator, TContext](this)(compilerInput)
 
+}
+
+object Context {
+  type WithRes[I <: ResourceIndicator] = Context { type ResIndicator = I }
 }

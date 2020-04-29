@@ -4,17 +4,17 @@ import dev.argon.compiler.Comp
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.loaders.armodule.ArgonModuleLoader.PayloadLoader
 
-class JSPayloadLoader extends PayloadLoader[JSContext, ReferencePayloadSpecifier] {
+class JSPayloadLoader[TContext <: JSContext] extends PayloadLoader[TContext, ReferencePayloadSpecifier] {
 
-  override def createClassPayload(context: JSContext): ReferencePayloadSpecifier[Unit, context.TClassMetadata] = ()
+  override def createClassPayload(context: TContext): ReferencePayloadSpecifier[Unit, context.TClassMetadata] = ()
 
-  override def createTraitPayload(context: JSContext): ReferencePayloadSpecifier[Unit, context.TTraitMetadata] = ()
+  override def createTraitPayload(context: TContext): ReferencePayloadSpecifier[Unit, context.TTraitMetadata] = ()
 
-  override def createDataConstructorPayload(context: JSContext): ReferencePayloadSpecifier[Comp[context.TDataConstructorImplementation], context.TDataConstructorMetadata] = ()
+  override def createDataConstructorPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TDataConstructorImplementation], context.TDataConstructorMetadata] = ()
 
-  override def createFunctionPayload(context: JSContext): ReferencePayloadSpecifier[Comp[context.TFunctionImplementation], context.TFunctionMetadata] = ()
+  override def createFunctionPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TFunctionImplementation], context.TFunctionMetadata] = ()
 
-  override def createMethodPayload(context: JSContext): ReferencePayloadSpecifier[Comp[context.TMethodImplementation], context.TMethodMetadata] = ()
+  override def createMethodPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TMethodImplementation], context.TMethodMetadata] = ()
 
-  override def createClassConstructorPayload(context: JSContext): ReferencePayloadSpecifier[Comp[context.TClassConstructorImplementation], context.TClassConstructorMetadata] = ()
+  override def createClassConstructorPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TClassConstructorImplementation], context.TClassConstructorMetadata] = ()
 }

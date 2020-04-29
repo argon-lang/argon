@@ -2,8 +2,8 @@
 inputFiles = [ "*.argon" ]
 references = [ "../../libraries/Argon.Core/Argon.Core.armodule" ]
 
-[compiler-options]
+[options]
 moduleName = "ArgonExample"
 
-[js]
+[backend.js]
 outputFile = "example.js"

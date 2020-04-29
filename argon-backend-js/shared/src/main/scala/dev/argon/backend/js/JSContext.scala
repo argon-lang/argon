@@ -4,14 +4,10 @@ import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.{ModuleLoader, ResourceIndicator}
 import dev.argon.compiler._
-import cats._
-import cats.implicits._
-import zio.IO
+import shapeless.Id
+import zio._
 
-final class JSContext
-(
-  override protected val compilerInput: CompilerInput[ResourceIndicator, JSBackendOptions[Id, ResourceIndicator]]
-) extends Context {
+sealed abstract class JSContext extends Context {
 
   override type TTraitMetadata = Unit
   override type TClassMetadata = Unit
@@ -25,7 +21,7 @@ final class JSContext
   override type TClassConstructorImplementation = JSImpl.ClassConstructor
   override type TDataConstructorImplementation = JSImpl.DataConstructor
 
-  override type BackendOptions = JSBackendOptions[Id, ResourceIndicator]
+  override type BackendOptions = JSBackendOptions[Id, ResIndicator]
 
   override def createExprFunctionImplementation(expr: typeSystem.ArExpr): JSImpl.Function =
     JSImpl.Function.ExpressionBody(expr)
@@ -80,4 +76,13 @@ final class JSContext
     }
   }
 
+}
+
+object JSContext {
+  def apply[I <: ResourceIndicator: Tagged](input: CompilerInput[I, JSBackendOptions[Id, I]]): JSContext with Context.WithRes[I] = new JSContext {
+    type ResIndicator = I
+
+    override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]] = input
+    override val resIndicatorTag: Tagged[I] = implicitly
+  }
 }

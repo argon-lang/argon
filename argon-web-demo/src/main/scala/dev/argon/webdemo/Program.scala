@@ -117,8 +117,7 @@ object Program extends App {
             CompilerOptions[Id](
               moduleName = "Test"
             ),
-            JSBackendOptions[Id, ResourceIndicator](
-              outputFile = PathResourceIndicator(new Path("test.js")),
+            JSBackendOptions[Id, PathResourceIndicator](
               extern = Map.empty,
               inject = JSInjectCode[Id](
                 before = None,

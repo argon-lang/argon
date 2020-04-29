@@ -10,57 +10,58 @@ import dev.argon.io.fileio.FileIO
 import dev.argon.module.PathResourceIndicator
 import shapeless.{Path => _, _}
 import zio._
+import zio.interop.catz._
 
-trait ProjectLoader[A, B, I] {
-  def loadProject[F[_]](a: A)(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[B]
+trait ProjectLoader[-A, +B, +IOld, -I] {
+  def loadProject[R, E](a: A)(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, B]
 }
 
 object ProjectLoader {
 
-  def apply[A, B, I](implicit loader: ProjectLoader[A, B, I]): ProjectLoader[A, B, I] = loader
+  def apply[A, B, IOld, I](implicit loader: ProjectLoader[A, B, IOld, I]): ProjectLoader[A, B, IOld, I] = loader
 
   object Implicits {
 
-    implicit def identityLoader[A, I]: ProjectLoader[A, A, I] = new ProjectLoader[A, A, I] {
-      override def loadProject[F[_]](a: A)(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[A] =
-        monadInstance.point(a)
+    implicit def identityLoader[A, IOld, I]: ProjectLoader[A, A, IOld, I] = new ProjectLoader[A, A, IOld, I] {
+      override def loadProject[R, E](a: A)(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, A] =
+        IO.succeed(a)
     }
 
-    implicit def fileLoader[I]: ProjectLoader[String, I, I] = new ProjectLoader[String, I, I] {
-      override def loadProject[F[_]](a: String)(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[I] =
+    implicit def fileLoader[IOld, I]: ProjectLoader[IOld, I, IOld, I] = new ProjectLoader[IOld, I, IOld, I] {
+      override def loadProject[R, E](a: IOld)(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, I] =
         fileHandler.loadSingleFile(a)
     }
 
-    implicit def fileListLoader[I]: ProjectLoader[List[String], List[I], I] = new ProjectLoader[List[String], List[I], I] {
-      override def loadProject[F[_]](a: List[String])(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[List[I]] =
-        a.traverse(fileHandler.loadSingleFile)
+    implicit def fileListLoader[IOld, I]: ProjectLoader[List[IOld], List[I], IOld, I] = new ProjectLoader[List[IOld], List[I], IOld, I] {
+      override def loadProject[R, E](a: List[IOld])(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, List[I]] =
+        ZIO.foreach(a)(fileHandler.loadSingleFile)
     }
 
-    implicit def hconsLoader[AHead, ATail <: HList, BHead, BTail <: HList, I](implicit headLoader: ProjectLoader[AHead, BHead, I], tailLoader: ProjectLoader[ATail, BTail, I]): ProjectLoader[AHead :: ATail, BHead :: BTail, I] =
-      new ProjectLoader[AHead :: ATail, BHead :: BTail, I] {
-        override def loadProject[F[_]](a: AHead :: ATail)(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[BHead :: BTail] =
-          headLoader.loadProject(a.head)(monadInstance, fileHandler).flatMap { bHead =>
-            tailLoader.loadProject(a.tail)(monadInstance, fileHandler).map { bTail =>
+    implicit def hconsLoader[AHead, ATail <: HList, BHead, BTail <: HList, IOld, I](implicit headLoader: ProjectLoader[AHead, BHead, IOld, I], tailLoader: ProjectLoader[ATail, BTail, IOld, I]): ProjectLoader[AHead :: ATail, BHead :: BTail, IOld, I] =
+      new ProjectLoader[AHead :: ATail, BHead :: BTail, IOld, I] {
+        override def loadProject[R, E](a: AHead :: ATail)(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, BHead :: BTail] =
+          headLoader.loadProject(a.head).flatMap { bHead =>
+            tailLoader.loadProject(a.tail).map { bTail =>
               bHead :: bTail
             }
           }
       }
 
-    implicit def productGenericLoader[A[_] <: Product, T1, T2, L1 <: HList, L2 <: HList, I](implicit gen1: Generic.Aux[A[T1], L1], gen2: Generic.Aux[A[T2], L2], loader: ProjectLoader[L1, L2, I]): ProjectLoader[A[T1], A[T2], I] =
-      new ProjectLoader[A[T1], A[T2], I] {
-        override def loadProject[F[_]](a: A[T1])(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[A[T2]] =
-          loader.loadProject(gen1.to(a))(monadInstance, fileHandler).map(gen2.from)
+    implicit def productGenericLoader[A[_] <: Product, T1, T2, L1 <: HList, L2 <: HList, IOld, I](implicit gen1: Generic.Aux[A[T1], L1], gen2: Generic.Aux[A[T2], L2], loader: ProjectLoader[L1, L2, IOld, I]): ProjectLoader[A[T1], A[T2], IOld, I] =
+      new ProjectLoader[A[T1], A[T2], IOld, I] {
+        override def loadProject[R, E](a: A[T1])(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, A[T2]] =
+          loader.loadProject(gen1.to(a)).map(gen2.from)
       }
 
-    implicit def mapLoader[K1, K2, V1, V2, I](implicit keyLoader: ProjectLoader[K1, K2, I], valueLoader: ProjectLoader[V1, V2, I]): ProjectLoader[Map[K1, V1], Map[K2, V2], I] =
-      new ProjectLoader[Map[K1, V1], Map[K2, V2], I] {
-        override def loadProject[F[_]](a: Map[K1, V1])(implicit monadInstance: Monad[F], fileHandler: ProjectFileHandler[F, I]): F[Map[K2, V2]] =
+    implicit def mapLoader[K1, K2, V1, V2, IOld, I](implicit keyLoader: ProjectLoader[K1, K2, IOld, I], valueLoader: ProjectLoader[V1, V2, IOld, I]): ProjectLoader[Map[K1, V1], Map[K2, V2], IOld, I] =
+      new ProjectLoader[Map[K1, V1], Map[K2, V2], IOld, I] {
+        override def loadProject[R, E](a: Map[K1, V1])(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, Map[K2, V2]] =
           a
           .toVector
           .traverse { case (k, v) =>
             for {
-              k2 <- keyLoader.loadProject(k)(monadInstance, fileHandler)
-              v2 <- valueLoader.loadProject(v)(monadInstance, fileHandler)
+              k2 <- keyLoader.loadProject(k)
+              v2 <- valueLoader.loadProject(v)
             } yield k2 -> v2
           }
           .map(_.toMap)
@@ -72,17 +73,21 @@ object ProjectLoader {
 
 }
 
-trait ProjectFileHandler[F[_], I] {
-  def loadSingleFile(file: String): F[I]
+trait ProjectFileHandler[-R, +E, -IOld, +I] {
+  def loadSingleFile(file: IOld): ZIO[R, E, I]
 }
 
 object ProjectFileHandler {
 
-  def fileHandlerPath(dir: Path): ProjectFileHandler[ZIO[FileIO, IOException, *], ResourceIndicator] = new ProjectFileHandler[ZIO[FileIO, IOException, *], ResourceIndicator] {
+  def fileHandlerPath(dir: Path): ProjectFileHandler[FileIO, IOException, String, PathResourceIndicator] = new ProjectFileHandler[FileIO, IOException, String, PathResourceIndicator] {
 
-    override def loadSingleFile(file: String): ZIO[FileIO, IOException, ResourceIndicator] =
+    override def loadSingleFile(file: String): ZIO[FileIO, IOException, PathResourceIndicator] =
       Path.of(file).map(dir.resolve).map(PathResourceIndicator.apply)
 
+  }
+
+  def nothingFileHandler[R, E]: ProjectFileHandler[R, E, Nothing, Nothing] = new ProjectFileHandler[R, E, Nothing, Nothing] {
+    override def loadSingleFile(file: Nothing): ZIO[R, E, Nothing] = file
   }
 
 }
