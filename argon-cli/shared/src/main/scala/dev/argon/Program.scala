@@ -10,16 +10,15 @@ import zio.interop.catz._
 import shapeless.{BuildInfo => _, Id => _, Path => _, _}
 import CommandLineParser.Implicits._
 import dev.argon.io.Path
+import dev.argon.io.fileio.{FileIO, FileIOLite}
 
-object Program extends App {
+object Program extends PlatformApp {
 
 
-  override def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
-    CommandLineParser.parse(CommandLineArguments.parser)(PlatformHelpers.getCommandLineArgs(args)) match {
+  override def run2(args: List[String]): ZIO[ZEnv with FileIO with FileIOLite, Nothing, Int] =
+    CommandLineParser.parse(CommandLineArguments.parser)(args) match {
       case Some(CommandLineArguments(cmd: CompileCommand[Id])) =>
-        runCompilation(cmd)
-          .provideCustomLayer(PlatformHelpers.fileIOLayer)
-          .orDie
+        runCompilation(cmd).orDie
 
       case None =>
         for {

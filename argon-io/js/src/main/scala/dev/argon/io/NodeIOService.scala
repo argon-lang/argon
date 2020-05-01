@@ -22,9 +22,6 @@ import dev.argon.util.NodeProcess
 @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null", "dev.argon.warts.ZioEffect"))
 class NodeIOService extends FileIOServiceCommon {
 
-  override def getEnv(name: String): UIO[Option[String]] =
-    IO.effectTotal { NodeProcess.env(name).toOption }
-
   override def readAllText(path: Path): IO[IOException, String] =
     IO.effectAsync { register =>
       NodeFileSystem.readFile(path.toString, "utf-8", (error, data) =>

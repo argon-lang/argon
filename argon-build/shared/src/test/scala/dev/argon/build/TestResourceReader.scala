@@ -8,23 +8,25 @@ import dev.argon.build.testrunner.js.JSModuleLoad
 import dev.argon.compiler.{Comp, CompilationError, CompilationMessageSource, ErrorList}
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.{Path, ZipEntryInfo}
-import dev.argon.io.fileio.FileIO
+import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.module.PathResourceIndicator
 import dev.argon.stream.builder.Source
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 import zio._
+import zio.system.System
 
 object TestResourceReader {
 
-  def layer: ZLayer[FileIO, Throwable, Has[Service]] =
-    ZLayer.fromManaged(ZManaged.accessManaged[FileIO] { env =>
-      val fileIO = env.get
+  def layer: ZLayer[FileIO with FileIOLite with System, Throwable, Has[Service]] =
+    ZLayer.fromManaged(ZManaged.accessManaged[FileIO with FileIOLite with System] { env =>
+      val system = env.get[System.Service]
 
       for {
         libDir <- ZManaged.fromEffect(
-          fileIO.getEnv("ARGON_LIB_DIR")
+          system.env("ARGON_LIB_DIR")
+            .orDie
             .get
-            .mapError(_ => new RuntimeException("ARGON_LIB_DIR was not set"))
+            .mapError { _ => new RuntimeException("ARGON_LIB_DIR was not set") }
         )
 
         liveResReaderEnv <- ResourceReader.forFileIO.build

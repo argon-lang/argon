@@ -6,7 +6,7 @@ import cats.data.NonEmptyList
 import dev.argon.compiler._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.{ZipEntryInfo, ZipFileReader}
-import dev.argon.io.fileio.FileIO
+import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.module.PathResourceIndicator
 import dev.argon.stream.builder.Source
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
@@ -24,7 +24,7 @@ object ResourceReader {
 
   private trait ServiceCommon[I <: ResourceIndicator] extends Service[I] with ResourceAccess.ResourceAccessCommon {
 
-    protected val fileIO: FileIO.Service
+    protected val fileIOLite: FileIOLite.Service
 
     override type ZipReader = ZipFileReader[Comp]
 
@@ -32,24 +32,25 @@ object ResourceReader {
       zip.getEntryStream(name)
 
     override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Comp, Chunk[Byte], Unit]): Comp[A] =
-      fileIO.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
+      fileIOLite.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
 
   }
 
-  def forFileIO: ZLayer[FileIO, Nothing, ResourceReader[PathResourceIndicator]] =
+  def forFileIO: ZLayer[FileIO with FileIOLite, Nothing, ResourceReader[PathResourceIndicator]] =
     ZLayer.fromFunction { prevLayer =>
+      val fileIO = prevLayer.get[FileIO.Service]
       new ServiceCommon[PathResourceIndicator] with ResourceAccess.ResourceAccessCommon {
-        override protected val fileIO: FileIO.Service = prevLayer.get
+        override protected val fileIOLite: FileIOLite.Service = prevLayer.get[FileIOLite.Service]
 
         override def getZipReader(id: PathResourceIndicator): Managed[ErrorList, ZipFileReader[Comp]] =
           fileIO.openZipFile(ioExceptionToError)(id.path)
       }
     }
 
-  def forNothing: ZLayer[FileIO, Nothing, ResourceReader[Nothing]] =
+  def forNothing: ZLayer[FileIOLite, Nothing, ResourceReader[Nothing]] =
     ZLayer.fromFunction { env =>
       new ServiceCommon[Nothing] with ResourceAccess.ResourceAccessCommon {
-        override protected val fileIO: FileIO.Service = env.get
+        override protected val fileIOLite: FileIOLite.Service = env.get
 
         override def getZipReader(id: Nothing): Managed[ErrorList, ZipFileReader[Comp]] = id
       }

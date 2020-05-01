@@ -1,16 +1,17 @@
 package dev.argon.webdemo
 
 import java.io.{PrintWriter, StringWriter}
+import java.net.URI
 
 import cats.Id
 import cats.data.NonEmptyList
-import dev.argon.backend.ResourceAccess
+import dev.argon.backend.{ResourceAccess, ResourceReader}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.build.{BuildEnvironment, BuildProcess, InputFileInfo, Pipeline}
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.compiler.{CompilationError, CompilerOptions}
 import dev.argon.io.Path
-import dev.argon.io.fileio.FileIO
+import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.module.PathResourceIndicator
 import dev.argon.parser.SourceAST
 import dev.argon.stream.builder.{Source, ZStreamSource}
@@ -81,13 +82,16 @@ object Program extends App {
 
       }
     } yield 0
-  )
+  ).provideLayer(FileIOLite.browserLive >>> HttpResourceReader.live)
 
-  private def references = Vector(PathResourceIndicator(DummyFileSystem.argonCoreFileName))
+  private def references =
+    Vector("Argon.Core")
+      .map { name => UriResourceIndicator(s"libraries/$name.armodule") }
 
-  type CIO[+A] = ZIO[BuildEnvironment, NonEmptyList[CompilationError], A]
+  type CIO[+A] = ZIO[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError], A]
+  type UCIO[+A] = ZIO[ResourceReader[WebDemoResourceIndicator], Nothing, A]
 
-  private def runCode(queue: Queue[DemoCommand])(code: String): UIO[Unit] =
+  private def runCode(queue: Queue[DemoCommand])(code: String): UCIO[Unit] =
     compileCode(code)
       .foldM(
         failure = errors => queue.offer(DemoCommand.CompileFailureEvent(errors)).unit,
@@ -97,11 +101,10 @@ object Program extends App {
             success = _ => queue.offer(DemoCommand.ExecutionCompleteEvent).unit
           )
       )
-      .provideLayer(FileIO.memFSLayer)
 
   private def compileCode(code: String): CIO[String] = {
     val inputFiles: Source[CIO, InputFileInfo[CIO], Unit] =
-      ZStreamSource[BuildEnvironment, NonEmptyList[CompilationError], InputFileInfo[CIO]](ZStream(
+      ZStreamSource[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError], InputFileInfo[CIO]](ZStream(
         InputFileInfo[CIO](FileSpec(FileID(0), "test.argon"), ZStreamSource(ZStream.fromIterable(code))),
       ))
 
@@ -117,7 +120,7 @@ object Program extends App {
             CompilerOptions[Id](
               moduleName = "Test"
             ),
-            JSBackendOptions[Id, PathResourceIndicator](
+            JSBackendOptions[Id, WebDemoResourceIndicator](
               extern = Map.empty,
               inject = JSInjectCode[Id](
                 before = None,
@@ -129,7 +132,6 @@ object Program extends App {
               .foldLeftM("") { (a, b) => IO.succeed(a + b) }
               .map { case (str, _) => str }
           }
-          .provideSomeLayer[BuildEnvironment](ResourceAccess.forFileIO)
       }
   }
 

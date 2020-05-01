@@ -9,14 +9,12 @@ import zio.stream._
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 
 object fileio {
+  type FileIOLite = Has[FileIOLite.Service]
   type FileIO = Has[FileIO.Service]
 
   object FileIO extends FileIOPlatform {
 
     trait Service {
-
-      def getEnv(name: String): UIO[Option[String]]
-
       def getAbsolutePath(path: dev.argon.io.Path): IO[IOException, Path]
 
       def readAllText(path: Path): IO[IOException, String]
@@ -26,8 +24,14 @@ object fileio {
       def isDirectory(path: Path): IO[IOException, Boolean]
       def listDirectory(path: Path): Stream[IOException, Path]
 
-      def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, *]], Unit]): Source[ZIO[R, E, *], Chunk[Byte], Unit]
       def openZipFile[R, E](errorHandler: IOException => E)(path: Path): Managed[E, ZipFileReader[ZIO[R, E, *]]]
+    }
+
+  }
+
+  object FileIOLite extends FileIOLitePlatform {
+    trait Service {
+      def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, *]], Unit]): Source[ZIO[R, E, *], Chunk[Byte], Unit]
 
       def deserializeProtocolBuffer[R, E, A <: GeneratedMessage]
       (errorHandler: IOException => E)
@@ -37,6 +41,6 @@ object fileio {
 
       def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): Source[ZIO[R, E, *], Chunk[Byte], Unit]
     }
-
   }
+
 }

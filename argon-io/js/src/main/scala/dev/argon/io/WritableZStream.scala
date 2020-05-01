@@ -61,7 +61,7 @@ private[io] class WritableZStream[R] private(runtime: Runtime[R], queue: Queue[P
 object WritableZStream {
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
-  def apply[R](consume: NodeWritable => ZIO[R, js.Error, Unit]): ZStream[R, js.Error, Chunk[Byte]] =
+  def apply[R](fill: NodeWritable => ZIO[R, js.Error, Unit]): ZStream[R, js.Error, Chunk[Byte]] =
     ZStream(
       ZManaged.make(
         for {
@@ -69,7 +69,7 @@ object WritableZStream {
           queue <- Queue.bounded[Promise[Option[js.Error], Chunk[Byte]]](1)
           wzs <- IO.effectTotal { new WritableZStream[R](runtime, queue) }
           _ <- (
-            consume(wzs).foldCauseM(
+            fill(wzs).foldCauseM(
               failure = cause => cause.failureOrCause match {
                 case Left(failure) => IO.effectTotal { wzs.destroy(failure) }
                 case Right(cause) => for {

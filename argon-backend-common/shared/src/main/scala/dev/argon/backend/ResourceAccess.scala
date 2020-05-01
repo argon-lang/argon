@@ -6,7 +6,7 @@ import cats.data.NonEmptyList
 import dev.argon.compiler._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.{Path, ZipEntryInfo, ZipFileReader}
-import dev.argon.io.fileio.FileIO
+import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.module.PathResourceIndicator
 import dev.argon.stream.builder.Source
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
@@ -20,10 +20,10 @@ object ResourceAccess {
   }
 
 
-  def forFileIO: ZLayer[FileIO, Nothing, ResourceAccess[PathResourceIndicator]] =
+  def forFileIO: ZLayer[FileIO with FileIOLite, Nothing, ResourceAccess[PathResourceIndicator]] =
     ResourceReader.forFileIO ++ ResourceWriter.forFileIO
 
-  def forNothing: ZLayer[FileIO, Nothing, ResourceAccess[Nothing]] =
+  def forNothing: ZLayer[FileIOLite, Nothing, ResourceAccess[Nothing]] =
     ResourceReader.forNothing ++ ResourceWriter.forNothing
 
 }

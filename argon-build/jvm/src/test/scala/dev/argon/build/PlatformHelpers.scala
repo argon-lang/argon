@@ -6,7 +6,7 @@ import dev.argon.build.testrunner.js.{GraalJSTestCaseRunner, JSModuleLoad}
 import dev.argon.build.testrunner.{BuildTestCaseRunner, ParseTestCaseRunner, TestCaseRunner}
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.Path
-import dev.argon.io.fileio.FileIO
+import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.module.PathResourceIndicator
 import zio.{Has, IO, RIO, UIO, ZLayer, ZManaged}
 import zio.blocking.Blocking
@@ -15,11 +15,12 @@ import zio.system.System
 
 object PlatformHelpers {
 
+  type BaseLayer = FileIO with FileIOLite with System
   type TestExecEnv = ResourceReader[TestResourceIndicator] with ResourceWriter[Nothing] with JSModuleLoad
 
-  def fileIOLayer: ZLayer[Blocking, Nothing, FileIO] = FileIO.live
+  def baseLayer: ZLayer[Blocking, Nothing, FileIO with FileIOLite] = FileIO.live ++ FileIOLite.live
 
-  def execEnvLayer: ZLayer[FileIO, Throwable, TestExecEnv] =
+  def execEnvLayer: ZLayer[FileIO with FileIOLite with System, Throwable, TestExecEnv] =
     TestResourceReader.layer.passthrough >>> (
       ZLayer.fromFunction[Has[TestResourceReader.Service], ResourceReader.Service[TestResourceIndicator]](_.get) ++
         ResourceWriter.forNothing ++

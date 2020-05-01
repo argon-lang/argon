@@ -5,6 +5,7 @@ import java.io.IOException
 import dev.argon.build.testrunner._
 import dev.argon.io.Path
 import zio._
+import zio.system.System
 import zio.test.Assertion.equalTo
 import zio.test._
 import cats._
@@ -25,7 +26,7 @@ abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
     libraries.map(LibraryResourceIndicator.apply)
 
   protected val suiteName: String
-  protected def testCases: ZIO[FileIO, TestFailure[Failure], TestCaseStructure]
+  protected def testCases: ZIO[FileIO with System, TestFailure[Failure], TestCaseStructure]
   protected def runners(references: Vector[TestResourceIndicator]): Seq[TestCaseRunner[TestExecEnv]]
 
   private def isExpectedResult(runner: TestCaseRunner[_])(expected: TestCaseExpectedResult): Assertion[TestCaseActualResult] =
@@ -33,15 +34,15 @@ abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
       runner.isResultExpected(actual, expected)
     }
 
-  private def createTest(runner: TestCaseRunner[TestExecEnv])(testCase: TestCase): ZSpec[Environment, Failure] =
+  private def createTest(runner: TestCaseRunner[TestExecEnv])(testCase: TestCase): ZSpec[PlatformHelpers.BaseLayer, Failure] =
     testM(testCase.name) {
       runner.runTest(testCase)
-        .provideLayer(PlatformHelpers.fileIOLayer >>> PlatformHelpers.execEnvLayer)
+        .provideLayer(PlatformHelpers.execEnvLayer)
         .orDie
         .map { result => assert(result)(isExpectedResult(runner)(testCase.expectedResult)) }
     }
 
-  private def createSuites(runner: TestCaseRunner[TestExecEnv], structure: TestCaseStructure): Seq[ZSpec[Environment, Failure]] =
+  private def createSuites(runner: TestCaseRunner[TestExecEnv], structure: TestCaseStructure): Seq[ZSpec[PlatformHelpers.BaseLayer, Failure]] =
     structure.nestedStructures.map { case (name, nested) =>
       suite(name)(createSuites(runner, nested): _*)
     } ++
@@ -57,5 +58,5 @@ abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
         )
       }.toVector,
       None
-    ).provideSomeLayer[Environment](PlatformHelpers.fileIOLayer)
+    ).provideSomeLayer[Environment](PlatformHelpers.baseLayer)
 }

@@ -25,9 +25,6 @@ trait FileIOPlatform {
 
     new FileIO.Service {
 
-      override def getEnv(name: String): UIO[Option[String]] =
-        IO.effectTotal { Option(java.lang.System.getenv(name)) }
-
       override def getAbsolutePath(path: Path): IO[IOException, Path] =
         blocking.effectBlocking { new Path(path.javaPath.toAbsolutePath) }
           .refineOrDie { case e: IOException => e }
@@ -87,11 +84,6 @@ trait FileIOPlatform {
           .flatMap(Stream.fromIterable(_))
           .map(new Path(_))
 
-      override def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, *]], Unit]): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
-        ZStreamSource(
-          ZipEntryStreamTransformation[R, E](errorHandler, env)(entries)
-        )
-
       override def openZipFile[R, E](errorHandler: IOException => E)(path: Path): Managed[E, ZipFileReader[ZIO[R, E, *]]] =
         ZManaged.fromAutoCloseable(
           blocking.effectBlocking { new ZipFile(path.javaPath.toFile) }
@@ -115,28 +107,6 @@ trait FileIOPlatform {
               }
             }
           }
-
-      override def deserializeProtocolBuffer[R, E, A <: GeneratedMessage](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, A] =
-        InputStreamReaderTransformation(SourceIO.fromSource(data).toZStream) { stream =>
-          blocking.effectBlocking {
-            companion.parseFrom(stream)
-          }
-            .refineOrDie {
-              case ex: IOException => errorHandler(ex)
-            }
-        }
-
-      override def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
-        ZStreamSource(
-          OutputStreamWriterStream { stream =>
-            blocking.effectBlocking {
-              message.writeTo(stream)
-            }
-              .refineOrDie {
-                case ex: IOException => errorHandler(ex)
-              }
-          }
-        )
 
     }
   }
