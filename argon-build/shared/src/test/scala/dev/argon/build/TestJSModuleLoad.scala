@@ -5,14 +5,15 @@ import java.io.{FileNotFoundException, IOException}
 import dev.argon.build.testrunner.js.JSModuleLoad
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.Path
+import dev.argon.io.Path.PathExtensions
 import dev.argon.io.fileio.FileIO
-import zio.{Has, IO, ZLayer}
+import zio._
 
 object TestJSModuleLoad {
 
-  def layer: ZLayer[Has[TestResourceReader.Service] with FileIO, Nothing, JSModuleLoad] = ZLayer.fromFunction { env =>
-    val fileIO = env.get[FileIO.Service]
-    val res = env.get[TestResourceReader.Service]
+  def layer[P: Path : Tagged]: ZLayer[Has[TestResourceReader.Service[P]] with FileIO[P], Nothing, JSModuleLoad] = ZLayer.fromFunction { env =>
+    val fileIO = env.get[FileIO.Service[P]]
+    val res = env.get[TestResourceReader.Service[P]]
 
     new JSModuleLoad.Service {
 

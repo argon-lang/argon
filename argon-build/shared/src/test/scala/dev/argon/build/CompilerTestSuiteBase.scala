@@ -13,10 +13,11 @@ import cats.implicits._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.fileio.FileIO
 import dev.argon.module.PathResourceIndicator
+import dev.argon.platform._
 import zio.interop.catz._
-import PlatformHelpers.TestExecEnv
+import zio.test.environment.Live
 
-abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
+abstract class CompilerTestSuiteBase extends PlatformRunnableSpec with PlatformHelperTestSuite {
 
   private val libraries = Vector(
     "Argon.Core",
@@ -26,23 +27,22 @@ abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
     libraries.map(LibraryResourceIndicator.apply)
 
   protected val suiteName: String
-  protected def testCases: ZIO[FileIO with System, TestFailure[Failure], TestCaseStructure]
-  protected def runners(references: Vector[TestResourceIndicator]): Seq[TestCaseRunner[TestExecEnv]]
+  protected def testCases[P : Path : Tagged]: ZIO[FileIO[P] with Live, TestFailure[Failure], TestCaseStructure]
 
   private def isExpectedResult(runner: TestCaseRunner[_])(expected: TestCaseExpectedResult): Assertion[TestCaseActualResult] =
     Assertion.assertion("isExpectedResult")(Assertion.Render.param(expected)) { actual =>
       runner.isResultExpected(actual, expected)
     }
 
-  private def createTest(runner: TestCaseRunner[TestExecEnv])(testCase: TestCase): ZSpec[PlatformHelpers.BaseLayer, Failure] =
+  private def createTest(runner: TestCaseRunner[TestExecEnv])(testCase: TestCase): ZSpec[Environment, Failure] =
     testM(testCase.name) {
       runner.runTest(testCase)
-        .provideLayer(PlatformHelpers.execEnvLayer)
+        .provideLayer(execEnvLayer)
         .orDie
         .map { result => assert(result)(isExpectedResult(runner)(testCase.expectedResult)) }
     }
 
-  private def createSuites(runner: TestCaseRunner[TestExecEnv], structure: TestCaseStructure): Seq[ZSpec[PlatformHelpers.BaseLayer, Failure]] =
+  private def createSuites(runner: TestCaseRunner[TestExecEnv], structure: TestCaseStructure): Seq[ZSpec[Environment, Failure]] =
     structure.nestedStructures.map { case (name, nested) =>
       suite(name)(createSuites(runner, nested): _*)
     } ++
@@ -58,5 +58,5 @@ abstract class CompilerTestSuiteBase extends DefaultRunnableSpec {
         )
       }.toVector,
       None
-    ).provideSomeLayer[Environment](PlatformHelpers.baseLayer)
+    )
 }

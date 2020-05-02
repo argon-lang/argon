@@ -9,13 +9,14 @@ import zio._
 import zio.interop.catz._
 import dev.argon.build._
 import dev.argon.io.Path
+import dev.argon.io.Path.PathExtensions
 import dev.argon.io.fileio._
 import dev.argon.util.XmlParser
 
 object TestCaseLoader {
 
-  private def loadTestCase(path: Path): ZIO[FileIO, Throwable, TestCase] =
-    ZIO.accessM[FileIO](_.get.readAllText(path))
+  private def loadTestCase[P: Path : Tagged](path: P): ZIO[FileIO[P], Throwable, TestCase] =
+    ZIO.accessM[FileIO[P]](_.get.readAllText(path))
       .flatMap(XmlParser.parseString)
       .flatMap { content =>
         IO.fromEither(
@@ -46,12 +47,12 @@ object TestCaseLoader {
         )
       }
 
-  def loadTestCases(path: Path): ZIO[FileIO, Throwable, TestCaseStructure] =
-    ZIO.accessM[FileIO](_.get.listDirectory(path).foldM[FileIO, Throwable, Path, (Seq[(String, TestCaseStructure)], Seq[TestCase])](
+  def loadTestCases[P: Path : Tagged](path: P): ZIO[FileIO[P], Throwable, TestCaseStructure] =
+    ZIO.accessM[FileIO[P]](_.get.listDirectory(path).foldM[FileIO[P], Throwable, P, (Seq[(String, TestCaseStructure)], Seq[TestCase])](
       (Seq.empty[(String, TestCaseStructure)], Seq.empty[TestCase])
     ) { case ((dirs, tests), path) =>
 
-      ZIO.ifM(ZIO.accessM[FileIO](_.get.isDirectory(path)))(
+      ZIO.ifM(ZIO.accessM[FileIO[P]](_.get.isDirectory(path)))(
         loadTestCases(path).map { subCases => (dirs :+ (path.fileName -> subCases), tests) },
         loadTestCase(path).map { testCase => (dirs, tests :+ testCase) }
       )

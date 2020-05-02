@@ -14,16 +14,18 @@ import dev.argon.io.Path
 import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.module.PathResourceIndicator
 import dev.argon.parser.SourceAST
+import dev.argon.platform.PlatformApp
 import dev.argon.stream.builder.{Source, ZStreamSource}
 import dev.argon.util.{FileID, FileSpec}
 import zio._
 import zio.stream.ZStream
 import org.scalajs.dom
 
-object Program extends App {
+object Program extends PlatformApp {
+
 
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "dev.argon.warts.ZioEffect"))
-  override def run(args: List[String]): URIO[ZEnv, Int] = (
+  override def runApp(args: List[String]): URIO[ZEnv with FileIOLite, Int] = (
     for {
       queue <- Queue.bounded[DemoCommand](1000)
       state <- RefM.make[ExecutionStatus](ExecutionStatus.NotRun)
@@ -82,7 +84,7 @@ object Program extends App {
 
       }
     } yield 0
-  ).provideLayer(FileIOLite.browserLive >>> HttpResourceReader.live)
+  ).provideLayer(HttpResourceReader.live)
 
   private def references =
     Vector("Argon.Core")

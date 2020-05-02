@@ -5,7 +5,7 @@ import java.io.IOException
 import cats.data.NonEmptyList
 import dev.argon.compiler._
 import dev.argon.compiler.loaders.ResourceIndicator
-import dev.argon.io.ZipEntryInfo
+import dev.argon.io.{Path, ZipEntryInfo}
 import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.module.PathResourceIndicator
 import dev.argon.stream.builder.Source
@@ -33,13 +33,13 @@ object ResourceWriter {
 
   }
 
-  def forFileIO: ZLayer[FileIO with FileIOLite, Nothing, ResourceWriter[PathResourceIndicator]] =
+  def forFileIO[P: Path : Tagged]: ZLayer[FileIO[P] with FileIOLite, Nothing, ResourceWriter[PathResourceIndicator[P]]] =
     ZLayer.fromFunction { prevLayer =>
-      val fileIO = prevLayer.get[FileIO.Service]
-      new ServiceCommon[PathResourceIndicator] with ResourceAccess.ResourceAccessCommon {
+      val fileIO = prevLayer.get[FileIO.Service[P]]
+      new ServiceCommon[PathResourceIndicator[P]] with ResourceAccess.ResourceAccessCommon {
         override protected val fileIOLite: FileIOLite.Service = prevLayer.get[FileIOLite.Service]
 
-        override def writeToResource[X](id: PathResourceIndicator)(data: Source[Comp, Chunk[Byte], X]): Comp[X] =
+        override def writeToResource[X](id: PathResourceIndicator[P])(data: Source[Comp, Chunk[Byte], X]): Comp[X] =
           fileIO.writeToFile(ioExceptionToError)(id.path)(data)
       }
     }

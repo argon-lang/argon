@@ -5,7 +5,7 @@ import java.io.IOException
 import cats.data.NonEmptyList
 import dev.argon.compiler._
 import dev.argon.compiler.loaders.ResourceIndicator
-import dev.argon.io.{ZipEntryInfo, ZipFileReader}
+import dev.argon.io.{Path, ZipEntryInfo, ZipFileReader}
 import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.module.PathResourceIndicator
 import dev.argon.stream.builder.Source
@@ -36,13 +36,13 @@ object ResourceReader {
 
   }
 
-  def forFileIO: ZLayer[FileIO with FileIOLite, Nothing, ResourceReader[PathResourceIndicator]] =
+  def forFileIO[P: Path: Tagged]: ZLayer[FileIO[P] with FileIOLite, Nothing, ResourceReader[PathResourceIndicator[P]]] =
     ZLayer.fromFunction { prevLayer =>
-      val fileIO = prevLayer.get[FileIO.Service]
-      new ServiceCommon[PathResourceIndicator] with ResourceAccess.ResourceAccessCommon {
+      val fileIO = prevLayer.get[FileIO.Service[P]]
+      new ServiceCommon[PathResourceIndicator[P]] with ResourceAccess.ResourceAccessCommon {
         override protected val fileIOLite: FileIOLite.Service = prevLayer.get[FileIOLite.Service]
 
-        override def getZipReader(id: PathResourceIndicator): Managed[ErrorList, ZipFileReader[Comp]] =
+        override def getZipReader(id: PathResourceIndicator[P]): Managed[ErrorList, ZipFileReader[Comp]] =
           fileIO.openZipFile(ioExceptionToError)(id.path)
       }
     }

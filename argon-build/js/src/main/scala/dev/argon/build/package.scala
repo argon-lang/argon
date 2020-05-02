@@ -4,6 +4,6 @@ import dev.argon.io.fileio.{FileIO, FileIOLite}
 
 package object build {
 
-  type BuildEnvironment = FileIO with FileIOLite
+  type BuildEnvironment = Any
 
 }

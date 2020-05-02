@@ -10,26 +10,26 @@ import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 
 object fileio {
   type FileIOLite = Has[FileIOLite.Service]
-  type FileIO = Has[FileIO.Service]
+  type FileIO[P] = Has[FileIO.Service[P]]
 
-  object FileIO extends FileIOPlatform {
+  object FileIO {
 
-    trait Service {
-      def getAbsolutePath(path: dev.argon.io.Path): IO[IOException, Path]
+    trait Service[P] {
+      def getAbsolutePath(path: P): IO[IOException, P]
 
-      def readAllText(path: Path): IO[IOException, String]
-      def readText[E](errorHandler: IOException => E)(path: Path): Stream[E, Char]
-      def writeToFile[R, E, X](errorHandler: IOException => E)(path: Path)(data: Source[ZIO[R, E, *], Chunk[Byte], X]): ZIO[R, E, X]
+      def readAllText(path: P): IO[IOException, String]
+      def readText[E](errorHandler: IOException => E)(path: P): Stream[E, Char]
+      def writeToFile[R, E, X](errorHandler: IOException => E)(path: P)(data: Source[ZIO[R, E, *], Chunk[Byte], X]): ZIO[R, E, X]
 
-      def isDirectory(path: Path): IO[IOException, Boolean]
-      def listDirectory(path: Path): Stream[IOException, Path]
+      def isDirectory(path: P): IO[IOException, Boolean]
+      def listDirectory(path: P): Stream[IOException, P]
 
-      def openZipFile[R, E](errorHandler: IOException => E)(path: Path): Managed[E, ZipFileReader[ZIO[R, E, *]]]
+      def openZipFile[R, E](errorHandler: IOException => E)(path: P): Managed[E, ZipFileReader[ZIO[R, E, *]]]
     }
 
   }
 
-  object FileIOLite extends FileIOLitePlatform {
+  object FileIOLite {
     trait Service {
       def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, *]], Unit]): Source[ZIO[R, E, *], Chunk[Byte], Unit]
 

@@ -6,6 +6,7 @@ import cats._
 import cats.implicits._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.Path
+import dev.argon.io.Path.PathExtensions
 import dev.argon.io.fileio.FileIO
 import dev.argon.module.PathResourceIndicator
 import shapeless.{Path => _, _}
@@ -79,10 +80,10 @@ trait ProjectFileHandler[-R, +E, -IOld, +I] {
 
 object ProjectFileHandler {
 
-  def fileHandlerPath(dir: Path): ProjectFileHandler[FileIO, IOException, String, PathResourceIndicator] = new ProjectFileHandler[FileIO, IOException, String, PathResourceIndicator] {
+  def fileHandlerPath[P : Path](dir: P): ProjectFileHandler[FileIO[P], IOException, String, PathResourceIndicator[P]] = new ProjectFileHandler[FileIO[P], IOException, String, PathResourceIndicator[P]] {
 
-    override def loadSingleFile(file: String): ZIO[FileIO, IOException, PathResourceIndicator] =
-      Path.of(file).map(dir.resolve).map(PathResourceIndicator.apply)
+    override def loadSingleFile(file: String): ZIO[FileIO[P], IOException, PathResourceIndicator[P]] =
+      Path.of[P](file).map(dir.resolve).map(PathResourceIndicator(_))
 
   }
 

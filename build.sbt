@@ -9,6 +9,8 @@ lazy val envValues = Map(
   "ARGON_TEST_CASES" -> file("testcases").getAbsolutePath,
 )
 
+val zioVersion = "1.0.0-RC18-2"
+
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.0",
 
@@ -25,8 +27,8 @@ lazy val commonSettings = Seq(
     "org.typelevel" %%% "cats-core" % "2.1.1",
     "org.typelevel" %%% "cats-effect" % "2.1.3",
     "org.typelevel" %%% "kittens" % "2.0.0",
-    "dev.zio" %%% "zio" % "1.0.0-RC18-2",
-    "dev.zio" %%% "zio-streams" % "1.0.0-RC18-2",
+    "dev.zio" %%% "zio" % zioVersion,
+    "dev.zio" %%% "zio-streams" % zioVersion,
     "dev.zio" %%% "zio-interop-cats" % "2.0.0.0-RC12",
 
 
@@ -35,8 +37,8 @@ lazy val commonSettings = Seq(
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 
-    "dev.zio" %%% "zio-test" % "1.0.0-RC18-2" % "test",
-    "dev.zio" %%% "zio-test-sbt" % "1.0.0-RC18-2" % "test",
+    "dev.zio" %%% "zio-test" % zioVersion % "test",
+    "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
     compilerPlugin("com.github.ghik" % "silencer-plugin" % "1.6.0" cross CrossVersion.full),
     "com.github.ghik" %%% "silencer-lib" % "1.6.0" % Provided cross CrossVersion.full,
@@ -83,8 +85,8 @@ lazy val zioEffectWarts = project.in(file("zio-effect-warts"))
     scalaVersion := "2.13.0",
     libraryDependencies ++= Seq(
       "org.wartremover" % "wartremover" % wartremover.Wart.PluginVersion cross CrossVersion.full,
-      "dev.zio" %%% "zio" % "1.0.0-RC18-2",
-      "dev.zio" %%% "zio-streams" % "1.0.0-RC18-2",
+      "dev.zio" %%% "zio" % zioVersion,
+      "dev.zio" %%% "zio-streams" % zioVersion,
     ),
 
 
@@ -114,7 +116,7 @@ lazy val compilerOptions = Seq(
   scalacOptions in (Test, console) ~= (_ filterNot (opt => opt == "-Xlint")),
 
 
-  wartremoverWarnings in (Compile, compile) ++= Warts.allBut(
+  wartremoverWarnings ++= Warts.allBut(
     Wart.Recursion,
     Wart.Any,
     Wart.Nothing,
@@ -147,6 +149,7 @@ lazy val cli = crossProject(JVMPlatform, JSPlatform).in(file("argon-cli"))
   .dependsOn(argon_build)
   .jvmConfigure(
     _.settings(commonJVMSettings)
+      .dependsOn(argon_platform_jvm)
   )
   .jsConfigure(
     _.settings(
@@ -155,6 +158,7 @@ lazy val cli = crossProject(JVMPlatform, JSPlatform).in(file("argon-cli"))
       scalaJSUseMainModuleInitializer := true,
 
     )
+      .dependsOn(argon_platform_node)
   )
   .settings(
     commonSettings,
@@ -184,7 +188,7 @@ lazy val cliJS = cli.js
 
 lazy val webDemo = project.in(file("argon-web-demo"))
   .enablePlugins(ScalaJSPlugin)
-  .dependsOn(argon_buildJS)
+  .dependsOn(argon_buildJS, argon_platform_browser)
   .settings(
     commonSettings,
     commonJSSettings,
@@ -197,7 +201,8 @@ lazy val webDemo = project.in(file("argon-web-demo"))
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform).in(file("argon-build"))
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.dependsOn(argon_platform_jvm % "test->compile")
+     .settings(commonJVMSettings)
      .settings(
        libraryDependencies ++= Seq(
          "org.graalvm.sdk" % "graal-sdk" % graalVersion,
@@ -209,7 +214,8 @@ lazy val argon_build = crossProject(JVMPlatform, JSPlatform).in(file("argon-buil
      )
   )
   .jsConfigure(
-    _.settings(commonJSSettings)
+    _.dependsOn(argon_platform_node % "test->compile")
+     .settings(commonJSSettings)
   )
   .dependsOn(arstream, util, parser, argon_compiler, backend_js, backend_module)
   .settings(
@@ -401,6 +407,54 @@ lazy val argonio = crossProject(JVMPlatform, JSPlatform).in(file("argon-io"))
 
 lazy val argonioJVM = argonio.jvm
 lazy val argonioJS = argonio.js
+
+lazy val argon_platform_jvm = project.in(file("argon-platform-jvm"))
+  .dependsOn(argonioJVM)
+  .settings(
+    commonJVMSettings,
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-platform-jvm",
+
+    libraryDependencies += "dev.zio" %%% "zio-test" % zioVersion % "optional",
+  )
+
+lazy val argon_platform_js_shared = project.in(file("argon-platform-js-shared"))
+  .enablePlugins(ScalaJSPlugin)
+  .dependsOn(argonioJS)
+  .settings(
+    commonJSSettings,
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-platform-js-shared",
+  )
+
+lazy val argon_platform_node = project.in(file("argon-platform-node"))
+  .enablePlugins(ScalaJSPlugin)
+  .dependsOn(argon_platform_js_shared)
+  .settings(
+    commonJSSettings,
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-platform-node",
+
+    libraryDependencies += "dev.zio" %%% "zio-test" % zioVersion % "optional",
+  )
+
+lazy val argon_platform_browser = project.in(file("argon-platform-browser"))
+  .enablePlugins(ScalaJSPlugin)
+  .dependsOn(argon_platform_js_shared)
+  .settings(
+    commonJSSettings,
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-platform-browser",
+  )
+
 
 lazy val modulefmt = crossProject(JVMPlatform, JSPlatform).in(file("argon-modulefmt"))
   .jvmConfigure(

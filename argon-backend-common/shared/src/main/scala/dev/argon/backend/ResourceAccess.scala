@@ -20,7 +20,7 @@ object ResourceAccess {
   }
 
 
-  def forFileIO: ZLayer[FileIO with FileIOLite, Nothing, ResourceAccess[PathResourceIndicator]] =
+  def forFileIO[P: Path : Tagged]: ZLayer[FileIO[P] with FileIOLite, Nothing, ResourceAccess[PathResourceIndicator[P]]] =
     ResourceReader.forFileIO ++ ResourceWriter.forFileIO
 
   def forNothing: ZLayer[FileIOLite, Nothing, ResourceAccess[Nothing]] =

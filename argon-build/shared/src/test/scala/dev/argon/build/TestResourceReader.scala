@@ -14,16 +14,15 @@ import dev.argon.stream.builder.Source
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 import zio._
 import zio.system.System
+import zio.test.environment._
 
 object TestResourceReader {
 
-  def layer: ZLayer[FileIO with FileIOLite with System, Throwable, Has[Service]] =
-    ZLayer.fromManaged(ZManaged.accessManaged[FileIO with FileIOLite with System] { env =>
-      val system = env.get[System.Service]
-
+  def layer[P : Path : Tagged]: ZLayer[FileIO[P] with FileIOLite with Live, Throwable, Has[Service[P]]] =
+    ZLayer.fromManaged(ZManaged.accessManaged[FileIO[P] with FileIOLite with Live] { env =>
       for {
         libDir <- ZManaged.fromEffect(
-          system.env("ARGON_LIB_DIR")
+          live(system.env("ARGON_LIB_DIR"))
             .orDie
             .get
             .mapError { _ => new RuntimeException("ARGON_LIB_DIR was not set") }
@@ -31,7 +30,7 @@ object TestResourceReader {
 
         liveResReaderEnv <- ResourceReader.forFileIO.build
         liveResReader = liveResReaderEnv.get
-      } yield (new Service {
+      } yield (new Service[P] {
 
         private def ioFail(ex: IOException): IO[ErrorList, Nothing] =
           IO.fail(NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex))))
@@ -39,7 +38,7 @@ object TestResourceReader {
         private def managedFail(ex: IOException): Managed[ErrorList, Nothing] =
           Managed.fromEffect(ioFail(ex))
 
-        override def getLibPath(name: String): UIO[Path] =
+        override def getLibPath(name: String): UIO[P] =
           Path.of(libDir, name, name + ".armodule")
 
         override type ZipReader = liveResReader.ZipReader
@@ -59,11 +58,11 @@ object TestResourceReader {
 
         override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Comp, Chunk[Byte], Unit]): Comp[A] =
           liveResReader.deserializeProtocolBuffer(companion)(data)
-      } : Service)
+      } : Service[P])
     })
 
-  trait Service extends ResourceReader.Service[TestResourceIndicator] {
-    def getLibPath(name: String): UIO[Path]
+  trait Service[P] extends ResourceReader.Service[TestResourceIndicator] {
+    def getLibPath(name: String): UIO[P]
   }
 
 }

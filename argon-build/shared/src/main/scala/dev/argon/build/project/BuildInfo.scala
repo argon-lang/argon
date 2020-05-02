@@ -3,6 +3,7 @@ package dev.argon.build.project
 import java.io.IOException
 
 import dev.argon.io.Path
+import dev.argon.io.Path.PathExtensions
 import cats._
 import cats.implicits._
 import dev.argon.backend.{Backend, ProjectFileHandler, ProjectLoader}
@@ -37,7 +38,7 @@ trait BuildInfo[I] {
 
 object BuildInfo {
 
-  type Resolved = BuildInfo[PathResourceIndicator]
+  type Resolved[P] = BuildInfo[PathResourceIndicator[P]]
 
 
   def apply[I](backend: Backend)(project: ProjectInfoFormat[Id, I], compilerOptions: CompilerOptions[Id], backendOptions: backend.BackendOptionsId[I], outputOptions: backend.BackendOutputOptionsId[I]): BuildInfo[I] = {
@@ -63,8 +64,8 @@ object BuildInfo {
 
 
 
-  def loadFile(file: Path): ZIO[FileIO, IOException, Option[Vector[Resolved]]] =
-    ZIO.accessM[FileIO] { env =>
+  def loadFile[P: Path : Tagged](file: P): ZIO[FileIO[P], IOException, Option[Vector[Resolved[P]]]] =
+    ZIO.accessM[FileIO[P]] { env =>
       for {
         absoluteFile <- env.get.getAbsolutePath(file)
         currentDir <- Path.of(".")
@@ -114,7 +115,7 @@ object BuildInfo {
   private def loadCompilerOptions(opts: toml.Value.Tbl): Option[CompilerOptions[Option]] =
     Toml.parseAs[CompilerOptions[Option]](opts).toOption
 
-  private def loadBuildInfo(file: Path, backendName: String, table: toml.Value.Tbl, globalProj: ProjectInfoFormat[Option, String], globalOptions: CompilerOptions[Option]): Option[BuildInfo[String]] = for {
+  private def loadBuildInfo[P: Path](file: P, backendName: String, table: toml.Value.Tbl, globalProj: ProjectInfoFormat[Option, String], globalOptions: CompilerOptions[Option]): Option[BuildInfo[String]] = for {
     backend <- Backends.find(backendName)
 
     proj = loadProjectOpt(table.values.get(projectKey))
@@ -143,16 +144,16 @@ object BuildInfo {
     outputOptions = backend.inferOutputOptions(compilerOpts, outputOpts),
   )
 
-  private def loadProjectFile(dir: Path)(build: BuildInfo[String]): ZIO[FileIO, IOException, Resolved] = {
+  private def loadProjectFile[P: Path : Tagged](dir: P)(build: BuildInfo[String]): ZIO[FileIO[P], IOException, Resolved[P]] = {
     import dev.argon.backend.ProjectLoader.Implicits._
 
     type ProjFormat[A] = ProjectInfoFormat[Id, A]
     implicit val fileHandler = ProjectFileHandler.fileHandlerPath(dir)
 
     for {
-      resolvedProj <- ProjectLoader[ProjFormat[String], ProjFormat[PathResourceIndicator], String, PathResourceIndicator].loadProject[FileIO, IOException](build.project)
-      resolvedBackendOpts <- build.backend.backendOptionsProjectLoader[String, PathResourceIndicator].loadProject[FileIO, IOException](build.backendOptions)
-      resolvedOutputOpts <- build.backend.outputOptionsProjectLoader[String, PathResourceIndicator].loadProject[FileIO, IOException](build.outputOptions)
+      resolvedProj <- ProjectLoader[ProjFormat[String], ProjFormat[PathResourceIndicator[P]], String, PathResourceIndicator[P]].loadProject[FileIO[P], IOException](build.project)
+      resolvedBackendOpts <- build.backend.backendOptionsProjectLoader[String, PathResourceIndicator[P]].loadProject[FileIO[P], IOException](build.backendOptions)
+      resolvedOutputOpts <- build.backend.outputOptionsProjectLoader[String, PathResourceIndicator[P]].loadProject[FileIO[P], IOException](build.outputOptions)
     } yield BuildInfo(build.backend)(
       project = resolvedProj,
       compilerOptions = build.compilerOptions,

@@ -3,6 +3,7 @@ package dev.argon.build
 import java.io.IOException
 
 import dev.argon.io.Path
+import dev.argon.io.Path.PathExtensions
 import dev.argon.compiler._
 import dev.argon.stream._
 import cats._
@@ -17,7 +18,7 @@ import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.backend.{Backend, ResourceAccess}
 import dev.argon.parser.SourceAST
 import dev.argon.io.FilenameManip
-import dev.argon.io.fileio.FileIO
+import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.build._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.module.PathResourceIndicator
@@ -30,19 +31,14 @@ object Pipeline {
   private def ioToCompilationError(ex: IOException): ErrorList =
     NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex)))
 
-  private def createFileDataStream(path: Path): stream.ZStream[FileIO, ErrorList, Char] =
+  private def createFileDataStream[P: Path : Tagged](path: P): stream.ZStream[FileIO[P], ErrorList, Char] =
     stream.ZStream.flatten(stream.ZStream.fromEffect(
-      ZIO.access[FileIO] { _.get.readText(ioToCompilationError)(path) }
+      ZIO.access[FileIO[P]] { _.get.readText(ioToCompilationError)(path) }
     ))
 
-  private type CIO[+A] = ZIO[BuildEnvironment, ErrorList, A]
-
-  private def resolveGlob(globs: List[ResourceIndicator]): ZStream[FileIO, ErrorList, Path] =
+  private def resolveGlob[P: Path : Tagged](globs: List[PathResourceIndicator[P]]): ZStream[FileIO[P], ErrorList, P] =
     ZStream.fromIterable(globs)
-      .mapM {
-        case PathResourceIndicator(path) => IO.succeed(path)
-        case _ => Compilation.forErrors(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(new IOException("Unexpected resource indicator"))))
-      }
+      .map { _.path }
       .flatMap { glob =>
         ZStream.fromEffect(
           FilenameManip.findGlob(glob).runCollect
@@ -51,11 +47,11 @@ object Pipeline {
           .flatMap(ZStream.fromIterable(_))
       }
 
-  private def findInputFiles(buildInfo: BuildInfo.Resolved): ZStream[FileIO, ErrorList, InputFileInfo[CIO]] =
+  private def findInputFiles[P: Path : Tagged](buildInfo: BuildInfo.Resolved[P]): ZStream[FileIO[P], ErrorList, InputFileInfo[ZIO[FileIO[P], ErrorList, *]]] =
     resolveGlob(buildInfo.project.inputFiles)
       .zipWithIndex
       .map { case (path, id) =>
-        InputFileInfo[CIO](FileSpec(FileID(id.toInt), path.toString),
+        InputFileInfo[ZIO[FileIO[P], ErrorList, *]](FileSpec(FileID(id.toInt), path.fullPathString),
           ZStreamSource(createFileDataStream(path))
         )
       }
@@ -69,18 +65,18 @@ object Pipeline {
       }
   }
 
-  def compileResult
-  (buildInfo: BuildInfo.Resolved)
-  : ZManaged[BuildEnvironment with ResourceAccess[PathResourceIndicator], ErrorList, buildInfo.backend.TCompilationOutput] =
+  def compileResult[P: Path : Tagged]
+  (buildInfo: BuildInfo.Resolved[P])
+  : ZManaged[BuildEnvironment with FileIO[P] with ResourceAccess[PathResourceIndicator[P]], ErrorList, buildInfo.backend.TCompilationOutput] =
     ZManaged.fromEffect(
-      BuildProcess.parseInput[BuildEnvironment](ZStreamSource(findInputFiles(buildInfo)))
+      BuildProcess.parseInput(ZStreamSource(findInputFiles(buildInfo)))
         .foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
     )
       .flatMap {
         case (parsedInput, _) =>
           ZManaged.fromEffect(
             resolveGlob(buildInfo.project.references)
-              .map(PathResourceIndicator.apply)
+              .map(PathResourceIndicator(_))
               .runCollect
           )
             .flatMap { references =>
@@ -97,12 +93,12 @@ object Pipeline {
             }
       }
 
-  def run(buildInfo: BuildInfo.Resolved): RIO[Console with BuildEnvironment, Int] =
+  def run[P : Path: Tagged](buildInfo: BuildInfo.Resolved[P]): RIO[Console with BuildEnvironment with FileIO[P] with FileIOLite, Int] =
     compileResult(buildInfo)
       .use { output =>
         output.write(buildInfo.outputOptions)
       }
-      .provideSomeLayer[BuildEnvironment](ResourceAccess.forFileIO)
+      .provideSomeLayer[BuildEnvironment with FileIO[P] with FileIOLite](ResourceAccess.forFileIO[P])
       .either
       .map {
         case Left(errors) => (errors.toList.toVector, 1)

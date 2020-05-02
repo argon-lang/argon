@@ -21,8 +21,9 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
 
 
   protected implicit val errorFactory: Grammar.ErrorFactory[Int, String, WithSource[String]] = new Grammar.ErrorFactory[Int, String, WithSource[String]] {
+    @SuppressWarnings(Array("org.wartremover.warts.ToString"))
     override def createError(error: GrammarError[Int, String]): WithSource[String] =
-      WithSource(s"$error", error.location)
+      WithSource(error.toString, error.location)
 
     override def createAmbiguityError(location: SourceLocation): WithSource[String] =
       WithSource("Ambiguity", location)

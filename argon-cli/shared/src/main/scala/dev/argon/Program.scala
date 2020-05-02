@@ -11,11 +11,12 @@ import shapeless.{BuildInfo => _, Id => _, Path => _, _}
 import CommandLineParser.Implicits._
 import dev.argon.io.Path
 import dev.argon.io.fileio.{FileIO, FileIOLite}
+import dev.argon.platform._
 
 object Program extends PlatformApp {
 
 
-  override def run2(args: List[String]): ZIO[ZEnv with FileIO with FileIOLite, Nothing, Int] =
+  override def runApp(args: List[String]): ZIO[ZEnv with FileIO[FilePath] with FileIOLite, Nothing, Int] =
     CommandLineParser.parse(CommandLineArguments.parser)(args) match {
       case Some(CommandLineArguments(cmd: CompileCommand[Id])) =>
         runCompilation(cmd).orDie
@@ -26,11 +27,11 @@ object Program extends PlatformApp {
         } yield 1
     }
 
-  private def runCompilation(args: CompileCommand[Id]): ZIO[BuildEnvironment with Console, Throwable, Int] =
+  private def runCompilation(args: CompileCommand[Id]): ZIO[BuildEnvironment with Console with FileIO[FilePath] with FileIOLite, Throwable, Int] =
     args match {
       case CompileCommand(buildInfoFileName) =>
         Path.of(buildInfoFileName)
-          .flatMap(BuildInfo.loadFile)
+          .flatMap(BuildInfo.loadFile(_))
           .flatMap {
             case Some(buildInfos) => buildInfos.foldLeftM(0) { (exitCode, buildInfo) =>
               Pipeline.run(buildInfo).map { exitCode2 =>

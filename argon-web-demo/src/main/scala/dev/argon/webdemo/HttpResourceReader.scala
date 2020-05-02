@@ -7,8 +7,9 @@ import cats.implicits._
 import cats.data.NonEmptyList
 import dev.argon.backend.ResourceReader
 import dev.argon.compiler.{Comp, CompilationError, CompilationMessageSource, ErrorList}
-import dev.argon.io.{ResourceReaderMemZipBase, ZipFileReader}
+import dev.argon.io.ZipFileReader
 import dev.argon.io.fileio.FileIOLite
+import dev.argon.platform.ResourceReaderMemZipBase
 import dev.argon.stream.builder.Source
 import org.scalajs.dom.raw.XMLHttpRequest
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
