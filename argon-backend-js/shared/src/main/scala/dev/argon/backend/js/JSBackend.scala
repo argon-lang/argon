@@ -9,12 +9,13 @@ import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.loaders.armodule.ArgonModuleLoader
 import dev.argon.loaders.armodule.ArgonModuleLoader.PayloadLoader
+import dev.argon.project.{ProjectLoader, SingleFile}
 import dev.argon.stream.builder.Source
 import zio._
 import zio.interop.catz._
 import toml.Codecs._
 import shapeless._
-import dev.argon.util.ExtraTomlCodecs._
+import dev.argon.project.ExtraTomlCodecs._
 import toml.Parse.{Address, Message}
 import toml.Value
 
@@ -45,7 +46,7 @@ object JSBackend extends Backend {
     )
 
   override def backendOptionsProjectLoader[IOld, I]: ProjectLoader[BackendOptionsId[IOld], BackendOptionsId[I], IOld, I] = {
-    import ProjectLoader.Implicits._
+    import dev.argon.project.ProjectLoader.Implicits._
     ProjectLoader.apply
   }
 
@@ -53,15 +54,15 @@ object JSBackend extends Backend {
     toml.Toml.parseAs[JSBackendOptions[Option, String]](table)
 
   override def emptyOutputOptions[I]: JSOutputOptions[Option, I] =
-    JSOutputOptions(None)
+    JSOutputOptions[Option, I](None)
 
   override def inferOutputOptions(compilerOptions: CompilerOptions[Id], options: JSOutputOptions[Option, String]): BackendOutputOptionsId[String] =
     JSOutputOptions[Id, String](
-      outputFile = options.outputFile.getOrElse(compilerOptions.moduleName + ".js"),
+      outputFile = options.outputFile.getOrElse(SingleFile(compilerOptions.moduleName + ".js")),
     )
 
   override def outputOptionsProjectLoader[IOld, I]: ProjectLoader[JSBackend.BackendOutputOptionsId[IOld], JSBackend.BackendOutputOptionsId[I], IOld, I] = {
-    import ProjectLoader.Implicits._
+    import dev.argon.project.ProjectLoader.Implicits._
     ProjectLoader.apply
   }
 
@@ -81,7 +82,7 @@ object JSBackend extends Backend {
 
   private def createOutput(jsModule: JSModule): CompilationOutputText[BackendOutputOptionsId] = new CompilationOutputText[BackendOutputOptionsId] {
 
-    override def outputResource[I](options: BackendOutputOptionsId[I]): I = options.outputFile
+    override def outputResource[I](options: BackendOutputOptionsId[I]): I = options.outputFile.file
 
     override val textStream: Source[Comp, String, Unit] =
       JSAst.writeModule(jsModule)

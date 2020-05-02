@@ -5,10 +5,11 @@ import dev.argon.stream._
 import scalapb.GeneratedMessage
 import cats.instances._
 import cats.data.NonEmptyList
-import dev.argon.backend.{Backend, CompilationOutput, ProjectLoader, ResourceAccess, ResourceReader, ResourceWriter}
+import dev.argon.backend.{Backend, CompilationOutput, ResourceAccess, ResourceReader, ResourceWriter}
 import dev.argon.compiler.core.Context
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.ZipEntryInfo
+import dev.argon.project.{ProjectLoader, SingleFile}
 import dev.argon.stream.builder.Source
 import toml.Codecs._
 import shapeless._
@@ -33,7 +34,7 @@ object ArModuleBackend extends Backend {
     ModuleBackendOptions[Id, I]()
 
   override def backendOptionsProjectLoader[IOld, I]: ProjectLoader[BackendOptionsId[IOld], BackendOptionsId[I], IOld, I] = {
-    import ProjectLoader.Implicits._
+    import dev.argon.project.ProjectLoader.Implicits._
     ProjectLoader.apply
   }
 
@@ -41,15 +42,15 @@ object ArModuleBackend extends Backend {
     toml.Toml.parseAs[ModuleBackendOptions[Option, String]](table)
 
   override def emptyOutputOptions[I]: ModuleOutputOptions[Option, I] =
-    ModuleOutputOptions(None)
+    ModuleOutputOptions[Option, I](None)
 
   override def inferOutputOptions(compilerOptions: CompilerOptions[Id], options: ModuleOutputOptions[Option, String]): BackendOutputOptionsId[String] =
     ModuleOutputOptions[Id, String](
-      referenceModule = options.referenceModule.getOrElse(compilerOptions.moduleName + ".armodule")
+      referenceModule = options.referenceModule.getOrElse(SingleFile(compilerOptions.moduleName + ".armodule"))
     )
 
-  override def outputOptionsProjectLoader[IOld, I]: ProjectLoader[ArModuleBackend.BackendOutputOptionsId[IOld], ArModuleBackend.BackendOutputOptionsId[I], IOld, I] = {
-    import ProjectLoader.Implicits._
+  override def outputOptionsProjectLoader[IOld, I]: ProjectLoader[BackendOutputOptionsId[IOld], BackendOutputOptionsId[I], IOld, I] = {
+    import dev.argon.project.ProjectLoader.Implicits._
     ProjectLoader.apply
   }
 
@@ -78,7 +79,7 @@ object ArModuleBackend extends Backend {
 
           val zipData = res.zipFromEntries(zipEntries)
 
-          res.writeToResource(options.referenceModule)(zipData)
+          res.writeToResource(options.referenceModule.file)(zipData)
         }
 
     }

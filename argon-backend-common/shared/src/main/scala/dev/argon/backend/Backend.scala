@@ -3,6 +3,7 @@ package dev.argon.backend
 import shapeless.Id
 import dev.argon.compiler._
 import dev.argon.compiler.loaders.ResourceIndicator
+import dev.argon.project.ProjectLoader
 import zio._
 
 trait Backend {

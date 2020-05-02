@@ -1,7 +1,6 @@
 package dev.argon
 
-import dev.argon.build.{BackendProviderImpl, BuildEnvironment, Pipeline}
-import dev.argon.build.project.BuildInfo
+import dev.argon.build.{BackendProviderImpl, BuildEnvironment, BuildInfoLoader, Pipeline}
 import cats._
 import cats.implicits._
 import zio.{BuildInfo => _, _}
@@ -12,6 +11,7 @@ import CommandLineParser.Implicits._
 import dev.argon.io.Path
 import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.platform._
+import dev.argon.project.BuildInfo
 
 object Program extends PlatformApp {
 
@@ -31,7 +31,7 @@ object Program extends PlatformApp {
     args match {
       case CompileCommand(buildInfoFileName) =>
         Path.of(buildInfoFileName)
-          .flatMap(BuildInfo.loadFile(_))
+          .flatMap(BuildInfoLoader.loadFile(_))
           .provideSomeLayer[FileIO[FilePath]](BackendProviderImpl.live)
           .flatMap {
             case Some(buildInfos) => buildInfos.foldLeftM(0) { (exitCode, buildInfo) =>

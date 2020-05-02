@@ -8,15 +8,16 @@ import java.io.IOException
 
 import dev.argon.io.{Path, ZipEntryInfo}
 import cats.data.NonEmptyList
-import dev.argon.backend.{Backend, ProjectFileHandler, ResourceAccess, ResourceReader, ResourceWriter}
+import dev.argon.backend.{Backend, ResourceAccess, ResourceReader, ResourceWriter}
 import dev.argon.compiler.{Comp, CompilationError, CompilerOptions}
 import zio._
 import shapeless.{Id => _, Path => _, _}
-import dev.argon.backend.ProjectLoader.Implicits._
+import dev.argon.project.ProjectLoader.Implicits._
 import dev.argon.build._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.fileio.FileIO
 import dev.argon.module.PathResourceIndicator
+import dev.argon.project.ProjectFileHandler
 import dev.argon.stream.builder.Source
 import scalapb.GeneratedMessage
 
@@ -66,6 +67,9 @@ object BuildTestCaseRunner {
     new ProjectFileHandler[Any, Nothing, String, dummyOutputPath.type] {
       override def loadSingleFile(file: String): ZIO[Any, Nothing, dummyOutputPath.type] =
         IO.succeed(dummyOutputPath)
+
+      override def loadGlobList(files: List[String]): ZIO[Any, Nothing, List[dummyOutputPath.type]] =
+        IO.succeed(Nil)
     }
 
   private def dummyWriterService: ZLayer[ResourceWriter[Nothing], Nothing, ResourceWriter[DummyOutputPath]] =

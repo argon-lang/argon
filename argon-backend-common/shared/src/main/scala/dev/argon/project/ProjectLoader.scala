@@ -1,12 +1,8 @@
-package dev.argon.backend
+package dev.argon.project
 
 import java.io.IOException
 
-import cats._
 import cats.implicits._
-import dev.argon.compiler.loaders.ResourceIndicator
-import dev.argon.io.Path
-import dev.argon.io.Path.PathExtensions
 import dev.argon.io.fileio.FileIO
 import dev.argon.module.PathResourceIndicator
 import shapeless.{Path => _, _}
@@ -28,14 +24,19 @@ object ProjectLoader {
         IO.succeed(a)
     }
 
-    implicit def fileLoader[IOld, I]: ProjectLoader[IOld, I, IOld, I] = new ProjectLoader[IOld, I, IOld, I] {
-      override def loadProject[R, E](a: IOld)(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, I] =
-        fileHandler.loadSingleFile(a)
+    implicit def fileLoader[IOld, I]: ProjectLoader[SingleFile[IOld], SingleFile[I], IOld, I] = new ProjectLoader[SingleFile[IOld], SingleFile[I], IOld, I] {
+      override def loadProject[R, E](a: SingleFile[IOld])(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, SingleFile[I]] =
+        fileHandler.loadSingleFile(a.file).map(SingleFile.apply)
     }
 
-    implicit def fileListLoader[IOld, I]: ProjectLoader[List[IOld], List[I], IOld, I] = new ProjectLoader[List[IOld], List[I], IOld, I] {
-      override def loadProject[R, E](a: List[IOld])(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, List[I]] =
-        ZIO.foreach(a)(fileHandler.loadSingleFile)
+    implicit def fileListLoader[IOld, I]: ProjectLoader[FileList[IOld], FileList[I], IOld, I] = new ProjectLoader[FileList[IOld], FileList[I], IOld, I] {
+      override def loadProject[R, E](a: FileList[IOld])(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, FileList[I]] =
+        ZIO.foreach(a.files)(fileHandler.loadSingleFile).map(FileList.apply)
+    }
+
+    implicit def fileGlobLoader[IOld, I]: ProjectLoader[FileGlob[IOld], FileGlob[I], IOld, I] = new ProjectLoader[FileGlob[IOld], FileGlob[I], IOld, I] {
+      override def loadProject[R, E](a: FileGlob[IOld])(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, FileGlob[I]] =
+        fileHandler.loadGlobList(a.files).map(FileGlob.apply)
     }
 
     implicit def hconsLoader[AHead, ATail <: HList, BHead, BTail <: HList, IOld, I](implicit headLoader: ProjectLoader[AHead, BHead, IOld, I], tailLoader: ProjectLoader[ATail, BTail, IOld, I]): ProjectLoader[AHead :: ATail, BHead :: BTail, IOld, I] =
@@ -71,24 +72,5 @@ object ProjectLoader {
   }
 
 
-
-}
-
-trait ProjectFileHandler[-R, +E, -IOld, +I] {
-  def loadSingleFile(file: IOld): ZIO[R, E, I]
-}
-
-object ProjectFileHandler {
-
-  def fileHandlerPath[P : Path](dir: P): ProjectFileHandler[FileIO[P], IOException, String, PathResourceIndicator[P]] = new ProjectFileHandler[FileIO[P], IOException, String, PathResourceIndicator[P]] {
-
-    override def loadSingleFile(file: String): ZIO[FileIO[P], IOException, PathResourceIndicator[P]] =
-      Path.of[P](file).map(dir.resolve).map(PathResourceIndicator(_))
-
-  }
-
-  def nothingFileHandler[R, E]: ProjectFileHandler[R, E, Nothing, Nothing] = new ProjectFileHandler[R, E, Nothing, Nothing] {
-    override def loadSingleFile(file: Nothing): ZIO[R, E, Nothing] = file
-  }
 
 }

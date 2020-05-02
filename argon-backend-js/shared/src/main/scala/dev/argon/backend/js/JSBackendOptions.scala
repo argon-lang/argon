@@ -1,5 +1,7 @@
 package dev.argon.backend.js
 
+import dev.argon.project.SingleFile
+
 final case class JSBackendOptions[F[_], I]
 (
   extern: F[Map[String, String]],
@@ -14,5 +16,5 @@ final case class JSInjectCode[F[_]]
 
 final case class JSOutputOptions[F[_], I]
 (
-  outputFile: F[I],
+  outputFile: F[SingleFile[I]],
 )
