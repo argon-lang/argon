@@ -217,7 +217,7 @@ lazy val argon_build = crossProject(JVMPlatform, JSPlatform).in(file("argon-buil
     _.dependsOn(argon_platform_node % "test->compile")
      .settings(commonJSSettings)
   )
-  .dependsOn(arstream, util, parser, argon_compiler, backend_js, backend_module)
+  .dependsOn(argon_build_base, backend_js, backend_module)
   .settings(
     commonSettings,
     compilerOptions,
@@ -228,6 +228,25 @@ lazy val argon_build = crossProject(JVMPlatform, JSPlatform).in(file("argon-buil
 
 lazy val argon_buildJVM = argon_build.jvm
 lazy val argon_buildJS = argon_build.js
+
+lazy val argon_build_base = crossProject(JVMPlatform, JSPlatform).in(file("argon-build-base"))
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonJSSettings)
+  )
+  .dependsOn(parser, argon_compiler, backend_common)
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-build",
+    wartremoverExcluded += sourceDirectory.value / "main" / "scala" / "dev" / "argon" / "build" / "testrunner" / "js" / "api.gen.scala",
+  )
+
+lazy val argon_build_baseJVM = argon_build.jvm
+lazy val argon_build_baseJS = argon_build.js
 
 lazy val grammar = crossProject(JVMPlatform, JSPlatform).in(file("argon-grammar"))
   .dependsOn(arstream, util)

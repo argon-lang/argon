@@ -5,13 +5,13 @@ import java.io.IOException
 import dev.argon.io.Path
 import dev.argon.io.Path.PathExtensions
 import cats._
+import cats.data.OptionT
 import cats.implicits._
 import dev.argon.backend.{Backend, ProjectFileHandler, ProjectLoader}
 import dev.argon.build._
 import zio._
 import zio.interop.catz._
 import dev.argon.compiler._
-import dev.argon.backend.ProjectFileHandler
 import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.fileio.FileIO
@@ -64,38 +64,47 @@ object BuildInfo {
 
 
 
-  def loadFile[P: Path : Tagged](file: P): ZIO[FileIO[P], IOException, Option[Vector[Resolved[P]]]] =
-    ZIO.accessM[FileIO[P]] { env =>
-      for {
-        absoluteFile <- env.get.getAbsolutePath(file)
-        currentDir <- Path.of(".")
-        currentDirAbs <- env.get.getAbsolutePath(currentDir)
-        dir = absoluteFile.parent.getOrElse(currentDir)
-        buildFile <- env.get.readAllText(file)
-        result <-
-          Toml.parse(buildFile)
-            .toOption
-            .flatMap { rootTable =>
-              val proj = loadProjectOpt(rootTable.values.get(projectKey))
-              val compOpts = loadCompilerOptionsOpt(rootTable.values.get(compilerOptionsKey))
+  def loadFile[P: Path : Tagged](file: P): ZIO[FileIO[P] with BackendProvider, IOException, Option[Vector[Resolved[P]]]] = for {
 
-              rootTable
-                .values
-                .get(backendKey)
-                .collect { case table: toml.Value.Tbl => table }
-                .toList
-                .flatMap { _.values }
-                .toVector
-                .traverse {
-                  case (key, value: toml.Value.Tbl) =>
-                    loadBuildInfo(file, key, value, proj, compOpts)
+    fileIO <- ZIO.access[FileIO[P]](_.get)
+    absoluteFile <- fileIO.getAbsolutePath(file)
+    currentDir <- Path.of(".")
+    currentDirAbs <- fileIO.getAbsolutePath(currentDir)
+    dir = absoluteFile.parent.getOrElse(currentDirAbs)
+    buildFile <- fileIO.readAllText(file)
+    result <-
+      Toml.parse(buildFile)
+        .toOption
+        .flatTraverse { rootTable =>
+          val proj = loadProjectOpt(rootTable.values.get(projectKey))
+          val compOpts = loadCompilerOptionsOpt(rootTable.values.get(compilerOptionsKey))
 
-                  case (_, _) => None
-                }
+          rootTable
+            .values
+            .get(backendKey)
+            .collect { case table: toml.Value.Tbl => table }
+            .toList
+            .flatMap { _.values }
+            .toVector
+            .traverse[OptionT[URIO[BackendProvider, *], *], BuildInfo[String]] {
+              case (key, value: toml.Value.Tbl) =>
+                OptionT(
+                  ZIO.access[BackendProvider](_.get.findBackend(key))
+                    .map { backendOpt =>
+                      backendOpt.flatMap { backend =>
+                        loadBuildInfo(file, backend, value, proj, compOpts)
+                      }
+                    }
+                )
+
+              case (_, _) => OptionT.none
             }
-            .traverse { _.traverse(loadProjectFile(dir)) }
-      } yield result
-    }
+            .value
+        }
+        .flatMap {
+          _.traverse { _.traverse(loadProjectFile(dir)) }
+        }
+  } yield result
 
   private def loadProjectOpt(proj: Option[toml.Value]): ProjectInfoFormat[Option, String] =
     proj
@@ -115,34 +124,35 @@ object BuildInfo {
   private def loadCompilerOptions(opts: toml.Value.Tbl): Option[CompilerOptions[Option]] =
     Toml.parseAs[CompilerOptions[Option]](opts).toOption
 
-  private def loadBuildInfo[P: Path](file: P, backendName: String, table: toml.Value.Tbl, globalProj: ProjectInfoFormat[Option, String], globalOptions: CompilerOptions[Option]): Option[BuildInfo[String]] = for {
-    backend <- Backends.find(backendName)
+  private def loadBuildInfo[P: Path](file: P, backend: Backend, table: toml.Value.Tbl, globalProj: ProjectInfoFormat[Option, String], globalOptions: CompilerOptions[Option]): Option[BuildInfo[String]] = {
+    val proj = loadProjectOpt(table.values.get(projectKey))
+    val compOpts = loadCompilerOptionsOpt(table.values.get(compilerOptionsKey))
 
-    proj = loadProjectOpt(table.values.get(projectKey))
-    compOpts = loadCompilerOptionsOpt(table.values.get(compilerOptionsKey))
-
-    output = table.values
+    val output = table.values
       .get(outputKey)
       .collect { case table: toml.Value.Tbl => table }
       .getOrElse { toml.Value.Tbl(Map.empty) }
 
-    outputOpts <- backend.parseOutputOptions(output).toOption
+    for {
 
-    table2 = toml.Value.Tbl(table.values - projectKey - compilerOptionsKey)
-    backendOptions <- backend.parseBackendOptions(table2).toOption
+      outputOpts <- backend.parseOutputOptions(output).toOption
 
-    compilerOpts = CompilerOptions[Id](
-      moduleName = compOpts.moduleName.orElse(globalOptions.moduleName).getOrElse(file.fileNameWithoutExtension),
+      table2 = toml.Value.Tbl(table.values - projectKey - compilerOptionsKey)
+      backendOptions <- backend.parseBackendOptions(table2).toOption
+
+      compilerOpts = CompilerOptions[Id](
+        moduleName = compOpts.moduleName.orElse(globalOptions.moduleName).getOrElse(file.fileNameWithoutExtension),
+      )
+    } yield BuildInfo(backend)(
+      project = ProjectInfoFormat[Id, String](
+        inputFiles = globalProj.inputFiles.toList.flatten ++ proj.inputFiles.toList.flatten,
+        references = globalProj.references.toList.flatten ++ proj.references.toList.flatten,
+      ),
+      compilerOptions = compilerOpts,
+      backendOptions = backend.inferBackendOptions(compilerOpts, backendOptions),
+      outputOptions = backend.inferOutputOptions(compilerOpts, outputOpts),
     )
-  } yield BuildInfo(backend)(
-    project = ProjectInfoFormat[Id, String](
-      inputFiles = globalProj.inputFiles.toList.flatten ++ proj.inputFiles.toList.flatten,
-      references = globalProj.references.toList.flatten ++ proj.references.toList.flatten,
-    ),
-    compilerOptions = compilerOpts,
-    backendOptions = backend.inferBackendOptions(compilerOpts, backendOptions),
-    outputOptions = backend.inferOutputOptions(compilerOpts, outputOpts),
-  )
+  }
 
   private def loadProjectFile[P: Path : Tagged](dir: P)(build: BuildInfo[String]): ZIO[FileIO[P], IOException, Resolved[P]] = {
     import dev.argon.backend.ProjectLoader.Implicits._

@@ -1,8 +1,8 @@
-package dev.argon
+package dev.argon.build
 
 import zio.blocking.Blocking
 
-package object build {
+trait BuildPackageObjectPlatform {
 
   type BuildEnvironment = Blocking
 

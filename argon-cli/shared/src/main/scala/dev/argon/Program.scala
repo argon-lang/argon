@@ -1,6 +1,6 @@
 package dev.argon
 
-import dev.argon.build.{BuildEnvironment, Pipeline}
+import dev.argon.build.{BackendProviderImpl, BuildEnvironment, Pipeline}
 import dev.argon.build.project.BuildInfo
 import cats._
 import cats.implicits._
@@ -32,6 +32,7 @@ object Program extends PlatformApp {
       case CompileCommand(buildInfoFileName) =>
         Path.of(buildInfoFileName)
           .flatMap(BuildInfo.loadFile(_))
+          .provideSomeLayer[FileIO[FilePath]](BackendProviderImpl.live)
           .flatMap {
             case Some(buildInfos) => buildInfos.foldLeftM(0) { (exitCode, buildInfo) =>
               Pipeline.run(buildInfo).map { exitCode2 =>
