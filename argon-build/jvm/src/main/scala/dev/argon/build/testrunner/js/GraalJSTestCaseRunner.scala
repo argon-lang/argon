@@ -28,7 +28,7 @@ import org.apache.commons.text.StringEscapeUtils
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.io.FileSystem
 
-final class GraalJSTestCaseRunner[I <: ResourceIndicator: Tagged](protected val references: Vector[I]) extends JavaScriptTestCaseRunnerBase[I] {
+final class GraalJSTestCaseRunner[I <: ResourceIndicator: Tagged, P: Path : Tagged](protected val references: Vector[I], pathResolver: I => UIO[P]) extends JavaScriptTestCaseRunnerBase[I, P](pathResolver) {
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): Task[String] =

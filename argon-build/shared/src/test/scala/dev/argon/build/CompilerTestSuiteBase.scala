@@ -10,6 +10,7 @@ import zio.test.Assertion.equalTo
 import zio.test._
 import cats._
 import cats.implicits._
+import dev.argon.backend.{ResourceReader, ResourceWriter}
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.fileio.FileIO
 import dev.argon.module.PathResourceIndicator
@@ -17,7 +18,13 @@ import dev.argon.platform._
 import zio.interop.catz._
 import zio.test.environment.Live
 
-abstract class CompilerTestSuiteBase extends PlatformRunnableSpec with PlatformHelperTestSuite {
+abstract class CompilerTestSuiteBase extends PlatformRunnableSpec {
+
+  private type TestExecEnv =
+    ResourceReader[TestResourceIndicator] with
+      Has[TestResourceReader.Service[FilePath]] with
+      ResourceWriter[Nothing] with
+      FileIO[FilePath]
 
   private val libraries = Vector(
     "Argon.Core",
@@ -28,6 +35,13 @@ abstract class CompilerTestSuiteBase extends PlatformRunnableSpec with PlatformH
 
   protected val suiteName: String
   protected def testCases[P : Path : Tagged]: ZIO[FileIO[P] with Live, TestFailure[Failure], TestCaseStructure]
+
+  private def execEnvLayer: ZLayer[Environment, Throwable, TestExecEnv] =
+    TestResourceReader.layer[FilePath].passthrough >>> (
+      ZLayer.identity[FileIO[FilePath] with Has[TestResourceReader.Service[FilePath]]] ++
+        ZLayer.fromFunction[Has[TestResourceReader.Service[FilePath]], ResourceReader.Service[TestResourceIndicator]](_.get) ++
+        ResourceWriter.forNothing
+      )
 
   private def isExpectedResult(runner: TestCaseRunner[_])(expected: TestCaseExpectedResult): Assertion[TestCaseActualResult] =
     Assertion.assertion("isExpectedResult")(Assertion.Render.param(expected)) { actual =>
@@ -48,11 +62,24 @@ abstract class CompilerTestSuiteBase extends PlatformRunnableSpec with PlatformH
     } ++
       structure.tests.map(createTest(runner))
 
+  private def allRunners: URIO[BackendProvider with Has[TestResourceReader.Service[FilePath]], Seq[TestCaseRunner[ResourceReader[TestResourceIndicator] with ResourceWriter[Nothing] with FileIO[FilePath]]]] =
+    ZIO.access { env =>
+      val testResReader = env.get[TestResourceReader.Service[FilePath]]
+
+      def pathResolver(id: TestResourceIndicator): UIO[FilePath] = id match {
+        case LibraryResourceIndicator(name) =>
+          testResReader.getLibPath(name)
+      }
+
+      env.get[BackendProvider.Service].testCaseRunners(references, pathResolver)
+    }
+
   override def spec: ZSpec[Environment, Failure] =
     Spec.suite(suiteName,
       for {
         loadedTestCases <- testCases
-      } yield runners(references).map { runner =>
+        runners <- allRunners.provideSomeLayer[Environment](execEnvLayer.orDie ++ BackendProviderImpl.live)
+      } yield runners.map { runner =>
         suite(runner.name)(
           createSuites(runner, loadedTestCases): _*
         )

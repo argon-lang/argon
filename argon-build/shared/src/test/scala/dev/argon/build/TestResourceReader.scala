@@ -4,7 +4,6 @@ import java.io.{FileNotFoundException, IOException}
 
 import cats.data.NonEmptyList
 import dev.argon.backend.{ResourceAccess, ResourceReader}
-import dev.argon.build.testrunner.js.JSModuleLoad
 import dev.argon.compiler.{Comp, CompilationError, CompilationMessageSource, ErrorList}
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.{Path, ZipEntryInfo}
@@ -32,12 +31,6 @@ object TestResourceReader {
         liveResReader = liveResReaderEnv.get
       } yield (new Service[P] {
 
-        private def ioFail(ex: IOException): IO[ErrorList, Nothing] =
-          IO.fail(NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex))))
-
-        private def managedFail(ex: IOException): Managed[ErrorList, Nothing] =
-          Managed.fromEffect(ioFail(ex))
-
         override def getLibPath(name: String): UIO[P] =
           Path.of(libDir, name, name + ".armodule")
 
@@ -45,7 +38,6 @@ object TestResourceReader {
 
         override def getZipReader(id: TestResourceIndicator): Managed[ErrorList, ZipReader] =
           id match {
-            case InputFileResourceIndicator(_) => managedFail(new IOException("Input file cannot be used as zip file."))
             case LibraryResourceIndicator(name) =>
               ZManaged.fromEffect(getLibPath(name))
                 .flatMap { path =>

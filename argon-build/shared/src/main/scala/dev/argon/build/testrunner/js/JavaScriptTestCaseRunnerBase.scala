@@ -1,8 +1,9 @@
 package dev.argon.build.testrunner.js
 
-import java.io.IOException
+import java.io.{FileNotFoundException, IOException}
 
 import dev.argon.io.Path
+import dev.argon.io.Path.PathExtensions
 import dev.argon.build.testrunner._
 import cats._
 import cats.data.{EitherT, NonEmptyList, NonEmptyVector}
@@ -17,7 +18,7 @@ import dev.argon.build._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.module.PathResourceIndicator
 
-abstract class JavaScriptTestCaseRunnerBase[I <: ResourceIndicator: Tagged] extends TestCaseRunnerExecutionPhase[I, ResourceReader[I] with ResourceWriter[Nothing] with JSModuleLoad] {
+abstract class JavaScriptTestCaseRunnerBase[I <: ResourceIndicator: Tagged, P: Path : Tagged](pathResolver: I => UIO[P]) extends TestCaseRunnerExecutionPhase[I, ResourceReader[I] with ResourceWriter[Nothing] with FileIO[P]] {
 
   override val name: String = "JavaScript Execution"
   override protected val backend: JSBackend.type = JSBackend
@@ -33,16 +34,20 @@ abstract class JavaScriptTestCaseRunnerBase[I <: ResourceIndicator: Tagged] exte
       )
     )
 
-  override protected def getProgramOutput(compOutput: backend.TCompilationOutput): ZIO[JSModuleLoad, TestCaseError, String] =
+  override protected def getProgramOutput(compOutput: backend.TCompilationOutput): ZIO[FileIO[P], TestCaseError, String] =
     for {
       (compiledFile, _) <- compOutput.textStream.foldLeftM("") { (a, b) => IO.succeed(a + b) }.mapError(compilationFailureResult)
       output <- runJSOutput(references)(compiledFile).mapError(executionFailureResult)
     } yield output
 
-  private def runJSOutput(files: Vector[ResourceIndicator])(compiledFile: String): RIO[JSModuleLoad, String] = for {
+  private def runJSOutput(files: Vector[I])(compiledFile: String): RIO[FileIO[P], String] = for {
     referenceLibs <- files.traverse { id =>
       for {
-        (libName, content) <- ZIO.accessM[JSModuleLoad] { _.get.loadJSForArgonModule(id) }
+        libPath <- pathResolver(id)
+        libDir <- IO.fromEither(libPath.parent.toRight { new FileNotFoundException() })
+        libName = libPath.fileNameWithoutExtension
+        relPart <- Path.of("js", libName + ".js")
+        content <- ZIO.accessM[FileIO[P]] { _.get.readAllText(libDir.resolve(relPart)) }
       } yield FileInfo(libName, content)
     }
 
