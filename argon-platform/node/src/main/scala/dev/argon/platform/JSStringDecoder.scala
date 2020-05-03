@@ -3,7 +3,6 @@ package dev.argon.platform
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
 import scala.scalajs.js.typedarray.Uint8Array
-import scala.scalajs.js.|
 
 @js.native
 @JSImport("string_decoder", "StringDecoder")

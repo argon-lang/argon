@@ -4,7 +4,6 @@ import java.io.IOException
 
 import cats.implicits._
 import cats.data.NonEmptyList
-import dev.argon.compiler.{CompilationError, CompilationMessageSource, ErrorList}
 import dev.argon.io.{FilenameManip, Path}
 import dev.argon.io.Path.PathExtensions
 import dev.argon.io.fileio.FileIO

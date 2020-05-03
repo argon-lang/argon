@@ -3,8 +3,6 @@ package dev.argon.project
 import java.io.IOException
 
 import cats.implicits._
-import dev.argon.io.fileio.FileIO
-import dev.argon.module.PathResourceIndicator
 import shapeless.{Path => _, _}
 import zio._
 import zio.interop.catz._
