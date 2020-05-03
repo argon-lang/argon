@@ -14,11 +14,12 @@ import cats.data._
 import cats.implicits._
 import PayloadSpecifiers._
 import cats.evidence.{===, Is}
+import dev.argon.compiler.loaders.source.ExpressionConverter.HoleId
 import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
 import dev.argon.parser.{BindingPattern, DeconstructPattern, DiscardPattern, TuplePattern, TypeTestPattern}
 import shapeless.{:: => _, Id => _, _}
 import shapeless.ops.nat.{LT, Pred}
-import zio.{IO, Ref, UIO}
+import zio.{IO, Ref, UIO, ZIO}
 import zio.interop.catz._
 
 import Function.const
@@ -38,7 +39,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   import scopeContext.{ context => _, _ }
   import signatureContext.{ Signature, SignatureParameters, SignatureVisitor }
 
-  def peekNextHoleId: Comp[Int]
+  def getAllHoles: Comp[Seq[HoleId]]
   def createHole: Comp[TType]
   def recordConstraint(info: SubTypeInfo[TType]): Comp[Unit]
   def resolveType(t: TType): Comp[TType]
@@ -1308,14 +1309,21 @@ object ExpressionConverter {
 
     import typeSystem.TType
 
-    override def peekNextHoleId: Comp[Int] =
-      state.get.map { _.nextHoleId }
+    override def getAllHoles: Comp[Seq[HoleId]] =
+      state.get.map { _.constraints.keys.toSeq }
 
     override def createHole: Comp[TType] =
-      state.modify { oldState => (oldState.nextHoleId, oldState.copy(nextHoleId = oldState.nextHoleId + 1)) }
+      HoleId.make
+        .tap { id =>
+          state.update { oldState =>
+            oldState.copy(
+              constraints = oldState.constraints.updated(id, HoleBounds(Set.empty, Set.empty))
+            )
+          }
+        }
         .map(HoleTypeHole.apply)
 
-    private def addConstraint(id: Int, prop: Lens[HoleBounds[ts.TType], Set[ts.TType]], constraint: ts.TType): Comp[Unit] =
+    private def addConstraint(id: HoleId, prop: Lens[HoleBounds[ts.TType], Set[ts.TType]], constraint: ts.TType): Comp[Unit] =
       state.update { oldState =>
         oldState.constraints.getOrElse(id, HoleBounds(Set.empty, Set.empty)) match {
           case HoleResolved(_) => oldState
@@ -1351,7 +1359,7 @@ object ExpressionConverter {
           info.args.traverse_(recordConstraint(_))
       }
 
-    private def getConstraints(id: Int): Comp[HoleConstraint[ts.TType]] =
+    private def getConstraints(id: HoleId): Comp[HoleConstraint[ts.TType]] =
       state.get.map { stateValue =>
         stateValue.constraints.getOrElse(id, HoleBounds(Set.empty, Set.empty))
       }
@@ -1377,12 +1385,12 @@ object ExpressionConverter {
 
     }
 
-    private def updateConstraints(id: Int, constraints: HoleConstraint[ts.TType]): Comp[Unit] =
+    private def updateConstraints(id: HoleId, constraints: HoleConstraint[ts.TType]): Comp[Unit] =
       state.update { stateValue =>
         stateValue.copy(constraints = stateValue.constraints.updated(id, constraints))
       }
 
-    private def resolveOuterHole(id: Int): Comp[ts.TType] =
+    private def resolveOuterHole(id: HoleId): Comp[ts.TType] =
       getConstraints(id).flatMap  {
         case HoleResolved(hole) => IO.succeed(hole)
         case bounds @ HoleBounds(_, _) =>
@@ -1419,7 +1427,8 @@ object ExpressionConverter {
           } yield resolvedType
       }
 
-    override def attemptRun[A](value: Comp[A]): Comp[Either[ErrorList, Comp[A]]] = for {
+    override def attemptRun[A](value: Comp[A]): Comp[Either[ErrorList, Comp[A]]] =
+      for {
       prevState <- state.get
       v <- value.either
       newState <- state.getAndSet(prevState)
@@ -1541,19 +1550,6 @@ object ExpressionConverter {
     } yield filled
   }
 
-
-  private def resolveHoles
-  (context: Context)
-  (ts: TypeSystem[context.type] { type TTypeWrapper[+A] = HoleType[A] })
-  (converter: ExpressionConverter[context.type] { val typeSystem: ts.type })
-  (remainingHoles: Int)
-  : Comp[Unit] =
-    if(remainingHoles > 0)
-      converter.resolveType(HoleTypeHole(remainingHoles - 1))
-        .flatMap { _ => resolveHoles(context)(ts)(converter)(remainingHoles - 1) }
-    else
-      IO.unit
-
   private def fillHoles
   (context: Context)
   (ts: HoleTypeSystem[context.type])
@@ -1587,17 +1583,24 @@ object ExpressionConverter {
 
     for {
       e <- expr
-      id <- converter.peekNextHoleId
-      _ <- resolveHoles(context)(ts)(converter)(id)
+      ids <- converter.getAllHoles
+      _ <- ZIO.foreach_(ids) { id =>
+        converter.resolveType(HoleTypeHole(id))
+      }
       convE <- (new FillConverter).convertTypeSystem(e)
     } yield convE
   }
 
-
+  sealed trait HoleId
+  object HoleId {
+    @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
+    def make: UIO[HoleId] =
+      IO.effectTotal { new HoleId {} }
+  }
 
   sealed trait HoleType[+T]
   private final case class HoleTypeType[+T](t: T) extends HoleType[T]
-  private final case class HoleTypeHole[+T](id: Int) extends HoleType[T]
+  private final case class HoleTypeHole[+T](id: HoleId) extends HoleType[T]
 
 
 
@@ -1716,12 +1719,11 @@ object ExpressionConverter {
 
   final case class TypeCheckState[TType]
   (
-    nextHoleId: Int,
-    constraints: Map[Int, HoleConstraint[TType]],
+    constraints: Map[HoleId, HoleConstraint[TType]],
   )
 
   object TypeCheckState {
-    def default[TType]: TypeCheckState[TType] = TypeCheckState(0, Map.empty)
+    def default[TType]: TypeCheckState[TType] = TypeCheckState(Map.empty)
   }
 
 
