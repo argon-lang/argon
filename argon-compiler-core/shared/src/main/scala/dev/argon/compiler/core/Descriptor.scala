@@ -4,6 +4,7 @@ import dev.argon.util.NamespacePath
 import cats._
 import cats.implicits._
 import cats.Eq
+import zio.{IO, UIO}
 
 final case class ModuleDescriptor(name: String)
 
@@ -105,8 +106,22 @@ final case class ParameterDescriptor(owner: ParameterOwnerDescriptor, index: Int
   override def moduleDescriptor: ModuleDescriptor = owner.moduleDescriptor
 }
 
-final case class VariableDescriptor(owner: VariableOwnerDescriptor, index: Int) extends VariableLikeDescriptor {
+final case class VariableDescriptor(owner: VariableOwnerDescriptor, id: VariableIdentifier) extends VariableLikeDescriptor {
   override def moduleDescriptor: ModuleDescriptor = owner.moduleDescriptor
+}
+
+sealed trait VariableIdentifier
+object VariableIdentifier {
+
+  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
+  def make: UIO[VariableIdentifier] =
+    IO.effectTotal { new VariableIdentifier {} }
+
+  implicit val eqInstance: Eq[VariableIdentifier] = new Eq[VariableIdentifier] {
+    @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+    override def eqv(x: VariableIdentifier, y: VariableIdentifier): Boolean = x eq y
+  }
+
 }
 
 final case class FieldDescriptor(owner: ClassDescriptor, name: String) extends VariableLikeDescriptor {

@@ -71,13 +71,14 @@ object JSBackend extends Backend {
 
   override def compile[I <: ResourceIndicator: Tagged](input: CompilerInput[I, JSBackendOptions[Id, I]]): ZManaged[ResourceReader[I], ErrorList, TCompilationOutput] = {
     val context = JSContext(input)
-    val emitter = new JSEmitter[context.type](context, input.backendOptions.inject)
 
-    context.module[JSContext with Context.WithRes[I]].mapM { module =>
-      emitter.emitModule(module).map { jsModule =>
-        createOutput(jsModule)
-      }
-    }.provideSomeLayer(JSBackendLoadService.forResourceReader[I, JSContext with Context.WithRes[I]])
+    ZManaged.fromEffect(JSEmitter.make(context, input.backendOptions.inject)).flatMap { emitter =>
+      context.module[JSContext with Context.WithRes[I]].mapM { module =>
+        emitter.emitModule(module).map { jsModule =>
+          createOutput(jsModule)
+        }
+      }.provideSomeLayer(JSBackendLoadService.forResourceReader[I, JSContext with Context.WithRes[I]])
+    }
   }
 
   private def createOutput(jsModule: JSModule): CompilationOutputText[BackendOutputOptionsId] = new CompilationOutputText[BackendOutputOptionsId] {

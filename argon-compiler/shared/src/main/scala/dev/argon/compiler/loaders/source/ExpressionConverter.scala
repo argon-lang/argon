@@ -439,8 +439,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
               exprConverter <- convertExprTypeDelay(env)(expr.location)(fromSimpleType(FunctionType(argHole, resultHole)))(expectedType)
 
+              varId <- VariableIdentifier.make
+
               argVar = LocalVariable(
-                VariableDescriptor(env.descriptor, env.scope.nextVariable),
+                VariableDescriptor(env.descriptor, varId),
                 varName.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
                 Mutability.NonMutable,
                 argHole
@@ -481,38 +483,45 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               case DeconstructPattern(constructor, args) => ???
               case TuplePattern(values) => ???
               case DiscardPattern =>
-                val variable = LocalVariable(
-                  VariableDescriptor(env.descriptor, env.scope.nextVariable),
-                  VariableName.Unnamed,
-                  Mutability.NonMutable,
-                  t
-                )
-                val env2 = env.copy(scope = env.scope.addVariable(variable))
+                for {
+                  varId <- VariableIdentifier.make
 
-                (PatternExpr.Binding(variable), env2).upcast[(PatternExpr, Env)].pure[Comp]
+                  variable = LocalVariable(
+                    VariableDescriptor(env.descriptor, varId),
+                    VariableName.Unnamed,
+                    Mutability.NonMutable,
+                    t
+                  )
+                  env2 = env.copy(scope = env.scope.addVariable(variable))
+
+                } yield (PatternExpr.Binding(variable), env2)
 
               case BindingPattern(name) =>
-                val variable = LocalVariable(
-                  VariableDescriptor(env.descriptor, env.scope.nextVariable),
-                  VariableName.Normal(name),
-                  Mutability.NonMutable,
-                  t
-                )
-                val env2 = env.copy(scope = env.scope.addVariable(variable))
+                for {
+                  varId <- VariableIdentifier.make
 
-                (PatternExpr.Binding(variable), env2).upcast[(PatternExpr, Env)].pure[Comp]
+                  variable = LocalVariable(
+                    VariableDescriptor(env.descriptor, varId),
+                    VariableName.Normal(name),
+                    Mutability.NonMutable,
+                    t
+                  )
+                  env2 = env.copy(scope = env.scope.addVariable(variable))
+
+                } yield (PatternExpr.Binding(variable), env2)
 
               case TypeTestPattern(name, patternType) =>
                 for {
                   patT <- evaluateTypeExprAST(env)(patternType)
+                  varId <- VariableIdentifier.make
                   variable = LocalVariable(
-                    VariableDescriptor(env.descriptor, env.scope.nextVariable),
+                    VariableDescriptor(env.descriptor, varId),
                     name.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
                     Mutability.NonMutable,
                     patT
                   )
                   env2 = env.copy(scope = env.scope.addVariable(variable))
-                } yield (PatternExpr.CastBinding(variable), env2).upcast[(PatternExpr, Env)]
+                } yield (PatternExpr.CastBinding(variable), env2)
 
             }
 
@@ -634,8 +643,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               valueExpr <- convertExpr(env)(stmt.value).forExpectedType(exprType)
               varType <- resolveType(exprType)
 
+              varId <- VariableIdentifier.make
+
               variable = LocalVariable(
-                VariableDescriptor(env.descriptor, env.scope.nextVariable),
+                VariableDescriptor(env.descriptor, varId),
                 varName,
                 mutability,
                 varType
@@ -1112,20 +1123,25 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         override def visitParameters[RestLen <: Nat](sigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): Comp[typeSystem.ArExpr] =
           prevArgs match {
             case Vector() =>
-              val newVar = LocalVariable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
-              val env2 = env.copy(scope = env.scope.addVariable(newVar))
-              val newVarExpr = LoadVariable(newVar)
-              signatureNextPart(sigParams)(fromSimpleType(newVarExpr)).flatMap { nextSig =>
-                partiallyApply(env2, prevArgs, argVariables :+ fromSimpleType(newVarExpr), nextSig, inner => wrapInLambda(LoadLambda(newVar, fromSimpleType(inner))))
-              }
+              for {
+                varId <- VariableIdentifier.make
+                newVar = LocalVariable(VariableDescriptor(env.descriptor, varId), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+                env2 = env.copy(scope = env.scope.addVariable(newVar))
+                newVarExpr = LoadVariable(newVar)
+
+                nextSig <- signatureNextPart(sigParams)(fromSimpleType(newVarExpr))
+                result <- partiallyApply(env2, prevArgs, argVariables :+ fromSimpleType(newVarExpr), nextSig, inner => wrapInLambda(LoadLambda(newVar, fromSimpleType(inner))))
+              } yield result
 
             case head +: tail =>
-              val newVar = LocalVariable(VariableDescriptor(env.descriptor, env.scope.nextVariable), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
-              val env2 = env.copy(scope = env.scope.addVariable(newVar))
-              val newVarExpr = LoadVariable(newVar)
-              signatureNextPart(sigParams)(fromSimpleType(newVarExpr)).flatMap { nextSig =>
-                partiallyApply(env2, tail, argVariables :+ fromSimpleType(newVarExpr), nextSig, inner => wrapInLambda(LetBinding(newVar, head, fromSimpleType(inner))))
-              }
+              for {
+                varId <- VariableIdentifier.make
+                newVar = LocalVariable(VariableDescriptor(env.descriptor, varId), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+                env2 = env.copy(scope = env.scope.addVariable(newVar))
+                newVarExpr = LoadVariable(newVar)
+                nextSig <- signatureNextPart(sigParams)(fromSimpleType(newVarExpr))
+                result <- partiallyApply(env2, tail, argVariables :+ fromSimpleType(newVarExpr), nextSig, inner => wrapInLambda(LetBinding(newVar, head, fromSimpleType(inner))))
+              } yield result
           }
 
         override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenEq: Len === _0): Comp[typeSystem.ArExpr] =
