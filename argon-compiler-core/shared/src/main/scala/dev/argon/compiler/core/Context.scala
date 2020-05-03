@@ -2,8 +2,7 @@ package dev.argon.compiler.core
 
 import PayloadSpecifiers._
 import dev.argon.compiler._
-import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, ResourceIndicator}
-import dev.argon.compiler.loaders.source.SourceModuleCreator
+import dev.argon.compiler.loaders.{ModuleLoad, ResourceIndicator}
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types._
 import cats._
@@ -89,8 +88,7 @@ trait Context {
   implicit val resIndicatorTag: Tagged[ResIndicator]
   protected val compilerInput: CompilerInput[ResIndicator, BackendOptions]
 
-  def module[TContext >: this.type <: Context.WithRes[ResIndicator]: Tagged]: ZManaged[ModuleLoad[ResIndicator, TContext], ErrorList, ArModule[this.type, DeclarationPayloadSpecifier]] =
-    SourceModuleCreator.createModule[ResIndicator, TContext](this)(compilerInput)
+  def module[TContext >: this.type <: Context.WithRes[ResIndicator]: Tagged]: ZManaged[ModuleLoad[ResIndicator, TContext], ErrorList, ArModule[this.type, DeclarationPayloadSpecifier]]
 
 }
 

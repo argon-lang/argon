@@ -210,6 +210,7 @@ lazy val webDemo = project.in(file("argon-web-demo"))
   )
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-build"))
+  .dependsOn(argon_build_base, backend_js, backend_module, argon_platform % "test")
   .jvmConfigure(
     _.settings(commonJVMSettings)
      .settings(
@@ -228,7 +229,6 @@ lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(fi
   .nodeConfigure(
     _.settings(commonNodeSettings)
   )
-  .dependsOn(argon_build_base, backend_js, backend_module, argon_platform % "test")
   .settings(
     commonSettings,
     compilerOptions,
@@ -238,15 +238,16 @@ lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(fi
 
 lazy val argon_buildJVM = argon_build.jvm
 lazy val argon_buildJS = argon_build.js
+lazy val argon_buildNode = argon_build.node
 
 lazy val argon_build_base = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-build-base"))
+  .dependsOn(parser, backend_common)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
     _.settings(commonBrowserSettings)
   )
-  .dependsOn(parser, argon_compiler, backend_common)
   .settings(
     commonSettings,
     compilerOptions,
@@ -256,6 +257,7 @@ lazy val argon_build_base = crossProject(JVMPlatform, JSPlatform, NodePlatform).
 
 lazy val argon_build_baseJVM = argon_build_base.jvm
 lazy val argon_build_baseJS = argon_build_base.js
+lazy val argon_build_baseNode = argon_build_base.node
 
 lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-grammar"))
   .dependsOn(arstream, util)
@@ -277,9 +279,10 @@ lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("
 
 lazy val grammarJVM = grammar.jvm
 lazy val grammarJS = grammar.js
+lazy val grammarNode = grammar.node
 
 lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-parser"))
-  .dependsOn(arstream, util, parser_data, grammar)
+  .dependsOn(parser_data, grammar)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -298,9 +301,10 @@ lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("a
 
 lazy val parserJVM = parser.jvm
 lazy val parserJS = parser.js
+lazy val parserNode = parser.node
 
 lazy val parser_data = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-parser-data"))
-  .dependsOn(arstream, util, grammar)
+  .dependsOn(grammar)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -319,9 +323,10 @@ lazy val parser_data = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(fi
 
 lazy val parser_dataJVM = parser_data.jvm
 lazy val parser_dataJS = parser_data.js
+lazy val parser_dataNode = parser_data.node
 
 lazy val argon_compiler = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-compiler"))
-  .dependsOn(arstream, util, argonio, modulefmt, parser_data)
+  .dependsOn(argon_compiler_core)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -340,9 +345,32 @@ lazy val argon_compiler = crossProject(JVMPlatform, JSPlatform, NodePlatform).in
 
 lazy val argon_compilerJVM = argon_compiler.jvm
 lazy val argon_compilerJS = argon_compiler.js
+lazy val argon_compilerNode = argon_compiler.node
+
+lazy val argon_compiler_core = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-compiler-core"))
+  .dependsOn(argonio, modulefmt, parser_data)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-compiler-core",
+  )
+
+lazy val argon_compiler_coreJVM = argon_compiler_core.jvm
+lazy val argon_compiler_coreJS = argon_compiler_core.js
+lazy val argon_compiler_coreNode = argon_compiler_core.node
 
 lazy val backend_common = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-backend-common"))
-  .dependsOn(argon_compiler)
+  .dependsOn(argon_compiler_core)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -361,10 +389,33 @@ lazy val backend_common = crossProject(JVMPlatform, JSPlatform, NodePlatform).in
 
 lazy val backend_commonJVM = backend_common.jvm
 lazy val backend_commonJS = backend_common.js
+lazy val backend_commonNode = backend_common.node
+
+lazy val armodule_loader = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-armodule-loader"))
+  .dependsOn(argon_compiler, backend_common)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-armodule-loader",
+  )
+
+lazy val armodule_loaderJVM = armodule_loader.jvm
+lazy val armodule_loaderJS = armodule_loader.js
+lazy val armodule_loaderNode = armodule_loader.node
 
 
 lazy val backend_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-backend-js"))
-  .dependsOn(backend_common)
+  .dependsOn(armodule_loader)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -383,9 +434,10 @@ lazy val backend_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(fil
 
 lazy val backend_jsJVM = backend_js.jvm
 lazy val backend_jsJS = backend_js.js
+lazy val backend_jsNode = backend_js.node
 
 lazy val backend_module = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-backend-module"))
-  .dependsOn(backend_common)
+  .dependsOn(armodule_loader)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -404,6 +456,7 @@ lazy val backend_module = crossProject(JVMPlatform, JSPlatform, NodePlatform).in
 
 lazy val backend_moduleJVM = backend_module.jvm
 lazy val backend_moduleJS = backend_module.js
+lazy val backend_moduleNode = backend_module.node
 
 lazy val util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-util"))
   .jvmConfigure(
@@ -449,6 +502,7 @@ lazy val arstreamJS = arstream.js
 lazy val arstreamNode = arstream.node
 
 lazy val argonio = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-io"))
+  .dependsOn(arstream)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -458,7 +512,6 @@ lazy val argonio = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("
   .nodeConfigure(
     _.settings(commonNodeSettings)
   )
-  .dependsOn(arstream, util)
   .settings(
     commonSettings,
     compilerOptions,
@@ -471,6 +524,7 @@ lazy val argonioJS = argonio.js
 lazy val argonioNode = argonio.node
 
 lazy val argon_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-platform"))
+  .dependsOn(argonio)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -483,7 +537,6 @@ lazy val argon_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in
   .platformsSettings(JVMPlatform, NodePlatform)(
     libraryDependencies += "dev.zio" %%% "zio-test" % zioVersion % "optional",
   )
-  .dependsOn(arstream, util, argonio)
   .settings(
     commonSettings,
     compilerOptions,

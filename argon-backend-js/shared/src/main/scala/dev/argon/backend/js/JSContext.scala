@@ -7,7 +7,7 @@ import dev.argon.compiler._
 import shapeless.Id
 import zio._
 
-sealed abstract class JSContext extends Context {
+sealed abstract class JSContext extends ContextWithModule {
 
   override type TTraitMetadata = Unit
   override type TClassMetadata = Unit

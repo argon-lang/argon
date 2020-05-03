@@ -8,7 +8,7 @@ import shapeless.Id
 import cats.implicits._
 import zio._
 
-sealed abstract class ModuleContext extends Context {
+sealed abstract class ModuleContext extends ContextWithModule {
   override type TFunctionMetadata = Unit
   override type TMethodMetadata = Unit
   override type TTraitMetadata = Unit
