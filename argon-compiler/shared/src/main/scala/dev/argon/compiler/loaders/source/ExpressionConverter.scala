@@ -16,7 +16,6 @@ import PayloadSpecifiers._
 import cats.evidence.{===, Is}
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
-import dev.argon.compiler.loaders.source.ExpressionConverter.HoleId
 import dev.argon.parser.{BindingPattern, DeconstructPattern, DiscardPattern, TuplePattern, TypeTestPattern}
 import shapeless.{:: => _, _}
 import shapeless.ops.nat.{LT, Pred}
@@ -1462,7 +1461,7 @@ object ExpressionConverter {
     for {
       converter <- createConverter(context)(ts)
 
-      tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
+      tsConverter = HoleTypeSystem.holeTypeConverter(context)(context.typeSystem)(ts)
 
       env2 = Env(
         effectInfo = env.effectInfo,
@@ -1506,7 +1505,7 @@ object ExpressionConverter {
     for {
       converter <- createConverter(context)(ts)
 
-      tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
+      tsConverter = HoleTypeSystem.holeTypeConverter(context)(context.typeSystem)(ts)
 
       env2 = Env(
         effectInfo = env.effectInfo,
@@ -1535,7 +1534,7 @@ object ExpressionConverter {
     for {
       converter <- createConverter(context)(ts)
 
-      tsConverter = holeTypeConverter(context)(context.typeSystem)(ts)
+      tsConverter = HoleTypeSystem.holeTypeConverter(context)(context.typeSystem)(ts)
 
       env2 = Env(
         effectInfo = env.effectInfo,
@@ -1592,120 +1591,6 @@ object ExpressionConverter {
       }
       convE <- (new FillConverter).convertTypeSystem(e)
     } yield convE
-  }
-
-  sealed trait HoleId
-  object HoleId {
-    @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
-    def make: UIO[HoleId] =
-      IO.effectTotal { new HoleId {} }
-  }
-
-  sealed trait HoleType[+T]
-  private final case class HoleTypeType[+T](t: T) extends HoleType[T]
-  private final case class HoleTypeHole[+T](id: HoleId) extends HoleType[T]
-
-  object HoleType {
-    implicit val holeTypeInstances: Traverse[HoleType] with Monad[HoleType] = new Traverse[HoleType] with Monad[HoleType] {
-      override def traverse[G[_], A, B](fa: HoleType[A])(f: A => G[B])(implicit ev: Applicative[G]): G[HoleType[B]] =
-        fa match {
-          case HoleTypeType(t) => f(t).map(HoleTypeType.apply)
-          case HoleTypeHole(id) => ev.pure(HoleTypeHole(id))
-        }
-
-      override def flatMap[A, B](fa: HoleType[A])(f: A => HoleType[B]): HoleType[B] =
-        fa match {
-          case HoleTypeType(t) => f(t)
-          case HoleTypeHole(id) => HoleTypeHole(id)
-        }
-
-      override def tailRecM[A, B](a: A)(f: A => HoleType[Either[A, B]]): HoleType[B] =
-        f(a) match {
-          case HoleTypeType(Right(b)) => HoleTypeType(b)
-          case HoleTypeType(Left(a)) => tailRecM(a)(f)
-          case HoleTypeHole(id) => HoleTypeHole(id)
-        }
-
-      override def foldLeft[A, B](fa: HoleType[A], b: B)(f: (B, A) => B): B =
-        fa match {
-          case HoleTypeType(t) => f(b, t)
-          case HoleTypeHole(_) => b
-        }
-
-      override def foldRight[A, B](fa: HoleType[A], lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] =
-        fa match {
-          case HoleTypeType(t) => f(t, lb)
-          case HoleTypeHole(_) => lb
-        }
-
-      override def pure[A](x: A): HoleType[A] = HoleTypeType(x)
-    }
-
-  }
-
-
-  trait HoleTypeSystem extends TypeSystem {
-
-    override type TTypeWrapper[+A] = HoleType[A]
-
-    override def unwrapType[A](t: HoleType[A]): Option[A] =
-      t match {
-        case HoleTypeType(t) => Some(t)
-        case HoleTypeHole(_) => None
-      }
-
-    override def wrapExprType(expr: WrapExpr): Comp[TType] =
-      expr match {
-        case HoleTypeType(t) => getExprType(t)
-        case HoleTypeHole(_) => IO.succeed(fromSimpleType(TypeOfType(expr)))
-      }
-
-    override def isSubTypeWrapper(a: TType, b: TType): Comp[Option[SubTypeInfo[TType]]] =
-      (a, b) match {
-        case (HoleTypeType(aInner), HoleTypeType(bInner)) => isSimpleSubType(aInner, bInner)
-        case (_, _) => IO.succeed(Some(SubTypeInfo(a, b, Vector.empty)))
-      }
-
-    override def universeOfWrapExpr(expr: WrapExpr): Comp[UniverseExpr] =
-      expr match {
-        case HoleTypeHole(_) => IO.succeed(AbstractUniverse())
-        case HoleTypeType(t) => universeOfExpr(t)
-      }
-
-  }
-
-  object HoleTypeSystem {
-
-    def apply(ctx: Context): HoleTypeSystem { val context: ctx.type } = new HoleTypeSystem {
-      override val context: ctx.type = ctx
-      override val typeWrapperInstances: WrapperInstance[HoleType] = implicitly
-    }
-
-  }
-
-  private def holeTypeConverter
-  (context: Context)
-  (innerTS: TypeSystem.Aux[context.type])
-  (holeTS: TypeSystem.Aux[context.type] {
-    type TTypeWrapper[+A] = HoleType[innerTS.TTypeWrapper[A]]
-  })
-  : TypeSystemConverter.Aux[context.type, innerTS.TTypeWrapper, holeTS.TTypeWrapper] = {
-    val context2: context.type = context
-
-    new TypeSystemConverter {
-
-      override val context: context2.type = context2
-
-      override type FromWrap[+A] = innerTS.TTypeWrapper[A]
-      override type ToWrap[+A] = holeTS.TTypeWrapper[A]
-
-
-      override protected implicit val fromWrapInstances: WrapperInstance[innerTS.TTypeWrapper] = innerTS.typeWrapperInstances
-      override protected implicit val toWrapInstances: WrapperInstance[holeTS.TTypeWrapper] = holeTS.typeWrapperInstances
-
-      override protected def convertType[A](fromExpr: ArExpr[context.type, FromWrap] => Comp[A])(t: FromWrap[A]): Comp[ToWrap[A]] =
-        IO.succeed(HoleTypeType(t))
-    }
   }
 
 
