@@ -46,19 +46,7 @@ trait Context {
     override type TTypeWrapper[+A] = A
     override val typeWrapperInstances: WrapperInstance[Id] = implicitly
 
-    final override def wrapType[A](a: A): A = a
-
     override def unwrapType[A](t: A): Option[A] = Some(t)
-
-    final override def mapTypeWrapper[A, B](t: A)(f: A => B): B = f(t)
-
-    final override def flatMapTypeWrapper[A, B](t: A)(f: A => B): B = f(t)
-
-    final override def traverseTypeWrapper[A, B, F[_] : Applicative](t: A)(f: A => F[B]): F[B] =
-      f(t)
-
-    override def flatTraverseTypeWrapper[A, B, F[_] : Applicative](t: A)(f: A => F[B]): F[B] =
-      f(t)
 
     override def wrapExprType(expr: WrapExpr): Comp[TType] =
       getExprType(expr)

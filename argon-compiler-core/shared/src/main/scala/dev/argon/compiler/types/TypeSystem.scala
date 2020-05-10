@@ -34,18 +34,12 @@ trait TypeSystem {
   type TTraitType = TraitType[context.type, TTypeWrapper]
   type TDataConstructorType = DataConstructorType[context.type, TTypeWrapper]
 
-
-  final def fromSimpleType(simpleType: ArExpr[context.type, TTypeWrapper]): TType = wrapType(simpleType)
-
-  def wrapType[A](a: A): TTypeWrapper[A]
   def unwrapType[A](t: TTypeWrapper[A]): Option[A]
-  def mapTypeWrapper[A, B](t: TTypeWrapper[A])(f: A => B): TTypeWrapper[B]
-  def flatMapTypeWrapper[A, B](t: TTypeWrapper[A])(f: A => TTypeWrapper[B]): TTypeWrapper[B]
-  def traverseTypeWrapper[A, B, F[_] : Applicative](t: TTypeWrapper[A])(f: A => F[B]): F[TTypeWrapper[B]]
-  def flatTraverseTypeWrapper[A, B, F[_] : Applicative](t: TTypeWrapper[A])(f: A => F[TTypeWrapper[B]]): F[TTypeWrapper[B]] =
-    traverseTypeWrapper(t)(f).map(flatMapTypeWrapper(_)(identity))
 
   implicit val typeWrapperInstances: WrapperInstance[TTypeWrapper]
+
+  final def fromSimpleType(simpleType: ArExpr[context.type, TTypeWrapper]): TType =
+    simpleType.pure[TTypeWrapper]
 
   def wrapExprType(expr: WrapExpr): Comp[TType]
 
@@ -54,8 +48,8 @@ trait TypeSystem {
   def universeOfWrapExpr(expr: WrapExpr): Comp[UniverseExpr]
 
   final def isSubType(a: TType, b: TType): Comp[Option[TSubTypeInfo]] = for {
-    a2 <- flatTraverseTypeWrapper(a)(reduceExprToValue)
-    b2 <- flatTraverseTypeWrapper(b)(reduceExprToValue)
+    a2 <- a.flatTraverse(reduceExprToValue)
+    b2 <- b.flatTraverse(reduceExprToValue)
     res <- isSubTypeWrapper(a2, b2)
   } yield res
 
@@ -441,7 +435,7 @@ trait TypeSystem {
     }
 
   final def reduceWrapExprToValue(expr: WrapExpr): Comp[WrapExpr] =
-    flatTraverseTypeWrapper(expr)(reduceExprToValue)
+    expr.flatTraverse(reduceExprToValue)
 
   final def getExprType(expr: ArExpr[context.type, TTypeWrapper], includeExtraTypeOfType: Boolean = true): Comp[TType] = {
     def withTypeOfExpr(result: Comp[TType]): Comp[TType] =

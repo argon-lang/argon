@@ -555,7 +555,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   elemPairs
                     .traverse { case (elem, elemHole) =>
                         convertExpr(env)(elem).forExpectedType(elemHole).map { elemExpr =>
-                          TupleElement(wrapType(exprTypeConv(elemExpr)))
+                          TupleElement(fromSimpleType(exprTypeConv(elemExpr)))
                         }
                     }
                     .map { tupleElements =>
@@ -1186,7 +1186,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         values
           .traverse_ {
             case TupleElement(value) =>
-              traverseTypeWrapper(value)(validateTypeExpr(env)(location)(_))
+              value.traverse(validateTypeExpr(env)(location)(_))
           }
 
       case expr if isExprPure(expr) =>
@@ -1257,7 +1257,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     }
 
   def isWrapExprPure(expr: WrapExpr): Boolean =
-    traverseTypeWrapper(expr) { t =>
+    expr.traverse { t =>
       if(isExprPure(t)) Some(()) else None
     }.isDefined
 
@@ -1479,7 +1479,7 @@ object ExpressionConverter {
         converter
           .convertStmts(env2)(stmts)
           .forExpectedType(convExpectedType)
-          .map(ts.wrapType)
+          .map(ts.fromSimpleType)
       )
     } yield convExpr
   }
@@ -1648,37 +1648,10 @@ object ExpressionConverter {
 
     override type TTypeWrapper[+A] = HoleType[A]
 
-    override def wrapType[A](a: A): HoleType[A] =
-      HoleTypeType(a)
-
     override def unwrapType[A](t: HoleType[A]): Option[A] =
       t match {
         case HoleTypeType(t) => Some(t)
         case HoleTypeHole(_) => None
-      }
-
-    override def mapTypeWrapper[A, B](t: HoleType[A])(f: A => B): HoleType[B] =
-      t match {
-        case HoleTypeType(a) => HoleTypeType(f(a))
-        case HoleTypeHole(id) => HoleTypeHole(id)
-      }
-
-    override def flatMapTypeWrapper[A, B](t: HoleType[A])(f: A => HoleType[B]): HoleType[B] =
-      t match {
-        case HoleTypeType(a) => f(a)
-        case HoleTypeHole(id) => HoleTypeHole(id)
-      }
-
-    override def traverseTypeWrapper[A, B, F[_] : Applicative](t: HoleType[A])(f: A => F[B]): F[HoleType[B]] =
-      t match {
-        case HoleTypeType(a) => f(a).map(HoleTypeType.apply)
-        case HoleTypeHole(id) => (HoleTypeHole(id) : TTypeWrapper[B]).pure[F]
-      }
-
-    override def flatTraverseTypeWrapper[A, B, F[_] : Applicative](t: HoleType[A])(f: A => F[HoleType[B]]): F[HoleType[B]] =
-      t match {
-        case HoleTypeType(a) => f(a)
-        case HoleTypeHole(id) => (HoleTypeHole(id) : TTypeWrapper[B]).pure[F]
       }
 
     override def wrapExprType(expr: WrapExpr): Comp[TType] =
