@@ -3,6 +3,7 @@ package dev.argon.compiler.core
 import cats._
 import cats.evidence.Is
 import cats.implicits._
+import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.{Comp, Compilation}
 import dev.argon.compiler.types._
 import dev.argon.util.FileID
@@ -28,11 +29,11 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
 
   final def signature
   (newSigContext: SignatureContext.Aux[context.type])
-  (instanceType: newSigContext.typeSystem.TypeWithMethods)
-  : Comp[newSigContext.Signature[FunctionResultInfo, _]] =
+  (instanceType: TypeWithMethods[context.type, newSigContext.TTypeWrapper])
+  : Comp[newSigContext.Signature[FunctionResultInfo, _]] = {
     for {
       sig <- signatureUnsubstituted
-      converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
+      converter = ArTypeSystemConverter[newSigContext.TTypeWrapper](context)(newSigContext.typeWrapperInstances)
       ownerSig <- owner match {
         case ArMethod.ClassOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
         case ArMethod.ClassObjectOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
@@ -44,14 +45,15 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
       convSig <- sig.convertTypeSystem(newSigContext)(converter)
 
       instTypeArgs = instanceType match {
-        case newSigContext.typeSystem.TraitType(_, args) => args
-        case newSigContext.typeSystem.ClassType(_, args) => args
-        case newSigContext.typeSystem.DataConstructorType(_, args, _) => args
+        case TraitType(_, args) => args
+        case ClassType(_, args) => args
+        case DataConstructorType(_, args, _) => args
       }
 
       newSig <- convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instTypeArgs)
 
     } yield newSig
+  }
 
   val payload: TPayloadSpec[Comp[TMethodImplementation], TMethodMetadata]
 

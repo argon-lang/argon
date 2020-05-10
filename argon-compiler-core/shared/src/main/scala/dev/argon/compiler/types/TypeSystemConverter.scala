@@ -4,324 +4,306 @@ import cats._
 import cats.implicits._
 import dev.argon.compiler.Comp
 import dev.argon.compiler.core._
+import dev.argon.compiler.expr._
+import dev.argon.compiler.expr.ArExpr._
 import dev.argon.util.AnyExtensions._
+import zio.IO
 import zio.interop.catz._
 
 abstract class TypeSystemConverter {
   val context: Context
-  val ts: TypeSystem[context.type]
-  val otherTS: TypeSystem[context.type]
+  type FromWrap[+_]
+  type ToWrap[+_]
 
-  protected def convertType[A](fromExpr: otherTS.ArExpr => A)(t: ts.TTypeWrapper[A]): Comp[otherTS.TTypeWrapper[A]]
+  protected implicit val fromWrapInstances: WrapperInstance[FromWrap]
+  protected implicit val toWrapInstances: WrapperInstance[ToWrap]
+
+  protected def convertType[A](fromExpr: ArExpr[context.type, FromWrap] => Comp[A])(t: FromWrap[A]): Comp[ToWrap[A]]
 
   def convertTypeSystem
-  (t1: ts.TType)
-  : Comp[otherTS.TType] =
-    ts.traverseTypeWrapper(t1)(convertExprTypeSystem(_))
-      .flatMap(convertType(identity)(_))
+  (t1: ArExprWrap[context.type, FromWrap])
+  : Comp[ArExprWrap[context.type, ToWrap]] =
+    t1.traverse(convertExprTypeSystem(_))
+      .flatMap(convertType(convertExprTypeSystem)(_))
 
   def convertTypeArg
-  (t1: ts.TypeArgument)
-  : Comp[otherTS.TypeArgument] =
+  (t1: TypeArgument[context.type, FromWrap])
+  : Comp[TypeArgument[context.type, ToWrap]] =
     t1 match {
-      case ts.TypeArgument.Expr(expr) =>
-        convertTypeSystem(expr).map(otherTS.TypeArgument.Expr)
+      case TypeArgument.Expr(expr) =>
+        convertTypeSystem(expr).map(TypeArgument.Expr.apply)
 
-      case ts.TypeArgument.Wildcard(u) =>
-        convertUniverseTypeSystem(u).map(otherTS.TypeArgument.Wildcard)
+      case TypeArgument.Wildcard(u) =>
+        IO.succeed(TypeArgument.Wildcard(u))
     }
 
   def convertTraitType
-  (traitType: ts.TraitType)
-  : Comp[otherTS.TraitType] = for {
+  (traitType: TraitType[context.type, FromWrap])
+  : Comp[TraitType[context.type, ToWrap]] = for {
     newArgs <- traitType.args.traverse(convertTypeArg(_))
-  } yield otherTS.TraitType(
+  } yield TraitType(
     traitType.arTrait,
     newArgs,
   )
 
   def convertClassType
-  (classType: ts.ClassType)
-  : Comp[otherTS.ClassType] = for {
+  (classType: ClassType[context.type, FromWrap])
+  : Comp[ClassType[context.type, ToWrap]] = for {
     newArgs <- classType.args.traverse(convertTypeArg(_))
-  } yield otherTS.ClassType(
+  } yield ClassType(
     classType.arClass,
     newArgs
   )
 
 
   def convertDataConstructorType
-  (dataCtorType: ts.DataConstructorType)
-  : Comp[otherTS.DataConstructorType] = for {
+  (dataCtorType: DataConstructorType[context.type, FromWrap])
+  : Comp[DataConstructorType[context.type, ToWrap]] = for {
     newArgs <- dataCtorType.args.traverse(convertTypeArg(_))
     newInstanceType <- convertTraitType(dataCtorType.instanceType)
-  } yield otherTS.DataConstructorType(
+  } yield DataConstructorType(
     dataCtorType.ctor,
     newArgs,
     newInstanceType
   )
 
   final def convertLocalVariableTypeSystem
-  (v: ts.LocalVariable)
-  : Comp[otherTS.LocalVariable] =
+  (v: LocalVariable[context.type, FromWrap])
+  : Comp[LocalVariable[context.type, ToWrap]] =
     for {
       newType <- convertTypeSystem(v.varType)
-    } yield otherTS.LocalVariable(v.descriptor, v.name, v.mutability, newType)
+    } yield LocalVariable(v.descriptor, v.name, v.mutability, newType)
 
   final def convertParamVariableTypeSystem
-  (v: ts.ParameterVariable)
-  : Comp[otherTS.ParameterVariable] =
+  (v: ParameterVariable[context.type, FromWrap])
+  : Comp[ParameterVariable[context.type, ToWrap]] =
     for {
       newType <- convertTypeSystem(v.varType)
-    } yield otherTS.ParameterVariable(v.descriptor, v.name, v.mutability, newType)
+    } yield ParameterVariable(v.descriptor, v.name, v.mutability, newType)
 
   final def convertVariableTypeSystem
-  (v: ts.Variable)
-  : Comp[otherTS.Variable] =
+  (v: Variable[context.type, FromWrap])
+  : Comp[Variable[context.type, ToWrap]] =
     v match {
-      case v @ ts.LocalVariable(_, _, _, _) =>
+      case v @ LocalVariable(_, _, _, _) =>
         convertLocalVariableTypeSystem(v).map(identity)
 
-      case v @ ts.ParameterVariable(_, _, _, _) =>
+      case v @ ParameterVariable(_, _, _, _) =>
         convertParamVariableTypeSystem(v).map(identity)
 
-      case ts.FieldVariable(descriptor, ownerClass, name, mutability, varType) =>
+      case FieldVariable(descriptor, ownerClass, name, mutability, varType) =>
         for {
           newType <- convertTypeSystem(varType)
-        } yield otherTS.FieldVariable(descriptor, ownerClass, name, mutability, newType)
+        } yield FieldVariable(descriptor, ownerClass, name, mutability, newType)
 
     }
 
   final def convertParameterElementTypeSystem
-  (p: ts.ParameterElement)
-  : Comp[otherTS.ParameterElement] =
+  (p: ParameterElement[context.type, FromWrap])
+  : Comp[ParameterElement[context.type, ToWrap]] =
     for {
       newParamVar <- convertParamVariableTypeSystem(p.paramVar)
       newElemType <- convertTypeSystem(p.elemType)
-    } yield otherTS.ParameterElement(newParamVar, p.name, newElemType, p.index)
+    } yield ParameterElement(newParamVar, p.name, newElemType, p.index)
 
   final def convertParameterTypeSystem
-  (p: ts.Parameter)
-  : Comp[otherTS.Parameter] =
+  (p: Parameter[context.type, FromWrap])
+  : Comp[Parameter[context.type, ToWrap]] =
     for {
       newParamVar <- convertParamVariableTypeSystem(p.paramVar)
       newElems <- p.elements.traverse(convertParameterElementTypeSystem(_))
-    } yield otherTS.Parameter(p.style, newParamVar, newElems)
+    } yield Parameter(p.style, newParamVar, newElems)
 
   def convertPatternExprTypeSystem
-  (pattern: ts.PatternExpr)
-  : Comp[otherTS.PatternExpr] =
+  (pattern: PatternExpr[context.type, FromWrap])
+  : Comp[PatternExpr[context.type, ToWrap]] =
     pattern match {
-      case ts.PatternExpr.DataDeconstructor(ctor, args) =>
+      case PatternExpr.DataDeconstructor(ctor, args) =>
         for {
           newArgs <- args.traverse(convertPatternExprTypeSystem(_))
-        } yield otherTS.PatternExpr.DataDeconstructor(ctor, newArgs)
+        } yield PatternExpr.DataDeconstructor(ctor, newArgs)
 
-      case ts.PatternExpr.Binding(variable) =>
+      case PatternExpr.Binding(variable) =>
         for {
           newVar <- convertLocalVariableTypeSystem(variable)
-        } yield otherTS.PatternExpr.Binding(newVar)
+        } yield PatternExpr.Binding(newVar)
 
-      case ts.PatternExpr.CastBinding(variable) =>
+      case PatternExpr.CastBinding(variable) =>
         for {
           newVar <- convertLocalVariableTypeSystem(variable)
-        } yield otherTS.PatternExpr.CastBinding(newVar)
+        } yield PatternExpr.CastBinding(newVar)
     }
 
-  def convertUniverseTypeSystem
-  (expr: ts.UniverseExpr)
-  : Comp[otherTS.UniverseExpr] = expr match {
-    case ts.FixedUniverse(u) => otherTS.FixedUniverse(u).upcast[otherTS.UniverseExpr].pure[Comp]
-    case ts.AbstractUniverse() => otherTS.AbstractUniverse().upcast[otherTS.UniverseExpr].pure[Comp]
-
-    case ts.LargestUniverse(a, b) =>
-      for {
-        newA <- convertUniverseTypeSystem(a)
-        newB <- convertUniverseTypeSystem(b)
-      } yield otherTS.LargestUniverse(newA, newB)
-
-    case ts.NextLargestUniverse(a) =>
-      for {
-        newA <- convertUniverseTypeSystem(a)
-      } yield otherTS.NextLargestUniverse(newA)
-
-    case ts.PreviousUniverse(a) =>
-      for {
-        newA <- convertUniverseTypeSystem(a)
-      } yield otherTS.PreviousUniverse(newA)
-  }
-
   def convertExprTypeSystem
-  (expr: ts.ArExpr)
-  : Comp[otherTS.ArExpr] = expr match {
+  (expr: ArExpr[context.type, FromWrap])
+  : Comp[ArExpr[context.type, ToWrap]] = expr match {
 
 
-    case ts.ClassConstructorCall(classType, classCtor, args) =>
+    case ClassConstructorCall(classType, classCtor, args) =>
       for {
         newClassType <- convertClassType(classType)
         newArgs <- args.traverse(convertTypeSystem(_))
-      } yield otherTS.ClassConstructorCall(newClassType, classCtor, newArgs)
+      } yield ClassConstructorCall(newClassType, classCtor, newArgs)
 
-    case ts.DataConstructorCall(dataCtor, args) =>
+    case DataConstructorCall(dataCtor, args) =>
       for {
         newType <- convertDataConstructorType(dataCtor)
         newArgs <- args.traverse(convertTypeSystem(_))
-      } yield otherTS.DataConstructorCall(newType, newArgs)
+      } yield DataConstructorCall(newType, newArgs)
 
-    case ts.EnsureExecuted(body, ensuring) =>
+    case EnsureExecuted(body, ensuring) =>
       for {
         newBody <- convertTypeSystem(body)
         newEnsuring <- convertTypeSystem(ensuring)
-      } yield otherTS.EnsureExecuted(newBody, newEnsuring)
+      } yield EnsureExecuted(newBody, newEnsuring)
 
-    case ts.FunctionCall(function, args, returnType) =>
+    case FunctionCall(function, args, returnType) =>
       for {
         newArgs <- args.traverse(convertTypeSystem(_))
         newReturnType <- convertTypeSystem(returnType)
-      } yield otherTS.FunctionCall(function, newArgs, newReturnType)
+      } yield FunctionCall(function, newArgs, newReturnType)
 
-    case ts.FunctionObjectCall(function, args, returnType) =>
+    case FunctionObjectCall(function, args, returnType) =>
       for {
         newFunction <- convertTypeSystem(function)
         newArgs <- convertTypeSystem(args)
         newReturnType <- convertTypeSystem(returnType)
-      } yield otherTS.FunctionObjectCall(newFunction, newArgs, newReturnType)
+      } yield FunctionObjectCall(newFunction, newArgs, newReturnType)
 
-    case ts.IfElse(condition, ifBody, elseBody) =>
+    case IfElse(condition, ifBody, elseBody) =>
       for {
         newCondition <- convertTypeSystem(condition)
         newIfBody <- convertTypeSystem(ifBody)
         newElseBody <- convertTypeSystem(elseBody)
-      } yield otherTS.IfElse(newCondition, newIfBody, newElseBody)
+      } yield IfElse(newCondition, newIfBody, newElseBody)
 
-    case ts.LetBinding(variable, value, next) =>
+    case LetBinding(variable, value, next) =>
       for {
         newVar <- convertLocalVariableTypeSystem(variable)
         newValue <- convertTypeSystem(value)
         newNext <- convertTypeSystem(next)
-      } yield otherTS.LetBinding(newVar, newValue, newNext)
+      } yield LetBinding(newVar, newValue, newNext)
 
-    case ts.LoadConstantBool(value, exprType) =>
+    case LoadConstantBool(value, exprType) =>
       for {
         newType <- convertTypeSystem(exprType)
-      } yield otherTS.LoadConstantBool(value, newType)
+      } yield LoadConstantBool(value, newType)
 
-    case ts.LoadConstantInt(value, exprType) =>
+    case LoadConstantInt(value, exprType) =>
       for {
         newType <- convertTypeSystem(exprType)
-      } yield otherTS.LoadConstantInt(value, newType)
+      } yield LoadConstantInt(value, newType)
 
-    case ts.LoadConstantString(value, exprType) =>
+    case LoadConstantString(value, exprType) =>
       for {
         newType <- convertTypeSystem(exprType)
-      } yield otherTS.LoadConstantString(value, newType)
+      } yield LoadConstantString(value, newType)
 
-    case ts.LoadLambda(variable, body) =>
+    case LoadLambda(variable, body) =>
       for {
         newVar <- convertLocalVariableTypeSystem(variable)
         newBody <- convertTypeSystem(body)
-      } yield otherTS.LoadLambda(newVar, newBody)
+      } yield LoadLambda(newVar, newBody)
 
-    case expr: ts.LoadTuple =>
-      expr.values
-        .traverse { case ts.TupleElement(elementType) =>
-          convertTypeSystem(elementType).map(otherTS.TupleElement(_))
+    case LoadTuple(tupleValues) =>
+      tupleValues
+        .traverse { case TupleElement(elementType) =>
+          convertTypeSystem(elementType).map(TupleElement(_))
         }
-        .map(otherTS.LoadTuple(_))
+        .map(LoadTuple(_))
 
-    case ts.LoadTupleElement(tupleValue, elemType, index) =>
+    case LoadTupleElement(tupleValue, elemType, index) =>
       for {
         newValue <- convertTypeSystem(tupleValue)
         newType <- convertTypeSystem(elemType)
-      } yield otherTS.LoadTupleElement(newValue, newType, index)
+      } yield LoadTupleElement(newValue, newType, index)
 
-    case ts.LoadUnit(exprType) =>
+    case LoadUnit(exprType) =>
       for {
         newType <- convertTypeSystem(exprType)
-      } yield otherTS.LoadUnit(newType)
+      } yield LoadUnit(newType)
 
-    case ts.LoadVariable(variable) =>
+    case LoadVariable(variable) =>
       for {
         newVar <- convertVariableTypeSystem(variable)
-      } yield otherTS.LoadVariable(newVar)
+      } yield LoadVariable(newVar)
 
-    case ts.MethodCall(method, instance, args, returnType) =>
+    case MethodCall(method, instance, args, returnType) =>
       for {
         newInstance <- convertTypeSystem(instance)
         newArgs <- args.traverse(convertTypeSystem(_))
         newReturnType <- convertTypeSystem(returnType)
-      } yield otherTS.MethodCall(method, newInstance, newArgs, newReturnType)
+      } yield MethodCall(method, newInstance, newArgs, newReturnType)
 
-    case ts.PatternMatch(expr, cases) =>
+    case PatternMatch(expr, cases) =>
       for {
         newExpr <- convertTypeSystem(expr)
         newCases <- cases.traverse {
-          case ts.PatternCase(pattern, body) =>
+          case PatternCase(pattern, body) =>
             for {
               newPattern <- convertPatternExprTypeSystem(pattern)
               newBody <- convertTypeSystem(body)
-            } yield otherTS.PatternCase(newPattern, newBody)
+            } yield PatternCase(newPattern, newBody)
         }
-      } yield otherTS.PatternMatch(newExpr, newCases)
+      } yield PatternMatch(newExpr, newCases)
 
-    case ts.PrimitiveOp(operation, left, right, exprType) =>
+    case PrimitiveOp(operation, left, right, exprType) =>
       for {
         newLeft <- convertTypeSystem(left)
         newRight <- convertTypeSystem(right)
         newType <- convertTypeSystem(exprType)
-      } yield otherTS.PrimitiveOp(operation, newLeft, newRight, newType)
+      } yield PrimitiveOp(operation, newLeft, newRight, newType)
 
-    case ts.Sequence(first, second) =>
+    case Sequence(first, second) =>
       for {
         newFirst <- convertTypeSystem(first)
         newSecond <- convertTypeSystem(second)
-      } yield otherTS.Sequence(newFirst, newSecond)
+      } yield Sequence(newFirst, newSecond)
 
-    case ts.StoreVariable(variable, value, unitType) =>
+    case StoreVariable(variable, value, unitType) =>
       for {
         newVar <- convertVariableTypeSystem(variable)
         newValue <- convertTypeSystem(value)
         newUnitType <- convertTypeSystem(unitType)
-      } yield otherTS.StoreVariable(newVar, newValue, newUnitType)
+      } yield StoreVariable(newVar, newValue, newUnitType)
 
-    case t1: ts.TraitType => convertTraitType(t1).map(identity)
-    case t1: ts.ClassType => convertClassType(t1).map(identity)
-    case t1: ts.DataConstructorType => convertDataConstructorType(t1).map(identity)
+    case t1 @ TraitType(_, _) => convertTraitType(t1)
+    case t1 @ ClassType(_, _) => convertClassType(t1)
+    case t1 @ DataConstructorType(_, _, _) => convertDataConstructorType(t1)
 
-    case ts.TypeOfType(inner) =>
+    case TypeOfType(inner) =>
       for {
         newInner <- convertTypeSystem(inner)
-      } yield (otherTS.TypeOfType(newInner) : otherTS.ArExpr)
+      } yield TypeOfType(newInner)
 
-    case ts.TypeN(universe, subtypeConstraint, supertypeConstraint) =>
+    case TypeN(universe, subtypeConstraint, supertypeConstraint) =>
       for {
-        newUniv <- convertUniverseTypeSystem(universe)
         newSub <- subtypeConstraint.traverse(convertTypeSystem(_))
         newSup <- supertypeConstraint.traverse(convertTypeSystem(_))
-      } yield (otherTS.TypeN(newUniv, newSub, newSup) : otherTS.ArExpr)
+      } yield TypeN(universe, newSub, newSup)
 
-    case ts.LoadVariable(variable) =>
+    case LoadVariable(variable) =>
       for {
         newVar <- convertVariableTypeSystem(variable)
-      } yield otherTS.LoadVariable(newVar)
+      } yield LoadVariable(newVar)
 
-    case ts.FunctionType(argumentType, resultType) =>
+    case FunctionType(argumentType, resultType) =>
       for {
         newArgType <- convertTypeSystem(argumentType)
         newResultType <- convertTypeSystem(resultType)
-      } yield otherTS.FunctionType(newArgType, newResultType)
+      } yield FunctionType(newArgType, newResultType)
 
-    case ts.UnionType(first, second) =>
+    case UnionType(first, second) =>
       for {
         newFirst <- convertTypeSystem(first)
         newSecond <- convertTypeSystem(second)
-      } yield otherTS.UnionType(newFirst, newSecond)
+      } yield UnionType(newFirst, newSecond)
 
-    case ts.IntersectionType(first, second) =>
+    case IntersectionType(first, second) =>
       for {
         newFirst <- convertTypeSystem(first)
         newSecond <- convertTypeSystem(second)
-      } yield otherTS.IntersectionType(newFirst, newSecond)
+      } yield IntersectionType(newFirst, newSecond)
   }
 
 
@@ -330,11 +312,11 @@ abstract class TypeSystemConverter {
 
 object TypeSystemConverter {
 
-  type Aux[TContext <: Context with Singleton, TS1 <: TypeSystem[TContext], TS2 <: TypeSystem[TContext]] =
+  type Aux[TContext <: Context with Singleton, TFromWrap[+_], TToWrap[+_]] =
     TypeSystemConverter {
       val context: TContext
-      val ts: TS1
-      val otherTS: TS2
+      type FromWrap[+A] = TFromWrap[A]
+      type ToWrap[+A] = TToWrap[A]
     }
 
 }

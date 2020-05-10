@@ -3,58 +3,61 @@ package dev.argon.compiler.core
 import dev.argon.compiler.types.TypeSystem
 import cats._
 import cats.implicits._
+import dev.argon.compiler.expr.ArExpr._
+import dev.argon.compiler.expr._
 
-trait Substitutions {
+sealed abstract class Substitutions[Wrap[+_]: Monad] {
 
-  type TContext <: Context with Singleton
-  val typeSystem: TypeSystem[TContext]
-  import typeSystem._
+  val context: Context
 
-  val oldVariable: Variable
-  val replacement: WrapExpr
+  val oldVariable: Variable[context.type, Wrap]
+  val replacement: ArExprWrap[context.type, Wrap]
 
-  def substTypeArg(arg: TypeArgument): TypeArgument = arg match {
+  private def fromSimpleType(expr: ArExpr[context.type, Wrap]): ArExprWrap[context.type, Wrap] =
+    expr.pure[Wrap]
+
+  def substTypeArg(arg: TypeArgument[context.type, Wrap]): TypeArgument[context.type, Wrap] = arg match {
     case TypeArgument.Expr(argExpr) => TypeArgument.Expr(substWrapExpr(argExpr))
     case TypeArgument.Wildcard(u) => TypeArgument.Wildcard(u)
   }
 
-  def substClassType(expr: ClassType): ClassType =
+  def substClassType(expr: ClassType[context.type, Wrap]): ClassType[context.type, Wrap] =
     ClassType(
       expr.arClass,
       expr.args.map(substTypeArg)
     )
 
-  def substTraitType(expr: TraitType): TraitType =
+  def substTraitType(expr: TraitType[context.type, Wrap]): TraitType[context.type, Wrap] =
     TraitType(
       expr.arTrait,
       expr.args.map(substTypeArg)
     )
 
-  def substDataCtorType(expr: DataConstructorType): DataConstructorType =
+  def substDataCtorType(expr: DataConstructorType[context.type, Wrap]): DataConstructorType[context.type, Wrap] =
     DataConstructorType(
       expr.ctor,
       expr.args.map(substTypeArg),
       substTraitType(expr.instanceType)
     )
 
-  def substLocalVariable(localVariable: LocalVariable): LocalVariable =
+  def substLocalVariable(localVariable: LocalVariable[context.type, Wrap]): LocalVariable[context.type, Wrap] =
     localVariable match {
       case LocalVariable(descriptor, name, mutability, varType) => LocalVariable(descriptor, name, mutability, substWrapExpr(varType))
     }
 
-  def substParamVariable(paramVariable: ParameterVariable): ParameterVariable =
+  def substParamVariable(paramVariable: ParameterVariable[context.type, Wrap]): ParameterVariable[context.type, Wrap] =
     paramVariable match {
       case ParameterVariable(descriptor, name, mutability, varType) => ParameterVariable(descriptor, name, mutability, substWrapExpr(varType))
     }
 
-  def substVariable(variable: Variable): Variable =
+  def substVariable(variable: Variable[context.type, Wrap]): Variable[context.type, Wrap] =
     variable match {
-      case variable: LocalVariable => substLocalVariable(variable)
-      case variable: ParameterVariable => substParamVariable(variable)
+      case variable: LocalVariable[context.type, Wrap] => substLocalVariable(variable)
+      case variable: ParameterVariable[context.type, Wrap] => substParamVariable(variable)
       case FieldVariable(descriptor, ownerClass, name, mutability, varType) => FieldVariable(descriptor, ownerClass, name, mutability, substWrapExpr(varType))
     }
 
-  def substParamElement(paramElem: ParameterElement): ParameterElement =
+  def substParamElement(paramElem: ParameterElement[context.type, Wrap]): ParameterElement[context.type, Wrap] =
     ParameterElement(
       substParamVariable(paramElem.paramVar),
       paramElem.name,
@@ -62,10 +65,10 @@ trait Substitutions {
       paramElem.index,
     )
 
-  def substParameter(parameter: Parameter): Parameter =
+  def substParameter(parameter: Parameter[context.type, Wrap]): Parameter[context.type, Wrap] =
     Parameter(parameter.style, substParamVariable(parameter.paramVar), parameter.elements.map(substParamElement))
 
-  def substArExpr(expr: ArExpr): WrapExpr =
+  def substArExpr(expr: ArExpr[context.type, Wrap]): ArExprWrap[context.type, Wrap] =
     expr match {
       case ClassConstructorCall(classType, classCtor, args) =>
         fromSimpleType(ClassConstructorCall(substClassType(classType), classCtor, args.map(substWrapExpr)))
@@ -105,9 +108,9 @@ trait Substitutions {
       case StoreVariable(variable, value, exprType) =>
         fromSimpleType(StoreVariable(substVariable(variable), substWrapExpr(value), substWrapExpr(exprType)))
 
-      case expr: TraitType => fromSimpleType(substTraitType(expr))
-      case expr: ClassType => fromSimpleType(substClassType(expr))
-      case expr: DataConstructorType => fromSimpleType(substDataCtorType(expr))
+      case expr @ TraitType(_, _) => fromSimpleType(substTraitType(expr))
+      case expr @ ClassType(_, _) => fromSimpleType(substClassType(expr))
+      case expr @ DataConstructorType(_, _, _) => fromSimpleType(substDataCtorType(expr))
       case TypeOfType(inner) => fromSimpleType(TypeOfType(substWrapExpr(inner)))
       case TypeN(universe, subtypeConstraint, supertypeConstraint) =>
         fromSimpleType(TypeN(
@@ -135,27 +138,24 @@ trait Substitutions {
         ))
     }
 
-  def substWrapExpr(expr: TType): TType =
-    flatMapTypeWrapper(expr)(substArExpr)
+  def substWrapExpr(expr: ArExprWrap[context.type, Wrap]): ArExprWrap[context.type, Wrap] =
+    expr.flatMap(substArExpr)
 
 
 }
 
 object Substitutions {
 
-  type Aux[TCtx <: Context with Singleton, TS <: TypeSystem[TCtx]] = Substitutions {
-    type TContext = TCtx
-    val typeSystem: TS
+  type Aux[TCtx <: Context with Singleton, Wrap[+_]] = Substitutions[Wrap] {
+    val context: TCtx
   }
 
-  def apply[TCtx <: Context with Singleton](ts: TypeSystem[TCtx])(oldVar: ts.Variable, newExpr: ts.WrapExpr): Substitutions.Aux[TCtx, ts.type] =
-    new Substitutions {
-      override type TContext = TCtx
-      override val typeSystem: ts.type = ts
-      import typeSystem._
+  def apply[Wrap[+_]: Monad](ctx: Context)(oldVar: Variable[ctx.type, Wrap], newExpr: ArExprWrap[ctx.type, Wrap]): Substitutions.Aux[ctx.type, Wrap] =
+    new Substitutions[Wrap] {
+      override val context: ctx.type = ctx
 
-      override val oldVariable: Variable = oldVar
-      override val replacement: WrapExpr = newExpr
+      override val oldVariable: Variable[context.type, Wrap] = oldVar
+      override val replacement: ArExprWrap[context.type, Wrap] = newExpr
     }
 
 }

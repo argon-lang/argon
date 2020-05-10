@@ -6,11 +6,13 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.parser
 import dev.argon.util._
-import cats._
+import cats.{Id => _, _}
 import cats.implicits._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
+import dev.argon.compiler.expr.ArExpr.ClassConstructorCall
+import dev.argon.compiler.expr._
 import dev.argon.compiler.loaders.StandardTypeLoaders
-import shapeless.Nat
+import shapeless.{Id, Nat}
 import zio.IO
 
 object SourceClassConstructor {
@@ -31,7 +33,7 @@ object SourceClassConstructor {
       import context.typeSystem
       import context.scopeContext.ScopeExtensions
       import context.scopeContext.Scope
-      import typeSystem.{ArExpr, TType}
+      import typeSystem.{SimpleExpr, TType}
 
       override val descriptor: ClassConstructorDescriptor = desc
       override val fileId: FileID = env.fileSpec.fileID
@@ -66,18 +68,18 @@ object SourceClassConstructor {
       (unitType: TType)
       (env: ExpressionConverter.Env[context.type, Scope])
       (unconverted: WithSource[Vector[WithSource[parser.Stmt]]])
-      (converted: Vector[typeSystem.ClassConstructorStatement])
+      (converted: Vector[ClassConstructorStatement[context.type]])
       (initializedFields: Set[FieldDescriptor])
       (body: WithSource[Vector[WithSource[parser.Stmt]]])
-      : Comp[typeSystem.ClassConstructorBody] = {
+      : Comp[ClassConstructorBody[context.type]] = {
 
-        def convertUnconverted: Comp[(Vector[typeSystem.ClassConstructorStatement], ExpressionConverter.Env[context.type, Scope])] =
+        def convertUnconverted: Comp[(Vector[ClassConstructorStatement[context.type]], ExpressionConverter.Env[context.type, Scope])] =
           if(unconverted.value.isEmpty)
             IO.succeed((converted, env))
           else
             ExpressionConverter.convertStatementList(context)(env)(unitType)(unconverted).map { newStmt =>
 
-              (converted :+ typeSystem.ClassConstructorStatementExpr(newStmt), ExpressionScopeExtractor.addDeclarationsFrom(context)(newStmt, env))
+              (converted :+ ClassConstructorStatementExpr(newStmt), ExpressionScopeExtractor.addDeclarationsFrom(context)(newStmt, env))
             }
 
         def nextBody(tail: Vector[WithSource[parser.Stmt]]) = {
@@ -98,7 +100,7 @@ object SourceClassConstructor {
                   Compilation.forErrors(CompilationError.MutableVariableNotPureError(field.name, CompilationMessageSource.SourceFile(env2.fileSpec, location)))
                 else
                   ExpressionConverter.convertExpression(context)(env2)(field.varType)(value).flatMap { valueExpr =>
-                    val initStmt = typeSystem.InitializeFieldStatement(field, valueExpr)
+                    val initStmt = InitializeFieldStatement(field, valueExpr)
                     val env3 = env2.copy(scope = env2.scope.addVariable(field))
 
                     val newUnconvertedLoc = tail.headOption.map { _.location.start }.getOrElse { body.location.end }
@@ -135,7 +137,7 @@ object SourceClassConstructor {
 
                         case (Some(baseCtorExpr), Some(baseClass)) =>
                           ExpressionConverter.convertExpression(context)(env2.copy(allowAbstractConstructor = true))(typeSystem.fromSimpleType(baseClass))(baseCtorExpr).flatMap {
-                            case baseCall: typeSystem.ClassConstructorCall => IO.succeed(Some(baseCall))
+                            case baseCall: ClassConstructorCall[context.type, Id] => IO.succeed(Some(baseCall))
                             case _ =>
                               Compilation.forErrors(
                                 CompilationError.InvalidBaseConstructorCall(CompilationMessageSource.SourceFile(env.fileSpec, location))
@@ -145,7 +147,7 @@ object SourceClassConstructor {
                     }
                     .flatMap { baseCall =>
                       ExpressionConverter.convertStatementList(context)(env2)(unitType)(nextBody(tail)).map { endExpr =>
-                        typeSystem.ClassConstructorBody(newConverted, baseCall, endExpr)
+                        ClassConstructorBody(newConverted, baseCall, endExpr)
                       }
                     }
 
@@ -172,7 +174,7 @@ object SourceClassConstructor {
                       Compilation.forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, unconverted.location)))
                     else
                       ExpressionConverter.convertStatementList(context)(env)(unitType)(unconverted).map { endExpr =>
-                        typeSystem.ClassConstructorBody(converted, None, endExpr)
+                        ClassConstructorBody(converted, None, endExpr)
                       }
                   }
               }
@@ -181,7 +183,7 @@ object SourceClassConstructor {
         }
       }
 
-      private def findField(name: String, location: SourceLocation): Comp[typeSystem.FieldVariable] =
+      private def findField(name: String, location: SourceLocation): Comp[FieldVariable[context.type, Id]] =
         ownerClass.fields.flatMap { fields =>
           Compilation.requireSome(fields.find { _.name.name === name })(
             CompilationError.FieldNotFound(name, CompilationMessageSource.SourceFile(env.fileSpec, location))
@@ -195,8 +197,8 @@ object SourceClassConstructor {
 
         override def createResult
         (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-        : Comp[ClassConstructor.ResultInfo[context.type, context.typeSystem.type]] =
-          IO.succeed(ClassConstructor.ResultInfo[context.type, context.typeSystem.type]())
+        : Comp[ClassConstructor.ResultInfo[context.type, context.typeSystem.TTypeWrapper]] =
+          IO.succeed(ClassConstructor.ResultInfo[context.type, context.typeSystem.TTypeWrapper]())
       }
 
     }

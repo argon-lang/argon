@@ -7,11 +7,13 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.ClassDeclarationStmt
 import dev.argon.util.{FileID, SourceLocation, ValueCache, WithSource}
-import cats._
+import cats.{Id => _, _}
 import cats.implicits._
 import cats.evidence.Is
+import dev.argon.compiler.expr.ArExpr._
+import dev.argon.compiler.expr._
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
-import shapeless.Nat
+import shapeless.{Id, Nat}
 import zio.{IO, ZIO}
 import zio.interop.catz._
 
@@ -39,14 +41,14 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
     for {
       sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[ArClass.ResultInfo, _ <: Nat]]
-      sigResultCache <- ValueCache.make[ErrorList, context2.typeSystem.BaseTypeInfoClass]
+      sigResultCache <- ValueCache.make[ErrorList, BaseTypeInfoClass[context2.type, Id]]
 
       paramsEnvCache <- ValueCache.make[ErrorList, EnvCreator[context2.type]]
 
       groupedStaticCache <- ValueCache.make[ErrorList, GroupedStaticStatements]
       groupedInstCache <- ValueCache.make[ErrorList, GroupedInstanceStatements]
 
-      fieldCache <- ValueCache.make[ErrorList, Vector[context2.typeSystem.FieldVariable]]
+      fieldCache <- ValueCache.make[ErrorList, Vector[FieldVariable[context2.type, Id]]]
       methodCache <- ValueCache.make[ErrorList, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
       staticMethodCache <- ValueCache.make[ErrorList, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
       classCtorCache <- ValueCache.make[ErrorList, Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]]
@@ -116,7 +118,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           }
         )
 
-      override val fields: Comp[Vector[context.typeSystem.FieldVariable]] =
+      override val fields: Comp[Vector[FieldVariable[context.type, Id]]] =
         fieldCache.get(groupedInst.flatMap { inst =>
           inst.fields.traverse { field =>
             field.value.name match {
@@ -124,7 +126,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
                 for {
                   env2 <- paramsEnv
                   fieldType <- ExpressionConverter.convertTypeExpression(context)(env2(context)(EffectInfo.pure, descriptor))(field.value.fieldType)
-                } yield context.typeSystem.FieldVariable(
+                } yield FieldVariable[context.type, Id](
                   FieldDescriptor(descriptor, fieldName),
                   AbsRef(this),
                   VariableName.Normal(fieldName),
@@ -190,19 +192,19 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     }
   }
 
-  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[ErrorList, ctx.typeSystem.BaseTypeInfoClass])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
+  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[ErrorList, BaseTypeInfoClass[ctx.type, Id]])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
 
     override val context: ctx.type = ctx
 
     override def createResult
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    : Comp[ArClass.ResultInfo[context.type, context.typeSystem.type]] = {
+    : Comp[ArClass.ResultInfo[context.type, context.typeSystem.TTypeWrapper]] = {
 
-      ArClass.ResultInfo(context.typeSystem)(
+      ArClass.ResultInfo(
         cache.get(baseTypeExpr match {
           case Some(baseTypeExpr) =>
             ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
-              .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoClass(None, Vector())))
+              .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(BaseTypeInfoClass(None, Vector())))
               .flatMap { baseTypes =>
                 val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
@@ -217,7 +219,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
                   .map { _ => baseTypes }
               }
           case None =>
-            context.typeSystem.BaseTypeInfoClass(None, Vector()).pure[Comp]
+            IO.succeed(BaseTypeInfoClass(None, Vector()))
         })
       ).pure[Comp]
     }
@@ -227,20 +229,20 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
     (t: context.typeSystem.TType)
     (location: SourceLocation)
-    (acc: context.typeSystem.BaseTypeInfoClass)
-    : Comp[context.typeSystem.BaseTypeInfoClass] = {
+    (acc: BaseTypeInfoClass[context.type, Id])
+    : Comp[BaseTypeInfoClass[context.type, Id]] = {
       import context._
       t match {
-        case t: context.typeSystem.ClassType =>
+        case t @ ClassType(_, _) =>
           if(acc.baseClass.isDefined)
             Compilation.forErrors(CompilationError.MultipleBaseClasses(CompilationMessageSource.SourceFile(env.fileSpec, location)))
           else
             acc.copy(baseClass = Some(t)).pure[Comp]
 
-        case t: context.typeSystem.TraitType =>
+        case t @ TraitType(_, _) =>
           acc.copy(baseTraits = acc.baseTraits :+ t).pure[Comp]
 
-        case context.typeSystem.IntersectionType(first, second) =>
+        case IntersectionType(first, second) =>
           typeToBaseTypes(context)(env)(first)(location)(acc).flatMap { acc2 =>
             typeToBaseTypes(context)(env)(second)(location)(acc2)
           }

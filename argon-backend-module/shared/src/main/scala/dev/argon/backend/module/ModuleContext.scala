@@ -6,6 +6,7 @@ import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.loaders.ResourceIndicator
 import shapeless.Id
 import cats.implicits._
+import dev.argon.compiler.expr.ClassConstructorBody
 import zio._
 
 sealed abstract class ModuleContext extends ContextWithModule {
@@ -16,24 +17,24 @@ sealed abstract class ModuleContext extends ContextWithModule {
   override type TDataConstructorMetadata = Unit
   override type TClassConstructorMetadata = Unit
 
-  override type TFunctionImplementation = typeSystem.ArExpr
-  override type TMethodImplementation = Option[typeSystem.ArExpr]
-  override type TClassConstructorImplementation = typeSystem.ClassConstructorBody
-  override type TDataConstructorImplementation = typeSystem.ArExpr
+  override type TFunctionImplementation = typeSystem.SimpleExpr
+  override type TMethodImplementation = Option[typeSystem.SimpleExpr]
+  override type TClassConstructorImplementation = ClassConstructorBody[this.type]
+  override type TDataConstructorImplementation = typeSystem.SimpleExpr
 
   override type BackendOptions = ModuleBackendOptions[Id, ResIndicator]
 
-  override def createExprFunctionImplementation(expr: typeSystem.ArExpr): typeSystem.ArExpr = expr
-  override def createExprMethodImplementation(expr: typeSystem.ArExpr): Option[typeSystem.ArExpr] = Some(expr)
-  override def abstractMethodImplementation: Option[typeSystem.ArExpr] = None
-  override def createClassConstructorBodyImplementation(body: typeSystem.ClassConstructorBody): typeSystem.ClassConstructorBody = body
-  override def createDataConstructorImplementation(body: typeSystem.ArExpr): typeSystem.ArExpr = body
+  override def createExprFunctionImplementation(expr: typeSystem.SimpleExpr): typeSystem.SimpleExpr = expr
+  override def createExprMethodImplementation(expr: typeSystem.SimpleExpr): Option[typeSystem.SimpleExpr] = Some(expr)
+  override def abstractMethodImplementation: Option[typeSystem.SimpleExpr] = None
+  override def createClassConstructorBodyImplementation(body: ClassConstructorBody[this.type]): ClassConstructorBody[this.type] = body
+  override def createDataConstructorImplementation(body: typeSystem.SimpleExpr): typeSystem.SimpleExpr = body
 
 
-  override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[typeSystem.ArExpr] =
+  override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[typeSystem.SimpleExpr] =
     Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
 
-  override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[Option[typeSystem.ArExpr]] =
+  override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[Option[typeSystem.SimpleExpr]] =
     Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
 
 }

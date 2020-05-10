@@ -2,7 +2,9 @@ package dev.argon.compiler.core
 
 import cats.data.NonEmptyList
 import dev.argon.compiler.core.ErasedSignature.TraitType
+import dev.argon.compiler.expr.ArExpr
 import dev.argon.compiler.types.TypeSystem
+import shapeless.Id
 
 
 sealed trait ErasedSignature[TContext <: Context with Singleton]
@@ -23,7 +25,7 @@ object ErasedSignature {
   final case class ParameterOnlySignature[TContext <: Context with Singleton](paramTypes: Vector[SigType[TContext]])
 
   def fromSignature(context: Context)(sig: context.signatureContext.Signature[FunctionResultInfo, _]): ErasedSignature[context.type] = {
-    import context.signatureContext.{ context => _, typeSystem => _, _ }
+    import context.signatureContext.{ SignatureParameters, SignatureResult }
     sig match {
       case SignatureParameters(parameter, nextUnsubstituted) =>
         ErasedSignature.Parameter(
@@ -31,20 +33,21 @@ object ErasedSignature {
           fromSignature(context)(nextUnsubstituted)
         )
 
-      case SignatureResult(result) => ErasedSignature.Result(typeToSigType(context)(result.returnType))
+      case SignatureResult(result) =>
+        ErasedSignature.Result(typeToSigType(context)(result.returnType))
     }
   }
 
-  def fromSignatureParameters[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](context: Context)(sig: context.signatureContext.Signature[TResult, _]): ParameterOnlySignature[context.type] =
+  def fromSignatureParameters[TResult[TContext2 <: Context with Singleton, Wrap[+_]]](context: Context)(sig: context.signatureContext.Signature[TResult, _]): ParameterOnlySignature[context.type] =
     ParameterOnlySignature(sig.unsubstitutedParameters.map { param => typeToSigType(context)(param.paramType) })
 
-  private def typeToSigType(context: Context)(t: context.signatureContext.typeSystem.TType): SigType[context.type] =
+  private def typeToSigType(context: Context)(t: ArExpr[context.type, Id]): SigType[context.type] =
     t match {
-      case t: context.typeSystem.ClassType => ClassType(t.arClass)
-      case t: context.typeSystem.TraitType => TraitType(t.arTrait)
-      case t: context.typeSystem.DataConstructorType => DataConstructorType(t.ctor)
-      case t: context.typeSystem.LoadTuple => TupleType(t.values.map { elem => typeToSigType(context)(elem.value) })
-      case t: context.typeSystem.FunctionType => FunctionType(typeToSigType(context)(t.argumentType), typeToSigType(context)(t.resultType))
+      case t: ArExpr.ClassType[context.type, Id] => ClassType(t.arClass)
+      case t: ArExpr.TraitType[context.type, Id] => TraitType(t.arTrait)
+      case t: ArExpr.DataConstructorType[context.type, Id] => DataConstructorType(t.ctor)
+      case t: ArExpr.LoadTuple[context.type, Id] => TupleType(t.values.map { elem => typeToSigType(context)(elem.value) })
+      case t: ArExpr.FunctionType[context.type, Id] => FunctionType(typeToSigType(context)(t.argumentType), typeToSigType(context)(t.resultType))
       case _ => BlankType()
     }
 

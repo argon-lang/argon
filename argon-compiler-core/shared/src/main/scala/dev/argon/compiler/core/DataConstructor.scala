@@ -6,6 +6,7 @@ import scala.collection.immutable._
 import cats._
 import cats.evidence.Is
 import cats.implicits._
+import dev.argon.compiler.expr.ArExpr.TraitType
 import dev.argon.compiler.{Comp, CompilationMessageSource}
 import dev.argon.util.FileID
 import shapeless.Nat
@@ -33,33 +34,23 @@ object DataConstructor {
   type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
     DataConstructor[TContext, TPayloadSpec] { val descriptor: DataConstructorDescriptor.InNamespace }
 
-  sealed trait ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton] {
-    val typeSystem: TS
-    val instanceType: typeSystem.TraitType
-  }
+  final case class ResultInfo[TContext <: Context with Singleton, Wrap[+_]](instanceType: TraitType[TContext, Wrap])
 
   object ResultInfo {
-    def apply[TContext <: Context with Singleton](ts: TypeSystem[TContext])(instance: ts.TraitType): ResultInfo[TContext, ts.type] = new ResultInfo[TContext, ts.type] {
-      override val typeSystem: ts.type = ts
-      override val instanceType: typeSystem.TraitType = instance
-    }
-
     implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
 
-      override def convertTypeSystem
+      override def convertTypeSystem[Wrap1[+_], Wrap2[+_]]
       (context: Context)
-      (ts1: TypeSystem[context.type])
-      (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type])
-      (result: ResultInfo[context.type, ts1.type])
-      : Comp[ResultInfo[context.type, ts2.type]] = for {
+      (converter: TypeSystemConverter.Aux[context.type, Wrap1, Wrap2])
+      (result: ResultInfo[context.type, Wrap1])
+      : Comp[ResultInfo[context.type, Wrap2]] = for {
         instanceType <- converter.convertTraitType(result.instanceType)
-      } yield ResultInfo(ts2)(instanceType)
+      } yield ResultInfo(instanceType)
 
       override def referencesParameter
       (signatureContext: SignatureContext)
       (refChecker: signatureContext.RefChecker)
-      (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
+      (result: ResultInfo[signatureContext.context.type, signatureContext.TTypeWrapper])
       : Comp[Boolean] =
         IO.succeed(refChecker.checkArExpr(result.instanceType))
 
@@ -67,9 +58,9 @@ object DataConstructor {
       override def substitute
       (signatureContext: SignatureContext)
       (subst: signatureContext.Subst)
-      (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
-      : ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] =
-        ResultInfo(result.typeSystem)(subst.substTraitType(result.instanceType))
+      (result: ResultInfo[signatureContext.context.type, signatureContext.TTypeWrapper])
+      : ResultInfo[signatureContext.context.type, signatureContext.TTypeWrapper] =
+        ResultInfo(subst.substTraitType(result.instanceType))
     }
   }
 

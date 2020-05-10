@@ -6,11 +6,11 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.parser
 import dev.argon.util._
-import cats._
+import cats.{Id => _, _}
 import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
-import shapeless.Nat
+import shapeless.{Id, Nat}
 import zio.IO
 
 object SourceMethod {
@@ -101,9 +101,9 @@ object SourceMethod {
 
         override def createResult
         (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-        : Comp[FunctionResultInfo[context.type, context.typeSystem.type]] = {
+        : Comp[FunctionResultInfo[context.type, context.typeSystem.TTypeWrapper]] = {
           ExpressionConverter.convertTypeExpression(context)(env)(returnTypeExpr)
-            .map { t => FunctionResultInfo(context.typeSystem)(t) }
+            .map { t => FunctionResultInfo[context.type, Id](t) }
         }
       }
 

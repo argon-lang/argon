@@ -6,16 +6,19 @@ import dev.argon.compiler.types.TypeSystem
 import cats._
 import cats.data.NonEmptyVector
 import cats.implicits._
+import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.{Comp, Compilation}
 import zio.IO
 import zio.interop.catz._
 
 object MethodLookup {
 
-  def lookupMethods(context: Context)(ts: TypeSystem[context.type])(instanceType: ts.TypeWithMethods)(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName): Comp[OverloadResult[MemberValue[context.type]]] =
+  def lookupMethods(context: Context)(ts: TypeSystem.Aux[context.type])(instanceType: TypeWithMethods[context.type, ts.TTypeWrapper])(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName): Comp[OverloadResult[MemberValue[context.type]]] =
     lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(Vector(instanceType))(Set.empty)
 
-  private def lookupMethodsImpl(context: Context)(ts: TypeSystem[context.type])(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName)(instanceTypes: Vector[ts.TypeWithMethods])(seenTypes: Set[MethodOwnerDescriptor]): Comp[OverloadResult[MemberValue[context.type]]] = {
+  private def lookupMethodsImpl(context: Context)(ts: TypeSystem.Aux[context.type])(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName)(instanceTypes: Vector[TypeWithMethods[context.type, ts.TTypeWrapper]])(seenTypes: Set[MethodOwnerDescriptor]): Comp[OverloadResult[MemberValue[context.type]]] = {
+    import ts.typeWrapperInstances
+
     if(instanceTypes.isEmpty)
       IO.succeed(OverloadResult.End)
     else {
@@ -25,10 +28,10 @@ object MethodLookup {
 
       unseenInstanceTypes
         .flatTraverse {
-          case ts.ClassType(arClass, args) =>
+          case ClassType(arClass, args) =>
             arClass.value.signature
               .flatMap { sig =>
-                ts.liftSignatureResult(sig, args)
+                SignatureContext.liftSignatureResult(context)(sig, args)
               }
               .flatMap { result =>
                 result.baseTypes.map { baseTypes =>
@@ -36,25 +39,25 @@ object MethodLookup {
                 }
               }
 
-          case ts.TraitType(arTrait, args) =>
+          case TraitType(arTrait, args) =>
             arTrait.value.signature
               .flatMap { sig =>
-                ts.liftSignatureResult(sig, args)
+                SignatureContext.liftSignatureResult(context)(sig, args)
               }
               .flatMap { result =>
                 result.baseTypes.map { baseTypes => baseTypes.baseTraits }
               }
 
 
-          case ts.DataConstructorType(_, _, instanceType) =>
+          case DataConstructorType(_, _, instanceType) =>
             IO.succeed(Vector(instanceType))
         }
           .flatMap { newBaseTypes =>
             unseenInstanceTypes
               .flatTraverse {
-                case ts.ClassType(arClass, _) => arClass.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
-                case ts.TraitType(arTrait, _) => arTrait.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
-                case ts.DataConstructorType(ctor, _, _) => ctor.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+                case ClassType(arClass, _) => arClass.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+                case TraitType(arTrait, _) => arTrait.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+                case DataConstructorType(ctor, _, _) => ctor.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
               }
               .flatMap { memberValues =>
                 memberValues
@@ -80,11 +83,11 @@ object MethodLookup {
     }
   }
 
-  private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem[context.type])(t: ts.TypeWithMethods): MethodOwnerDescriptor =
+  private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem.Aux[context.type])(t: TypeWithMethods[context.type, ts.TTypeWrapper]): MethodOwnerDescriptor =
     t match {
-      case ts.ClassType(arClass, _) => arClass.value.descriptor
-      case ts.TraitType(arTrait, _) => arTrait.value.descriptor
-      case ts.DataConstructorType(ctor, _, _) => ctor.value.descriptor
+      case ClassType(arClass, _) => arClass.value.descriptor
+      case TraitType(arTrait, _) => arTrait.value.descriptor
+      case DataConstructorType(ctor, _, _) => ctor.value.descriptor
     }
 
 }

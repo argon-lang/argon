@@ -439,16 +439,14 @@ object CompilationError {
   }
 
   sealed trait CouldNotConvertType extends CompilationError {
-    val context: Context
-    val typeSystem: TypeSystem[context.type]
+    val typeSystem: TypeSystem
     val fromType: typeSystem.TType
     val toType: typeSystem.TType
   }
 
   object CouldNotConvertType {
-    def apply(ctx: Context)(ts: TypeSystem[ctx.type])(fromT: ts.TType, toT: ts.TType)(src: CompilationMessageSource): CouldNotConvertType =
+    def apply(ts: TypeSystem)(fromT: ts.TType, toT: ts.TType)(src: CompilationMessageSource): CouldNotConvertType =
       new CouldNotConvertType {
-        override val context: ctx.type = ctx
         override val typeSystem: ts.type = ts
         override val fromType: typeSystem.TType = fromT
         override val toType: typeSystem.TType = toT

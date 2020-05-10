@@ -8,30 +8,34 @@ import cats.implicits._
 import cats.data._
 import cats.evidence.===
 import dev.argon.compiler.core.ErasedSignature.TupleType
-import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
+import dev.argon.compiler.expr._
+import dev.argon.compiler.expr.ArExpr._
 import shapeless.Nat
 import zio.interop.catz._
 
 import scala.collection.immutable.Vector
 
-trait TypeSystem[TContext <: Context with Singleton] {
+trait TypeSystem {
 
-  val context: TContext
-  val contextProof: TContext === context.type
+  val context: Context
 
   type TTypeWrapper[+_]
 
-  type WrapExpr = TTypeWrapper[ArExpr]
+  type SimpleExpr = ArExpr[context.type, TTypeWrapper]
+  type WrapExpr = TTypeWrapper[SimpleExpr]
   type TType = WrapExpr
   
-  type WrapRef[T[_ <: Context with Singleton, _[_, _]]] = AbsRef[context.type, T]
   type TSubTypeInfo = SubTypeInfo[TType]
 
+  type TTypeArgument = TypeArgument[context.type, TTypeWrapper]
+  type TFieldVariable = FieldVariable[context.type, TTypeWrapper]
 
-  def liftSignatureResult[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](sig: context.signatureContext.Signature[TResult, _ <: Nat], args: Vector[TypeArgument]): Comp[TResult[TContext, this.type]]
+  type TClassType = ClassType[context.type, TTypeWrapper]
+  type TTraitType = TraitType[context.type, TTypeWrapper]
+  type TDataConstructorType = DataConstructorType[context.type, TTypeWrapper]
 
 
-  final def fromSimpleType(simpleType: ArExpr): TType = wrapType(simpleType)
+  final def fromSimpleType(simpleType: ArExpr[context.type, TTypeWrapper]): TType = wrapType(simpleType)
 
   def wrapType[A](a: A): TTypeWrapper[A]
   def unwrapType[A](t: TTypeWrapper[A]): Option[A]
@@ -40,6 +44,8 @@ trait TypeSystem[TContext <: Context with Singleton] {
   def traverseTypeWrapper[A, B, F[_] : Applicative](t: TTypeWrapper[A])(f: A => F[B]): F[TTypeWrapper[B]]
   def flatTraverseTypeWrapper[A, B, F[_] : Applicative](t: TTypeWrapper[A])(f: A => F[TTypeWrapper[B]]): F[TTypeWrapper[B]] =
     traverseTypeWrapper(t)(f).map(flatMapTypeWrapper(_)(identity))
+
+  implicit val typeWrapperInstances: WrapperInstance[TTypeWrapper]
 
   def wrapExprType(expr: WrapExpr): Comp[TType]
 
@@ -54,114 +60,11 @@ trait TypeSystem[TContext <: Context with Singleton] {
   } yield res
 
 
-
-
-  sealed trait Variable {
-    val descriptor: VariableLikeDescriptor
-    val name: VariableName
-    val mutability: Mutability
-    val varType: TType
-  }
-
-  final case class LocalVariable(descriptor: VariableDescriptor, name: VariableName, mutability: Mutability, varType: TType) extends Variable
-  final case class ParameterVariable(descriptor: ParameterDescriptor, name: VariableName, mutability: Mutability, varType: TType) extends Variable
-  final case class FieldVariable(descriptor: FieldDescriptor, ownerClass: AbsRef[context.type, ArClass], name: VariableName.Normal, mutability: Mutability, varType: TType) extends Variable
-
-  final case class ParameterElement(paramVar: ParameterVariable, name: VariableName, elemType: TType, index: Int)
-  final case class Parameter(style: ParameterStyle, paramVar: ParameterVariable, elements: Vector[ParameterElement]) {
-    def paramType: TType = paramVar.varType
-  }
-
-
-  sealed trait ArExpr
-
-  final case class ClassConstructorCall(classType: ClassType, classCtor: AbsRef[context.type, ClassConstructor], args: Vector[WrapExpr]) extends ArExpr
-  final case class DataConstructorCall(dataCtorInstanceType: DataConstructorType, args: Vector[WrapExpr]) extends ArExpr
-  final case class EnsureExecuted(body: WrapExpr, ensuring: WrapExpr) extends ArExpr
-  final case class FunctionCall(function: AbsRef[context.type, ArFunc], args: Vector[WrapExpr], returnType: TType) extends ArExpr
-  final case class FunctionObjectCall(function: WrapExpr, arg: WrapExpr, returnType: TType) extends ArExpr
-  final case class IfElse(condition: WrapExpr, ifBody: WrapExpr, elseBody: WrapExpr) extends ArExpr
-  final case class LetBinding(variable: LocalVariable, value: WrapExpr, next: WrapExpr) extends ArExpr
-  final case class LoadConstantBool(value: Boolean, exprType: TType) extends ArExpr
-  final case class LoadConstantInt(value: BigInt, exprType: TType) extends ArExpr
-  final case class LoadConstantString(value: String, exprType: TType) extends ArExpr
-  final case class LoadLambda(argVariable: LocalVariable, body: WrapExpr) extends ArExpr
-  final case class TupleElement(value: WrapExpr)
-  final case class LoadTuple(values: NonEmptyList[TupleElement]) extends ArExpr
-  final case class LoadTupleElement(tupleValue: WrapExpr, elemType: TType, index: Int) extends ArExpr
-  final case class LoadUnit(exprType: TType) extends ArExpr
-  final case class LoadVariable(variable: Variable) extends ArExpr
-  final case class MethodCall(method: AbsRef[context.type, ArMethod], instance: WrapExpr, args: Vector[WrapExpr], returnType: TType) extends ArExpr
-
-
-  sealed trait PatternExpr
-  object PatternExpr {
-    final case class DataDeconstructor(ctor: AbsRef[context.type, DataConstructor], args: Vector[PatternExpr]) extends PatternExpr
-    final case class Binding(variable: LocalVariable) extends PatternExpr
-    final case class CastBinding(variable: LocalVariable) extends PatternExpr
-  }
-
-  final case class PatternCase(pattern: PatternExpr, body: WrapExpr)
-
-  final case class PatternMatch(expr: WrapExpr, cases: NonEmptyList[PatternCase]) extends ArExpr
-
-  final case class PrimitiveOp(operation: PrimitiveOperation, left: WrapExpr, right: WrapExpr, exprType: TType) extends ArExpr
-  final case class Sequence(first: WrapExpr, second: WrapExpr) extends ArExpr
-  final case class StoreVariable(variable: Variable, value: WrapExpr, exprType: TType) extends ArExpr
-
-  sealed trait TypeIsTypeOfTypeExpr extends ArExpr
-
-  sealed trait TypeWithMethods extends TypeIsTypeOfTypeExpr
-
-  sealed trait TypeArgument
-  object TypeArgument {
-    final case class Expr(expr: WrapExpr) extends TypeArgument
-    final case class Wildcard(universe: UniverseExpr) extends TypeArgument
-  }
-
-  final case class TypeOfType(inner: TType) extends TypeIsTypeOfTypeExpr
-  final case class TypeN(universe: UniverseExpr, subtypeConstraint: Option[TType], supertypeConstraint: Option[TType]) extends TypeIsTypeOfTypeExpr
-
-  final case class TraitType(arTrait: WrapRef[ArTrait], args: Vector[TypeArgument]) extends TypeWithMethods
-  final case class ClassType(arClass: WrapRef[ArClass], args: Vector[TypeArgument]) extends TypeWithMethods
-  final case class DataConstructorType(ctor: WrapRef[DataConstructor], args: Vector[TypeArgument], instanceType: TraitType) extends TypeWithMethods
-
-  final case class FunctionType(argumentType: TType, resultType: TType) extends TypeIsTypeOfTypeExpr
-  final case class UnionType(first: TType, second: TType) extends TypeIsTypeOfTypeExpr
-  final case class IntersectionType(first: TType, second: TType) extends TypeIsTypeOfTypeExpr
-
-
-  final case class BaseTypeInfoTrait(baseTraits: Vector[TraitType])
-  final case class BaseTypeInfoClass(baseClass: Option[ClassType], baseTraits: Vector[TraitType])
-
-
-  sealed trait ClassConstructorStatement
-  final case class ClassConstructorStatementExpr(expr: ArExpr) extends ClassConstructorStatement
-  final case class InitializeFieldStatement(field: FieldVariable, value: ArExpr) extends ClassConstructorStatement
-
-  final case class ClassConstructorBody
-  (
-    initStatements: Vector[ClassConstructorStatement],
-    baseConstructorCall: Option[ClassConstructorCall],
-    endExpr: ArExpr,
-  )
-
-
-  sealed trait UniverseExpr
-  final case class FixedUniverse(u: BigInt) extends UniverseExpr
-  final case class AbstractUniverse() extends UniverseExpr
-  final case class LargestUniverse(a: UniverseExpr, b: UniverseExpr) extends UniverseExpr
-  final case class NextLargestUniverse(a: UniverseExpr) extends UniverseExpr
-  final case class PreviousUniverse(a: UniverseExpr) extends UniverseExpr
-
-
-
-
-  protected final def isSimpleSubType(a: ArExpr, b: ArExpr): Comp[Option[TSubTypeInfo]] = {
+  protected final def isSimpleSubType(a: ArExpr[context.type, TTypeWrapper], b: ArExpr[context.type, TTypeWrapper]): Comp[Option[TSubTypeInfo]] = {
 
     val notSubType = Option.empty[TSubTypeInfo].pure[Comp]
 
-    def compareTypeArg(a: TypeArgument, b: TypeArgument): Comp[Option[Vector[TSubTypeInfo]]] = {
+    def compareTypeArg(a: TypeArgument[context.type, TTypeWrapper], b: TypeArgument[context.type, TTypeWrapper]): Comp[Option[Vector[TSubTypeInfo]]] = {
       def fromIsSame(b: Boolean): Comp[Option[Vector[TSubTypeInfo]]] =
         if(b)
           Some(Vector.empty).upcast[Option[Vector[TSubTypeInfo]]].pure[Comp]
@@ -189,7 +92,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
             case (Some(LoadLambda(aVar, aBody)), Some(LoadLambda(bVar, bBody))) =>
               @SuppressWarnings(Array("org.wartremover.warts.Equals"))
-              def isSameLambda = aBody == Substitutions(this)(bVar, fromSimpleType(LoadVariable(aVar))).substWrapExpr(bBody)
+              def isSameLambda = aBody == Substitutions(context)(bVar, fromSimpleType(LoadVariable(aVar))).substWrapExpr(bBody)
               fromIsSame(isSameLambda)
 
             case _ =>
@@ -203,7 +106,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
       }
     }
 
-    def compareArguments(aType: TType, bType: TType)(a: Vector[TypeArgument])(b: Vector[TypeArgument]): Comp[Option[TSubTypeInfo]] =
+    def compareArguments(aType: TType, bType: TType)(a: Vector[TTypeArgument])(b: Vector[TTypeArgument]): Comp[Option[TSubTypeInfo]] =
       if(a.size === b.size)
         a.zip(b)
           .traverse { case (aArg, bArg) => OptionT(compareTypeArg(aArg, bArg)) }
@@ -212,31 +115,31 @@ trait TypeSystem[TContext <: Context with Singleton] {
       else
         notSubType
 
-    def isSubTrait(a: TraitType)(b: TraitType): Comp[Option[TSubTypeInfo]] =
+    def isSubTrait(a: TTraitType)(b: TTraitType): Comp[Option[TSubTypeInfo]] =
       if(a.arTrait.value.descriptor === b.arTrait.value.descriptor)
         compareArguments(fromSimpleType(a), fromSimpleType(b))(a.args)(b.args)
       else
         for {
           sig <- b.arTrait.value.signature
-          resultInfo <- liftSignatureResult(sig, b.args)
+          resultInfo <- SignatureContext.liftSignatureResult(context)(sig, b.args)
           baseTypes <- resultInfo.baseTypes
           result <- baseTypes.baseTraits.collectFirstSomeM(isSubTrait(a))
         } yield result
 
-    def isSubClass(a: ClassType)(b: ClassType): Comp[Option[TSubTypeInfo]] =
+    def isSubClass(a: TClassType)(b: TClassType): Comp[Option[TSubTypeInfo]] =
       if(a.arClass.value.descriptor === b.arClass.value.descriptor)
         compareArguments(fromSimpleType(a), fromSimpleType(b))(a.args)(b.args)
       else
         for {
           sig <- b.arClass.value.signature
-          resultInfo <- liftSignatureResult(sig, b.args)
+          resultInfo <- SignatureContext.liftSignatureResult(context)(sig, b.args)
           baseTypes <- resultInfo.baseTypes
           result <- baseTypes.baseClass.collectFirstSomeM(isSubClass(a))
         } yield result
 
-    def classImplementsTrait(a: TraitType)(b: ClassType): Comp[Option[TSubTypeInfo]] = for {
+    def classImplementsTrait(a: TTraitType)(b: TClassType): Comp[Option[TSubTypeInfo]] = for {
       sig <- b.arClass.value.signature
-      resultInfo <- liftSignatureResult(sig, b.args)
+      resultInfo <- SignatureContext.liftSignatureResult(context)(sig, b.args)
       baseTypes <- resultInfo.baseTypes
       result <-
         Vector(
@@ -246,13 +149,13 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
     } yield result
 
-    def isSameDataCtor(a: DataConstructorType)(b: DataConstructorType): Comp[Option[TSubTypeInfo]] =
+    def isSameDataCtor(a: TDataConstructorType)(b: TDataConstructorType): Comp[Option[TSubTypeInfo]] =
       if(a.ctor.value.descriptor === b.ctor.value.descriptor)
         compareArguments(fromSimpleType(a), fromSimpleType(b))(a.args)(b.args)
       else
         Option.empty[TSubTypeInfo].pure[Comp]
 
-    def unMetaType(t: ArExpr): Vector[TType] =
+    def unMetaType(t: SimpleExpr): Vector[TType] =
       t match {
         case TypeOfType(inner) =>
           Vector(inner)
@@ -264,7 +167,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
           values
             .traverse {
               case TupleElement(value) =>
-                unMetaTypeWrapped(value).map(TupleElement)
+                unMetaTypeWrapped(value).map(TupleElement.apply)
             }
             .map { newValues => fromSimpleType(LoadTuple(newValues)) }
 
@@ -276,7 +179,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
 
     Vector(
       () => a match {
-        case a: IntersectionType =>
+        case a @ IntersectionType(_, _) =>
           isSubType(a.first, fromSimpleType(b)).flatMap {
             case Some(left) =>
               isSubType(a.second, fromSimpleType(b)).map { _.map { right =>
@@ -288,7 +191,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case _ => notSubType
       },
       () => b match {
-        case b: UnionType =>
+        case b @ UnionType(_, _) =>
           isSubType(fromSimpleType(a), b.first).flatMap {
             case Some(left) =>
               isSubType(fromSimpleType(a), b.second).map { _.map { right =>
@@ -301,7 +204,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case _ => notSubType
       },
       () => b match {
-        case b: IntersectionType =>
+        case b @ IntersectionType(_, _) =>
           Vector(
             () => isSubType(fromSimpleType(a), b.first),
             () => isSubType(fromSimpleType(a), b.second),
@@ -312,7 +215,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case _ => notSubType
       },
       () => a match {
-        case a: UnionType =>
+        case a @ UnionType(_, _) =>
           Vector(
             () => isSubType(a.first, fromSimpleType(b)),
             () => isSubType(a.second, fromSimpleType(b)),
@@ -333,19 +236,19 @@ trait TypeSystem[TContext <: Context with Singleton] {
       },
       () => (a, b) match {
 
-        case (aTrait: TraitType, bTrait: TraitType) => isSubTrait(aTrait)(bTrait)
-        case (aClass: ClassType, bClass: ClassType) => isSubClass(aClass)(bClass)
-        case (aTrait: TraitType, bClass: ClassType) => classImplementsTrait(aTrait)(bClass)
-        case (_: ClassType, _: TraitType) => notSubType
+        case (aTrait @ TraitType(_, _), bTrait @ TraitType(_, _)) => isSubTrait(aTrait)(bTrait)
+        case (aClass @ ClassType(_, _), bClass @ ClassType(_, _)) => isSubClass(aClass)(bClass)
+        case (aTrait @ TraitType(_, _), bClass @ ClassType(_, _)) => classImplementsTrait(aTrait)(bClass)
+        case (ClassType(_, _), TraitType(_, _)) => notSubType
 
-        case (aDataCtor: DataConstructorType, bDataCtor: DataConstructorType) =>
+        case (aDataCtor @ DataConstructorType(_, _, _), bDataCtor @ DataConstructorType(_, _, _)) =>
           isSameDataCtor(aDataCtor)(bDataCtor)
 
-        case (aTrait: TraitType, bDataCtor: DataConstructorType) =>
+        case (aTrait @ TraitType(_, _), bDataCtor @ DataConstructorType(_, _, _)) =>
           isSubTrait(aTrait)(bDataCtor.instanceType)
 
 
-        case (aTuple: LoadTuple, bTuple: LoadTuple) =>
+        case (aTuple @ LoadTuple(_), bTuple @ LoadTuple(_)) =>
           if(aTuple.values.size =!= bTuple.values.size)
             notSubType
           else
@@ -430,7 +333,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
         case (_, _) => notSubType
       },
       () => b match {
-        case _: TypeIsTypeOfTypeExpr | _: LoadTuple => notSubType
+        case _: TypeIsTypeOfTypeExpr[context.type, TTypeWrapper] | LoadTuple(_) => notSubType
         case _ =>
           def handleBType(bType: TType): Comp[Option[TSubTypeInfo]] =
             reduceWrapExprToValue(bType).flatMap { bType =>
@@ -461,7 +364,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
           getExprType(b, includeExtraTypeOfType = false).flatMap(handleBType)
       },
       () => a match {
-        case _: TypeIsTypeOfTypeExpr | _: LoadTuple => notSubType
+        case _: TypeIsTypeOfTypeExpr[context.type, TTypeWrapper] | LoadTuple(_) => notSubType
         case _ =>
           def handleAType(aType: TType): Comp[Option[TSubTypeInfo]] =
             reduceWrapExprToValue(aType).flatMap { aType =>
@@ -495,7 +398,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   }
 
 
-  final def reduceExprToValue(expr: ArExpr): Comp[WrapExpr] =
+  final def reduceExprToValue(expr: ArExpr[context.type, TTypeWrapper]): Comp[WrapExpr] =
     expr match {
       // Already reduced, has a constructor at the top level
       case ClassConstructorCall(_, _, _) | DataConstructorCall(_, _) |
@@ -506,7 +409,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
            LoadTuple(_) |
            LoadUnit(_) |
            LoadVariable(_) |
-           _: TypeIsTypeOfTypeExpr =>
+           _: TypeIsTypeOfTypeExpr[context.type, TTypeWrapper] =>
         fromSimpleType(expr).pure[Comp]
 
 
@@ -520,7 +423,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
             case Some(LoadLambda(argVariable, body)) =>
               for {
                 argValue <- reduceWrapExprToValue(arg)
-              } yield Substitutions(this)(argVariable, argValue).substWrapExpr(body)
+              } yield Substitutions(context)(argVariable, argValue).substWrapExpr(body)
 
             case _ => fromSimpleType(expr).pure[Comp]
           }
@@ -540,7 +443,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
   final def reduceWrapExprToValue(expr: WrapExpr): Comp[WrapExpr] =
     flatTraverseTypeWrapper(expr)(reduceExprToValue)
 
-  final def getExprType(expr: ArExpr, includeExtraTypeOfType: Boolean = true): Comp[TType] = {
+  final def getExprType(expr: ArExpr[context.type, TTypeWrapper], includeExtraTypeOfType: Boolean = true): Comp[TType] = {
     def withTypeOfExpr(result: Comp[TType]): Comp[TType] =
       if(includeExtraTypeOfType)
         result.map { t => fromSimpleType(IntersectionType(t, fromSimpleType(TypeOfType(fromSimpleType(expr))))) }
@@ -568,7 +471,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
         } yield fromSimpleType(FunctionType(argVariable.varType, bodyType))
       case LoadTuple(values) =>
         values
-          .traverse { case TupleElement(elem) => wrapExprType(elem).map(TupleElement) }
+          .traverse { case TupleElement(elem) => wrapExprType(elem).map(TupleElement.apply) }
           .map { elems => fromSimpleType(LoadTuple(elems)) }
       case LoadTupleElement(_, elemType, _) => elemType.pure[Comp]
       case LoadUnit(exprType) => exprType.pure[Comp]
@@ -581,7 +484,7 @@ trait TypeSystem[TContext <: Context with Singleton] {
       case PrimitiveOp(_, _, _, exprType) => exprType.pure[Comp]
       case Sequence(_, second) => getWrapExprType(second)
       case StoreVariable(_, _, exprType) => exprType.pure[Comp]
-      case expr: TypeIsTypeOfTypeExpr => fromSimpleType(TypeOfType(fromSimpleType(expr))).pure[Comp]
+      case expr: TypeIsTypeOfTypeExpr[context.type, TTypeWrapper] => fromSimpleType(TypeOfType(fromSimpleType(expr))).pure[Comp]
     }
   }
 
@@ -591,8 +494,8 @@ trait TypeSystem[TContext <: Context with Singleton] {
       case None => fromSimpleType(TypeOfType(expr)).pure[Comp]
     }
 
-  def universeOfExpr(expr: ArExpr): Comp[UniverseExpr] = {
-    def universeOfTypeArgs(args: Vector[TypeArgument]): Comp[UniverseExpr] =
+  def universeOfExpr(expr: ArExpr[context.type, TTypeWrapper]): Comp[UniverseExpr] = {
+    def universeOfTypeArgs(args: Vector[TypeArgument[context.type, TTypeWrapper]]): Comp[UniverseExpr] =
       args
         .traverse {
           case TypeArgument.Expr(expr) => universeOfWrapExpr(expr)
@@ -724,13 +627,6 @@ trait TypeSystem[TContext <: Context with Singleton] {
 }
 
 object TypeSystem {
-
-  sealed trait PrimitiveOperation
-  object PrimitiveOperation {
-    case object AddInt extends PrimitiveOperation
-    case object SubInt extends PrimitiveOperation
-    case object MulInt extends PrimitiveOperation
-    case object IntEqual extends PrimitiveOperation
-  }
-
+  type Aux[TContext <: Context with Singleton] = TypeSystem { val context: TContext }
+  type Aux2[TContext <: Context with Singleton, Wrap[+_]] = TypeSystem { val context: TContext; type TTypeWrapper[+A] = Wrap[A] }
 }

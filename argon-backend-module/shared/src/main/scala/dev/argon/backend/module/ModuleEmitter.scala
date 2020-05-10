@@ -9,8 +9,10 @@ import cats._
 import cats.data._
 import cats.evidence.===
 import cats.implicits._
+import dev.argon.compiler.expr.ArExpr._
+import dev.argon.compiler.expr._
 import dev.argon.loaders.armodule.{ModuleFormatVersion, ModulePaths}
-import dev.argon.compiler.types.{ParameterStyle, TypeSystem}
+import dev.argon.compiler.types.TypeSystem
 import dev.argon.util.FileID
 import dev.argon.module
 import dev.argon.stream.builder.{GenEffect, Sink, Source}
@@ -349,10 +351,10 @@ final class ModuleEmitter[TContext <: ModuleContext with Singleton](val context:
       getObjIdInt(descriptor)(lens[ModuleIds].nextClassCtorId, lens[ModuleIds].classCtorIds)
 
 
-    def convertSignature[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], A]
+    def convertSignature[TResult[_ <: Context with Singleton, Wrap[+_]], A]
     (armodule: ArModule[context.type, DeclarationPayloadSpecifier])
     (sig: Signature[TResult, _ <: Nat])
-    (f: (Vector[module.Parameter], TResult[context.type, context.typeSystem.type]) => Emit[A])
+    (f: (Vector[module.Parameter], TResult[context.type, context.typeSystem.TTypeWrapper]) => Emit[A])
     : Emit[A] = {
 
       def impl[Len <: Nat](sig: Signature[TResult, Len], prevParams: Vector[module.Parameter]): Emit[A] =
@@ -387,37 +389,37 @@ final class ModuleEmitter[TContext <: ModuleContext with Singleton](val context:
       impl(sig, Vector.empty)
     }
 
-    def convertClassType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], classType: typeSystem.ClassType): Emit[module.ClassType] = for {
+    def convertClassType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], classType: typeSystem.TClassType): Emit[module.ClassType] = for {
       id <- getClassId(armodule, classType.arClass.value.descriptor)
       args <- classType.args.traverse(convertTypeArg(armodule, _))
     } yield module.ClassType(id, args)
 
-    def convertTraitType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], traitType: typeSystem.TraitType): Emit[module.TraitType] = for {
+    def convertTraitType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], traitType: typeSystem.TTraitType): Emit[module.TraitType] = for {
       id <- getTraitId(armodule, traitType.arTrait.value.descriptor)
       args <- traitType.args.traverse(convertTypeArg(armodule, _))
     } yield module.TraitType(id, args)
 
-    def convertDataCtorType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], dataCtorType: typeSystem.DataConstructorType): Emit[module.DataConstructorType] = for {
+    def convertDataCtorType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], dataCtorType: typeSystem.TDataConstructorType): Emit[module.DataConstructorType] = for {
       id <- getDataCtorId(armodule, dataCtorType.ctor.value.descriptor)
       args <- dataCtorType.args.traverse(convertTypeArg(armodule, _))
     } yield module.DataConstructorType(id, args)
 
-    def convertType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.ArExpr): Emit[module.Type] =
+    def convertType(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.SimpleExpr): Emit[module.Type] =
       ((t match {
-        case t: typeSystem.ClassType => convertClassType(armodule, t).map(module.Type.TypeInfo.ClassType)
-        case t: typeSystem.TraitType => convertTraitType(armodule, t).map(module.Type.TypeInfo.TraitType)
-        case t: typeSystem.DataConstructorType => convertDataCtorType(armodule, t).map(module.Type.TypeInfo.DataConstructorType)
+        case t: typeSystem.TClassType => convertClassType(armodule, t).map(module.Type.TypeInfo.ClassType)
+        case t: typeSystem.TTraitType => convertTraitType(armodule, t).map(module.Type.TypeInfo.TraitType)
+        case t: typeSystem.TDataConstructorType => convertDataCtorType(armodule, t).map(module.Type.TypeInfo.DataConstructorType)
         case _ => ???
       }) : Emit[module.Type.TypeInfo])
         .map(module.Type(_))
 
-    def convertTypeArg(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.TypeArgument): Emit[module.TypeArg] =
+    def convertTypeArg(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.TTypeArgument): Emit[module.TypeArg] =
       t match {
-        case typeSystem.TypeArgument.Expr(t) =>
+        case TypeArgument.Expr(t) =>
           convertType(armodule, t)
             .map { modType => module.TypeArg(module.TypeArg.TypeInfo.Type(modType)) }
 
-        case typeSystem.TypeArgument.Wildcard(_) =>
+        case TypeArgument.Wildcard(_) =>
           module.TypeArg(module.TypeArg.TypeInfo.Wildcard(module.Wildcard())).pure[Emit]
       }
 

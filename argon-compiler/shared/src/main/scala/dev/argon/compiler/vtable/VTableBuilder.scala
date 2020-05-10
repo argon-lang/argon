@@ -4,6 +4,7 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import cats._
 import cats.implicits._
+import dev.argon.compiler.expr.ArExpr._
 import dev.argon.util.{MemoCache, MemoCacheStore}
 import shapeless.Nat
 import zio.interop.catz._
@@ -124,9 +125,9 @@ object VTableBuilder {
           .traverse { method => overrideMethod(method)(source)(baseTypeVTable) }
           .map { baseTypeVTable |+| _.combineAll }
 
-      private def findAllBaseClasses(baseClass: Option[ClassType]): Comp[Vector[AbsRef[context.type, ArClass]]] = {
+      private def findAllBaseClasses(baseClass: Option[TClassType]): Comp[Vector[AbsRef[context.type, ArClass]]] = {
 
-        def addClass(acc: Vector[AbsRef[context.type, ArClass]], baseClass: ClassType): Comp[Vector[AbsRef[context.type, ArClass]]] =
+        def addClass(acc: Vector[AbsRef[context.type, ArClass]], baseClass: TClassType): Comp[Vector[AbsRef[context.type, ArClass]]] =
           if(acc.exists { _.value.descriptor === baseClass.arClass.value.descriptor })
             acc.pure[Comp]
           else
@@ -139,9 +140,9 @@ object VTableBuilder {
         baseClass.foldLeftM(Vector.empty[AbsRef[context.type, ArClass]])(addClass(_, _))
       }
 
-      private def findAllBaseTraits(baseClasses: Vector[AbsRef[context.type, ArClass]], baseTraits: Vector[TraitType]): Comp[Vector[AbsRef[context.type, ArTrait]]] = {
+      private def findAllBaseTraits(baseClasses: Vector[AbsRef[context.type, ArClass]], baseTraits: Vector[TTraitType]): Comp[Vector[AbsRef[context.type, ArTrait]]] = {
 
-        def addTrait(acc: Vector[AbsRef[context.type, ArTrait]], baseTrait: TraitType): Comp[Vector[AbsRef[context.type, ArTrait]]] =
+        def addTrait(acc: Vector[AbsRef[context.type, ArTrait]], baseTrait: TTraitType): Comp[Vector[AbsRef[context.type, ArTrait]]] =
           if(acc.exists { _.value.descriptor === baseTrait.arTrait.value.descriptor })
             acc.pure[Comp]
           else
@@ -174,7 +175,7 @@ object VTableBuilder {
           case VTableEntry(_, _, VTableEntryAmbiguous(_)) => ???
         }
 
-      private def getBaseTraitVTable(bt: TraitType): Comp[VT] =
+      private def getBaseTraitVTable(bt: TTraitType): Comp[VT] =
         for {
           btSig <- bt.arTrait.value.signature
           baseTraitVTable <- fromTrait(bt.arTrait.value)

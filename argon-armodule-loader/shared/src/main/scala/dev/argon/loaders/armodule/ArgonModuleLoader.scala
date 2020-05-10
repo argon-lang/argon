@@ -8,15 +8,17 @@ import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, ModuleMetadata, Nam
 import dev.argon.compiler.types._
 import dev.argon.{module => ArgonModule}
 import dev.argon.util._
-import cats._
+import cats.{Id => _, _}
 import cats.evidence.{===, Is}
 import cats.data.NonEmptyList
 import cats.implicits._
 import dev.argon.backend.{ResourceAccess, ResourceReader}
+import dev.argon.compiler.expr._
+import dev.argon.compiler.expr.ArExpr._
 import dev.argon.module.Metadata
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import shapeless.ops.nat.{LT, Pred, ToInt}
-import shapeless.{Nat, Sized, Succ, _0}
+import shapeless.{Nat, Sized, Succ, _0, Id}
 import shapeless.syntax.sized._
 import zio.{IO, Managed, ZIO, ZManaged}
 import zio.interop.catz._
@@ -61,7 +63,7 @@ object ArgonModuleLoader {
     : Comp[ArModule[context.type, TPayloadSpec]] = {
 
       val context2: context.type = context
-      import context.{typeSystem, signatureContext}, typeSystem.{ context => _, _ }, signatureContext.{ context => _, typeSystem => _, _ }
+      import context.{typeSystem, signatureContext}, typeSystem.{ context => _, _ }, signatureContext.{ context => _, TTypeWrapper => _, typeWrapperInstances => _, _ }
 
       val currentModuleDescriptor = ModuleDescriptor(metadata.name)
 
@@ -408,7 +410,7 @@ object ArgonModuleLoader {
                             parametersResolved <- parameters.zipWithIndex.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
 
                             result = SignatureResult[ArTrait.ResultInfo](
-                              ArTrait.ResultInfo(typeSystem)(BaseTypeInfoTrait(baseTraitsResolved).pure[Comp])
+                              ArTrait.ResultInfo(BaseTypeInfoTrait(baseTraitsResolved).pure[Comp])
                             )
 
                           } yield parametersResolved.foldRight[Signature[ArTrait.ResultInfo, _ <: Nat]](result) {
@@ -483,7 +485,7 @@ object ArgonModuleLoader {
                             parametersResolved <- parameters.zipWithIndex.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
 
                             result = SignatureResult[ArClass.ResultInfo](
-                              ArClass.ResultInfo(typeSystem)(BaseTypeInfoClass(baseClassResolved, baseTraitsResolved).pure[Comp])
+                              ArClass.ResultInfo(BaseTypeInfoClass(baseClassResolved, baseTraitsResolved).pure[Comp])
                             )
 
                           } yield parametersResolved.foldRight[Signature[ArClass.ResultInfo, _ <: Nat]](result) {
@@ -492,11 +494,11 @@ object ArgonModuleLoader {
                           }
                       }
 
-                    override val fields: Comp[Vector[FieldVariable]] =
+                    override val fields: Comp[Vector[FieldVariable[context.type, Id]]] =
                       definition.fields.traverse { field =>
                         for {
                           fieldType <- resolveType(field.fieldType)
-                        } yield FieldVariable(
+                        } yield FieldVariable[context.type, Id](
                           FieldDescriptor(descriptor, field.name),
                           AbsRef(this),
                           VariableName.Normal(field.name),
@@ -615,7 +617,7 @@ object ArgonModuleLoader {
                             parametersResolved <- parameters.zipWithIndex.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
 
                             result = SignatureResult[FunctionResultInfo](
-                              FunctionResultInfo(typeSystem)(returnTypeResolved)
+                              FunctionResultInfo[context.type, Id](returnTypeResolved)
                             )
 
                           } yield parametersResolved.foldRight[Signature[FunctionResultInfo, _ <: Nat]](result) {
@@ -763,7 +765,7 @@ object ArgonModuleLoader {
                             parametersResolved <- parameters.zipWithIndex.toVector.traverse { case (param, index) => resolveParameter(descriptor)(index)(param) }
 
                             result = SignatureResult[FunctionResultInfo](
-                              FunctionResultInfo(typeSystem)(returnTypeResolved)
+                              FunctionResultInfo[context.type, Id](returnTypeResolved)
                             )
 
                           } yield parametersResolved.foldRight[Signature[FunctionResultInfo, _ <: Nat]](result) {
@@ -947,9 +949,9 @@ object ArgonModuleLoader {
                 )
             }
 
-          def resolveSignatureTypeArgs[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton], Len <: Nat, T]
-          (sig: Signature[TResult, Len], args: Sized[Vector[ArgonModule.TypeArg], Len], convArgs: Vector[TypeArgument])
-          (f: (Vector[TypeArgument], TResult[context.type, context.typeSystem.type]) => T)
+          def resolveSignatureTypeArgs[TResult[TContext2 <: Context with Singleton, Wrap[+_]], Len <: Nat, T]
+          (sig: Signature[TResult, Len], args: Sized[Vector[ArgonModule.TypeArg], Len], convArgs: Vector[TTypeArgument])
+          (f: (Vector[TTypeArgument], TResult[context.type, Id]) => T)
           : Comp[T] =
             sig.visit(new SignatureVisitor[TResult, Len, Comp[T]] {
 
@@ -958,7 +960,7 @@ object ArgonModuleLoader {
                   case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Type(head), _) =>
                     resolveType(head).flatMap { argType =>
                       val nextSig = sigParams.next(argType)
-                      resolveSignatureTypeArgs(nextSig, args.tail, convArgs :+ TypeArgument.Expr(argType))(f)
+                      resolveSignatureTypeArgs(nextSig, args.tail, convArgs :+ TypeArgument.Expr[context.type, Id](argType))(f)
                     }
 
                   case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Wildcard(ArgonModule.Wildcard(_)), _) =>
@@ -972,13 +974,13 @@ object ArgonModuleLoader {
                 f(convArgs, sigResult.result).pure[Comp]
             })
 
-          def resolveTraitType(traitType: ArgonModule.TraitType): Comp[TraitType] =
+          def resolveTraitType(traitType: ArgonModule.TraitType): Comp[TTraitType] =
             findTrait(traitType.traitId).flatMap { arTrait =>
               arTrait.value.signature.flatMap {
                 case sig: Signature[ArTrait.ResultInfo, len] =>
                   traitType.typeArguments.sized((sig : Signature[ArTrait.ResultInfo, len]).parameterCountToInt) match {
                     case Some(typeArgs) =>
-                      resolveSignatureTypeArgs[ArTrait.ResultInfo, len, TraitType](sig, typeArgs, Vector.empty) {
+                      resolveSignatureTypeArgs[ArTrait.ResultInfo, len, TTraitType](sig, typeArgs, Vector.empty) {
                         (args, result) => TraitType(arTrait, args)
                       }
 
@@ -987,13 +989,13 @@ object ArgonModuleLoader {
               }
             }
 
-          def resolveClassType(classType: ArgonModule.ClassType): Comp[ClassType] =
+          def resolveClassType(classType: ArgonModule.ClassType): Comp[TClassType] =
             findClass(classType.classId).flatMap { arClass =>
               arClass.value.signature.flatMap {
                 case sig: Signature[ArClass.ResultInfo, len] =>
                   classType.typeArguments.sized((sig : Signature[ArClass.ResultInfo, len]).parameterCountToInt) match {
                     case Some(typeArgs) =>
-                      resolveSignatureTypeArgs[ArClass.ResultInfo, len, ClassType](sig, typeArgs, Vector.empty) {
+                      resolveSignatureTypeArgs[ArClass.ResultInfo, len, TClassType](sig, typeArgs, Vector.empty) {
                         (args, result) => ClassType(arClass, args)
                       }
 
@@ -1010,7 +1012,7 @@ object ArgonModuleLoader {
               case ArgonModule.Type.TypeInfo.Empty => ???
             }
 
-          def resolveParameter(ownerDescriptor: ParameterOwnerDescriptor)(index: Int)(parameter: ArgonModule.Parameter): Comp[Parameter] = {
+          def resolveParameter(ownerDescriptor: ParameterOwnerDescriptor)(index: Int)(parameter: ArgonModule.Parameter): Comp[Parameter[context.type, Id]] = {
             val parameterStyle =
               parameter.style match {
                 case Some(ArgonModule.ParameterStyle.Normal) | None => ParameterStyle.Normal
@@ -1033,27 +1035,27 @@ object ArgonModuleLoader {
                       CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
                     )(currentModule)(referencedModules)
 
-                  } yield Parameter(
+                  } yield Parameter[context.type, Id](
                     parameterStyle,
-                    ParameterVariable(ParameterDescriptor(ownerDescriptor, index), VariableName.Unnamed, Mutability.NonMutable, unitType),
+                    ParameterVariable[context.type, Id](ParameterDescriptor(ownerDescriptor, index), VariableName.Unnamed, Mutability.NonMutable, unitType),
                     Vector()
                   )
 
                 case Vector((t, varName)) =>
                   Parameter(
                     parameterStyle,
-                    ParameterVariable(ParameterDescriptor(ownerDescriptor, index), varName, Mutability.NonMutable, t),
+                    ParameterVariable[context.type, Id](ParameterDescriptor(ownerDescriptor, index), varName, Mutability.NonMutable, t),
                     Vector()
                   ).pure[Comp]
 
                 case elems @ head +: tail =>
 
-                  val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTuple(
-                    NonEmptyList(head, tail.toList).map { case (t, _) => context.typeSystem.TupleElement(t) }
+                  val paramType = context.typeSystem.fromSimpleType(LoadTuple(
+                    NonEmptyList(head, tail.toList).map { case (t, _) => TupleElement[context.type, Id](t) }
                   ))
 
-                  val paramVar = ParameterVariable(ParameterDescriptor(ownerDescriptor, index), VariableName.Unnamed, Mutability.NonMutable, paramType)
-                  val paramElems = elems.zipWithIndex.map { case ((t, name), elemIndex) => ParameterElement(paramVar, name, t, elemIndex) }
+                  val paramVar = ParameterVariable[context.type, Id](ParameterDescriptor(ownerDescriptor, index), VariableName.Unnamed, Mutability.NonMutable, paramType)
+                  val paramElems = elems.zipWithIndex.map { case ((t, name), elemIndex) => ParameterElement[context.type, Id](paramVar, name, t, elemIndex) }
 
                   Parameter(parameterStyle, paramVar, paramElems).pure[Comp]
               }

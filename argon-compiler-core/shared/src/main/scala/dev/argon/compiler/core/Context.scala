@@ -9,6 +9,8 @@ import cats._
 import cats.data.NonEmptyList
 import cats.evidence.{===, Is}
 import cats.implicits._
+import dev.argon.compiler.expr.ArExpr.TypeArgument
+import dev.argon.compiler.expr.{ClassConstructorBody, UniverseExpr, WrapperInstance}
 import shapeless.Nat
 import zio._
 
@@ -29,23 +31,20 @@ trait Context {
 
   type BackendOptions
 
-  def createExprFunctionImplementation(expr: typeSystem.ArExpr): TFunctionImplementation
-  def createExprMethodImplementation(expr: typeSystem.ArExpr): TMethodImplementation
+  def createExprFunctionImplementation(expr: typeSystem.SimpleExpr): TFunctionImplementation
+  def createExprMethodImplementation(expr: typeSystem.SimpleExpr): TMethodImplementation
   def abstractMethodImplementation: TMethodImplementation
-  def createClassConstructorBodyImplementation(body: typeSystem.ClassConstructorBody): TClassConstructorImplementation
-  def createDataConstructorImplementation(body: typeSystem.ArExpr): TDataConstructorImplementation
+  def createClassConstructorBodyImplementation(body: ClassConstructorBody[this.type]): TClassConstructorImplementation
+  def createDataConstructorImplementation(body: typeSystem.SimpleExpr): TDataConstructorImplementation
 
   def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[TFunctionImplementation]
   def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[TMethodImplementation]
 
-  object ContextTypeSystem extends TypeSystem[this.type] {
+  object ContextTypeSystem extends TypeSystem {
     override val context: Context.this.type = Context.this
-    override val contextProof: Context.this.type === this.context.type = Is.refl
 
     override type TTypeWrapper[+A] = A
-
-    override def liftSignatureResult[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](sig: context.signatureContext.Signature[TResult, _ <: Nat], args: Vector[TypeArgument]): Comp[TResult[Context.this.type, ContextTypeSystem.type]] =
-      sig.substituteTypeArguments(sig.unsubstitutedParameters)(args).map { _.unsubstitutedResult }
+    override val typeWrapperInstances: WrapperInstance[Id] = implicitly
 
     final override def wrapType[A](a: A): A = a
 
@@ -78,8 +77,9 @@ trait Context {
   }
 
   object ContextSignatureContext extends SignatureContext {
-    override val context: Context.this.type = Context.this
-    override lazy val typeSystem: Context.this.typeSystem.type = Context.this.typeSystem
+    override lazy val context: Context.this.type = Context.this
+    override type TTypeWrapper[+A] = A
+    override val typeWrapperInstances: WrapperInstance[Id] = implicitly
   }
 
   final lazy val signatureContext: ContextSignatureContext.type = ContextSignatureContext

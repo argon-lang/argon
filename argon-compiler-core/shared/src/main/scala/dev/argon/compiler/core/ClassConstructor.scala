@@ -4,6 +4,7 @@ import dev.argon.compiler._
 import dev.argon.compiler.types._
 import cats._
 import cats.implicits._
+import dev.argon.compiler.expr.ArExpr.ClassType
 import dev.argon.util.FileID
 import shapeless.Nat
 import zio.IO
@@ -22,12 +23,12 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
 
   final def signature
   (newSigContext: SignatureContext.Aux[context.type])
-  (instanceType: newSigContext.typeSystem.ClassType)
+  (instanceType: ClassType[context.type, newSigContext.TTypeWrapper])
   : Comp[newSigContext.Signature[ClassConstructor.ResultInfo, _]] =
     for {
       sig <- signatureUnsubstituted
+      converter = ArTypeSystemConverter(context)(newSigContext.typeWrapperInstances)
       ownerSigUnConv <- ownerClass.signature
-      converter = ArTypeSystemConverter(context)(newSigContext.typeSystem)
       ownerSig <- ownerSigUnConv.convertTypeSystem(newSigContext)(converter)
       convSig <- sig.convertTypeSystem(newSigContext)(converter)
       newSig <- convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instanceType.args)
@@ -40,33 +41,31 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
 
 object ClassConstructor {
 
-  final case class ResultInfo[TContext <: Context with Singleton, TS <: TypeSystem[TContext] with Singleton]()
+  final case class ResultInfo[TContext <: Context with Singleton, Wrap[+_]]()
 
   object ResultInfo {
 
     implicit val sigResConverterInstance: SignatureResultConverter[ResultInfo] = new SignatureResultConverter[ResultInfo] {
 
-      override def convertTypeSystem
+      override def convertTypeSystem[Wrap1[+_], Wrap2[+_]]
       (context: Context)
-      (ts1: TypeSystem[context.type])
-      (ts2: TypeSystem[context.type])
-      (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type])
-      (result: ResultInfo[context.type, ts1.type])
-      : Comp[ResultInfo[context.type, ts2.type]] =
-        IO.succeed(ResultInfo[context.type, ts2.type]())
+      (converter: TypeSystemConverter.Aux[context.type, Wrap1, Wrap2])
+      (result: ResultInfo[context.type, Wrap1])
+      : Comp[ResultInfo[context.type, Wrap2]] =
+        IO.succeed(ResultInfo[context.type, Wrap2]())
 
       override def referencesParameter
       (signatureContext: SignatureContext)
       (refChecker: signatureContext.RefChecker)
-      (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
+      (result: ResultInfo[signatureContext.context.type, signatureContext.TTypeWrapper])
       : Comp[Boolean] =
         IO.succeed(false)
 
       override def substitute
       (signatureContext: SignatureContext)
       (subst: signatureContext.Subst)
-      (result: ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type])
-      : ResultInfo[signatureContext.context.type, signatureContext.typeSystem.type] =
+      (result: ResultInfo[signatureContext.context.type, signatureContext.TTypeWrapper])
+      : ResultInfo[signatureContext.context.type, signatureContext.TTypeWrapper] =
         ResultInfo()
     }
 

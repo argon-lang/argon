@@ -6,6 +6,7 @@ import dev.argon.compiler.lookup.{LookupNames, ModuleLookup}
 import dev.argon.util.NamespacePath
 import cats._
 import cats.implicits._
+import dev.argon.compiler.expr.ArExpr.ClassType
 
 object StandardTypeLoaders {
 
@@ -41,7 +42,7 @@ object StandardTypeLoaders {
       .flatMap { unitClass =>
         unitClass.value.signature
           .map { sig =>
-            context.typeSystem.fromSimpleType(context.typeSystem.ClassType(unitClass, Vector()))
+            context.typeSystem.fromSimpleType(ClassType(unitClass, Vector()))
           }
       }
   }

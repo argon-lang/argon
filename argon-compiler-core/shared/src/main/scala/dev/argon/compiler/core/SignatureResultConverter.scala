@@ -4,24 +4,22 @@ import dev.argon.compiler.types._
 import cats.Monad
 import dev.argon.compiler.Comp
 
-trait SignatureResultConverter[TResult[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton]] {
-  def convertTypeSystem
+trait SignatureResultConverter[TResult[TContext2 <: Context with Singleton, Wrap[+_]]] {
+  def convertTypeSystem[Wrap1[+_], Wrap2[+_]]
   (context: Context)
-  (ts1: TypeSystem[context.type])
-  (ts2: TypeSystem[context.type])
-  (converter: TypeSystemConverter.Aux[context.type, ts1.type, ts2.type])
-  (result: TResult[context.type, ts1.type])
-  : Comp[TResult[context.type, ts2.type]]
+  (converter: TypeSystemConverter.Aux[context.type, Wrap1, Wrap2])
+  (result: TResult[context.type, Wrap1])
+  : Comp[TResult[context.type, Wrap2]]
 
   def referencesParameter
   (signatureContext: SignatureContext)
   (refChecker: signatureContext.RefChecker)
-  (result: TResult[signatureContext.context.type, signatureContext.typeSystem.type])
+  (result: TResult[signatureContext.context.type, signatureContext.TTypeWrapper])
   : Comp[Boolean]
 
   def substitute
   (signatureContext: SignatureContext)
   (subst: signatureContext.Subst)
-  (result: TResult[signatureContext.context.type, signatureContext.typeSystem.type])
-  : TResult[signatureContext.context.type, signatureContext.typeSystem.type]
+  (result: TResult[signatureContext.context.type, signatureContext.TTypeWrapper])
+  : TResult[signatureContext.context.type, signatureContext.TTypeWrapper]
 }

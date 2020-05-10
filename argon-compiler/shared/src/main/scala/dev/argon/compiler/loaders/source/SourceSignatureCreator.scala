@@ -5,15 +5,17 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.types._
 import dev.argon.parser
 import dev.argon.util.WithSource
-import cats._
+import cats.{Id => _, _}
 import cats.data.NonEmptyList
 import cats.implicits._
-import shapeless.Nat
+import dev.argon.compiler.expr.ArExpr._
+import dev.argon.compiler.expr._
+import shapeless.{Id, Nat}
 import zio.interop.catz._
 
 object SourceSignatureCreator {
 
-  def fromParameters[TResult[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton] : SignatureResultConverter]
+  def fromParameters[TResult[TContext <: Context with Singleton, Wrap[+_]] : SignatureResultConverter]
   (context: Context)
   (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
   (paramOwner: ParameterOwnerDescriptor)
@@ -22,7 +24,6 @@ object SourceSignatureCreator {
   : Comp[context.signatureContext.Signature[TResult, _ <: Nat]] = {
 
     import context._
-    import typeSystem.{ ParameterElement, Parameter, ParameterVariable }
     import scopeContext.{ Scope, ScopeExtensions }
     import signatureContext.{ Signature, SignatureParameters, SignatureResult }
 
@@ -41,7 +42,7 @@ object SourceSignatureCreator {
                     SignatureParameters[TResult, len](
                       Parameter(
                         ParameterStyle.fromParser(listType),
-                        ParameterVariable(ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, unitType),
+                        ParameterVariable[context.type, Id](ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, unitType),
                         Vector()
                       ),
                       restSig
@@ -68,7 +69,7 @@ object SourceSignatureCreator {
             .flatMap {
               case NonEmptyList((t, name), Nil) =>
 
-                val paramVar = ParameterVariable(ParameterDescriptor(paramOwner, paramIndex), VariableName.Normal(name), Mutability.NonMutable, t)
+                val paramVar = ParameterVariable[context.type, Id](ParameterDescriptor(paramOwner, paramIndex), VariableName.Normal(name), Mutability.NonMutable, t)
 
                 impl(env.copy(scope = env.scope.addVariable(paramVar)))(tail)(paramIndex + 1)
                   .map {
@@ -77,7 +78,7 @@ object SourceSignatureCreator {
                         Parameter(
                           ParameterStyle.fromParser(listType),
                           paramVar,
-                          Vector(ParameterElement(paramVar, VariableName.Normal(name), t, 0))
+                          Vector(ParameterElement[context.type, Id](paramVar, VariableName.Normal(name), t, 0))
                         ),
                         restSig
                       )
@@ -85,13 +86,13 @@ object SourceSignatureCreator {
 
               case elems =>
 
-                val paramType = context.typeSystem.fromSimpleType(context.typeSystem.LoadTuple(
-                  elems.map { case (t, _) => context.typeSystem.TupleElement(t) }
+                val paramType = context.typeSystem.fromSimpleType(LoadTuple(
+                  elems.map { case (t, _) => TupleElement[context.type, Id](t) }
                 ))
 
-                val paramVar = ParameterVariable(ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, paramType)
+                val paramVar = ParameterVariable[context.type, Id](ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, paramType)
 
-                val paramElems = elems.toList.toVector.zipWithIndex.map { case ((t, name), i) => ParameterElement(paramVar, VariableName.Normal(name), t, i) }
+                val paramElems = elems.toList.toVector.zipWithIndex.map { case ((t, name), i) => ParameterElement[context.type, Id](paramVar, VariableName.Normal(name), t, i) }
 
                 val param = Parameter(ParameterStyle.fromParser(listType), paramVar, paramElems)
 
@@ -115,17 +116,17 @@ object SourceSignatureCreator {
     impl(env)(params)(0)
   }
 
-  trait ResultCreator[TResultInfo[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton]] {
+  trait ResultCreator[TResultInfo[TContext <: Context with Singleton, Wrap[+_]]] {
     val context: Context
 
     def createResult
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    : Comp[TResultInfo[context.type, context.typeSystem.type]]
+    : Comp[TResultInfo[context.type, context.typeSystem.TTypeWrapper]]
   }
 
   object ResultCreator {
 
-    type Aux[TContext <: Context with Singleton, TResultInfo[TContext <: Context with Singleton, _ <: TypeSystem[TContext] with Singleton]] =
+    type Aux[TContext <: Context with Singleton, TResultInfo[_ <: Context with Singleton, Wrap[+_]]] =
       ResultCreator[TResultInfo] {
         val context: TContext
       }

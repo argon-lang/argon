@@ -7,10 +7,12 @@ import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.parser.SourceAST
 import dev.argon.util._
-import cats._
+import cats.{Id => _, _}
 import cats.implicits._
 import PayloadSpecifiers._
+import dev.argon.compiler.expr.{Parameter, Variable}
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
+import shapeless.Id
 import zio._
 import zio.interop.catz._
 
@@ -76,10 +78,10 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           )
 
 
-        override def addVariables(context: context2.type)(variables: Vector[context.typeSystem.Variable]): EnvCreator[context2.type] =
+        override def addVariables(context: context2.type)(variables: Vector[Variable[context.type, Id]]): EnvCreator[context2.type] =
           new EnvCreatorInstance(envFileSpec, scope.addVariables(variables))
 
-        override def addParameters(context: context2.type)(params: Vector[context.typeSystem.Parameter]): EnvCreator[context2.type] =
+        override def addParameters(context: context2.type)(params: Vector[Parameter[context.type, Id]]): EnvCreator[context2.type] =
           new EnvCreatorInstance(envFileSpec, scope.addParameters(params))
 
         override val fileSpec: FileSpec = envFileSpec

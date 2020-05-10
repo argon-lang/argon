@@ -6,10 +6,10 @@ import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.util.{FileID, FileSpec, WithSource}
-import cats._
+import cats.{Id => _, _}
 import cats.implicits._
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
-import shapeless.Nat
+import shapeless.{Id, Nat}
 
 private[compiler] object SourceFunction {
 
@@ -57,11 +57,9 @@ private[compiler] object SourceFunction {
 
         override def createResult
         (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-        : Comp[FunctionResultInfo[context.type, context.typeSystem.type]] = {
-          import context._
+        : Comp[FunctionResultInfo[context.type, context.typeSystem.TTypeWrapper]] =
           ExpressionConverter.convertTypeExpression(context)(env)(returnTypeExpr)
-            .map { t => FunctionResultInfo(context.typeSystem)(t) }
-        }
+            .map { t => FunctionResultInfo[context.type, Id](t) }
       }
     }
 

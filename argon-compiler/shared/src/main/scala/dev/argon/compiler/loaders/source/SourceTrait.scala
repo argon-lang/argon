@@ -9,10 +9,12 @@ import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.parser.TraitDeclarationStmt
 import dev.argon.util.{FileID, SourceLocation, ValueCache, WithSource}
-import cats._
+import cats.{Id => _, _}
 import cats.implicits._
 import cats.evidence.Is
-import shapeless.Nat
+import dev.argon.compiler.expr.ArExpr._
+import dev.argon.compiler.expr.BaseTypeInfoTrait
+import shapeless.{Id, Nat}
 import zio.interop.catz._
 
 private[compiler] object SourceTrait extends AccessModifierHelpers {
@@ -37,7 +39,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
     
     for {
       sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[ArTrait.ResultInfo, _ <: Nat]]
-      sigResultCache <- ValueCache.make[ErrorList, context2.typeSystem.BaseTypeInfoTrait]
+      sigResultCache <- ValueCache.make[ErrorList, BaseTypeInfoTrait[context2.type, Id]]
 
       paramsEnvCache <- ValueCache.make[ErrorList, EnvCreator[context2.type]]
 
@@ -136,18 +138,18 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
   }
 
 
-  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[ErrorList, ctx.typeSystem.BaseTypeInfoTrait])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArTrait.ResultInfo] = new ResultCreator[ArTrait.ResultInfo] {
+  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[ErrorList, BaseTypeInfoTrait[ctx.type, Id]])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArTrait.ResultInfo] = new ResultCreator[ArTrait.ResultInfo] {
 
     override val context: ctx.type = ctx
 
     override def createResult
     (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-    : Comp[ArTrait.ResultInfo[context.type, context.typeSystem.type]] =
-      ArTrait.ResultInfo(context.typeSystem)(
+    : Comp[ArTrait.ResultInfo[context.type, context.typeSystem.TTypeWrapper]] =
+      ArTrait.ResultInfo(
         cache.get(baseTypeExpr match {
           case Some(baseTypeExpr) =>
             ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
-              .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(context.typeSystem.BaseTypeInfoTrait(Vector())))
+              .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(BaseTypeInfoTrait[context.type, Id](Vector())))
               .flatMap { baseTypes =>
                 val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
@@ -157,7 +159,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
                   .map { _ => baseTypes }
               }
           case None =>
-            context.typeSystem.BaseTypeInfoTrait(Vector()).pure[Comp]
+            BaseTypeInfoTrait[context.type, Id](Vector()).pure[Comp]
         })
       ).pure[Comp]
 
@@ -168,14 +170,14 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
   (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
   (t: context.typeSystem.TType)
   (location: SourceLocation)
-  (acc: context.typeSystem.BaseTypeInfoTrait)
-  : Comp[context.typeSystem.BaseTypeInfoTrait] = {
+  (acc: BaseTypeInfoTrait[context.type, Id])
+  : Comp[BaseTypeInfoTrait[context.type, Id]] = {
     import context._
     t match {
-      case t: context.typeSystem.TraitType =>
+      case t @ TraitType(_, _) =>
         acc.copy(baseTraits = acc.baseTraits :+ t).pure[Comp]
 
-      case context.typeSystem.IntersectionType(first, second) =>
+      case IntersectionType(first, second) =>
         typeToBaseTypes(context)(env)(first)(location)(acc).flatMap { acc2 =>
           typeToBaseTypes(context)(env)(second)(location)(acc2)
         }

@@ -7,10 +7,11 @@ import cats.data.NonEmptyList
 import shapeless.Id
 import dev.argon.compiler.core.PayloadSpecifiers._
 import dev.argon.compiler.core._
+import dev.argon.compiler.expr.ArExpr._
+import dev.argon.compiler.expr._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
-import dev.argon.compiler.types.TypeSystem.PrimitiveOperation
 import dev.argon.compiler.vtable._
 import zio.{IO, Ref, UIO, ZIO}
 import zio.interop.catz._
@@ -18,7 +19,7 @@ import zio.interop.catz._
 final class JSEmitter[TContext <: JSContext with Singleton] private(val context: TContext, inject: JSInjectCode[Id], localVariableIdMapping: Ref[Map[VariableOwnerDescriptor, Seq[VariableIdentifier]]]) {
 
   import context._
-  import context.signatureContext.{ context => _, typeSystem => _, _ }
+  import context.signatureContext.{ context => _, _ }
 
   private val moduleVarName = JSIdentifier("modules")
   private val traitsVarName = JSIdentifier("traits")
@@ -116,7 +117,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
         JSIdentifier(name)
       )
 
-  private def parameterVarMapping[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: Signature[TResult, _]): Map[VariableLikeDescriptor, JSIdentifier] =
+  private def parameterVarMapping[TResult[_ <: Context with Singleton, Wrap[+_]]](owner: ParameterOwnerDescriptor)(sig: Signature[TResult, _]): Map[VariableLikeDescriptor, JSIdentifier] =
     sig.unsubstitutedParameters.unsized.map { param =>
       val desc = param.paramVar.descriptor
       desc -> getParameterName(desc)
@@ -416,10 +417,10 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
 
     }
 
-  private def createBaseTraitObject[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]]
+  private def createBaseTraitObject[TResult[_ <: Context with Singleton, Wrap[+_]]]
   (ownerDescriptor: ParameterOwnerDescriptor)
   (ownerSig: Signature[TResult, _])
-  (baseTrait: typeSystem.TraitType)
+  (baseTrait: typeSystem.TTraitType)
   : Comp[JSExpression] =
     for {
       baseSig <- baseTrait.arTrait.value.signature
@@ -481,7 +482,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
 
           for {
             (initStmts, initVarMapping) <- body.initStatements.foldLeftM((Vector.empty[JSStatement], paramVarMapping)) {
-              case ((acc, varMapping), context.typeSystem.ClassConstructorStatementExpr(expr)) =>
+              case ((acc, varMapping), ClassConstructorStatementExpr(expr)) =>
                 for {
                   (newStmts, newMapping) <- StatementConverterLocalBinding.convertStmt(EmitParams(
                     owner = ctor.descriptor,
@@ -489,7 +490,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
                   ))(useReturn = false)(expr)
                 } yield (acc ++ newStmts, newMapping)
 
-              case ((acc, varMapping), context.typeSystem.InitializeFieldStatement(field, value)) =>
+              case ((acc, varMapping), InitializeFieldStatement(field, value)) =>
                 for {
                   varExpr <- getFieldVariableExpr(getParamOwnerModule(ctor.descriptor), field)
                   valueExpr <- convertExpr(EmitParams(
@@ -610,7 +611,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
     .map(JSArrayLiteral(_))
 
 
-  private def createExpressionImpl(params: EmitParams)(sig: context.signatureContext.Signature[FunctionResultInfo, _])(expr: context.typeSystem.ArExpr): Comp[JSExpression] =
+  private def createExpressionImpl(params: EmitParams)(sig: context.signatureContext.Signature[FunctionResultInfo, _])(expr: context.typeSystem.SimpleExpr): Comp[JSExpression] =
     for {
       body <- convertStmt(params)(useReturn = true)(expr)
     } yield JSFunctionExpression(
@@ -619,7 +620,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
       body
     )
 
-  def createParameterList[TResult[TContext2 <: Context with Singleton, _ <: TypeSystem[TContext2] with Singleton]](owner: ParameterOwnerDescriptor)(sig: context.signatureContext.Signature[TResult, _]): JSFunctionParameterList =
+  def createParameterList[TResult[_ <: Context with Singleton, Wrap[+_]]](owner: ParameterOwnerDescriptor)(sig: context.signatureContext.Signature[TResult, _]): JSFunctionParameterList =
     sig.unsubstitutedParameters.foldRight[JSFunctionParameterList](JSFunctionEmptyParameterList) { case (param, list) =>
       JSFunctionParameter(
         JSBindingIdentifier(getParameterName(param.paramVar.descriptor)),
@@ -629,22 +630,22 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
 
   private trait StatementConverter {
 
-    protected def initializeLetBinding(variable: context.typeSystem.LocalVariable, valueExpr: JSExpression): UIO[(Vector[JSStatement], JSExpression)]
+    protected def initializeLetBinding(variable: LocalVariable[context.type, Id], valueExpr: JSExpression): UIO[(Vector[JSStatement], JSExpression)]
 
-    final def wrapStatement(params: EmitParams)(expr: context.typeSystem.ArExpr): Comp[JSExpression] =
+    final def wrapStatement(params: EmitParams)(expr: context.typeSystem.SimpleExpr): Comp[JSExpression] =
       for {
         (stmts, _) <- convertStmt(params)(useReturn = true)(expr)
       } yield JSFunctionCall(JSArrowFunctionStmts(JSFunctionEmptyParameterList, stmts), Vector())
 
-    final def convertStmt(params: EmitParams)(useReturn: Boolean)(expr: context.typeSystem.ArExpr): Comp[(Vector[JSStatement], VarMap)] = expr match {
-      case context.typeSystem.LetBinding(variable, value, next) =>
+    final def convertStmt(params: EmitParams)(useReturn: Boolean)(expr: context.typeSystem.SimpleExpr): Comp[(Vector[JSStatement], VarMap)] = expr match {
+      case LetBinding(variable, value, next) =>
         for {
           valueExpr <- convertExpr(params)(value)
           (declStmts, varExpr) <- initializeLetBinding(variable, valueExpr)
           (nextStmts, endMapping) <- convertStmt(params.copy(varMapping = params.varMapping + (variable.descriptor -> varExpr)))(useReturn)(next)
         } yield (declStmts ++ nextStmts, endMapping)
 
-      case context.typeSystem.IfElse(condition, ifBody, elseBody) =>
+      case IfElse(condition, ifBody, elseBody) =>
         for {
           condExpr <- convertExpr(params)(condition)
           (ifBodyStmts, _) <- convertStmt(params)(useReturn)(ifBody)
@@ -657,7 +658,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
         } yield (Vector(JSIfElseStatement(accessNativeBool, ifBodyStmts, elseBodyStmts)), params.varMapping)
 
 
-      case context.typeSystem.Sequence(first, second) =>
+      case Sequence(first, second) =>
         for {
           convFirst <- wrapStatement(params)(first)
           (convSecond, endMapping) <- convertStmt(params)(useReturn)(second)
@@ -671,7 +672,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
   }
 
   private object StatementConverterLocalBinding extends StatementConverter {
-    override def initializeLetBinding(variable: context.typeSystem.LocalVariable, valueExpr: JSExpression): UIO[(Vector[JSStatement], JSExpression)] = for {
+    override def initializeLetBinding(variable: LocalVariable[context.type, Id], valueExpr: JSExpression): UIO[(Vector[JSStatement], JSExpression)] = for {
       varName <- getVariableName(variable.descriptor)
       decl = JSDeclareInit(JSBindingIdentifier(varName), valueExpr)
       declStmt = variable.mutability match {
@@ -681,13 +682,13 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
     } yield (Vector(declStmt), varName)
   }
 
-  def convertStmt(params: EmitParams)(useReturn: Boolean)(expr: context.typeSystem.ArExpr): Comp[Vector[JSStatement]] =
+  def convertStmt(params: EmitParams)(useReturn: Boolean)(expr: context.typeSystem.SimpleExpr): Comp[Vector[JSStatement]] =
     StatementConverterLocalBinding.convertStmt(params)(useReturn)(expr).map { case (convBody, _) => convBody }
 
   private trait StatementConverterFieldBinding extends StatementConverter {
     def fieldVarExpr(id: JSIdentifier): JSExpression
 
-    override protected final def initializeLetBinding(variable: context.typeSystem.LocalVariable, valueExpr: JSExpression): UIO[(Vector[JSStatement], JSExpression)] = for {
+    override protected final def initializeLetBinding(variable: LocalVariable[context.type, Id], valueExpr: JSExpression): UIO[(Vector[JSStatement], JSExpression)] = for {
       varName <- getVariableName(variable.descriptor)
       fieldExpr = fieldVarExpr(varName)
       assign = JSAssignment(fieldExpr, valueExpr)
@@ -714,7 +715,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
   }
 
 
-  def convertExpr(params: EmitParams)(expr: context.typeSystem.ArExpr): Comp[JSExpression] = {
+  def convertExpr(params: EmitParams)(expr: context.typeSystem.SimpleExpr): Comp[JSExpression] = {
     import context.typeSystem. { context => _, _ }
     expr match {
       case ClassConstructorCall(classType, ctor, args) =>
@@ -821,7 +822,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
       case LoadTuple(NonEmptyList(TupleElement(value), Nil)) =>
         convertExpr(params)(value)
 
-      case expr: LoadTuple =>
+      case expr @ LoadTuple(_) =>
         for {
           values <- expr.values.toList.toVector.traverse { elem => convertExpr(params)(elem.value) }
         } yield JSArrayLiteral(values)
@@ -850,7 +851,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
 
       case PatternMatch(expr, cases) =>
 
-        def convertPattern(params: EmitParams)(patternValue: JSExpression)(pattern: PatternExpr): Comp[(Vector[JSStatement] => Vector[JSStatement], EmitParams)] =
+        def convertPattern(params: EmitParams)(patternValue: JSExpression)(pattern: PatternExpr[context.type, Id]): Comp[(Vector[JSStatement] => Vector[JSStatement], EmitParams)] =
           pattern match {
             case PatternExpr.DataDeconstructor(ctor, args) =>  ???
             case PatternExpr.Binding(variable) =>
@@ -950,10 +951,10 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
     }
   }
 
-  def convertTypeArg(params: EmitParams)(arg: context.typeSystem.TypeArgument): Comp[JSExpression] =
+  def convertTypeArg(params: EmitParams)(arg: context.typeSystem.TTypeArgument): Comp[JSExpression] =
     arg match {
-      case context.typeSystem.TypeArgument.Expr(expr) => convertExpr(params)(expr)
-      case context.typeSystem.TypeArgument.Wildcard(_) => JSNull.pure[Comp]
+      case TypeArgument.Expr(expr) => convertExpr(params)(expr)
+      case TypeArgument.Wildcard(_) => JSNull.pure[Comp]
     }
 
   def getMethodObject(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): Comp[JSExpression] = for {
@@ -989,7 +990,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
     }
       .map { index => JSIdentifier(s"local_${index.toString}") }
 
-  private def getFieldVariableExpr(moduleDescriptor: ModuleDescriptor, variable: context.typeSystem.FieldVariable): Comp[JSExpression] = for {
+  private def getFieldVariableExpr(moduleDescriptor: ModuleDescriptor, variable: context.typeSystem.TFieldVariable): Comp[JSExpression] = for {
     sig <- variable.ownerClass.value.signature
     erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
   } yield JSPropertyAccessBracket(

@@ -1,25 +1,31 @@
 package dev.argon.compiler.types
 
 import dev.argon.compiler.core.Context
-import cats._
+import cats.{ Id => _, _ }
 import cats.implicits._
 import dev.argon.compiler.Comp
+import dev.argon.compiler.expr.{ArExpr, WrapperInstance}
 import zio.IO
+import shapeless.Id
 
 object ArTypeSystemConverter {
 
-  def apply
+  def apply[Wrap[+_]: WrapperInstance]
   (context2: Context)
-  (ts2_outer: TypeSystem[context2.type])
-  : TypeSystemConverter.Aux[context2.type, context2.typeSystem.type, ts2_outer.type] = {
+  : TypeSystemConverter.Aux[context2.type, context2.typeSystem.TTypeWrapper, Wrap] = {
     new TypeSystemConverter {
+      import context2.typeSystem.typeWrapperInstances
 
       override val context: context2.type = context2
-      override val ts: context.typeSystem.type = context.typeSystem
-      override val otherTS: ts2_outer.type = ts2_outer
+      override type FromWrap[+A] = context2.typeSystem.TTypeWrapper[A]
+      override type ToWrap[+A] = Wrap[A]
 
-      override protected def convertType[A](fromExpr: otherTS.ArExpr => A)(t: A): Comp[otherTS.TTypeWrapper[A]] =
-        IO.succeed(otherTS.wrapType(t))
+
+      override protected val fromWrapInstances: WrapperInstance[Id] = implicitly
+      override protected val toWrapInstances: WrapperInstance[Wrap] = implicitly
+
+      override protected def convertType[A](fromExpr: ArExpr[context.type, Id] => Comp[A])(t: A): Comp[Wrap[A]] =
+        IO.succeed(t.pure[Wrap])
     }
   }
 

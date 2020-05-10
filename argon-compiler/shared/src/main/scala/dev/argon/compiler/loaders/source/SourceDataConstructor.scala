@@ -33,7 +33,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
     for {
       sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[DataConstructor.ResultInfo, _ <: Nat]]
 
-      bodyStmtCache <- ValueCache.make[ErrorList, context2.typeSystem.ArExpr]
+      bodyStmtCache <- ValueCache.make[ErrorList, context2.typeSystem.SimpleExpr]
       bodyEnvCache <- ValueCache.make[ErrorList, EnvCreator[context2.type]]
 
       methodCache <- ValueCache.make[ErrorList, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
@@ -122,14 +122,14 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
 
         override def createResult
         (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-        : Comp[DataConstructor.ResultInfo[context.type, context.typeSystem.type]] =
+        : Comp[DataConstructor.ResultInfo[context.type, context.typeSystem.TTypeWrapper]] =
           ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
             .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location))
             .flatMap { baseTrait =>
               val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
               osCheck.checkExtendTrait[context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
-                .map { _ => DataConstructor.ResultInfo(context.typeSystem)(baseTrait) }
+                .map { _ => DataConstructor.ResultInfo(baseTrait) }
             }
 
         private def typeToBaseTypes
@@ -137,9 +137,9 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
         (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
         (t: context.typeSystem.TType)
         (location: SourceLocation)
-        : Comp[context.typeSystem.TraitType] =
+        : Comp[context.typeSystem.TTraitType] =
           t match {
-            case t: context.typeSystem.TraitType =>
+            case t: context.typeSystem.TTraitType =>
               IO.succeed(t)
 
             case _ =>
