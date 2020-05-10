@@ -1,47 +1,93 @@
 package dev.argon.compiler.types
 
+import cats._
+import cats.implicits._
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
 import zio.IO
+import zio.interop.catz._
 
 
-trait HoleTypeSystem extends TypeSystem {
+sealed trait HoleTypeSystem extends TypeSystem {
 
-  override type TTypeWrapper[+A] = HoleType[A]
+  val baseTypeSystem: TypeSystem
+  override lazy val context: baseTypeSystem.context.type = baseTypeSystem.context
 
-  override def unwrapType[A](t: HoleType[A]): Option[A] =
+  override type TTypeWrapper[+A] = HoleType[baseTypeSystem.TTypeWrapper[A]]
+
+  override implicit val typeWrapperInstances: WrapperInstance[TTypeWrapper] = new Traverse[TTypeWrapper] with Monad[TTypeWrapper] {
+    override def pure[A](x: A): HoleType[baseTypeSystem.TTypeWrapper[A]] =
+      HoleTypeType(baseTypeSystem.typeWrapperInstances.pure(x))
+
+    override def flatMap[A, B](fa: HoleType[baseTypeSystem.TTypeWrapper[A]])(f: A => HoleType[baseTypeSystem.TTypeWrapper[B]]): HoleType[baseTypeSystem.TTypeWrapper[B]] =
+      fa match {
+        case HoleTypeType(a) => baseTypeSystem.typeWrapperInstances.flatTraverse(a)(f)(implicitly, baseTypeSystem.typeWrapperInstances)
+        case HoleTypeHole(id) => HoleTypeHole(id)
+      }
+
+    override def tailRecM[A, B](a: A)(f: A => HoleType[baseTypeSystem.TTypeWrapper[Either[A, B]]]): HoleType[baseTypeSystem.TTypeWrapper[B]] =
+      f(a) match {
+        case HoleTypeType(innerEither) =>
+          baseTypeSystem.typeWrapperInstances.sequence(innerEither) match {
+            case Left(a) => tailRecM(a)(f)
+            case Right(b) => HoleTypeType(b)
+          }
+        case HoleTypeHole(id) => HoleTypeHole(id)
+      }
+
+    override def traverse[G[_]: Applicative, A, B](fa: HoleType[baseTypeSystem.TTypeWrapper[A]])(f: A => G[B]): G[HoleType[baseTypeSystem.TTypeWrapper[B]]] =
+      fa match {
+        case HoleTypeType(t) => baseTypeSystem.typeWrapperInstances.traverse(t)(f).map(HoleTypeType.apply)
+        case HoleTypeHole(id) => HoleTypeHole(id).pure[G].widen
+      }
+
+    override def foldLeft[A, B](fa: HoleType[baseTypeSystem.TTypeWrapper[A]], b: B)(f: (B, A) => B): B =
+      fa match {
+        case HoleTypeType(t) => baseTypeSystem.typeWrapperInstances.foldLeft(t, b)(f)
+        case HoleTypeHole(_) => b
+      }
+
+    override def foldRight[A, B](fa: HoleType[baseTypeSystem.TTypeWrapper[A]], lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] =
+      fa match {
+        case HoleTypeType(t) => baseTypeSystem.typeWrapperInstances.foldRight(t, lb)(f)
+        case HoleTypeHole(_) => lb
+      }
+  }
+
+  override def unwrapType[A](t: HoleType[baseTypeSystem.TTypeWrapper[A]]): Option[A] =
     t match {
-      case HoleTypeType(t) => Some(t)
+      case HoleTypeType(t) => baseTypeSystem.unwrapType(t)
       case HoleTypeHole(_) => None
     }
 
   override def wrapExprType(expr: WrapExpr): Comp[TType] =
-    expr match {
-      case HoleTypeType(t) => getExprType(t)
-      case HoleTypeHole(_) => IO.succeed(fromSimpleType(TypeOfType(expr)))
+    unwrapType(expr) match {
+      case Some(t) => getExprType(t)
+      case None => IO.succeed(fromSimpleType(TypeOfType[context.type, TTypeWrapper](expr)))
     }
 
-  override def isSubTypeWrapper(a: TType, b: TType): Comp[Option[SubTypeInfo[TType]]] =
+  override def isSubTypeWrapperImpl[A](a: HoleType[baseTypeSystem.TTypeWrapper[A]], b: HoleType[baseTypeSystem.TTypeWrapper[A]]): Comp[Either[(A, A), Option[SubTypeInfo[TTypeWrapper[A]]]]] =
     (a, b) match {
-      case (HoleTypeType(aInner), HoleTypeType(bInner)) => isSimpleSubType(aInner, bInner)
-      case (_, _) => IO.succeed(Some(SubTypeInfo(a, b, Vector.empty)))
+      case (HoleTypeType(aInner), HoleTypeType(bInner)) =>
+        baseTypeSystem.isSubTypeWrapperImpl(aInner, bInner).map { _.map { _.map { _.map(HoleTypeType[baseTypeSystem.TTypeWrapper[A]]) } } }
+
+      case (_, _) => IO.succeed(Right(Some(SubTypeInfo(a, b, Vector.empty))))
     }
 
-  override def universeOfWrapExpr(expr: WrapExpr): Comp[UniverseExpr] =
+  override def universeOfWrapExprImpl[A](expr: HoleType[baseTypeSystem.TTypeWrapper[A]]): Comp[Either[A, UniverseExpr]] =
     expr match {
-      case HoleTypeHole(_) => IO.succeed(AbstractUniverse())
-      case HoleTypeType(t) => universeOfExpr(t)
+      case HoleTypeHole(_) => IO.succeed(Right(AbstractUniverse()))
+      case HoleTypeType(t) => baseTypeSystem.universeOfWrapExprImpl(t)
     }
 
 }
 
 object HoleTypeSystem {
 
-  def apply(ctx: Context): HoleTypeSystem { val context: ctx.type } = new HoleTypeSystem {
-    override val context: ctx.type = ctx
-    override val typeWrapperInstances: WrapperInstance[HoleType] = implicitly
+  def apply(ts: TypeSystem): HoleTypeSystem { val baseTypeSystem: ts.type } = new HoleTypeSystem {
+    override val baseTypeSystem: ts.type = ts
   }
 
   def holeTypeConverter

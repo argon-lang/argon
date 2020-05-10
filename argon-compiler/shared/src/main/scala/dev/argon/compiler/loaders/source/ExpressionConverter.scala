@@ -1297,7 +1297,7 @@ object ExpressionConverter {
     val referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]]
   }
 
-  private def createConverter(ctx: Context)(ts: HoleTypeSystem { val context: ctx.type })
+  private def createConverter(ctx: Context)(ts: HoleTypeSystem { val baseTypeSystem: ctx.typeSystem.type })
   : UIO[ExpressionConverter[ctx.type] { val typeSystem: ts.type }] = for {
     state <- Ref.make(TypeCheckState.default[ts.TType])
   } yield new ExpressionConverter[ctx.type] {
@@ -1456,7 +1456,7 @@ object ExpressionConverter {
   (stmts: WithSource[Vector[WithSource[parser.Stmt]]])
   : Comp[ArExpr[context.type, Id]] = {
 
-    val ts = HoleTypeSystem(context)
+    val ts = HoleTypeSystem(context.typeSystem)
 
     for {
       converter <- createConverter(context)(ts)
@@ -1500,7 +1500,7 @@ object ExpressionConverter {
   (expr: WithSource[parser.Expr])
   : Comp[context.typeSystem.TType] = {
 
-    val ts = HoleTypeSystem(context)
+    val ts = HoleTypeSystem(context.typeSystem)
 
     for {
       converter <- createConverter(context)(ts)
@@ -1529,7 +1529,7 @@ object ExpressionConverter {
   (env: Env[context.type, context.scopeContext.Scope])
   (location: SourceLocation): Comp[context.typeSystem.TType] = {
 
-    val ts = HoleTypeSystem(context)
+    val ts = HoleTypeSystem(context.typeSystem)
 
     for {
       converter <- createConverter(context)(ts)
@@ -1554,7 +1554,7 @@ object ExpressionConverter {
 
   private def fillHoles
   (context2: Context)
-  (ts: HoleTypeSystem { val context: context2.type })
+  (ts: HoleTypeSystem { val baseTypeSystem: context2.typeSystem.type })
   (converter: ExpressionConverter[context2.type] { val typeSystem: ts.type })
   (expr: Comp[ts.WrapExpr])
   : Comp[context2.typeSystem.SimpleExpr] = {

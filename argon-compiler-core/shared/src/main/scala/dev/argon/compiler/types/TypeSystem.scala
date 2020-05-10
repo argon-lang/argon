@@ -11,6 +11,7 @@ import dev.argon.compiler.core.ErasedSignature.TupleType
 import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
 import shapeless.Nat
+import zio.IO
 import zio.interop.catz._
 
 import scala.collection.immutable.Vector
@@ -43,9 +44,21 @@ trait TypeSystem {
 
   def wrapExprType(expr: WrapExpr): Comp[TType]
 
-  def isSubTypeWrapper(a: TType, b: TType): Comp[Option[SubTypeInfo[TType]]]
+  def isSubTypeWrapper(a: TType, b: TType): Comp[Option[SubTypeInfo[TType]]] =
+    isSubTypeWrapperImpl(a, b).flatMap {
+      case Left((aInner, bInner)) => isSimpleSubType(aInner, bInner)
+      case Right(result) => IO.succeed(result)
+    }
 
-  def universeOfWrapExpr(expr: WrapExpr): Comp[UniverseExpr]
+  def isSubTypeWrapperImpl[A](a: TTypeWrapper[A], b: TTypeWrapper[A]): Comp[Either[(A, A), Option[SubTypeInfo[TTypeWrapper[A]]]]]
+
+  def universeOfWrapExpr(expr: WrapExpr): Comp[UniverseExpr] =
+    universeOfWrapExprImpl(expr).flatMap {
+      case Left(expr) => universeOfExpr(expr)
+      case Right(universe) => IO.succeed(universe)
+    }
+
+  def universeOfWrapExprImpl[A](expr: TTypeWrapper[A]): Comp[Either[A, UniverseExpr]]
 
   final def isSubType(a: TType, b: TType): Comp[Option[TSubTypeInfo]] = for {
     a2 <- a.flatTraverse(reduceExprToValue)

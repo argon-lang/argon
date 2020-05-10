@@ -54,8 +54,14 @@ trait Context {
     override def isSubTypeWrapper(a: TType, b: TType): Comp[Option[SubTypeInfo[TType]]] =
       isSimpleSubType(a, b)
 
+    override def isSubTypeWrapperImpl[A](a: A, b: A): Comp[Either[(A, A), Option[SubTypeInfo[A]]]] =
+      IO.succeed(Left((a, b)))
+
     override def universeOfWrapExpr(expr: WrapExpr): Comp[UniverseExpr] =
       universeOfExpr(expr)
+
+    override def universeOfWrapExprImpl[A](expr: A): Comp[Either[A, UniverseExpr]] =
+      IO.succeed(Left(expr))
   }
 
   final lazy val typeSystem: ContextTypeSystem.type = ContextTypeSystem
