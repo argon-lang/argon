@@ -6,7 +6,7 @@ import cats.data.NonEmptyList
 import dev.argon.backend.{ResourceAccess, ResourceReader}
 import dev.argon.compiler.{Comp, CompilationError, CompilationMessageSource, ErrorList}
 import dev.argon.compiler.loaders.ResourceIndicator
-import dev.argon.io.{Path, ZipEntryInfo}
+import dev.argon.io.{Path, ZipEntryInfo, ZipFileReader}
 import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.module.PathResourceIndicator
 import dev.argon.stream.builder.Source
@@ -34,9 +34,7 @@ object TestResourceReader {
         override def getLibPath(name: String): UIO[P] =
           Path.of(libDir, name, name + ".armodule")
 
-        override type ZipReader = liveResReader.ZipReader
-
-        override def getZipReader(id: TestResourceIndicator): Managed[ErrorList, ZipReader] =
+        override def getZipReader(id: TestResourceIndicator): Managed[ErrorList, ZipFileReader[Any, ErrorList]] =
           id match {
             case LibraryResourceIndicator(name) =>
               ZManaged.fromEffect(getLibPath(name))
@@ -44,9 +42,6 @@ object TestResourceReader {
                   liveResReader.getZipReader(PathResourceIndicator(path))
                 }
           }
-
-        override def zipEntryStream(zip: ZipReader, name: String): Source[Any, ErrorList, Chunk[Byte], Unit] =
-          liveResReader.zipEntryStream(zip, name)
 
         override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Any, ErrorList, Chunk[Byte], Unit]): Comp[A] =
           liveResReader.deserializeProtocolBuffer(companion)(data)

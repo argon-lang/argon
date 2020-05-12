@@ -15,10 +15,11 @@ import cats.implicits._
 import dev.argon.backend.{ResourceAccess, ResourceReader}
 import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
+import dev.argon.io.ZipFileReader
 import dev.argon.module.Metadata
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import shapeless.ops.nat.{LT, Pred, ToInt}
-import shapeless.{Nat, Sized, Succ, _0, Id}
+import shapeless.{Id, Nat, Sized, Succ, _0}
 import shapeless.syntax.sized._
 import zio.{IO, Managed, ZIO, ZManaged}
 import zio.interop.catz._
@@ -33,7 +34,7 @@ object ArgonModuleLoader {
       id.extension match {
         case "armodule" =>
           res.getZipReader(id).mapM { zip =>
-            val entry = res.zipEntryStream(zip, ModulePaths.metadata)
+            val entry = zip.getEntryStream(ModulePaths.metadata)
             res.deserializeProtocolBuffer(ArgonModule.Metadata)(entry)
               .map { metadata =>
                 Some(ArModuleMetadata(zip, metadata))
@@ -43,7 +44,7 @@ object ArgonModuleLoader {
         case _ => ZManaged.succeed(None)
       }
 
-    private final case class ArModuleMetadata(zip: res.ZipReader, metadata: Metadata) extends ModuleMetadata[TContext] {
+    private final case class ArModuleMetadata(zip: ZipFileReader[Any, ErrorList], metadata: Metadata) extends ModuleMetadata[TContext] {
       override val descriptor: ModuleDescriptor = ModuleDescriptor(metadata.name)
       override val referencedModules: Vector[ModuleDescriptor] =
         metadata.references.map {
@@ -56,7 +57,7 @@ object ArgonModuleLoader {
 
     private def loadModule[TPayloadSpec[_, _]]
     (context: TContext)
-    (zipFile: res.ZipReader)
+    (zipFile: ZipFileReader[Any, ErrorList])
     (metadata: ArgonModule.Metadata)
     (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
     (payloadLoader: PayloadLoader[TContext, TPayloadSpec])
@@ -296,7 +297,7 @@ object ArgonModuleLoader {
               val zip = zipFile
 
               if(id < 0) {
-                val entry = res.zipEntryStream(zip, refPathFunction(id.abs))
+                val entry = zip.getEntryStream(refPathFunction(id.abs))
                 res.deserializeProtocolBuffer(refCompanion)(entry)
                   .flatMap { refValue =>
                     refModuleMap.get(refModuleIdLens(refValue)) match {
@@ -324,7 +325,7 @@ object ArgonModuleLoader {
                   }
               }
               else {
-                val entry = res.zipEntryStream(zip, defPathFunction(id))
+                val entry = zip.getEntryStream(defPathFunction(id))
                 res.deserializeProtocolBuffer(defCompanion)(entry)
                   .flatMap { defValue =>
                     parseDescriptor(currentModuleDescriptor)(defDescriptorLens(defValue)) match {

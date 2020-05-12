@@ -15,9 +15,7 @@ import zio._
 object ResourceReader {
 
   trait Service[I <: ResourceIndicator] {
-    type ZipReader
-    def getZipReader(id: I): Managed[ErrorList, ZipReader]
-    def zipEntryStream(zip: ZipReader, name: String): Source[Any, ErrorList, Chunk[Byte], Unit]
+    def getZipReader(id: I): Managed[ErrorList, ZipFileReader[Any, ErrorList]]
 
     def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Any, ErrorList, Chunk[Byte], Unit]): Comp[A]
   }
@@ -25,11 +23,6 @@ object ResourceReader {
   private trait ServiceCommon[I <: ResourceIndicator] extends Service[I] with ResourceAccess.ResourceAccessCommon {
 
     protected val fileIOLite: FileIOLite.Service
-
-    override type ZipReader = ZipFileReader[Any, ErrorList]
-
-    override def zipEntryStream(zip: ZipReader, name: String): Source[Any, ErrorList, Chunk[Byte], Unit] =
-      zip.getEntryStream(name)
 
     override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Any, ErrorList, Chunk[Byte], Unit]): Comp[A] =
       fileIOLite.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
