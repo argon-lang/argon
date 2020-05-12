@@ -59,14 +59,13 @@ object ArModuleBackend extends Backend {
 
   override def compile[I <: ResourceIndicator : Tagged](input: CompilerInput[I, ModuleBackendOptions[Id, I]]): ZManaged[ResourceReader[I], ErrorList, TCompilationOutput] = {
     val context = ModuleContext(input)
-    val emitter = new ModuleEmitter[context.type](context)
 
     context.module[ModuleContext with Context.WithRes[I]].map { module =>
-      createOutput(emitter.emitModule(module))
+      createOutput(ModuleEmitter.emitModule(context)(module))
     }.provideSomeLayer(ModuleBackendLoadService.forResourceReader[I, ModuleContext with Context.WithRes[I]])
   }
 
-  private def createOutput(moduleGen: Source[Comp, (String, GeneratedMessage), Unit]): CompilationOutput[BackendOutputOptionsId] =
+  private def createOutput(moduleGen: Source[Any, ErrorList, (String, GeneratedMessage), Unit]): CompilationOutput[BackendOutputOptionsId] =
     new CompilationOutput[BackendOutputOptionsId] {
 
       override def write[I <: ResourceIndicator : Tagged](options: BackendOutputOptionsId[I]): RComp[ResourceWriter[I], Unit] =

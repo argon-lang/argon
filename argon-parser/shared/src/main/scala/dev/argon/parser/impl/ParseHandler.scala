@@ -8,28 +8,26 @@ import cats.implicits._
 import dev.argon.grammar.ParseErrorHandler
 import dev.argon.parser.impl.TopLevelStatement.NSAndImports
 import dev.argon.stream._
-import dev.argon.stream.builder.{GenEffect, Sink, Source}
+import dev.argon.stream.builder.Source
+import zio.ZIO
 
 object ParseHandler {
 
-  def parse[F[_]: Monad](fileSpec: FileSpec)(chars: Source[F, Char, Unit])(implicit errorHandler: ParseErrorHandler[F, NonEmptyVector[SyntaxError]]): Source[F, SourceAST, Unit] =
-    Characterizer.characterize[F](chars)
+  def parse[R, E](fileSpec: FileSpec)(chars: Source[R, E, Char, Unit])(implicit errorHandler: ParseErrorHandler[ZIO[R, E, *], NonEmptyVector[SyntaxError]]): Source[R, E, SourceAST, Unit] =
+    Characterizer.characterize(chars)
       .bufferVector(1024 * 4)
-      .into(Lexer.lex(_))
+      .into(Lexer.lex[R, E])
       .bufferVector(1024)
-      .into(ArgonParser.parse(_))
-      .into(buildSourceAST(fileSpec)(_))
+      .into(ArgonParser.parse[R, E])
+      .into(buildSourceAST[R, E](fileSpec)(_))
 
-  private def buildSourceAST[F[_]: Monad](fileSpec: FileSpec)(stmts: Source[F, TopLevelStatement, Unit]): Source[F, SourceAST, Unit] =
-    new Source[F, SourceAST, Unit] {
-
-      override protected val monadF: Monad[F] = implicitly
-
-      override protected def generateImpl[G[_] : Monad](sink: Sink[G, SourceAST])(implicit genEffect: GenEffect[F, G]): G[Unit] =
-        stmts.foldLeftG(TopLevelStatement.defaultNSAndImports) { (state, stmt) =>
+  private def buildSourceAST[R, E](fileSpec: FileSpec)(stmts: Source[R, E, TopLevelStatement, Unit]): Source[R, E, SourceAST, Unit] =
+    new Source[R, E, SourceAST, Unit] {
+      override def foreach[R1 <: R, E1 >: E](f: SourceAST => ZIO[R1, E1, Unit]): ZIO[R1, E1, Unit] =
+        stmts.foldLeftM[R1, E1, NSAndImports](TopLevelStatement.defaultNSAndImports) { (state, stmt) =>
           val (newState, opt) = TopLevelStatement.accumulate(fileSpec)(state, stmt)
-          opt.fold(().pure[G])(sink.consume).map { _ => newState }
-        }.map { _ => }
+          ZIO.foreach(opt)(f).as(newState)
+        }.unit
     }
 
 }

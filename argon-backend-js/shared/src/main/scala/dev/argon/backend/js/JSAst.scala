@@ -5,8 +5,9 @@ import java.io.PrintWriter
 import cats._
 import cats.implicits._
 import cats.data.NonEmptyList
-import dev.argon.stream.builder.{GenEffect, Sink, Source}
+import dev.argon.stream.builder.Source
 import dev.argon.util.StringHelpers
+import zio.{IO, ZIO}
 
 final case class JSModule(statements: Vector[JSModuleStatement])
 
@@ -79,19 +80,20 @@ case object JSThis extends JSExpression
 
 object JSAst {
 
-  def writeModule[F[_]: Monad](module: JSModule): Source[F, String, Unit] = new Source[F, String, Unit] {
-    override protected val monadF: Monad[F] = implicitly[Monad[F]]
+  def writeModule[R, E](module: JSModule): Source[R, E, String, Unit] = new Source[R, E, String, Unit] {
 
-    override protected def generateImpl[G[_] : Monad](sink: Sink[G, String])(implicit genEffect: GenEffect[F, G]): G[Unit] =
-      new WriteImpl[G](sink).writeModule(module)
+    override def foreach[R1 <: R, E1 >: E](consume: String => ZIO[R1, E1, Unit]): ZIO[R1, E1, Unit] =
+      new WriteImpl(consume).writeModule(module)
   }
 
-  private class WriteImpl[F[_]: Monad](sink: Sink[F, String]) {
+  private class WriteImpl[R, E](consume: String => ZIO[R, E, Unit]) {
 
-    def write(s: String): F[Unit] = sink.consume(s)
+    type F[A] = ZIO[R, E, A]
+
+    def write(s: String): F[Unit] = consume(s)
     
     def writeModule(module: JSModule): F[Unit] =
-      module.statements.traverse_(writeModuleStatement)
+      ZIO.foreach_(module.statements)(writeModuleStatement)
 
     def writeModuleStatement(stmt: JSModuleStatement): F[Unit] =
       stmt match {
@@ -120,7 +122,7 @@ object JSAst {
         case JSImportAllStatement(defaultExport, name, moduleName) =>
           for {
             _ <- write("import ")
-            _ <- defaultExport.traverse_ { defaultId =>
+            _ <- ZIO.foreach(defaultExport) { defaultId =>
               for {
                 _ <- writeIdentifier(defaultId)
                 _ <- write(", ")
@@ -146,7 +148,7 @@ object JSAst {
           for {
             _ <- write("const ")
             _ <- writeDeclaration(bindings.head)
-            _ <- bindings.tail.toVector.traverse { binding =>
+            _ <- ZIO.foreach_(bindings.tail) { binding =>
               for {
                 _ <- write(", ")
                 _ <- writeDeclaration(binding)
@@ -160,7 +162,7 @@ object JSAst {
             _ <- write("let ")
             _ <- writeDeclaration(bindings.head)
 
-            _ <- bindings.tail.toVector.traverse_ { binding =>
+            _ <- ZIO.foreach_(bindings.tail) { binding =>
               for {
                 _ <- write(", ")
                 _ <- writeDeclaration(binding)
@@ -176,7 +178,7 @@ object JSAst {
             _ <- write("(")
             _ <- writeParameterList(parameters)
             _ <- write("){")
-            _ <- body.traverse_(writeStatement)
+            _ <- ZIO.foreach_(body)(writeStatement)
             _ <- write("}")
           } yield ()
 
@@ -185,31 +187,31 @@ object JSAst {
             _ <- write("if(")
             _ <- writeExpr(condition)
             _ <- write(") {")
-            _ <- ifBody.traverse_(writeStatement)
+            _ <- ZIO.foreach_(ifBody)(writeStatement)
             _ <- write("} else {")
-            _ <- elseBody.traverse_(writeStatement)
+            _ <- ZIO.foreach_(elseBody)(writeStatement)
             _ <- write("}")
           } yield ()
 
         case JSTryStatement(body, catchClause, finallyBody) =>
           for {
             _ <- write("try {")
-            _ <- body.traverse_(writeStatement)
+            _ <- ZIO.foreach_(body)(writeStatement)
             _ <- write("} ")
-            _ <- catchClause.traverse_ {
+            _ <- ZIO.foreach(catchClause) {
               case (id, catchBody) =>
                 for {
                   _ <- write("catch(")
                   _ <- writeIdentifier(id)
                   _ <- write(") {")
-                  _ <- catchBody.traverse_(writeStatement)
+                  _ <- ZIO.foreach_(catchBody)(writeStatement)
                   _ <- write("} ")
                 } yield ()
             }
-            _ <- finallyBody.traverse_ { finallyBody =>
+            _ <- ZIO.foreach(finallyBody) { finallyBody =>
                 for {
                   _ <- write("finally {")
-                  _ <- finallyBody.traverse_(writeStatement)
+                  _ <- ZIO.foreach_(finallyBody)(writeStatement)
                   _ <- write("} ")
                 } yield ()
             }
@@ -225,7 +227,7 @@ object JSAst {
         case JSBlockStatement(body) =>
           for {
             _ <- write("{")
-            _ <- body.traverse_(writeStatement)
+            _ <- ZIO.foreach_(body)(writeStatement)
             _ <- write("}")
           } yield ()
 
@@ -258,7 +260,7 @@ object JSAst {
         case JSArrayDestructBinding(bindings) =>
           for {
             _ <- write("[")
-            _ <- bindings.traverse_ { binding =>
+            _ <- ZIO.foreach_(bindings) { binding =>
               for {
                 _ <- writeBinding(binding)
                 _ <- write(",")
@@ -282,7 +284,7 @@ object JSAst {
         case JSObjectLiteral(members) =>
           for {
             _ <- write("{")
-            _ <- members.traverse_ {
+            _ <- ZIO.foreach_(members) {
               case JSObjectProperty(name, value) =>
                 for {
                   _ <- writeString(name)
@@ -295,7 +297,7 @@ object JSAst {
                   _ <- write("get ")
                   _ <- writeString(name)
                   _ <- write("() {")
-                  _ <- value.traverse_(writeStatement)
+                  _ <- ZIO.foreach_(value)(writeStatement)
                   _ <- write("},")
                 } yield ()
               case JSObjectComputedProperty(name, value) =>
@@ -348,7 +350,7 @@ object JSAst {
           for {
             _ <- writeExprParen(function)
             _ <- write("(")
-            _ <- args.traverse_ { arg =>
+            _ <- ZIO.foreach_(args) { arg =>
               for {
                 _ <- writeExpr(arg)
                 _ <- write(",")
@@ -362,7 +364,7 @@ object JSAst {
             _ <- write("new ")
             _ <- writeExprParen(function)
             _ <- write("(")
-            _ <- args.traverse_ { arg =>
+            _ <- ZIO.foreach_(args) { arg =>
               for {
                 _ <- writeExpr(arg)
                 _ <- write(",")
@@ -374,11 +376,11 @@ object JSAst {
         case JSFunctionExpression(name, parameters, body) =>
           for {
             _ <- write("function ")
-            _ <- name.traverse_(writeIdentifier)
+            _ <- ZIO.foreach(name)(writeIdentifier)
             _ <- write("(")
             _ <- writeParameterList(parameters)
             _ <- write("){")
-            _ <- body.traverse_(writeStatement)
+            _ <- ZIO.foreach_(body)(writeStatement)
             _ <- write("}")
           } yield ()
 
@@ -395,7 +397,7 @@ object JSAst {
             _ <- write("(")
             _ <- writeParameterList(parameters)
             _ <- write(") => {")
-            _ <- body.traverse_(writeStatement)
+            _ <- ZIO.foreach_(body)(writeStatement)
             _ <- write("}")
           } yield ()
 
@@ -403,7 +405,7 @@ object JSAst {
         case JSArrayLiteral(values) =>
           for {
             _ <- write("[")
-            _ <- values.traverse_ { value =>
+            _ <- ZIO.foreach_(values) { value =>
               for {
                 _ <- writeExpr(value)
                 _ <- write(",")
@@ -427,7 +429,7 @@ object JSAst {
 
     def writeParameterList(params: JSFunctionParameterList): F[Unit] =
       params match {
-        case JSFunctionEmptyParameterList => ().pure[F]
+        case JSFunctionEmptyParameterList => IO.unit
         case JSFunctionParameter(binding, next) =>
           for {
             _ <- writeBinding(binding)

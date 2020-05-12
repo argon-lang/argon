@@ -14,6 +14,7 @@ import Grammar.Operators._
 import Grammar.{GrammarFactory, UnionGrammar}
 import dev.argon.stream._
 import dev.argon.stream.builder.Source
+import zio.ZIO
 
 import Function.const
 
@@ -23,6 +24,7 @@ object ArgonParser {
 
     sealed trait ParenAllowedState
     case object ParenAllowed extends ParenAllowedState
+
     case object ParenDisallowed extends ParenAllowedState
     
 
@@ -732,8 +734,8 @@ object ArgonParser {
 
   private[impl] def grammarFactory: GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] = ArgonGrammarFactory
 
-  def parse[F[_]: Monad](tokens: Source[F, NonEmptyVector[WithSource[Token]], FilePosition])(implicit errorHandler: ParseErrorHandler[F, NonEmptyVector[SyntaxError]]): Source[F, TopLevelStatement, Unit] =
-    Grammar.parseAll[F, Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)(tokens)
+  def parse[R, E](tokens: Source[R, E, NonEmptyVector[WithSource[Token]], FilePosition])(implicit errorHandler: ParseErrorHandler[ZIO[R, E, *], NonEmptyVector[SyntaxError]]): Source[R, E, TopLevelStatement, Unit] =
+    Grammar.parseAll[R, E, Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)(tokens)
       .mapResult(const(()))
 
 }

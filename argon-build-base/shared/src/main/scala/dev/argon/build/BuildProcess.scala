@@ -12,7 +12,7 @@ import dev.argon.grammar.ParseErrorHandler
 import dev.argon.parser.impl.ParseHandler
 import dev.argon.util.FileSpec
 import dev.argon.stream._
-import dev.argon.stream.builder.{GenEffect, Sink, Source}
+import dev.argon.stream.builder.Source
 import dev.argon.util.AnyExtensions._
 import zio._
 import zio.interop.catz._
@@ -20,27 +20,19 @@ import zio.interop.catz._
 object BuildProcess {
 
   def parseInput[R]
-  (inputFiles: Source[ZIO[R, ErrorList, *], InputFileInfo[ZIO[R, ErrorList, *]], Unit])
-  : Source[ZIO[R, ErrorList, *], SourceAST, Unit] =
-    new Source[ZIO[R, ErrorList, *], SourceAST, Unit] {
+  (inputFiles: Source[R, ErrorList, InputFileInfo[R, ErrorList], Unit])
+  : Source[R, ErrorList, SourceAST, Unit] =
+    inputFiles.flatMap { fileInfo =>
+      def toCompileError(error: SyntaxError): CompilationError =
+        CompilationError.SyntaxCompilerError(SyntaxErrorData(fileInfo.fileSpec, error))
 
-      override protected val monadF: Monad[ZIO[R, ErrorList, *]] = implicitly[Monad[ZIO[R, ErrorList, *]]]
-
-      override protected def generateImpl[G[_] : Monad](sink: Sink[G, SourceAST])(implicit genEffect: GenEffect[ZIO[R, ErrorList, *], G]): G[Unit] =
-        inputFiles.foreachG { fileInfo =>
-          def toCompileError(error: SyntaxError): CompilationError =
-            CompilationError.SyntaxCompilerError(SyntaxErrorData(fileInfo.fileSpec, error))
-
-          implicit val errorHandler: ParseErrorHandler[ZIO[R, ErrorList, *], NonEmptyVector[SyntaxError]] =
-            new ParseErrorHandler[ZIO[R, ErrorList, *], NonEmptyVector[SyntaxError]] {
-              override def raiseError[A](errors: NonEmptyVector[SyntaxError]): ZIO[R, ErrorList, A] =
-                Compilation.forErrors(NonEmptyList(toCompileError(errors.head), errors.tail.map(toCompileError).toList))
-            }
-
-          val parsed = ParseHandler.parse[ZIO[R, ErrorList, *]](fileInfo.fileSpec)(fileInfo.dataStream)
-
-          parsed.foreachG(sink.consume)
+      implicit val errorHandler: ParseErrorHandler[ZIO[R, ErrorList, *], NonEmptyVector[SyntaxError]] =
+        new ParseErrorHandler[ZIO[R, ErrorList, *], NonEmptyVector[SyntaxError]] {
+          override def raiseError[A](errors: NonEmptyVector[SyntaxError]): ZIO[R, ErrorList, A] =
+            Compilation.forErrors(NonEmptyList(toCompileError(errors.head), errors.tail.map(toCompileError).toList))
         }
+
+      ParseHandler.parse[R, ErrorList](fileInfo.fileSpec)(fileInfo.dataStream)
     }
 
   def compile[I <: ResourceIndicator: Tagged]

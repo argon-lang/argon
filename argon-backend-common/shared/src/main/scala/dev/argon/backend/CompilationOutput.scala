@@ -3,7 +3,7 @@ package dev.argon.backend
 import java.nio.charset.StandardCharsets
 
 import cats._
-import dev.argon.compiler.{Comp, RComp}
+import dev.argon.compiler.{Comp, ErrorList, RComp}
 import dev.argon.compiler.core.Context
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.stream._
@@ -24,7 +24,7 @@ abstract class CompilationOutputText[OutputOptions[_]] extends CompilationOutput
 
   def outputResource[I](options: OutputOptions[I]): I
 
-  val textStream: Source[Comp, String, Unit]
+  val textStream: Source[Any, ErrorList, String, Unit]
 
 
 }

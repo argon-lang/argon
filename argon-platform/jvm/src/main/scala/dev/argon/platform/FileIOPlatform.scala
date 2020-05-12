@@ -6,7 +6,7 @@ import java.nio.file.{Files, StandardOpenOption}
 import java.util.zip.ZipFile
 
 import dev.argon.io.{Path, ZipFileReader}
-import dev.argon.stream.builder.{Source, SourceIO, ZStreamSource}
+import dev.argon.stream.builder.{Source, ZStreamSource}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import zio.{Chunk, IO, Managed, UIO, ZIO, ZLayer, ZManaged, stream}
 import zio.blocking.Blocking
@@ -57,7 +57,7 @@ private[platform] object FileIOPlatform {
           }
         }
 
-      override def writeToFile[R, E, X](errorHandler: IOException => E)(path: FilePath)(data: Source[ZIO[R, E, *], Chunk[Byte], X]): ZIO[R, E, X] =
+      override def writeToFile[R, E, X](errorHandler: IOException => E)(path: FilePath)(data: Source[R, E, Chunk[Byte], X]): ZIO[R, E, X] =
         ZManaged.fromAutoCloseable(
           blocking.effectBlocking { Files.newOutputStream(path.javaPath, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING) }
         )
@@ -86,14 +86,14 @@ private[platform] object FileIOPlatform {
             .flatMap(Stream.fromIterable(_))
         )
 
-      override def openZipFile[R, E](errorHandler: IOException => E)(path: FilePath): Managed[E, ZipFileReader[ZIO[R, E, *]]] =
+      override def openZipFile[R, E](errorHandler: IOException => E)(path: FilePath): Managed[E, ZipFileReader[R, E]] =
         ZManaged.fromAutoCloseable(
           blocking.effectBlocking { new ZipFile(path.javaPath.toFile) }
             .refineOrDie { case e: IOException => errorHandler(e) }
         )
           .map { zipFile =>
-            new ZipFileReader[ZIO[R, E, *]] {
-              override def getEntryStream(name: String): Source[ZIO[R, E, *], Chunk[Byte], Unit] = {
+            new ZipFileReader[R, E] {
+              override def getEntryStream(name: String): Source[R, E, Chunk[Byte], Unit] = {
                 val stream =
                   ZStream.managed(
                     ZManaged.fromAutoCloseable(
@@ -105,7 +105,7 @@ private[platform] object FileIOPlatform {
                   )
                   .flatMap(ZStream.fromInputStream(_).chunks.mapError(errorHandler))
 
-                ZStreamSource(stream)
+                new ZStreamSource(stream)
               }
             }
           }

@@ -85,7 +85,7 @@ object JSBackend extends Backend {
 
     override def outputResource[I](options: BackendOutputOptionsId[I]): I = options.outputFile.file
 
-    override val textStream: Source[Comp, String, Unit] =
+    override val textStream: Source[Any, ErrorList, String, Unit] =
       JSAst.writeModule(jsModule)
 
   }

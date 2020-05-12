@@ -45,10 +45,10 @@ object TestResourceReader {
                 }
           }
 
-        override def zipEntryStream(zip: ZipReader, name: String): Source[Comp, Chunk[Byte], Unit] =
+        override def zipEntryStream(zip: ZipReader, name: String): Source[Any, ErrorList, Chunk[Byte], Unit] =
           liveResReader.zipEntryStream(zip, name)
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Comp, Chunk[Byte], Unit]): Comp[A] =
+        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Any, ErrorList, Chunk[Byte], Unit]): Comp[A] =
           liveResReader.deserializeProtocolBuffer(companion)(data)
       } : Service[P])
     })

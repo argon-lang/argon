@@ -5,7 +5,7 @@ import java.io.IOException
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import dev.argon.io.ZipEntryInfo
-import dev.argon.stream.builder.{Source, SourceIO}
+import dev.argon.stream.builder.Source
 import zio.blocking.Blocking
 import zio._
 import zio.interop._
@@ -14,7 +14,7 @@ import zio.stream.{ZSink, ZStream}
 
 private[platform] object ZipEntryStreamTransformation {
 
-  def apply[R, E](errorHandler: IOException => E, env: Blocking)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, *]], Unit]): ZStream[R, E, Chunk[Byte]] =
+  def apply[R, E](errorHandler: IOException => E, env: Blocking)(entries: Source[R, E, ZipEntryInfo[R, E], Unit]): ZStream[R, E, Chunk[Byte]] =
     OutputStreamWriterStream { outputStream =>
       val blocking = env.get[Blocking.Service]
 
@@ -29,7 +29,7 @@ private[platform] object ZipEntryStreamTransformation {
             .bracket(_ =>
               blocking.effectBlocking { zipStream.closeEntry() }.orDie
             ) { _ =>
-              SourceIO.fromSource(dataStream).toZStream
+              dataStream.toZStream
                 .run(
                   ZSink.fromOutputStream(zipStream)
                     .provideSome[Any](_ => env)

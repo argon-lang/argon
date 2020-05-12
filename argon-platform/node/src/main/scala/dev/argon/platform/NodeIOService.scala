@@ -9,7 +9,7 @@ import java.nio.{ByteBuffer, CharBuffer}
 import dev.argon.io._
 import dev.argon.io.fileio.FileIO
 import dev.argon.platform.FileIOCommon
-import dev.argon.stream.builder.{Source, SourceIO, ZStreamSource}
+import dev.argon.stream.builder.{Source, ZStreamSource}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import zio._
 import zio.stream._
@@ -97,7 +97,7 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
       }
       .flatMap(ZStream.fromIterable(_))
 
-  override def writeToFile[R, E, X](errorHandler: IOException => E)(path: FilePath)(data: Source[ZIO[R, E, *], Chunk[Byte], X]): ZIO[R, E, X] =
+  override def writeToFile[R, E, X](errorHandler: IOException => E)(path: FilePath)(data: Source[R, E, Chunk[Byte], X]): ZIO[R, E, X] =
     IO.effectAsync[E, Integer] { register =>
       NodeFileSystem.open(path.pathName, "w", (error, fd) =>
         register(
@@ -163,7 +163,7 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
       .flatMap(ZStream.fromIterable(_))
 
 
-  override def openZipFile[R, E](errorHandler: IOException => E)(path: FilePath): Managed[E, ZipFileReader[ZIO[R, E, *]]] =
+  override def openZipFile[R, E](errorHandler: IOException => E)(path: FilePath): Managed[E, ZipFileReader[R, E]] =
     Managed.make(
       IO.effectAsync[E, NodeStreamZip] { register =>
         val zip = new NodeStreamZip(NodeStreamZip.Options(path.pathName))
@@ -174,9 +174,9 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
       IO.effectTotal { zip.close() }
     }
       .map { zip =>
-        new ZipFileReader[ZIO[R, E, *]] {
-          override def getEntryStream(name: String): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
-            ZStreamSource(
+        new ZipFileReader[R, E] {
+          override def getEntryStream(name: String): Source[R, E, Chunk[Byte], Unit] =
+            new ZStreamSource(
               ZStream.fromEffect(
                 IO.effectAsync[E, NodeReadable] { register =>
                   zip.stream(name, (err, stream) => register(

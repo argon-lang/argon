@@ -9,7 +9,7 @@ import java.io.IOException
 import dev.argon.io.{Path, ZipEntryInfo}
 import cats.data.NonEmptyList
 import dev.argon.backend.{Backend, ResourceAccess, ResourceReader, ResourceWriter}
-import dev.argon.compiler.{Comp, CompilationError, CompilerOptions}
+import dev.argon.compiler.{Comp, CompilationError, CompilerOptions, ErrorList}
 import zio._
 import shapeless.{Id => _, Path => _, _}
 import dev.argon.project.ProjectLoader.Implicits._
@@ -77,13 +77,13 @@ object BuildTestCaseRunner {
       val res = env.get
 
       new ResourceWriter.Service[DummyOutputPath] {
-        override def writeToResource[X](id: DummyOutputPath)(data: Source[Comp, Chunk[Byte], X]): Comp[X] =
+        override def writeToResource[X](id: DummyOutputPath)(data: Source[Any, ErrorList, Chunk[Byte], X]): Comp[X] =
           data.foldLeftM(()) { (_, _) => IO.unit }.map { case (_, x) => x }
 
-        override def zipFromEntries(entries: Source[Comp, ZipEntryInfo[Comp], Unit]): Source[Comp, Chunk[Byte], Unit] =
+        override def zipFromEntries(entries: Source[Any, ErrorList, ZipEntryInfo[Any, ErrorList], Unit]): Source[Any, ErrorList, Chunk[Byte], Unit] =
           res.zipFromEntries(entries)
 
-        override def serializeProtocolBuffer(message: GeneratedMessage): Source[Comp, Chunk[Byte], Unit] =
+        override def serializeProtocolBuffer(message: GeneratedMessage): Source[Any, ErrorList, Chunk[Byte], Unit] =
           res.serializeProtocolBuffer(message)
       }
     }

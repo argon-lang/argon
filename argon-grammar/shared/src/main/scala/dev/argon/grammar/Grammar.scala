@@ -8,8 +8,9 @@ import scala.language.postfixOps
 import cats._
 import cats.data._
 import cats.implicits._
-import dev.argon.stream.builder.{GenEffect, Sink, Source}
+import dev.argon.stream.builder.Source
 import dev.argon.util._
+import zio.{IO, ZIO}
 
 sealed trait Grammar[TToken, TSyntaxError, TLabel <: RuleLabel, +T] {
 
@@ -309,53 +310,52 @@ object Grammar {
   : Grammar[TToken, TSyntaxError, TLabel, Result] =
     TokenGrammar(category, tokenMatcher)
 
-  def parseAll[F[_]: Monad, TToken, TSyntaxError, TLabel <: RuleLabel, T]
+  def parseAll[R, E, TToken, TSyntaxError, TLabel <: RuleLabel, T]
   (factory: GrammarFactory[TToken, TSyntaxError, TLabel])
   (label: TLabel { type RuleType = T })
-  (input: Source[F, NonEmptyVector[WithSource[TToken]], FilePosition])
-  (implicit errorHandler: ParseErrorHandler[F, NonEmptyVector[TSyntaxError]])
-  : Source[F, T, FilePosition] = new Source[F, T, FilePosition] {
+  (input: Source[R, E, NonEmptyVector[WithSource[TToken]], FilePosition])
+  (implicit errorHandler: ParseErrorHandler[ZIO[R, E, *], NonEmptyVector[TSyntaxError]])
+  : Source[R, E, T, FilePosition] = new Source[R, E, T, FilePosition] {
     sealed trait ParseStep
     case object ParseStepReady extends ParseStep
     final case class ParseStepPartial(suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T]) extends ParseStep
 
-    override protected val monadF: Monad[F] = implicitly[Monad[F]]
 
-    override def generateImpl[G[_] : Monad](sink: Sink[G, T])(implicit genEffect: GenEffect[F, G]): G[FilePosition] =
-      input.foldLeftG[G, ParseStep](ParseStepReady) { (s, tokens) =>
+    override def foreach[R1 <: R, E1 >: E](consume: T => ZIO[R1, E1, Unit]): ZIO[R1, E1, FilePosition] =
+      input.foldLeftM[R1, E1, ParseStep](ParseStepReady) { (s, tokens) =>
 
-        def runParseStepMulti(s: ParseStep, tokens: NonEmptyVector[WithSource[TToken]]): G[ParseStep] =
+        def runParseStepMulti(s: ParseStep, tokens: NonEmptyVector[WithSource[TToken]]): ZIO[R1, E1, ParseStep] =
           runParseStep(s, tokens) match {
             case GrammarResultSuccess(remaining, WithSource(value, _)) =>
-              sink.consume(value).flatMap { _ =>
+              consume(value).flatMap { _ =>
                 NonEmptyVector.fromVector(remaining) match {
                   case Some(remaining) => runParseStepMulti(ParseStepReady, remaining)
-                  case None => (ParseStepReady : ParseStep).pure[G]
+                  case None => IO.succeed(ParseStepReady)
                 }
               }
 
-            case GrammarResultFailure(failure) => genEffect.liftF(errorHandler.raiseError(failure))
-            case GrammarResultError(error) => genEffect.liftF(errorHandler.raiseError(error))
+            case GrammarResultFailure(failure) => errorHandler.raiseError(failure)
+            case GrammarResultError(error) => errorHandler.raiseError(error)
             case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] =>
-              (ParseStepPartial(suspend) : ParseStep).pure[G]
+              IO.succeed(ParseStepPartial(suspend))
           }
 
         runParseStepMulti(s, tokens)
       }.flatMap {
-        case (ParseStepReady, end) => Monad[G].pure(end)
+        case (ParseStepReady, end) => IO.succeed(end)
         case (ParseStepPartial(suspend), end) =>
-          def parseEnd(result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T]): G[FilePosition] =
+          def parseEnd(result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T]): ZIO[R1, E1, FilePosition] =
             result match {
               case GrammarResultSuccess(remaining, WithSource(value, _)) =>
-                sink.consume(value).flatMap { _ =>
+                consume(value).flatMap { _ =>
                   NonEmptyVector.fromVector(remaining) match {
                     case Some(tokens) => parseEnd(rule.parseTokens(tokens, defaultParseOptions).completeResult(end))
-                    case None => Monad[G].pure(end)
+                    case None => IO.succeed(end)
                   }
                 }
 
-              case GrammarResultFailure(failure) => genEffect.liftF(errorHandler.raiseError(failure))
-              case GrammarResultError(error) => genEffect.liftF(errorHandler.raiseError(error))
+              case GrammarResultFailure(failure) => errorHandler.raiseError(failure)
+              case GrammarResultError(error) => errorHandler.raiseError(error)
             }
 
           parseEnd(suspend.completeResult(end))

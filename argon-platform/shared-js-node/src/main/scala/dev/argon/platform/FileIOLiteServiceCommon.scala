@@ -4,7 +4,7 @@ import java.io.IOException
 
 import dev.argon.io.ZipEntryInfo
 import dev.argon.io.fileio.FileIOLite
-import dev.argon.stream.builder.{Source, SourceIO, ZStreamSource}
+import dev.argon.stream.builder.{Source, ZStreamSource}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 import zio._
 import zio.stream.ZStream
@@ -12,8 +12,8 @@ import zio.stream.ZStream
 @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 private[platform] trait FileIOLiteServiceCommon extends FileIOLite.Service with FileIOCommon {
 
-  def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[ZIO[R, E, *], ZipEntryInfo[ZIO[R, E, *]], Unit]): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
-    ZStreamSource(
+  def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[R, E, ZipEntryInfo[R, E], Unit]): Source[R, E, Chunk[Byte], Unit] =
+    new ZStreamSource(
       ZStream.flatten(
         ZStream.fromEffect(
           IO.effectTotal { new JSZip() }
@@ -34,8 +34,8 @@ private[platform] trait FileIOLiteServiceCommon extends FileIOLite.Service with 
       )
     )
 
-  def deserializeProtocolBuffer[R, E, A <: GeneratedMessage](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: Source[ZIO[R, E, *], Chunk[Byte], Unit]): ZIO[R, E, A] =
-    dataStreamToArray(SourceIO.fromSource(data))
+  def deserializeProtocolBuffer[R, E, A <: GeneratedMessage](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: Source[R, E, Chunk[Byte], Unit]): ZIO[R, E, A] =
+    dataStreamToArray(data)
       .flatMap { data =>
         IO.effect { companion.parseFrom(data) }
           .refineOrDie {
@@ -43,8 +43,8 @@ private[platform] trait FileIOLiteServiceCommon extends FileIOLite.Service with 
           }
       }
 
-  def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): Source[ZIO[R, E, *], Chunk[Byte], Unit] =
-    ZStreamSource(
+  def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): Source[R, E, Chunk[Byte], Unit] =
+    new ZStreamSource(
       ZStream.fromEffect(
         IO.effect {
           message.toByteArray

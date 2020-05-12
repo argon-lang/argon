@@ -105,9 +105,9 @@ object Program extends PlatformApp {
       )
 
   private def compileCode(code: String): CIO[String] = {
-    val inputFiles: Source[CIO, InputFileInfo[CIO], Unit] =
-      ZStreamSource[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError], InputFileInfo[CIO]](ZStream(
-        InputFileInfo[CIO](FileSpec(FileID(0), "test.argon"), ZStreamSource(ZStream.fromIterable(code))),
+    val inputFiles: Source[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError], InputFileInfo[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError]], Unit] =
+      new ZStreamSource(ZStream(
+        InputFileInfo(FileSpec(FileID(0), "test.argon"), new ZStreamSource(ZStream.fromIterable(code))),
       ))
 
     BuildProcess.parseInput(inputFiles)

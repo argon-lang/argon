@@ -36,12 +36,12 @@ object Pipeline {
       ZIO.access[FileIO[P]] { _.get.readText(ioToCompilationError)(path) }
     ))
 
-  private def findInputFiles[P: Path : Tagged](buildInfo: project.BuildInfo.Resolved[P]): ZStream[FileIO[P], ErrorList, InputFileInfo[ZIO[FileIO[P], ErrorList, *]]] =
+  private def findInputFiles[P: Path : Tagged](buildInfo: project.BuildInfo.Resolved[P]): ZStream[FileIO[P], ErrorList, InputFileInfo[FileIO[P], ErrorList]] =
     ZStream.fromIterable(buildInfo.project.inputFiles.files)
       .zipWithIndex
       .map { case (pathRes, id) =>
-        InputFileInfo[ZIO[FileIO[P], ErrorList, *]](FileSpec(FileID(id.toInt), pathRes.path.fullPathString),
-          ZStreamSource(createFileDataStream(pathRes.path))
+        InputFileInfo[FileIO[P], ErrorList](FileSpec(FileID(id.toInt), pathRes.path.fullPathString),
+          new ZStreamSource(createFileDataStream(pathRes.path))
         )
       }
 
@@ -58,7 +58,7 @@ object Pipeline {
   (buildInfo: project.BuildInfo.Resolved[P])
   : ZManaged[BuildEnvironment with FileIO[P] with ResourceAccess[PathResourceIndicator[P]], ErrorList, buildInfo.backend.TCompilationOutput] =
     ZManaged.fromEffect(
-      BuildProcess.parseInput(ZStreamSource(findInputFiles(buildInfo)))
+      BuildProcess.parseInput(new ZStreamSource(findInputFiles(buildInfo)))
         .foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
     )
       .flatMap {

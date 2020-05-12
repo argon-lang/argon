@@ -59,15 +59,15 @@ object HttpResourceReader {
               Stream(Chunk.fromArray(content.getBytes(StandardCharsets.UTF_8)))
           }
 
-        override type ZipReader = ZipFileReader[Comp]
+        override type ZipReader = ZipFileReader[Any, ErrorList]
 
-        override def getZipReader(id: WebDemoResourceIndicator): Managed[ErrorList, ZipFileReader[Comp]] =
+        override def getZipReader(id: WebDemoResourceIndicator): Managed[ErrorList, ZipFileReader[Any, ErrorList]] =
           ZManaged.fromEffect(zipReaderForStream(ioExceptionToError)(readResource(id)))
 
-        override def zipEntryStream(zip: ZipFileReader[Comp], name: String): Source[Comp, Chunk[Byte], Unit] =
+        override def zipEntryStream(zip: ZipFileReader[Any, ErrorList], name: String): Source[Any, ErrorList, Chunk[Byte], Unit] =
           zip.getEntryStream(name)
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Comp, Chunk[Byte], Unit]): Comp[A] =
+        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Any, ErrorList, Chunk[Byte], Unit]): Comp[A] =
           env.get.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
       }
     }

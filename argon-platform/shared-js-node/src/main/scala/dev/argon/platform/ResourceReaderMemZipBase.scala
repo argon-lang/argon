@@ -27,15 +27,15 @@ trait ResourceReaderMemZipBase {
         )
     }
 
-  def zipReaderForStream[R, E](errorHandler: IOException => E)(data: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, ZipFileReader[IO[E, *]]] =
+  def zipReaderForStream[R, E](errorHandler: IOException => E)(data: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, ZipFileReader[Any, E]] =
       data.fold(Chunk.empty : Chunk[Byte])(_ ++ _)
         .flatMap { data =>
           promiseToIO(errorHandler)(new JSZip().loadAsync(new Uint8Array(data.toArray.toJSArray)))
         }
         .map { zip =>
-          new ZipFileReader[IO[E, *]] {
-            override def getEntryStream(name: String): Source[IO[E, *], Chunk[Byte], Unit] =
-              ZStreamSource(
+          new ZipFileReader[Any, E] {
+            override def getEntryStream(name: String): Source[Any, E, Chunk[Byte], Unit] =
+              new ZStreamSource(
                 ZStream.flatten(
                   ZStream.fromEffect(
                     promiseToIO(errorHandler)(zip.file(name).async("uint8array"))

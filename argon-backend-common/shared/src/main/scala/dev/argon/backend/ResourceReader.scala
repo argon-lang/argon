@@ -17,21 +17,21 @@ object ResourceReader {
   trait Service[I <: ResourceIndicator] {
     type ZipReader
     def getZipReader(id: I): Managed[ErrorList, ZipReader]
-    def zipEntryStream(zip: ZipReader, name: String): Source[Comp, Chunk[Byte], Unit]
+    def zipEntryStream(zip: ZipReader, name: String): Source[Any, ErrorList, Chunk[Byte], Unit]
 
-    def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Comp, Chunk[Byte], Unit]): Comp[A]
+    def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Any, ErrorList, Chunk[Byte], Unit]): Comp[A]
   }
 
   private trait ServiceCommon[I <: ResourceIndicator] extends Service[I] with ResourceAccess.ResourceAccessCommon {
 
     protected val fileIOLite: FileIOLite.Service
 
-    override type ZipReader = ZipFileReader[Comp]
+    override type ZipReader = ZipFileReader[Any, ErrorList]
 
-    override def zipEntryStream(zip: ZipReader, name: String): Source[Comp, Chunk[Byte], Unit] =
+    override def zipEntryStream(zip: ZipReader, name: String): Source[Any, ErrorList, Chunk[Byte], Unit] =
       zip.getEntryStream(name)
 
-    override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Comp, Chunk[Byte], Unit]): Comp[A] =
+    override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Any, ErrorList, Chunk[Byte], Unit]): Comp[A] =
       fileIOLite.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
 
   }
@@ -42,7 +42,7 @@ object ResourceReader {
       new ServiceCommon[PathResourceIndicator[P]] with ResourceAccess.ResourceAccessCommon {
         override protected val fileIOLite: FileIOLite.Service = prevLayer.get[FileIOLite.Service]
 
-        override def getZipReader(id: PathResourceIndicator[P]): Managed[ErrorList, ZipFileReader[Comp]] =
+        override def getZipReader(id: PathResourceIndicator[P]): Managed[ErrorList, ZipFileReader[Any, ErrorList]] =
           fileIO.openZipFile(ioExceptionToError)(id.path)
       }
     }
@@ -52,7 +52,7 @@ object ResourceReader {
       new ServiceCommon[Nothing] with ResourceAccess.ResourceAccessCommon {
         override protected val fileIOLite: FileIOLite.Service = env.get
 
-        override def getZipReader(id: Nothing): Managed[ErrorList, ZipFileReader[Comp]] = id
+        override def getZipReader(id: Nothing): Managed[ErrorList, ZipFileReader[Any, ErrorList]] = id
       }
     }
 

@@ -9,7 +9,7 @@ import zio.Chunk
 
 object StringToByteStreamTransformation {
 
-  def convert[F[_]: Functor, X](charset: Charset)(text: Source[F, String, X]): Source[F, Chunk[Byte], X] =
+  def convert[R, E, X](charset: Charset)(text: Source[R, E, String, X]): Source[R, E, Chunk[Byte], X] =
     text.map { s => Chunk.fromArray(s.getBytes(charset)) }
 
 }

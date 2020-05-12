@@ -15,20 +15,20 @@ import zio._
 object ResourceWriter {
 
   trait Service[I <: ResourceIndicator] {
-    def writeToResource[X](id: I)(data: Source[Comp, Chunk[Byte], X]): Comp[X]
-    def zipFromEntries(entries: Source[Comp, ZipEntryInfo[Comp], Unit]): Source[Comp, Chunk[Byte], Unit]
+    def writeToResource[X](id: I)(data: Source[Any, ErrorList, Chunk[Byte], X]): Comp[X]
+    def zipFromEntries(entries: Source[Any, ErrorList, ZipEntryInfo[Any, ErrorList], Unit]): Source[Any, ErrorList, Chunk[Byte], Unit]
 
-    def serializeProtocolBuffer(message: GeneratedMessage): Source[Comp, Chunk[Byte], Unit]
+    def serializeProtocolBuffer(message: GeneratedMessage): Source[Any, ErrorList, Chunk[Byte], Unit]
   }
 
   private trait ServiceCommon[I <: ResourceIndicator] extends Service[I] with ResourceAccess.ResourceAccessCommon {
     protected val fileIOLite: FileIOLite.Service
 
 
-    override def zipFromEntries(entries: Source[Comp, ZipEntryInfo[Comp], Unit]): Source[Comp, Chunk[Byte], Unit] =
+    override def zipFromEntries(entries: Source[Any, ErrorList, ZipEntryInfo[Any, ErrorList], Unit]): Source[Any, ErrorList, Chunk[Byte], Unit] =
       fileIOLite.zipEntries(ioExceptionToError)(entries)
 
-    override def serializeProtocolBuffer(message: GeneratedMessage): Source[Comp, Chunk[Byte], Unit] =
+    override def serializeProtocolBuffer(message: GeneratedMessage): Source[Any, ErrorList, Chunk[Byte], Unit] =
       fileIOLite.serializeProtocolBuffer(ioExceptionToError)(message)
 
   }
@@ -39,7 +39,7 @@ object ResourceWriter {
       new ServiceCommon[PathResourceIndicator[P]] with ResourceAccess.ResourceAccessCommon {
         override protected val fileIOLite: FileIOLite.Service = prevLayer.get[FileIOLite.Service]
 
-        override def writeToResource[X](id: PathResourceIndicator[P])(data: Source[Comp, Chunk[Byte], X]): Comp[X] =
+        override def writeToResource[X](id: PathResourceIndicator[P])(data: Source[Any, ErrorList, Chunk[Byte], X]): Comp[X] =
           fileIO.writeToFile(ioExceptionToError)(id.path)(data)
       }
     }
@@ -49,7 +49,7 @@ object ResourceWriter {
       new ServiceCommon[Nothing] with ResourceAccess.ResourceAccessCommon {
         override protected val fileIOLite: FileIOLite.Service = prevLayer.get
 
-        override def writeToResource[X](id: Nothing)(data: Source[Comp, Chunk[Byte], X]): Comp[X] = id
+        override def writeToResource[X](id: Nothing)(data: Source[Any, ErrorList, Chunk[Byte], X]): Comp[X] = id
       }
     }
 
