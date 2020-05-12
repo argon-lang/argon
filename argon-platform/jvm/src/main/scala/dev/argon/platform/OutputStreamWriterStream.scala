@@ -19,13 +19,11 @@ private[platform] object OutputStreamWriterStream {
     "org.wartremover.warts.NonUnitStatements",
     "org.wartremover.warts.Var",
   ))
-  private final class TransformOutputStream[R, E, A2 >: Byte, X, S]
+  private final class TransformOutputStream[R, E]
   (
     runtime: Runtime[R],
     queue: Queue[Take[E, Chunk[Byte]]],
   ) extends OutputStream {
-
-    var result: Option[X] = None
 
     override def write(b: Int): Unit = write(Array(b.toByte))
 

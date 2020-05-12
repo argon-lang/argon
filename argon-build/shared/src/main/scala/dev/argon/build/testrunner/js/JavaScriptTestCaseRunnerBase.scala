@@ -36,7 +36,7 @@ abstract class JavaScriptTestCaseRunnerBase[I <: ResourceIndicator: Tagged, P: P
 
   override protected def getProgramOutput(compOutput: backend.TCompilationOutput): ZIO[FileIO[P], TestCaseError, String] =
     for {
-      (compiledFile, _) <- compOutput.textStream.foldLeftM("") { (a, b) => IO.succeed(a + b) }.mapError(compilationFailureResult)
+      compiledFile <- compOutput.textStream.foldM("") { (a, b) => IO.succeed(a + b) }.mapError(compilationFailureResult)
       output <- runJSOutput(references)(compiledFile).mapError(executionFailureResult)
     } yield output
 

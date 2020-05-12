@@ -62,7 +62,7 @@ object HttpResourceReader {
         override def getZipReader(id: WebDemoResourceIndicator): Managed[ErrorList, ZipFileReader[Any, ErrorList]] =
           ZManaged.fromEffect(zipReaderForStream(ioExceptionToError)(readResource(id)))
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Any, ErrorList, Chunk[Byte], Unit]): Comp[A] =
+        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[ErrorList, Chunk[Byte]]): Comp[A] =
           env.get.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
       }
     }

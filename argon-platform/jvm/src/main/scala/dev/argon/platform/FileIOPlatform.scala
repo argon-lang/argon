@@ -57,7 +57,8 @@ private[platform] object FileIOPlatform {
           }
         }
 
-      override def writeToFile[R, E, X](errorHandler: IOException => E)(path: FilePath)(data: Source[R, E, Chunk[Byte], X]): ZIO[R, E, X] =
+
+      override def writeToFile[R, E](errorHandler: IOException => E)(path: FilePath)(data: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, Unit] =
         ZManaged.fromAutoCloseable(
           blocking.effectBlocking { Files.newOutputStream(path.javaPath, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING) }
         )
@@ -93,8 +94,7 @@ private[platform] object FileIOPlatform {
         )
           .map { zipFile =>
             new ZipFileReader[R, E] {
-              override def getEntryStream(name: String): Source[R, E, Chunk[Byte], Unit] = {
-                val stream =
+              override def getEntryStream(name: String): ZStream[R, E, Chunk[Byte]] =
                   ZStream.managed(
                     ZManaged.fromAutoCloseable(
                       blocking.effectBlocking { zipFile.getInputStream(zipFile.getEntry(name)) }
@@ -104,9 +104,6 @@ private[platform] object FileIOPlatform {
                     )
                   )
                   .flatMap(ZStream.fromInputStream(_).chunks.mapError(errorHandler))
-
-                new ZStreamSource(stream)
-              }
             }
           }
 

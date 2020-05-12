@@ -12,6 +12,7 @@ import dev.argon.loaders.armodule.ArgonModuleLoader.PayloadLoader
 import dev.argon.project.{ProjectLoader, SingleFile}
 import dev.argon.stream.builder.Source
 import zio._
+import zio.stream._
 import zio.interop.catz._
 import toml.Codecs._
 import shapeless._
@@ -85,8 +86,8 @@ object JSBackend extends Backend {
 
     override def outputResource[I](options: BackendOutputOptionsId[I]): I = options.outputFile.file
 
-    override val textStream: Source[Any, ErrorList, String, Unit] =
-      JSAst.writeModule(jsModule)
+    override val textStream: Stream[ErrorList, String] =
+      JSAst.writeModule(jsModule).toZStream
 
   }
 

@@ -11,20 +11,21 @@ import dev.argon.module.PathResourceIndicator
 import dev.argon.stream.builder.Source
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 import zio._
+import zio.stream._
 
 object ResourceReader {
 
   trait Service[I <: ResourceIndicator] {
     def getZipReader(id: I): Managed[ErrorList, ZipFileReader[Any, ErrorList]]
 
-    def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Any, ErrorList, Chunk[Byte], Unit]): Comp[A]
+    def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[ErrorList, Chunk[Byte]]): Comp[A]
   }
 
   private trait ServiceCommon[I <: ResourceIndicator] extends Service[I] with ResourceAccess.ResourceAccessCommon {
 
     protected val fileIOLite: FileIOLite.Service
 
-    override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Any, ErrorList, Chunk[Byte], Unit]): Comp[A] =
+    override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[ErrorList, Chunk[Byte]]): Comp[A] =
       fileIOLite.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
 
   }

@@ -34,13 +34,11 @@ trait ResourceReaderMemZipBase {
         }
         .map { zip =>
           new ZipFileReader[Any, E] {
-            override def getEntryStream(name: String): Source[Any, E, Chunk[Byte], Unit] =
-              new ZStreamSource(
-                ZStream.flatten(
-                  ZStream.fromEffect(
-                    promiseToIO(errorHandler)(zip.file(name).async("uint8array"))
-                      .map { data => ZStream(Chunk.fromArray(data.toArray.map { _.toByte })) }
-                  )
+            override def getEntryStream(name: String): ZStream[Any, E, Chunk[Byte]] =
+              ZStream.flatten(
+                ZStream.fromEffect(
+                  promiseToIO(errorHandler)(zip.file(name).async("uint8array"))
+                    .map { data => ZStream(Chunk.fromArray(data.toArray.map { _.toByte })) }
                 )
               )
 

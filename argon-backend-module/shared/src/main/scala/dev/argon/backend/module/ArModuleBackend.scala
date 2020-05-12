@@ -16,6 +16,7 @@ import shapeless._
 import toml.Parse.{Address, Message}
 import toml.Value
 import zio._
+import zio.stream._
 
 
 
@@ -65,7 +66,7 @@ object ArModuleBackend extends Backend {
     }.provideSomeLayer(ModuleBackendLoadService.forResourceReader[I, ModuleContext with Context.WithRes[I]])
   }
 
-  private def createOutput(moduleGen: Source[Any, ErrorList, (String, GeneratedMessage), Unit]): CompilationOutput[BackendOutputOptionsId] =
+  private def createOutput(moduleGen: Stream[ErrorList, ModuleEmitter.StreamElem]): CompilationOutput[BackendOutputOptionsId] =
     new CompilationOutput[BackendOutputOptionsId] {
 
       override def write[I <: ResourceIndicator : Tagged](options: BackendOutputOptionsId[I]): RComp[ResourceWriter[I], Unit] =

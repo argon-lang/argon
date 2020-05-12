@@ -131,8 +131,7 @@ object Program extends PlatformApp {
             ),
           ).use { output =>
             output.textStream
-              .foldLeftM("") { (a, b) => IO.succeed(a + b) }
-              .map { case (str, _) => str }
+              .fold("") { (a, b) => a + b }
           }
       }
   }

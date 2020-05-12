@@ -7,7 +7,8 @@ import dev.argon.io.fileio.FileIOLite
 import dev.argon.stream.builder.{Source, ZStreamSource}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 import zio.blocking.Blocking
-import zio.{Chunk, ZIO, ZLayer}
+import zio.stream.ZStream
+import zio.{Chunk, Has, ZIO, ZLayer}
 
 @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 private[platform] object FileIOLitePlatform {
@@ -15,13 +16,11 @@ private[platform] object FileIOLitePlatform {
     val blocking = env.get[Blocking.Service]
 
     new FileIOLite.Service {
-      override def zipEntries[R, E](errorHandler: IOException => E)(entries: Source[R, E, ZipEntryInfo[R, E], Unit]): Source[R, E, Chunk[Byte], Unit] =
-        new ZStreamSource(
-          ZipEntryStreamTransformation[R, E](errorHandler, env)(entries)
-        )
+      override def zipEntries[R, E](errorHandler: IOException => E)(entries: ZStream[R, E, ZipEntryInfo[R, E]]): ZStream[R, E, Chunk[Byte]] =
+        ZipEntryStreamTransformation(errorHandler, blocking)(entries)
 
-      override def deserializeProtocolBuffer[R, E, A <: GeneratedMessage](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: Source[R, E, Chunk[Byte], Unit]): ZIO[R, E, A] =
-        InputStreamReaderTransformation(data.toZStream) { stream =>
+      override def deserializeProtocolBuffer[R, E, A <: GeneratedMessage](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, A] =
+        InputStreamReaderTransformation(data) { stream =>
           blocking.effectBlocking {
             companion.parseFrom(stream)
           }
@@ -30,17 +29,15 @@ private[platform] object FileIOLitePlatform {
             }
         }
 
-      override def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): Source[R, E, Chunk[Byte], Unit] =
-        new ZStreamSource(
-          OutputStreamWriterStream { stream =>
-            blocking.effectBlocking {
-              message.writeTo(stream)
-            }
-              .refineOrDie {
-                case ex: IOException => errorHandler(ex)
-              }
+      override def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): ZStream[R, E, Chunk[Byte]] =
+        OutputStreamWriterStream { stream =>
+          blocking.effectBlocking {
+            message.writeTo(stream)
           }
-        )
+            .refineOrDie {
+              case ex: IOException => errorHandler(ex)
+            }
+        }
     }
   }
 }

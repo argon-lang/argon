@@ -15,7 +15,7 @@ import scalajs.js.JSConverters._
 
 @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 private[platform] trait FileIOCommon {
-  protected def dataStreamToArray[R, E](dataStream: Source[R, E, Chunk[Byte], Unit]): ZIO[R, E, Array[Byte]] =
+  protected def dataStreamToArray[R, E](dataStream: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, Array[Byte]] =
     IO.effectTotal { new ByteArrayOutputStream() }
       .flatMap { outputStream =>
         dataStream.foreach { chunk =>
@@ -25,7 +25,7 @@ private[platform] trait FileIOCommon {
             IO.effectTotal { outputStream.toByteArray }
           }
       }
-  protected def dataStreamToUint8Array[R, E](dataStream: Source[R, E, Chunk[Byte], Unit]): ZIO[R, E, Uint8Array] =
+  protected def dataStreamToUint8Array[R, E](dataStream: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, Uint8Array] =
     dataStreamToArray(dataStream).map { arr => new Uint8Array(arr.toJSArray) }
 
   protected def promiseToIO[E, A](errorHandler: IOException => E)(promise: => js.Promise[A]): IO[E, A] =

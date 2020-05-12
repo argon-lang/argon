@@ -6,10 +6,11 @@ import cats._
 import cats.implicits._
 import dev.argon.stream.builder.Source
 import zio.Chunk
+import zio.stream.ZStream
 
 object StringToByteStreamTransformation {
 
-  def convert[R, E, X](charset: Charset)(text: Source[R, E, String, X]): Source[R, E, Chunk[Byte], X] =
+  def convert[R, E, X](charset: Charset)(text: ZStream[R, E, String]): ZStream[R, E, Chunk[Byte]] =
     text.map { s => Chunk.fromArray(s.getBytes(charset)) }
 
 }

@@ -12,6 +12,7 @@ import dev.argon.module.PathResourceIndicator
 import dev.argon.stream.builder.Source
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 import zio._
+import zio.stream._
 import zio.system.System
 import zio.test.environment._
 
@@ -43,7 +44,7 @@ object TestResourceReader {
                 }
           }
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Source[Any, ErrorList, Chunk[Byte], Unit]): Comp[A] =
+        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[ErrorList, Chunk[Byte]]): Comp[A] =
           liveResReader.deserializeProtocolBuffer(companion)(data)
       } : Service[P])
     })

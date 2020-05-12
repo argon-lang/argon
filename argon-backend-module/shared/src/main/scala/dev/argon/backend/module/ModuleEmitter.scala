@@ -695,7 +695,7 @@ object ModuleEmitter {
 
   type StreamElem = (String, GeneratedMessage)
 
-  def emitModule(context: ModuleContext)(module: ArModule[context.type, DeclarationPayloadSpecifier]): Source[Any, ErrorList, StreamElem, Unit] =
+  def emitModule(context: ModuleContext)(module: ArModule[context.type, DeclarationPayloadSpecifier]): zstream.Stream[ErrorList, StreamElem] =
     new Source[Any, ErrorList, StreamElem, Unit] {
 
       override def foreach[R1 <: Any, E1 >: ErrorList](f: StreamElem => ZIO[R1, E1, Unit]): ZIO[R1, E1, Unit] =
@@ -703,7 +703,7 @@ object ModuleEmitter {
           new ModuleEmitter[context.type](context, emitStateRef).processModule[R1, E1](module)(f)
         }
 
-    }
+    }.toZStream
 
   private final case class ModuleIds
   (

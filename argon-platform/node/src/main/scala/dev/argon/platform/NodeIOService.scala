@@ -97,7 +97,8 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
       }
       .flatMap(ZStream.fromIterable(_))
 
-  override def writeToFile[R, E, X](errorHandler: IOException => E)(path: FilePath)(data: Source[R, E, Chunk[Byte], X]): ZIO[R, E, X] =
+
+  override def writeToFile[R, E](errorHandler: IOException => E)(path: FilePath)(data: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, Unit] =
     IO.effectAsync[E, Integer] { register =>
       NodeFileSystem.open(path.pathName, "w", (error, fd) =>
         register(
@@ -175,28 +176,26 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
     }
       .map { zip =>
         new ZipFileReader[R, E] {
-          override def getEntryStream(name: String): Source[R, E, Chunk[Byte], Unit] =
-            new ZStreamSource(
-              ZStream.fromEffect(
-                IO.effectAsync[E, NodeReadable] { register =>
-                  zip.stream(name, (err, stream) => register(
-                    if(err == null)
-                      IO.succeed(stream)
-                    else
-                      IO.fail(errorHandler(JSIOException(err)))
-                  ))
-                }
-              )
-                .flatMap { stream =>
-                  WritableZStream { wzs =>
-                    IO.effectAsync { register =>
-                      stream.pipe(wzs)
-                      stream.on("end", () => register(IO.succeed(())))
-                    }
-                  }
-                    .mapError { err => errorHandler(JSIOException(err)) }
-                }
+          override def getEntryStream(name: String): ZStream[R, E, Chunk[Byte]] =
+            ZStream.fromEffect(
+              IO.effectAsync[E, NodeReadable] { register =>
+                zip.stream(name, (err, stream) => register(
+                  if(err == null)
+                    IO.succeed(stream)
+                  else
+                    IO.fail(errorHandler(JSIOException(err)))
+                ))
+              }
             )
+              .flatMap { stream =>
+                WritableZStream { wzs =>
+                  IO.effectAsync { register =>
+                    stream.pipe(wzs)
+                    stream.on("end", () => register(IO.succeed(())))
+                  }
+                }
+                  .mapError { err => errorHandler(JSIOException(err)) }
+              }
         }
       }
 

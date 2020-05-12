@@ -9,6 +9,7 @@ import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.stream._
 import dev.argon.stream.builder.Source
 import zio._
+import zio.stream._
 import zio.interop.catz._
 
 trait CompilationOutput[OutputOptions[_]] {
@@ -24,7 +25,7 @@ abstract class CompilationOutputText[OutputOptions[_]] extends CompilationOutput
 
   def outputResource[I](options: OutputOptions[I]): I
 
-  val textStream: Source[Any, ErrorList, String, Unit]
+  val textStream: Stream[ErrorList, String]
 
 
 }
