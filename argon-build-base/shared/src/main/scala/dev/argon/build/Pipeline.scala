@@ -58,8 +58,7 @@ object Pipeline {
   (buildInfo: project.BuildInfo.Resolved[P])
   : ZManaged[BuildEnvironment with FileIO[P] with ResourceAccess[PathResourceIndicator[P]], ErrorList, buildInfo.backend.TCompilationOutput] =
     ZManaged.fromEffect(
-      BuildProcess.parseInput(findInputFiles(buildInfo))
-        .runCollect
+      ZIO.access[FileIO[P]](BuildProcess.parseInput(findInputFiles(buildInfo)).provide)
     )
       .flatMap { parsedInput =>
         val references = buildInfo.project.references.files
@@ -67,7 +66,7 @@ object Pipeline {
         BuildProcess.compile(
           buildInfo.backend : buildInfo.backend.type
         )(
-          parsedInput.toVector,
+          parsedInput,
           references.toVector,
           CompilerOptions(
             moduleName = buildInfo.compilerOptions.moduleName

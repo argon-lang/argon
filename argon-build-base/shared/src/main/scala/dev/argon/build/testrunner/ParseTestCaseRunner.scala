@@ -10,6 +10,8 @@ object ParseTestCaseRunner extends TestCaseRunnerParsePhase[Any] {
 
   override def runTest(testCase: TestCase): UIO[TestCaseActualResult] =
     parseTestCaseSource(testCase)
+      .runDrain
+      .mapError(compilationFailureResult)
       .as(TestCaseActualResult.NotExecuted)
       .catchAll(IO.succeed(_))
 

@@ -12,11 +12,11 @@ import cats.instances._
 import zio._
 import dev.argon.build._
 import dev.argon.stream.builder.ZStreamSource
-import zio.stream.ZStream
+import zio.stream._
 
 private[testrunner] trait TestCaseRunnerParsePhase[-R] extends TestCaseRunner[R] {
 
-  protected final def parseTestCaseSource(testCase: TestCase): IO[TestCaseError, Vector[SourceAST]] = {
+  protected final def parseTestCaseSource(testCase: TestCase): Stream[ErrorList, SourceAST] = {
 
     val inputFiles = ZStream.fromIterable[(InputSourceData, Int)](testCase.sourceCode.zipWithIndex)
       .map {
@@ -27,12 +27,7 @@ private[testrunner] trait TestCaseRunnerParsePhase[-R] extends TestCaseRunner[R]
           )
       }
 
-    val parsedInputStream =
-      BuildProcess.parseInput(inputFiles)
-
-    parsedInputStream.runCollect
-      .map { parsedInput => parsedInput.toVector }
-      .mapError(compilationFailureResult)
+    BuildProcess.parseInput(inputFiles)
   }
 
 }

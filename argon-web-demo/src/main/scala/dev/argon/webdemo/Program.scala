@@ -18,7 +18,7 @@ import dev.argon.platform.PlatformApp
 import dev.argon.stream.builder.{Source, ZStreamSource}
 import dev.argon.util.{FileID, FileSpec}
 import zio._
-import zio.stream.ZStream
+import zio.stream._
 import org.scalajs.dom
 
 object Program extends PlatformApp {
@@ -105,34 +105,29 @@ object Program extends PlatformApp {
       )
 
   private def compileCode(code: String): CIO[String] = {
-    val inputFiles: ZStream[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError], InputFileInfo[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError]]] =
-      ZStream(
-        InputFileInfo(FileSpec(FileID(0), "test.argon"), ZStream.fromIterable(code)),
-      )
-
-    BuildProcess.parseInput(inputFiles)
-      .runCollect
-      .flatMap { parsedInput =>
-        BuildProcess.compile(
-          JSBackend
-        )(
-          parsedInput.toVector,
-          references,
-          CompilerOptions[Id](
-            moduleName = "Test"
-          ),
-          JSBackendOptions[Id, WebDemoResourceIndicator](
-            extern = Map.empty,
-            inject = JSInjectCode[Id](
-              before = None,
-              after = None,
-            )
-          ),
-        ).use { output =>
-          output.textStream
-            .fold("") { (a, b) => a + b }
-        }
-      }
+    val inputFiles = ZStream(
+      InputFileInfo(FileSpec(FileID(0), "test.argon"), ZStream.fromIterable(code)),
+    )
+    
+    BuildProcess.compile(
+      JSBackend
+    )(
+      BuildProcess.parseInput(inputFiles),
+      references,
+      CompilerOptions[Id](
+        moduleName = "Test"
+      ),
+      JSBackendOptions[Id, WebDemoResourceIndicator](
+        extern = Map.empty,
+        inject = JSInjectCode[Id](
+          before = None,
+          after = None,
+        )
+      ),
+    ).use { output =>
+      output.textStream
+        .fold("") { (a, b) => a + b }
+    }
   }
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))

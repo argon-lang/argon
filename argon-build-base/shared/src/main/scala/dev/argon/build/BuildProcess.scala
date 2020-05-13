@@ -16,7 +16,7 @@ import dev.argon.stream.builder.Source
 import dev.argon.util.AnyExtensions._
 import zio._
 import zio.interop.catz._
-import zio.stream.ZStream
+import zio.stream._
 
 object BuildProcess {
 
@@ -40,7 +40,7 @@ object BuildProcess {
   (
     backend: Backend
   )(
-    sourceASTs: Vector[SourceAST],
+    sourceASTs: Stream[ErrorList, SourceAST],
     references: Vector[I],
     compilerOptions: CompilerOptions[Id],
     backendOptions: backend.BackendOptions[Id, I]

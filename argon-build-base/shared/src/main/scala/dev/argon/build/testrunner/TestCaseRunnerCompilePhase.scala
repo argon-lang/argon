@@ -27,14 +27,12 @@ private[testrunner] abstract class TestCaseRunnerCompilePhase[I <: ResourceIndic
   protected def backendOptions(compilerOptions: CompilerOptions[Id]): UIO[backend.BackendOptions[Id, I]]
 
   protected final def compileTestCase(testCase: TestCase, references: Vector[I]): ZManaged[R, TestCaseError, backend.TCompilationOutput] = for {
-    parsedSource <- ZManaged.fromEffect(parseTestCaseSource(testCase))
-
     backendOpts <- ZManaged.fromEffect(backendOptions(compilerOptions))
 
     output <- BuildProcess.compile(
       backend : backend.type
     )(
-      parsedSource,
+      parseTestCaseSource(testCase),
       references,
       compilerOptions,
       backendOpts,
