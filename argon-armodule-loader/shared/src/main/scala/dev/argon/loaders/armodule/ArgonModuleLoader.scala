@@ -22,6 +22,7 @@ import shapeless.ops.nat.{LT, Pred, ToInt}
 import shapeless.{Id, Nat, Sized, Succ, _0}
 import shapeless.syntax.sized._
 import zio.{IO, Managed, ZIO, ZManaged}
+import zio.stream._
 import zio.interop.catz._
 
 import scala.collection.immutable.{Map, Vector}
@@ -898,7 +899,9 @@ object ArgonModuleLoader {
                 case ArgonModule.GlobalDeclaration(id, _, _, _) =>
                   Compilation.forErrors(CompilationError.InvalidGlobal(CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
               }
-              .map(NamespaceBuilder.createNamespace)
+              .flatMap { globals =>
+                NamespaceBuilder.createNamespace(Stream.fromIterable(globals))
+              }
 
 
           def findTrait(traitId: Int): Comp[AbsRef[context.type, ArTrait]] =

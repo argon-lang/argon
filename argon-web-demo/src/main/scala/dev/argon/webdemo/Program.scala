@@ -108,7 +108,7 @@ object Program extends PlatformApp {
     val inputFiles = ZStream(
       InputFileInfo(FileSpec(FileID(0), "test.argon"), ZStream.fromIterable(code)),
     )
-    
+
     BuildProcess.compile(
       JSBackend
     )(

@@ -40,13 +40,12 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
       override val descriptor: ModuleDescriptor = ModuleDescriptor(input.options.moduleName)
       override val globalNamespace: Comp[Namespace[context.type, DeclarationPayloadSpecifier]] =
         globalNamespaceCache.get(
-          input.source
-            .mapM { ast =>
-              createNamespaceElementFromAST(context2)(input.options)(this)(referencedModules2)(ast)
-            }
-            .runCollect
-            .map { _.toVector }
-            .map(NamespaceBuilder.createNamespace[context.type, DeclarationPayloadSpecifier])
+          NamespaceBuilder.createNamespace[context.type, DeclarationPayloadSpecifier](
+            input.source
+              .mapM { ast =>
+                createNamespaceElementFromAST(context2)(input.options)(this)(referencedModules2)(ast)
+              }
+          )
         )
 
       override val referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]] = referencedModules2

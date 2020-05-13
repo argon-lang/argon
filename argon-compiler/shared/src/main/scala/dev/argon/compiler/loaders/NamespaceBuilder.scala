@@ -1,14 +1,18 @@
 package dev.argon.compiler.loaders
 
+import dev.argon.compiler.{Comp, ErrorList}
 import dev.argon.util.NamespacePath
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types._
+import zio.stream._
 
 object NamespaceBuilder {
 
-  def createNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](elements: Vector[ModuleElement[TContext, TPayloadSpec]]): Namespace[TContext, TPayloadSpec] =
-    createNamespaceWithPath(NamespacePath.empty, elements)
+  def createNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](elements: Stream[ErrorList, ModuleElement[TContext, TPayloadSpec]]): Comp[Namespace[TContext, TPayloadSpec]] =
+    elements.runCollect.map { elems =>
+      createNamespaceWithPath(NamespacePath.empty, elems.toVector)
+    }
 
   def createNamespaceWithPath[TContext <: Context with Singleton, TPayloadSpec[_, _]](path: NamespacePath, elements: Vector[ModuleElement[TContext, TPayloadSpec]]): Namespace[TContext, TPayloadSpec] = {
     val (directElements, nestedElements) = divideNamespaceElements(elements)(Vector.empty, Vector.empty)
