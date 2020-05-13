@@ -8,18 +8,20 @@ import cats.implicits._
 import dev.argon.grammar.ParseErrorHandler
 import dev.argon.parser.impl.TopLevelStatement.NSAndImports
 import dev.argon.stream._
-import dev.argon.stream.builder.Source
+import dev.argon.stream.builder.{Source, ZStreamSource}
 import zio.ZIO
+import zio.stream.ZStream
 
 object ParseHandler {
 
-  def parse[R, E](fileSpec: FileSpec)(chars: Source[R, E, Char, Unit])(implicit errorHandler: ParseErrorHandler[ZIO[R, E, *], NonEmptyVector[SyntaxError]]): Source[R, E, SourceAST, Unit] =
-    Characterizer.characterize(chars)
+  def parse[R, E](fileSpec: FileSpec)(chars: ZStream[R, E, Char])(implicit errorHandler: ParseErrorHandler[ZIO[R, E, *], NonEmptyVector[SyntaxError]]): ZStream[R, E, SourceAST] =
+    Characterizer.characterize(new ZStreamSource(chars))
       .bufferVector(1024 * 4)
       .into(Lexer.lex[R, E])
       .bufferVector(1024)
       .into(ArgonParser.parse[R, E])
       .into(buildSourceAST[R, E](fileSpec)(_))
+      .toZStream
 
   private def buildSourceAST[R, E](fileSpec: FileSpec)(stmts: Source[R, E, TopLevelStatement, Unit]): Source[R, E, SourceAST, Unit] =
     new Source[R, E, SourceAST, Unit] {

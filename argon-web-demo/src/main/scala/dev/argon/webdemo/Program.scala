@@ -105,34 +105,33 @@ object Program extends PlatformApp {
       )
 
   private def compileCode(code: String): CIO[String] = {
-    val inputFiles: Source[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError], InputFileInfo[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError]], Unit] =
-      new ZStreamSource(ZStream(
-        InputFileInfo(FileSpec(FileID(0), "test.argon"), new ZStreamSource(ZStream.fromIterable(code))),
-      ))
+    val inputFiles: ZStream[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError], InputFileInfo[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError]]] =
+      ZStream(
+        InputFileInfo(FileSpec(FileID(0), "test.argon"), ZStream.fromIterable(code)),
+      )
 
     BuildProcess.parseInput(inputFiles)
-      .foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
-      .flatMap {
-        case (parsedInput, _) =>
-          BuildProcess.compile(
-            JSBackend
-          )(
-            parsedInput,
-            references,
-            CompilerOptions[Id](
-              moduleName = "Test"
-            ),
-            JSBackendOptions[Id, WebDemoResourceIndicator](
-              extern = Map.empty,
-              inject = JSInjectCode[Id](
-                before = None,
-                after = None,
-              )
-            ),
-          ).use { output =>
-            output.textStream
-              .fold("") { (a, b) => a + b }
-          }
+      .runCollect
+      .flatMap { parsedInput =>
+        BuildProcess.compile(
+          JSBackend
+        )(
+          parsedInput.toVector,
+          references,
+          CompilerOptions[Id](
+            moduleName = "Test"
+          ),
+          JSBackendOptions[Id, WebDemoResourceIndicator](
+            extern = Map.empty,
+            inject = JSInjectCode[Id](
+              before = None,
+              after = None,
+            )
+          ),
+        ).use { output =>
+          output.textStream
+            .fold("") { (a, b) => a + b }
+        }
       }
   }
 

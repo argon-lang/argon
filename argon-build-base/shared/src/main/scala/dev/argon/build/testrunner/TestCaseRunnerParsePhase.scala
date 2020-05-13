@@ -23,17 +23,15 @@ private[testrunner] trait TestCaseRunnerParsePhase[-R] extends TestCaseRunner[R]
         case (InputSourceData(filename, data), i) =>
           InputFileInfo[Any, ErrorList](
             FileSpec(FileID(i), filename),
-            new ZStreamSource(ZStream.fromChunk(Chunk.fromArray(data.toCharArray)))
+            ZStream.fromChunk(Chunk.fromArray(data.toCharArray))
           )
       }
 
     val parsedInputStream =
-      BuildProcess.parseInput(new ZStreamSource(inputFiles))
+      BuildProcess.parseInput(inputFiles)
 
-    parsedInputStream.foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
-      .map {
-        case (parsedInput, _) => parsedInput
-      }
+    parsedInputStream.runCollect
+      .map { parsedInput => parsedInput.toVector }
       .mapError(compilationFailureResult)
   }
 

@@ -41,7 +41,7 @@ object Pipeline {
       .zipWithIndex
       .map { case (pathRes, id) =>
         InputFileInfo[FileIO[P], ErrorList](FileSpec(FileID(id.toInt), pathRes.path.fullPathString),
-          new ZStreamSource(createFileDataStream(pathRes.path))
+          createFileDataStream(pathRes.path)
         )
       }
 
@@ -58,23 +58,22 @@ object Pipeline {
   (buildInfo: project.BuildInfo.Resolved[P])
   : ZManaged[BuildEnvironment with FileIO[P] with ResourceAccess[PathResourceIndicator[P]], ErrorList, buildInfo.backend.TCompilationOutput] =
     ZManaged.fromEffect(
-      BuildProcess.parseInput(new ZStreamSource(findInputFiles(buildInfo)))
-        .foldLeftM(Vector.empty[SourceAST]) { (acc, ast) => IO.succeed(acc :+ ast) }
+      BuildProcess.parseInput(findInputFiles(buildInfo))
+        .runCollect
     )
-      .flatMap {
-        case (parsedInput, _) =>
-          val references = buildInfo.project.references.files
+      .flatMap { parsedInput =>
+        val references = buildInfo.project.references.files
 
-          BuildProcess.compile(
-            buildInfo.backend : buildInfo.backend.type
-          )(
-            parsedInput,
-            references.toVector,
-            CompilerOptions(
-              moduleName = buildInfo.compilerOptions.moduleName
-            ),
-            buildInfo.backendOptions,
-          )
+        BuildProcess.compile(
+          buildInfo.backend : buildInfo.backend.type
+        )(
+          parsedInput.toVector,
+          references.toVector,
+          CompilerOptions(
+            moduleName = buildInfo.compilerOptions.moduleName
+          ),
+          buildInfo.backendOptions,
+        )
       }
 
   def run[P : Path: Tagged](buildInfo: project.BuildInfo.Resolved[P]): RIO[Console with BuildEnvironment with FileIO[P] with FileIOLite, Int] =

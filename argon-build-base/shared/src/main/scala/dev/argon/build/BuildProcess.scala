@@ -16,12 +16,13 @@ import dev.argon.stream.builder.Source
 import dev.argon.util.AnyExtensions._
 import zio._
 import zio.interop.catz._
+import zio.stream.ZStream
 
 object BuildProcess {
 
   def parseInput[R]
-  (inputFiles: Source[R, ErrorList, InputFileInfo[R, ErrorList], Unit])
-  : Source[R, ErrorList, SourceAST, Unit] =
+  (inputFiles: ZStream[R, ErrorList, InputFileInfo[R, ErrorList]])
+  : ZStream[R, ErrorList, SourceAST] =
     inputFiles.flatMap { fileInfo =>
       def toCompileError(error: SyntaxError): CompilationError =
         CompilationError.SyntaxCompilerError(SyntaxErrorData(fileInfo.fileSpec, error))
