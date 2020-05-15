@@ -50,7 +50,7 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
         case DataConstructorType(_, args, _) => args
       }
 
-      newSig <- convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instTypeArgs)
+      newSig = convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instTypeArgs)
 
     } yield newSig
   }

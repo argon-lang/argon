@@ -16,27 +16,22 @@ sealed abstract class Substitutions[Wrap[+_]: Monad] {
   private def fromSimpleType(expr: ArExpr[context.type, Wrap]): ArExprWrap[context.type, Wrap] =
     expr.pure[Wrap]
 
-  def substTypeArg(arg: TypeArgument[context.type, Wrap]): TypeArgument[context.type, Wrap] = arg match {
-    case TypeArgument.Expr(argExpr) => TypeArgument.Expr(substWrapExpr(argExpr))
-    case TypeArgument.Wildcard(u) => TypeArgument.Wildcard(u)
-  }
-
   def substClassType(expr: ClassType[context.type, Wrap]): ClassType[context.type, Wrap] =
     ClassType(
       expr.arClass,
-      expr.args.map(substTypeArg)
+      expr.args.map(substWrapExpr)
     )
 
   def substTraitType(expr: TraitType[context.type, Wrap]): TraitType[context.type, Wrap] =
     TraitType(
       expr.arTrait,
-      expr.args.map(substTypeArg)
+      expr.args.map(substWrapExpr)
     )
 
   def substDataCtorType(expr: DataConstructorType[context.type, Wrap]): DataConstructorType[context.type, Wrap] =
     DataConstructorType(
       expr.ctor,
-      expr.args.map(substTypeArg),
+      expr.args.map(substWrapExpr),
       substTraitType(expr.instanceType)
     )
 

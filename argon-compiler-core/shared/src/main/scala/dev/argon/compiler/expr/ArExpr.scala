@@ -142,12 +142,6 @@ object ArExpr {
 
   sealed trait TypeWithMethods[TContext, Wrap[+_]] extends TypeIsTypeOfTypeExpr[TContext, Wrap]
 
-  sealed trait TypeArgument[TContext, Wrap[+_]]
-  object TypeArgument {
-    final case class Expr[TContext, Wrap[+_]](expr: ArExprWrap[TContext, Wrap]) extends TypeArgument[TContext, Wrap]
-    final case class Wildcard[TContext, Wrap[+_]](universe: UniverseExpr) extends TypeArgument[TContext, Wrap]
-  }
-
   final case class TypeOfType[TContext, Wrap[+_]]
   (
     inner: ArExprWrap[TContext, Wrap]
@@ -163,19 +157,19 @@ object ArExpr {
   final case class TraitType[TContext <: Context with Singleton, Wrap[+_]]
   (
     arTrait: AbsRef[TContext, ArTrait],
-    args: Vector[TypeArgument[TContext, Wrap]]
+    args: Vector[ArExprWrap[TContext, Wrap]]
   ) extends TypeWithMethods[TContext, Wrap]
   
   final case class ClassType[TContext <: Context with Singleton, Wrap[+_]]
   (
     arClass: AbsRef[TContext, ArClass],
-    args: Vector[TypeArgument[TContext, Wrap]]
+    args: Vector[ArExprWrap[TContext, Wrap]]
   ) extends TypeWithMethods[TContext, Wrap]
   
   final case class DataConstructorType[TContext <: Context with Singleton, Wrap[+_]]
   (
     ctor: AbsRef[TContext, DataConstructor],
-    args: Vector[TypeArgument[TContext, Wrap]],
+    args: Vector[ArExprWrap[TContext, Wrap]],
     instanceType: TraitType[TContext, Wrap]
   ) extends TypeWithMethods[TContext, Wrap]
 
@@ -196,5 +190,11 @@ object ArExpr {
     first: ArExprWrap[TContext, Wrap],
     second: ArExprWrap[TContext, Wrap]
   ) extends TypeIsTypeOfTypeExpr[TContext, Wrap]
+
+  final case class ExistentialType[TContext, Wrap[+_]]
+  (
+    variable: LocalVariable[TContext, Wrap],
+    inner: ArExprWrap[TContext, Wrap]
+  )
 
 }

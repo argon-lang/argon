@@ -179,11 +179,10 @@ object VTableBuilder {
         for {
           btSig <- bt.arTrait.value.signature
           baseTraitVTable <- fromTrait(bt.arTrait.value)
-          newMap <- baseTraitVTable.methodMap.toVector.traverse {
+          newMap = baseTraitVTable.methodMap.toSeq.map {
             case (key, VTableEntry(signature, entrySource, impl)) =>
-              signature.substituteTypeArguments(btSig.unsubstitutedParameters)(bt.args).map { newSig =>
-                key -> VTableEntry(newSig, entrySource, impl)
-              }
+              val newSig = signature.substituteTypeArguments(btSig.unsubstitutedParameters)(bt.args)
+              key -> VTableEntry(newSig, entrySource, impl)
           }
         } yield VTable(newMap.toMap)
 
@@ -200,15 +199,14 @@ object VTableBuilder {
               for {
                 bcSig <- bc.arClass.value.signature
                 baseClassVTable <- fromClass(bc.arClass.value)
-                newMap <- baseClassVTable.methodMap.toVector.traverse {
+                newMap = baseClassVTable.methodMap.toSeq.map {
                   case (key, VTableEntry(signature, entrySource, impl)) =>
-                    signature.substituteTypeArguments(bcSig.unsubstitutedParameters)(bc.args).map { substSig =>
-                      key -> VTableEntry(
-                        substSig,
-                        entrySource,
-                        impl
-                      )
-                    }
+                    val substSig = signature.substituteTypeArguments(bcSig.unsubstitutedParameters)(bc.args)
+                    key -> VTableEntry(
+                      substSig,
+                      entrySource,
+                      impl
+                    )
                 }
               } yield VTable(newMap.toMap)
             }

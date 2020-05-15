@@ -929,7 +929,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
           erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
           classObj = getClassJSObject(getParamOwnerModule(params.owner), arClass.value.descriptor, erasedSig)
 
-          argExprs <- args.traverse(convertTypeArg(params)(_))
+          argExprs <- args.traverse(convertExpr(params)(_))
         } yield JSFunctionCall(
           JSPropertyAccessDot(classObj, classCreateMethodName),
           argExprs
@@ -941,7 +941,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
           erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
           traitObj = getTraitJSObject(getParamOwnerModule(params.owner), arTrait.value.descriptor, erasedSig)
 
-          argExprs <- args.traverse(convertTypeArg(params)(_))
+          argExprs <- args.traverse(convertExpr(params)(_))
         } yield JSFunctionCall(
           JSPropertyAccessDot(traitObj, traitCreateMethodName),
           argExprs
@@ -950,12 +950,6 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
       case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
     }
   }
-
-  def convertTypeArg(params: EmitParams)(arg: context.typeSystem.TTypeArgument): Comp[JSExpression] =
-    arg match {
-      case TypeArgument.Expr(expr) => convertExpr(params)(expr)
-      case TypeArgument.Wildcard(_) => JSNull.pure[Comp]
-    }
 
   def getMethodObject(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): Comp[JSExpression] = for {
     sig <- method.value.signatureUnsubstituted

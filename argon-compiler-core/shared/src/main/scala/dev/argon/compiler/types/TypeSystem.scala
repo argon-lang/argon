@@ -28,7 +28,6 @@ trait TypeSystem {
   
   type TSubTypeInfo = SubTypeInfo[TType]
 
-  type TTypeArgument = TypeArgument[context.type, TTypeWrapper]
   type TFieldVariable = FieldVariable[context.type, TTypeWrapper]
 
   type TClassType = ClassType[context.type, TTypeWrapper]
@@ -71,49 +70,42 @@ trait TypeSystem {
 
     val notSubType = Option.empty[TSubTypeInfo].pure[Comp]
 
-    def compareTypeArg(a: TypeArgument[context.type, TTypeWrapper], b: TypeArgument[context.type, TTypeWrapper]): Comp[Option[Vector[TSubTypeInfo]]] = {
+    def compareTypeArg(a: WrapExpr, b: WrapExpr): Comp[Option[Vector[TSubTypeInfo]]] = {
       def fromIsSame(b: Boolean): Comp[Option[Vector[TSubTypeInfo]]] =
         if(b)
           Some(Vector.empty).upcast[Option[Vector[TSubTypeInfo]]].pure[Comp]
         else
           Option.empty[Vector[TSubTypeInfo]].pure[Comp]
 
-      (a, b) match {
-        case (TypeArgument.Wildcard(ua), TypeArgument.Wildcard(ub)) => ???
-        case (TypeArgument.Wildcard(ua), _) => ???
-        case (_, TypeArgument.Wildcard(_)) => fromIsSame(false)
+      (unwrapType(a), unwrapType(b)) match {
 
-        case (TypeArgument.Expr(a), TypeArgument.Expr(b)) =>
-          (unwrapType(a), unwrapType(b)) match {
+        case (Some(LoadConstantString(a, _)), Some(LoadConstantString(b, _))) =>
+          fromIsSame(a === b)
 
-            case (Some(LoadConstantString(a, _)), Some(LoadConstantString(b, _))) =>
-              fromIsSame(a === b)
+        case (Some(LoadConstantInt(a, _)), Some(LoadConstantInt(b, _))) =>
+          fromIsSame(a === b)
 
-            case (Some(LoadConstantInt(a, _)), Some(LoadConstantInt(b, _))) =>
-              fromIsSame(a === b)
+        case (Some(LoadConstantBool(a, _)), Some(LoadConstantBool(b, _))) =>
+          fromIsSame(a === b)
 
-            case (Some(LoadConstantBool(a, _)), Some(LoadConstantBool(b, _))) =>
-              fromIsSame(a === b)
+        case (Some(LoadUnit(_)), Some(LoadUnit(_))) => fromIsSame(true)
 
-            case (Some(LoadUnit(_)), Some(LoadUnit(_))) => fromIsSame(true)
+        case (Some(LoadLambda(aVar, aBody)), Some(LoadLambda(bVar, bBody))) =>
+          @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+          def isSameLambda = aBody == Substitutions(context)(bVar, fromSimpleType(LoadVariable(aVar))).substWrapExpr(bBody)
+          fromIsSame(isSameLambda)
 
-            case (Some(LoadLambda(aVar, aBody)), Some(LoadLambda(bVar, bBody))) =>
-              @SuppressWarnings(Array("org.wartremover.warts.Equals"))
-              def isSameLambda = aBody == Substitutions(context)(bVar, fromSimpleType(LoadVariable(aVar))).substWrapExpr(bBody)
-              fromIsSame(isSameLambda)
-
-            case _ =>
-              (
-                for {
-                  proof1 <- OptionT(isSubType(a, b))
-                  proof2 <- OptionT(isSubType(b, a))
-                } yield Vector(SubTypeInfo(a, b, Vector(proof1, proof2)))
-              ).value
-          }
+        case _ =>
+          (
+            for {
+              proof1 <- OptionT(isSubType(a, b))
+              proof2 <- OptionT(isSubType(b, a))
+            } yield Vector(SubTypeInfo(a, b, Vector(proof1, proof2)))
+          ).value
       }
     }
 
-    def compareArguments(aType: TType, bType: TType)(a: Vector[TTypeArgument])(b: Vector[TTypeArgument]): Comp[Option[TSubTypeInfo]] =
+    def compareArguments(aType: TType, bType: TType)(a: Vector[WrapExpr])(b: Vector[WrapExpr]): Comp[Option[TSubTypeInfo]] =
       if(a.size === b.size)
         a.zip(b)
           .traverse { case (aArg, bArg) => OptionT(compareTypeArg(aArg, bArg)) }
@@ -332,9 +324,9 @@ trait TypeSystem {
 
         case (FunctionObjectCall(functionA, argA, _), FunctionObjectCall(functionB, argB, _)) =>
           compareArguments(fromSimpleType(a), fromSimpleType(b))(
-            Vector(TypeArgument.Expr(functionA), TypeArgument.Expr(argA))
+            Vector(functionA, argA)
           )(
-            Vector(TypeArgument.Expr(functionB), TypeArgument.Expr(argB))
+            Vector(functionB, argB)
           )
 
         case (_, _) => notSubType
@@ -502,12 +494,9 @@ trait TypeSystem {
     }
 
   def universeOfExpr(expr: ArExpr[context.type, TTypeWrapper]): Comp[UniverseExpr] = {
-    def universeOfTypeArgs(args: Vector[TypeArgument[context.type, TTypeWrapper]]): Comp[UniverseExpr] =
+    def universeOfTypeArgs(args: Vector[WrapExpr]): Comp[UniverseExpr] =
       args
-        .traverse {
-          case TypeArgument.Expr(expr) => universeOfWrapExpr(expr)
-          case TypeArgument.Wildcard(universe) => universe.pure[Comp]
-        }
+        .traverse(universeOfWrapExpr)
         .map { _.reduceLeftOption(LargestUniverse).getOrElse { FixedUniverse(0) } }
 
     expr match {

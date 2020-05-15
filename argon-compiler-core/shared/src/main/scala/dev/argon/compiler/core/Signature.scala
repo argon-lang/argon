@@ -37,23 +37,11 @@ trait SignatureContext
     def referencesParameter(parameter: TParameter): Comp[Boolean]
     def substitute(parameter: TParameter)(replacement: ArExprWrap[context.type, TTypeWrapper]): Signature[TResult, Len]
 
-    final def substituteTypeArguments(parameters: Vector[TParameter])(replacements: Vector[TypeArgument[context.type, TTypeWrapper]]): Comp[Signature[TResult, Len]] = {
-
-      def handleNonReplaceableParam(sig: Signature[TResult, Len])(param: TParameter): Comp[Signature[TResult, Len]] =
-        sig.referencesParameter(param).map {
-          case false => sig
-          case true => ???
-        }
-
-      ZIO.foldLeft(parameters.zip(replacements))(this) {
-        case (sig, (param, TypeArgument.Expr(arg))) =>
-          IO.succeed(sig.substitute(param)(arg))
-
-        case (sig, (param, TypeArgument.Wildcard(_))) =>
-          handleNonReplaceableParam(sig)(param)
+    final def substituteTypeArguments(parameters: Vector[TParameter])(replacements: Vector[ArExprWrap[context.type, TTypeWrapper]]): Signature[TResult, Len] =
+      parameters.zip(replacements).foldLeft(this) {
+        case (sig, (param, arg)) =>
+          sig.substitute(param)(arg)
       }
-
-    }
 
     def visit[A](visitor: SignatureVisitor[TResult, Len, A]): A
     def toSignatureParameters[RestLen <: Nat](implicit pred: Pred.Aux[Len, RestLen]): SignatureParameters[TResult, RestLen]
@@ -138,13 +126,6 @@ trait SignatureContext
 
   class RefChecker private[SignatureContext](parameter: TParameter) {
 
-
-
-    def checkTypeArg(arg: TypeArgument[context.type, TTypeWrapper]): Boolean = arg match {
-      case TypeArgument.Expr(argExpr) => checkWrapExpr(argExpr)
-      case TypeArgument.Wildcard(_) => false
-    }
-
     def checkVariable(variable: Variable[context.type, TTypeWrapper]): Boolean =
       checkWrapExpr(variable.varType)
 
@@ -189,13 +170,13 @@ trait SignatureContext
           checkVariable(variable) || checkWrapExpr(value) || checkWrapExpr(exprType)
 
         case TraitType(_, args) =>
-          args.exists(checkTypeArg)
+          args.exists(checkWrapExpr)
 
         case ClassType(_, args) =>
-          args.exists(checkTypeArg)
+          args.exists(checkWrapExpr)
 
         case DataConstructorType(_, args, _) =>
-          args.exists(checkTypeArg)
+          args.exists(checkWrapExpr)
 
         case TypeOfType(inner) => checkWrapExpr(inner)
         case TypeN(_, subtypeConstraint, supertypeConstraint) =>
@@ -219,7 +200,7 @@ object SignatureContext {
   type Aux[TContext <: Context with Singleton] = SignatureContext { val context: TContext }
   type Aux2[TContext <: Context with Singleton, Wrap[+_]] = SignatureContext { val context: TContext; type TTypeWrapper[+A] = Wrap[A] }
 
-  def liftSignatureResult[TResult[TContext2 <: Context with Singleton, _[+_]], Wrap[+_]: WrapperInstance](context: Context)(sig: context.signatureContext.Signature[TResult, _ <: Nat], args: Vector[ArExpr.TypeArgument[context.type, Wrap]]): Comp[TResult[context.type, Wrap]] = {
+  def liftSignatureResult[TResult[TContext2 <: Context with Singleton, _[+_]], Wrap[+_]: WrapperInstance](context: Context)(sig: context.signatureContext.Signature[TResult, _ <: Nat], args: Vector[ArExprWrap[context.type, Wrap]]): Comp[TResult[context.type, Wrap]] = {
     val ctx: context.type = context
     val conv = ArTypeSystemConverter[Wrap](context)
 
@@ -231,7 +212,7 @@ object SignatureContext {
 
     for {
       convSig <- sig.convertTypeSystem(sigContext)(conv)
-      substSig <- convSig.substituteTypeArguments(convSig.unsubstitutedParameters)(args)
+      substSig = convSig.substituteTypeArguments(convSig.unsubstitutedParameters)(args)
     } yield substSig.unsubstitutedResult
   }
 

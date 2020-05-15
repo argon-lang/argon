@@ -26,21 +26,10 @@ abstract class TypeSystemConverter {
     t1.traverse(convertExprTypeSystem(_))
       .flatMap(convertType(convertExprTypeSystem)(_))
 
-  def convertTypeArg
-  (t1: TypeArgument[context.type, FromWrap])
-  : Comp[TypeArgument[context.type, ToWrap]] =
-    t1 match {
-      case TypeArgument.Expr(expr) =>
-        convertTypeSystem(expr).map(TypeArgument.Expr.apply)
-
-      case TypeArgument.Wildcard(u) =>
-        IO.succeed(TypeArgument.Wildcard(u))
-    }
-
   def convertTraitType
   (traitType: TraitType[context.type, FromWrap])
   : Comp[TraitType[context.type, ToWrap]] = for {
-    newArgs <- traitType.args.traverse(convertTypeArg(_))
+    newArgs <- traitType.args.traverse(convertTypeSystem(_))
   } yield TraitType(
     traitType.arTrait,
     newArgs,
@@ -49,7 +38,7 @@ abstract class TypeSystemConverter {
   def convertClassType
   (classType: ClassType[context.type, FromWrap])
   : Comp[ClassType[context.type, ToWrap]] = for {
-    newArgs <- classType.args.traverse(convertTypeArg(_))
+    newArgs <- classType.args.traverse(convertTypeSystem(_))
   } yield ClassType(
     classType.arClass,
     newArgs
@@ -59,7 +48,7 @@ abstract class TypeSystemConverter {
   def convertDataConstructorType
   (dataCtorType: DataConstructorType[context.type, FromWrap])
   : Comp[DataConstructorType[context.type, ToWrap]] = for {
-    newArgs <- dataCtorType.args.traverse(convertTypeArg(_))
+    newArgs <- dataCtorType.args.traverse(convertTypeSystem(_))
     newInstanceType <- convertTraitType(dataCtorType.instanceType)
   } yield DataConstructorType(
     dataCtorType.ctor,

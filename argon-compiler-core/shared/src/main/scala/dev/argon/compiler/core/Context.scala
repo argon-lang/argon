@@ -9,7 +9,6 @@ import cats._
 import cats.data.NonEmptyList
 import cats.evidence.{===, Is}
 import cats.implicits._
-import dev.argon.compiler.expr.ArExpr.TypeArgument
 import dev.argon.compiler.expr.{ClassConstructorBody, UniverseExpr, WrapperInstance}
 import shapeless.Nat
 import zio._

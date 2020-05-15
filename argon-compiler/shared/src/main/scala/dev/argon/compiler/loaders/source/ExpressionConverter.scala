@@ -705,7 +705,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   convertSignature[ArClass.ResultInfo, len](classSig).map { convSig =>
                     val classFactory =
                       signatureFactory[ArClass.ResultInfo, len](env)(location)(arClass.descriptor)(convSig) { (args, classResult) =>
-                        ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), args.map(TypeArgument.Expr.apply))
+                        ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), args)
                       }
 
                     args.foldLeft(classFactory) { (factory, arg) => factory.forArguments(arg) }
@@ -820,7 +820,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                     case sig: context.signatureContext.Signature[ArTrait.ResultInfo, len] =>
                       convertSignature[ArTrait.ResultInfo, len](sig).map { convSig =>
                         signatureFactory(env)(location)(arTrait.value.descriptor)(convSig) { (args, result) =>
-                          TraitType(arTrait, args.map(TypeArgument.Expr.apply))
+                          TraitType(arTrait, args)
                         }
                       }
                   }
@@ -831,7 +831,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                     case sig: context.signatureContext.Signature[ArClass.ResultInfo, len] =>
                       convertSignature[ArClass.ResultInfo, len](sig).map { convSig =>
                         signatureFactory(env)(location)(arClass.value.descriptor)(convSig) { (args, result) =>
-                          ClassType(arClass, args.map(TypeArgument.Expr.apply))
+                          ClassType(arClass, args)
                         }
                       }
                   }
@@ -845,7 +845,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                           DataConstructorCall(
                             DataConstructorType(
                               ctor,
-                              args.map(TypeArgument.Expr.apply),
+                              args,
                               result.instanceType
                             ),
                             args
@@ -1245,9 +1245,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case PrimitiveOp(_, left, right, _) => isWrapExprPure(left) && isWrapExprPure(right)
       case Sequence(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
       case StoreVariable(_, _, _) => false
-      case TraitType(_, args) => args.forall(isTypeArgPure)
-      case ClassType(_, args) => args.forall(isTypeArgPure)
-      case DataConstructorType(_, args, _) => args.forall(isTypeArgPure)
+      case TraitType(_, args) => args.forall(isWrapExprPure)
+      case ClassType(_, args) => args.forall(isWrapExprPure)
+      case DataConstructorType(_, args, _) => args.forall(isWrapExprPure)
       case TypeOfType(inner) => isWrapExprPure(inner)
       case TypeN(_, subtypeConstraint, supertypeConstraint) => subtypeConstraint.forall(isWrapExprPure) && supertypeConstraint.forall(isWrapExprPure)
       case FunctionType(argumentType, resultType) => isWrapExprPure(argumentType) && isWrapExprPure(resultType)
@@ -1259,12 +1259,6 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     expr.traverse { t =>
       if(isExprPure(t)) Some(()) else None
     }.isDefined
-
-  def isTypeArgPure(arg: TTypeArgument): Boolean =
-    arg match {
-      case TypeArgument.Expr(expr) => isWrapExprPure(expr)
-      case TypeArgument.Wildcard(_) => true
-    }
 
 
 

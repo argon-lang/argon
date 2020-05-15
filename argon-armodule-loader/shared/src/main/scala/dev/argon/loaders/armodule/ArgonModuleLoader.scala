@@ -954,8 +954,8 @@ object ArgonModuleLoader {
             }
 
           def resolveSignatureTypeArgs[TResult[TContext2 <: Context with Singleton, Wrap[+_]], Len <: Nat, T]
-          (sig: Signature[TResult, Len], args: Sized[Vector[ArgonModule.TypeArg], Len], convArgs: Vector[TTypeArgument])
-          (f: (Vector[TTypeArgument], TResult[context.type, Id]) => T)
+          (sig: Signature[TResult, Len], args: Sized[Vector[ArgonModule.TypeArg], Len], convArgs: Vector[WrapExpr])
+          (f: (Vector[WrapExpr], TResult[context.type, Id]) => T)
           : Comp[T] =
             sig.visit(new SignatureVisitor[TResult, Len, Comp[T]] {
 
@@ -964,7 +964,7 @@ object ArgonModuleLoader {
                   case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Type(head), _) =>
                     resolveType(head).flatMap { argType =>
                       val nextSig = sigParams.next(argType)
-                      resolveSignatureTypeArgs(nextSig, args.tail, convArgs :+ TypeArgument.Expr[context.type, Id](argType))(f)
+                      resolveSignatureTypeArgs(nextSig, args.tail, convArgs :+ argType)(f)
                     }
 
                   case ArgonModule.TypeArg(ArgonModule.TypeArg.TypeInfo.Wildcard(ArgonModule.Wildcard(_)), _) =>
@@ -985,7 +985,7 @@ object ArgonModuleLoader {
                   traitType.typeArguments.sized((sig : Signature[ArTrait.ResultInfo, len]).parameterCountToInt) match {
                     case Some(typeArgs) =>
                       resolveSignatureTypeArgs[ArTrait.ResultInfo, len, TTraitType](sig, typeArgs, Vector.empty) {
-                        (args, result) => TraitType(arTrait, args)
+                        (args, result) => TraitType[context.type, TTypeWrapper](arTrait, args)
                       }
 
                     case None => ???
@@ -1000,7 +1000,7 @@ object ArgonModuleLoader {
                   classType.typeArguments.sized((sig : Signature[ArClass.ResultInfo, len]).parameterCountToInt) match {
                     case Some(typeArgs) =>
                       resolveSignatureTypeArgs[ArClass.ResultInfo, len, TClassType](sig, typeArgs, Vector.empty) {
-                        (args, result) => ClassType(arClass, args)
+                        (args, result) => ClassType[context.type, TTypeWrapper](arClass, args)
                       }
 
 

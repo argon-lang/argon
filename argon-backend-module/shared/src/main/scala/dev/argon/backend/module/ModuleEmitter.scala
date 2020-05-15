@@ -382,15 +382,9 @@ final class ModuleEmitter[TContext <: ModuleContext with Singleton] private(val 
     }) : Emit[module.Type.TypeInfo])
       .map(module.Type(_))
 
-  def convertTypeArg(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.TTypeArgument): Emit[module.TypeArg] =
-    t match {
-      case TypeArgument.Expr(t) =>
-        convertType(armodule, t)
-          .map { modType => module.TypeArg(module.TypeArg.TypeInfo.Type(modType)) }
-
-      case TypeArgument.Wildcard(_) =>
-        module.TypeArg(module.TypeArg.TypeInfo.Wildcard(module.Wildcard())).pure[Emit]
-    }
+  def convertTypeArg(armodule: ArModule[context.type, DeclarationPayloadSpecifier], t: typeSystem.WrapExpr): Emit[module.TypeArg] =
+    convertType(armodule, t)
+      .map { modType => module.TypeArg(module.TypeArg.TypeInfo.Type(modType)) }
 
   def convertInNamespaceDescriptor(descriptor: InNamespaceDescriptor): module.InNamespaceDescriptor =
     module.InNamespaceDescriptor(

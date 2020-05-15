@@ -31,7 +31,7 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
       ownerSigUnConv <- ownerClass.signature
       ownerSig <- ownerSigUnConv.convertTypeSystem(newSigContext)(converter)
       convSig <- sig.convertTypeSystem(newSigContext)(converter)
-      newSig <- convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instanceType.args)
+      newSig = convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instanceType.args)
     } yield newSig
 
 
