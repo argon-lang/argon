@@ -65,7 +65,7 @@ trait TypeSystem {
     res <- isSubTypeWrapper(a2, b2)
   } yield res
 
-
+  // B <: A
   protected final def isSimpleSubType(a: ArExpr[context.type, TTypeWrapper], b: ArExpr[context.type, TTypeWrapper]): Comp[Option[TSubTypeInfo]] = {
 
     val notSubType = Option.empty[TSubTypeInfo].pure[Comp]
