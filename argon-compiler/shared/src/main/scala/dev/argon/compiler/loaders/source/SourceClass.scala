@@ -15,7 +15,7 @@ import dev.argon.compiler.expr._
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import shapeless.{Id, Nat}
 import zio.{IO, ZIO}
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 private[compiler] object SourceClass extends AccessModifierHelpers {
 

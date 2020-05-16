@@ -8,7 +8,7 @@ import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.util.AnyExtensions._
 import zio.IO
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 abstract class TypeSystemConverter {
   val context: Context

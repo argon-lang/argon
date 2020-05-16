@@ -20,7 +20,7 @@ import dev.argon.parser.{BindingPattern, DeconstructPattern, DiscardPattern, Tup
 import shapeless.{:: => _, _}
 import shapeless.ops.nat.{LT, Pred}
 import zio.{IO, Ref, UIO, ZIO}
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 import Function.const
 import scala.collection.immutable

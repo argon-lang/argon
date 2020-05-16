@@ -2,7 +2,7 @@ package dev.argon.build.testrunner
 
 import cats._
 import cats.implicits._
-import zio.interop.catz._
+import zio.interop.catz.core._
 import dev.argon.build._
 import java.io.IOException
 

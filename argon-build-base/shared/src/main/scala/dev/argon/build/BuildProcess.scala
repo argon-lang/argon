@@ -15,7 +15,7 @@ import dev.argon.stream._
 import dev.argon.stream.builder.Source
 import dev.argon.util.AnyExtensions._
 import zio._
-import zio.interop.catz._
+import zio.interop.catz.core._
 import zio.stream._
 
 object BuildProcess {

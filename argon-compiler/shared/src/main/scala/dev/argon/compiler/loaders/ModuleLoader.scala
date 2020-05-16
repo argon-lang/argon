@@ -8,7 +8,7 @@ import cats._
 import cats.data.NonEmptyList
 import cats.implicits._
 import zio._
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 import scala.collection.immutable._
 

@@ -7,7 +7,7 @@ import cats.implicits._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.util.{MemoCache, MemoCacheStore}
 import shapeless.Nat
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 sealed abstract class VTableBuilder {
 

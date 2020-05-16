@@ -10,7 +10,7 @@ import dev.argon.stream._
 import dev.argon.stream.builder.Source
 import zio._
 import zio.stream._
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 trait CompilationOutput[OutputOptions[_]] {
   def write[I <: ResourceIndicator: Tagged](options: OutputOptions[I]): RComp[ResourceWriter[I], Unit]

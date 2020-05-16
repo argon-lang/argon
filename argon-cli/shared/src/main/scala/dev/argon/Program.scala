@@ -5,7 +5,7 @@ import cats._
 import cats.implicits._
 import zio.{BuildInfo => _, _}
 import zio.console._
-import zio.interop.catz._
+import zio.interop.catz.core._
 import shapeless.{BuildInfo => _, Id => _, Path => _, _}
 import CommandLineParser.Implicits._
 import dev.argon.io.Path

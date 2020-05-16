@@ -21,7 +21,7 @@ import shapeless._
 import dev.argon.util.AnyExtensions._
 import shapeless.ops.nat.{LT, Pred}
 import zio.{IO, Ref, UIO, ZIO, stream => zstream}
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 final class ModuleEmitter[TContext <: ModuleContext with Singleton] private(val context: TContext, emitStateRef: Ref[ModuleIds]) {
 

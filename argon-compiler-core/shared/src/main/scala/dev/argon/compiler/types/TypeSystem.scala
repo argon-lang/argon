@@ -12,7 +12,7 @@ import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
 import shapeless.Nat
 import zio.IO
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 import scala.collection.immutable.Vector
 

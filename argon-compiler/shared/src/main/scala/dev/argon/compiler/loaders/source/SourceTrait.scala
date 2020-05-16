@@ -15,7 +15,7 @@ import cats.evidence.Is
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr.BaseTypeInfoTrait
 import shapeless.{Id, Nat}
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 private[compiler] object SourceTrait extends AccessModifierHelpers {
 

@@ -7,7 +7,7 @@ import zio.stream.ZStream.Pull
 import zio.stream.{Take, ZStream}
 import cats._
 import cats.implicits._
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 import scala.scalajs.js.annotation.ScalaJSDefined
 

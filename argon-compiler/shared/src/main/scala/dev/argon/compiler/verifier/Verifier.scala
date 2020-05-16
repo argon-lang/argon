@@ -5,7 +5,7 @@ import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.core._
 import cats._
 import cats.implicits._
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 class Verifier {
 

@@ -10,7 +10,7 @@ import cats.data.NonEmptyVector
 import cats.implicits._
 import dev.argon.compiler.Comp
 import zio.IO
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 object GlobalScope {
 

@@ -7,7 +7,7 @@ import scala.collection.immutable.Vector
 import cats._
 import cats.implicits._
 import dev.argon.compiler.{Comp, Compilation}
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 object ModuleLookup {
 

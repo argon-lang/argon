@@ -24,7 +24,7 @@ import dev.argon.module.PathResourceIndicator
 import dev.argon.project
 import dev.argon.stream.builder.ZStreamSource
 import zio.stream.{ZSink, ZStream}
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 object Pipeline {
 
@@ -46,7 +46,7 @@ object Pipeline {
       }
 
   def printMessages[C[_] : Traverse, TMsg <: CompilationMessage](msgs: C[TMsg]): URIO[Console, Unit] = {
-    import zio.interop.catz._
+    import zio.interop.catz.core._
 
     msgs
       .traverse_ { msg =>

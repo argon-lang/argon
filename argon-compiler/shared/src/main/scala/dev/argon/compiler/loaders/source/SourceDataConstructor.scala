@@ -14,7 +14,7 @@ import dev.argon.compiler.loaders.StandardTypeLoaders
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import shapeless.Nat
 import zio.IO
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
 

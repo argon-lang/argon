@@ -5,7 +5,7 @@ import java.io.IOException
 import cats.implicits._
 import shapeless.{Path => _, _}
 import zio._
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 trait ProjectLoader[-A, +B, +IOld, -I] {
   def loadProject[R, E](a: A)(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, B]

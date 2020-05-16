@@ -10,7 +10,7 @@ import dev.argon.io.fileio.FileIO
 import dev.argon.module.PathResourceIndicator
 import zio.stream.ZStream
 import zio._
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 
 trait ProjectFileHandler[-R, +E, -IOld, +I] {

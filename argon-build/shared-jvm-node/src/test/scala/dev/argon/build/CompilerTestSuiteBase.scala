@@ -15,7 +15,7 @@ import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.fileio.FileIO
 import dev.argon.module.PathResourceIndicator
 import dev.argon.platform._
-import zio.interop.catz._
+import zio.interop.catz.core._
 import zio.test.environment.Live
 
 abstract class CompilerTestSuiteBase extends PlatformRunnableSpec {

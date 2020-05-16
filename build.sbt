@@ -26,7 +26,6 @@ lazy val commonSettings = Seq(
     "org.scala-lang.modules" %%% "scala-xml" % "2.0.0-M1",
 
     "org.typelevel" %%% "cats-core" % "2.1.1",
-    "org.typelevel" %%% "cats-effect" % "2.1.3",
     "org.typelevel" %%% "kittens" % "2.0.0",
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,

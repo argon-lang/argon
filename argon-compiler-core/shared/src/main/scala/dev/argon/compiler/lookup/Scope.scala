@@ -8,7 +8,7 @@ import cats._
 import cats.implicits._
 import dev.argon.compiler.expr._
 import zio.IO
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 trait ScopeContext[TContext <: Context with Singleton] {
 

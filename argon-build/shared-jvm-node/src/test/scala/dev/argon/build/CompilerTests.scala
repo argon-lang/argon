@@ -10,7 +10,7 @@ import dev.argon.io.Path
 import dev.argon.io.fileio.FileIO
 import zio._
 import zio.system.System
-import zio.interop.catz._
+import zio.interop.catz.core._
 import zio.test._
 import zio.test.environment._
 import zio.test.Assertion._

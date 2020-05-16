@@ -9,7 +9,7 @@ import dev.argon.stream.builder.Source
 import zio.blocking.Blocking
 import zio._
 import zio.interop._
-import zio.interop.catz._
+import zio.interop.catz.core._
 import zio.stream.{ZSink, ZStream}
 
 private[platform] object ZipEntryStreamTransformation {

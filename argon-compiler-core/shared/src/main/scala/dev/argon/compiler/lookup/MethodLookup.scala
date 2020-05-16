@@ -9,7 +9,7 @@ import cats.implicits._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.{Comp, Compilation}
 import zio.IO
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 object MethodLookup {
 

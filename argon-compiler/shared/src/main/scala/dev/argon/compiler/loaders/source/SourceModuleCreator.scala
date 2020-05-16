@@ -14,7 +14,7 @@ import dev.argon.compiler.expr.{Parameter, Variable}
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import shapeless.Id
 import zio._
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 

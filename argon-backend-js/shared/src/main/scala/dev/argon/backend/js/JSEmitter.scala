@@ -14,7 +14,7 @@ import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
 import dev.argon.compiler.vtable._
 import zio.{IO, Ref, UIO, ZIO}
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 final class JSEmitter[TContext <: JSContext with Singleton] private(val context: TContext, inject: JSInjectCode[Id], localVariableIdMapping: Ref[Map[VariableOwnerDescriptor, Seq[VariableIdentifier]]]) {
 

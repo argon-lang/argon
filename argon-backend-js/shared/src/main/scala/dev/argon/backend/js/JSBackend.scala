@@ -13,7 +13,7 @@ import dev.argon.project.{ProjectLoader, SingleFile}
 import dev.argon.stream.builder.Source
 import zio._
 import zio.stream._
-import zio.interop.catz._
+import zio.interop.catz.core._
 import toml.Codecs._
 import shapeless._
 import dev.argon.project.ExtraTomlCodecs._

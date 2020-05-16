@@ -10,7 +10,7 @@ import cats.data.{EitherT, NonEmptyList, NonEmptyVector}
 import cats.implicits._
 import dev.argon.backend.{ResourceReader, ResourceWriter}
 import zio._
-import zio.interop.catz._
+import zio.interop.catz.core._
 import dev.argon.compiler.{CompilationError, CompilerOptions, ErrorList}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.io.fileio.FileIO

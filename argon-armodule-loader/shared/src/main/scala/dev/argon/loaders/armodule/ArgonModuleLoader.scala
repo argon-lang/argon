@@ -23,7 +23,7 @@ import shapeless.{Id, Nat, Sized, Succ, _0}
 import shapeless.syntax.sized._
 import zio.{IO, Managed, ZIO, ZManaged}
 import zio.stream._
-import zio.interop.catz._
+import zio.interop.catz.core._
 
 import scala.collection.immutable.{Map, Vector}
 
