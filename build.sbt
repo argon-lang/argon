@@ -57,6 +57,11 @@ lazy val sharedJSNodeSettings = Seq(
     "io.github.cquiroz" %%% "scala-java-time" % "2.0.0-RC3",
   ),
 
+  npmDependencies ++= Seq(
+    "jszip" -> "^3.2.2",
+    "xmldom" -> "^0.3.0",
+  ),
+  
   scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 
   scalacOptions ++= Seq(
@@ -84,6 +89,12 @@ lazy val commonJVMSettings = sharedJVMNodeSettings ++ Seq(
 lazy val commonBrowserSettings = sharedJSNodeSettings
 
 lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ Seq(
+
+  npmDependencies ++= Seq(
+    "memory-streams" -> "^0.1.3",
+    "node-stream-zip" -> "^1.8.2",
+  ),
+
   jsEnv := new NodeJSEnv(
     NodeJSEnv.Config()
       .withEnv(envValues)
@@ -162,10 +173,11 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).in(file("argon-cli"))
     _.settings(commonJVMSettings)
   )
   .nodeConfigure(
-    _.settings(
-      commonNodeSettings,
+    _.enablePlugins(NpmUtil)
+      .settings(
+        commonNodeSettings,
 
-      scalaJSUseMainModuleInitializer := true,
+        scalaJSUseMainModuleInitializer := true,
 
     )
   )
@@ -196,7 +208,7 @@ lazy val cliJVM = cli.jvm
 lazy val cliNode = cli.node
 
 lazy val webDemo = project.in(file("argon-web-demo"))
-  .enablePlugins(ScalaJSPlugin)
+  .enablePlugins(ScalaJSPlugin, NpmUtil)
   .dependsOn(argon_buildJS, argon_platformJS)
   .settings(
     commonSettings,
@@ -223,10 +235,12 @@ lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(fi
      )
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -245,7 +259,12 @@ lazy val argon_build_base = crossProject(JVMPlatform, JSPlatform, NodePlatform).
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -264,10 +283,12 @@ lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -286,10 +307,12 @@ lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("a
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -308,10 +331,12 @@ lazy val parser_data = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(fi
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -330,10 +355,12 @@ lazy val argon_compiler = crossProject(JVMPlatform, JSPlatform, NodePlatform).in
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -352,10 +379,12 @@ lazy val argon_compiler_core = crossProject(JVMPlatform, JSPlatform, NodePlatfor
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -374,10 +403,12 @@ lazy val backend_common = crossProject(JVMPlatform, JSPlatform, NodePlatform).in
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -396,10 +427,12 @@ lazy val armodule_loader = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -419,10 +452,12 @@ lazy val backend_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(fil
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -441,10 +476,12 @@ lazy val backend_module = crossProject(JVMPlatform, JSPlatform, NodePlatform).in
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -462,10 +499,12 @@ lazy val util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("arg
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -484,10 +523,12 @@ lazy val arstream = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file(
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -506,10 +547,12 @@ lazy val argonio = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
@@ -528,10 +571,12 @@ lazy val argon_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .platformsSettings(JVMPlatform, NodePlatform)(
     libraryDependencies += "dev.zio" %%% "zio-test" % zioVersion % "optional",
@@ -553,10 +598,12 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.settings(commonBrowserSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.settings(commonNodeSettings)
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
