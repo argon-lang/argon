@@ -12,6 +12,11 @@ lazy val envValues = Map(
 
 val zioVersion = "1.0.0-RC18-2"
 
+val esParseDeps = Seq(
+  "escodegen" -> "^1.14.1",
+  "esprima" -> "^4.0.1",
+)
+
 lazy val commonSettings = Seq(
   scalaVersion := "2.13.0",
 
@@ -60,7 +65,7 @@ lazy val sharedJSNodeSettings = Seq(
   npmDependencies ++= Seq(
     "jszip" -> "^3.2.2",
     "xmldom" -> "^0.3.0",
-  ),
+  ) ++ esParseDeps,
   
   scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
 
@@ -166,6 +171,8 @@ lazy val compilerOptions = Seq(
 )
 
 lazy val buildArgonLibs = taskKey[Unit]("Compile Argon libraries")
+lazy val parcelJS = taskKey[File]("Parcel version of JS output")
+
 
 lazy val cli = crossProject(JVMPlatform, NodePlatform).in(file("argon-cli"))
   .dependsOn(argon_build, argon_platform)
@@ -449,14 +456,39 @@ lazy val armodule_loaderNode = armodule_loader.node
 lazy val backend_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-backend-js"))
   .dependsOn(armodule_loader)
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.settings(
+      commonJVMSettings,
+
+      libraryDependencies ++= Seq(
+        "org.graalvm.sdk" % "graal-sdk" % graalVersion,
+        "org.graalvm.js" % "js" % graalVersion,
+        "org.graalvm.js" % "js-scriptengine" % graalVersion,
+        "org.graalvm.tools" % "profiler" % graalVersion,
+        "org.graalvm.tools" % "chromeinspector" % graalVersion,
+      ),
+
+      Compile / resourceGenerators += Def.task {
+        val bundledFile = (js_module_extractor / parcelJS).value
+        val resourceFile = (Compile / resourceManaged).value / "js-module-extractor.js"
+
+        val bundledFileMod = IO.getModifiedTimeOrZero(bundledFile)
+        val resourceFileMod = IO.getModifiedTimeOrZero(resourceFile)
+
+        if(bundledFileMod == 0 || resourceFileMod == 0 || bundledFileMod > resourceFileMod)
+          IO.copyFile(bundledFile, resourceFile, preserveLastModified = true)
+
+        Seq(resourceFile)
+      }.taskValue,
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
+      .dependsOn(js_module_extractor)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
     _.enablePlugins(NpmUtil)
+      .dependsOn(js_module_extractor)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -629,3 +661,44 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
 lazy val modulefmtJVM = modulefmt.jvm
 lazy val modulefmtJS = modulefmt.js
 
+lazy val js_module_extractor = project.in(file("argon-js-module-extractor"))
+  .enablePlugins(ScalaJSPlugin, NpmUtil)
+  .settings(
+    scalaVersion := "2.13.0",
+
+    scalacOptions ++= Seq(
+      "-encoding", "UTF-8",
+      "-unchecked",
+      "-deprecation",
+      "-Xfatal-warnings",
+      "-Ypatmat-exhaust-depth", "500",
+      "-language:higherKinds",
+      "-language:existentials",
+      "-language:implicitConversions",
+      "-P:scalajs:sjsDefinedByDefault",
+    ),
+
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+
+    npmDependencies ++= esParseDeps,
+
+    npmDevDependencies += "parcel-bundler" -> "^1.12.4",
+
+    parcelJS := {
+      npmInstall.value
+
+      val dir = crossTarget.value
+      val scalaJSOutput = (Compile / fullOptJS).value.data.file
+      val bundledOutput = dir / "dist" / scalaJSOutput.getName
+
+      FileFunction.cached(streams.value.cacheDirectory / "parcel-bundle") { _ =>
+        import scala.sys.process.Process
+        Process("node_modules/.bin/parcel" :: "build" :: "--global" :: "ModuleExtractor" :: scalaJSOutput.toString :: Nil, dir).!
+        Set(bundledOutput)
+      }(Set(bundledOutput))
+
+      bundledOutput
+    },
+
+    name := "argon-js-module-extractor",
+  )

@@ -10,6 +10,8 @@ object NpmUtil extends AutoPlugin {
 
   object autoImport {
     val npmInstall = taskKey[Unit]("Runs npm install")
+
+
     val packageLockJsonFile = settingKey[File]("The package-lock.json file")
     val npmDependencies = settingKey[Seq[(String, String)]]("NPM packages")
     val npmDevDependencies = settingKey[Seq[(String, String)]]("NPM dev packages")
