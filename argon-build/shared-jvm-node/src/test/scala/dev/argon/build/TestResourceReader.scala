@@ -33,11 +33,11 @@ object TestResourceReader {
       } yield (new Service[P] {
 
         override def getLibPath(name: String): UIO[P] =
-          Path.of(libDir, name, name + ".armodule")
+          Path.of(libDir, name, "bin", name + ".armodule")
 
         override def readTextFile(id: TestResourceIndicator): Comp[String] =
           id match {
-            case LibraryResourceIndicator(name) =>
+            case LibraryResourceIndicator(_) =>
               Compilation.forErrors(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(new FileNotFoundException())))
           }
 

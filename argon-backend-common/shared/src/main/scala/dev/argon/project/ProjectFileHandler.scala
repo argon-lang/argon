@@ -25,20 +25,11 @@ object ProjectFileHandler {
     override def loadSingleFile(file: String): ZIO[FileIO[P], IOException, PathResourceIndicator[P]] =
       Path.of[P](file).map(dir.resolve).map(PathResourceIndicator(_))
 
-    private def resolveGlob(globs: List[P]): ZStream[FileIO[P], IOException, P] =
-      ZStream.fromIterable(globs)
-        .flatMap { glob =>
-          ZStream.fromEffect(
-            FilenameManip.findGlob(glob).runCollect
-          )
-            .flatMap(ZStream.fromIterable(_))
-        }
-
     override def loadGlobList(files: List[String]): ZIO[FileIO[P], IOException, List[PathResourceIndicator[P]]] =
       ZStream.fromIterable(files)
         .mapM(Path.of(_))
         .flatMap { path =>
-          resolveGlob(path.segments)
+          FilenameManip.findGlob(dir, path)
         }
         .map(PathResourceIndicator(_))
         .runCollect

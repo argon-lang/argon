@@ -21,43 +21,19 @@ object ExtraTomlCodecs {
         }
     }
 
-  implicit def singleFileFieldCodec[K <: Symbol, T <: HList]
-  (implicit
-   witness: Witness.Aux[K],
-   fromT: SLazy[Codec[T]]
-  ): Codec[FieldType[K, SingleFile[String]] :: T] =
+  implicit def singleFileCodec: Codec[SingleFile[String]] =
     Codec { (value, defaults, index) =>
-      toml.Codecs.hconsFromNode[K, String, T].apply(value, defaults, index)
-        .map { case head :: tail =>
-          val newHead = SingleFile[String](head)
-          field[K](newHead) :: tail
-        }
+      stringCodec(value, defaults, index).map { new SingleFile(_) }
     }
 
-  implicit def fileListFieldCodec[K <: Symbol, T <: HList]
-  (implicit
-   witness: Witness.Aux[K],
-   fromT: SLazy[Codec[T]]
-  ): Codec[FieldType[K, FileList[String]] :: T] =
+  implicit def fileListCodec: Codec[FileList[String]] =
     Codec { (value, defaults, index) =>
-      toml.Codecs.hconsFromNode[K, List[String], T].apply(value, defaults, index)
-        .map { case head :: tail =>
-          val newHead = FileList(head)
-          field[K](newHead) :: tail
-        }
+      implicitly[Codec[List[String]]].apply(value, defaults, index).map { new FileList(_) }
     }
 
-  implicit def fileGlobFieldCodec[K <: Symbol, T <: HList]
-  (implicit
-   witness: Witness.Aux[K],
-   fromT: SLazy[Codec[T]]
-  ): Codec[FieldType[K, FileGlob[String]] :: T] =
-    Codec { (value, defaults, index) =>
-      toml.Codecs.hconsFromNode[K, List[String], T].apply(value, defaults, index)
-        .map { case head :: tail =>
-          val newHead = FileGlob(head)
-          field[K](newHead) :: tail
-        }
-    }
+  implicit def fileGlobFieldCodec: Codec[FileGlob[String]] =
+  Codec { (value, defaults, index) =>
+    implicitly[Codec[List[String]]].apply(value, defaults, index).map { new FileGlob(_) }
+  }
 
 }

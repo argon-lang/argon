@@ -16,6 +16,7 @@ object fileio {
 
     trait Service[P] {
       def getAbsolutePath(path: P): IO[IOException, P]
+      def ensureParentDirectory(path: P): IO[IOException, Unit]
 
       def readAllText(path: P): IO[IOException, String]
       def readText[E](errorHandler: IOException => E)(path: P): Stream[E, Char]

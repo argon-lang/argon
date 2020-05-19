@@ -17,6 +17,7 @@ import dev.argon.io.fileio.FileIO
 
 import scala.jdk.CollectionConverters._
 import scala.jdk.StreamConverters._
+import dev.argon.io.Path.PathExtensions
 
 @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 private[platform] object FileIOPlatform {
@@ -28,7 +29,11 @@ private[platform] object FileIOPlatform {
 
       override def getAbsolutePath(path: FilePath): IO[IOException, FilePath] =
         blocking.effectBlocking { path.javaPath.toAbsolutePath.toFilePath }
-          .refineOrDie { case e: IOException => e }
+          .refineToOrDie[IOException]
+
+      override def ensureParentDirectory(path: FilePath): IO[IOException, Unit] =
+        blocking.effectBlocking { path.parent.foreach { dir => Files.createDirectories(dir.javaPath) } }
+          .refineToOrDie[IOException]
 
       override def readAllText(path: FilePath): IO[IOException, String] =
         blocking.effectBlocking { Files.readString(path.javaPath, StandardCharsets.UTF_8) }

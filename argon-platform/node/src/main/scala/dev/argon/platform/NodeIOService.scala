@@ -8,6 +8,7 @@ import java.nio.{ByteBuffer, CharBuffer}
 
 import dev.argon.io._
 import dev.argon.io.fileio.FileIO
+import dev.argon.io.Path.PathExtensions
 import dev.argon.platform.FileIOCommon
 import dev.argon.stream.builder.{Source, ZStreamSource}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
@@ -27,6 +28,21 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
   override def getAbsolutePath(path: FilePath): IO[IOException, FilePath] =
     IO.effect { toFilePath(JSPath.resolve(path.pathName)) }
       .refineOrDie { case e: IOException => e }
+
+  override def ensureParentDirectory(path: FilePath): IO[IOException, Unit] =
+    ZIO.foreach[Any, IOException, FilePath, Unit](path.parent) { dir =>
+      IO.effectAsync[IOException, Unit] { register =>
+        NodeFileSystem.mkdir(dir.pathName, NodeFSMkdirOptions(recursive = true), error =>
+          register(
+            if(error != null)
+              IO.fail(JSIOException(error))
+            else
+              IO.unit
+          )
+        )
+      }
+    }.unit
+
 
   override def readAllText(path: FilePath): IO[IOException, String] =
     IO.effectAsync { register =>

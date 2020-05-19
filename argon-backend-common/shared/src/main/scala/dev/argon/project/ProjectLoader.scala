@@ -24,17 +24,17 @@ object ProjectLoader {
 
     implicit def fileLoader[IOld, I]: ProjectLoader[SingleFile[IOld], SingleFile[I], IOld, I] = new ProjectLoader[SingleFile[IOld], SingleFile[I], IOld, I] {
       override def loadProject[R, E](a: SingleFile[IOld])(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, SingleFile[I]] =
-        fileHandler.loadSingleFile(a.file).map(SingleFile.apply)
+        fileHandler.loadSingleFile(a.file).map(new SingleFile(_))
     }
 
     implicit def fileListLoader[IOld, I]: ProjectLoader[FileList[IOld], FileList[I], IOld, I] = new ProjectLoader[FileList[IOld], FileList[I], IOld, I] {
       override def loadProject[R, E](a: FileList[IOld])(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, FileList[I]] =
-        ZIO.foreach(a.files)(fileHandler.loadSingleFile).map(FileList.apply)
+        ZIO.foreach(a.files)(fileHandler.loadSingleFile).map(new FileList(_))
     }
 
     implicit def fileGlobLoader[IOld, I]: ProjectLoader[FileGlob[IOld], FileGlob[I], IOld, I] = new ProjectLoader[FileGlob[IOld], FileGlob[I], IOld, I] {
       override def loadProject[R, E](a: FileGlob[IOld])(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, FileGlob[I]] =
-        fileHandler.loadGlobList(a.files).map(FileGlob.apply)
+        fileHandler.loadGlobList(a.files).map(new FileGlob(_))
     }
 
     implicit def optionLoader[A, B, IOld, I](implicit innerLoader: ProjectLoader[A, B, IOld, I]): ProjectLoader[Option[A], Option[B], IOld, I] = new ProjectLoader[Option[A], Option[B], IOld, I] {

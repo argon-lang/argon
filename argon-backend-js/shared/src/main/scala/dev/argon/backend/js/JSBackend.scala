@@ -10,13 +10,13 @@ import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.loaders.armodule.ArgonModuleLoader
 import dev.argon.loaders.armodule.ArgonModuleLoader.PayloadLoader
 import dev.argon.project.{FileList, ProjectLoader, SingleFile}
+import dev.argon.project.ExtraTomlCodecs._
 import dev.argon.stream.builder.Source
 import zio._
 import zio.stream._
 import zio.interop.catz.core._
 import toml.Codecs._
 import shapeless._
-import dev.argon.project.ExtraTomlCodecs._
 import dev.argon.util.ValueCache
 import toml.Parse.{Address, Message}
 import toml.Value
@@ -37,7 +37,7 @@ final case class JSBackend(private val moduleExtractor: JSModuleExtractor) exten
   )
   override def inferBackendOptions[I](compilerOptions: CompilerOptions[Id], options: JSBackendOptions[Option, I]): BackendOptionsId[I] =
     JSBackendOptions[Id, I](
-      extern = options.extern.getOrElse(FileList[I](List.empty)),
+      extern = options.extern.getOrElse(new FileList[I](List.empty)),
       inject = options.inject.getOrElse(JSInjectCode[Option, I](before = None, after = None)) match {
         case JSInjectCode(beforeOpt, afterOpt) =>
           JSInjectCode[Id, I](
@@ -63,7 +63,7 @@ final case class JSBackend(private val moduleExtractor: JSModuleExtractor) exten
 
   override def inferOutputOptions(compilerOptions: CompilerOptions[Id], options: JSOutputOptions[Option, String]): BackendOutputOptionsId[String] =
     JSOutputOptions[Id, String](
-      outputFile = options.outputFile.getOrElse(SingleFile(compilerOptions.moduleName + ".js")),
+      outputFile = options.outputFile.getOrElse(new SingleFile(compilerOptions.moduleName + ".js")),
     )
 
   override def outputOptionsProjectLoader[IOld, I]: ProjectLoader[BackendOutputOptionsId[IOld], BackendOutputOptionsId[I], IOld, I] = {

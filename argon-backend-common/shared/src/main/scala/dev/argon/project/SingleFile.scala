@@ -1,3 +1,5 @@
 package dev.argon.project
 
-final case class SingleFile[I](file: I)
+final class SingleFile[I](file2: I) {
+  val file = file2
+}

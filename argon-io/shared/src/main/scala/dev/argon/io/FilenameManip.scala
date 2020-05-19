@@ -11,14 +11,15 @@ import cats.implicits._
 import scala.jdk.CollectionConverters._
 import scala.jdk.StreamConverters._
 import scala.util.matching.Regex
-
 import dev.argon.io.fileio.FileIO
 import dev.argon.io.Path.PathExtensions
+
+import scala.annotation.tailrec
 
 object FilenameManip {
 
   @SuppressWarnings(Array("org.wartremover.warts.ToString", "org.wartremover.warts.Equals"))
-  def findGlob[P : Path: Tagged](path: P): ZStream[FileIO[P], IOException, P] = {
+  def findGlob[P : Path: Tagged](baseDir: P, path: P): ZStream[FileIO[P], IOException, P] = {
 
     def globSegmentMatches(glob: String)(path: P): Boolean =
       glob.split("\\*").map(Regex.quote).mkString(".*").r.matches(path.toString)
@@ -49,6 +50,7 @@ object FilenameManip {
       }
 
 
+    @tailrec
     def findTrueBase(baseDir: P, path: List[P]): ZStream[FileIO[P], IOException, P] =
       path match {
         case head :: _ if head.toString contains "*" =>
@@ -62,13 +64,7 @@ object FilenameManip {
       }
 
 
-    ZStream.fromEffect(
-      path.root match {
-        case Some(pathRoot) => IO.succeed(pathRoot)
-        case None => Path.of[P](".").flatMap { rootPath => ZIO.accessM[FileIO[P]] { _.get.getAbsolutePath(rootPath) } }
-      }
-    )
-      .flatMap(findTrueBase(_, path.segments))
+    findTrueBase(baseDir, path.segments)
   }
 
 }

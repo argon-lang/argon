@@ -27,7 +27,7 @@ abstract class JavaScriptTestCaseRunnerBase[I <: ResourceIndicator: Tagged, P: P
   override protected def backendOptions(compilerOptions: CompilerOptions[Id]): UIO[JSBackendOptions[Id, I]] =
     IO.succeed(
       JSBackendOptions[Id, I](
-        extern = FileList[I](List.empty),
+        extern = new FileList[I](List.empty),
         inject = JSInjectCode[Id, I](
           before = None,
           after = None,

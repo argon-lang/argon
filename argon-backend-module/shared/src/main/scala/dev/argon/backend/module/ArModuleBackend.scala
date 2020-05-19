@@ -10,6 +10,7 @@ import dev.argon.compiler.core.Context
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.ZipEntryInfo
 import dev.argon.project.{ProjectLoader, SingleFile}
+import dev.argon.project.ExtraTomlCodecs._
 import dev.argon.stream.builder.Source
 import toml.Codecs._
 import shapeless._
@@ -47,7 +48,7 @@ object ArModuleBackend extends Backend {
 
   override def inferOutputOptions(compilerOptions: CompilerOptions[Id], options: ModuleOutputOptions[Option, String]): BackendOutputOptionsId[String] =
     ModuleOutputOptions[Id, String](
-      referenceModule = options.referenceModule.getOrElse(SingleFile(compilerOptions.moduleName + ".armodule"))
+      referenceModule = options.referenceModule.getOrElse(new SingleFile(compilerOptions.moduleName + ".armodule"))
     )
 
   override def outputOptionsProjectLoader[IOld, I]: ProjectLoader[BackendOutputOptionsId[IOld], BackendOutputOptionsId[I], IOld, I] = {

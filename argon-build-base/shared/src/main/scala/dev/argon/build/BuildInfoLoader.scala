@@ -5,7 +5,7 @@ import java.io.IOException
 import dev.argon.io.Path
 import dev.argon.io.Path.PathExtensions
 import cats.{Id => _, _}
-import cats.data.OptionT
+import cats.data.{EitherT, OptionT}
 import cats.implicits._
 import dev.argon.backend.Backend
 import zio.{BuildInfo => _, _}
@@ -19,19 +19,20 @@ import dev.argon.project.BuildInfo.Resolved
 import dev.argon.project._
 import toml.Toml
 import toml.Codecs._
+import ExtraTomlCodecs._
 import shapeless.{BuildInfo => _, Path => _, _}
 
 
 object BuildInfoLoader {
 
   private val projectKey = "project"
-  private val compilerOptionsKey = "options"
+  private val compilerOptionsKey = "compiler-options"
   private val backendKey = "backend"
   private val outputKey = "output"
 
 
 
-  def loadFile[P: Path : Tagged](file: P): ZIO[FileIO[P] with BackendProvider, IOException, Option[Vector[Resolved[P]]]] = for {
+  def loadFile[P: Path : Tagged](file: P): ZIO[FileIO[P] with BackendProvider, IOException, Either[String, Vector[Resolved[P]]]] = for {
 
     fileIO <- ZIO.access[FileIO[P]](_.get)
     absoluteFile <- fileIO.getAbsolutePath(file)
@@ -41,7 +42,7 @@ object BuildInfoLoader {
     buildFile <- fileIO.readAllText(file)
     result <-
       Toml.parse(buildFile)
-        .toOption
+        .leftMap { case (addr, message) => addr.toString + message }
         .flatTraverse { rootTable =>
           val proj = loadProjectOpt(rootTable.values.get(projectKey))
           val compOpts = loadCompilerOptionsOpt(rootTable.values.get(compilerOptionsKey))
@@ -53,10 +54,10 @@ object BuildInfoLoader {
             .toList
             .flatMap { _.values }
             .toVector
-            .traverse[OptionT[URIO[BackendProvider, *], *], BuildInfo[String]] {
+            .traverse[EitherT[URIO[BackendProvider, *], String, *], BuildInfo[String]] {
               case (key, value: toml.Value.Tbl) =>
-                OptionT(
-                  ZIO.access[BackendProvider](_.get.findBackend(key))
+                EitherT(
+                  ZIO.access[BackendProvider](_.get.findBackend(key).toRight { s"Could not find backend $key" })
                     .map { backendOpt =>
                       backendOpt.flatMap { backend =>
                         loadBuildInfo(file, backend, value, proj, compOpts)
@@ -64,7 +65,7 @@ object BuildInfoLoader {
                     }
                 )
 
-              case (_, _) => OptionT.none
+              case (_, _) => EitherT.fromEither(Left("Invalid value for backends"))
             }
             .value
         }
@@ -92,7 +93,7 @@ object BuildInfoLoader {
   private def loadCompilerOptions(opts: toml.Value.Tbl): Option[CompilerOptions[Option]] =
     Toml.parseAs[CompilerOptions[Option]](opts).toOption
 
-  private def loadBuildInfo[P: Path](file: P, backend: Backend, table: toml.Value.Tbl, globalProj: ProjectInfoFormat[Option, String], globalOptions: CompilerOptions[Option]): Option[BuildInfo[String]] = {
+  private def loadBuildInfo[P: Path](file: P, backend: Backend, table: toml.Value.Tbl, globalProj: ProjectInfoFormat[Option, String], globalOptions: CompilerOptions[Option]): Either[String, BuildInfo[String]] = {
     val proj = loadProjectOpt(table.values.get(projectKey))
     val compOpts = loadCompilerOptionsOpt(table.values.get(compilerOptionsKey))
 
@@ -103,18 +104,18 @@ object BuildInfoLoader {
 
     for {
 
-      outputOpts <- backend.parseOutputOptions(output).toOption
+      outputOpts <- backend.parseOutputOptions(output).leftMap { case (addr, message) => addr.toString + message }
 
-      table2 = toml.Value.Tbl(table.values - projectKey - compilerOptionsKey)
-      backendOptions <- backend.parseBackendOptions(table2).toOption
+      table2 = toml.Value.Tbl(table.values - projectKey - compilerOptionsKey - outputKey)
+      backendOptions <- backend.parseBackendOptions(table2).leftMap { case (addr, message) => addr.toString + message }
 
       compilerOpts = CompilerOptions[Id](
         moduleName = compOpts.moduleName.orElse(globalOptions.moduleName).getOrElse(file.fileNameWithoutExtension),
       )
     } yield BuildInfo(backend)(
       project = ProjectInfoFormat[Id, String](
-        inputFiles = FileGlob(globalProj.inputFiles.toList.flatMap(_.files) ++ proj.inputFiles.toList.flatMap(_.files)),
-        references = FileList(globalProj.references.toList.flatMap(_.files) ++ proj.references.toList.flatMap(_.files)),
+        inputFiles = new FileGlob(globalProj.inputFiles.toList.flatMap(_.files) ++ proj.inputFiles.toList.flatMap(_.files)),
+        references = new FileList(globalProj.references.toList.flatMap(_.files) ++ proj.references.toList.flatMap(_.files)),
       ),
       compilerOptions = compilerOpts,
       backendOptions = backend.inferBackendOptions(compilerOpts, backendOptions),

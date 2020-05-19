@@ -119,7 +119,7 @@ object Program extends PlatformApp {
         moduleName = "Test"
       ),
       JSBackendOptions[Id, WebDemoResourceIndicator](
-        extern = FileList[WebDemoResourceIndicator](List.empty),
+        extern = new FileList[WebDemoResourceIndicator](List.empty),
         inject = JSInjectCode[Id, WebDemoResourceIndicator](
           before = None,
           after = None,

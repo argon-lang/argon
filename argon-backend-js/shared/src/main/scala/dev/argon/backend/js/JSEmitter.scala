@@ -49,12 +49,12 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
 
 
     for {
-      injectBefore <- ZIO.foreach(inject.before) { case SingleFile(file) =>
-        ZIO.accessM[ResourceReader[I]](_.get.readTextFile(file))
+      injectBefore <- ZIO.foreach(inject.before) { singleFile =>
+        ZIO.accessM[ResourceReader[I]](_.get.readTextFile(singleFile.file))
       }
 
-      injectAfter <- ZIO.foreach(inject.after) { case SingleFile(file) =>
-        ZIO.accessM[ResourceReader[I]](_.get.readTextFile(file))
+      injectAfter <- ZIO.foreach(inject.after) { singleFile =>
+        ZIO.accessM[ResourceReader[I]](_.get.readTextFile(singleFile.file))
       }
 
       globalNamespace <- module.globalNamespace
@@ -1069,9 +1069,9 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
 
 object JSEmitter {
 
-  def make(context: JSContext)(inject: JSInjectCode[Id, context.ResIndicator]): UIO[JSEmitter[context.type, context.ResIndicator]] =
+  def make[I <: ResourceIndicator: Tagged](context: JSContext)(inject: JSInjectCode[Id, I]): UIO[JSEmitter[context.type, I]] =
     for {
       localVariableIdMapping <- Ref.make(Map.empty[VariableOwnerDescriptor, Seq[VariableIdentifier]])
-    } yield new JSEmitter[context.type, context.ResIndicator](context, inject, localVariableIdMapping)
+    } yield new JSEmitter[context.type, I](context, inject, localVariableIdMapping)
 
 }

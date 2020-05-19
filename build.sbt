@@ -695,7 +695,7 @@ lazy val js_module_extractor = project.in(file("argon-js-module-extractor"))
         import scala.sys.process.Process
         Process("node_modules/.bin/parcel" :: "build" :: "--global" :: "ModuleExtractor" :: scalaJSOutput.toString :: Nil, dir).!
         Set(bundledOutput)
-      }(Set(bundledOutput))
+      }(Set(scalaJSOutput))
 
       bundledOutput
     },

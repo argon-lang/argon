@@ -42,7 +42,8 @@ object ResourceWriter {
 
 
         override def writeToResource(id: PathResourceIndicator[P])(data: Stream[ErrorList, Chunk[Byte]]): Comp[Unit] =
-          fileIO.writeToFile(ioExceptionToError)(id.path)(data)
+          fileIO.ensureParentDirectory(id.path).mapError(ioExceptionToError) *>
+            fileIO.writeToFile(ioExceptionToError)(id.path)(data)
       }
     }
 

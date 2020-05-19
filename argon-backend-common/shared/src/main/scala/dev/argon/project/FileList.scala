@@ -1,3 +1,5 @@
 package dev.argon.project
 
-final case class FileList[I](files: List[I])
+final class FileList[I](files2: List[I]) {
+  val files: List[I] = files2
+}

@@ -34,13 +34,13 @@ object Program extends PlatformApp {
           .flatMap(BuildInfoLoader.loadFile(_))
           .provideSomeLayer[BuildEnvironment with FileIO[FilePath]](BackendProviderImpl.live)
           .flatMap {
-            case Some(buildInfos) => buildInfos.foldLeftM(0) { (exitCode, buildInfo) =>
+            case Right(buildInfos) => buildInfos.foldLeftM(0) { (exitCode, buildInfo) =>
               Pipeline.run(buildInfo).map { exitCode2 =>
                 if(exitCode === 0) exitCode2
                 else exitCode
               }
             }
-            case None => putStrLn("Could not load build info file.").as(1)
+            case Left(message) => putStrLn(s"Could not load build info file: $message").as(1)
           }
     }
 
