@@ -4,7 +4,7 @@ import java.io.{FileNotFoundException, IOException}
 
 import cats.data.NonEmptyList
 import dev.argon.backend.{ResourceAccess, ResourceReader}
-import dev.argon.compiler.{Comp, CompilationError, CompilationMessageSource, ErrorList}
+import dev.argon.compiler.{Comp, Compilation, CompilationError, CompilationMessageSource, ErrorList}
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.{Path, ZipEntryInfo, ZipFileReader}
 import dev.argon.io.fileio.{FileIO, FileIOLite}
@@ -34,6 +34,12 @@ object TestResourceReader {
 
         override def getLibPath(name: String): UIO[P] =
           Path.of(libDir, name, name + ".armodule")
+
+        override def readTextFile(id: TestResourceIndicator): Comp[String] =
+          id match {
+            case LibraryResourceIndicator(name) =>
+              Compilation.forErrors(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(new FileNotFoundException())))
+          }
 
         override def getZipReader(id: TestResourceIndicator): Managed[ErrorList, ZipFileReader[Any, ErrorList]] =
           id match {

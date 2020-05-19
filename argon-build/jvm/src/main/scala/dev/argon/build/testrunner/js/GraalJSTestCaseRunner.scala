@@ -20,6 +20,7 @@ import java.nio.file.attribute.FileAttribute
 import java.util
 import java.util.Locale
 
+import dev.argon.backend.js.JSBackend
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.fileio.FileIO
 import org.apache.commons.compress.utils.SeekableInMemoryByteChannel
@@ -28,7 +29,7 @@ import org.apache.commons.text.StringEscapeUtils
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.io.FileSystem
 
-final class GraalJSTestCaseRunner[I <: ResourceIndicator: Tagged, P: Path : Tagged](protected val references: Vector[I], pathResolver: I => UIO[P]) extends JavaScriptTestCaseRunnerBase[I, P](pathResolver) {
+final class GraalJSTestCaseRunner[I <: ResourceIndicator: Tagged, P: Path : Tagged](protected val backend: JSBackend, protected val references: Vector[I], pathResolver: I => UIO[P]) extends JavaScriptTestCaseRunnerBase[I, P](pathResolver) {
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): Task[String] =

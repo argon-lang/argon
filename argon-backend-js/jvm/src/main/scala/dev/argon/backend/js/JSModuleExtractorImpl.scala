@@ -11,11 +11,11 @@ import zio.{IO, RIO, Task, ZIO}
 
 import scala.jdk.CollectionConverters._
 
-object JSModuleExtractor {
+private[js] final case class JSModuleExtractorImpl(blocking: Blocking.Service) extends JSModuleExtractor {
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
-  def exportedFunctions(module: String): RIO[Blocking, Map[String, String]] =
-    ZIO.accessM[Blocking](_.get.effectBlocking {
+  private[js] def exportedFunctions(module: String): Task[Map[String, String]] =
+    blocking.effectBlocking {
       val context = Context.newBuilder("js")
         .out(new NullOutputStream)
         .err(new NullOutputStream)
@@ -48,6 +48,6 @@ object JSModuleExtractor {
           .toMap
       }
       finally context.close()
-    })
+    }
 
 }

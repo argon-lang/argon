@@ -1,14 +1,19 @@
 package dev.argon.backend.js
 
+import cats.data.NonEmptyList
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.{ModuleLoader, ResourceIndicator}
 import dev.argon.compiler._
 import dev.argon.compiler.expr._
+import dev.argon.util.ValueCache
 import shapeless.Id
 import zio._
+import zio.interop.catz.core._
+import cats.implicits._
+import dev.argon.backend.ResourceReader
 
-sealed abstract class JSContext extends ContextWithModule {
+abstract class JSContext private[js] extends ContextWithModule {
 
   override type TTraitMetadata = Unit
   override type TClassMetadata = Unit
@@ -38,16 +43,32 @@ sealed abstract class JSContext extends ContextWithModule {
   override def createDataConstructorImplementation(body: typeSystem.SimpleExpr): JSImpl.DataConstructor =
     JSImpl.DataConstructor.ExpressionBody(body)
 
+  private def getExterns(source: CompilationMessageSource): Comp[Map[String, ResolvedExtern]] =
+    externFunctionsCache.get(
+      compilerInput.backendOptions.extern.files.foldMapM { file =>
+        for {
+          jsModule <- resourceReader.readTextFile(file)
+          map <- extractJSModuleFunctions(jsModule).mapError { _ => NonEmptyList.of(CompilationError.InvalidExternFunction(source)) }
+        } yield map.view.mapValues(ResolvedExtern.Function.apply).toMap
+      }
+    )
+
   override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[JSImpl.Function] =
-    compilerInput.backendOptions.extern.get(specifier) match {
-      case Some(impl) => IO.succeed(JSImpl.Function.JSExpressionBody(JSExpressionRaw(impl)))
-      case None => Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+    getExterns(source).flatMap { externs =>
+      externs.get(specifier) match {
+        case Some(ResolvedExtern.Function(impl)) => IO.succeed(JSImpl.Function.JSExpressionBody(JSExpressionRaw(impl)))
+        case Some(ResolvedExtern.Ambiguous) => Compilation.forErrors(CompilationError.AmbiguousExtern(specifier, source))
+        case None => Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+      }
     }
 
   override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[JSImpl.Method] =
-    compilerInput.backendOptions.extern.get(specifier) match {
-      case Some(impl) => IO.succeed(JSImpl.Method.JSExpressionBody(JSExpressionRaw(impl)))
-      case None => Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+    getExterns(source).flatMap { externs =>
+      externs.get(specifier) match {
+        case Some(ResolvedExtern.Function(impl)) => IO.succeed(JSImpl.Method.JSExpressionBody(JSExpressionRaw(impl)))
+        case Some(ResolvedExtern.Ambiguous) => Compilation.forErrors(CompilationError.AmbiguousExtern(specifier, source))
+        case None => Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+      }
     }
 
   object JSImpl {
@@ -77,13 +98,8 @@ sealed abstract class JSContext extends ContextWithModule {
     }
   }
 
-}
+  def extractJSModuleFunctions(jsModule: String): IO[Throwable, Map[String, String]]
+  protected val externFunctionsCache: ValueCache[ErrorList, Map[String, ResolvedExtern]]
+  protected val resourceReader: ResourceReader.Service[ResIndicator]
 
-object JSContext {
-  def apply[I <: ResourceIndicator: Tagged](input: CompilerInput[I, JSBackendOptions[Id, I]]): JSContext with Context.WithRes[I] = new JSContext {
-    type ResIndicator = I
-
-    override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]] = input
-    override val resIndicatorTag: Tagged[I] = implicitly
-  }
 }

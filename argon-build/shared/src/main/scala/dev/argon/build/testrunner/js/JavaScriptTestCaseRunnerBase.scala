@@ -8,7 +8,7 @@ import dev.argon.build.testrunner._
 import cats._
 import cats.data.{EitherT, NonEmptyList, NonEmptyVector}
 import cats.implicits._
-import dev.argon.backend.{ResourceReader, ResourceWriter}
+import dev.argon.backend.{Backend, ResourceReader, ResourceWriter}
 import zio._
 import zio.interop.catz.core._
 import dev.argon.compiler.{CompilationError, CompilerOptions, ErrorList}
@@ -17,17 +17,18 @@ import dev.argon.io.fileio.FileIO
 import dev.argon.build._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.module.PathResourceIndicator
+import dev.argon.project.FileList
 
 abstract class JavaScriptTestCaseRunnerBase[I <: ResourceIndicator: Tagged, P: Path : Tagged](pathResolver: I => UIO[P]) extends TestCaseRunnerExecutionPhase[I, ResourceReader[I] with ResourceWriter[Nothing] with FileIO[P]] {
 
   override val name: String = "JavaScript Execution"
-  override protected val backend: JSBackend.type = JSBackend
+  override protected val backend: JSBackend
 
   override protected def backendOptions(compilerOptions: CompilerOptions[Id]): UIO[JSBackendOptions[Id, I]] =
     IO.succeed(
       JSBackendOptions[Id, I](
-        extern = Map.empty,
-        inject = JSInjectCode[Id](
+        extern = FileList[I](List.empty),
+        inject = JSInjectCode[Id, I](
           before = None,
           after = None,
         )

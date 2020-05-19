@@ -1,6 +1,6 @@
 package dev.argon.build
 
-import dev.argon.backend.js.JSBackend
+import dev.argon.backend.js.{JSBackend, JSModuleExtractorFactory}
 import dev.argon.backend.module.ArModuleBackend
 import dev.argon.backend.{Backend, ResourceReader, ResourceWriter}
 import zio._
@@ -10,21 +10,25 @@ import dev.argon.build.testrunner.{BuildTestCaseRunner, ParseTestCaseRunner, Tes
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.Path
 import dev.argon.io.fileio.FileIO
+import zio.blocking.Blocking
 
 object BackendProviderImpl {
 
-  def live: ULayer[BackendProvider] = ZLayer.succeed(
-    new BackendProvider.Service {
+  def live: URLayer[Blocking, BackendProvider] = ZLayer.fromEffect(
+    JSModuleExtractorFactory.make.map { jsModuleExtractor =>
+      new BackendProvider.Service {
 
-      val allBackends = Vector(ArModuleBackend, JSBackend)
+        val jsBackend = JSBackend(jsModuleExtractor)
+        val allBackends = Vector(ArModuleBackend, jsBackend)
 
-      override def findBackend(id: String): Option[Backend] =
-        allBackends.find { _.id === id }
+        override def findBackend(id: String): Option[Backend] =
+          allBackends.find { _.id === id }
 
-      override def testCaseRunners[I <: ResourceIndicator: Tagged, P: Path : Tagged](references: Vector[I], pathResolver: I => UIO[P]): Seq[TestCaseRunner[ResourceReader[I] with ResourceWriter[Nothing] with FileIO[P]]] =
-        Seq(ParseTestCaseRunner) ++
-          Seq(JSBackend).map { backend => new BuildTestCaseRunner(backend, references) } ++
-          Seq(new GraalJSTestCaseRunner(references, pathResolver))
+        override def testCaseRunners[I <: ResourceIndicator: Tagged, P: Path : Tagged](references: Vector[I], pathResolver: I => UIO[P]): Seq[TestCaseRunner[ResourceReader[I] with ResourceWriter[Nothing] with FileIO[P]]] =
+          Seq(ParseTestCaseRunner) ++
+            Seq(jsBackend).map { backend => new BuildTestCaseRunner(backend, references) } ++
+            Seq(new GraalJSTestCaseRunner(jsBackend, references, pathResolver))
+      }
     }
   )
 

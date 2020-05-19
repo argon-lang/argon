@@ -59,6 +59,9 @@ object HttpResourceReader {
               Stream(Chunk.fromArray(content.getBytes(StandardCharsets.UTF_8)))
           }
 
+        override def readTextFile(id: WebDemoResourceIndicator): Comp[String] =
+          readResource(id).run(ZSink.utf8DecodeChunk)
+
         override def getZipReader(id: WebDemoResourceIndicator): Managed[ErrorList, ZipFileReader[Any, ErrorList]] =
           ZManaged.fromEffect(zipReaderForStream(ioExceptionToError)(readResource(id)))
 

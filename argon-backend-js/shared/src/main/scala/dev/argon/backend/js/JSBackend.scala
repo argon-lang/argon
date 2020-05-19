@@ -9,7 +9,7 @@ import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.loaders.armodule.ArgonModuleLoader
 import dev.argon.loaders.armodule.ArgonModuleLoader.PayloadLoader
-import dev.argon.project.{ProjectLoader, SingleFile}
+import dev.argon.project.{FileList, ProjectLoader, SingleFile}
 import dev.argon.stream.builder.Source
 import zio._
 import zio.stream._
@@ -17,11 +17,12 @@ import zio.interop.catz.core._
 import toml.Codecs._
 import shapeless._
 import dev.argon.project.ExtraTomlCodecs._
+import dev.argon.util.ValueCache
 import toml.Parse.{Address, Message}
 import toml.Value
 
 
-object JSBackend extends Backend {
+final case class JSBackend(private val moduleExtractor: JSModuleExtractor) extends Backend {
 
   override type BackendOptions[F[_], I] = JSBackendOptions[F, I]
   override type BackendOutputOptions[F[_], I] = JSOutputOptions[F, I]
@@ -36,10 +37,10 @@ object JSBackend extends Backend {
   )
   override def inferBackendOptions[I](compilerOptions: CompilerOptions[Id], options: JSBackendOptions[Option, I]): BackendOptionsId[I] =
     JSBackendOptions[Id, I](
-      extern = options.extern.getOrElse(Map.empty),
-      inject = options.inject.getOrElse(JSInjectCode[Option](before = None, after = None)) match {
+      extern = options.extern.getOrElse(FileList[I](List.empty)),
+      inject = options.inject.getOrElse(JSInjectCode[Option, I](before = None, after = None)) match {
         case JSInjectCode(beforeOpt, afterOpt) =>
-          JSInjectCode[Id](
+          JSInjectCode[Id, I](
             before = beforeOpt.flatten,
             after = afterOpt.flatten
           )
@@ -48,7 +49,10 @@ object JSBackend extends Backend {
 
   override def backendOptionsProjectLoader[IOld, I]: ProjectLoader[BackendOptionsId[IOld], BackendOptionsId[I], IOld, I] = {
     import dev.argon.project.ProjectLoader.Implicits._
-    ProjectLoader.apply
+
+    implicit val injectCode: ProjectLoader[JSInjectCode[Id, IOld], JSInjectCode[Id, I], IOld, I] = productGenericLoader
+
+    ProjectLoader[BackendOptionsId[IOld], BackendOptionsId[I], IOld, I]
   }
 
   override def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Parse.Error, JSBackendOptions[Option, String]] =
@@ -62,7 +66,7 @@ object JSBackend extends Backend {
       outputFile = options.outputFile.getOrElse(SingleFile(compilerOptions.moduleName + ".js")),
     )
 
-  override def outputOptionsProjectLoader[IOld, I]: ProjectLoader[JSBackend.BackendOutputOptionsId[IOld], JSBackend.BackendOutputOptionsId[I], IOld, I] = {
+  override def outputOptionsProjectLoader[IOld, I]: ProjectLoader[BackendOutputOptionsId[IOld], BackendOutputOptionsId[I], IOld, I] = {
     import dev.argon.project.ProjectLoader.Implicits._
     ProjectLoader.apply
   }
@@ -70,17 +74,26 @@ object JSBackend extends Backend {
   override def parseOutputOptions(table: Value.Tbl): Either[(Address, Message), JSOutputOptions[Option, String]] =
     toml.Toml.parseAs[JSOutputOptions[Option, String]](table)
 
-  override def compile[I <: ResourceIndicator: Tagged](input: CompilerInput[I, JSBackendOptions[Id, I]]): ZManaged[ResourceReader[I], ErrorList, TCompilationOutput] = {
-    val context = JSContext(input)
+  override def compile[I <: ResourceIndicator: Tagged](input: CompilerInput[I, JSBackendOptions[Id, I]]): ZManaged[ResourceReader[I], ErrorList, TCompilationOutput] = for {
+    externCache <- ZManaged.fromEffect(ValueCache.make[ErrorList, Map[String, ResolvedExtern]])
+    resReader <- ZManaged.access[ResourceReader[I]](_.get)
+    context: JSContext with Context.WithRes[I] = new JSContext {
+      override type ResIndicator = I
+      override val resIndicatorTag: zio.Tagged[I] = implicitly
+      override protected val compilerInput: CompilerInput[I, JSBackendOptions[Id, I]] = input
 
-    ZManaged.fromEffect(JSEmitter.make(context, input.backendOptions.inject)).flatMap { emitter =>
-      context.module[JSContext with Context.WithRes[I]].mapM { module =>
-        emitter.emitModule(module).map { jsModule =>
-          createOutput(jsModule)
-        }
-      }.provideSomeLayer(JSBackendLoadService.forResourceReader[I, JSContext with Context.WithRes[I]])
+      override def extractJSModuleFunctions(jsModule: String): IO[Throwable, Map[String, String]] =
+        moduleExtractor.exportedFunctions(jsModule)
+
+      override protected val externFunctionsCache: ValueCache[ErrorList, Map[String, ResolvedExtern]] = externCache
+      override protected val resourceReader: ResourceReader.Service[I] = resReader
     }
-  }
+
+    emitter <- ZManaged.fromEffect(JSEmitter.make(context)(input.backendOptions.inject))
+    module <- context.module[JSContext with Context.WithRes[I]].provideLayer(JSBackendLoadService.forResourceReader[I, JSContext with Context.WithRes[I]])
+    jsModule <- ZManaged.fromEffect(emitter.emitModule(module))
+
+  } yield createOutput(jsModule)
 
   private def createOutput(jsModule: JSModule): CompilationOutputText[BackendOutputOptionsId] = new CompilationOutputText[BackendOutputOptionsId] {
 

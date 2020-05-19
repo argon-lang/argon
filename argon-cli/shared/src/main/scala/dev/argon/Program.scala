@@ -32,7 +32,7 @@ object Program extends PlatformApp {
       case CompileCommand(buildInfoFileName) =>
         Path.of(buildInfoFileName)
           .flatMap(BuildInfoLoader.loadFile(_))
-          .provideSomeLayer[FileIO[FilePath]](BackendProviderImpl.live)
+          .provideSomeLayer[BuildEnvironment with FileIO[FilePath]](BackendProviderImpl.live)
           .flatMap {
             case Some(buildInfos) => buildInfos.foldLeftM(0) { (exitCode, buildInfo) =>
               Pipeline.run(buildInfo).map { exitCode2 =>

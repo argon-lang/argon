@@ -16,7 +16,7 @@ object JSModuleExtractorTests extends DefaultRunnableSpec {
   override def spec: ZSpec[Environment, Failure] =
     suite("JSModuleExtractor")(
       testM("Math Module")(
-        assertM(JSModuleExtractor.exportedFunctions(mathModule))(
+        assertM(JSModuleExtractorFactory.make.flatMap { _.exportedFunctions(mathModule) })(
           hasSize[(String, String)](equalTo(2)) &&
             hasKey("add")(anything) &&
             hasKey("sub")(anything)

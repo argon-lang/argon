@@ -6,7 +6,7 @@ import java.net.URI
 import cats.Id
 import cats.data.NonEmptyList
 import dev.argon.backend.{ResourceAccess, ResourceReader}
-import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
+import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode, JSModuleExtractorImpl}
 import dev.argon.build.{BuildEnvironment, BuildProcess, InputFileInfo, Pipeline}
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.compiler.{CompilationError, CompilerOptions}
@@ -15,6 +15,7 @@ import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.module.PathResourceIndicator
 import dev.argon.parser.SourceAST
 import dev.argon.platform.PlatformApp
+import dev.argon.project.FileList
 import dev.argon.stream.builder.{Source, ZStreamSource}
 import dev.argon.util.{FileID, FileSpec}
 import zio._
@@ -110,7 +111,7 @@ object Program extends PlatformApp {
     )
 
     BuildProcess.compile(
-      JSBackend
+      JSBackend(JSModuleExtractorImpl)
     )(
       BuildProcess.parseInput(inputFiles),
       references,
@@ -118,8 +119,8 @@ object Program extends PlatformApp {
         moduleName = "Test"
       ),
       JSBackendOptions[Id, WebDemoResourceIndicator](
-        extern = Map.empty,
-        inject = JSInjectCode[Id](
+        extern = FileList[WebDemoResourceIndicator](List.empty),
+        inject = JSInjectCode[Id, WebDemoResourceIndicator](
           before = None,
           after = None,
         )

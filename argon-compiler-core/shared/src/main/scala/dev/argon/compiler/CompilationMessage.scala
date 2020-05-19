@@ -334,6 +334,14 @@ object CompilationError {
     override def message: String = "A circular dependency was detected among modules."
   }
 
+  final case class InvalidExternFunction(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "An external function is invalid."
+  }
+
+  final case class AmbiguousExtern(name: String, source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Extern \"" + name + "\" is ambiguous."
+  }
+
   final case class InvalidAccessModifierCombination(accessModifier1: parser.AccessModifier, accessModifier2: parser.AccessModifier, source: CompilationMessageSource) extends CompilationError {
     override def message: String = s"The access modifier '${formatParserAccessModifier(accessModifier1)}' cannot be combined with '${formatParserAccessModifier(accessModifier2)}'"
   }

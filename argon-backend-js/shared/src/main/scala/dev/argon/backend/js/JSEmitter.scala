@@ -4,6 +4,7 @@ import dev.argon.compiler._
 import cats.{Id => _, _}
 import cats.implicits._
 import cats.data.NonEmptyList
+import dev.argon.backend.ResourceReader
 import shapeless.Id
 import dev.argon.compiler.core.PayloadSpecifiers._
 import dev.argon.compiler.core._
@@ -13,10 +14,11 @@ import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
 import dev.argon.compiler.vtable._
-import zio.{IO, Ref, UIO, ZIO}
+import dev.argon.project.SingleFile
+import zio._
 import zio.interop.catz.core._
 
-final class JSEmitter[TContext <: JSContext with Singleton] private(val context: TContext, inject: JSInjectCode[Id], localVariableIdMapping: Ref[Map[VariableOwnerDescriptor, Seq[VariableIdentifier]]]) {
+final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicator: Tagged] private(val context: TContext, inject: JSInjectCode[Id, I], localVariableIdMapping: Ref[Map[VariableOwnerDescriptor, Seq[VariableIdentifier]]]) {
 
   import context._
   import context.signatureContext.{ context => _, _ }
@@ -38,7 +40,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
 
   private final case class EmitParams(owner: ParameterOwnerDescriptor, varMapping: VarMap)
 
-  def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): Comp[JSModule] = {
+  def emitModule(module: ArModule[context.type, DeclarationPayloadSpecifier]): RComp[ResourceReader[I], JSModule] = {
 
 
     val modulePairs = module.referencedModules
@@ -47,6 +49,14 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
 
 
     for {
+      injectBefore <- ZIO.foreach(inject.before) { case SingleFile(file) =>
+        ZIO.accessM[ResourceReader[I]](_.get.readTextFile(file))
+      }
+
+      injectAfter <- ZIO.foreach(inject.after) { case SingleFile(file) =>
+        ZIO.accessM[ResourceReader[I]](_.get.readTextFile(file))
+      }
+
       globalNamespace <- module.globalNamespace
       vtableBuilder <- VTableBuilder(context)
       topLevelStmts <- allNamespaceElements(globalNamespace).toVector.traverse(createObjectsForScopeValue(vtableBuilder))
@@ -56,7 +66,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
           JSImportAllStatement(None, importId, refModule.descriptor.name)
         },
 
-        inject.before.map(JSModuleRaw.apply).toList.toVector,
+        injectBefore.map(JSModuleRaw.apply).toList.toVector,
 
         Vector(
           JSConst(NonEmptyList.of(
@@ -89,7 +99,7 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
 
         topLevelStmts,
 
-        inject.after.map(JSModuleRaw.apply).toList.toVector,
+        injectAfter.map(JSModuleRaw.apply).toList.toVector,
 
         Vector(
           freeze_obj(moduleVarName),
@@ -1059,9 +1069,9 @@ final class JSEmitter[TContext <: JSContext with Singleton] private(val context:
 
 object JSEmitter {
 
-  def make(context: JSContext, inject: JSInjectCode[Id]): UIO[JSEmitter[context.type]] =
+  def make(context: JSContext)(inject: JSInjectCode[Id, context.ResIndicator]): UIO[JSEmitter[context.type, context.ResIndicator]] =
     for {
       localVariableIdMapping <- Ref.make(Map.empty[VariableOwnerDescriptor, Seq[VariableIdentifier]])
-    } yield new JSEmitter[context.type](context, inject, localVariableIdMapping)
+    } yield new JSEmitter[context.type, context.ResIndicator](context, inject, localVariableIdMapping)
 
 }

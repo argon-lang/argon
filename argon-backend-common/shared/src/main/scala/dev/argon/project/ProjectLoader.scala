@@ -37,6 +37,11 @@ object ProjectLoader {
         fileHandler.loadGlobList(a.files).map(FileGlob.apply)
     }
 
+    implicit def optionLoader[A, B, IOld, I](implicit innerLoader: ProjectLoader[A, B, IOld, I]): ProjectLoader[Option[A], Option[B], IOld, I] = new ProjectLoader[Option[A], Option[B], IOld, I] {
+      override def loadProject[R, E](a: Option[A])(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, Option[B]] =
+        ZIO.foreach(a)(innerLoader.loadProject(_))
+    }
+
     implicit def hconsLoader[AHead, ATail <: HList, BHead, BTail <: HList, IOld, I](implicit headLoader: ProjectLoader[AHead, BHead, IOld, I], tailLoader: ProjectLoader[ATail, BTail, IOld, I]): ProjectLoader[AHead :: ATail, BHead :: BTail, IOld, I] =
       new ProjectLoader[AHead :: ATail, BHead :: BTail, IOld, I] {
         override def loadProject[R, E](a: AHead :: ATail)(implicit fileHandler: ProjectFileHandler[R, E, IOld, I]): ZIO[R, E, BHead :: BTail] =

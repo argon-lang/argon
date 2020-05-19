@@ -16,6 +16,7 @@ import zio.stream._
 object ResourceReader {
 
   trait Service[I <: ResourceIndicator] {
+    def readTextFile(id: I): Comp[String]
     def getZipReader(id: I): Managed[ErrorList, ZipFileReader[Any, ErrorList]]
 
     def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[ErrorList, Chunk[Byte]]): Comp[A]
@@ -36,6 +37,9 @@ object ResourceReader {
       new ServiceCommon[PathResourceIndicator[P]] with ResourceAccess.ResourceAccessCommon {
         override protected val fileIOLite: FileIOLite.Service = prevLayer.get[FileIOLite.Service]
 
+        override def readTextFile(id: PathResourceIndicator[P]): Comp[String] =
+          fileIO.readAllText(id.path).mapError(ioExceptionToError)
+
         override def getZipReader(id: PathResourceIndicator[P]): Managed[ErrorList, ZipFileReader[Any, ErrorList]] =
           fileIO.openZipFile(ioExceptionToError)(id.path)
       }
@@ -45,6 +49,8 @@ object ResourceReader {
     ZLayer.fromFunction { env =>
       new ServiceCommon[Nothing] with ResourceAccess.ResourceAccessCommon {
         override protected val fileIOLite: FileIOLite.Service = env.get
+
+        override def readTextFile(id: Nothing): Comp[String] = id
 
         override def getZipReader(id: Nothing): Managed[ErrorList, ZipFileReader[Any, ErrorList]] = id
       }
