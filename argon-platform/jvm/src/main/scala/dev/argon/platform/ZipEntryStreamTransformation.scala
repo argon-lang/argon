@@ -14,7 +14,7 @@ import zio.stream.{ZSink, ZStream}
 
 private[platform] object ZipEntryStreamTransformation {
 
-  def apply[R, E](errorHandler: IOException => E, blocking: Blocking.Service)(entries: ZStream[R, E, ZipEntryInfo[R, E]]): ZStream[R, E, Chunk[Byte]] =
+  def apply[R, E](errorHandler: IOException => E, blocking: Blocking.Service)(entries: ZStream[R, E, ZipEntryInfo[R, E]]): ZStream[R, E, Byte] =
     OutputStreamWriterStream { outputStream =>
       blocking.effectBlocking { new ZipOutputStream(outputStream) }.orDie.bracketAuto { zipStream =>
         entries.foreach { case ZipEntryInfo(path, dataStream) =>
@@ -27,13 +27,17 @@ private[platform] object ZipEntryStreamTransformation {
             .bracket(_ =>
               blocking.effectBlocking { zipStream.closeEntry() }.orDie
             ) { _ =>
-              dataStream
-                .run(
-                  ZSink.fromOutputStream(zipStream)
-                    .provideSome[Any] { _ => Has(blocking) }
-                    .mapError(errorHandler)
-                    .unit
-                )
+              ZSink.fromOutputStream(zipStream).push.provide(Has(blocking)).use { push =>
+                dataStream
+                  .run(
+                    ZSink.fromPush[Any, IOException, Byte, Int] { chunkOpt =>
+                      push(chunkOpt)
+                        .provide(Has(blocking))
+                    }
+                      .mapError(errorHandler)
+                  )
+                  .unit
+              }
             }
 
         }

@@ -4,7 +4,7 @@ import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup._
-import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, ModuleMetadata, NamespaceBuilder, ResourceIndicator, StandardTypeLoaders}
+import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, ModuleMetadata, NamespaceBuilder, ResourceIndicator, ResourceReader, StandardTypeLoaders}
 import dev.argon.compiler.types._
 import dev.argon.{module => ArgonModule}
 import dev.argon.util._
@@ -12,7 +12,7 @@ import cats.{Id => _, _}
 import cats.evidence.{===, Is}
 import cats.data.NonEmptyList
 import cats.implicits._
-import dev.argon.backend.{ResourceAccess, ResourceReader}
+import dev.argon.backend.ResourceAccess
 import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.io.ZipFileReader

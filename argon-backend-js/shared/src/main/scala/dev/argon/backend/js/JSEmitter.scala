@@ -4,21 +4,19 @@ import dev.argon.compiler._
 import cats.{Id => _, _}
 import cats.implicits._
 import cats.data.NonEmptyList
-import dev.argon.backend.ResourceReader
 import shapeless.Id
 import dev.argon.compiler.core.PayloadSpecifiers._
 import dev.argon.compiler.core._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
-import dev.argon.compiler.loaders.ResourceIndicator
+import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.types.TypeSystem
 import dev.argon.compiler.vtable._
-import dev.argon.project.SingleFile
 import zio._
 import zio.interop.catz.core._
 
-final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicator: Tagged] private(val context: TContext, inject: JSInjectCode[Id, I], localVariableIdMapping: Ref[Map[VariableOwnerDescriptor, Seq[VariableIdentifier]]]) {
+final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicator: Tag] private(val context: TContext, inject: JSInjectCode[Id, I], localVariableIdMapping: Ref[Map[VariableOwnerDescriptor, Seq[VariableIdentifier]]]) {
 
   import context._
   import context.signatureContext.{ context => _, _ }
@@ -50,11 +48,11 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
 
     for {
       injectBefore <- ZIO.foreach(inject.before) { singleFile =>
-        ZIO.accessM[ResourceReader[I]](_.get.readTextFile(singleFile.file))
+        ZIO.accessM[ResourceReader[I]](_.get.readTextFileAsString(singleFile.file))
       }
 
       injectAfter <- ZIO.foreach(inject.after) { singleFile =>
-        ZIO.accessM[ResourceReader[I]](_.get.readTextFile(singleFile.file))
+        ZIO.accessM[ResourceReader[I]](_.get.readTextFileAsString(singleFile.file))
       }
 
       globalNamespace <- module.globalNamespace
@@ -1069,7 +1067,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
 
 object JSEmitter {
 
-  def make[I <: ResourceIndicator: Tagged](context: JSContext)(inject: JSInjectCode[Id, I]): UIO[JSEmitter[context.type, I]] =
+  def make[I <: ResourceIndicator: Tag](context: JSContext)(inject: JSInjectCode[Id, I]): UIO[JSEmitter[context.type, I]] =
     for {
       localVariableIdMapping <- Ref.make(Map.empty[VariableOwnerDescriptor, Seq[VariableIdentifier]])
     } yield new JSEmitter[context.type, I](context, inject, localVariableIdMapping)

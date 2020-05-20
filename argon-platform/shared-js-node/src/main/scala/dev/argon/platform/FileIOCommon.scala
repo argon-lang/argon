@@ -15,18 +15,24 @@ import scalajs.js.JSConverters._
 
 @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 private[platform] trait FileIOCommon {
-  protected def dataStreamToArray[R, E](dataStream: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, Array[Byte]] =
+  protected def dataStreamToArray[R, E](dataStream: ZStream[R, E, Byte]): ZIO[R, E, Array[Byte]] =
     IO.effectTotal { new ByteArrayOutputStream() }
       .flatMap { outputStream =>
-        dataStream.foreach { chunk =>
+        dataStream.foreachChunk { chunk =>
           IO.effectTotal { outputStream.write(chunk.toArray) }
         }
           .flatMap { _ =>
             IO.effectTotal { outputStream.toByteArray }
           }
       }
-  protected def dataStreamToUint8Array[R, E](dataStream: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, Uint8Array] =
-    dataStreamToArray(dataStream).map { arr => new Uint8Array(arr.toJSArray) }
+  protected def dataStreamToUint8Array[R, E](dataStream: ZStream[R, E, Byte]): ZIO[R, E, Uint8Array] =
+    dataStreamToArray(dataStream).map { arr =>
+      val u8arr = new Uint8Array(arr.length)
+      for(i <- arr.indices) {
+        u8arr(i) = (arr(i) & 0xFF).toShort
+      }
+      u8arr
+    }
 
   protected def promiseToIO[E, A](errorHandler: IOException => E)(promise: => js.Promise[A]): IO[E, A] =
     IO.effectAsync { register =>

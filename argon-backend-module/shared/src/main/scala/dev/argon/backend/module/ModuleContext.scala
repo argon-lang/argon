@@ -7,6 +7,7 @@ import dev.argon.compiler.loaders.ResourceIndicator
 import shapeless.Id
 import cats.implicits._
 import dev.argon.compiler.expr.ClassConstructorBody
+import dev.argon.compiler.options.CompilerInput
 import zio._
 
 sealed abstract class ModuleContext extends ContextWithModule {
@@ -40,9 +41,9 @@ sealed abstract class ModuleContext extends ContextWithModule {
 }
 
 object ModuleContext {
-  def apply[I <: ResourceIndicator: Tagged](input: CompilerInput[I, ModuleBackendOptions[Id, I]]): ModuleContext with Context.WithRes[I] = new ModuleContext {
+  def apply[I <: ResourceIndicator: Tag](input: CompilerInput[I, ModuleBackendOptions[Id, I]]): ModuleContext with Context.WithRes[I] = new ModuleContext {
     override type ResIndicator = I
-    override val resIndicatorTag: Tagged[I] = implicitly
+    override val resIndicatorTag: Tag[I] = implicitly
     override protected val compilerInput: CompilerInput[I, ModuleBackendOptions[Id, I]] = input
   }
 }

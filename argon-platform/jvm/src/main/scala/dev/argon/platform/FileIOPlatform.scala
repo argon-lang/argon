@@ -11,7 +11,7 @@ import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import zio.{Chunk, IO, Managed, UIO, ZIO, ZLayer, ZManaged, stream}
 import zio.blocking.Blocking
 import zio.console.Console
-import zio.stream.{Stream, ZStream}
+import zio.stream.{Stream, ZSink, ZStream}
 import zio.system.System
 import dev.argon.io.fileio.FileIO
 
@@ -63,7 +63,7 @@ private[platform] object FileIOPlatform {
         }
 
 
-      override def writeToFile[R, E](errorHandler: IOException => E)(path: FilePath)(data: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, Unit] =
+      override def writeToFile[R, E](errorHandler: IOException => E)(path: FilePath)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit] =
         ZManaged.fromAutoCloseable(
           blocking.effectBlocking { Files.newOutputStream(path.javaPath, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING) }
         )
@@ -71,7 +71,7 @@ private[platform] object FileIOPlatform {
             case ex: IOException => errorHandler(ex)
           }
           .use { outputStream =>
-            data.foreach { chunk =>
+            data.foreachChunk { chunk =>
               blocking.effectBlocking { outputStream.write(chunk.toArray) }
                 .refineOrDie {
                   case ex: IOException => errorHandler(ex)
@@ -99,7 +99,7 @@ private[platform] object FileIOPlatform {
         )
           .map { zipFile =>
             new ZipFileReader[R, E] {
-              override def getEntryStream(name: String): ZStream[R, E, Chunk[Byte]] =
+              override def getEntryStream(name: String): ZStream[R, E, Byte] =
                   ZStream.managed(
                     ZManaged.fromAutoCloseable(
                       blocking.effectBlocking { zipFile.getInputStream(zipFile.getEntry(name)) }
@@ -108,7 +108,7 @@ private[platform] object FileIOPlatform {
                         }
                     )
                   )
-                  .flatMap(ZStream.fromInputStream(_).chunks.mapError(errorHandler))
+                  .flatMap(ZStream.fromInputStream(_).mapError(errorHandler).provide(env))
             }
           }
 

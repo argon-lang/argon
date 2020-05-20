@@ -14,7 +14,7 @@ import scala.collection.immutable._
 
 object ModuleLoader {
 
-  def loadReferencedModules[I <: ResourceIndicator: Tagged, TContext <: Context.WithRes[I]: Tagged]
+  def loadReferencedModules[I <: ResourceIndicator: Tag, TContext <: Context.WithRes[I]: Tag]
   (context: TContext)
   (refFiles: Vector[I])
   : ZManaged[ModuleLoad[I, TContext], ErrorList, Vector[ArModule[context.type, ReferencePayloadSpecifier]]] = {

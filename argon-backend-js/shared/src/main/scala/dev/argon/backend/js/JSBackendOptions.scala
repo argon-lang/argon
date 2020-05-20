@@ -1,11 +1,12 @@
 package dev.argon.backend.js
 
-import dev.argon.project.{FileList, SingleFile}
+import dev.argon.compiler.options.SingleFile
+import dev.argon.compiler.options.{FileList, SingleFile}
 
 final case class JSBackendOptions[F[_], I]
 (
   extern: F[FileList[I]],
-  inject: F[JSInjectCode[F, I]],
+  inject: JSInjectCode[F, I],
 )
 
 final case class JSInjectCode[F[_], I]

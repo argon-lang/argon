@@ -13,7 +13,7 @@ import dev.argon.io.fileio.FileIO
 import scala.scalajs.js
 import scala.scalajs.js.{JSON, |}
 
-final class JavaScriptNodeVMTestCaseRunner[I <: ResourceIndicator: Tagged, P: Path : Tagged](protected val backend: JSBackend, protected val references: Vector[I], pathResolver: I => UIO[P]) extends JavaScriptTestCaseRunnerBase[I, P](pathResolver) {
+final class JavaScriptNodeVMTestCaseRunner[I <: ResourceIndicator: Tag, P: Path : Tag](protected val backend: JSBackend, protected val references: Vector[I], pathResolver: I => UIO[P]) extends JavaScriptTestCaseRunnerBase[I, P](pathResolver) {
 
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null", "org.wartremover.warts.ToString", "dev.argon.warts.ZioEffect"))
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): Task[String] =

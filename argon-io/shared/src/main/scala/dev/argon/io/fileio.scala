@@ -20,7 +20,7 @@ object fileio {
 
       def readAllText(path: P): IO[IOException, String]
       def readText[E](errorHandler: IOException => E)(path: P): Stream[E, Char]
-      def writeToFile[R, E](errorHandler: IOException => E)(path: P)(data: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, Unit]
+      def writeToFile[R, E](errorHandler: IOException => E)(path: P)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit]
 
       def isDirectory(path: P): IO[IOException, Boolean]
       def listDirectory(path: P): Stream[IOException, P]
@@ -32,15 +32,15 @@ object fileio {
 
   object FileIOLite {
     trait Service {
-      def zipEntries[R, E](errorHandler: IOException => E)(entries: ZStream[R, E, ZipEntryInfo[R, E]]): ZStream[R, E, Chunk[Byte]]
+      def zipEntries[R, E](errorHandler: IOException => E)(entries: ZStream[R, E, ZipEntryInfo[R, E]]): ZStream[R, E, Byte]
 
       def deserializeProtocolBuffer[R, E, A <: GeneratedMessage]
       (errorHandler: IOException => E)
       (companion: GeneratedMessageCompanion[A])
-      (data: ZStream[R, E, Chunk[Byte]])
+      (data: ZStream[R, E, Byte])
       : ZIO[R, E, A]
 
-      def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): ZStream[R, E, Chunk[Byte]]
+      def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): ZStream[R, E, Byte]
     }
   }
 

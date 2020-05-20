@@ -3,7 +3,7 @@ package dev.argon.backend.js
 import cats.data.NonEmptyList
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
-import dev.argon.compiler.loaders.{ModuleLoader, ResourceIndicator}
+import dev.argon.compiler.loaders.{ModuleLoader, ResourceIndicator, ResourceReader}
 import dev.argon.compiler._
 import dev.argon.compiler.expr._
 import dev.argon.util.ValueCache
@@ -11,7 +11,6 @@ import shapeless.Id
 import zio._
 import zio.interop.catz.core._
 import cats.implicits._
-import dev.argon.backend.ResourceReader
 
 abstract class JSContext private[js] extends ContextWithModule {
 
@@ -47,7 +46,7 @@ abstract class JSContext private[js] extends ContextWithModule {
     externFunctionsCache.get(
       compilerInput.backendOptions.extern.files.foldMapM { file =>
         for {
-          jsModule <- resourceReader.readTextFile(file)
+          jsModule <- resourceReader.readTextFileAsString(file)
           map <- extractJSModuleFunctions(jsModule).mapError { _ => NonEmptyList.of(CompilationError.InvalidExternFunction(source)) }
         } yield map.view.mapValues(ResolvedExtern.Function.apply).toMap
       }

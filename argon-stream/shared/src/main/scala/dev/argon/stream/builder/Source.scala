@@ -4,8 +4,8 @@ import cats._
 import cats.arrow.FunctionK
 import cats.data.{NonEmptyVector, StateT}
 import cats.implicits._
-import zio.stream.{Take, ZStream}
-import zio.{IO, Queue, Ref, ZIO}
+import zio.stream.ZStream
+import zio.{Exit, IO, Queue, Ref, ZIO}
 
 trait Source[-R, +E, +A, +X] {
 
@@ -76,18 +76,16 @@ trait Source[-R, +E, +A, +X] {
 
 
   def toZStream: ZStream[R, E, A] =
-    ZStream.flatten(
-      ZStream.fromEffect(
-        for {
-          queue <- Queue.bounded[Take[E, A]](1)
+    ZStream.unwrap(
+      for {
+        queue <- Queue.bounded[Exit[Option[E], A]](1)
 
-          _ <- foreach { value => queue.offer(Take.Value(value)).unit }.foldCauseM(
-            failure = cause => queue.offer(Take.Fail(cause)).unit,
-            success = _ => queue.offer(Take.End).unit
-          ).fork
+        _ <- foreach { value => queue.offer(Exit.Success(value)).unit }.foldCauseM(
+          failure = cause => queue.offer(Exit.Failure(cause.map(Some.apply))).unit,
+          success = _ => queue.offer(Exit.fail(None)).unit
+        ).fork
 
-        } yield ZStream.fromQueue(queue).unTake
-      )
+      } yield ZStream.fromQueue(queue).collectWhileSuccess
     )
 
 

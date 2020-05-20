@@ -1,6 +1,6 @@
 package dev.argon.compiler.loaders
 
-import dev.argon.compiler.{Comp, ErrorList}
+import dev.argon.compiler.{Comp, ErrorList, RComp}
 import dev.argon.util.NamespacePath
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup._
@@ -9,7 +9,7 @@ import zio.stream._
 
 object NamespaceBuilder {
 
-  def createNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](elements: Stream[ErrorList, ModuleElement[TContext, TPayloadSpec]]): Comp[Namespace[TContext, TPayloadSpec]] =
+  def createNamespace[R, TContext <: Context with Singleton, TPayloadSpec[_, _]](elements: ZStream[R, ErrorList, ModuleElement[TContext, TPayloadSpec]]): RComp[R, Namespace[TContext, TPayloadSpec]] =
     elements.runCollect.map { elems =>
       createNamespaceWithPath(NamespacePath.empty, elems.toVector)
     }

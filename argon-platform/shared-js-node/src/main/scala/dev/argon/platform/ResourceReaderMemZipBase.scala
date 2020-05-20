@@ -27,19 +27,23 @@ trait ResourceReaderMemZipBase {
         )
     }
 
-  def zipReaderForStream[R, E](errorHandler: IOException => E)(data: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, ZipFileReader[Any, E]] =
-      data.fold(Chunk.empty : Chunk[Byte])(_ ++ _)
+  def zipReaderForStream[R, E](errorHandler: IOException => E)(data: ZStream[R, E, Byte]): ZIO[R, E, ZipFileReader[Any, E]] =
+      data.run(ZSink.foldLeftChunks(Chunk.empty : Chunk[Byte]) { _ ++ _ })
         .flatMap { data =>
-          promiseToIO(errorHandler)(new JSZip().loadAsync(new Uint8Array(data.toArray.toJSArray)))
+          promiseToIO(errorHandler)(new JSZip().loadAsync {
+            val u8arr = new Uint8Array(data.length)
+            for(i <- data.indices) {
+              u8arr(i) = (data.byte(i) & 0xFF).toShort
+            }
+            u8arr
+          })
         }
         .map { zip =>
           new ZipFileReader[Any, E] {
-            override def getEntryStream(name: String): ZStream[Any, E, Chunk[Byte]] =
-              ZStream.flatten(
-                ZStream.fromEffect(
-                  promiseToIO(errorHandler)(zip.file(name).async("uint8array"))
-                    .map { data => ZStream(Chunk.fromArray(data.toArray.map { _.toByte })) }
-                )
+            override def getEntryStream(name: String): ZStream[Any, E, Byte] =
+              ZStream.unwrap(
+                promiseToIO(errorHandler)(zip.file(name).async("uint8array"))
+                  .map { data => ZStream.fromChunk(Chunk.fromArray(data.toArray.map { _.toByte })) }
               )
 
           }

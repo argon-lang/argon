@@ -5,17 +5,18 @@ import java.net.URI
 
 import cats.Id
 import cats.data.NonEmptyList
-import dev.argon.backend.{ResourceAccess, ResourceReader}
+import dev.argon.backend.ResourceAccess
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode, JSModuleExtractorImpl}
 import dev.argon.build.{BuildEnvironment, BuildProcess, InputFileInfo, Pipeline}
-import dev.argon.compiler.loaders.ResourceIndicator
-import dev.argon.compiler.{CompilationError, CompilerOptions}
+import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
+import dev.argon.compiler.CompilationError
+import dev.argon.compiler.options.CompilerOptions
 import dev.argon.io.Path
 import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.module.PathResourceIndicator
 import dev.argon.parser.SourceAST
 import dev.argon.platform.PlatformApp
-import dev.argon.project.FileList
+import dev.argon.compiler.options.FileList
 import dev.argon.stream.builder.{Source, ZStreamSource}
 import dev.argon.util.{FileID, FileSpec}
 import zio._
@@ -88,8 +89,10 @@ object Program extends PlatformApp {
   ).provideLayer(HttpResourceReader.live)
 
   private def references =
-    Vector("Argon.Core")
-      .map { name => UriResourceIndicator(s"libraries/$name.armodule") }
+    new FileList[WebDemoResourceIndicator](
+      List("Argon.Core")
+        .map { name => UriResourceIndicator(s"libraries/$name.armodule") }
+    )
 
   type CIO[+A] = ZIO[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError], A]
   type UCIO[+A] = ZIO[ResourceReader[WebDemoResourceIndicator], Nothing, A]
@@ -106,17 +109,17 @@ object Program extends PlatformApp {
       )
 
   private def compileCode(code: String): CIO[String] = {
-    val inputFiles = ZStream(
-      InputFileInfo(FileSpec(FileID(0), "test.argon"), ZStream.fromIterable(code)),
+    val inputFiles = List(
+      LocalResourceIndicator("test.argon", code),
     )
 
     BuildProcess.compile(
       JSBackend(JSModuleExtractorImpl)
     )(
-      BuildProcess.parseInput(inputFiles),
-      references,
-      CompilerOptions[Id](
-        moduleName = "Test"
+      CompilerOptions[Id, WebDemoResourceIndicator](
+        moduleName = "Test",
+        inputFiles = new FileList(inputFiles),
+        references = references,
       ),
       JSBackendOptions[Id, WebDemoResourceIndicator](
         extern = new FileList[WebDemoResourceIndicator](List.empty),

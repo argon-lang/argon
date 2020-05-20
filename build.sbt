@@ -10,7 +10,7 @@ lazy val envValues = Map(
   "ARGON_TEST_CASES" -> file("testcases").getAbsolutePath,
 )
 
-val zioVersion = "1.0.0-RC18-2"
+val zioVersion = "1.0.0-RC19"
 
 val esParseDeps = Seq(
   "escodegen" -> "^1.14.1",
@@ -31,14 +31,13 @@ lazy val commonSettings = Seq(
     "org.scala-lang.modules" %%% "scala-xml" % "2.0.0-M1",
 
     "org.typelevel" %%% "cats-core" % "2.1.1",
-    "org.typelevel" %%% "kittens" % "2.0.0",
+    "org.typelevel" %%% "kittens" % "2.1.0",
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
-    "dev.zio" %%% "zio-interop-cats" % "2.0.0.0-RC12",
+    "dev.zio" %%% "zio-interop-cats" % "2.0.0.0-RC14",
 
 
     "com.chuusai" %%% "shapeless" % "2.3.3",
-    "tech.sparse" %%%  "toml-scala" % "0.2.2",
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 
@@ -59,7 +58,7 @@ lazy val sharedJVMNodeSettings = Seq(
 lazy val sharedJSNodeSettings = Seq(
 
   libraryDependencies ++= Seq(
-    "io.github.cquiroz" %%% "scala-java-time" % "2.0.0-RC3",
+    "io.github.cquiroz" %%% "scala-java-time" % "2.0.0",
   ),
 
   npmDependencies ++= Seq(
@@ -68,10 +67,6 @@ lazy val sharedJSNodeSettings = Seq(
   ) ++ esParseDeps,
   
   scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
-
-  scalacOptions ++= Seq(
-    "-P:scalajs:sjsDefinedByDefault",
-  ),
 
   unmanagedSourceDirectories in Compile += baseDirectory.value / "../shared-js-node/src/main/scala",
   unmanagedSourceDirectories in Test += baseDirectory.value / "../shared-js-node/src/test/scala",
@@ -194,17 +189,66 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).in(file("argon-cli"))
 
     name := "argon-cli",
 
+    libraryDependencies += "com.github.scopt" %% "scopt" % "4.0.0-RC2",
 
     buildArgonLibs := (Def.taskDyn {
-      Def.sequential(
-        IO.listFiles(file("libraries"), DirectoryFilter).map { libDir =>
-          val libName = libDir.getName
+      def buildLibTask(libName: String): Def.Initialize[Task[Unit]] =
+        Def.task {
+          val r = (Compile / runner).value
+          val libDir = file("libraries") / libName
+          val classpath = (Compile / fullClasspath).value
 
-          Def.task {
-            streams.value.log.info(s"Building library $libName")
-            (runMain in Compile).toTask(s" dev.argon.Program compile libraries/$libName/build.toml").value
+          streams.value.log.info(s"Building library $libName")
+
+          val jsExternFile = libDir / "js/extern.js"
+          val jsInjectBeforeFile = libDir / "js/inject_before.js"
+          val jsInjectAfterFile = libDir / "js/inject_after.js"
+
+          val backends = Seq(
+            "argon-module" -> Seq(
+              "--argon-module:referenceModule",
+              (libDir / "bin" / (libName + ".armodule")).toString,
+            ),
+            "js" -> (
+              Seq(
+                "--js:outputFile",
+                (libDir / "bin/js" / (libName + ".js")).toString,
+              ) ++
+                (if(jsExternFile.exists()) Seq("--js:extern", jsExternFile.toString) else Seq.empty) ++
+                (if(jsInjectBeforeFile.exists()) Seq("--js:inject.before", jsInjectBeforeFile.toString) else Seq.empty) ++
+                (if(jsInjectAfterFile.exists()) Seq("--js:inject.after", jsInjectAfterFile.toString) else Seq.empty)
+            )
+          )
+
+          val inputFileOpts =
+            Path.allSubpaths(libDir / "src")
+              .map(_._1.toString)
+              .filter(_.endsWith(".argon"))
+              .flatMap { file => Seq("--inputFiles", file) }
+
+          backends.foreach { case (backend, opts) =>
+            streams.value.log.info(s"Building library $libName ($backend)")
+            Run.run(
+              "dev.argon.Program",
+              classpath.map { _.data },
+              Seq(
+                "build",
+                backend,
+
+                "--moduleName",
+                libName,
+              ) ++
+                inputFileOpts ++
+                opts,
+              streams.value.log
+            )(r).get
           }
-        },
+        }
+
+      Def.sequential(
+        Seq(
+          buildLibTask("Argon.Core"),
+        ),
 
         Def.task {}
       )
@@ -224,7 +268,7 @@ lazy val webDemo = project.in(file("argon-web-demo"))
 
     name := "argon-web-demo",
 
-    libraryDependencies += "org.scala-js" %%% "scalajs-dom" % "0.9.7",
+    libraryDependencies += "org.scala-js" %%% "scalajs-dom" % "1.0.0",
   )
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-build"))
@@ -309,7 +353,7 @@ lazy val grammarJS = grammar.js
 lazy val grammarNode = grammar.node
 
 lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-parser"))
-  .dependsOn(parser_data, grammar)
+  .dependsOn(parser_data, grammar, argon_compiler_core)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -675,7 +719,6 @@ lazy val js_module_extractor = project.in(file("argon-js-module-extractor"))
       "-language:higherKinds",
       "-language:existentials",
       "-language:implicitConversions",
-      "-P:scalajs:sjsDefinedByDefault",
     ),
 
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },

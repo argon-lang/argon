@@ -15,7 +15,7 @@ import dev.argon.util.XmlParser
 
 object TestCaseLoader {
 
-  private def loadTestCase[P: Path : Tagged](path: P): ZIO[FileIO[P], Throwable, TestCase] =
+  private def loadTestCase[P: Path : Tag](path: P): ZIO[FileIO[P], Throwable, TestCase] =
     ZIO.accessM[FileIO[P]](_.get.readAllText(path))
       .flatMap(XmlParser.parseString)
       .flatMap { content =>
@@ -47,7 +47,7 @@ object TestCaseLoader {
         )
       }
 
-  def loadTestCases[P: Path : Tagged](path: P): ZIO[FileIO[P], Throwable, TestCaseStructure] =
+  def loadTestCases[P: Path : Tag](path: P): ZIO[FileIO[P], Throwable, TestCaseStructure] =
     ZIO.accessM[FileIO[P]](_.get.listDirectory(path).foldM[FileIO[P], Throwable, P, (Seq[(String, TestCaseStructure)], Seq[TestCase])](
       (Seq.empty[(String, TestCaseStructure)], Seq.empty[TestCase])
     ) { case ((dirs, tests), path) =>

@@ -87,7 +87,7 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
         .map {
           case Left(e) => IO.fail(Some(e))
           case Right(fd) =>
-            IO.effectAsync[Option[E], Uint8Array] { register =>
+            IO.effectAsync[Option[E], Chunk[Uint8Array]] { register =>
               val buffer = new Uint8Array(4096)
               NodeFileSystem.read(fd, buffer, 0, buffer.length, null, (err, bytesRead, _) =>
                 register(
@@ -96,7 +96,7 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
                   else if(bytesRead.toInt === 0)
                     IO.fail(None)
                   else
-                    IO.succeed(buffer.subarray(0, bytesRead))
+                    IO.succeed(Chunk(buffer.subarray(0, bytesRead)))
                 )
               )
             }
@@ -114,7 +114,7 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
       .flatMap(ZStream.fromIterable(_))
 
 
-  override def writeToFile[R, E](errorHandler: IOException => E)(path: FilePath)(data: ZStream[R, E, Chunk[Byte]]): ZIO[R, E, Unit] =
+  override def writeToFile[R, E](errorHandler: IOException => E)(path: FilePath)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit] =
     IO.effectAsync[E, Integer] { register =>
       NodeFileSystem.open(path.pathName, "w", (error, fd) =>
         register(
@@ -137,9 +137,14 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
           )
         }.orDie
       ) { fd =>
-        data.foreach { chunk =>
+        data.foreachChunk { chunk =>
           IO.effectAsync[E, Unit] { register =>
-            NodeFileSystem.write(fd, new Uint8Array(chunk.toArray.toJSArray), (err, _, _) =>
+            val u8arr = new Uint8Array(chunk.size)
+            for(i <- chunk.indices) {
+              u8arr(i) = (chunk.byte(i) & 0xFF).toShort
+            }
+
+            NodeFileSystem.write(fd, u8arr, (err, _, _) =>
               register(
                 if(err != null)
                   IO.fail(errorHandler(JSIOException(err)))
@@ -192,7 +197,7 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
     }
       .map { zip =>
         new ZipFileReader[R, E] {
-          override def getEntryStream(name: String): ZStream[R, E, Chunk[Byte]] =
+          override def getEntryStream(name: String): ZStream[R, E, Byte] =
             ZStream.fromEffect(
               IO.effectAsync[E, NodeReadable] { register =>
                 zip.stream(name, (err, stream) => register(

@@ -21,7 +21,7 @@ object CompilerTests extends CompilerTestSuiteBase {
   override val suiteName: String = "Compiler Tests"
 
 
-  override protected def testCases[P: Path : Tagged]: ZIO[FileIO[P] with Live, TestFailure[Failure], TestCaseStructure] =
+  override protected def testCases[P: Path : Tag]: ZIO[FileIO[P] with Live, TestFailure[Failure], TestCaseStructure] =
     live(system.env("ARGON_TEST_CASES").orDie)
       .get
       .mapError { _ => IO.fail(new Exception("ARGON_TEST_CASES was unset")) }

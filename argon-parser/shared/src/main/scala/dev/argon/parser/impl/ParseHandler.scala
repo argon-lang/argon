@@ -12,7 +12,7 @@ import dev.argon.stream.builder.{Source, ZStreamSource}
 import zio.ZIO
 import zio.stream.ZStream
 
-object ParseHandler {
+private[impl] object ParseHandler {
 
   def parse[R, E](fileSpec: FileSpec)(chars: ZStream[R, E, Char])(implicit errorHandler: ParseErrorHandler[ZIO[R, E, *], NonEmptyVector[SyntaxError]]): ZStream[R, E, SourceAST] =
     Characterizer.characterize(new ZStreamSource(chars))

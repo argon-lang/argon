@@ -1,10 +1,9 @@
 package dev.argon.build.testrunner
 
-import dev.argon.backend.ResourceReader
-import dev.argon.compiler.loaders.ResourceIndicator
+import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import zio._
 
-private[testrunner] abstract class TestCaseRunnerExecutionPhase[I <: ResourceIndicator: Tagged, -R <: ResourceReader[I]] extends TestCaseRunnerCompilePhase[I, R] {
+private[testrunner] abstract class TestCaseRunnerExecutionPhase[I <: ResourceIndicator: Tag, -R <: ResourceReader[I]] extends TestCaseRunnerCompilePhase[I, R] {
 
   protected val references: Vector[I]
 

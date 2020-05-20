@@ -1,24 +1,23 @@
 package dev.argon.backend.module
 
+import cats.{Applicative, Monad}
+import cats.implicits._
 import dev.argon.compiler._
 import dev.argon.stream._
 import scalapb.GeneratedMessage
 import cats.instances._
 import cats.data.NonEmptyList
-import dev.argon.backend.{Backend, CompilationOutput, ResourceAccess, ResourceReader, ResourceWriter}
+import dev.argon.compiler.options.SingleFile
+import dev.argon.backend.{Backend, CompilationOutput, ResourceAccess, ResourceWriter}
 import dev.argon.compiler.core.Context
-import dev.argon.compiler.loaders.ResourceIndicator
+import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader, SourceParser}
+import dev.argon.compiler.options.{CompilerInput, OptionInfo, OptionsConverter, OptionsConverterFunction, OptionsHandler, OptionsLoader, SingleFile}
 import dev.argon.io.ZipEntryInfo
-import dev.argon.project.{ProjectLoader, SingleFile}
-import dev.argon.project.ExtraTomlCodecs._
 import dev.argon.stream.builder.Source
-import toml.Codecs._
 import shapeless._
-import toml.Parse.{Address, Message}
-import toml.Value
 import zio._
 import zio.stream._
-
+import dev.argon.compiler.options.CodecSelector.Instances._
 
 
 object ArModuleBackend extends Backend {
@@ -31,46 +30,66 @@ object ArModuleBackend extends Backend {
   override val id: String = "argon-module"
   override val name: String = "Argon Module"
 
-  override def emptyBackendOptions[I]: ModuleBackendOptions[Option, I] = ModuleBackendOptions()
-  override def inferBackendOptions[I](compilerOptions: CompilerOptions[Id], options: ModuleBackendOptions[Option, I]): BackendOptionsId[I] =
-    ModuleBackendOptions[Id, I]()
+  override val backendOptions: OptionsHandler[ModuleBackendOptions] = new OptionsHandler[ModuleBackendOptions] {
+    override def info[I]: ModuleBackendOptions[OptionInfo[*, I], I] =
+      ModuleBackendOptions()
 
-  override def backendOptionsProjectLoader[IOld, I]: ProjectLoader[BackendOptionsId[IOld], BackendOptionsId[I], IOld, I] = {
-    import dev.argon.project.ProjectLoader.Implicits._
-    ProjectLoader.apply
+    override def converter[I]: OptionsConverter[ModuleBackendOptions[*[_], I]] =
+      new OptionsConverter[ModuleBackendOptions[*[_], I]] {
+        override def convert[A[_], B[_], C[_], F[_] : Applicative](optionsA: ModuleBackendOptions[A, I], optionsB: ModuleBackendOptions[B, I])(f: OptionsConverterFunction[A, B, C, F]): F[ModuleBackendOptions[C, I]] =
+          Applicative[F].pure(ModuleBackendOptions())
+      }
+
+    override def optionsLoader[IOld, I]: OptionsLoader[ModuleBackendOptions[Id, IOld], ModuleBackendOptions[Id, I], IOld, I] = {
+      import dev.argon.compiler.options.OptionsLoader.Implicits._
+      OptionsLoader.apply
+    }
+
   }
 
-  override def parseBackendOptions(table: toml.Value.Tbl): Either[toml.Parse.Error, ModuleBackendOptions[Option, String]] =
-    toml.Toml.parseAs[ModuleBackendOptions[Option, String]](table)
+  override val outputOptions: OptionsHandler[ModuleOutputOptions] = new OptionsHandler[ModuleOutputOptions] {
+    override def info[I]: ModuleOutputOptions[OptionInfo[*, I], I] =
+      ModuleOutputOptions[OptionInfo[*, I], I](
+        referenceModule = OptionInfo(
+          name = "referenceModule",
+          description = "The reference module that will contain the interface of the compiled module"
+        )
+      )
 
-  override def emptyOutputOptions[I]: ModuleOutputOptions[Option, I] =
-    ModuleOutputOptions[Option, I](None)
+    override def converter[I]: OptionsConverter[ModuleOutputOptions[*[_], I]] =
+      new OptionsConverter[ModuleOutputOptions[*[_], I]] {
+        override def convert[A[_], B[_], C[_], F[_] : Applicative](optionsA: ModuleOutputOptions[A, I], optionsB: ModuleOutputOptions[B, I])(f: OptionsConverterFunction[A, B, C, F]): F[ModuleOutputOptions[C, I]] =
+          for {
+            convRefModule <- f(optionsA.referenceModule, optionsB.referenceModule)
+          } yield ModuleOutputOptions(
+            referenceModule = convRefModule
+          )
+      }
 
-  override def inferOutputOptions(compilerOptions: CompilerOptions[Id], options: ModuleOutputOptions[Option, String]): BackendOutputOptionsId[String] =
-    ModuleOutputOptions[Id, String](
-      referenceModule = options.referenceModule.getOrElse(new SingleFile(compilerOptions.moduleName + ".armodule"))
+    override def optionsLoader[IOld, I]: OptionsLoader[ModuleOutputOptions[Id, IOld], ModuleOutputOptions[Id, I], IOld, I] = {
+      import dev.argon.compiler.options.OptionsLoader.Implicits._
+      OptionsLoader.apply
+    }
+  }
+
+  override def testOutputOptions[I](dummyFile: I): ModuleOutputOptions[Id, I] =
+    ModuleOutputOptions[Id, I](
+      referenceModule = new SingleFile(dummyFile)
     )
 
-  override def outputOptionsProjectLoader[IOld, I]: ProjectLoader[BackendOutputOptionsId[IOld], BackendOutputOptionsId[I], IOld, I] = {
-    import dev.argon.project.ProjectLoader.Implicits._
-    ProjectLoader.apply
-  }
-
-  override def parseOutputOptions(table: Value.Tbl): Either[(Address, Message), ModuleOutputOptions[Option, String]] =
-    toml.Toml.parseAs[ModuleOutputOptions[Option, String]](table)
-
-  override def compile[I <: ResourceIndicator : Tagged](input: CompilerInput[I, ModuleBackendOptions[Id, I]]): ZManaged[ResourceReader[I], ErrorList, TCompilationOutput] = {
+  override def compile[I <: ResourceIndicator : Tag](input: CompilerInput[I, ModuleBackendOptions[Id, I]]): ZManaged[ResourceReader[I] with SourceParser, ErrorList, TCompilationOutput] = {
     val context = ModuleContext(input)
 
     context.module[ModuleContext with Context.WithRes[I]].map { module =>
       createOutput(ModuleEmitter.emitModule(context)(module))
-    }.provideSomeLayer(ModuleBackendLoadService.forResourceReader[I, ModuleContext with Context.WithRes[I]])
+    }
+      .provideSomeLayer[ResourceReader[I] with SourceParser](ModuleBackendLoadService.forResourceReader[I, ModuleContext with Context.WithRes[I]])
   }
 
   private def createOutput(moduleGen: Stream[ErrorList, ModuleEmitter.StreamElem]): CompilationOutput[BackendOutputOptionsId] =
     new CompilationOutput[BackendOutputOptionsId] {
 
-      override def write[I <: ResourceIndicator : Tagged](options: BackendOutputOptionsId[I]): RComp[ResourceWriter[I], Unit] =
+      override def write[I <: ResourceIndicator : Tag](options: BackendOutputOptionsId[I]): RComp[ResourceWriter[I], Unit] =
         ZIO.accessM[ResourceWriter[I]] { env =>
           val res = env.get
 

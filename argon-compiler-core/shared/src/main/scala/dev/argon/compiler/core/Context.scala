@@ -2,7 +2,7 @@ package dev.argon.compiler.core
 
 import PayloadSpecifiers._
 import dev.argon.compiler._
-import dev.argon.compiler.loaders.{ModuleLoad, ResourceIndicator}
+import dev.argon.compiler.loaders.{ModuleLoad, ResourceIndicator, ResourceReader, SourceParser}
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types._
 import cats._
@@ -10,6 +10,7 @@ import cats.data.NonEmptyList
 import cats.evidence.{===, Is}
 import cats.implicits._
 import dev.argon.compiler.expr.{ClassConstructorBody, UniverseExpr, WrapperInstance}
+import dev.argon.compiler.options.CompilerInput
 import shapeless.Nat
 import zio._
 
@@ -78,10 +79,10 @@ trait Context {
   final lazy val signatureContext: ContextSignatureContext.type = ContextSignatureContext
 
   type ResIndicator <: ResourceIndicator
-  implicit val resIndicatorTag: Tagged[ResIndicator]
+  implicit val resIndicatorTag: Tag[ResIndicator]
   protected val compilerInput: CompilerInput[ResIndicator, BackendOptions]
 
-  def module[TContext >: this.type <: Context.WithRes[ResIndicator]: Tagged]: ZManaged[ModuleLoad[ResIndicator, TContext], ErrorList, ArModule[this.type, DeclarationPayloadSpecifier]]
+  def module[TContext >: this.type <: Context.WithRes[ResIndicator]: Tag]: ZManaged[ModuleLoad[ResIndicator, TContext] with ResourceReader[ResIndicator] with SourceParser, ErrorList, ArModule[this.type, DeclarationPayloadSpecifier]]
 
 }
 

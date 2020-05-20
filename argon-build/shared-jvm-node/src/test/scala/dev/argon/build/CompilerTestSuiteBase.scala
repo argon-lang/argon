@@ -10,8 +10,8 @@ import zio.test.Assertion.equalTo
 import zio.test._
 import cats._
 import cats.implicits._
-import dev.argon.backend.{ResourceReader, ResourceWriter}
-import dev.argon.compiler.loaders.ResourceIndicator
+import dev.argon.backend.ResourceWriter
+import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import dev.argon.io.fileio.FileIO
 import dev.argon.module.PathResourceIndicator
 import dev.argon.platform._
@@ -34,7 +34,7 @@ abstract class CompilerTestSuiteBase extends PlatformRunnableSpec {
     libraries.map(LibraryResourceIndicator.apply)
 
   protected val suiteName: String
-  protected def testCases[P : Path : Tagged]: ZIO[FileIO[P] with Live, TestFailure[Failure], TestCaseStructure]
+  protected def testCases[P : Path : Tag]: ZIO[FileIO[P] with Live, TestFailure[Failure], TestCaseStructure]
 
   private def execEnvLayer: ZLayer[Environment, Throwable, TestExecEnv] =
     TestResourceReader.layer[FilePath].passthrough >>> (
@@ -76,14 +76,16 @@ abstract class CompilerTestSuiteBase extends PlatformRunnableSpec {
 
   override def spec: ZSpec[Environment, Failure] =
     Spec.suite(suiteName,
-      for {
-        loadedTestCases <- testCases
-        runners <- allRunners.provideSomeLayer[Environment](execEnvLayer.orDie ++ BackendProviderImpl.live)
-      } yield runners.map { runner =>
-        suite(runner.name)(
-          createSuites(runner, loadedTestCases): _*
-        )
-      }.toVector,
+      ZManaged.fromEffect(
+        for {
+          loadedTestCases <- testCases
+          runners <- allRunners.provideSomeLayer[Environment](execEnvLayer.orDie ++ BackendProviderImpl.live)
+        } yield runners.map { runner =>
+          suite(runner.name)(
+            createSuites(runner, loadedTestCases): _*
+          )
+        }.toVector
+      ),
       None
     )
 }

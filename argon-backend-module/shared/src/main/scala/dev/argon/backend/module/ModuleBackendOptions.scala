@@ -1,6 +1,6 @@
 package dev.argon.backend.module
 
-import dev.argon.project.SingleFile
+import dev.argon.compiler.options.SingleFile
 
 final case class ModuleBackendOptions[F[_], I]()
 

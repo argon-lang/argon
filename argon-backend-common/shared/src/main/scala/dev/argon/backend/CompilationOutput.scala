@@ -13,12 +13,12 @@ import zio.stream._
 import zio.interop.catz.core._
 
 trait CompilationOutput[OutputOptions[_]] {
-  def write[I <: ResourceIndicator: Tagged](options: OutputOptions[I]): RComp[ResourceWriter[I], Unit]
+  def write[I <: ResourceIndicator: Tag](options: OutputOptions[I]): RComp[ResourceWriter[I], Unit]
 }
 
 abstract class CompilationOutputText[OutputOptions[_]] extends CompilationOutput[OutputOptions] {
 
-  override def write[I <: ResourceIndicator: Tagged](options: OutputOptions[I]): RComp[ResourceWriter[I], Unit] =
+  override def write[I <: ResourceIndicator: Tag](options: OutputOptions[I]): RComp[ResourceWriter[I], Unit] =
     ZIO.accessM[ResourceWriter[I]](_.get.writeToResource(outputResource(options))(
       StringToByteStreamTransformation.convert(StandardCharsets.UTF_8)(textStream)
     ))

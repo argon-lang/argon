@@ -53,8 +53,8 @@ private[platform] object InputStreamReaderTransformation {
   }
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
-  def apply[R, E, L[_, _], A](data: ZStream[R, E, Chunk[Byte]])(readHandler: InputStream => ZIO[R, E, A]): ZIO[R, E, A] =
-    data.filterNot(_.isEmpty).process.use { pull =>
+  def apply[R, E, A](data: ZStream[R, E, Byte])(readHandler: InputStream => ZIO[R, E, A]): ZIO[R, E, A] =
+    data.process.use { pull =>
       for {
         runtime <- ZIO.runtime[R]
         inputStream <- IO.effectTotal {

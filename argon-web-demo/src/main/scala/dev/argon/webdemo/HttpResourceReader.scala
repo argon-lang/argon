@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets
 
 import cats.implicits._
 import cats.data.NonEmptyList
-import dev.argon.backend.ResourceReader
+import dev.argon.compiler.loaders.ResourceReader
 import dev.argon.compiler.{Comp, CompilationError, CompilationMessageSource, ErrorList}
 import dev.argon.io.ZipFileReader
 import dev.argon.io.fileio.FileIOLite
@@ -28,15 +28,15 @@ object HttpResourceReader {
           NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex)))
 
         @SuppressWarnings(Array("dev.argon.warts.ZioEffect", "org.wartremover.warts.AsInstanceOf"))
-        private def readHttp(url: String): Stream[ErrorList, Chunk[Byte]] =
-          ZStream.fromEffect(
+        private def readHttp(url: String): Stream[ErrorList, Byte] =
+          ZStream.unwrap(
             ZIO.effectAsync { complete =>
               val request = new XMLHttpRequest()
               request.responseType = "arraybuffer"
               request.onload = { _ =>
                 if(request.status === 200) {
                   val arrBuffer = request.response.asInstanceOf[ArrayBuffer]
-                  complete(IO.succeed(Chunk.fromArray(new Int8Array(arrBuffer).toArray)))
+                  complete(IO.succeed(ZStream.fromChunk(Chunk.fromArray(new Int8Array(arrBuffer).toArray))))
                 }
                 else {
                   complete(IO.fail(ioExceptionToError(new FileNotFoundException)))
@@ -50,22 +50,52 @@ object HttpResourceReader {
             }
           )
 
-        private def readResource(id: WebDemoResourceIndicator): Stream[ErrorList, Chunk[Byte]] =
+        @SuppressWarnings(Array("dev.argon.warts.ZioEffect", "org.wartremover.warts.AsInstanceOf"))
+        private def readHttpStr(url: String): IO[ErrorList, String] =
+          ZIO.effectAsync { complete =>
+            val request = new XMLHttpRequest()
+            request.responseType = "text"
+            request.onload = { _ =>
+              if(request.status === 200) {
+                val str = request.response.asInstanceOf[String]
+                complete(IO.succeed(str))
+              }
+              else {
+                complete(IO.fail(ioExceptionToError(new FileNotFoundException)))
+              }
+            }
+            request.onerror = { e =>
+              complete(IO.fail(ioExceptionToError(new IOException(e.message))))
+            }
+
+            request.open("GET", url)
+          }
+
+        private def readResource(id: WebDemoResourceIndicator): Stream[ErrorList, Byte] =
           id match {
             case UriResourceIndicator(uri) =>
               readHttp(uri)
 
             case LocalResourceIndicator(_, content) =>
-              Stream(Chunk.fromArray(content.getBytes(StandardCharsets.UTF_8)))
+              Stream.fromChunk(Chunk.fromArray(content.getBytes(StandardCharsets.UTF_8)))
           }
 
-        override def readTextFile(id: WebDemoResourceIndicator): Comp[String] =
-          readResource(id).run(ZSink.utf8DecodeChunk)
+
+        override def readTextFile(id: WebDemoResourceIndicator): Stream[ErrorList, Char] =
+          ZStream.unwrap(readTextFileAsString(id).map { str =>
+            ZStream.fromChunk(Chunk.fromArray(str.toCharArray))
+          })
+
+        override def readTextFileAsString(id: WebDemoResourceIndicator): Comp[String] =
+          id match {
+            case UriResourceIndicator(uri) => readHttpStr(uri)
+            case LocalResourceIndicator(_, content) => IO.succeed(content)
+          }
 
         override def getZipReader(id: WebDemoResourceIndicator): Managed[ErrorList, ZipFileReader[Any, ErrorList]] =
           ZManaged.fromEffect(zipReaderForStream(ioExceptionToError)(readResource(id)))
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[ErrorList, Chunk[Byte]]): Comp[A] =
+        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[ErrorList, Byte]): Comp[A] =
           env.get.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
       }
     }

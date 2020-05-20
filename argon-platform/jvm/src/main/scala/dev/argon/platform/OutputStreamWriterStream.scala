@@ -11,7 +11,7 @@ import cats._
 import cats.implicits._
 import zio._
 import zio.blocking.Blocking
-import zio.stream.{Take, ZStream}
+import zio.stream.ZStream
 
 private[platform] object OutputStreamWriterStream {
 
@@ -22,35 +22,33 @@ private[platform] object OutputStreamWriterStream {
   private final class TransformOutputStream[R, E]
   (
     runtime: Runtime[R],
-    queue: Queue[Take[E, Chunk[Byte]]],
+    queue: Queue[Exit[Option[E], Chunk[Byte]]],
   ) extends OutputStream {
 
     override def write(b: Int): Unit = write(Array(b.toByte))
 
     override def write(b: Array[Byte], off: Int, len: Int): Unit = {
       Objects.checkFromIndexSize(off, len, b.length)
-      val _ = runtime.unsafeRun(queue.offer(Take.Value(Chunk.fromArray(b.slice(off, off + len)))))
+      val _ = runtime.unsafeRun(queue.offer(Exit.Success(Chunk.fromArray(b.slice(off, off + len)))))
     }
   }
 
 
 
 
-  def apply[R, E](f: OutputStream => ZIO[R, E, Unit]): ZStream[R, E, Chunk[Byte]] =
-    ZStream.flatten(
-      ZStream.fromEffect(
-        for {
-          runtime <- ZIO.runtime[R]
-          queue <- Queue.bounded[Take[E, Chunk[Byte]]](1)
-          writeTask <- f(new TransformOutputStream(runtime, queue))
-            .foldCauseM(
-              failure = e => queue.offer(Take.Fail(e)),
-              success = _ => queue.offer(Take.End)
-            )
-            .fork
+  def apply[R, E](f: OutputStream => ZIO[R, E, Unit]): ZStream[R, E, Byte] =
+    ZStream.unwrap(
+      for {
+        runtime <- ZIO.runtime[R]
+        queue <- Queue.bounded[Exit[Option[E], Chunk[Byte]]](1)
+        writeTask <- f(new TransformOutputStream(runtime, queue))
+          .foldCauseM(
+            failure = e => queue.offer(Exit.Failure(e.map(Some.apply))),
+            success = _ => queue.offer(Exit.fail(None))
+          )
+          .fork
 
-        } yield ZStream.fromQueue(queue).unTake ++ ZStream.fromEffect(writeTask.interrupt).drain
-      )
+      } yield ZStream.fromQueueWithShutdown(queue).collectWhileSuccess.flattenChunks ++ ZStream.fromEffect(writeTask.interrupt).drain
     )
 
 

@@ -6,10 +6,11 @@ import cats._
 import cats.arrow.FunctionK
 import cats.implicits._
 import cats.data.{NonEmptyList, NonEmptyVector}
-import dev.argon.backend.{Backend, ResourceReader}
-import dev.argon.compiler.loaders.ResourceIndicator
+import dev.argon.backend.Backend
+import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
+import dev.argon.compiler.options.{CompilerInput, CompilerOptions}
 import dev.argon.grammar.ParseErrorHandler
-import dev.argon.parser.impl.ParseHandler
+import dev.argon.parser.impl.{ArgonSourceParser, ParseHandler}
 import dev.argon.util.FileSpec
 import dev.argon.stream._
 import dev.argon.stream.builder.Source
@@ -20,40 +21,20 @@ import zio.stream._
 
 object BuildProcess {
 
-  def parseInput[R]
-  (inputFiles: ZStream[R, ErrorList, InputFileInfo[R, ErrorList]])
-  : ZStream[R, ErrorList, SourceAST] =
-    inputFiles.flatMap { fileInfo =>
-      def toCompileError(error: SyntaxError): CompilationError =
-        CompilationError.SyntaxCompilerError(SyntaxErrorData(fileInfo.fileSpec, error))
-
-      implicit val errorHandler: ParseErrorHandler[ZIO[R, ErrorList, *], NonEmptyVector[SyntaxError]] =
-        new ParseErrorHandler[ZIO[R, ErrorList, *], NonEmptyVector[SyntaxError]] {
-          override def raiseError[A](errors: NonEmptyVector[SyntaxError]): ZIO[R, ErrorList, A] =
-            Compilation.forErrors(NonEmptyList(toCompileError(errors.head), errors.tail.map(toCompileError).toList))
-        }
-
-      ParseHandler.parse[R, ErrorList](fileInfo.fileSpec)(fileInfo.dataStream)
-    }
-
-  def compile[I <: ResourceIndicator: Tagged]
+  def compile[I <: ResourceIndicator: Tag]
   (
     backend: Backend
   )(
-    sourceASTs: Stream[ErrorList, SourceAST],
-    references: Vector[I],
-    compilerOptions: CompilerOptions[Id],
+    compilerOptions: CompilerOptions[Id, I],
     backendOptions: backend.BackendOptions[Id, I]
   )
   : ZManaged[ResourceReader[I], ErrorList, backend.TCompilationOutput] = {
     val input = CompilerInput(
-      source = sourceASTs,
-      references = references,
       options = compilerOptions,
       backendOptions = backendOptions,
     )
 
-    backend.compile(input)
+    backend.compile(input).provideSomeLayer[ResourceReader[I]](ArgonSourceParser.live)
   }
 
 

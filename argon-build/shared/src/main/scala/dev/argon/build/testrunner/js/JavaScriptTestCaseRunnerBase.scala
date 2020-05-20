@@ -8,27 +8,27 @@ import dev.argon.build.testrunner._
 import cats._
 import cats.data.{EitherT, NonEmptyList, NonEmptyVector}
 import cats.implicits._
-import dev.argon.backend.{Backend, ResourceReader, ResourceWriter}
+import dev.argon.backend.{Backend, ResourceWriter}
 import zio._
 import zio.interop.catz.core._
-import dev.argon.compiler.{CompilationError, CompilerOptions, ErrorList}
+import dev.argon.compiler.{CompilationError, ErrorList}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.io.fileio.FileIO
 import dev.argon.build._
-import dev.argon.compiler.loaders.ResourceIndicator
-import dev.argon.module.PathResourceIndicator
-import dev.argon.project.FileList
+import dev.argon.build.testrunner.TestCaseRunnerCompilePhase.TestCompileResource
+import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
+import dev.argon.compiler.options.{CompilerOptions, FileList}
 
-abstract class JavaScriptTestCaseRunnerBase[I <: ResourceIndicator: Tagged, P: Path : Tagged](pathResolver: I => UIO[P]) extends TestCaseRunnerExecutionPhase[I, ResourceReader[I] with ResourceWriter[Nothing] with FileIO[P]] {
+abstract class JavaScriptTestCaseRunnerBase[I <: ResourceIndicator: Tag, P: Path : Tag](pathResolver: I => UIO[P]) extends TestCaseRunnerExecutionPhase[I, ResourceReader[I] with ResourceWriter[Nothing] with FileIO[P]] {
 
   override val name: String = "JavaScript Execution"
   override protected val backend: JSBackend
 
-  override protected def backendOptions(compilerOptions: CompilerOptions[Id]): UIO[JSBackendOptions[Id, I]] =
+  override protected def backendOptions: UIO[JSBackendOptions[Id, TestCompileResource[I]]] =
     IO.succeed(
-      JSBackendOptions[Id, I](
-        extern = new FileList[I](List.empty),
-        inject = JSInjectCode[Id, I](
+      JSBackendOptions[Id, TestCompileResource[I]](
+        extern = new FileList(List.empty),
+        inject = JSInjectCode[Id, TestCompileResource[I]](
           before = None,
           after = None,
         )

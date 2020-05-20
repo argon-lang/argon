@@ -32,7 +32,7 @@ object WritableZStreamTests extends DefaultRunnableSpec {
               .mapError(js.JavaScriptException)
               .orDie
           )(
-            equalTo(List(Chunk.fromIterable(byteList)))
+            equalTo(byteList)
           )
         }
       },
@@ -49,7 +49,7 @@ object WritableZStreamTests extends DefaultRunnableSpec {
               .mapError(js.JavaScriptException)
               .orDie
           )(
-            equalTo(byteList.map(Chunk(_)))
+            equalTo(byteList)
           )
         }
       },

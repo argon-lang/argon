@@ -1,11 +1,12 @@
 package dev.argon.compiler.types
 
-import dev.argon.compiler.{Comp, CompilationMessageSource, CompilerInput, CompilerOptions, ErrorList}
+import dev.argon.compiler.{Comp, CompilationMessageSource, ErrorList}
 import dev.argon.compiler.core.{ArModule, Context}
 import dev.argon.compiler.core.Context.WithRes
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.expr.ClassConstructorBody
 import dev.argon.compiler.loaders.ModuleLoad
+import dev.argon.compiler.options.{CompilerInput, CompilerOptions, FileList}
 import shapeless.Id
 import zio._
 import zio.stream._
@@ -39,16 +40,18 @@ class DummyContext extends Context {
 
 
   override type ResIndicator = Nothing
-  override val resIndicatorTag: Tagged[ResIndicator] = implicitly
+  override val resIndicatorTag: Tag[ResIndicator] = implicitly
 
 
-  override protected val compilerInput: CompilerInput[ResIndicator, Unit] = CompilerInput(
-    source = Stream.empty,
-    references = Vector.empty,
-    options = CompilerOptions[Id](moduleName = "DummyModule"),
+  override protected val compilerInput: CompilerInput[ResIndicator, Unit] = CompilerInput[ResIndicator, Unit](
+    options = CompilerOptions[Id, ResIndicator](
+      moduleName = "DummyModule",
+      inputFiles = new FileList(List.empty),
+      references = new FileList(List.empty),
+    ),
     backendOptions = (),
   )
 
-  override def module[TContext >: DummyContext.this.type <: WithRes[ResIndicator] : zio.Tagged]: ZManaged[ModuleLoad[ResIndicator, TContext], ErrorList, ArModule[DummyContext.this.type, DeclarationPayloadSpecifier]] =
+  override def module[TContext >: DummyContext.this.type <: WithRes[ResIndicator] : Tag]: ZManaged[ModuleLoad[ResIndicator, TContext], ErrorList, ArModule[DummyContext.this.type, DeclarationPayloadSpecifier]] =
     Managed.die(new UnsupportedOperationException)
 }

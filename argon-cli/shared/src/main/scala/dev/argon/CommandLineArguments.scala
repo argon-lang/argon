@@ -1,33 +1,19 @@
 package dev.argon
 
 import shapeless._
+import dev.argon.backend.Backend
+import dev.argon.compiler.options.CompilerOptions
 
-import ArgumentParser._
-import CommandLineParser.Implicits._
-
-final case class CommandLineArguments[F[_]]
+final case class CommandLineArguments
 (
-  command: F[ArgonCommand[Id]]
+  command: ArgonCommand
 )
 
-sealed trait ArgonCommand[F[_]]
+sealed trait ArgonCommand
 
-final case class CompileCommand[F[_]]
-(
-  file: F[String],
-) extends ArgonCommand[F]
-
-
-object CommandLineArguments {
-
-  val parser: CommandLineArguments[ArgumentParser] = CommandLineArguments(
-    command = subcommands[ArgonCommand[Id]](
-      subcommand("compile", description = "Compile an argon program.")(
-        CompileCommand(
-          file = rest("file", description = "Build definition TOML file.")
-        )
-      ),
-    )
-  )
-
+trait BuildCommand extends ArgonCommand {
+  val backend: Backend
+  val compilerOptions: CompilerOptions[Option, String]
+  val backendOptions: backend.BackendOptions[Option, String]
+  val outputOptions: backend.BackendOutputOptions[Option, String]
 }

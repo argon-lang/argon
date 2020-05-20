@@ -2,7 +2,7 @@ package dev.argon.compiler.loaders.source
 
 import dev.argon.compiler._
 import dev.argon.compiler.core._
-import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, NamespaceBuilder, ResourceIndicator}
+import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, NamespaceBuilder, ResourceIndicator, ResourceReader, SourceParser}
 import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.parser.SourceAST
@@ -12,27 +12,30 @@ import cats.implicits._
 import PayloadSpecifiers._
 import dev.argon.compiler.expr.{Parameter, Variable}
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
+import dev.argon.compiler.options.{CompilerInput, CompilerOptions}
 import shapeless.Id
 import zio._
+import zio.stream._
 import zio.interop.catz.core._
 
 private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
 
-  def createModule[I <: ResourceIndicator: Tagged, TContext <: Context.WithRes[I]: Tagged]
+  def createModule[I <: ResourceIndicator: Tag, TContext <: Context.WithRes[I]: Tag]
   (context: TContext)
   (input: CompilerInput[I, context.BackendOptions])
-  : ZManaged[ModuleLoad[I, TContext], ErrorList, ArModule[context.type, DeclarationPayloadSpecifier]] =
-    ModuleLoader.loadReferencedModules[I, TContext](context)(input.references).mapM { refModules =>
+  : ZManaged[ModuleLoad[I, TContext] with ResourceReader[I] with SourceParser, ErrorList, ArModule[context.type, DeclarationPayloadSpecifier]] =
+    ModuleLoader.loadReferencedModules[I, TContext](context)(input.options.references.files.toVector).mapM { refModules =>
       createModuleWithRefs(context)(input)(refModules)
     }
 
-  private def createModuleWithRefs
+  private def createModuleWithRefs[I <: ResourceIndicator: Tag]
   (context2: Context)
-  (input: CompilerInput[context2.ResIndicator, context2.BackendOptions])
+  (input: CompilerInput[I, context2.BackendOptions])
   (referencedModules2: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
-    : Comp[ArModule[context2.type, DeclarationPayloadSpecifier]] = {
+    : RComp[ResourceReader[I] with SourceParser, ArModule[context2.type, DeclarationPayloadSpecifier]] = {
     for {
+      env <- ZIO.environment[ResourceReader[I] with SourceParser]
       globalNamespaceCache <- ValueCache.make[ErrorList, Namespace[context2.type, DeclarationPayloadSpecifier]]
     } yield new ArModule[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
@@ -40,12 +43,23 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
       override val descriptor: ModuleDescriptor = ModuleDescriptor(input.options.moduleName)
       override val globalNamespace: Comp[Namespace[context.type, DeclarationPayloadSpecifier]] =
         globalNamespaceCache.get(
-          NamespaceBuilder.createNamespace[context.type, DeclarationPayloadSpecifier](
-            input.source
+          NamespaceBuilder.createNamespace[ResourceReader[I] with SourceParser, context.type, DeclarationPayloadSpecifier](
+            Stream.fromIterable(input.options.inputFiles.files)
+              .zipWithIndex
+              .flatMap { case (file, index) =>
+                val fileSpec = FileSpec(FileID(index.toInt), file.show)
+
+                Stream.unwrap(
+                  ZIO.access[ResourceReader[I]](_.get.readTextFile(file))
+                    .flatMap { fileStream =>
+                      ZIO.access[SourceParser](_.get.parse(fileSpec)(fileStream))
+                    }
+                )
+              }
               .mapM { ast =>
                 createNamespaceElementFromAST(context2)(input.options)(this)(referencedModules2)(ast)
               }
-          )
+          ).provide(env)
         )
 
       override val referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]] = referencedModules2
@@ -54,7 +68,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
   private def createNamespaceElementFromAST
   (context2: Context)
-  (options: CompilerOptions[Id])
+  (options: CompilerOptions[Id, _])
   (currentModule: ArModule[context2.type, DeclarationPayloadSpecifier])
   (referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
   (sourceAST: SourceAST)
@@ -125,7 +139,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
   private def createNamespaceElementFromASTWithScope
   (context: Context)
-  (options: CompilerOptions[Id])
+  (options: CompilerOptions[Id, _])
   (envF: FileSpec => EnvCreator[context.type])
   (sourceAST: SourceAST)
   : Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] = {
