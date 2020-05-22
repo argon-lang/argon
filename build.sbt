@@ -18,11 +18,11 @@ val esParseDeps = Seq(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.0",
+  scalaVersion := "2.13.2",
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
-  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
 
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
