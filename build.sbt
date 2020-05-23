@@ -43,9 +43,6 @@ lazy val commonSettings = Seq(
 
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
-
-    compilerPlugin("com.github.ghik" % "silencer-plugin" % "1.6.0" cross CrossVersion.full),
-    "com.github.ghik" %%% "silencer-lib" % "1.6.0" % Provided cross CrossVersion.full,
   ),
 
 )
@@ -118,20 +115,24 @@ lazy val compilerOptions = Seq(
 
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "-unchecked",
-    "-deprecation",
-    "-Xlint",
+    "-Wconf:cat=lint:wv," +
+      "cat=deprecation:wv," +
+      "cat=feature:wv," +
+      "cat=optimizer:wv," +
+      "cat=unchecked&msg=The outer reference in this type test cannot be checked at run time\\.:silent," +
+      "cat=unchecked:wv," +
+      "cat=java-source:wv," +
+      "cat=unused-imports:silent," +
+      "cat=unused:wv," +
+      "cat=w-flag-dead-code:silent," +
+      "cat=w-flag:wv," +
+      "cat=other-match-analysis&msg=unreachable code:silent",
     "-Xfatal-warnings",
-    "-Ywarn-numeric-widen",
-    "-Ywarn-value-discard",
-    "-Ywarn-unused:-implicits,-explicits,-imports",
     "-Ypatmat-exhaust-depth", "500",
     "-Yrangepos",
-    "-feature",
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
-    "-P:silencer:globalFilters=unreachable;outer reference in this type test cannot be checked at run time.",
   ),
   
   scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xlint")),
