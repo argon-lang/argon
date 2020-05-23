@@ -3,7 +3,7 @@ import sbt.internal.util.ManagedLogger
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
-val graalVersion = "20.0.0"
+val graalVersion = "20.1.0"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -101,7 +101,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ S
 
 lazy val zioEffectWarts = project.in(file("zio-effect-warts"))
   .settings(
-    scalaVersion := "2.13.0",
+    scalaVersion := "2.13.2",
     libraryDependencies ++= Seq(
       "org.wartremover" % "wartremover" % wartremover.Wart.PluginVersion cross CrossVersion.full,
       "dev.zio" %%% "zio" % zioVersion,
@@ -709,7 +709,7 @@ lazy val modulefmtJS = modulefmt.js
 lazy val js_module_extractor = project.in(file("argon-js-module-extractor"))
   .enablePlugins(ScalaJSPlugin, NpmUtil)
   .settings(
-    scalaVersion := "2.13.0",
+    scalaVersion := "2.13.2",
 
     scalacOptions ++= Seq(
       "-encoding", "UTF-8",
