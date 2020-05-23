@@ -80,7 +80,7 @@ case object JSThis extends JSExpression
 
 object JSAst {
 
-  def writeModule[R, E](module: JSModule): Source[R, E, String, Unit] = new Source[R, E, String, Unit] {
+  def writeModule[R, E](module: JSModule): Source[R, E, String] = new Source[R, E, String] {
 
     override def foreach[R1 <: R, E1 >: E](consume: String => ZIO[R1, E1, Unit]): ZIO[R1, E1, Unit] =
       new WriteImpl(consume).writeModule(module)

@@ -690,7 +690,7 @@ object ModuleEmitter {
   type StreamElem = (String, GeneratedMessage)
 
   def emitModule(context: ModuleContext)(module: ArModule[context.type, DeclarationPayloadSpecifier]): zstream.Stream[ErrorList, StreamElem] =
-    new Source[Any, ErrorList, StreamElem, Unit] {
+    new Source[Any, ErrorList, StreamElem] {
 
       override def foreach[R1 <: Any, E1 >: ErrorList](f: StreamElem => ZIO[R1, E1, Unit]): ZIO[R1, E1, Unit] =
         Ref.make(ModuleIds()).flatMap { emitStateRef =>
