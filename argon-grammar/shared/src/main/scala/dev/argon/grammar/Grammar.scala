@@ -8,9 +8,9 @@ import scala.language.postfixOps
 import cats._
 import cats.data._
 import cats.implicits._
-import dev.argon.stream.builder.Source
+import dev.argon.stream.StreamTransformation
 import dev.argon.util._
-import zio.{IO, ZIO}
+import zio.{Chunk, IO, NonEmptyChunk, ZIO}
 
 sealed trait Grammar[TToken, TSyntaxError, TLabel <: RuleLabel, +T] {
 
@@ -310,66 +310,72 @@ object Grammar {
   : Grammar[TToken, TSyntaxError, TLabel, Result] =
     TokenGrammar(category, tokenMatcher)
 
-  def parseAll[R, E, TToken, TSyntaxError, TLabel <: RuleLabel, T]
+  def parseAll[TToken, TSyntaxError, TLabel <: RuleLabel, T]
   (factory: GrammarFactory[TToken, TSyntaxError, TLabel])
   (label: TLabel { type RuleType = T })
-  (input: Source[R, E, NonEmptyVector[WithSource[TToken]], FilePosition])
-  (implicit errorHandler: ParseErrorHandler[ZIO[R, E, *], NonEmptyVector[TSyntaxError]])
-  : Source[R, E, T, FilePosition] = new Source[R, E, T, FilePosition] {
-    sealed trait ParseStep
-    case object ParseStepReady extends ParseStep
-    final case class ParseStepPartial(suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T]) extends ParseStep
+  : StreamTransformation[Any, NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] =
+    new StreamTransformation[Any, NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] {
+      sealed trait ParseStep
+      case object ParseStepReady extends ParseStep
+      final case class ParseStepPartial(suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T]) extends ParseStep
 
 
-    override def foreach[R1 <: R, E1 >: E](consume: T => ZIO[R1, E1, Unit]): ZIO[R1, E1, FilePosition] =
-      input.foldLeftM[R1, E1, ParseStep](ParseStepReady) { (s, tokens) =>
+      override type TransformState = ParseStep
 
-        def runParseStepMulti(s: ParseStep, tokens: NonEmptyVector[WithSource[TToken]]): ZIO[R1, E1, ParseStep] =
+      override def start: ZIO[Any, NonEmptyVector[TSyntaxError], ParseStep] = IO.succeed(ParseStepReady)
+
+      @SuppressWarnings(Array("org.wartremover.warts.TraversableOps"))
+      private def nonEmptyChunkToVector[A](chunk: NonEmptyChunk[A]): NonEmptyVector[A] =
+        NonEmptyVector.of(chunk.head, chunk.tail.toVector: _*)
+
+      override def consume(s: ParseStep, tokens: NonEmptyChunk[WithSource[TToken]]): ZIO[Any, NonEmptyVector[TSyntaxError], (ParseStep, Chunk[T])] = {
+
+        def runParseStepMulti(s: ParseStep, tokens: NonEmptyVector[WithSource[TToken]], acc: Chunk[T]): IO[NonEmptyVector[TSyntaxError], (ParseStep, Chunk[T])] =
           runParseStep(s, tokens) match {
             case GrammarResultSuccess(remaining, WithSource(value, _)) =>
-              consume(value).flatMap { _ =>
-                NonEmptyVector.fromVector(remaining) match {
-                  case Some(remaining) => runParseStepMulti(ParseStepReady, remaining)
-                  case None => IO.succeed(ParseStepReady)
-                }
+              NonEmptyVector.fromVector(remaining) match {
+                case Some(remaining) => runParseStepMulti(ParseStepReady, remaining, acc :+ value)
+                case None => IO.succeed((ParseStepReady, acc :+ value))
               }
 
-            case GrammarResultFailure(failure) => errorHandler.raiseError(failure)
-            case GrammarResultError(error) => errorHandler.raiseError(error)
+            case GrammarResultFailure(failure) => IO.fail(failure)
+            case GrammarResultError(error) => IO.fail(error)
             case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] =>
-              IO.succeed(ParseStepPartial(suspend))
+              IO.succeed((ParseStepPartial(suspend), acc))
           }
 
-        runParseStepMulti(s, tokens)
-      }.flatMap {
-        case (ParseStepReady, end) => IO.succeed(end)
-        case (ParseStepPartial(suspend), end) =>
-          def parseEnd(result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T]): ZIO[R1, E1, FilePosition] =
-            result match {
-              case GrammarResultSuccess(remaining, WithSource(value, _)) =>
-                consume(value).flatMap { _ =>
+        val tokensNEV = nonEmptyChunkToVector(tokens)
+        runParseStepMulti(s, tokensNEV, Chunk.empty)
+      }
+
+      override def finish(state: ParseStep, end: FilePosition): ZIO[Any, NonEmptyVector[TSyntaxError], (Chunk[T], FilePosition)] =
+        state match {
+          case ParseStepReady => IO.succeed((Chunk.empty, end))
+          case ParseStepPartial(suspend) =>
+            def parseEnd(result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T], acc: Chunk[T]): IO[NonEmptyVector[TSyntaxError], (Chunk[T], FilePosition)] =
+              result match {
+                case GrammarResultSuccess(remaining, WithSource(value, _)) =>
                   NonEmptyVector.fromVector(remaining) match {
-                    case Some(tokens) => parseEnd(rule.parseTokens(tokens, defaultParseOptions).completeResult(end))
-                    case None => IO.succeed(end)
+                    case Some(tokens) => parseEnd(rule.parseTokens(tokens, defaultParseOptions).completeResult(end), acc :+ value)
+                    case None => IO.succeed((acc :+ value, end))
                   }
-                }
 
-              case GrammarResultFailure(failure) => errorHandler.raiseError(failure)
-              case GrammarResultError(error) => errorHandler.raiseError(error)
-            }
+                case GrammarResultFailure(failure) => IO.fail(failure)
+                case GrammarResultError(error) => IO.fail(error)
+              }
 
-          parseEnd(suspend.completeResult(end))
-      }
+            parseEnd(suspend.completeResult(end), Chunk.empty)
+        }
 
-    private val defaultParseOptions: ParseOptions[TToken, TSyntaxError, TLabel] = ParseOptions(Set.empty, None, factory)
-    private val rule = factory(label)
+      private val defaultParseOptions: ParseOptions[TToken, TSyntaxError, TLabel] = ParseOptions(Set.empty, None, factory)
+      private val rule = factory(label)
 
-    private def runParseStep(s: ParseStep, tokens: NonEmptyVector[WithSource[TToken]]): GrammarResult[TToken, TSyntaxError, TLabel, T] =
-      s match {
-        case ParseStepReady => rule.parseTokens(tokens, defaultParseOptions)
-        case ParseStepPartial(suspend) => suspend.continue(tokens)
-      }
-  }
+      private def runParseStep(s: ParseStep, tokens: NonEmptyVector[WithSource[TToken]]): GrammarResult[TToken, TSyntaxError, TLabel, T] =
+        s match {
+          case ParseStepReady => rule.parseTokens(tokens, defaultParseOptions)
+          case ParseStepPartial(suspend) => suspend.continue(tokens)
+        }
+    }
 
 
   trait ErrorFactory[-TToken, -TTokenCategory, TSyntaxError] {

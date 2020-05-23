@@ -9,7 +9,6 @@ import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.backend.Backend
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import dev.argon.compiler.options.{CompilerInput, CompilerOptions}
-import dev.argon.grammar.ParseErrorHandler
 import dev.argon.parser.impl.{ArgonSourceParser, ParseHandler}
 import dev.argon.util.FileSpec
 import dev.argon.stream._

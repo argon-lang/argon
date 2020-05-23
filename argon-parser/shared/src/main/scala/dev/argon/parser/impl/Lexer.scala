@@ -7,10 +7,10 @@ import scala.language.postfixOps
 import cats._
 import cats.data._
 import cats.implicits._
-import dev.argon.grammar.{Grammar, GrammarError, ParseErrorHandler}
+import dev.argon.grammar.{Grammar, GrammarError}
 import Grammar.Operators._
 import dev.argon.parser.impl.Lexer.LexerGrammarFactory
-import dev.argon.stream.builder.Source
+import dev.argon.stream.StreamTransformation
 import zio.ZIO
 
 import Function.const
@@ -268,8 +268,8 @@ object Lexer {
   }
 
 
-  def lex[R, E](chars: Source[R, E, NonEmptyVector[WithSource[String]], FilePosition])(implicit errorHandler: ParseErrorHandler[ZIO[R, E, *], NonEmptyVector[SyntaxError]]): Source[R, E, WithSource[Token], FilePosition] =
-    Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken)(chars).collect {
+  def lex: StreamTransformation[Any, NonEmptyVector[SyntaxError], WithSource[String], FilePosition, WithSource[Token], FilePosition] =
+    Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken).collect {
       case WithSource(Some(value), loc) => WithSource(value, loc)
     }
 

@@ -6,7 +6,6 @@ import java.nio.file.{Files, StandardOpenOption}
 import java.util.zip.ZipFile
 
 import dev.argon.io.{Path, ZipFileReader}
-import dev.argon.stream.builder.{Source, ZStreamSource}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import zio.{Chunk, IO, Managed, UIO, ZIO, ZLayer, ZManaged, stream}
 import zio.blocking.Blocking

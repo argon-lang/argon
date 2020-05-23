@@ -2,9 +2,6 @@ package dev.argon.stream
 
 import java.nio.charset.Charset
 
-import cats._
-import cats.implicits._
-import dev.argon.stream.builder.Source
 import zio.Chunk
 import zio.stream.ZStream
 

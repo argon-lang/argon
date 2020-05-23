@@ -7,7 +7,6 @@ import dev.argon.compiler.{Comp, ErrorList, RComp}
 import dev.argon.compiler.core.Context
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.stream._
-import dev.argon.stream.builder.Source
 import zio._
 import zio.stream._
 import zio.interop.catz.core._

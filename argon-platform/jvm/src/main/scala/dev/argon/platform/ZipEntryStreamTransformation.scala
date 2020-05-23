@@ -5,7 +5,6 @@ import java.io.IOException
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import dev.argon.io.ZipEntryInfo
-import dev.argon.stream.builder.Source
 import zio.blocking.Blocking
 import zio._
 import zio.interop._

@@ -4,7 +4,6 @@ import java.io.IOException
 
 import dev.argon.io.ZipEntryInfo
 import dev.argon.io.fileio.FileIOLite
-import dev.argon.stream.builder.{Source, ZStreamSource}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 import zio.blocking.Blocking
 import zio.stream.ZStream

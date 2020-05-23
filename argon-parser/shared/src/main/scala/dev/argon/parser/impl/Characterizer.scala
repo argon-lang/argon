@@ -3,53 +3,86 @@ package dev.argon.parser.impl
 import cats._
 import cats.data._
 import cats.implicits._
+import dev.argon.stream.StreamTransformation
 import dev.argon.stream.builder._
 import dev.argon.util._
-import zio.{IO, ZIO}
+import zio.{Chunk, IO, NonEmptyChunk, UIO, ZIO}
 
 
 object Characterizer {
 
-  private def toCodePoints[R, E](chars: Source[R, E, Char, Unit]): Source[R, E, Int, Unit] = new Source[R, E, Int, Unit] {
-    override def foreach[R1 <: R, E1 >: E](consume: Int => ZIO[R1, E1, Unit]): ZIO[R1, E1, Unit] =
-      chars.foldLeftM[R1, E1, Option[Char]](Option.empty[Char]) {
-        case (Some(prevCh), ch) => consume(Character.toCodePoint(prevCh, ch)).map { _ => Option.empty[Char] }
-        case (None, ch) if Character.isHighSurrogate(ch) => IO.succeed(Some(ch))
-        case (None, ch) => consume(ch.toInt).as { Option.empty[Char] }
-      }.flatMap {
-        case (Some(ch), _) => consume(ch.toInt)
-        case (None, _) => IO.unit
+  private def toCodePoints: StreamTransformation[Any, Nothing, Char, Unit, Int, Unit] =
+    new StreamTransformation[Any, Nothing, Char, Unit, Int, Unit] {
+      override type TransformState = Option[Char]
+
+      override def start: UIO[Option[Char]] = IO.succeed(None)
+
+      override def consume(state: Option[Char], values: NonEmptyChunk[Char]): UIO[(Option[Char], Chunk[Int])] = {
+
+        def convert(state: Option[Char], values: Chunk[Char], acc: Chunk[Int]): (Option[Char], Chunk[Int]) =
+          (state, values) match {
+            case (Some(prevCh), ch +: tail) => convert(None, tail, acc :+ Character.toCodePoint(prevCh, ch))
+            case (None, ch +: tail) if Character.isHighSurrogate(ch) => convert(Some(ch), tail, acc)
+            case (None, ch +: tail) => convert(None, tail, acc :+ ch.toInt)
+            case (_, _) => (state, acc)
+          }
+
+        IO.succeed(convert(state, values.toChunk, Chunk.empty))
       }
-  }
 
-  private def toGraphemes[R, E](codepoints: Source[R, E, Int, Unit]): Source[R, E, String, Unit] = new Source[R, E, String, Unit] {
-    override def foreach[R1 <: R, E1 >: E](consume: String => ZIO[R1, E1, Unit]): ZIO[R1, E1, Unit] =
-      codepoints.foldLeftM[R1, E1, Option[String]](Option.empty[String]) {
-        case (Some(str), cp) if isCombiningChar(cp) => IO.succeed(Some(str + codePointToString(cp)))
-        case (Some(str), cp) => consume(str).as { Some(codePointToString(cp)) }
-        case (None, cp) => IO.succeed(Some(codePointToString(cp)))
-      }.flatMap {
-        case (Some(str), _) => consume(str)
-        case (None, _) => IO.unit
+
+      override def finish(state: Option[Char], value: Unit): UIO[(Chunk[Int], Unit)] =
+        IO.succeed((Chunk.fromIterable(state.map { _.toInt }.toList), ()))
+    }
+
+  private def toGraphemes: StreamTransformation[Any, Nothing, Int, Unit, String, Unit] =
+    new StreamTransformation[Any, Nothing, Int, Unit, String, Unit] {
+      override type TransformState = Option[String]
+
+      override def start: UIO[Option[String]] = IO.succeed(None)
+
+      override def consume(state: Option[String], values: NonEmptyChunk[Int]): UIO[(Option[String], Chunk[String])] = {
+
+        def convert(state: Option[String], values: Chunk[Int], acc: Chunk[String]): (Option[String], Chunk[String]) =
+          (state, values) match {
+            case (Some(str), cp +: tail) if isCombiningChar(cp) => convert(Some(str + codePointToString(cp)), tail, acc)
+            case (Some(str), cp +: tail) => convert(Some(codePointToString(cp)), tail, acc :+ str)
+            case (None, cp +: tail) => convert(Some(codePointToString(cp)), tail, acc)
+            case (_, _) => (state, acc)
+          }
+
+        IO.succeed(convert(state, values.toChunk, Chunk.empty))
       }
-  }
 
-  private def withSource[R, E](graphemes: Source[R, E, String, Unit]): Source[R, E, WithSource[String], FilePosition] = new Source[R, E, WithSource[String], FilePosition] {
+      override def finish(state: Option[String], value: Unit): ZIO[Any, Nothing, (Chunk[String], Unit)] =
+        IO.succeed((Chunk.fromIterable(state.toList), ()))
+    }
 
 
-    override def foreach[R1 <: R, E1 >: E](consume: WithSource[String] => ZIO[R1, E1, Unit]): ZIO[R1, E1, FilePosition] =
-      graphemes.foldLeftM[R1, E1, FilePosition](FilePosition(1, 1)) { (pos, item) =>
-        val nextPos =
-          if(item === "\n")
-            FilePosition(pos.line + 1, 1)
-          else
-            pos.copy(position = pos.position + 1)
+  private def withSource: StreamTransformation[Any, Nothing, String, Unit, WithSource[String], FilePosition] =
+    new StreamTransformation[Any, Nothing, String, Unit, WithSource[String], FilePosition] {
+      override type TransformState = FilePosition
 
-        val newItem = WithSource(item, SourceLocation(pos, nextPos))
+      override def start: ZIO[Any, Nothing, FilePosition] = IO.succeed(FilePosition(1, 1))
 
-        consume(newItem).as { nextPos }
-      }.map { case (pos, _) => pos }
-  }
+      override def consume(pos: FilePosition, values: NonEmptyChunk[String]): ZIO[Any, Nothing, (FilePosition, Chunk[WithSource[String]])] =
+        IO.succeed(
+          values.toChunk.mapAccum(pos) { (pos, item) =>
+            val nextPos =
+              if(item === "\n")
+                FilePosition(pos.line + 1, 1)
+              else
+                pos.copy(position = pos.position + 1)
+
+            val newItem = WithSource(item, SourceLocation(pos, nextPos))
+            (nextPos, newItem)
+          }
+        )
+
+
+      override def finish(pos: FilePosition, value: Unit): ZIO[Any, Nothing, (Chunk[WithSource[String]], FilePosition)] =
+        IO.succeed((Chunk.empty, pos))
+    }
 
   private def isCombiningChar(cp: Int): Boolean =
     Character.getType(cp) match {
@@ -61,7 +94,7 @@ object Characterizer {
     new String(Character.toChars(cp))
 
 
-  def characterize[R, E](chars: Source[R, E, Char, Unit]): Source[R, E, WithSource[String], FilePosition] =
-    chars.into(toCodePoints[R, E]).into(toGraphemes[R, E]).into(withSource[R, E])
+  def characterize: StreamTransformation[Any, Nothing, Char, Unit, WithSource[String], FilePosition] =
+    toCodePoints.andThen(toGraphemes).andThen(withSource)
 
 }

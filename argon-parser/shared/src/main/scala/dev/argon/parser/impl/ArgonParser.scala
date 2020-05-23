@@ -9,11 +9,10 @@ import scala.language.postfixOps
 import cats._
 import cats.data._
 import cats.implicits._
-import dev.argon.grammar.{Grammar, GrammarError, ParseErrorHandler, TokenMatcher}
+import dev.argon.grammar.{Grammar, GrammarError, TokenMatcher}
 import Grammar.Operators._
 import Grammar.{GrammarFactory, UnionGrammar}
 import dev.argon.stream._
-import dev.argon.stream.builder.Source
 import zio.ZIO
 
 import Function.const
@@ -734,8 +733,8 @@ object ArgonParser {
 
   private[impl] def grammarFactory: GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] = ArgonGrammarFactory
 
-  def parse[R, E](tokens: Source[R, E, NonEmptyVector[WithSource[Token]], FilePosition])(implicit errorHandler: ParseErrorHandler[ZIO[R, E, *], NonEmptyVector[SyntaxError]]): Source[R, E, TopLevelStatement, Unit] =
-    Grammar.parseAll[R, E, Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)(tokens)
-      .mapResult(const(()))
+  def parse: StreamTransformation[Any, NonEmptyVector[SyntaxError], WithSource[Token], FilePosition, TopLevelStatement, Unit] =
+    Grammar.parseAll[Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)
+      .unit
 
 }
