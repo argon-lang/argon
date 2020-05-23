@@ -1,9 +1,0 @@
-[project]
-inputFiles = [ "*.argon" ]
-references = [ "../../libraries/Argon.Core/Argon.Core.armodule" ]
-
-[options]
-moduleName = "ArgonExample"
-
-[backend.js]
-outputFile = "example.js"
