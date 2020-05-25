@@ -12,12 +12,13 @@ import zio.{IO, ZIO}
 
 import scala.collection.immutable._
 
-trait ArTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+trait ArTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]] extends CallableTrait {
   val context: TContext
   val contextProof: context.type Is TContext
   import context._, signatureContext.Signature
 
-  val descriptor: TraitDescriptor
+  val id: TraitId
+  val owner: TraitOwner
   val fileId: FileID
 
   val isSealed: Boolean
@@ -29,10 +30,10 @@ trait ArTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
 
   val payload: TPayloadSpec[Unit, TTraitMetadata]
 
-  override def hashCode(): Int = descriptor.hashCode()
+  override def hashCode(): Int = id.hashCode()
 
   override def equals(o: Any): Boolean = o match {
-    case other: ArTrait[_, _] => other.descriptor === descriptor
+    case other: ArTrait[_, _] => other.id === id
     case _ => false
   }
 }
@@ -40,7 +41,7 @@ trait ArTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
 object ArTrait {
 
   type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
-    ArTrait[TContext, TPayloadSpec] { val descriptor: TraitDescriptor.InNamespace }
+    ArTrait[TContext, TPayloadSpec] { val owner: TraitOwner.ByNamespace }
 
   sealed trait ResultInfo[TContext <: Context with Singleton, Wrap[+_]] {
     def baseTypes: Comp[BaseTypeInfoTrait[TContext, Wrap]]

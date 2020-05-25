@@ -1,7 +1,7 @@
 package dev.argon.compiler.types
 
-import dev.argon.compiler.core.ModuleDescriptor
+import dev.argon.compiler.core.ModuleId
 
 object DummyModule {
-  val descriptor: ModuleDescriptor = ModuleDescriptor("DummyModule")
+  val descriptor: ModuleId = ModuleId("DummyModule")
 }

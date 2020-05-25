@@ -31,7 +31,7 @@ final class ModuleEmitter[TContext <: ModuleContext with Singleton] private(val 
   final case class ModuleRefs
   (
     nextModuleId: Int = 1,
-    moduleRefIds: Map[ModuleDescriptor, Int] = Map(),
+    moduleRefIds: Map[ModuleId, Int] = Map(),
   )
 
   type Emit[A] = Comp[A]
@@ -211,7 +211,7 @@ final class ModuleEmitter[TContext <: ModuleContext with Singleton] private(val 
           moduleRefs.moduleRefIds
             .toVector
             .sortBy { case (_, id) => id }
-            .map { case (ModuleDescriptor(name), _) => module.ModuleReference(name) },
+            .map { case (ModuleId(name), _) => module.ModuleReference(name) },
           globals = moduleIds.globals
         ))
       } yield ()
@@ -260,7 +260,7 @@ final class ModuleEmitter[TContext <: ModuleContext with Singleton] private(val 
   def getObjIdInt[O, D](ref: Ref[O])(descriptor: D)(nextId: Lens[O, Int], idMap: Lens[O, Map[D, Int]]): UIO[Int] =
     getObjId(ref)(descriptor)(identity)(nextId, idMap)(IO.succeed(identity[Int] _))
 
-  def getModuleId(ref: Ref[ModuleRefs])(descriptor: ModuleDescriptor): UIO[Int] =
+  def getModuleId(ref: Ref[ModuleRefs])(descriptor: ModuleId): UIO[Int] =
     getObjIdInt(ref)(descriptor)(lens[ModuleRefs].nextModuleId, lens[ModuleRefs].moduleRefIds)
 
   def getTraitId(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: TraitDescriptor): UIO[Int] =

@@ -6,7 +6,7 @@ import dev.argon.compiler.core.{ArClass, _}
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.ClassDeclarationStmt
-import dev.argon.util.{FileID, SourceLocation, ValueCache, WithSource}
+import dev.argon.util.{FileID, SourceLocation, UniqueIdentifier, ValueCache, WithSource}
 import cats.{Id => _, _}
 import cats.implicits._
 import cats.evidence.Is
@@ -35,11 +35,13 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
   (context2: Context)
   (env: EnvCreator[context2.type])
   (stmt: ClassDeclarationStmt)
-  (desc: ClassDescriptor)
-  : Comp[ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type }] = {
+  (classOwner: ClassOwner)
+  : Comp[ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val owner: classOwner.type }] = {
     import context2._
 
     for {
+      unqId <- UniqueIdentifier.make
+
       sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[ArClass.ResultInfo, _ <: Nat]]
       sigResultCache <- ValueCache.make[ErrorList, BaseTypeInfoClass[context2.type, Id]]
 
@@ -59,7 +61,10 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
       override val contextProof: context.type Is context2.type = Is.refl
 
-      override val descriptor: desc.type = desc
+
+      override val id: ClassId = ClassId(unqId)
+      override val owner: classOwner.type = classOwner
+      override def ownerModuleId: ModuleId = getClassModule(this)
       override val fileId: FileID = env.fileSpec.fileID
       override val classMessageSource: CompilationMessageSource = CompilationMessageSource.SourceFile(env.fileSpec, stmt.name.location)
 
@@ -75,6 +80,9 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         case WithSource(parser.AbstractModifier, _) => true
         case _ => false
       }
+
+      private def localVarOwner = LocalVariableOwner.ByClass(AbsRef(this))
+      private def paramVarOwner = ParameterVariableOwner.ByClass(AbsRef(this))
 
       private val groupedStatic =
         groupedStaticCache.get(
@@ -107,8 +115,8 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
       override val signature: Comp[Signature[ArClass.ResultInfo, _ <: Nat]] =
         sigCache.get(
           SourceSignatureCreator.fromParameters[ArClass.ResultInfo](context2)(
-            env(context)(EffectInfo.pure, descriptor)
-          )(descriptor)(stmt.parameters)(resultCreator(context)(stmt.baseType, sigResultCache)(this))
+            env(context)(EffectInfo.pure, id, localVarOwner)
+          )(paramVarOwner)(stmt.parameters)(resultCreator(context)(stmt.baseType, sigResultCache)(this))
         )
 
       private val paramsEnv: Comp[EnvCreator[context.type]] =
@@ -125,10 +133,9 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
               case Some(fieldName) =>
                 for {
                   env2 <- paramsEnv
-                  fieldType <- ExpressionConverter.convertTypeExpression(context)(env2(context)(EffectInfo.pure, descriptor))(field.value.fieldType)
+                  fieldType <- ExpressionConverter.convertTypeExpression(context)(env2(context)(EffectInfo.pure, id, localVarOwner))(field.value.fieldType)
                 } yield FieldVariable[context.type, Id](
-                  FieldDescriptor(descriptor, fieldName),
-                  AbsRef(this),
+                  FieldVariableOwner(AbsRef(this)),
                   VariableName.Normal(fieldName),
                   Mutability.fromIsMutable(field.value.isMutable),
                   fieldType
@@ -144,14 +151,13 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         methodCache.get(groupedInst.flatMap { inst =>
           inst.methods.zipWithIndex.traverse { case (method, i) =>
             parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
-              val memberName = MethodName.fromMethodNameSpecifier(method.value.name)
-
               paramsEnv.flatMap { env2 =>
                 fields.flatMap { fieldVars =>
                   val env3 = env2.addVariables(context)(fieldVars)
-                  val desc = MethodDescriptor(descriptor, i, memberName)
-                  SourceMethod(context)(env3)(method.value, method.location)(desc)(ArMethod.ClassOwner(this))
-                    .map(MethodBinding(memberName, i, modifiers, _))
+                  SourceMethod(context)(env3)(method.value, method.location)(MethodOwner.ByClass(this))
+                    .map { method =>
+                      MethodBinding(method.name, i, modifiers, method)
+                    }
                 }
               }
             }
@@ -162,13 +168,11 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
         staticMethodCache.get(groupedStatic.flatMap { statics =>
           statics.staticMethods.zipWithIndex.traverse { case (method, i) =>
             parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
-              val memberName = MethodName.fromMethodNameSpecifier(method.value.name)
-              val desc = MethodDescriptor(ClassObjectDescriptor(descriptor), i, memberName)
-
               paramsEnv.flatMap { env2 =>
-                SourceMethod(context)(env2)(method.value, method.location)(desc)(ArMethod.ClassObjectOwner(this))
-                  .map(MethodBinding(memberName, i, modifiers, _))
-
+                SourceMethod(context)(env2)(method.value, method.location)(MethodOwner.ByClassObject(this))
+                  .map { method =>
+                    MethodBinding(method.name, i, modifiers, method)
+                  }
               }
             }
           }
@@ -176,12 +180,10 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
 
       override val classConstructors: Comp[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]] =
         classCtorCache.get(groupedInst.flatMap { inst =>
-          inst.classCtors.zipWithIndex.traverse { case (classCtor, i) =>
+          inst.classCtors.traverse { classCtor =>
             parseAccessModifier(env.fileSpec, classCtor.location, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
-              val desc = ClassConstructorDescriptor(descriptor, i)
-
               paramsEnv.flatMap { env2 =>
-                SourceClassConstructor(context)(env2)(this)(classCtor.value)(desc).map(ClassConstructorBinding(i, modifiers, _))
+                SourceClassConstructor(context)(env2)(this)(classCtor.value).map(ClassConstructorBinding(modifiers, _))
               }
             }
           }

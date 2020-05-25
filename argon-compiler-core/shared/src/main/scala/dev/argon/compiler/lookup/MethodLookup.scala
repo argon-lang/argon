@@ -13,18 +13,18 @@ import zio.interop.catz.core._
 
 object MethodLookup {
 
-  def lookupMethods(context: Context)(ts: TypeSystem.Aux[context.type])(instanceType: TypeWithMethods[context.type, ts.TTypeWrapper])(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName): Comp[OverloadResult[MemberValue[context.type]]] =
-    lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(Vector(instanceType))(Set.empty)
+  def lookupMethods(context: Context)(ts: TypeSystem.Aux[context.type])(instanceType: TypeWithMethods[context.type, ts.TTypeWrapper])(callerId: CallerId, fileSpec: FileSpec)(memberName: MemberName): Comp[OverloadResult[MemberValue[context.type]]] =
+    lookupMethodsImpl(context)(ts)(callerId, fileSpec)(memberName)(Vector(instanceType))(Set.empty)
 
-  private def lookupMethodsImpl(context: Context)(ts: TypeSystem.Aux[context.type])(callerDescriptor: Descriptor, fileSpec: FileSpec)(memberName: MemberName)(instanceTypes: Vector[TypeWithMethods[context.type, ts.TTypeWrapper]])(seenTypes: Set[MethodOwnerDescriptor]): Comp[OverloadResult[MemberValue[context.type]]] = {
+  private def lookupMethodsImpl(context: Context)(ts: TypeSystem.Aux[context.type])(callerId: CallerId, fileSpec: FileSpec)(memberName: MemberName)(instanceTypes: Vector[TypeWithMethods[context.type, ts.TTypeWrapper]])(seenTypes: Set[MethodOwnerId]): Comp[OverloadResult[MemberValue[context.type]]] = {
     import ts.typeWrapperInstances
 
     if(instanceTypes.isEmpty)
       IO.succeed(OverloadResult.End)
     else {
-      val newSeenTypes = seenTypes ++ instanceTypes.map(getDescriptor(context)(ts)(_))
+      val newSeenTypes = seenTypes ++ instanceTypes.map(getId(context)(ts)(_))
 
-      val unseenInstanceTypes = instanceTypes.filterNot { t => seenTypes.contains(getDescriptor(context)(ts)(t)) }
+      val unseenInstanceTypes = instanceTypes.filterNot { t => seenTypes.contains(getId(context)(ts)(t)) }
 
       unseenInstanceTypes
         .flatTraverse {
@@ -61,16 +61,16 @@ object MethodLookup {
               }
               .flatMap { memberValues =>
                 memberValues
-                  .distinctBy { _.arMethod.value.method.descriptor }
+                  .distinctBy { _.arMethod.value.method.id }
                   .filter { method =>
                     val methodName = method.arMethod.value.name
                     methodName =!= MemberName.Unnamed && memberName === methodName
                   }
                   .filterA { method =>
-                    AccessCheck.checkInstance[context.type, method.arMethod.PayloadSpec](callerDescriptor, fileSpec, method.arMethod.value)
+                    AccessCheck.checkInstance[context.type, method.arMethod.PayloadSpec](callerId, fileSpec, method.arMethod.value)
                   }
                   .flatMap { filteredMembers =>
-                    lookupMethodsImpl(context)(ts)(callerDescriptor, fileSpec)(memberName)(newBaseTypes)(newSeenTypes)
+                    lookupMethodsImpl(context)(ts)(callerId, fileSpec)(memberName)(newBaseTypes)(newSeenTypes)
                       .map { baseTypeOverloads =>
                         NonEmptyVector.fromVector(filteredMembers) match {
                           case Some(filteredMembers) => OverloadResult.List(filteredMembers, baseTypeOverloads)
@@ -83,11 +83,11 @@ object MethodLookup {
     }
   }
 
-  private def getDescriptor[TComp[_]](context: Context)(ts: TypeSystem.Aux[context.type])(t: TypeWithMethods[context.type, ts.TTypeWrapper]): MethodOwnerDescriptor =
+  private def getId[TComp[_]](context: Context)(ts: TypeSystem.Aux[context.type])(t: TypeWithMethods[context.type, ts.TTypeWrapper]): MethodOwnerId =
     t match {
-      case ClassType(arClass, _) => arClass.value.descriptor
-      case TraitType(arTrait, _) => arTrait.value.descriptor
-      case DataConstructorType(ctor, _, _) => ctor.value.descriptor
+      case ClassType(arClass, _) => arClass.value.id
+      case TraitType(arTrait, _) => arTrait.value.id
+      case DataConstructorType(ctor, _, _) => ctor.value.id
     }
 
 }

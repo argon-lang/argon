@@ -33,13 +33,13 @@ trait VTableContext {
       (a, b) match {
         case (EntrySourceMulti(_, _), _) | (_, EntrySourceMulti(_, _)) => false
 
-        case (EntrySourceClass(a, _, _), EntrySourceClass(b, _, _)) => a.value.descriptor === b.value.descriptor
+        case (EntrySourceClass(a, _, _), EntrySourceClass(b, _, _)) => a.value.id === b.value.id
         case (EntrySourceClass(_, _, _), _) | (_, EntrySourceClass(_, _, _)) => false
 
-        case (EntrySourceTrait(a, _), EntrySourceTrait(b, _)) => a.value.descriptor === b.value.descriptor
+        case (EntrySourceTrait(a, _), EntrySourceTrait(b, _)) => a.value.id === b.value.id
         case (EntrySourceTrait(_, _), _) | (_, EntrySourceTrait(_, _)) => false
 
-        case (EntrySourceDataCtor(a, _), EntrySourceDataCtor(b, _)) => a.value.descriptor === b.value.descriptor
+        case (EntrySourceDataCtor(a, _), EntrySourceDataCtor(b, _)) => a.value.id === b.value.id
         case (EntrySourceDataCtor(_, _), _) | (_, EntrySourceDataCtor(_, _)) => false
       }
 
@@ -47,12 +47,12 @@ trait VTableContext {
       (a, b) match {
         case (EntrySourceMulti(a1, a2), _) => moreSpecificSource(a1, b) || moreSpecificSource(a2, b)
         case (_, EntrySourceMulti(b1, b2)) => moreSpecificSource(a, b1) && moreSpecificSource(a, b2)
-        case (EntrySourceTrait(_, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.exists { _.value.descriptor === arTrait.value.descriptor }
+        case (EntrySourceTrait(_, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.exists { _.value.id === arTrait.value.id }
         case (EntrySourceTrait(_, _), _) => false
-        case (EntrySourceClass(_, baseClasses, _), EntrySourceClass(arClass, _, _)) => baseClasses.exists { _.value.descriptor === arClass.value.descriptor }
-        case (EntrySourceClass(_, _, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.exists { _.value.descriptor === arTrait.value.descriptor }
+        case (EntrySourceClass(_, baseClasses, _), EntrySourceClass(arClass, _, _)) => baseClasses.exists { _.value.id === arClass.value.id }
+        case (EntrySourceClass(_, _, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.exists { _.value.id === arTrait.value.id }
         case (EntrySourceClass(_, _, _), _) => false
-        case (EntrySourceDataCtor(_, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.exists { _.value.descriptor === arTrait.value.descriptor }
+        case (EntrySourceDataCtor(_, baseTraits), EntrySourceTrait(arTrait, _)) => baseTraits.exists { _.value.id === arTrait.value.id }
         case (EntrySourceDataCtor(_, _), _) => false
       }
 

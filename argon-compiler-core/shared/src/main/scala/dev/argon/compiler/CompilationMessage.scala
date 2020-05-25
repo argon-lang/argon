@@ -218,11 +218,11 @@ object CompilationError {
     override def message: String = "Could not find identifier"
   }
 
-  final case class AmbiguousLookupError(alternatives: NonEmptyVector[CallableDescriptor], source: CompilationMessageSource) extends CompilationError {
+  final case class AmbiguousLookupError(alternatives: NonEmptyVector[Callable], source: CompilationMessageSource) extends CompilationError {
     override def message: String = "Lookup is ambiguous"
   }
 
-  final case class OverloadedLookupFailed(alternatives: NonEmptyVector[(CallableDescriptor, NonEmptyList[CompilationError])], source: CompilationMessageSource) extends CompilationError {
+  final case class OverloadedLookupFailed(alternatives: NonEmptyVector[(Callable, NonEmptyList[CompilationError])], source: CompilationMessageSource) extends CompilationError {
     override def message: String = "Overloaded lookup failed"
   }
 
@@ -242,7 +242,7 @@ object CompilationError {
     override def message: String = s"Missing module name"
   }
 
-  final case class NamespaceElementNotFound(module: ModuleDescriptor, namespacePath: NamespacePath, name: GlobalName, source: CompilationMessageSource) extends CompilationError {
+  final case class NamespaceElementNotFound(module: ModuleId, namespacePath: NamespacePath, name: GlobalName, source: CompilationMessageSource) extends CompilationError {
 
     private def nameStr: String =
       name match {
@@ -326,7 +326,7 @@ object CompilationError {
     override def message: String = "A compatible module loader could not be found."
   }
 
-  final case class ModuleDependencyNotFound(missingDependency: ModuleDescriptor, source: CompilationMessageSource) extends CompilationError {
+  final case class ModuleDependencyNotFound(missingDependency: ModuleId, source: CompilationMessageSource) extends CompilationError {
     override def message: String = s"A module requires a dependency (${missingDependency.name}) that was not found."
   }
 
@@ -362,7 +362,7 @@ object CompilationError {
     override def message: String = s"Field must have name."
   }
 
-  final case class NonAbstractMethodNotImplemented(descriptor: MethodDescriptor, source: CompilationMessageSource) extends CompilationError {
+  final case class NonAbstractMethodNotImplemented(descriptor: AbsRef[_ <: Context with Singleton, ArMethod], source: CompilationMessageSource) extends CompilationError {
     override def message: String = s"Non abstract method must have an implementation."
   }
 
@@ -497,7 +497,7 @@ object CompilationMessageSource {
       s"${file.name} ${location.start.line.toString}.${location.start.position.toString}-${location.end.line.toString}.${location.end.position.toString}"
   }
 
-  final case class ReferencedModule(moduleDescriptor: ModuleDescriptor) extends CompilationMessageSource {
+  final case class ReferencedModule(moduleDescriptor: ModuleId) extends CompilationMessageSource {
     override def formatted: String = s"module ${moduleDescriptor.name}"
   }
 

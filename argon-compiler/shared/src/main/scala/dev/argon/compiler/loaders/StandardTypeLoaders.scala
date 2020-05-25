@@ -10,7 +10,7 @@ import dev.argon.compiler.expr.ArExpr.ClassType
 
 object StandardTypeLoaders {
 
-  private val arCore = ModuleDescriptor(LookupNames.argonCoreLib)
+  private val arCore = ModuleId(LookupNames.argonCoreLib)
 
   def loadUnitType[TPayloadSpec[_, _]]
   (context: Context)

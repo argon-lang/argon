@@ -5,7 +5,7 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types._
 import dev.argon.parser
-import dev.argon.util.{FileSpec, NamespacePath, SourceLocation, WithSource}
+import dev.argon.util.{FileSpec, NamespacePath, SourceLocation, UniqueIdentifier, WithSource}
 import dev.argon.util.AnyExtensions._
 
 import scala.collection.immutable.Set
@@ -72,7 +72,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                       }
                       .map {
                         case sig: Signature[FunctionResultInfo, len] =>
-                          signatureFactory[FunctionResultInfo, len](env)(location)(method.value.method.descriptor)(sig) { (args, result) =>
+                          signatureFactory[FunctionResultInfo, len](env)(location)(method.value.method)(sig) { (args, result) =>
                             MethodCall(AbsRef(method.value.method), fromSimpleType(thisExpr), args, result.returnType)
                           }
                       }
@@ -85,13 +85,13 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           simplifyInstanceType(t).flatMap {
             case Some(resolvedTypeWithMethods: TypeWithMethods[context.type, TTypeWrapper]) =>
               resolveMethodOverloads(resolvedTypeWithMethods)(
-                MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.descriptor, env.fileSpec)(memberName)
+                MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.callerId, env.fileSpec)(memberName)
               )
 
             case Some(funcType @ FunctionType(argType, resultType)) if memberName === MemberName.Call =>
               Vector(List(NonEmptyVector.of(new OverloadExprFactory {
 
-                override def overloadDescriptor: CallableDescriptor = FunctionTypeCallDescriptor
+                override def callable: Callable = CallableExpression
 
                 override def usedParamTypes: Vector[TType] = Vector()
                 override def remainingParameterTypes: Vector[TType] = Vector(argType)
@@ -101,7 +101,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
                 override def forArguments(argInfo: ArgumentInfo): OverloadExprFactory =
                   new OverloadExprFactory {
-                    override def overloadDescriptor: CallableDescriptor = FunctionTypeCallDescriptor
+                    override def callable: Callable = CallableExpression
 
                     override def usedParamTypes: Vector[TType] = Vector(argType)
                     override def remainingParameterTypes: Vector[TType] = Vector()
@@ -152,14 +152,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                               t.arClass.value.classConstructors.flatMap { constructors =>
                                 constructors
                                   .traverse {
-                                    case ClassConstructorBinding(_, _, classCtor) =>
+                                    case ClassConstructorBinding(_, classCtor) =>
                                       Compilation.require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
                                         .flatMap { _ =>
                                           classCtor.signature(signatureContext)(t)
                                         }
                                         .map {
                                           case sig: Signature[ClassConstructor.ResultInfo, len] =>
-                                            signatureFactory[ClassConstructor.ResultInfo, len](env)(location)(classCtor.descriptor)(sig) { (args, _) =>
+                                            signatureFactory[ClassConstructor.ResultInfo, len](env)(location)(classCtor)(sig) { (args, _) =>
                                               ClassConstructorCall(t, AbsRef(classCtor), args)
                                             }
                                         }
@@ -173,7 +173,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                                 .flatMap {
                                   _.filter { binding => binding.name === methodName }
                                     .filterA { binding =>
-                                      AccessCheck.checkInstance[context.type, t.arClass.PayloadSpec](env.descriptor, env.fileSpec, binding)
+                                      AccessCheck.checkInstance[context.type, t.arClass.PayloadSpec](env.callerId, env.fileSpec, binding)
                                     }
                                 }
                                 .map(methodBindingsToOverloads)
@@ -190,7 +190,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                                 .flatMap {
                                   _.filter { binding => binding.name === methodName }
                                     .filterA { binding =>
-                                      AccessCheck.checkInstance[context.type, t.arTrait.PayloadSpec](env.descriptor, env.fileSpec, binding)
+                                      AccessCheck.checkInstance[context.type, t.arTrait.PayloadSpec](env.callerId, env.fileSpec, binding)
                                     }
                                 }
                                 .map(methodBindingsToOverloads)
@@ -222,6 +222,22 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             case (_, _) => b
           }
 
+        def dedupOverloads(overloads: Vector[OverloadExprFactory], seenOverloads: Set[CallableId], acc: Vector[OverloadExprFactory]): Vector[OverloadExprFactory] =
+          overloads match {
+            case Vector() => Vector()
+            case head +: tail =>
+              head.overloadId match {
+                case Some(id) if seenOverloads.contains(id) => dedupOverloads(tail, seenOverloads, acc)
+                case Some(id) => dedupOverloads(tail, seenOverloads + id, acc :+ head)
+                case None => dedupOverloads(tail, seenOverloads, acc :+ head)
+              }
+          }
+
+        def dedupOverloadsNonEmpty(overloads: NonEmptyVector[OverloadExprFactory]): NonEmptyVector[OverloadExprFactory] =
+          NonEmptyVector(overloads.head, dedupOverloads(overloads.tail, overloads.head.overloadId.toList.toSet, Vector()))
+
+
+
         def overloadsForName(memberName: MemberName): Comp[ExprFactory] =
           getExprType(thisExpr, includeExtraTypeOfType = false)
             .flatMap(overloadsOfType(memberName))
@@ -231,7 +247,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   .reduceOption(mergeOverloadLists)
                   .toList
                   .flatten
-                  .map { overloadList => NonEmptyVector.fromVectorUnsafe(overloadList.toVector.distinctBy { _.overloadDescriptor }) }
+                  .map(dedupOverloadsNonEmpty)
 
               NonEmptyList.fromList(mergedOverloads) match {
                 case Some(mergedOverloads) => overloadSelectionFactory(env)(location)(mergedOverloads).pure[Comp]
@@ -275,7 +291,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
   abstract class OverloadExprFactory {
 
-    def overloadDescriptor: CallableDescriptor
+    def callable: Callable
+    final def overloadId: Option[CallableId] = callable match {
+      case callable: NonExpressionCallable => Some(callable.id)
+      case CallableExpression => None
+    }
     def usedParamTypes: Vector[TType]
     def remainingParameterTypes: Vector[TType]
 
@@ -292,8 +312,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
     protected final def wrapNonOverloadFactory(factory: ExprFactory): OverloadExprFactory =
       new OverloadExprFactory {
-
-        override def overloadDescriptor: CallableDescriptor = OverloadExprFactory.this.overloadDescriptor
+        override def callable: Callable = OverloadExprFactory.this.callable
 
         override def usedParamTypes: Vector[TType] = OverloadExprFactory.this.usedParamTypes
         override def remainingParameterTypes: Vector[typeSystem.TType] = OverloadExprFactory.this.remainingParameterTypes
@@ -437,10 +456,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
               exprConverter <- convertExprTypeDelay(env)(expr.location)(fromSimpleType(FunctionType(argHole, resultHole)))(expectedType)
 
-              varId <- VariableIdentifier.make
+              varId <- UniqueIdentifier.make
 
               argVar = LocalVariable(
-                VariableDescriptor(env.descriptor, varId),
+                VariableId(varId),
+                env.variableOwner,
                 varName.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
                 Mutability.NonMutable,
                 argHole
@@ -482,10 +502,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               case TuplePattern(values) => ???
               case DiscardPattern =>
                 for {
-                  varId <- VariableIdentifier.make
+                  varId <- UniqueIdentifier.make
 
                   variable = LocalVariable(
-                    VariableDescriptor(env.descriptor, varId),
+                    VariableId(varId),
+                    env.variableOwner,
                     VariableName.Unnamed,
                     Mutability.NonMutable,
                     t
@@ -496,10 +517,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
               case BindingPattern(name) =>
                 for {
-                  varId <- VariableIdentifier.make
+                  varId <- UniqueIdentifier.make
 
                   variable = LocalVariable(
-                    VariableDescriptor(env.descriptor, varId),
+                    VariableId(varId),
+                    env.variableOwner,
                     VariableName.Normal(name),
                     Mutability.NonMutable,
                     t
@@ -511,9 +533,10 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               case TypeTestPattern(name, patternType) =>
                 for {
                   patT <- evaluateTypeExprAST(env)(patternType)
-                  varId <- VariableIdentifier.make
+                  varId <- UniqueIdentifier.make
                   variable = LocalVariable(
-                    VariableDescriptor(env.descriptor, varId),
+                    VariableId(varId),
+                    env.variableOwner,
                     name.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
                     Mutability.NonMutable,
                     patT
@@ -528,7 +551,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.StringValueExpr(str) =>
         compFactory(
           for {
-            stringType <- resolveModuleClass(env)(expr.location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("String"))
+            stringType <- resolveModuleClass(env)(expr.location)(ModuleId(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("String"))
           } yield factoryForExpr(env)(expr.location)(LoadConstantString(str, stringType))
         )
 
@@ -641,10 +664,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               valueExpr <- convertExpr(env)(stmt.value).forExpectedType(exprType)
               varType <- resolveType(exprType)
 
-              varId <- VariableIdentifier.make
+              varId <- UniqueIdentifier.make
 
               variable = LocalVariable(
-                VariableDescriptor(env.descriptor, varId),
+                VariableId(varId),
+                env.variableOwner,
                 varName,
                 mutability,
                 varType
@@ -685,7 +709,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def resolveModuleClassFactory
   (env: Env)
   (location: SourceLocation)
-  (moduleDesc: ModuleDescriptor)
+  (moduleDesc: ModuleId)
   (namespacePath: NamespacePath, name: GlobalName)
   (args: Vector[ArgumentInfo])
   : ExprFactory = {
@@ -704,7 +728,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 case classSig: context.signatureContext.Signature[ArClass.ResultInfo, len] =>
                   convertSignature[ArClass.ResultInfo, len](classSig).map { convSig =>
                     val classFactory =
-                      signatureFactory[ArClass.ResultInfo, len](env)(location)(arClass.descriptor)(convSig) { (args, classResult) =>
+                      signatureFactory[ArClass.ResultInfo, len](env)(location)(arClass)(convSig) { (args, classResult) =>
                         ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), args)
                       }
 
@@ -725,19 +749,19 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def resolveModuleClass
   (env: Env)
   (location: SourceLocation)
-  (moduleDesc: ModuleDescriptor)
+  (moduleDesc: ModuleId)
   (namespacePath: NamespacePath, name: GlobalName)
   : Comp[TType] =
     evaluateTypeExprFactory(env)(location)(resolveModuleClassFactory(env)(location)(moduleDesc)(namespacePath, name)(Vector.empty))
 
   def resolveBoolClass(env: Env)(location: SourceLocation): Comp[TType] =
-    resolveModuleClass(env)(location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))
+    resolveModuleClass(env)(location)(ModuleId(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Bool"))
 
   def resolveUnitType(env: Env)(location: SourceLocation): Comp[TType] =
-    resolveModuleClass(env)(location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))
+    resolveModuleClass(env)(location)(ModuleId(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))
 
   def resolveIntType(env: Env)(location: SourceLocation): Comp[TType] =
-    resolveModuleClass(env)(location)(ModuleDescriptor(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Int"))
+    resolveModuleClass(env)(location)(ModuleId(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("Int"))
 
   def loadUnitLiteral(env: Env)(location: SourceLocation): ExprFactory =
     compFactory(
@@ -808,7 +832,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   .flatMap {
                     case sig: context.signatureContext.Signature[FunctionResultInfo, len] =>
                       convertSignature[FunctionResultInfo, len](sig).map { convSig =>
-                        signatureFactory[FunctionResultInfo, len](env)(location)(func.value.descriptor)(convSig) { (args, result) =>
+                        signatureFactory[FunctionResultInfo, len](env)(location)(func.value)(convSig) { (args, result) =>
                           FunctionCall(func, args, result.returnType)
                         }
                       }
@@ -819,7 +843,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   .flatMap {
                     case sig: context.signatureContext.Signature[ArTrait.ResultInfo, len] =>
                       convertSignature[ArTrait.ResultInfo, len](sig).map { convSig =>
-                        signatureFactory(env)(location)(arTrait.value.descriptor)(convSig) { (args, result) =>
+                        signatureFactory(env)(location)(arTrait.value)(convSig) { (args, result) =>
                           TraitType(arTrait, args)
                         }
                       }
@@ -830,7 +854,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   .flatMap {
                     case sig: context.signatureContext.Signature[ArClass.ResultInfo, len] =>
                       convertSignature[ArClass.ResultInfo, len](sig).map { convSig =>
-                        signatureFactory(env)(location)(arClass.value.descriptor)(convSig) { (args, result) =>
+                        signatureFactory(env)(location)(arClass.value)(convSig) { (args, result) =>
                           ClassType(arClass, args)
                         }
                       }
@@ -841,7 +865,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   .flatMap {
                     case sig: context.signatureContext.Signature[DataConstructor.ResultInfo, len] =>
                       convertSignature[DataConstructor.ResultInfo, len](sig).map { convSig =>
-                        signatureFactory(env)(location)(ctor.value.descriptor)(convSig) { (args, result) =>
+                        signatureFactory(env)(location)(ctor.value)(convSig) { (args, result) =>
                           DataConstructorCall(
                             DataConstructorType(
                               ctor,
@@ -923,21 +947,21 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       private def runSameLevelOverloads
       (overloads: NonEmptyVector[OverloadExprFactory])
       (expectedType: TType)
-      : Comp[NonEmptyVector[(CallableDescriptor, Either[NonEmptyList[CompilationError], Comp[SimpleExpr]])]] =
+      : Comp[NonEmptyVector[(Callable, Either[NonEmptyList[CompilationError], Comp[SimpleExpr]])]] =
         overloads.traverse { overload =>
           attemptRun(overload.forExpectedType(expectedType))
-            .map { (overload.overloadDescriptor, _) }
+            .map { (overload.callable, _) }
         }
 
-      type FailedOverload = (CallableDescriptor, NonEmptyList[CompilationError])
-      type GoodOverload = (CallableDescriptor, Comp[SimpleExpr])
+      type FailedOverload = (Callable, NonEmptyList[CompilationError])
+      type GoodOverload = (Callable, Comp[SimpleExpr])
 
       private def splitCallsAndErrors
-      (results: NonEmptyVector[(CallableDescriptor, Either[NonEmptyList[CompilationError], Comp[SimpleExpr]])])
+      (results: NonEmptyVector[(Callable, Either[NonEmptyList[CompilationError], Comp[SimpleExpr]])])
       : Either[NonEmptyVector[FailedOverload], NonEmptyVector[GoodOverload]] = {
 
         def impl
-        (results: Vector[(CallableDescriptor, Either[NonEmptyList[CompilationError], Comp[SimpleExpr]])])
+        (results: Vector[(Callable, Either[NonEmptyList[CompilationError], Comp[SimpleExpr]])])
         (acc: Either[NonEmptyVector[FailedOverload], NonEmptyVector[GoodOverload]])
         : Either[NonEmptyVector[FailedOverload], NonEmptyVector[GoodOverload]] =
           (results, acc) match {
@@ -1041,7 +1065,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def signatureFactory[TResult[TContext2 <: Context with Singleton, Wrap[+_]], FullLen <: Nat]
   (env: Env)
   (location: SourceLocation)
-  (descriptor: ParameterOwnerDescriptor)
+  (callable2: NonExpressionCallable)
   (fullSignature: Signature[TResult, FullLen])
   (f: (Vector[WrapExpr], TResult[context.type, TTypeWrapper]) => SimpleExpr)
   : OverloadExprFactory = {
@@ -1058,9 +1082,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
     final class SigFactory[Len <: Nat](env: Env)(unsubSig: Signature[TResult, Len])(prevParamTypes: Vector[TType])(acc: Comp[(Signature[TResult, Len], Vector[WrapExpr])]) extends OverloadExprFactory {
 
-
-      override def overloadDescriptor: ParameterOwnerDescriptor = descriptor
-
+      override def callable: Callable = callable2
 
       override def usedParamTypes: Vector[TType] = prevParamTypes
       override lazy val remainingParameterTypes: Vector[TType] = unsubSig.unsubstitutedParameters.unsized.map { _.paramType }
@@ -1122,8 +1144,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           prevArgs match {
             case Vector() =>
               for {
-                varId <- VariableIdentifier.make
-                newVar = LocalVariable(VariableDescriptor(env.descriptor, varId), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+                varId <- UniqueIdentifier.make
+                newVar = LocalVariable(VariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
                 env2 = env.copy(scope = env.scope.addVariable(newVar))
                 newVarExpr = LoadVariable(newVar)
 
@@ -1133,8 +1155,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
             case head +: tail =>
               for {
-                varId <- VariableIdentifier.make
-                newVar = LocalVariable(VariableDescriptor(env.descriptor, varId), VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+                varId <- UniqueIdentifier.make
+                newVar = LocalVariable(VariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
                 env2 = env.copy(scope = env.scope.addVariable(newVar))
                 newVarExpr = LoadVariable(newVar)
                 nextSig <- signatureNextPart(sigParams)(fromSimpleType(newVarExpr))
@@ -1269,7 +1291,8 @@ object ExpressionConverter {
   final case class Env[TContext <: Context with Singleton, TScope]
   (
     effectInfo: EffectInfo,
-    descriptor: VariableOwnerDescriptor,
+    callerId: CallerId,
+    variableOwner: LocalVariableOwner[TContext],
     fileSpec: FileSpec,
     currentModule: ArModule[TContext, DeclarationPayloadSpecifier],
     referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]],
@@ -1278,7 +1301,7 @@ object ExpressionConverter {
   )
 
   trait EnvCreator[TContext <: Context with Singleton] {
-    def apply(context: TContext)(effectInfo: EffectInfo, descriptor: VariableOwnerDescriptor): Env[context.type, context.scopeContext.Scope]
+    def apply(context: TContext)(effectInfo: EffectInfo, callerId: CallerId, variableOwner: LocalVariableOwner[TContext]): Env[context.type, context.scopeContext.Scope]
 
     def addVariables(context: TContext)(variables: Vector[Variable[context.type, Id]]): EnvCreator[TContext]
     def addVariable(context: TContext)(variable: Variable[context.type, Id]): EnvCreator[TContext] =
@@ -1459,7 +1482,8 @@ object ExpressionConverter {
 
       env2 = Env(
         effectInfo = env.effectInfo,
-        descriptor = env.descriptor,
+        callerId = env.callerId,
+        variableOwner = env.variableOwner,
         fileSpec = env.fileSpec,
         currentModule = env.currentModule,
         referencedModules = env.referencedModules,
@@ -1503,7 +1527,8 @@ object ExpressionConverter {
 
       env2 = Env(
         effectInfo = env.effectInfo,
-        descriptor = env.descriptor,
+        callerId = env.callerId,
+        variableOwner = env.variableOwner,
         fileSpec = env.fileSpec,
         currentModule = env.currentModule,
         referencedModules = env.referencedModules,
@@ -1532,7 +1557,8 @@ object ExpressionConverter {
 
       env2 = Env(
         effectInfo = env.effectInfo,
-        descriptor = env.descriptor,
+        callerId = env.callerId,
+        variableOwner = env.variableOwner,
         fileSpec = env.fileSpec,
         currentModule = env.currentModule,
         referencedModules = env.referencedModules,

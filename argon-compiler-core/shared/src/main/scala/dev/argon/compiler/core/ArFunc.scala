@@ -6,11 +6,12 @@ import dev.argon.compiler.Comp
 import dev.argon.util.FileID
 import shapeless.Nat
 
-trait ArFunc[TContext <: Context, TPayloadSpec[_, _]] {
+abstract class ArFunc[TContext <: Context, TPayloadSpec[_, _]] extends CallableFunction {
   val context: TContext
   import context._, signatureContext.Signature
 
-  val descriptor: FuncDescriptor
+  val id: FunctionId
+  val owner: FunctionOwner
   val fileId: FileID
   val effectInfo: EffectInfo
 
@@ -18,10 +19,10 @@ trait ArFunc[TContext <: Context, TPayloadSpec[_, _]] {
 
   val payload: TPayloadSpec[Comp[TFunctionImplementation], TFunctionMetadata]
 
-  override def hashCode(): Int = descriptor.hashCode()
+  override def hashCode(): Int = id.hashCode()
 
   override def equals(o: Any): Boolean = o match {
-    case other: ArFunc[_, _] => other.descriptor === descriptor
+    case other: ArFunc[_, _] => other.id === id
     case _ => false
   }
 }
@@ -29,6 +30,6 @@ trait ArFunc[TContext <: Context, TPayloadSpec[_, _]] {
 object ArFunc {
 
   type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
-    ArFunc[TContext, TPayloadSpec] { val descriptor: FuncDescriptor.InNamespace }
+    ArFunc[TContext, TPayloadSpec] { val owner: FunctionOwner.ByNamespace }
 
 }

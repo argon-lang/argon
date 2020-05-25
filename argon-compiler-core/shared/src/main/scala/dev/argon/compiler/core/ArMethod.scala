@@ -9,14 +9,16 @@ import dev.argon.compiler.types._
 import dev.argon.util.FileID
 import shapeless.Nat
 
-abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] extends CallableMethod {
   val context: TContext
   val contextProof: context.type Is TContext
   import context._, signatureContext.Signature
 
-  val descriptor: MethodDescriptor
+  val id: MethodId
+  val owner: MethodOwner[context.type, TPayloadSpec]
+  val name: MethodName
+
   val fileId: FileID
-  val owner: ArMethod.Owner[context.type, TPayloadSpec]
 
   val effectInfo: EffectInfo
 
@@ -35,11 +37,11 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
       sig <- signatureUnsubstituted
       converter = ArTypeSystemConverter[newSigContext.TTypeWrapper](context)(newSigContext.typeWrapperInstances)
       ownerSig <- owner match {
-        case ArMethod.ClassOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
-        case ArMethod.ClassObjectOwner(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
-        case ArMethod.TraitOwner(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
-        case ArMethod.TraitObjectOwner(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
-        case ArMethod.DataCtorOwner(dataCtor) => dataCtor.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+        case MethodOwner.ByClass(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+        case MethodOwner.ByClassObject(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+        case MethodOwner.ByTrait(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+        case MethodOwner.ByTraitObject(ownerTrait) => ownerTrait.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
+        case MethodOwner.ByDataCtor(dataCtor) => dataCtor.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }
       }
 
       convSig <- sig.convertTypeSystem(newSigContext)(converter)
@@ -57,26 +59,11 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
 
   val payload: TPayloadSpec[Comp[TMethodImplementation], TMethodMetadata]
 
-  override def hashCode(): Int = descriptor.hashCode()
+  override def hashCode(): Int = id.hashCode()
 
   override def equals(o: Any): Boolean = o match {
-    case other: ArMethod[_, _] => other.descriptor === descriptor
+    case other: ArMethod[_, _] => other.id === id
     case _ => false
   }
-
-  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
-  override def toString: String =
-    descriptor.toString
-}
-
-object ArMethod {
-
-  sealed trait Owner[TContext <: Context with Singleton, TPayloadSpec[_, _]]
-  final case class ClassOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerClass: ArClass[TContext, TPayloadSpec]) extends Owner[TContext, TPayloadSpec]
-  final case class ClassObjectOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerClass: ArClass[TContext, TPayloadSpec]) extends Owner[TContext, TPayloadSpec]
-  final case class TraitOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerTrait: ArTrait[TContext, TPayloadSpec]) extends Owner[TContext, TPayloadSpec]
-  final case class TraitObjectOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerTrait: ArTrait[TContext, TPayloadSpec]) extends Owner[TContext, TPayloadSpec]
-  final case class DataCtorOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]](dataCtor: DataConstructor[TContext, TPayloadSpec]) extends Owner[TContext, TPayloadSpec]
-
 }
 

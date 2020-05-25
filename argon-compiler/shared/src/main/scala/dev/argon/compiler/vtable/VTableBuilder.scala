@@ -94,8 +94,8 @@ object VTableBuilder {
                 .filter { case (slotMethod, _) =>
                   slotMethod.value.isVirtual &&
                     !slotMethod.value.isFinal &&
-                    slotMethod.value.descriptor.name === method.name &&
-                    slotMethod.value.descriptor.name =!= MemberName.Unnamed
+                    slotMethod.value.name === method.name &&
+                    slotMethod.value.name =!= MemberName.Unnamed
                 }
                 .toVector
                 .filterA { case (slotMethod, VTableEntry(slotSig, _, _)) => signatureMatches(method.method)(slotMethod.value, slotSig) }
@@ -128,7 +128,7 @@ object VTableBuilder {
       private def findAllBaseClasses(baseClass: Option[TClassType]): Comp[Vector[AbsRef[context.type, ArClass]]] = {
 
         def addClass(acc: Vector[AbsRef[context.type, ArClass]], baseClass: TClassType): Comp[Vector[AbsRef[context.type, ArClass]]] =
-          if(acc.exists { _.value.descriptor === baseClass.arClass.value.descriptor })
+          if(acc.exists { _.value.id === baseClass.arClass.value.id })
             acc.pure[Comp]
           else
             for {
@@ -143,7 +143,7 @@ object VTableBuilder {
       private def findAllBaseTraits(baseClasses: Vector[AbsRef[context.type, ArClass]], baseTraits: Vector[TTraitType]): Comp[Vector[AbsRef[context.type, ArTrait]]] = {
 
         def addTrait(acc: Vector[AbsRef[context.type, ArTrait]], baseTrait: TTraitType): Comp[Vector[AbsRef[context.type, ArTrait]]] =
-          if(acc.exists { _.value.descriptor === baseTrait.arTrait.value.descriptor })
+          if(acc.exists { _.value.id === baseTrait.arTrait.value.id })
             acc.pure[Comp]
           else
             for {

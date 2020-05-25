@@ -37,19 +37,19 @@ sealed abstract class Substitutions[Wrap[+_]: Monad] {
 
   def substLocalVariable(localVariable: LocalVariable[context.type, Wrap]): LocalVariable[context.type, Wrap] =
     localVariable match {
-      case LocalVariable(descriptor, name, mutability, varType) => LocalVariable(descriptor, name, mutability, substWrapExpr(varType))
+      case LocalVariable(id, owner, name, mutability, varType) => LocalVariable(id, owner, name, mutability, substWrapExpr(varType))
     }
 
   def substParamVariable(paramVariable: ParameterVariable[context.type, Wrap]): ParameterVariable[context.type, Wrap] =
     paramVariable match {
-      case ParameterVariable(descriptor, name, mutability, varType) => ParameterVariable(descriptor, name, mutability, substWrapExpr(varType))
+      case ParameterVariable(id, owner, name, mutability, varType) => ParameterVariable(id, owner, name, mutability, substWrapExpr(varType))
     }
 
   def substVariable(variable: Variable[context.type, Wrap]): Variable[context.type, Wrap] =
     variable match {
       case variable: LocalVariable[context.type, Wrap] => substLocalVariable(variable)
       case variable: ParameterVariable[context.type, Wrap] => substParamVariable(variable)
-      case FieldVariable(descriptor, ownerClass, name, mutability, varType) => FieldVariable(descriptor, ownerClass, name, mutability, substWrapExpr(varType))
+      case FieldVariable(owner, name, mutability, varType) => FieldVariable(owner, name, mutability, substWrapExpr(varType))
     }
 
   def substParamElement(paramElem: ParameterElement[context.type, Wrap]): ParameterElement[context.type, Wrap] =
@@ -89,7 +89,7 @@ sealed abstract class Substitutions[Wrap[+_]: Monad] {
       case LoadLambda(argVariable, body) => fromSimpleType(LoadLambda(substLocalVariable(argVariable), substWrapExpr(body)))
       case LoadTuple(values) => fromSimpleType(LoadTuple(values.map { case TupleElement(value) => TupleElement(substWrapExpr(value)) }))
       case LoadUnit(exprType) => fromSimpleType(LoadUnit(substWrapExpr(exprType)))
-      case LoadVariable(variable) if variable.descriptor === oldVariable.descriptor => replacement
+      case LoadVariable(variable) if variable === oldVariable => replacement
       case LoadVariable(variable) => fromSimpleType(LoadVariable(substVariable(variable)))
       case MethodCall(method, instance, args, returnType) =>
         fromSimpleType(MethodCall(method, substWrapExpr(instance), args.map(substWrapExpr), substWrapExpr(returnType)))

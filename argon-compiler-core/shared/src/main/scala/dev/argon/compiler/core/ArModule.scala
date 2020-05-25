@@ -7,7 +7,7 @@ import dev.argon.util.NamespacePath
 trait ArModule[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   val context: TContext
 
-  val descriptor: ModuleDescriptor
+  val descriptor: ModuleId
   val globalNamespace: Comp[Namespace[context.type, TPayloadSpec]]
   val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]]
 }

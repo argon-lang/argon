@@ -13,12 +13,13 @@ import dev.argon.util.FileID
 import shapeless.Nat
 import zio.{IO, ZIO}
 
-abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] extends CallableClass {
   val context: TContext
   val contextProof: context.type Is TContext
   import context._, signatureContext.Signature
 
-  val descriptor: ClassDescriptor
+  val id: ClassId
+  val owner: ClassOwner
   val fileId: FileID
   val classMessageSource: CompilationMessageSource
 
@@ -35,10 +36,10 @@ abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
 
   val payload: TPayloadSpec[Unit, TClassMetadata]
 
-  override def hashCode(): Int = descriptor.hashCode()
+  override def hashCode(): Int = id.hashCode()
 
   override def equals(o: Any): Boolean = o match {
-    case other: ArClass[_, _] => other.descriptor === descriptor
+    case other: ArClass[_, _] => other.id === id
     case _ => false
   }
 }
@@ -46,7 +47,7 @@ abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
 object ArClass {
 
   type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
-    ArClass[TContext, TPayloadSpec] { val descriptor: ClassDescriptor.InNamespace }
+    ArClass[TContext, TPayloadSpec] { val owner: ClassOwner.ByNamespace }
 
   sealed trait ResultInfo[TContext <: Context with Singleton, Wrap[+_]] {
     def baseTypes: Comp[BaseTypeInfoClass[TContext, Wrap]]

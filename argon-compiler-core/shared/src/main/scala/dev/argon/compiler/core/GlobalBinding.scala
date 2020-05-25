@@ -12,19 +12,19 @@ object GlobalBinding {
     extends GlobalBinding[TContext, TPayloadSpec]
 
   final case class GlobalClass[TContext <: Context with Singleton, TPayloadSpec[_, _]]
-  (name: GlobalName, access: AccessModifierGlobal, arClass: ArClass[TContext, TPayloadSpec] { val descriptor: ClassDescriptor.InNamespace })
+  (name: GlobalName, access: AccessModifierGlobal, arClass: ArClass.InNamespace[TContext, TPayloadSpec])
     extends NonNamespace[TContext, TPayloadSpec]
 
   final case class GlobalTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]]
-  (name: GlobalName, access: AccessModifierGlobal, arTrait: ArTrait[TContext, TPayloadSpec] { val descriptor: TraitDescriptor.InNamespace })
+  (name: GlobalName, access: AccessModifierGlobal, arTrait: ArTrait.InNamespace[TContext, TPayloadSpec])
     extends NonNamespace[TContext, TPayloadSpec]
 
   final case class GlobalFunction[TContext <: Context with Singleton, TPayloadSpec[_, _]]
-  (name: GlobalName, access: AccessModifierGlobal, func: ArFunc[TContext, TPayloadSpec] { val descriptor: FuncDescriptor.InNamespace })
+  (name: GlobalName, access: AccessModifierGlobal, func: ArFunc.InNamespace[TContext, TPayloadSpec])
     extends NonNamespace[TContext, TPayloadSpec]
 
   final case class GlobalDataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]]
-  (name: GlobalName, access: AccessModifierGlobal, dataCtor: DataConstructor[TContext, TPayloadSpec] { val descriptor: DataConstructorDescriptor.InNamespace })
+  (name: GlobalName, access: AccessModifierGlobal, dataCtor: DataConstructor.InNamespace[TContext, TPayloadSpec])
     extends NonNamespace[TContext, TPayloadSpec]
 
 

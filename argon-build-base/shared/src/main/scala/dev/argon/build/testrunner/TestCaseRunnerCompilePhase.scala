@@ -5,7 +5,7 @@ import java.io.IOException
 import dev.argon.io.{Path, ZipFileReader}
 import dev.argon.build.BuildProcess
 import dev.argon.compiler._
-import dev.argon.compiler.core.ModuleDescriptor
+import dev.argon.compiler.core.ModuleId
 import cats._
 import cats.data.NonEmptyList
 import zio._

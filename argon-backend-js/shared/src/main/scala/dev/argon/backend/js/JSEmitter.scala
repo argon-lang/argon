@@ -116,7 +116,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
       case binding: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier] => Vector(binding)
     }
 
-  private def coreLibExport(moduleDescriptor: ModuleDescriptor, name: String): JSExpression =
+  private def coreLibExport(moduleDescriptor: ModuleId, name: String): JSExpression =
     if(moduleDescriptor.name === LookupNames.argonCoreLib)
       JSIdentifier(name)
     else
@@ -959,7 +959,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
     }
   }
 
-  def getMethodObject(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): Comp[JSExpression] = for {
+  def getMethodObject(moduleDescriptor: ModuleId)(method: AbsRef[context.type, ArMethod]): Comp[JSExpression] = for {
     sig <- method.value.signatureUnsubstituted
     ownerObj <- getClassLikeJSObject(moduleDescriptor, method.value.owner)
   } yield JSPropertyAccessBracket(
@@ -970,7 +970,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
     JSString(DescriptorId.forMethod(method.value.descriptor, ErasedSignature.fromSignature(context)(sig)))
   )
 
-  def getMethodSymbol(moduleDescriptor: ModuleDescriptor)(method: AbsRef[context.type, ArMethod]): Comp[JSExpression] = for {
+  def getMethodSymbol(moduleDescriptor: ModuleId)(method: AbsRef[context.type, ArMethod]): Comp[JSExpression] = for {
     methodObj <- getMethodObject(moduleDescriptor)(method)
   } yield JSPropertyAccessDot(
     methodObj,
@@ -992,7 +992,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
     }
       .map { index => JSIdentifier(s"local_${index.toString}") }
 
-  private def getFieldVariableExpr(moduleDescriptor: ModuleDescriptor, variable: context.typeSystem.TFieldVariable): Comp[JSExpression] = for {
+  private def getFieldVariableExpr(moduleDescriptor: ModuleId, variable: context.typeSystem.TFieldVariable): Comp[JSExpression] = for {
     sig <- variable.ownerClass.value.signature
     erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
   } yield JSPropertyAccessBracket(
@@ -1009,7 +1009,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
     )
   )
 
-  private def getClassJSObject(moduleDescriptor: ModuleDescriptor, descriptor: ClassDescriptor, sig: ErasedSignature.ParameterOnlySignature[context.type]): JSExpression = {
+  private def getClassJSObject(moduleDescriptor: ModuleId, descriptor: ClassDescriptor, sig: ErasedSignature.ParameterOnlySignature[context.type]): JSExpression = {
     val classModule = getParamOwnerModule(descriptor)
     val classesObj =
       if(moduleDescriptor === classModule)
@@ -1023,7 +1023,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
     JSPropertyAccessBracket(classesObj, JSString(DescriptorId.forClass(descriptor, sig)))
   }
 
-  private def getTraitJSObject(moduleDescriptor: ModuleDescriptor, descriptor: TraitDescriptor, sig: ErasedSignature.ParameterOnlySignature[context.type]): JSExpression = {
+  private def getTraitJSObject(moduleDescriptor: ModuleId, descriptor: TraitDescriptor, sig: ErasedSignature.ParameterOnlySignature[context.type]): JSExpression = {
     val traitModule = getParamOwnerModule(descriptor)
     val traitsObj =
       if(moduleDescriptor === traitModule)
@@ -1038,7 +1038,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
   }
 
 
-  private def getDataCtorJSObject(moduleDescriptor: ModuleDescriptor, descriptor: DataConstructorDescriptor, sig: ErasedSignature.ParameterOnlySignature[context.type]): JSExpression = {
+  private def getDataCtorJSObject(moduleDescriptor: ModuleId, descriptor: DataConstructorDescriptor, sig: ErasedSignature.ParameterOnlySignature[context.type]): JSExpression = {
     val dataCtorModule = getParamOwnerModule(descriptor)
     val dataCtorsObj =
       if(moduleDescriptor === dataCtorModule)
@@ -1052,7 +1052,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
     JSPropertyAccessBracket(dataCtorsObj, JSString(DescriptorId.forDataConstructor(descriptor, sig)))
   }
 
-  private def getClassLikeJSObject[TPayloadSpec[_, _]](moduleDescriptor: ModuleDescriptor, methodOwner: ArMethod.Owner[context.type, TPayloadSpec]): Comp[JSExpression] =
+  private def getClassLikeJSObject[TPayloadSpec[_, _]](moduleDescriptor: ModuleId, methodOwner: ArMethod.Owner[context.type, TPayloadSpec]): Comp[JSExpression] =
     methodOwner match {
       case ArMethod.TraitOwner(ownerTrait) => ownerTrait.signature.map { sig => getTraitJSObject(moduleDescriptor, ownerTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)) }
       case ArMethod.TraitObjectOwner(ownerTrait) => ownerTrait.signature.map { sig => JSPropertyAccessDot(getTraitJSObject(moduleDescriptor, ownerTrait.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)), JSIdentifier("static")) }
@@ -1061,7 +1061,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
       case ArMethod.DataCtorOwner(dataCtor) => dataCtor.signature.map { sig => getDataCtorJSObject(moduleDescriptor, dataCtor.descriptor, ErasedSignature.fromSignatureParameters(context)(sig)) }
     }
 
-  private def getParamOwnerModule(descriptor: ParameterOwnerDescriptor): ModuleDescriptor =
+  private def getParamOwnerModule(descriptor: ParameterOwnerDescriptor): ModuleId =
     descriptor.moduleDescriptor
 }
 

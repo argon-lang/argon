@@ -5,7 +5,7 @@ import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
 
 trait ModuleMetadata[-TContext <: Context] {
-  val descriptor: ModuleDescriptor
-  val referencedModules: Vector[ModuleDescriptor]
+  val descriptor: ModuleId
+  val referencedModules: Vector[ModuleId]
   def loadReference(context: TContext)(referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]]): Comp[ArModule[context.type, ReferencePayloadSpecifier]]
 }

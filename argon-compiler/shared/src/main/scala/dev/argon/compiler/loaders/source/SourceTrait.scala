@@ -8,7 +8,7 @@ import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.parser.TraitDeclarationStmt
-import dev.argon.util.{FileID, SourceLocation, ValueCache, WithSource}
+import dev.argon.util.{FileID, SourceLocation, UniqueIdentifier, ValueCache, WithSource}
 import cats.{Id => _, _}
 import cats.implicits._
 import cats.evidence.Is
@@ -33,11 +33,13 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
   (context2: Context)
   (env: EnvCreator[context2.type])
   (stmt: TraitDeclarationStmt)
-  (desc: TraitDescriptor)
-  : Comp[ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type }] = {
+  (traitOwner: TraitOwner)
+  : Comp[ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val owner: traitOwner.type }] = {
     import context2._
     
     for {
+      uniqId <- UniqueIdentifier.make
+
       sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[ArTrait.ResultInfo, _ <: Nat]]
       sigResultCache <- ValueCache.make[ErrorList, BaseTypeInfoTrait[context2.type, Id]]
 
@@ -56,19 +58,26 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
 
       override val contextProof: context.type Is context2.type = Is.refl
 
-      override val descriptor: desc.type = desc
+
+      override val id: TraitId = TraitId(uniqId)
+      override val owner: traitOwner.type = traitOwner
+
+      override def ownerModuleId: ModuleId = getTraitModule(this)
+
       override val fileId: FileID = env.fileSpec.fileID
 
       override val isSealed: Boolean = stmt.modifiers.exists {
         case WithSource(parser.SealedModifier, _) => true
         case _ => false
       }
+      private def localVarOwner = LocalVariableOwner.ByTrait(AbsRef(this))
+      private def paramVarOwner = ParameterVariableOwner.ByTrait(AbsRef(this))
 
       override lazy val signature: Comp[Signature[ArTrait.ResultInfo, _ <: Nat]] =
         sigCache.get(
           SourceSignatureCreator.fromParameters[ArTrait.ResultInfo](context2)(
-            env(context)(EffectInfo.pure, descriptor)
-          )(descriptor)(stmt.parameters)(resultCreator(context)(stmt.baseType, sigResultCache)(this))
+            env(context)(EffectInfo.pure, id, localVarOwner)
+          )(paramVarOwner)(stmt.parameters)(resultCreator(context)(stmt.baseType, sigResultCache)(this))
         )
 
       private val paramsEnv: Comp[EnvCreator[context.type]] =
@@ -109,8 +118,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
               val memberName = MethodName.fromMethodNameSpecifier(method.value.name)
 
               paramsEnv.flatMap { env2 =>
-                val desc = MethodDescriptor(descriptor, i, memberName)
-                SourceMethod(context)(env2)(method.value, method.location)(desc)(ArMethod.TraitOwner(this))
+                SourceMethod(context)(env2)(method.value, method.location)(MethodOwner.ByTrait(this))
                   .map(MethodBinding(memberName, i, modifiers, _))
               }
             }
@@ -124,8 +132,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
               val memberName = MethodName.fromMethodNameSpecifier(method.value.name)
 
               paramsEnv.flatMap { env2 =>
-                val desc = MethodDescriptor(TraitObjectDescriptor(descriptor), i, memberName)
-                SourceMethod(context)(env2)(method.value, method.location)(desc)(ArMethod.TraitObjectOwner(this))
+                SourceMethod(context)(env2)(method.value, method.location)(MethodOwner.ByTraitObject(this))
                   .map(MethodBinding(memberName, i, modifiers, _))
               }
             }

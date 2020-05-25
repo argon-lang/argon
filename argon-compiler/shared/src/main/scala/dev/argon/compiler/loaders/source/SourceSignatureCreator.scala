@@ -18,7 +18,7 @@ object SourceSignatureCreator {
   def fromParameters[TResult[TContext <: Context with Singleton, Wrap[+_]] : SignatureResultConverter]
   (context: Context)
   (env: ExpressionConverter.Env[context.type, context.scopeContext.Scope])
-  (paramOwner: ParameterOwnerDescriptor)
+  (paramOwner: ParameterVariableOwner[context.type])
   (params: Vector[WithSource[parser.FunctionParameterList]])
   (resultCreator: ResultCreator.Aux[context.type, TResult])
   : Comp[context.signatureContext.Signature[TResult, _ <: Nat]] = {
@@ -42,7 +42,7 @@ object SourceSignatureCreator {
                     SignatureParameters[TResult, len](
                       Parameter(
                         ParameterStyle.fromParser(listType),
-                        ParameterVariable[context.type, Id](ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, unitType),
+                        ParameterVariable[context.type, Id](paramOwner, paramIndex, VariableName.Unnamed, Mutability.NonMutable, unitType),
                         Vector()
                       ),
                       restSig
@@ -69,7 +69,7 @@ object SourceSignatureCreator {
             .flatMap {
               case NonEmptyList((t, name), Nil) =>
 
-                val paramVar = ParameterVariable[context.type, Id](ParameterDescriptor(paramOwner, paramIndex), VariableName.Normal(name), Mutability.NonMutable, t)
+                val paramVar = ParameterVariable[context.type, Id](paramOwner, paramIndex, VariableName.Normal(name), Mutability.NonMutable, t)
 
                 impl(env.copy(scope = env.scope.addVariable(paramVar)))(tail)(paramIndex + 1)
                   .map {
@@ -90,7 +90,7 @@ object SourceSignatureCreator {
                   elems.map { case (t, _) => TupleElement[context.type, Id](t) }
                 ))
 
-                val paramVar = ParameterVariable[context.type, Id](ParameterDescriptor(paramOwner, paramIndex), VariableName.Unnamed, Mutability.NonMutable, paramType)
+                val paramVar = ParameterVariable[context.type, Id](paramOwner, paramIndex, VariableName.Unnamed, Mutability.NonMutable, paramType)
 
                 val paramElems = elems.toList.toVector.zipWithIndex.map { case ((t, name), i) => ParameterElement[context.type, Id](paramVar, VariableName.Normal(name), t, i) }
 

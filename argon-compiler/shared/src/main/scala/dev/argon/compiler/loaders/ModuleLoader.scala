@@ -30,11 +30,11 @@ object ModuleLoader {
     type PayloadResult = ArModule[context.type, ReferencePayloadSpecifier]
 
     val dependencyTreeOps
-    : DependencyTreeOperations[Comp, ModInfo, ModuleDescriptor, PayloadResult, Either[CompilationError, ?]] =
-      new DependencyTreeOperations[Comp, ModInfo, ModuleDescriptor, PayloadResult, Either[CompilationError, ?]] {
-        override def getItemKey(item: ModInfo): ModuleDescriptor = item.descriptor
+    : DependencyTreeOperations[Comp, ModInfo, ModuleId, PayloadResult, Either[CompilationError, ?]] =
+      new DependencyTreeOperations[Comp, ModInfo, ModuleId, PayloadResult, Either[CompilationError, ?]] {
+        override def getItemKey(item: ModInfo): ModuleId = item.descriptor
 
-        override def getItemDependencies(item: ModInfo): Vector[ModuleDescriptor] =
+        override def getItemDependencies(item: ModInfo): Vector[ModuleId] =
           item.referencedModules
 
         override def loadItem(item: ModInfo, dependencies: Vector[PayloadResult]): Comp[PayloadResult] =
@@ -43,7 +43,7 @@ object ModuleLoader {
         override def circularReferenceHandler(item: ModInfo): Either[CompilationError, Nothing] =
           Left(CompilationError.CircularDependencyLoadingModule(CompilationMessageSource.ReferencedModule(item.descriptor)))
 
-        override def missingDependencyHandler(item: ModInfo, missingDepKey: ModuleDescriptor): Either[CompilationError, Nothing] =
+        override def missingDependencyHandler(item: ModInfo, missingDepKey: ModuleId): Either[CompilationError, Nothing] =
           Left(CompilationError.ModuleDependencyNotFound(missingDepKey, CompilationMessageSource.ReferencedModule(item.descriptor)))
 
       }
@@ -51,7 +51,7 @@ object ModuleLoader {
     def loadModuleRefFromData
     (refDataPairs: Vector[ModInfo])
     : RComp[ModuleLoad[I, TContext], Vector[Either[CompilationError, PayloadResult]]] =
-      loadDependencies[Comp, ModInfo, ModuleDescriptor, PayloadResult, Either[CompilationError, *]](dependencyTreeOps)(refDataPairs)
+      loadDependencies[Comp, ModInfo, ModuleId, PayloadResult, Either[CompilationError, *]](dependencyTreeOps)(refDataPairs)
 
 
 

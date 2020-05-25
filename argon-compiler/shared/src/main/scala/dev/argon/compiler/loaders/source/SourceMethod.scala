@@ -18,12 +18,12 @@ object SourceMethod {
   (context2: Context)
   (env: EnvCreator[context2.type])
   (stmt: parser.MethodDeclarationStmt, location: SourceLocation)
-  (desc: MethodDescriptor)
-  (methodOwner: ArMethod.Owner[context2.type, DeclarationPayloadSpecifier])
+  (methodOwner: MethodOwner[context2.type, DeclarationPayloadSpecifier])
   : Comp[ArMethod[context2.type, DeclarationPayloadSpecifier]] = {
     import context2._
     
     for {
+      uniqId <- UniqueIdentifier.make
       sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[FunctionResultInfo, _ <: Nat]]
       implCache <- ValueCache.make[ErrorList, context2.TMethodImplementation]
     } yield new ArMethod[context2.type, DeclarationPayloadSpecifier] {
@@ -32,7 +32,9 @@ object SourceMethod {
 
       import context.scopeContext.ScopeExtensions
 
-      override val descriptor: MethodDescriptor = desc
+
+      override val id: MethodId = MethodId(uniqId)
+      override val name: MethodName = MethodName.fromMethodNameSpecifier(stmt.name)
       override val fileId: FileID = env.fileSpec.fileID
 
 
@@ -59,13 +61,16 @@ object SourceMethod {
       override val effectInfo: EffectInfo = EffectInfo(stmt.purity)
 
 
-      override val owner: ArMethod.Owner[context.type, DeclarationPayloadSpecifier] = methodOwner
+      override val owner: MethodOwner[context.type, DeclarationPayloadSpecifier] = methodOwner
+
+      private def localVarOwner = LocalVariableOwner.ByMethod(AbsRef(this))
+      private def paramVarOwner = ParameterVariableOwner.ByMethod(AbsRef(this))
 
       override lazy val signatureUnsubstituted: Comp[context.signatureContext.Signature[FunctionResultInfo, _ <: Nat]] =
         sigCache.get(
           SourceSignatureCreator.fromParameters[FunctionResultInfo](context2)(
-            env(context)(effectInfo, descriptor)
-          )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType))
+            env(context)(effectInfo, id, localVarOwner)
+          )(paramVarOwner)(stmt.parameters)(resultCreator(stmt.returnType))
         )
 
 
@@ -82,7 +87,7 @@ object SourceMethod {
               case Some(body) =>
                 for {
                   sig <- signatureUnsubstituted
-                  env2 = env(context)(effectInfo, descriptor)
+                  env2 = env(context)(effectInfo, id, localVarOwner)
                   env3 = env2.copy(scope = env2.scope.addParameters(
                     sig.unsubstitutedParameters
                   ))
@@ -90,7 +95,7 @@ object SourceMethod {
                 } yield context.createExprMethodImplementation(expr)
 
               case None =>
-                Compilation.forErrors(CompilationError.NonAbstractMethodNotImplemented(descriptor, CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                Compilation.forErrors(CompilationError.NonAbstractMethodNotImplemented(AbsRef(this), CompilationMessageSource.SourceFile(env.fileSpec, location)))
             }
         )
 

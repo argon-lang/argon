@@ -11,8 +11,7 @@ import shapeless.ops.nat.{LT, Pred, ToInt}
 import shapeless.{Nat, Sized, Succ, _0}
 import zio.{IO, ZIO}
 
-trait SignatureContext
-{
+trait SignatureContext {
   val context: Context
   type TTypeWrapper[+_]
   implicit val typeWrapperInstances: WrapperInstance[TTypeWrapper]
@@ -155,7 +154,7 @@ trait SignatureContext
         case LoadLambda(argVariable, body) => checkVariable(argVariable) || checkWrapExpr(body)
         case LoadTuple(values) => values.exists { case TupleElement(value) => checkWrapExpr(value) }
         case LoadUnit(_) => false
-        case LoadVariable(variable) if variable.descriptor === parameter.paramVar.descriptor => true
+        case LoadVariable(variable) if variable === parameter.paramVar => true
         case LoadVariable(variable) => checkVariable(variable)
         case MethodCall(_, instance, args, _) =>
           checkWrapExpr(instance) || args.exists(checkWrapExpr)

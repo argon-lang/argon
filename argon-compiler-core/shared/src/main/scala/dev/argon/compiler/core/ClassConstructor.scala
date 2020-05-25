@@ -9,13 +9,13 @@ import dev.argon.util.FileID
 import shapeless.Nat
 import zio.IO
 
-trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] {
+trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] extends CallableClassConstructor {
   val context: TContext
   import context._, signatureContext.Signature
 
   val effectInfo: EffectInfo
 
-  val descriptor: ClassConstructorDescriptor
+  val id: ClassConstructorId
   val fileId: FileID
 
   val ownerClass: ArClass[context.type, TPayloadSpec]

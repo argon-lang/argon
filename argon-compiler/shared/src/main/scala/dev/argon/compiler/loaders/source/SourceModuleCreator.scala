@@ -40,7 +40,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
     } yield new ArModule[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
 
-      override val descriptor: ModuleDescriptor = ModuleDescriptor(input.options.moduleName)
+      override val descriptor: ModuleId = ModuleId(input.options.moduleName)
       override val globalNamespace: Comp[Namespace[context.type, DeclarationPayloadSpecifier]] =
         globalNamespaceCache.get(
           NamespaceBuilder.createNamespace[ResourceReader[I] with SourceParser, context.type, DeclarationPayloadSpecifier](
@@ -81,10 +81,11 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
       val referencedModules2 = referencedModules
 
       final class EnvCreatorInstance(envFileSpec: FileSpec, scope: context2.scopeContext.Scope) extends EnvCreator[context2.type] {
-        override def apply(context: context2.type)(effectInfo: EffectInfo, descriptor: VariableOwnerDescriptor): ExpressionConverter.Env[context.type, context.scopeContext.Scope] =
+        override def apply(context: context2.type)(effectInfo: EffectInfo, callerId: CallerId, varOwner: LocalVariableOwner[context.type]): ExpressionConverter.Env[context.type, context.scopeContext.Scope] =
           ExpressionConverter.Env(
             effectInfo = effectInfo,
-            descriptor = descriptor,
+            callerId = callerId,
+            variableOwner = varOwner,
             fileSpec = fileSpec,
             currentModule = currentModule,
             referencedModules = referencedModules,
@@ -147,7 +148,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
     import context._
 
     val env = envF(sourceAST.fileSpec)
-    val moduleDescriptor = ModuleDescriptor(options.moduleName)
+    val moduleId = ModuleId(options.moduleName)
 
     def createBinding(name: Option[String], modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
       parseGlobalAccessModifier(sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
@@ -162,39 +163,40 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
     sourceAST.statement.value match {
       case traitDeclarationStmt @ parser.TraitDeclarationStmt(_, traitName, _, _, _, modifiers) =>
         createBinding(traitName, modifiers) { (globalName, accessModifier) =>
-          val desc = TraitDescriptor.InNamespace(moduleDescriptor, createId(sourceAST), sourceAST.currentNamespace, globalName)
+          val owner = TraitOwner.ByNamespace(moduleId, sourceAST.currentNamespace, globalName)
 
           for {
-            arTrait <- SourceTrait(context)(env)(traitDeclarationStmt)(desc)
+            arTrait <- SourceTrait(context)(env)(traitDeclarationStmt)(owner)
           } yield GlobalBinding.GlobalTrait(globalName, accessModifier, arTrait)
         }
 
       case classDeclarationStmt @ parser.ClassDeclarationStmt(_, WithSource(className, _), _, _, _, modifiers) =>
         createBinding(className, modifiers) { (globalName, accessModifier) =>
-          val desc = ClassDescriptor.InNamespace(moduleDescriptor, createId(sourceAST), sourceAST.currentNamespace, globalName)
+          val owner = ClassOwner.ByNamespace(moduleId, sourceAST.currentNamespace, globalName)
 
           for {
-            arClass <- SourceClass(context)(env)(classDeclarationStmt)(desc)
+            arClass <- SourceClass(context)(env)(classDeclarationStmt)(owner)
           } yield GlobalBinding.GlobalClass(globalName, accessModifier, arClass)
         }
 
       case funcDeclarationStmt @ parser.FunctionDeclarationStmt(funcName, _, _, _, modifiers, _) =>
         createBinding(funcName, modifiers) { (globalName, accessModifier) =>
-          val desc = FuncDescriptor.InNamespace(moduleDescriptor, createId(sourceAST), sourceAST.currentNamespace, globalName)
+          val owner = FunctionOwner.ByNamespace(moduleId, sourceAST.currentNamespace, globalName)
 
-          GlobalBinding.GlobalFunction(
+          for {
+            arFunc <- SourceFunction(context)(env)(funcDeclarationStmt)(owner)
+          } yield GlobalBinding.GlobalFunction(
             globalName, accessModifier,
-            SourceFunction(context)(env)(funcDeclarationStmt)(desc)
-          ).pure[Comp]
+            arFunc
+          )
         }
 
       case dataCtorDeclarationStmt @ parser.DataConstructorDeclarationStmt(WithSource(name, _), _, _, _, modifiers) =>
         createBinding(name, modifiers) { (globalName, accessModifier) =>
-          val desc = DataConstructorDescriptor.InNamespace(moduleDescriptor, createId(sourceAST), sourceAST.currentNamespace, globalName)
-
+          val owner = DataConstructorOwner.ByNamespace(moduleId, sourceAST.currentNamespace, globalName)
 
           for {
-            ctor <- SourceDataConstructor(context)(env)(dataCtorDeclarationStmt)(desc)
+            ctor <- SourceDataConstructor(context)(env)(dataCtorDeclarationStmt)(owner)
           } yield GlobalBinding.GlobalDataConstructor(globalName, accessModifier, ctor)
         }
 

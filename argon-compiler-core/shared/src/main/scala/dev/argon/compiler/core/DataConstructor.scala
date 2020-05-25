@@ -13,12 +13,13 @@ import shapeless.Nat
 import zio.IO
 
 
-trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] extends CallableDataConstructor {
   val context: TContext
   val contextProof: context.type Is TContext
   import context._, signatureContext.Signature
 
-  val descriptor: DataConstructorDescriptor
+  val id: DataConstructorId
+  val owner: DataConstructorOwner
   val fileId: FileID
   val ctorMessageSource: CompilationMessageSource
 
@@ -32,7 +33,7 @@ trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
 object DataConstructor {
 
   type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
-    DataConstructor[TContext, TPayloadSpec] { val descriptor: DataConstructorDescriptor.InNamespace }
+    DataConstructor[TContext, TPayloadSpec] { val owner: DataConstructorOwner.ByNamespace }
 
   final case class ResultInfo[TContext <: Context with Singleton, Wrap[+_]](instanceType: TraitType[TContext, Wrap])
 

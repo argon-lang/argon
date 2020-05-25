@@ -115,7 +115,7 @@ trait TypeSystem {
         notSubType
 
     def isSubTrait(a: TTraitType)(b: TTraitType): Comp[Option[TSubTypeInfo]] =
-      if(a.arTrait.value.descriptor === b.arTrait.value.descriptor)
+      if(a.arTrait.value.id === b.arTrait.value.id)
         compareArguments(fromSimpleType(a), fromSimpleType(b))(a.args)(b.args)
       else
         for {
@@ -126,7 +126,7 @@ trait TypeSystem {
         } yield result
 
     def isSubClass(a: TClassType)(b: TClassType): Comp[Option[TSubTypeInfo]] =
-      if(a.arClass.value.descriptor === b.arClass.value.descriptor)
+      if(a.arClass.value.id === b.arClass.value.id)
         compareArguments(fromSimpleType(a), fromSimpleType(b))(a.args)(b.args)
       else
         for {
@@ -149,7 +149,7 @@ trait TypeSystem {
     } yield result
 
     def isSameDataCtor(a: TDataConstructorType)(b: TDataConstructorType): Comp[Option[TSubTypeInfo]] =
-      if(a.ctor.value.descriptor === b.ctor.value.descriptor)
+      if(a.ctor.value.id === b.ctor.value.id)
         compareArguments(fromSimpleType(a), fromSimpleType(b))(a.args)(b.args)
       else
         Option.empty[TSubTypeInfo].pure[Comp]
@@ -319,7 +319,7 @@ trait TypeSystem {
                   } }
             }
 
-        case (LoadVariable(varA), LoadVariable(varB)) if varA.descriptor === varB.descriptor =>
+        case (LoadVariable(varA), LoadVariable(varB)) if varA === varB =>
           SubTypeInfo(fromSimpleType(a), fromSimpleType(b), Vector.empty).pure[Option].pure[Comp]
 
         case (FunctionObjectCall(functionA, argA, _), FunctionObjectCall(functionB, argB, _)) =>

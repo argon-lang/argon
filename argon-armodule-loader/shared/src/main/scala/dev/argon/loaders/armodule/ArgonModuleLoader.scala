@@ -46,10 +46,10 @@ object ArgonModuleLoader {
       }
 
     private final case class ArModuleMetadata(zip: ZipFileReader[Any, ErrorList], metadata: Metadata) extends ModuleMetadata[TContext] {
-      override val descriptor: ModuleDescriptor = ModuleDescriptor(metadata.name)
-      override val referencedModules: Vector[ModuleDescriptor] =
+      override val descriptor: ModuleId = ModuleId(metadata.name)
+      override val referencedModules: Vector[ModuleId] =
         metadata.references.map {
-          case ArgonModule.ModuleReference(name, _) => ModuleDescriptor(name)
+          case ArgonModule.ModuleReference(name, _) => ModuleId(name)
         }
 
       override def loadReference(context: TContext)(referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]]): Comp[ArModule[context.type, ReferencePayloadSpecifier]] =
@@ -67,7 +67,7 @@ object ArgonModuleLoader {
       val context2: context.type = context
       import context.{typeSystem, signatureContext}, typeSystem.{ context => _, _ }, signatureContext.{ context => _, TTypeWrapper => _, typeWrapperInstances => _, _ }
 
-      val currentModuleDescriptor = ModuleDescriptor(metadata.name)
+      val currentModuleDescriptor = ModuleId(metadata.name)
 
 
       trait ModuleCreator {
@@ -154,7 +154,7 @@ object ArgonModuleLoader {
               case _ => ???
             }
 
-          private def parseTraitDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.TraitDescriptor): Option[Either[TraitDescriptor, TraitDescriptor.InNamespace]] =
+          private def parseTraitDescriptor(id: Int)(module: ModuleId)(desc: ArgonModule.TraitDescriptor): Option[Either[TraitDescriptor, TraitDescriptor.InNamespace]] =
             desc.descriptor match {
               case ArgonModule.TraitDescriptor.Descriptor.InNamespace(
                 ArgonModule.InNamespaceDescriptor(
@@ -169,7 +169,7 @@ object ArgonModuleLoader {
                 None
             }
 
-          private def parseClassDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.ClassDescriptor): Option[Either[ClassDescriptor, ClassDescriptor.InNamespace]] =
+          private def parseClassDescriptor(id: Int)(module: ModuleId)(desc: ArgonModule.ClassDescriptor): Option[Either[ClassDescriptor, ClassDescriptor.InNamespace]] =
             desc.descriptor match {
               case ArgonModule.ClassDescriptor.Descriptor.InNamespace(
                 ArgonModule.InNamespaceDescriptor(
@@ -184,7 +184,7 @@ object ArgonModuleLoader {
                 None
             }
 
-          private def parseDataCtorDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.DataConstructorDescriptor): Option[Either[DataConstructorDescriptor, DataConstructorDescriptor.InNamespace]] =
+          private def parseDataCtorDescriptor(id: Int)(module: ModuleId)(desc: ArgonModule.DataConstructorDescriptor): Option[Either[DataConstructorDescriptor, DataConstructorDescriptor.InNamespace]] =
             desc.descriptor match {
               case ArgonModule.DataConstructorDescriptor.Descriptor.InNamespace(
                 ArgonModule.InNamespaceDescriptor(
@@ -199,7 +199,7 @@ object ArgonModuleLoader {
                 None
             }
 
-          private def parseFunctionDescriptor(id: Int)(module: ModuleDescriptor)(desc: ArgonModule.FunctionDescriptor): Option[Either[FuncDescriptor, FuncDescriptor.InNamespace]] =
+          private def parseFunctionDescriptor(id: Int)(module: ModuleId)(desc: ArgonModule.FunctionDescriptor): Option[Either[FuncDescriptor, FuncDescriptor.InNamespace]] =
             desc.descriptor match {
               case ArgonModule.FunctionDescriptor.Descriptor.InNamespace(
                 ArgonModule.InNamespaceDescriptor(
@@ -234,7 +234,7 @@ object ArgonModuleLoader {
 
             }
 
-          private def parseMethodDescriptor(module: ModuleDescriptor)(desc: ArgonModule.MethodDescriptor): Option[Either[MethodDescriptor, Nothing]] =
+          private def parseMethodDescriptor(module: ModuleId)(desc: ArgonModule.MethodDescriptor): Option[Either[MethodDescriptor, Nothing]] =
             desc match {
               case ArgonModule.MethodDescriptor(index, memberName, instanceTypeId, ownerDesc, _) =>
                 for {
@@ -250,7 +250,7 @@ object ArgonModuleLoader {
                 } yield Left(MethodDescriptor(ownerDescValue, 0, memberNameValue))
             }
 
-          private def parseClassCtorDescriptor(module: ModuleDescriptor)(desc: ArgonModule.ClassConstructorDescriptor): Option[Either[ClassConstructorDescriptor, Nothing]] =
+          private def parseClassCtorDescriptor(module: ModuleId)(desc: ArgonModule.ClassConstructorDescriptor): Option[Either[ClassConstructorDescriptor, Nothing]] =
             desc match {
               case ArgonModule.ClassConstructorDescriptor(ownerClass, index, instanceClassId, _) =>
                 for {
@@ -288,7 +288,7 @@ object ArgonModuleLoader {
             refDescriptorLens: TRef => TValueDescriptor,
             defDescriptorLens: TDef => TValueDescriptor,
           )(
-            parseDescriptor: ModuleDescriptor => TValueDescriptor => Option[Either[TResultDescriptor, TGlobalDescriptor]]
+            parseDescriptor: ModuleId => TValueDescriptor => Option[Either[TResultDescriptor, TGlobalDescriptor]]
           )(
             referenceHandler: ArModule[context.type, ReferencePayloadSpecifier] => TResultDescriptor => Comp[Option[TRefResult]],
             definitionHandler: ObjectDefinitionLoader[TDef, TResultDescriptor, TDefResult],
@@ -1071,7 +1071,7 @@ object ArgonModuleLoader {
                 globalNamespaceCache <- ValueCache.make[ErrorList, Namespace[context.type, TPayloadSpec]]
               } yield new ArModule[context.type, TPayloadSpec] {
                 override val context: context2.type = context2
-                override val descriptor: ModuleDescriptor = currentModuleDescriptor
+                override val descriptor: ModuleId = currentModuleDescriptor
                 override lazy val globalNamespace: Comp[Namespace[context.type, TPayloadSpec]] = globalNamespaceCache.get(globalNamespaceComp)
                 override val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]] =
                   refModuleMap.values.toVector.collect {

@@ -10,18 +10,17 @@ object AccessCheck {
 
   def checkInstance[TContext <: Context with Singleton, TPayloadSpec[_, _]]
   (
-    callerDescriptor: Descriptor,
+    callerId: CallerId,
     fileSpec: FileSpec,
     methodBinding: MethodBinding[TContext, TPayloadSpec]
   ): Comp[Boolean] = methodBinding.accessModifier match {
-    case global: AccessModifierGlobal => IO.succeed(checkGlobal(callerDescriptor, fileSpec, global))
+    case global: AccessModifierGlobal => IO.succeed(checkGlobal(callerId, fileSpec, global))
     case AccessModifier.Protected => ???
     case AccessModifier.ProtectedInternal => ???
-    case AccessModifier.Private =>
-      IO.succeed(callerDescriptor === methodBinding.method.descriptor)
+    case AccessModifier.Private => ???
   }
 
-  def checkGlobal(callerDescriptor: Descriptor, fileSpec: FileSpec, accessModifier: AccessModifierGlobal): Boolean = accessModifier match {
+  def checkGlobal(callerId: CallerId, fileSpec: FileSpec, accessModifier: AccessModifierGlobal): Boolean = accessModifier match {
     case AccessModifier.Public => true
     case AccessModifier.Internal => ???
     case AccessModifier.PrivateInternal => ???

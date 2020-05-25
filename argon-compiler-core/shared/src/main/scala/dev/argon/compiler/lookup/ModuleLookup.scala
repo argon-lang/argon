@@ -14,7 +14,7 @@ object ModuleLookup {
   def lookupValues[T, TPayloadSpec[_, _]]
   (context: Context)
   (referencedModules: Vector[ArModule[context.type, TPayloadSpec]])
-  (moduleDesc: ModuleDescriptor)
+  (moduleDesc: ModuleId)
   (namespace: NamespacePath, name: GlobalName)
   (f: PartialFunction[GlobalBinding[context.type, TPayloadSpec], T])
   : Comp[Vector[T]] =
@@ -25,7 +25,7 @@ object ModuleLookup {
   def findModule[TPayloadSpec[_, _]]
   (context: Context)
   (referencedModules: Vector[ArModule[context.type, TPayloadSpec]])
-  (moduleDesc: ModuleDescriptor)
+  (moduleDesc: ModuleId)
   : Option[ArModule[context.type, TPayloadSpec]] =
     referencedModules.find { _.descriptor === moduleDesc }
 

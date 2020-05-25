@@ -6,7 +6,7 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.DataConstructorDeclarationStmt
-import dev.argon.util.{FileID, SourceLocation, ValueCache, WithSource}
+import dev.argon.util.{FileID, SourceLocation, UniqueIdentifier, ValueCache, WithSource}
 import cats._
 import cats.evidence.Is
 import cats.implicits._
@@ -28,9 +28,11 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
   (context2: Context)
   (env: EnvCreator[context2.type])
   (stmt: DataConstructorDeclarationStmt)
-  (desc: DataConstructorDescriptor)
-  : Comp[DataConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val descriptor: desc.type }] =
+  (ctorOwner: DataConstructorOwner)
+  : Comp[DataConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val owner: ctorOwner.type }] =
     for {
+      uniqId <- UniqueIdentifier.make
+
       sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[DataConstructor.ResultInfo, _ <: Nat]]
 
       bodyStmtCache <- ValueCache.make[ErrorList, context2.typeSystem.SimpleExpr]
@@ -44,7 +46,12 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
 
       override val contextProof: context.type Is context2.type = Is.refl
 
-      override val descriptor: desc.type = desc
+
+      override val id: DataConstructorId = DataConstructorId(uniqId)
+      override val owner: ctorOwner.type = ctorOwner
+
+      override def ownerModuleId: ModuleId = getDataCtorModule(this)
+
       override val fileId: FileID = env.fileSpec.fileID
       override val ctorMessageSource: CompilationMessageSource = CompilationMessageSource.SourceFile(env.fileSpec, stmt.name.location)
 
@@ -57,11 +64,14 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
             group.copy(body = group.body :+ stmt)
         }
 
+      private def localVarOwner = LocalVariableOwner.ByDataConstructor(AbsRef(this))
+      private def paramVarOwner = ParameterVariableOwner.ByDataConstructor(AbsRef(this))
+
       override val signature: Comp[Signature[DataConstructor.ResultInfo, _ <: Nat]] =
         sigCache.get(
           SourceSignatureCreator.fromParameters[DataConstructor.ResultInfo](context2)(
-            env(context)(EffectInfo.pure, descriptor)
-          )(descriptor)(stmt.parameters)(resultCreator(stmt.returnType)(this))
+            env(context)(EffectInfo.pure, id, localVarOwner)
+          )(paramVarOwner)(stmt.parameters)(resultCreator(stmt.returnType)(this))
         )
 
       private def paramEnv = for {
@@ -79,7 +89,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
               CompilationMessageSource.SourceFile(env.fileSpec, stmt.body.location)
             )(pEnv.currentModule)(pEnv.referencedModules)
 
-            expr <- ExpressionConverter.convertStatementList(context)(pEnv(context)(EffectInfo.pure, descriptor))(unitType)(WithSource(groupedInst.body, stmt.body.location))
+            expr <- ExpressionConverter.convertStatementList(context)(pEnv(context)(EffectInfo.pure, id, localVarOwner))(unitType)(WithSource(groupedInst.body, stmt.body.location))
           } yield expr
         )
 
@@ -100,11 +110,9 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
 
               memberName = MethodName.fromMethodNameSpecifier(method.value.name)
 
-              desc = MethodDescriptor(descriptor, i, memberName)
-
               bEnv <- bodyEnv
 
-              method <- SourceMethod(context)(bEnv)(method.value, method.location)(desc)(ArMethod.DataCtorOwner(this))
+              method <- SourceMethod(context)(bEnv)(method.value, method.location)(MethodOwner.ByDataCtor(this))
             } yield MethodBinding(memberName, i, modifiers, method)
           }
         )

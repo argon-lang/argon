@@ -22,9 +22,9 @@ object SourceClassConstructor {
   (env: EnvCreator[context2.type])
   (ownerClass2: ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier])
   (stmt: parser.ClassConstructorDeclarationStmt)
-  (desc: ClassConstructorDescriptor)
   : Comp[ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier]] =
     for {
+      uniqId <- UniqueIdentifier.make
       sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[ClassConstructor.ResultInfo, _ <: Nat]]
 
     } yield new ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
@@ -35,24 +35,28 @@ object SourceClassConstructor {
       import context.scopeContext.Scope
       import typeSystem.{SimpleExpr, TType}
 
-      override val descriptor: ClassConstructorDescriptor = desc
+
+      override val id: ClassConstructorId = ClassConstructorId(uniqId)
       override val fileId: FileID = env.fileSpec.fileID
 
       override val effectInfo: EffectInfo = EffectInfo(stmt.purity)
 
       override val ownerClass: ArClass[context.type, DeclarationPayloadSpecifier] = ownerClass2
 
+      private def localVarOwner = LocalVariableOwner.ByClassConstructor(AbsRef(this))
+      private def paramVarOwner = ParameterVariableOwner.ByClassConstructor(AbsRef(this))
+
       override lazy val signatureUnsubstituted: Comp[context.signatureContext.Signature[ClassConstructor.ResultInfo, _ <: Nat]] =
         sigCache.get(
           SourceSignatureCreator.fromParameters[ClassConstructor.ResultInfo](context2)(
-            env(context)(effectInfo, descriptor)
-          )(descriptor)(stmt.parameters)(resultCreator)
+            env(context)(effectInfo, id, localVarOwner)
+          )(paramVarOwner)(stmt.parameters)(resultCreator)
         )
 
       override lazy val payload: Comp[context.TClassConstructorImplementation] =
         for {
           sig <- signatureUnsubstituted
-          env2 = env(context)(effectInfo, descriptor)
+          env2 = env(context)(effectInfo, id, localVarOwner)
           env3 = env2.copy(scope = env2.scope.addParameters(
             sig.unsubstitutedParameters
           ))
@@ -69,7 +73,7 @@ object SourceClassConstructor {
       (env: ExpressionConverter.Env[context.type, Scope])
       (unconverted: WithSource[Vector[WithSource[parser.Stmt]]])
       (converted: Vector[ClassConstructorStatement[context.type]])
-      (initializedFields: Set[FieldDescriptor])
+      (initializedFields: Set[VariableName.Normal])
       (body: WithSource[Vector[WithSource[parser.Stmt]]])
       : Comp[ClassConstructorBody[context.type]] = {
 
@@ -94,7 +98,7 @@ object SourceClassConstructor {
           case WithSource(parser.FieldInitializationStmt(name, value), location) +: tail =>
             convertUnconverted.flatMap { case (newConvertedNoInit, env2) =>
               findField(name, location).flatMap { field =>
-                if(initializedFields.contains(field.descriptor))
+                if(initializedFields.contains(field.name))
                   Compilation.forErrors(CompilationError.FieldReinitializedError(CompilationMessageSource.SourceFile(env2.fileSpec, location)))
                 else if(Mutability.toIsMutable(field.mutability) && effectInfo.isPure)
                   Compilation.forErrors(CompilationError.MutableVariableNotPureError(field.name, CompilationMessageSource.SourceFile(env2.fileSpec, location)))
@@ -105,7 +109,7 @@ object SourceClassConstructor {
 
                     val newUnconvertedLoc = tail.headOption.map { _.location.start }.getOrElse { body.location.end }
                     val newUnconverted = WithSource(Vector(), SourceLocation(newUnconvertedLoc, newUnconvertedLoc))
-                    convertCtorBody(unitType)(env3)(newUnconverted)(newConvertedNoInit :+ initStmt)(initializedFields + field.descriptor)(nextBody(tail))
+                    convertCtorBody(unitType)(env3)(newUnconverted)(newConvertedNoInit :+ initStmt)(initializedFields + field.name)(nextBody(tail))
                   }
               }
             }
