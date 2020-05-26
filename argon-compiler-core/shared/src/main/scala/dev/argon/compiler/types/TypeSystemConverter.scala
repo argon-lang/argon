@@ -293,6 +293,12 @@ abstract class TypeSystemConverter {
         newFirst <- convertTypeSystem(first)
         newSecond <- convertTypeSystem(second)
       } yield IntersectionType(newFirst, newSecond)
+
+    case ExistentialType(variable, inner) =>
+      for {
+        newVar <- convertLocalVariableTypeSystem(variable)
+        newInner <- convertTypeSystem(inner)
+      } yield ExistentialType(newVar, newInner)
   }
 
 

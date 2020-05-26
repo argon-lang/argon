@@ -19,7 +19,7 @@ abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] e
   import context._, signatureContext.Signature
 
   val id: ClassId
-  val owner: ClassOwner
+  val owner: ClassOwner[context.type, TPayloadSpec]
   val fileId: FileID
   val classMessageSource: CompilationMessageSource
 
@@ -47,7 +47,7 @@ abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] e
 object ArClass {
 
   type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
-    ArClass[TContext, TPayloadSpec] { val owner: ClassOwner.ByNamespace }
+    ArClass[TContext, TPayloadSpec] { val owner: ClassOwner.ByNamespace[TContext, TPayloadSpec] }
 
   sealed trait ResultInfo[TContext <: Context with Singleton, Wrap[+_]] {
     def baseTypes: Comp[BaseTypeInfoClass[TContext, Wrap]]

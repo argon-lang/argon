@@ -40,7 +40,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
     } yield new ArModule[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
 
-      override val descriptor: ModuleId = ModuleId(input.options.moduleName)
+      override val id: ModuleId = ModuleId(input.options.moduleName)
       override val globalNamespace: Comp[Namespace[context.type, DeclarationPayloadSpecifier]] =
         globalNamespaceCache.get(
           NamespaceBuilder.createNamespace[ResourceReader[I] with SourceParser, context.type, DeclarationPayloadSpecifier](
@@ -106,7 +106,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
       }
 
       val envF = (envFileSpec: FileSpec) => new EnvCreatorInstance(envFileSpec, scope)
-      createNamespaceElementFromASTWithScope(context2)(options)(envF)(sourceAST).map { binding =>
+      createNamespaceElementFromASTWithScope(context2)(options)(currentModule)(envF)(sourceAST).map { binding =>
         ModuleElement(sourceAST.currentNamespace, binding)
       }
     }
@@ -141,6 +141,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
   private def createNamespaceElementFromASTWithScope
   (context: Context)
   (options: CompilerOptions[Id, _])
+  (currentModule: ArModule[context.type, DeclarationPayloadSpecifier])
   (envF: FileSpec => EnvCreator[context.type])
   (sourceAST: SourceAST)
   : Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] = {
@@ -148,7 +149,6 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
     import context._
 
     val env = envF(sourceAST.fileSpec)
-    val moduleId = ModuleId(options.moduleName)
 
     def createBinding(name: Option[String], modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
       parseGlobalAccessModifier(sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
@@ -163,7 +163,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
     sourceAST.statement.value match {
       case traitDeclarationStmt @ parser.TraitDeclarationStmt(_, traitName, _, _, _, modifiers) =>
         createBinding(traitName, modifiers) { (globalName, accessModifier) =>
-          val owner = TraitOwner.ByNamespace(moduleId, sourceAST.currentNamespace, globalName)
+          val owner = TraitOwner.ByNamespace(currentModule, sourceAST.currentNamespace, globalName)
 
           for {
             arTrait <- SourceTrait(context)(env)(traitDeclarationStmt)(owner)
@@ -172,7 +172,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
       case classDeclarationStmt @ parser.ClassDeclarationStmt(_, WithSource(className, _), _, _, _, modifiers) =>
         createBinding(className, modifiers) { (globalName, accessModifier) =>
-          val owner = ClassOwner.ByNamespace(moduleId, sourceAST.currentNamespace, globalName)
+          val owner = ClassOwner.ByNamespace(currentModule, sourceAST.currentNamespace, globalName)
 
           for {
             arClass <- SourceClass(context)(env)(classDeclarationStmt)(owner)
@@ -181,7 +181,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
       case funcDeclarationStmt @ parser.FunctionDeclarationStmt(funcName, _, _, _, modifiers, _) =>
         createBinding(funcName, modifiers) { (globalName, accessModifier) =>
-          val owner = FunctionOwner.ByNamespace(moduleId, sourceAST.currentNamespace, globalName)
+          val owner = FunctionOwner.ByNamespace(currentModule, sourceAST.currentNamespace, globalName)
 
           for {
             arFunc <- SourceFunction(context)(env)(funcDeclarationStmt)(owner)
@@ -193,7 +193,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
       case dataCtorDeclarationStmt @ parser.DataConstructorDeclarationStmt(WithSource(name, _), _, _, _, modifiers) =>
         createBinding(name, modifiers) { (globalName, accessModifier) =>
-          val owner = DataConstructorOwner.ByNamespace(moduleId, sourceAST.currentNamespace, globalName)
+          val owner = DataConstructorOwner.ByNamespace(currentModule, sourceAST.currentNamespace, globalName)
 
           for {
             ctor <- SourceDataConstructor(context)(env)(dataCtorDeclarationStmt)(owner)

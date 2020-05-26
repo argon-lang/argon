@@ -4,24 +4,24 @@ import cats.Eq
 import cats.implicits._
 import dev.argon.util.NamespacePath
 
-sealed trait ClassOwner
+sealed trait ClassOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]]
 object ClassOwner {
-  final case class ByNamespace(moduleId: ModuleId, namespace: NamespacePath, name: GlobalName) extends ClassOwner
+  final case class ByNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](module: ArModule[TContext, TPayloadSpec], namespace: NamespacePath, name: GlobalName) extends ClassOwner[TContext, TPayloadSpec]
 }
 
-sealed trait TraitOwner
+sealed trait TraitOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]]
 object TraitOwner {
-  final case class ByNamespace(moduleId: ModuleId, namespace: NamespacePath, name: GlobalName) extends TraitOwner
+  final case class ByNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](moduleId: ArModule[TContext, TPayloadSpec], namespace: NamespacePath, name: GlobalName) extends TraitOwner[TContext, TPayloadSpec]
 }
 
-sealed trait DataConstructorOwner
+sealed trait DataConstructorOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]]
 object DataConstructorOwner {
-  final case class ByNamespace(moduleId: ModuleId, namespace: NamespacePath, name: GlobalName) extends DataConstructorOwner
+  final case class ByNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](moduleId: ArModule[TContext, TPayloadSpec], namespace: NamespacePath, name: GlobalName) extends DataConstructorOwner[TContext, TPayloadSpec]
 }
 
-sealed trait FunctionOwner
+sealed trait FunctionOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]]
 object FunctionOwner {
-  final case class ByNamespace(moduleId: ModuleId, namespace: NamespacePath, name: GlobalName) extends FunctionOwner
+  final case class ByNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](moduleId: ArModule[TContext, TPayloadSpec], namespace: NamespacePath, name: GlobalName) extends FunctionOwner[TContext, TPayloadSpec]
 }
 
 
@@ -33,6 +33,8 @@ object MethodOwner {
   final case class ByTraitObject[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerTrait: ArTrait[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec]
   final case class ByDataCtor[TContext <: Context with Singleton, TPayloadSpec[_, _]](dataCtor: DataConstructor[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec]
 }
+
+final case class ClassConstructorOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerClass: ArClass[TContext, TPayloadSpec])
 
 sealed trait VariableOwner[TContext]
 

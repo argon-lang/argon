@@ -242,8 +242,11 @@ object CompilationError {
     override def message: String = s"Missing module name"
   }
 
-  final case class NamespaceElementNotFound(module: ModuleId, namespacePath: NamespacePath, name: GlobalName, source: CompilationMessageSource) extends CompilationError {
+  final case class ModuleFormatInvalid(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Module format is invalid"
+  }
 
+  final case class NamespaceElementNotFound(module: ModuleId, namespacePath: NamespacePath, name: GlobalName, source: CompilationMessageSource) extends CompilationError {
     private def nameStr: String =
       name match {
         case GlobalName.Normal(name) => s"'$name'"
@@ -293,9 +296,8 @@ object CompilationError {
   case object ModuleObjectClassConstructor extends ModuleObjectType {
     override def name: String = "class constructor"
   }
-
-  final case class ModuleObjectInvalidDescriptor(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
-    override def message: String = s"Invalid descriptor for ${objectType.name} #${id.toString}."
+  case object ModuleObjectReferencedModule extends ModuleObjectType {
+    override def name: String = "referenced module"
   }
 
   final case class ModuleObjectModuleNotLoaded(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {

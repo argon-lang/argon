@@ -94,7 +94,7 @@ object VTableBuilder {
                 .filter { case (slotMethod, _) =>
                   slotMethod.value.isVirtual &&
                     !slotMethod.value.isFinal &&
-                    slotMethod.value.name === method.name &&
+                    slotMethod.value.name === method.method.name &&
                     slotMethod.value.name =!= MemberName.Unnamed
                 }
                 .toVector

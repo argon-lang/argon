@@ -16,9 +16,10 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] extends Callable
   val effectInfo: EffectInfo
 
   val id: ClassConstructorId
+  val owner: ClassConstructorOwner[context.type, TPayloadSpec]
   val fileId: FileID
 
-  val ownerClass: ArClass[context.type, TPayloadSpec]
+  final def ownerClass: ArClass[context.type, TPayloadSpec] = owner.ownerClass
   val signatureUnsubstituted: Comp[Signature[ClassConstructor.ResultInfo, _ <: Nat]]
 
   final def signature

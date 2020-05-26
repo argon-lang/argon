@@ -1,5 +1,6 @@
 syntax = "proto2";
 
+import "google/protobuf/empty.proto";
 import "scalapb/scalapb.proto";
 
 option (scalapb.options) = {
@@ -7,6 +8,7 @@ option (scalapb.options) = {
     package_name: "dev.argon.module"
     flat_package: true
     collection_type: "scala.collection.immutable.Vector"
+    preserve_unknown_fields: false
 };
 
 // File Formats
@@ -18,7 +20,10 @@ message Metadata {
     optional bool isInterfaceModule = 5;
 
     repeated ModuleReference references = 9;
-    repeated GlobalDeclaration globals = 10;
+    repeated GlobalDeclaration globalTraits = 10;
+    repeated GlobalDeclaration globalClasses = 11;
+    repeated GlobalDeclaration globalDataConstructors = 12;
+    repeated GlobalDeclaration globalFunctions = 13;
 }
 
 message ModuleReference {
@@ -26,14 +31,7 @@ message ModuleReference {
 }
 
 message GlobalDeclaration {
-    oneof descriptor {
-        InNamespaceDescriptor traitDescriptor = 3;
-        InNamespaceDescriptor classDescriptor = 4;
-        InNamespaceDescriptor dataConstructorDescriptor = 5;
-        InNamespaceDescriptor functionDescriptor = 6;
-    }
-
-    required int32 id = 1;
+    required uint32 id = 1;
     required AccessModifier accessModifier = 2;
 }
 
@@ -43,52 +41,44 @@ message FileID {
 
 // *-ref/id
 message TraitReference {
-    required int32 moduleId = 1;
-    required TraitDescriptor descriptor = 2;
+    required TraitOwner owner = 1;
+    required TraitSignature signature = 2;
 }
 
 message ClassReference {
-    required int32 moduleId = 1;
-    required ClassDescriptor descriptor = 2;
+    required ClassOwner owner = 1;
+    required ClassSignature signature = 2;
 }
 
 message DataConstructorReference {
-    required int32 moduleId = 1;
-    required DataConstructorDescriptor descriptor = 2;
+    required DataConstructorOwner owner = 1;
+    required DataConstructorSignature signature = 2;
 }
 
 message FunctionReference {
-    required int32 moduleId = 1;
-    required FunctionDescriptor descriptor = 2;
+    required FunctionOwner owner = 1;
+    required FunctionSignature signature = 2;
 }
 
 message MethodReference {
-    required int32 moduleId = 1;
-    required MethodDescriptor descriptor = 2;
-    oneof methodOwner {
-        sint32 ownerClassId = 3;
-        int32 ownerClassObjectId = 4;
-        sint32 ownerTraitId = 5;
-        int32 ownerTraitObjectId = 6;
-        sint32 ownerConstructorId = 7;
-    }
+    required MethodOwner owner = 1;
+    required MethodName name = 2;
+    required MethodSignature signature = 3;
 }
 
 message ClassConstructorReference {
-    required int32 moduleId = 1;
-    required ClassConstructorDescriptor descriptor = 2;
+    required sint32 ownerClass = 1;
+    required ClassConstructorSignature signature = 2;
 }
-
 
 // */id
 message MethodMember {
-    required MethodDescriptor descriptor = 1;
-    required int32 id = 2;
-    required AccessModifier accessModifier = 3;
+    required int32 id = 1;
+    required AccessModifier accessModifier = 2;
 }
 
 message TraitDefinition {
-    required TraitDescriptor descriptor = 1;
+    required TraitOwner owner = 1;
     required FileID fileId = 6;
     required TraitSignature signature = 2;
     optional bool isSealed = 3;
@@ -97,7 +87,7 @@ message TraitDefinition {
 }
 
 message ClassDefinition {
-    required ClassDescriptor descriptor = 1;
+    required ClassOwner owner = 1;
     required FileID fileId = 10;
     required ClassSignature signature = 2;
     optional bool isOpen = 3;
@@ -106,26 +96,25 @@ message ClassDefinition {
     repeated ClassField fields = 6;
     repeated MethodMember methods = 7;
     repeated MethodMember staticMethods = 8;
-    repeated ClassConstructorMember constructors = 9;
+    repeated MethodMember constructors = 9;
 }
 
 message ClassField {
-    required bool isMutable = 1;
+    required Mutability mutability = 1;
     required string name = 2;
-    required Type fieldType = 3;
+    required Expression fieldType = 3;
 }
 
 message ClassConstructorMember {
-    required ClassConstructorDescriptor descriptor = 1;
-    required int32 id = 2;
-    required AccessModifier accessModifier = 3;
+    required int32 id = 1;
+    required AccessModifier accessModifier = 2;
 }
 
 message DataConstructorDefinition {
-    required DataConstructorDescriptor descriptor = 1;
-    required FileID fileId = 4;
-    required DataConstructorSignature signature = 2;
-    repeated MethodMember methods = 3;
+    required DataConstructorOwner owner = 1;
+    required FileID fileId = 2;
+    required DataConstructorSignature signature = 3;
+    repeated MethodMember methods = 4;
 }
 
 message EffectInfo {
@@ -133,35 +122,37 @@ message EffectInfo {
 }
 
 message FunctionDefinition {
-    required FunctionDescriptor descriptor = 1;
-    required FileID fileId = 4;
-    required FunctionSignature signature = 2;
-    required EffectInfo effects = 3;
+    required FunctionOwner owner = 1;
+    required FileID fileId = 2;
+    required FunctionSignature signature = 3;
+    required EffectInfo effects = 4;
+}
+
+message MethodName {
+    oneof name {
+        string normal = 1;
+        string mutator = 2;
+        SpecialMethodName specialName = 3;
+    }
 }
 
 message MethodDefinition {
-    required MethodDescriptor descriptor = 1;
-    required FileID fileId = 13;
-    required MethodSignature signature = 2;
-    oneof methodOwner {
-        int32 ownerClassId = 8;
-        int32 ownerClassObjectId = 9;
-        int32 ownerTraitId = 10;
-        int32 ownerTraitObjectId = 11;
-        int32 ownerConstructorId = 12;
-    }
-    required EffectInfo effects = 3;
-    optional bool isVirtual = 4;
-    optional bool isAbstract = 5;
-    optional bool isImplicitOverride = 6;
-    optional bool isFinal = 7;
+    required MethodOwner owner = 1;
+    required MethodName name = 2;
+    required FileID fileId = 3;
+    required MethodSignature signature = 4;
+    required EffectInfo effects = 5;
+    optional bool isVirtual = 6;
+    optional bool isAbstract = 7;
+    optional bool isImplicitOverride = 8;
+    optional bool isFinal = 9;
 }
 
 message ClassConstructorDefinition {
-    required ClassConstructorDescriptor descriptor = 1;
-    required FileID fileId = 4;
-    required ClassConstructorSignature signature = 2;
-    required EffectInfo effects = 3;
+    required sint32 ownerClass = 1;
+    required FileID fileId = 2;
+    required ClassConstructorSignature signature = 3;
+    required EffectInfo effects = 4;
 }
 // Shared types
 
@@ -182,6 +173,14 @@ message GlobalName {
     }
 }
 
+message BigInt {
+    oneof intType {
+        sint32 signed32 = 1;
+        sfixed64 signed64 = 2;
+        bytes bigint = 3;
+    }
+}
+
 enum AccessModifier {
     Public = 1;
     Internal = 2;
@@ -191,51 +190,9 @@ enum AccessModifier {
     PrivateInternal = 6;
 }
 
-// Descriptors
-message InNamespaceDescriptor {
-    required Namespace ns = 1;
-    required GlobalName name = 2;
-}
-
-message TraitDescriptor {
-    oneof descriptor {
-        InNamespaceDescriptor inNamespace = 1;
-    }
-}
-
-message ClassDescriptor {
-    oneof descriptor {
-        InNamespaceDescriptor inNamespace = 1;
-    }
-}
-
-message DataConstructorDescriptor {
-    oneof descriptor {
-        InNamespaceDescriptor inNamespace = 1;
-    }
-}
-
-message FunctionDescriptor {
-    oneof descriptor {
-        InNamespaceDescriptor inNamespace = 1;
-    }
-}
-
-message MethodDescriptor {
-    required int32 index = 1;
-    oneof memberName {
-        string name = 3;
-        string mutator = 12;
-        SpecialMethodName specialMethodName = 4;
-    }
-    required int32 instanceTypeId = 5;
-    oneof instanceType {
-        TraitDescriptor traitDescriptor = 7;
-        TraitDescriptor traitObjectDescriptor = 8;
-        ClassDescriptor classDescriptor = 9;
-        ClassDescriptor classObjectDescriptor = 10;
-        DataConstructorDescriptor dataConstructorDescriptor = 11;
-    }
+enum Mutability {
+    Mutable = 1;
+    NonMutable = 2;
 }
 
 enum SpecialMethodName {
@@ -243,41 +200,210 @@ enum SpecialMethodName {
     Call = 1;
 }
 
-message ClassConstructorDescriptor {
-    required ClassDescriptor ownerClass = 1;
-    required int32 index = 2;
-    required int32 instanceClassId = 3;
+// Owners
+message ByNamespaceOwner {
+    optional uint32 module = 1;
+    required Namespace ns = 2;
+    required GlobalName name = 3;
+}
+
+message TraitOwner {
+    oneof owner {
+        ByNamespaceOwner inNamespace = 1;
+    }
+}
+
+message ClassOwner {
+    oneof owner {
+        ByNamespaceOwner inNamespace = 1;
+    }
+}
+
+message DataConstructorOwner {
+    oneof owner {
+        ByNamespaceOwner inNamespace = 1;
+    }
+}
+
+message FunctionOwner {
+    oneof owner {
+        ByNamespaceOwner inNamespace = 1;
+    }
+}
+
+message MethodOwner {
+    oneof owner {
+        sint32 byClass = 1;
+        sint32 byClassObject = 2;
+        sint32 byTrait = 3;
+        sint32 byTraitObject = 4;
+        sint32 byDataConstructor = 5;
+    }
+}
+
+message LocalVariableOwner {
+    oneof owner {
+        sint32 byClass = 2;
+        sint32 byTrait = 3;
+        sint32 byDataConstructor = 4;
+        sint32 byFunction = 5;
+        sint32 byMethod = 6;
+        sint32 byClassConstructor = 7;
+    }
+}
+
+message ParameterVariableOwner {
+    oneof owner {
+        sint32 byClass = 2;
+        sint32 byTrait = 3;
+        sint32 byDataConstructor = 4;
+        sint32 byFunction = 5;
+        sint32 byMethod = 6;
+        sint32 byClassConstructor = 7;
+    }
 }
 
 // Types
+message VariableName {
+    oneof name {
+        string normal = 1;
+        google.protobuf.Empty unnamed = 2;
+    }
+}
+
+message LocalVariable {
+    required uint32 id = 1;
+    required LocalVariableOwner owner = 2;
+    required VariableName name = 3;
+    required Mutability mutability = 4;
+    required Expression varType = 5;
+}
+
+message FieldVariable {
+    required sint32 ownerClass = 1;
+    required VariableName name = 2;
+    required Mutability mutability = 3;
+    required Expression varType = 4;
+}
+
+message ParameterVariable {
+    required ParameterVariableOwner owner = 1;
+    required uint32 index = 2;
+    required VariableName name = 3;
+    required Mutability mutability = 4;
+    required Expression varType = 5;
+}
+
+message Variable {
+    oneof variableType {
+        LocalVariable local = 1;
+        FieldVariable field = 2;
+        ParameterVariable param = 3;
+    }
+}
+
+message TupleElement {
+    required Expression value = 1;
+}
+
+message TupleMetadata {
+    repeated TupleElement elements = 1;
+}
+
+message DataDeconstructPattern {
+    required sint32 dataConstructorId = 1;
+    repeated PatternExpr args = 2;
+}
+
+message PatternExpr {
+    oneof pattern {
+        DataDeconstructPattern dataDeconstructor = 1;
+        LocalVariable binding = 2;
+        LocalVariable castBinding = 3;
+    }
+}
+
+message PatternMatch {
+    repeated PatternExpr patterns = 1;
+}
+
+enum PrimitiveOperation {
+    AddInt = 1;
+    SubInt = 2;
+    MulInt = 3;
+    IntEqual = 4;
+}
+
+message UniversePair {
+    required UniverseExpr a = 1;
+    required UniverseExpr b = 2;
+}
+
+message UniverseExpr {
+    oneof exprType {
+        BigInt fixed = 1;
+        sint32 abstractUniverse = 2;
+        UniversePair largestUniverse = 3;
+        UniverseExpr nextLargestUniverse = 4;
+        UniverseExpr previousUniverse = 5;
+    }
+}
+
+message TypeN {
+    required UniverseExpr universe = 1;
+    optional Expression subtypeConstraint = 2;
+    optional Expression supertypeConstraint = 3;
+}
+
+message Expression {
+    oneof exprType {
+        sint32 traitType = 3;
+        sint32 classType = 4;
+        sint32 dataConstructorType = 5;
+        google.protobuf.Empty typeOfType = 6;
+        TypeN typeN = 7;
+        google.protobuf.Empty functionType = 8;
+        google.protobuf.Empty unionType = 9;
+        google.protobuf.Empty intersectionType = 10;
+        LocalVariable existentialType = 11;
+
+        sint32 classConstructorCall = 106; // First type arg is the class type
+        google.protobuf.Empty dataConstructorCall = 107; // First type arg is the data constructor type
+        google.protobuf.Empty ensureExecuted = 108; // First arg is the body, second is the ensuring expression
+        sint32 functionCall = 109;
+        google.protobuf.Empty functionObjectCall = 110; // first arg is the function, second is the argument, third is the return type
+        google.protobuf.Empty ifElse = 111; // First arg is the condition, second is the true body, third is false body
+        LocalVariable letBinding = 112; // First arg is value, second is the expression with the variable bound
+        bool loadConstantBool = 113; // First arg is the type
+        BigInt loadConstantInt = 114; // First arg is the type
+        string loadConstantString = 115; // First arg is the type
+        TupleMetadata loadTuple = 116; // Args must correspond to elements.
+        uint32 loadTupleElement = 117; // Index of the element to load. First is the tuple value, second is the type of the element.
+        google.protobuf.Empty loadUnit = 118; // First is the type
+        Variable loadVariable = 119;
+        sint32 methodCall = 120; // First is the instance object, second is the instance type, rest are method args
+        PatternMatch patternMatch = 121; // First arg is the matched value, patterns must correspond to remaining args
+        PrimitiveOperation primitiveOp = 122; // First arg is the type, rest are operation args
+        google.protobuf.Empty sequence = 123; // Args are executed in sequence (must be non-empty)
+        Variable storeVariable = 124; // First arg is the type of the expression (e.g. Unit), second is the value stored in the variable
+    }
+
+    repeated Expression args = 1;
+}
+
 message TraitType {
     required sint32 traitId = 1;
-    repeated TypeArg typeArguments = 2;
+    repeated Expression typeArguments = 2;
 }
 
 message ClassType {
     required sint32 classId = 1;
-    repeated TypeArg typeArguments = 2;
+    repeated Expression typeArguments = 2;
 }
 
 message DataConstructorType {
     required sint32 constructorId = 1;
-    repeated TypeArg typeArguments = 2;
-}
-
-message Type {
-    oneof typeInfo {
-        TraitType traitType = 1;
-        ClassType classType = 2;
-        DataConstructorType dataConstructorType = 3;
-    }
-}
-
-message TypeArg {
-    oneof typeInfo {
-        Type type = 1;
-        Wildcard wildcard = 2;
-    }
+    repeated Expression typeArguments = 2;
 }
 
 message Wildcard {}
@@ -285,7 +411,7 @@ message Wildcard {}
 // Signature
 message ParameterElement {
     optional string name = 1;
-    required Type paramType = 2;
+    required Expression paramType = 2;
 }
 
 enum ParameterStyle {
@@ -316,12 +442,12 @@ message DataConstructorSignature {
 
 message FunctionSignature {
     repeated Parameter parameters = 1;
-    required Type returnType = 2;
+    required Expression returnType = 2;
 }
 
 message MethodSignature {
     repeated Parameter parameters = 1;
-    required Type returnType = 2;
+    required Expression returnType = 2;
 }
 
 message ClassConstructorSignature {

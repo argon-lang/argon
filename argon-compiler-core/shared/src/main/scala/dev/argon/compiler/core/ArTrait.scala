@@ -18,7 +18,7 @@ trait ArTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]] extends Ca
   import context._, signatureContext.Signature
 
   val id: TraitId
-  val owner: TraitOwner
+  val owner: TraitOwner[context.type, TPayloadSpec]
   val fileId: FileID
 
   val isSealed: Boolean
@@ -41,7 +41,7 @@ trait ArTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]] extends Ca
 object ArTrait {
 
   type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
-    ArTrait[TContext, TPayloadSpec] { val owner: TraitOwner.ByNamespace }
+    ArTrait[TContext, TPayloadSpec] { val owner: TraitOwner.ByNamespace[TContext, TPayloadSpec] }
 
   sealed trait ResultInfo[TContext <: Context with Singleton, Wrap[+_]] {
     def baseTypes: Comp[BaseTypeInfoTrait[TContext, Wrap]]

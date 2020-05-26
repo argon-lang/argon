@@ -11,7 +11,7 @@ abstract class ArFunc[TContext <: Context, TPayloadSpec[_, _]] extends CallableF
   import context._, signatureContext.Signature
 
   val id: FunctionId
-  val owner: FunctionOwner
+  val owner: FunctionOwner[context.type, TPayloadSpec]
   val fileId: FileID
   val effectInfo: EffectInfo
 
@@ -30,6 +30,6 @@ abstract class ArFunc[TContext <: Context, TPayloadSpec[_, _]] extends CallableF
 object ArFunc {
 
   type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
-    ArFunc[TContext, TPayloadSpec] { val owner: FunctionOwner.ByNamespace }
+    ArFunc[TContext, TPayloadSpec] { val owner: FunctionOwner.ByNamespace[TContext, TPayloadSpec] }
 
 }

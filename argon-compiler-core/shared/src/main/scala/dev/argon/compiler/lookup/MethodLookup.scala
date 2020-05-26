@@ -63,7 +63,7 @@ object MethodLookup {
                 memberValues
                   .distinctBy { _.arMethod.value.method.id }
                   .filter { method =>
-                    val methodName = method.arMethod.value.name
+                    val methodName = method.arMethod.value.method.name
                     methodName =!= MemberName.Unnamed && memberName === methodName
                   }
                   .filterA { method =>

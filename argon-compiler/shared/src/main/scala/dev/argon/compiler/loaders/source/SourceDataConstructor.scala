@@ -28,8 +28,8 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
   (context2: Context)
   (env: EnvCreator[context2.type])
   (stmt: DataConstructorDeclarationStmt)
-  (ctorOwner: DataConstructorOwner)
-  : Comp[DataConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val owner: ctorOwner.type }] =
+  (ctorOwner: DataConstructorOwner[context2.type, DeclarationPayloadSpecifier])
+  : Comp[DataConstructor[context2.type, DeclarationPayloadSpecifier] { val owner: ctorOwner.type }] =
     for {
       uniqId <- UniqueIdentifier.make
 
@@ -113,7 +113,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
               bEnv <- bodyEnv
 
               method <- SourceMethod(context)(bEnv)(method.value, method.location)(MethodOwner.ByDataCtor(this))
-            } yield MethodBinding(memberName, i, modifiers, method)
+            } yield MethodBinding(modifiers, method)
           }
         )
 

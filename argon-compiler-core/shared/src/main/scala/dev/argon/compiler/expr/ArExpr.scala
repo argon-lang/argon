@@ -195,6 +195,6 @@ object ArExpr {
   (
     variable: LocalVariable[TContext, Wrap],
     inner: ArExprWrap[TContext, Wrap]
-  )
+  ) extends TypeIsTypeOfTypeExpr[TContext, Wrap]
 
 }

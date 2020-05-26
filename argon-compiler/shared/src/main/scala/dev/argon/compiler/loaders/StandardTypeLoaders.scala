@@ -21,7 +21,7 @@ object StandardTypeLoaders {
     import context._
 
     {
-      if(currentModule.descriptor === arCore)
+      if(currentModule.id === arCore)
         ModuleLookup.lookupNamespaceValues(context)(currentModule)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass)
             .map { _.map(AbsRef.apply) }
       else

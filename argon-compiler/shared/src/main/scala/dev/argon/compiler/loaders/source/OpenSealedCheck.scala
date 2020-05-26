@@ -14,17 +14,17 @@ trait OpenSealedCheck {
 
   def getClassModule[TContext <: Context with Singleton, TPS[_, _]](arClass: ArClass[TContext, TPS]): ModuleId =
     arClass.owner match {
-      case ClassOwner.ByNamespace(moduleId, _, _) => moduleId
+      case ClassOwner.ByNamespace(module, _, _) => module.id
     }
 
   def getTraitModule[TContext <: Context with Singleton, TPS[_, _]](arTrait: ArTrait[TContext, TPS]): ModuleId =
     arTrait.owner match {
-      case TraitOwner.ByNamespace(moduleId, _, _) => moduleId
+      case TraitOwner.ByNamespace(module, _, _) => module.id
     }
 
   def getDataCtorModule[TContext <: Context with Singleton, TPS[_, _]](ctor: DataConstructor[TContext, TPS]): ModuleId =
     ctor.owner match {
-      case DataConstructorOwner.ByNamespace(moduleId, _, _) => moduleId
+      case DataConstructorOwner.ByNamespace(module, _, _) => module.id
     }
 
   final def checkExtendClass[TContext <: Context with Singleton, TPS[_, _]](arClass: ArClass[TContext, TPS])(source: CompilationMessageSource): Comp[Unit] =

@@ -206,7 +206,7 @@ final class ModuleEmitter[TContext <: ModuleContext with Singleton] private(val 
         moduleIds <- emitStateRef.get
         _ <- consume(ModulePaths.metadata -> module.Metadata(
           formatVersion = ModuleFormatVersion.currentVersion,
-          name = armodule.descriptor.name,
+          name = armodule.id.name,
           references =
           moduleRefs.moduleRefIds
             .toVector
@@ -264,32 +264,32 @@ final class ModuleEmitter[TContext <: ModuleContext with Singleton] private(val 
     getObjIdInt(ref)(descriptor)(lens[ModuleRefs].nextModuleId, lens[ModuleRefs].moduleRefIds)
 
   def getTraitId(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: TraitDescriptor): UIO[Int] =
-    if(descriptor.moduleDescriptor === armodule.descriptor)
+    if(descriptor.moduleDescriptor === armodule.id)
       getObjIdInt(emitStateRef)(descriptor)(lens[ModuleIds].nextTraitId, lens[ModuleIds].traitIds)
     else
       getObjIdInt(emitStateRef)(descriptor)(lens[ModuleIds].nextTraitRefId, lens[ModuleIds].traitRefIds).map(-_)
 
 
   def getClassId(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: ClassDescriptor): UIO[Int] =
-    if(descriptor.moduleDescriptor === armodule.descriptor)
+    if(descriptor.moduleDescriptor === armodule.id)
       getObjIdInt(emitStateRef)(descriptor)(lens[ModuleIds].nextClassId, lens[ModuleIds].classIds)
     else
       getObjIdInt(emitStateRef)(descriptor)(lens[ModuleIds].nextClassRefId, lens[ModuleIds].classRefIds).map(-_)
 
   def getDataCtorId(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: DataConstructorDescriptor): UIO[Int] =
-    if(descriptor.moduleDescriptor === armodule.descriptor)
+    if(descriptor.moduleDescriptor === armodule.id)
       getObjIdInt(emitStateRef)(descriptor)(lens[ModuleIds].nextDataCtorId, lens[ModuleIds].dataCtorIds)
     else
       getObjIdInt(emitStateRef)(descriptor)(lens[ModuleIds].nextDataCtorRefId, lens[ModuleIds].dataCtorRefIds).map(-_)
 
   def getFuncId(armodule: ArModule[context.type, DeclarationPayloadSpecifier], descriptor: FuncDescriptor): UIO[Int] =
-    if(descriptor.moduleDescriptor === armodule.descriptor)
+    if(descriptor.moduleDescriptor === armodule.id)
       getObjIdInt(emitStateRef)(descriptor)(lens[ModuleIds].nextFunctionId, lens[ModuleIds].functionIds)
     else
       getObjIdInt(emitStateRef)(descriptor)(lens[ModuleIds].nextFunctionRefId, lens[ModuleIds].functionRefIds).map(-_)
 
   def getMethodId[TPayloadSpec[_, _]](armodule: ArModule[context.type, DeclarationPayloadSpecifier], method: ArMethod[context.type, TPayloadSpec]): UIO[Int] =
-    if(method.descriptor.moduleDescriptor === armodule.descriptor)
+    if(method.descriptor.moduleDescriptor === armodule.id)
       getObjIdInt(emitStateRef)(method.descriptor)(lens[ModuleIds].nextMethodId, lens[ModuleIds].methodIds)
     else
       getObjId(emitStateRef)(method)(_.descriptor)(lens[ModuleIds].nextMethodRefId, lens[ModuleIds].methodRefIds)(

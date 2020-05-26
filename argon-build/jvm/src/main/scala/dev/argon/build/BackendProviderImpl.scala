@@ -26,9 +26,8 @@ object BackendProviderImpl {
 
         override def testCaseRunners[I <: ResourceIndicator: Tag, P: Path : Tag](references: Vector[I], pathResolver: I => UIO[P]): Seq[TestCaseRunner[ResourceReader[I] with ResourceWriter[Nothing] with FileIO[P]]] =
           Seq(ParseTestCaseRunner) ++
-            Seq(jsBackend).map { backend => new BuildTestCaseRunner(backend, references) } ++
+            allBackends.map { backend => new BuildTestCaseRunner(backend, references) } ++
             Seq(new GraalJSTestCaseRunner(jsBackend, references, pathResolver))
-      }
     }
   )
 

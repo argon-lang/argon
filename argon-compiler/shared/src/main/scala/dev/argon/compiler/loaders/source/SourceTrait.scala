@@ -33,8 +33,8 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
   (context2: Context)
   (env: EnvCreator[context2.type])
   (stmt: TraitDeclarationStmt)
-  (traitOwner: TraitOwner)
-  : Comp[ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val owner: traitOwner.type }] = {
+  (traitOwner: TraitOwner[context2.type, DeclarationPayloadSpecifier])
+  : Comp[ArTrait[context2.type, DeclarationPayloadSpecifier] { val owner: traitOwner.type }] = {
     import context2._
     
     for {
@@ -119,7 +119,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
 
               paramsEnv.flatMap { env2 =>
                 SourceMethod(context)(env2)(method.value, method.location)(MethodOwner.ByTrait(this))
-                  .map(MethodBinding(memberName, i, modifiers, _))
+                  .map(MethodBinding(modifiers, _))
               }
             }
           }
@@ -133,7 +133,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
 
               paramsEnv.flatMap { env2 =>
                 SourceMethod(context)(env2)(method.value, method.location)(MethodOwner.ByTraitObject(this))
-                  .map(MethodBinding(memberName, i, modifiers, _))
+                  .map(MethodBinding(modifiers, _))
               }
             }
           }

@@ -8,6 +8,7 @@ import dev.argon.parser
 import dev.argon.util.{FileID, FileSpec, UniqueIdentifier, WithSource}
 import cats.{Id => _, _}
 import cats.implicits._
+import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import shapeless.{Id, Nat}
 
@@ -17,10 +18,10 @@ private[compiler] object SourceFunction {
   (context2: Context)
   (env: EnvCreator[context2.type])
   (stmt: parser.FunctionDeclarationStmt)
-  (funcOwner: FunctionOwner)
-  : Comp[ArFunc[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val owner: funcOwner.type }] = for {
+  (funcOwner: FunctionOwner[context2.type, DeclarationPayloadSpecifier])
+  : Comp[ArFunc[context2.type, DeclarationPayloadSpecifier] { val owner: funcOwner.type }] = for {
     uniqId <- UniqueIdentifier.make
-  } yield new ArFunc[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
+  } yield new ArFunc[context2.type, DeclarationPayloadSpecifier] {
     override val context: context2.type = context2
     import context._
 

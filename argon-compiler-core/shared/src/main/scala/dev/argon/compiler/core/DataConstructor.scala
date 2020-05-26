@@ -19,7 +19,7 @@ trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] ex
   import context._, signatureContext.Signature
 
   val id: DataConstructorId
-  val owner: DataConstructorOwner
+  val owner: DataConstructorOwner[context.type, TPayloadSpec]
   val fileId: FileID
   val ctorMessageSource: CompilationMessageSource
 
@@ -33,7 +33,7 @@ trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] ex
 object DataConstructor {
 
   type InNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] =
-    DataConstructor[TContext, TPayloadSpec] { val owner: DataConstructorOwner.ByNamespace }
+    DataConstructor[TContext, TPayloadSpec] { val owner: DataConstructorOwner.ByNamespace[TContext, TPayloadSpec] }
 
   final case class ResultInfo[TContext <: Context with Singleton, Wrap[+_]](instanceType: TraitType[TContext, Wrap])
 

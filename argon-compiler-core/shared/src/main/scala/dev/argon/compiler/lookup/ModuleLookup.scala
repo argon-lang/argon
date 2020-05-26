@@ -27,7 +27,7 @@ object ModuleLookup {
   (referencedModules: Vector[ArModule[context.type, TPayloadSpec]])
   (moduleDesc: ModuleId)
   : Option[ArModule[context.type, TPayloadSpec]] =
-    referencedModules.find { _.descriptor === moduleDesc }
+    referencedModules.find { _.id === moduleDesc }
 
   def lookupNamespaceValues[T, TPayloadSpec[_, _]]
   (context: Context)

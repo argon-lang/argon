@@ -555,6 +555,12 @@ trait TypeSystem {
           firstUniv <- universeOfWrapExpr(first)
           secondUniv <- universeOfWrapExpr(second)
         } yield LargestUniverse(firstUniv, secondUniv)
+
+      case ExistentialType(variable, inner) =>
+        for {
+          varUniv <- universeOfWrapExpr(variable.varType)
+          innerUniv <- universeOfWrapExpr(inner)
+        } yield LargestUniverse(varUniv, innerUniv)
     }
   }
 

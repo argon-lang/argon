@@ -35,8 +35,8 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
   (context2: Context)
   (env: EnvCreator[context2.type])
   (stmt: ClassDeclarationStmt)
-  (classOwner: ClassOwner)
-  : Comp[ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] { val owner: classOwner.type }] = {
+  (classOwner: ClassOwner[context2.type, DeclarationPayloadSpecifier])
+  : Comp[ArClass[context2.type, DeclarationPayloadSpecifier] { val owner: classOwner.type }] = {
     import context2._
 
     for {
@@ -156,7 +156,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
                   val env3 = env2.addVariables(context)(fieldVars)
                   SourceMethod(context)(env3)(method.value, method.location)(MethodOwner.ByClass(this))
                     .map { method =>
-                      MethodBinding(method.name, i, modifiers, method)
+                      MethodBinding(modifiers, method)
                     }
                 }
               }
@@ -171,7 +171,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
               paramsEnv.flatMap { env2 =>
                 SourceMethod(context)(env2)(method.value, method.location)(MethodOwner.ByClassObject(this))
                   .map { method =>
-                    MethodBinding(method.name, i, modifiers, method)
+                    MethodBinding(modifiers, method)
                   }
               }
             }

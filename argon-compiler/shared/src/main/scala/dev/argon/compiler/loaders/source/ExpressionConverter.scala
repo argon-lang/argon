@@ -171,7 +171,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                             resolveMethodOverloads(t)(
                               t.arClass.value.staticMethods
                                 .flatMap {
-                                  _.filter { binding => binding.name === methodName }
+                                  _.filter { binding => binding.method.name === methodName }
                                     .filterA { binding =>
                                       AccessCheck.checkInstance[context.type, t.arClass.PayloadSpec](env.callerId, env.fileSpec, binding)
                                     }
@@ -188,7 +188,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                             resolveMethodOverloads(t)(
                               t.arTrait.value.staticMethods
                                 .flatMap {
-                                  _.filter { binding => binding.name === methodName }
+                                  _.filter { binding => binding.method.name === methodName }
                                     .filterA { binding =>
                                       AccessCheck.checkInstance[context.type, t.arTrait.PayloadSpec](env.callerId, env.fileSpec, binding)
                                     }
@@ -740,7 +740,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         } yield overloadSelectionFactory(env)(location)(NonEmptyList.of(classFactories))
       )
 
-    if(moduleDesc === env.currentModule.descriptor)
+    if(moduleDesc === env.currentModule.id)
       resolveClass(ModuleLookup.lookupNamespaceValues(context)(env.currentModule)(namespacePath, name)(ModuleLookup.lookupGlobalClass))
     else
       resolveClass(ModuleLookup.lookupValues(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass))
@@ -1275,6 +1275,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case FunctionType(argumentType, resultType) => isWrapExprPure(argumentType) && isWrapExprPure(resultType)
       case UnionType(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
       case IntersectionType(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
+      case ExistentialType(_, inner) => isWrapExprPure(inner)
     }
 
   def isWrapExprPure(expr: WrapExpr): Boolean =

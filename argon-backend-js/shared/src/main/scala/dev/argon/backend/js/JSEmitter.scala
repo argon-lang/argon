@@ -16,7 +16,7 @@ import dev.argon.compiler.vtable._
 import zio._
 import zio.interop.catz.core._
 
-final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicator: Tag] private(val context: TContext, inject: JSInjectCode[Id, I], localVariableIdMapping: Ref[Map[VariableOwnerDescriptor, Seq[VariableIdentifier]]]) {
+final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicator: Tag] private(val context: TContext, inject: JSInjectCode[Id, I], localVariableIdMapping: Ref[Map[VariableOwnerDescriptor, Seq[UniqueIdentifier]]]) {
 
   import context._
   import context.signatureContext.{ context => _, _ }
@@ -61,7 +61,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
     } yield JSModule(
       Vector(
         modulePairs.map { case (refModule, importId) =>
-          JSImportAllStatement(None, importId, refModule.descriptor.name)
+          JSImportAllStatement(None, importId, refModule.id.name)
         },
 
         injectBefore.map(JSModuleRaw.apply).toList.toVector,
@@ -90,7 +90,7 @@ final class JSEmitter[TContext <: JSContext with Singleton, I <: ResourceIndicat
 
         modulePairs.map { case (refModule, importId) =>
           JSAssignment(
-            JSPropertyAccessBracket(moduleVarName, JSString(refModule.descriptor.name)),
+            JSPropertyAccessBracket(moduleVarName, JSString(refModule.id.name)),
             importId
           )
         },
@@ -1069,7 +1069,7 @@ object JSEmitter {
 
   def make[I <: ResourceIndicator: Tag](context: JSContext)(inject: JSInjectCode[Id, I]): UIO[JSEmitter[context.type, I]] =
     for {
-      localVariableIdMapping <- Ref.make(Map.empty[VariableOwnerDescriptor, Seq[VariableIdentifier]])
+      localVariableIdMapping <- Ref.make(Map.empty[VariableOwnerDescriptor, Seq[UniqueIdentifier]])
     } yield new JSEmitter[context.type, I](context, inject, localVariableIdMapping)
 
 }
