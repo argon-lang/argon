@@ -13,8 +13,7 @@ bin/
 
 # Argon Build Output
 example/**/*.js
-libraries/**/*.js
-!libraries/**/out/**/*.js
+libraries/*/bin/
 *.armodule
 
 # Generated Code

@@ -27,22 +27,27 @@ object CallableId {
   implicit val eqInstance: Eq[CallableId] = cats.derived.semi.eq
 }
 
-final case class ClassId(id: UniqueIdentifier) extends CallerId with MethodOwnerId with CallableId
+sealed trait GlobalId
+object GlobalId {
+  implicit val eqInstance: Eq[GlobalId] = cats.derived.semi.eq
+}
+
+final case class ClassId(id: UniqueIdentifier) extends CallerId with MethodOwnerId with CallableId with GlobalId
 object ClassId {
   implicit val eqInstance: Eq[ClassId] = cats.derived.semi.eq
 }
 
-final case class TraitId(id: UniqueIdentifier) extends CallerId with MethodOwnerId with CallableId
+final case class TraitId(id: UniqueIdentifier) extends CallerId with MethodOwnerId with CallableId with GlobalId
 object TraitId {
   implicit val eqInstance: Eq[TraitId] = cats.derived.semi.eq
 }
 
-final case class DataConstructorId(id: UniqueIdentifier) extends CallerId with MethodOwnerId with CallableId
+final case class DataConstructorId(id: UniqueIdentifier) extends CallerId with MethodOwnerId with CallableId with GlobalId
 object DataConstructorId {
   implicit val eqInstance: Eq[DataConstructorId] = cats.derived.semi.eq
 }
 
-final case class FunctionId(id: UniqueIdentifier) extends CallerId with CallableId
+final case class FunctionId(id: UniqueIdentifier) extends CallerId with CallableId with GlobalId
 object FunctionId {
   implicit val eqInstance: Eq[FunctionId] = cats.derived.semi.eq
 }
@@ -57,31 +62,17 @@ object ClassConstructorId {
   implicit val eqInstance: Eq[ClassConstructorId] = cats.derived.semi.eq
 }
 
-final case class VariableId(id: UniqueIdentifier)
-object VariableId {
-  implicit val eqInstance: Eq[VariableId] = cats.derived.semi.eq
+
+
+sealed trait VariableId
+
+final case class LocalVariableId(id: UniqueIdentifier) extends VariableId
+object LocalVariableId {
+  implicit val eqInstance: Eq[LocalVariableId] = cats.derived.semi.eq
 }
 
+final case class ParameterVariableId(ownerId: CallableId, index: Int) extends VariableId
+final case class ThisParameterVariableId(ownerId: CallableId) extends VariableId
 
-/*
+final case class FieldVariableId(ownerId: ClassId, name: String) extends VariableId
 
-
-sealed trait VariableLikeDescriptor extends Descriptor
-object VariableLikeDescriptor {
-  implicit val eqInstance: Eq[VariableLikeDescriptor] = cats.derived.semi.eq
-}
-
-final case class ParameterDescriptor(owner: ParameterOwnerDescriptor, index: Int) extends VariableLikeDescriptor {
-  override def moduleDescriptor: ModuleId = owner.moduleDescriptor
-}
-
-final case class VariableDescriptor(owner: VariableOwnerDescriptor, id: UniqueIdentifier) extends VariableLikeDescriptor {
-  override def moduleDescriptor: ModuleId = owner.moduleDescriptor
-}
-
-final case class FieldDescriptor(owner: ClassDescriptor, name: String) extends VariableLikeDescriptor {
-  override def moduleDescriptor: ModuleId = owner.moduleDescriptor
-}
-
-
-*/

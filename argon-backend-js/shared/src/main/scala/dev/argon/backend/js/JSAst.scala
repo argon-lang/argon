@@ -19,7 +19,7 @@ final case class JSExportDeclaration(declaration: JSDeclarationStatement) extend
 
 sealed trait JSImportStatement extends JSModuleStatement
 final case class JSImportDefaultStatement(defaultExport: JSIdentifier, moduleName: String) extends JSImportStatement
-final case class JSImportAllStatement(defaultExport: Option[JSIdentifier], name: JSIdentifier, moduleName: String) extends JSImportStatement
+final case class JSImportAllStatement(name: JSIdentifier, moduleName: String) extends JSImportStatement
 
 final case class JSModuleRaw(code: String) extends JSModuleStatement
 
@@ -31,18 +31,17 @@ final case class JSLet(declarations: NonEmptyList[JSDeclaration]) extends JSDecl
 final case class JSFunctionStatement(name: JSIdentifier, parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSDeclarationStatement
 
 sealed trait JSBinding
-sealed trait JSBindingNonEmpty extends JSBinding
-final case class JSBindingIdentifier(identifier: JSIdentifier) extends JSBindingNonEmpty
-final case class JSArrayDestructBinding(bindings: Vector[JSBinding]) extends JSBindingNonEmpty
+final case class JSBindingIdentifier(identifier: JSIdentifier) extends JSBinding
+final case class JSArrayDestructBinding(bindings: Vector[JSBinding]) extends JSBinding
 
 sealed trait JSDeclaration
-final case class JSDeclareNewVariable(binding: JSBindingNonEmpty) extends JSDeclaration
-final case class JSDeclareInit(binding: JSBindingNonEmpty, value: JSExpression) extends JSDeclaration
+final case class JSDeclareNewVariable(binding: JSIdentifier) extends JSDeclaration
+final case class JSDeclareInit(binding: JSBinding, value: JSExpression) extends JSDeclaration
 
 sealed trait JSFunctionParameterList
 case object JSFunctionEmptyParameterList extends JSFunctionParameterList
-final case class JSFunctionParameter(name: JSBindingNonEmpty, next: JSFunctionParameterList) extends JSFunctionParameterList
-final case class JSFunctionRestParameters(name: JSBindingNonEmpty) extends JSFunctionParameterList
+final case class JSFunctionParameter(name: JSBinding, next: JSFunctionParameterList) extends JSFunctionParameterList
+final case class JSFunctionRestParameters(name: JSBinding) extends JSFunctionParameterList
 
 final case class JSIfElseStatement(condition: JSExpression, ifBody: Vector[JSStatement], elseBody: Vector[JSStatement]) extends JSStatement
 final case class JSTryStatement(body: Vector[JSStatement], catchClause: Option[(JSIdentifier, Vector[JSStatement])], finallyBody: Option[Vector[JSStatement]]) extends JSStatement
@@ -64,10 +63,12 @@ final case class JSObjectComputedProperty(name: JSExpression, value: JSExpressio
 final case class JSIdentifier(id: String) extends JSExpression
 
 final case class JSAssignment(left: JSExpression, right: JSExpression) extends JSExpression
-final case class JSPropertyAccessDot(expr: JSExpression, prop: JSIdentifier) extends JSExpression
-final case class JSPropertyAccessBracket(expr: JSExpression, prop: JSExpression) extends JSExpression
+final case class JSPropertyAccessDot(expr: JSExpression, property: JSIdentifier) extends JSExpression
+final case class JSPropertyAccessBracket(expr: JSExpression, property: JSExpression) extends JSExpression
 final case class JSString(value: String) extends JSExpression
 final case class JSBigInt(value: BigInt) extends JSExpression
+final case class JSNumberInt(value: Int) extends JSExpression
+final case class JSBoolean(value: Boolean) extends JSExpression
 final case class JSFunctionCall(function: JSExpression, args: Vector[JSExpression]) extends JSExpression
 final case class JSNewCall(function: JSExpression, args: Vector[JSExpression]) extends JSExpression
 final case class JSFunctionExpression(name: Option[JSIdentifier], parameters: JSFunctionParameterList, body: Vector[JSStatement]) extends JSExpression
@@ -82,7 +83,7 @@ object JSAst {
 
   def writeModule[R, E](module: JSModule): Source[R, E, String] = new Source[R, E, String] {
 
-    override def foreach[R1 <: R, E1 >: E](consume: String => ZIO[R1, E1, Unit]): ZIO[R1, E1, Unit] =
+    override def foreach(consume: String => ZIO[R, E, Unit]): ZIO[R, E, Unit] =
       new WriteImpl(consume).writeModule(module)
   }
 
@@ -119,15 +120,9 @@ object JSAst {
             _ <- write(";")
           } yield ()
 
-        case JSImportAllStatement(defaultExport, name, moduleName) =>
+        case JSImportAllStatement(name, moduleName) =>
           for {
             _ <- write("import ")
-            _ <- ZIO.foreach(defaultExport) { defaultId =>
-              for {
-                _ <- writeIdentifier(defaultId)
-                _ <- write(", ")
-              } yield ()
-            }
             _ <- write("* as ")
             _ <- writeIdentifier(name)
             _ <- write(" from ")
@@ -242,7 +237,7 @@ object JSAst {
     def writeDeclaration(decl: JSDeclaration): F[Unit] =
       decl match {
         case JSDeclareNewVariable(binding) =>
-          writeBinding(binding)
+          writeBinding(JSBindingIdentifier(binding))
 
         case JSDeclareInit(binding, value) =>
           for {
@@ -345,6 +340,12 @@ object JSAst {
             _ <- write(i.toString)
             _ <- write("n")
           } yield ()
+
+        case JSNumberInt(i) =>
+          write(i.toString)
+
+        case JSBoolean(true) => write("true")
+        case JSBoolean(false) => write("false")
 
         case JSFunctionCall(function, args) =>
           for {

@@ -49,6 +49,7 @@ sealed abstract class Substitutions[Wrap[+_]: Monad] {
     variable match {
       case variable: LocalVariable[context.type, Wrap] => substLocalVariable(variable)
       case variable: ParameterVariable[context.type, Wrap] => substParamVariable(variable)
+      case ThisParameterVariable(owner, name, mutability, varType) => ThisParameterVariable(owner, name, mutability, substWrapExpr(varType))
       case FieldVariable(owner, name, mutability, varType) => FieldVariable(owner, name, mutability, substWrapExpr(varType))
     }
 

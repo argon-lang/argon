@@ -12,11 +12,15 @@ import zio.IO
 
 object DummyTrait {
 
-  def apply(ctx: DummyContext)(name: String, id: BigInt, baseTraits: TraitType[ctx.type, Id]*): ArTrait[ctx.type, DeclarationPayloadSpecifier] =
+  def apply(ctx: DummyContext)(module: ArModule[ctx.type, DeclarationPayloadSpecifier], name: String, traitId: TraitId, baseTraits: TraitType[ctx.type, Id]*): ArTrait[ctx.type, DeclarationPayloadSpecifier] =
     new ArTrait[ctx.type, DeclarationPayloadSpecifier] {
       override val context: ctx.type = ctx
       override val contextProof: Is[context.type, ctx.type] = Is.refl
-      override val descriptor: TraitDescriptor = TraitDescriptor.InNamespace(DummyModule.descriptor, id, NamespacePath.empty, GlobalName.Normal(name))
+
+      override val id: TraitId = traitId
+      override val owner: TraitOwner[context.type, DeclarationPayloadSpecifier] =
+        TraitOwner.ByNamespace(module, NamespacePath.empty, GlobalName.Normal(name))
+
       override val fileId: FileID = FileID(0)
       override val isSealed: Boolean = false
 

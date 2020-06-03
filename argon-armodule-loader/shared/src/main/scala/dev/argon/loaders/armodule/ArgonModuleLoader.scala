@@ -89,7 +89,7 @@ object ArgonModuleLoader {
         functionCache <- MemoCacheStore.make[ErrorList, Int, FunctionLoadResult[context.type, TPayloadSpec]]
         methodCache <- MemoCacheStore.make[ErrorList, Int, MethodLoadResult[context.type, TPayloadSpec]]
         classCtorCache <- MemoCacheStore.make[ErrorList, Int, ClassCtorLoadResult[context.type, TPayloadSpec]]
-        localVariableIdCache <- MemoCacheStore.make[ErrorList, Int, VariableId]
+        localVariableIdCache <- MemoCacheStore.make[ErrorList, Int, LocalVariableId]
 
         module <- new ModuleCreator {
 
@@ -335,8 +335,7 @@ object ArgonModuleLoader {
           )(
             moduleObjectType: CompilationError.ModuleObjectType,
           )(
-            refPathFunction: Int => String,
-            defPathFunction: Int => String,
+            pathTypeStr: String,
             refCompanion: GeneratedMessageCompanion[TRef],
             defCompanion: GeneratedMessageCompanion[TDef],
           )(
@@ -353,7 +352,7 @@ object ArgonModuleLoader {
               val zip = zipFile
 
               if(id < 0) {
-                val entry = zip.getEntryStream(refPathFunction(id.abs))
+                val entry = zip.getEntryStream(ModulePaths.elementRef(pathTypeStr, id.abs))
                 res.deserializeProtocolBuffer(refCompanion)(entry)
                   .flatMap { refValue =>
                     parseDescriptor(refOwnerLens(refValue)).flatMap {
@@ -371,7 +370,7 @@ object ArgonModuleLoader {
                   }
               }
               else {
-                val entry = zip.getEntryStream(defPathFunction(id))
+                val entry = zip.getEntryStream(ModulePaths.elementDef(pathTypeStr, id))
                 res.deserializeProtocolBuffer(defCompanion)(entry)
                   .flatMap { defValue =>
                     parseDescriptor(defOwnerLens(defValue)).flatMap {
@@ -423,8 +422,7 @@ object ArgonModuleLoader {
             )(
               CompilationError.ModuleObjectTrait
             )(
-              refPathFunction = ModulePaths.traitRef,
-              defPathFunction = ModulePaths.traitDef,
+              pathTypeStr = ModulePaths.traitTypeName,
               refCompanion = ArgonModule.TraitReference,
               defCompanion = ArgonModule.TraitDefinition,
             )(
@@ -496,8 +494,7 @@ object ArgonModuleLoader {
             )(
               CompilationError.ModuleObjectClass
             )(
-              refPathFunction = ModulePaths.classRef,
-              defPathFunction = ModulePaths.classDef,
+              pathTypeStr = ModulePaths.classTypeName,
               refCompanion = ArgonModule.ClassReference,
               defCompanion = ArgonModule.ClassDefinition,
             )(
@@ -594,8 +591,7 @@ object ArgonModuleLoader {
             )(
               CompilationError.ModuleObjectDataConstructor
             )(
-              refPathFunction = ModulePaths.dataCtorRef,
-              defPathFunction = ModulePaths.dataCtorDef,
+              pathTypeStr = ModulePaths.dataCtorTypeName,
               refCompanion = ArgonModule.DataConstructorReference,
               defCompanion = ArgonModule.DataConstructorDefinition,
             )(
@@ -630,8 +626,7 @@ object ArgonModuleLoader {
             )(
               CompilationError.ModuleObjectFunction
             )(
-              refPathFunction = ModulePaths.funcRef,
-              defPathFunction = ModulePaths.funcDef,
+              pathTypeStr = ModulePaths.funcTypeName,
               refCompanion = ArgonModule.FunctionReference,
               defCompanion = ArgonModule.FunctionDefinition,
             )(
@@ -696,8 +691,7 @@ object ArgonModuleLoader {
             )(
               CompilationError.ModuleObjectMethod
             )(
-              refPathFunction = ModulePaths.methodRef,
-              defPathFunction = ModulePaths.methodDef,
+              pathTypeStr = ModulePaths.methodTypeName,
               refCompanion = ArgonModule.MethodReference,
               defCompanion = ArgonModule.MethodDefinition,
             )(
@@ -783,8 +777,7 @@ object ArgonModuleLoader {
               )(
                 CompilationError.ModuleObjectClassConstructor
               )(
-                refPathFunction = ModulePaths.classCtorRef,
-                defPathFunction = ModulePaths.classCtorDef,
+                pathTypeStr = ModulePaths.classCtorTypeName,
                 refCompanion = ArgonModule.ClassConstructorReference,
                 defCompanion = ArgonModule.ClassConstructorDefinition,
               )(
@@ -1032,7 +1025,7 @@ object ArgonModuleLoader {
             }
 
           def resolveLocalVariable(variable: ArgonModule.LocalVariable): Comp[LocalVariable[context.type, TTypeWrapper]] = for {
-            varId <- localVariableIdCache.usingCreate { _ => UniqueIdentifier.make.map(VariableId(_)) }.get(variable.id)
+            varId <- localVariableIdCache.usingCreate { _ => UniqueIdentifier.make.map(LocalVariableId(_)) }.get(variable.id)
             varOwner <- variable.owner.owner match {
               case ArgonModule.LocalVariableOwner.Owner.ByClass(classId) => getArClass(classId).map(unifyLoadResult(_)).map(LocalVariableOwner.ByClass(_))
               case ArgonModule.LocalVariableOwner.Owner.ByTrait(traitId) => getTrait(traitId).map(unifyLoadResult(_)).map(LocalVariableOwner.ByTrait(_))

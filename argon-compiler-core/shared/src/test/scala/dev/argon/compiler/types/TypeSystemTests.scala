@@ -1,42 +1,34 @@
 package dev.argon.compiler.types
 
-import dev.argon.compiler.ErrorList
-import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
-import dev.argon.compiler.core.{AbsRef, ArTrait}
+import dev.argon.compiler.{Comp, ErrorList}
+import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
+import dev.argon.compiler.core.{AbsRef, ArModule, ArTrait, ModuleId, Namespace}
 import dev.argon.compiler.expr.ArExpr.TraitType
 import zio.test.{DefaultRunnableSpec, ZSpec}
 import shapeless.Id
-import zio.Cause
-import zio.stream._
+import zio._
 import zio.test._
 import zio.test.Assertion._
 
 object TypeSystemTests extends DefaultRunnableSpec {
 
-  val context = new DummyContext
-  def traitType[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): TraitType[context.type, Id] =
-    TraitType[context.type, Id](AbsRef(arTrait), Vector.empty)
-
-  val traitA = DummyTrait(context)("A", 0)
-  val traitB = DummyTrait(context)("B", 0, traitType(traitA))
-  val traitC = DummyTrait(context)("C", 0, traitType(traitB))
-  val traitD = DummyTrait(context)("D", 0, traitType(traitA))
-  val traitE = DummyTrait(context)("E", 0, traitType(traitB), traitType(traitD))
-
-
-
-  val genTraitType: Gen[Any, TraitType[context.type, Id]] = Gen(Stream(traitA, traitB, traitC, traitD, traitE).map { t => Sample(traitType(t), Stream.empty) })
-
-
-  import context.typeSystem
 
 
   override def spec: ZSpec[Environment, Failure] =
-    suite("Type System Tests")(
-      traitTests,
+    Spec.suite(
+      "Type System Tests",
+      Managed.fromEffect(
+        for {
+          moduleEmitter <- ExampleTypes.make
+        } yield Vector(traitTests(moduleEmitter))
+      ),
+      None
     )
 
-  private def traitTests: ZSpec[Environment, Failure] =
+  private def traitTests(exampleTypes: ExampleTypes): ZSpec[Environment, Failure] = {
+    import exampleTypes._
+    import context.typeSystem
+
     suite("Trait Tests")(
       testM("forall trait X :: X <: X")(
         checkM(genTraitType) { x =>
@@ -89,5 +81,6 @@ object TypeSystemTests extends DefaultRunnableSpec {
         assertM(typeSystem.isSubType(traitType(traitE), traitType(traitD)))(isNone)
       ),
     )
+  }
 
 }

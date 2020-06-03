@@ -105,11 +105,6 @@ message ClassField {
     required Expression fieldType = 3;
 }
 
-message ClassConstructorMember {
-    required int32 id = 1;
-    required AccessModifier accessModifier = 2;
-}
-
 message DataConstructorDefinition {
     required DataConstructorOwner owner = 1;
     required FileID fileId = 2;

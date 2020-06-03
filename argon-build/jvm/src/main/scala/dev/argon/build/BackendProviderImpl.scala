@@ -28,6 +28,7 @@ object BackendProviderImpl {
           Seq(ParseTestCaseRunner) ++
             allBackends.map { backend => new BuildTestCaseRunner(backend, references) } ++
             Seq(new GraalJSTestCaseRunner(jsBackend, references, pathResolver))
+      }
     }
   )
 

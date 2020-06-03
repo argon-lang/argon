@@ -126,7 +126,7 @@ final case class JSBackend(private val moduleExtractor: JSModuleExtractor) exten
       override protected val resourceReader: ResourceReader.Service[I] = resReader
     }
 
-    emitter <- ZManaged.fromEffect(JSEmitter.make(context)(input.backendOptions.inject))
+    emitter = new JSEmitter(context, input.backendOptions.inject)
     module <- context.module[JSContext with Context.WithRes[I]].provideSomeLayer[ResourceReader[I] with SourceParser](JSBackendLoadService.forResourceReader[I, JSContext with Context.WithRes[I]])
     jsModule <- ZManaged.fromEffect(emitter.emitModule(module))
 

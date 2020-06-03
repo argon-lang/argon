@@ -80,6 +80,11 @@ abstract class TypeSystemConverter {
       case v @ ParameterVariable(_, _, _, _, _) =>
         convertParamVariableTypeSystem(v).map(identity)
 
+      case ThisParameterVariable(owner, name, mutability, varType) =>
+        for {
+          newType <- convertTypeSystem(varType)
+        } yield ThisParameterVariable(owner, name, mutability, newType)
+
       case FieldVariable(owner, name, mutability, varType) =>
         for {
           newType <- convertTypeSystem(varType)

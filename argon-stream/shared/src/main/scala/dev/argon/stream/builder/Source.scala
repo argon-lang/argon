@@ -7,9 +7,9 @@ import cats.implicits._
 import zio.stream.ZStream
 import zio.{Exit, IO, Queue, Ref, ZIO}
 
-trait Source[-R, +E, +A] {
+trait Source[R, E, A] {
 
-  def foreach[R1 <: R, E1 >: E](f: A => ZIO[R1, E1, Unit]): ZIO[R1, E1, Unit]
+  def foreach(f: A => ZIO[R, E, Unit]): ZIO[R, E, Unit]
 
   def toZStream: ZStream[R, E, A] =
     ZStream.unwrap(

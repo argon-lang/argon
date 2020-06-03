@@ -448,6 +448,10 @@ object CompilationError {
     override def message: String = "Else without rescue is useless."
   }
 
+  final case class EmitError(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "An error occurred while generating the output."
+  }
+
   sealed trait CouldNotConvertType extends CompilationError {
     val typeSystem: TypeSystem
     val fromType: typeSystem.TType
@@ -509,6 +513,10 @@ object CompilationMessageSource {
 
   final case class ThrownException(ex: Exception) extends CompilationMessageSource {
     override def formatted: String = ex.toString
+  }
+
+  final case class EmitPhase() extends CompilationMessageSource {
+    override def formatted: String = "emit phase"
   }
 
 }

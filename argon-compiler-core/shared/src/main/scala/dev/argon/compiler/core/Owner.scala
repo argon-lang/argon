@@ -4,24 +4,32 @@ import cats.Eq
 import cats.implicits._
 import dev.argon.util.NamespacePath
 
-sealed trait ClassOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]]
+sealed trait ClassOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+  def module: ArModule[TContext, TPayloadSpec]
+}
 object ClassOwner {
   final case class ByNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](module: ArModule[TContext, TPayloadSpec], namespace: NamespacePath, name: GlobalName) extends ClassOwner[TContext, TPayloadSpec]
 }
 
-sealed trait TraitOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]]
+sealed trait TraitOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+  def module: ArModule[TContext, TPayloadSpec]
+}
 object TraitOwner {
-  final case class ByNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](moduleId: ArModule[TContext, TPayloadSpec], namespace: NamespacePath, name: GlobalName) extends TraitOwner[TContext, TPayloadSpec]
+  final case class ByNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](module: ArModule[TContext, TPayloadSpec], namespace: NamespacePath, name: GlobalName) extends TraitOwner[TContext, TPayloadSpec]
 }
 
-sealed trait DataConstructorOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]]
+sealed trait DataConstructorOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+  def module: ArModule[TContext, TPayloadSpec]
+}
 object DataConstructorOwner {
-  final case class ByNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](moduleId: ArModule[TContext, TPayloadSpec], namespace: NamespacePath, name: GlobalName) extends DataConstructorOwner[TContext, TPayloadSpec]
+  final case class ByNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](module: ArModule[TContext, TPayloadSpec], namespace: NamespacePath, name: GlobalName) extends DataConstructorOwner[TContext, TPayloadSpec]
 }
 
-sealed trait FunctionOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]]
+sealed trait FunctionOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+  def module: ArModule[TContext, TPayloadSpec]
+}
 object FunctionOwner {
-  final case class ByNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](moduleId: ArModule[TContext, TPayloadSpec], namespace: NamespacePath, name: GlobalName) extends FunctionOwner[TContext, TPayloadSpec]
+  final case class ByNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]](module: ArModule[TContext, TPayloadSpec], namespace: NamespacePath, name: GlobalName) extends FunctionOwner[TContext, TPayloadSpec]
 }
 
 

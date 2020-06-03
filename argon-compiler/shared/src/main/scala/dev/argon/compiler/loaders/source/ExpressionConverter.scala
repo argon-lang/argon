@@ -459,7 +459,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               varId <- UniqueIdentifier.make
 
               argVar = LocalVariable(
-                VariableId(varId),
+                LocalVariableId(varId),
                 env.variableOwner,
                 varName.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
                 Mutability.NonMutable,
@@ -505,7 +505,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   varId <- UniqueIdentifier.make
 
                   variable = LocalVariable(
-                    VariableId(varId),
+                    LocalVariableId(varId),
                     env.variableOwner,
                     VariableName.Unnamed,
                     Mutability.NonMutable,
@@ -520,7 +520,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   varId <- UniqueIdentifier.make
 
                   variable = LocalVariable(
-                    VariableId(varId),
+                    LocalVariableId(varId),
                     env.variableOwner,
                     VariableName.Normal(name),
                     Mutability.NonMutable,
@@ -535,7 +535,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   patT <- evaluateTypeExprAST(env)(patternType)
                   varId <- UniqueIdentifier.make
                   variable = LocalVariable(
-                    VariableId(varId),
+                    LocalVariableId(varId),
                     env.variableOwner,
                     name.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
                     Mutability.NonMutable,
@@ -667,7 +667,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               varId <- UniqueIdentifier.make
 
               variable = LocalVariable(
-                VariableId(varId),
+                LocalVariableId(varId),
                 env.variableOwner,
                 varName,
                 mutability,
@@ -1145,7 +1145,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             case Vector() =>
               for {
                 varId <- UniqueIdentifier.make
-                newVar = LocalVariable(VariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+                newVar = LocalVariable(LocalVariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
                 env2 = env.copy(scope = env.scope.addVariable(newVar))
                 newVarExpr = LoadVariable(newVar)
 
@@ -1156,7 +1156,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             case head +: tail =>
               for {
                 varId <- UniqueIdentifier.make
-                newVar = LocalVariable(VariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+                newVar = LocalVariable(LocalVariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
                 env2 = env.copy(scope = env.scope.addVariable(newVar))
                 newVarExpr = LoadVariable(newVar)
                 nextSig <- signatureNextPart(sigParams)(fromSimpleType(newVarExpr))
