@@ -7,6 +7,7 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.lookup.LookupNames
 import dev.argon.util.NamespacePath
 import zio._
+import zio.interop.catz.core._
 import cats.implicits._
 
 private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
@@ -59,8 +60,85 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
       })
     }
 
-  def convertSignature(sig: ErasedSignature[context.type]): JSExpression = ???
-  def convertParameterOnlySignature(sig: ErasedSignature.ParameterOnlySignature[context.type]): JSExpression = ???
+  def convertSignatureType(t: ErasedSignature.SigType[context.type]): Emit[JSExpression] =
+    t match {
+      case ErasedSignature.BlankType() => IO.succeed(jsobj("type" -> JSString("blank")))
+      case ErasedSignature.TraitType(arTrait) =>
+        arTrait.value.signature
+          .flatMap { sig => getTraitJSObject(arTrait.value, ErasedSignature.fromSignatureParameters(context)(sig)) }
+          .map { traitObj =>
+            jsobj(
+              "type" -> JSString("trait"),
+              "arTrait" -> traitObj,
+            )
+          }
+
+      case ErasedSignature.ClassType(arClass) =>
+        arClass.value.signature
+          .flatMap { sig => getClassJSObject(arClass.value, ErasedSignature.fromSignatureParameters(context)(sig)) }
+          .map { classObj =>
+            jsobj(
+              "type" -> JSString("class"),
+              "arClass" -> classObj,
+            )
+          }
+      case ErasedSignature.DataConstructorType(ctor) =>
+        ctor.value.signature
+          .flatMap { sig => getDataCtorJSObject(ctor.value, ErasedSignature.fromSignatureParameters(context)(sig)) }
+          .map { ctorObj =>
+            jsobj(
+              "type" -> JSString("data-constructor"),
+              "dataConstructor" -> ctorObj,
+            )
+          }
+
+      case ErasedSignature.TupleType(elements) =>
+        elements.toList.toVector
+          .traverse(convertSignatureType)
+          .map { elemTypes =>
+            jsobj(
+              "type" -> JSString("tuple"),
+              "elements" -> JSArrayLiteral(elemTypes),
+            )
+          }
+
+      case ErasedSignature.FunctionType(argumentType, resultType) =>
+        for {
+          argType <- convertSignatureType(argumentType)
+          resType <- convertSignatureType(resultType)
+        } yield jsobj(
+          "type" -> JSString("function"),
+          "argumentType" -> argType,
+          "resultType" -> resType,
+        )
+    }
+
+  def convertSignature(sig: ErasedSignature[context.type]): Emit[JSExpression] = {
+    def impl(sig: ErasedSignature[context.type], acc: Vector[JSExpression]): Emit[JSExpression] =
+      sig match {
+        case ErasedSignature.Parameter(paramType, next) =>
+          convertSignatureType(paramType).flatMap { convParamType =>
+            impl(next, acc :+ convParamType)
+          }
+
+        case ErasedSignature.Result(resultType) =>
+          convertSignatureType(resultType).map { convResultType =>
+            jsobj(
+              "parameterTypes" -> JSArrayLiteral(acc),
+              "resultType" -> convResultType
+            )
+          }
+      }
+
+    impl(sig, Vector.empty)
+  }
+
+  def convertParameterOnlySignature(sig: ErasedSignature.ParameterOnlySignature[context.type]): Emit[JSExpression] =
+    for {
+      paramTypes <- sig.paramTypes.traverse(convertSignatureType)
+    } yield jsobj(
+      "parameterTypes" -> JSArrayLiteral(paramTypes)
+    )
 
   def getClassJSObject[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec], sig: ErasedSignature.ParameterOnlySignature[context.type]): Emit[JSExpression] =
     arClass.owner match {
@@ -68,7 +146,8 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
         for {
           moduleObj <- getModuleJSObject(module.id)
           nameValue <- convertGlobalName(name, arClass.id)
-        } yield moduleObj.prop(id"globalClass")(convertNamespacePath(namespace), nameValue, convertParameterOnlySignature(sig))
+          convSig <- convertParameterOnlySignature(sig)
+        } yield moduleObj.prop(id"globalClass")(convertNamespacePath(namespace), nameValue, convSig)
     }
 
   def getTraitJSObject[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec], sig: ErasedSignature.ParameterOnlySignature[context.type]): Emit[JSExpression] =
@@ -77,7 +156,8 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
         for {
           moduleObj <- getModuleJSObject(module.id)
           nameValue <- convertGlobalName(name, arTrait.id)
-        } yield moduleObj.prop(id"globalTrait")(convertNamespacePath(namespace), nameValue, convertParameterOnlySignature(sig))
+          convSig <- convertParameterOnlySignature(sig)
+        } yield moduleObj.prop(id"globalTrait")(convertNamespacePath(namespace), nameValue, convSig)
     }
 
 
@@ -87,7 +167,8 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
         for {
           moduleObj <- getModuleJSObject(module.id)
           nameValue <- convertGlobalName(name, ctor.id)
-        } yield moduleObj.prop(id"globalDataConstructor")(convertNamespacePath(namespace), nameValue, convertParameterOnlySignature(sig))
+          convSig <- convertParameterOnlySignature(sig)
+        } yield moduleObj.prop(id"globalDataConstructor")(convertNamespacePath(namespace), nameValue, convSig)
     }
 
   def getMethodLookupFunction[TPayloadSpec[_, _]](methodOwner: MethodOwner[context.type, TPayloadSpec]): Emit[JSExpression] =
@@ -129,21 +210,22 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
     sig <- method.signatureUnsubstituted
     lookupFunction <- getMethodLookupFunction(method.owner)
     name = getMethodName(method.name)
-  } yield lookupFunction(name, convertSignature(ErasedSignature.fromSignature(context)(sig)))
+    convSig <- convertSignature(ErasedSignature.fromSignature(context)(sig))
+  } yield lookupFunction(name, convSig)
 
   def getClassConstructorJSObject[TPayloadSpec[_, _]](ctor: ClassConstructor[context.type, TPayloadSpec]): Emit[JSExpression] = for {
     classSig <- ctor.ownerClass.signature
     ownerClassObj <- getClassJSObject(ctor.ownerClass, ErasedSignature.fromSignatureParameters(context)(classSig))
     sig <- ctor.signatureUnsubstituted
-  } yield ownerClassObj.prop(id"constructor")(convertParameterOnlySignature(ErasedSignature.fromSignatureParameters(context)(sig)))
+    convSig <- convertParameterOnlySignature(ErasedSignature.fromSignatureParameters(context)(sig))
+  } yield ownerClassObj.prop(id"constructor")(convSig)
 
   def getFunctionJSObject[TPayloadSpec[_, _]](func: ArFunc[context.type, TPayloadSpec]): Emit[JSExpression] = for {
     sig <- func.signature
     result <- func.owner match {
       case FunctionOwner.ByNamespace(module, namespace, name) =>
-        val jsSig = convertSignature(ErasedSignature.fromSignature(context)(sig))
-
         for {
+          jsSig <- convertSignature(ErasedSignature.fromSignature(context)(sig))
           moduleObj <- getModuleJSObject(module.id)
           nameValue <- convertGlobalName(name, func.id)
         } yield moduleObj.prop(id"globalFunction")(convertNamespacePath(namespace), nameValue, jsSig)

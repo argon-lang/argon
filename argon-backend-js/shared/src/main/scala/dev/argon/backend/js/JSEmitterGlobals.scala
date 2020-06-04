@@ -292,9 +292,10 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
       }
 
       createMethod <- coreLibExport("createMethod")
+      convSig <- convertSignature(ErasedSignature.fromSignature(context)(sig))
     } yield jsobj(
       "name" -> getMethodName(method.name),
-      "sig" -> convertSignature(ErasedSignature.fromSignature(context)(sig)),
+      "sig" -> convSig,
       "create" -> jsfunction(None)()(
         JSReturn(createMethod(jsobj(
           "implementation" -> jsImpl,
@@ -398,7 +399,9 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
                 baseClassErasedSig = ErasedSignature.fromSignatureParameters(context)(baseClassSig)
                 baseClassObj <- getClassJSObject(baseClass, baseClassErasedSig)
 
-                baseCtorObj = baseClassObj.prop(id"constructor")(convertParameterOnlySignature(ErasedSignature.fromSignatureParameters(context)(baseCtorSig)))
+                convBaseCtorSig <- convertParameterOnlySignature(ErasedSignature.fromSignatureParameters(context)(baseCtorSig))
+
+                baseCtorObj = baseClassObj.prop(id"constructor")(convBaseCtorSig)
 
                 argExprs <- addToVarMap(initVarMapping: _*)(
                   baseCallExpr.args.traverse(convertExpr(_))

@@ -22,14 +22,9 @@ export interface DataConstructorType {
     readonly dataConstructor: DataConstructor;
 }
 
-export interface TupleElement {
-    readonly name?: undefined;
-    readonly elementType: SigType;
-}
-
 export interface TupleType {
     readonly type: "tuple";
-    readonly elements: ReadonlyArray<TupleElement>;
+    readonly elements: ReadonlyArray<SigType>;
 }
 
 export interface FunctionType {
@@ -40,21 +35,12 @@ export interface FunctionType {
 
 export type SigType = BlankType | TraitType | ClassType | DataConstructorType | TupleType | FunctionType;
 
-export interface SigParameter {
-    readonly type: "parameter";
-    readonly parameterType: SigType;
-    readonly next: Signature;
-}
-
-export interface SigResult {
-    readonly type: "result";
-    readonly resultType: SigType;
-}
-
-export type Signature = SigParameter | SigResult;
-
 export interface ParameterOnlySignature {
     readonly parameterTypes: ReadonlyArray<SigType>;
+}
+
+export interface Signature extends ParameterOnlySignature {
+    readonly resultType: SigType;
 }
 
 export interface GlobalClassDescriptor {
@@ -193,11 +179,7 @@ function sigTypeEqual(t1: SigType, t2: SigType): boolean {
         }
 
         for(let i = 0; i < t1.elements.length; ++i) {
-            if(t1.elements[i].name !== t2.elements[i].name) {
-                return false;
-            }
-
-            if(!sigTypeEqual(t1.elements[i].elementType, t2.elements[i].elementType)) {
+            if(!sigTypeEqual(t1.elements[i], t2.elements[i])) {
                 return false;
             }
         }
@@ -213,15 +195,7 @@ function sigTypeEqual(t1: SigType, t2: SigType): boolean {
 }
 
 function signatureEqual(sig1: Signature, sig2: Signature): boolean {
-    if(sig1.type === "parameter" && sig2.type === "parameter") {
-        return sigTypeEqual(sig1.parameterType, sig2.parameterType) && signatureEqual(sig1.next, sig2.next);
-    }
-    else if(sig1.type === "result" && sig2.type === "result") {
-        return sigTypeEqual(sig1.resultType, sig2.resultType);
-    }
-    else {
-        return false;
-    }
+    return paramSignatureEqual(sig1, sig2) && sigTypeEqual(sig1.resultType, sig2.resultType);
 }
 
 function paramSignatureEqual(sig1: ParameterOnlySignature, sig2: ParameterOnlySignature): boolean {

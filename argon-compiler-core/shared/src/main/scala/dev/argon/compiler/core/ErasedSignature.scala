@@ -46,6 +46,7 @@ object ErasedSignature {
       case t: ArExpr.ClassType[context.type, Id] => ClassType(t.arClass)
       case t: ArExpr.TraitType[context.type, Id] => TraitType(t.arTrait)
       case t: ArExpr.DataConstructorType[context.type, Id] => DataConstructorType(t.ctor)
+      case ArExpr.LoadTuple(NonEmptyList(ArExpr.TupleElement(inner), Nil)) => typeToSigType(context)(inner)
       case t: ArExpr.LoadTuple[context.type, Id] => TupleType(t.values.map { elem => typeToSigType(context)(elem.value) })
       case t: ArExpr.FunctionType[context.type, Id] => FunctionType(typeToSigType(context)(t.argumentType), typeToSigType(context)(t.resultType))
       case _ => BlankType()
