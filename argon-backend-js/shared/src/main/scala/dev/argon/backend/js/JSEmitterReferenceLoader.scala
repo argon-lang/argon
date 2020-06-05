@@ -22,7 +22,7 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
         IO.fromEither(
           emitEnv.modulePairs
             .find { case (module, _) => module.id.name === LookupNames.argonCoreLib }
-            .map { case (_, importName) => importName.cprop(LookupNames.argonCoreLib).prop(id"$exportName") }
+            .map { case (_, JSIdentifier(importName)) => id"${importName}_all".prop(id"$exportName") }
             .toRight { NonEmptyList.of(CompilationError.ReferencedModuleNotFound(dev.argon.module.ModuleReference(LookupNames.argonCoreLib), CompilationMessageSource.EmitPhase())) }
         )
 
@@ -49,7 +49,7 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
 
   def convertGlobalName(name: GlobalName, id: GlobalId): Emit[JSExpression] =
     name match {
-      case GlobalName.Normal(name) => IO.succeed(id"$name")
+      case GlobalName.Normal(name) => IO.succeed(JSString(name))
       case GlobalName.Unnamed => ZIO.accessM(_.unnamedSymbols.modify { symbols =>
         symbols.get(id) match {
           case Some(symbolIdent) => (symbolIdent, symbols)

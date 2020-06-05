@@ -1,20 +1,28 @@
 
-export const unitValue = Object.freeze(Object.create(classes["Ar.Unit:"].constructor.prototype));
+const unitClass = currentModule.globalClass(["Ar"], "Unit", { parameterTypes: [] });
+const stringClass = currentModule.globalClass(["Ar"], "String", { parameterTypes: [] });
+const intClass = currentModule.globalClass(["Ar"], "Int", { parameterTypes: [] });
+const boolClass = currentModule.globalClass(["Ar"], "Bool", { parameterTypes: [] });
+
+
+export const unitValue = Object.freeze(Object.create(
+	unitClass.createUninitializedInstance(unitClass.createClassObject())
+));
 
 export function createString(str) {
-	const obj = Object.create(classes["Ar.String:"].constructor.prototype);
+	const obj = stringClass.createUninitializedInstance(stringClass.createClassObject());
 	obj[stringValueSymbol] = str;
 	return Object.freeze(obj);
 };
 
 export function createInt(i) {
-	const obj = Object.create(classes["Ar.Int:"].constructor.prototype);
+	const obj = intClass.createUninitializedInstance(intClass.createClassObject());
 	obj[intValueSymbol] = i;
 	return Object.freeze(obj);
 }
 
 export function createBool(b) {
-	const obj = Object.create(classes["Ar.Bool:"].constructor.prototype);
+	const obj = boolClass.createUninitializedInstance(boolClass.createClassObject());
 	obj[boolValueSymbol] = b;
 	return Object.freeze(obj);
 }

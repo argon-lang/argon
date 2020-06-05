@@ -414,7 +414,7 @@ trait TypeSystem {
 
       // Potentially reducible after adding inline support
       case FunctionCall(_, _, _) => fromSimpleType(expr).pure[Comp]
-      case MethodCall(_, _, _, _) => fromSimpleType(expr).pure[Comp]
+      case MethodCall(_, _, _, _, _) => fromSimpleType(expr).pure[Comp]
 
       case FunctionObjectCall(function, arg, _) =>
         reduceWrapExprToValue(function).flatMap { func =>
@@ -475,7 +475,7 @@ trait TypeSystem {
       case LoadTupleElement(_, elemType, _) => elemType.pure[Comp]
       case LoadUnit(exprType) => exprType.pure[Comp]
       case LoadVariable(variable) => withTypeOfExpr(variable.varType.pure[Comp])
-      case MethodCall(_, _, _, returnType) => withTypeOfExpr(returnType.pure[Comp])
+      case MethodCall(_, _, _, _, returnType) => withTypeOfExpr(returnType.pure[Comp])
       case PatternMatch(_, cases) =>
         cases
           .traverse { patCase => getWrapExprType(patCase.body) }
@@ -526,7 +526,7 @@ trait TypeSystem {
       case LoadTupleElement(_, elemType, _) => universeOfWrapExpr(elemType).map(PreviousUniverse)
       case LoadUnit(_) => FixedUniverse(0).upcast[UniverseExpr].pure[Comp]
       case LoadVariable(variable) => universeOfWrapExpr(variable.varType).map(PreviousUniverse)
-      case MethodCall(_, _, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse)
+      case MethodCall(_, _, _, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse)
       case PatternMatch(_, cases) =>
         cases
           .traverse { patCase => universeOfWrapExpr(patCase.body) }

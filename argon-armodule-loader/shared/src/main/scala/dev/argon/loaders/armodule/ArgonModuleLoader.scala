@@ -1223,11 +1223,20 @@ object ArgonModuleLoader {
                   strType <- resolveExpr(args.head)
                 } yield LoadConstantString[context.type, TTypeWrapper](s, strType)
 
+              case ArgonModule.Expression.ExprType.LoadLambda(variable) =>
+                for {
+                  args <- sizedArgs[Succ[_0]]
+                  convVariable <- resolveLocalVariable(variable)
+                  body <- resolveExpr(args.head)
+                } yield LoadLambda[context.type, TTypeWrapper](convVariable, body)
+
+
               case ArgonModule.Expression.ExprType.LoadTuple(tupleMetadata) =>
                 for {
-                  elems <- ZIO.foreach(tupleMetadata.elements) {
-                    case ArgonModule.TupleElement(value) =>
-                      resolveExpr(value).map(TupleElement[context.type, TTypeWrapper](_))
+                  _ <- Compilation.require(tupleMetadata.elements.size === t.args.size)(invalidModuleFormatError)
+                  elems <- ZIO.foreach(tupleMetadata.elements zip t.args) {
+                    case (ArgonModule.TupleElement(), arg) =>
+                      resolveExpr(arg).map(TupleElement[context.type, TTypeWrapper](_))
                   }
                   elemsNonEmpty <-
                     IO.fromEither(
@@ -1262,7 +1271,7 @@ object ArgonModuleLoader {
                       resolveExpr(instanceType).flatMap {
                         case instanceType: TypeWithMethods[context.type, TTypeWrapper] =>
                           resolveUsingSignature(findMethod(id))(_.value.signature(context.signatureContext)(instanceType))(args) {
-                            method => (args, resultInfo) => MethodCall[context.type, TTypeWrapper](method, instance, args, resultInfo.returnType)
+                            method => (args, resultInfo) => MethodCall[context.type, TTypeWrapper](method, instance, instanceType, args, resultInfo.returnType)
                           }
 
                         case _ => Compilation.forErrors(invalidModuleFormatError)

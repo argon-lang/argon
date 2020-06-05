@@ -298,7 +298,6 @@ message Variable {
 }
 
 message TupleElement {
-    required Expression value = 1;
 }
 
 message TupleMetadata {
@@ -337,7 +336,7 @@ message UniversePair {
 message UniverseExpr {
     oneof exprType {
         BigInt fixed = 1;
-        sint32 abstractUniverse = 2;
+        google.protobuf.Empty abstractUniverse = 2;
         UniversePair largestUniverse = 3;
         UniverseExpr nextLargestUniverse = 4;
         UniverseExpr previousUniverse = 5;
@@ -372,15 +371,16 @@ message Expression {
         bool loadConstantBool = 113; // First arg is the type
         BigInt loadConstantInt = 114; // First arg is the type
         string loadConstantString = 115; // First arg is the type
-        TupleMetadata loadTuple = 116; // Args must correspond to elements.
-        uint32 loadTupleElement = 117; // Index of the element to load. First is the tuple value, second is the type of the element.
-        google.protobuf.Empty loadUnit = 118; // First is the type
-        Variable loadVariable = 119;
-        sint32 methodCall = 120; // First is the instance object, second is the instance type, rest are method args
-        PatternMatch patternMatch = 121; // First arg is the matched value, patterns must correspond to remaining args
-        PrimitiveOperation primitiveOp = 122; // First arg is the type, rest are operation args
-        google.protobuf.Empty sequence = 123; // Args are executed in sequence (must be non-empty)
-        Variable storeVariable = 124; // First arg is the type of the expression (e.g. Unit), second is the value stored in the variable
+        LocalVariable loadLambda = 116; // First arg is the body
+        TupleMetadata loadTuple = 117; // Args must correspond to elements.
+        uint32 loadTupleElement = 118; // Index of the element to load. First is the tuple value, second is the type of the element.
+        google.protobuf.Empty loadUnit = 119; // First is the type
+        Variable loadVariable = 120;
+        sint32 methodCall = 121; // First is the instance object, second is the instance type, rest are method args
+        PatternMatch patternMatch = 122; // First arg is the matched value, patterns must correspond to remaining args
+        PrimitiveOperation primitiveOp = 123; // First arg is the type, rest are operation args
+        google.protobuf.Empty sequence = 124; // Args are executed in sequence (must be non-empty)
+        Variable storeVariable = 125; // First arg is the type of the expression (e.g. Unit), second is the value stored in the variable
     }
 
     repeated Expression args = 1;

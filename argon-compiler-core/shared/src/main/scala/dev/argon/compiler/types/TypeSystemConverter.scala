@@ -128,6 +128,13 @@ abstract class TypeSystemConverter {
         } yield PatternExpr.CastBinding(newVar)
     }
 
+  def convertTypeWithMethods(t: TypeWithMethods[context.type, FromWrap]): Comp[TypeWithMethods[context.type, ToWrap]] =
+    t match {
+      case t1 @ TraitType(_, _) => convertTraitType(t1)
+      case t1 @ ClassType(_, _) => convertClassType(t1)
+      case t1 @ DataConstructorType(_, _, _) => convertDataConstructorType(t1)
+    }
+
   def convertExprTypeSystem
   (expr: ArExpr[context.type, FromWrap])
   : Comp[ArExpr[context.type, ToWrap]] = expr match {
@@ -222,12 +229,13 @@ abstract class TypeSystemConverter {
         newVar <- convertVariableTypeSystem(variable)
       } yield LoadVariable(newVar)
 
-    case MethodCall(method, instance, args, returnType) =>
+    case MethodCall(method, instance, instanceType, args, returnType) =>
       for {
         newInstance <- convertTypeSystem(instance)
+        newInstanceType <- convertTypeWithMethods(instanceType)
         newArgs <- args.traverse(convertTypeSystem(_))
         newReturnType <- convertTypeSystem(returnType)
-      } yield MethodCall(method, newInstance, newArgs, newReturnType)
+      } yield MethodCall(method, newInstance, newInstanceType, newArgs, newReturnType)
 
     case PatternMatch(expr, cases) =>
       for {
@@ -261,9 +269,8 @@ abstract class TypeSystemConverter {
         newUnitType <- convertTypeSystem(unitType)
       } yield StoreVariable(newVar, newValue, newUnitType)
 
-    case t1 @ TraitType(_, _) => convertTraitType(t1)
-    case t1 @ ClassType(_, _) => convertClassType(t1)
-    case t1 @ DataConstructorType(_, _, _) => convertDataConstructorType(t1)
+    case t1: TypeWithMethods[context.type, FromWrap] =>
+      convertTypeWithMethods(t1)
 
     case TypeOfType(inner) =>
       for {

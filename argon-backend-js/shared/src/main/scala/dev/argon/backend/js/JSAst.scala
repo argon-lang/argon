@@ -20,6 +20,7 @@ final case class JSExportDeclaration(declaration: JSDeclarationStatement) extend
 sealed trait JSImportStatement extends JSModuleStatement
 final case class JSImportDefaultStatement(defaultExport: JSIdentifier, moduleName: String) extends JSImportStatement
 final case class JSImportAllStatement(name: JSIdentifier, moduleName: String) extends JSImportStatement
+final case class JSImportDefaultAndAllStatement(defaultExport: JSIdentifier, name: JSIdentifier, moduleName: String) extends JSImportStatement
 
 final case class JSModuleRaw(code: String) extends JSModuleStatement
 
@@ -124,6 +125,17 @@ object JSAst {
           for {
             _ <- write("import ")
             _ <- write("* as ")
+            _ <- writeIdentifier(name)
+            _ <- write(" from ")
+            _ <- writeString(moduleName)
+            _ <- write(";")
+          } yield ()
+
+        case JSImportDefaultAndAllStatement(defaultExport, name, moduleName) =>
+          for {
+            _ <- write("import ")
+            _ <- writeIdentifier(defaultExport)
+            _ <- write(", * as ")
             _ <- writeIdentifier(name)
             _ <- write(" from ")
             _ <- writeString(moduleName)

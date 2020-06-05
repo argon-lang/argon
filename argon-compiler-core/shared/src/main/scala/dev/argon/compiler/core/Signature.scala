@@ -156,7 +156,7 @@ trait SignatureContext {
         case LoadUnit(_) => false
         case LoadVariable(variable) if variable === parameter.paramVar => true
         case LoadVariable(variable) => checkVariable(variable)
-        case MethodCall(_, instance, args, _) =>
+        case MethodCall(_, instance, _, args, _) =>
           checkWrapExpr(instance) || args.exists(checkWrapExpr)
 
         case PrimitiveOp(_, left, right, _) =>

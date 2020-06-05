@@ -47,10 +47,11 @@ final class GraalJSTestCaseRunner[I <: ResourceIndicator: Tag, P: Path : Tag](pr
       try {
         val mainSource = Source.newBuilder("js",
           s"""
-             |import * as arCore from "Argon.Core";
-             |import * as mainModule from "${StringEscapeUtils.escapeEcmaScript(moduleName)}";
+             |import arCore, { unitValue } from "Argon.Core";
+             |import mainModule from "${StringEscapeUtils.escapeEcmaScript(moduleName)}";
              |
-             |mainModule.functions["main:(Ar.Unit)->(Ar.Unit)"].value(arCore.unitValue)
+             |const unitType = { type: "class", arClass: arCore.globalClass(["Ar"], "Unit", { parameterTypes: [] }) };
+             |mainModule.globalFunction([], "main", { parameterTypes: [unitType], resultType: unitType }).invoke(unitValue);
              |""".stripMargin,
           "main.mjs"
         )

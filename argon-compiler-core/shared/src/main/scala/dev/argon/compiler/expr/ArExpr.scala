@@ -107,6 +107,7 @@ object ArExpr {
   (
     method: AbsRef[TContext, ArMethod],
     instance: ArExprWrap[TContext, Wrap],
+    instanceType: TypeWithMethods[TContext, Wrap],
     args: Vector[Wrap[ArExpr[TContext, Wrap]]],
     returnType: ArExprWrap[TContext, Wrap]
   ) extends ArExpr[TContext, Wrap]

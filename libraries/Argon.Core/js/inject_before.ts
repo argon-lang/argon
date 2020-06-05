@@ -1,5 +1,7 @@
 
-
+const stringValueSymbol = Symbol();
+const intValueSymbol = Symbol();
+const boolValueSymbol = Symbol();
 
 export type NamespacePath = ReadonlyArray<string>;
 
@@ -307,7 +309,6 @@ function defineMethod<TSelf>(this: TSelf, proto: {}, methodArr: Array<[MethodBin
     };
 
     const method = creator.create(this);
-    method.override(proto, method.invokeNonVirtual);
     methodArr.push([ binding, method ]);
 }
 
@@ -364,6 +365,7 @@ export function createClass(creator: ClassCreator): ArClass {
         baseTraits = creator.baseTraits || [];
 
         const proto = baseClass === null ? Object.create(null) : baseClass.baseType.inherit();
+        classPrototype = proto;
         
         for(let baseTrait of baseTraits) {
             baseTrait.baseType.implement(proto);
@@ -377,7 +379,6 @@ export function createClass(creator: ClassCreator): ArClass {
 
         Object.freeze(proto);
 
-        classPrototype = proto;
         return proto;
     }
 
@@ -656,6 +657,8 @@ export function createDataConstructor(creator: DataConstructorCreator): DataCons
         }
         
         const proto = Object.create(null);
+        ctorPrototype = proto;
+        
         const instTrait = creator.instanceTrait;
         
         instTrait.baseType.implement(proto);
@@ -667,8 +670,6 @@ export function createDataConstructor(creator: DataConstructorCreator): DataCons
         creator.loadVTable(proto);
 
         Object.freeze(proto);
-
-        ctorPrototype = proto;
         return proto;
     }
 

@@ -5,10 +5,11 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.stream._
 import scalapb.GeneratedMessage
-import cats._
+import cats.{Id => _, _}
 import cats.data._
 import cats.evidence.===
 import cats.implicits._
+import com.google.protobuf.ByteString
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
 import dev.argon.loaders.armodule.{ModuleFormatVersion, ModulePaths}
@@ -39,6 +40,8 @@ sealed abstract class ModuleEmitter private() {
     def getFunctionIdNum[TPayloadSpec[_, _]](func: ArFunc[context.type, TPayloadSpec]): Comp[Int]
     def getMethodIdNum[TPayloadSpec[_, _]](method: ArMethod[context.type, TPayloadSpec]): Comp[Int]
     def getClassCtorIdNum[TPayloadSpec[_, _]](ctor: ClassConstructor[context.type, TPayloadSpec]): Comp[Int]
+
+    def getLocalVariableIdNum[TPayloadSpec[_, _]](variable: LocalVariable[context.type, Id]): Comp[Int]
 
     def updateMetadataElement(f: module.Metadata => module.Metadata): UIO[Unit]
     def produceStreamElement[R](path: String)(element: => RComp[R, GeneratedMessage]): RComp[R, Unit]
@@ -192,8 +195,344 @@ sealed abstract class ModuleEmitter private() {
     args <- dataCtorType.args.traverse(convertExpr(_))
   } yield module.DataConstructorType(id, args)
 
-  def convertExpr(expr: typeSystem.SimpleExpr): Emit[module.Expression] =
-    ???
+  def convertExpr(expr: typeSystem.SimpleExpr): Emit[module.Expression] = {
+    def convertBigInt(i: BigInt): module.BigInt =
+      module.BigInt(
+        if(i >= Int.MinValue && i <= Int.MaxValue)
+          module.BigInt.IntType.Signed32(i.toInt)
+        else if(i >= Long.MinValue && i <= Long.MaxValue)
+          module.BigInt.IntType.Signed64(i.toLong)
+        else
+          module.BigInt.IntType.Bigint(ByteString.copyFrom(i.toByteArray))
+      )
+
+    def convertUniverse(universe: UniverseExpr): module.UniverseExpr =
+      module.UniverseExpr(
+        universe match {
+          case FixedUniverse(u) => module.UniverseExpr.ExprType.Fixed(convertBigInt(u))
+          case AbstractUniverse() => module.UniverseExpr.ExprType.AbstractUniverse(com.google.protobuf.empty.Empty())
+          case LargestUniverse(a, b) =>
+            module.UniverseExpr.ExprType.LargestUniverse(
+              module.UniversePair(convertUniverse(a), convertUniverse(b))
+            )
+          case NextLargestUniverse(a) =>
+            module.UniverseExpr.ExprType.NextLargestUniverse(convertUniverse(a))
+
+          case PreviousUniverse(a) =>
+            module.UniverseExpr.ExprType.PreviousUniverse(convertUniverse(a))
+        }
+      )
+
+    def convertVariableName(name: VariableName): module.VariableName = name match {
+      case VariableName.Normal(name) => module.VariableName(module.VariableName.Name.Normal(name))
+      case VariableName.Unnamed => module.VariableName(module.VariableName.Name.Unnamed(com.google.protobuf.empty.Empty()))
+    }
+
+    def convertLocalVariable(variable: LocalVariable[context.type, Id]): Emit[module.LocalVariable] =
+      for {
+        varIdNum <- ZIO.accessM[EmitEnv](_.getLocalVariableIdNum(variable))
+
+        ownerId <- variable.owner match {
+          case LocalVariableOwner.ByClass(ownerClass) =>
+            ZIO.accessM[EmitEnv](_.getClassIdNum(ownerClass.value))
+              .map { module.LocalVariableOwner.Owner.ByClass(_) }
+
+          case LocalVariableOwner.ByTrait(ownerTrait) =>
+            ZIO.accessM[EmitEnv](_.getTraitIdNum(ownerTrait.value))
+              .map { module.LocalVariableOwner.Owner.ByTrait(_) }
+
+          case LocalVariableOwner.ByDataConstructor(ownerCtor) =>
+            ZIO.accessM[EmitEnv](_.getDataCtorIdNum(ownerCtor.value))
+              .map { module.LocalVariableOwner.Owner.ByDataConstructor(_) }
+
+          case LocalVariableOwner.ByFunction(ownerFunc) =>
+            ZIO.accessM[EmitEnv](_.getFunctionIdNum(ownerFunc.value))
+              .map { module.LocalVariableOwner.Owner.ByFunction(_) }
+
+          case LocalVariableOwner.ByMethod(ownerMethod) =>
+            ZIO.accessM[EmitEnv](_.getMethodIdNum(ownerMethod.value))
+              .map { module.LocalVariableOwner.Owner.ByMethod(_) }
+
+          case LocalVariableOwner.ByClassConstructor(ownerCtor) =>
+            ZIO.accessM[EmitEnv](_.getClassCtorIdNum(ownerCtor.value))
+              .map { module.LocalVariableOwner.Owner.ByClassConstructor(_) }
+        }
+
+        convVarType <- convertExpr(variable.varType)
+      } yield module.LocalVariable(
+        id = varIdNum,
+        owner = module.LocalVariableOwner(ownerId),
+        name = convertVariableName(variable.name),
+        mutability = convertMutability(variable.mutability),
+        varType = convVarType,
+      )
+
+    def convertVariable(variable: Variable[context.type, Id]): Emit[module.Variable] =
+      variable match {
+        case variable: LocalVariable[context.type, Id] =>
+          convertLocalVariable(variable).map { convVar =>
+            module.Variable(module.Variable.VariableType.Local(convVar))
+          }
+
+        case ParameterVariable(owner, index, name, mutability, varType) =>
+          for {
+            ownerId <- owner match {
+              case ParameterVariableOwner.ByClass(ownerClass) =>
+                ZIO.accessM[EmitEnv](_.getClassIdNum(ownerClass.value))
+                  .map { module.ParameterVariableOwner.Owner.ByClass(_) }
+
+              case ParameterVariableOwner.ByTrait(ownerTrait) =>
+                ZIO.accessM[EmitEnv](_.getTraitIdNum(ownerTrait.value))
+                  .map { module.ParameterVariableOwner.Owner.ByTrait(_) }
+
+              case ParameterVariableOwner.ByDataConstructor(ownerCtor) =>
+                ZIO.accessM[EmitEnv](_.getDataCtorIdNum(ownerCtor.value))
+                  .map { module.ParameterVariableOwner.Owner.ByDataConstructor(_) }
+
+              case ParameterVariableOwner.ByFunction(ownerFunc) =>
+                ZIO.accessM[EmitEnv](_.getFunctionIdNum(ownerFunc.value))
+                  .map { module.ParameterVariableOwner.Owner.ByFunction(_) }
+
+              case ParameterVariableOwner.ByMethod(ownerMethod) =>
+                ZIO.accessM[EmitEnv](_.getMethodIdNum(ownerMethod.value))
+                  .map { module.ParameterVariableOwner.Owner.ByMethod(_) }
+
+              case ParameterVariableOwner.ByClassConstructor(ownerCtor) =>
+                ZIO.accessM[EmitEnv](_.getClassCtorIdNum(ownerCtor.value))
+                  .map { module.ParameterVariableOwner.Owner.ByClassConstructor(_) }
+            }
+
+            convVarType <- convertExpr(varType)
+          } yield module.Variable(module.Variable.VariableType.Param(module.ParameterVariable(
+            owner = module.ParameterVariableOwner(ownerId),
+            index = index,
+            name = convertVariableName(name),
+            mutability = convertMutability(mutability),
+            varType = convVarType,
+          )))
+
+        case ThisParameterVariable(owner, name, mutability, varType) => ???
+
+        case FieldVariable(owner, name, mutability, varType) =>
+          for {
+            ownerId <- ZIO.accessM[EmitEnv](_.getClassIdNum(owner.ownerClass.value))
+            convVarType <- convertExpr(varType)
+          } yield module.Variable(module.Variable.VariableType.Field(module.FieldVariable(
+            ownerClass = ownerId,
+            name = convertVariableName(name),
+            mutability = convertMutability(mutability),
+            varType = convVarType,
+          )))
+
+
+      }
+
+    def impl(expr: typeSystem.SimpleExpr): Emit[(module.Expression.ExprType, Vector[module.Expression])] =
+      expr match {
+        case TraitType(arTrait, args) =>
+          for {
+            idNum <- ZIO.accessM[EmitEnv](_.getTraitIdNum(arTrait.value))
+            convArgs <- args.traverse(convertExpr(_))
+          } yield (module.Expression.ExprType.TraitType(idNum), convArgs)
+
+        case ClassType(arClass, args) =>
+          for {
+            idNum <- ZIO.accessM[EmitEnv](_.getClassIdNum(arClass.value))
+            convArgs <- args.traverse(convertExpr(_))
+          } yield (module.Expression.ExprType.ClassType(idNum), convArgs)
+
+        case DataConstructorType(ctor, args, _) =>
+          for {
+            idNum <- ZIO.accessM[EmitEnv](_.getDataCtorIdNum(ctor.value))
+            convArgs <- args.traverse(convertExpr(_))
+          } yield (module.Expression.ExprType.DataConstructorType(idNum), convArgs)
+
+        case TypeOfType(inner) =>
+          for {
+            convInner <- convertExpr(inner)
+          } yield (module.Expression.ExprType.TypeOfType(com.google.protobuf.empty.Empty()), Vector(convInner))
+
+        case TypeN(universe, subtypeConstraint, supertypeConstraint) =>
+          for {
+            convSubtype <- ZIO.foreach(subtypeConstraint)(convertExpr(_))
+            convSupertype <- ZIO.foreach(supertypeConstraint)(convertExpr(_))
+          } yield (
+            module.Expression.ExprType.TypeN(
+              module.TypeN(convertUniverse(universe), convSubtype, convSupertype)
+            ),
+            Vector.empty
+          )
+
+        case FunctionType(argumentType, resultType) =>
+          for {
+            convArg <- convertExpr(argumentType)
+            convRes <- convertExpr(resultType)
+          } yield (module.Expression.ExprType.FunctionType(com.google.protobuf.empty.Empty()), Vector(convArg, convRes))
+
+        case UnionType(a, b) =>
+          for {
+            convA <- convertExpr(a)
+            convB <- convertExpr(b)
+          } yield (module.Expression.ExprType.UnionType(com.google.protobuf.empty.Empty()), Vector(convA, convB))
+
+        case IntersectionType(a, b) =>
+          for {
+            convA <- convertExpr(a)
+            convB <- convertExpr(b)
+          } yield (module.Expression.ExprType.IntersectionType(com.google.protobuf.empty.Empty()), Vector(convA, convB))
+
+        case ExistentialType(variable, inner) =>
+          for {
+            convVar <- convertLocalVariable(variable)
+            convInner <- convertExpr(inner)
+          } yield (module.Expression.ExprType.ExistentialType(convVar), Vector(convInner))
+
+        case ClassConstructorCall(classType, classCtor, args) =>
+          for {
+            idNum <- ZIO.accessM[EmitEnv](_.getClassCtorIdNum(classCtor.value))
+            convClassType <- convertExpr(classType)
+            convArgs <- args.traverse(convertExpr(_))
+          } yield (module.Expression.ExprType.ClassConstructorCall(idNum), convClassType +: convArgs)
+
+        case DataConstructorCall(dataCtorInstanceType, args) =>
+          for {
+            convCtorType <- convertExpr(dataCtorInstanceType)
+            convArgs <- args.traverse(convertExpr(_))
+          } yield (module.Expression.ExprType.DataConstructorCall(com.google.protobuf.empty.Empty()), convCtorType +: convArgs)
+
+        case EnsureExecuted(body, ensuring) =>
+          for {
+            convBody <- convertExpr(body)
+            convEnsuring <- convertExpr(ensuring)
+          } yield (module.Expression.ExprType.EnsureExecuted(com.google.protobuf.empty.Empty()), Vector(convBody, convEnsuring))
+
+        case FunctionCall(function, args, _) =>
+          for {
+            idNum <- ZIO.accessM[EmitEnv](_.getFunctionIdNum(function.value))
+            convArgs <- args.traverse(convertExpr(_))
+          } yield (module.Expression.ExprType.FunctionCall(idNum), convArgs)
+
+        case FunctionObjectCall(function, arg, returnType) =>
+          for {
+            convFunc <- convertExpr(function)
+            convArg <- convertExpr(arg)
+            convReturnType <- convertExpr(returnType)
+          } yield (module.Expression.ExprType.FunctionObjectCall(com.google.protobuf.empty.Empty()), Vector(convFunc, convArg, convReturnType))
+
+        case IfElse(condition, ifBody, elseBody) =>
+          for {
+            convCond <- convertExpr(condition)
+            convIfBody <- convertExpr(ifBody)
+            convElseBody <- convertExpr(elseBody)
+          } yield (module.Expression.ExprType.IfElse(com.google.protobuf.empty.Empty()), Vector(convCond, convIfBody, convElseBody))
+
+        case LetBinding(variable, value, next) =>
+          for {
+            convVar <- convertLocalVariable(variable)
+            convValue <- convertExpr(value)
+            convNext <- convertExpr(next)
+          } yield (module.Expression.ExprType.LetBinding(convVar), Vector(convValue, convNext))
+
+        case LoadConstantBool(value, exprType) =>
+          for {
+            convExprType <- convertExpr(exprType)
+          } yield (module.Expression.ExprType.LoadConstantBool(value), Vector(convExprType))
+
+        case LoadConstantInt(value, exprType) =>
+          for {
+            convExprType <- convertExpr(exprType)
+          } yield (module.Expression.ExprType.LoadConstantInt(convertBigInt(value)), Vector(convExprType))
+
+        case LoadConstantString(value, exprType) =>
+          for {
+            convExprType <- convertExpr(exprType)
+          } yield (module.Expression.ExprType.LoadConstantString(value), Vector(convExprType))
+
+        case LoadLambda(argVariable, body) =>
+          for {
+            convVar <- convertLocalVariable(argVariable)
+            convBody <- convertExpr(body)
+          } yield (module.Expression.ExprType.LoadLambda(convVar), Vector(convBody))
+
+        case LoadTuple(values) =>
+          val tupleElements = values.toList.toVector.map { _ => module.TupleElement() }
+          for {
+            convValues <- values.toList.toVector.traverse { case TupleElement(value) => convertExpr(value) }
+          } yield (
+            module.Expression.ExprType.LoadTuple(module.TupleMetadata(tupleElements)),
+            convValues
+          )
+
+        case LoadTupleElement(tupleValue, elemType, index) =>
+          for {
+            convValue <- convertExpr(tupleValue)
+            convElemType <- convertExpr(elemType)
+          } yield (module.Expression.ExprType.LoadTupleElement(index), Vector(convValue, convElemType))
+
+        case LoadUnit(exprType) =>
+          for {
+            convExprType <- convertExpr(exprType)
+          } yield (module.Expression.ExprType.LoadUnit(com.google.protobuf.empty.Empty()), Vector(convExprType))
+
+        case LoadVariable(variable) =>
+          for {
+            convVar <- convertVariable(variable)
+          } yield (module.Expression.ExprType.LoadVariable(convVar), Vector.empty)
+
+        case MethodCall(method, instance, instanceType, args, _) =>
+          for {
+            idNum <- ZIO.accessM[EmitEnv](_.getMethodIdNum(method.value))
+            convInstance <- convertExpr(instance)
+            convInstanceType <- convertExpr(instanceType)
+            convArgs <- args.traverse(convertExpr(_))
+          } yield (module.Expression.ExprType.MethodCall(idNum), convInstance +: convInstanceType +: convArgs)
+
+        case PatternMatch(expr, cases) =>
+          def convertPattern(pattern: PatternExpr[context.type, Id]): Emit[module.PatternExpr] = ???
+
+          for {
+            convExpr <- convertExpr(expr)
+            patterns <- cases.toList.toVector.traverse { case PatternCase(pattern, _) => convertPattern(pattern) }
+            caseBodies <- cases.toList.toVector.traverse { case PatternCase(_, body) => convertExpr(body) }
+          } yield (
+            module.Expression.ExprType.PatternMatch(
+              module.PatternMatch(patterns)
+            ),
+            convExpr +: caseBodies
+          )
+
+        case PrimitiveOp(operation, left, right, exprType) =>
+          val convOp = operation match {
+            case PrimitiveOperation.AddInt => module.PrimitiveOperation.AddInt
+            case PrimitiveOperation.SubInt => module.PrimitiveOperation.SubInt
+            case PrimitiveOperation.MulInt => module.PrimitiveOperation.MulInt
+            case PrimitiveOperation.IntEqual => module.PrimitiveOperation.IntEqual
+          }
+
+          for {
+            convLeft <- convertExpr(left)
+            convRight <- convertExpr(right)
+            convExprType <- convertExpr(exprType)
+          } yield (module.Expression.ExprType.PrimitiveOp(convOp), Vector(convExprType, convLeft, convRight))
+
+        case Sequence(first, second) =>
+          for {
+            convFirst <- convertExpr(first)
+            convSecond <- convertExpr(second)
+          } yield (module.Expression.ExprType.Sequence(com.google.protobuf.empty.Empty()), Vector(convFirst, convSecond))
+
+        case StoreVariable(variable, value, exprType) =>
+          for {
+            convVar <- convertVariable(variable)
+            convExprType <- convertExpr(exprType)
+            convValue <- convertExpr(value)
+          } yield (module.Expression.ExprType.StoreVariable(convVar), Vector(convExprType, convValue))
+      }
+
+    impl(expr).map { case (exprType, args) =>
+      module.Expression(exprType, args)
+    }
+  }
 
   def convertAccessModifier(accessModifier: AccessModifier): module.AccessModifier =
     accessModifier match {
@@ -531,6 +870,8 @@ object ModuleEmitter {
         methodRefIds <- Ref.make(IdentifierState.initial[MethodId])
         classCtorRefIds <- Ref.make(IdentifierState.initial[ClassConstructorId])
 
+        localVarIds <- Ref.make(IdentifierState.initial[LocalVariableId])
+
         emittedPaths <- Ref.make(Set.empty[String])
 
         context2: context.type = context
@@ -652,6 +993,9 @@ object ModuleEmitter {
                 convSig <- moduleEmitter.convertClassCtorSignature(sig).provide(this)
               } yield module.ClassConstructorReference(ownerClassIdNum, convSig)
             )
+
+          override def getLocalVariableIdNum[TPayloadSpec[_, _]](variable: LocalVariable[moduleEmitter.context.type, Id]): Comp[Int] =
+            getElementIdNum(localVarIds)(variable.id)
 
           override def updateMetadataElement(f: Metadata => Metadata): UIO[Unit] =
             metadata.update(f)

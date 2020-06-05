@@ -181,7 +181,9 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
       baseTraitExprs <- baseTypes.baseTraits.traverse(createBaseTraitObject(sig)(_))
 
-    } yield JSObjectLiteral(Vector[Vector[JSObjectMember]](
+      createClass <- coreLibExport("createClass")
+
+    } yield createClass(JSObjectLiteral(Vector[Vector[JSObjectMember]](
 
       baseClassExpr.map[JSObjectMember] { "baseClass" -> _ }.toList.toVector,
 
@@ -197,7 +199,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
         "constructors" -> JSArrayLiteral(ctorObjects),
         "loadVTable" -> vtableObject,
       ),
-    ).flatten)
+    ).flatten))
 
   def createGlobalDataConstructor(vtableBuilder: VTableBuilder.Aux[context.type])(ctor: DataConstructor[context.type, DeclarationPayloadSpecifier]): Emit[JSExpression] =
     for {
@@ -230,7 +232,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
               }
               .toVector
 
-            body <- addToVarMap(paramMapping.map { case (paramVar, name) => paramVar.id -> loadTypeParameter(paramVar, ctorObj, thisVarName) }: _*)(
+            body <- addToVarMap(paramMapping.map { case (paramVar, _) => paramVar.id -> loadTypeParameter(paramVar, ctorObj, thisVarName) }: _*)(
               statementConverter.convertStmt(useReturn = true)(expr)
             )
           } yield (JSFunctionExpression(None, paramList, initObjectExprs ++ body), paramMapping)
@@ -239,6 +241,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
       fieldMapping <- fieldMappingRef.get
 
       instanceVarMap = (instance: JSExpression) =>
+        (paramMapping.map { case (paramVar, _) => paramVar.id -> loadTypeParameter(paramVar, ctorObj, instance) }.toMap : VarMap) ++
         (fieldMapping.map { case (id, varName) =>
           id -> new VariableLoader {
             override def loadVariable: JSExpression =
@@ -280,8 +283,15 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
         case context.JSImpl.Method.JSExpressionBody(expr) => expr.pure[Comp]
         case context.JSImpl.Method.ExpressionBody(expr) =>
           for {
-            (paramList, paramMap) <- createParameterList(sig)
-            body <- addToVarMap(paramMap.map { case (variable, name) => variable.id -> VariableLoader.fromExpr(JSIdentifier(name)) }: _*)(convertStmt(useReturn = true)(expr))
+            thisVarNum <- getNextSymbolId
+            thisVarName = id"this_$thisVarNum"
+
+            (paramListNoThis, paramMap) <- createParameterList(sig)
+            paramList = JSFunctionParameter(JSBindingIdentifier(thisVarName), paramListNoThis)
+
+            body <- addToVarMap(
+              instanceVarMap(thisVarName).toSeq ++ paramMap.map { case (variable, name) => variable.id -> VariableLoader.fromExpr(JSIdentifier(name)) }
+            : _*)(convertStmt(useReturn = true)(expr))
           } yield JSFunctionExpression(
             None,
             paramList,
@@ -409,14 +419,18 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
               } yield baseCtorObj.prop(id"initializeInstance")(thisVarName +: argExprs :_*)
             }
 
-            endExpr <- convertStmt(useReturn = false)(body.endExpr)
+            postInitVarMapping = initVarMapping :+ (ThisParameterVariableId(ctor.id) -> VariableLoader.fromExpr(thisVarName))
+
+            endExpr <- addToVarMap(postInitVarMapping: _*)(convertStmt(useReturn = false)(body.endExpr))
           } yield JSFunctionExpression(None, paramList, initStmts ++ baseCall.toList.toVector ++ endExpr)
 
       }
 
-    } yield jsobj(
+      createDataConstructor <- coreLibExport("createDataConstructor")
+
+    } yield createDataConstructor(jsobj(
       "implementation" -> func
-    )
+    ))
 
   private def createVTableObject(vtableContext: VTableContext.Aux[context.type])(vtable: vtableContext.VTable): Emit[JSExpression] = {
     val protoObjName = id"proto"

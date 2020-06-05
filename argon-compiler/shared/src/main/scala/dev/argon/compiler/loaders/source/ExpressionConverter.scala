@@ -73,7 +73,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                       .map {
                         case sig: Signature[FunctionResultInfo, len] =>
                           signatureFactory[FunctionResultInfo, len](env)(location)(method.value.method)(sig) { (args, result) =>
-                            MethodCall(AbsRef(method.value.method), fromSimpleType(thisExpr), args, result.returnType)
+                            MethodCall(AbsRef(method.value.method), fromSimpleType(thisExpr), instanceType, args, result.returnType)
                           }
                       }
                 } }
@@ -1262,7 +1262,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case LoadTupleElement(tupleValue, _, _) => isWrapExprPure(tupleValue)
       case LoadUnit(_) => true
       case LoadVariable(variable) => !Mutability.toIsMutable(variable.mutability)
-      case MethodCall(_, instance, args, _) => isWrapExprPure(instance) && args.forall(isWrapExprPure)
+      case MethodCall(_, instance, _, args, _) => isWrapExprPure(instance) && args.forall(isWrapExprPure)
       case PatternMatch(expr, cases) => isWrapExprPure(expr) && cases.forall { case PatternCase(_, body) => isWrapExprPure(body) }
       case PrimitiveOp(_, left, right, _) => isWrapExprPure(left) && isWrapExprPure(right)
       case Sequence(first, second) => isWrapExprPure(first) && isWrapExprPure(second)

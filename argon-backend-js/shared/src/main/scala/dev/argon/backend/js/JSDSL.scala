@@ -15,7 +15,7 @@ object JSDSL {
     JSString(str)
 
   implicit class IdSyntaxHelper(private val sc: StringContext) extends AnyVal {
-    def id(args: Any*): JSIdentifier = JSIdentifier(sc.s(args))
+    def id(args: Any*): JSIdentifier = JSIdentifier(sc.s(args: _*))
   }
 
   def get(name: String)(body: JSStatement*): JSObjectGetProperty =
@@ -41,6 +41,16 @@ object JSDSL {
       override def from(modulePath: String): JSImportAllStatement =
         JSImportAllStatement(name, modulePath)
     }
+  }
+
+  def `import`(defaultExport: JSIdentifier): ImportSyntax[JSImportDefaultStatement] = new ImportSyntax[JSImportDefaultStatement] {
+    override def from(modulePath: String): JSImportDefaultStatement =
+      JSImportDefaultStatement(defaultExport, modulePath)
+  }
+
+  def `import`(defaultExport: JSIdentifier, `* as`: JSIdentifier): ImportSyntax[JSImportDefaultAndAllStatement] = new ImportSyntax[JSImportDefaultAndAllStatement] {
+    override def from(modulePath: String): JSImportDefaultAndAllStatement =
+      JSImportDefaultAndAllStatement(defaultExport, `* as`, modulePath)
   }
 
   object export {

@@ -116,7 +116,6 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
     expr match {
       case ClassConstructorCall(classType, ctor, args) =>
         for {
-          ownerClassSig <- ctor.value.ownerClass.signature
           ctorObj <- getClassConstructorJSObject(ctor.value)
 
           classTypeObj <- convertExpr(classType)
@@ -143,7 +142,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
         for {
           funcExpr <- getFunctionJSObject(func.value)
           argExprs <- args.traverse(convertExpr(_))
-        } yield JSFunctionCall(funcExpr, argExprs)
+        } yield funcExpr.prop(id"invoke")(argExprs: _*)
 
       case FunctionObjectCall(funcExpr, arg, _) =>
         for {
@@ -198,7 +197,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
           emitEnv.varMap(variable.id).loadVariable
         }
 
-      case MethodCall(method, instance, args, _) =>
+      case MethodCall(method, instance, _, args, _) =>
         for {
           instanceExpr <- convertExpr(instance)
           methodObj <- getMethodJSObject(method.value)

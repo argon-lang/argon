@@ -20,7 +20,7 @@ object SourceClassConstructor {
   def apply
   (context2: Context)
   (env: EnvCreator[context2.type])
-  (ownerClass: ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier])
+  (ownerClass2: ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier])
   (stmt: parser.ClassConstructorDeclarationStmt)
   : Comp[ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier]] =
     for {
@@ -37,7 +37,7 @@ object SourceClassConstructor {
 
 
       override val id: ClassConstructorId = ClassConstructorId(uniqId)
-      override val owner: ClassConstructorOwner[context.type, DeclarationPayloadSpecifier] = ClassConstructorOwner(ownerClass)
+      override val owner: ClassConstructorOwner[context.type, DeclarationPayloadSpecifier] = ClassConstructorOwner(ownerClass2)
       override val fileId: FileID = env.fileSpec.fileID
 
       override val effectInfo: EffectInfo = EffectInfo(stmt.purity)
