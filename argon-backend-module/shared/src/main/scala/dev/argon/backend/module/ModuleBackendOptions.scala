@@ -6,5 +6,6 @@ final case class ModuleBackendOptions[F[_], I]()
 
 final case class ModuleOutputOptions[F[_], I]
 (
-  referenceModule: F[SingleFile[I]],
+  referenceModule: F[Option[SingleFile[I]]],
+  declarationModule: F[Option[SingleFile[I]]],
 )

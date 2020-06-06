@@ -17,13 +17,18 @@ option (scalapb.options) = {
 message Metadata {
     required int32 formatVersion = 1;
     required string name = 2;
-    optional bool isInterfaceModule = 5;
+    required ModuleType moduleType = 5;
 
     repeated ModuleReference references = 9;
     repeated GlobalDeclaration globalTraits = 10;
     repeated GlobalDeclaration globalClasses = 11;
     repeated GlobalDeclaration globalDataConstructors = 12;
     repeated GlobalDeclaration globalFunctions = 13;
+}
+
+enum ModuleType {
+    ReferenceModule = 0;
+    DefinitionModule = 1;
 }
 
 message ModuleReference {
@@ -121,6 +126,14 @@ message FunctionDefinition {
     required FileID fileId = 2;
     required FunctionSignature signature = 3;
     required EffectInfo effects = 4;
+    optional FunctionBody body = 5;
+}
+
+message FunctionBody {
+    oneof bodyType {
+        Expression expressionBody = 1;
+        uint32 externalImplementation = 2;
+    }
 }
 
 message MethodName {
@@ -141,6 +154,7 @@ message MethodDefinition {
     optional bool isAbstract = 7;
     optional bool isImplicitOverride = 8;
     optional bool isFinal = 9;
+    optional FunctionBody body = 10;
 }
 
 message ClassConstructorDefinition {
@@ -148,7 +162,33 @@ message ClassConstructorDefinition {
     required FileID fileId = 2;
     required ClassConstructorSignature signature = 3;
     required EffectInfo effects = 4;
+    optional ClassConstructorBody body = 5;
 }
+
+message PreInitClassConstructorStatement {
+    optional FieldVariable field = 1;
+    required Expression expr = 2;
+}
+
+message BaseClassConstructorCall {
+    required sint32 baseConstructorId = 1;
+    required ClassType instanceClassType = 2;
+    repeated Expression args = 3;
+}
+
+message ClassConstructorExpressionBody {
+    repeated PreInitClassConstructorStatement preInitStatements = 1;
+    optional BaseClassConstructorCall baseConstructorCall = 2;
+    required Expression endExpr = 3;
+}
+
+message ClassConstructorBody {
+    oneof bodyType {
+        ClassConstructorExpressionBody expressionBody = 1;
+        uint32 externalImplementation = 2;
+    }
+}
+
 // Shared types
 
 // Simple types

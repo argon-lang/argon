@@ -32,6 +32,8 @@ sealed abstract class ModuleEmitter private() {
   import context.signatureContext.{ Signature, SignatureResult, SignatureParameters, SignatureVisitor }
 
   trait EmitEnv {
+    val options: ModuleEmitOptions
+
     def getModuleIdNum[TPayloadSpec[_, _]](arModule: ArModule[context.type, TPayloadSpec]): Comp[Option[Int]]
 
     def getClassIdNum[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[Int]
@@ -195,6 +197,22 @@ sealed abstract class ModuleEmitter private() {
     args <- dataCtorType.args.traverse(convertExpr(_))
   } yield module.DataConstructorType(id, args)
 
+  def convertVariableName(name: VariableName): module.VariableName = name match {
+    case VariableName.Normal(name) => module.VariableName(module.VariableName.Name.Normal(name))
+    case VariableName.Unnamed => module.VariableName(module.VariableName.Name.Unnamed(com.google.protobuf.empty.Empty()))
+  }
+
+  def convertFieldVariable(variable: FieldVariable[context.type, Id]): Emit[module.FieldVariable] =
+    for {
+      ownerId <- ZIO.accessM[EmitEnv](_.getClassIdNum(variable.owner.ownerClass.value))
+      convVarType <- convertExpr(variable.varType)
+    } yield module.FieldVariable(
+      ownerClass = ownerId,
+      name = convertVariableName(variable.name),
+      mutability = convertMutability(variable.mutability),
+      varType = convVarType,
+    )
+
   def convertExpr(expr: typeSystem.SimpleExpr): Emit[module.Expression] = {
     def convertBigInt(i: BigInt): module.BigInt =
       module.BigInt(
@@ -222,11 +240,6 @@ sealed abstract class ModuleEmitter private() {
             module.UniverseExpr.ExprType.PreviousUniverse(convertUniverse(a))
         }
       )
-
-    def convertVariableName(name: VariableName): module.VariableName = name match {
-      case VariableName.Normal(name) => module.VariableName(module.VariableName.Name.Normal(name))
-      case VariableName.Unnamed => module.VariableName(module.VariableName.Name.Unnamed(com.google.protobuf.empty.Empty()))
-    }
 
     def convertLocalVariable(variable: LocalVariable[context.type, Id]): Emit[module.LocalVariable] =
       for {
@@ -313,16 +326,11 @@ sealed abstract class ModuleEmitter private() {
 
         case ThisParameterVariable(owner, name, mutability, varType) => ???
 
-        case FieldVariable(owner, name, mutability, varType) =>
-          for {
-            ownerId <- ZIO.accessM[EmitEnv](_.getClassIdNum(owner.ownerClass.value))
-            convVarType <- convertExpr(varType)
-          } yield module.Variable(module.Variable.VariableType.Field(module.FieldVariable(
-            ownerClass = ownerId,
-            name = convertVariableName(name),
-            mutability = convertMutability(mutability),
-            varType = convVarType,
-          )))
+        case variable: FieldVariable[context.type, Id] =>
+          convertFieldVariable(variable).map { convVar =>
+            module.Variable(module.Variable.VariableType.Field(convVar))
+          }
+
 
 
       }
@@ -776,6 +784,12 @@ sealed abstract class ModuleEmitter private() {
 
       convOwner <- convertFuncOwner(func.owner)
 
+      funcBody <- ZIO.accessM[EmitEnv](_.options.moduleType match {
+        case ModuleEmitOptions.ReferenceModule => IO.succeed(None)
+        case ModuleEmitOptions.DeclarationModule => func.payload.map(Some.apply)
+      })
+      convFuncBody <- ZIO.foreach(funcBody)(convertExpr(_))
+
     } yield module.FunctionDefinition(
       owner = convOwner,
       fileId = convertFileId(func.fileId),
@@ -783,6 +797,8 @@ sealed abstract class ModuleEmitter private() {
       effects = module.EffectInfo(
         isPure = func.effectInfo.isPure
       ),
+
+      body = convFuncBody.map { expr => module.FunctionBody(module.FunctionBody.BodyType.ExpressionBody(expr)) },
     )
 
   def convertMethodSignature(sig: Signature[FunctionResultInfo, _ <: Nat]): Emit[module.MethodSignature] =
@@ -801,6 +817,13 @@ sealed abstract class ModuleEmitter private() {
       convSig <- convertMethodSignature(sig)
 
       methodOwner <- convertMethodOwner(method.owner)
+
+      methodBody <- ZIO.accessM[EmitEnv](_.options.moduleType match {
+        case ModuleEmitOptions.ReferenceModule => IO.succeed(None)
+        case ModuleEmitOptions.DeclarationModule => method.payload
+      })
+      convMethodBody <- ZIO.foreach(methodBody)(convertExpr(_))
+
     } yield module.MethodDefinition(
       owner = methodOwner,
       name = convertMethodName(method.name),
@@ -814,6 +837,8 @@ sealed abstract class ModuleEmitter private() {
       isAbstract = Some(method.isAbstract).filter(identity),
       isImplicitOverride = Some(method.isImplicitOverride).filter(identity),
       isFinal = Some(method.isFinal).filter(identity),
+
+      body = convMethodBody.map { expr => module.FunctionBody(module.FunctionBody.BodyType.ExpressionBody(expr)) },
     )
 
   def convertClassCtorSignature(sig: Signature[ClassConstructor.ResultInfo, _ <: Nat]): Emit[module.ClassConstructorSignature] =
@@ -828,6 +853,8 @@ sealed abstract class ModuleEmitter private() {
 
       ownerClassIdNum <- ZIO.accessM[EmitEnv](_.getClassCtorIdNum(ctor))
 
+      convCtorBody <- createClassCtorBody(ctor)
+
     } yield module.ClassConstructorDefinition(
       ownerClass = ownerClassIdNum,
       fileId = convertFileId(ctor.fileId),
@@ -835,23 +862,66 @@ sealed abstract class ModuleEmitter private() {
       effects = module.EffectInfo(
         isPure = ctor.effectInfo.isPure
       ),
+      body = convCtorBody,
     )
 
+  def createClassCtorBody(ctor: ClassConstructor[context.type, DeclarationPayloadSpecifier]): Emit[Option[module.ClassConstructorBody]] =
+    ZIO.accessM[EmitEnv](_.options.moduleType match {
+      case ModuleEmitOptions.ReferenceModule => IO.succeed(None)
+      case ModuleEmitOptions.DeclarationModule =>
+        def convertPreInitStmt(stmt: ClassConstructorStatement[context.type]): Emit[module.PreInitClassConstructorStatement] =
+          stmt match {
+            case ClassConstructorStatementExpr(expr) => convertExpr(expr).map { convExpr => module.PreInitClassConstructorStatement(expr = convExpr) }
+            case InitializeFieldStatement(field, value) =>
+              for {
+                convField <- convertFieldVariable(field)
+                convValue <- convertExpr(value)
+              } yield module.PreInitClassConstructorStatement(field = Some(convField), expr = convValue)
+          }
 
+        def convertBaseCtorCall(baseCall: ClassConstructorCall[context.type, Id]): Emit[module.BaseClassConstructorCall] =
+          for {
+            baseCtorIdNum <- ZIO.accessM[EmitEnv](_.getClassCtorIdNum(baseCall.classCtor.value))
+            baseCtorClassType <- convertClassType(baseCall.classType)
+            convArgs <- baseCall.args.traverse(convertExpr(_))
+          } yield module.BaseClassConstructorCall(
+            baseConstructorId = baseCtorIdNum,
+            instanceClassType = baseCtorClassType,
+            args = convArgs,
+          )
+
+        for {
+          body <- ctor.payload
+
+          preInitStmts <- body.initStatements.traverse(convertPreInitStmt(_))
+          baseCall <- ZIO.foreach(body.baseConstructorCall)(convertBaseCtorCall(_))
+          endExpr <- convertExpr(body.endExpr)
+
+        } yield Some(module.ClassConstructorBody(module.ClassConstructorBody.BodyType.ExpressionBody(
+          module.ClassConstructorExpressionBody(
+            preInitStatements = preInitStmts,
+            baseConstructorCall = baseCall,
+            endExpr = endExpr,
+          )
+        )))
+    })
 }
 
 object ModuleEmitter {
 
   type StreamElem = (String, GeneratedMessage)
 
-  def emitModule(context: ModuleContext)(currentModule: ArModule[context.type, DeclarationPayloadSpecifier]): zstream.Stream[ErrorList, StreamElem] =
+  def emitModule(context: ModuleContext)(emitOptions: ModuleEmitOptions)(currentModule: ArModule[context.type, DeclarationPayloadSpecifier]): zstream.Stream[ErrorList, StreamElem] =
     new Source[Any, ErrorList, StreamElem] {
 
       override def foreach(f: StreamElem => Comp[Unit]): Comp[Unit] = for {
         metadata <- Ref.make(module.Metadata(
           formatVersion = ModuleFormatVersion.currentVersion,
           name = currentModule.id.name,
-          isInterfaceModule = Some(true),
+          moduleType = emitOptions.moduleType match {
+            case ModuleEmitOptions.ReferenceModule => module.ModuleType.ReferenceModule
+            case ModuleEmitOptions.DeclarationModule => module.ModuleType.DefinitionModule
+          },
         ))
 
         moduleIds <- Ref.make(IdentifierState.initial[ModuleId])
@@ -880,6 +950,8 @@ object ModuleEmitter {
         }
 
         emitEnv = new moduleEmitter.EmitEnv {
+          
+          override val options: ModuleEmitOptions = emitOptions
 
           private def isCurrentModule[TPayloadSpec[_, _]](arModule: ArModule[context.type, TPayloadSpec]): Boolean =
             arModule.id === currentModule.id

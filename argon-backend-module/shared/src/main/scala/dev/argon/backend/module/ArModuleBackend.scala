@@ -53,17 +53,25 @@ object ArModuleBackend extends Backend {
         referenceModule = OptionInfo(
           name = "referenceModule",
           description = "The reference module that will contain the interface of the compiled module"
-        )
+        ),
+        declarationModule = OptionInfo(
+          name = "declarationModule",
+          description = "The declaration module that will contain the serialized compiled module"
+        ),
       )
 
     override def converter[I]: OptionsConverter[ModuleOutputOptions[*[_], I]] =
       new OptionsConverter[ModuleOutputOptions[*[_], I]] {
         override def convert[A[_], B[_], C[_], F[_] : Applicative](optionsA: ModuleOutputOptions[A, I], optionsB: ModuleOutputOptions[B, I])(f: OptionsConverterFunction[A, B, C, F]): F[ModuleOutputOptions[C, I]] =
-          for {
-            convRefModule <- f(optionsA.referenceModule, optionsB.referenceModule)
-          } yield ModuleOutputOptions(
-            referenceModule = convRefModule
-          )
+          Applicative[F].map2(
+            f(optionsA.referenceModule, optionsB.referenceModule),
+            f(optionsA.declarationModule, optionsB.declarationModule),
+          ) { (convRefModule, convDeclModule) =>
+            ModuleOutputOptions(
+              referenceModule = convRefModule,
+              declarationModule = convDeclModule,
+            )
+          }
       }
 
     override def optionsLoader[IOld, I]: OptionsLoader[ModuleOutputOptions[Id, IOld], ModuleOutputOptions[Id, I], IOld, I] = {
@@ -74,33 +82,43 @@ object ArModuleBackend extends Backend {
 
   override def testOutputOptions[I](dummyFile: I): ModuleOutputOptions[Id, I] =
     ModuleOutputOptions[Id, I](
-      referenceModule = new SingleFile(dummyFile)
+      referenceModule = Some(new SingleFile(dummyFile)),
+      declarationModule = Some(new SingleFile(dummyFile)),
     )
 
   override def compile[I <: ResourceIndicator : Tag](input: CompilerInput[I, ModuleBackendOptions[Id, I]]): ZManaged[ResourceReader[I] with SourceParser, ErrorList, TCompilationOutput] = {
     val context = ModuleContext(input)
 
     context.module[ModuleContext with Context.WithRes[I]].map { module =>
-      createOutput(ModuleEmitter.emitModule(context)(module))
+      createOutput(
+        refModuleGen = ModuleEmitter.emitModule(context)(ModuleEmitOptions(ModuleEmitOptions.ReferenceModule))(module),
+        declModuleGen = ModuleEmitter.emitModule(context)(ModuleEmitOptions(ModuleEmitOptions.DeclarationModule))(module),
+      )
     }
       .provideSomeLayer[ResourceReader[I] with SourceParser](ModuleBackendLoadService.forResourceReader[I, ModuleContext with Context.WithRes[I]])
   }
 
-  private def createOutput(moduleGen: Stream[ErrorList, ModuleEmitter.StreamElem]): CompilationOutput[BackendOutputOptionsId] =
+  private def createOutput(refModuleGen: Stream[ErrorList, ModuleEmitter.StreamElem], declModuleGen: Stream[ErrorList, ModuleEmitter.StreamElem]): CompilationOutput[BackendOutputOptionsId] =
     new CompilationOutput[BackendOutputOptionsId] {
 
-      override def write[I <: ResourceIndicator : Tag](options: BackendOutputOptionsId[I]): RComp[ResourceWriter[I], Unit] =
-        ZIO.accessM[ResourceWriter[I]] { env =>
-          val res = env.get
+      private def outputModule[I <: ResourceIndicator : Tag](outputFile: Option[SingleFile[I]])(moduleGen: Stream[ErrorList, ModuleEmitter.StreamElem]): RComp[ResourceWriter[I], Unit] =
+        ZIO.foreach(outputFile) { outputFile =>
+          ZIO.accessM[ResourceWriter[I]] { env =>
+            val res = env.get
 
-          val zipEntries = moduleGen.map { case (path, message) =>
-            ZipEntryInfo(path, res.serializeProtocolBuffer(message))
+            val zipEntries = moduleGen.map { case (path, message) =>
+              ZipEntryInfo(path, res.serializeProtocolBuffer(message))
+            }
+
+            val zipData = res.zipFromEntries(zipEntries)
+
+            res.writeToResource(outputFile.file)(zipData)
           }
+        }.unit
 
-          val zipData = res.zipFromEntries(zipEntries)
-
-          res.writeToResource(options.referenceModule.file)(zipData)
-        }
+      override def write[I <: ResourceIndicator : Tag](options: BackendOutputOptionsId[I]): RComp[ResourceWriter[I], Unit] =
+        outputModule(options.referenceModule)(refModuleGen) *>
+          outputModule(options.declarationModule)(declModuleGen)
 
     }
 
