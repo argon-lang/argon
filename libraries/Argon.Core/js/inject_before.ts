@@ -302,7 +302,7 @@ export interface BaseTypeInfo<T> {
     parameterMapping(...params: readonly any[]): readonly any[];
 }
 
-function defineMethod<TSelf>(this: TSelf, proto: {}, methodArr: Array<[MethodBinding, ArMethod]>, creator: MethodBinding & { create(self: TSelf): ArMethod; }): void {
+function defineMethod<TSelf>(this: TSelf, methodArr: Array<[MethodBinding, ArMethod]>, creator: MethodBinding & { create(self: TSelf): ArMethod; }): ArMethod {
     const binding: MethodBinding = {
         name: creator.name,
         sig: creator.sig,
@@ -310,6 +310,7 @@ function defineMethod<TSelf>(this: TSelf, proto: {}, methodArr: Array<[MethodBin
 
     const method = creator.create(this);
     methodArr.push([ binding, method ]);
+    return method;
 }
 
 export interface ClassCreator {
@@ -372,7 +373,7 @@ export function createClass(creator: ClassCreator): ArClass {
         }
 
         for(let methodCreator of creator.methods || []) {
-            defineMethod.call(this, proto, methods, methodCreator);
+            const method = defineMethod.call(this, methods, methodCreator);
         }
 
         creator.loadVTable(proto);
@@ -391,7 +392,8 @@ export function createClass(creator: ClassCreator): ArClass {
         const proto = Object.create(null);
         
         for(let methodCreator of creator.staticMethods || []) {
-            defineMethod.call(this, proto, staticMethods, methodCreator);
+            const method = defineMethod.call(this, staticMethods, methodCreator);
+            method.override(proto, method.invokeNonVirtual);
         }
 
         staticPrototype = proto;
@@ -559,7 +561,8 @@ export function createTrait(creator: TraitCreator): ArTrait {
         const proto = Object.create(null);
         
         for(let methodCreator of creator.staticMethods || []) {
-            defineMethod.call(this, proto, staticMethods, methodCreator);
+            const method = defineMethod.call(this, staticMethods, methodCreator);
+            method.override(proto, method.invokeNonVirtual);
         }
 
         staticPrototype = proto;
@@ -665,7 +668,7 @@ export function createDataConstructor(creator: DataConstructorCreator): DataCons
         instTrait.baseType.implement(proto);
 
         for(let methodCreator of creator.methods || []) {
-            defineMethod.call(this, proto, methods, methodCreator);
+            defineMethod.call(this, methods, methodCreator);
         }
 
         creator.loadVTable(proto);
