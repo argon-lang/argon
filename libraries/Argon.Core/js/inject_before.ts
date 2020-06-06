@@ -1,7 +1,7 @@
 
-const stringValueSymbol = Symbol();
-const intValueSymbol = Symbol();
-const boolValueSymbol = Symbol();
+export const stringValueSymbol = Symbol();
+export const intValueSymbol = Symbol();
+export const boolValueSymbol = Symbol();
 
 export type NamespacePath = ReadonlyArray<string>;
 
