@@ -37,21 +37,22 @@ final class JavaScriptNodeVMTestCaseRunner[I <: ResourceIndicator: Tag, P: Path 
         sandbox
       ).asInstanceOf[js.Dynamic](sandboxConsole)
 
-      val linker: js.Function2[String, NodeVM.SourceTextModule, js.Promise[NodeVM.SourceTextModule]] = (specifier, referencingModule) => {
-        val fileInfo = modules.find { _.name === specifier }
-          .getOrElse { throw js.JavaScriptException(js.Error("Unknown module \"" + specifier + "\"")) }
+      val vmModules = modules.map { fileInfo =>
+        fileInfo.name -> new NodeVM.SourceTextModule(fileInfo.content, NodeVMUtil.SourceTextModuleOptions(sandbox))
+      }.toMap
 
-        js.Promise.resolve[NodeVM.SourceTextModule](
-          new NodeVM.SourceTextModule(fileInfo.content, NodeVMUtil.SourceTextModuleOptions(referencingModule.context))
-        )
+      val linker: js.Function2[String, NodeVM.SourceTextModule, js.Promise[NodeVM.SourceTextModule]] = (specifier, referencingModule) => {
+        val module = vmModules.getOrElse(specifier, throw js.JavaScriptException(js.Error("Unknown module \"" + specifier + "\"")))
+        js.Promise.resolve[NodeVM.SourceTextModule](module)
       }
 
       val mainModule = new NodeVM.SourceTextModule(
         s"""
-          |import * as arCore from "Argon.Core";
-          |import * as mainModule from ${JSON.stringify(moduleName)};
+          |import arCore, { unitValue } from "Argon.Core";
+          |import mainModule from ${JSON.stringify(moduleName)};
           |
-          |mainModule.functions["main:(Ar.Unit)->(Ar.Unit)"].value(arCore.unitValue)
+          |const unitType = { type: "class", arClass: arCore.globalClass(["Ar"], "Unit", { parameterTypes: [] }) };
+          |mainModule.globalFunction([], "main", { parameterTypes: [unitType], resultType: unitType }).invoke(unitValue);
           |""".stripMargin,
         NodeVMUtil.SourceTextModuleOptions(sandbox)
       )
