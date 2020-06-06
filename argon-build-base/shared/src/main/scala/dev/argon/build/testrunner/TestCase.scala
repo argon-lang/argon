@@ -5,7 +5,7 @@ import scala.xml.Elem
 import cats._
 import cats.implicits._
 
-final case class TestCase(name: String, sourceCode: Vector[InputSourceData], expectedResult: TestCaseExpectedResult)
+final case class TestCase(name: String, enabled: Boolean, sourceCode: Vector[InputSourceData], expectedResult: TestCaseExpectedResult)
 
 sealed trait TestCaseExpectedResult
 case object TestCaseExpectedAnyOutput extends TestCaseExpectedResult

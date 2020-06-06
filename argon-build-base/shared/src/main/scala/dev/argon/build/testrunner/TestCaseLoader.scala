@@ -20,30 +20,34 @@ object TestCaseLoader {
       .flatMap(XmlParser.parseString)
       .flatMap { content =>
         IO.fromEither(
-          (
-            for {
-              nameElem <- (content \ "Name").headOption
-              name = nameElem.text
+          for {
+            nameElem <- (content \ "Name").headOption.toRight { new Exception(s"Test case missing name: ${content.toString}") }
+            name = nameElem.text
 
-              testFiles <- (content \ "InputSource").toVector.traverse { inputSourceElem =>
-                for {
-                  nameAttr <- (inputSourceElem \ "@name").headOption
-                  fileName = nameAttr.text
-                  fileData = inputSourceElem.text
-                } yield InputSourceData(fileName, fileData)
-              }
+            enabled <- (content \ "@enabled").headOption match {
+              case Some(enabledAttr) => enabledAttr.text.toBooleanOption.toRight { new Exception(s"Invalid value for enabled in test case: $name") }
+              case None => Right(true)
+            }
 
-              expectedResult <-
-                (content \ "ExpectedOutput")
-                  .collectFirst { case outputElem: Elem => TestCaseExpectedOutput(outputElem.text) }
-                  .orElse {
-                    (content \ "ExpectedError")
-                      .collectFirst { case errorElem: Elem => TestCaseExpectedError(errorElem.text) }
-                  }
+            testFiles <- (content \ "InputSource").toVector.traverse { inputSourceElem =>
+              for {
+                nameAttr <- (inputSourceElem \ "@name").headOption.toRight { new Exception(s"Test case file missing name: ${name}") }
+                fileName = nameAttr.text
+                fileData = inputSourceElem.text
+              } yield InputSourceData(fileName, fileData)
+            }
+
+            expectedResult <-
+              (content \ "ExpectedOutput")
+                .collectFirst { case outputElem: Elem => TestCaseExpectedOutput(outputElem.text) }
+                .orElse {
+                  (content \ "ExpectedError")
+                    .collectFirst { case errorElem: Elem => TestCaseExpectedError(errorElem.text) }
+                }
+                .toRight { new Exception(s"Missing expection for test case: ${name}") }
 
 
-            } yield TestCase(name, testFiles.toVector, expectedResult)
-            ).toRight { new Exception(s"Invalid test case: ${content.toString}") }
+          } yield TestCase(name, enabled, testFiles, expectedResult)
         )
       }
 

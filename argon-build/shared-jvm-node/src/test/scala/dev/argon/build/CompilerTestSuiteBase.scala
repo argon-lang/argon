@@ -48,13 +48,20 @@ abstract class CompilerTestSuiteBase extends PlatformRunnableSpec {
       runner.isResultExpected(actual, expected)
     }
 
-  private def createTest(runner: TestCaseRunner[TestExecEnv])(testCase: TestCase): ZSpec[Environment, Failure] =
-    testM(testCase.name) {
-      runner.runTest(testCase)
-        .provideLayer(execEnvLayer)
-        .orDie
-        .map { result => assert(result)(isExpectedResult(runner)(testCase.expectedResult)) }
-    }
+  private def createTest(runner: TestCaseRunner[TestExecEnv])(testCase: TestCase): ZSpec[Environment, Failure] = {
+    val testInfo =
+      testM(testCase.name) {
+        runner.runTest(testCase)
+          .provideLayer(execEnvLayer)
+          .orDie
+          .map { result => assert(result)(isExpectedResult(runner)(testCase.expectedResult)) }
+      }
+
+    if(testCase.enabled)
+      testInfo
+    else
+      testInfo @@ TestAspect.ignore
+  }
 
   private def createSuites(runner: TestCaseRunner[TestExecEnv], structure: TestCaseStructure): Seq[ZSpec[Environment, Failure]] =
     structure.nestedStructures.map { case (name, nested) =>
