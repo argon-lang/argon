@@ -78,7 +78,7 @@ export interface ArTrait {
     isInstance(value: any): boolean;
     copyTraitParameters(src: any, dest: any): void;
     createTraitObject(...traitParams: readonly any[]): void;
-    initializeClassObject(classObject: any, ...traitParams: readonly any[]): void;
+    initializeClassObject(classObject: any, traitParams: () => readonly any[]): void;
     getParameter(obj: any, index: number): any;
 
     method(name: NamedMethodName, sig: Signature): ArMethod;
@@ -103,7 +103,7 @@ export interface ArClass {
     createUninitializedInstance(classObject: any): any;
     copyClassParameters(src: any, dest: any): void;
     createClassObject(...classParams: readonly any[]): any;
-    initializeSubClassObject(classObject: any, ...classParams: readonly any[]): void;
+    initializeSubClassObject(classObject: any, classParams: () => readonly any[]): void;
     getParameter(obj: any, index: number): any;
 
     field(name: string): ClassField;
@@ -433,19 +433,19 @@ export function createClass(creator: ClassCreator): ArClass {
 
         createClassObject(...classParams: readonly any[]): any {
             const instance = Object.create(getStaticPrototype.call(this));
-            this.initializeSubClassObject(instance, ...classParams);
+            this.initializeSubClassObject(instance, () => classParams);
             return instance;
         },
 
-        initializeSubClassObject(classObject: any, ...classParams: readonly any[]): any {
+        initializeSubClassObject(classObject: any, classParams: () => readonly any[]): any {
             getPrototype.call(this);
 
-            Object.defineProperty(classObject, classParamSymbol, { configurable: false, writable: false, value: Object.freeze([...classParams]) });
+            Object.defineProperty(classObject, classParamSymbol, { configurable: false, get: classParams });
             if(baseClass !== null) {
-                baseClass.baseType.initializeSubClassObject(classObject, ...baseClass.parameterMapping(...classParams))
+                baseClass.baseType.initializeSubClassObject(classObject, () => baseClass!.parameterMapping(...classParams()))
             }
             for(let baseTrait of baseTraits) {
-                baseTrait.baseType.initializeClassObject(classObject, ...baseTrait.parameterMapping(...classParams));
+                baseTrait.baseType.initializeClassObject(classObject, () => baseTrait.parameterMapping(...classParams()));
             }
         },
 
@@ -591,19 +591,19 @@ export function createTrait(creator: TraitCreator): ArTrait {
 
         createTraitObject(...traitParams: readonly any[]): void {
             const instance = Object.create(getStaticPrototype.call(this));
-            this.initializeClassObject(instance, ...traitParams);
+            this.initializeClassObject(instance, () => traitParams);
             return instance;
         },
 
-        initializeClassObject(classObject: any, ...traitParams: readonly any[]): void {
+        initializeClassObject(classObject: any, traitParams: () => readonly any[]): void {
             if(traitParamSymbol in classObject) {
                 return;
             }
 
-            Object.defineProperty(classObject, traitParamSymbol, { configurable: false, writable: false, value: Object.freeze([...traitParams]) });
+            Object.defineProperty(classObject, traitParamSymbol, { configurable: false, get: traitParams });
             
             for(let baseTrait of getBaseTraits()) {
-                baseTrait.baseType.initializeClassObject(classObject, ...baseTrait.parameterMapping(...traitParams));
+                baseTrait.baseType.initializeClassObject(classObject, () => baseTrait.parameterMapping(...traitParams()));
             }
         },
 
@@ -695,7 +695,7 @@ export function createDataConstructor(creator: DataConstructorCreator): DataCons
             getPrototype.call(this);
             const instance = Object.create(null);
             Object.defineProperty(instance, classParamSymbol, { configurable: false, writable: false, value: Object.freeze([...classParams]) });
-            instanceTrait!.baseType.initializeClassObject(instance, ...instanceTrait!.parameterMapping(...classParams));
+            instanceTrait!.baseType.initializeClassObject(instance, () => instanceTrait!.parameterMapping(...classParams));
             return instance;
         },
 
