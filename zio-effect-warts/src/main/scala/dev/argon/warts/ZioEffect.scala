@@ -12,21 +12,28 @@ object ZioEffect extends WartTraverser {
     val bannedSymbols =
       for {
         name <- Seq(
+          "apply",
+
           "effect", "effectTotal",
           "effectSuspend", "effectSuspendTotal", "effectSuspendTotalWith", "effectSuspendWith",
           "effectAsync", "effectAsyncInterrupt", "effectAsyncM", "effectAsyncMaybe",
 
           "fromJavaIteratorTotal", "fromIterator", "fromJavaIterator",
           "fromIteratorEffect", "fromJavaIteratorEffect",
-          "fromIteratorManaged", "fromJavaIteratorManaged"
+          "fromIteratorManaged", "fromJavaIteratorManaged",
+
+          "fromFile",
         )
 
         termName = TermName(NameTransformer.encode(name))
 
         t <- Seq(
           typeOf[ZIO.type], typeOf[IO.type], typeOf[RIO.type], typeOf[UIO.type], typeOf[URIO.type], typeOf[Task.type],
-          typeOf[ZManaged.type], typeOf[Managed.type],
-          typeOf[Stream.type], typeOf[ZStream.type],
+        ) ++ (
+          if(name != "apply")
+            Seq(typeOf[ZManaged.type], typeOf[Managed.type], typeOf[Stream.type], typeOf[ZStream.type])
+          else
+            Seq.empty
         )
 
         symbol = t.member(termName) if symbol != NoSymbol
