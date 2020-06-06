@@ -207,17 +207,17 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
       erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
 
       ctorObj <- getDataCtorJSObject(ctor, erasedSig)
-      fieldMappingRef <- Ref.make(Map.empty[LocalVariableId, JSIdentifier])
+      localFieldMappingRef <- Ref.make(Map.empty[LocalVariableId, JSIdentifier])
 
 
       ctorImpl <- ctor.payload : Comp[context.JSImpl.DataConstructor]
       (ctorFunc, paramMapping) <- ctorImpl match {
         case context.JSImpl.DataConstructor.ExpressionBody(expr) =>
-          val statementConverter = StatementConverterDataCtorFieldBinding(ctorObj, fieldMappingRef)
-
           for {
             thisVarId <- getNextSymbolId
             thisVarName = id"this_$thisVarId"
+
+            statementConverter = StatementConverterDataCtorFieldBinding(thisVarName, localFieldMappingRef)
 
             (paramListNoThis, paramMapping) <- createParameterList(sig)
             paramList = JSFunctionParameter(JSBindingIdentifier(thisVarName), paramListNoThis)
@@ -238,20 +238,20 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
           } yield (JSFunctionExpression(None, paramList, initObjectExprs ++ body), paramMapping)
       }
 
-      fieldMapping <- fieldMappingRef.get
+      localFieldMapping <- localFieldMappingRef.get
 
       instanceVarMap = (instance: JSExpression) =>
         (paramMapping.map { case (paramVar, varName) => paramVar.id -> VariableLoader.fromExpr(instance.cprop(id"${varName}_sym")) }.toMap : VarMap) ++
-        (fieldMapping.map { case (id, varName) =>
+        (localFieldMapping.map { case (id, varName) =>
           id -> new VariableLoader {
             override def loadVariable: JSExpression =
-              instance.cprop(JSIdentifier(s"${varName.id}_sym"))
+              instance.cprop(varName)
 
             override def storeVariable(value: JSExpression): Option[JSExpression] =
-              Some(loadVariable := value)
+              Some(instance.cprop(varName) := value)
 
             override def initializeVariable(value: JSExpression): Option[JSStatement] =
-              Some(defineProperty(instance, s"${varName.id}_sym", value))
+              None
           }
         }: VarMap)
 
@@ -271,6 +271,10 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
         const(id"${varName}_sym" ::= id"Symbol"())
       }
 
+      localSymbolDecls = localFieldMapping.map { case (_, varName) =>
+        const(varName ::= id"Symbol"())
+      }
+
       dataCtorObj = createDataConstructor(jsobj(
         get("instanceTrait")(
           JSReturn(instanceTypeExpr),
@@ -281,7 +285,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
         "loadVTable" -> vtableObject,
       ))
 
-    } yield paramSymbolDecls :+ JSReturn(dataCtorObj)
+    } yield paramSymbolDecls ++ localSymbolDecls :+ JSReturn(dataCtorObj)
 
   private def createMethodObject(method: ArMethod[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier], instanceVarMap: JSExpression => VarMap): Emit[JSExpression] =
     for {

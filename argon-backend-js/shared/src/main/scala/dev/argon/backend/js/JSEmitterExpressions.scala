@@ -90,22 +90,22 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
   def convertStmt(useReturn: Boolean)(expr: context.typeSystem.SimpleExpr): Emit[Vector[JSStatement]] =
     StatementConverterLocalBinding.convertStmt(useReturn)(expr)
 
-  final case class StatementConverterDataCtorFieldBinding(dataCtorObj: JSExpression, fieldMap: Ref[Map[LocalVariableId, JSIdentifier]]) extends StatementConverter {
+  final case class StatementConverterDataCtorFieldBinding(instance: JSExpression, fieldMap: Ref[Map[LocalVariableId, JSIdentifier]]) extends StatementConverter {
     override def declareLocalVariable(variable: LocalVariable[context.type, Id]): Emit[VariableLoader] = for {
       symVarNum <- getNextSymbolId
       symVarName = id"local_sym_$symVarNum"
 
       _ <- fieldMap.update { _ + (variable.id -> symVarName) }
     } yield new VariableLoader {
-      override def loadVariable: JSExpression = dataCtorObj.cprop(symVarName)
+      override def loadVariable: JSExpression = instance.cprop(symVarName)
 
       override def storeVariable(value: JSExpression): Option[JSExpression] =
-        Some(dataCtorObj.cprop(symVarName) := value)
+        Some(instance.cprop(symVarName) := value)
 
       override def initializeVariable(value: JSExpression): Option[JSStatement] =
         variable.mutability match {
           case Mutability.Mutable => storeVariable(value)
-          case Mutability.NonMutable => Some(defineProperty(dataCtorObj, symVarName, value))
+          case Mutability.NonMutable => Some(defineProperty(instance, symVarName, value))
         }
     }
   }
