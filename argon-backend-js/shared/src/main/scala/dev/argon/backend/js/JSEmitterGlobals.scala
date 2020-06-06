@@ -440,11 +440,23 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
       }
 
-      createDataConstructor <- coreLibExport("createDataConstructor")
+      convSig <- convertParameterOnlySignature(ErasedSignature.fromSignatureParameters(context)(sig))
 
-    } yield createDataConstructor(jsobj(
-      "implementation" -> func
-    ))
+      createClassConstructor <- coreLibExport("createClassConstructor")
+
+    } yield jsobj(
+      get("sig")(
+        JSReturn(convSig),
+      ),
+      "create" -> jsfunction(None)(id"instanceClass")(
+        JSReturn(createClassConstructor(
+          jsobj(
+          "implementation" -> func
+          ),
+          id"instanceClass",
+        )),
+      ),
+    )
 
   private def createVTableObject(vtableContext: VTableContext.Aux[context.type])(vtable: vtableContext.VTable): Emit[JSExpression] = {
     val protoObjName = id"proto"
