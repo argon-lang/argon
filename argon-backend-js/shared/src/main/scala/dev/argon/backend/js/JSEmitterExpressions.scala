@@ -129,8 +129,10 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
 
           ownerObj <- getDataCtorJSObject(dataCtorInstanceType.ctor.value, ErasedSignature.fromSignatureParameters(context)(sig))
 
+          instTypeExpr <- convertExpr(dataCtorInstanceType)
+
           argExprs <- args.traverse(convertExpr(_))
-        } yield JSNewCall(JSPropertyAccessDot(ownerObj, JSIdentifier("constructor")), argExprs)
+        } yield ownerObj.prop(id"createInstance")(instTypeExpr +: argExprs: _*)
 
       case EnsureExecuted(body, ensuring) =>
         for {
@@ -295,6 +297,16 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
 
           argExprs <- args.traverse(convertExpr(_))
         } yield traitObj.prop(id"createTraitObject")(argExprs: _*)
+
+      case DataConstructorType(ctor, args, _) =>
+        for {
+          sig <- ctor.value.signature
+          erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
+          ctorObj <- getDataCtorJSObject(ctor.value, erasedSig)
+
+          argExprs <- args.traverse(convertExpr(_))
+        } yield ctorObj.prop(id"createTypeObject")(argExprs: _*)
+
 
       case e => throw new NotImplementedError(s"Expression type ${e.getClass.getName} is not yet implemented")
     }

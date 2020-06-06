@@ -120,7 +120,7 @@ export interface ClassField {
 
 export interface DataConstructor {
     isInstance(value: any): boolean;
-    createTypeObject(...classParams: readonly any[]): any;
+    createTypeObject(...typeParams: readonly any[]): any;
     createInstance(typeObject: any, ...args: any[]): any;
     method(name: NamedMethodName, sig: Signature): ArMethod;
 }
@@ -657,9 +657,10 @@ export function createDataConstructor(creator: DataConstructorCreator): DataCons
         }
         
         const proto = Object.create(null);
-        ctorPrototype = proto;
         
         const instTrait = creator.instanceTrait;
+        ctorPrototype = proto;
+        instanceTrait = instTrait;
         
         instTrait.baseType.implement(proto);
 
@@ -688,6 +689,7 @@ export function createDataConstructor(creator: DataConstructorCreator): DataCons
         },
 
         createTypeObject(...classParams: readonly any[]): any {
+            getPrototype.call(this);
             const instance = Object.create(null);
             Object.defineProperty(instance, classParamSymbol, { configurable: false, writable: false, value: Object.freeze([...classParams]) });
             instanceTrait!.baseType.initializeClassObject(instance, ...instanceTrait!.parameterMapping(...classParams));

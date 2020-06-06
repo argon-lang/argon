@@ -227,12 +227,12 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
                 paramVar.mutability match {
                   case Mutability.Mutable => JSThis.cprop(id"${varName}_sym") := JSIdentifier(varName)
                   case Mutability.NonMutable =>
-                    defineProperty(JSThis, id"${varName}_sym", JSIdentifier(varName))
+                    defineProperty(thisVarName, id"${varName}_sym", JSIdentifier(varName))
                 }
               }
               .toVector
 
-            body <- addToVarMap(paramMapping.map { case (paramVar, _) => paramVar.id -> loadTypeParameter(paramVar, ctorObj, thisVarName) }: _*)(
+            body <- addToVarMap(paramMapping.map { case (paramVar, varName) => paramVar.id -> VariableLoader.fromExpr(thisVarName.cprop(id"${varName}_sym")) }: _*)(
               statementConverter.convertStmt(useReturn = true)(expr)
             )
           } yield (JSFunctionExpression(None, paramList, initObjectExprs ++ body), paramMapping)
@@ -241,7 +241,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
       fieldMapping <- fieldMappingRef.get
 
       instanceVarMap = (instance: JSExpression) =>
-        (paramMapping.map { case (paramVar, _) => paramVar.id -> loadTypeParameter(paramVar, ctorObj, instance) }.toMap : VarMap) ++
+        (paramMapping.map { case (paramVar, varName) => paramVar.id -> VariableLoader.fromExpr(instance.cprop(id"${varName}_sym")) }.toMap : VarMap) ++
         (fieldMapping.map { case (id, varName) =>
           id -> new VariableLoader {
             override def loadVariable: JSExpression =
@@ -265,11 +265,13 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
       instanceTypeExpr <- createBaseTraitObject(sig)(sig.unsubstitutedResult.instanceType)
 
+      createDataConstructor <- coreLibExport("createDataConstructor")
+
       paramSymbolDecls = paramMapping.map { case (_, varName) =>
         const(id"${varName}_sym" ::= id"Symbol"())
       }
 
-      dataCtorObj = jsobj(
+      dataCtorObj = createDataConstructor(jsobj(
         get("instanceTrait")(
           JSReturn(instanceTypeExpr),
         ),
@@ -277,7 +279,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
         "methods" -> JSArrayLiteral(methodObjects),
         "loadVTable" -> vtableObject,
-      )
+      ))
 
     } yield paramSymbolDecls :+ JSReturn(dataCtorObj)
 
