@@ -52,11 +52,13 @@ object ArModuleBackend extends Backend {
       ModuleOutputOptions[OptionInfo[*, I], I](
         referenceModule = OptionInfo(
           name = "referenceModule",
-          description = "The reference module that will contain the interface of the compiled module"
+          description = "The reference module that will contain the interface of the compiled module",
+          defaultValue = None
         ),
         declarationModule = OptionInfo(
           name = "declarationModule",
-          description = "The declaration module that will contain the serialized compiled module"
+          description = "The declaration module that will contain the serialized compiled module",
+          defaultValue = None
         ),
       )
 
