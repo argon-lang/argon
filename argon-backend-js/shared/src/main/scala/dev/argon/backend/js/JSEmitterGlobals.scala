@@ -87,7 +87,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
     )
 
   private final class FieldVariableLoader(thisExpr: JSExpression, classObj: JSExpression, fieldName: String) extends VariableLoader {
-    private val fieldObj = classObj.prop(id"field")(id"${fieldName}")
+    private val fieldObj = classObj.prop(id"field")(JSString(fieldName))
 
     override def loadVariable: JSExpression =
       fieldObj.prop(id"read")(thisExpr)
