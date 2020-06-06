@@ -313,6 +313,27 @@ function defineMethod<TSelf>(this: TSelf, methodArr: Array<[MethodBinding, ArMet
     return method;
 }
 
+const methodMatches = (name: NamedMethodName, sig: Signature) => (binding: MethodBinding): boolean => {
+    if(binding.name === null) {
+        return false;
+    }
+    else if(typeof(binding.name) === "object" && typeof(name) === "object") {
+        if(binding.name.type === "mutator" && name.type === "mutator") {
+            if(binding.name.name !== name.name) {
+                return false;
+            }
+        }
+        else {
+            return false;
+        }
+    }
+    else if(binding.name !== name) {
+        return false;
+    }
+
+    return signatureEqual(binding.sig, sig);
+};
+
 export interface ClassCreator {
     readonly baseClass?: BaseTypeInfo<ArClass>;
     readonly baseTraits?: ReadonlyArray<BaseTypeInfo<ArTrait>>;
@@ -457,7 +478,7 @@ export function createClass(creator: ClassCreator): ArClass {
             getPrototype.call(this);
 
             for(let [binding, method] of methods) {
-                if(binding.name === name && signatureEqual(binding.sig, sig)) {
+                if(methodMatches(name, sig)(binding)) {
                     return method;
                 }
             }
@@ -469,7 +490,7 @@ export function createClass(creator: ClassCreator): ArClass {
             getStaticPrototype.call(this);
 
             for(let [binding, method] of staticMethods) {
-                if(binding.name === name && signatureEqual(binding.sig, sig)) {
+                if(methodMatches(name, sig)(binding)) {
                     return method;
                 }
             }
@@ -613,9 +634,7 @@ export function createTrait(creator: TraitCreator): ArTrait {
     
         method(name: NamedMethodName, sig: Signature): ArMethod {
 
-            function matches(binding: MethodBinding) {
-                return binding.name === name && signatureEqual(binding.sig, sig)
-            }
+            const matches = methodMatches(name, sig);
 
             return cacheValue(this, methodCache, creator.methods, matches, "Could not find method");
 
@@ -625,7 +644,7 @@ export function createTrait(creator: TraitCreator): ArTrait {
             getStaticPrototype.call(this);
 
             for(let [binding, method] of staticMethods) {
-                if(binding.name === name && signatureEqual(binding.sig, sig)) {
+                if(methodMatches(name, sig)(binding)) {
                     return method;
                 }
             }
@@ -703,7 +722,7 @@ export function createDataConstructor(creator: DataConstructorCreator): DataCons
             getPrototype.call(this);
 
             for(let [binding, method] of methods) {
-                if(binding.name === name && signatureEqual(binding.sig, sig)) {
+                if(methodMatches(name, sig)(binding)) {
                     return method;
                 }
             }

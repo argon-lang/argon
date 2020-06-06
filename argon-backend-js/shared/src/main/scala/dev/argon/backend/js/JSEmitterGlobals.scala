@@ -314,9 +314,10 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
       }
 
       createMethod <- coreLibExport("createMethod")
+      convMethodName <- getMethodName(method.name)
       convSig <- convertSignature(ErasedSignature.fromSignature(context)(sig))
     } yield jsobj(
-      "name" -> getMethodName(method.name),
+      "name" -> convMethodName,
       get("sig")(
         JSReturn(convSig),
       ),

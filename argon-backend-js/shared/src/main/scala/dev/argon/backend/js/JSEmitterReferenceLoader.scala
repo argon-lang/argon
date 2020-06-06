@@ -198,18 +198,18 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
           .map { _.prop(id"method") }
     }
 
-  def getMethodName(methodName: MethodName): JSExpression =
+  def getMethodName(methodName: MethodName): Emit[JSExpression] =
     methodName match {
-      case MemberName.Normal(name) => JSString(name)
-      case MemberName.Mutator(name) => ???
-      case MemberName.Unnamed => ???
-      case MemberName.Call => ???
+      case MemberName.Normal(name) => IO.succeed(JSString(name))
+      case MemberName.Mutator(name) => IO.succeed(jsobj("type" -> JSString("mutator"), "name" -> JSString(name)))
+      case MemberName.Unnamed => IO.succeed(JSNull)
+      case MemberName.Call => coreLibExport("SpecialMethodName").map { _.prop(id"Call") }
     }
 
   def getMethodJSObject[TPayloadSpec[_, _]](method: ArMethod[context.type, TPayloadSpec]): Emit[JSExpression] = for {
     sig <- method.signatureUnsubstituted
     lookupFunction <- getMethodLookupFunction(method.owner)
-    name = getMethodName(method.name)
+    name <- getMethodName(method.name)
     convSig <- convertSignature(ErasedSignature.fromSignature(context)(sig))
   } yield lookupFunction(name, convSig)
 
