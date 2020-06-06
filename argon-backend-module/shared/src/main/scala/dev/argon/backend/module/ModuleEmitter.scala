@@ -14,6 +14,8 @@ import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
 import dev.argon.loaders.armodule.{ModuleFormatVersion, ModulePaths}
 import dev.argon.compiler.types.TypeSystem
+import dev.argon.compiler.vtable.VTableBuilder
+import dev.argon.compiler.vtable.VTableBuilder.Aux
 import dev.argon.util.{FileID, NamespacePath}
 import dev.argon.module
 import dev.argon.module.Metadata
@@ -33,6 +35,7 @@ sealed abstract class ModuleEmitter private() {
 
   trait EmitEnv {
     val options: ModuleEmitOptions
+    val vtableBuilder: VTableBuilder.Aux[context.type]
 
     def getModuleIdNum[TPayloadSpec[_, _]](arModule: ArModule[context.type, TPayloadSpec]): Comp[Option[Int]]
 
@@ -728,6 +731,7 @@ sealed abstract class ModuleEmitter private() {
       }
 
       convOwner <- convertClassOwner(arClass.owner)
+      _ <- ZIO.accessM[EmitEnv](_.vtableBuilder.fromClass(arClass))
 
     } yield module.ClassDefinition(
       owner = convOwner,
@@ -760,6 +764,8 @@ sealed abstract class ModuleEmitter private() {
       methods <- createMethodMembers(dataCtor.methods)
 
       convOwner <- convertDataCtorOwner(dataCtor.owner)
+      _ <- ZIO.accessM[EmitEnv](_.vtableBuilder.fromDataConstructor(dataCtor))
+
     } yield module.DataConstructorDefinition(
       owner = convOwner,
       fileId = convertFileId(dataCtor.fileId),
@@ -924,6 +930,8 @@ object ModuleEmitter {
           },
         ))
 
+        vtableBuilderObj <- VTableBuilder(context)
+
         moduleIds <- Ref.make(IdentifierState.initial[ModuleId])
 
         classIds <- Ref.make(IdentifierState.initial[ClassId])
@@ -950,8 +958,10 @@ object ModuleEmitter {
         }
 
         emitEnv = new moduleEmitter.EmitEnv {
-          
+
           override val options: ModuleEmitOptions = emitOptions
+
+          override val vtableBuilder: Aux[context.type] = vtableBuilderObj
 
           private def isCurrentModule[TPayloadSpec[_, _]](arModule: ArModule[context.type, TPayloadSpec]): Boolean =
             arModule.id === currentModule.id
