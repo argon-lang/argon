@@ -6,7 +6,7 @@ import zio.system.System
 
 trait PlatformApp extends App {
 
-  def runApp(args: List[String]): ZIO[ZEnv with FileIO[FilePath] with FileIOLite, Nothing, Int]
+  def runApp(args: List[String]): ZIO[ZEnv with FileIO[FilePath] with FileIOLite, Nothing, ExitCode]
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   private def getCommandLineArgs: UIO[List[String]] =
@@ -15,7 +15,7 @@ trait PlatformApp extends App {
   private def baseLayer: ZLayer[Any, Nothing, FileIO[FilePath] with FileIOLite with System] =
     FileIOPlatform.live ++ FileIOLitePlatform.live ++ NodeSystem.live
 
-  override def run(args: List[String]): ZIO[ZEnv, Nothing, Int] =
+  override def run(args: List[String]): ZIO[ZEnv, Nothing, ExitCode] =
     getCommandLineArgs.flatMap(runApp).provideSomeLayer[ZEnv](baseLayer)
 
 }

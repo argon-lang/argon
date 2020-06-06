@@ -23,7 +23,7 @@ object Pipeline {
       }
   }
 
-  def run[P : Path: Tag](buildInfo: backend.BuildInfo.Resolved[P]): ZIO[Console with BuildEnvironment with FileIO[P] with FileIOLite, Int, Unit] =
+  def run[P : Path: Tag](buildInfo: backend.BuildInfo.Resolved[P]): ZIO[Console with BuildEnvironment with FileIO[P] with FileIOLite, ExitCode, Unit] =
     BuildProcess.compile(
       buildInfo.backend : buildInfo.backend.type
     )(
@@ -35,7 +35,7 @@ object Pipeline {
       }
       .provideSomeLayer[BuildEnvironment with FileIO[P] with FileIOLite](ResourceAccess.forFileIO[P])
       .flatMapError { errors =>
-        printMessages(errors.toList.toVector).as(1)
+        printMessages(errors.toList.toVector).as(ExitCode.failure)
       }
 
 }

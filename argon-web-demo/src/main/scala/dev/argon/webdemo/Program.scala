@@ -26,7 +26,7 @@ object Program extends PlatformApp {
 
 
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "dev.argon.warts.ZioEffect"))
-  override def runApp(args: List[String]): URIO[ZEnv with FileIOLite, Int] = (
+  override def runApp(args: List[String]): URIO[ZEnv with FileIOLite, ExitCode] = (
     for {
       queue <- Queue.bounded[DemoCommand](1000)
       state <- RefM.make[ExecutionStatus](ExecutionStatus.NotRun)
@@ -84,7 +84,7 @@ object Program extends PlatformApp {
           IO.effectTotal { outputElem.value += output }
 
       }
-    } yield 0
+    } yield ExitCode.success
   ).provideLayer(HttpResourceReader.live)
 
   private def references =

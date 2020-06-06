@@ -17,29 +17,29 @@ object Program extends PlatformApp {
 
 
 
-  override def runApp(args: List[String]): ZIO[ZEnv with FileIO[FilePath] with FileIOLite, Nothing, Int] =
+  override def runApp(args: List[String]): ZIO[ZEnv with FileIO[FilePath] with FileIOLite, Nothing, ExitCode] =
     parseArgs(args)
       .provideSomeLayer[ZEnv with FileIO[FilePath] with FileIOLite](BackendProviderImpl.live)
       .flatMap {
         case CommandLineArguments(cmd: BuildCommand) =>
-          runCompilation(cmd).as(0)
+          runCompilation(cmd).as(ExitCode.success)
       }
       .catchAll(IO.succeed(_))
 
 
-  private def resolveOptions[Options[_[_], _]](options: Options[Option, String], handler: OptionsHandler[Options]): ZIO[Console with FileIO[FilePath], Int, Options[Id, PathResourceIndicator[FilePath]]] =
+  private def resolveOptions[Options[_[_], _]](options: Options[Option, String], handler: OptionsHandler[Options]): ZIO[Console with FileIO[FilePath], ExitCode, Options[Id, PathResourceIndicator[FilePath]]] =
     IO.fromEither(handler.inferDefaults(options))
-      .flatMapError { field => putStrLn("Missing value for option: " + field.name).as(1) }
+      .flatMapError { field => putStrLn("Missing value for option: " + field.name).as(ExitCode.failure) }
       .flatMap { options2 =>
         Path.of[FilePath](".")
           .flatMap { currentDir =>
             implicit val fileHandler = PathResourceIndicator.fileHandlerPath(currentDir)
             handler.optionsLoader[String, PathResourceIndicator[FilePath]].loadOptions(options2)
           }
-          .flatMapError { ex => putStrLn("Error: " + ex.getMessage).as(1) }
+          .flatMapError { ex => putStrLn("Error: " + ex.getMessage).as(ExitCode.failure) }
       }
 
-  private def runCompilation(args: BuildCommand): ZIO[BuildEnvironment with Console with FileIO[FilePath] with FileIOLite, Int, Unit] = for {
+  private def runCompilation(args: BuildCommand): ZIO[BuildEnvironment with Console with FileIO[FilePath] with FileIOLite, ExitCode, Unit] = for {
     resCompilerOpts <- resolveOptions(args.compilerOptions, CompilerOptions.handler)
     resBackendOpts <- resolveOptions(args.backendOptions, args.backend.backendOptions)
     resOutputOpts <- resolveOptions(args.outputOptions, args.backend.outputOptions)
@@ -48,26 +48,26 @@ object Program extends PlatformApp {
   } yield ()
 
 
-  private def parseArgs(args: List[String]): ZIO[Console with BackendProvider, Int, CommandLineArguments] =
+  private def parseArgs(args: List[String]): ZIO[Console with BackendProvider, ExitCode, CommandLineArguments] =
     parseCommands(args).map { CommandLineArguments(_) }
 
-  private def parseCommands(args: List[String]): ZIO[Console with BackendProvider, Int, ArgonCommand] =
+  private def parseCommands(args: List[String]): ZIO[Console with BackendProvider, ExitCode, ArgonCommand] =
     args match {
       case Nil =>
-        putStrLn("No command specified") *> IO.fail(1)
+        putStrLn("No command specified") *> IO.fail(ExitCode.failure)
 
       case "build" :: backendName :: tail =>
         parseBuildCommand(backendName, tail)
 
       case cmdName :: _ =>
-        putStrLn(s"Unknown command: $cmdName") *> IO.fail(1)
+        putStrLn(s"Unknown command: $cmdName") *> IO.fail(ExitCode.failure)
     }
 
   private trait ArgDecoder[A] {
     def decode(prevValue: Option[A], value: String): Either[String, A]
   }
 
-  private def parseBuildCommand(backendName: String, args: List[String]): ZIO[Console with BackendProvider, Int, ArgonCommand] =
+  private def parseBuildCommand(backendName: String, args: List[String]): ZIO[Console with BackendProvider, ExitCode, ArgonCommand] =
     ZIO.access[BackendProvider](_.get.findBackend(backendName))
       .flatMap {
         case Some(b) =>
@@ -110,7 +110,7 @@ object Program extends PlatformApp {
               .map { field => ("--" + namePrefix + field.info.name) -> field }
               .toMap
 
-          def parseBuildArgs(args: List[String], fields: Map[String, OptionsField[Option, String]]): ZIO[Console, Int, Unit] =
+          def parseBuildArgs(args: List[String], fields: Map[String, OptionsField[Option, String]]): ZIO[Console, ExitCode, Unit] =
             args match {
               case switch :: value :: tail if switch.startsWith("--") =>
                 (
@@ -120,18 +120,18 @@ object Program extends PlatformApp {
                         prevValue <- field.fieldRef.get
                         newValue <- IO.fromEither(field.info.codecSelector.codec[ArgDecoder].decode(prevValue, value))
                           .flatMapError { msg =>
-                            putStrLn(s"Error parsing value for switch $switch: $msg").as(1)
+                            putStrLn(s"Error parsing value for switch $switch: $msg").as(ExitCode.failure)
                           }
                         _ <- field.fieldRef.set(Some(newValue))
                       } yield ()
 
                     case None =>
-                      putStrLn(s"Unknown switch: $switch") *> IO.fail(1)
+                      putStrLn(s"Unknown switch: $switch") *> IO.fail(ExitCode.failure)
                   }
                 ).flatMap { _ => parseBuildArgs(tail, fields) }
 
               case switch :: Nil if switch.startsWith("--") =>
-                putStrLn(s"Switch $switch missing value.") *> IO.fail(1)
+                putStrLn(s"Switch $switch missing value.") *> IO.fail(ExitCode.failure)
 
               case Nil => IO.unit
             }
@@ -153,7 +153,7 @@ object Program extends PlatformApp {
           }
 
         case None =>
-          putStrLn(s"Unknown backend: $backendName") *> IO.fail(1)
+          putStrLn(s"Unknown backend: $backendName") *> IO.fail(ExitCode.failure)
       }
 
 

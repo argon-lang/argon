@@ -10,7 +10,7 @@ lazy val envValues = Map(
   "ARGON_TEST_CASES" -> file("testcases").getAbsolutePath,
 )
 
-val zioVersion = "1.0.0-RC19-2"
+val zioVersion = "1.0.0-RC20"
 
 val esParseDeps = Seq(
   "escodegen" -> "^1.14.1",

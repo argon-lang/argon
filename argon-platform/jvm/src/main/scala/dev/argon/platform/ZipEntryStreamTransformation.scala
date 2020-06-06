@@ -29,13 +29,12 @@ private[platform] object ZipEntryStreamTransformation {
               ZSink.fromOutputStream(zipStream).push.provide(Has(blocking)).use { push =>
                 dataStream
                   .run(
-                    ZSink.fromPush[Any, IOException, Byte, Int] { chunkOpt =>
+                    ZSink.fromPush[Any, IOException, Byte, Long] { chunkOpt =>
                       push(chunkOpt)
                         .provide(Has(blocking))
                     }
                       .mapError(errorHandler)
                   )
-                  .unit
               }
             }
 
