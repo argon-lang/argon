@@ -85,7 +85,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           simplifyInstanceType(t).flatMap {
             case Some(resolvedTypeWithMethods: TypeWithMethods[context.type, TTypeWrapper]) =>
               resolveMethodOverloads(resolvedTypeWithMethods)(
-                MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.callerId, env.fileSpec)(memberName)
+                MethodLookup.lookupMethods(context)(typeSystem)(resolvedTypeWithMethods)(env.accessTokens, env.currentModule.id, env.fileSpec.fileID)(memberName)
               )
 
             case Some(funcType @ FunctionType(argType, resultType)) if memberName === MemberName.Call =>
@@ -173,7 +173,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                                 .flatMap {
                                   _.filter { binding => binding.method.name === methodName }
                                     .filterA { binding =>
-                                      AccessCheck.checkInstance[context.type, t.arClass.PayloadSpec](env.callerId, env.fileSpec, binding)
+                                      AccessCheck.checkInstance[context.type, t.arClass.PayloadSpec](env.accessTokens, AccessToken.OfClass(t.arClass), env.currentModule.id, env.fileSpec.fileID, binding)
                                     }
                                 }
                                 .map(methodBindingsToOverloads)
@@ -190,7 +190,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                                 .flatMap {
                                   _.filter { binding => binding.method.name === methodName }
                                     .filterA { binding =>
-                                      AccessCheck.checkInstance[context.type, t.arTrait.PayloadSpec](env.callerId, env.fileSpec, binding)
+                                      AccessCheck.checkInstance[context.type, t.arTrait.PayloadSpec](env.accessTokens, AccessToken.OfTrait(t.arTrait), env.currentModule.id, env.fileSpec.fileID, binding)
                                     }
                                 }
                                 .map(methodBindingsToOverloads)
@@ -1299,6 +1299,7 @@ object ExpressionConverter {
     referencedModules: Vector[ArModule[TContext, ReferencePayloadSpecifier]],
     scope: TScope,
     allowAbstractConstructor: Boolean,
+    accessTokens: Set[AccessToken],
   )
 
   trait EnvCreator[TContext <: Context with Singleton] {
@@ -1309,6 +1310,8 @@ object ExpressionConverter {
       addVariables(context)(Vector(variable))
 
     def addParameters(context: TContext)(params: Vector[Parameter[context.type, Id]]): EnvCreator[TContext]
+
+    def addAccessToken(accessToken: AccessToken): EnvCreator[TContext]
 
     val fileSpec: FileSpec
     val currentModule: ArModule[TContext, DeclarationPayloadSpecifier]
@@ -1490,6 +1493,7 @@ object ExpressionConverter {
         referencedModules = env.referencedModules,
         scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
         allowAbstractConstructor = env.allowAbstractConstructor,
+        accessTokens = env.accessTokens,
       )
 
       convExpectedType <- tsConverter.convertTypeSystem(expectedType)
@@ -1535,6 +1539,7 @@ object ExpressionConverter {
         referencedModules = env.referencedModules,
         scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
         allowAbstractConstructor = env.allowAbstractConstructor,
+        accessTokens = env.accessTokens,
       )
 
       tcExpr = converter.evaluateTypeExprAST(env2)(expr)
@@ -1565,6 +1570,7 @@ object ExpressionConverter {
         referencedModules = env.referencedModules,
         scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
         allowAbstractConstructor = env.allowAbstractConstructor,
+        accessTokens = env.accessTokens,
       )
 
       tcExpr = converter.resolveUnitType(env2)(location)

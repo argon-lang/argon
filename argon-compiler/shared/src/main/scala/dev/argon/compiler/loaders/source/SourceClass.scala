@@ -122,7 +122,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
       private val paramsEnv: Comp[EnvCreator[context.type]] =
         paramsEnvCache.get(
           signature.map { sig =>
-            env.addParameters(context)(sig.unsubstitutedParameters)
+            env.addAccessToken(AccessToken.OfClass(AbsRef(this))).addParameters(context)(sig.unsubstitutedParameters)
           }
         )
 

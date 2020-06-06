@@ -2,7 +2,7 @@ package dev.argon.compiler.core
 
 import cats.Eq
 import cats.implicits._
-import dev.argon.util.NamespacePath
+import dev.argon.util.{IsHelpers, NamespacePath}
 
 sealed trait ClassOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
   def module: ArModule[TContext, TPayloadSpec]
@@ -33,13 +33,39 @@ object FunctionOwner {
 }
 
 
-sealed trait MethodOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]]
+sealed trait MethodOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]] {
+  def module: ArModule[TContext, TPayloadSpec]
+}
 object MethodOwner {
-  final case class ByClass[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerClass: ArClass[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec]
-  final case class ByClassObject[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerClass: ArClass[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec]
-  final case class ByTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerTrait: ArTrait[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec]
-  final case class ByTraitObject[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerTrait: ArTrait[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec]
-  final case class ByDataCtor[TContext <: Context with Singleton, TPayloadSpec[_, _]](dataCtor: DataConstructor[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec]
+  final case class ByClass[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerClass: ArClass[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec] {
+    private type OwnerSubst[TCtx <: Context with Singleton] = ClassOwner[TCtx, TPayloadSpec]
+    override def module: ArModule[TContext, TPayloadSpec] =
+      IsHelpers.substituteBounded[Context with Singleton, Nothing, OwnerSubst, ownerClass.context.type, TContext](ownerClass.contextProof)(ownerClass.owner).module
+  }
+
+  final case class ByClassObject[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerClass: ArClass[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec] {
+    private type OwnerSubst[TCtx <: Context with Singleton] = ClassOwner[TCtx, TPayloadSpec]
+    override def module: ArModule[TContext, TPayloadSpec] =
+      IsHelpers.substituteBounded[Context with Singleton, Nothing, OwnerSubst, ownerClass.context.type, TContext](ownerClass.contextProof)(ownerClass.owner).module
+  }
+
+  final case class ByTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerTrait: ArTrait[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec] {
+    private type OwnerSubst[TCtx <: Context with Singleton] = TraitOwner[TCtx, TPayloadSpec]
+    override def module: ArModule[TContext, TPayloadSpec] =
+      IsHelpers.substituteBounded[Context with Singleton, Nothing, OwnerSubst, ownerTrait.context.type, TContext](ownerTrait.contextProof)(ownerTrait.owner).module
+  }
+
+  final case class ByTraitObject[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerTrait: ArTrait[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec] {
+    private type OwnerSubst[TCtx <: Context with Singleton] = TraitOwner[TCtx, TPayloadSpec]
+    override def module: ArModule[TContext, TPayloadSpec] =
+      IsHelpers.substituteBounded[Context with Singleton, Nothing, OwnerSubst, ownerTrait.context.type, TContext](ownerTrait.contextProof)(ownerTrait.owner).module
+  }
+
+  final case class ByDataCtor[TContext <: Context with Singleton, TPayloadSpec[_, _]](dataCtor: DataConstructor[TContext, TPayloadSpec]) extends MethodOwner[TContext, TPayloadSpec] {
+    private type OwnerSubst[TCtx <: Context with Singleton] = DataConstructorOwner[TCtx, TPayloadSpec]
+    override def module: ArModule[TContext, TPayloadSpec] =
+      IsHelpers.substituteBounded[Context with Singleton, Nothing, OwnerSubst, dataCtor.context.type, TContext](dataCtor.contextProof)(dataCtor.owner).module
+  }
 }
 
 final case class ClassConstructorOwner[TContext <: Context with Singleton, TPayloadSpec[_, _]](ownerClass: ArClass[TContext, TPayloadSpec])

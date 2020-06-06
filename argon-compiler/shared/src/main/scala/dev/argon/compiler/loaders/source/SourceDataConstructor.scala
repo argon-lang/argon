@@ -76,7 +76,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
 
       private def paramEnv = for {
         sig <- signature
-      } yield env.addParameters(context)(
+      } yield env.addAccessToken(AccessToken.OfDataConstructor(AbsRef(this))).addParameters(context)(
         sig.unsubstitutedParameters
       )
 

@@ -1,7 +1,7 @@
 package dev.argon.compiler.lookup
 
 import dev.argon.compiler.core._
-import dev.argon.util.FileSpec
+import dev.argon.util.{FileID, FileSpec}
 import dev.argon.compiler.types.TypeSystem
 import cats._
 import cats.data.NonEmptyVector
@@ -13,10 +13,39 @@ import zio.interop.catz.core._
 
 object MethodLookup {
 
-  def lookupMethods(context: Context)(ts: TypeSystem.Aux[context.type])(instanceType: TypeWithMethods[context.type, ts.TTypeWrapper])(callerId: CallerId, fileSpec: FileSpec)(memberName: MemberName): Comp[OverloadResult[MemberValue[context.type]]] =
-    lookupMethodsImpl(context)(ts)(callerId, fileSpec)(memberName)(Vector(instanceType))(Set.empty)
+  def instanceAccessToken(context: Context)(ts: TypeSystem.Aux[context.type])(instanceType: TypeWithMethods[context.type, ts.TTypeWrapper]): AccessToken =
+    instanceType match {
+      case TraitType(arTrait, _) => AccessToken.OfTrait(arTrait)
+      case ClassType(arClass, _) => AccessToken.OfClass(arClass)
+      case DataConstructorType(ctor, _, _) => AccessToken.OfDataConstructor(ctor)
+    }
 
-  private def lookupMethodsImpl(context: Context)(ts: TypeSystem.Aux[context.type])(callerId: CallerId, fileSpec: FileSpec)(memberName: MemberName)(instanceTypes: Vector[TypeWithMethods[context.type, ts.TTypeWrapper]])(seenTypes: Set[MethodOwnerId]): Comp[OverloadResult[MemberValue[context.type]]] = {
+  def lookupMethods
+  (context: Context)
+  (ts: TypeSystem.Aux[context.type])
+  (instanceType: TypeWithMethods[context.type, ts.TTypeWrapper])
+  (
+    accessTokens: Set[AccessToken],
+    callerModule: ModuleId,
+    callerFileID: FileID
+  )
+  (memberName: MemberName)
+  : Comp[OverloadResult[MemberValue[context.type]]] =
+    lookupMethodsImpl(context)(ts)(accessTokens, instanceAccessToken(context)(ts)(instanceType), callerModule, callerFileID)(memberName)(Vector(instanceType))(Set.empty)
+
+  private def lookupMethodsImpl
+  (context: Context)
+  (ts: TypeSystem.Aux[context.type])
+  (
+    accessTokens: Set[AccessToken],
+    instanceAccessToken: AccessToken,
+    callerModule: ModuleId,
+    callerFileID: FileID
+  )
+  (memberName: MemberName)
+  (instanceTypes: Vector[TypeWithMethods[context.type, ts.TTypeWrapper]])
+  (seenTypes: Set[MethodOwnerId])
+  : Comp[OverloadResult[MemberValue[context.type]]] = {
     import ts.typeWrapperInstances
 
     if(instanceTypes.isEmpty)
@@ -67,10 +96,10 @@ object MethodLookup {
                     methodName =!= MemberName.Unnamed && memberName === methodName
                   }
                   .filterA { method =>
-                    AccessCheck.checkInstance[context.type, method.arMethod.PayloadSpec](callerId, fileSpec, method.arMethod.value)
+                    AccessCheck.checkInstance[context.type, method.arMethod.PayloadSpec](accessTokens, instanceAccessToken, callerModule, callerFileID, method.arMethod.value)
                   }
                   .flatMap { filteredMembers =>
-                    lookupMethodsImpl(context)(ts)(callerId, fileSpec)(memberName)(newBaseTypes)(newSeenTypes)
+                    lookupMethodsImpl(context)(ts)(accessTokens, instanceAccessToken, callerModule, callerFileID)(memberName)(newBaseTypes)(newSeenTypes)
                       .map { baseTypeOverloads =>
                         NonEmptyVector.fromVector(filteredMembers) match {
                           case Some(filteredMembers) => OverloadResult.List(filteredMembers, baseTypeOverloads)

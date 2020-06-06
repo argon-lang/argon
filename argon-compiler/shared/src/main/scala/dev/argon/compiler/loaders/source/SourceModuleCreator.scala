@@ -80,7 +80,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
       val currentModule2 = currentModule
       val referencedModules2 = referencedModules
 
-      final class EnvCreatorInstance(envFileSpec: FileSpec, scope: context2.scopeContext.Scope) extends EnvCreator[context2.type] {
+      final class EnvCreatorInstance(envFileSpec: FileSpec, scope: context2.scopeContext.Scope, accessTokens: Set[AccessToken]) extends EnvCreator[context2.type] {
         override def apply(context: context2.type)(effectInfo: EffectInfo, callerId: CallerId, varOwner: LocalVariableOwner[context.type]): ExpressionConverter.Env[context.type, context.scopeContext.Scope] =
           ExpressionConverter.Env(
             effectInfo = effectInfo,
@@ -91,21 +91,25 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
             referencedModules = referencedModules,
             scope = scope,
             allowAbstractConstructor = false,
+            accessTokens = accessTokens,
           )
 
 
         override def addVariables(context: context2.type)(variables: Vector[Variable[context.type, Id]]): EnvCreator[context2.type] =
-          new EnvCreatorInstance(envFileSpec, scope.addVariables(variables))
+          new EnvCreatorInstance(envFileSpec, scope.addVariables(variables), accessTokens)
 
         override def addParameters(context: context2.type)(params: Vector[Parameter[context.type, Id]]): EnvCreator[context2.type] =
-          new EnvCreatorInstance(envFileSpec, scope.addParameters(params))
+          new EnvCreatorInstance(envFileSpec, scope.addParameters(params), accessTokens)
+
+        override def addAccessToken(accessToken: AccessToken): EnvCreator[context2.type] =
+          new EnvCreatorInstance(envFileSpec, scope, accessTokens + accessToken)
 
         override val fileSpec: FileSpec = envFileSpec
         override val currentModule: ArModule[context2.type, DeclarationPayloadSpecifier] = currentModule2
         override val referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]] = referencedModules2
       }
 
-      val envF = (envFileSpec: FileSpec) => new EnvCreatorInstance(envFileSpec, scope)
+      val envF = (envFileSpec: FileSpec) => new EnvCreatorInstance(envFileSpec, scope, Set.empty)
       createNamespaceElementFromASTWithScope(context2)(options)(currentModule)(envF)(sourceAST).map { binding =>
         ModuleElement(sourceAST.currentNamespace, binding)
       }
