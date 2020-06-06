@@ -167,7 +167,7 @@ abstract class JSEmitterModule[I <: ResourceIndicator: Tag] extends JSEmitterGlo
               JSReturn(jsSig),
             ),
             "create" -> jsfunction(None)(currentModuleVarName)(
-              JSReturn(ctorCreator),
+              ctorCreator: _*
             )
           )
         } yield state.copy(dataConstructors = state.dataConstructors :+ ctorInfo)

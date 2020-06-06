@@ -201,7 +201,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
       ),
     ).flatten))
 
-  def createGlobalDataConstructor(vtableBuilder: VTableBuilder.Aux[context.type])(ctor: DataConstructor[context.type, DeclarationPayloadSpecifier]): Emit[JSExpression] =
+  def createGlobalDataConstructor(vtableBuilder: VTableBuilder.Aux[context.type])(ctor: DataConstructor[context.type, DeclarationPayloadSpecifier]): Emit[Seq[JSStatement]] =
     for {
       sig <- ctor.signature
       erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
@@ -265,15 +265,21 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
       instanceTypeExpr <- createBaseTraitObject(sig)(sig.unsubstitutedResult.instanceType)
 
-    } yield jsobj(
-      get("instanceTrait")(
-        JSReturn(instanceTypeExpr),
-      ),
-      "constructor" -> ctorFunc,
+      paramSymbolDecls = paramMapping.map { case (_, varName) =>
+        const(id"${varName}_sym" ::= id"Symbol"())
+      }
 
-      "methods" -> JSArrayLiteral(methodObjects),
-      "loadVTable" -> vtableObject,
-    )
+      dataCtorObj = jsobj(
+        get("instanceTrait")(
+          JSReturn(instanceTypeExpr),
+        ),
+        "constructor" -> ctorFunc,
+
+        "methods" -> JSArrayLiteral(methodObjects),
+        "loadVTable" -> vtableObject,
+      )
+
+    } yield paramSymbolDecls :+ JSReturn(dataCtorObj)
 
   private def createMethodObject(method: ArMethod[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier], instanceVarMap: JSExpression => VarMap): Emit[JSExpression] =
     for {
