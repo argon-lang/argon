@@ -10,7 +10,7 @@ import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import zio.{Chunk, IO, Managed, UIO, ZIO, ZLayer, ZManaged, stream}
 import zio.blocking.Blocking
 import zio.console.Console
-import zio.stream.{Stream, ZSink, ZStream}
+import zio.stream.{Stream, ZSink, ZStream, ZTransducer}
 import zio.system.System
 import dev.argon.io.fileio.FileIO
 
@@ -39,27 +39,13 @@ private[platform] object FileIOPlatform {
           .refineOrDie { case e: IOException => e }
 
       override def readText[E](errorHandler: IOException => E)(path: FilePath): Stream[E, Char] =
-        stream.ZStream.managed(
-          ZManaged.fromAutoCloseable(
-            blocking.effectBlocking { Files.newBufferedReader(path.javaPath, StandardCharsets.UTF_8) }
-              .refineOrDie {
-                case ex: IOException => errorHandler(ex)
-              }
-          )
-        ).flatMap { reader =>
-          stream.ZStream.unfoldM(()) { _ =>
-            blocking.effectBlocking {
-              val b = reader.read()
-              if(b < 0)
-                None
-              else
-                Some((b.toChar, ()))
-            }
-              .refineOrDie {
-                case ex: IOException => errorHandler(ex)
-              }
+        ZStream.fromFile(path.javaPath)
+          .transduce(ZTransducer.utf8Decode)
+          .flatMap { s => ZStream.fromChunk(Chunk.fromArray(s.toCharArray)) }
+          .refineOrDie {
+            case ex: IOException => errorHandler(ex)
           }
-        }
+          .provide(env)
 
 
       override def writeToFile[R, E](errorHandler: IOException => E)(path: FilePath)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit] =
