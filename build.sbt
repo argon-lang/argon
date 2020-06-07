@@ -34,7 +34,7 @@ lazy val commonSettings = Seq(
     "org.typelevel" %%% "kittens" % "2.1.0",
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
-    "dev.zio" %%% "zio-interop-cats" % "2.0.0.0-RC14",
+    "dev.zio" %%% "zio-interop-cats" % "2.1.3.0-RC15",
 
 
     "com.chuusai" %%% "shapeless" % "2.3.3",
@@ -75,7 +75,7 @@ lazy val commonJVMSettings = sharedJVMNodeSettings ++ Seq(
   libraryDependencies ++= Seq(
     "org.apache.commons" % "commons-text" % "1.8",
     "org.apache.commons" % "commons-compress" % "1.20",
-    "commons-io" % "commons-io" % "2.6",
+    "commons-io" % "commons-io" % "2.7",
   ),
 
   fork in Test := true,

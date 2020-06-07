@@ -17,8 +17,8 @@ private[js] final case class JSModuleExtractorImpl(blocking: Blocking.Service) e
   private[js] def exportedFunctions(module: String): Task[Map[String, String]] =
     blocking.effectBlocking {
       val context = Context.newBuilder("js")
-        .out(new NullOutputStream)
-        .err(new NullOutputStream)
+        .out(NullOutputStream.NULL_OUTPUT_STREAM)
+        .err(NullOutputStream.NULL_OUTPUT_STREAM)
         .in(new NullInputStream(0))
         .build()
       try {
