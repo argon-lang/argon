@@ -89,7 +89,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ S
 
   npmDependencies ++= Seq(
     "memory-streams" -> "^0.1.3",
-    "node-stream-zip" -> "^1.8.2",
+    "node-stream-zip" -> "^1.11.2",
   ),
 
   jsEnv := new NodeJSEnv(
