@@ -17,7 +17,7 @@ final class JavaScriptNodeVMTestCaseRunner[I <: ResourceIndicator: Tag, P: Path 
 
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null", "org.wartremover.warts.ToString", "dev.argon.warts.ZioEffect"))
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): Task[String] =
-    IO.effectAsync { register =>
+    IO.effectSuspend {
       val stdout = new MemoryWritableStream()
       val sandboxConsole = new NodeConsole(stdout)
 
@@ -48,28 +48,23 @@ final class JavaScriptNodeVMTestCaseRunner[I <: ResourceIndicator: Tag, P: Path 
 
       val mainModule = new NodeVM.SourceTextModule(
         s"""
-          |import arCore, { unitValue } from "Argon.Core";
-          |import mainModule from ${JSON.stringify(moduleName)};
-          |
-          |const unitType = { type: "class", arClass: arCore.globalClass(["Ar"], "Unit", { parameterTypes: [] }) };
-          |mainModule.globalFunction([], "main", { parameterTypes: [unitType], resultType: unitType }).invoke(unitValue);
-          |""".stripMargin,
+           |import arCore, { unitValue } from "Argon.Core";
+           |import mainModule from ${JSON.stringify(moduleName)};
+           |
+           |const unitType = { type: "class", arClass: arCore.globalClass(["Ar"], "Unit", { parameterTypes: [] }) };
+           |mainModule.globalFunction([], "main", { parameterTypes: [unitType], resultType: unitType }).invoke(unitValue);
+           |""".stripMargin,
         NodeVMUtil.SourceTextModuleOptions(sandbox)
       )
 
-      val _ =
-        mainModule
-          .link(linker)
-          .`then`[js.Any] { _ =>
-            mainModule.instantiate()
-            mainModule.evaluate()
-          }
-          .`then`[Unit](
-              onFulfilled = _ => register(IO.succeed(stdout.toString)),
-              onRejected = (
-                err => register(IO.fail(new RuntimeException(err.toString + "\nCompiled output:\n" + compiledFile + "\n")))
-              ) : js.Function1[Any, Unit | js.Thenable[Unit]]
-          )
+      for {
+        _ <- ZIO.fromPromiseJS(mainModule.link(linker))
+        _ <- IO.effect {
+          mainModule.instantiate()
+          mainModule.evaluate()
+        }
+        output <- IO.effect { stdout.toString }
+      } yield output
     }
 
 
