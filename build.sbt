@@ -13,8 +13,7 @@ lazy val envValues = Map(
 val zioVersion = "1.0.0-RC20"
 
 val esParseDeps = Seq(
-  "escodegen" -> "^1.14.1",
-  "esprima" -> "^4.0.1",
+  "acorn" -> "^7.2.0",
 )
 
 lazy val commonSettings = Seq(

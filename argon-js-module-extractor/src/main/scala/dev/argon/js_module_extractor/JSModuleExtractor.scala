@@ -13,7 +13,7 @@ object JSModuleExtractor {
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Equals"))
   def usingScalaMap(module: String): Map[String, String] = {
 
-    val mod = Esprima.parseModule(module).asInstanceOf[js.Dynamic]
+    val mod = Acorn.parse(module, AcornParserOptions(ecmaVersion = 11, sourceType = "module")).asInstanceOf[js.Dynamic]
 
     mod.body.asInstanceOf[js.Array[js.Dynamic]]
       .toSeq
@@ -21,7 +21,7 @@ object JSModuleExtractor {
       .map { _.declaration }
       .filter { _.`type`.asInstanceOf[String] == "FunctionDeclaration" }
       .map { declaration =>
-        declaration.id.name.asInstanceOf[String] -> ESCodeGen.generate(declaration.asInstanceOf[js.Object])
+        declaration.id.name.asInstanceOf[String] -> module.substring(declaration.start.asInstanceOf[Int], declaration.end.asInstanceOf[Int])
       }
       .toMap
   }
