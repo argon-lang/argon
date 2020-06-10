@@ -2,9 +2,11 @@ import sbt._
 import sbt.Keys._
 import _root_.io.circe._
 import _root_.io.circe.parser._
+import org.scalajs.linker.interface.ModuleKind
 
 import scala.sys.process.Process
 import scala.util.control.NonFatal
+import org.scalajs.sbtplugin.ScalaJSPlugin.autoImport.scalaJSLinkerConfig
 
 object NpmUtil extends AutoPlugin {
 
@@ -27,10 +29,17 @@ object NpmUtil extends AutoPlugin {
 
       val dir = crossTarget.value
 
+      val linkerConfig = scalaJSLinkerConfig.value
+
       val packageLockDest = dir / "package-lock.json"
       val packageJson = dir / "package.json"
 
       val newJson = Json.obj(
+        "type" -> Json.fromString(linkerConfig.moduleKind match {
+          case ModuleKind.CommonJSModule => "commonjs"
+          case ModuleKind.ESModule => "module"
+          case _ => throw new Exception("Unexpected module type")
+        }),
         "dependencies" -> Json.obj(
           npmDependencies.value.map { case (k, v) => k -> Json.fromString(v) }: _*
         ),

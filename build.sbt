@@ -10,6 +10,11 @@ lazy val envValues = Map(
   "ARGON_TEST_CASES" -> file("testcases").getAbsolutePath,
 )
 
+lazy val nodeConfig =
+  NodeJSEnv.Config()
+    .withEnv(envValues)
+    .withArgs(List("--no-warnings", "--experimental-vm-modules"))
+
 val zioVersion = "1.0.0-RC20"
 
 val esParseDeps = Seq(
@@ -91,11 +96,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ S
     "node-stream-zip" -> "^1.11.2",
   ),
 
-  jsEnv := new NodeJSEnv(
-    NodeJSEnv.Config()
-      .withEnv(envValues)
-      .withArgs(List("--no-warnings", "--experimental-vm-modules"))
-  ),
+  jsEnv := new NodeJSEnv(nodeConfig),
 )
 
 lazy val zioEffectWarts = project.in(file("zio-effect-warts"))
@@ -165,14 +166,44 @@ lazy val compilerOptions = Seq(
   }
 )
 
+def argonLibraries = Seq("Argon.Core")
+
 lazy val buildArgonLibs = taskKey[Unit]("Compile Argon libraries")
-lazy val parcelJS = taskKey[File]("Parcel version of JS output")
 
 
 lazy val cli = crossProject(JVMPlatform, NodePlatform).in(file("argon-cli"))
   .dependsOn(argon_build, argon_platform)
   .jvmConfigure(
-    _.settings(commonJVMSettings)
+    _.settings(commonJVMSettings,
+
+      buildArgonLibs := (Def.taskDyn {
+        def buildLibTask(libName: String): Def.Initialize[Task[Unit]] =
+          Def.task {
+            val r = (Compile / runner).value
+            val classpath = (Compile / fullClasspath).value
+            val log = streams.value.log
+
+            log.info(s"Building library $libName")
+
+            ArgonLibraryBuild.eachCommand(libName) { (backend, commandArgs) =>
+
+              log.info(s"Building library $libName ($backend)")
+              Run.run(
+                "dev.argon.Program",
+                classpath.map { _.data },
+                commandArgs,
+                log
+              )(r).get
+            }
+          }
+
+        Def.sequential(
+          argonLibraries.map(buildLibTask),
+          Def.task {}
+        )
+      }).value,
+
+    )
   )
   .nodeConfigure(
     _.enablePlugins(NpmUtil)
@@ -180,6 +211,35 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).in(file("argon-cli"))
         commonNodeSettings,
 
         scalaJSUseMainModuleInitializer := true,
+
+        buildArgonLibs := (Def.taskDyn {
+          def buildLibTask(libName: String): Def.Initialize[Task[Unit]] =
+            Def.task {
+              import org.scalajs.jsenv
+
+              val log = streams.value.log
+              val jsFile = (Compile / fastOptJS).value.data
+
+              log.info(s"Building library $libName")
+
+              ArgonLibraryBuild.eachCommand(libName) { (backend, commandArgs) =>
+                import scala.sys.process.Process
+
+                log.info(s"Building library $libName ($backend)")
+                Process(
+                  (nodeConfig.executable +: nodeConfig.args) ++ (jsFile.toString +: commandArgs),
+                  file("."),
+                  nodeConfig.env.toSeq: _*
+                ).!
+
+              }
+            }
+
+          Def.sequential(
+            argonLibraries.map(buildLibTask),
+            Def.task {}
+          )
+        }).dependsOn(npmInstall).value
 
     )
   )
@@ -191,68 +251,6 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).in(file("argon-cli"))
 
     libraryDependencies += "com.github.scopt" %% "scopt" % "4.0.0-RC2",
 
-    buildArgonLibs := (Def.taskDyn {
-      def buildLibTask(libName: String): Def.Initialize[Task[Unit]] =
-        Def.task {
-          val r = (Compile / runner).value
-          val libDir = file("libraries") / libName
-          val classpath = (Compile / fullClasspath).value
-
-          streams.value.log.info(s"Building library $libName")
-
-          val jsExternFile = libDir / "js/extern.js"
-          val jsInjectBeforeFile = libDir / "js/inject_before.js"
-          val jsInjectAfterFile = libDir / "js/inject_after.js"
-
-          val backends = Seq(
-            "argon-module" -> Seq(
-              "--argon-module:referenceModule",
-              (libDir / "bin" / (libName + ".armodule")).toString,
-            ),
-            "js" -> (
-              Seq(
-                "--js:outputFile",
-                (libDir / "bin/js" / (libName + ".js")).toString,
-              ) ++
-                (if(jsExternFile.exists()) Seq("--js:extern", jsExternFile.toString) else Seq.empty) ++
-                (if(jsInjectBeforeFile.exists()) Seq("--js:inject.before", jsInjectBeforeFile.toString) else Seq.empty) ++
-                (if(jsInjectAfterFile.exists()) Seq("--js:inject.after", jsInjectAfterFile.toString) else Seq.empty)
-            )
-          )
-
-          val inputFileOpts =
-            Path.allSubpaths(libDir / "src")
-              .map(_._1.toString)
-              .filter(_.endsWith(".argon"))
-              .flatMap { file => Seq("--inputFiles", file) }
-
-          backends.foreach { case (backend, opts) =>
-            streams.value.log.info(s"Building library $libName ($backend)")
-            Run.run(
-              "dev.argon.Program",
-              classpath.map { _.data },
-              Seq(
-                "build",
-                backend,
-
-                "--moduleName",
-                libName,
-              ) ++
-                inputFileOpts ++
-                opts,
-              streams.value.log
-            )(r).get
-          }
-        }
-
-      Def.sequential(
-        Seq(
-          buildLibTask("Argon.Core"),
-        ),
-
-        Def.task {}
-      )
-    }).value
   )
 
 lazy val cliJVM = cli.jvm
@@ -512,16 +510,37 @@ lazy val backend_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(fil
       ),
 
       Compile / resourceGenerators += Def.task {
-        val bundledFile = (js_module_extractor / parcelJS).value
-        val resourceFile = (Compile / resourceManaged).value / "js-module-extractor.js"
 
-        val bundledFileMod = IO.getModifiedTimeOrZero(bundledFile)
-        val resourceFileMod = IO.getModifiedTimeOrZero(resourceFile)
+        (js_module_extractor / Compile / npmInstall).value
 
-        if(bundledFileMod == 0 || resourceFileMod == 0 || bundledFileMod > resourceFileMod)
-          IO.copyFile(bundledFile, resourceFile, preserveLastModified = true)
+        val moduleExtractorDir = (js_module_extractor / Compile / crossTarget).value
+        val resDir = (Compile / resourceManaged).value / "dev" / "argon" / "js_module_extractor"
 
-        Seq(resourceFile)
+        val moduleExtractorFile = (js_module_extractor / Compile / fullOptJS).value.data
+        val moduleExtractorResFile = resDir / "js-module-extractor.mjs"
+
+        def extraFiles(baseDir: File): Seq[File] = Seq(
+          baseDir / "package.json",
+          baseDir / "node_modules" / "acorn" / "dist" / "acorn.mjs",
+          baseDir / "node_modules" / "acorn" / "package.json",
+        )
+
+        def copyFileIfNewer(src: File, dest: File): Unit = {
+          val srcMod = IO.getModifiedTimeOrZero(src)
+          val destMod = IO.getModifiedTimeOrZero(dest)
+
+          if(srcMod == 0 || destMod == 0 || srcMod > destMod)
+            IO.copyFile(src, dest, preserveLastModified = true)
+        }
+
+        copyFileIfNewer(moduleExtractorFile, moduleExtractorResFile)
+
+        val extraResFiles = extraFiles(resDir)
+
+        extraFiles(moduleExtractorDir).zip(extraResFiles)
+          .foreach { case (src, dest) => copyFileIfNewer(src, dest) }
+
+        moduleExtractorResFile +: extraResFiles
       }.taskValue,
     )
   )
@@ -721,27 +740,9 @@ lazy val js_module_extractor = project.in(file("argon-js-module-extractor"))
       "-language:implicitConversions",
     ),
 
-    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+    scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
 
     npmDependencies ++= esParseDeps,
-
-    npmDevDependencies += "parcel-bundler" -> "^1.12.4",
-
-    parcelJS := {
-      npmInstall.value
-
-      val dir = crossTarget.value
-      val scalaJSOutput = (Compile / fullOptJS).value.data.file
-      val bundledOutput = dir / "dist" / scalaJSOutput.getName
-
-      FileFunction.cached(streams.value.cacheDirectory / "parcel-bundle") { _ =>
-        import scala.sys.process.Process
-        Process("node_modules/.bin/parcel" :: "build" :: "--global" :: "ModuleExtractor" :: scalaJSOutput.toString :: Nil, dir).!
-        Set(bundledOutput)
-      }(Set(scalaJSOutput))
-
-      bundledOutput
-    },
 
     name := "argon-js-module-extractor",
   )

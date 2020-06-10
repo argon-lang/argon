@@ -7,7 +7,7 @@ import scala.scalajs.js.annotation.JSImport
 import scala.scalajs.js.|
 
 @js.native
-@JSImport("acorn", JSImport.Default)
+@JSImport("acorn", JSImport.Namespace)
 object Acorn extends js.Object {
 
   def parse(code: String, parserOptions: AcornParserOptions): js.Object = js.native

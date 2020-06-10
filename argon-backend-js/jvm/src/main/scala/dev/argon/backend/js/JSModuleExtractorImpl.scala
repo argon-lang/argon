@@ -1,13 +1,23 @@
 package dev.argon.backend.js
 
+import java.io.FileNotFoundException
+import java.net.{URI, URL}
+import java.nio.channels.SeekableByteChannel
 import java.nio.charset.StandardCharsets
+import java.nio.file.attribute.FileAttribute
 
-import org.apache.commons.io.IOUtils
+import org.apache.commons.io.{FilenameUtils, IOUtils}
 import org.apache.commons.io.input.NullInputStream
 import org.apache.commons.io.output.NullOutputStream
+import org.graalvm.polyglot.io.FileSystem
 import org.graalvm.polyglot.{Context, Source}
 import zio.blocking.Blocking
 import zio.{IO, RIO, Task, ZIO}
+import java.nio.file.{AccessMode, DirectoryStream, LinkOption, OpenOption, Path, FileSystems => NIOFileSystems}
+import java.util
+
+import dev.argon.backend.js.JSModuleExtractorImpl.ResourceFileSystem
+import org.apache.commons.compress.utils.SeekableInMemoryByteChannel
 
 import scala.jdk.CollectionConverters._
 
@@ -20,24 +30,22 @@ private[js] final case class JSModuleExtractorImpl(blocking: Blocking.Service) e
         .out(NullOutputStream.NULL_OUTPUT_STREAM)
         .err(NullOutputStream.NULL_OUTPUT_STREAM)
         .in(new NullInputStream(0))
+        .allowIO(true)
+        .fileSystem(new ResourceFileSystem("dev/argon/js_module_extractor/"))
         .build()
       try {
-        val extractorCode = {
-          val stream = getClass.getClassLoader.getResourceAsStream("js-module-extractor.js")
-          try IOUtils.toString(stream, StandardCharsets.UTF_8)
-          finally stream.close()
-        }
-
         val mainSource = Source.newBuilder("js",
-
-          extractorCode,
-          "js-module-extractor.js"
+          """
+            |import { extractModuleFunctions } from "./js-module-extractor.mjs"
+            |
+            |extractModuleFunctions
+            |""".stripMargin,
+          "main.mjs"
         )
-          .mimeType("application/javascript")
+          .mimeType("application/javascript+module")
           .build()
 
-        val _ = context.eval(mainSource)
-        val extractModuleFunctions = context.eval("js", "ModuleExtractor.extractModuleFunctions")
+        val extractModuleFunctions = context.eval(mainSource)
 
         val exportedFunctions = extractModuleFunctions.execute(module)
 
@@ -49,5 +57,68 @@ private[js] final case class JSModuleExtractorImpl(blocking: Blocking.Service) e
       }
       finally context.close()
     }
+
+}
+
+object JSModuleExtractorImpl {
+
+  @SuppressWarnings(Array("org.wartremover.warts.All"))
+  final class ResourceFileSystem(resourcePath: String) extends FileSystem {
+
+    private def getResURL(path: Path): URL = {
+      val norm = FilenameUtils.normalize(Path.of(resourcePath).resolve(path).toString)
+      if(norm == null || !norm.startsWith(resourcePath)) {
+        throw new FileNotFoundException()
+      }
+
+      val url = getClass.getClassLoader.getResource(norm)
+      if(url == null) {
+        throw new FileNotFoundException()
+      }
+
+      url
+    }
+
+    override def parsePath(uri: URI): Path = Path.of(uri)
+
+    override def parsePath(path: String): Path = Path.of(path)
+
+    override def checkAccess(path: Path, modes: util.Set[_ <: AccessMode], linkOptions: LinkOption*): Unit = {
+      val _ = getResURL(path)
+    }
+
+    override def createDirectory(dir: Path, attrs: FileAttribute[_]*): Unit =
+      throw new UnsupportedOperationException()
+
+    override def delete(path: Path): Unit =
+      throw new UnsupportedOperationException()
+
+    override def newByteChannel(path: Path, options: util.Set[_ <: OpenOption], attrs: FileAttribute[_]*): SeekableByteChannel = {
+      val url = getResURL(path)
+      val content = IOUtils.toByteArray(url)
+      new SeekableInMemoryByteChannel(content)
+    }
+
+    override def newDirectoryStream(dir: Path, filter: DirectoryStream.Filter[_ >: Path]): DirectoryStream[Path] =
+      throw new UnsupportedOperationException()
+
+    override def toAbsolutePath(path: Path): Path =
+      Path.of("/").resolve(path)
+
+    override def toRealPath(path: Path, linkOptions: LinkOption*): Path = {
+      val norm = FilenameUtils.normalize(Path.of(resourcePath).resolve(path).toString)
+      if(norm == null || !norm.startsWith(resourcePath)) {
+        throw new FileNotFoundException()
+      }
+
+      Path.of(norm.substring(resourcePath.length) match {
+        case "acorn" => "node_modules/acorn/dist/acorn.mjs"
+        case p => p
+      })
+    }
+
+    override def readAttributes(path: Path, attributes: String, options: LinkOption*): util.Map[String, AnyRef] =
+      throw new UnsupportedOperationException()
+  }
 
 }
