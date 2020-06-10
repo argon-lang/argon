@@ -1,6 +1,7 @@
 import sbt.Keys.streams
 import sbt.{Path, Run}
 import sbt._
+import scala.sys.process.Process
 
 object ArgonLibraryBuild {
 
@@ -20,19 +21,30 @@ object ArgonLibraryBuild {
     val jsInjectAfterFile = libDir / "js/inject_after.js"
 
     val backends = Seq(
-      "argon-module" -> Seq(
-        "--argon-module:referenceModule",
-        (libDir / "bin" / (libName + ".armodule")).toString,
+      "argon-module" -> BackendBuildOpts(
+        options = Seq(
+          "--argon-module:referenceModule",
+          (libDir / "bin" / (libName + ".armodule")).toString,
+        ),
+        runBefore = () => (),
       ),
-      "js" -> (
-        Seq(
+      "js" -> BackendBuildOpts(
+        options = Seq(
           "--js:outputFile",
           (libDir / "bin/js" / (libName + ".js")).toString,
         ) ++
           (if(jsExternFile.exists()) Seq("--js:extern", jsExternFile.toString) else Seq.empty) ++
           (if(jsInjectBeforeFile.exists()) Seq("--js:inject.before", jsInjectBeforeFile.toString) else Seq.empty) ++
-          (if(jsInjectAfterFile.exists()) Seq("--js:inject.after", jsInjectAfterFile.toString) else Seq.empty)
-        )
+          (if(jsInjectAfterFile.exists()) Seq("--js:inject.after", jsInjectAfterFile.toString) else Seq.empty),
+
+        runBefore = () => {
+          if((libDir / "package.json").exists()) {
+            log.info("Building JS")
+            Process("npm" :: "install" :: Nil, libDir).!(log)
+            Process("npm" :: "run" :: "build" :: Nil, libDir).!(log)
+          }
+        },
+      )
     )
 
     val inputFileOpts =
@@ -44,6 +56,8 @@ object ArgonLibraryBuild {
     backends.foreach { case (backend, opts) =>
       log.info(s"Building library $libName ($backend)")
 
+      opts.runBefore()
+
       val commandArgs =
         Seq(
           "build",
@@ -53,11 +67,13 @@ object ArgonLibraryBuild {
           libName,
         ) ++
           inputFileOpts ++
-          opts
+          opts.options
 
       f(commandArgs)
     }
 
   }
+
+  private final case class BackendBuildOpts(options: Seq[String], runBefore: () => Unit)
 
 }

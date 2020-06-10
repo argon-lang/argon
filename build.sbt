@@ -211,7 +211,7 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).in(file("argon-cli"))
               (nodeConfig.executable +: nodeConfig.args) ++ (jsFile.toString +: commandArgs),
               file("."),
               nodeConfig.env.toSeq: _*
-            ).!
+            ).!(log)
 
           }
         },
