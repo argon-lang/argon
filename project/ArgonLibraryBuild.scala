@@ -4,7 +4,14 @@ import sbt._
 
 object ArgonLibraryBuild {
 
-  def eachCommand(libName: String)(f: (String, Seq[String]) => Unit): Unit = {
+  def buildLibraries(log: Logger)(libs: Seq[String])(f: Seq[String] => Unit): Unit = {
+    libs.foreach { libName =>
+      log.info(s"Building library $libName")
+      buildLibrary(log)(libName)(f)
+    }
+  }
+
+  private def buildLibrary(log: Logger)(libName: String)(f: Seq[String] => Unit): Unit = {
 
     val libDir = file("libraries") / libName
 
@@ -35,6 +42,8 @@ object ArgonLibraryBuild {
         .flatMap { file => Seq("--inputFiles", file) }
 
     backends.foreach { case (backend, opts) =>
+      log.info(s"Building library $libName ($backend)")
+
       val commandArgs =
         Seq(
           "build",
@@ -46,7 +55,7 @@ object ArgonLibraryBuild {
           inputFileOpts ++
           opts
 
-      f(backend, commandArgs)
+      f(commandArgs)
     }
 
   }

@@ -176,32 +176,20 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).in(file("argon-cli"))
   .jvmConfigure(
     _.settings(commonJVMSettings,
 
-      buildArgonLibs := (Def.taskDyn {
-        def buildLibTask(libName: String): Def.Initialize[Task[Unit]] =
-          Def.task {
-            val r = (Compile / runner).value
-            val classpath = (Compile / fullClasspath).value
-            val log = streams.value.log
+      buildArgonLibs := {
+        val r = (Compile / runner).value
+        val classpath = (Compile / fullClasspath).value
+        val log = streams.value.log
 
-            log.info(s"Building library $libName")
-
-            ArgonLibraryBuild.eachCommand(libName) { (backend, commandArgs) =>
-
-              log.info(s"Building library $libName ($backend)")
-              Run.run(
-                "dev.argon.Program",
-                classpath.map { _.data },
-                commandArgs,
-                log
-              )(r).get
-            }
-          }
-
-        Def.sequential(
-          argonLibraries.map(buildLibTask),
-          Def.task {}
-        )
-      }).value,
+        ArgonLibraryBuild.buildLibraries(log)(argonLibraries) { commandArgs =>
+          Run.run(
+            "dev.argon.Program",
+            classpath.map { _.data },
+            commandArgs,
+            log
+          )(r).get
+        }
+      },
 
     )
   )
@@ -212,34 +200,21 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).in(file("argon-cli"))
 
         scalaJSUseMainModuleInitializer := true,
 
-        buildArgonLibs := (Def.taskDyn {
-          def buildLibTask(libName: String): Def.Initialize[Task[Unit]] =
-            Def.task {
-              import org.scalajs.jsenv
+        buildArgonLibs := {
+          npmInstall.value
+          val log = streams.value.log
+          val jsFile = (Compile / fastOptJS).value.data
 
-              val log = streams.value.log
-              val jsFile = (Compile / fastOptJS).value.data
+          ArgonLibraryBuild.buildLibraries(log)(argonLibraries) { commandArgs =>
+            import scala.sys.process.Process
+            Process(
+              (nodeConfig.executable +: nodeConfig.args) ++ (jsFile.toString +: commandArgs),
+              file("."),
+              nodeConfig.env.toSeq: _*
+            ).!
 
-              log.info(s"Building library $libName")
-
-              ArgonLibraryBuild.eachCommand(libName) { (backend, commandArgs) =>
-                import scala.sys.process.Process
-
-                log.info(s"Building library $libName ($backend)")
-                Process(
-                  (nodeConfig.executable +: nodeConfig.args) ++ (jsFile.toString +: commandArgs),
-                  file("."),
-                  nodeConfig.env.toSeq: _*
-                ).!
-
-              }
-            }
-
-          Def.sequential(
-            argonLibraries.map(buildLibTask),
-            Def.task {}
-          )
-        }).dependsOn(npmInstall).value
+          }
+        },
 
     )
   )
