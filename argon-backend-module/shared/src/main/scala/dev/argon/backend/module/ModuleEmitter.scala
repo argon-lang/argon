@@ -174,7 +174,7 @@ sealed abstract class ModuleEmitter private() {
                 case ParameterStyle.Inferrable => Some(module.ParameterStyle.Inferrable)
               }
 
-              impl(sigParams.nextUnsubstituted, prevParams :+ module.Parameter(style, elems))
+              impl(sigParams.nextUnsubstituted, prevParams :+ module.Parameter(style, isErased = if(sigParams.parameter.paramVar.isErased) Some(true) else None, elems))
             }
 
         override def visitResult(sigResult: SignatureResult[TResult])(implicit lenEq: Len === _0): Emit[A] =
@@ -281,6 +281,7 @@ sealed abstract class ModuleEmitter private() {
         name = convertVariableName(variable.name),
         mutability = convertMutability(variable.mutability),
         varType = convVarType,
+        isErased = if(variable.isErased) Some(true) else None
       )
 
     def convertVariable(variable: Variable[context.type, Id]): Emit[module.Variable] =
@@ -290,7 +291,7 @@ sealed abstract class ModuleEmitter private() {
             module.Variable(module.Variable.VariableType.Local(convVar))
           }
 
-        case ParameterVariable(owner, index, name, mutability, varType) =>
+        case ParameterVariable(owner, index, name, mutability, isErased, varType) =>
           for {
             ownerId <- owner match {
               case ParameterVariableOwner.ByClass(ownerClass) =>
@@ -325,6 +326,7 @@ sealed abstract class ModuleEmitter private() {
             name = convertVariableName(name),
             mutability = convertMutability(mutability),
             varType = convVarType,
+            isErased = if(isErased) Some(true) else None
           )))
 
         case ThisParameterVariable(owner, name, mutability, varType) => ???

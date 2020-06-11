@@ -124,6 +124,10 @@ object CompilationError {
       case TokenCategory.KW_BEGIN => "begin"
       case TokenCategory.KW_RESCUE => "rescue"
       case TokenCategory.KW_ENSURE => "ensure"
+      case TokenCategory.KW_ERASED => "erased"
+      case TokenCategory.KW_REQUIRES => "requires"
+      case TokenCategory.KW_ENSURES => "ensures"
+      case TokenCategory.KW_MAINTAINS => "maintains"
 
       case TokenCategory.OP_BOOLAND => "&&"
       case TokenCategory.OP_BOOLOR => "||"
@@ -450,6 +454,10 @@ object CompilationError {
 
   final case class EmitError(source: CompilationMessageSource) extends CompilationError {
     override def message: String = "An error occurred while generating the output."
+  }
+
+  final case class NonErasedExpressionExpected(source: CompilationMessageSource) extends CompilationError {
+    override def message: String = "Expression must not be erased."
   }
 
   sealed trait CouldNotConvertType extends CompilationError {

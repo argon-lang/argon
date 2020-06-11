@@ -516,15 +516,15 @@ object ArgonParser {
         case Rule.MethodParameters =>
           ((
             (
-              matchToken(OP_OPENPAREN) ++! (rule(Rule.NewLines) ++ rule(Rule.MethodParameterList) ++ rule(Rule.NewLines) ++ matchToken(OP_CLOSEPAREN)) --> {
-                case (_, (_, params, _, _)) =>
-                  FunctionParameterList(FunctionParameterListType.NormalList, params)
+              matchToken(OP_OPENPAREN) ++! (rule(Rule.NewLines) ++ matchToken(KW_ERASED).? ++ rule(Rule.NewLines) ++ rule(Rule.MethodParameterList) ++ rule(Rule.NewLines) ++ matchToken(OP_CLOSEPAREN)) --> {
+                case (_, (_, erasedToken, _, params, _, _)) =>
+                  FunctionParameterList(FunctionParameterListType.NormalList, isErased = erasedToken.isDefined, params)
               }
             ) |
               (
-                matchToken(OP_OPENBRACKET) ++! (rule(Rule.NewLines) ++ rule(Rule.MethodParameterList) ++ rule(Rule.NewLines) ++ matchToken(OP_CLOSEBRACKET)) --> {
-                  case (_, (_, params, _, _)) =>
-                    FunctionParameterList(FunctionParameterListType.InferrableList, params)
+                matchToken(OP_OPENBRACKET) ++! (rule(Rule.NewLines) ++ matchToken(KW_ERASED).? ++ rule(Rule.NewLines) ++ rule(Rule.MethodParameterList) ++ rule(Rule.NewLines) ++ matchToken(OP_CLOSEBRACKET)) --> {
+                  case (_, (_, erasedToken, _, params, _, _)) =>
+                    FunctionParameterList(FunctionParameterListType.InferrableList, isErased = erasedToken.isDefined, params)
                 }
               )
           ).observeSource*) --> { _.toVector }

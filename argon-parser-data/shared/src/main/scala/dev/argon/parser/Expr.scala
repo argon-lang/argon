@@ -127,7 +127,7 @@ final case class TypeTestPattern(name: Option[String], patternType: WithSource[E
 
 
 final case class FunctionParameter(paramType: Option[WithSource[Expr]], subTypeOf: Option[WithSource[Expr]], name: String)
-final case class FunctionParameterList(listType: FunctionParameterListType, parameters: Vector[WithSource[FunctionParameter]])
+final case class FunctionParameterList(listType: FunctionParameterListType, isErased: Boolean, parameters: Vector[WithSource[FunctionParameter]])
 
 sealed trait BinaryOperator
 object BinaryOperator {

@@ -44,12 +44,12 @@ sealed abstract class Substitutions[Wrap[+_]: Monad] {
 
   def substLocalVariable(localVariable: LocalVariable[context.type, Wrap]): LocalVariable[context.type, Wrap] =
     localVariable match {
-      case LocalVariable(id, owner, name, mutability, varType) => LocalVariable(id, owner, name, mutability, substWrapExpr(varType))
+      case LocalVariable(id, owner, name, mutability, isErased, varType) => LocalVariable(id, owner, name, mutability, isErased, substWrapExpr(varType))
     }
 
   def substParamVariable(paramVariable: ParameterVariable[context.type, Wrap]): ParameterVariable[context.type, Wrap] =
     paramVariable match {
-      case ParameterVariable(id, owner, name, mutability, varType) => ParameterVariable(id, owner, name, mutability, substWrapExpr(varType))
+      case ParameterVariable(id, owner, name, mutability, isErased, varType) => ParameterVariable(id, owner, name, mutability, isErased, substWrapExpr(varType))
     }
 
   def substVariable(variable: Variable[context.type, Wrap]): Variable[context.type, Wrap] =

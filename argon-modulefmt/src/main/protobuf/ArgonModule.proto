@@ -312,6 +312,7 @@ message LocalVariable {
     required VariableName name = 3;
     required Mutability mutability = 4;
     required Expression varType = 5;
+    optional bool isErased = 6 [default = false];
 }
 
 message FieldVariable {
@@ -327,6 +328,7 @@ message ParameterVariable {
     required VariableName name = 3;
     required Mutability mutability = 4;
     required Expression varType = 5;
+    optional bool isErased = 6 [default = false];
 }
 
 message Variable {
@@ -456,6 +458,7 @@ enum ParameterStyle {
 
 message Parameter {
 	optional ParameterStyle style = 2;
+    optional bool isErased = 3 [default = false];
     repeated ParameterElement elements = 1;
 }
 

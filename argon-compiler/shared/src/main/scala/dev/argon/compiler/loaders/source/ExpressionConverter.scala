@@ -463,6 +463,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 env.variableOwner,
                 varName.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
                 Mutability.NonMutable,
+                isErased = false,
                 argHole
               )
               env2 = env.copy(scope = env.scope.addVariable(argVar), effectInfo = EffectInfo.pure)
@@ -509,6 +510,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                     env.variableOwner,
                     VariableName.Unnamed,
                     Mutability.NonMutable,
+                    isErased = false,
                     t
                   )
                   env2 = env.copy(scope = env.scope.addVariable(variable))
@@ -524,6 +526,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                     env.variableOwner,
                     VariableName.Normal(name),
                     Mutability.NonMutable,
+                    isErased = false,
                     t
                   )
                   env2 = env.copy(scope = env.scope.addVariable(variable))
@@ -539,6 +542,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                     env.variableOwner,
                     name.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
                     Mutability.NonMutable,
+                    isErased = false,
                     patT
                   )
                   env2 = env.copy(scope = env.scope.addVariable(variable))
@@ -671,6 +675,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 env.variableOwner,
                 varName,
                 mutability,
+                isErased = false,
                 varType
               )
               env2 = env.copy(scope = env.scope.addVariable(variable))
@@ -1145,7 +1150,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             case Vector() =>
               for {
                 varId <- UniqueIdentifier.make
-                newVar = LocalVariable(LocalVariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+                newVar = LocalVariable(LocalVariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, isErased = false, sigParams.parameter.paramType)
                 env2 = env.copy(scope = env.scope.addVariable(newVar))
                 newVarExpr = LoadVariable(newVar)
 
@@ -1156,7 +1161,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             case head +: tail =>
               for {
                 varId <- UniqueIdentifier.make
-                newVar = LocalVariable(LocalVariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, sigParams.parameter.paramType)
+                newVar = LocalVariable(LocalVariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, isErased = false, sigParams.parameter.paramType)
                 env2 = env.copy(scope = env.scope.addVariable(newVar))
                 newVarExpr = LoadVariable(newVar)
                 nextSig <- signatureNextPart(sigParams)(fromSimpleType(newVarExpr))
@@ -1503,6 +1508,9 @@ object ExpressionConverter {
           .forExpectedType(convExpectedType)
           .map(ts.fromSimpleType)
       )
+
+      _ <- Compilation.requireM(Erasure(context)(context.typeSystem).isExprErased(convExpr).map { !_ })(CompilationError.NonErasedExpressionExpected(CompilationMessageSource.SourceFile(env.fileSpec, stmts.location)))
+
     } yield convExpr
   }
 

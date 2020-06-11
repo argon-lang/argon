@@ -37,6 +37,7 @@ final case class LocalVariable[TContext, Wrap[+_]]
   owner: LocalVariableOwner[TContext],
   name: VariableName,
   mutability: Mutability,
+  isErased: Boolean,
   varType: ArExprWrap[TContext, Wrap]
 ) extends Variable[TContext, Wrap]
 
@@ -46,6 +47,7 @@ final case class ParameterVariable[TContext, Wrap[+_]]
   index: Int,
   name: VariableName,
   mutability: Mutability,
+  isErased: Boolean,
   varType: ArExprWrap[TContext, Wrap]
 ) extends Variable[TContext, Wrap] {
   override def id: ParameterVariableId = {

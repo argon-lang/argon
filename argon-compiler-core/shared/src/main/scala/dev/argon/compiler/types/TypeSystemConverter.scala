@@ -61,23 +61,23 @@ abstract class TypeSystemConverter {
   : Comp[LocalVariable[context.type, ToWrap]] =
     for {
       newType <- convertTypeSystem(v.varType)
-    } yield LocalVariable(v.id, v.owner, v.name, v.mutability, newType)
+    } yield LocalVariable(v.id, v.owner, v.name, v.mutability, v.isErased, newType)
 
   final def convertParamVariableTypeSystem
   (v: ParameterVariable[context.type, FromWrap])
   : Comp[ParameterVariable[context.type, ToWrap]] =
     for {
       newType <- convertTypeSystem(v.varType)
-    } yield ParameterVariable(v.owner, v.index, v.name, v.mutability, newType)
+    } yield ParameterVariable(v.owner, v.index, v.name, v.mutability, v.isErased, newType)
 
   final def convertVariableTypeSystem
   (v: Variable[context.type, FromWrap])
   : Comp[Variable[context.type, ToWrap]] =
     v match {
-      case v @ LocalVariable(_, _, _, _, _) =>
+      case v @ LocalVariable(_, _, _, _, _, _) =>
         convertLocalVariableTypeSystem(v).map(identity)
 
-      case v @ ParameterVariable(_, _, _, _, _) =>
+      case v @ ParameterVariable(_, _, _, _, _, _) =>
         convertParamVariableTypeSystem(v).map(identity)
 
       case ThisParameterVariable(owner, name, mutability, varType) =>

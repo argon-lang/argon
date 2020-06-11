@@ -1038,7 +1038,7 @@ object ArgonModuleLoader {
             varName <- parseVariableName(variable.name)
             mutability <- parseMutability(variable.mutability)
             varType <- resolveExpr(variable.varType)
-          } yield LocalVariable[context.type, TTypeWrapper](varId, varOwner, varName, mutability, varType)
+          } yield LocalVariable[context.type, TTypeWrapper](varId, varOwner, varName, mutability, isErased = variable.isErased.getOrElse(false), varType)
 
           def resolveVariable(variable: ArgonModule.Variable): Comp[Variable[context.type, TTypeWrapper]] =
             variable.variableType match {
@@ -1068,8 +1068,7 @@ object ArgonModuleLoader {
                   varName <- parseVariableName(parameterVariable.name)
                   mutability <- parseMutability(parameterVariable.mutability)
                   varType <- resolveExpr(parameterVariable.varType)
-                } yield ParameterVariable[context.type, TTypeWrapper](varOwner, parameterVariable.index, varName, mutability, varType)
-
+                } yield ParameterVariable[context.type, TTypeWrapper](varOwner, parameterVariable.index, varName, mutability, isErased = parameterVariable.isErased.getOrElse(false), varType)
 
               case ArgonModule.Variable.VariableType.Empty => Compilation.forErrors(invalidModuleFormatError)
             }
@@ -1359,14 +1358,14 @@ object ArgonModuleLoader {
 
                   } yield Parameter[context.type, Id](
                     parameterStyle,
-                    ParameterVariable[context.type, Id](owner, index, VariableName.Unnamed, Mutability.NonMutable, unitType),
+                    ParameterVariable[context.type, Id](owner, index, VariableName.Unnamed, Mutability.NonMutable, isErased = parameter.isErased.getOrElse(false), unitType),
                     Vector()
                   )
 
                 case Vector((t, varName)) =>
                   Parameter(
                     parameterStyle,
-                    ParameterVariable[context.type, Id](owner, index, varName, Mutability.NonMutable, t),
+                    ParameterVariable[context.type, Id](owner, index, varName, Mutability.NonMutable, isErased = parameter.isErased.getOrElse(false), t),
                     Vector()
                   ).pure[Comp]
 
@@ -1376,7 +1375,7 @@ object ArgonModuleLoader {
                     NonEmptyList(head, tail.toList).map { case (t, _) => TupleElement[context.type, Id](t) }
                   ))
 
-                  val paramVar = ParameterVariable[context.type, Id](owner, index, VariableName.Unnamed, Mutability.NonMutable, paramType)
+                  val paramVar = ParameterVariable[context.type, Id](owner, index, VariableName.Unnamed, Mutability.NonMutable, isErased = parameter.isErased.getOrElse(false), paramType)
                   val paramElems = elems.zipWithIndex.map { case ((t, name), elemIndex) => ParameterElement[context.type, Id](paramVar, name, t, elemIndex) }
 
                   Parameter(parameterStyle, paramVar, paramElems).pure[Comp]

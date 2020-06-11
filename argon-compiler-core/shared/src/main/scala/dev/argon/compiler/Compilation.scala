@@ -17,6 +17,9 @@ object Compilation {
     if(value) IO.unit
     else forErrors(head, tail: _*)
 
+  def requireM(value: Comp[Boolean])(head: CompilationError, tail: CompilationError*): Comp[Unit] =
+    value.flatMap(require(_)(head, tail: _*))
+
   final def requireSome[A](option: Option[A])(head: CompilationError, tail: CompilationError*): Comp[A] =
     option match {
       case Some(a) => IO.succeed(a)
