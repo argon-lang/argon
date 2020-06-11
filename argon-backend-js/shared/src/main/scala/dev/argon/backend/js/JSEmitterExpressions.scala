@@ -5,7 +5,7 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
-import shapeless.Id
+import shapeless.{Id, Nat}
 import zio._
 import zio.interop.catz.core._
 import cats.implicits._
@@ -110,6 +110,13 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
     }
   }
 
+  def convertArgs[TResult[_ <: Context with Singleton, _[+_]]](sigComp: Comp[context.signatureContext.Signature[TResult, _ <: Nat]])(args: Vector[context.typeSystem.WrapExpr]): Emit[Vector[JSExpression]] =
+    sigComp.flatMap { sig =>
+      sig.unsubstitutedParameters.zip(args)
+        .collect { case (parameter, arg) if !parameter.paramVar.isErased => arg }
+        .traverse(convertExpr(_))
+    }
+
 
   def convertExpr(expr: context.typeSystem.SimpleExpr): Emit[JSExpression] = {
     import context.typeSystem. { context => _, _ }
@@ -119,7 +126,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
           ctorObj <- getClassConstructorJSObject(ctor.value)
 
           classTypeObj <- convertExpr(classType)
-          argExprs <- args.traverse(convertExpr(_))
+          argExprs <- convertArgs(ctor.value.signatureUnsubstituted)(args)
 
         } yield ctorObj.prop(id"invoke")(classTypeObj +: argExprs: _*)
 
@@ -131,7 +138,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
 
           instTypeExpr <- convertExpr(dataCtorInstanceType)
 
-          argExprs <- args.traverse(convertExpr(_))
+          argExprs <- convertArgs(dataCtorInstanceType.ctor.value.signature)(args)
         } yield ownerObj.prop(id"createInstance")(instTypeExpr +: argExprs: _*)
 
       case EnsureExecuted(body, ensuring) =>
@@ -143,7 +150,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
       case FunctionCall(func, args, _) =>
         for {
           funcExpr <- getFunctionJSObject(func.value)
-          argExprs <- args.traverse(convertExpr(_))
+          argExprs <- convertArgs(func.value.signature)(args)
         } yield funcExpr.prop(id"invoke")(argExprs: _*)
 
       case FunctionObjectCall(funcExpr, arg, _) =>
@@ -203,7 +210,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
         for {
           instanceExpr <- convertExpr(instance)
           methodObj <- getMethodJSObject(method.value)
-          argExprs <- args.traverse(convertExpr(_))
+          argExprs <- convertArgs(method.value.signatureUnsubstituted)(args)
         } yield methodObj.prop(id"invoke")(instanceExpr +: argExprs: _*)
 
       case PatternMatch(expr, cases) =>
@@ -286,7 +293,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
           erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
           classObj <- getClassJSObject(arClass.value, erasedSig)
 
-          argExprs <- args.traverse(convertExpr(_))
+          argExprs <- convertArgs(arClass.value.signature)(args)
         } yield classObj.prop(id"createClassObject")(argExprs: _*)
 
       case TraitType(arTrait, args) =>
@@ -295,7 +302,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
           erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
           traitObj <- getTraitJSObject(arTrait.value, erasedSig)
 
-          argExprs <- args.traverse(convertExpr(_))
+          argExprs <- convertArgs(arTrait.value.signature)(args)
         } yield traitObj.prop(id"createTraitObject")(argExprs: _*)
 
       case DataConstructorType(ctor, args, _) =>
@@ -304,7 +311,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
           erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
           ctorObj <- getDataCtorJSObject(ctor.value, erasedSig)
 
-          argExprs <- args.traverse(convertExpr(_))
+          argExprs <- convertArgs(ctor.value.signature)(args)
         } yield ctorObj.prop(id"createTypeObject")(argExprs: _*)
 
 

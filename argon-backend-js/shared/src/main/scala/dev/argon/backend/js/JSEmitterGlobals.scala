@@ -47,9 +47,12 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
     }
 
   private def loadTypeParametersFromSig[TResult[_ <: Context with Singleton, Wrap[+_]]](sig: Signature[TResult, _], typeInfo: JSExpression, thisExpr: JSExpression): VarMap =
-    sig.unsubstitutedParameters.unsized.map { param =>
-      param.paramVar.id -> loadTypeParameter(param.paramVar, typeInfo, thisExpr)
-    }.toMap
+    sig.unsubstitutedParameters.unsized
+      .filterNot { param => param.paramVar.isErased }
+      .map { param =>
+        param.paramVar.id -> loadTypeParameter(param.paramVar, typeInfo, thisExpr)
+      }
+      .toMap
 
   def createGlobalTrait(arTrait: ArTrait[context.type, DeclarationPayloadSpecifier]): Emit[JSExpression] =
     for {
@@ -159,7 +162,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
               }
           }
 
-          classArgs <- baseClass.args.traverse(convertExpr).provideSome[EmitEnv] { emitEnv =>
+          classArgs <- convertArgs(baseClass.arClass.value.signature)(baseClass.args).provideSome[EmitEnv] { emitEnv =>
 
             val paramVarMap: VarMap = paramVarNames
               .map {
@@ -347,7 +350,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
           }
       }
 
-      traitArgs <- baseTrait.args.traverse(convertExpr).provideSome[EmitEnv] { emitEnv =>
+      traitArgs <- convertArgs(baseTrait.arTrait.value.signature)(baseTrait.args).provideSome[EmitEnv] { emitEnv =>
 
         val paramVarMap: VarMap = paramVarNames
           .map {
@@ -429,7 +432,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
                 baseCtorObj = baseClassObj.prop(id"constructor")(convBaseCtorSig)
 
                 argExprs <- addToVarMap(initVarMapping: _*)(
-                  baseCallExpr.args.traverse(convertExpr(_))
+                  convertArgs(baseCallExpr.classCtor.value.signatureUnsubstituted)(baseCallExpr.args)
                 )
               } yield baseCtorObj.prop(id"initializeInstance")(thisVarName +: argExprs :_*)
             }
@@ -481,6 +484,8 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
   def createParameterList[TResult[_ <: Context with Singleton, Wrap[+_]]](sig: context.signatureContext.Signature[TResult, _]): UEmit[(JSFunctionParameterList, Seq[(ParameterVariable[context.type, Id], String)])] =
     ZIO.foldRight(sig.unsubstitutedParameters.unsized)((JSFunctionEmptyParameterList : JSFunctionParameterList, Seq.empty[(ParameterVariable[context.type, Id], String)])) {
+      case (param, prev) if param.paramVar.isErased => IO.succeed(prev)
+
       case (param, (list, map)) =>
         for {
           varNum <- getNextSymbolId
