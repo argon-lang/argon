@@ -38,10 +38,11 @@ object ArgonLibraryBuild {
           (if(jsInjectAfterFile.exists()) Seq("--js:inject.after", jsInjectAfterFile.toString) else Seq.empty),
 
         runBefore = () => {
-          if((libDir / "package.json").exists()) {
+          val jsDir = libDir / "js"
+          if((jsDir / "package.json").exists()) {
             log.info("Building JS")
-            Process("npm" :: "install" :: Nil, libDir).!(log)
-            Process("npm" :: "run" :: "build" :: Nil, libDir).!(log)
+            Process("npm" :: "install" :: Nil, jsDir).!(log)
+            Process("npm" :: "run" :: "build" :: Nil, jsDir).!(log)
           }
         },
       )
