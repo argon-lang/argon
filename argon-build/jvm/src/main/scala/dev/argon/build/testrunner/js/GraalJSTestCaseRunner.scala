@@ -50,7 +50,7 @@ final class GraalJSTestCaseRunner[I <: ResourceIndicator: Tag, P: Path : Tag](pr
              |import arCore, { unitValue } from "Argon.Core";
              |import mainModule from "${StringEscapeUtils.escapeEcmaScript(moduleName)}";
              |
-             |const unitType = { type: "class", arClass: arCore.globalClass(["Ar"], "Unit", { parameterTypes: [] }) };
+             |const unitType = { type: "class", arClass: arCore.globalClass(["Ar"], "Unit", { parameterTypes: [] }), arguments: [] };
              |mainModule.globalFunction([], "main", { parameterTypes: [unitType], resultType: unitType }).invoke(unitValue);
              |""".stripMargin,
           "main.mjs"

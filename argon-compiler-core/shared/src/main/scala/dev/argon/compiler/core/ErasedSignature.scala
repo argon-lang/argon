@@ -13,9 +13,9 @@ object ErasedSignature {
 
   sealed trait SigType[TContext <: Context with Singleton]
   final case class BlankType[TContext <: Context with Singleton]() extends SigType[TContext]
-  final case class TraitType[TContext <: Context with Singleton](arTrait: AbsRef[TContext, ArTrait]) extends SigType[TContext]
-  final case class ClassType[TContext <: Context with Singleton](arClass: AbsRef[TContext, ArClass]) extends SigType[TContext]
-  final case class DataConstructorType[TContext <: Context with Singleton](ctor: AbsRef[TContext, DataConstructor]) extends SigType[TContext]
+  final case class TraitType[TContext <: Context with Singleton](arTrait: AbsRef[TContext, ArTrait], typeArgs: Vector[SigType[TContext]]) extends SigType[TContext]
+  final case class ClassType[TContext <: Context with Singleton](arClass: AbsRef[TContext, ArClass], typeArgs: Vector[SigType[TContext]]) extends SigType[TContext]
+  final case class DataConstructorType[TContext <: Context with Singleton](ctor: AbsRef[TContext, DataConstructor], typeArgs: Vector[SigType[TContext]]) extends SigType[TContext]
   final case class TupleType[TContext <: Context with Singleton](elements: NonEmptyList[SigType[TContext]]) extends SigType[TContext]
   final case class FunctionType[TContext <: Context with Singleton](argumentType: SigType[TContext], resultType: SigType[TContext]) extends SigType[TContext]
 
@@ -43,9 +43,9 @@ object ErasedSignature {
 
   private def typeToSigType(context: Context)(t: ArExpr[context.type, Id]): SigType[context.type] =
     t match {
-      case t: ArExpr.ClassType[context.type, Id] => ClassType(t.arClass)
-      case t: ArExpr.TraitType[context.type, Id] => TraitType(t.arTrait)
-      case t: ArExpr.DataConstructorType[context.type, Id] => DataConstructorType(t.ctor)
+      case t: ArExpr.ClassType[context.type, Id] => ClassType(t.arClass, t.args.map(typeToSigType(context)(_)))
+      case t: ArExpr.TraitType[context.type, Id] => TraitType(t.arTrait, t.args.map(typeToSigType(context)(_)))
+      case t: ArExpr.DataConstructorType[context.type, Id] => DataConstructorType(t.ctor, t.args.map(typeToSigType(context)(_)))
       case ArExpr.LoadTuple(NonEmptyList(ArExpr.TupleElement(inner), Nil)) => typeToSigType(context)(inner)
       case t: ArExpr.LoadTuple[context.type, Id] => TupleType(t.values.map { elem => typeToSigType(context)(elem.value) })
       case t: ArExpr.FunctionType[context.type, Id] => FunctionType(typeToSigType(context)(t.argumentType), typeToSigType(context)(t.resultType))

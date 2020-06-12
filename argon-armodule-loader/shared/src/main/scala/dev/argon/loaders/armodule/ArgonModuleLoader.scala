@@ -400,7 +400,7 @@ object ArgonModuleLoader {
                 }
               }
 
-          private def lookupTrait[TPS[_, _]]: TraitOwner[context.type, TPS] => Comp[Option[ArTrait[context.type, TPS]]] = {
+          private def lookupTrait[TPS[_, _]]: ArgonModule.TraitReference => TraitOwner[context.type, TPS] => Comp[Option[ArTrait[context.type, TPS]]] = traitRef => {
             case TraitOwner.ByNamespace(module, namespace, name) =>
               lookupNamespaceValue(module)(namespace, name) {
                 case GlobalBinding.GlobalTrait(_, _, arTrait) => arTrait
@@ -431,7 +431,7 @@ object ArgonModuleLoader {
             )(
               parseDescriptor = parseTraitOwner(_)
             )(
-              referenceHandler = _ => lookupTrait(_),
+              referenceHandler = lookupTrait,
               definitionHandler = new ObjectDefinitionLoader[ArgonModule.TraitDefinition, TraitOwner[context.type, TPayloadSpec], ArTrait[context.type, TPayloadSpec]] {
                 override def apply(id: Int, definition: ArgonModule.TraitDefinition, traitOwner: TraitOwner[context.type, TPayloadSpec]): Comp[ArTrait[context.type, TPayloadSpec] { val owner: traitOwner.type }] = for {
                   uniqId <- UniqueIdentifier.make

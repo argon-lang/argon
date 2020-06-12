@@ -63,34 +63,38 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
   def convertSignatureType(t: ErasedSignature.SigType[context.type]): Emit[JSExpression] =
     t match {
       case ErasedSignature.BlankType() => IO.succeed(jsobj("type" -> JSString("blank")))
-      case ErasedSignature.TraitType(arTrait) =>
-        arTrait.value.signature
-          .flatMap { sig => getTraitJSObject(arTrait.value, ErasedSignature.fromSignatureParameters(context)(sig)) }
-          .map { traitObj =>
-            jsobj(
-              "type" -> JSString("trait"),
-              "arTrait" -> traitObj,
-            )
-          }
+      case ErasedSignature.TraitType(arTrait, typeArgs) =>
+        for {
+          sig <- arTrait.value.signature
+          traitObj <- getTraitJSObject(arTrait.value, ErasedSignature.fromSignatureParameters(context)(sig))
+          args <- typeArgs.traverse(convertSignatureType)
+        } yield jsobj(
+          "type" -> JSString("trait"),
+          "arTrait" -> traitObj,
+          "arguments" -> JSArrayLiteral(args),
+        )
 
-      case ErasedSignature.ClassType(arClass) =>
-        arClass.value.signature
-          .flatMap { sig => getClassJSObject(arClass.value, ErasedSignature.fromSignatureParameters(context)(sig)) }
-          .map { classObj =>
-            jsobj(
-              "type" -> JSString("class"),
-              "arClass" -> classObj,
-            )
-          }
-      case ErasedSignature.DataConstructorType(ctor) =>
-        ctor.value.signature
-          .flatMap { sig => getDataCtorJSObject(ctor.value, ErasedSignature.fromSignatureParameters(context)(sig)) }
-          .map { ctorObj =>
-            jsobj(
-              "type" -> JSString("data-constructor"),
-              "dataConstructor" -> ctorObj,
-            )
-          }
+      case ErasedSignature.ClassType(arClass, typeArgs) =>
+        for {
+          sig <- arClass.value.signature
+          classObj <- getClassJSObject(arClass.value, ErasedSignature.fromSignatureParameters(context)(sig))
+          args <- typeArgs.traverse(convertSignatureType)
+        } yield jsobj(
+          "type" -> JSString("class"),
+          "arClass" -> classObj,
+          "arguments" -> JSArrayLiteral(args),
+        )
+
+      case ErasedSignature.DataConstructorType(ctor, typeArgs) =>
+        for {
+          sig <- ctor.value.signature
+          ctorObj <- getDataCtorJSObject(ctor.value, ErasedSignature.fromSignatureParameters(context)(sig))
+          args <- typeArgs.traverse(convertSignatureType)
+        } yield jsobj(
+          "type" -> JSString("data-constructor"),
+          "dataConstructor" -> ctorObj,
+          "arguments" -> JSArrayLiteral(args),
+        )
 
       case ErasedSignature.TupleType(elements) =>
         elements.toList.toVector

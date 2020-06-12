@@ -12,16 +12,19 @@ export interface BlankType {
 export interface TraitType {
     readonly type: "trait";
     readonly arTrait: ArTrait;
+    readonly arguments: ReadonlyArray<SigType>;
 }
 
 export interface ClassType {
     readonly type: "class";
     readonly arClass: ArClass;
+    readonly arguments: ReadonlyArray<SigType>;
 }
 
 export interface DataConstructorType {
     readonly type: "data-constructor";
     readonly dataConstructor: DataConstructor;
+    readonly arguments: ReadonlyArray<SigType>;
 }
 
 export interface TupleType {
@@ -163,30 +166,34 @@ function namespacePathEqual(ns1: NamespacePath, ns2: NamespacePath): boolean {
 }
 
 function sigTypeEqual(t1: SigType, t2: SigType): boolean {
-    if(t1.type === "blank" && t2.type === "blank") {
-        return true;
-    }
-    else if(t1.type === "class" && t2.type === "class") {
-        return t1.arClass === t2.arClass;
-    }
-    else if(t1.type === "trait" && t2.type === "trait") {
-        return t1.arTrait === t2.arTrait;
-    }
-    else if(t1.type === "data-constructor" && t2.type === "data-constructor") {
-        return t1.dataConstructor === t2.dataConstructor;
-    }
-    else if(t1.type === "tuple" && t2.type === "tuple") {
-        if(t1.elements.length !== t2.elements.length) {
+    function typeArrayEqual(a1: ReadonlyArray<SigType>, a2: ReadonlyArray<SigType>): boolean {
+        if(a1.length !== a2.length) {
             return false;
         }
 
-        for(let i = 0; i < t1.elements.length; ++i) {
-            if(!sigTypeEqual(t1.elements[i], t2.elements[i])) {
+        for(let i = 0; i < a1.length; ++i) {
+            if(!sigTypeEqual(a1[i], a2[i])) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    if(t1.type === "blank" && t2.type === "blank") {
+        return true;
+    }
+    else if(t1.type === "class" && t2.type === "class") {
+        return t1.arClass === t2.arClass && typeArrayEqual(t1.arguments, t2.arguments);
+    }
+    else if(t1.type === "trait" && t2.type === "trait") {
+        return t1.arTrait === t2.arTrait && typeArrayEqual(t1.arguments, t2.arguments);
+    }
+    else if(t1.type === "data-constructor" && t2.type === "data-constructor") {
+        return t1.dataConstructor === t2.dataConstructor && typeArrayEqual(t1.arguments, t2.arguments);
+    }
+    else if(t1.type === "tuple" && t2.type === "tuple") {
+        return typeArrayEqual(t1.elements, t2.elements);
     }
     else if(t1.type === "function" && t2.type === "function") {
         return sigTypeEqual(t1.argumentType, t2.argumentType) && sigTypeEqual(t1.resultType, t2.resultType);

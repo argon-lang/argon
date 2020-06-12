@@ -51,7 +51,7 @@ final class JavaScriptNodeVMTestCaseRunner[I <: ResourceIndicator: Tag, P: Path 
            |import arCore, { unitValue } from "Argon.Core";
            |import mainModule from ${JSON.stringify(moduleName)};
            |
-           |const unitType = { type: "class", arClass: arCore.globalClass(["Ar"], "Unit", { parameterTypes: [] }) };
+           |const unitType = { type: "class", arClass: arCore.globalClass(["Ar"], "Unit", { parameterTypes: [] }), arguments: [] };
            |mainModule.globalFunction([], "main", { parameterTypes: [unitType], resultType: unitType }).invoke(unitValue);
            |""".stripMargin,
         NodeVMUtil.SourceTextModuleOptions(sandbox)
