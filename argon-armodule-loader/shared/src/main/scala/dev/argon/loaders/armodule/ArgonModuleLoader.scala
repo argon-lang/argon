@@ -157,7 +157,7 @@ object ArgonModuleLoader {
           private def lookupNamespaceValue[T, TPS[_, _]]
           (refModule: ArModule[context.type, TPS])
           (namespace: NamespacePath, name: GlobalName)
-          (f: PartialFunction[GlobalBinding[context.type, TPS], T])
+          (f: GlobalBinding[context.type, TPS] => Comp[Option[T]])
           : Comp[Option[T]] =
             ModuleLookup.lookupNamespaceValues(context)(refModule)(namespace, name)(f).map {
               case Vector(single) => Some(single)
@@ -314,6 +314,64 @@ object ArgonModuleLoader {
                 }
             }
 
+          private def parseErasedSigType(t: ArgonModule.SigType): Comp[ErasedSignature.SigType[context.type]] =
+            t.sigType match {
+              case ArgonModule.SigType.SigType._Empty(_) => IO.succeed(ErasedSignature.BlankType())
+              case ArgonModule.SigType.SigType.ClassType(ArgonModule.SigTypeClass(classId, typeArguments)) =>
+                for {
+                  arClass <- findClass(classId)
+                  args <- typeArguments.traverse(parseErasedSigType(_))
+                } yield ErasedSignature.ClassType(arClass, args)
+
+              case ArgonModule.SigType.SigType.TraitType(ArgonModule.SigTypeTrait(traitId, typeArguments)) =>
+                for {
+                  arTrait <- findTrait(traitId)
+                  args <- typeArguments.traverse(parseErasedSigType(_))
+                } yield ErasedSignature.TraitType(arTrait, args)
+
+              case ArgonModule.SigType.SigType.DataCtorType(ArgonModule.SigTypeDataConstructor(ctorId, typeArguments)) =>
+                for {
+                  ctor <- findDataConstructor(ctorId)
+                  args <- typeArguments.traverse(parseErasedSigType(_))
+                } yield ErasedSignature.DataConstructorType(ctor, args)
+
+              case ArgonModule.SigType.SigType.TupleType(ArgonModule.SigTypeTuple(elements)) =>
+                for {
+                  elems <- elements.traverse(parseErasedSigType(_))
+                  nonEmptyElems <- Compilation.requireSome(NonEmptyList.fromList(elems.toList))(invalidModuleFormatError)
+                } yield ErasedSignature.TupleType(nonEmptyElems)
+
+
+              case ArgonModule.SigType.SigType.FunctionType(ArgonModule.SigTypeFunction(argumentType, resultType)) =>
+                for {
+                  arg <- parseErasedSigType(argumentType)
+                  res <- parseErasedSigType(resultType)
+                } yield ErasedSignature.FunctionType(arg, res)
+
+              case ArgonModule.SigType.SigType.Empty => Compilation.forErrors(invalidModuleFormatError)
+            }
+
+          private def parseErasedSigParamOnly(sig: ArgonModule.ErasedSignatureParameterOnly): Comp[ErasedSignature.ParameterOnlySignature[context.type]] =
+            sig.parameterTypes.traverse(parseErasedSigType(_)).map(ErasedSignature.ParameterOnlySignature.apply)
+
+          private def parseErasedSig(sig: ArgonModule.ErasedSignature): Comp[ErasedSignature[context.type]] = {
+
+            def impl(paramTypes: Vector[ArgonModule.SigType]): Comp[ErasedSignature[context.type]] =
+              paramTypes match {
+                case head +: tail =>
+                  for {
+                    paramType <- parseErasedSigType(head)
+                    rest <- impl(tail)
+                  } yield ErasedSignature.Parameter(paramType, rest)
+
+                case Vector() =>
+                  parseErasedSigType(sig.resultType).map(ErasedSignature.Result.apply)
+              }
+
+           impl(sig.parameterTypes)
+          }
+
+
           private def convertFileId(id: ArgonModule.FileID): FileID =
             FileID(id.id)
 
@@ -402,8 +460,8 @@ object ArgonModuleLoader {
 
           private def lookupTrait[TPS[_, _]]: ArgonModule.TraitReference => TraitOwner[context.type, TPS] => Comp[Option[ArTrait[context.type, TPS]]] = traitRef => {
             case TraitOwner.ByNamespace(module, namespace, name) =>
-              lookupNamespaceValue(module)(namespace, name) {
-                case GlobalBinding.GlobalTrait(_, _, arTrait) => arTrait
+              parseErasedSigParamOnly(traitRef.signature).flatMap { sig =>
+                lookupNamespaceValue(module)(namespace, name)(ModuleLookup.lookupGlobalTrait(context)(sig))
               }
           }
 
@@ -474,9 +532,11 @@ object ArgonModuleLoader {
               }
             ).get(id)
 
-          private def lookupClass[TPS[_, _]]: ClassOwner[context.type, TPS] => Comp[Option[ArClass[context.type, TPS]]] = {
+          private def lookupClass[TPS[_, _]]: ArgonModule.ClassReference => ClassOwner[context.type, TPS] => Comp[Option[ArClass[context.type, TPS]]] = classRef => {
             case ClassOwner.ByNamespace(module, namespace, name) =>
-              lookupNamespaceValue(module)(namespace, name)(ModuleLookup.lookupGlobalClass)
+              parseErasedSigParamOnly(classRef.signature).flatMap { sig =>
+                lookupNamespaceValue(module)(namespace, name)(ModuleLookup.lookupGlobalClass(context)(sig))
+              }
           }
 
           private def getArClass(id: Int): Comp[ClassLoadResult[context.type, TPayloadSpec]] =
@@ -503,7 +563,7 @@ object ArgonModuleLoader {
             )(
               parseDescriptor = parseClassOwner(_)
             )(
-              referenceHandler = _ => lookupClass(_),
+              referenceHandler =  lookupClass,
               definitionHandler = new ObjectDefinitionLoader[ArgonModule.ClassDefinition, ClassOwner[context.type, TPayloadSpec], ArClass[context.type, TPayloadSpec]] {
                 override def apply(id: Int, definition: ArgonModule.ClassDefinition, classOwner: ClassOwner[context.type, TPayloadSpec]): Comp[ArClass[context.type, TPayloadSpec] { val owner: classOwner.type }] = for {
                   uniqId <- UniqueIdentifier.make
@@ -600,10 +660,10 @@ object ArgonModuleLoader {
             )(
               parseDescriptor = parseDataCtorOwner(_)
             )(
-              referenceHandler = _ => {
+              referenceHandler = ctorRef => {
                 case DataConstructorOwner.ByNamespace(module, namespace, name) =>
-                  lookupNamespaceValue(module)(namespace, name) {
-                    case GlobalBinding.GlobalDataConstructor(_, _, dataCtor) => dataCtor
+                  parseErasedSigParamOnly(ctorRef.signature).flatMap { sig =>
+                    lookupNamespaceValue(module)(namespace, name)(ModuleLookup.lookupGlobalDataConstructor(context)(sig))
                   }
               },
               definitionHandler = new ObjectDefinitionLoader[ArgonModule.DataConstructorDefinition, DataConstructorOwner[context.type, TPayloadSpec], DataConstructor[context.type, TPayloadSpec]] {
@@ -635,10 +695,10 @@ object ArgonModuleLoader {
             )(
               parseDescriptor = parseFunctionOwner(_)
             )(
-              referenceHandler = _ => {
+              referenceHandler = funcRef => {
                 case FunctionOwner.ByNamespace(module, namespace, name) =>
-                  lookupNamespaceValue(module)(namespace, name) {
-                    case GlobalBinding.GlobalFunction(_, _, func) => func
+                  parseErasedSig(funcRef.signature).flatMap { sig =>
+                    lookupNamespaceValue(module)(namespace, name)(ModuleLookup.lookupGlobalFunction(context)(sig))
                   }
               },
               definitionHandler = new ObjectDefinitionLoader[ArgonModule.FunctionDefinition, FunctionOwner[context.type, TPayloadSpec], ArFunc[context.type, TPayloadSpec]] {
@@ -708,11 +768,20 @@ object ArgonModuleLoader {
                   case MethodOwner.ByTraitObject(ownerTrait) => ownerTrait.staticMethods
                   case MethodOwner.ByDataCtor(dataCtor) => dataCtor.methods
                 }
-              } yield methods
-                .find { binding =>
-                  parseMemberName(methodRef.name).exists { binding.method.name === _ }
-                }
-                .map { _.method },
+
+                methodName <- Compilation.requireSome(parseMemberName(methodRef.name))(invalidModuleFormatError)
+                methodSig <- parseErasedSig(methodRef.signature)
+
+                method <- methods
+                  .map { _.method }
+                  .findM { method =>
+                    if(method.name === methodName)
+                      method.signatureUnsubstituted.map { sig => methodSig === ErasedSignature.fromSignature(context)(sig) }
+                    else
+                      IO.succeed(false)
+                  }
+
+              } yield method,
               definitionHandler = new ObjectDefinitionLoader[ArgonModule.MethodDefinition, MethodOwner[context.type, TPayloadSpec], ArMethod[context.type, TPayloadSpec]] {
                 override def apply(id: Int, definition: ArgonModule.MethodDefinition, methodOwner: MethodOwner[context.type, TPayloadSpec]): Comp[ArMethod[context.type, TPayloadSpec] { val owner: methodOwner.type }] =
                   for {

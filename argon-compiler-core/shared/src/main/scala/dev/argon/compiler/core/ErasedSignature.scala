@@ -1,21 +1,45 @@
 package dev.argon.compiler.core
 
+import cats.Eq
 import cats.data.NonEmptyList
 import dev.argon.compiler.core.ErasedSignature.TraitType
 import dev.argon.compiler.expr.ArExpr
 import dev.argon.compiler.types.TypeSystem
 import shapeless.Id
+import cats.implicits._
 
 
 sealed trait ErasedSignature[TContext <: Context with Singleton]
 
 object ErasedSignature {
 
+  implicit def erasedSignatureEqInstance[TContext <: Context with Singleton]: Eq[ErasedSignature[TContext]] = cats.derived.semi.eq
+
   sealed trait SigType[TContext <: Context with Singleton]
+  object SigType {
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[SigType[TContext]] = cats.derived.semi.eq
+  }
+
   final case class BlankType[TContext <: Context with Singleton]() extends SigType[TContext]
+
   final case class TraitType[TContext <: Context with Singleton](arTrait: AbsRef[TContext, ArTrait], typeArgs: Vector[SigType[TContext]]) extends SigType[TContext]
+  object TraitType {
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[TraitType[TContext]] = (a, b) =>
+      a.arTrait.value.id === b.arTrait.value.id && a.typeArgs === b.typeArgs
+  }
+
   final case class ClassType[TContext <: Context with Singleton](arClass: AbsRef[TContext, ArClass], typeArgs: Vector[SigType[TContext]]) extends SigType[TContext]
+  object ClassType {
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[ClassType[TContext]] = (a, b) =>
+      a.arClass.value.id === b.arClass.value.id && a.typeArgs === b.typeArgs
+  }
+
   final case class DataConstructorType[TContext <: Context with Singleton](ctor: AbsRef[TContext, DataConstructor], typeArgs: Vector[SigType[TContext]]) extends SigType[TContext]
+  object DataConstructorType {
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[DataConstructorType[TContext]] = (a, b) =>
+      a.ctor.value.id === b.ctor.value.id && a.typeArgs === b.typeArgs
+  }
+
   final case class TupleType[TContext <: Context with Singleton](elements: NonEmptyList[SigType[TContext]]) extends SigType[TContext]
   final case class FunctionType[TContext <: Context with Singleton](argumentType: SigType[TContext], resultType: SigType[TContext]) extends SigType[TContext]
 
@@ -23,6 +47,11 @@ object ErasedSignature {
   final case class Result[TContext <: Context with Singleton](resultType: SigType[TContext]) extends ErasedSignature[TContext]
 
   final case class ParameterOnlySignature[TContext <: Context with Singleton](paramTypes: Vector[SigType[TContext]])
+
+  object ParameterOnlySignature {
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[ParameterOnlySignature[TContext]] = cats.derived.semi.eq
+
+  }
 
   def fromSignature(context: Context)(sig: context.signatureContext.Signature[FunctionResultInfo, _]): ErasedSignature[context.type] = {
     import context.signatureContext.{ SignatureParameters, SignatureResult }

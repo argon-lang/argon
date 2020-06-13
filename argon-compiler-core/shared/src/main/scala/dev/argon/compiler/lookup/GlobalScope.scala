@@ -108,8 +108,8 @@ object GlobalScope {
       .flatTraverse { importNS =>
         modules.flatTraverse { module =>
           ModuleLookup.lookupNamespaceValues(context)(module.value)(importNS, GlobalName.Normal(name)) {
-            case GlobalBinding.NestedNamespace(_, _) => NestedNamespaces(Set(NamespacePath(importNS.ns :+ name)))
-            case _ => FoundOverloadable
+            case GlobalBinding.NestedNamespace(_, _) => IO.succeed(Some(NestedNamespaces(Set(NamespacePath(importNS.ns :+ name)))))
+            case _ => IO.succeed(Some(FoundOverloadable))
           }
         }
       }
@@ -162,7 +162,9 @@ object GlobalScope {
         modules.flatTraverse { module =>
           ModuleLookup.lookupNamespaceValues(context)(module.value)(importNS, GlobalName.Normal(name)) {
             case binding: GlobalBinding.NonNamespace[context.type, module.PayloadSpec] =>
-              getScopeValue(context)(binding)
+              IO.succeed(Some(getScopeValue(context)(binding)))
+
+            case _ => IO.succeed(None)
           }
             .map { _.toList.toVector }
         }

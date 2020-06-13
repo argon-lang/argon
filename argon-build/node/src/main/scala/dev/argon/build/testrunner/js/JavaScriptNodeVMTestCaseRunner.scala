@@ -60,7 +60,6 @@ final class JavaScriptNodeVMTestCaseRunner[I <: ResourceIndicator: Tag, P: Path 
       for {
         _ <- ZIO.fromPromiseJS(mainModule.link(linker))
         _ <- IO.effect {
-          mainModule.instantiate()
           mainModule.evaluate()
         }
         output <- IO.effect { stdout.toString }

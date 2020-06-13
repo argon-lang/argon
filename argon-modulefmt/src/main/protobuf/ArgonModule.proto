@@ -47,33 +47,33 @@ message FileID {
 // *-ref/id
 message TraitReference {
     required TraitOwner owner = 1;
-    required TraitSignature signature = 2;
+    required ErasedSignatureParameterOnly signature = 2;
 }
 
 message ClassReference {
     required ClassOwner owner = 1;
-    required ClassSignature signature = 2;
+    required ErasedSignatureParameterOnly signature = 2;
 }
 
 message DataConstructorReference {
     required DataConstructorOwner owner = 1;
-    required DataConstructorSignature signature = 2;
+    required ErasedSignatureParameterOnly signature = 2;
 }
 
 message FunctionReference {
     required FunctionOwner owner = 1;
-    required FunctionSignature signature = 2;
+    required ErasedSignature signature = 2;
 }
 
 message MethodReference {
     required MethodOwner owner = 1;
     required MethodName name = 2;
-    required MethodSignature signature = 3;
+    required ErasedSignature signature = 3;
 }
 
 message ClassConstructorReference {
     required sint32 ownerClass = 1;
-    required ClassConstructorSignature signature = 2;
+    required ErasedSignatureParameterOnly signature = 2;
 }
 
 // */id
@@ -490,4 +490,50 @@ message MethodSignature {
 
 message ClassConstructorSignature {
     repeated Parameter parameters = 1;
+}
+
+
+// Erased Signature
+message SigType {
+    oneof sigType {
+        google.protobuf.Empty empty = 1;
+        SigTypeClass classType = 2;
+        SigTypeTrait traitType = 3;
+        SigTypeDataConstructor dataCtorType = 4;
+        SigTypeTuple tupleType = 5;
+        SigTypeFunction functionType = 6;
+    }
+}
+
+message SigTypeClass {
+    required sint32 classId = 1;
+    repeated SigType typeArguments = 2;
+}
+
+message SigTypeTrait {
+    required sint32 traitId = 1;
+    repeated SigType typeArguments = 2;
+}
+
+message SigTypeDataConstructor {
+    required sint32 ctorId = 1;
+    repeated SigType typeArguments = 2;
+}
+
+message SigTypeTuple {
+    repeated SigType elements = 1;
+}
+
+message SigTypeFunction {
+    required SigType argumentType = 1;
+    required SigType resultType = 2;
+}
+
+message ErasedSignatureParameterOnly {
+    repeated SigType parameterTypes = 1;
+}
+
+message ErasedSignature {
+    repeated SigType parameterTypes = 1;
+    required SigType resultType = 2;
 }

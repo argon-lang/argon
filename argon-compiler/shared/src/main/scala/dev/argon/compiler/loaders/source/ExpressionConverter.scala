@@ -745,10 +745,13 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         } yield overloadSelectionFactory(env)(location)(NonEmptyList.of(classFactories))
       )
 
+
+    val noArgs = ErasedSignature.ParameterOnlySignature[context.type](Vector())
+
     if(moduleDesc === env.currentModule.id)
-      resolveClass(ModuleLookup.lookupNamespaceValues(context)(env.currentModule)(namespacePath, name)(ModuleLookup.lookupGlobalClass))
+      resolveClass(ModuleLookup.lookupNamespaceValues(context)(env.currentModule)(namespacePath, name)(ModuleLookup.lookupGlobalClass(context)(noArgs)))
     else
-      resolveClass(ModuleLookup.lookupValues(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass))
+      resolveClass(ModuleLookup.lookupValues(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass(context)(noArgs)))
   }
 
   def resolveModuleClass

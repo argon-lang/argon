@@ -18,7 +18,6 @@ object NodeVM extends js.Any {
   @js.native
   class SourceTextModule(code: String, options: SourceTextModuleOptions) extends js.Object {
     def link(linker: js.Function2[String, SourceTextModule, js.Promise[SourceTextModule]]): js.Promise[Unit] = js.native
-    def instantiate(): Unit = js.native
     def evaluate(): js.Promise[js.Any] = js.native
     val context: js.Any = js.native
   }

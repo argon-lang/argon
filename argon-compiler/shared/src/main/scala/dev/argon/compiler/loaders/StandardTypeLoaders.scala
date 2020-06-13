@@ -20,12 +20,14 @@ object StandardTypeLoaders {
   : Comp[context.typeSystem.TType] = {
     import context._
 
+    val noArgs = ErasedSignature.ParameterOnlySignature[context.type](Vector())
+
     {
       if(currentModule.id === arCore)
-        ModuleLookup.lookupNamespaceValues(context)(currentModule)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass)
+        ModuleLookup.lookupNamespaceValues(context)(currentModule)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass(context)(noArgs))
             .map { _.map(AbsRef.apply) }
       else
-        ModuleLookup.lookupValues(context)(referencedModules)(arCore)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass)
+        ModuleLookup.lookupValues(context)(referencedModules)(arCore)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass(context)(noArgs))
           .map { _.map(AbsRef.apply) }
 
     }

@@ -569,6 +569,57 @@ sealed abstract class ModuleEmitter private() {
       case GlobalName.Unnamed => ???
     }
 
+  def convertErasedSigType(sigType: ErasedSignature.SigType[context.type]): Emit[module.SigType] =
+    (sigType match {
+      case ErasedSignature.BlankType() => IO.succeed(module.SigType.SigType._Empty(com.google.protobuf.empty.Empty()))
+      case ErasedSignature.TraitType(arTrait, typeArgs) =>
+        for {
+          idNum <- ZIO.accessM[EmitEnv](_.getTraitIdNum(arTrait.value))
+          args <- typeArgs.traverse(convertErasedSigType)
+        } yield module.SigType.SigType.TraitType(module.SigTypeTrait(idNum, args))
+
+      case ErasedSignature.ClassType(arClass, typeArgs) =>
+        for {
+          idNum <- ZIO.accessM[EmitEnv](_.getClassIdNum(arClass.value))
+          args <- typeArgs.traverse(convertErasedSigType)
+        } yield module.SigType.SigType.ClassType(module.SigTypeClass(idNum, args))
+
+      case ErasedSignature.DataConstructorType(ctor, typeArgs) =>
+        for {
+          idNum <- ZIO.accessM[EmitEnv](_.getDataCtorIdNum(ctor.value))
+          args <- typeArgs.traverse(convertErasedSigType)
+        } yield module.SigType.SigType.DataCtorType(module.SigTypeDataConstructor(idNum, args))
+
+      case ErasedSignature.TupleType(elements) =>
+        for {
+          elems <- elements.toList.toVector.traverse(convertErasedSigType)
+        } yield module.SigType.SigType.TupleType(module.SigTypeTuple(elems))
+
+      case ErasedSignature.FunctionType(argumentType, resultType) =>
+        for {
+          argType <- convertErasedSigType(argumentType)
+          resType <- convertErasedSigType(resultType)
+        } yield module.SigType.SigType.FunctionType(module.SigTypeFunction(argType, resType))
+
+    }).map(module.SigType.apply)
+
+  def convertErasedSignatureParameterOnly(sig: ErasedSignature.ParameterOnlySignature[context.type]): Emit[module.ErasedSignatureParameterOnly] =
+    sig.paramTypes.traverse(convertErasedSigType)
+      .map(module.ErasedSignatureParameterOnly.apply)
+
+  def convertErasedSignature(sig: ErasedSignature[context.type]): Emit[module.ErasedSignature] = sig match {
+    case ErasedSignature.Parameter(paramType, next) =>
+      for {
+        paramTypeConv <- convertErasedSigType(paramType)
+        nextConv <- convertErasedSignature(next)
+      } yield module.ErasedSignature(parameterTypes = paramTypeConv +: nextConv.parameterTypes, resultType = nextConv.resultType)
+
+    case ErasedSignature.Result(resultType) =>
+      for {
+        resultTypeConv <- convertErasedSigType(resultType)
+      } yield module.ErasedSignature(parameterTypes = Vector.empty, resultType = resultTypeConv)
+  }
+
   def convertTraitOwner[TPayloadSpec[_, _]](owner: TraitOwner[context.type, TPayloadSpec]): Emit[module.TraitOwner] =
     owner match {
       case TraitOwner.ByNamespace(arModule, namespace, name) =>
@@ -1029,7 +1080,7 @@ object ModuleEmitter {
               for {
                 owner <- moduleEmitter.convertClassOwner(arClass.owner).provide(this)
                 sig <- arClass.signature
-                convSig <- moduleEmitter.convertClassSignature(sig).provide(this)
+                convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
               } yield module.ClassReference(owner, convSig)
             )
 
@@ -1038,7 +1089,7 @@ object ModuleEmitter {
               for {
                 owner <- moduleEmitter.convertTraitOwner(arTrait.owner).provide(this)
                 sig <- arTrait.signature
-                convSig <- moduleEmitter.convertTraitSignature(sig).provide(this)
+                convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
               } yield module.TraitReference(owner, convSig)
             )
 
@@ -1047,7 +1098,7 @@ object ModuleEmitter {
               for {
                 owner <- moduleEmitter.convertDataCtorOwner(ctor.owner).provide(this)
                 sig <- ctor.signature
-                convSig <- moduleEmitter.convertDataCtorSignature(sig).provide(this)
+                convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
               } yield module.DataConstructorReference(owner, convSig)
             )
 
@@ -1056,7 +1107,7 @@ object ModuleEmitter {
               for {
                 owner <- moduleEmitter.convertFuncOwner(func.owner).provide(this)
                 sig <- func.signature
-                convSig <- moduleEmitter.convertFunctionSignature(sig).provide(this)
+                convSig <- moduleEmitter.convertErasedSignature(ErasedSignature.fromSignature(context)(sig)).provide(this)
               } yield module.FunctionReference(owner, convSig)
             )
 
@@ -1065,7 +1116,7 @@ object ModuleEmitter {
               for {
                 owner <- moduleEmitter.convertMethodOwner(method.owner).provide(this)
                 sig <- method.signatureUnsubstituted
-                convSig <- moduleEmitter.convertMethodSignature(sig).provide(this)
+                convSig <- moduleEmitter.convertErasedSignature(ErasedSignature.fromSignature(context)(sig)).provide(this)
               } yield module.MethodReference(owner, moduleEmitter.convertMethodName(method.name), convSig)
             )
 
@@ -1074,7 +1125,7 @@ object ModuleEmitter {
               for {
                 ownerClassIdNum <- getClassIdNum(ctor.ownerClass)
                 sig <- ctor.signatureUnsubstituted
-                convSig <- moduleEmitter.convertClassCtorSignature(sig).provide(this)
+                convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
               } yield module.ClassConstructorReference(ownerClassIdNum, convSig)
             )
 
