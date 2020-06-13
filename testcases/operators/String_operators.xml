@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Bool comparison operators</Name>
+
+
+    <InputSource name="test.argon">
+
+        import Ar._
+
+        proc main(): Unit do
+            puts (('A' = 'A').to_s())
+            puts (('A' = 'B').to_s())
+            puts (('A' != 'A').to_s())
+            puts (('A' != 'B').to_s())
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>
+        true
+        false
+        false
+        true
+    </ExpectedOutput>
+
+</ArgonTest>
