@@ -117,14 +117,6 @@ object ArExpr {
     expr: ArExprWrap[TContext, Wrap],
     cases: NonEmptyList[PatternCase[TContext, Wrap]]
   ) extends ArExpr[TContext, Wrap]
-
-  final case class PrimitiveOp[TContext, Wrap[+_]]
-  (
-    operation: PrimitiveOperation,
-    left: ArExprWrap[TContext, Wrap],
-    right: ArExprWrap[TContext, Wrap],
-    exprType: ArExprWrap[TContext, Wrap]
-  ) extends ArExpr[TContext, Wrap]
   
   final case class Sequence[TContext, Wrap[+_]]
   (

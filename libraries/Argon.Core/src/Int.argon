@@ -3,3 +3,8 @@ namespace Ar
 public class Int <: Object
 	public def this.to_s(): String = extern Int_to_s
 end
+
+public def (+) (a: Int) (b: Int): Int = extern addInt
+public def (-) (a: Int) (b: Int): Int = extern subInt
+public def (*) (a: Int) (b: Int): Int = extern mulInt
+public def (=) (a: Int) (b: Int): Bool = extern intEqual

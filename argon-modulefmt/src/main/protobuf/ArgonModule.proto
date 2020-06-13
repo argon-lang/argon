@@ -421,9 +421,8 @@ message Expression {
         Variable loadVariable = 120;
         sint32 methodCall = 121; // First is the instance object, second is the instance type, rest are method args
         PatternMatch patternMatch = 122; // First arg is the matched value, patterns must correspond to remaining args
-        PrimitiveOperation primitiveOp = 123; // First arg is the type, rest are operation args
-        google.protobuf.Empty sequence = 124; // Args are executed in sequence (must be non-empty)
-        Variable storeVariable = 125; // First arg is the type of the expression (e.g. Unit), second is the value stored in the variable
+        google.protobuf.Empty sequence = 123; // Args are executed in sequence (must be non-empty)
+        Variable storeVariable = 124; // First arg is the type of the expression (e.g. Unit), second is the value stored in the variable
     }
 
     repeated Expression args = 1;

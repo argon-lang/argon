@@ -262,21 +262,6 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
           Vector(jsExpr)
         )
 
-      case PrimitiveOp(op, left, right, _) =>
-        for {
-          opFunc <- coreLibExport(
-            op match {
-              case PrimitiveOperation.AddInt => "addInt"
-              case PrimitiveOperation.SubInt => "subInt"
-              case PrimitiveOperation.MulInt => "mulInt"
-              case PrimitiveOperation.IntEqual => "intEqual"
-            }
-          )
-
-          leftExpr <- convertExpr(left)
-          rightExpr <- convertExpr(right)
-        } yield opFunc(leftExpr, rightExpr)
-
       case e @ Sequence(_, _) =>
         StatementConverterLocalBinding.wrapStatement(e)
 

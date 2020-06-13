@@ -18,13 +18,17 @@ trait ScopeContext[TContext <: Context with Singleton] {
   sealed trait Scope {
 
     def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[LookupResult]
+    def findOperator(op: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[LookupResult]
 
     def convertScopeContext(other: ScopeContext[context.type])(converter: TypeSystemConverter.Aux[context.type, typeSystem.TTypeWrapper, other.typeSystem.TTypeWrapper]): other.Scope = new other.Scope {
 
       override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[other.LookupResult] =
         Scope.this.findIdentifier(name, fileSpec, sourceLocation)
           .flatMap { _.convertScopeContext(other)(converter) }
-      
+
+      override def findOperator(op: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[other.LookupResult] =
+        Scope.this.findOperator(op, fileSpec, sourceLocation)
+          .flatMap { _.convertScopeContext(other)(converter) }
     }
 
   }
@@ -44,6 +48,8 @@ trait ScopeContext[TContext <: Context with Singleton] {
             scope.findIdentifier(name, fileSpec, sourceLocation)
           }
 
+        override def findOperator(op: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[LookupResult] =
+          scope.findOperator(op, fileSpec, sourceLocation)
       }
 
     def addVariables(variables: Vector[Variable[context.type, typeSystem.TTypeWrapper]]): Scope =
@@ -63,6 +69,8 @@ trait ScopeContext[TContext <: Context with Singleton] {
               scope.findIdentifier(name, fileSpec, sourceLocation)
             }
 
+          override def findOperator(op: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[LookupResult] =
+            scope.findOperator(op, fileSpec, sourceLocation)
         }
 
       if(param.elements.size > 1)
@@ -81,18 +89,23 @@ trait ScopeContext[TContext <: Context with Singleton] {
   case object EmptyScope extends NamespacesOnlyScope {
     override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[LookupResult] =
       IO.succeed(LookupResult.Failed)
+
+    override def findOperator(op: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[LookupResult] =
+      IO.succeed(LookupResult.Failed)
   }
 
-  final class NamespaceScope private(findId: MemoCache[Any, ErrorList, (String, FileSpec, SourceLocation), LookupResult], parentScope: NamespacesOnlyScope) extends NamespacesOnlyScope {
+  final class NamespaceScope private(findId: MemoCache[Any, ErrorList, (GlobalName.NonEmpty, FileSpec, SourceLocation), LookupResult], parentScope: NamespacesOnlyScope) extends NamespacesOnlyScope {
 
     override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[LookupResult] =
-      findId.get((name, fileSpec, sourceLocation))
+      findId.get((GlobalName.Normal(name), fileSpec, sourceLocation))
 
+    override def findOperator(op: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[LookupResult] =
+      findId.get((GlobalName.Operator(op), fileSpec, sourceLocation))
   }
 
   object NamespaceScope {
 
-    def apply(findId: (String, FileSpec, SourceLocation) => Comp[LookupResult], parentScope: NamespacesOnlyScope): Comp[NamespaceScope] =
+    def apply(findId: (GlobalName.NonEmpty, FileSpec, SourceLocation) => Comp[LookupResult], parentScope: NamespacesOnlyScope): Comp[NamespaceScope] =
       MemoCache.make(findId.tupled).map { findIdMemo =>
         new NamespaceScope(findIdMemo, parentScope)
       }

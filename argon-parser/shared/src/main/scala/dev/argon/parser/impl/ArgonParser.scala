@@ -332,7 +332,7 @@ object ArgonParser {
 
         case Rule.UnaryExpr =>
           def matchUnaryOp[TToken <: TokenWithCategory[_ <: TokenCategory] with UnaryOperatorToken : ClassTag](token: TToken): TGrammar[Expr] =
-            matchToken(token) ++! rule(Rule.UnaryExpr).observeSource --> { case (_, inner) => UnaryOperatorExpr(token.unaryOperator, inner) }
+            matchToken(token).observeSource ++! rule(Rule.UnaryExpr).observeSource --> { case (opToken, inner) => UnaryOperatorExpr(opToken.map(_.unaryOperator), inner) }
 
           matchUnaryOp(OP_BITNOT) |
             matchUnaryOp(OP_BOOLNOT) |
@@ -442,9 +442,10 @@ object ArgonParser {
 
         case Rule.AssignExpr =>
           val nextRule = rule(Rule.TupleExpr)
-          nextRule.observeSource ++ ((matchToken(OP_ASSIGN) ++! nextRule.observeSource)?) --> {
+          nextRule.observeSource ++ ((matchToken(OP_ASSIGN).observeSource ++! nextRule.observeSource)?) --> {
             case (WithSource(left, _), None) => left
-            case (left, Some((_, right))) => BinaryOperatorExpr(BinaryOperator.Assign, left, right)
+            case (left, Some((WithSource(_, opLocation), right))) =>
+              BinaryOperatorExpr(WithSource(BinaryOperator.Assign, opLocation), left, right)
           }
 
         case Rule.Expression =>
@@ -732,7 +733,7 @@ object ArgonParser {
       val opGrammarsNev = NonEmptyVector(firstOpGrammar, opGrammars.toVector)
 
       val rightGrammars = opGrammarsNev.map { opGrammar =>
-        Lazy { (opGrammar ++! nextGrammar.observeSource) --> { case (op, right) => left: WithSource[Expr] => BinaryOperatorExpr(op, left, right) } }
+        Lazy { (opGrammar.observeSource ++! nextGrammar.observeSource) --> { case (op, right) => left: WithSource[Expr] => BinaryOperatorExpr(op, left, right) } }
       }
 
       nextGrammar.observeSource ++ (UnionGrammar.fromList(rightGrammars).observeSource*) --> {

@@ -434,7 +434,6 @@ trait TypeSystem {
 
       case LetBinding(_, _, _) => ???
       case LoadTupleElement(_, _, _) => ???
-      case PrimitiveOp(_, _, _, _) => ???
       case Sequence(_, second) => reduceWrapExprToValue(second)
       case StoreVariable(_, _, _) => ???
     }
@@ -480,7 +479,6 @@ trait TypeSystem {
         cases
           .traverse { patCase => getWrapExprType(patCase.body) }
           .map { _.reduceLeft { (a, b) => fromSimpleType(UnionType(a, b)) } }
-      case PrimitiveOp(_, _, _, exprType) => exprType.pure[Comp]
       case Sequence(_, second) => getWrapExprType(second)
       case StoreVariable(_, _, exprType) => exprType.pure[Comp]
       case expr: TypeIsTypeOfTypeExpr[context.type, TTypeWrapper] => fromSimpleType(TypeOfType(fromSimpleType(expr))).pure[Comp]
@@ -531,7 +529,6 @@ trait TypeSystem {
         cases
           .traverse { patCase => universeOfWrapExpr(patCase.body) }
           .map { _.reduceLeft(LargestUniverse) }
-      case PrimitiveOp(_, _, _, exprType) => universeOfWrapExpr(exprType).map(PreviousUniverse)
       case Sequence(_, second) => universeOfWrapExpr(second)
       case StoreVariable(_, _, exprType) => universeOfWrapExpr(exprType).map(PreviousUniverse)
       case TraitType(_, args) => universeOfTypeArgs(args)

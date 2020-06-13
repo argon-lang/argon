@@ -26,19 +26,3 @@ export function createBool(b) {
 	obj[boolValueSymbol] = b;
 	return Object.freeze(obj);
 }
-
-export function addInt(a, b) {
-	return createInt(a[intValueSymbol] + b[intValueSymbol]);
-}
-
-export function subInt(a, b) {
-	return createInt(a[intValueSymbol] - b[intValueSymbol]);
-}
-
-export function mulInt(a, b) {
-	return createInt(a[intValueSymbol] * b[intValueSymbol]);
-}
-
-export function intEqual(a, b) {
-	return createBool(a[intValueSymbol] === b[intValueSymbol]);
-}

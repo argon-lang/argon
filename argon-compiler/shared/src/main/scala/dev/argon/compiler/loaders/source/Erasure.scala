@@ -2,7 +2,7 @@ package dev.argon.compiler.loaders.source
 
 import dev.argon.compiler.Comp
 import dev.argon.compiler.core.Context
-import dev.argon.compiler.expr.ArExpr.{ClassConstructorCall, ClassType, DataConstructorCall, DataConstructorType, EnsureExecuted, ExistentialType, FunctionCall, FunctionObjectCall, FunctionType, IfElse, IntersectionType, LetBinding, LoadConstantBool, LoadConstantInt, LoadConstantString, LoadLambda, LoadTuple, LoadTupleElement, LoadUnit, LoadVariable, MethodCall, PatternMatch, PrimitiveOp, Sequence, StoreVariable, TraitType, TupleElement, TypeN, TypeOfType, UnionType}
+import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr.{FieldVariable, LocalVariable, ParameterVariable, PatternCase, ThisParameterVariable, Variable}
 import dev.argon.compiler.types.TypeSystem
 import shapeless.Nat
@@ -76,7 +76,6 @@ sealed trait Erasure {
           cases.existsM { case PatternCase(_, body) => isWrapExprErased(body) }
         )
 
-      case PrimitiveOp(_, left, right, _) => compOr(isWrapExprErased(left), isWrapExprErased(right))
       case Sequence(first, second) => compOr(isWrapExprErased(first), isWrapExprErased(second))
       case StoreVariable(variable, _, _) if isVariableErased(variable) => IO.succeed(false)
       case StoreVariable(_, value, _) => isWrapExprErased(value)

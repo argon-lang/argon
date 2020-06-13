@@ -514,20 +514,6 @@ sealed abstract class ModuleEmitter private() {
             convExpr +: caseBodies
           )
 
-        case PrimitiveOp(operation, left, right, exprType) =>
-          val convOp = operation match {
-            case PrimitiveOperation.AddInt => module.PrimitiveOperation.AddInt
-            case PrimitiveOperation.SubInt => module.PrimitiveOperation.SubInt
-            case PrimitiveOperation.MulInt => module.PrimitiveOperation.MulInt
-            case PrimitiveOperation.IntEqual => module.PrimitiveOperation.IntEqual
-          }
-
-          for {
-            convLeft <- convertExpr(left)
-            convRight <- convertExpr(right)
-            convExprType <- convertExpr(exprType)
-          } yield (module.Expression.ExprType.PrimitiveOp(convOp), Vector(convExprType, convLeft, convRight))
-
         case Sequence(first, second) =>
           for {
             convFirst <- convertExpr(first)

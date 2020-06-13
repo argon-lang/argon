@@ -5,8 +5,10 @@ import cats.implicits._
 
 sealed trait GlobalName
 object GlobalName {
-  final case class Normal(name: String) extends GlobalName
-  final case class Operator(name: String) extends GlobalName
+  sealed trait NonEmpty extends GlobalName
+
+  final case class Normal(name: String) extends NonEmpty
+  final case class Operator(name: String) extends NonEmpty
 
   case object Unnamed extends GlobalName
 

@@ -159,9 +159,6 @@ trait SignatureContext {
         case MethodCall(_, instance, _, args, _) =>
           checkWrapExpr(instance) || args.exists(checkWrapExpr)
 
-        case PrimitiveOp(_, left, right, _) =>
-          checkWrapExpr(left) || checkWrapExpr(right)
-
         case Sequence(first, second) =>
           checkWrapExpr(first) || checkWrapExpr(second)
 

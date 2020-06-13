@@ -102,9 +102,6 @@ sealed abstract class Substitutions[Wrap[+_]: Monad] {
       case MethodCall(method, instance, instanceType, args, returnType) =>
         fromSimpleType(MethodCall(method, substWrapExpr(instance), substTypeWithMethods(instanceType), args.map(substWrapExpr), substWrapExpr(returnType)))
 
-      case PrimitiveOp(operation, left, right, exprType) =>
-        fromSimpleType(PrimitiveOp(operation, substWrapExpr(left), substWrapExpr(right), substWrapExpr(exprType)))
-
       case Sequence(first, second) =>
         fromSimpleType(Sequence(substWrapExpr(first), substWrapExpr(second)))
 

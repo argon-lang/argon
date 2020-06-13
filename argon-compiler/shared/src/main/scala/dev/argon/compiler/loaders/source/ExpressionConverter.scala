@@ -336,44 +336,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           } yield factoryForExpr(env)(expr.location)(result)
         )
 
-      case parser.BinaryOperatorExpr(parser.BinaryOperator.Add, left, right) =>
-        compFactory(
-          for {
-            intType <- resolveIntType(env)(expr.location)
-            leftExpr <- convertExpr(env)(left).forExpectedType(intType)
-            rightExpr <- convertExpr(env)(right).forExpectedType(intType)
-          } yield factoryForExpr(env)(expr.location)(PrimitiveOp(PrimitiveOperation.AddInt, fromSimpleType(leftExpr), fromSimpleType(rightExpr), intType))
-        )
-
-      case parser.BinaryOperatorExpr(parser.BinaryOperator.Sub, left, right) =>
-        compFactory(
-          for {
-            intType <- resolveIntType(env)(expr.location)
-            leftExpr <- convertExpr(env)(left).forExpectedType(intType)
-            rightExpr <- convertExpr(env)(right).forExpectedType(intType)
-          } yield factoryForExpr(env)(expr.location)(PrimitiveOp(PrimitiveOperation.SubInt, fromSimpleType(leftExpr), fromSimpleType(rightExpr), intType))
-        )
-
-      case parser.BinaryOperatorExpr(parser.BinaryOperator.Mul, left, right) =>
-        compFactory(
-          for {
-            intType <- resolveIntType(env)(expr.location)
-            leftExpr <- convertExpr(env)(left).forExpectedType(intType)
-            rightExpr <- convertExpr(env)(right).forExpectedType(intType)
-          } yield factoryForExpr(env)(expr.location)(PrimitiveOp(PrimitiveOperation.MulInt, fromSimpleType(leftExpr), fromSimpleType(rightExpr), intType))
-        )
-
-      case parser.BinaryOperatorExpr(parser.BinaryOperator.Equal, left, right) =>
-        compFactory(
-          for {
-            intType <- resolveIntType(env)(expr.location)
-            boolType <- resolveBoolClass(env)(expr.location)
-            leftExpr <- convertExpr(env)(left).forExpectedType(intType)
-            rightExpr <- convertExpr(env)(right).forExpectedType(intType)
-          } yield factoryForExpr(env)(expr.location)(PrimitiveOp(PrimitiveOperation.IntEqual, fromSimpleType(leftExpr), fromSimpleType(rightExpr), boolType))
-        )
-
-      case parser.BinaryOperatorExpr(parser.BinaryOperator.Union, left, right) =>
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.Union, _), left, right) =>
         compFactory(
           for {
             leftExpr <- evaluateTypeExprAST(env)(left)
@@ -381,7 +344,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           } yield factoryForExpr(env)(expr.location)(UnionType(leftExpr, rightExpr))
         )
 
-      case parser.BinaryOperatorExpr(parser.BinaryOperator.Intersection, left, right) =>
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.Intersection, _), left, right) =>
         compFactory(
           for {
             leftExpr <- evaluateTypeExprAST(env)(left)
@@ -389,8 +352,20 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           } yield factoryForExpr(env)(expr.location)(IntersectionType(leftExpr, rightExpr))
         )
 
-      case parser.BinaryOperatorExpr(parser.BinaryOperator.Assign, left, right) =>
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.Assign, _), left, right) =>
         convertExpr(env)(left).mutateValue(env, expr.location, convertExpr(env)(right))
+
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.BoolAnd, _), left, right) => ???
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.BoolOr, _), left, right) => ???
+
+      case parser.BinaryOperatorExpr(WithSource(op, opLocation), left, right) =>
+        compFactory(
+          env.scope.findOperator(op.symbol, env.fileSpec, opLocation)
+            .map(createLookupFactory(env)(LookupDescription.Operator(op.symbol))(expr.location))
+        )
+          .forArguments(ArgumentInfo(convertExpr(env)(left), env, left.location, ParameterStyle.Normal))
+          .forArguments(ArgumentInfo(convertExpr(env)(right), env, right.location, ParameterStyle.Normal))
+
 
       case parser.BlockExpr(body, Vector(), None, None) =>
         convertStmts(env)(body)
@@ -1272,7 +1247,6 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case LoadVariable(variable) => !Mutability.toIsMutable(variable.mutability)
       case MethodCall(_, instance, _, args, _) => isWrapExprPure(instance) && args.forall(isWrapExprPure)
       case PatternMatch(expr, cases) => isWrapExprPure(expr) && cases.forall { case PatternCase(_, body) => isWrapExprPure(body) }
-      case PrimitiveOp(_, left, right, _) => isWrapExprPure(left) && isWrapExprPure(right)
       case Sequence(first, second) => isWrapExprPure(first) && isWrapExprPure(second)
       case StoreVariable(_, _, _) => false
       case TraitType(_, args) => args.forall(isWrapExprPure)

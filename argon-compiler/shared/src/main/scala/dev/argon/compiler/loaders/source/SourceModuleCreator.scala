@@ -158,7 +158,8 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
       parseGlobalAccessModifier(sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
         val globalName = name match {
           case NameSpecifier.Identifier(n) => GlobalName.Normal(n)
-          case NameSpecifier.Operator(op) => GlobalName.Operator(op.symbol)
+          case NameSpecifier.Operator(op: parser.Token.BinaryOperatorToken) => GlobalName.Operator(op.binaryOperator.symbol)
+          case NameSpecifier.Operator(op: parser.Token.UnaryOperatorToken) => GlobalName.Operator(op.unaryOperator.symbol)
           case NameSpecifier.Blank => GlobalName.Unnamed
         }
 

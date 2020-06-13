@@ -249,13 +249,6 @@ abstract class TypeSystemConverter {
         }
       } yield PatternMatch(newExpr, newCases)
 
-    case PrimitiveOp(operation, left, right, exprType) =>
-      for {
-        newLeft <- convertTypeSystem(left)
-        newRight <- convertTypeSystem(right)
-        newType <- convertTypeSystem(exprType)
-      } yield PrimitiveOp(operation, newLeft, newRight, newType)
-
     case Sequence(first, second) =>
       for {
         newFirst <- convertTypeSystem(first)

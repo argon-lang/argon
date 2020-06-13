@@ -36,7 +36,7 @@ object GlobalScope {
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[Vector[AbsRef[context.type, ArModule]]])
   (
-    name: String,
+    name: GlobalName.NonEmpty,
     fileSpec: FileSpec,
     sourceLocation: SourceLocation,
   )
@@ -68,7 +68,7 @@ object GlobalScope {
   (context: Context)
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[Vector[AbsRef[context.type, ArModule]]])
-  (name: String)
+  (name: GlobalName.NonEmpty)
   (acc: ResolvedName)
   : Comp[ResolvedName] =
     modules match {
@@ -85,7 +85,7 @@ object GlobalScope {
   (context: Context)
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[AbsRef[context.type, ArModule]])
-  (name: String)
+  (name: GlobalName.NonEmpty)
   (acc: ResolvedName)
   : Comp[ResolvedName] =
     imports match {
@@ -101,14 +101,14 @@ object GlobalScope {
   (context: Context)
   (imports: Vector[NamespacePath])
   (modules: Vector[AbsRef[context.type, ArModule]])
-  (name: String)
+  (name: GlobalName.NonEmpty)
   (acc: ResolvedName)
   : Comp[ResolvedName] =
     imports
       .flatTraverse { importNS =>
         modules.flatTraverse { module =>
-          ModuleLookup.lookupNamespaceValues(context)(module.value)(importNS, GlobalName.Normal(name)) {
-            case GlobalBinding.NestedNamespace(_, _) => IO.succeed(Some(NestedNamespaces(Set(NamespacePath(importNS.ns :+ name)))))
+          ModuleLookup.lookupNamespaceValues(context)(module.value)(importNS, name) {
+            case GlobalBinding.NestedNamespace(name2, _) => IO.succeed(Some(NestedNamespaces(Set(NamespacePath(importNS.ns :+ name2.name)))))
             case _ => IO.succeed(Some(FoundOverloadable))
           }
         }
@@ -127,7 +127,7 @@ object GlobalScope {
   (context: Context)
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[Vector[AbsRef[context.type, ArModule]]])
-  (name: String)
+  (name: GlobalName.NonEmpty)
   : Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] =
     modules match {
       case Vector() => IO.succeed(OverloadResult.End)
@@ -140,7 +140,7 @@ object GlobalScope {
   (context: Context)
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[AbsRef[context.type, ArModule]])
-  (name: String)
+  (name: GlobalName.NonEmpty)
   (nextResult: OverloadResult[context.scopeContext.ScopeValueOverload])
   : Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] =
     imports match {
@@ -154,13 +154,13 @@ object GlobalScope {
   (context: Context)
   (imports: Vector[NamespacePath])
   (modules: Vector[AbsRef[context.type, ArModule]])
-  (name: String)
+  (name: GlobalName.NonEmpty)
   (nextResult: OverloadResult[context.scopeContext.ScopeValueOverload])
   : Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] =
     imports
       .flatTraverse { importNS =>
         modules.flatTraverse { module =>
-          ModuleLookup.lookupNamespaceValues(context)(module.value)(importNS, GlobalName.Normal(name)) {
+          ModuleLookup.lookupNamespaceValues(context)(module.value)(importNS, name) {
             case binding: GlobalBinding.NonNamespace[context.type, module.PayloadSpec] =>
               IO.succeed(Some(getScopeValue(context)(binding)))
 

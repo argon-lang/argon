@@ -1353,23 +1353,6 @@ object ArgonModuleLoader {
 
               case ArgonModule.Expression.ExprType.PatternMatch(patternMatch) => ???
 
-              case ArgonModule.Expression.ExprType.PrimitiveOp(op) =>
-                for {
-                  op2 <- op match {
-                    case ArgonModule.PrimitiveOperation.AddInt => IO.succeed(PrimitiveOperation.AddInt)
-                    case ArgonModule.PrimitiveOperation.SubInt => IO.succeed(PrimitiveOperation.SubInt)
-                    case ArgonModule.PrimitiveOperation.MulInt => IO.succeed(PrimitiveOperation.MulInt)
-                    case ArgonModule.PrimitiveOperation.IntEqual => IO.succeed(PrimitiveOperation.IntEqual)
-                    case ArgonModule.PrimitiveOperation.Unrecognized(_) =>
-                      Compilation.forErrors(invalidModuleFormatError)
-                  }
-
-                  args <- sizedArgs[Succ[Succ[Succ[_0]]]]
-                  exprType <- resolveExpr(args.head)
-                  left <- resolveExpr(args.tail.head)
-                  right <- resolveExpr(args.tail.tail.head)
-                } yield PrimitiveOp[context.type, TTypeWrapper](op2, left, right, exprType)
-
 
               case ArgonModule.Expression.ExprType.Sequence(_) =>
                 def convertSequence(rest: NonEmptyVector[ArgonModule.Expression]): Comp[WrapExpr] =

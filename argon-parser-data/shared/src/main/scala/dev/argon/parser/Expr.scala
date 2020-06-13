@@ -87,7 +87,7 @@ final case class FieldInitializationStmt
 
 sealed trait Expr extends Stmt
 final case class AsExpr(value: WithSource[Expr], valueType: WithSource[Expr]) extends Expr
-final case class BinaryOperatorExpr(op: BinaryOperator, left: WithSource[Expr], right: WithSource[Expr]) extends Expr
+final case class BinaryOperatorExpr(op: WithSource[BinaryOperator], left: WithSource[Expr], right: WithSource[Expr]) extends Expr
 final case class BlockExpr
 (
   body: WithSource[Vector[WithSource[Stmt]]],
@@ -114,7 +114,7 @@ final case class StringValueExpr(value: String) extends Expr
 final case class TupleExpr(values: NonEmptyList[WithSource[Expr]]) extends Expr
 final case class TypeExpr(level: Option[WithSource[Expr]], instanceType: Option[WithSource[Expr]], subtypeOf: Option[WithSource[Expr]], supertypeOf: Option[WithSource[Expr]]) extends Expr
 final case class TypeOfExpr(ofExpr: WithSource[Expr]) extends Expr
-final case class UnaryOperatorExpr(op: UnaryOperator, inner: WithSource[Expr]) extends Expr
+final case class UnaryOperatorExpr(op: WithSource[UnaryOperator], inner: WithSource[Expr]) extends Expr
 case object UnitLiteral extends Expr
 
 
@@ -129,36 +129,89 @@ final case class TypeTestPattern(name: Option[String], patternType: WithSource[E
 final case class FunctionParameter(paramType: Option[WithSource[Expr]], subTypeOf: Option[WithSource[Expr]], name: String)
 final case class FunctionParameterList(listType: FunctionParameterListType, isErased: Boolean, parameters: Vector[WithSource[FunctionParameter]])
 
-sealed trait BinaryOperator
-object BinaryOperator {
-  case object Assign extends BinaryOperator
-  case object Add extends BinaryOperator
-  case object Sub extends BinaryOperator
-  case object Mul extends BinaryOperator
-  case object Div extends BinaryOperator
-  case object Equal extends BinaryOperator
-  case object NotEqual extends BinaryOperator
-  case object LessThan extends BinaryOperator
-  case object LessThanEq extends BinaryOperator
-  case object GreaterThan extends BinaryOperator
-  case object GreaterThanEq extends BinaryOperator
-  case object BitOr extends BinaryOperator
-  case object BitXOr extends BinaryOperator
-  case object BitAnd extends BinaryOperator
-  case object BoolOr extends BinaryOperator
-  case object BoolAnd extends BinaryOperator
-  case object ShiftLeft extends BinaryOperator
-  case object ShiftRight extends BinaryOperator
-  case object Union extends BinaryOperator
-  case object Intersection extends BinaryOperator
+sealed trait BinaryOperator {
+  def symbol: String
 }
 
-sealed trait UnaryOperator
+object BinaryOperator {
+  case object Assign extends BinaryOperator {
+    override def symbol: String = ":="
+  }
+  case object Add extends BinaryOperator {
+    override def symbol: String = "+"
+  }
+  case object Sub extends BinaryOperator {
+    override def symbol: String = "-"
+  }
+  case object Mul extends BinaryOperator {
+    override def symbol: String = "×"
+  }
+  case object Div extends BinaryOperator {
+    override def symbol: String = "÷"
+  }
+  case object Equal extends BinaryOperator {
+    override def symbol: String = "="
+  }
+  case object NotEqual extends BinaryOperator {
+    override def symbol: String = "≠"
+  }
+  case object LessThan extends BinaryOperator {
+    override def symbol: String = "<"
+  }
+  case object LessThanEq extends BinaryOperator {
+    override def symbol: String = "≤"
+  }
+  case object GreaterThan extends BinaryOperator {
+    override def symbol: String = ">"
+  }
+  case object GreaterThanEq extends BinaryOperator {
+    override def symbol: String = "≥"
+  }
+  case object BitOr extends BinaryOperator {
+    override def symbol: String = "|||"
+  }
+  case object BitXOr extends BinaryOperator {
+    override def symbol: String = "^^^"
+  }
+  case object BitAnd extends BinaryOperator {
+    override def symbol: String = "&&&"
+  }
+  case object BoolOr extends BinaryOperator {
+    override def symbol: String = "||"
+  }
+  case object BoolAnd extends BinaryOperator {
+    override def symbol: String = "&&"
+  }
+  case object ShiftLeft extends BinaryOperator {
+    override def symbol: String = "<<<"
+  }
+  case object ShiftRight extends BinaryOperator {
+    override def symbol: String = ">>>"
+  }
+  case object Union extends BinaryOperator {
+    override def symbol: String = "|"
+  }
+  case object Intersection extends BinaryOperator {
+    override def symbol: String = "&"
+  }
+}
+
+sealed trait UnaryOperator {
+  def symbol: String
+}
 object UnaryOperator {
-  case object BitNot extends UnaryOperator
-  case object BoolNot extends UnaryOperator
-  case object UnaryPlus extends UnaryOperator
-  case object UnaryMinus extends UnaryOperator
+  case object BitNot extends UnaryOperator {
+    override def symbol: String = "~~~"
+  }
+  case object BoolNot extends UnaryOperator {
+    override def symbol: String = "!"
+  }
+  case object UnaryPlus extends UnaryOperator {
+    override def symbol: String = "+"
+  }
+  case object UnaryMinus extends UnaryOperator {
+    override def symbol: String = "-"
+  }
 }
 
 sealed trait FunctionParameterListType
