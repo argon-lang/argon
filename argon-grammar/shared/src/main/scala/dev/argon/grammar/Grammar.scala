@@ -680,4 +680,83 @@ object Grammar {
       options.factory(label).parseEnd(pos, options)
   }
 
+  trait EmbeddedGrammar[TSyntaxError, TTokenA, TLabelA <: RuleLabel, TTokenB, TLabelB <: RuleLabel, T] extends Grammar[TTokenA, TSyntaxError, TLabelA, T] {
+
+    protected val outerGrammar: Grammar[TTokenA, TSyntaxError, TLabelA, TTokenB]
+    protected val innerGrammar: Grammar[TTokenB, TSyntaxError, TLabelB, T]
+    protected val innerFactory: GrammarFactory[TTokenB, TSyntaxError, TLabelB]
+    def stopToken(token: TTokenB): Boolean
+    def unexpectedEndOfFileError(pos: FilePosition): TSyntaxError
+    def unexpectedToken(token: WithSource[TTokenB]): TSyntaxError
+
+    final override def parseTokens(tokens: NonEmptyVector[WithSource[TTokenA]], options: TParseOptions): GrammarResult[TTokenA, TSyntaxError, TLabelA, T] = {
+
+      def handleResult(result: GrammarResult[TTokenA, TSyntaxError, TLabelA, TTokenB], acc: Vector[WithSource[TTokenB]]): GrammarResult[TTokenA, TSyntaxError, TLabelA, T] =
+        result match {
+          case result: GrammarResultError[TTokenA, TSyntaxError, TLabelA] => result
+          case result: GrammarResultFailure[TTokenA, TSyntaxError, TLabelA] => result
+          case result: GrammarResultSuspend[TTokenA, TSyntaxError, TLabelA, TTokenB] =>
+            new GrammarResultSuspend[TTokenA, TSyntaxError, TLabelA, T] {
+              override def continue(tokens: NonEmptyVector[WithSource[TTokenA]]): GrammarResult[TTokenA, TSyntaxError, TLabelA, T] =
+                handleResult(result.continue(tokens), acc)
+
+              override def completeResult(pos: FilePosition): GrammarResultComplete[TTokenA, TSyntaxError, TLabelA, T] =
+                handleResult(result.completeResult(pos), acc).completeResult(pos)
+            }
+
+          case GrammarResultSuccess(extra, tokenB) if stopToken(tokenB.value) =>
+            def handleFinalResult(result: GrammarResultComplete[TTokenB, TSyntaxError, TLabelB, T]): GrammarResult[TTokenA, TSyntaxError, TLabelA, T] =
+              result match {
+                case GrammarResultFailure(failure) => GrammarResultFailure(failure)
+                case GrammarResultError(error) => GrammarResultError(error)
+
+                case GrammarResultSuccess(Vector(), value) =>
+                  GrammarResultSuccess(extra, value)
+
+                case GrammarResultSuccess(head +: _, _) =>
+                  GrammarResultFailure(NonEmptyVector.of(unexpectedToken(head)))
+              }
+
+            NonEmptyVector.fromVector(acc) match {
+              case Some(acc) =>
+                innerGrammar.parseTokens(acc, ParseOptions(Set.empty, None, innerFactory)) match {
+                  case GrammarResultError(errors) => GrammarResultError(errors)
+                  case GrammarResultFailure(failure) => GrammarResultFailure(failure)
+                  case innerResult: GrammarResultSuspend[TTokenB, TSyntaxError, TLabelB, T] =>
+                    handleFinalResult(innerResult.completeResult(tokenB.location.start))
+
+                  case GrammarResultSuccess(Vector(), value) =>
+                    GrammarResultSuccess(extra, value)
+
+                  case GrammarResultSuccess(head +: _, _) =>
+                    GrammarResultFailure(NonEmptyVector.of(unexpectedToken(head)))
+                }
+
+              case None =>
+                handleFinalResult(innerGrammar.parseEnd(tokenB.location.start, ParseOptions(Set.empty, None, innerFactory)))
+            }
+
+
+          case GrammarResultSuccess(Vector(), tokenB) =>
+            new GrammarResultSuspend[TTokenA, TSyntaxError, TLabelA, T] {
+              override def continue(tokens: NonEmptyVector[WithSource[TTokenA]]): GrammarResult[TTokenA, TSyntaxError, TLabelA, T] =
+                handleResult(outerGrammar.parseTokens(tokens, options), acc :+ tokenB)
+
+              override def completeResult(pos: FilePosition): GrammarResultComplete[TTokenA, TSyntaxError, TLabelA, T] =
+                GrammarResultFailure(NonEmptyVector.of(unexpectedEndOfFileError(pos)))
+            }
+
+          case GrammarResultSuccess(head +: tail, tokenB) =>
+            handleResult(outerGrammar.parseTokens(NonEmptyVector(head, tail), options), acc :+ tokenB)
+
+        }
+
+      handleResult(outerGrammar.parseTokens(tokens, options), Vector.empty)
+    }
+
+    final override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TTokenA, TSyntaxError, TLabelA, T] =
+      GrammarResultFailure(NonEmptyVector.of(unexpectedEndOfFileError(pos)))
+
+  }
+
 }

@@ -128,7 +128,7 @@ object ArgonParser {
 
   }
 
-  private[ArgonParser] object ArgonGrammarFactory extends GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] {
+  private[parser] object ArgonGrammarFactory extends GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] {
 
     private implicit val errorFactory = new Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] {
       override def createError(error: GrammarError[Token, TokenCategory]): SyntaxError =
@@ -271,10 +271,7 @@ object ArgonParser {
 
         case Rule.PrimaryExpr(Rule.ParenDisallowed) =>
           matchTokenFactory(Identifier) --> { case Identifier(id) => IdentifierExpr(id) : Expr } |
-            matchTokenFactory(StringToken) --> {
-              case StringToken(NonEmptyList(StringToken.StringPart(str), Nil)) => StringValueExpr(str)
-              case StringToken(NonEmptyList(StringToken.StringPart(str), _ :: _)) => ???
-            } |
+            matchTokenFactory(StringToken) --> { str => StringValueExpr(str) } |
             matchTokenFactory(IntToken) --> { case IntToken(sign, base, digits) => IntValueExpr(sign, base, digits) } |
             matchToken(KW_TRUE) --> const(BoolValueExpr(true)) |
             matchToken(KW_FALSE) --> const(BoolValueExpr(false)) |

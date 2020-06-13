@@ -361,7 +361,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.BinaryOperatorExpr(WithSource(op, opLocation), left, right) =>
         compFactory(
           env.scope.findOperator(op.symbol, env.fileSpec, opLocation)
-            .map(createLookupFactory(env)(LookupDescription.Operator(op.symbol))(expr.location))
+            .map(createLookupFactory(env)(LookupDescription.Operator(op.symbol))(opLocation))
         )
           .forArguments(ArgumentInfo(convertExpr(env)(left), env, left.location, ParameterStyle.Normal))
           .forArguments(ArgumentInfo(convertExpr(env)(right), env, right.location, ParameterStyle.Normal))
@@ -535,11 +535,38 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         }
 
       case parser.StringValueExpr(str) =>
-        compFactory(
-          for {
-            stringType <- resolveModuleClass(env)(expr.location)(ModuleId(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("String"))
-          } yield factoryForExpr(env)(expr.location)(LoadConstantString(str, stringType))
-        )
+        str.parts
+          .map {
+            case parser.Token.StringToken.StringPart(WithSource(str, strLocation)) =>
+              WithSource(
+                compFactory(
+                  for {
+                    stringType <- resolveModuleClass(env)(expr.location)(ModuleId(LookupNames.argonCoreLib))(NamespacePath(Vector("Ar")), GlobalName.Normal("String"))
+                  } yield factoryForExpr(env)(expr.location)(LoadConstantString(str, stringType))
+                ),
+                strLocation
+              )
+
+
+            case parser.Token.StringToken.ExprPart(None, expr) =>
+              WithSource(convertExpr(env)(expr), expr.location)
+
+            case parser.Token.StringToken.ExprPart(Some(_), expr) => ???
+
+          }
+          .reduceLeft[WithSource[ExprFactory]] { case (WithSource(a, aLocation), WithSource(b, bLocation)) =>
+            val combinedFactory =
+              compFactory(
+                env.scope.findOperator("++", env.fileSpec, expr.location)
+                  .map(createLookupFactory(env)(LookupDescription.Operator("++"))(expr.location))
+              )
+                .forArguments(ArgumentInfo(a, env, aLocation, ParameterStyle.Normal))
+                .forArguments(ArgumentInfo(b, env, bLocation, ParameterStyle.Normal))
+
+            WithSource(combinedFactory, SourceLocation.merge(aLocation, bLocation))
+          }
+          .value
+
 
       case parser.UnitLiteral =>
         compFactory(

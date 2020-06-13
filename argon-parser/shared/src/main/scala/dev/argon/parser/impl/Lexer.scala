@@ -9,6 +9,7 @@ import cats.data._
 import cats.implicits._
 import dev.argon.grammar.{Grammar, GrammarError}
 import Grammar.Operators._
+import dev.argon.grammar.Grammar.ParseOptions
 import dev.argon.parser.impl.Lexer.LexerGrammarFactory
 import dev.argon.stream.StreamTransformation
 import zio.ZIO
@@ -23,13 +24,16 @@ object Lexer {
       override type RuleType = T
     }
 
-    final case object NewLine extends LexerRuleNameTyped[Option[Token]]
-    final case object Whitespace extends LexerRuleNameTyped[Option[Token]]
-    final case object SingleQuoteString extends LexerRuleNameTyped[Option[Token]]
-    final case object Integer extends LexerRuleNameTyped[Option[Token]]
-    final case object Identifier extends LexerRuleNameTyped[Option[Token]]
-    final case object Operator extends LexerRuleNameTyped[Option[Token]]
-    final case object ResultToken extends LexerRuleNameTyped[WithSource[Option[Token]]]
+    final case object NewLine extends LexerRuleNameTyped[Token]
+    final case object Whitespace extends LexerRuleNameTyped[Unit]
+    final case object DoubleQuoteString extends LexerRuleNameTyped[Token]
+    final case object SingleQuoteString extends LexerRuleNameTyped[Token]
+    final case object HexDigit extends LexerRuleNameTyped[BigInt]
+    final case object Integer extends LexerRuleNameTyped[Token]
+    final case object Identifier extends LexerRuleNameTyped[Token]
+    final case object Operator extends LexerRuleNameTyped[Token]
+    final case object ResultToken extends LexerRuleNameTyped[Option[WithSource[Token]]]
+    final case object NonEmptyToken extends LexerRuleNameTyped[Token]
   }
 
   private[Lexer] object LexerGrammarFactory extends Grammar.GrammarFactory[String, SyntaxError, Rule.LexerRuleName] {
@@ -56,28 +60,145 @@ object Lexer {
           val cr = token(CharacterCategory.CR, "\r")
           val lf = token(CharacterCategory.LF, "\n")
 
-          (lf.discard | (cr ++ lf).discard) --> const(Some(Token.NewLine))
+          (lf.discard | (cr ++ lf).discard) --> const(Token.NewLine)
 
         case Rule.Whitespace =>
-          (tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0)) && s != "\r" && s != "\n")+~) --> const(None)
+          (tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0)) && s != "\r" && s != "\n")+~) --> const(())
+
+        case Rule.DoubleQuoteString =>
+          val doubleQuote = token(CharacterCategory.Quote, "\"")
+          val esc = token(CharacterCategory.StringEscape, "\\")
+
+          def singleEscape(ch: String, value: String): TGrammar[Token.StringToken.StringPart] =
+            (esc ++! token(CharacterCategory.StringEscape, ch)).observeSource --> {
+              case WithSource(_, location) =>
+              Token.StringToken.StringPart(WithSource(value, location))
+            }
+
+          def isValidStringChar(c: String): Boolean = c =!= "\"" && c =!= "\\" && c =!= "#"
+          val anyChar = tokenF(CharacterCategory.StringChar, isValidStringChar).observeSource --> Token.StringToken.StringPart.apply
+
+          val unicodeEscape: TGrammar[Token.StringToken.StringPart] =
+            (esc ++!
+              token(CharacterCategory.OpenCurly, "{") ++
+              rule(Rule.HexDigit).+~ ++
+              token(CharacterCategory.CloseCurly, "}")
+            ).observeSource --> {
+              case WithSource((_, _, digits, _), location) =>
+                val codepoint = digits.reduceLeft { (prev, digit) => prev * 16 + digit }
+
+                val mask = (1L << 32) - 1
+                if(codepoint =!= (codepoint & mask)) {
+                  throw new Exception("Invalid codepoint")
+                }
+
+                Token.StringToken.StringPart(WithSource(new String(Character.toChars(codepoint.toInt)), location))
+            }
+
+          val escapeSequence =
+            singleEscape("b", "\b") |
+              singleEscape("f", "\f") |
+              singleEscape("n", "\n") |
+              singleEscape("r", "\r") |
+              singleEscape("t", "\t") |
+              singleEscape("v", "\u000B") |
+              singleEscape("\\", "\\") |
+              singleEscape("'", "'") |
+              singleEscape("\"", "\"") |
+              singleEscape("#", "#") |
+              singleEscape("[", "[") |
+              singleEscape("]", "]") |
+              singleEscape("{", "{") |
+              singleEscape("}", "}") |
+              unicodeEscape
+
+          val escapeSequenceStr = escapeSequence --> { _.str }
+
+          val interpolation: TGrammar[Token.StringToken.ExprPart] = {
+
+            val interpStart = token(CharacterCategory.Hash, "#")
+
+            val formatStart = token(CharacterCategory.OpenSquare, "[")
+            val formatEnd = token(CharacterCategory.CloseSquare, "]")
+            val formatChar = tokenF(CharacterCategory.StringChar, c => isValidStringChar(c) && c =!= "]")
+
+            val subExprStart = token(CharacterCategory.OpenCurly, "{")
+
+            val formatStr = formatStart ++ (formatChar | escapeSequenceStr).* ++ formatEnd --> {
+              case (_, parts, _) =>
+                parts.mkString
+            }
+
+            val innerExprGrammar = new Grammar.EmbeddedGrammar[SyntaxError, String, Rule.LexerRuleName, Token, ArgonParser.Rule.ArgonRuleName, Expr] {
+              override protected val outerGrammar: Grammar[String, SyntaxError, Rule.LexerRuleName, Token] =
+                rule(Rule.Whitespace).* ++ rule(Rule.NonEmptyToken) --> { case (_, token) => token }
+
+              override protected val innerGrammar: Grammar[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName, Expr] =
+                ArgonParser.ArgonGrammarFactory.rule(ArgonParser.Rule.Expression)
+
+              override protected val innerFactory: Grammar.GrammarFactory[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName] =
+                ArgonParser.ArgonGrammarFactory
+
+              override def stopToken(token: Token): Boolean =
+                token match {
+                  case Token.OP_CLOSECURLY => true
+                  case _ => false
+                }
+
+              override def unexpectedEndOfFileError(pos: FilePosition): SyntaxError =
+                SyntaxError.LexerError(GrammarError.UnexpectedEndOfFile(CharacterCategory.CloseCurly, pos))
+
+              override def unexpectedToken(token: WithSource[Token]): SyntaxError =
+                SyntaxError.ParserError(GrammarError.UnexpectedToken(TokenCategory.OP_CLOSECURLY, token))
+            }
+
+            interpStart ++! (formatStr.observeSource.? ++ subExprStart ++ innerExprGrammar.observeSource) --> {
+              case (_, (format, _, expr)) =>
+                Token.StringToken.ExprPart(format, expr)
+            }
+          }
+
+
+          (
+            doubleQuote ++
+              (anyChar | escapeSequence | interpolation).* ++
+              doubleQuote
+          ).observeSource --> {
+            case WithSource((_, parts, _), location) =>
+              def combineParts(parts: Vector[Token.StringToken.Part]): Vector[Token.StringToken.Part] =
+                parts match {
+                  case Vector() => Vector()
+                  case Token.StringToken.StringPart(WithSource(s1, SourceLocation(start, _))) +: Token.StringToken.StringPart(WithSource(s2, SourceLocation(_, end))) +: rest =>
+                    combineParts(Token.StringToken.StringPart(WithSource(s1 + s2, SourceLocation(start, end))) +: rest)
+
+                  case head +: tail =>
+                    head +: combineParts(tail)
+                }
+
+              Token.StringToken(
+                NonEmptyList.fromList(combineParts(parts).toList)
+                  .getOrElse { NonEmptyList.of(Token.StringToken.StringPart(WithSource("", location))) }
+              )
+          }
+
 
         case Rule.SingleQuoteString =>
-          val singleQuote = token(CharacterCategory.SingleQuote, "'")
+          val singleQuote = token(CharacterCategory.Quote, "'")
 
-          val anyChar = tokenF(CharacterCategory.SingleQuoteStringChar, _ =!= "'")
+          val anyChar = tokenF(CharacterCategory.StringChar, _ =!= "'")
 
           (singleQuote ++ ((
             singleQuote ++ singleQuote --> const("'") |
               anyChar
-            )*) ++ singleQuote) --> {
+            )*).observeSource ++ singleQuote) --> {
             case (_, chs, _) =>
-              Some(Token.StringToken(NonEmptyList.of(
-                Token.StringToken.StringPart(chs.mkString)
-              )))
+              Token.StringToken(NonEmptyList.of(
+                Token.StringToken.StringPart(chs.map(_.mkString))
+              ))
           }
 
-        case Rule.Integer =>
-          val digit = partialMatcher[BigInt](CharacterCategory.NumberDigit) {
+        case Rule.HexDigit =>
+          partialMatcher[BigInt](CharacterCategory.NumberDigit) {
             case "0" => 0
             case "1" => 1
             case "2" => 2
@@ -95,6 +216,9 @@ object Lexer {
             case "E" | "e" => 0xE
             case "F" | "f" => 0xF
           }
+
+        case Rule.Integer =>
+          val digit = rule(Rule.HexDigit)
 
           val decDigit = partialMatcher[BigInt](CharacterCategory.NonZeroDigit) {
             case "0" => 0
@@ -117,13 +241,13 @@ object Lexer {
 
           val withBaseSpec =
             (token(CharacterCategory.Zero, "0") ++ numBase ++ (digit*)) --> {
-              case (_, base, content) => Some(Token.IntToken(1, base, content)) : Option[Token]
+              case (_, base, content) => Token.IntToken(1, base, content)
             }
 
           val decimalNum =
-            decDigit ++ decDigit ++ (digit*) --> { case (d1, d2, tail) => Some(Token.IntToken(1, 10, Vector(d1, d2) ++ tail)) : Option[Token] }
+            decDigit ++ decDigit ++ (digit*) --> { case (d1, d2, tail) => Token.IntToken(1, 10, Vector(d1, d2) ++ tail) }
 
-          val singleDigit = decDigit --> { d => Some(Token.IntToken(1, 10, Vector(d))) : Option[Token] }
+          val singleDigit = decDigit --> { d => Token.IntToken(1, 10, Vector(d)) }
 
           withBaseSpec | decimalNum | singleDigit
 
@@ -188,13 +312,13 @@ object Lexer {
 
           (startChar ++ (idChar*) ++ (idTerminator?)) --> {
             case (start, inner, term) =>
-              Some(createToken(start + inner.mkString + term.toList.mkString))
+              createToken(start + inner.mkString + term.toList.mkString)
           }
 
         case Rule.Operator =>
 
-          def op(grammar: TGrammar[_], t: Token): TGrammar[Option[Token]] =
-            grammar --> const(Some(t))
+          def op(grammar: TGrammar[_], t: Token): TGrammar[Token] =
+            grammar --> const(t)
 
           val and = token(CharacterCategory.And, "&")
           val or = token(CharacterCategory.Or, "|")
@@ -263,21 +387,26 @@ object Lexer {
             op(greaterThan, Token.OP_GREATERTHAN) |
             op(colon, Token.OP_COLON)
 
-        case Rule.ResultToken => (
+        case Rule.ResultToken =>
+          (rule(Rule.NonEmptyToken).observeSource --> Some.apply) |
+            (rule(Rule.Whitespace) --> const(None : Option[WithSource[Token]]))
+
+
+        case Rule.NonEmptyToken =>
           rule(Rule.NewLine) |
-            rule(Rule.Whitespace) |
             rule(Rule.SingleQuoteString) |
+            rule(Rule.DoubleQuoteString) |
             rule(Rule.Integer) |
             rule(Rule.Identifier) |
             rule(Rule.Operator)
-        ).observeSource
+
       }
   }
 
 
   def lex: StreamTransformation[Any, NonEmptyVector[SyntaxError], WithSource[String], FilePosition, WithSource[Token], FilePosition] =
     Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken).collect {
-      case WithSource(Some(value), loc) => WithSource(value, loc)
+      case Some(value) => value
     }
 
 

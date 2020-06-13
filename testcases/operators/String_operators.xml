@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Bool comparison operators</Name>
+    <Name>String operators</Name>
 
 
     <InputSource name="test.argon">

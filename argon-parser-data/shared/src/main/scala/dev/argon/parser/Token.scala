@@ -1,6 +1,7 @@
 package dev.argon.parser
 
 import cats.data.NonEmptyList
+import dev.argon.util.WithSource
 
 sealed trait Token {
   def category: TokenCategory
@@ -31,7 +32,8 @@ object Token {
   }
   object StringToken extends TokenWithCategory(TokenCategory.StringToken) with TokenFactory[StringToken] {
     sealed trait Part
-    final case class StringPart(str: String) extends Part
+    final case class StringPart(str: WithSource[String]) extends Part
+    final case class ExprPart(format: Option[WithSource[String]], expr: WithSource[Expr]) extends Part
   }
 
   final case class IntToken(sign: Int, base: BigInt, digits: Vector[BigInt]) extends Token {

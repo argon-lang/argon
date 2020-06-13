@@ -168,11 +168,12 @@ object CompilationError {
     }
 
     private def formatCharacterCategory(category: CharacterCategory) = category match {
-      case CharacterCategory.SingleQuoteStringChar => "single quote string character"
+      case CharacterCategory.StringChar => "string character"
       case CharacterCategory.CR => "\\r"
       case CharacterCategory.LF => "\\n"
       case CharacterCategory.Whitespace => "whitespace"
-      case CharacterCategory.SingleQuote => "'"
+      case CharacterCategory.Quote => "quote"
+      case CharacterCategory.StringEscape => "escape sequence"
       case CharacterCategory.NumberDigit => "digit"
       case CharacterCategory.NonZeroDigit => "non-zero digit"
       case CharacterCategory.Zero => "0"
@@ -180,6 +181,7 @@ object CompilationError {
       case CharacterCategory.BaseSpecifier => "base specifier"
       case CharacterCategory.Letter => "letter"
       case CharacterCategory.Underscore => "_"
+      case CharacterCategory.Hash => "#"
 
       case CharacterCategory.QMark => "?"
       case CharacterCategory.Exclaim => "!"

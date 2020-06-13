@@ -2,11 +2,12 @@ package dev.argon.parser
 
 sealed trait CharacterCategory
 object CharacterCategory {
-  final case object SingleQuoteStringChar extends CharacterCategory
+  final case object StringChar extends CharacterCategory
   final case object CR extends CharacterCategory
   final case object LF extends CharacterCategory
   final case object Whitespace extends CharacterCategory
-  final case object SingleQuote extends CharacterCategory
+  final case object Quote extends CharacterCategory
+  final case object StringEscape extends CharacterCategory
   final case object NumberDigit extends CharacterCategory
   final case object NonZeroDigit extends CharacterCategory
   final case object Zero extends CharacterCategory
@@ -14,6 +15,7 @@ object CharacterCategory {
   final case object BaseSpecifier extends CharacterCategory
   final case object Letter extends CharacterCategory
   final case object Underscore extends CharacterCategory
+  final case object Hash extends CharacterCategory
 
   final case object QMark extends CharacterCategory
   final case object Exclaim extends CharacterCategory
