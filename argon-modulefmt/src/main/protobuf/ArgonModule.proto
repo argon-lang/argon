@@ -204,6 +204,7 @@ message Namespace {
 message GlobalName {
     oneof globalName {
         string normalName = 1;
+        string operator = 3;
         int32 unnamed = 2;
     }
 }

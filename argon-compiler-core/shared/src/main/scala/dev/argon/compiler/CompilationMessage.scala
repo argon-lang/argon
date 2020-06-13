@@ -135,8 +135,8 @@ object CompilationError {
       case TokenCategory.OP_NOTEQUALS => "≠ (or !=)"
       case TokenCategory.OP_LESSTHANEQ => "≤ (or <=)"
       case TokenCategory.OP_GREATERTHANEQ => "≥ (or >=)"
-      case TokenCategory.OP_SHIFTLEFT => "<<"
-      case TokenCategory.OP_SHIFTRIGHT => ">>"
+      case TokenCategory.OP_SHIFTLEFT => "<<<"
+      case TokenCategory.OP_SHIFTRIGHT => ">>>"
       case TokenCategory.OP_ASSIGN => ":="
       case TokenCategory.OP_DOT => "."
       case TokenCategory.OP_COMMA => ","
@@ -154,7 +154,7 @@ object CompilationError {
       case TokenCategory.OP_BITAND => "&&&"
       case TokenCategory.OP_BITOR => "|||"
       case TokenCategory.OP_BITXOR => "^^^"
-      case TokenCategory.OP_BITNOT => "~"
+      case TokenCategory.OP_BITNOT => "~~~"
       case TokenCategory.OP_LESSTHAN => "<"
       case TokenCategory.OP_GREATERTHAN => ">"
       case TokenCategory.OP_COLON => ":"
@@ -253,7 +253,8 @@ object CompilationError {
   final case class NamespaceElementNotFound(module: ModuleId, namespacePath: NamespacePath, name: GlobalName, source: CompilationMessageSource) extends CompilationError {
     private def nameStr: String =
       name match {
-        case GlobalName.Normal(name) => s"'$name'"
+        case GlobalName.Normal(name) => name
+        case GlobalName.Operator(op) => s"($op)"
         case GlobalName.Unnamed => "[unnamed]"
       }
 

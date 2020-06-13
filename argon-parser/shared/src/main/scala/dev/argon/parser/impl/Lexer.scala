@@ -220,13 +220,17 @@ object Lexer {
           val tilde = token(CharacterCategory.Tilde, "~")
 
 
-          op(and ++ and, Token.OP_BOOLAND) |
+          op(and ++ and ++ and, Token.OP_BITAND) |
+            op(or ++ or ++ or, Token.OP_BITOR) |
+            op(and ++ and, Token.OP_BOOLAND) |
+            op(caret ++ caret ++ caret, Token.OP_BITXOR) |
+            op(tilde ++ tilde ++ tilde, Token.OP_BITNOT) |
+            op(lessThan ++ lessThan ++ lessThan, Token.OP_SHIFTLEFT) |
+            op(greaterThan ++ greaterThan ++ greaterThan, Token.OP_SHIFTRIGHT) |
             op(or ++ or, Token.OP_BOOLOR) |
             op(exclaim ++ equal, Token.OP_NOTEQUALS) |
             op(lessThan ++ equal, Token.OP_LESSTHANEQ) |
             op(greaterThan ++ equal, Token.OP_GREATERTHANEQ) |
-            op(lessThan ++ lessThan, Token.OP_SHIFTLEFT) |
-            op(greaterThan ++ greaterThan, Token.OP_SHIFTRIGHT) |
             op(lessThan ++ colon, Token.OP_SUBTYPE) |
             op(greaterThan ++ colon, Token.OP_SUPERTYPE) |
             op(colon ++ equal, Token.OP_ASSIGN) |
@@ -254,8 +258,6 @@ object Lexer {
             op(token(CharacterCategory.Divide, "÷"), Token.OP_DIV) |
             op(and, Token.OP_INTERSECTION) |
             op(or, Token.OP_UNION) |
-            op(caret, Token.OP_BITXOR) |
-            op(tilde, Token.OP_BITNOT) |
             op(lessThan, Token.OP_LESSTHAN) |
             op(greaterThan, Token.OP_GREATERTHAN) |
             op(colon, Token.OP_COLON)

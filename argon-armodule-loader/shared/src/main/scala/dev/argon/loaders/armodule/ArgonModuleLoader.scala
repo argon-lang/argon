@@ -105,6 +105,7 @@ object ArgonModuleLoader {
             def unapply(globalName: ArgonModule.GlobalName): Option[GlobalName] =
               globalName.globalName match {
                 case ArgonModule.GlobalName.GlobalName.NormalName(name) => Some(GlobalName.Normal(name))
+                case ArgonModule.GlobalName.GlobalName.Operator(op) => Some(GlobalName.Operator(op))
                 case ArgonModule.GlobalName.GlobalName.Unnamed(_) => Some(GlobalName.Unnamed)
                 case ArgonModule.GlobalName.GlobalName.Empty => None
               }

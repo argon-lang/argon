@@ -12,7 +12,7 @@ sealed trait Stmt {
 final case class TraitDeclarationStmt
 (
   baseType: Option[WithSource[Expr]],
-  name: Option[String],
+  name: NameSpecifier,
   parameters: Vector[WithSource[FunctionParameterList]],
   body: Seq[WithSource[Stmt]],
   instanceBody: Vector[WithSource[Stmt]],
@@ -20,7 +20,7 @@ final case class TraitDeclarationStmt
 ) extends Stmt
 final case class DataConstructorDeclarationStmt
 (
-  name: WithSource[Option[String]],
+  name: WithSource[NameSpecifier],
   parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
   body: WithSource[Vector[WithSource[Stmt]]],
@@ -29,7 +29,7 @@ final case class DataConstructorDeclarationStmt
 final case class ClassDeclarationStmt
 (
   baseType: Option[WithSource[Expr]],
-  name: WithSource[Option[String]],
+  name: WithSource[NameSpecifier],
   parameters: Vector[WithSource[FunctionParameterList]],
   body: Vector[WithSource[Stmt]],
   instanceBody: Vector[WithSource[Stmt]],
@@ -37,7 +37,7 @@ final case class ClassDeclarationStmt
 ) extends Stmt
 final case class FunctionDeclarationStmt
 (
-  name: Option[String],
+  name: NameSpecifier,
   parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
   body: WithSource[Expr],

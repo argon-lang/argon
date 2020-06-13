@@ -5,7 +5,7 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, NamespaceBuilder, ResourceIndicator, ResourceReader, SourceParser}
 import dev.argon.compiler.lookup._
 import dev.argon.parser
-import dev.argon.parser.SourceAST
+import dev.argon.parser.{NameSpecifier, SourceAST}
 import dev.argon.util._
 import cats.{Id => _, _}
 import cats.implicits._
@@ -154,11 +154,12 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
     val env = envF(sourceAST.fileSpec)
 
-    def createBinding(name: Option[String], modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
+    def createBinding(name: parser.NameSpecifier, modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
       parseGlobalAccessModifier(sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
         val globalName = name match {
-          case Some(n) => GlobalName.Normal(n)
-          case None => GlobalName.Unnamed
+          case NameSpecifier.Identifier(n) => GlobalName.Normal(n)
+          case NameSpecifier.Operator(op) => GlobalName.Operator(op.symbol)
+          case NameSpecifier.Blank => GlobalName.Unnamed
         }
 
         f(globalName, accessModifier)

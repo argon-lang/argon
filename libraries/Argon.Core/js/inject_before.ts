@@ -68,12 +68,38 @@ export interface GlobalFunctionDescriptor {
     readonly sig: Signature;
 }
 
+export interface OperatorName {
+    readonly type: "operator";
+    readonly name: string;
+}
+
+export type GlobalName = string | symbol | OperatorName;
+
+function globalNameEqual(a: GlobalName, b: GlobalName): boolean {
+    if(typeof(a) === "string" && typeof(b) === "string") {
+        return a === b;
+    }
+    else if(typeof(a) === "symbol" && typeof(b) === "symbol") {
+        return a === b;
+    }
+    else if(typeof(a) === "object" && typeof(b) === "object") {
+        if(a.type === "operator" && b.type === "operator") {
+            return a.name === b.name;
+        }
+        else {
+            return false;
+        }
+    }
+    else {
+        return false;
+    }
+}
 
 export interface ArModule {
-    globalClass(ns: NamespacePath, name: string | symbol, sig: ParameterOnlySignature): ArClass;
-    globalTrait(ns: NamespacePath, name: string | symbol, sig: ParameterOnlySignature): ArTrait;
-    globalDataConstructor(ns: NamespacePath, name: string | symbol, sig: ParameterOnlySignature): DataConstructor;
-    globalFunction(ns: NamespacePath, name: string | symbol, sig: Signature): ArFunc;
+    globalClass(ns: NamespacePath, name: GlobalName, sig: ParameterOnlySignature): ArClass;
+    globalTrait(ns: NamespacePath, name: GlobalName, sig: ParameterOnlySignature): ArTrait;
+    globalDataConstructor(ns: NamespacePath, name: GlobalName, sig: ParameterOnlySignature): DataConstructor;
+    globalFunction(ns: NamespacePath, name: GlobalName, sig: Signature): ArFunc;
 }
 
 export interface ArTrait {
@@ -251,37 +277,37 @@ export function createModule(creator: ModuleCreator): ArModule {
     const funcCache: Array<[GlobalFunctionDescriptor, ArFunc]> = [];
 
     return {
-        globalClass(ns: NamespacePath, name: string | symbol, sig: ParameterOnlySignature): ArClass {
+        globalClass(ns: NamespacePath, name: GlobalName, sig: ParameterOnlySignature): ArClass {
 
             function matches(desc: GlobalClassDescriptor): boolean {
-                return namespacePathEqual(desc.ns, ns) && desc.name === name && paramSignatureEqual(desc.sig, sig);
+                return namespacePathEqual(desc.ns, ns) && globalNameEqual(desc.name, name) && paramSignatureEqual(desc.sig, sig);
             }
 
             return cacheValue(this, classCache, creator.globalClasses, matches, "Could not find class");
         },
 
-        globalTrait(ns: NamespacePath, name: string | symbol, sig: ParameterOnlySignature): ArTrait {
+        globalTrait(ns: NamespacePath, name: GlobalName, sig: ParameterOnlySignature): ArTrait {
 
             function matches(desc: GlobalTraitDescriptor): boolean {
-                return namespacePathEqual(desc.ns, ns) && desc.name === name && paramSignatureEqual(desc.sig, sig);
+                return namespacePathEqual(desc.ns, ns) && globalNameEqual(desc.name, name) && paramSignatureEqual(desc.sig, sig);
             }
 
             return cacheValue(this, traitCache, creator.globalTraits, matches, "Could not find trait");
         },
 
-        globalDataConstructor(ns: NamespacePath, name: string | symbol, sig: ParameterOnlySignature): DataConstructor {
+        globalDataConstructor(ns: NamespacePath, name: GlobalName, sig: ParameterOnlySignature): DataConstructor {
 
             function matches(desc: GlobalDataConstructorDescriptor): boolean {
-                return namespacePathEqual(desc.ns, ns) && desc.name === name && paramSignatureEqual(desc.sig, sig);
+                return namespacePathEqual(desc.ns, ns) && globalNameEqual(desc.name, name) && paramSignatureEqual(desc.sig, sig);
             }
 
             return cacheValue(this, dataCtorCache, creator.globalDataConstructors, matches, "Could not find data constructor");
         },
 
-        globalFunction(ns: NamespacePath, name: string | symbol, sig: Signature): ArFunc {
+        globalFunction(ns: NamespacePath, name: GlobalName, sig: Signature): ArFunc {
 
             function matches(desc: GlobalFunctionDescriptor): boolean {
-                return namespacePathEqual(desc.ns, ns) && desc.name === name && signatureEqual(desc.sig, sig);
+                return namespacePathEqual(desc.ns, ns) && globalNameEqual(desc.name, name) && signatureEqual(desc.sig, sig);
             }
 
             return cacheValue(this, funcCache, creator.globalFunctions, matches, "Could not find function");

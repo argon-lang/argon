@@ -50,6 +50,7 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
   def convertGlobalName(name: GlobalName, id: GlobalId): Emit[JSExpression] =
     name match {
       case GlobalName.Normal(name) => IO.succeed(JSString(name))
+      case GlobalName.Operator(op) => IO.succeed(jsobj("type" -> JSString("operator"), "name" -> JSString(op)))
       case GlobalName.Unnamed => ZIO.accessM(_.unnamedSymbols.modify { symbols =>
         symbols.get(id) match {
           case Some(symbolIdent) => (symbolIdent, symbols)

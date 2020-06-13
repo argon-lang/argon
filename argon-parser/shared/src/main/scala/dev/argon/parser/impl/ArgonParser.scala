@@ -33,6 +33,8 @@ object ArgonParser {
     }
 
     case object Identifier extends ArgonRuleNameTyped[Option[String]]
+    case object OperatorName extends ArgonRuleNameTyped[OperatorToken]
+    case object NameSpecifier extends ArgonRuleNameTyped[NameSpecifier]
     case object MethodName extends ArgonRuleNameTyped[MethodNameSpecifier]
     case object NewLines extends ArgonRuleNameTyped[Unit]
     case object StatementSeparator extends ArgonRuleNameTyped[Unit]
@@ -165,6 +167,21 @@ object ArgonParser {
         case Rule.Identifier =>
           tokenUnderscore --> const(None : Option[String]) |
             tokenIdentifier --> Some.apply
+
+        case Rule.OperatorName =>
+          NonEmptyList.of(
+            OP_EQUALS, OP_NOTEQUALS, OP_LESSTHANEQ, OP_GREATERTHANEQ,
+            OP_SHIFTLEFT, OP_SHIFTRIGHT, OP_BOOLNOT,
+            OP_ADD, OP_SUB, OP_MUL, OP_DIV,
+            OP_BITAND, OP_BITOR, OP_BITXOR, OP_BITNOT,
+            OP_LESSTHAN, OP_GREATERTHAN,
+            OP_UNION, OP_INTERSECTION,
+          ).map(matchToken).reduceLeft { _ | _ }
+
+        case Rule.NameSpecifier =>
+          tokenUnderscore --> const(NameSpecifier.Blank) |
+            (tokenIdentifier --> NameSpecifier.Identifier.apply) |
+            ((matchToken(OP_OPENPAREN) ++ rule(Rule.OperatorName) ++ matchToken(OP_CLOSEPAREN)) --> { case (_, op, _) => NameSpecifier.Operator(op) } : TGrammar[NameSpecifier])
 
         case Rule.MethodName =>
           tokenUnderscore --> const(MethodNameSpecifier.Unnamed : MethodNameSpecifier) |
@@ -557,7 +574,7 @@ object ArgonParser {
         case Rule.FunctionDefinitionStmt =>
           rule(Rule.Modifiers) ++
             rule(Rule.MethodPurity) ++
-            rule(Rule.Identifier) ++
+            rule(Rule.NameSpecifier) ++
             rule(Rule.NewLines) ++
             rule(Rule.MethodParameters) ++! (
               matchToken(OP_COLON) ++
@@ -620,7 +637,7 @@ object ArgonParser {
         case Rule.TraitDeclarationStmt =>
           rule(Rule.Modifiers) ++
             matchToken(KW_TRAIT) ++! (
-              rule(Rule.Identifier) ++
+              rule(Rule.NameSpecifier) ++
                 rule(Rule.NewLines) ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_SUBTYPE) ++
@@ -636,7 +653,7 @@ object ArgonParser {
         case Rule.DataConstructorDeclarationStmt =>
           rule(Rule.Modifiers) ++
             matchToken(KW_CONSTRUCTOR) ++! (
-              rule(Rule.Identifier).observeSource ++
+              rule(Rule.NameSpecifier).observeSource ++
                 rule(Rule.NewLines) ++
                 rule(Rule.MethodParameters) ++
                 rule(Rule.NewLines) ++
@@ -654,7 +671,7 @@ object ArgonParser {
         case Rule.ClassDeclarationStmt =>
           rule(Rule.Modifiers) ++
             matchToken(KW_CLASS) ++! (
-              rule(Rule.Identifier).observeSource ++
+              rule(Rule.NameSpecifier).observeSource ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_SUBTYPE) ++
                 rule(Rule.BaseTypeSpecifier) ++

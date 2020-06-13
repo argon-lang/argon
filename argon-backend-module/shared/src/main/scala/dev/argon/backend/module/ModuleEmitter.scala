@@ -566,6 +566,7 @@ sealed abstract class ModuleEmitter private() {
   def convertGlobalName(name: GlobalName): module.GlobalName =
     name match {
       case GlobalName.Normal(name) => module.GlobalName(module.GlobalName.GlobalName.NormalName(name))
+      case GlobalName.Operator(op) => module.GlobalName(module.GlobalName.GlobalName.Operator(op))
       case GlobalName.Unnamed => ???
     }
 

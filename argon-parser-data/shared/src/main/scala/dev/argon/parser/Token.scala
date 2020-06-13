@@ -12,11 +12,15 @@ object Token {
   class TokenWithCategory[+TCategory <: TokenCategory](val category: TCategory)
   trait TokenFactory[TToken <: Token]
 
-  sealed trait BinaryOperatorToken extends Token {
+  sealed trait OperatorToken extends Token {
+    def symbol: String
+  }
+
+  sealed trait BinaryOperatorToken extends OperatorToken {
     def binaryOperator: BinaryOperator
   }
 
-  sealed trait UnaryOperatorToken extends Token {
+  sealed trait UnaryOperatorToken extends OperatorToken {
     def unaryOperator: UnaryOperator
   }
 
@@ -120,21 +124,27 @@ object Token {
   case object OP_BOOLAND extends TokenWithCategory(TokenCategory.OP_BOOLAND) with Token
   case object OP_BOOLOR extends TokenWithCategory(TokenCategory.OP_BOOLOR) with Token
   case object OP_EQUALS extends TokenWithCategory(TokenCategory.OP_EQUALS) with BinaryOperatorToken {
+    override def symbol: String = "="
     override def binaryOperator: BinaryOperator = BinaryOperator.Equal
   }
   case object OP_NOTEQUALS extends TokenWithCategory(TokenCategory.OP_NOTEQUALS) with BinaryOperatorToken {
+    override def symbol: String = "≠"
     override def binaryOperator: BinaryOperator = BinaryOperator.NotEqual
   }
   case object OP_LESSTHANEQ extends TokenWithCategory(TokenCategory.OP_LESSTHANEQ) with BinaryOperatorToken {
+    override def symbol: String = "≤"
     override def binaryOperator: BinaryOperator = BinaryOperator.LessThanEq
   }
   case object OP_GREATERTHANEQ extends TokenWithCategory(TokenCategory.OP_GREATERTHANEQ) with BinaryOperatorToken {
+    override def symbol: String = "≥"
     override def binaryOperator: BinaryOperator = BinaryOperator.GreaterThanEq
   }
   case object OP_SHIFTLEFT extends TokenWithCategory(TokenCategory.OP_SHIFTLEFT) with BinaryOperatorToken {
+    override def symbol: String = "<<<"
     override def binaryOperator: BinaryOperator = BinaryOperator.ShiftLeft
   }
   case object OP_SHIFTRIGHT extends TokenWithCategory(TokenCategory.OP_SHIFTRIGHT) with BinaryOperatorToken {
+    override def symbol: String = ">>>"
     override def binaryOperator: BinaryOperator = BinaryOperator.ShiftRight
   }
   case object OP_ASSIGN extends TokenWithCategory(TokenCategory.OP_ASSIGN) with Token
@@ -147,38 +157,49 @@ object Token {
   case object OP_OPENCURLY extends TokenWithCategory(TokenCategory.OP_OPENCURLY) with Token
   case object OP_CLOSECURLY extends TokenWithCategory(TokenCategory.OP_CLOSECURLY) with Token
   case object OP_BOOLNOT extends TokenWithCategory(TokenCategory.OP_BOOLNOT) with UnaryOperatorToken {
+    override def symbol: String = "!"
     override def unaryOperator: UnaryOperator = UnaryOperator.BoolNot
   }
   case object OP_ADD extends TokenWithCategory(TokenCategory.OP_ADD) with BinaryOperatorToken with UnaryOperatorToken {
+    override def symbol: String = "+"
     override def binaryOperator: BinaryOperator = BinaryOperator.Add
     override def unaryOperator: UnaryOperator = UnaryOperator.UnaryPlus
   }
   case object OP_SUB extends TokenWithCategory(TokenCategory.OP_SUB) with BinaryOperatorToken with UnaryOperatorToken {
+    override def symbol: String = "-"
     override def binaryOperator: BinaryOperator = BinaryOperator.Sub
     override def unaryOperator: UnaryOperator = UnaryOperator.UnaryMinus
   }
   case object OP_MUL extends TokenWithCategory(TokenCategory.OP_MUL) with BinaryOperatorToken {
+    override def symbol: String = "×"
     override def binaryOperator: BinaryOperator = BinaryOperator.Mul
   }
   case object OP_DIV extends TokenWithCategory(TokenCategory.OP_DIV) with BinaryOperatorToken {
+    override def symbol: String = "÷"
     override def binaryOperator: BinaryOperator = BinaryOperator.Div
   }
   case object OP_BITAND extends TokenWithCategory(TokenCategory.OP_BITAND) with BinaryOperatorToken {
+    override def symbol: String = "&&&"
     override def binaryOperator: BinaryOperator = BinaryOperator.BitAnd
   }
   case object OP_BITOR extends TokenWithCategory(TokenCategory.OP_BITOR) with BinaryOperatorToken {
+    override def symbol: String = "|||"
     override def binaryOperator: BinaryOperator = BinaryOperator.BitOr
   }
   case object OP_BITXOR extends TokenWithCategory(TokenCategory.OP_BITXOR) with BinaryOperatorToken {
+    override def symbol: String = "^^^"
     override def binaryOperator: BinaryOperator = BinaryOperator.BitXOr
   }
   case object OP_BITNOT extends TokenWithCategory(TokenCategory.OP_BITNOT) with UnaryOperatorToken {
+    override def symbol: String = "~~~"
     override def unaryOperator: UnaryOperator = UnaryOperator.BitNot
   }
   case object OP_LESSTHAN extends TokenWithCategory(TokenCategory.OP_LESSTHAN) with BinaryOperatorToken {
+    override def symbol: String = "<"
     override def binaryOperator: BinaryOperator = BinaryOperator.LessThan
   }
   case object OP_GREATERTHAN extends TokenWithCategory(TokenCategory.OP_GREATERTHAN) with BinaryOperatorToken {
+    override def symbol: String = ">"
     override def binaryOperator: BinaryOperator = BinaryOperator.GreaterThan
   }
   case object OP_COLON extends TokenWithCategory(TokenCategory.OP_COLON) with Token
@@ -187,9 +208,11 @@ object Token {
   case object OP_LAMBDA_TYPE extends TokenWithCategory(TokenCategory.OP_LAMBDA_TYPE) with Token
   case object OP_LAMBDA extends TokenWithCategory(TokenCategory.OP_LAMBDA) with Token
   case object OP_UNION extends TokenWithCategory(TokenCategory.OP_UNION) with BinaryOperatorToken {
+    override def symbol: String = "|"
     override def binaryOperator: BinaryOperator = BinaryOperator.Union
   }
   case object OP_INTERSECTION extends TokenWithCategory(TokenCategory.OP_INTERSECTION) with BinaryOperatorToken {
+    override def symbol: String = "&"
     override def binaryOperator: BinaryOperator = BinaryOperator.Intersection
   }
 }
