@@ -1,0 +1,31 @@
+<ArgonTest>
+
+    <Name>Int math operators</Name>
+
+
+    <InputSource name="test.argon">
+            
+        import Ar._
+        
+        proc main(): Unit do
+            puts ((99 + 2).to_s())
+            puts ((99 - 2).to_s())
+            puts ((99 * 2).to_s())
+            puts ((99 / 2).to_s())
+            puts ((+99).to_s())
+            puts ((-99).to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>
+        101
+        97
+        198
+        49
+        99
+        -99
+    </ExpectedOutput>
+
+</ArgonTest>

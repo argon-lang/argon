@@ -366,6 +366,13 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           .forArguments(ArgumentInfo(convertExpr(env)(left), env, left.location, ParameterStyle.Normal))
           .forArguments(ArgumentInfo(convertExpr(env)(right), env, right.location, ParameterStyle.Normal))
 
+      case parser.UnaryOperatorExpr(WithSource(op, opLocation), inner) =>
+        compFactory(
+          env.scope.findOperator(op.symbol, env.fileSpec, opLocation)
+            .map(createLookupFactory(env)(LookupDescription.Operator(op.symbol))(expr.location))
+        )
+          .forArguments(ArgumentInfo(convertExpr(env)(inner), env, inner.location, ParameterStyle.Normal))
+
 
       case parser.BlockExpr(body, Vector(), None, None) =>
         convertStmts(env)(body)
