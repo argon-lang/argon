@@ -371,6 +371,7 @@ object ArgonParser {
           createLeftAssociativeOperatorRule(
             ruleBinaryOperator(OP_ADD),
             ruleBinaryOperator(OP_SUB),
+            ruleBinaryOperator(OP_CONCAT),
           )(rule(Rule.MultiplicativeExpr))
 
         case Rule.ShiftExpr =>

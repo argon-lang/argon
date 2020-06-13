@@ -164,6 +164,7 @@ object CompilationError {
       case TokenCategory.OP_LAMBDA => "=>"
       case TokenCategory.OP_UNION => "|"
       case TokenCategory.OP_INTERSECTION => "&"
+      case TokenCategory.OP_CONCAT => "++"
     }
 
     private def formatCharacterCategory(category: CharacterCategory) = category match {

@@ -194,4 +194,7 @@ object Token {
   case object OP_INTERSECTION extends TokenWithCategory(TokenCategory.OP_INTERSECTION) with BinaryOperatorToken {
     override def binaryOperator: BinaryOperator = BinaryOperator.Intersection
   }
+  case object OP_CONCAT extends TokenWithCategory(TokenCategory.OP_CONCAT) with BinaryOperatorToken {
+    override def binaryOperator: BinaryOperator = BinaryOperator.Concat
+  }
 }

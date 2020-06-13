@@ -236,6 +236,7 @@ object Lexer {
             op(colon ++ equal, Token.OP_ASSIGN) |
             op(minus ++ greaterThan, Token.OP_LAMBDA_TYPE) |
             op(equal ++ greaterThan, Token.OP_LAMBDA) |
+            op(plus ++ plus, Token.OP_CONCAT) |
             op(equal, Token.OP_EQUALS) |
             op(token(CharacterCategory.NotEquals, "≠"), Token.OP_NOTEQUALS) |
             op(token(CharacterCategory.LessThanEq, "≤"), Token.OP_LESSTHANEQ) |

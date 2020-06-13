@@ -194,6 +194,9 @@ object BinaryOperator {
   case object Intersection extends BinaryOperator {
     override def symbol: String = "&"
   }
+  case object Concat extends BinaryOperator {
+    override def symbol: String = "++"
+  }
 }
 
 sealed trait UnaryOperator {
