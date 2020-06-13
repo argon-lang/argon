@@ -38,6 +38,22 @@ export function intEqual(a, b) {
 	return createBool(a[intValueSymbol] === b[intValueSymbol]);
 }
 
+export function intLessThan(a, b) {
+	return createBool(a[intValueSymbol] < b[intValueSymbol]);
+}
+
+export function intLessThanEq(a, b) {
+	return createBool(a[intValueSymbol] <= b[intValueSymbol]);
+}
+
+export function intGreaterThan(a, b) {
+	return createBool(a[intValueSymbol] > b[intValueSymbol]);
+}
+
+export function intGreaterThanEq(a, b) {
+	return createBool(a[intValueSymbol] >= b[intValueSymbol]);
+}
+
 export function bitNotInt(a, b) {
 	return createInt(~a[intValueSymbol]);
 }

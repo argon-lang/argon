@@ -3,7 +3,7 @@
     <Name>Int comparison operators</Name>
 
 
-    <InputSource name="test.argon">
+    <InputSource name="test.argon"><![CDATA[
 
         import Ar._
 
@@ -12,16 +12,32 @@
             puts ((99 = 99).to_s())
             puts ((99 != 2).to_s())
             puts ((99 != 99).to_s())
+            puts ((99 < 2).to_s())
+            puts ((99 < 99).to_s())
+            puts ((99 <= 2).to_s())
+            puts ((99 <= 99).to_s())
+            puts ((99 > 2).to_s())
+            puts ((99 > 99).to_s())
+            puts ((99 >= 2).to_s())
+            puts ((99 >= 99).to_s())
         end
 
 
-    </InputSource>
+    ]]></InputSource>
 
     <ExpectedOutput>
         false
         true
         true
         false
+        false
+        false
+        false
+        true
+        true
+        false
+        true
+        true
     </ExpectedOutput>
 
 </ArgonTest>
