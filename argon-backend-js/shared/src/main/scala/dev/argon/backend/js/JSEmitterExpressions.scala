@@ -165,6 +165,11 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
       case LetBinding(_, _, _) =>
         StatementConverterLocalBinding.wrapStatement(expr)
 
+      case LoadConstantBool(b, _) =>
+        for {
+          createBool <- coreLibExport("createBool")
+        } yield createBool(JSBoolean(b))
+
       case LoadConstantInt(i, _) =>
         for {
           createInt <- coreLibExport("createInt")
