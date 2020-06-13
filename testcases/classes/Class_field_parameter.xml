@@ -3,7 +3,7 @@
     <Name>Class field from parameter</Name>
 
 
-    <InputSource name="test.ar"><![CDATA[
+    <InputSource name="test.argon"><![CDATA[
             
         import Ar._
         

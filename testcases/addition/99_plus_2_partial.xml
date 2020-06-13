@@ -3,7 +3,7 @@
     <Name>99 + 2 partial application</Name>
 
 
-    <InputSource name="test.ar">
+    <InputSource name="test.argon">
             
         import Ar._
         

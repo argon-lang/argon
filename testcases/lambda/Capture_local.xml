@@ -2,7 +2,7 @@
 
     <Name>Capture local</Name>
 
-    <InputSource name="test.ar">
+    <InputSource name="test.argon">
 
         import Ar._
 

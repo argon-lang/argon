@@ -3,7 +3,7 @@
     <Name>curried 99 + 2</Name>
 
 
-    <InputSource name="test.ar">
+    <InputSource name="test.argon">
             
         import Ar._
         

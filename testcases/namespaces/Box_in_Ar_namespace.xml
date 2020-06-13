@@ -3,7 +3,7 @@
     <Name>Box type in Ar namespace</Name>
 
 
-    <InputSource name="test.ar"><![CDATA[
+    <InputSource name="test.argon"><![CDATA[
 
         namespace Ar
 
@@ -17,7 +17,7 @@
         
     ]]></InputSource>
 
-    <InputSource name="main.ar"><![CDATA[
+    <InputSource name="main.argon"><![CDATA[
 
         import Ar._
 

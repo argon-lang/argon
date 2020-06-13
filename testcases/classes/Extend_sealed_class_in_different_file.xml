@@ -2,7 +2,7 @@
 
     <Name>Extend sealed class in different file</Name>
 
-    <InputSource name="a.ar"><![CDATA[
+    <InputSource name="a.argon"><![CDATA[
 
         import Ar._
 
@@ -13,7 +13,7 @@
 
     ]]></InputSource>
     
-    <InputSource name="b.ar"><![CDATA[
+    <InputSource name="b.argon"><![CDATA[
         
         import Ar._
 

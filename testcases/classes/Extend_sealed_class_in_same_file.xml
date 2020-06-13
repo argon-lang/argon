@@ -3,7 +3,7 @@
     <Name>Extend sealed class in same file</Name>
 
 
-    <InputSource name="test.ar"><![CDATA[
+    <InputSource name="test.argon"><![CDATA[
             
         import Ar._
         

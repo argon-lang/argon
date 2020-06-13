@@ -3,7 +3,7 @@
     <Name>Print Me</Name>
 
 
-    <InputSource name="test.ar">
+    <InputSource name="test.argon">
             
         import Ar._
         

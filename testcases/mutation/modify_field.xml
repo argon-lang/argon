@@ -2,7 +2,7 @@
 
     <Name>Modify Field</Name>
 
-    <InputSource name="test.ar"><![CDATA[
+    <InputSource name="test.argon"><![CDATA[
 
         import Ar._
 

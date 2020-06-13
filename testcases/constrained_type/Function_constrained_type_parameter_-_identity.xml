@@ -3,7 +3,7 @@
     <Name>Function constrained type parameter - identity</Name>
 
 
-    <InputSource name="test.ar">
+    <InputSource name="test.argon">
             
         import Ar._
         

@@ -3,7 +3,7 @@
     <Name>Print class parameter instance method base class</Name>
 
 
-    <InputSource name="test.ar"><![CDATA[
+    <InputSource name="test.argon"><![CDATA[
             
         import Ar._
         

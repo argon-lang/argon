@@ -2,7 +2,7 @@
 
     <Name>Trait private static method</Name>
 
-    <InputSource name="test.ar"><![CDATA[
+    <InputSource name="test.argon"><![CDATA[
 
         import Ar._
 

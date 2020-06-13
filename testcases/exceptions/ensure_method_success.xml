@@ -3,7 +3,7 @@
     <Name>Ensure for Method on Success</Name>
 
 
-    <InputSource name="test.ar">
+    <InputSource name="test.argon">
             
         import Ar._
         

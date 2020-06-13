@@ -3,7 +3,7 @@
     <Name>Constructor purity 4</Name>
 
 
-    <InputSource name="test.ar"><![CDATA[
+    <InputSource name="test.argon"><![CDATA[
             
         import Ar._
 

@@ -2,7 +2,7 @@
 
     <Name>Modify Local (Purity Error)</Name>
 
-    <InputSource name="test.ar">
+    <InputSource name="test.argon">
 
         import Ar._
 

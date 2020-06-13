@@ -3,7 +3,7 @@
     <Name>Local constrained type with same supertype and subtype</Name>
 
 
-    <InputSource name="test.ar"><![CDATA[
+    <InputSource name="test.argon"><![CDATA[
             
         import Ar._
         

@@ -2,7 +2,7 @@
 
     <Name>Hello World (Parenthesis)</Name>
 
-    <InputSource name="test.ar">
+    <InputSource name="test.argon">
 
         import Ar._
 

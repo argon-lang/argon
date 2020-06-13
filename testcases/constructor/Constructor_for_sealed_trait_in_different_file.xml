@@ -2,7 +2,7 @@
 
     <Name>Constructor for sealed trait in different file</Name>
 
-    <InputSource name="MyType.ar"><![CDATA[
+    <InputSource name="MyType.argon"><![CDATA[
 
         import Ar._
 
@@ -12,7 +12,7 @@
 
     ]]></InputSource>
 
-    <InputSource name="MyCtor.ar"><![CDATA[
+    <InputSource name="MyCtor.argon"><![CDATA[
 
         import Ar._
 
