@@ -5,45 +5,47 @@ import dev.argon.util.NamespacePath
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types._
+import zio.{IO, ZManaged}
 import zio.stream._
 
 object NamespaceBuilder {
 
   def createNamespace[R, TContext <: Context with Singleton, TPayloadSpec[_, _]](elements: ZStream[R, ErrorList, ModuleElement[TContext, TPayloadSpec]]): RComp[R, Namespace[TContext, TPayloadSpec]] =
-    elements.runCollect.map { elems =>
-      createNamespaceWithPath(NamespacePath.empty, elems.toVector)
-    }
+    createNamespaceWithPath(NamespacePath.empty, elements)
 
-  def createNamespaceWithPath[TContext <: Context with Singleton, TPayloadSpec[_, _]](path: NamespacePath, elements: Vector[ModuleElement[TContext, TPayloadSpec]]): Namespace[TContext, TPayloadSpec] = {
-    val (directElements, nestedElements) = divideNamespaceElements(elements)(Vector.empty, Vector.empty)
+  def createNamespaceWithPath[R, TContext <: Context with Singleton, TPayloadSpec[_, _]](path: NamespacePath, elements: ZStream[R, ErrorList, ModuleElement[TContext, TPayloadSpec]]): RComp[R, Namespace[TContext, TPayloadSpec]] =
+    divideNamespaceElements(elements).use { case (directElements, nestedElemenets) =>
 
-    val nestedElementGroups =
-      nestedElements
-        .groupBy { case (nestedNSName, _, _) => nestedNSName }
-        .map { case (nestedNSName, subNSElems) =>
+      val nestedElementGroups =
+        nestedElemenets
+        .groupByKey({ case (name, _, _) => name }) { (nestedNSName, subNSElems) =>
           val nestedElements = subNSElems.map { case (_, nestedNSPath, binding) => ModuleElement(nestedNSPath, binding) }
 
-          val nestedNS = createNamespaceWithPath(NamespacePath(path.ns :+ nestedNSName), nestedElements)
-          GlobalBinding.NestedNamespace(GlobalName.Normal(nestedNSName), nestedNS)
+          ZStream.fromEffect(
+            createNamespaceWithPath(NamespacePath(path.ns :+ nestedNSName), nestedElements)
+              .map { nestedNS =>
+                GlobalBinding.NestedNamespace(GlobalName.Normal(nestedNSName), nestedNS)
+              }
+          )
         }
-        .toVector
 
-    Namespace(path, nestedElementGroups ++ directElements)
-  }
+      nestedElementGroups.merge(directElements)
+        .runCollect
+        .map { bindings =>
+          Namespace(path, bindings.toVector)
+        }
 
-  private def divideNamespaceElements[TContext <: Context with Singleton, TPayloadSpec[_, _]]
-  (elements: Vector[ModuleElement[TContext, TPayloadSpec]])
-  (accDirect: Vector[GlobalBinding[TContext, TPayloadSpec]], accNested: Vector[(String, NamespacePath, GlobalBinding[TContext, TPayloadSpec])])
-  : (Vector[GlobalBinding[TContext, TPayloadSpec]], Vector[(String, NamespacePath, GlobalBinding[TContext, TPayloadSpec])]) =
-    elements match {
-      case ModuleElement(NamespacePath(headNS +: tailNS), binding) +: tail =>
-        divideNamespaceElements(tail)(accDirect, accNested :+ ((headNS, NamespacePath(tailNS), binding)))
+    }
 
-      case ModuleElement(NamespacePath(Vector()), binding) +: tail =>
-        divideNamespaceElements(tail)(accDirect :+ binding, accNested)
+  private def divideNamespaceElements[R, TContext <: Context with Singleton, TPayloadSpec[_, _]]
+  (elements: ZStream[R, ErrorList, ModuleElement[TContext, TPayloadSpec]])
+  : ZManaged[R, ErrorList, (Stream[ErrorList, GlobalBinding[TContext, TPayloadSpec]], Stream[ErrorList, (String, NamespacePath, GlobalBinding[TContext, TPayloadSpec])])] =
+    elements.partitionEither {
+      case ModuleElement(NamespacePath(headNS +: tailNS), binding) =>
+        IO.succeed(Right((headNS, NamespacePath(tailNS), binding)))
 
-      case Vector() =>
-        (accDirect, accNested)
+      case ModuleElement(NamespacePath(Vector()), binding) =>
+        IO.succeed(Left(binding))
     }
 
 }
