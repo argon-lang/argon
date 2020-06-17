@@ -30,7 +30,7 @@ private[platform] object NodeSystem {
         }
 
       override def property(prop: String): IO[Throwable, Option[String]] =
-        IO.succeed(None)
+        IO.none
 
       override def properties: IO[Throwable, Map[String, String]] =
         IO.succeed(Map.empty)

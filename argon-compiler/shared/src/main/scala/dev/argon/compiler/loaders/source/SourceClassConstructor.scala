@@ -136,11 +136,11 @@ object SourceClassConstructor {
                           )
 
                         case (None, None) =>
-                          IO.succeed(None)
+                          IO.none
 
                         case (Some(baseCtorExpr), Some(baseClass)) =>
                           ExpressionConverter.convertExpression(context)(env2.copy(allowAbstractConstructor = true))(typeSystem.fromSimpleType(baseClass))(baseCtorExpr).flatMap {
-                            case baseCall: ClassConstructorCall[context.type, Id] => IO.succeed(Some(baseCall))
+                            case baseCall: ClassConstructorCall[context.type, Id] => IO.some(baseCall)
                             case _ =>
                               Compilation.forErrors(
                                 CompilationError.InvalidBaseConstructorCall(CompilationMessageSource.SourceFile(env.fileSpec, location))

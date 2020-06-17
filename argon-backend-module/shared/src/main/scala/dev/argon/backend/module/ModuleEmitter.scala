@@ -848,7 +848,7 @@ sealed abstract class ModuleEmitter private() {
       convOwner <- convertFuncOwner(func.owner)
 
       funcBody <- ZIO.accessM[EmitEnv](_.options.moduleType match {
-        case ModuleEmitOptions.ReferenceModule => IO.succeed(None)
+        case ModuleEmitOptions.ReferenceModule => IO.none
         case ModuleEmitOptions.DeclarationModule => func.payload.map(Some.apply)
       })
       convFuncBody <- ZIO.foreach(funcBody)(convertExpr(_))
@@ -882,7 +882,7 @@ sealed abstract class ModuleEmitter private() {
       methodOwner <- convertMethodOwner(method.owner)
 
       methodBody <- ZIO.accessM[EmitEnv](_.options.moduleType match {
-        case ModuleEmitOptions.ReferenceModule => IO.succeed(None)
+        case ModuleEmitOptions.ReferenceModule => IO.none
         case ModuleEmitOptions.DeclarationModule => method.payload
       })
       convMethodBody <- ZIO.foreach(methodBody)(convertExpr(_))
@@ -930,7 +930,7 @@ sealed abstract class ModuleEmitter private() {
 
   def createClassCtorBody(ctor: ClassConstructor[context.type, DeclarationPayloadSpecifier]): Emit[Option[module.ClassConstructorBody]] =
     ZIO.accessM[EmitEnv](_.options.moduleType match {
-      case ModuleEmitOptions.ReferenceModule => IO.succeed(None)
+      case ModuleEmitOptions.ReferenceModule => IO.none
       case ModuleEmitOptions.DeclarationModule =>
         def convertPreInitStmt(stmt: ClassConstructorStatement[context.type]): Emit[module.PreInitClassConstructorStatement] =
           stmt match {
@@ -1075,7 +1075,7 @@ object ModuleEmitter {
 
           override def getModuleIdNum[TPayloadSpec[_, _]](arModule: ArModule[context.type, TPayloadSpec]): Comp[Option[Int]] =
             if(isCurrentModule(arModule))
-              IO.succeed(None)
+              IO.none
             else
               getElementIdNum(moduleIds)(arModule.id).map(Some.apply)
 

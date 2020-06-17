@@ -71,7 +71,7 @@ object ModuleLookup {
         }
       }
 
-    case _ => IO.succeed(None)
+    case _ => IO.none
   }
 
   def lookupGlobalTrait[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArTrait[context.type, TPayloadSpec]]] = {
@@ -87,7 +87,7 @@ object ModuleLookup {
             None
         }
       }
-    case _ => IO.succeed(None)
+    case _ => IO.none
   }
 
   def lookupGlobalDataConstructor[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[DataConstructor[context.type, TPayloadSpec]]] = {
@@ -103,7 +103,7 @@ object ModuleLookup {
             None
         }
       }
-    case _ => IO.succeed(None)
+    case _ => IO.none
   }
 
   def lookupGlobalFunction[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArFunc[context.type, TPayloadSpec]]] = {
@@ -119,7 +119,7 @@ object ModuleLookup {
             None
         }
       }
-    case _ => IO.succeed(None)
+    case _ => IO.none
   }
 
 

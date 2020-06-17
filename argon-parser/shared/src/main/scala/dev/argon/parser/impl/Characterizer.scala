@@ -15,7 +15,7 @@ object Characterizer {
     new StreamTransformation[Any, Nothing, Char, Unit, Int, Unit] {
       override type TransformState = Option[Char]
 
-      override def start: UIO[Option[Char]] = IO.succeed(None)
+      override def start: UIO[Option[Char]] = IO.none
 
       override def consume(state: Option[Char], values: NonEmptyChunk[Char]): UIO[(Option[Char], Chunk[Int])] = {
 
@@ -39,7 +39,7 @@ object Characterizer {
     new StreamTransformation[Any, Nothing, Int, Unit, String, Unit] {
       override type TransformState = Option[String]
 
-      override def start: UIO[Option[String]] = IO.succeed(None)
+      override def start: UIO[Option[String]] = IO.none
 
       override def consume(state: Option[String], values: NonEmptyChunk[Int]): UIO[(Option[String], Chunk[String])] = {
 
