@@ -180,10 +180,10 @@ object GlobalScope {
   (context: Context)
   (binding: GlobalBinding.NonNamespace[context.type, TPayloadSpec])
   : context.scopeContext.ScopeValueOverload = binding match {
-    case GlobalBinding.GlobalClass(_, _, arClass) => context.scopeContext.ClassScopeValue(AbsRef(arClass))
-    case GlobalBinding.GlobalTrait(_, _, arTrait) => context.scopeContext.TraitScopeValue(AbsRef(arTrait))
-    case GlobalBinding.GlobalFunction(_, _, func) => context.scopeContext.FunctionScopeValue(AbsRef(func))
-    case GlobalBinding.GlobalDataConstructor(_, _, dataCtor) => context.scopeContext.DataConstructorScopeValue(AbsRef(dataCtor))
+    case GlobalBinding.GlobalClass(_, _, _, arClass) => context.scopeContext.ClassScopeValue(AbsRef(arClass))
+    case GlobalBinding.GlobalTrait(_, _, _, arTrait) => context.scopeContext.TraitScopeValue(AbsRef(arTrait))
+    case GlobalBinding.GlobalFunction(_, _, _, func) => context.scopeContext.FunctionScopeValue(AbsRef(func))
+    case GlobalBinding.GlobalDataConstructor(_, _, _, dataCtor) => context.scopeContext.DataConstructorScopeValue(AbsRef(dataCtor))
   }
 
 }

@@ -54,26 +54,29 @@ sealed abstract class ModuleEmitter private() {
 
   type Emit[A] = RComp[EmitEnv, A]
 
-  def addGlobalDeclaration(lens: scalapb.lenses.Lens[module.Metadata, module.Metadata] => scalapb.lenses.Lens[module.Metadata, Vector[module.GlobalDeclaration]])(declaration: module.GlobalDeclaration): URIO[EmitEnv, Unit] =
+  def addGlobalDeclaration[TDecl](lens: scalapb.lenses.Lens[module.Metadata, module.Metadata] => scalapb.lenses.Lens[module.Metadata, Vector[TDecl]])(declaration: TDecl): URIO[EmitEnv, Unit] =
     ZIO.accessM[EmitEnv] { emitEnv =>
       emitEnv.updateMetadataElement { metadata =>
         metadata.update { metadataLens => lens(metadataLens).modify(_ :+ declaration) }
       }
     }
 
-  def produceGlobalElement[TElem[_ <: Context with Singleton, _[_, _]]]
+  def produceGlobalElement[TDecl, TElem[_ <: Context with Singleton, _[_, _]], TSig]
   (accessor: EmitEnv => TElem[context.type, DeclarationPayloadSpecifier] => Comp[Int])
   (elem: TElem[context.type, DeclarationPayloadSpecifier])
-  (accessModifier: AccessModifierGlobal)
-  (metadataLens: scalapb.lenses.Lens[module.Metadata, module.Metadata] => scalapb.lenses.Lens[module.Metadata, Vector[module.GlobalDeclaration]])
+  (ns: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal, sig: TSig)
+  (createDecl: (Int, module.Namespace, module.GlobalName, module.AccessModifier, TSig) => TDecl)
+  (metadataLens: scalapb.lenses.Lens[module.Metadata, module.Metadata] => scalapb.lenses.Lens[module.Metadata, Vector[TDecl]])
   (pathTypeName: String)
   (message: TElem[context.type, DeclarationPayloadSpecifier] => Emit[GeneratedMessage])
   : Emit[Unit] =
     ZIO.accessM[EmitEnv] { emitEnv =>
       accessor(emitEnv)(elem).flatMap { idNum =>
         val path = ModulePaths.elementDef(pathTypeName, idNum)
+        val decl = createDecl(idNum, convertNamespace(ns), convertGlobalName(name), convertAccessModifier(accessModifier), sig)
+
         emitEnv.produceStreamElement(path)(message(elem)) *>
-          addGlobalDeclaration(metadataLens)(module.GlobalDeclaration(idNum, convertAccessModifier(accessModifier)))
+          addGlobalDeclaration(metadataLens)(decl)
       }
     }
 
@@ -92,20 +95,24 @@ sealed abstract class ModuleEmitter private() {
 
   def processModule(armodule: ArModule[context.type, DeclarationPayloadSpecifier]): Emit[Unit] = {
 
-    def processNamespace(ns: Namespace[context.type, DeclarationPayloadSpecifier]): Emit[Unit] =
+    def processNamespace(nsPath: NamespacePath, ns: Namespace[context.type, DeclarationPayloadSpecifier]): Emit[Unit] =
       ZIO.foreach_(ns.bindings) {
-        case GlobalBinding.NestedNamespace(_, nestedNS) => processNamespace(nestedNS)
-        case GlobalBinding.GlobalTrait(_, access, arTrait) =>
+        case GlobalBinding.NestedNamespace(GlobalName.Normal(name), nestedNS) => processNamespace(NamespacePath(nsPath.ns :+ name), nestedNS)
+        case GlobalBinding.GlobalTrait(name, access, _, arTrait) =>
           for {
-            _ <- produceGlobalElement[ArTrait](_.getTraitIdNum)(arTrait)(access)(_.globalTraits)(ModulePaths.traitTypeName)(createTraitDefMessage)
+            sig <- arTrait.signature
+            erasedSig <- convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig))
+            _ <- produceGlobalElement[module.GlobalDeclarationType, ArTrait, module.ErasedSignatureParameterOnly](_.getTraitIdNum)(arTrait)(nsPath, name, access, erasedSig)(module.GlobalDeclarationType(_, _, _, _, _))(_.globalTraits)(ModulePaths.traitTypeName)(createTraitDefMessage)
 
             instMethods <- arTrait.methods
             _ <- processMethods(instMethods)
           } yield ()
 
-        case GlobalBinding.GlobalClass(_, access, arClass) =>
+        case GlobalBinding.GlobalClass(name, access, _, arClass) =>
           for {
-            _ <- produceGlobalElement[ArClass](_.getClassIdNum)(arClass)(access)(_.globalClasses)(ModulePaths.classTypeName)(createClassDefMessage)
+            sig <- arClass.signature
+            erasedSig <- convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig))
+            _ <- produceGlobalElement[module.GlobalDeclarationType, ArClass, module.ErasedSignatureParameterOnly](_.getClassIdNum)(arClass)(nsPath, name, access, erasedSig)(module.GlobalDeclarationType(_, _, _, _, _))(_.globalClasses)(ModulePaths.classTypeName)(createClassDefMessage)
 
             instMethods <- arClass.methods
             _ <- processMethods(instMethods)
@@ -117,16 +124,22 @@ sealed abstract class ModuleEmitter private() {
             _ <- processClassCtors(ctors)
           } yield ()
 
-        case GlobalBinding.GlobalDataConstructor(_, access, dataCtor) =>
+        case GlobalBinding.GlobalDataConstructor(name, access, _, dataCtor) =>
           for {
-            _ <- produceGlobalElement[DataConstructor](_.getDataCtorIdNum)(dataCtor)(access)(_.globalDataConstructors)(ModulePaths.dataCtorTypeName)(createDataCtorDefMessage)
+            sig <- dataCtor.signature
+            erasedSig <- convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig))
+            _ <- produceGlobalElement[module.GlobalDeclarationType, DataConstructor, module.ErasedSignatureParameterOnly](_.getDataCtorIdNum)(dataCtor)(nsPath, name, access, erasedSig)(module.GlobalDeclarationType(_, _, _, _, _))(_.globalDataConstructors)(ModulePaths.dataCtorTypeName)(createDataCtorDefMessage)
 
             instMethods <- dataCtor.methods
             instEntries <- processMethods(instMethods)
           } yield instEntries
 
-        case GlobalBinding.GlobalFunction(_, access, func) =>
-          produceGlobalElement[ArFunc](_.getFunctionIdNum)(func)(access)(_.globalFunctions)(ModulePaths.funcTypeName)(createFuncDefMessage)
+        case GlobalBinding.GlobalFunction(name, access, _, func) =>
+          for {
+            sig <- func.signature
+            erasedSig <- convertErasedSignature(ErasedSignature.fromSignature(context)(sig))
+            _ <- produceGlobalElement[module.GlobalDeclarationFunction, ArFunc, module.ErasedSignature](_.getFunctionIdNum)(func)(nsPath, name, access, erasedSig)(module.GlobalDeclarationFunction(_, _, _, _, _))(_.globalFunctions)(ModulePaths.funcTypeName)(createFuncDefMessage)
+          } yield ()
 
       }
 
@@ -144,7 +157,7 @@ sealed abstract class ModuleEmitter private() {
 
 
     armodule.globalNamespace
-      .flatMap(processNamespace(_))
+      .flatMap(processNamespace(NamespacePath.empty, _))
   }
 
 

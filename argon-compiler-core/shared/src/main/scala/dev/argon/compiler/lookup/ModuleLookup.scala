@@ -58,7 +58,10 @@ object ModuleLookup {
   }
 
   def lookupGlobalClass[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArClass[context.type, TPayloadSpec]]] = {
-    case GlobalBinding.GlobalClass(_, _, arClass) =>
+    case GlobalBinding.GlobalClass(_, _, Some(bindingSig), arClass) if sig === bindingSig =>
+      IO.succeed(Some(arClass))
+
+    case GlobalBinding.GlobalClass(_, _, None, arClass) =>
       arClass.signature.map { sig2 =>
         if(sig === ErasedSignature.fromSignatureParameters(context)(sig2))
           Some(arClass)
@@ -69,7 +72,10 @@ object ModuleLookup {
   }
 
   def lookupGlobalTrait[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArTrait[context.type, TPayloadSpec]]] = {
-    case GlobalBinding.GlobalTrait(_, _, arTrait) =>
+    case GlobalBinding.GlobalTrait(_, _, Some(bindingSig), arTrait) if sig === bindingSig =>
+      IO.succeed(Some(arTrait))
+
+    case GlobalBinding.GlobalTrait(_, _, None, arTrait) =>
       arTrait.signature.map { sig2 =>
         if(sig === ErasedSignature.fromSignatureParameters(context)(sig2))
           Some(arTrait)
@@ -80,7 +86,10 @@ object ModuleLookup {
   }
 
   def lookupGlobalDataConstructor[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[DataConstructor[context.type, TPayloadSpec]]] = {
-    case GlobalBinding.GlobalDataConstructor(_, _, ctor) =>
+    case GlobalBinding.GlobalDataConstructor(_, _, Some(bindingSig), ctor) if sig === bindingSig =>
+      IO.succeed(Some(ctor))
+
+    case GlobalBinding.GlobalDataConstructor(_, _, None, ctor) =>
       ctor.signature.map { sig2 =>
         if(sig === ErasedSignature.fromSignatureParameters(context)(sig2))
           Some(ctor)
@@ -91,7 +100,10 @@ object ModuleLookup {
   }
 
   def lookupGlobalFunction[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArFunc[context.type, TPayloadSpec]]] = {
-    case GlobalBinding.GlobalFunction(_, _, func) =>
+    case GlobalBinding.GlobalFunction(_, _, Some(bindingSig), func) if sig === bindingSig =>
+      IO.succeed(Some(func))
+
+    case GlobalBinding.GlobalFunction(_, _, None, func) =>
       func.signature.map { sig2 =>
         if(sig === ErasedSignature.fromSignature(context)(sig2))
           Some(func)

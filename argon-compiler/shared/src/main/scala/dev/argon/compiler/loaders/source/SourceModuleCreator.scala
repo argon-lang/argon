@@ -173,7 +173,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
           for {
             arTrait <- SourceTrait(context)(env)(traitDeclarationStmt)(owner)
-          } yield GlobalBinding.GlobalTrait(globalName, accessModifier, arTrait)
+          } yield GlobalBinding.GlobalTrait(globalName, accessModifier, None, arTrait)
         }
 
       case classDeclarationStmt @ parser.ClassDeclarationStmt(_, WithSource(className, _), _, _, _, modifiers) =>
@@ -182,7 +182,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
           for {
             arClass <- SourceClass(context)(env)(classDeclarationStmt)(owner)
-          } yield GlobalBinding.GlobalClass(globalName, accessModifier, arClass)
+          } yield GlobalBinding.GlobalClass(globalName, accessModifier, None, arClass)
         }
 
       case funcDeclarationStmt @ parser.FunctionDeclarationStmt(funcName, _, _, _, modifiers, _) =>
@@ -192,7 +192,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           for {
             arFunc <- SourceFunction(context)(env)(funcDeclarationStmt)(owner)
           } yield GlobalBinding.GlobalFunction(
-            globalName, accessModifier,
+            globalName, accessModifier, None,
             arFunc
           )
         }
@@ -203,7 +203,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
 
           for {
             ctor <- SourceDataConstructor(context)(env)(dataCtorDeclarationStmt)(owner)
-          } yield GlobalBinding.GlobalDataConstructor(globalName, accessModifier, ctor)
+          } yield GlobalBinding.GlobalDataConstructor(globalName, accessModifier, None, ctor)
         }
 
       case _ => ???

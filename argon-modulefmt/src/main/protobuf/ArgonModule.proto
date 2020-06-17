@@ -20,10 +20,10 @@ message Metadata {
     required ModuleType moduleType = 5;
 
     repeated ModuleReference references = 9;
-    repeated GlobalDeclaration globalTraits = 10;
-    repeated GlobalDeclaration globalClasses = 11;
-    repeated GlobalDeclaration globalDataConstructors = 12;
-    repeated GlobalDeclaration globalFunctions = 13;
+    repeated GlobalDeclarationType globalTraits = 10;
+    repeated GlobalDeclarationType globalClasses = 11;
+    repeated GlobalDeclarationType globalDataConstructors = 12;
+    repeated GlobalDeclarationFunction globalFunctions = 13;
 }
 
 enum ModuleType {
@@ -35,9 +35,20 @@ message ModuleReference {
     required string name = 1;
 }
 
-message GlobalDeclaration {
+message GlobalDeclarationType {
     required uint32 id = 1;
-    required AccessModifier accessModifier = 2;
+    required Namespace ns = 2;
+    required GlobalName name = 3;
+    required AccessModifier accessModifier = 4;
+    required ErasedSignatureParameterOnly sig = 5;
+}
+
+message GlobalDeclarationFunction {
+    required uint32 id = 1;
+    required Namespace ns = 2;
+    required GlobalName name = 3;
+    required AccessModifier accessModifier = 4;
+    required ErasedSignature sig = 5;
 }
 
 message FileID {

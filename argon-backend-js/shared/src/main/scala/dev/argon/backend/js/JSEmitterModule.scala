@@ -88,7 +88,7 @@ abstract class JSEmitterModule[I <: ResourceIndicator: Tag] extends JSEmitterGlo
 
   private def createObjectsForScopeValue(vtableBuilder: VTableBuilder.Aux[context.type])(state: ArModuleElements, value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): Emit[ArModuleElements] =
     value match {
-      case GlobalBinding.GlobalFunction(_, _, func) =>
+      case GlobalBinding.GlobalFunction(_, _, _, func) =>
         for {
           funcCreator <- createGlobalFunction(func)
 
@@ -109,7 +109,7 @@ abstract class JSEmitterModule[I <: ResourceIndicator: Tag] extends JSEmitterGlo
           )
         } yield state.copy(functions = state.functions :+ funcInfo)
 
-      case GlobalBinding.GlobalTrait(_, _, arTrait) =>
+      case GlobalBinding.GlobalTrait(_, _, _, arTrait) =>
         for {
           traitCreator <- createGlobalTrait(arTrait)
 
@@ -130,7 +130,7 @@ abstract class JSEmitterModule[I <: ResourceIndicator: Tag] extends JSEmitterGlo
           )
         } yield state.copy(traits = state.traits :+ traitInfo)
 
-      case GlobalBinding.GlobalClass(_, _, arClass) =>
+      case GlobalBinding.GlobalClass(_, _, _, arClass) =>
         for {
           classCreator <- createGlobalClass(vtableBuilder)(arClass)
 
@@ -151,7 +151,7 @@ abstract class JSEmitterModule[I <: ResourceIndicator: Tag] extends JSEmitterGlo
           )
         } yield state.copy(classes = state.classes :+ classInfo)
 
-      case GlobalBinding.GlobalDataConstructor(_, _, ctor) =>
+      case GlobalBinding.GlobalDataConstructor(_, _, _, ctor) =>
         for {
           ctorCreator <- createGlobalDataConstructor(vtableBuilder)(ctor)
 

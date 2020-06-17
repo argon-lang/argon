@@ -2,7 +2,7 @@ package dev.argon.loaders.armodule
 
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.{core, _}
-import dev.argon.compiler.core._
+import dev.argon.compiler.core.{ErasedSignature, _}
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, ModuleMetadata, NamespaceBuilder, ResourceIndicator, ResourceReader, StandardTypeLoaders}
 import dev.argon.compiler.types._
@@ -16,7 +16,6 @@ import dev.argon.backend.ResourceAccess
 import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.io.ZipFileReader
-import dev.argon.module.Metadata
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import shapeless.ops.nat.{LT, Pred, ToInt}
 import shapeless.{Id, Nat, Sized, Succ, _0}
@@ -45,7 +44,7 @@ object ArgonModuleLoader {
         case _ => ZManaged.succeed(None)
       }
 
-    private final case class ArModuleMetadata(zip: ZipFileReader[Any, ErrorList], metadata: Metadata) extends ModuleMetadata[TContext] {
+    private final case class ArModuleMetadata(zip: ZipFileReader[Any, ErrorList], metadata: ArgonModule.Metadata) extends ModuleMetadata[TContext] {
       override val descriptor: ModuleId = ModuleId(metadata.name)
       override val referencedModules: Vector[ModuleId] =
         metadata.references.map {
@@ -904,38 +903,87 @@ object ArgonModuleLoader {
                 }
               ).toFunction
 
+          trait GlobalDeclarationHelper[TDecl] {
+            def getId(decl: TDecl): Int
+            def getAccessModifier(decl: TDecl): ArgonModule.AccessModifier
+            def getNamespace(decl: TDecl): ArgonModule.Namespace
+            def getName(decl: TDecl): ArgonModule.GlobalName
 
-          private def convertNamespaceElements[TElem]
+            type ErasedSig
+            def getErasedSig(decl: TDecl): Comp[ErasedSig]
+          }
+
+          object GlobalDeclarationTypeHelper extends GlobalDeclarationHelper[ArgonModule.GlobalDeclarationType] {
+
+            override def getId(decl: ArgonModule.GlobalDeclarationType): Int = decl.id
+            override def getAccessModifier(decl: ArgonModule.GlobalDeclarationType): ArgonModule.AccessModifier = decl.accessModifier
+
+            override def getNamespace(decl: ArgonModule.GlobalDeclarationType): ArgonModule.Namespace = decl.ns
+
+            override def getName(decl: ArgonModule.GlobalDeclarationType): ArgonModule.GlobalName = decl.name
+
+            override type ErasedSig = ErasedSignature.ParameterOnlySignature[context.type]
+
+            override def getErasedSig(decl: ArgonModule.GlobalDeclarationType): Comp[ErasedSignature.ParameterOnlySignature[context.type]] =
+              parseErasedSigParamOnly(decl.sig)
+          }
+
+          object GlobalDeclarationFunctionHelper extends GlobalDeclarationHelper[ArgonModule.GlobalDeclarationFunction] {
+
+            override def getId(decl: ArgonModule.GlobalDeclarationFunction): Int = decl.id
+            override def getAccessModifier(decl: ArgonModule.GlobalDeclarationFunction): ArgonModule.AccessModifier = decl.accessModifier
+
+            override def getNamespace(decl: ArgonModule.GlobalDeclarationFunction): ArgonModule.Namespace = decl.ns
+
+            override def getName(decl: ArgonModule.GlobalDeclarationFunction): ArgonModule.GlobalName = decl.name
+
+            override type ErasedSig = ErasedSignature[context.type]
+
+            override def getErasedSig(decl: ArgonModule.GlobalDeclarationFunction): Comp[ErasedSignature[context.type]] =
+              parseErasedSig(decl.sig)
+          }
+
+          private def convertNamespaceElements[TDecl, TElem]
           (
-            declarations: Vector[ArgonModule.GlobalDeclaration]
+            declarations: Vector[TDecl]
+          )(
+            declarationHelper: GlobalDeclarationHelper[TDecl]
           )(
             loadElement: Int => Comp[ModuleObjectLoadResult[_, TElem, _]],
           )(
-            getNamespace: TElem => NamespacePath,
-            getName: TElem => GlobalName,
-            createBinding: (GlobalName, AccessModifierGlobal, TElem) => GlobalBinding[context.type, TPayloadSpec]
+            createBinding: (GlobalName, AccessModifierGlobal, Option[declarationHelper.ErasedSig], TElem) => GlobalBinding[context.type, TPayloadSpec]
           ): Comp[Vector[ModuleElement[context.type, TPayloadSpec]]] =
-            declarations.traverse {
-              case ArgonModule.GlobalDeclaration(id, ParsedAccessModifier(accessModifier: AccessModifierGlobal)) =>
-                loadElement(id).flatMap {
-                  case ModuleObjectGlobalDefinition(elem) =>
-                    val nsPath = getNamespace(elem)
+            declarations.traverse { decl =>
+              for {
+                accessModifier <- declarationHelper.getAccessModifier(decl) match {
+                  case ParsedAccessModifier(accessModifier: AccessModifierGlobal) => IO.succeed(accessModifier)
+                  case _ => Compilation.forErrors(invalidModuleFormatError)
+                }
 
-                    ModuleElement(nsPath, createBinding(getName(elem), accessModifier, elem)).pure[Comp]
-
+                elem <- loadElement(declarationHelper.getId(decl)).flatMap {
+                  case ModuleObjectGlobalDefinition(elem) => IO.succeed(elem)
                   case ModuleObjectDefinition(_) | ModuleObjectReference(_) =>
                     Compilation.forErrors(CompilationError.InvalidGlobal(CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
                 }
 
-              case _ => Compilation.forErrors(invalidModuleFormatError)
+                nsPath = parseNamespacePath(declarationHelper.getNamespace(decl))
+                name <- declarationHelper.getName(decl) match {
+                  case ValidGlobalName(name) => IO.succeed(name)
+                  case _ => Compilation.forErrors(invalidModuleFormatError)
+                }
+
+                sig <- declarationHelper.getErasedSig(decl)
+
+
+              } yield ModuleElement(nsPath, createBinding(name, accessModifier, Some(sig), elem))
             }
 
           private lazy val globalNamespaceComp: Comp[Namespace[context.type, TPayloadSpec]] =
             Vector(
-              convertNamespaceElements(metadata.globalTraits)(getTrait(_))(_.owner.namespace, _.owner.name, GlobalBinding.GlobalTrait(_, _, _)),
-              convertNamespaceElements(metadata.globalClasses)(getArClass(_))(_.owner.namespace, _.owner.name, GlobalBinding.GlobalClass(_, _, _)),
-              convertNamespaceElements(metadata.globalDataConstructors)(getDataCtor(_))(_.owner.namespace, _.owner.name, GlobalBinding.GlobalDataConstructor(_, _, _)),
-              convertNamespaceElements(metadata.globalFunctions)(getFunction(_))(_.owner.namespace, _.owner.name, GlobalBinding.GlobalFunction(_, _, _)),
+              convertNamespaceElements(metadata.globalTraits)(GlobalDeclarationTypeHelper)(getTrait(_))(GlobalBinding.GlobalTrait(_, _, _, _)),
+              convertNamespaceElements(metadata.globalClasses)(GlobalDeclarationTypeHelper)(getArClass(_))(GlobalBinding.GlobalClass(_, _, _, _)),
+              convertNamespaceElements(metadata.globalDataConstructors)(GlobalDeclarationTypeHelper)(getDataCtor(_))(GlobalBinding.GlobalDataConstructor(_, _, _, _)),
+              convertNamespaceElements(metadata.globalFunctions)(GlobalDeclarationFunctionHelper)(getFunction(_))(GlobalBinding.GlobalFunction(_, _, _, _)),
             )
               .flatSequence[Comp, ModuleElement[context.type, TPayloadSpec]]
               .flatMap { globals =>
