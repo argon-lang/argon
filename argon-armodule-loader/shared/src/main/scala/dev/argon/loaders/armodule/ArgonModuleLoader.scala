@@ -951,7 +951,7 @@ object ArgonModuleLoader {
           )(
             loadElement: Int => Comp[ModuleObjectLoadResult[_, TElem, _]],
           )(
-            createBinding: (GlobalName, AccessModifierGlobal, Option[declarationHelper.ErasedSig], TElem) => GlobalBinding[context.type, TPayloadSpec]
+            createBinding: (GlobalName, AccessModifierGlobal, Option[declarationHelper.ErasedSig], Comp[TElem]) => GlobalBinding[context.type, TPayloadSpec]
           ): Comp[Vector[ModuleElement[context.type, TPayloadSpec]]] =
             declarations.traverse { decl =>
               for {
@@ -964,7 +964,7 @@ object ArgonModuleLoader {
                   case ModuleObjectGlobalDefinition(elem) => IO.succeed(elem)
                   case ModuleObjectDefinition(_) | ModuleObjectReference(_) =>
                     Compilation.forErrors(CompilationError.InvalidGlobal(CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
-                }
+                }.memoize
 
                 nsPath = parseNamespacePath(declarationHelper.getNamespace(decl))
                 name <- declarationHelper.getName(decl) match {

@@ -172,7 +172,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           val owner = TraitOwner.ByNamespace(currentModule, sourceAST.currentNamespace, globalName)
 
           for {
-            arTrait <- SourceTrait(context)(env)(traitDeclarationStmt)(owner)
+            arTrait <- SourceTrait(context)(env)(traitDeclarationStmt)(owner).memoize
           } yield GlobalBinding.GlobalTrait(globalName, accessModifier, None, arTrait)
         }
 
@@ -181,7 +181,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           val owner = ClassOwner.ByNamespace(currentModule, sourceAST.currentNamespace, globalName)
 
           for {
-            arClass <- SourceClass(context)(env)(classDeclarationStmt)(owner)
+            arClass <- SourceClass(context)(env)(classDeclarationStmt)(owner).memoize
           } yield GlobalBinding.GlobalClass(globalName, accessModifier, None, arClass)
         }
 
@@ -190,7 +190,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           val owner = FunctionOwner.ByNamespace(currentModule, sourceAST.currentNamespace, globalName)
 
           for {
-            arFunc <- SourceFunction(context)(env)(funcDeclarationStmt)(owner)
+            arFunc <- SourceFunction(context)(env)(funcDeclarationStmt)(owner).memoize
           } yield GlobalBinding.GlobalFunction(
             globalName, accessModifier, None,
             arFunc
@@ -202,7 +202,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
           val owner = DataConstructorOwner.ByNamespace(currentModule, sourceAST.currentNamespace, globalName)
 
           for {
-            ctor <- SourceDataConstructor(context)(env)(dataCtorDeclarationStmt)(owner)
+            ctor <- SourceDataConstructor(context)(env)(dataCtorDeclarationStmt)(owner).memoize
           } yield GlobalBinding.GlobalDataConstructor(globalName, accessModifier, None, ctor)
         }
 

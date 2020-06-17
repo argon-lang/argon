@@ -98,8 +98,9 @@ sealed abstract class ModuleEmitter private() {
     def processNamespace(nsPath: NamespacePath, ns: Namespace[context.type, DeclarationPayloadSpecifier]): Emit[Unit] =
       ZIO.foreach_(ns.bindings) {
         case GlobalBinding.NestedNamespace(GlobalName.Normal(name), nestedNS) => processNamespace(NamespacePath(nsPath.ns :+ name), nestedNS)
-        case GlobalBinding.GlobalTrait(name, access, _, arTrait) =>
+        case GlobalBinding.GlobalTrait(name, access, _, arTraitComp) =>
           for {
+            arTrait <- arTraitComp
             sig <- arTrait.signature
             erasedSig <- convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig))
             _ <- produceGlobalElement[module.GlobalDeclarationType, ArTrait, module.ErasedSignatureParameterOnly](_.getTraitIdNum)(arTrait)(nsPath, name, access, erasedSig)(module.GlobalDeclarationType(_, _, _, _, _))(_.globalTraits)(ModulePaths.traitTypeName)(createTraitDefMessage)
@@ -108,8 +109,9 @@ sealed abstract class ModuleEmitter private() {
             _ <- processMethods(instMethods)
           } yield ()
 
-        case GlobalBinding.GlobalClass(name, access, _, arClass) =>
+        case GlobalBinding.GlobalClass(name, access, _, arClassComp) =>
           for {
+            arClass <- arClassComp
             sig <- arClass.signature
             erasedSig <- convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig))
             _ <- produceGlobalElement[module.GlobalDeclarationType, ArClass, module.ErasedSignatureParameterOnly](_.getClassIdNum)(arClass)(nsPath, name, access, erasedSig)(module.GlobalDeclarationType(_, _, _, _, _))(_.globalClasses)(ModulePaths.classTypeName)(createClassDefMessage)
@@ -124,8 +126,9 @@ sealed abstract class ModuleEmitter private() {
             _ <- processClassCtors(ctors)
           } yield ()
 
-        case GlobalBinding.GlobalDataConstructor(name, access, _, dataCtor) =>
+        case GlobalBinding.GlobalDataConstructor(name, access, _, dataCtorComp) =>
           for {
+            dataCtor <- dataCtorComp
             sig <- dataCtor.signature
             erasedSig <- convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig))
             _ <- produceGlobalElement[module.GlobalDeclarationType, DataConstructor, module.ErasedSignatureParameterOnly](_.getDataCtorIdNum)(dataCtor)(nsPath, name, access, erasedSig)(module.GlobalDeclarationType(_, _, _, _, _))(_.globalDataConstructors)(ModulePaths.dataCtorTypeName)(createDataCtorDefMessage)
@@ -134,8 +137,9 @@ sealed abstract class ModuleEmitter private() {
             instEntries <- processMethods(instMethods)
           } yield instEntries
 
-        case GlobalBinding.GlobalFunction(name, access, _, func) =>
+        case GlobalBinding.GlobalFunction(name, access, _, funcComp) =>
           for {
+            func <- funcComp
             sig <- func.signature
             erasedSig <- convertErasedSignature(ErasedSignature.fromSignature(context)(sig))
             _ <- produceGlobalElement[module.GlobalDeclarationFunction, ArFunc, module.ErasedSignature](_.getFunctionIdNum)(func)(nsPath, name, access, erasedSig)(module.GlobalDeclarationFunction(_, _, _, _, _))(_.globalFunctions)(ModulePaths.funcTypeName)(createFuncDefMessage)

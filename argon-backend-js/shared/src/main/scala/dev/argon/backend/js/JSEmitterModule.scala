@@ -88,8 +88,9 @@ abstract class JSEmitterModule[I <: ResourceIndicator: Tag] extends JSEmitterGlo
 
   private def createObjectsForScopeValue(vtableBuilder: VTableBuilder.Aux[context.type])(state: ArModuleElements, value: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]): Emit[ArModuleElements] =
     value match {
-      case GlobalBinding.GlobalFunction(_, _, _, func) =>
+      case GlobalBinding.GlobalFunction(_, _, _, funcComp) =>
         for {
+          func <- funcComp
           funcCreator <- createGlobalFunction(func)
 
           globalName <- convertGlobalName(func.owner.name, func.id)
@@ -109,8 +110,9 @@ abstract class JSEmitterModule[I <: ResourceIndicator: Tag] extends JSEmitterGlo
           )
         } yield state.copy(functions = state.functions :+ funcInfo)
 
-      case GlobalBinding.GlobalTrait(_, _, _, arTrait) =>
+      case GlobalBinding.GlobalTrait(_, _, _, arTraitComp) =>
         for {
+          arTrait <- arTraitComp
           traitCreator <- createGlobalTrait(arTrait)
 
           globalName <- convertGlobalName(arTrait.owner.name, arTrait.id)
@@ -130,8 +132,9 @@ abstract class JSEmitterModule[I <: ResourceIndicator: Tag] extends JSEmitterGlo
           )
         } yield state.copy(traits = state.traits :+ traitInfo)
 
-      case GlobalBinding.GlobalClass(_, _, _, arClass) =>
+      case GlobalBinding.GlobalClass(_, _, _, arClassComp) =>
         for {
+          arClass <- arClassComp
           classCreator <- createGlobalClass(vtableBuilder)(arClass)
 
           globalName <- convertGlobalName(arClass.owner.name, arClass.id)
@@ -151,8 +154,9 @@ abstract class JSEmitterModule[I <: ResourceIndicator: Tag] extends JSEmitterGlo
           )
         } yield state.copy(classes = state.classes :+ classInfo)
 
-      case GlobalBinding.GlobalDataConstructor(_, _, _, ctor) =>
+      case GlobalBinding.GlobalDataConstructor(_, _, _, ctorComp) =>
         for {
+          ctor <- ctorComp
           ctorCreator <- createGlobalDataConstructor(vtableBuilder)(ctor)
 
           globalName <- convertGlobalName(ctor.owner.name, ctor.id)

@@ -162,7 +162,7 @@ object GlobalScope {
         modules.flatTraverse { module =>
           ModuleLookup.lookupNamespaceValues(context)(module.value)(importNS, name) {
             case binding: GlobalBinding.NonNamespace[context.type, module.PayloadSpec] =>
-              IO.succeed(Some(getScopeValue(context)(binding)))
+              getScopeValue(context)(binding).map(Some.apply)
 
             case _ => IO.succeed(None)
           }
@@ -179,11 +179,11 @@ object GlobalScope {
   private def getScopeValue[TPayloadSpec[_, _]]
   (context: Context)
   (binding: GlobalBinding.NonNamespace[context.type, TPayloadSpec])
-  : context.scopeContext.ScopeValueOverload = binding match {
-    case GlobalBinding.GlobalClass(_, _, _, arClass) => context.scopeContext.ClassScopeValue(AbsRef(arClass))
-    case GlobalBinding.GlobalTrait(_, _, _, arTrait) => context.scopeContext.TraitScopeValue(AbsRef(arTrait))
-    case GlobalBinding.GlobalFunction(_, _, _, func) => context.scopeContext.FunctionScopeValue(AbsRef(func))
-    case GlobalBinding.GlobalDataConstructor(_, _, _, dataCtor) => context.scopeContext.DataConstructorScopeValue(AbsRef(dataCtor))
+  : Comp[context.scopeContext.ScopeValueOverload] = binding match {
+    case GlobalBinding.GlobalClass(_, _, _, arClassComp) => arClassComp.map { arClass => context.scopeContext.ClassScopeValue(AbsRef(arClass)) }
+    case GlobalBinding.GlobalTrait(_, _, _, arTraitComp) => arTraitComp.map { arTrait => context.scopeContext.TraitScopeValue(AbsRef(arTrait)) }
+    case GlobalBinding.GlobalFunction(_, _, _, funcComp) => funcComp.map { func => context.scopeContext.FunctionScopeValue(AbsRef(func)) }
+    case GlobalBinding.GlobalDataConstructor(_, _, _, dataCtorComp) => dataCtorComp.map { dataCtor => context.scopeContext.DataConstructorScopeValue(AbsRef(dataCtor)) }
   }
 
 }
