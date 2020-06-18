@@ -7,6 +7,7 @@ import cats.implicits._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.util.{MemoCache, MemoCacheStore}
 import shapeless.Nat
+import zio.UIO
 import zio.interop.catz.core._
 
 sealed abstract class VTableBuilder {
@@ -25,7 +26,7 @@ object VTableBuilder {
     val vtableContext: VTableContext.Aux[TContext]
   }
 
-  def apply(context: Context): Comp[VTableBuilder.Aux[context.type]] = {
+  def apply(context: Context): UIO[VTableBuilder.Aux[context.type]] = {
     import context._
     val ctx: context.type = context
 

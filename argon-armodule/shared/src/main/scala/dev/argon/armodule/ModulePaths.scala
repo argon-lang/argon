@@ -1,4 +1,4 @@
-package dev.argon.loaders.armodule
+package dev.argon.armodule
 
 object ModulePaths {
   val metadata = "argon_module"

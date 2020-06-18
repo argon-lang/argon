@@ -443,7 +443,7 @@ lazy val backend_commonJVM = backend_common.jvm
 lazy val backend_commonJS = backend_common.js
 lazy val backend_commonNode = backend_common.node
 
-lazy val armodule_loader = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-armodule-loader"))
+lazy val armodule = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-armodule"))
   .dependsOn(argon_compiler, backend_common)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -460,16 +460,16 @@ lazy val armodule_loader = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
     commonSettings,
     compilerOptions,
 
-    name := "argon-armodule-loader",
+    name := "argon-armodule",
   )
 
-lazy val armodule_loaderJVM = armodule_loader.jvm
-lazy val armodule_loaderJS = armodule_loader.js
-lazy val armodule_loaderNode = armodule_loader.node
+lazy val armoduleJVM = armodule.jvm
+lazy val armoduleJS = armodule.js
+lazy val armoduleNode = armodule.node
 
 
 lazy val backend_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-backend-js"))
-  .dependsOn(armodule_loader)
+  .dependsOn(armodule)
   .jvmConfigure(
     _.settings(
       commonJVMSettings,
@@ -539,7 +539,7 @@ lazy val backend_jsJS = backend_js.js
 lazy val backend_jsNode = backend_js.node
 
 lazy val backend_module = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-backend-module"))
-  .dependsOn(armodule_loader)
+  .dependsOn(armodule)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )

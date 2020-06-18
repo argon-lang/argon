@@ -1,10 +1,10 @@
-package dev.argon.loaders.armodule
+package dev.argon.armodule.loader
 
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.{core, _}
 import dev.argon.compiler.core.{ErasedSignature, _}
 import dev.argon.compiler.lookup._
-import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, ModuleMetadata, NamespaceBuilder, ResourceIndicator, ResourceReader, StandardTypeLoaders}
+import dev.argon.compiler.loaders.{ModuleLoad, ModuleMetadata, NamespaceBuilder, ResourceIndicator, ResourceReader, StandardTypeLoaders}
 import dev.argon.compiler.types._
 import dev.argon.{module => ArgonModule}
 import dev.argon.util._
@@ -12,6 +12,7 @@ import cats.{Id => _, _}
 import cats.evidence.{===, Is}
 import cats.data.{NonEmptyList, NonEmptyVector}
 import cats.implicits._
+import dev.argon.armodule.{ModuleFormatVersion, ModulePaths}
 import dev.argon.backend.ResourceAccess
 import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._

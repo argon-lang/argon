@@ -1,4 +1,4 @@
-package dev.argon.loaders.armodule
+package dev.argon.armodule.loader
 
 import dev.argon.compiler.ErrorList
 import dev.argon.compiler.core.Context

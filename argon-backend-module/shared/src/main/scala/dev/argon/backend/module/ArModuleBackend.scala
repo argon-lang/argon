@@ -7,6 +7,7 @@ import dev.argon.stream._
 import scalapb.GeneratedMessage
 import cats.instances._
 import cats.data.NonEmptyList
+import dev.argon.armodule.emitter.{ModuleEmitOptions, ModuleEmitter}
 import dev.argon.compiler.options.SingleFile
 import dev.argon.backend.{Backend, CompilationOutput, ResourceAccess, ResourceWriter}
 import dev.argon.compiler.core.Context
@@ -89,12 +90,16 @@ object ArModuleBackend extends Backend {
     )
 
   override def compile[I <: ResourceIndicator : Tag](input: CompilerInput[I, ModuleBackendOptions[Id, I]]): ZManaged[ResourceReader[I] with SourceParser, ErrorList, TCompilationOutput] = {
-    val context = ModuleContext(input)
+    val ctx = ModuleContext(input)
 
-    context.module[ModuleContext with Context.WithRes[I]].map { module =>
+    val moduleEmitter = new ModuleEmitterImpl {
+      override val context: ctx.type = ctx
+    }
+
+    ctx.module[ModuleContext with Context.WithRes[I]].map { module =>
       createOutput(
-        refModuleGen = ModuleEmitter.emitModule(context)(ModuleEmitOptions(ModuleEmitOptions.ReferenceModule))(module),
-        declModuleGen = ModuleEmitter.emitModule(context)(ModuleEmitOptions(ModuleEmitOptions.DeclarationModule))(module),
+        refModuleGen = ModuleEmitter.emitModule(moduleEmitter)(ModuleEmitOptions(ModuleEmitOptions.ReferenceModule))(module),
+        declModuleGen = ModuleEmitter.emitModule(moduleEmitter)(ModuleEmitOptions(ModuleEmitOptions.DeclarationModule))(module),
       )
     }
       .provideSomeLayer[ResourceReader[I] with SourceParser](ModuleBackendLoadService.forResourceReader[I, ModuleContext with Context.WithRes[I]])

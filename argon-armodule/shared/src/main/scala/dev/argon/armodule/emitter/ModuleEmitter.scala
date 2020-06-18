@@ -1,4 +1,4 @@
-package dev.argon.backend.module
+package dev.argon.armodule.emitter
 
 import dev.argon.compiler.{core, _}
 import dev.argon.compiler.core._
@@ -10,9 +10,9 @@ import cats.data._
 import cats.evidence.===
 import cats.implicits._
 import com.google.protobuf.ByteString
+import dev.argon.armodule.{ModuleFormatVersion, ModulePaths}
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
-import dev.argon.loaders.armodule.{ModuleFormatVersion, ModulePaths}
 import dev.argon.compiler.types.TypeSystem
 import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.compiler.vtable.VTableBuilder.Aux
@@ -26,9 +26,9 @@ import shapeless.ops.nat.{LT, Pred}
 import zio.{IO, Ref, UIO, URIO, ZIO, stream => zstream}
 import zio.interop.catz.core._
 
-sealed abstract class ModuleEmitter private() {
+abstract class ModuleEmitter {
 
-  val context: ModuleContext
+  val context: Context
 
   import context.typeSystem
   import context.signatureContext.{ Signature, SignatureResult, SignatureParameters, SignatureVisitor }
@@ -49,19 +49,25 @@ sealed abstract class ModuleEmitter private() {
     def getLocalVariableIdNum[TPayloadSpec[_, _]](variable: LocalVariable[context.type, Id]): Comp[Int]
 
     def updateMetadataElement(f: module.Metadata => module.Metadata): UIO[Unit]
+    def currentMetadata: UIO[module.Metadata]
     def produceStreamElement[R](path: String)(element: => RComp[R, GeneratedMessage]): RComp[R, Unit]
   }
 
   type Emit[A] = RComp[EmitEnv, A]
 
-  def addGlobalDeclaration[TDecl](lens: scalapb.lenses.Lens[module.Metadata, module.Metadata] => scalapb.lenses.Lens[module.Metadata, Vector[TDecl]])(declaration: TDecl): URIO[EmitEnv, Unit] =
+  def convertFunctionBody(body: context.TFunctionImplementation): Emit[module.FunctionBody]
+  def convertMethodBody(body: context.TMethodImplementation): Emit[Option[module.FunctionBody]]
+  def convertClassConstructorBody(body: context.TClassConstructorImplementation): Emit[module.ClassConstructorBody]
+
+
+  private def addGlobalDeclaration[TDecl](lens: scalapb.lenses.Lens[module.Metadata, module.Metadata] => scalapb.lenses.Lens[module.Metadata, Vector[TDecl]])(declaration: TDecl): URIO[EmitEnv, Unit] =
     ZIO.accessM[EmitEnv] { emitEnv =>
       emitEnv.updateMetadataElement { metadata =>
         metadata.update { metadataLens => lens(metadataLens).modify(_ :+ declaration) }
       }
     }
 
-  def produceGlobalElement[TDecl, TElem[_ <: Context with Singleton, _[_, _]], TSig]
+  private def produceGlobalElement[TDecl, TElem[_ <: Context with Singleton, _[_, _]], TSig]
   (accessor: EmitEnv => TElem[context.type, DeclarationPayloadSpecifier] => Comp[Int])
   (elem: TElem[context.type, DeclarationPayloadSpecifier])
   (ns: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal, sig: TSig)
@@ -80,7 +86,7 @@ sealed abstract class ModuleEmitter private() {
       }
     }
 
-  def produceElement[TElem[_ <: Context with Singleton, _[_, _]]]
+  private def produceElement[TElem[_ <: Context with Singleton, _[_, _]]]
   (accessor: EmitEnv => TElem[context.type, DeclarationPayloadSpecifier] => Comp[Int])
   (elem: TElem[context.type, DeclarationPayloadSpecifier])
   (pathTypeName: String)
@@ -851,7 +857,7 @@ sealed abstract class ModuleEmitter private() {
         case ModuleEmitOptions.ReferenceModule => IO.none
         case ModuleEmitOptions.DeclarationModule => func.payload.asSome
       })
-      convFuncBody <- ZIO.foreach(funcBody)(convertExpr(_))
+      convFuncBody <- ZIO.foreach(funcBody)(convertFunctionBody(_))
 
     } yield module.FunctionDefinition(
       owner = convOwner,
@@ -861,7 +867,7 @@ sealed abstract class ModuleEmitter private() {
         isPure = func.effectInfo.isPure
       ),
 
-      body = convFuncBody.map { expr => module.FunctionBody(module.FunctionBody.BodyType.ExpressionBody(expr)) },
+      body = convFuncBody,
     )
 
   def convertMethodSignature(sig: Signature[FunctionResultInfo, _ <: Nat]): Emit[module.MethodSignature] =
@@ -883,9 +889,9 @@ sealed abstract class ModuleEmitter private() {
 
       methodBody <- ZIO.accessM[EmitEnv](_.options.moduleType match {
         case ModuleEmitOptions.ReferenceModule => IO.none
-        case ModuleEmitOptions.DeclarationModule => method.payload
+        case ModuleEmitOptions.DeclarationModule => method.payload.asSome
       })
-      convMethodBody <- ZIO.foreach(methodBody)(convertExpr(_))
+      convMethodBody <- methodBody.flatTraverse(convertMethodBody(_))
 
     } yield module.MethodDefinition(
       owner = methodOwner,
@@ -901,7 +907,7 @@ sealed abstract class ModuleEmitter private() {
       isImplicitOverride = Some(method.isImplicitOverride).filter(identity),
       isFinal = Some(method.isFinal).filter(identity),
 
-      body = convMethodBody.map { expr => module.FunctionBody(module.FunctionBody.BodyType.ExpressionBody(expr)) },
+      body = convMethodBody,
     )
 
   def convertClassCtorSignature(sig: Signature[ClassConstructor.ResultInfo, _ <: Nat]): Emit[module.ClassConstructorSignature] =
@@ -928,45 +934,50 @@ sealed abstract class ModuleEmitter private() {
       body = convCtorBody,
     )
 
+
+  def convertClassConstructorExpressionBody(body: ClassConstructorBody[context.type]): Emit[module.ClassConstructorBody] = {
+
+    def convertPreInitStmt(stmt: ClassConstructorStatement[context.type]): Emit[module.PreInitClassConstructorStatement] =
+      stmt match {
+        case ClassConstructorStatementExpr(expr) => convertExpr(expr).map { convExpr => module.PreInitClassConstructorStatement(expr = convExpr) }
+        case InitializeFieldStatement(field, value) =>
+          for {
+            convField <- convertFieldVariable(field)
+            convValue <- convertExpr(value)
+          } yield module.PreInitClassConstructorStatement(field = Some(convField), expr = convValue)
+      }
+
+    def convertBaseCtorCall(baseCall: ClassConstructorCall[context.type, Id]): Emit[module.BaseClassConstructorCall] =
+      for {
+        baseCtorIdNum <- ZIO.accessM[EmitEnv](_.getClassCtorIdNum(baseCall.classCtor.value))
+        baseCtorClassType <- convertClassType(baseCall.classType)
+        convArgs <- baseCall.args.traverse(convertExpr(_))
+      } yield module.BaseClassConstructorCall(
+        baseConstructorId = baseCtorIdNum,
+        instanceClassType = baseCtorClassType,
+        args = convArgs,
+      )
+
+
+    for {
+      preInitStmts <- body.initStatements.traverse(convertPreInitStmt(_))
+      baseCall <- ZIO.foreach(body.baseConstructorCall)(convertBaseCtorCall(_))
+      endExpr <- convertExpr(body.endExpr)
+
+    } yield module.ClassConstructorBody(module.ClassConstructorBody.BodyType.ExpressionBody(
+      module.ClassConstructorExpressionBody(
+        preInitStatements = preInitStmts,
+        baseConstructorCall = baseCall,
+        endExpr = endExpr,
+      )
+    ))
+  }
+
   def createClassCtorBody(ctor: ClassConstructor[context.type, DeclarationPayloadSpecifier]): Emit[Option[module.ClassConstructorBody]] =
     ZIO.accessM[EmitEnv](_.options.moduleType match {
       case ModuleEmitOptions.ReferenceModule => IO.none
       case ModuleEmitOptions.DeclarationModule =>
-        def convertPreInitStmt(stmt: ClassConstructorStatement[context.type]): Emit[module.PreInitClassConstructorStatement] =
-          stmt match {
-            case ClassConstructorStatementExpr(expr) => convertExpr(expr).map { convExpr => module.PreInitClassConstructorStatement(expr = convExpr) }
-            case InitializeFieldStatement(field, value) =>
-              for {
-                convField <- convertFieldVariable(field)
-                convValue <- convertExpr(value)
-              } yield module.PreInitClassConstructorStatement(field = Some(convField), expr = convValue)
-          }
-
-        def convertBaseCtorCall(baseCall: ClassConstructorCall[context.type, Id]): Emit[module.BaseClassConstructorCall] =
-          for {
-            baseCtorIdNum <- ZIO.accessM[EmitEnv](_.getClassCtorIdNum(baseCall.classCtor.value))
-            baseCtorClassType <- convertClassType(baseCall.classType)
-            convArgs <- baseCall.args.traverse(convertExpr(_))
-          } yield module.BaseClassConstructorCall(
-            baseConstructorId = baseCtorIdNum,
-            instanceClassType = baseCtorClassType,
-            args = convArgs,
-          )
-
-        for {
-          body <- ctor.payload
-
-          preInitStmts <- body.initStatements.traverse(convertPreInitStmt(_))
-          baseCall <- ZIO.foreach(body.baseConstructorCall)(convertBaseCtorCall(_))
-          endExpr <- convertExpr(body.endExpr)
-
-        } yield Some(module.ClassConstructorBody(module.ClassConstructorBody.BodyType.ExpressionBody(
-          module.ClassConstructorExpressionBody(
-            preInitStatements = preInitStmts,
-            baseConstructorCall = baseCall,
-            endExpr = endExpr,
-          )
-        )))
+        ctor.payload.flatMap(convertClassConstructorBody).asSome
     })
 }
 
@@ -974,194 +985,197 @@ object ModuleEmitter {
 
   type StreamElem = (String, GeneratedMessage)
 
-  def emitModule(context: ModuleContext)(emitOptions: ModuleEmitOptions)(currentModule: ArModule[context.type, DeclarationPayloadSpecifier]): zstream.Stream[ErrorList, StreamElem] =
+  def emitModule(moduleEmitter: ModuleEmitter)(emitOptions: ModuleEmitOptions)(currentModule: ArModule[moduleEmitter.context.type, DeclarationPayloadSpecifier]): zstream.Stream[ErrorList, StreamElem] =
     new Source[Any, ErrorList, StreamElem] {
 
-      override def foreach(f: StreamElem => Comp[Unit]): Comp[Unit] = for {
-        metadata <- Ref.make(module.Metadata(
-          formatVersion = ModuleFormatVersion.currentVersion,
-          name = currentModule.id.name,
-          moduleType = emitOptions.moduleType match {
-            case ModuleEmitOptions.ReferenceModule => module.ModuleType.ReferenceModule
-            case ModuleEmitOptions.DeclarationModule => module.ModuleType.DefinitionModule
-          },
-        ))
+      override def foreach(f: StreamElem => Comp[Unit]): Comp[Unit] =
+        for {
+          emitEnv <- createEmitEnv(moduleEmitter)(emitOptions)(currentModule)(f)
 
-        vtableBuilderObj <- VTableBuilder(context)
-
-        moduleIds <- Ref.make(IdentifierState.initial[ModuleId])
-
-        classIds <- Ref.make(IdentifierState.initial[ClassId])
-        traitIds <- Ref.make(IdentifierState.initial[TraitId])
-        dataCtorIds <- Ref.make(IdentifierState.initial[DataConstructorId])
-        functionIds <- Ref.make(IdentifierState.initial[FunctionId])
-        methodIds <- Ref.make(IdentifierState.initial[MethodId])
-        classCtorIds <- Ref.make(IdentifierState.initial[ClassConstructorId])
-
-        classRefIds <- Ref.make(IdentifierState.initial[ClassId])
-        traitRefIds <- Ref.make(IdentifierState.initial[TraitId])
-        dataCtorRefIds <- Ref.make(IdentifierState.initial[DataConstructorId])
-        functionRefIds <- Ref.make(IdentifierState.initial[FunctionId])
-        methodRefIds <- Ref.make(IdentifierState.initial[MethodId])
-        classCtorRefIds <- Ref.make(IdentifierState.initial[ClassConstructorId])
-
-        localVarIds <- Ref.make(IdentifierState.initial[LocalVariableId])
-
-        emittedPaths <- Ref.make(Set.empty[String])
-
-        context2: context.type = context
-        moduleEmitter = new ModuleEmitter {
-          override val context: context2.type = context2
-        }
-
-        emitEnv = new moduleEmitter.EmitEnv {
-
-          override val options: ModuleEmitOptions = emitOptions
-
-          override val vtableBuilder: Aux[context.type] = vtableBuilderObj
-
-          private def isCurrentModule[TPayloadSpec[_, _]](arModule: ArModule[context.type, TPayloadSpec]): Boolean =
-            arModule.id === currentModule.id
-
-          private def classFromCurrentModule[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Boolean =
-            arClass.owner match {
-              case ClassOwner.ByNamespace(arModule, _, _) => isCurrentModule(arModule)
-            }
-
-          private def traitFromCurrentModule[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): Boolean =
-            arTrait.owner match {
-              case TraitOwner.ByNamespace(arModule, _, _) => isCurrentModule(arModule)
-            }
-
-          private def dataCtorFromCurrentModule[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): Boolean =
-            ctor.owner match {
-              case DataConstructorOwner.ByNamespace(arModule, _, _) => isCurrentModule(arModule)
-            }
-
-          private def funcFromCurrentModule[TPayloadSpec[_, _]](func: ArFunc[context.type, TPayloadSpec]): Boolean =
-            func.owner match {
-              case FunctionOwner.ByNamespace(arModule, _, _) => isCurrentModule(arModule)
-            }
-
-          private def methodFromCurrentModule[TPayloadSpec[_, _]](method: ArMethod[context.type, TPayloadSpec]): Boolean =
-            method.owner match {
-              case MethodOwner.ByClass(ownerClass) => classFromCurrentModule(ownerClass)
-              case MethodOwner.ByClassObject(ownerClass) => classFromCurrentModule(ownerClass)
-              case MethodOwner.ByTrait(ownerTrait) => traitFromCurrentModule(ownerTrait)
-              case MethodOwner.ByTraitObject(ownerTrait) => traitFromCurrentModule(ownerTrait)
-              case MethodOwner.ByDataCtor(dataCtor) => dataCtorFromCurrentModule(dataCtor)
-            }
-
-          private def classCtorFromCurrentModule[TPayloadSpec[_, _]](ctor: ClassConstructor[context.type, TPayloadSpec]): Boolean =
-            classFromCurrentModule(ctor.ownerClass)
-
-
-          private def getDefOrRefId[TElem, ID]
-          (elem: TElem)
-          (fromCurrentModule: TElem => Boolean)
-          (id: TElem => ID)
-          (defIds: Ref[IdentifierState[ID]], refIds: Ref[IdentifierState[ID]])
-          (elemTypeName: String)
-          (createReference: => Comp[GeneratedMessage])
-          : Comp[Int] =
-            if(fromCurrentModule(elem))
-              getElementIdNum(defIds)(id(elem))
-            else
-              for {
-                idNum <- getElementIdNum(refIds)(id(elem))
-                _ <- produceStreamElement(ModulePaths.elementRef(elemTypeName, idNum))(createReference)
-              } yield idNum
-
-
-          override def getModuleIdNum[TPayloadSpec[_, _]](arModule: ArModule[context.type, TPayloadSpec]): Comp[Option[Int]] =
-            if(isCurrentModule(arModule))
-              IO.none
-            else
-              getElementIdNum(moduleIds)(arModule.id).asSome
-
-          override def getClassIdNum[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[Int] =
-            getDefOrRefId(arClass)(classFromCurrentModule)(_.id)(classIds, classRefIds)(ModulePaths.classTypeName)(
-              for {
-                owner <- moduleEmitter.convertClassOwner(arClass.owner).provide(this)
-                sig <- arClass.signature
-                convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
-              } yield module.ClassReference(owner, convSig)
-            )
-
-          override def getTraitIdNum[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): Comp[Int] =
-            getDefOrRefId(arTrait)(traitFromCurrentModule)(_.id)(traitIds, traitRefIds)(ModulePaths.traitTypeName)(
-              for {
-                owner <- moduleEmitter.convertTraitOwner(arTrait.owner).provide(this)
-                sig <- arTrait.signature
-                convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
-              } yield module.TraitReference(owner, convSig)
-            )
-
-          override def getDataCtorIdNum[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): Comp[Int] =
-            getDefOrRefId(ctor)(dataCtorFromCurrentModule)(_.id)(dataCtorIds, dataCtorRefIds)(ModulePaths.dataCtorTypeName)(
-              for {
-                owner <- moduleEmitter.convertDataCtorOwner(ctor.owner).provide(this)
-                sig <- ctor.signature
-                convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
-              } yield module.DataConstructorReference(owner, convSig)
-            )
-
-          override def getFunctionIdNum[TPayloadSpec[_, _]](func: ArFunc[context.type, TPayloadSpec]): Comp[Int] =
-            getDefOrRefId(func)(funcFromCurrentModule)(_.id)(functionIds, functionRefIds)(ModulePaths.funcTypeName)(
-              for {
-                owner <- moduleEmitter.convertFuncOwner(func.owner).provide(this)
-                sig <- func.signature
-                convSig <- moduleEmitter.convertErasedSignature(ErasedSignature.fromSignature(context)(sig)).provide(this)
-              } yield module.FunctionReference(owner, convSig)
-            )
-
-          override def getMethodIdNum[TPayloadSpec[_, _]](method: ArMethod[context.type, TPayloadSpec]): Comp[Int] =
-            getDefOrRefId(method)(methodFromCurrentModule)(_.id)(methodIds, methodRefIds)(ModulePaths.methodTypeName)(
-              for {
-                owner <- moduleEmitter.convertMethodOwner(method.owner).provide(this)
-                sig <- method.signatureUnsubstituted
-                convSig <- moduleEmitter.convertErasedSignature(ErasedSignature.fromSignature(context)(sig)).provide(this)
-              } yield module.MethodReference(owner, moduleEmitter.convertMethodName(method.name), convSig)
-            )
-
-          override def getClassCtorIdNum[TPayloadSpec[_, _]](ctor: ClassConstructor[context.type, TPayloadSpec]): Comp[Int] =
-            getDefOrRefId(ctor)(classCtorFromCurrentModule)(_.id)(classCtorIds, classCtorRefIds)(ModulePaths.classCtorTypeName)(
-              for {
-                ownerClassIdNum <- getClassIdNum(ctor.ownerClass)
-                sig <- ctor.signatureUnsubstituted
-                convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
-              } yield module.ClassConstructorReference(ownerClassIdNum, convSig)
-            )
-
-          override def getLocalVariableIdNum[TPayloadSpec[_, _]](variable: LocalVariable[moduleEmitter.context.type, Id]): Comp[Int] =
-            getElementIdNum(localVarIds)(variable.id)
-
-          override def updateMetadataElement(f: Metadata => Metadata): UIO[Unit] =
-            metadata.update(f)
-
-          override def produceStreamElement[R](path: String)(element: => RComp[R, GeneratedMessage]): RComp[R, Unit] =
-            emittedPaths.modifySome(false) {
-              case emPaths if !emPaths.contains(path) =>
-                (true, emPaths + path)
-            }
-              .flatMap {
-                case true =>
-                  element.flatMap { msg =>
-                    f((path, msg))
-                  }
-
-                case false =>
-                  IO.unit
-              }
-        }
-
-        _ <- moduleEmitter.processModule(currentModule).provide(emitEnv)
-        metadataValue <- metadata.get
-        _ <- f(ModulePaths.metadata -> metadataValue)
-      } yield ()
+          _ <- moduleEmitter.processModule(currentModule).provide(emitEnv)
+          metadataValue <- emitEnv.currentMetadata
+          _ <- f(ModulePaths.metadata -> metadataValue)
+        } yield ()
 
     }.toZStream
 
+  def createEmitEnv(moduleEmitter: ModuleEmitter)(emitOptions: ModuleEmitOptions)(currentModule: ArModule[moduleEmitter.context.type, DeclarationPayloadSpecifier])(produceStreamElem: StreamElem => Comp[Unit]): UIO[moduleEmitter.EmitEnv] = {
+    import moduleEmitter.context
+
+    for {
+      metadata <- Ref.make(module.Metadata(
+        formatVersion = ModuleFormatVersion.currentVersion,
+        name = currentModule.id.name,
+        moduleType = emitOptions.moduleType match {
+          case ModuleEmitOptions.ReferenceModule => module.ModuleType.ReferenceModule
+          case ModuleEmitOptions.DeclarationModule => module.ModuleType.DefinitionModule
+        },
+      ))
+
+      vtableBuilderObj <- VTableBuilder(context)
+
+      moduleIds <- Ref.make(IdentifierState.initial[ModuleId])
+
+      classIds <- Ref.make(IdentifierState.initial[ClassId])
+      traitIds <- Ref.make(IdentifierState.initial[TraitId])
+      dataCtorIds <- Ref.make(IdentifierState.initial[DataConstructorId])
+      functionIds <- Ref.make(IdentifierState.initial[FunctionId])
+      methodIds <- Ref.make(IdentifierState.initial[MethodId])
+      classCtorIds <- Ref.make(IdentifierState.initial[ClassConstructorId])
+
+      classRefIds <- Ref.make(IdentifierState.initial[ClassId])
+      traitRefIds <- Ref.make(IdentifierState.initial[TraitId])
+      dataCtorRefIds <- Ref.make(IdentifierState.initial[DataConstructorId])
+      functionRefIds <- Ref.make(IdentifierState.initial[FunctionId])
+      methodRefIds <- Ref.make(IdentifierState.initial[MethodId])
+      classCtorRefIds <- Ref.make(IdentifierState.initial[ClassConstructorId])
+
+      localVarIds <- Ref.make(IdentifierState.initial[LocalVariableId])
+
+      emittedPaths <- Ref.make(Set.empty[String])
+    } yield new moduleEmitter.EmitEnv {
+
+      override val options: ModuleEmitOptions = emitOptions
+
+      override val vtableBuilder: Aux[context.type] = vtableBuilderObj
+
+      private def isCurrentModule[TPayloadSpec[_, _]](arModule: ArModule[context.type, TPayloadSpec]): Boolean =
+        arModule.id === currentModule.id
+
+      private def classFromCurrentModule[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Boolean =
+        arClass.owner match {
+          case ClassOwner.ByNamespace(arModule, _, _) => isCurrentModule(arModule)
+        }
+
+      private def traitFromCurrentModule[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): Boolean =
+        arTrait.owner match {
+          case TraitOwner.ByNamespace(arModule, _, _) => isCurrentModule(arModule)
+        }
+
+      private def dataCtorFromCurrentModule[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): Boolean =
+        ctor.owner match {
+          case DataConstructorOwner.ByNamespace(arModule, _, _) => isCurrentModule(arModule)
+        }
+
+      private def funcFromCurrentModule[TPayloadSpec[_, _]](func: ArFunc[context.type, TPayloadSpec]): Boolean =
+        func.owner match {
+          case FunctionOwner.ByNamespace(arModule, _, _) => isCurrentModule(arModule)
+        }
+
+      private def methodFromCurrentModule[TPayloadSpec[_, _]](method: ArMethod[context.type, TPayloadSpec]): Boolean =
+        method.owner match {
+          case MethodOwner.ByClass(ownerClass) => classFromCurrentModule(ownerClass)
+          case MethodOwner.ByClassObject(ownerClass) => classFromCurrentModule(ownerClass)
+          case MethodOwner.ByTrait(ownerTrait) => traitFromCurrentModule(ownerTrait)
+          case MethodOwner.ByTraitObject(ownerTrait) => traitFromCurrentModule(ownerTrait)
+          case MethodOwner.ByDataCtor(dataCtor) => dataCtorFromCurrentModule(dataCtor)
+        }
+
+      private def classCtorFromCurrentModule[TPayloadSpec[_, _]](ctor: ClassConstructor[context.type, TPayloadSpec]): Boolean =
+        classFromCurrentModule(ctor.ownerClass)
+
+
+      private def getDefOrRefId[TElem, ID]
+      (elem: TElem)
+      (fromCurrentModule: TElem => Boolean)
+      (id: TElem => ID)
+      (defIds: Ref[IdentifierState[ID]], refIds: Ref[IdentifierState[ID]])
+      (elemTypeName: String)
+      (createReference: => Comp[GeneratedMessage])
+      : Comp[Int] =
+        if(fromCurrentModule(elem))
+          getElementIdNum(defIds)(id(elem))
+        else
+          for {
+            idNum <- getElementIdNum(refIds)(id(elem))
+            _ <- produceStreamElement(ModulePaths.elementRef(elemTypeName, idNum))(createReference)
+          } yield idNum
+
+
+      override def getModuleIdNum[TPayloadSpec[_, _]](arModule: ArModule[context.type, TPayloadSpec]): Comp[Option[Int]] =
+        if(isCurrentModule(arModule))
+          IO.none
+        else
+          getElementIdNum(moduleIds)(arModule.id).asSome
+
+      override def getClassIdNum[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[Int] =
+        getDefOrRefId(arClass)(classFromCurrentModule)(_.id)(classIds, classRefIds)(ModulePaths.classTypeName)(
+          for {
+            owner <- moduleEmitter.convertClassOwner(arClass.owner).provide(this)
+            sig <- arClass.signature
+            convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
+          } yield module.ClassReference(owner, convSig)
+        )
+
+      override def getTraitIdNum[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): Comp[Int] =
+        getDefOrRefId(arTrait)(traitFromCurrentModule)(_.id)(traitIds, traitRefIds)(ModulePaths.traitTypeName)(
+          for {
+            owner <- moduleEmitter.convertTraitOwner(arTrait.owner).provide(this)
+            sig <- arTrait.signature
+            convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
+          } yield module.TraitReference(owner, convSig)
+        )
+
+      override def getDataCtorIdNum[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): Comp[Int] =
+        getDefOrRefId(ctor)(dataCtorFromCurrentModule)(_.id)(dataCtorIds, dataCtorRefIds)(ModulePaths.dataCtorTypeName)(
+          for {
+            owner <- moduleEmitter.convertDataCtorOwner(ctor.owner).provide(this)
+            sig <- ctor.signature
+            convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
+          } yield module.DataConstructorReference(owner, convSig)
+        )
+
+      override def getFunctionIdNum[TPayloadSpec[_, _]](func: ArFunc[context.type, TPayloadSpec]): Comp[Int] =
+        getDefOrRefId(func)(funcFromCurrentModule)(_.id)(functionIds, functionRefIds)(ModulePaths.funcTypeName)(
+          for {
+            owner <- moduleEmitter.convertFuncOwner(func.owner).provide(this)
+            sig <- func.signature
+            convSig <- moduleEmitter.convertErasedSignature(ErasedSignature.fromSignature(context)(sig)).provide(this)
+          } yield module.FunctionReference(owner, convSig)
+        )
+
+      override def getMethodIdNum[TPayloadSpec[_, _]](method: ArMethod[context.type, TPayloadSpec]): Comp[Int] =
+        getDefOrRefId(method)(methodFromCurrentModule)(_.id)(methodIds, methodRefIds)(ModulePaths.methodTypeName)(
+          for {
+            owner <- moduleEmitter.convertMethodOwner(method.owner).provide(this)
+            sig <- method.signatureUnsubstituted
+            convSig <- moduleEmitter.convertErasedSignature(ErasedSignature.fromSignature(context)(sig)).provide(this)
+          } yield module.MethodReference(owner, moduleEmitter.convertMethodName(method.name), convSig)
+        )
+
+      override def getClassCtorIdNum[TPayloadSpec[_, _]](ctor: ClassConstructor[context.type, TPayloadSpec]): Comp[Int] =
+        getDefOrRefId(ctor)(classCtorFromCurrentModule)(_.id)(classCtorIds, classCtorRefIds)(ModulePaths.classCtorTypeName)(
+          for {
+            ownerClassIdNum <- getClassIdNum(ctor.ownerClass)
+            sig <- ctor.signatureUnsubstituted
+            convSig <- moduleEmitter.convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig)).provide(this)
+          } yield module.ClassConstructorReference(ownerClassIdNum, convSig)
+        )
+
+      override def getLocalVariableIdNum[TPayloadSpec[_, _]](variable: LocalVariable[moduleEmitter.context.type, Id]): Comp[Int] =
+        getElementIdNum(localVarIds)(variable.id)
+
+      override def updateMetadataElement(f: Metadata => Metadata): UIO[Unit] =
+        metadata.update(f)
+
+      override def currentMetadata: UIO[Metadata] = metadata.get
+
+      override def produceStreamElement[R](path: String)(element: => RComp[R, GeneratedMessage]): RComp[R, Unit] =
+        emittedPaths.modifySome(false) {
+          case emPaths if !emPaths.contains(path) =>
+            (true, emPaths + path)
+        }
+          .flatMap {
+            case true =>
+              element.flatMap { msg =>
+                produceStreamElem((path, msg))
+              }
+
+            case false =>
+              IO.unit
+          }
+    }
+  }
 
 
   private[this] final case class IdentifierState[ID](nextIdNum: Int, idMap: Map[ID, Int])
