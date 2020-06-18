@@ -59,7 +59,7 @@ object ModuleLookup {
 
   def lookupGlobalClass[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArClass[context.type, TPayloadSpec]]] = {
     case GlobalBinding.GlobalClass(_, _, Some(bindingSig), arClass) if sig === bindingSig =>
-      arClass.map(Some.apply)
+      arClass.asSome
 
     case GlobalBinding.GlobalClass(_, _, None, arClassComp) =>
       arClassComp.flatMap { arClass =>
@@ -76,7 +76,7 @@ object ModuleLookup {
 
   def lookupGlobalTrait[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArTrait[context.type, TPayloadSpec]]] = {
     case GlobalBinding.GlobalTrait(_, _, Some(bindingSig), arTrait) if sig === bindingSig =>
-      arTrait.map(Some.apply)
+      arTrait.asSome
 
     case GlobalBinding.GlobalTrait(_, _, None, arTraitComp) =>
       arTraitComp.flatMap { arTrait =>
@@ -92,7 +92,7 @@ object ModuleLookup {
 
   def lookupGlobalDataConstructor[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[DataConstructor[context.type, TPayloadSpec]]] = {
     case GlobalBinding.GlobalDataConstructor(_, _, Some(bindingSig), ctor) if sig === bindingSig =>
-      ctor.map(Some.apply)
+      ctor.asSome
 
     case GlobalBinding.GlobalDataConstructor(_, _, None, ctorComp) =>
       ctorComp.flatMap { ctor =>
@@ -108,7 +108,7 @@ object ModuleLookup {
 
   def lookupGlobalFunction[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArFunc[context.type, TPayloadSpec]]] = {
     case GlobalBinding.GlobalFunction(_, _, Some(bindingSig), func) if sig === bindingSig =>
-      func.map(Some.apply)
+      func.asSome
 
     case GlobalBinding.GlobalFunction(_, _, None, funcComp) =>
       funcComp.flatMap { func =>

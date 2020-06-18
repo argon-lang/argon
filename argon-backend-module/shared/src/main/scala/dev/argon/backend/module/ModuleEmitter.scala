@@ -849,7 +849,7 @@ sealed abstract class ModuleEmitter private() {
 
       funcBody <- ZIO.accessM[EmitEnv](_.options.moduleType match {
         case ModuleEmitOptions.ReferenceModule => IO.none
-        case ModuleEmitOptions.DeclarationModule => func.payload.map(Some.apply)
+        case ModuleEmitOptions.DeclarationModule => func.payload.asSome
       })
       convFuncBody <- ZIO.foreach(funcBody)(convertExpr(_))
 
@@ -1077,7 +1077,7 @@ object ModuleEmitter {
             if(isCurrentModule(arModule))
               IO.none
             else
-              getElementIdNum(moduleIds)(arModule.id).map(Some.apply)
+              getElementIdNum(moduleIds)(arModule.id).asSome
 
           override def getClassIdNum[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[Int] =
             getDefOrRefId(arClass)(classFromCurrentModule)(_.id)(classIds, classRefIds)(ModulePaths.classTypeName)(

@@ -162,7 +162,7 @@ object GlobalScope {
         modules.flatTraverse { module =>
           ModuleLookup.lookupNamespaceValues(context)(module.value)(importNS, name) {
             case binding: GlobalBinding.NonNamespace[context.type, module.PayloadSpec] =>
-              getScopeValue(context)(binding).map(Some.apply)
+              getScopeValue(context)(binding).asSome
 
             case _ => IO.none
           }
