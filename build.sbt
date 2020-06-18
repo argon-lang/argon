@@ -134,9 +134,6 @@ lazy val compilerOptions = Seq(
     "-language:existentials",
     "-language:implicitConversions",
   ),
-  
-  scalacOptions in (Compile, console) ~= (_ filterNot (opt => opt == "-Xlint")),
-  scalacOptions in (Test, console) ~= (_ filterNot (opt => opt == "-Xlint")),
 
 
   wartremoverWarnings ++= Warts.allBut(
