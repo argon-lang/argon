@@ -687,7 +687,7 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
       "-language:implicitConversions",
     ),
 
-    PB.protoSources in Compile := Seq(file("argon-modulefmt/src/main/protobuf")),
+    PB.protoSources in Compile += file("argon-modulefmt/shared/src/main/protobuf"),
 
     PB.targets in Compile := Seq(
       scalapb.gen() -> (sourceManaged in Compile).value / "protobuf"
