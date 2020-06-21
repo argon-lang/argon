@@ -1,4 +1,4 @@
-package dev.argon.backend.module
+package dev.argon.backend.generic
 
 import dev.argon.compiler._
 import dev.argon.compiler.core._
@@ -23,7 +23,7 @@ sealed abstract class ModuleContext extends ContextWithModule {
   override type TClassConstructorImplementation = ClassConstructorBody[this.type]
   override type TDataConstructorImplementation = typeSystem.SimpleExpr
 
-  override type BackendOptions = ModuleBackendOptions[Id, ResIndicator]
+  override type BackendOptions = GenericBackendOptions[Id, ResIndicator]
 
   override def createExprFunctionImplementation(expr: typeSystem.SimpleExpr): typeSystem.SimpleExpr = expr
   override def createExprMethodImplementation(expr: typeSystem.SimpleExpr): Option[typeSystem.SimpleExpr] = Some(expr)
@@ -41,10 +41,10 @@ sealed abstract class ModuleContext extends ContextWithModule {
 }
 
 object ModuleContext {
-  def apply[I <: ResourceIndicator: Tag](input: CompilerInput[I, ModuleBackendOptions[Id, I]]): ModuleContext with Context.WithRes[I] = new ModuleContext {
+  def apply[I <: ResourceIndicator: Tag](input: CompilerInput[I, GenericBackendOptions[Id, I]]): ModuleContext with Context.WithRes[I] = new ModuleContext {
     override type ResIndicator = I
     override val resIndicatorTag: Tag[I] = implicitly
-    override protected val compilerInput: CompilerInput[I, ModuleBackendOptions[Id, I]] = input
+    override protected val compilerInput: CompilerInput[I, GenericBackendOptions[Id, I]] = input
   }
 }
 

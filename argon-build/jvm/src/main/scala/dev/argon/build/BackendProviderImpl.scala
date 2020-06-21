@@ -1,7 +1,7 @@
 package dev.argon.build
 
 import dev.argon.backend.js.{JSBackend, JSModuleExtractorFactory}
-import dev.argon.backend.module.ArModuleBackend
+import dev.argon.backend.generic.GenericBackend
 import dev.argon.backend.{Backend, ResourceWriter}
 import zio._
 import cats.implicits._
@@ -19,7 +19,7 @@ object BackendProviderImpl {
       new BackendProvider.Service {
 
         val jsBackend = JSBackend(jsModuleExtractor)
-        override val allBackends = Vector(ArModuleBackend, jsBackend)
+        override val allBackends = Vector(GenericBackend, jsBackend)
 
         override def findBackend(id: String): Option[Backend] =
           allBackends.find { _.id === id }

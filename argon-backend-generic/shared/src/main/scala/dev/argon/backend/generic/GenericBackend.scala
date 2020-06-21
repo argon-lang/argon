@@ -1,4 +1,4 @@
-package dev.argon.backend.module
+package dev.argon.backend.generic
 
 import cats.{Applicative, Monad}
 import cats.implicits._
@@ -21,36 +21,36 @@ import zio.stream._
 import dev.argon.compiler.options.CodecSelector.Instances._
 
 
-object ArModuleBackend extends Backend {
+object GenericBackend extends Backend {
 
-  override type BackendOptions[F[_], I] = ModuleBackendOptions[F, I]
-  override type BackendOutputOptions[F[_], I] = ModuleOutputOptions[F, I]
+  override type BackendOptions[F[_], I] = GenericBackendOptions[F, I]
+  override type BackendOutputOptions[F[_], I] = GenericOutputOptions[F, I]
   override type TCompilationOutput = CompilationOutput[BackendOutputOptionsId]
 
 
-  override val id: String = "argon-module"
-  override val name: String = "Argon Module"
+  override val id: String = "generic"
+  override val name: String = "Generic"
 
-  override val backendOptions: OptionsHandler[ModuleBackendOptions] = new OptionsHandler[ModuleBackendOptions] {
-    override def info[I]: ModuleBackendOptions[OptionInfo[*, I], I] =
-      ModuleBackendOptions()
+  override val backendOptions: OptionsHandler[GenericBackendOptions] = new OptionsHandler[GenericBackendOptions] {
+    override def info[I]: GenericBackendOptions[OptionInfo[*, I], I] =
+      GenericBackendOptions()
 
-    override def converter[I]: OptionsConverter[ModuleBackendOptions[*[_], I]] =
-      new OptionsConverter[ModuleBackendOptions[*[_], I]] {
-        override def convert[A[_], B[_], C[_], F[_] : Applicative](optionsA: ModuleBackendOptions[A, I], optionsB: ModuleBackendOptions[B, I])(f: OptionsConverterFunction[A, B, C, F]): F[ModuleBackendOptions[C, I]] =
-          Applicative[F].pure(ModuleBackendOptions())
+    override def converter[I]: OptionsConverter[GenericBackendOptions[*[_], I]] =
+      new OptionsConverter[GenericBackendOptions[*[_], I]] {
+        override def convert[A[_], B[_], C[_], F[_] : Applicative](optionsA: GenericBackendOptions[A, I], optionsB: GenericBackendOptions[B, I])(f: OptionsConverterFunction[A, B, C, F]): F[GenericBackendOptions[C, I]] =
+          Applicative[F].pure(GenericBackendOptions())
       }
 
-    override def optionsLoader[IOld, I]: OptionsLoader[ModuleBackendOptions[Id, IOld], ModuleBackendOptions[Id, I], IOld, I] = {
+    override def optionsLoader[IOld, I]: OptionsLoader[GenericBackendOptions[Id, IOld], GenericBackendOptions[Id, I], IOld, I] = {
       import dev.argon.compiler.options.OptionsLoader.Implicits._
       OptionsLoader.apply
     }
 
   }
 
-  override val outputOptions: OptionsHandler[ModuleOutputOptions] = new OptionsHandler[ModuleOutputOptions] {
-    override def info[I]: ModuleOutputOptions[OptionInfo[*, I], I] =
-      ModuleOutputOptions[OptionInfo[*, I], I](
+  override val outputOptions: OptionsHandler[GenericOutputOptions] = new OptionsHandler[GenericOutputOptions] {
+    override def info[I]: GenericOutputOptions[OptionInfo[*, I], I] =
+      GenericOutputOptions[OptionInfo[*, I], I](
         referenceModule = OptionInfo(
           name = "referenceModule",
           description = "The reference module that will contain the interface of the compiled module",
@@ -63,33 +63,33 @@ object ArModuleBackend extends Backend {
         ),
       )
 
-    override def converter[I]: OptionsConverter[ModuleOutputOptions[*[_], I]] =
-      new OptionsConverter[ModuleOutputOptions[*[_], I]] {
-        override def convert[A[_], B[_], C[_], F[_] : Applicative](optionsA: ModuleOutputOptions[A, I], optionsB: ModuleOutputOptions[B, I])(f: OptionsConverterFunction[A, B, C, F]): F[ModuleOutputOptions[C, I]] =
+    override def converter[I]: OptionsConverter[GenericOutputOptions[*[_], I]] =
+      new OptionsConverter[GenericOutputOptions[*[_], I]] {
+        override def convert[A[_], B[_], C[_], F[_] : Applicative](optionsA: GenericOutputOptions[A, I], optionsB: GenericOutputOptions[B, I])(f: OptionsConverterFunction[A, B, C, F]): F[GenericOutputOptions[C, I]] =
           Applicative[F].map2(
             f(optionsA.referenceModule, optionsB.referenceModule),
             f(optionsA.declarationModule, optionsB.declarationModule),
           ) { (convRefModule, convDeclModule) =>
-            ModuleOutputOptions(
+            GenericOutputOptions(
               referenceModule = convRefModule,
               declarationModule = convDeclModule,
             )
           }
       }
 
-    override def optionsLoader[IOld, I]: OptionsLoader[ModuleOutputOptions[Id, IOld], ModuleOutputOptions[Id, I], IOld, I] = {
+    override def optionsLoader[IOld, I]: OptionsLoader[GenericOutputOptions[Id, IOld], GenericOutputOptions[Id, I], IOld, I] = {
       import dev.argon.compiler.options.OptionsLoader.Implicits._
       OptionsLoader.apply
     }
   }
 
-  override def testOutputOptions[I](dummyFile: I): ModuleOutputOptions[Id, I] =
-    ModuleOutputOptions[Id, I](
+  override def testOutputOptions[I](dummyFile: I): GenericOutputOptions[Id, I] =
+    GenericOutputOptions[Id, I](
       referenceModule = Some(new SingleFile(dummyFile)),
       declarationModule = Some(new SingleFile(dummyFile)),
     )
 
-  override def compile[I <: ResourceIndicator : Tag](input: CompilerInput[I, ModuleBackendOptions[Id, I]]): ZManaged[ResourceReader[I] with SourceParser, ErrorList, TCompilationOutput] = {
+  override def compile[I <: ResourceIndicator : Tag](input: CompilerInput[I, GenericBackendOptions[Id, I]]): ZManaged[ResourceReader[I] with SourceParser, ErrorList, TCompilationOutput] = {
     val ctx = ModuleContext(input)
 
     val moduleEmitter = new ModuleEmitterImpl {
@@ -102,7 +102,7 @@ object ArModuleBackend extends Backend {
         declModuleGen = ModuleEmitter.emitModule(moduleEmitter)(ModuleEmitOptions(ModuleEmitOptions.DeclarationModule))(module),
       )
     }
-      .provideSomeLayer[ResourceReader[I] with SourceParser](ModuleBackendLoadService.forResourceReader[I, ModuleContext with Context.WithRes[I]])
+      .provideSomeLayer[ResourceReader[I] with SourceParser](GenericBackendLoadService.forResourceReader[I, ModuleContext with Context.WithRes[I]])
   }
 
   private def createOutput(refModuleGen: Stream[ErrorList, ModuleEmitter.StreamElem], declModuleGen: Stream[ErrorList, ModuleEmitter.StreamElem]): CompilationOutput[BackendOutputOptionsId] =

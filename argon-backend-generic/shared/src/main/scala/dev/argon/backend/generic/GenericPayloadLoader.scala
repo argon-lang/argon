@@ -1,10 +1,10 @@
-package dev.argon.backend.module
+package dev.argon.backend.generic
 
 import dev.argon.compiler.Comp
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
-import dev.argon.loaders.armodule.ArgonModuleLoader.PayloadLoader
+import dev.argon.armodule.loader.ArgonModuleLoader.PayloadLoader
 
-class ModulePayloadLoader[TContext <: ModuleContext] extends PayloadLoader[TContext, ReferencePayloadSpecifier] {
+private[generic] class GenericPayloadLoader[TContext <: ModuleContext] extends PayloadLoader[TContext, ReferencePayloadSpecifier] {
 
   override def createClassPayload(context: TContext): ReferencePayloadSpecifier[Unit, context.TClassMetadata] = ()
 

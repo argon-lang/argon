@@ -1,4 +1,4 @@
-package dev.argon.backend.module
+package dev.argon.backend.generic
 
 import dev.argon.armodule.emitter.ModuleEmitter
 import dev.argon.compiler.core.Context
@@ -7,7 +7,7 @@ import zio.ZIO
 import cats.implicits._
 import zio.interop.catz.core._
 
-abstract class ModuleEmitterImpl extends ModuleEmitter {
+private[generic] abstract class ModuleEmitterImpl extends ModuleEmitter {
 
   override val context: ModuleContext
 

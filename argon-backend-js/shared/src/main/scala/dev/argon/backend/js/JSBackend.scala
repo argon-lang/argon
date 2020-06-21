@@ -11,8 +11,6 @@ import dev.argon.compiler.core.Context
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader, SourceParser}
 import dev.argon.compiler.options.{CompilerInput, FileList, OptionInfo, OptionsConverter, OptionsConverterFunction, OptionsHandler, OptionsLoader, SingleFile}
-import dev.argon.loaders.armodule.ArgonModuleLoader
-import dev.argon.loaders.armodule.ArgonModuleLoader.PayloadLoader
 import dev.argon.stream.builder.Source
 import zio._
 import zio.stream._

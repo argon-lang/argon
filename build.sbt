@@ -243,7 +243,7 @@ lazy val webDemo = project.in(file("argon-web-demo"))
   )
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-build"))
-  .dependsOn(argon_build_base, backend_js, backend_module, argon_platform % "test")
+  .dependsOn(argon_build_base, backend_js, backend_generic, argon_platform % "test")
   .jvmConfigure(
     _.settings(commonJVMSettings)
      .settings(
@@ -531,14 +531,14 @@ lazy val backend_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(fil
     commonSettings,
     compilerOptions,
 
-    name := "argon-compiler-js",
+    name := "argon-backend-js",
   )
 
 lazy val backend_jsJVM = backend_js.jvm
 lazy val backend_jsJS = backend_js.js
 lazy val backend_jsNode = backend_js.node
 
-lazy val backend_module = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-backend-module"))
+lazy val backend_generic = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-backend-generic"))
   .dependsOn(armodule)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -555,12 +555,12 @@ lazy val backend_module = crossProject(JVMPlatform, JSPlatform, NodePlatform).in
     commonSettings,
     compilerOptions,
 
-    name := "argon-compiler-module",
+    name := "argon-backend-generic",
   )
 
-lazy val backend_moduleJVM = backend_module.jvm
-lazy val backend_moduleJS = backend_module.js
-lazy val backend_moduleNode = backend_module.node
+lazy val backend_genericJVM = backend_generic.jvm
+lazy val backend_genericJS = backend_generic.js
+lazy val backend_genericNode = backend_generic.node
 
 lazy val util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-util"))
   .jvmConfigure(

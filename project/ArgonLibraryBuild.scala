@@ -21,9 +21,9 @@ object ArgonLibraryBuild {
     val jsInjectAfterFile = libDir / "js/inject_after.js"
 
     val backends = Seq(
-      "argon-module" -> BackendBuildOpts(
+      "generic" -> BackendBuildOpts(
         options = Seq(
-          "--argon-module:referenceModule",
+          "--generic:referenceModule",
           (libDir / "bin" / (libName + ".armodule")).toString,
         ),
         runBefore = () => (),

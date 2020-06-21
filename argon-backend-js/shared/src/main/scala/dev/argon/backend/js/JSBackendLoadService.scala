@@ -3,8 +3,8 @@ package dev.argon.backend.js
 import dev.argon.compiler.core.Context
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.loaders.{ModuleLoad, ResourceIndicator, ResourceReader}
-import dev.argon.loaders.armodule.{AggregateLoadService, ArgonModuleLoader}
-import dev.argon.loaders.armodule.ArgonModuleLoader.PayloadLoader
+import dev.argon.armodule.loader.{AggregateLoadService, ArgonModuleLoader}
+import dev.argon.armodule.loader.ArgonModuleLoader.PayloadLoader
 import zio._
 
 object JSBackendLoadService {
