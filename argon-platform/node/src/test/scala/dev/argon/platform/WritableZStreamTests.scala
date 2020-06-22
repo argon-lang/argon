@@ -12,7 +12,7 @@ import scalajs.js.JSConverters._
 object WritableZStreamTests extends DefaultRunnableSpec {
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
-  def writeDataToWritable(writable: NodeWritable, data: List[Byte]): IO[js.Error, Unit] =
+  def writeDataToWritable(writable: NodeWritable, data: Chunk[Byte]): IO[js.Error, Unit] =
     IO.effectAsync { register =>
       val buffer = NodeBuffer.from(data.toArray.toJSArray.map(_.toInt))
       writable.write(buffer, "utf8", _ => {
@@ -23,7 +23,7 @@ object WritableZStreamTests extends DefaultRunnableSpec {
   override def spec: ZSpec[_root_.zio.test.environment.TestEnvironment, Any] =
     suite("WritableZStream")(
       testM("Single Chunk") {
-        checkM(Gen.listOf(Gen.anyByte)) { byteList =>
+        checkM(Gen.chunkOf(Gen.anyByte)) { byteList =>
           assertM(
             WritableZStream { writable =>
               writeDataToWritable(writable, byteList)
@@ -38,11 +38,11 @@ object WritableZStreamTests extends DefaultRunnableSpec {
       },
 
       testM("Chunk per byte") {
-        checkM(Gen.listOf(Gen.anyByte)) { byteList =>
+        checkM(Gen.chunkOf(Gen.anyByte)) { byteList =>
           assertM(
             WritableZStream { writable =>
-              byteList.traverse_ { b =>
-                writeDataToWritable(writable, List(b))
+              ZIO.foreach_(byteList) { b =>
+                writeDataToWritable(writable, Chunk(b))
               }
             }
               .runCollect

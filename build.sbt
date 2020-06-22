@@ -4,6 +4,7 @@ import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
 val graalVersion = "20.1.0"
+val zioVersion = "1.0.0-RC21"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -14,8 +15,6 @@ lazy val nodeConfig =
   NodeJSEnv.Config()
     .withEnv(envValues)
     .withArgs(List("--no-warnings", "--experimental-vm-modules"))
-
-val zioVersion = "1.0.0-RC20"
 
 val esParseDeps = Seq(
   "acorn" -> "^7.2.0",
@@ -38,7 +37,7 @@ lazy val commonSettings = Seq(
     "org.typelevel" %%% "kittens" % "2.1.0",
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
-    "dev.zio" %%% "zio-interop-cats" % "2.1.3.0-RC15",
+    "dev.zio" %%% "zio-interop-cats" % "2.1.3.0-RC16",
 
 
     "com.chuusai" %%% "shapeless" % "2.3.3",

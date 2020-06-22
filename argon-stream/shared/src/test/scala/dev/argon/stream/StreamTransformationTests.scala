@@ -12,15 +12,15 @@ object StreamTransformationTests extends DefaultRunnableSpec {
   override def spec: ZSpec[Environment, Failure] =
     suite("StreamTransformation tests")(
       testM("StreamMapper") {
-        checkM(Gen.listOf[Random with Sized, Byte](Gen.anyByte)) { byteList =>
-          assertM(ZStream.fromIterable(byteList).transformWith(
+        checkM(Gen.chunkOf[Random with Sized, Byte](Gen.anyByte)) { byteList =>
+          assertM(ZStream.fromChunk(byteList).transformWith(
             new StreamMapper[Any, Nothing, Byte, Unit, Byte](b => IO.succeed((b + 1).toByte))
           ).runCollect)(equalTo(byteList.map { b => (b + 1).toByte }))
         }
       },
       testM("StreamCollector") {
-        checkM(Gen.listOf[Random with Sized, Byte](Gen.anyByte)) { byteList =>
-          assertM(ZStream.fromIterable(byteList).transformWith(
+        checkM(Gen.chunkOf[Random with Sized, Byte](Gen.anyByte)) { byteList =>
+          assertM(ZStream.fromChunk(byteList).transformWith(
             new StreamCollector[Any, Nothing, Byte, Unit, Byte]({
               case b if b % 2 === 0 => IO.succeed((b / 2).toByte)
             })

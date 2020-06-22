@@ -36,11 +36,6 @@ object OptionsLoader {
         ZIO.foreach(a.files)(fileHandler.loadSingleFile).map(new FileList(_))
     }
 
-    implicit def fileGlobLoader[IOld, I]: OptionsLoader[FileGlob[IOld], FileGlob[I], IOld, I] = new OptionsLoader[FileGlob[IOld], FileGlob[I], IOld, I] {
-      override def loadOptions[R, E](a: FileGlob[IOld])(implicit fileHandler: OptionsFileHandler[R, E, IOld, I]): ZIO[R, E, FileGlob[I]] =
-        fileHandler.loadGlobList(a.files).map(new FileGlob(_))
-    }
-
     implicit def hconsLoader[AHead, ATail <: HList, BHead, BTail <: HList, IOld, I](implicit headLoader: OptionsLoader[AHead, BHead, IOld, I], tailLoader: OptionsLoader[ATail, BTail, IOld, I]): OptionsLoader[AHead :: ATail, BHead :: BTail, IOld, I] =
       new OptionsLoader[AHead :: ATail, BHead :: BTail, IOld, I] {
         override def loadOptions[R, E](a: AHead :: ATail)(implicit fileHandler: OptionsFileHandler[R, E, IOld, I]): ZIO[R, E, BHead :: BTail] =

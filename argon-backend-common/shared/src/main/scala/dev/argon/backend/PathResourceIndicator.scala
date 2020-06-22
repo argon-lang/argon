@@ -26,15 +26,6 @@ object PathResourceIndicator {
     override def loadSingleFile(file: String): ZIO[FileIO[P], IOException, PathResourceIndicator[P]] =
       Path.of[P](file).map(dir.resolve).map(PathResourceIndicator(_))
 
-    override def loadGlobList(files: List[String]): ZIO[FileIO[P], IOException, List[PathResourceIndicator[P]]] =
-      ZStream.fromIterable(files)
-        .mapM(Path.of(_))
-        .flatMap { path =>
-          FilenameManip.findGlob(dir, path)
-        }
-        .map(PathResourceIndicator(_))
-        .runCollect
-
   }
 
   def pathResourceReader[P: Path: Tag]: ZLayer[FileIO[P] with FileIOLite, Nothing, ResourceReader[PathResourceIndicator[P]]] =

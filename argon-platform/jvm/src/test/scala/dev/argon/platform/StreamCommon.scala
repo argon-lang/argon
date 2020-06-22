@@ -75,14 +75,14 @@ object StreamCommon {
       eofCount
     } }
 
-  def usingSingleByteWrite(data: List[Byte])(outputStream: OutputStream): RIO[Blocking, Unit] =
+  def usingSingleByteWrite(data: Chunk[Byte])(outputStream: OutputStream): RIO[Blocking, Unit] =
     ZIO.accessM[Blocking] { _.get.effectBlocking {
       for(b <- data) {
         outputStream.write(b.toInt)
       }
     } }
 
-  def usingBufferWriter(data: List[Byte])(outputStream: OutputStream): RIO[Blocking, Unit] =
+  def usingBufferWriter(data: Chunk[Byte])(outputStream: OutputStream): RIO[Blocking, Unit] =
     ZIO.accessM[Blocking] { _.get.effectBlocking {
       outputStream.write(data.toArray)
     } }

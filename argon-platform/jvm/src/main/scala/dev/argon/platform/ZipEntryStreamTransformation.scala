@@ -29,7 +29,7 @@ private[platform] object ZipEntryStreamTransformation {
               ZSink.fromOutputStream(zipStream).push.provide(Has(blocking)).use { push =>
                 dataStream
                   .run(
-                    ZSink.fromPush[Any, IOException, Byte, Long] { chunkOpt =>
+                    ZSink.fromPush { chunkOpt: Option[Chunk[Byte]] =>
                       push(chunkOpt)
                         .provide(Has(blocking))
                     }
