@@ -70,11 +70,10 @@ private[platform] object FileIOPlatform {
 
       override def listDirectory(path: FilePath): Stream[IOException, FilePath] =
         filePathIsJavaPath.flip.substitute(
-          Stream.fromEffect(
+          Stream.fromIterableM(
             blocking.effectBlocking { Files.list(path.javaPath).toScala(Iterable) }
               .refineOrDie { case e: IOException => e }
           )
-            .flatMap(Stream.fromIterable(_))
         )
 
       override def openZipFile[R, E](errorHandler: IOException => E)(path: FilePath): Managed[E, ZipFileReader[R, E]] =
