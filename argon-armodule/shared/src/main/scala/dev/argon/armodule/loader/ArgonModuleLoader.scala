@@ -1125,7 +1125,7 @@ object ArgonModuleLoader {
             i.intType match {
               case ArgonModule.BigInt.IntType.Signed32(value) => IO.succeed(BigInt(value))
               case ArgonModule.BigInt.IntType.Signed64(value) => IO.succeed(BigInt(value))
-              case ArgonModule.BigInt.IntType.Bigint(value) => IO.succeed(BigInt(value.toByteArray))
+              case ArgonModule.BigInt.IntType.Bigint(value) => IO.succeed(BigInt(value.toByteArray()))
               case ArgonModule.BigInt.IntType.Empty => Compilation.forErrors(invalidModuleFormatError)
             }
 

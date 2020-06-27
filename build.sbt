@@ -4,7 +4,7 @@ import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
 val graalVersion = "20.1.0"
-val zioVersion = "1.0.0-RC21"
+val zioVersion = "1.0.0-RC21-1"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -21,7 +21,7 @@ val esParseDeps = Seq(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.2",
+  scalaVersion := "2.13.3",
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
@@ -100,7 +100,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ S
 
 lazy val zioEffectWarts = project.in(file("zio-effect-warts"))
   .settings(
-    scalaVersion := "2.13.2",
+    scalaVersion := "2.13.3",
     libraryDependencies ++= Seq(
       "org.wartremover" % "wartremover" % wartremover.Wart.PluginVersion cross CrossVersion.full,
       "dev.zio" %%% "zio" % zioVersion,
@@ -677,8 +677,7 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
 
     scalacOptions ++= Seq(
       "-encoding", "UTF-8",
-      "-unchecked",
-      "-deprecation",
+      "-Wconf:cat=deprecation&msg=Auto-application:silent",
       "-Xfatal-warnings",
       "-Ypatmat-exhaust-depth", "500",
       "-language:higherKinds",
@@ -699,7 +698,7 @@ lazy val modulefmtJS = modulefmt.js
 lazy val js_module_extractor = project.in(file("argon-js-module-extractor"))
   .enablePlugins(ScalaJSPlugin, NpmUtil)
   .settings(
-    scalaVersion := "2.13.2",
+    scalaVersion := "2.13.3",
 
     scalacOptions ++= Seq(
       "-encoding", "UTF-8",
