@@ -1,5 +1,7 @@
 package dev.argon.compiler
 
+import java.io.IOException
+
 import cats._
 import cats.implicits._
 import cats.data.NonEmptyList
@@ -25,6 +27,12 @@ object Compilation {
       case Some(a) => IO.succeed(a)
       case None => forErrors(head, tail: _*)
     }
+
+  def errorListForIOException(ex: IOException): ErrorList =
+    NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex)))
+
+  def forIOException(ex: IOException): Comp[Nothing] =
+    IO.fail(errorListForIOException(ex))
 
 }
 

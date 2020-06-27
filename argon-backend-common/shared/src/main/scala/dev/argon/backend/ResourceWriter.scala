@@ -7,7 +7,6 @@ import dev.argon.compiler._
 import dev.argon.compiler.loaders.ResourceIndicator
 import dev.argon.io.{Path, ZipEntryInfo}
 import dev.argon.io.fileio.{FileIO, FileIOLite}
-import dev.argon.module.PathResourceIndicator
 import scalapb.GeneratedMessage
 import zio._
 import zio.stream._

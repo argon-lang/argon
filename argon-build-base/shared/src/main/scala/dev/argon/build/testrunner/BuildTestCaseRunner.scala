@@ -19,7 +19,6 @@ import dev.argon.build.testrunner.TestCaseRunnerCompilePhase.TestCompileResource
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import dev.argon.compiler.options.{CompilerOptions, OptionsFileHandler}
 import dev.argon.io.fileio.FileIO
-import dev.argon.module.PathResourceIndicator
 import dev.argon.stream.builder.Source
 import scalapb.GeneratedMessage
 

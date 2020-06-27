@@ -8,8 +8,8 @@ import scala.scalajs.js.annotation.JSImport
 private[platform] class NodeStreamZip(options: NodeStreamZip.Options) extends js.Object {
 
   def on(event: "ready", callback: js.Function0[Unit]): Unit = js.native
-  def on(event: "error", callback: js.Function1[js.Error, Unit]): Unit = js.native
-  def stream(path: String, callback: js.Function2[js.Error, NodeReadable, Unit]): Unit = js.native
+  def on(event: "error", callback: js.Function1[Any, Unit]): Unit = js.native
+  def stream(path: String, callback: js.Function2[Any, NodeReadable, Unit]): Unit = js.native
   def close(): Unit = js.native
 
 }

@@ -2,7 +2,7 @@ package dev.argon.platform
 
 import cats._
 import cats.implicits._
-import java.io.{ByteArrayOutputStream, IOException}
+import java.io.{ByteArrayOutputStream, IOException, InputStream}
 import java.nio.charset.CharsetDecoder
 import java.nio.{ByteBuffer, CharBuffer}
 
@@ -41,6 +41,18 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
       }
     }.unit
 
+
+  override def readFile[E](errorHandler: IOException => E)(path: FilePath): Stream[E, Byte] =
+    readByteChunks(errorHandler)(path).map { arr =>
+      val chunkBuilder = ChunkBuilder.make[Byte]()
+      chunkBuilder.sizeHint(arr)
+      arr.foreach { b =>
+        chunkBuilder.addOne(b.toByte)
+      }
+
+      chunkBuilder.result()
+    }
+    .flattenChunks
 
   override def readAllText(path: FilePath): IO[IOException, String] =
     IO.effectAsync { register =>
@@ -182,31 +194,36 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
     )
       .flatMap(ZStream.fromIterable(_))
 
+  override def openZipFile[R, E](errorHandler: IOException => E)(path: FilePath): Managed[E, ZipFileReader[R, E]] = {
+    def handleNodeStreamZipError(err: Any): IO[E, Nothing] = err match {
+      case err: js.Error => IO.fail(errorHandler(JSIOException(err)))
+      case err: String => IO.fail(errorHandler(JSIOException(js.Error(err))))
+      case _ => IO.fail(errorHandler(JSIOException(js.Error("An unknown error occurred"))))
+    }
 
-  override def openZipFile[R, E](errorHandler: IOException => E)(path: FilePath): Managed[E, ZipFileReader[R, E]] =
     Managed.make(
       IO.effectAsync[E, NodeStreamZip] { register =>
         val zip = new NodeStreamZip(NodeStreamZip.Options(path.pathName))
         zip.on("ready", () => register(IO.succeed(zip)))
-        zip.on("error", err => register(IO.fail(errorHandler(JSIOException(err)))))
+        zip.on("error", err => register(handleNodeStreamZipError(err)))
       }
     ) { zip =>
       IO.effectTotal { zip.close() }
     }
       .map { zip =>
         new ZipFileReader[R, E] {
-          override def getEntryStream(name: String): ZStream[R, E, Byte] =
-            ZStream.fromEffect(
-              IO.effectAsync[E, NodeReadable] { register =>
-                zip.stream(name, (err, stream) => register(
-                  if(err == null)
-                    IO.succeed(stream)
-                  else
-                    IO.fail(errorHandler(JSIOException(err)))
-                ))
-              }
-            )
-              .flatMap { stream =>
+          override def getEntryStream(name: String): ZIO[R, E, Option[ZStream[R, E, Byte]]] =
+            IO.effectAsync[E, Option[NodeReadable]] { register =>
+              zip.stream(name, (err, stream) => register(
+                if(err == null)
+                  IO.some(stream)
+                else if(err == "Entry not found" || err == "Entry is not file")
+                  IO.none
+                else
+                  handleNodeStreamZipError(err)
+              ))
+            }
+              .map { _.map { stream =>
                 WritableZStream { wzs =>
                   IO.effectAsync { register =>
                     stream.pipe(wzs)
@@ -214,9 +231,11 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
                   }
                 }
                   .mapError { err => errorHandler(JSIOException(err)) }
-              }
+              } }
+
         }
       }
+  }
 
 
 }

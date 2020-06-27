@@ -13,10 +13,11 @@ object fileio {
 
   object FileIO {
 
-    trait Service[P] {
+    trait Service[P] extends FileIOServicePlatformSpecific[P] {
       def getAbsolutePath(path: P): IO[IOException, P]
       def ensureParentDirectory(path: P): IO[IOException, Unit]
 
+      def readFile[E](errorHandler: IOException => E)(path: P): Stream[E, Byte]
       def readAllText(path: P): IO[IOException, String]
       def readText[E](errorHandler: IOException => E)(path: P): Stream[E, Char]
       def writeToFile[R, E](errorHandler: IOException => E)(path: P)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit]

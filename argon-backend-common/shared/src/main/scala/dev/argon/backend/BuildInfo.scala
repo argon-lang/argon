@@ -1,7 +1,6 @@
 package dev.argon.backend
 
 import dev.argon.compiler.options.{CompilerOptions, FileList}
-import dev.argon.module.PathResourceIndicator
 import shapeless.{Path => _, _}
 
 trait BuildInfo[I] {

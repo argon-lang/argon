@@ -467,6 +467,22 @@ lazy val armoduleJS = armodule.js
 lazy val armoduleNode = armodule.node
 
 
+lazy val backend_jvm = project.in(file("argon-backend-jvm"))
+  .dependsOn(armoduleJVM)
+  .settings(
+    commonJVMSettings,
+
+    libraryDependencies ++= Seq(
+      "org.ow2.asm" % "asm" % "8.0.1",
+      "org.ow2.asm" % "asm-tree" % "8.0.1",
+    ),
+
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-backend-js",
+  )
+
 lazy val backend_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-backend-js"))
   .dependsOn(armodule)
   .jvmConfigure(

@@ -1,6 +1,7 @@
 package dev.argon.build.testrunner
 
 import java.io.IOException
+import java.nio.charset.StandardCharsets
 
 import dev.argon.io.{Path, ZipFileReader}
 import dev.argon.build.BuildProcess
@@ -74,7 +75,16 @@ object TestCaseRunnerCompilePhase {
 
   private def testCompileResourceReaderLayer[I <: ResourceIndicator : Tag]: URLayer[ResourceReader[I], ResourceReader[TestCompileResource[I]]] =
     ZLayer.fromFunction { env =>
-      new ResourceReader.Service[TestCompileResource[I]] {
+      new ResourceReader.Service[TestCompileResource[I]] with TestCaseRunnerCompilePhasePlatformSpecific.ResourceReaderService[I] {
+        protected val outerReaderEnv: ResourceReader[I] = env
+        protected val resIndicatorTag: Tag[I] = implicitly[Tag[I]]
+
+        override def readFile(id: TestCompileResource[I]): Stream[ErrorList, Byte] =
+          id match {
+            case TestCaseInputSource(inputSource) => Stream.fromChunk(Chunk.fromArray(inputSource.data.getBytes(StandardCharsets.UTF_8)))
+            case TestCaseOtherRes(id) => env.get.readFile(id)
+          }
+
         override def readTextFile(id: TestCompileResource[I]): Stream[ErrorList, Char] =
           id match {
             case TestCaseInputSource(inputSource) => Stream.fromChunk(Chunk.fromArray(inputSource.data.toCharArray))

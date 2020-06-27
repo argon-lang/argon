@@ -13,7 +13,6 @@ import dev.argon.compiler.CompilationError
 import dev.argon.compiler.options.CompilerOptions
 import dev.argon.io.Path
 import dev.argon.io.fileio.{FileIO, FileIOLite}
-import dev.argon.module.PathResourceIndicator
 import dev.argon.parser.SourceAST
 import dev.argon.platform.PlatformApp
 import dev.argon.compiler.options.FileList

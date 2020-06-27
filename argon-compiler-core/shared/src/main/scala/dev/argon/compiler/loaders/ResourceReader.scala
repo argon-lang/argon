@@ -12,7 +12,8 @@ import zio.stream._
 
 object ResourceReader {
 
-  trait Service[I <: ResourceIndicator] {
+  trait Service[I <: ResourceIndicator] extends ResourceReaderPlatformSpecific.Service[I] {
+    def readFile(id: I): Stream[ErrorList, Byte]
     def readTextFile(id: I): Stream[ErrorList, Char]
     def readTextFileAsString(id: I): Comp[String]
     def getZipReader(id: I): Managed[ErrorList, ZipFileReader[Any, ErrorList]]
@@ -34,8 +35,10 @@ object ResourceReader {
 
   def forNothing: ZLayer[FileIOLite, Nothing, ResourceReader[Nothing]] =
     ZLayer.fromFunction { env =>
-      new ServiceCommon[Nothing] {
+      new ServiceCommon[Nothing] with ResourceReaderPlatformSpecific.ForNothingService {
         override protected val fileIOLite: FileIOLite.Service = env.get
+
+        override def readFile(id: Nothing): Stream[ErrorList, Byte] = id
 
         override def readTextFile(id: Nothing): Stream[ErrorList, Char] = id
 

@@ -3,12 +3,11 @@ package dev.argon.build
 import java.io.{FileNotFoundException, IOException}
 
 import cats.data.NonEmptyList
-import dev.argon.backend.ResourceAccess
+import dev.argon.backend.{PathResourceIndicator, ResourceAccess}
 import dev.argon.compiler.{Comp, Compilation, CompilationError, CompilationMessageSource, ErrorList}
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import dev.argon.io.{Path, ZipEntryInfo, ZipFileReader}
 import dev.argon.io.fileio.{FileIO, FileIOLite}
-import dev.argon.module.PathResourceIndicator
 import dev.argon.stream.builder.Source
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 import zio._
@@ -29,12 +28,25 @@ object TestResourceReader {
         )
 
         liveResReaderEnv <- PathResourceIndicator.pathResourceReader.build
-        liveResReader = liveResReaderEnv.get
-      } yield (new Service[P] {
+        liveResReaderOuter = liveResReaderEnv.get
+      } yield (new Service[P] with TestResourceReaderPlatformSpecific.Service[P] {
+
+        protected val liveResReader: ResourceReader.Service[PathResourceIndicator[P]] = liveResReaderOuter
+        protected val pathInstance: Path[P] = implicitly
 
         override def getLibPath(name: String): UIO[P] =
           Path.of(libDir, name, "bin", name + ".armodule")
 
+        override def readFile(id: TestResourceIndicator): Stream[ErrorList, Byte] =
+          id match {
+            case LibraryResourceIndicator(name) =>
+              ZStream.unwrapManaged(
+                ZManaged.fromEffect(getLibPath(name))
+                  .map { path =>
+                    liveResReader.readFile(PathResourceIndicator(path))
+                  }
+              )
+          }
 
         override def readTextFile(id: TestResourceIndicator): Stream[ErrorList, Char] =
           ZStream.unwrap(readTextFileAsString(id).map { ZStream.fromIterable(_) })

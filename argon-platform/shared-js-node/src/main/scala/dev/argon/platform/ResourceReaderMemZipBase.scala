@@ -11,9 +11,9 @@ import scala.scalajs.js.typedarray.Uint8Array
 import scala.scalajs.js.JSConverters._
 import scala.scalajs.js.|
 
+@SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 trait ResourceReaderMemZipBase {
 
-  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   private def promiseToIO[E, A](errorHandler: IOException => E)(promise: => js.Promise[A]): IO[E, A] =
     IO.effectAsync { register =>
       val _ = promise
@@ -39,11 +39,15 @@ trait ResourceReaderMemZipBase {
         }
         .map { zip =>
           new ZipFileReader[Any, E] {
-            override def getEntryStream(name: String): ZStream[Any, E, Byte] =
-              ZStream.unwrap(
-                promiseToIO(errorHandler)(zip.file(name).async("uint8array"))
-                  .map { data => ZStream.fromChunk(Chunk.fromArray(data.toArray.map { _.toByte })) }
-              )
+
+
+            override def getEntryStream(name: String): ZIO[Any, E, Option[ZStream[Any, E, Byte]]] =
+              IO.effectTotal { Option(zip.file(name)) }.flatMap { zipEntryOpt =>
+                  ZIO.foreach(zipEntryOpt) { zipEntry =>
+                    promiseToIO(errorHandler)(zipEntry.async("uint8array"))
+                      .map { data => ZStream.fromChunk(Chunk.fromArray(data.toArray.map { _.toByte })) }
+                  }
+                }
 
           }
         }

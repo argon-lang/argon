@@ -13,7 +13,6 @@ import cats.implicits._
 import dev.argon.backend.ResourceWriter
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import dev.argon.io.fileio.FileIO
-import dev.argon.module.PathResourceIndicator
 import dev.argon.platform._
 import zio.interop.catz.core._
 import zio.test.environment.Live

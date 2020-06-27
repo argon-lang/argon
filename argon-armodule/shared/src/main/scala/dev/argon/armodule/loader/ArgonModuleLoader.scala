@@ -35,11 +35,15 @@ object ArgonModuleLoader {
       id.extension match {
         case "armodule" =>
           res.getZipReader(id).mapM { zip =>
-            val entry = zip.getEntryStream(ModulePaths.metadata)
-            res.deserializeProtocolBuffer(ArgonModule.Metadata)(entry)
-              .map { metadata =>
-                Some(ArModuleMetadata(zip, metadata))
-              }
+            zip.getEntryStream(ModulePaths.metadata).flatMap {
+              case Some(entry) =>
+                res.deserializeProtocolBuffer(ArgonModule.Metadata)(entry)
+                  .map { metadata =>
+                    Some(ArModuleMetadata(zip, metadata))
+                  }
+
+              case None => IO.none
+            }
           }
 
         case _ => ZManaged.succeed(None)
@@ -411,37 +415,47 @@ object ArgonModuleLoader {
               val zip = zipFile
 
               if(id < 0) {
-                val entry = zip.getEntryStream(ModulePaths.elementRef(pathTypeStr, id.abs))
-                res.deserializeProtocolBuffer(refCompanion)(entry)
-                  .flatMap { refValue =>
-                    parseDescriptor(refOwnerLens(refValue)).flatMap {
-                      case ModuleObjectReference(owner) =>
-                        referenceHandler(refValue)(owner).flatMap {
-                          case Some(refResult) => IO.succeed(ModuleObjectReference(refResult))
-                          case None => Compilation.forErrors(CompilationError.ModuleObjectNotFound(
-                            moduleObjectType, id, CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
-                          ))
+                zip.getEntryStream(ModulePaths.elementRef(pathTypeStr, id.abs))
+                  .flatMap {
+                    case Some(entry) =>
+                      res.deserializeProtocolBuffer(refCompanion)(entry)
+                        .flatMap { refValue =>
+                          parseDescriptor(refOwnerLens(refValue)).flatMap {
+                            case ModuleObjectReference(owner) =>
+                              referenceHandler(refValue)(owner).flatMap {
+                                case Some(refResult) => IO.succeed(ModuleObjectReference(refResult))
+                                case None => Compilation.forErrors(CompilationError.ModuleObjectNotFound(
+                                  moduleObjectType, id, CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
+                                ))
+                              }
+
+                            case ModuleObjectDefinition(_) | ModuleObjectGlobalDefinition(_) =>
+                              Compilation.forErrors(invalidModuleFormatError)
+                          }
                         }
 
-                      case ModuleObjectDefinition(_) | ModuleObjectGlobalDefinition(_) =>
-                        Compilation.forErrors(invalidModuleFormatError)
-                    }
+                    case None => Compilation.forErrors(invalidModuleFormatError)
                   }
               }
               else {
-                val entry = zip.getEntryStream(ModulePaths.elementDef(pathTypeStr, id))
-                res.deserializeProtocolBuffer(defCompanion)(entry)
-                  .flatMap { defValue =>
-                    parseDescriptor(defOwnerLens(defValue)).flatMap {
-                      case ModuleObjectReference(_) => Compilation.forErrors(invalidModuleFormatError)
+                zip.getEntryStream(ModulePaths.elementDef(pathTypeStr, id))
+                    .flatMap {
+                      case Some(entry) =>
+                        res.deserializeProtocolBuffer(defCompanion)(entry)
+                          .flatMap { defValue =>
+                            parseDescriptor(defOwnerLens(defValue)).flatMap {
+                              case ModuleObjectReference(_) => Compilation.forErrors(invalidModuleFormatError)
 
-                      case ModuleObjectDefinition(owner) =>
-                        definitionHandler(id, defValue, owner).map(ModuleObjectDefinition.apply)
+                              case ModuleObjectDefinition(owner) =>
+                                definitionHandler(id, defValue, owner).map(ModuleObjectDefinition.apply)
 
-                      case ModuleObjectGlobalDefinition(owner) =>
-                        definitionHandler(id, defValue, owner).map(ModuleObjectGlobalDefinition.apply)
+                              case ModuleObjectGlobalDefinition(owner) =>
+                                definitionHandler(id, defValue, owner).map(ModuleObjectGlobalDefinition.apply)
+                            }
+                          }
+
+                      case None => Compilation.forErrors(invalidModuleFormatError)
                     }
-                  }
               }
             }
 

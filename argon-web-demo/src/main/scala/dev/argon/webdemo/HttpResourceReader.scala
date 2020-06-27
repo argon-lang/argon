@@ -81,6 +81,12 @@ object HttpResourceReader {
           }
 
 
+        override def readFile(id: WebDemoResourceIndicator): Stream[ErrorList, Byte] =
+          id match {
+            case UriResourceIndicator(uri) => readHttp(uri)
+            case LocalResourceIndicator(_, content) => ZStream.fromChunk(Chunk.fromArray(content.getBytes(StandardCharsets.UTF_8)))
+          }
+
         override def readTextFile(id: WebDemoResourceIndicator): Stream[ErrorList, Char] =
           ZStream.unwrap(readTextFileAsString(id).map { str =>
             ZStream.fromChunk(Chunk.fromArray(str.toCharArray))

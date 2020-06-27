@@ -1,4 +1,4 @@
-package dev.argon.module
+package dev.argon.backend
 
 import java.io.IOException
 
@@ -30,10 +30,13 @@ object PathResourceIndicator {
 
   def pathResourceReader[P: Path: Tag]: ZLayer[FileIO[P] with FileIOLite, Nothing, ResourceReader[PathResourceIndicator[P]]] =
     ZLayer.fromFunction { prevLayer =>
-      val fileIO = prevLayer.get[FileIO.Service[P]]
-      new ResourceReader.ServiceCommon[PathResourceIndicator[P]] {
+      new ResourceReader.ServiceCommon[PathResourceIndicator[P]] with PathResourceIndicatorPlatformSpecific.ReaderService[P] {
+        protected val fileIO = prevLayer.get[FileIO.Service[P]]
         override protected val fileIOLite: FileIOLite.Service = prevLayer.get[FileIOLite.Service]
 
+
+        override def readFile(id: PathResourceIndicator[P]): stream.Stream[ErrorList, Byte] =
+          fileIO.readFile(ioExceptionToError)(id.path)
 
         override def readTextFile(id: PathResourceIndicator[P]): stream.Stream[ErrorList, Char] =
           fileIO.readText(ioExceptionToError)(id.path)

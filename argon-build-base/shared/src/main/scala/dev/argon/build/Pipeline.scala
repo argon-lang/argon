@@ -10,7 +10,6 @@ import dev.argon.backend
 import dev.argon.backend.ResourceAccess
 import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.compiler.options.CompilerOptions
-import dev.argon.module.PathResourceIndicator
 
 object Pipeline {
 

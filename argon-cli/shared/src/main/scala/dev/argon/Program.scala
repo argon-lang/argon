@@ -3,14 +3,13 @@ package dev.argon
 import dev.argon.build.{BackendProvider, BackendProviderImpl, BuildEnvironment, Pipeline}
 import cats._
 import cats.implicits._
-import dev.argon.backend.{Backend, BuildInfo}
+import dev.argon.backend.{Backend, BuildInfo, PathResourceIndicator}
 import zio.{BuildInfo => _, _}
 import zio.console._
 import zio.interop.catz.core._
 import dev.argon.compiler.options.{CompilerOptions, FileList, OptionsField, OptionsHandler, PrimitiveCodecs, SingleFile}
 import dev.argon.io.Path
 import dev.argon.io.fileio.{FileIO, FileIOLite}
-import dev.argon.module.PathResourceIndicator
 import dev.argon.platform._
 
 object Program extends PlatformApp {
