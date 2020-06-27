@@ -20,7 +20,7 @@ object ModuleLookup {
   (f: GlobalBinding[context.type, TPayloadSpec] => Comp[Option[T]])
   : Comp[Vector[T]] =
     findModule(context)(referencedModules)(moduleDesc).toList.toVector.flatTraverse { module =>
-      lookupNamespaceValues(context)(module)(namespace, name)(f)
+      module.lookupNamespaceValues(namespace, name)(f)
     }
 
   def findModule[TPayloadSpec[_, _]]
@@ -30,9 +30,9 @@ object ModuleLookup {
   : Option[ArModule[context.type, TPayloadSpec]] =
     referencedModules.find { _.id === moduleDesc }
 
-  def lookupNamespaceValues[T, TPayloadSpec[_, _]]
+  def lookupNamespaceValuesInGlobalNS[T, TPayloadSpec[_, _]]
   (context: Context)
-  (module: ArModule[context.type, TPayloadSpec])
+  (globalNamespace: Namespace[context.type, TPayloadSpec])
   (namespace: NamespacePath, name: GlobalName)
   (f: GlobalBinding[context.type, TPayloadSpec] => Comp[Option[T]])
   : Comp[Vector[T]] = {
@@ -54,7 +54,7 @@ object ModuleLookup {
             }
       }
 
-    module.globalNamespace.flatMap(impl(namespace.ns))
+    impl(namespace.ns)(globalNamespace)
   }
 
   def lookupGlobalClass[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArClass[context.type, TPayloadSpec]]] = {

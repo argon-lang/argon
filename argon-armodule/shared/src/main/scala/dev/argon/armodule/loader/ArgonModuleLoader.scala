@@ -160,7 +160,7 @@ object ArgonModuleLoader {
           (namespace: NamespacePath, name: GlobalName)
           (f: GlobalBinding[context.type, TPS] => Comp[Option[T]])
           : Comp[Option[T]] =
-            ModuleLookup.lookupNamespaceValues(context)(refModule)(namespace, name)(f).map {
+            refModule.lookupNamespaceValues(namespace, name)(f).map {
               case Vector(single) => Some(single)
               case Vector() => None
               case _ => ???

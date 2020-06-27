@@ -758,7 +758,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     val noArgs = ErasedSignature.ParameterOnlySignature[context.type](Vector())
 
     if(moduleDesc === env.currentModule.id)
-      resolveClass(ModuleLookup.lookupNamespaceValues(context)(env.currentModule)(namespacePath, name)(ModuleLookup.lookupGlobalClass(context)(noArgs)))
+      resolveClass(env.currentModule.lookupNamespaceValues(namespacePath, name)(ModuleLookup.lookupGlobalClass(context)(noArgs)))
     else
       resolveClass(ModuleLookup.lookupValues(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass(context)(noArgs)))
   }
