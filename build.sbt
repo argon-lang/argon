@@ -114,28 +114,28 @@ lazy val compilerOptions = Seq(
 
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "-Wconf:cat=lint:wv," +
-      "cat=deprecation:wv," +
-      "cat=feature:wv," +
-      "cat=optimizer:wv," +
+    "-Wconf:cat=lint:error," +
+      "cat=deprecation:error," +
+      "cat=feature:error," +
+      "cat=optimizer:error," +
       "cat=unchecked&msg=The outer reference in this type test cannot be checked at run time\\.:silent," +
-      "cat=unchecked:wv," +
-      "cat=java-source:wv," +
-      "cat=unused-imports:silent," +
-      "cat=unused:wv," +
+      "cat=unchecked:error," +
+      "cat=java-source:error," +
+      "cat=unused-imports:ws," +
+      "cat=unused:ws," +
       "cat=w-flag-dead-code:silent," +
-      "cat=w-flag:wv," +
+      "cat=w-flag:error," +
       "cat=other-match-analysis&msg=unreachable code:silent",
-    "-Xfatal-warnings",
     "-Ypatmat-exhaust-depth", "500",
     "-Yrangepos",
+    "-Ywarn-unused",
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
   ),
 
 
-  wartremoverWarnings ++= Warts.allBut(
+  wartremoverErrors ++= Warts.allBut(
     Wart.Recursion,
     Wart.Any,
     Wart.Nothing,

@@ -46,7 +46,7 @@ object ZioEffect extends WartTraverser {
           case t if hasWartAnnotation(u)(t) =>
 
           case rt: RefTree if bannedSymbols.contains(rt.symbol) =>
-            warning(u)(tree.pos, "ZIO effects are banned")
+            error(u)(tree.pos, "ZIO effects are banned")
 
           case _ =>
             super.traverse(tree)
