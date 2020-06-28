@@ -3,6 +3,8 @@ syntax = "proto2";
 import "google/protobuf/empty.proto";
 import "scalapb/scalapb.proto";
 
+option java_package = "dev.argon.module.java_format";
+
 option (scalapb.options) = {
     scope: FILE
     package_name: "dev.argon.module"

@@ -112,8 +112,14 @@ lazy val zioEffectWarts = project.in(file("zio-effect-warts"))
 
 lazy val compilerOptions = Seq(
 
+  javacOptions ++= Seq(
+    "-encoding", "UTF-8",
+    "--release", "11"
+  ),
+
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
+    "-release", "11",
     "-Wconf:cat=lint:error," +
       "cat=deprecation:error," +
       "cat=feature:error," +
@@ -679,6 +685,15 @@ lazy val argon_platformNode = argon_platform.node
 lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-modulefmt"))
   .jvmConfigure(
     _.settings(commonJVMSettings)
+      .settings(
+        javacOptions ++= Seq(
+          "-encoding", "UTF-8",
+          "--release", "11"
+        ),
+
+        PB.targets in Compile += PB.gens.java -> (sourceManaged in Compile).value,
+        PB.targets in Compile += scalapb.gen(javaConversions=true) -> (sourceManaged in Compile).value,
+      )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -687,6 +702,9 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
   .nodeConfigure(
     _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
+  )
+  .platformsSettings(JSPlatform, NodePlatform)(
+    PB.targets in Compile += scalapb.gen() -> (sourceManaged in Compile).value / "protobuf",
   )
   .settings(
     commonSettings,
@@ -702,10 +720,6 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
     ),
 
     PB.protoSources in Compile += file("argon-modulefmt/shared/src/main/protobuf"),
-
-    PB.targets in Compile := Seq(
-      scalapb.gen() -> (sourceManaged in Compile).value / "protobuf"
-    ),
   )
 
 lazy val modulefmtJVM = modulefmt.jvm
