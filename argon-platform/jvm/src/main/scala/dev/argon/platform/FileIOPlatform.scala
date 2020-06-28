@@ -48,21 +48,20 @@ private[platform] object FileIOPlatform {
           .provide(env)
 
 
-      override def writeToFile[R, E](errorHandler: IOException => E)(path: FilePath)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit] =
-        ZManaged.fromAutoCloseable(
-          blocking.effectBlocking { Files.newOutputStream(path.javaPath, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING) }
+      override def writeToFile[R, E](errorHandler: IOException => E)(path: FilePath)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit] = {
+        val sink = ZSink.fromFile(path.javaPath)
+          .foldM[Blocking, E, Byte, Byte, Unit](
+            failure = {
+              case ex: IOException => ZSink.fail(errorHandler(ex))
+              case ex => ZSink.die(ex)
+            },
+            success = _ => ZSink.succeed(())
+          )
+
+        data.run(
+          ZSink(sink.push.map { push => (opt: Option[Chunk[Byte]]) => push(opt).provide(env) }.provide(env))
         )
-          .refineOrDie {
-            case ex: IOException => errorHandler(ex)
-          }
-          .use { outputStream =>
-            data.foreachChunk { chunk =>
-              blocking.effectBlocking { outputStream.write(chunk.toArray) }
-                .refineOrDie {
-                  case ex: IOException => errorHandler(ex)
-                }
-            }
-          }
+      }
 
       override def isDirectory(path: FilePath): IO[IOException, Boolean] =
         blocking.effectBlocking { Files.isDirectory(path.javaPath) }
