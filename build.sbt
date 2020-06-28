@@ -121,8 +121,8 @@ lazy val compilerOptions = Seq(
       "cat=unchecked&msg=The outer reference in this type test cannot be checked at run time\\.:silent," +
       "cat=unchecked:error," +
       "cat=java-source:error," +
-      "cat=unused-imports:ws," +
-      "cat=unused:ws," +
+      "cat=unused-imports:silent," +
+      "cat=unused:silent," +
       "cat=w-flag-dead-code:silent," +
       "cat=w-flag:error," +
       "cat=other-match-analysis&msg=unreachable code:silent",

@@ -213,13 +213,13 @@ object Grammar {
 
       def ++ [U, V]
       (grammar2: => Grammar[TToken, TSyntaxError, TLabel, U])
-      (implicit combiner: GrammarConcatCombiner[T, U, V], errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      (implicit combiner: GrammarConcatCombiner[T, U, V])
       : Grammar[TToken, TSyntaxError, TLabel, V] =
         ConcatGrammar(grammar1, grammar2) { (a, b) => WithSource(combiner.combine(a.value, b.value), SourceLocation.merge(a.location, b.location)) }
 
       def ++! [U, V]
       (grammar2: => Grammar[TToken, TSyntaxError, TLabel, U])
-      (implicit combiner: GrammarConcatCombiner[T, U, V], errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      (implicit combiner: GrammarConcatCombiner[T, U, V])
       : Grammar[TToken, TSyntaxError, TLabel, V] =
         ConcatGrammar(grammar1, StrictGrammar(grammar2)) { (a, b) => WithSource(combiner.combine(a.value, b.value), SourceLocation.merge(a.location, b.location)) }
 
@@ -228,14 +228,12 @@ object Grammar {
         --> (Some.apply) | EmptyStrGrammar(None)
 
       def +~
-      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
       : Grammar[TToken, TSyntaxError, TLabel, NonEmptyVector[T]] = {
         lazy val grammar1Cached = grammar1
         grammar1Cached ++ (grammar1Cached*) --> { case (head, tail) => NonEmptyVector(head, tail) }
       }
 
       def *
-      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
       : Grammar[TToken, TSyntaxError, TLabel, Vector[T]] =
         new RepeatGrammar(grammar1)
 
@@ -422,7 +420,7 @@ object Grammar {
       }
 
       tokens match {
-        case NonEmptyVector(WithSource(token @ MatchingToken(value), loc), tail) =>
+        case NonEmptyVector(WithSource(MatchingToken(value), loc), tail) =>
           GrammarResultSuccess(
             tail,
             WithSource(value, loc)
@@ -617,7 +615,6 @@ object Grammar {
 
   private final class RepeatGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, T]
   (innerUncached: => Grammar[TToken, TSyntaxError, TLabel, T])
-  (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
     extends Grammar[TToken, TSyntaxError, TLabel, Vector[T]] {
 
     private lazy val inner = innerUncached

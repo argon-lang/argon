@@ -1,6 +1,5 @@
 package dev.argon.stream
 
-import zio.stream.ZTransducer
 import zio.{Chunk, IO, NonEmptyChunk, ZIO}
 
 trait StreamTransformation[-R, +E, -A, -X, +B, +Y] {
