@@ -1,5 +1,7 @@
 package dev.argon.backend.jvm.jdkloader;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -7,16 +9,14 @@ import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
 public class JDKLibraryLoader {
     private JDKLibraryLoader() {}
 
-    public static JavaLibraryIterator systemLibraries(Runtime.Version jdkVersion) throws IOException {
+    public static @NotNull JavaLibraryIterator systemLibraries(@NotNull Runtime.Version jdkVersion) throws IOException {
         if(Runtime.version().feature() == jdkVersion.feature()) {
             return jrtLibs();
         }
@@ -39,7 +39,7 @@ public class JDKLibraryLoader {
         }
     }
 
-    private static JavaLibraryIterator jrtLibs() throws IOException {
+    private static @NotNull JavaLibraryIterator jrtLibs() throws IOException {
         final var fs = FileSystems.newFileSystem(URI.create("jrt:/"), new HashMap<>());
         try {
             final var rootDir = fs.getRootDirectories().iterator().next();
@@ -86,7 +86,7 @@ public class JDKLibraryLoader {
         }
     }
 
-    private static JavaLibraryIterator loadCtSymLibs(Path ctSym, Runtime.Version jdkVersion) throws IOException {
+    private static @NotNull JavaLibraryIterator loadCtSymLibs(@NotNull Path ctSym, @NotNull Runtime.Version jdkVersion) throws IOException {
         final var fs = FileSystems.newFileSystem(ctSym, (ClassLoader)null);
         try {
             final var rootDir = fs.getRootDirectories().iterator().next();
@@ -177,7 +177,7 @@ public class JDKLibraryLoader {
         }
     }
 
-    private static Path packageDir(Path baseDir, String pkg) {
+    private static @NotNull Path packageDir(@NotNull Path baseDir, @NotNull String pkg) {
         if(pkg.isEmpty()) {
             return baseDir;
         }
@@ -203,8 +203,13 @@ public class JDKLibraryLoader {
         private final Path moduleDir;
 
         @Override
-        String getModuleName() {
+        public String getModuleName() {
             return moduleInfo.name;
+        }
+
+        @Override
+        public @NotNull Set<String> getRequires() {
+            return new HashSet<>(moduleInfo.packages);
         }
 
         @Override
@@ -258,8 +263,13 @@ public class JDKLibraryLoader {
         private final List<Path> classDirs;
 
         @Override
-        String getModuleName() {
+        public String getModuleName() {
             return moduleInfo.name;
+        }
+
+        @Override
+        public @NotNull Set<String> getRequires() {
+            return new HashSet<>(moduleInfo.packages);
         }
 
         @Override

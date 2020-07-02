@@ -1,4 +1,4 @@
-package dev.argon.backend.jvm.jdkloader;
+package dev.argon.backend.jvm;
 
 import org.objectweb.asm.Opcodes;
 

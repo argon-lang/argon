@@ -31,6 +31,8 @@ lazy val commonSettings = Seq(
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
 
   libraryDependencies ++= Seq(
+    "org.jetbrains" % "annotations" % "19.0.0",
+
     "org.scala-lang.modules" %%% "scala-xml" % "2.0.0-M1",
 
     "org.typelevel" %%% "cats-core" % "2.1.1",

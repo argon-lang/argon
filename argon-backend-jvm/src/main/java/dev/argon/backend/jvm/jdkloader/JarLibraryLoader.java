@@ -1,13 +1,16 @@
 package dev.argon.backend.jvm.jdkloader;
 
+import org.jetbrains.annotations.NotNull;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashSet;
+import java.util.Set;
 
 public class JarLibraryLoader {
     private JarLibraryLoader() {}
 
-    public static JavaLibrary loadJar(JarReader jar, Runtime.Version jdkVersion) throws IOException {
+    public static @NotNull JavaLibrary loadJar(@NotNull JarReader jar, @NotNull Runtime.Version jdkVersion) throws IOException {
         if(jdkVersion.feature() >= 9) {
             var moduleInfo = getModuleName(jar);
             return new JarModule(moduleInfo, jar);
@@ -17,7 +20,7 @@ public class JarLibraryLoader {
         }
     }
 
-    private static ModuleInfoData getModuleName(JarReader jar) throws IOException {
+    private static @NotNull ModuleInfoData getModuleName(@NotNull JarReader jar) throws IOException {
 
         try(var moduleInfoStream = jar.getEntryStream("module-info.class")) {
             if(moduleInfoStream != null) {
@@ -30,12 +33,12 @@ public class JarLibraryLoader {
             if(manifest != null) {
                 String moduleName = manifest.getMainAttributes().getValue("Automatic-Module-Name");
                 if(moduleName != null) {
-                    return new ModuleInfoData(moduleName, null);
+                    return new ModuleInfoData(moduleName, null, new HashSet<>());
                 }
             }
         }
 
-        return new ModuleInfoData(jar.getJarName(), null);
+        return new ModuleInfoData(jar.getJarName(), null, new HashSet<>());
     }
 
     private static InputStream findJarClass(JarReader jar, String pkg, String name) throws IOException {
@@ -43,7 +46,7 @@ public class JarLibraryLoader {
         return jar.getEntryStream(entryPath);
     }
 
-    private static class JarModule implements JavaLibrary {
+    private static class JarModule extends JavaModule {
 
         public JarModule(ModuleInfoData moduleInfo, JarReader jar) {
             this.moduleInfo = moduleInfo;
@@ -52,6 +55,16 @@ public class JarLibraryLoader {
 
         private final ModuleInfoData moduleInfo;
         private final JarReader jar;
+
+        @Override
+        public @NotNull String getModuleName() {
+            return moduleInfo.name;
+        }
+
+        @Override
+        public @NotNull Set<String> getRequires() {
+            return new HashSet<>(moduleInfo.packages);
+        }
 
         @Override
         public InputStream findClass(String pkg, String name) throws IOException {
@@ -64,7 +77,7 @@ public class JarLibraryLoader {
         }
     }
 
-    private static class JarClassPathEntry implements JavaLibrary {
+    private static class JarClassPathEntry extends ClassPath {
 
         public JarClassPathEntry(JarReader jar) {
             this.jar = jar;

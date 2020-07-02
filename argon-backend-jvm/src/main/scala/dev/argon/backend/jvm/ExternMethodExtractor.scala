@@ -16,25 +16,25 @@ import scala.collection.mutable.ListBuffer
 @SuppressWarnings(Array("org.wartremover.warts.MutableDataStructures", "org.wartremover.warts.Null", "org.wartremover.warts.Var", "dev.argon.warts.ZioEffect"))
 object ExternMethodExtractor {
 
-  private class MethodFindClassVisitor(foundMethods: ListBuffer[MethodNode]) extends ClassVisitor(asmVersion) {
+  private class MethodFindClassVisitor(foundMethods: ListBuffer[MethodNode]) extends ClassVisitor(Constants.AsmVersion) {
 
     @SuppressWarnings(Array("org.wartremover.warts.NonUnitStatements"))
     override def visitMethod(access: Int, name: String, descriptor: String, signature: String, exceptions: Array[String]): MethodVisitor = {
-      val node = new MethodNode(asmVersion)
+      val node = new MethodNode(Constants.AsmVersion)
       foundMethods += node
       node
     }
 
   }
 
-  private class SpecifierMethodVisitor extends MethodVisitor(asmVersion) {
+  private class SpecifierMethodVisitor extends MethodVisitor(Constants.AsmVersion) {
 
     var specifier: Option[String] = None
 
     @SuppressWarnings(Array("org.wartremover.warts.NonUnitStatements"))
     override def visitAnnotation(descriptor: String, visible: Boolean): AnnotationVisitor =
       if(descriptor === "Argon/JVM/Annotations/Extern")
-        new AnnotationVisitor(asmVersion) {
+        new AnnotationVisitor(Constants.AsmVersion) {
           override def visit(name: String, value: Any): Unit = {
             if(name === "specifier")
               value match {
