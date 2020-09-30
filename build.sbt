@@ -3,8 +3,8 @@ import sbt.internal.util.ManagedLogger
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
-val graalVersion = "20.1.0"
-val zioVersion = "1.0.0-RC21-1"
+val graalVersion = "20.2.0"
+val zioVersion = "1.0.1"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -31,15 +31,15 @@ lazy val commonSettings = Seq(
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
 
   libraryDependencies ++= Seq(
-    "org.jetbrains" % "annotations" % "19.0.0",
+    "org.jetbrains" % "annotations" % "20.1.0",
 
-    "org.scala-lang.modules" %%% "scala-xml" % "2.0.0-M1",
+    "org.scala-lang.modules" %%% "scala-xml" % "2.0.0-M2",
 
-    "org.typelevel" %%% "cats-core" % "2.1.1",
+    "org.typelevel" %%% "cats-core" % "2.2.0",
     "org.typelevel" %%% "kittens" % "2.1.0",
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
-    "dev.zio" %%% "zio-interop-cats" % "2.1.3.0-RC16",
+    "dev.zio" %%% "zio-interop-cats" % "2.1.4.0",
 
 
     "com.chuusai" %%% "shapeless" % "2.3.3",
@@ -68,7 +68,11 @@ lazy val sharedJSNodeSettings = Seq(
     "xmldom" -> "^0.3.0",
   ) ++ esParseDeps,
   
-  scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+  scalaJSLinkerConfig ~= {
+    _
+      .withModuleKind(ModuleKind.CommonJSModule)
+      .withBatchMode(true)
+  },
 
   unmanagedSourceDirectories in Compile += baseDirectory.value / "../shared-js-node/src/main/scala",
   unmanagedSourceDirectories in Test += baseDirectory.value / "../shared-js-node/src/test/scala",
@@ -78,9 +82,9 @@ lazy val sharedJSNodeSettings = Seq(
 lazy val commonJVMSettings = sharedJVMNodeSettings ++ Seq(
 
   libraryDependencies ++= Seq(
-    "org.apache.commons" % "commons-text" % "1.8",
+    "org.apache.commons" % "commons-text" % "1.9",
     "org.apache.commons" % "commons-compress" % "1.20",
-    "commons-io" % "commons-io" % "2.7",
+    "commons-io" % "commons-io" % "2.8.0",
   ),
 
   fork in Test := true,
@@ -481,8 +485,8 @@ lazy val backend_jvm = project.in(file("argon-backend-jvm"))
     commonJVMSettings,
 
     libraryDependencies ++= Seq(
-      "org.ow2.asm" % "asm" % "8.0.1",
-      "org.ow2.asm" % "asm-tree" % "8.0.1",
+      "org.ow2.asm" % "asm" % "9.0",
+      "org.ow2.asm" % "asm-tree" % "9.0",
     ),
 
     commonSettings,

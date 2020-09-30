@@ -1282,7 +1282,7 @@ object ArgonModuleLoader {
                   ctor <- findClassConstructor(id)
                   args <- ZIO.foreach(t.args)(resolveExpr(_))
                   (classType, ctorArgs) <- args match {
-                    case (classType: ClassType[context.type, TTypeWrapper]) :: ctorArgs =>
+                    case (classType: ClassType[context.type, TTypeWrapper]) +: ctorArgs =>
                       IO.succeed((classType, ctorArgs))
 
                     case _ => Compilation.forErrors(invalidModuleFormatError)
@@ -1293,7 +1293,7 @@ object ArgonModuleLoader {
                 for {
                   args <- ZIO.foreach(t.args)(resolveExpr(_))
                   (dataCtor, ctorArgs) <- args match {
-                    case (dataCtor: DataConstructorType[context.type, TTypeWrapper]) :: ctorArgs =>
+                    case (dataCtor: DataConstructorType[context.type, TTypeWrapper]) +: ctorArgs =>
                       IO.succeed((dataCtor, ctorArgs))
 
                     case _ => Compilation.forErrors(invalidModuleFormatError)
@@ -1372,7 +1372,7 @@ object ArgonModuleLoader {
                   }
                   elemsNonEmpty <-
                     IO.fromEither(
-                      NonEmptyList.fromList(elems)
+                      NonEmptyList.fromList(elems.toList)
                         .toRight { NonEmptyList.of(invalidModuleFormatError) }
                     )
 
