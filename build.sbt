@@ -17,7 +17,7 @@ lazy val nodeConfig =
     .withArgs(List("--no-warnings", "--experimental-vm-modules"))
 
 val esParseDeps = Seq(
-  "acorn" -> "^7.3.1",
+  "acorn" -> "^8.0.2",
 )
 
 lazy val commonSettings = Seq(
@@ -98,7 +98,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ S
 
   npmDependencies ++= Seq(
     "memory-streams" -> "^0.1.3",
-    "node-stream-zip" -> "^1.11.2",
+    "node-stream-zip" -> "^1.11.3",
   ),
 
   jsEnv := new NodeJSEnv(nodeConfig),
