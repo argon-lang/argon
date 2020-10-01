@@ -15,11 +15,11 @@ private[testrunner] object TestCaseRunnerCompilePhasePlatformSpecific {
     protected implicit val resIndicatorTag: Tag[I]
     protected val outerReaderEnv: ResourceReader[I]
 
-    def getJarReader(id: TestCompileResource[I], jdkVersion: JDKVersion): Managed[CompError, JarFileReader[Any, CompError]] =
+    def getJarReader(id: TestCompileResource[I], jdkVersion: JDKVersion): Managed[CompilationError, JarFileReader[Any, CompilationError]] =
       id match {
         case TestCaseInputSource(_) =>
-          Managed.fail(CompilationError.ResourceIOError(
-            CompilationMessageSource.ThrownException(new IOException("Invalid file format. Not a zip file."))
+          Managed.fail(DiagnosticError.ResourceIOError(
+            DiagnosticSource.ThrownException(new IOException("Invalid file format. Not a zip file."))
           ))
         case TestCaseOtherRes(id) => outerReaderEnv.get.getJarReader(id, jdkVersion)
       }

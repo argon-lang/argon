@@ -1,7 +1,7 @@
 package dev.argon.compiler.options
 
 import cats._
-import dev.argon.compiler.CompError
+import dev.argon.compiler.CompilationError
 import dev.argon.parser.SourceAST
 import zio.stream._
 

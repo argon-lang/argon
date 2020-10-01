@@ -23,6 +23,6 @@ trait Backend {
 
   def compile[I <: ResourceIndicator: Tag]
   (input: CompilerInput[I, BackendOptions[Id, I]])
-  : ZManaged[ResourceReader[I] with SourceParser, CompError, TCompilationOutput]
+  : ZManaged[ResourceReader[I] with SourceParser, CompilationError, TCompilationOutput]
 
 }

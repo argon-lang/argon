@@ -23,7 +23,7 @@ trait AccessModifierHelpers {
       case AccessModifier.Private => IO.succeed(AccessModifier.PrivateInternal)
       case accessModifier =>
         val loc = access.headOption.map(_.location).getOrElse(stmtLocation)
-        Compilation.forErrors(CompilationError.AccessModifierNotAllowedForGlobal(accessModifier, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation.forErrors(DiagnosticError.AccessModifierNotAllowedForGlobal(accessModifier, DiagnosticSource.SourceFile(fileSpec, loc)))
     }
 
   protected def parseAccessModifier(fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): Comp[AccessModifier] =
@@ -32,7 +32,7 @@ trait AccessModifierHelpers {
         IO.succeed(AccessModifier.Public)
 
       case WithSource(a @ parser.PublicModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation.forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation.forErrors(DiagnosticError.InvalidAccessModifierCombination(a, b, DiagnosticSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.ProtectedModifier, _) :: Nil =>
         IO.succeed(AccessModifier.Protected)
@@ -41,7 +41,7 @@ trait AccessModifierHelpers {
         IO.succeed(AccessModifier.ProtectedInternal)
 
       case WithSource(a @ parser.ProtectedModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation.forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation.forErrors(DiagnosticError.InvalidAccessModifierCombination(a, b, DiagnosticSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.PrivateModifier, _) :: Nil =>
         IO.succeed(AccessModifier.Private)
@@ -50,7 +50,7 @@ trait AccessModifierHelpers {
         IO.succeed(AccessModifier.PrivateInternal)
 
       case WithSource(a @ parser.PrivateModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation.forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation.forErrors(DiagnosticError.InvalidAccessModifierCombination(a, b, DiagnosticSource.SourceFile(fileSpec, loc)))
 
       case WithSource(parser.InternalModifier, _) :: Nil =>
         IO.succeed(AccessModifier.Internal)
@@ -62,7 +62,7 @@ trait AccessModifierHelpers {
         IO.succeed(AccessModifier.PrivateInternal)
 
       case WithSource(a @ parser.InternalModifier, loc) :: WithSource(b, _) :: _ =>
-        Compilation.forErrors(CompilationError.InvalidAccessModifierCombination(a, b, CompilationMessageSource.SourceFile(fileSpec, loc)))
+        Compilation.forErrors(DiagnosticError.InvalidAccessModifierCombination(a, b, DiagnosticSource.SourceFile(fileSpec, loc)))
 
       case Nil =>
         IO.succeed(AccessModifier.Private)

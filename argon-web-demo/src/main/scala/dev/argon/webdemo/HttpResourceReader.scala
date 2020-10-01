@@ -6,7 +6,7 @@ import java.nio.charset.StandardCharsets
 import cats.implicits._
 import cats.data.NonEmptyList
 import dev.argon.compiler.loaders.ResourceReader
-import dev.argon.compiler.{Comp, CompError, Compilation, CompilationError, CompilationMessageSource}
+import dev.argon.compiler.{Comp, CompilationError, Compilation, DiagnosticSource}
 import dev.argon.io.ZipFileReader
 import dev.argon.io.fileio.FileIOLite
 import dev.argon.platform.ResourceReaderMemZipBase
@@ -28,7 +28,7 @@ object HttpResourceReader {
           Compilation.errorForIOException(ex)
 
         @SuppressWarnings(Array("dev.argon.warts.ZioEffect", "org.wartremover.warts.AsInstanceOf"))
-        private def readHttp(url: String): Stream[CompError, Byte] =
+        private def readHttp(url: String): Stream[CompilationError, Byte] =
           ZStream.unwrap(
             ZIO.effectAsync { complete =>
               val request = new XMLHttpRequest()
@@ -51,7 +51,7 @@ object HttpResourceReader {
           )
 
         @SuppressWarnings(Array("dev.argon.warts.ZioEffect", "org.wartremover.warts.AsInstanceOf"))
-        private def readHttpStr(url: String): IO[CompError, String] =
+        private def readHttpStr(url: String): IO[CompilationError, String] =
           ZIO.effectAsync { complete =>
             val request = new XMLHttpRequest()
             request.responseType = "text"
@@ -71,7 +71,7 @@ object HttpResourceReader {
             request.open("GET", url)
           }
 
-        private def readResource(id: WebDemoResourceIndicator): Stream[CompError, Byte] =
+        private def readResource(id: WebDemoResourceIndicator): Stream[CompilationError, Byte] =
           id match {
             case UriResourceIndicator(uri) =>
               readHttp(uri)
@@ -81,13 +81,13 @@ object HttpResourceReader {
           }
 
 
-        override def readFile(id: WebDemoResourceIndicator): Stream[CompError, Byte] =
+        override def readFile(id: WebDemoResourceIndicator): Stream[CompilationError, Byte] =
           id match {
             case UriResourceIndicator(uri) => readHttp(uri)
             case LocalResourceIndicator(_, content) => ZStream.fromChunk(Chunk.fromArray(content.getBytes(StandardCharsets.UTF_8)))
           }
 
-        override def readTextFile(id: WebDemoResourceIndicator): Stream[CompError, Char] =
+        override def readTextFile(id: WebDemoResourceIndicator): Stream[CompilationError, Char] =
           ZStream.unwrap(readTextFileAsString(id).map { str =>
             ZStream.fromChunk(Chunk.fromArray(str.toCharArray))
           })
@@ -98,10 +98,10 @@ object HttpResourceReader {
             case LocalResourceIndicator(_, content) => IO.succeed(content)
           }
 
-        override def getZipReader(id: WebDemoResourceIndicator): Managed[CompError, ZipFileReader[Any, CompError]] =
+        override def getZipReader(id: WebDemoResourceIndicator): Managed[CompilationError, ZipFileReader[Any, CompilationError]] =
           ZManaged.fromEffect(zipReaderForStream(ioExceptionToError)(readResource(id)))
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompError, Byte]): Comp[A] =
+        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompilationError, Byte]): Comp[A] =
           env.get.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
       }
     }

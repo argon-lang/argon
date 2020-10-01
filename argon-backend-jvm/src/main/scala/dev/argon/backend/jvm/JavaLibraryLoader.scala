@@ -3,7 +3,7 @@ package dev.argon.backend.jvm
 import java.io.InputStream
 
 import dev.argon.backend.jvm.jdkloader.{ClassPath, JarLibraryLoader, JarReader, JavaLibrary, JavaLibraryVisitor, JavaModule}
-import dev.argon.compiler.{Comp, CompError, Compilation, CompilationError, CompilationMessageSource}
+import dev.argon.compiler._
 import dev.argon.compiler.core.{ArModule, Context, GlobalBinding, GlobalName, ModuleId, Namespace}
 import dev.argon.compiler.loaders.{ModuleLoad, ModuleMetadata, ResourceIndicator, ResourceReader}
 import zio._
@@ -23,7 +23,7 @@ object JavaLibraryLoader {
 
   def javaLibraryLoader[I <: ResourceIndicator, TContext <: JVMContext with Context.WithRes[JVMResourceIndicator[I]]](jkdVersion: JDKVersion, libraries: Seq[JavaModule], classPath: ClassPath)(blocking: Blocking.Service, res: ResourceReader.Service[I]): ModuleLoad.Service[JVMResourceIndicator[I], TContext] =
     new ModuleLoad.Service[JVMResourceIndicator[I], TContext] {
-      override def loadResource(id: JVMResourceIndicator[I]): Managed[CompError, Option[ModuleMetadata[TContext]]] =
+      override def loadResource(id: JVMResourceIndicator[I]): Managed[CompilationError, Option[ModuleMetadata[TContext]]] =
         id match {
           case JVMResourceIndicator.SystemLibrary(moduleName) =>
             Managed.succeed(
@@ -43,14 +43,14 @@ object JavaLibraryLoader {
                 blocking.effectBlocking {
                   JarLibraryLoader.loadJar(javaJarReader, jkdVersion)
                 }
-                  .catchAll(CompilationError.unwrapThrowable)
+                  .catchAll(Compilation.unwrapThrowable)
                   .flatMap { javaLibrary =>
-                    javaLibrary.visit(new JavaLibraryVisitor[IO[CompError, Option[ModuleMetadata[TContext]]]] {
-                      override def visitModule(module: JavaModule): IO[CompError, Option[ModuleMetadata[TContext]]] =
+                    javaLibrary.visit(new JavaLibraryVisitor[IO[CompilationError, Option[ModuleMetadata[TContext]]]] {
+                      override def visitModule(module: JavaModule): IO[CompilationError, Option[ModuleMetadata[TContext]]] =
                         IO.some(javaModuleMetadata(module))
 
-                      override def visitClassPath(classPath: ClassPath): IO[CompError, Option[ModuleMetadata[TContext]]] =
-                        Compilation.forErrors(JVMBackendErrors.JarNotModule(inner.show, CompilationMessageSource.ReferencedModule(JavaLibrary.classpathModuleId)))
+                      override def visitClassPath(classPath: ClassPath): IO[CompilationError, Option[ModuleMetadata[TContext]]] =
+                        Compilation.forErrors(JVMBackendErrors.JarNotModule(inner.show, DiagnosticSource.ReferencedModule(JavaLibrary.classpathModuleId)))
                     })
                   }
               }
@@ -80,7 +80,7 @@ object JavaLibraryLoader {
   private class JavaLibraryMetadata[TContext <: JVMContext](val descriptor: ModuleId, val referencedModules: Vector[ModuleId], library: JavaLibrary, blocking: Blocking.Service) extends ModuleMetadata[TContext] {
     override def loadReference(ctx: TContext)(referencedModules2: Vector[ArModule[ctx.type, ReferencePayloadSpecifier]]): Comp[ArModule[ctx.type, ReferencePayloadSpecifier]] =
       for {
-        classCache <- MemoCacheStore.make[CompError, (String, String), Option[GlobalBinding[ctx.type, ReferencePayloadSpecifier]]]
+        classCache <- MemoCacheStore.make[CompilationError, (String, String), Option[GlobalBinding[ctx.type, ReferencePayloadSpecifier]]]
       } yield new ArModule[ctx.type, ReferencePayloadSpecifier] {
         override val context: ctx.type = ctx
         override val id: ModuleId = descriptor
@@ -94,7 +94,7 @@ object JavaLibraryLoader {
 
         private def lookupClass(pkg: String, name: String): Comp[Option[GlobalBinding[context.type, ReferencePayloadSpecifier]]] =
           ZManaged.make(blocking.effectBlocking { Option(library.findClass(pkg, name)) })(isOpt => blocking.effectBlocking { isOpt.foreach { _.close() } }.orDie)
-            .catchAll(CompilationError.unwrapThrowableManaged)
+            .catchAll(Compilation.unwrapThrowableManaged)
             .use { inputStreamOpt =>
               ZIO.foreach(inputStreamOpt)(classToGlobalBinding)
             }
@@ -118,7 +118,7 @@ object JavaLibraryLoader {
       }
   }
 
-  private class JavaJarReader(runtime: zio.Runtime[Any], jarReader: JarFileReader[Any, CompError]) extends JarReader {
+  private class JavaJarReader(runtime: zio.Runtime[Any], jarReader: JarFileReader[Any, CompilationError]) extends JarReader {
     override def getJarName: String = runtime.unsafeRunTask(jarReader.jarName)
 
     @SuppressWarnings(Array("org.wartremover.warts.Null"))

@@ -7,7 +7,7 @@ import cats._
 import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.expr.ArExpr.TraitType
-import dev.argon.compiler.{Comp, CompilationMessageSource}
+import dev.argon.compiler.{Comp, DiagnosticSource}
 import dev.argon.util.FileID
 import shapeless.Nat
 import zio.IO
@@ -21,7 +21,7 @@ trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] ex
   val id: DataConstructorId
   val owner: DataConstructorOwner[context.type, TPayloadSpec]
   val fileId: FileID
-  val ctorMessageSource: CompilationMessageSource
+  val ctorMessageSource: DiagnosticSource
 
   val signature: Comp[Signature[DataConstructor.ResultInfo, _ <: Nat]]
 

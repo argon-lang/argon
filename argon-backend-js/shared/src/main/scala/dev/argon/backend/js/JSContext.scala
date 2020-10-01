@@ -42,31 +42,31 @@ abstract class JSContext private[js] extends ContextWithModule {
   override def createDataConstructorImplementation(body: typeSystem.SimpleExpr): JSImpl.DataConstructor =
     JSImpl.DataConstructor.ExpressionBody(body)
 
-  private def getExterns(source: CompilationMessageSource): Comp[Map[String, ResolvedExtern]] =
+  private def getExterns(source: DiagnosticSource): Comp[Map[String, ResolvedExtern]] =
     externFunctionsCache.get(
       compilerInput.backendOptions.extern.files.foldMapM { file =>
         for {
           jsModule <- resourceReader.readTextFileAsString(file)
-          map <- extractJSModuleFunctions(jsModule).mapError { _ => CompilationError.InvalidExternFunction(source) }
+          map <- extractJSModuleFunctions(jsModule).mapError { _ => DiagnosticError.InvalidExternFunction(source) }
         } yield map.view.mapValues(ResolvedExtern.Function.apply).toMap
       }
     )
 
-  override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[JSImpl.Function] =
+  override def createExternFunctionImplementation(specifier: String, source: DiagnosticSource): Comp[JSImpl.Function] =
     getExterns(source).flatMap { externs =>
       externs.get(specifier) match {
         case Some(ResolvedExtern.Function(impl)) => IO.succeed(JSImpl.Function.JSExpressionBody(JSExpressionRaw(impl)))
-        case Some(ResolvedExtern.Ambiguous) => Compilation.forErrors(CompilationError.AmbiguousExtern(specifier, source))
-        case None => Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+        case Some(ResolvedExtern.Ambiguous) => Compilation.forErrors(DiagnosticError.AmbiguousExtern(specifier, source))
+        case None => Compilation.forErrors(DiagnosticError.UnknownExternImplementation(specifier, source))
       }
     }
 
-  override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[JSImpl.Method] =
+  override def createExternMethodImplementation(specifier: String, source: DiagnosticSource): Comp[JSImpl.Method] =
     getExterns(source).flatMap { externs =>
       externs.get(specifier) match {
         case Some(ResolvedExtern.Function(impl)) => IO.succeed(JSImpl.Method.JSExpressionBody(JSExpressionRaw(impl)))
-        case Some(ResolvedExtern.Ambiguous) => Compilation.forErrors(CompilationError.AmbiguousExtern(specifier, source))
-        case None => Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+        case Some(ResolvedExtern.Ambiguous) => Compilation.forErrors(DiagnosticError.AmbiguousExtern(specifier, source))
+        case None => Compilation.forErrors(DiagnosticError.UnknownExternImplementation(specifier, source))
       }
     }
 
@@ -98,7 +98,7 @@ abstract class JSContext private[js] extends ContextWithModule {
   }
 
   def extractJSModuleFunctions(jsModule: String): IO[Throwable, Map[String, String]]
-  protected val externFunctionsCache: ValueCache[CompError, Map[String, ResolvedExtern]]
+  protected val externFunctionsCache: ValueCache[CompilationError, Map[String, ResolvedExtern]]
   protected val resourceReader: ResourceReader.Service[ResIndicator]
 
 }

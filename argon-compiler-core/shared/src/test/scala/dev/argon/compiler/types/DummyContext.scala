@@ -1,6 +1,6 @@
 package dev.argon.compiler.types
 
-import dev.argon.compiler.{Comp, CompilationMessageSource, CompError}
+import dev.argon.compiler.{Comp, DiagnosticSource, CompilationError}
 import dev.argon.compiler.core.{ArModule, Context}
 import dev.argon.compiler.core.Context.WithRes
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
@@ -34,9 +34,9 @@ class DummyContext extends Context {
 
   override def createDataConstructorImplementation(body: typeSystem.SimpleExpr): Unit = ()
 
-  override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[Unit] = IO.unit
+  override def createExternFunctionImplementation(specifier: String, source: DiagnosticSource): Comp[Unit] = IO.unit
 
-  override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[Unit] = IO.unit
+  override def createExternMethodImplementation(specifier: String, source: DiagnosticSource): Comp[Unit] = IO.unit
 
 
   override type ResIndicator = Nothing
@@ -52,6 +52,6 @@ class DummyContext extends Context {
     backendOptions = (),
   )
 
-  override def module[TContext >: DummyContext.this.type <: WithRes[ResIndicator] : Tag]: ZManaged[ModuleLoad[ResIndicator, TContext], CompError, ArModule[DummyContext.this.type, DeclarationPayloadSpecifier]] =
+  override def module[TContext >: DummyContext.this.type <: WithRes[ResIndicator] : Tag]: ZManaged[ModuleLoad[ResIndicator, TContext], CompilationError, ArModule[DummyContext.this.type, DeclarationPayloadSpecifier]] =
     Managed.die(new UnsupportedOperationException)
 }

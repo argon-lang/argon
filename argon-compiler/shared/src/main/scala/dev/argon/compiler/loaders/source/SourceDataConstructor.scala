@@ -33,12 +33,12 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
     for {
       uniqId <- UniqueIdentifier.make
 
-      sigCache <- ValueCache.make[CompError, context2.signatureContext.Signature[DataConstructor.ResultInfo, _ <: Nat]]
+      sigCache <- ValueCache.make[CompilationError, context2.signatureContext.Signature[DataConstructor.ResultInfo, _ <: Nat]]
 
-      bodyStmtCache <- ValueCache.make[CompError, context2.typeSystem.SimpleExpr]
-      bodyEnvCache <- ValueCache.make[CompError, EnvCreator[context2.type]]
+      bodyStmtCache <- ValueCache.make[CompilationError, context2.typeSystem.SimpleExpr]
+      bodyEnvCache <- ValueCache.make[CompilationError, EnvCreator[context2.type]]
 
-      methodCache <- ValueCache.make[CompError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      methodCache <- ValueCache.make[CompilationError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
 
     } yield new DataConstructor[context2.type, DeclarationPayloadSpecifier] with OpenSealedCheck {
       override val context: context2.type = context2
@@ -53,7 +53,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
       override def ownerModuleId: ModuleId = getDataCtorModule(this)
 
       override val fileId: FileID = env.fileSpec.fileID
-      override val ctorMessageSource: CompilationMessageSource = CompilationMessageSource.SourceFile(env.fileSpec, stmt.name.location)
+      override val ctorMessageSource: DiagnosticSource = DiagnosticSource.SourceFile(env.fileSpec, stmt.name.location)
 
       private lazy val groupedInst =
         stmt.body.value.foldLeft(GroupedInstanceStatements(Vector.empty, Vector.empty)) {
@@ -86,7 +86,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
             pEnv <- paramEnv
 
             unitType <- StandardTypeLoaders.loadUnitType(context)(
-              CompilationMessageSource.SourceFile(env.fileSpec, stmt.body.location)
+              DiagnosticSource.SourceFile(env.fileSpec, stmt.body.location)
             )(pEnv.currentModule)(pEnv.referencedModules)
 
             expr <- ExpressionConverter.convertStatementList(context)(pEnv(context)(EffectInfo.pure, id, localVarOwner))(unitType)(WithSource(groupedInst.body, stmt.body.location))
@@ -134,7 +134,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
           ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
             .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location))
             .flatMap { baseTrait =>
-              val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
+              val messageSource = DiagnosticSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
               osCheck.checkExtendTrait[context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
                 .map { _ => DataConstructor.ResultInfo(baseTrait) }
@@ -151,7 +151,7 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
               IO.succeed(t)
 
             case _ =>
-              Compilation.forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              Compilation.forErrors(DiagnosticError.InvalidBaseType(DiagnosticSource.SourceFile(env.fileSpec, location)))
           }
       }
 

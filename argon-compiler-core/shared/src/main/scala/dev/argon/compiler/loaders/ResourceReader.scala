@@ -13,22 +13,22 @@ import zio.stream._
 object ResourceReader {
 
   trait Service[I <: ResourceIndicator] extends ResourceReaderPlatformSpecific.Service[I] {
-    def readFile(id: I): Stream[CompError, Byte]
-    def readTextFile(id: I): Stream[CompError, Char]
+    def readFile(id: I): Stream[CompilationError, Byte]
+    def readTextFile(id: I): Stream[CompilationError, Char]
     def readTextFileAsString(id: I): Comp[String]
-    def getZipReader(id: I): Managed[CompError, ZipFileReader[Any, CompError]]
+    def getZipReader(id: I): Managed[CompilationError, ZipFileReader[Any, CompilationError]]
 
-    def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompError, Byte]): Comp[A]
+    def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompilationError, Byte]): Comp[A]
   }
 
   trait ServiceCommon[I <: ResourceIndicator] extends Service[I] {
 
     protected val fileIOLite: FileIOLite.Service
 
-    protected def ioExceptionToError(ex: IOException): CompError =
+    protected def ioExceptionToError(ex: IOException): CompilationError =
       Compilation.errorForIOException(ex)
 
-    override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompError, Byte]): Comp[A] =
+    override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompilationError, Byte]): Comp[A] =
       fileIOLite.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
 
   }
@@ -38,13 +38,13 @@ object ResourceReader {
       new ServiceCommon[Nothing] with ResourceReaderPlatformSpecific.ForNothingService {
         override protected val fileIOLite: FileIOLite.Service = env.get
 
-        override def readFile(id: Nothing): Stream[CompError, Byte] = id
+        override def readFile(id: Nothing): Stream[CompilationError, Byte] = id
 
-        override def readTextFile(id: Nothing): Stream[CompError, Char] = id
+        override def readTextFile(id: Nothing): Stream[CompilationError, Char] = id
 
         override def readTextFileAsString(id: Nothing): Comp[String] = id
 
-        override def getZipReader(id: Nothing): Managed[CompError, ZipFileReader[Any, CompError]] = id
+        override def getZipReader(id: Nothing): Managed[CompilationError, ZipFileReader[Any, CompilationError]] = id
       }
     }
 

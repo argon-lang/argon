@@ -11,7 +11,7 @@ import cats.implicits._
 import dev.argon.backend.{Backend, ResourceWriter}
 import zio._
 import zio.interop.catz.core._
-import dev.argon.compiler.{CompilationError, CompError}
+import dev.argon.compiler.{CompilationError}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.io.fileio.FileIO
 import dev.argon.build._

@@ -4,7 +4,7 @@ import java.io.{FileNotFoundException, IOException}
 
 import cats.data.NonEmptyList
 import dev.argon.backend.{PathResourceIndicator, ResourceAccess}
-import dev.argon.compiler.{Comp, Compilation, CompilationError, CompilationMessageSource, CompError}
+import dev.argon.compiler.{Comp, Compilation, CompilationError, DiagnosticError, DiagnosticSource}
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import dev.argon.io.{Path, ZipEntryInfo, ZipFileReader}
 import dev.argon.io.fileio.{FileIO, FileIOLite}
@@ -37,7 +37,7 @@ object TestResourceReader {
         override def getLibPath(name: String): UIO[P] =
           Path.of(libDir, name, "bin", name + ".armodule")
 
-        override def readFile(id: TestResourceIndicator): Stream[CompError, Byte] =
+        override def readFile(id: TestResourceIndicator): Stream[CompilationError, Byte] =
           id match {
             case LibraryResourceIndicator(name) =>
               ZStream.unwrapManaged(
@@ -48,16 +48,16 @@ object TestResourceReader {
               )
           }
 
-        override def readTextFile(id: TestResourceIndicator): Stream[CompError, Char] =
+        override def readTextFile(id: TestResourceIndicator): Stream[CompilationError, Char] =
           ZStream.unwrap(readTextFileAsString(id).map { ZStream.fromIterable(_) })
 
         override def readTextFileAsString(id: TestResourceIndicator): Comp[String] =
           id match {
             case LibraryResourceIndicator(_) =>
-              Compilation.forErrors(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(new FileNotFoundException())))
+              Compilation.forErrors(DiagnosticError.ResourceIOError(DiagnosticSource.ThrownException(new FileNotFoundException())))
           }
 
-        override def getZipReader(id: TestResourceIndicator): Managed[CompError, ZipFileReader[Any, CompError]] =
+        override def getZipReader(id: TestResourceIndicator): Managed[CompilationError, ZipFileReader[Any, CompilationError]] =
           id match {
             case LibraryResourceIndicator(name) =>
               ZManaged.fromEffect(getLibPath(name))
@@ -66,7 +66,7 @@ object TestResourceReader {
                 }
           }
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompError, Byte]): Comp[A] =
+        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompilationError, Byte]): Comp[A] =
           liveResReader.deserializeProtocolBuffer(companion)(data)
       } : Service[P])
     })

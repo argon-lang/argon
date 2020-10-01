@@ -37,9 +37,9 @@ object VTableBuilder {
     import vtableCtx.{ context => _, _ }
 
     for {
-      classVtableCache <- MemoCacheStore.make[CompError, AbsRef[context.type, ArClass], VTable]
-      traitVtableCache <- MemoCacheStore.make[CompError, AbsRef[context.type, ArTrait], VTable]
-      dataCtorVtableCache <- MemoCacheStore.make[CompError, AbsRef[context.type, DataConstructor], VTable]
+      classVtableCache <- MemoCacheStore.make[CompilationError, AbsRef[context.type, ArClass], VTable]
+      traitVtableCache <- MemoCacheStore.make[CompilationError, AbsRef[context.type, ArTrait], VTable]
+      dataCtorVtableCache <- MemoCacheStore.make[CompilationError, AbsRef[context.type, DataConstructor], VTable]
     } yield new VTableBuilder {
 
       override val vtableContext: vtableCtx.type = vtableCtx
@@ -167,11 +167,11 @@ object VTableBuilder {
         } yield acc
       }
 
-      private def ensureNonAbstract(vtable: VT, source: CompilationMessageSource): Comp[Unit] =
+      private def ensureNonAbstract(vtable: VT, source: DiagnosticSource): Comp[Unit] =
         vtable.methodMap.values.toVector.traverse_ {
           case VTableEntry(_, _, VTableEntryMethod(_)) => ().pure[Comp]
           case VTableEntry(_, _, VTableEntryAbstract) =>
-            Compilation.forErrors(CompilationError.AbstractMethodNotImplementedError(source))
+            Compilation.forErrors(DiagnosticError.AbstractMethodNotImplementedError(source))
 
           case VTableEntry(_, _, VTableEntryAmbiguous(_)) => ???
         }

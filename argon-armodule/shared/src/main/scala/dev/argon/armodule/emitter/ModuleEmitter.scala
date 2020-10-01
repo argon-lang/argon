@@ -985,8 +985,8 @@ object ModuleEmitter {
 
   type StreamElem = (String, GeneratedMessage)
 
-  def emitModule(moduleEmitter: ModuleEmitter)(emitOptions: ModuleEmitOptions)(currentModule: ArModule[moduleEmitter.context.type, DeclarationPayloadSpecifier]): zstream.Stream[CompError, StreamElem] =
-    new Source[Any, CompError, StreamElem] {
+  def emitModule(moduleEmitter: ModuleEmitter)(emitOptions: ModuleEmitOptions)(currentModule: ArModule[moduleEmitter.context.type, DeclarationPayloadSpecifier]): zstream.Stream[CompilationError, StreamElem] =
+    new Source[Any, CompilationError, StreamElem] {
 
       override def foreach(f: StreamElem => Comp[Unit]): Comp[Unit] =
         for {

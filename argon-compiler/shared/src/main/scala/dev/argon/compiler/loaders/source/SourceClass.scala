@@ -42,18 +42,18 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     for {
       unqId <- UniqueIdentifier.make
 
-      sigCache <- ValueCache.make[CompError, context2.signatureContext.Signature[ArClass.ResultInfo, _ <: Nat]]
-      sigResultCache <- ValueCache.make[CompError, BaseTypeInfoClass[context2.type, Id]]
+      sigCache <- ValueCache.make[CompilationError, context2.signatureContext.Signature[ArClass.ResultInfo, _ <: Nat]]
+      sigResultCache <- ValueCache.make[CompilationError, BaseTypeInfoClass[context2.type, Id]]
 
-      paramsEnvCache <- ValueCache.make[CompError, EnvCreator[context2.type]]
+      paramsEnvCache <- ValueCache.make[CompilationError, EnvCreator[context2.type]]
 
-      groupedStaticCache <- ValueCache.make[CompError, GroupedStaticStatements]
-      groupedInstCache <- ValueCache.make[CompError, GroupedInstanceStatements]
+      groupedStaticCache <- ValueCache.make[CompilationError, GroupedStaticStatements]
+      groupedInstCache <- ValueCache.make[CompilationError, GroupedInstanceStatements]
 
-      fieldCache <- ValueCache.make[CompError, Vector[FieldVariable[context2.type, Id]]]
-      methodCache <- ValueCache.make[CompError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
-      staticMethodCache <- ValueCache.make[CompError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
-      classCtorCache <- ValueCache.make[CompError, Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]]
+      fieldCache <- ValueCache.make[CompilationError, Vector[FieldVariable[context2.type, Id]]]
+      methodCache <- ValueCache.make[CompilationError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      staticMethodCache <- ValueCache.make[CompilationError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      classCtorCache <- ValueCache.make[CompilationError, Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]]
 
     } yield new ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] with OpenSealedCheck {
       override val context: context2.type = context2
@@ -66,7 +66,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
       override val owner: classOwner.type = classOwner
       override def ownerModuleId: ModuleId = getClassModule(this)
       override val fileId: FileID = env.fileSpec.fileID
-      override val classMessageSource: CompilationMessageSource = CompilationMessageSource.SourceFile(env.fileSpec, stmt.name.location)
+      override val classMessageSource: DiagnosticSource = DiagnosticSource.SourceFile(env.fileSpec, stmt.name.location)
 
       override val isSealed: Boolean = stmt.modifiers.exists {
         case WithSource(parser.SealedModifier, _) => true
@@ -91,7 +91,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
               IO.succeed(group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)))
 
             case (_, WithSource(_, location)) =>
-              Compilation.forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              Compilation.forErrors(DiagnosticError.UnexpectedStatement(DiagnosticSource.SourceFile(env.fileSpec, location)))
           }
         )
 
@@ -108,7 +108,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
               IO.succeed(group.copy(classCtors = group.classCtors :+ WithSource(stmt, location)))
 
             case (_, WithSource(_, location)) =>
-              Compilation.forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              Compilation.forErrors(DiagnosticError.UnexpectedStatement(DiagnosticSource.SourceFile(env.fileSpec, location)))
           }
         )
 
@@ -142,7 +142,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
                 )
 
               case None =>
-                Compilation.forErrors(CompilationError.FieldMustHaveName(CompilationMessageSource.SourceFile(env.fileSpec, field.location)))
+                Compilation.forErrors(DiagnosticError.FieldMustHaveName(DiagnosticSource.SourceFile(env.fileSpec, field.location)))
             }
           }
         })
@@ -194,7 +194,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     }
   }
 
-  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[CompError, BaseTypeInfoClass[ctx.type, Id]])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
+  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[CompilationError, BaseTypeInfoClass[ctx.type, Id]])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
 
     override val context: ctx.type = ctx
 
@@ -208,7 +208,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
             ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
               .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(BaseTypeInfoClass(None, Vector())))
               .flatMap { baseTypes =>
-                val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
+                val messageSource = DiagnosticSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
                 baseTypes.baseClass.traverse_ { baseClass =>
                   osCheck.checkExtendClass[context.type, baseClass.arClass.PayloadSpec](baseClass.arClass.value)(messageSource)
@@ -237,7 +237,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
       t match {
         case t @ ClassType(_, _) =>
           if(acc.baseClass.isDefined)
-            Compilation.forErrors(CompilationError.MultipleBaseClasses(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+            Compilation.forErrors(DiagnosticError.MultipleBaseClasses(DiagnosticSource.SourceFile(env.fileSpec, location)))
           else
             acc.copy(baseClass = Some(t)).pure[Comp]
 
@@ -250,7 +250,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           }
 
         case _ =>
-          Compilation.forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          Compilation.forErrors(DiagnosticError.InvalidBaseType(DiagnosticSource.SourceFile(env.fileSpec, location)))
       }
     }
   }

@@ -24,8 +24,8 @@ object SourceMethod {
     
     for {
       uniqId <- UniqueIdentifier.make
-      sigCache <- ValueCache.make[CompError, context2.signatureContext.Signature[FunctionResultInfo, _ <: Nat]]
-      implCache <- ValueCache.make[CompError, context2.TMethodImplementation]
+      sigCache <- ValueCache.make[CompilationError, context2.signatureContext.Signature[FunctionResultInfo, _ <: Nat]]
+      implCache <- ValueCache.make[CompilationError, context2.TMethodImplementation]
     } yield new ArMethod[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
       override val contextProof: context.type Is context2.type = Is.refl
@@ -82,7 +82,7 @@ object SourceMethod {
           else
             stmt.body match {
               case Some(WithSource(parser.ExternExpr(specifier), location)) =>
-                context.createExternMethodImplementation(specifier, CompilationMessageSource.SourceFile(env.fileSpec, location))
+                context.createExternMethodImplementation(specifier, DiagnosticSource.SourceFile(env.fileSpec, location))
 
               case Some(body) =>
                 for {
@@ -95,7 +95,7 @@ object SourceMethod {
                 } yield context.createExprMethodImplementation(expr)
 
               case None =>
-                Compilation.forErrors(CompilationError.NonAbstractMethodNotImplemented(AbsRef(this), CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                Compilation.forErrors(DiagnosticError.NonAbstractMethodNotImplemented(AbsRef(this), DiagnosticSource.SourceFile(env.fileSpec, location)))
             }
         )
 

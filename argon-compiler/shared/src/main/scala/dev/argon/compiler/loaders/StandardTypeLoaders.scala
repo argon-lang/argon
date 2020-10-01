@@ -14,7 +14,7 @@ object StandardTypeLoaders {
 
   def loadUnitType[TPayloadSpec[_, _]]
   (context: Context)
-  (messageSource: => CompilationMessageSource)
+  (messageSource: => DiagnosticSource)
   (currentModule: ArModule[context.type, TPayloadSpec])
   (referencedModules: Vector[ArModule[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]])
   : Comp[context.typeSystem.TType] = {
@@ -38,7 +38,7 @@ object StandardTypeLoaders {
         }
 
         Compilation.requireSome(unitClassOpt)(
-          CompilationError.NamespaceElementNotFound(arCore, NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"), messageSource)
+          DiagnosticError.NamespaceElementNotFound(arCore, NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"), messageSource)
         )
       }
       .flatMap { unitClass =>

@@ -9,7 +9,7 @@ import zio._
 
 object Compilation {
 
-  def forErrors[A](errors: NonEmptyChunk[CompilationError], messages: Vector[CompilationMessageNonFatal] = Vector()): Comp[A] =
+  def forErrors[A](errors: NonEmptyChunk[CompilationError], messages: Vector[DiagnosticNonFatal] = Vector()): Comp[A] =
     IO.halt(errors.reduceMapLeft(Cause.fail(_))((cause, compError) => Cause.Both(cause, Cause.fail(compError))))
 
   def forErrors[A](head: CompilationError, tail: CompilationError*): Comp[A] =
@@ -28,11 +28,46 @@ object Compilation {
       case None => forErrors(head, tail: _*)
     }
 
-  def errorForIOException(ex: IOException): CompError =
-    CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex))
+  def errorForIOException(ex: IOException): CompilationError =
+    DiagnosticError.ResourceIOError(DiagnosticSource.ThrownException(ex))
 
   def forIOException(ex: IOException): Comp[Nothing] =
     IO.fail(errorForIOException(ex))
+
+
+  private def isCorrectCauseType(cause: Cause[Any]): Boolean =
+    cause.fold(
+      empty = true,
+      failCase = {
+        case _: CompilationError => true
+        case _ => false
+      },
+      dieCase = _ => true,
+      interruptCase = _ => true,
+    )(
+      thenCase = _ && _,
+      bothCase = _ && _,
+      tracedCase = (a, _) => a,
+    )
+
+  def unwrapThrowableCause(ex: Throwable): Cause[CompilationError] =
+    ex match {
+      case ex: CompilationError => Cause.fail(ex)
+      case ex: IOException => Cause.fail(Compilation.errorForIOException(ex))
+      case FiberFailure(cause) if isCorrectCauseType(cause) =>
+        cause.flatMap {
+          case error: CompilationError => Cause.fail(error)
+          case _ => Cause.empty
+        }
+
+      case _ => Cause.die(ex)
+    }
+
+  def unwrapThrowable(ex: Throwable): IO[CompilationError, Nothing] =
+    IO.halt(unwrapThrowableCause(ex))
+
+  def unwrapThrowableManaged(ex: Throwable): Managed[CompilationError, Nothing] =
+    Managed.halt(unwrapThrowableCause(ex))
 
 }
 

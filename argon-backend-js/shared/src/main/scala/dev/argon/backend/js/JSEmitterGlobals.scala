@@ -411,7 +411,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
                   initFieldStatement <- IO.fromEither(
                     loader.initializeVariable(valueExpr)
-                      .toRight { CompilationError.EmitError(CompilationMessageSource.EmitPhase()) }
+                      .toRight { DiagnosticError.EmitError(DiagnosticSource.EmitPhase()) }
                   )
 
                 } yield (acc :+ initFieldStatement, newMapping)

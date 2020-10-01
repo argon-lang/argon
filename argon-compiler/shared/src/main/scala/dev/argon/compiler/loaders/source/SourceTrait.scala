@@ -40,16 +40,16 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
     for {
       uniqId <- UniqueIdentifier.make
 
-      sigCache <- ValueCache.make[CompError, context2.signatureContext.Signature[ArTrait.ResultInfo, _ <: Nat]]
-      sigResultCache <- ValueCache.make[CompError, BaseTypeInfoTrait[context2.type, Id]]
+      sigCache <- ValueCache.make[CompilationError, context2.signatureContext.Signature[ArTrait.ResultInfo, _ <: Nat]]
+      sigResultCache <- ValueCache.make[CompilationError, BaseTypeInfoTrait[context2.type, Id]]
 
-      paramsEnvCache <- ValueCache.make[CompError, EnvCreator[context2.type]]
+      paramsEnvCache <- ValueCache.make[CompilationError, EnvCreator[context2.type]]
 
-      groupedStaticCache <- ValueCache.make[CompError, GroupedStaticStatements]
-      groupedInstCache <- ValueCache.make[CompError, GroupedInstanceStatements]
+      groupedStaticCache <- ValueCache.make[CompilationError, GroupedStaticStatements]
+      groupedInstCache <- ValueCache.make[CompilationError, GroupedInstanceStatements]
 
-      methodCache <- ValueCache.make[CompError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
-      staticMethodCache <- ValueCache.make[CompError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      methodCache <- ValueCache.make[CompilationError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      staticMethodCache <- ValueCache.make[CompilationError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
 
     } yield new ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] with OpenSealedCheck {
       override val context: context2.type = context2
@@ -94,7 +94,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
               group.copy(staticMethods = group.staticMethods :+ WithSource(stmt, location)).pure[Comp]
 
             case (_, WithSource(_, location)) =>
-              Compilation.forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              Compilation.forErrors(DiagnosticError.UnexpectedStatement(DiagnosticSource.SourceFile(env.fileSpec, location)))
           }
         )
 
@@ -105,7 +105,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
               group.copy(methods = group.methods :+ WithSource(stmt, location)).pure[Comp]
 
             case (_, WithSource(_, location)) =>
-              Compilation.forErrors(CompilationError.UnexpectedStatement(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              Compilation.forErrors(DiagnosticError.UnexpectedStatement(DiagnosticSource.SourceFile(env.fileSpec, location)))
           }
         )
 
@@ -145,7 +145,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
   }
 
 
-  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[CompError, BaseTypeInfoTrait[ctx.type, Id]])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArTrait.ResultInfo] = new ResultCreator[ArTrait.ResultInfo] {
+  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[CompilationError, BaseTypeInfoTrait[ctx.type, Id]])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArTrait.ResultInfo] = new ResultCreator[ArTrait.ResultInfo] {
 
     override val context: ctx.type = ctx
 
@@ -158,7 +158,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
             ExpressionConverter.convertTypeExpression(context)(env)(baseTypeExpr)
               .flatMap(typeToBaseTypes(context)(env)(_)(baseTypeExpr.location)(BaseTypeInfoTrait[context.type, Id](Vector())))
               .flatMap { baseTypes =>
-                val messageSource = CompilationMessageSource.SourceFile(env.fileSpec, baseTypeExpr.location)
+                val messageSource = DiagnosticSource.SourceFile(env.fileSpec, baseTypeExpr.location)
 
                 baseTypes.baseTraits.traverse_ { baseTrait =>
                   osCheck.checkExtendTrait[context.type, baseTrait.arTrait.PayloadSpec](baseTrait.arTrait.value)(messageSource)
@@ -190,7 +190,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
         }
 
       case _ =>
-        Compilation.forErrors(CompilationError.InvalidBaseType(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+        Compilation.forErrors(DiagnosticError.InvalidBaseType(DiagnosticSource.SourceFile(env.fileSpec, location)))
     }
   }
 }

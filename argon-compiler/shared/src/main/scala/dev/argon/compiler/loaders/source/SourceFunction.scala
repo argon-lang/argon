@@ -44,7 +44,7 @@ private[compiler] object SourceFunction {
 
     override lazy val payload: Comp[context.TFunctionImplementation] = stmt.body match {
       case WithSource(parser.ExternExpr(specifier), location) =>
-        context.createExternFunctionImplementation(specifier, CompilationMessageSource.SourceFile(env.fileSpec, location))
+        context.createExternFunctionImplementation(specifier, DiagnosticSource.SourceFile(env.fileSpec, location))
 
       case _ =>
         for {

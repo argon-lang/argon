@@ -17,54 +17,20 @@ import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.compiler.loaders.ResourceIndicator
 import zio.{Cause, FiberFailure, IO, Managed}
 
-sealed trait CompilationMessage {
-  val source: CompilationMessageSource
+sealed trait Diagnostic {
+  val source: DiagnosticSource
   def message: String
 
   override def toString: String =
     s"${source.formatted}: ${message}"
 }
-trait CompilationError extends Exception with CompilationMessage
-trait CompilationMessageNonFatal extends CompilationMessage
+trait DiagnosticError extends Exception with Diagnostic
+trait DiagnosticNonFatal extends Diagnostic
 
-object CompilationError {
+object DiagnosticError {
 
-  private def isCorrectCauseType(cause: Cause[Any]): Boolean =
-    cause.fold(
-      empty = true,
-      failCase = {
-        case _: CompilationError => true
-        case _ => false
-      },
-      dieCase = _ => true,
-      interruptCase = _ => true,
-    )(
-      thenCase = _ && _,
-      bothCase = _ && _,
-      tracedCase = (a, _) => a,
-    )
-
-  def unwrapThrowableCause(ex: Throwable): Cause[CompilationError] =
-    ex match {
-      case ex: CompilationError => Cause.fail(ex)
-      case ex: IOException => Cause.fail(Compilation.errorForIOException(ex))
-      case FiberFailure(cause) if isCorrectCauseType(cause) =>
-        cause.flatMap {
-          case error: CompilationError => Cause.fail(error)
-          case _ => Cause.empty
-        }
-
-      case _ => Cause.die(ex)
-    }
-
-  def unwrapThrowable(ex: Throwable): IO[CompilationError, Nothing] =
-    IO.halt(unwrapThrowableCause(ex))
-
-  def unwrapThrowableManaged(ex: Throwable): Managed[CompilationError, Nothing] =
-    Managed.halt(unwrapThrowableCause(ex))
-
-  final case class SyntaxCompilerError(syntaxError: SyntaxErrorData) extends CompilationError {
-    override val source: CompilationMessageSource = CompilationMessageSource.SourceFile(syntaxError.fileSpec, syntaxError.syntaxError.location)
+  final case class SyntaxCompilerError(syntaxError: SyntaxErrorData) extends DiagnosticError {
+    override val source: DiagnosticSource = DiagnosticSource.SourceFile(syntaxError.fileSpec, syntaxError.syntaxError.location)
 
     override def message: String = syntaxError.syntaxError match {
       case SyntaxError.InvalidSurrogatePairs(ch, _) => s"Invalid surrogate: ${ch.toInt.toHexString}"
@@ -254,43 +220,43 @@ object CompilationError {
 
       case CharacterCategory.Caret => "^"
       case CharacterCategory.Tilde => "~"
-        
+
     }
   }
 
-  final case class LookupFailedError(description: LookupDescription, source: CompilationMessageSource) extends CompilationError {
+  final case class LookupFailedError(description: LookupDescription, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Could not find identifier"
   }
 
-  final case class AmbiguousLookupError(alternatives: NonEmptyVector[Callable], source: CompilationMessageSource) extends CompilationError {
+  final case class AmbiguousLookupError(alternatives: NonEmptyVector[Callable], source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Lookup is ambiguous"
   }
 
-  final case class OverloadedLookupFailed(alternatives: NonEmptyVector[(Callable, Cause[CompilationError])], source: CompilationMessageSource) extends CompilationError {
+  final case class OverloadedLookupFailed(alternatives: NonEmptyVector[(Callable, Cause[CompilationError])], source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Overloaded lookup failed"
   }
 
-  final case class NamespaceUsedAsValueError(description: LookupDescription, source: CompilationMessageSource) extends CompilationError {
+  final case class NamespaceUsedAsValueError(description: LookupDescription, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Namespace used as a value"
   }
 
-  final case class UnsupportedModuleFormatVersion(version: Int, source: CompilationMessageSource) extends CompilationError {
+  final case class UnsupportedModuleFormatVersion(version: Int, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Unsupported module format version ${version.toString}"
   }
 
-  final case class ReferencedModuleNotFound(ref: module.ModuleReference, source: CompilationMessageSource) extends CompilationError {
+  final case class ReferencedModuleNotFound(ref: module.ModuleReference, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Could not find referenced module '${ref.name}'"
   }
 
-  final case class MissingModuleName(source: CompilationMessageSource) extends CompilationError {
+  final case class MissingModuleName(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Missing module name"
   }
 
-  final case class ModuleFormatInvalid(source: CompilationMessageSource) extends CompilationError {
+  final case class ModuleFormatInvalid(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Module format is invalid"
   }
 
-  final case class NamespaceElementNotFound(module: ModuleId, namespacePath: NamespacePath, name: GlobalName, source: CompilationMessageSource) extends CompilationError {
+  final case class NamespaceElementNotFound(module: ModuleId, namespacePath: NamespacePath, name: GlobalName, source: DiagnosticSource) extends DiagnosticError {
     private def nameStr: String =
       name match {
         case GlobalName.Normal(name) => name
@@ -301,11 +267,11 @@ object CompilationError {
     override def message: String = s"Could not find $nameStr under namespace '${formatNamespace(namespacePath)}' in module '${module.name}'"
   }
 
-  final case class ExpressionNotTypeError(source: CompilationMessageSource) extends CompilationError {
+  final case class ExpressionNotTypeError(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Expression is not a type"
   }
 
-  final case class MutableVariableNotPureError(name: VariableName, source: CompilationMessageSource) extends CompilationError {
+  final case class MutableVariableNotPureError(name: VariableName, source: DiagnosticSource) extends DiagnosticError {
 
     private def nameStr: String =
       name match {
@@ -316,7 +282,7 @@ object CompilationError {
     override def message: String = s"Declaring mutable variable $nameStr does not meet purity requirements"
   }
 
-  final case class ImpureFunctionCalledError(source: CompilationMessageSource) extends CompilationError {
+  final case class ImpureFunctionCalledError(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"An invoked function does not meet purity requirements"
   }
 
@@ -345,175 +311,175 @@ object CompilationError {
     override def name: String = "referenced module"
   }
 
-  final case class ModuleObjectModuleNotLoaded(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+  final case class ModuleObjectModuleNotLoaded(objectType: ModuleObjectType, id: Int, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Reference is in unloaded module for ${objectType.name} #${id.toString}."
   }
 
-  final case class ModuleObjectNotFound(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+  final case class ModuleObjectNotFound(objectType: ModuleObjectType, id: Int, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"${objectType.name} #${id.toString} could not be found in specified module."
   }
 
-  final case class ModuleObjectUndefined(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+  final case class ModuleObjectUndefined(objectType: ModuleObjectType, id: Int, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"${objectType.name} #${id.toString} is undefined."
   }
 
-  final case class ModuleObjectInvalidId(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+  final case class ModuleObjectInvalidId(objectType: ModuleObjectType, id: Int, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"${objectType.name} ID #${id.toString} is invalid."
   }
 
-  final case class ModuleObjectMustBeDefinition(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+  final case class ModuleObjectMustBeDefinition(objectType: ModuleObjectType, id: Int, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"${objectType.name} #${id.toString} was expected to be a definition."
   }
 
-  final case class MetaClassNotSpecified(objectType: ModuleObjectType, id: Int, source: CompilationMessageSource) extends CompilationError {
+  final case class MetaClassNotSpecified(objectType: ModuleObjectType, id: Int, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Meta class for ${objectType.name} #${id.toString} was not specified."
   }
 
-  final case class CouldNotFindCompatibleModuleLoader(source: CompilationMessageSource) extends CompilationError {
+  final case class CouldNotFindCompatibleModuleLoader(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "A compatible module loader could not be found."
   }
 
-  final case class ModuleDependencyNotFound(missingDependency: ModuleId, source: CompilationMessageSource) extends CompilationError {
+  final case class ModuleDependencyNotFound(missingDependency: ModuleId, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"A module requires a dependency (${missingDependency.name}) that was not found."
   }
 
-  final case class CircularDependencyLoadingModule(source: CompilationMessageSource) extends CompilationError {
+  final case class CircularDependencyLoadingModule(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "A circular dependency was detected among modules."
   }
 
-  final case class InvalidExternFunction(source: CompilationMessageSource) extends CompilationError {
+  final case class InvalidExternFunction(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "An external function is invalid."
   }
 
-  final case class AmbiguousExtern(name: String, source: CompilationMessageSource) extends CompilationError {
+  final case class AmbiguousExtern(name: String, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Extern \"" + name + "\" is ambiguous."
   }
 
-  final case class InvalidAccessModifierCombination(accessModifier1: parser.AccessModifier, accessModifier2: parser.AccessModifier, source: CompilationMessageSource) extends CompilationError {
+  final case class InvalidAccessModifierCombination(accessModifier1: parser.AccessModifier, accessModifier2: parser.AccessModifier, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"The access modifier '${formatParserAccessModifier(accessModifier1)}' cannot be combined with '${formatParserAccessModifier(accessModifier2)}'"
   }
 
-  final case class AccessModifierNotAllowedForGlobal(accessModifier: AccessModifier, source: CompilationMessageSource) extends CompilationError {
+  final case class AccessModifierNotAllowedForGlobal(accessModifier: AccessModifier, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"The access modifier '${formatAccessModifier(accessModifier)}' is not valid on global declarations."
   }
 
-  final case class ParameterTypeAnnotationRequired(paramName: String, source: CompilationMessageSource) extends CompilationError {
+  final case class ParameterTypeAnnotationRequired(paramName: String, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Parameter '$paramName' is missing a type annotation."
   }
 
-  final case class UnexpectedStatement(source: CompilationMessageSource) extends CompilationError {
+  final case class UnexpectedStatement(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Unexpected statement."
   }
 
-  final case class FieldMustHaveName(source: CompilationMessageSource) extends CompilationError {
+  final case class FieldMustHaveName(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Field must have name."
   }
 
-  final case class NonAbstractMethodNotImplemented(descriptor: AbsRef[_ <: Context with Singleton, ArMethod], source: CompilationMessageSource) extends CompilationError {
+  final case class NonAbstractMethodNotImplemented(descriptor: AbsRef[_ <: Context with Singleton, ArMethod], source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Non abstract method must have an implementation."
   }
 
-  final case class InvalidBaseType(source: CompilationMessageSource) extends CompilationError {
+  final case class InvalidBaseType(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Type is not valid as a base type."
   }
 
-  final case class MultipleBaseClasses(source: CompilationMessageSource) extends CompilationError {
+  final case class MultipleBaseClasses(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Class has multiple base classes."
   }
 
-  final case class FieldNotFound(name: String, source: CompilationMessageSource) extends CompilationError {
+  final case class FieldNotFound(name: String, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"""No field "$name" was found."""
   }
 
-  final case class BaseConstructorNotCalled(source: CompilationMessageSource) extends CompilationError {
+  final case class BaseConstructorNotCalled(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Base constructor was not called."
   }
 
-  final case class InvalidBaseConstructorCall(source: CompilationMessageSource) extends CompilationError {
+  final case class InvalidBaseConstructorCall(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Invalid base constructor call."
   }
 
-  final case class InvalidGlobal(source: CompilationMessageSource) extends CompilationError {
+  final case class InvalidGlobal(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "An invalid global declaration was found."
   }
 
-  final case class MethodMustHaveOwner(source: CompilationMessageSource) extends CompilationError {
+  final case class MethodMustHaveOwner(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Method must have owner."
   }
 
-  final case class UnknownExternImplementation(name: String, source: CompilationMessageSource) extends CompilationError {
+  final case class UnknownExternImplementation(name: String, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = s"Extern implementation $name is unknown."
   }
 
-  final case class AbstractClassConstructorCalledError(source: CompilationMessageSource) extends CompilationError {
+  final case class AbstractClassConstructorCalledError(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Cannot call constructor of abstract class."
   }
 
-  final case class NonOpenClassExtendedError(source: CompilationMessageSource) extends CompilationError {
+  final case class NonOpenClassExtendedError(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Cannot extend non-open class."
   }
 
-  final case class SealedClassExtendedError(source: CompilationMessageSource) extends CompilationError {
+  final case class SealedClassExtendedError(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "A sealed class may only be extend in the same file."
   }
 
-  final case class SealedTraitExtendedError(source: CompilationMessageSource) extends CompilationError {
+  final case class SealedTraitExtendedError(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "A sealed trait may only be extend in the same file."
   }
 
-  final case class AbstractMethodNotImplementedError(source: CompilationMessageSource) extends CompilationError {
+  final case class AbstractMethodNotImplementedError(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "An abstract method was not implemented."
   }
 
-  final case class FieldReinitializedError(source: CompilationMessageSource) extends CompilationError {
+  final case class FieldReinitializedError(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "An initialized field cannot be reinitialized."
   }
 
-  final case class FieldNotInitializedError(source: CompilationMessageSource) extends CompilationError {
+  final case class FieldNotInitializedError(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "A field was not initialized."
   }
 
-  final case class ArgumentToSignatureDependencyNotPureError(source: CompilationMessageSource) extends CompilationError {
+  final case class ArgumentToSignatureDependencyNotPureError(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "The argument to a parameter used in a dependent manner must be pure."
   }
 
-  final case class InvalidProtocolBufferMessage(source: CompilationMessageSource) extends CompilationError {
+  final case class InvalidProtocolBufferMessage(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Invalid protocol buffer message."
   }
 
-  final case class ResourceIOError(source: CompilationMessageSource.ThrownException) extends CompilationError {
+  final case class ResourceIOError(source: DiagnosticSource.ThrownException) extends DiagnosticError {
     override def message: String = "An IO error occurred."
   }
 
-  final case class InvalidLValue(source: CompilationMessageSource) extends CompilationError {
+  final case class InvalidLValue(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Invalid LValue"
   }
 
-  final case class ElseClauseWithoutRescue(source: CompilationMessageSource) extends CompilationError {
+  final case class ElseClauseWithoutRescue(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Else without rescue is useless."
   }
 
-  final case class EmitError(source: CompilationMessageSource) extends CompilationError {
+  final case class EmitError(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "An error occurred while generating the output."
   }
 
-  final case class NonErasedExpressionExpected(source: CompilationMessageSource) extends CompilationError {
+  final case class NonErasedExpressionExpected(source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Expression must not be erased."
   }
 
-  sealed trait CouldNotConvertType extends CompilationError {
+  sealed trait CouldNotConvertType extends DiagnosticError {
     val typeSystem: TypeSystem
     val fromType: typeSystem.TType
     val toType: typeSystem.TType
   }
 
   object CouldNotConvertType {
-    def apply(ts: TypeSystem)(fromT: ts.TType, toT: ts.TType)(src: CompilationMessageSource): CouldNotConvertType =
+    def apply(ts: TypeSystem)(fromT: ts.TType, toT: ts.TType)(src: DiagnosticSource): CouldNotConvertType =
       new CouldNotConvertType {
         override val typeSystem: ts.type = ts
         override val fromType: typeSystem.TType = fromT
         override val toType: typeSystem.TType = toT
-        override val source: CompilationMessageSource = src
+        override val source: DiagnosticSource = src
 
         override def message: String = "Could not convert types."
       }
@@ -541,30 +507,30 @@ object CompilationError {
     }
 }
 
-sealed trait CompilationMessageSource {
+sealed trait DiagnosticSource {
   def formatted: String
   override def toString: String = formatted
 }
-object CompilationMessageSource {
+object DiagnosticSource {
 
-  final case class SourceFile(file: FileSpec, location: SourceLocation) extends CompilationMessageSource {
+  final case class SourceFile(file: FileSpec, location: SourceLocation) extends DiagnosticSource {
     override def formatted: String =
       s"${file.name} ${location.start.line.toString}.${location.start.position.toString}-${location.end.line.toString}.${location.end.position.toString}"
   }
 
-  final case class ReferencedModule(moduleDescriptor: ModuleId) extends CompilationMessageSource {
+  final case class ReferencedModule(moduleDescriptor: ModuleId) extends DiagnosticSource {
     override def formatted: String = s"module ${moduleDescriptor.name}"
   }
 
-  final case class ResourceIdentifier(id: ResourceIndicator) extends CompilationMessageSource {
+  final case class ResourceIdentifier(id: ResourceIndicator) extends DiagnosticSource {
     override def formatted: String = id.show
   }
 
-  final case class ThrownException(ex: Exception) extends CompilationMessageSource {
+  final case class ThrownException(ex: Exception) extends DiagnosticSource {
     override def formatted: String = ex.toString
   }
 
-  final case class EmitPhase() extends CompilationMessageSource {
+  final case class EmitPhase() extends DiagnosticSource {
     override def formatted: String = "emit phase"
   }
 

@@ -31,7 +31,7 @@ object ArgonModuleLoader {
 
   def apply[I <: ResourceIndicator, TContext <: Context.WithRes[I]](res: ResourceReader.Service[I])(implicit referencePayloadLoader: PayloadLoader[TContext, ReferencePayloadSpecifier]): ModuleLoad.Service[I, TContext] = new ModuleLoad.Service[I, TContext] {
 
-    override def loadResource(id: I): Managed[CompError, Option[ModuleMetadata[TContext]]] =
+    override def loadResource(id: I): Managed[CompilationError, Option[ModuleMetadata[TContext]]] =
       id.extension match {
         case "armodule" =>
           res.getZipReader(id).mapM { zip =>
@@ -49,7 +49,7 @@ object ArgonModuleLoader {
         case _ => ZManaged.succeed(None)
       }
 
-    private final case class ArModuleMetadata(zip: ZipFileReader[Any, CompError], metadata: ArgonModule.Metadata) extends ModuleMetadata[TContext] {
+    private final case class ArModuleMetadata(zip: ZipFileReader[Any, CompilationError], metadata: ArgonModule.Metadata) extends ModuleMetadata[TContext] {
       override val descriptor: ModuleId = ModuleId(metadata.name)
       override val referencedModules: Vector[ModuleId] =
         metadata.references.map {
@@ -62,7 +62,7 @@ object ArgonModuleLoader {
 
     private def loadModule[TPayloadSpec[_, _]]
     (context: TContext)
-    (zipFile: ZipFileReader[Any, CompError])
+    (zipFile: ZipFileReader[Any, CompilationError])
     (metadata: ArgonModule.Metadata)
     (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
     (payloadLoader: PayloadLoader[TContext, TPayloadSpec])
@@ -83,23 +83,23 @@ object ArgonModuleLoader {
         _ <- Compilation.require(
           metadata.formatVersion > 0 && metadata.formatVersion <= ModuleFormatVersion.currentVersion
         )(
-          CompilationError.UnsupportedModuleFormatVersion(metadata.formatVersion, CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
+          DiagnosticError.UnsupportedModuleFormatVersion(metadata.formatVersion, DiagnosticSource.ReferencedModule(currentModuleDescriptor))
         )
 
-        moduleCache <- ValueCache.make[CompError, ArModule[context.type, TPayloadSpec]]
-        traitCache <- MemoCacheStore.make[CompError, Int, TraitLoadResult[context.type, TPayloadSpec]]
-        classCache <- MemoCacheStore.make[CompError, Int, ClassLoadResult[context.type, TPayloadSpec]]
-        dataCtorCache <- MemoCacheStore.make[CompError, Int, DataCtorLoadResult[context.type, TPayloadSpec]]
-        functionCache <- MemoCacheStore.make[CompError, Int, FunctionLoadResult[context.type, TPayloadSpec]]
-        methodCache <- MemoCacheStore.make[CompError, Int, MethodLoadResult[context.type, TPayloadSpec]]
-        classCtorCache <- MemoCacheStore.make[CompError, Int, ClassCtorLoadResult[context.type, TPayloadSpec]]
-        localVariableIdCache <- MemoCacheStore.make[CompError, Int, LocalVariableId]
+        moduleCache <- ValueCache.make[CompilationError, ArModule[context.type, TPayloadSpec]]
+        traitCache <- MemoCacheStore.make[CompilationError, Int, TraitLoadResult[context.type, TPayloadSpec]]
+        classCache <- MemoCacheStore.make[CompilationError, Int, ClassLoadResult[context.type, TPayloadSpec]]
+        dataCtorCache <- MemoCacheStore.make[CompilationError, Int, DataCtorLoadResult[context.type, TPayloadSpec]]
+        functionCache <- MemoCacheStore.make[CompilationError, Int, FunctionLoadResult[context.type, TPayloadSpec]]
+        methodCache <- MemoCacheStore.make[CompilationError, Int, MethodLoadResult[context.type, TPayloadSpec]]
+        classCtorCache <- MemoCacheStore.make[CompilationError, Int, ClassCtorLoadResult[context.type, TPayloadSpec]]
+        localVariableIdCache <- MemoCacheStore.make[CompilationError, Int, LocalVariableId]
 
         module <- new ModuleCreator {
 
 
           private def invalidModuleFormatError: CompilationError =
-            CompilationError.ModuleFormatInvalid(CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
+            DiagnosticError.ModuleFormatInvalid(DiagnosticSource.ReferencedModule(currentModuleDescriptor))
 
 
           private def parseNamespacePath(ns: ArgonModule.Namespace): NamespacePath =
@@ -178,7 +178,7 @@ object ArgonModuleLoader {
                     IO.succeed(ModuleObjectReference(module))
 
                   case _ =>
-                    Compilation.forErrors(CompilationError.ModuleObjectNotFound(CompilationError.ModuleObjectReferencedModule, id, CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
+                    Compilation.forErrors(DiagnosticError.ModuleObjectNotFound(DiagnosticError.ModuleObjectReferencedModule, id, DiagnosticSource.ReferencedModule(currentModuleDescriptor)))
                 }
 
               case None => this.module.map(ModuleObjectDefinition.apply)
@@ -394,9 +394,9 @@ object ArgonModuleLoader {
             TRefResult,
             TDefResult,
           ](
-           cache: MemoCacheStore[CompError, Int, ModuleObjectLoadResult[TDefResult, TDefResult { val owner: TGlobalOwner[context.type, TPayloadSpec] }, TRefResult]]
+           cache: MemoCacheStore[CompilationError, Int, ModuleObjectLoadResult[TDefResult, TDefResult { val owner: TGlobalOwner[context.type, TPayloadSpec] }, TRefResult]]
           )(
-            moduleObjectType: CompilationError.ModuleObjectType,
+            moduleObjectType: DiagnosticError.ModuleObjectType,
           )(
             pathTypeStr: String,
             refCompanion: GeneratedMessageCompanion[TRef],
@@ -409,7 +409,7 @@ object ArgonModuleLoader {
           )(
             referenceHandler: TRef => TResultOwner[context.type, ReferencePayloadSpecifier] => Comp[Option[TRefResult]],
             definitionHandler: ObjectDefinitionLoader[TDef, TResultOwner[context.type, TPayloadSpec], TDefResult],
-          ): MemoCache[Any, CompError, Int, ModuleObjectLoadResult[TDefResult, TDefResult { val owner: TGlobalOwner[context.type, TPayloadSpec] }, TRefResult]] =
+          ): MemoCache[Any, CompilationError, Int, ModuleObjectLoadResult[TDefResult, TDefResult { val owner: TGlobalOwner[context.type, TPayloadSpec] }, TRefResult]] =
             cache.usingCreate { id =>
 
               val zip = zipFile
@@ -424,8 +424,8 @@ object ArgonModuleLoader {
                             case ModuleObjectReference(owner) =>
                               referenceHandler(refValue)(owner).flatMap {
                                 case Some(refResult) => IO.succeed(ModuleObjectReference(refResult))
-                                case None => Compilation.forErrors(CompilationError.ModuleObjectNotFound(
-                                  moduleObjectType, id, CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
+                                case None => Compilation.forErrors(DiagnosticError.ModuleObjectNotFound(
+                                  moduleObjectType, id, DiagnosticSource.ReferencedModule(currentModuleDescriptor)
                                 ))
                               }
 
@@ -493,7 +493,7 @@ object ArgonModuleLoader {
             ](
               traitCache
             )(
-              CompilationError.ModuleObjectTrait
+              DiagnosticError.ModuleObjectTrait
             )(
               pathTypeStr = ModulePaths.traitTypeName,
               refCompanion = ArgonModule.TraitReference,
@@ -567,7 +567,7 @@ object ArgonModuleLoader {
             ](
               classCache,
             )(
-              CompilationError.ModuleObjectClass
+              DiagnosticError.ModuleObjectClass
             )(
               pathTypeStr = ModulePaths.classTypeName,
               refCompanion = ArgonModule.ClassReference,
@@ -590,7 +590,7 @@ object ArgonModuleLoader {
                   override val id: ClassId = ClassId(uniqId)
                   override val owner: classOwner.type = classOwner
                   override val fileId: FileID = convertFileId(definition.fileId)
-                  override val classMessageSource: CompilationMessageSource = CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
+                  override val classMessageSource: DiagnosticSource = DiagnosticSource.ReferencedModule(currentModuleDescriptor)
 
                   override val isSealed: Boolean = definition.isSealed.getOrElse(false)
                   override val isOpen: Boolean = definition.isOpen.getOrElse(false)
@@ -664,7 +664,7 @@ object ArgonModuleLoader {
             ](
               dataCtorCache
             )(
-              CompilationError.ModuleObjectDataConstructor
+              DiagnosticError.ModuleObjectDataConstructor
             )(
               pathTypeStr = ModulePaths.dataCtorTypeName,
               refCompanion = ArgonModule.DataConstructorReference,
@@ -699,7 +699,7 @@ object ArgonModuleLoader {
             ](
               functionCache
             )(
-              CompilationError.ModuleObjectFunction
+              DiagnosticError.ModuleObjectFunction
             )(
               pathTypeStr = ModulePaths.funcTypeName,
               refCompanion = ArgonModule.FunctionReference,
@@ -764,7 +764,7 @@ object ArgonModuleLoader {
             ](
               methodCache
             )(
-              CompilationError.ModuleObjectMethod
+              DiagnosticError.ModuleObjectMethod
             )(
               pathTypeStr = ModulePaths.methodTypeName,
               refCompanion = ArgonModule.MethodReference,
@@ -859,7 +859,7 @@ object ArgonModuleLoader {
               ](
                 classCtorCache
               )(
-                CompilationError.ModuleObjectClassConstructor
+                DiagnosticError.ModuleObjectClassConstructor
               )(
                 pathTypeStr = ModulePaths.classCtorTypeName,
                 refCompanion = ArgonModule.ClassConstructorReference,
@@ -978,7 +978,7 @@ object ArgonModuleLoader {
                 elem <- loadElement(declarationHelper.getId(decl)).flatMap {
                   case ModuleObjectGlobalDefinition(elem) => IO.succeed(elem)
                   case ModuleObjectDefinition(_) | ModuleObjectReference(_) =>
-                    Compilation.forErrors(CompilationError.InvalidGlobal(CompilationMessageSource.ReferencedModule(currentModuleDescriptor)))
+                    Compilation.forErrors(DiagnosticError.InvalidGlobal(DiagnosticSource.ReferencedModule(currentModuleDescriptor)))
                 }.memoize
 
                 nsPath = parseNamespacePath(declarationHelper.getNamespace(decl))
@@ -1020,7 +1020,7 @@ object ArgonModuleLoader {
               case ModuleObjectGlobalDefinition(arTrait) => arTrait.pure[Comp]
               case ModuleObjectReference(_) =>
                 Compilation.forErrors(
-                  CompilationError.ModuleObjectMustBeDefinition(CompilationError.ModuleObjectTrait, traitId, CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
+                  DiagnosticError.ModuleObjectMustBeDefinition(DiagnosticError.ModuleObjectTrait, traitId, DiagnosticSource.ReferencedModule(currentModuleDescriptor))
                 )
             }
 
@@ -1039,7 +1039,7 @@ object ArgonModuleLoader {
 
               case ModuleObjectReference(_) =>
                 Compilation.forErrors(
-                  CompilationError.ModuleObjectMustBeDefinition(CompilationError.ModuleObjectClass, classId, CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
+                  DiagnosticError.ModuleObjectMustBeDefinition(DiagnosticError.ModuleObjectClass, classId, DiagnosticSource.ReferencedModule(currentModuleDescriptor))
                 )
             }
 
@@ -1059,7 +1059,7 @@ object ArgonModuleLoader {
 
               case ModuleObjectReference(_) =>
                 Compilation.forErrors(
-                  CompilationError.ModuleObjectMustBeDefinition(CompilationError.ModuleObjectDataConstructor, ctorId, CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
+                  DiagnosticError.ModuleObjectMustBeDefinition(DiagnosticError.ModuleObjectDataConstructor, ctorId, DiagnosticSource.ReferencedModule(currentModuleDescriptor))
                 )
             }
 
@@ -1469,7 +1469,7 @@ object ArgonModuleLoader {
                   for {
                     currentModule <- module
                     unitType <- StandardTypeLoaders.loadUnitType(context)(
-                      CompilationMessageSource.ReferencedModule(currentModuleDescriptor)
+                      DiagnosticSource.ReferencedModule(currentModuleDescriptor)
                     )(currentModule)(referencedModules)
 
                   } yield Parameter[context.type, Id](
@@ -1501,7 +1501,7 @@ object ArgonModuleLoader {
           override lazy val module: Comp[ArModule[context.type, TPayloadSpec]] =
             moduleCache.get(
               for {
-                globalNamespaceCache <- ValueCache.make[CompError, Namespace[context.type, TPayloadSpec]]
+                globalNamespaceCache <- ValueCache.make[CompilationError, Namespace[context.type, TPayloadSpec]]
               } yield new ArModule[context.type, TPayloadSpec] {
                 override val context: context2.type = context2
                 override val id: ModuleId = currentModuleDescriptor

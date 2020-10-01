@@ -1,7 +1,7 @@
 package dev.argon.parser.impl
 
 import cats.data.{NonEmptyList, NonEmptyVector}
-import dev.argon.compiler.{Compilation, CompilationError, CompError}
+import dev.argon.compiler._
 import dev.argon.compiler.loaders.SourceParser
 import dev.argon.parser.{SourceAST, SyntaxError, SyntaxErrorData}
 import dev.argon.util.FileSpec
@@ -15,10 +15,10 @@ object ArgonSourceParser {
     new SourceParser.Service {
 
 
-      override def parse(fileSpec: FileSpec)(sourceCode: Stream[CompError, Char]): Stream[CompError, SourceAST] = {
+      override def parse(fileSpec: FileSpec)(sourceCode: Stream[CompilationError, Char]): Stream[CompilationError, SourceAST] = {
 
         def toCompileError(error: SyntaxError): CompilationError =
-          CompilationError.SyntaxCompilerError(SyntaxErrorData(fileSpec, error))
+          DiagnosticError.SyntaxCompilerError(SyntaxErrorData(fileSpec, error))
 
         sourceCode.transformWith(
           ParseHandler.parse(fileSpec)

@@ -9,7 +9,7 @@ import java.io.IOException
 import dev.argon.io.{Path, ZipEntryInfo}
 import cats.data.NonEmptyList
 import dev.argon.backend.{Backend, ResourceAccess, ResourceWriter}
-import dev.argon.compiler.{Comp, CompilationError, CompError}
+import dev.argon.compiler._
 import zio._
 import zio.stream._
 import shapeless.{Id => _, Path => _, _}
@@ -65,13 +65,13 @@ object BuildTestCaseRunner {
       val res = env.get
 
       new ResourceWriter.Service[DummyOutputPath] {
-        override def writeToResource(id: DummyOutputPath)(data: Stream[CompError, Byte]): Comp[Unit] =
+        override def writeToResource(id: DummyOutputPath)(data: Stream[CompilationError, Byte]): Comp[Unit] =
           data.runDrain
 
-        override def zipFromEntries(entries: Stream[CompError, ZipEntryInfo[Any, CompError]]): Stream[CompError, Byte] =
+        override def zipFromEntries(entries: Stream[CompilationError, ZipEntryInfo[Any, CompilationError]]): Stream[CompilationError, Byte] =
           res.zipFromEntries(entries)
 
-        override def serializeProtocolBuffer(message: GeneratedMessage): Stream[CompError, Byte] =
+        override def serializeProtocolBuffer(message: GeneratedMessage): Stream[CompilationError, Byte] =
           res.serializeProtocolBuffer(message)
       }
     }

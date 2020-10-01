@@ -24,7 +24,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
   def createModule[I <: ResourceIndicator: Tag, TContext <: Context.WithRes[I]: Tag]
   (context: TContext)
   (input: CompilerInput[I, context.BackendOptions])
-  : ZManaged[ModuleLoad[I, TContext] with ResourceReader[I] with SourceParser, CompError, ArModule[context.type, DeclarationPayloadSpecifier]] =
+  : ZManaged[ModuleLoad[I, TContext] with ResourceReader[I] with SourceParser, CompilationError, ArModule[context.type, DeclarationPayloadSpecifier]] =
     ModuleLoader.loadReferencedModules[I, TContext](context)(input.options.references.files.toVector).mapM { refModules =>
       createModuleWithRefs(context)(input)(refModules)
     }
@@ -36,7 +36,7 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
     : RComp[ResourceReader[I] with SourceParser, ArModule[context2.type, DeclarationPayloadSpecifier]] = {
     for {
       env <- ZIO.environment[ResourceReader[I] with SourceParser]
-      globalNamespaceCache <- ValueCache.make[CompError, Namespace[context2.type, DeclarationPayloadSpecifier]]
+      globalNamespaceCache <- ValueCache.make[CompilationError, Namespace[context2.type, DeclarationPayloadSpecifier]]
     } yield new ArModule[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
 

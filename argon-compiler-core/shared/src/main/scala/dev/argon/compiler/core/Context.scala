@@ -37,8 +37,8 @@ trait Context {
   def createClassConstructorBodyImplementation(body: ClassConstructorBody[this.type]): TClassConstructorImplementation
   def createDataConstructorImplementation(body: typeSystem.SimpleExpr): TDataConstructorImplementation
 
-  def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[TFunctionImplementation]
-  def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[TMethodImplementation]
+  def createExternFunctionImplementation(specifier: String, source: DiagnosticSource): Comp[TFunctionImplementation]
+  def createExternMethodImplementation(specifier: String, source: DiagnosticSource): Comp[TMethodImplementation]
 
   object ContextTypeSystem extends TypeSystem {
     override val context: Context.this.type = Context.this
@@ -82,7 +82,7 @@ trait Context {
   implicit val resIndicatorTag: Tag[ResIndicator]
   protected val compilerInput: CompilerInput[ResIndicator, BackendOptions]
 
-  def module[TContext >: this.type <: Context.WithRes[ResIndicator]: Tag]: ZManaged[ModuleLoad[ResIndicator, TContext] with ResourceReader[ResIndicator] with SourceParser, CompError, ArModule[this.type, DeclarationPayloadSpecifier]]
+  def module[TContext >: this.type <: Context.WithRes[ResIndicator]: Tag]: ZManaged[ModuleLoad[ResIndicator, TContext] with ResourceReader[ResIndicator] with SourceParser, CompilationError, ArModule[this.type, DeclarationPayloadSpecifier]]
 
 }
 

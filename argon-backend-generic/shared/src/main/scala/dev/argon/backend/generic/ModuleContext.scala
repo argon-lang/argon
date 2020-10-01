@@ -32,11 +32,11 @@ sealed abstract class ModuleContext extends ContextWithModule {
   override def createDataConstructorImplementation(body: typeSystem.SimpleExpr): typeSystem.SimpleExpr = body
 
 
-  override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[typeSystem.SimpleExpr] =
-    Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+  override def createExternFunctionImplementation(specifier: String, source: DiagnosticSource): Comp[typeSystem.SimpleExpr] =
+    Compilation.forErrors(DiagnosticError.UnknownExternImplementation(specifier, source))
 
-  override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[Option[typeSystem.SimpleExpr]] =
-    Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+  override def createExternMethodImplementation(specifier: String, source: DiagnosticSource): Comp[Option[typeSystem.SimpleExpr]] =
+    Compilation.forErrors(DiagnosticError.UnknownExternImplementation(specifier, source))
 
 }
 

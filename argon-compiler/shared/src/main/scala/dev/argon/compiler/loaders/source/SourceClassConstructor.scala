@@ -25,7 +25,7 @@ object SourceClassConstructor {
   : Comp[ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier]] =
     for {
       uniqId <- UniqueIdentifier.make
-      sigCache <- ValueCache.make[CompError, context2.signatureContext.Signature[ClassConstructor.ResultInfo, _ <: Nat]]
+      sigCache <- ValueCache.make[CompilationError, context2.signatureContext.Signature[ClassConstructor.ResultInfo, _ <: Nat]]
 
     } yield new ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
@@ -61,7 +61,7 @@ object SourceClassConstructor {
           ))
 
           unitType <- StandardTypeLoaders.loadUnitType(context)(
-            CompilationMessageSource.SourceFile(env.fileSpec, stmt.body.location)
+            DiagnosticSource.SourceFile(env.fileSpec, stmt.body.location)
           )(env3.currentModule)(env3.referencedModules)
 
           body <- convertCtorBody(unitType)(env3)(WithSource(Vector(), SourceLocation(stmt.body.location.start, stmt.body.location.start)))(Vector())(Set())(stmt.body)
@@ -98,9 +98,9 @@ object SourceClassConstructor {
             convertUnconverted.flatMap { case (newConvertedNoInit, env2) =>
               findField(name, location).flatMap { field =>
                 if(initializedFields.contains(field.name))
-                  Compilation.forErrors(CompilationError.FieldReinitializedError(CompilationMessageSource.SourceFile(env2.fileSpec, location)))
+                  Compilation.forErrors(DiagnosticError.FieldReinitializedError(DiagnosticSource.SourceFile(env2.fileSpec, location)))
                 else if(Mutability.toIsMutable(field.mutability) && effectInfo.isPure)
-                  Compilation.forErrors(CompilationError.MutableVariableNotPureError(field.name, CompilationMessageSource.SourceFile(env2.fileSpec, location)))
+                  Compilation.forErrors(DiagnosticError.MutableVariableNotPureError(field.name, DiagnosticSource.SourceFile(env2.fileSpec, location)))
                 else
                   ExpressionConverter.convertExpression(context)(env2)(field.varType)(value).flatMap { valueExpr =>
                     val initStmt = InitializeFieldStatement(field, valueExpr)
@@ -116,7 +116,7 @@ object SourceClassConstructor {
           case WithSource(parser.InitializeStmt(thisName, baseCtorExprOpt), location) +: tail =>
             ownerClass.fields.flatMap { fields =>
               if(fields.size =!= initializedFields.size)
-                Compilation.forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                Compilation.forErrors(DiagnosticError.FieldNotInitializedError(DiagnosticSource.SourceFile(env.fileSpec, location)))
               else
                 convertUnconverted.flatMap { case (newConverted, env2) =>
                   ownerClass.signature
@@ -127,12 +127,12 @@ object SourceClassConstructor {
                       ((baseCtorExprOpt, baseTypes.baseClass) match {
                         case (None, Some(_)) =>
                           Compilation.forErrors(
-                            CompilationError.BaseConstructorNotCalled(CompilationMessageSource.SourceFile(env.fileSpec, location))
+                            DiagnosticError.BaseConstructorNotCalled(DiagnosticSource.SourceFile(env.fileSpec, location))
                           )
 
                         case (Some(_), None) =>
                           Compilation.forErrors(
-                            CompilationError.InvalidBaseConstructorCall(CompilationMessageSource.SourceFile(env.fileSpec, location))
+                            DiagnosticError.InvalidBaseConstructorCall(DiagnosticSource.SourceFile(env.fileSpec, location))
                           )
 
                         case (None, None) =>
@@ -143,7 +143,7 @@ object SourceClassConstructor {
                             case baseCall: ClassConstructorCall[context.type, Id] => IO.some(baseCall)
                             case _ =>
                               Compilation.forErrors(
-                                CompilationError.InvalidBaseConstructorCall(CompilationMessageSource.SourceFile(env.fileSpec, location))
+                                DiagnosticError.InvalidBaseConstructorCall(DiagnosticSource.SourceFile(env.fileSpec, location))
                               )
                           }
                       })
@@ -169,12 +169,12 @@ object SourceClassConstructor {
               ownerSig.unsubstitutedResult.baseTypes.flatMap { baseTypes =>
                 if(baseTypes.baseClass.isDefined)
                   Compilation.forErrors(
-                    CompilationError.BaseConstructorNotCalled(CompilationMessageSource.SourceFile(env.fileSpec, body.location))
+                    DiagnosticError.BaseConstructorNotCalled(DiagnosticSource.SourceFile(env.fileSpec, body.location))
                   )
                 else
                   ownerClass.fields.flatMap { fields =>
                     if(fields.size =!= initializedFields.size)
-                      Compilation.forErrors(CompilationError.FieldNotInitializedError(CompilationMessageSource.SourceFile(env.fileSpec, unconverted.location)))
+                      Compilation.forErrors(DiagnosticError.FieldNotInitializedError(DiagnosticSource.SourceFile(env.fileSpec, unconverted.location)))
                     else
                       ExpressionConverter.convertStatementList(context)(env)(unitType)(unconverted).map { endExpr =>
                         ClassConstructorBody(converted, None, endExpr)
@@ -189,7 +189,7 @@ object SourceClassConstructor {
       private def findField(name: String, location: SourceLocation): Comp[FieldVariable[context.type, Id]] =
         ownerClass.fields.flatMap { fields =>
           Compilation.requireSome(fields.find { _.name.name === name })(
-            CompilationError.FieldNotFound(name, CompilationMessageSource.SourceFile(env.fileSpec, location))
+            DiagnosticError.FieldNotFound(name, DiagnosticSource.SourceFile(env.fileSpec, location))
           )
         }
 

@@ -27,17 +27,17 @@ trait OpenSealedCheck {
       case DataConstructorOwner.ByNamespace(module, _, _) => module.id
     }
 
-  final def checkExtendClass[TContext <: Context with Singleton, TPS[_, _]](arClass: ArClass[TContext, TPS])(source: CompilationMessageSource): Comp[Unit] =
+  final def checkExtendClass[TContext <: Context with Singleton, TPS[_, _]](arClass: ArClass[TContext, TPS])(source: DiagnosticSource): Comp[Unit] =
     if(!arClass.isOpen)
-      Compilation.forErrors(CompilationError.NonOpenClassExtendedError(source))
+      Compilation.forErrors(DiagnosticError.NonOpenClassExtendedError(source))
     else if(arClass.isSealed && (getClassModule(arClass) =!= ownerModuleId || arClass.fileId =!= fileId))
-      Compilation.forErrors(CompilationError.SealedClassExtendedError(source))
+      Compilation.forErrors(DiagnosticError.SealedClassExtendedError(source))
     else
       IO.unit
 
-  final def checkExtendTrait[TContext <: Context with Singleton, TPS[_, _]](arTrait: ArTrait[TContext, TPS])(source: CompilationMessageSource): Comp[Unit] =
+  final def checkExtendTrait[TContext <: Context with Singleton, TPS[_, _]](arTrait: ArTrait[TContext, TPS])(source: DiagnosticSource): Comp[Unit] =
     if(arTrait.isSealed && (getTraitModule(arTrait) =!= ownerModuleId || arTrait.fileId =!= fileId))
-      Compilation.forErrors(CompilationError.SealedTraitExtendedError(source))
+      Compilation.forErrors(DiagnosticError.SealedTraitExtendedError(source))
     else
       IO.unit
 

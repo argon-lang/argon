@@ -1,6 +1,6 @@
 package dev.argon.build.testrunner
 
-import dev.argon.compiler.{CompilationError, CompError}
+import dev.argon.compiler._
 import cats._
 import cats.data.NonEmptyList
 import cats.implicits._
@@ -32,7 +32,7 @@ trait TestCaseRunner[-R] {
     errors match {
       case NonEmptyList(error, Nil) =>
         val realName = error.getClass.getName
-        val expectedName = CompilationError.getClass.getName + errorName
+        val expectedName = DiagnosticError.getClass.getName + errorName
 
         realName.startsWith(expectedName) &&
           (expectedName.length === realName.length || realName.charAt(expectedName.length) === '$')

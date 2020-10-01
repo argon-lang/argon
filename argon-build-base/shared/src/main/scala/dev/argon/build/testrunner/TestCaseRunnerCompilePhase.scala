@@ -78,13 +78,13 @@ object TestCaseRunnerCompilePhase {
         protected val outerReaderEnv: ResourceReader[I] = env
         protected val resIndicatorTag: Tag[I] = implicitly[Tag[I]]
 
-        override def readFile(id: TestCompileResource[I]): Stream[CompError, Byte] =
+        override def readFile(id: TestCompileResource[I]): Stream[CompilationError, Byte] =
           id match {
             case TestCaseInputSource(inputSource) => Stream.fromChunk(Chunk.fromArray(inputSource.data.getBytes(StandardCharsets.UTF_8)))
             case TestCaseOtherRes(id) => env.get.readFile(id)
           }
 
-        override def readTextFile(id: TestCompileResource[I]): Stream[CompError, Char] =
+        override def readTextFile(id: TestCompileResource[I]): Stream[CompilationError, Char] =
           id match {
             case TestCaseInputSource(inputSource) => Stream.fromChunk(Chunk.fromArray(inputSource.data.toCharArray))
             case TestCaseOtherRes(id) => env.get.readTextFile(id)
@@ -96,16 +96,16 @@ object TestCaseRunnerCompilePhase {
             case TestCaseOtherRes(id) => env.get.readTextFileAsString(id)
           }
 
-        override def getZipReader(id: TestCompileResource[I]): Managed[CompError, ZipFileReader[Any, CompError]] =
+        override def getZipReader(id: TestCompileResource[I]): Managed[CompilationError, ZipFileReader[Any, CompilationError]] =
           id match {
             case TestCaseInputSource(_) =>
-              Managed.fail(CompilationError.ResourceIOError(
-                CompilationMessageSource.ThrownException(new IOException("Invalid file format. Not a zip file."))
+              Managed.fail(DiagnosticError.ResourceIOError(
+                DiagnosticSource.ThrownException(new IOException("Invalid file format. Not a zip file."))
               ))
             case TestCaseOtherRes(id) => env.get.getZipReader(id)
           }
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: stream.Stream[CompError, Byte]): Comp[A] =
+        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: stream.Stream[CompilationError, Byte]): Comp[A] =
           env.get.deserializeProtocolBuffer(companion)(data)
       }
     }

@@ -61,7 +61,7 @@ object SourceSignatureCreator {
                     ExpressionConverter.convertTypeExpression(context)(env)(paramType)
 
                   case None =>
-                    Compilation.forErrors(CompilationError.ParameterTypeAnnotationRequired(paramName, CompilationMessageSource.SourceFile(env.fileSpec, loc)))
+                    Compilation.forErrors(DiagnosticError.ParameterTypeAnnotationRequired(paramName, DiagnosticSource.SourceFile(env.fileSpec, loc)))
 
                 })
                 .map { t => (t, paramName) }

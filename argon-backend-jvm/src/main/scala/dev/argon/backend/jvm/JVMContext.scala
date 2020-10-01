@@ -43,19 +43,19 @@ abstract class JVMContext private[jvm] extends ContextWithModule {
   override def createDataConstructorImplementation(body: typeSystem.SimpleExpr): JVMImpl.DataConstructor =
     JVMImpl.DataConstructor.ExpressionBody(body)
 
-  private def getExtern(specifier: String, source: CompilationMessageSource): Comp[MethodNode] =
+  private def getExtern(specifier: String, source: DiagnosticSource): Comp[MethodNode] =
     externFunctionsCache.get(
       ExternMethodExtractor.getExterns(
         Stream.fromIterable(compilerInput.backendOptions.extern.files)
       )
         .provide(Has.allOf[ResourceReader.Service[ResIndicator], Blocking.Service](resourceReader, blockingService))
     )
-      .mapError { _ => CompilationError.InvalidExternFunction(source) }
+      .mapError { _ => DiagnosticError.InvalidExternFunction(source) }
       .flatMap { externs =>
         externs.get(specifier) match {
           case Some(ResolvedExtern.Method(node)) => IO.succeed(node)
-          case Some(ResolvedExtern.Ambiguous) => Compilation.forErrors(CompilationError.AmbiguousExtern(specifier, source))
-          case None => Compilation.forErrors(CompilationError.UnknownExternImplementation(specifier, source))
+          case Some(ResolvedExtern.Ambiguous) => Compilation.forErrors(DiagnosticError.AmbiguousExtern(specifier, source))
+          case None => Compilation.forErrors(DiagnosticError.UnknownExternImplementation(specifier, source))
         }
       }
 
@@ -63,15 +63,15 @@ abstract class JVMContext private[jvm] extends ContextWithModule {
     blockingService.effectBlocking {
       extern.accept(visitor)
     }
-      .catchAll(CompilationError.unwrapThrowable)
+      .catchAll(Compilation.unwrapThrowable)
 
 
-  override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[JVMImpl.Function] =
+  override def createExternFunctionImplementation(specifier: String, source: DiagnosticSource): Comp[JVMImpl.Function] =
     getExtern(specifier, source).map { extern =>
       JVMImpl.Function.MethodVisitorActionBody(getActionBodyForExtern(extern))
     }
 
-  override def createExternMethodImplementation(specifier: String, source: CompilationMessageSource): Comp[JVMImpl.Method] =
+  override def createExternMethodImplementation(specifier: String, source: DiagnosticSource): Comp[JVMImpl.Method] =
     getExtern(specifier, source).map { extern =>
       JVMImpl.Method.MethodVisitorActionBody(getActionBodyForExtern(extern))
     }

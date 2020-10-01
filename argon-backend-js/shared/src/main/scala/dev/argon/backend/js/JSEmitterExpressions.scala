@@ -29,7 +29,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
           loader <- declareLocalVariable(variable)
           declStmt <- loader.initializeVariable(valueExpr) match {
             case Some(initExpr) => IO.succeed(initExpr)
-            case None => Compilation.forErrors(CompilationError.EmitError(CompilationMessageSource.EmitPhase()))
+            case None => Compilation.forErrors(DiagnosticError.EmitError(DiagnosticSource.EmitPhase()))
           }
           nextStmts <- convertStmt(useReturn)(next).provideSome[EmitEnv] { emitEnv =>
             emitEnv.copy(varMap = emitEnv.varMap + (variable.id -> loader))
@@ -227,7 +227,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
               for {
                 loader <- StatementConverterLocalBinding.declareLocalVariable(variable)
                 initStmt <- ZIO.fromOption(loader.initializeVariable(patternValue))
-                  .mapError { _ => CompilationError.EmitError(CompilationMessageSource.EmitPhase()) }
+                  .mapError { _ => DiagnosticError.EmitError(DiagnosticSource.EmitPhase()) }
 
                 body <- bodyEmitter.provideSome[EmitEnv] { emitEnv =>
                   emitEnv.copy(varMap = emitEnv.varMap + (variable.id -> loader))
@@ -239,7 +239,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
               for {
                 loader <- StatementConverterLocalBinding.declareLocalVariable(variable)
                 initStmt <- ZIO.fromOption(loader.initializeVariable(patternValue))
-                  .mapError { _ => CompilationError.EmitError(CompilationMessageSource.EmitPhase()) }
+                  .mapError { _ => DiagnosticError.EmitError(DiagnosticSource.EmitPhase()) }
 
                 body <- bodyEmitter.provideSome[EmitEnv] { emitEnv =>
                   emitEnv.copy(varMap = emitEnv.varMap + (variable.id -> loader))

@@ -7,7 +7,7 @@ import scala.collection.immutable._
 import cats._
 import cats.evidence.Is
 import cats.implicits._
-import dev.argon.compiler.CompilationMessageSource
+import dev.argon.compiler.DiagnosticSource
 import dev.argon.compiler.expr.BaseTypeInfoClass
 import dev.argon.util.FileID
 import shapeless.Nat
@@ -21,7 +21,7 @@ abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] e
   val id: ClassId
   val owner: ClassOwner[context.type, TPayloadSpec]
   val fileId: FileID
-  val classMessageSource: CompilationMessageSource
+  val classMessageSource: DiagnosticSource
 
   val isOpen: Boolean
   val isSealed: Boolean

@@ -40,7 +40,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def createHole: Comp[TType]
   def recordConstraint(info: SubTypeInfo[TType]): Comp[Unit]
   def resolveType(t: TType): Comp[TType]
-  def attemptRun[A](value: Comp[A]): Comp[Exit[CompError, Comp[A]]]
+  def attemptRun[A](value: Comp[A]): Comp[Exit[CompilationError, Comp[A]]]
 
   type Env = ExpressionConverter.Env[context.type, Scope]
 
@@ -66,7 +66,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 .toList
                 .traverse { _.traverse {
                   case MemberValue.Method(method) =>
-                    Compilation.require(env.effectInfo.canCall(method.value.method.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                    Compilation.require(env.effectInfo.canCall(method.value.method.effectInfo))(DiagnosticError.ImpureFunctionCalledError(DiagnosticSource.SourceFile(env.fileSpec, location)))
                       .flatMap { _ =>
                         method.value.method.signature(signatureContext)(instanceType)
                       }
@@ -147,13 +147,13 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                         memberName match {
                           case MemberName.New =>
                             if (!env.allowAbstractConstructor && t.arClass.value.isAbstract)
-                              Compilation.forErrors(CompilationError.AbstractClassConstructorCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                              Compilation.forErrors(DiagnosticError.AbstractClassConstructorCalledError(DiagnosticSource.SourceFile(env.fileSpec, location)))
                             else
                               t.arClass.value.classConstructors.flatMap { constructors =>
                                 constructors
                                   .traverse {
                                     case ClassConstructorBinding(_, classCtor) =>
-                                      Compilation.require(env.effectInfo.canCall(classCtor.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                                      Compilation.require(env.effectInfo.canCall(classCtor.effectInfo))(DiagnosticError.ImpureFunctionCalledError(DiagnosticSource.SourceFile(env.fileSpec, location)))
                                         .flatMap { _ =>
                                           classCtor.signature(signatureContext)(t)
                                         }
@@ -252,7 +252,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               NonEmptyList.fromList(mergedOverloads) match {
                 case Some(mergedOverloads) => overloadSelectionFactory(env)(location)(mergedOverloads).pure[Comp]
                 case None =>
-                  Compilation.forErrors(CompilationError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, memberName), CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                  Compilation.forErrors(DiagnosticError.LookupFailedError(LookupDescription.Member(LookupDescription.Other, memberName), DiagnosticSource.SourceFile(env.fileSpec, location)))
               }
             }
 
@@ -284,7 +284,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
     def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory): ExprFactory =
       compFactory(
-        Compilation.forErrors(CompilationError.InvalidLValue(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+        Compilation.forErrors(DiagnosticError.InvalidLValue(DiagnosticSource.SourceFile(env.fileSpec, location)))
       )
 
   }
@@ -380,7 +380,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.BlockExpr(_, Vector(), Some(_), _) =>
         compFactory(
           Compilation.forErrors(
-            CompilationError.ElseClauseWithoutRescue(CompilationMessageSource.SourceFile(env.fileSpec, expr.location))
+            DiagnosticError.ElseClauseWithoutRescue(DiagnosticSource.SourceFile(env.fileSpec, expr.location))
           )
         )
 
@@ -668,7 +668,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             }
 
             for {
-              _ <- Compilation.require(env.effectInfo.canDeclareVariable(mutability))(CompilationError.MutableVariableNotPureError(varName, CompilationMessageSource.SourceFile(env.fileSpec, location)))
+              _ <- Compilation.require(env.effectInfo.canDeclareVariable(mutability))(DiagnosticError.MutableVariableNotPureError(varName, DiagnosticSource.SourceFile(env.fileSpec, location)))
 
               exprType <- stmt.varType match {
                 case Some(varTypeExpr) => evaluateTypeExprAST(env)(varTypeExpr)
@@ -734,7 +734,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           classesVec <- arClassOptComp
           classes <- Compilation.requireSome(
             NonEmptyVector.fromVector(classesVec)
-          )(CompilationError.NamespaceElementNotFound(moduleDesc, namespacePath, name, CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          )(DiagnosticError.NamespaceElementNotFound(moduleDesc, namespacePath, name, DiagnosticSource.SourceFile(env.fileSpec, location)))
 
           classFactories <- classes.traverse { arClass =>
             arClass.signature
@@ -797,7 +797,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     lookupResult match {
       case LookupResult.ScopeResult(scope) =>
         new ExprFactory {
-          private def error[A]: Comp[A] = Compilation.forErrors(CompilationError.NamespaceUsedAsValueError(description, CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          private def error[A]: Comp[A] = Compilation.forErrors(DiagnosticError.NamespaceUsedAsValueError(description, DiagnosticSource.SourceFile(env.fileSpec, location)))
 
           override def forExpectedType(expectedType: typeSystem.TType): Comp[SimpleExpr] =
             error
@@ -842,7 +842,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             .toNonEmptyList
             .traverse { _.traverse[Comp, OverloadExprFactory] {
               case FunctionScopeValue(func) =>
-                Compilation.require(env.effectInfo.canCall(func.value.effectInfo))(CompilationError.ImpureFunctionCalledError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+                Compilation.require(env.effectInfo.canCall(func.value.effectInfo))(DiagnosticError.ImpureFunctionCalledError(DiagnosticSource.SourceFile(env.fileSpec, location)))
                   .flatMap { _ =>
                     func.value.signature
                   }
@@ -902,7 +902,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case LookupResult.Failed =>
         new ExprFactory {
           private def error[A]: Comp[A] =
-            Compilation.forErrors(CompilationError.LookupFailedError(description, CompilationMessageSource.SourceFile(env.fileSpec, location)))
+            Compilation.forErrors(DiagnosticError.LookupFailedError(description, DiagnosticSource.SourceFile(env.fileSpec, location)))
 
           override def forExpectedType(expectedType: typeSystem.TType): Comp[SimpleExpr] = error
 
@@ -1005,9 +1005,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               case Right(NonEmptyVector((_, expr), Vector())) => expr
 
               case Right(exprs) =>
-                Compilation.forErrors(CompilationError.AmbiguousLookupError(
+                Compilation.forErrors(DiagnosticError.AmbiguousLookupError(
                   exprs.map { case (desc, _) => desc },
-                  CompilationMessageSource.SourceFile(env.fileSpec, location)
+                  DiagnosticSource.SourceFile(env.fileSpec, location)
                 ))
 
               case Left(failed) => fallback(failed)
@@ -1038,9 +1038,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               IO.halt(errors)
 
           case Ior.Left(failed) =>
-            Compilation.forErrors(CompilationError.OverloadedLookupFailed(
+            Compilation.forErrors(DiagnosticError.OverloadedLookupFailed(
               failed,
-              CompilationMessageSource.SourceFile(env.fileSpec, location)
+              DiagnosticSource.SourceFile(env.fileSpec, location)
             ))
         }
       }
@@ -1094,7 +1094,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       sig.nextUnsubstituted.referencesParameter(sig.parameter).flatMap {
         case false => sig.nextUnsubstituted.pure[Comp]
         case true =>
-          Compilation.forErrors(CompilationError.ArgumentToSignatureDependencyNotPureError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+          Compilation.forErrors(DiagnosticError.ArgumentToSignatureDependencyNotPureError(DiagnosticSource.SourceFile(env.fileSpec, location)))
       }
 
     final class SigFactory[Len <: Nat](env: Env)(unsubSig: Signature[TResult, Len])(prevParamTypes: Vector[TType])(acc: Comp[(Signature[TResult, Len], Vector[WrapExpr])]) extends OverloadExprFactory {
@@ -1202,7 +1202,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def convertExprTypeDelay(env: Env)(location: SourceLocation)(exprType: typeSystem.TType)(t: typeSystem.TType): Comp[SimpleExpr => SimpleExpr] =
     typeSystem.isSubType(t, exprType).flatMap {
       case Some(info) => recordConstraint(info).as(identity)
-      case None => Compilation.forErrors(CompilationError.CouldNotConvertType(typeSystem)(exprType, t)(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+      case None => Compilation.forErrors(DiagnosticError.CouldNotConvertType(typeSystem)(exprType, t)(DiagnosticSource.SourceFile(env.fileSpec, location)))
     }
 
   def evaluateTypeExprFactory(env: Env)(location: SourceLocation)(factory: ExprFactory): Comp[TType] =
@@ -1211,7 +1211,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     }
 
   def validateTypeExpr(env: Env)(location: SourceLocation)(expr: SimpleExpr): Comp[Unit] = {
-    def invalidType[A]: Comp[A] = Compilation.forErrors(CompilationError.ExpressionNotTypeError(CompilationMessageSource.SourceFile(env.fileSpec, location)))
+    def invalidType[A]: Comp[A] = Compilation.forErrors(DiagnosticError.ExpressionNotTypeError(DiagnosticSource.SourceFile(env.fileSpec, location)))
 
     expr match {
 
@@ -1465,7 +1465,7 @@ object ExpressionConverter {
           } yield resolvedType
       }
 
-    override def attemptRun[A](value: Comp[A]): Comp[Exit[CompError, Comp[A]]] =
+    override def attemptRun[A](value: Comp[A]): Comp[Exit[CompilationError, Comp[A]]] =
       for {
       prevState <- state.get
       v <- value.run
@@ -1520,7 +1520,7 @@ object ExpressionConverter {
           .map(ts.fromSimpleType)
       )
 
-      _ <- Compilation.requireM(Erasure(context)(context.typeSystem).isExprErased(convExpr).map { !_ })(CompilationError.NonErasedExpressionExpected(CompilationMessageSource.SourceFile(env.fileSpec, stmts.location)))
+      _ <- Compilation.requireM(Erasure(context)(context.typeSystem).isExprErased(convExpr).map { !_ })(DiagnosticError.NonErasedExpressionExpected(DiagnosticSource.SourceFile(env.fileSpec, stmts.location)))
 
     } yield convExpr
   }

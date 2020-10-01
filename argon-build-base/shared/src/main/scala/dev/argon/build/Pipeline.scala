@@ -14,7 +14,7 @@ import dev.argon.compiler.options.CompilerOptions
 
 object Pipeline {
 
-  def printMessages[TMsg <: CompilationMessage](msgs: List[TMsg]): URIO[Console, Unit] =
+  def printMessages[TMsg <: Diagnostic](msgs: List[TMsg]): URIO[Console, Unit] =
     ZIO.foreach_(msgs) { msg =>
       putStrLn(msg.toString)
     }

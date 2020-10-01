@@ -1,7 +1,7 @@
 package dev.argon.build
 
 import dev.argon.backend.PathResourceIndicator
-import dev.argon.compiler.CompError
+import dev.argon.compiler.CompilationError
 import dev.argon.io.{JarFileReader, Path}
 import zio.{Managed, UIO, ZManaged}
 import java.lang.Runtime.{Version => JDKVersion}
@@ -16,7 +16,7 @@ object TestResourceReaderPlatformSpecific {
     protected implicit val pathInstance: Path[P]
 
 
-    def getJarReader(id: TestResourceIndicator, jdkVersion: JDKVersion): Managed[CompError, JarFileReader[Any, CompError]] =
+    def getJarReader(id: TestResourceIndicator, jdkVersion: JDKVersion): Managed[CompilationError, JarFileReader[Any, CompilationError]] =
       id match {
         case LibraryResourceIndicator(name) =>
           ZManaged.fromEffect(getLibPath(name))

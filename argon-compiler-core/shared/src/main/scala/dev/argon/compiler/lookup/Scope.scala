@@ -94,7 +94,7 @@ trait ScopeContext[TContext <: Context with Singleton] {
       IO.succeed(LookupResult.Failed)
   }
 
-  final class NamespaceScope private(findId: MemoCache[Any, CompError, (GlobalName.NonEmpty, FileSpec, SourceLocation), LookupResult], parentScope: NamespacesOnlyScope) extends NamespacesOnlyScope {
+  final class NamespaceScope private(findId: MemoCache[Any, CompilationError, (GlobalName.NonEmpty, FileSpec, SourceLocation), LookupResult], parentScope: NamespacesOnlyScope) extends NamespacesOnlyScope {
 
     override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[LookupResult] =
       findId.get((GlobalName.Normal(name), fileSpec, sourceLocation))

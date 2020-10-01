@@ -1,6 +1,6 @@
 package dev.argon.compiler.loaders
 
-import dev.argon.compiler.{Comp, CompError, RComp}
+import dev.argon.compiler.{Comp, CompilationError, RComp}
 import dev.argon.util.NamespacePath
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup._
@@ -10,10 +10,10 @@ import zio.stream._
 
 object NamespaceBuilder {
 
-  def createNamespace[R, TContext <: Context with Singleton, TPayloadSpec[_, _]](elements: ZStream[R, CompError, ModuleElement[TContext, TPayloadSpec]]): RComp[R, Namespace[TContext, TPayloadSpec]] =
+  def createNamespace[R, TContext <: Context with Singleton, TPayloadSpec[_, _]](elements: ZStream[R, CompilationError, ModuleElement[TContext, TPayloadSpec]]): RComp[R, Namespace[TContext, TPayloadSpec]] =
     createNamespaceWithPath(NamespacePath.empty, elements)
 
-  def createNamespaceWithPath[R, TContext <: Context with Singleton, TPayloadSpec[_, _]](path: NamespacePath, elements: ZStream[R, CompError, ModuleElement[TContext, TPayloadSpec]]): RComp[R, Namespace[TContext, TPayloadSpec]] =
+  def createNamespaceWithPath[R, TContext <: Context with Singleton, TPayloadSpec[_, _]](path: NamespacePath, elements: ZStream[R, CompilationError, ModuleElement[TContext, TPayloadSpec]]): RComp[R, Namespace[TContext, TPayloadSpec]] =
     divideNamespaceElements(elements).use { case (directElements, nestedElemenets) =>
 
       val nestedElementGroups =
@@ -38,8 +38,8 @@ object NamespaceBuilder {
     }
 
   private def divideNamespaceElements[R, TContext <: Context with Singleton, TPayloadSpec[_, _]]
-  (elements: ZStream[R, CompError, ModuleElement[TContext, TPayloadSpec]])
-  : ZManaged[R, CompError, (Stream[CompError, GlobalBinding[TContext, TPayloadSpec]], Stream[CompError, (String, NamespacePath, GlobalBinding[TContext, TPayloadSpec])])] =
+  (elements: ZStream[R, CompilationError, ModuleElement[TContext, TPayloadSpec]])
+  : ZManaged[R, CompilationError, (Stream[CompilationError, GlobalBinding[TContext, TPayloadSpec]], Stream[CompilationError, (String, NamespacePath, GlobalBinding[TContext, TPayloadSpec])])] =
     elements.partitionEither {
       case ModuleElement(NamespacePath(headNS +: tailNS), binding) =>
         IO.succeed(Right((headNS, NamespacePath(tailNS), binding)))
