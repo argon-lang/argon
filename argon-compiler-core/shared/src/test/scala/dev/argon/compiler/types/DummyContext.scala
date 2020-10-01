@@ -1,6 +1,6 @@
 package dev.argon.compiler.types
 
-import dev.argon.compiler.{Comp, CompilationMessageSource, ErrorList}
+import dev.argon.compiler.{Comp, CompilationMessageSource, CompError}
 import dev.argon.compiler.core.{ArModule, Context}
 import dev.argon.compiler.core.Context.WithRes
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
@@ -52,6 +52,6 @@ class DummyContext extends Context {
     backendOptions = (),
   )
 
-  override def module[TContext >: DummyContext.this.type <: WithRes[ResIndicator] : Tag]: ZManaged[ModuleLoad[ResIndicator, TContext], ErrorList, ArModule[DummyContext.this.type, DeclarationPayloadSpecifier]] =
+  override def module[TContext >: DummyContext.this.type <: WithRes[ResIndicator] : Tag]: ZManaged[ModuleLoad[ResIndicator, TContext], CompError, ArModule[DummyContext.this.type, DeclarationPayloadSpecifier]] =
     Managed.die(new UnsupportedOperationException)
 }

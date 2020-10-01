@@ -51,6 +51,7 @@ abstract class CompilerTestSuiteBase extends PlatformRunnableSpec {
     val testInfo =
       testM(testCase.name) {
         runner.runTest(testCase)
+          .catchAllCause(cause => IO.succeed(TestCaseActualResult.Errors(cause)))
           .provideLayer(execEnvLayer)
           .orDie
           .map { result => assert(result)(isExpectedResult(runner)(testCase.expectedResult)) }

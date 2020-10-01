@@ -23,7 +23,7 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
           emitEnv.modulePairs
             .find { case (module, _) => module.id.name === LookupNames.argonCoreLib }
             .map { case (_, JSIdentifier(importName)) => id"${importName}_all".prop(id"$exportName") }
-            .toRight { NonEmptyList.of(CompilationError.ReferencedModuleNotFound(dev.argon.module.ModuleReference(LookupNames.argonCoreLib), CompilationMessageSource.EmitPhase())) }
+            .toRight { CompilationError.ReferencedModuleNotFound(dev.argon.module.ModuleReference(LookupNames.argonCoreLib), CompilationMessageSource.EmitPhase()) }
         )
 
     }
@@ -38,8 +38,8 @@ private[js] trait JSEmitterReferenceLoader extends JSEmitterBase {
             .find { case (module, _) => module.id === moduleId }
             .map { case (_, importName) => importName }
         )
-          .mapError[ErrorList] { _ =>
-            NonEmptyList.of(CompilationError.ReferencedModuleNotFound(dev.argon.module.ModuleReference(LookupNames.argonCoreLib), CompilationMessageSource.EmitPhase()))
+          .mapError[CompError] { _ =>
+            CompilationError.ReferencedModuleNotFound(dev.argon.module.ModuleReference(LookupNames.argonCoreLib), CompilationMessageSource.EmitPhase())
           }
 
     }

@@ -40,16 +40,16 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
     for {
       uniqId <- UniqueIdentifier.make
 
-      sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[ArTrait.ResultInfo, _ <: Nat]]
-      sigResultCache <- ValueCache.make[ErrorList, BaseTypeInfoTrait[context2.type, Id]]
+      sigCache <- ValueCache.make[CompError, context2.signatureContext.Signature[ArTrait.ResultInfo, _ <: Nat]]
+      sigResultCache <- ValueCache.make[CompError, BaseTypeInfoTrait[context2.type, Id]]
 
-      paramsEnvCache <- ValueCache.make[ErrorList, EnvCreator[context2.type]]
+      paramsEnvCache <- ValueCache.make[CompError, EnvCreator[context2.type]]
 
-      groupedStaticCache <- ValueCache.make[ErrorList, GroupedStaticStatements]
-      groupedInstCache <- ValueCache.make[ErrorList, GroupedInstanceStatements]
+      groupedStaticCache <- ValueCache.make[CompError, GroupedStaticStatements]
+      groupedInstCache <- ValueCache.make[CompError, GroupedInstanceStatements]
 
-      methodCache <- ValueCache.make[ErrorList, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
-      staticMethodCache <- ValueCache.make[ErrorList, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      methodCache <- ValueCache.make[CompError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      staticMethodCache <- ValueCache.make[CompError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
 
     } yield new ArTrait[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] with OpenSealedCheck {
       override val context: context2.type = context2
@@ -145,7 +145,7 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
   }
 
 
-  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[ErrorList, BaseTypeInfoTrait[ctx.type, Id]])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArTrait.ResultInfo] = new ResultCreator[ArTrait.ResultInfo] {
+  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[CompError, BaseTypeInfoTrait[ctx.type, Id]])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArTrait.ResultInfo] = new ResultCreator[ArTrait.ResultInfo] {
 
     override val context: ctx.type = ctx
 

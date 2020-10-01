@@ -5,15 +5,15 @@ import java.io.IOException
 import cats._
 import cats.implicits._
 import cats.data.NonEmptyList
-import zio.IO
+import zio._
 
 object Compilation {
 
-  def forErrors[A](errors: NonEmptyList[CompilationError], messages: Vector[CompilationMessageNonFatal] = Vector()): Comp[A] =
-    IO.fail(errors)
+  def forErrors[A](errors: NonEmptyChunk[CompilationError], messages: Vector[CompilationMessageNonFatal] = Vector()): Comp[A] =
+    IO.halt(errors.reduceMapLeft(Cause.fail(_))((cause, compError) => Cause.Both(cause, Cause.fail(compError))))
 
   def forErrors[A](head: CompilationError, tail: CompilationError*): Comp[A] =
-    forErrors(NonEmptyList(head, tail.toList))
+    forErrors(NonEmptyChunk(head, tail: _*))
 
   def require(value: Boolean)(head: CompilationError, tail: CompilationError*): Comp[Unit] =
     if(value) IO.unit
@@ -28,11 +28,11 @@ object Compilation {
       case None => forErrors(head, tail: _*)
     }
 
-  def errorListForIOException(ex: IOException): ErrorList =
-    NonEmptyList.of(CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex)))
+  def errorForIOException(ex: IOException): CompError =
+    CompilationError.ResourceIOError(CompilationMessageSource.ThrownException(ex))
 
   def forIOException(ex: IOException): Comp[Nothing] =
-    IO.fail(errorListForIOException(ex))
+    IO.fail(errorForIOException(ex))
 
 }
 

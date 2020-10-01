@@ -749,7 +749,7 @@ object ArgonParser {
 
   private[impl] def grammarFactory: GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] = ArgonGrammarFactory
 
-  def parse: StreamTransformation[Any, NonEmptyVector[SyntaxError], WithSource[Token], FilePosition, TopLevelStatement, Unit] =
+  def parse: StreamTransformation[Any, SyntaxError, WithSource[Token], FilePosition, TopLevelStatement, Unit] =
     Grammar.parseAll[Token, SyntaxError, Rule.ArgonRuleName, TopLevelStatement](ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)
       .unit
 

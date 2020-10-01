@@ -227,7 +227,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
               for {
                 loader <- StatementConverterLocalBinding.declareLocalVariable(variable)
                 initStmt <- ZIO.fromOption(loader.initializeVariable(patternValue))
-                  .mapError { _ => NonEmptyList.of(CompilationError.EmitError(CompilationMessageSource.EmitPhase())) }
+                  .mapError { _ => CompilationError.EmitError(CompilationMessageSource.EmitPhase()) }
 
                 body <- bodyEmitter.provideSome[EmitEnv] { emitEnv =>
                   emitEnv.copy(varMap = emitEnv.varMap + (variable.id -> loader))
@@ -239,7 +239,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
               for {
                 loader <- StatementConverterLocalBinding.declareLocalVariable(variable)
                 initStmt <- ZIO.fromOption(loader.initializeVariable(patternValue))
-                  .mapError { _ => NonEmptyList.of(CompilationError.EmitError(CompilationMessageSource.EmitPhase())) }
+                  .mapError { _ => CompilationError.EmitError(CompilationMessageSource.EmitPhase()) }
 
                 body <- bodyEmitter.provideSome[EmitEnv] { emitEnv =>
                   emitEnv.copy(varMap = emitEnv.varMap + (variable.id -> loader))

@@ -37,9 +37,9 @@ object VTableBuilder {
     import vtableCtx.{ context => _, _ }
 
     for {
-      classVtableCache <- MemoCacheStore.make[ErrorList, AbsRef[context.type, ArClass], VTable]
-      traitVtableCache <- MemoCacheStore.make[ErrorList, AbsRef[context.type, ArTrait], VTable]
-      dataCtorVtableCache <- MemoCacheStore.make[ErrorList, AbsRef[context.type, DataConstructor], VTable]
+      classVtableCache <- MemoCacheStore.make[CompError, AbsRef[context.type, ArClass], VTable]
+      traitVtableCache <- MemoCacheStore.make[CompError, AbsRef[context.type, ArTrait], VTable]
+      dataCtorVtableCache <- MemoCacheStore.make[CompError, AbsRef[context.type, DataConstructor], VTable]
     } yield new VTableBuilder {
 
       override val vtableContext: vtableCtx.type = vtableCtx

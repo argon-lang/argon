@@ -109,8 +109,8 @@ final case class JSBackend(private val moduleExtractor: JSModuleExtractor) exten
   override def testOutputOptions[I](dummyFile: I): JSOutputOptions[Id, I] =
     JSOutputOptions[Id, I](outputFile = new SingleFile[I](dummyFile))
 
-  override def compile[I <: ResourceIndicator: Tag](input: CompilerInput[I, JSBackendOptions[Id, I]]): ZManaged[ResourceReader[I] with SourceParser, ErrorList, TCompilationOutput] = for {
-    externCache <- ZManaged.fromEffect(ValueCache.make[ErrorList, Map[String, ResolvedExtern]])
+  override def compile[I <: ResourceIndicator: Tag](input: CompilerInput[I, JSBackendOptions[Id, I]]): ZManaged[ResourceReader[I] with SourceParser, CompError, TCompilationOutput] = for {
+    externCache <- ZManaged.fromEffect(ValueCache.make[CompError, Map[String, ResolvedExtern]])
     resReader <- ZManaged.access[ResourceReader[I]](_.get)
     context: JSContext with Context.WithRes[I] = new JSContext {
       override type ResIndicator = I
@@ -120,7 +120,7 @@ final case class JSBackend(private val moduleExtractor: JSModuleExtractor) exten
       override def extractJSModuleFunctions(jsModule: String): IO[Throwable, Map[String, String]] =
         moduleExtractor.exportedFunctions(jsModule)
 
-      override protected val externFunctionsCache: ValueCache[ErrorList, Map[String, ResolvedExtern]] = externCache
+      override protected val externFunctionsCache: ValueCache[CompError, Map[String, ResolvedExtern]] = externCache
       override protected val resourceReader: ResourceReader.Service[I] = resReader
     }
 
@@ -134,7 +134,7 @@ final case class JSBackend(private val moduleExtractor: JSModuleExtractor) exten
 
     override def outputResource[I](options: BackendOutputOptionsId[I]): I = options.outputFile.file
 
-    override val textStream: Stream[ErrorList, String] =
+    override val textStream: Stream[CompError, String] =
       JSAst.writeModule(jsModule).toZStream
 
   }

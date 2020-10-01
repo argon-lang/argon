@@ -58,7 +58,16 @@ object Program extends PlatformApp {
 
         case DemoCommand.CompileFailureEvent(errors) =>
           IO.effectTotal {
-            outputElem.value += errors.map(_.toString + "\n").toList.mkString
+            val reportFailures = errors.failures.map(_.toString + "\n").mkString
+
+            val defects = errors.stripFailures
+
+            @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+            val reportDefects =
+              if(defects.isEmpty) ""
+              else defects.toString
+
+            outputElem.value += reportFailures + reportDefects
           }.andThen(state.set(ExecutionStatus.CompileFailed(errors)))
 
         case DemoCommand.ExecutionFailedEvent(error) =>
@@ -92,18 +101,19 @@ object Program extends PlatformApp {
         .map { name => UriResourceIndicator(s"libraries/$name.armodule") }
     )
 
-  type CIO[+A] = ZIO[ResourceReader[WebDemoResourceIndicator], NonEmptyList[CompilationError], A]
+  type CIO[+A] = ZIO[ResourceReader[WebDemoResourceIndicator], CompilationError, A]
   type UCIO[+A] = ZIO[ResourceReader[WebDemoResourceIndicator], Nothing, A]
 
   private def runCode(queue: Queue[DemoCommand])(code: String): UCIO[Unit] =
     compileCode(code)
-      .foldM(
-        failure = errors => queue.offer(DemoCommand.CompileFailureEvent(errors)).unit,
+      .foldCauseM(
+        failure = cause => queue.offer(DemoCommand.CompileFailureEvent(cause)).unit,
         success = compiledCode =>
           executeJS(s => queue.offer(DemoCommand.AppendOutput(s)).unit)(compiledCode).foldM(
             failure = error => queue.offer(DemoCommand.ExecutionFailedEvent(error)).unit,
             success = _ => queue.offer(DemoCommand.ExecutionCompleteEvent).unit
           )
+
       )
 
   private def compileCode(code: String): CIO[String] = {

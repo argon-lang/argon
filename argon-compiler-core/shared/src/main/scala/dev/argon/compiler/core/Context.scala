@@ -82,7 +82,7 @@ trait Context {
   implicit val resIndicatorTag: Tag[ResIndicator]
   protected val compilerInput: CompilerInput[ResIndicator, BackendOptions]
 
-  def module[TContext >: this.type <: Context.WithRes[ResIndicator]: Tag]: ZManaged[ModuleLoad[ResIndicator, TContext] with ResourceReader[ResIndicator] with SourceParser, ErrorList, ArModule[this.type, DeclarationPayloadSpecifier]]
+  def module[TContext >: this.type <: Context.WithRes[ResIndicator]: Tag]: ZManaged[ModuleLoad[ResIndicator, TContext] with ResourceReader[ResIndicator] with SourceParser, CompError, ArModule[this.type, DeclarationPayloadSpecifier]]
 
 }
 

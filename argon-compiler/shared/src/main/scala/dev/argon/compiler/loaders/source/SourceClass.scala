@@ -42,18 +42,18 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     for {
       unqId <- UniqueIdentifier.make
 
-      sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[ArClass.ResultInfo, _ <: Nat]]
-      sigResultCache <- ValueCache.make[ErrorList, BaseTypeInfoClass[context2.type, Id]]
+      sigCache <- ValueCache.make[CompError, context2.signatureContext.Signature[ArClass.ResultInfo, _ <: Nat]]
+      sigResultCache <- ValueCache.make[CompError, BaseTypeInfoClass[context2.type, Id]]
 
-      paramsEnvCache <- ValueCache.make[ErrorList, EnvCreator[context2.type]]
+      paramsEnvCache <- ValueCache.make[CompError, EnvCreator[context2.type]]
 
-      groupedStaticCache <- ValueCache.make[ErrorList, GroupedStaticStatements]
-      groupedInstCache <- ValueCache.make[ErrorList, GroupedInstanceStatements]
+      groupedStaticCache <- ValueCache.make[CompError, GroupedStaticStatements]
+      groupedInstCache <- ValueCache.make[CompError, GroupedInstanceStatements]
 
-      fieldCache <- ValueCache.make[ErrorList, Vector[FieldVariable[context2.type, Id]]]
-      methodCache <- ValueCache.make[ErrorList, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
-      staticMethodCache <- ValueCache.make[ErrorList, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
-      classCtorCache <- ValueCache.make[ErrorList, Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]]
+      fieldCache <- ValueCache.make[CompError, Vector[FieldVariable[context2.type, Id]]]
+      methodCache <- ValueCache.make[CompError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      staticMethodCache <- ValueCache.make[CompError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      classCtorCache <- ValueCache.make[CompError, Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]]
 
     } yield new ArClass[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] with OpenSealedCheck {
       override val context: context2.type = context2
@@ -194,7 +194,7 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
     }
   }
 
-  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[ErrorList, BaseTypeInfoClass[ctx.type, Id]])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
+  private def resultCreator(ctx: Context)(baseTypeExpr: Option[WithSource[parser.Expr]], cache: ValueCache[CompError, BaseTypeInfoClass[ctx.type, Id]])(osCheck: OpenSealedCheck): ResultCreator.Aux[ctx.type, ArClass.ResultInfo] = new ResultCreator[ArClass.ResultInfo] {
 
     override val context: ctx.type = ctx
 

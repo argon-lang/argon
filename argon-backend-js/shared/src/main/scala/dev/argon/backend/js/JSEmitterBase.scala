@@ -61,6 +61,6 @@ private[js] trait JSEmitterBase {
 
   def requireSome[A](opt: Option[A]): Comp[A] =
     IO.fromOption(opt)
-      .mapError { _ => NonEmptyList.of(CompilationError.EmitError(CompilationMessageSource.EmitPhase())) }
+      .mapError { _ => CompilationError.EmitError(CompilationMessageSource.EmitPhase()) }
 
 }

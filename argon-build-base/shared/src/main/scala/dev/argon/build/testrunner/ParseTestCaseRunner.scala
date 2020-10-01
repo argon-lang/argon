@@ -3,6 +3,7 @@ package dev.argon.build.testrunner
 import zio.{Chunk, IO, Runtime, UIO, URIO, ZIO}
 import dev.argon.build._
 import cats.implicits._
+import dev.argon.compiler.CompilationError
 import dev.argon.compiler.loaders.SourceParser
 import dev.argon.parser.impl.ArgonSourceParser
 import dev.argon.util.{FileID, FileSpec}
@@ -12,7 +13,7 @@ object ParseTestCaseRunner extends TestCaseRunner[Any] {
 
   override val name: String = "Parsing"
 
-  override def runTest(testCase: TestCase): UIO[TestCaseActualResult] =
+  override def runTest(testCase: TestCase): IO[CompilationError, TestCaseCompletedResult] =
     ZStream.fromIterable(testCase.sourceCode)
         .zipWithIndex
         .flatMap { case (inputSource, index) =>
@@ -24,9 +25,7 @@ object ParseTestCaseRunner extends TestCaseRunner[Any] {
         }
       .provideLayer(ArgonSourceParser.live)
       .runDrain
-      .mapError(compilationFailureResult)
       .as(TestCaseActualResult.NotExecuted)
-      .catchAll(IO.succeed(_))
 
   override def isResultExpected(actual: TestCaseActualResult, expected: TestCaseExpectedResult): Boolean =
     expected match {

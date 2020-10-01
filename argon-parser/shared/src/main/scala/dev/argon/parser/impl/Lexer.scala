@@ -404,7 +404,7 @@ object Lexer {
   }
 
 
-  def lex: StreamTransformation[Any, NonEmptyVector[SyntaxError], WithSource[String], FilePosition, WithSource[Token], FilePosition] =
+  def lex: StreamTransformation[Any, SyntaxError, WithSource[String], FilePosition, WithSource[Token], FilePosition] =
     Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken).collect {
       case Some(value) => value
     }

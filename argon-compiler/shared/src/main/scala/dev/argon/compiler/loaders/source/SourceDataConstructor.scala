@@ -33,12 +33,12 @@ private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
     for {
       uniqId <- UniqueIdentifier.make
 
-      sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[DataConstructor.ResultInfo, _ <: Nat]]
+      sigCache <- ValueCache.make[CompError, context2.signatureContext.Signature[DataConstructor.ResultInfo, _ <: Nat]]
 
-      bodyStmtCache <- ValueCache.make[ErrorList, context2.typeSystem.SimpleExpr]
-      bodyEnvCache <- ValueCache.make[ErrorList, EnvCreator[context2.type]]
+      bodyStmtCache <- ValueCache.make[CompError, context2.typeSystem.SimpleExpr]
+      bodyEnvCache <- ValueCache.make[CompError, EnvCreator[context2.type]]
 
-      methodCache <- ValueCache.make[ErrorList, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
+      methodCache <- ValueCache.make[CompError, Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]]
 
     } yield new DataConstructor[context2.type, DeclarationPayloadSpecifier] with OpenSealedCheck {
       override val context: context2.type = context2

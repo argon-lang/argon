@@ -5,7 +5,7 @@ import java.io.IOException
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import dev.argon.io.Path.PathExtensions
 import cats.implicits._
-import dev.argon.compiler.{Comp, ErrorList}
+import dev.argon.compiler.{Comp, CompError}
 import dev.argon.compiler.options.OptionsFileHandler
 import dev.argon.io.{FilenameManip, Path, ZipFileReader}
 import dev.argon.io.fileio.{FileIO, FileIOLite}
@@ -35,16 +35,16 @@ object PathResourceIndicator {
         override protected val fileIOLite: FileIOLite.Service = prevLayer.get[FileIOLite.Service]
 
 
-        override def readFile(id: PathResourceIndicator[P]): stream.Stream[ErrorList, Byte] =
+        override def readFile(id: PathResourceIndicator[P]): stream.Stream[CompError, Byte] =
           fileIO.readFile(ioExceptionToError)(id.path)
 
-        override def readTextFile(id: PathResourceIndicator[P]): stream.Stream[ErrorList, Char] =
+        override def readTextFile(id: PathResourceIndicator[P]): stream.Stream[CompError, Char] =
           fileIO.readText(ioExceptionToError)(id.path)
 
         override def readTextFileAsString(id: PathResourceIndicator[P]): Comp[String] =
           fileIO.readAllText(id.path).mapError(ioExceptionToError)
 
-        override def getZipReader(id: PathResourceIndicator[P]): Managed[ErrorList, ZipFileReader[Any, ErrorList]] =
+        override def getZipReader(id: PathResourceIndicator[P]): Managed[CompError, ZipFileReader[Any, CompError]] =
           fileIO.openZipFile(ioExceptionToError)(id.path)
       }
     }

@@ -24,8 +24,8 @@ object SourceMethod {
     
     for {
       uniqId <- UniqueIdentifier.make
-      sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[FunctionResultInfo, _ <: Nat]]
-      implCache <- ValueCache.make[ErrorList, context2.TMethodImplementation]
+      sigCache <- ValueCache.make[CompError, context2.signatureContext.Signature[FunctionResultInfo, _ <: Nat]]
+      implCache <- ValueCache.make[CompError, context2.TMethodImplementation]
     } yield new ArMethod[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
       override val contextProof: context.type Is context2.type = Is.refl

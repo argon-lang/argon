@@ -311,8 +311,8 @@ object Grammar {
   def parseAll[TToken, TSyntaxError, TLabel <: RuleLabel, T]
   (factory: GrammarFactory[TToken, TSyntaxError, TLabel])
   (label: TLabel { type RuleType = T })
-  : StreamTransformation[Any, NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] =
-    new StreamTransformation[Any, NonEmptyVector[TSyntaxError], WithSource[TToken], FilePosition, T, FilePosition] {
+  : StreamTransformation[Any, TSyntaxError, WithSource[TToken], FilePosition, T, FilePosition] =
+    new StreamTransformation[Any, TSyntaxError, WithSource[TToken], FilePosition, T, FilePosition] {
       sealed trait ParseStep
       case object ParseStepReady extends ParseStep
       final case class ParseStepPartial(suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T]) extends ParseStep
@@ -320,15 +320,15 @@ object Grammar {
 
       override type TransformState = ParseStep
 
-      override def start: ZIO[Any, NonEmptyVector[TSyntaxError], ParseStep] = IO.succeed(ParseStepReady)
+      override def start: ZIO[Any, TSyntaxError, ParseStep] = IO.succeed(ParseStepReady)
 
       @SuppressWarnings(Array("org.wartremover.warts.TraversableOps"))
       private def nonEmptyChunkToVector[A](chunk: NonEmptyChunk[A]): NonEmptyVector[A] =
         NonEmptyVector.of(chunk.head, chunk.tail.toVector: _*)
 
-      override def consume(s: ParseStep, tokens: NonEmptyChunk[WithSource[TToken]]): ZIO[Any, NonEmptyVector[TSyntaxError], (ParseStep, Chunk[T])] = {
+      override def consume(s: ParseStep, tokens: NonEmptyChunk[WithSource[TToken]]): ZIO[Any, TSyntaxError, (ParseStep, Chunk[T])] = {
 
-        def runParseStepMulti(s: ParseStep, tokens: NonEmptyVector[WithSource[TToken]], acc: Chunk[T]): IO[NonEmptyVector[TSyntaxError], (ParseStep, Chunk[T])] =
+        def runParseStepMulti(s: ParseStep, tokens: NonEmptyVector[WithSource[TToken]], acc: Chunk[T]): IO[TSyntaxError, (ParseStep, Chunk[T])] =
           runParseStep(s, tokens) match {
             case GrammarResultSuccess(remaining, WithSource(value, _)) =>
               NonEmptyVector.fromVector(remaining) match {
@@ -336,8 +336,8 @@ object Grammar {
                 case None => IO.succeed((ParseStepReady, acc :+ value))
               }
 
-            case GrammarResultFailure(failure) => IO.fail(failure)
-            case GrammarResultError(error) => IO.fail(error)
+            case GrammarResultFailure(failure) => IO.halt(ZIOErrorUtil.multiCauseVector(failure))
+            case GrammarResultError(error) => IO.halt(ZIOErrorUtil.multiCauseVector(error))
             case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] =>
               IO.succeed((ParseStepPartial(suspend), acc))
           }
@@ -346,11 +346,11 @@ object Grammar {
         runParseStepMulti(s, tokensNEV, Chunk.empty)
       }
 
-      override def finish(state: ParseStep, end: FilePosition): ZIO[Any, NonEmptyVector[TSyntaxError], (Chunk[T], FilePosition)] =
+      override def finish(state: ParseStep, end: FilePosition): ZIO[Any, TSyntaxError, (Chunk[T], FilePosition)] =
         state match {
           case ParseStepReady => IO.succeed((Chunk.empty, end))
           case ParseStepPartial(suspend) =>
-            def parseEnd(result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T], acc: Chunk[T]): IO[NonEmptyVector[TSyntaxError], (Chunk[T], FilePosition)] =
+            def parseEnd(result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T], acc: Chunk[T]): IO[TSyntaxError, (Chunk[T], FilePosition)] =
               result match {
                 case GrammarResultSuccess(remaining, WithSource(value, _)) =>
                   NonEmptyVector.fromVector(remaining) match {
@@ -358,8 +358,8 @@ object Grammar {
                     case None => IO.succeed((acc :+ value, end))
                   }
 
-                case GrammarResultFailure(failure) => IO.fail(failure)
-                case GrammarResultError(error) => IO.fail(error)
+                case GrammarResultFailure(failure) => IO.halt(ZIOErrorUtil.multiCauseVector(failure))
+                case GrammarResultError(error) => IO.halt(ZIOErrorUtil.multiCauseVector(error))
               }
 
             parseEnd(suspend.completeResult(end), Chunk.empty)

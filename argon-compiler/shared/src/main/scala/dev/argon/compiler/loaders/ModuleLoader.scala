@@ -17,13 +17,13 @@ object ModuleLoader {
   def loadReferencedModules[I <: ResourceIndicator: Tag, TContext <: Context.WithRes[I]: Tag]
   (context: TContext)
   (refFiles: Vector[I])
-  : ZManaged[ModuleLoad[I, TContext], ErrorList, Vector[ArModule[context.type, ReferencePayloadSpecifier]]] = {
+  : ZManaged[ModuleLoad[I, TContext], CompError, Vector[ArModule[context.type, ReferencePayloadSpecifier]]] = {
 
     type ModInfo = ModuleMetadata[TContext]
 
-    def findWorkingLoader(id: I): ZManaged[ModuleLoad[I, TContext], ErrorList, ModInfo] =
+    def findWorkingLoader(id: I): ZManaged[ModuleLoad[I, TContext], CompError, ModInfo] =
       ZManaged.accessManaged[ModuleLoad[I, TContext]](_.get.loadResource(id))
-        .map { _.toRight { NonEmptyList.of(CompilationError.CouldNotFindCompatibleModuleLoader(CompilationMessageSource.ResourceIdentifier(id))) } }
+        .map { _.toRight { CompilationError.CouldNotFindCompatibleModuleLoader(CompilationMessageSource.ResourceIdentifier(id)) } }
         .absolve
 
 
@@ -56,7 +56,7 @@ object ModuleLoader {
 
 
 
-    def impl(refFiles: Vector[I], loadedFiles: Vector[ModInfo]): ZManaged[ModuleLoad[I, TContext], ErrorList, Vector[ArModule[context.type, ReferencePayloadSpecifier]]] =
+    def impl(refFiles: Vector[I], loadedFiles: Vector[ModInfo]): ZManaged[ModuleLoad[I, TContext], CompError, Vector[ArModule[context.type, ReferencePayloadSpecifier]]] =
       refFiles match {
         case id +: tail =>
           findWorkingLoader(id).flatMap { loadedFile => impl(tail, loadedFiles :+ loadedFile) }
@@ -65,7 +65,7 @@ object ModuleLoader {
           ZManaged.fromEffect(
             loadModuleRefFromData(loadedFiles)
               .map { moduleResults =>
-                moduleResults.sequence.left.map(NonEmptyList.of(_))
+                moduleResults.sequence
               }
               .absolve
           )

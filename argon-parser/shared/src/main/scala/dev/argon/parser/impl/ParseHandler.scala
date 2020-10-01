@@ -12,24 +12,24 @@ import zio.stream.ZStream
 
 private[impl] object ParseHandler {
 
-  def parse(fileSpec: FileSpec): StreamTransformation[Any, NonEmptyVector[SyntaxError], Char, Unit, SourceAST, Unit] =
+  def parse(fileSpec: FileSpec): StreamTransformation[Any, SyntaxError, Char, Unit, SourceAST, Unit] =
     Characterizer.characterize
       .andThen(Lexer.lex)
       .andThen(ArgonParser.parse)
       .andThen(buildSourceAST(fileSpec))
 
-  private def buildSourceAST(fileSpec: FileSpec): StreamTransformation[Any, NonEmptyVector[SyntaxError], TopLevelStatement, Unit, SourceAST, Unit] =
-    new StreamTransformation[Any, NonEmptyVector[SyntaxError], TopLevelStatement, Unit, SourceAST, Unit] {
+  private def buildSourceAST(fileSpec: FileSpec): StreamTransformation[Any, SyntaxError, TopLevelStatement, Unit, SourceAST, Unit] =
+    new StreamTransformation[Any, SyntaxError, TopLevelStatement, Unit, SourceAST, Unit] {
       override type TransformState = NSAndImports
 
-      override def start: IO[NonEmptyVector[SyntaxError], NSAndImports] = IO.succeed(TopLevelStatement.defaultNSAndImports)
+      override def start: IO[SyntaxError, NSAndImports] = IO.succeed(TopLevelStatement.defaultNSAndImports)
 
-      override def consume(state: NSAndImports, values: NonEmptyChunk[TopLevelStatement]): IO[NonEmptyVector[SyntaxError], (NSAndImports, Chunk[SourceAST])] = {
+      override def consume(state: NSAndImports, values: NonEmptyChunk[TopLevelStatement]): IO[SyntaxError, (NSAndImports, Chunk[SourceAST])] = {
         val (state2, chunkOpt) = values.toChunk.mapAccum(state)(TopLevelStatement.accumulate(fileSpec))
         IO.succeed(state2, chunkOpt.collect { case Some(x) => x })
       }
 
-      override def finish(state: NSAndImports, value: Unit): IO[NonEmptyVector[SyntaxError], (Chunk[SourceAST], Unit)] =
+      override def finish(state: NSAndImports, value: Unit): IO[SyntaxError, (Chunk[SourceAST], Unit)] =
         IO.succeed((Chunk.empty, ()))
     }
 

@@ -69,7 +69,7 @@ object ArClass {
             baseTypes <- result.baseTypes
             baseClass <- ZIO.foreach(baseTypes.baseClass)(converter.convertClassType(_))
             baseTraits <- ZIO.foreach(baseTypes.baseTraits)(converter.convertTraitType(_))
-          } yield BaseTypeInfoClass(baseClass, baseTraits.toVector)
+          } yield BaseTypeInfoClass(baseClass, baseTraits)
         ))
 
 

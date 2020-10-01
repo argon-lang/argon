@@ -27,7 +27,7 @@ object BuildProcess {
     compilerOptions: CompilerOptions[Id, I],
     backendOptions: backend.BackendOptions[Id, I]
   )
-  : ZManaged[ResourceReader[I], ErrorList, backend.TCompilationOutput] = {
+  : ZManaged[ResourceReader[I], CompError, backend.TCompilationOutput] = {
     val input = CompilerInput(
       options = compilerOptions,
       backendOptions = backendOptions,

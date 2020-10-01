@@ -1,5 +1,6 @@
 package dev.argon.compiler
 
+import java.io.IOException
 import java.nio.charset.StandardCharsets
 
 import dev.argon.compiler.core.GlobalName
@@ -14,6 +15,7 @@ import dev.argon.compiler.types.TypeSystem
 import cats._
 import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.compiler.loaders.ResourceIndicator
+import zio.{Cause, FiberFailure, IO, Managed}
 
 sealed trait CompilationMessage {
   val source: CompilationMessageSource
@@ -22,10 +24,45 @@ sealed trait CompilationMessage {
   override def toString: String =
     s"${source.formatted}: ${message}"
 }
-trait CompilationError extends CompilationMessage
+trait CompilationError extends Exception with CompilationMessage
 trait CompilationMessageNonFatal extends CompilationMessage
 
 object CompilationError {
+
+  private def isCorrectCauseType(cause: Cause[Any]): Boolean =
+    cause.fold(
+      empty = true,
+      failCase = {
+        case _: CompilationError => true
+        case _ => false
+      },
+      dieCase = _ => true,
+      interruptCase = _ => true,
+    )(
+      thenCase = _ && _,
+      bothCase = _ && _,
+      tracedCase = (a, _) => a,
+    )
+
+  def unwrapThrowableCause(ex: Throwable): Cause[CompilationError] =
+    ex match {
+      case ex: CompilationError => Cause.fail(ex)
+      case ex: IOException => Cause.fail(Compilation.errorForIOException(ex))
+      case FiberFailure(cause) if isCorrectCauseType(cause) =>
+        cause.flatMap {
+          case error: CompilationError => Cause.fail(error)
+          case _ => Cause.empty
+        }
+
+      case _ => Cause.die(ex)
+    }
+
+  def unwrapThrowable(ex: Throwable): IO[CompilationError, Nothing] =
+    IO.halt(unwrapThrowableCause(ex))
+
+  def unwrapThrowableManaged(ex: Throwable): Managed[CompilationError, Nothing] =
+    Managed.halt(unwrapThrowableCause(ex))
+
   final case class SyntaxCompilerError(syntaxError: SyntaxErrorData) extends CompilationError {
     override val source: CompilationMessageSource = CompilationMessageSource.SourceFile(syntaxError.fileSpec, syntaxError.syntaxError.location)
 
@@ -229,7 +266,7 @@ object CompilationError {
     override def message: String = "Lookup is ambiguous"
   }
 
-  final case class OverloadedLookupFailed(alternatives: NonEmptyVector[(Callable, NonEmptyList[CompilationError])], source: CompilationMessageSource) extends CompilationError {
+  final case class OverloadedLookupFailed(alternatives: NonEmptyVector[(Callable, Cause[CompilationError])], source: CompilationMessageSource) extends CompilationError {
     override def message: String = "Overloaded lookup failed"
   }
 

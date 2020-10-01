@@ -147,7 +147,7 @@ lazy val compilerOptions = Seq(
   ),
 
 
-  wartremoverErrors ++= Warts.allBut(
+  Compile / compile / wartremoverErrors ++= Warts.allBut(
     Wart.Recursion,
     Wart.Any,
     Wart.Nothing,
@@ -167,6 +167,7 @@ lazy val compilerOptions = Seq(
   ) ++ Seq(
     Wart.custom("dev.argon.warts.ZioEffect"),
   ),
+  Test / compile / wartremoverErrors := (Compile / compile / wartremoverErrors).value,
 
   wartremoverExcluded += sourceManaged.value,
 

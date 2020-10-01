@@ -47,7 +47,7 @@ abstract class JSContext private[js] extends ContextWithModule {
       compilerInput.backendOptions.extern.files.foldMapM { file =>
         for {
           jsModule <- resourceReader.readTextFileAsString(file)
-          map <- extractJSModuleFunctions(jsModule).mapError { _ => NonEmptyList.of(CompilationError.InvalidExternFunction(source)) }
+          map <- extractJSModuleFunctions(jsModule).mapError { _ => CompilationError.InvalidExternFunction(source) }
         } yield map.view.mapValues(ResolvedExtern.Function.apply).toMap
       }
     )
@@ -98,7 +98,7 @@ abstract class JSContext private[js] extends ContextWithModule {
   }
 
   def extractJSModuleFunctions(jsModule: String): IO[Throwable, Map[String, String]]
-  protected val externFunctionsCache: ValueCache[ErrorList, Map[String, ResolvedExtern]]
+  protected val externFunctionsCache: ValueCache[CompError, Map[String, ResolvedExtern]]
   protected val resourceReader: ResourceReader.Service[ResIndicator]
 
 }

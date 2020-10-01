@@ -11,7 +11,7 @@ import cats.implicits._
 import dev.argon.backend.{Backend, ResourceWriter}
 import zio._
 import zio.interop.catz.core._
-import dev.argon.compiler.{CompilationError, ErrorList}
+import dev.argon.compiler.{CompilationError, CompError}
 import dev.argon.backend.js.{JSBackend, JSBackendOptions, JSInjectCode}
 import dev.argon.io.fileio.FileIO
 import dev.argon.build._
@@ -35,10 +35,10 @@ abstract class JavaScriptTestCaseRunnerBase[I <: ResourceIndicator: Tag, P: Path
       )
     )
 
-  override protected def getProgramOutput(compOutput: backend.TCompilationOutput): ZIO[FileIO[P], TestCaseError, String] =
+  override protected def getProgramOutput(compOutput: backend.TCompilationOutput): ZIO[FileIO[P], CompilationError, String] =
     for {
-      compiledFile <- compOutput.textStream.foldM("") { (a, b) => IO.succeed(a + b) }.mapError(compilationFailureResult)
-      output <- runJSOutput(references)(compiledFile).mapError(executionFailureResult)
+      compiledFile <- compOutput.textStream.foldM("") { (a, b) => IO.succeed(a + b) }
+      output <- runJSOutput(references)(compiledFile).orDie
     } yield output
 
   private def runJSOutput(files: Vector[I])(compiledFile: String): RIO[FileIO[P], String] = for {
@@ -54,7 +54,7 @@ abstract class JavaScriptTestCaseRunnerBase[I <: ResourceIndicator: Tag, P: Path
 
     modules = (referenceLibs :+ FileInfo(moduleName, compiledFile))
 
-    output <- executeJS(compiledFile)(modules)
+    output <- executeJS(compiledFile)(modules).orDie
   } yield output
 
   protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): Task[String]

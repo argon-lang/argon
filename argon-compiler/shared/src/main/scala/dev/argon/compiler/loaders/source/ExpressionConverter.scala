@@ -19,7 +19,7 @@ import dev.argon.compiler.expr._
 import dev.argon.parser.{BindingPattern, DeconstructPattern, DiscardPattern, TuplePattern, TypeTestPattern}
 import shapeless.{:: => _, _}
 import shapeless.ops.nat.{LT, Pred}
-import zio.{IO, Ref, UIO, ZIO}
+import zio.{Cause, Exit, IO, Ref, UIO, ZIO}
 import zio.interop.catz.core._
 
 import Function.const
@@ -40,7 +40,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   def createHole: Comp[TType]
   def recordConstraint(info: SubTypeInfo[TType]): Comp[Unit]
   def resolveType(t: TType): Comp[TType]
-  def attemptRun[A](value: Comp[A]): Comp[Either[ErrorList, Comp[A]]]
+  def attemptRun[A](value: Comp[A]): Comp[Exit[CompError, Comp[A]]]
 
   type Env = ExpressionConverter.Env[context.type, Scope]
 
@@ -964,35 +964,35 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       private def runSameLevelOverloads
       (overloads: NonEmptyVector[OverloadExprFactory])
       (expectedType: TType)
-      : Comp[NonEmptyVector[(Callable, Either[NonEmptyList[CompilationError], Comp[SimpleExpr]])]] =
+      : Comp[NonEmptyVector[(Callable, Exit[CompilationError, Comp[SimpleExpr]])]] =
         overloads.traverse { overload =>
           attemptRun(overload.forExpectedType(expectedType))
             .map { (overload.callable, _) }
         }
 
-      type FailedOverload = (Callable, NonEmptyList[CompilationError])
+      type FailedOverload = (Callable, Cause[CompilationError])
       type GoodOverload = (Callable, Comp[SimpleExpr])
 
       private def splitCallsAndErrors
-      (results: NonEmptyVector[(Callable, Either[NonEmptyList[CompilationError], Comp[SimpleExpr]])])
+      (results: NonEmptyVector[(Callable, Exit[CompilationError, Comp[SimpleExpr]])])
       : Either[NonEmptyVector[FailedOverload], NonEmptyVector[GoodOverload]] = {
 
         def impl
-        (results: Vector[(Callable, Either[NonEmptyList[CompilationError], Comp[SimpleExpr]])])
+        (results: Vector[(Callable, Exit[CompilationError, Comp[SimpleExpr]])])
         (acc: Either[NonEmptyVector[FailedOverload], NonEmptyVector[GoodOverload]])
         : Either[NonEmptyVector[FailedOverload], NonEmptyVector[GoodOverload]] =
           (results, acc) match {
-            case ((_, Left(_)) +: tail, Right(_)) => impl(tail)(acc)
-            case ((desc, Right(expr)) +: tail, Right(exprs)) => impl(tail)(Right(exprs :+ ((desc, expr))))
-            case ((desc, Left(errors)) +: tail, Left(errorLists)) => impl(tail)(Left(errorLists :+ ((desc, errors))))
-            case ((desc, Right(expr)) +: tail, Left(_)) => impl(tail)(Right(NonEmptyVector.of((desc, expr))))
+            case ((_, Exit.Failure(_)) +: tail, Right(_)) => impl(tail)(acc)
+            case ((desc, Exit.Success(expr)) +: tail, Right(exprs)) => impl(tail)(Right(exprs :+ ((desc, expr))))
+            case ((desc, Exit.Failure(errors)) +: tail, Left(errorLists)) => impl(tail)(Left(errorLists :+ ((desc, errors))))
+            case ((desc, Exit.Success(expr)) +: tail, Left(_)) => impl(tail)(Right(NonEmptyVector.of((desc, expr))))
 
             case (Vector(), _) => acc
           }
 
         results match {
-          case NonEmptyVector((desc, Left(errors)), tail) => impl(tail)(Left(NonEmptyVector.of((desc, errors))))
-          case NonEmptyVector((desc, Right(expr)), tail) => impl(tail)(Right(NonEmptyVector.of((desc, expr))))
+          case NonEmptyVector((desc, Exit.Failure(errors)), tail) => impl(tail)(Left(NonEmptyVector.of((desc, errors))))
+          case NonEmptyVector((desc, Exit.Success(expr)), tail) => impl(tail)(Right(NonEmptyVector.of((desc, expr))))
         }
       }
 
@@ -1035,7 +1035,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             }
 
           case Ior.Left(NonEmptyVector((_, errors), Vector())) =>
-              Compilation.forErrors(errors)
+              IO.halt(errors)
 
           case Ior.Left(failed) =>
             Compilation.forErrors(CompilationError.OverloadedLookupFailed(
@@ -1465,10 +1465,10 @@ object ExpressionConverter {
           } yield resolvedType
       }
 
-    override def attemptRun[A](value: Comp[A]): Comp[Either[ErrorList, Comp[A]]] =
+    override def attemptRun[A](value: Comp[A]): Comp[Exit[CompError, Comp[A]]] =
       for {
       prevState <- state.get
-      v <- value.either
+      v <- value.run
       newState <- state.getAndSet(prevState)
     } yield v.map(state.set(newState).as(_))
 

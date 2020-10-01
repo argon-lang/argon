@@ -1,5 +1,6 @@
 package dev.argon.build.testrunner
 
+import dev.argon.compiler.CompilationError
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import zio._
 
@@ -7,15 +8,11 @@ private[testrunner] abstract class TestCaseRunnerExecutionPhase[I <: ResourceInd
 
   protected val references: Vector[I]
 
-  override def runTest(testCase: TestCase): URIO[R, TestCaseActualResult] =
+  override def runTest(testCase: TestCase): ZIO[R, CompilationError, TestCaseCompletedResult] =
     compileTestCase(testCase, references)
       .use(getProgramOutput)
       .map(TestCaseActualResult.Output)
-      .catchAll(IO.succeed(_))
 
-  protected def getProgramOutput(compOutput: backend.TCompilationOutput): ZIO[R, TestCaseError, String]
-
-  protected final def executionFailureResult(error: Throwable): TestCaseError =
-    TestCaseActualResult.ExecutionError(error)
+  protected def getProgramOutput(compOutput: backend.TCompilationOutput): ZIO[R, CompilationError, String]
 
 }

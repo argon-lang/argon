@@ -89,7 +89,7 @@ object GenericBackend extends Backend {
       declarationModule = Some(new SingleFile(dummyFile)),
     )
 
-  override def compile[I <: ResourceIndicator : Tag](input: CompilerInput[I, GenericBackendOptions[Id, I]]): ZManaged[ResourceReader[I] with SourceParser, ErrorList, TCompilationOutput] = {
+  override def compile[I <: ResourceIndicator : Tag](input: CompilerInput[I, GenericBackendOptions[Id, I]]): ZManaged[ResourceReader[I] with SourceParser, CompError, TCompilationOutput] = {
     val ctx = ModuleContext(input)
 
     val moduleEmitter = new ModuleEmitterImpl {
@@ -105,10 +105,10 @@ object GenericBackend extends Backend {
       .provideSomeLayer[ResourceReader[I] with SourceParser](GenericBackendLoadService.forResourceReader[I, ModuleContext with Context.WithRes[I]])
   }
 
-  private def createOutput(refModuleGen: Stream[ErrorList, ModuleEmitter.StreamElem], declModuleGen: Stream[ErrorList, ModuleEmitter.StreamElem]): CompilationOutput[BackendOutputOptionsId] =
+  private def createOutput(refModuleGen: Stream[CompError, ModuleEmitter.StreamElem], declModuleGen: Stream[CompError, ModuleEmitter.StreamElem]): CompilationOutput[BackendOutputOptionsId] =
     new CompilationOutput[BackendOutputOptionsId] {
 
-      private def outputModule[I <: ResourceIndicator : Tag](outputFile: Option[SingleFile[I]])(moduleGen: Stream[ErrorList, ModuleEmitter.StreamElem]): RComp[ResourceWriter[I], Unit] =
+      private def outputModule[I <: ResourceIndicator : Tag](outputFile: Option[SingleFile[I]])(moduleGen: Stream[CompError, ModuleEmitter.StreamElem]): RComp[ResourceWriter[I], Unit] =
         ZIO.foreach(outputFile) { outputFile =>
           ZIO.accessM[ResourceWriter[I]] { env =>
             val res = env.get

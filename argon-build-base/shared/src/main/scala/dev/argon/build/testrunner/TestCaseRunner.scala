@@ -1,6 +1,6 @@
 package dev.argon.build.testrunner
 
-import dev.argon.compiler.{CompilationError, ErrorList}
+import dev.argon.compiler.{CompilationError, CompError}
 import cats._
 import cats.data.NonEmptyList
 import cats.implicits._
@@ -11,7 +11,7 @@ trait TestCaseRunner[-R] {
 
   val name: String
 
-  def runTest(testCase: TestCase): URIO[R, TestCaseActualResult]
+  def runTest(testCase: TestCase): ZIO[R, CompilationError, TestCaseCompletedResult]
 
   def isResultExpected(actual: TestCaseActualResult, expected: TestCaseExpectedResult): Boolean =
     (actual, expected) match {
@@ -21,12 +21,11 @@ trait TestCaseRunner[-R] {
       case (TestCaseActualResult.Output(actualOutput), TestCaseExpectedOutput(expectedOutput)) =>
         normalizeOutput(actualOutput) === normalizeOutput(expectedOutput)
 
-      case (TestCaseActualResult.CompileErrors(errors), TestCaseExpectedError(errorName)) =>
-        isExpectedError(errors, errorName)
+      case (TestCaseActualResult.Errors(errors), TestCaseExpectedError(errorName)) if errors.stripFailures.isEmpty =>
+        NonEmptyList.fromList(errors.failures).exists(isExpectedError(_, errorName))
 
-      case (TestCaseActualResult.CompileErrors(_), TestCaseExpectedOutput(_) | TestCaseExpectedAnyOutput) => false
+      case (TestCaseActualResult.Errors(_), _) => false
       case (_, TestCaseExpectedError(_)) => false
-      case (TestCaseActualResult.ExecutionError(_), _) => false
     }
 
   protected def isExpectedError(errors: NonEmptyList[CompilationError], errorName: String): Boolean =
@@ -43,8 +42,5 @@ trait TestCaseRunner[-R] {
 
   protected def normalizeOutput(output: String): String =
     output.split("\n").map { _.trim }.filter { _.nonEmpty }.mkString("\n")
-
-  protected final def compilationFailureResult(errors: ErrorList): TestCaseError =
-    TestCaseActualResult.CompileErrors(errors)
 
 }

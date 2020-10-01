@@ -9,7 +9,7 @@ import java.io.IOException
 import dev.argon.io.{Path, ZipEntryInfo}
 import cats.data.NonEmptyList
 import dev.argon.backend.{Backend, ResourceAccess, ResourceWriter}
-import dev.argon.compiler.{Comp, CompilationError, ErrorList}
+import dev.argon.compiler.{Comp, CompilationError, CompError}
 import zio._
 import zio.stream._
 import shapeless.{Id => _, Path => _, _}
@@ -38,17 +38,16 @@ final class BuildTestCaseRunner[I <: ResourceIndicator: Tag](protected val backe
 
 
 
-  override def runTest(testCase: TestCase): URIO[ResourceReader[I] with ResourceWriter[Nothing], TestCaseActualResult] =
+
+  override def runTest(testCase: TestCase): ZIO[ResourceReader[I] with ResourceWriter[Nothing], CompilationError, TestCaseCompletedResult] =
     compileTestCase(testCase, referencePaths)
       .use { output =>
         val emptyOutputOptions = backend.testOutputOptions[DummyOutputPath](dummyOutputPath)
 
         output.write(emptyOutputOptions)
           .provideLayer(BuildTestCaseRunner.dummyWriterService)
-          .mapError(compilationFailureResult)
       }
       .as(TestCaseActualResult.NotExecuted)
-      .catchAll(IO.succeed(_))
 
 }
 
@@ -66,13 +65,13 @@ object BuildTestCaseRunner {
       val res = env.get
 
       new ResourceWriter.Service[DummyOutputPath] {
-        override def writeToResource(id: DummyOutputPath)(data: Stream[ErrorList, Byte]): Comp[Unit] =
+        override def writeToResource(id: DummyOutputPath)(data: Stream[CompError, Byte]): Comp[Unit] =
           data.runDrain
 
-        override def zipFromEntries(entries: Stream[ErrorList, ZipEntryInfo[Any, ErrorList]]): Stream[ErrorList, Byte] =
+        override def zipFromEntries(entries: Stream[CompError, ZipEntryInfo[Any, CompError]]): Stream[CompError, Byte] =
           res.zipFromEntries(entries)
 
-        override def serializeProtocolBuffer(message: GeneratedMessage): Stream[ErrorList, Byte] =
+        override def serializeProtocolBuffer(message: GeneratedMessage): Stream[CompError, Byte] =
           res.serializeProtocolBuffer(message)
       }
     }

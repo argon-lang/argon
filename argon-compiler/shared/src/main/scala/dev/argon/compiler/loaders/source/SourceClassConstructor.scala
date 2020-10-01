@@ -25,7 +25,7 @@ object SourceClassConstructor {
   : Comp[ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier]] =
     for {
       uniqId <- UniqueIdentifier.make
-      sigCache <- ValueCache.make[ErrorList, context2.signatureContext.Signature[ClassConstructor.ResultInfo, _ <: Nat]]
+      sigCache <- ValueCache.make[CompError, context2.signatureContext.Signature[ClassConstructor.ResultInfo, _ <: Nat]]
 
     } yield new ClassConstructor[context2.type, PayloadSpecifiers.DeclarationPayloadSpecifier] {
       override val context: context2.type = context2

@@ -31,7 +31,7 @@ object ArgonModuleLoader {
 
   def apply[I <: ResourceIndicator, TContext <: Context.WithRes[I]](res: ResourceReader.Service[I])(implicit referencePayloadLoader: PayloadLoader[TContext, ReferencePayloadSpecifier]): ModuleLoad.Service[I, TContext] = new ModuleLoad.Service[I, TContext] {
 
-    override def loadResource(id: I): Managed[ErrorList, Option[ModuleMetadata[TContext]]] =
+    override def loadResource(id: I): Managed[CompError, Option[ModuleMetadata[TContext]]] =
       id.extension match {
         case "armodule" =>
           res.getZipReader(id).mapM { zip =>
@@ -49,7 +49,7 @@ object ArgonModuleLoader {
         case _ => ZManaged.succeed(None)
       }
 
-    private final case class ArModuleMetadata(zip: ZipFileReader[Any, ErrorList], metadata: ArgonModule.Metadata) extends ModuleMetadata[TContext] {
+    private final case class ArModuleMetadata(zip: ZipFileReader[Any, CompError], metadata: ArgonModule.Metadata) extends ModuleMetadata[TContext] {
       override val descriptor: ModuleId = ModuleId(metadata.name)
       override val referencedModules: Vector[ModuleId] =
         metadata.references.map {
@@ -62,7 +62,7 @@ object ArgonModuleLoader {
 
     private def loadModule[TPayloadSpec[_, _]]
     (context: TContext)
-    (zipFile: ZipFileReader[Any, ErrorList])
+    (zipFile: ZipFileReader[Any, CompError])
     (metadata: ArgonModule.Metadata)
     (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
     (payloadLoader: PayloadLoader[TContext, TPayloadSpec])
@@ -86,14 +86,14 @@ object ArgonModuleLoader {
           CompilationError.UnsupportedModuleFormatVersion(metadata.formatVersion, CompilationMessageSource.ReferencedModule(currentModuleDescriptor))
         )
 
-        moduleCache <- ValueCache.make[ErrorList, ArModule[context.type, TPayloadSpec]]
-        traitCache <- MemoCacheStore.make[ErrorList, Int, TraitLoadResult[context.type, TPayloadSpec]]
-        classCache <- MemoCacheStore.make[ErrorList, Int, ClassLoadResult[context.type, TPayloadSpec]]
-        dataCtorCache <- MemoCacheStore.make[ErrorList, Int, DataCtorLoadResult[context.type, TPayloadSpec]]
-        functionCache <- MemoCacheStore.make[ErrorList, Int, FunctionLoadResult[context.type, TPayloadSpec]]
-        methodCache <- MemoCacheStore.make[ErrorList, Int, MethodLoadResult[context.type, TPayloadSpec]]
-        classCtorCache <- MemoCacheStore.make[ErrorList, Int, ClassCtorLoadResult[context.type, TPayloadSpec]]
-        localVariableIdCache <- MemoCacheStore.make[ErrorList, Int, LocalVariableId]
+        moduleCache <- ValueCache.make[CompError, ArModule[context.type, TPayloadSpec]]
+        traitCache <- MemoCacheStore.make[CompError, Int, TraitLoadResult[context.type, TPayloadSpec]]
+        classCache <- MemoCacheStore.make[CompError, Int, ClassLoadResult[context.type, TPayloadSpec]]
+        dataCtorCache <- MemoCacheStore.make[CompError, Int, DataCtorLoadResult[context.type, TPayloadSpec]]
+        functionCache <- MemoCacheStore.make[CompError, Int, FunctionLoadResult[context.type, TPayloadSpec]]
+        methodCache <- MemoCacheStore.make[CompError, Int, MethodLoadResult[context.type, TPayloadSpec]]
+        classCtorCache <- MemoCacheStore.make[CompError, Int, ClassCtorLoadResult[context.type, TPayloadSpec]]
+        localVariableIdCache <- MemoCacheStore.make[CompError, Int, LocalVariableId]
 
         module <- new ModuleCreator {
 
@@ -394,7 +394,7 @@ object ArgonModuleLoader {
             TRefResult,
             TDefResult,
           ](
-           cache: MemoCacheStore[ErrorList, Int, ModuleObjectLoadResult[TDefResult, TDefResult { val owner: TGlobalOwner[context.type, TPayloadSpec] }, TRefResult]]
+           cache: MemoCacheStore[CompError, Int, ModuleObjectLoadResult[TDefResult, TDefResult { val owner: TGlobalOwner[context.type, TPayloadSpec] }, TRefResult]]
           )(
             moduleObjectType: CompilationError.ModuleObjectType,
           )(
@@ -409,7 +409,7 @@ object ArgonModuleLoader {
           )(
             referenceHandler: TRef => TResultOwner[context.type, ReferencePayloadSpecifier] => Comp[Option[TRefResult]],
             definitionHandler: ObjectDefinitionLoader[TDef, TResultOwner[context.type, TPayloadSpec], TDefResult],
-          ): MemoCache[Any, ErrorList, Int, ModuleObjectLoadResult[TDefResult, TDefResult { val owner: TGlobalOwner[context.type, TPayloadSpec] }, TRefResult]] =
+          ): MemoCache[Any, CompError, Int, ModuleObjectLoadResult[TDefResult, TDefResult { val owner: TGlobalOwner[context.type, TPayloadSpec] }, TRefResult]] =
             cache.usingCreate { id =>
 
               val zip = zipFile
@@ -803,7 +803,7 @@ object ArgonModuleLoader {
                     uniqId <- UniqueIdentifier.make
                     methodName <- IO.fromEither(
                       parseMemberName(definition.name)
-                        .toRight { NonEmptyList.of(invalidModuleFormatError) }
+                        .toRight { invalidModuleFormatError }
                     )
                   } yield new ArMethod[context.type, TPayloadSpec] {
                   override val context: context2.type = context2
@@ -1229,7 +1229,7 @@ object ArgonModuleLoader {
               Compilation.require(t.args.size === len)(invalidModuleFormatError)
 
             def sizedArgs[N <: Nat: ToInt]: Comp[Sized[Vector[ArgonModule.Expression], N]] =
-              IO.fromEither(t.args.sized[N].toRight(NonEmptyList.of(invalidModuleFormatError)))
+              IO.fromEither(t.args.sized[N].toRight(invalidModuleFormatError))
 
             t.exprType match {
               case ArgonModule.Expression.ExprType.TraitType(traitType) => resolveTraitType(ArgonModule.TraitType(traitType, t.args))
@@ -1373,7 +1373,7 @@ object ArgonModuleLoader {
                   elemsNonEmpty <-
                     IO.fromEither(
                       NonEmptyList.fromList(elems.toList)
-                        .toRight { NonEmptyList.of(invalidModuleFormatError) }
+                        .toRight { invalidModuleFormatError }
                     )
 
                 } yield LoadTuple[context.type, TTypeWrapper](elemsNonEmpty)
@@ -1501,7 +1501,7 @@ object ArgonModuleLoader {
           override lazy val module: Comp[ArModule[context.type, TPayloadSpec]] =
             moduleCache.get(
               for {
-                globalNamespaceCache <- ValueCache.make[ErrorList, Namespace[context.type, TPayloadSpec]]
+                globalNamespaceCache <- ValueCache.make[CompError, Namespace[context.type, TPayloadSpec]]
               } yield new ArModule[context.type, TPayloadSpec] {
                 override val context: context2.type = context2
                 override val id: ModuleId = currentModuleDescriptor

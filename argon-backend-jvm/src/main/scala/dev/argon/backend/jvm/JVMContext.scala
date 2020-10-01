@@ -1,7 +1,7 @@
 package dev.argon.backend.jvm
 
 import cats.data.NonEmptyList
-import dev.argon.compiler.{Comp, Compilation, CompilationError, CompilationMessageSource, ErrorList, WrappedErrorListException}
+import dev.argon.compiler._
 import dev.argon.compiler.core.ContextWithModule
 import dev.argon.compiler.expr.ClassConstructorBody
 import dev.argon.compiler.loaders.ResourceReader
@@ -50,7 +50,7 @@ abstract class JVMContext private[jvm] extends ContextWithModule {
       )
         .provide(Has.allOf[ResourceReader.Service[ResIndicator], Blocking.Service](resourceReader, blockingService))
     )
-      .mapError { _ => NonEmptyList.of(CompilationError.InvalidExternFunction(source)) }
+      .mapError { _ => CompilationError.InvalidExternFunction(source) }
       .flatMap { externs =>
         externs.get(specifier) match {
           case Some(ResolvedExtern.Method(node)) => IO.succeed(node)
@@ -63,7 +63,7 @@ abstract class JVMContext private[jvm] extends ContextWithModule {
     blockingService.effectBlocking {
       extern.accept(visitor)
     }
-      .refineOrDie(WrappedErrorListException.fromThrowable)
+      .catchAll(CompilationError.unwrapThrowable)
 
 
   override def createExternFunctionImplementation(specifier: String, source: CompilationMessageSource): Comp[JVMImpl.Function] =

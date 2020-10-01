@@ -1,7 +1,6 @@
 package dev.argon.backend.jvm
 
 import dev.argon.backend.ResourceAccess
-import dev.argon.compiler.WrappedErrorListException
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import org.objectweb.asm.{AnnotationVisitor, ClassReader, ClassVisitor, MethodVisitor, Opcodes}
 import org.objectweb.asm.tree.MethodNode
@@ -55,7 +54,7 @@ object ExternMethodExtractor {
       .flatMap { classFile =>
         ZStream.unwrap(
           ZIO.access[ResourceReader[I]](_.get.readFile(classFile)).flatMap { classFileContent =>
-            classFileContent.mapError(WrappedErrorListException.toThrowable).toInputStream.use { classFileIS =>
+            classFileContent.toInputStream.use { classFileIS =>
               ZIO.accessM[Blocking](_.get.effectBlocking {
                 val reader = new ClassReader(classFileIS)
                 val foundMethods = ListBuffer[MethodNode]()

@@ -12,9 +12,9 @@ import dev.argon.io.fileio.FileIO
 object PathResourceIndicatorPlatformSpecific {
   trait ReaderService[P] {
     protected val fileIO: FileIO.Service[P]
-    protected def ioExceptionToError(ex: IOException): ErrorList
+    protected def ioExceptionToError(ex: IOException): CompError
 
-    def getJarReader(id: PathResourceIndicator[P], jdkVersion: JDKVersion): Managed[ErrorList, JarFileReader[Any, ErrorList]] =
+    def getJarReader(id: PathResourceIndicator[P], jdkVersion: JDKVersion): Managed[CompError, JarFileReader[Any, CompError]] =
       fileIO.openJarFile(ioExceptionToError)(id.path, jdkVersion)
   }
 }
