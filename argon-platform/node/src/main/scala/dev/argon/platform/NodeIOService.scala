@@ -23,17 +23,16 @@ import scala.scalajs.js.|
 @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null", "dev.argon.warts.ZioEffect"))
 private[platform] class NodeIOService extends FileIO.Service[FilePath] with FileIOCommon {
 
-  override def getAbsolutePath(path: FilePath): IO[IOException, FilePath] =
+  override def getAbsolutePath(path: FilePath): IO[Throwable, FilePath] =
     IO.effect { toFilePath(JSPath.resolve(path.pathName)) }
-      .refineOrDie { case e: IOException => e }
 
-  override def ensureParentDirectory(path: FilePath): IO[IOException, Unit] =
-    ZIO.foreach[Any, IOException, FilePath, Unit](path.parent) { dir =>
-      IO.effectAsync[IOException, Unit] { register =>
+  override def ensureParentDirectory(path: FilePath): IO[Throwable, Unit] =
+    ZIO.foreach(path.parent) { dir =>
+      IO.effectAsync[Throwable, Unit] { register =>
         NodeFileSystem.mkdir(dir.pathName, NodeFSMkdirOptions(recursive = true), error =>
           register(
             if(error != null)
-              IO.fail(JSIOException(error))
+              IO.fail(handleJSError(error))
             else
               IO.unit
           )
@@ -42,7 +41,7 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
     }.unit
 
 
-  override def readFile[E](errorHandler: IOException => E)(path: FilePath): Stream[E, Byte] =
+  override def readFile[E](errorHandler: Throwable => Cause[E])(path: FilePath): Stream[E, Byte] =
     readByteChunks(errorHandler)(path).map { arr =>
       val chunkBuilder = ChunkBuilder.make[Byte]()
       chunkBuilder.sizeHint(arr)
@@ -54,12 +53,12 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
     }
     .flattenChunks
 
-  override def readAllText(path: FilePath): IO[IOException, String] =
+  override def readAllText(path: FilePath): IO[Throwable, String] =
     IO.effectAsync { register =>
       NodeFileSystem.readFile(path.pathName, "utf-8", (error, data) =>
         register(
           if(error != null)
-            IO.fail(JSIOException(error))
+            IO.fail(handleJSError(error))
           else
             IO.succeed(data)
         )
@@ -67,14 +66,14 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
     }
 
 
-  private def readByteChunks[E](errorHandler: IOException => E)(path: FilePath): Stream[E, Uint8Array] =
+  private def readByteChunks[E](errorHandler: Throwable => Cause[E])(path: FilePath): Stream[E, Uint8Array] =
     ZStream[Any, E, Uint8Array](
       ZManaged.make(
         IO.effectAsync[E, Integer] { register =>
           NodeFileSystem.open(path.pathName, "r", (error, fd) =>
             register(
               if(error != null)
-                IO.fail(errorHandler(JSIOException(error)))
+                IO.halt(errorHandler(handleJSError(error)))
               else
                 IO.succeed(fd)
             )
@@ -83,11 +82,11 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
       )({
         case Left(_) => IO.unit
         case Right(fd) =>
-          IO.effectAsync[IOException, Unit] { register =>
+          IO.effectAsync[Throwable, Unit] { register =>
             NodeFileSystem.close(fd, error =>
               register(
                 if(error != null)
-                  IO.fail(JSIOException(error))
+                  IO.fail(handleJSError(error))
                 else
                   IO.succeed(())
               )
@@ -102,7 +101,7 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
               NodeFileSystem.read(fd, buffer, 0, buffer.length, null, (err, bytesRead, _) =>
                 register(
                   if(err != null)
-                    IO.fail(Some(errorHandler(JSIOException(err))))
+                    IO.halt(errorHandler(handleJSError(err))).some
                   else if(bytesRead.toInt === 0)
                     IO.fail(None)
                   else
@@ -114,7 +113,7 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
     )
 
 
-  override def readText[E](errorHandler: IOException => E)(path: FilePath): Stream[E, Char] =
+  override def readText[E](errorHandler: Throwable => Cause[E])(path: FilePath): Stream[E, Char] =
     ZStream.fromEffect(IO.effectTotal { new JSStringDecoder("utf8") })
       .flatMap { decoder =>
         readByteChunks(errorHandler)(path)
@@ -124,23 +123,23 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
       .flatMap(ZStream.fromIterable(_))
 
 
-  override def writeToFile[R, E](errorHandler: IOException => E)(path: FilePath)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit] =
+  override def writeToFile[R, E](errorHandler: Throwable => Cause[E])(path: FilePath)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit] =
     IO.effectAsync[E, Integer] { register =>
       NodeFileSystem.open(path.pathName, "w", (error, fd) =>
         register(
           if(error != null)
-            IO.fail(errorHandler(JSIOException(error)))
+            IO.halt(errorHandler(handleJSError(error)))
           else
             IO.succeed(fd)
         )
       )
     }
       .bracket(fd =>
-        IO.effectAsync[IOException, Unit] { register =>
+        IO.effectAsync[Throwable, Unit] { register =>
           NodeFileSystem.close(fd, error =>
             register(
               if(error != null)
-                IO.fail(JSIOException(error))
+                IO.fail(handleJSError(error))
               else
                 IO.succeed(())
             )
@@ -157,7 +156,7 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
             NodeFileSystem.write(fd, u8arr, (err, _, _) =>
               register(
                 if(err != null)
-                  IO.fail(errorHandler(JSIOException(err)))
+                  IO.halt(errorHandler(handleJSError(err)))
                 else
                   IO.succeed(())
               )
@@ -167,25 +166,25 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
       }
 
 
-  override def isDirectory(path: FilePath): IO[IOException, Boolean] =
+  override def isDirectory(path: FilePath): IO[Throwable, Boolean] =
     IO.effectAsync { register =>
       NodeFileSystem.stat(path.pathName, (err, stat) =>
         register(
           if(err != null)
-            IO.fail(JSIOException(err))
+            IO.fail(handleJSError(err))
           else
             IO.succeed(stat.isDirectory())
         )
       )
     }
 
-  override def listDirectory(path: FilePath): Stream[IOException, FilePath] =
+  override def listDirectory(path: FilePath): Stream[Throwable, FilePath] =
     Stream.fromEffect(
-      IO.effectAsync[IOException, Vector[FilePath]] { register =>
+      IO.effectAsync[Throwable, Vector[FilePath]] { register =>
         NodeFileSystem.readdir(path.pathName, (err, files) =>
           register(
             if(err != null)
-              IO.fail(JSIOException(err))
+              IO.fail(handleJSError(err))
             else
               IO.succeed(files.map { fileName => toFilePath(JSPath.join(path.pathName, fileName)) }.toVector)
           )
@@ -194,12 +193,9 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
     )
       .flatMap(ZStream.fromIterable(_))
 
-  override def openZipFile[R, E](errorHandler: IOException => E)(path: FilePath): Managed[E, ZipFileReader[R, E]] = {
-    def handleNodeStreamZipError(err: Any): IO[E, Nothing] = err match {
-      case err: js.Error => IO.fail(errorHandler(JSIOException(err)))
-      case err: String => IO.fail(errorHandler(JSIOException(js.Error(err))))
-      case _ => IO.fail(errorHandler(JSIOException(js.Error("An unknown error occurred"))))
-    }
+  override def openZipFile[R, E](errorHandler: Throwable => Cause[E])(path: FilePath): Managed[E, ZipFileReader[R, E]] = {
+    def handleNodeStreamZipError(err: Any): IO[E, Nothing] =
+      IO.halt(errorHandler(handleJSError(err)))
 
     Managed.make(
       IO.effectAsync[E, NodeStreamZip] { register =>
@@ -225,12 +221,12 @@ private[platform] class NodeIOService extends FileIO.Service[FilePath] with File
             }
               .map { _.map { stream =>
                 WritableZStream { wzs =>
-                  IO.effectAsync { register =>
+                  IO.effectAsync[Any, Unit] { register =>
                     stream.pipe(wzs)
                     stream.on("end", () => register(IO.succeed(())))
                   }
                 }
-                  .mapError { err => errorHandler(JSIOException(err)) }
+                  .catchAll { err => Stream.halt(errorHandler(handleJSError(err))) }
               } }
 
         }

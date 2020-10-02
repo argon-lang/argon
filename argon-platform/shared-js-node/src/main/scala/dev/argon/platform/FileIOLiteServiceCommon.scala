@@ -11,7 +11,8 @@ import zio.stream.ZStream
 @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 private[platform] trait FileIOLiteServiceCommon extends FileIOLite.Service with FileIOCommon {
 
-  def zipEntries[R, E](errorHandler: IOException => E)(entries: ZStream[R, E, ZipEntryInfo[R, E]]): ZStream[R, E, Byte] =
+
+  override def zipEntries[R, E <: Throwable](errorHandler: Throwable => Cause[E])(entries: ZStream[R, E, ZipEntryInfo[R, E]]): ZStream[R, E, Byte] =
     ZStream.unwrap(
       IO.effectTotal { new JSZip() }
         .flatMap { zip =>
@@ -36,23 +37,19 @@ private[platform] trait FileIOLiteServiceCommon extends FileIOLite.Service with 
         }
     )
 
-  def deserializeProtocolBuffer[R, E, A <: GeneratedMessage](errorHandler: IOException => E)(companion: GeneratedMessageCompanion[A])(data: ZStream[R, E, Byte]): ZIO[R, E, A] =
+  override def deserializeProtocolBuffer[R, E <: Throwable, A <: GeneratedMessage](errorHandler: Throwable => Cause[E])(companion: GeneratedMessageCompanion[A])(data: ZStream[R, E, Byte]): ZIO[R, E, A] =
     dataStreamToArray(data)
       .flatMap { data =>
         IO.effect { companion.parseFrom(data) }
-          .refineOrDie {
-            case ex: IOException => errorHandler(ex)
-          }
+          .catchAll { ex => IO.halt(errorHandler(ex)) }
       }
 
-  def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): ZStream[R, E, Byte] =
+  override def serializeProtocolBuffer[E <: Throwable](errorHandler: Throwable => Cause[E])(message: GeneratedMessage): stream.Stream[E, Byte] =
     ZStream.unwrap(
       IO.effect {
         message.toByteArray
       }
-        .refineOrDie {
-          case ex: IOException => errorHandler(ex)
-        }
+        .catchAll { ex => IO.halt(errorHandler(ex)) }
         .map { data => ZStream.fromChunk(Chunk.fromArray(data)) }
     )
 

@@ -24,9 +24,6 @@ object HttpResourceReader {
   def live: ZLayer[FileIOLite, Nothing, ResourceReader[WebDemoResourceIndicator]] =
     ZLayer.fromFunction { env =>
       new ResourceReader.Service[WebDemoResourceIndicator] with ResourceReaderMemZipBase {
-        protected def ioExceptionToError(ex: IOException): CompilationError =
-          Compilation.errorForIOException(ex)
-
         @SuppressWarnings(Array("dev.argon.warts.ZioEffect", "org.wartremover.warts.AsInstanceOf"))
         private def readHttp(url: String): Stream[CompilationError, Byte] =
           ZStream.unwrap(
@@ -39,11 +36,11 @@ object HttpResourceReader {
                   complete(IO.succeed(ZStream.fromChunk(Chunk.fromArray(new Int8Array(arrBuffer).toArray))))
                 }
                 else {
-                  complete(IO.fail(ioExceptionToError(new FileNotFoundException)))
+                  complete(IO.fail(Compilation.errorForIOException(new FileNotFoundException)))
                 }
               }
               request.onerror = { e =>
-                complete(IO.fail(ioExceptionToError(new IOException(e.message))))
+                complete(Compilation.unwrapThrowable(handleJSError(e)))
               }
 
               request.open("GET", url)
@@ -61,11 +58,11 @@ object HttpResourceReader {
                 complete(IO.succeed(str))
               }
               else {
-                complete(IO.fail(ioExceptionToError(new FileNotFoundException)))
+                complete(IO.fail(Compilation.errorForIOException(new FileNotFoundException)))
               }
             }
             request.onerror = { e =>
-              complete(IO.fail(ioExceptionToError(new IOException(e.message))))
+              complete(Compilation.unwrapThrowable(handleJSError(e)))
             }
 
             request.open("GET", url)
@@ -99,10 +96,10 @@ object HttpResourceReader {
           }
 
         override def getZipReader(id: WebDemoResourceIndicator): Managed[CompilationError, ZipFileReader[Any, CompilationError]] =
-          ZManaged.fromEffect(zipReaderForStream(ioExceptionToError)(readResource(id)))
+          ZManaged.fromEffect(zipReaderForStream(Compilation.unwrapThrowableCause)(readResource(id)))
 
         override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompilationError, Byte]): Comp[A] =
-          env.get.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
+          env.get.deserializeProtocolBuffer(Compilation.unwrapThrowableCause)(companion)(data)
       }
     }
 

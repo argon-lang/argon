@@ -5,11 +5,11 @@ import java.io.IOException
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import dev.argon.io.Path.PathExtensions
 import cats.implicits._
-import dev.argon.compiler.{Comp, CompilationError}
+import dev.argon.compiler.{Comp, Compilation, CompilationError}
 import dev.argon.compiler.options.OptionsFileHandler
 import dev.argon.io.{FilenameManip, Path, ZipFileReader}
 import dev.argon.io.fileio.{FileIO, FileIOLite}
-import zio.{Managed, Tag, ZIO, ZLayer, stream}
+import zio._
 import zio.stream.ZStream
 
 final case class PathResourceIndicator[P: Path](path: P) extends ResourceIndicator {
@@ -36,16 +36,16 @@ object PathResourceIndicator {
 
 
         override def readFile(id: PathResourceIndicator[P]): stream.Stream[CompilationError, Byte] =
-          fileIO.readFile(ioExceptionToError)(id.path)
+          fileIO.readFile(Compilation.unwrapThrowableCause)(id.path)
 
         override def readTextFile(id: PathResourceIndicator[P]): stream.Stream[CompilationError, Char] =
-          fileIO.readText(ioExceptionToError)(id.path)
+          fileIO.readText(Compilation.unwrapThrowableCause)(id.path)
 
         override def readTextFileAsString(id: PathResourceIndicator[P]): Comp[String] =
-          fileIO.readAllText(id.path).mapError(ioExceptionToError)
+          fileIO.readAllText(id.path).catchAll { ex => IO.halt(Compilation.unwrapThrowableCause(ex)) }
 
         override def getZipReader(id: PathResourceIndicator[P]): Managed[CompilationError, ZipFileReader[Any, CompilationError]] =
-          fileIO.openZipFile(ioExceptionToError)(id.path)
+          fileIO.openZipFile(Compilation.unwrapThrowableCause)(id.path)
       }
     }
 

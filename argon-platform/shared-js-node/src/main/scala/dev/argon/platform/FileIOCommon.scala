@@ -4,7 +4,7 @@ import java.io.{ByteArrayOutputStream, IOException}
 
 import dev.argon.io.JSIOException
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
-import zio.{Chunk, IO, ZIO}
+import zio.{Cause, Chunk, IO, ZIO}
 import zio.stream.ZStream
 
 import scala.scalajs.js
@@ -13,7 +13,7 @@ import scala.scalajs.js.|
 import scalajs.js.JSConverters._
 
 @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
-private[platform] trait FileIOCommon {
+private[platform] trait FileIOCommon extends JSErrorHandler {
   protected def dataStreamToArray[R, E](dataStream: ZStream[R, E, Byte]): ZIO[R, E, Array[Byte]] =
     IO.effectTotal { new ByteArrayOutputStream() }
       .flatMap { outputStream =>
@@ -33,15 +33,12 @@ private[platform] trait FileIOCommon {
       u8arr
     }
 
-  protected def promiseToIO[E, A](errorHandler: IOException => E)(promise: => js.Promise[A]): IO[E, A] =
+  protected def promiseToIO[E, A](errorHandler: Throwable => Cause[E])(promise: => js.Promise[A]): IO[E, A] =
     IO.effectAsync { register =>
       val _ = promise
         .`then`[Unit](
           onFulfilled = data => register(IO.succeed(data)),
-          onRejected = {
-            case e: js.Error => register(IO.fail(errorHandler(JSIOException(e))))
-            case _ => register(IO.fail(errorHandler(new IOException("An unknown error occurred"))))
-          } : js.Function1[Any, Unit | js.Thenable[Unit]]
+          onRejected = (e => register(IO.halt(errorHandler(handleJSError(e))))) : js.Function1[Any, Unit | js.Thenable[Unit]]
         )
     }
 }

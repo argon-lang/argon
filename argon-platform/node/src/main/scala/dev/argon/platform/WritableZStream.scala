@@ -28,7 +28,7 @@ private[platform] class WritableZStream[R] private(runtime: Runtime[R], queue: Q
     }
 
   @SuppressWarnings(Array("org.wartremover.warts.Null", "org.wartremover.warts.Equals"))
-  override protected def _destroy(err: js.Error, callback: js.Function1[Any, Unit]): Unit =
+  override protected def _destroy(err: Any, callback: js.Function1[Any, Unit]): Unit =
     runtime.unsafeRunAsync(
       queue.offer(Exit.fail(None))
     ) {
@@ -40,7 +40,7 @@ private[platform] class WritableZStream[R] private(runtime: Runtime[R], queue: Q
 object WritableZStream {
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
-  def apply[R](fill: NodeWritable => ZIO[R, js.Error, Unit]): ZStream[R, js.Error, Byte] =
+  def apply[R](fill: NodeWritable => ZIO[R, Any, Unit]): ZStream[R, Any, Byte] =
     ZStream.unwrapManaged(
       for {
         queue <- ZManaged.make(Queue.bounded[Exit[Option[js.Error], Chunk[Byte]]](10))(_.shutdown)

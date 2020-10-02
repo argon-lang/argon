@@ -14,33 +14,33 @@ object fileio {
   object FileIO {
 
     trait Service[P] extends FileIOServicePlatformSpecific[P] {
-      def getAbsolutePath(path: P): IO[IOException, P]
-      def ensureParentDirectory(path: P): IO[IOException, Unit]
+      def getAbsolutePath(path: P): IO[Throwable, P]
+      def ensureParentDirectory(path: P): IO[Throwable, Unit]
 
-      def readFile[E](errorHandler: IOException => E)(path: P): Stream[E, Byte]
-      def readAllText(path: P): IO[IOException, String]
-      def readText[E](errorHandler: IOException => E)(path: P): Stream[E, Char]
-      def writeToFile[R, E](errorHandler: IOException => E)(path: P)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit]
+      def readFile[E](errorHandler: Throwable => Cause[E])(path: P): Stream[E, Byte]
+      def readAllText(path: P): IO[Throwable, String]
+      def readText[E](errorHandler: Throwable => Cause[E])(path: P): Stream[E, Char]
+      def writeToFile[R, E](errorHandler: Throwable => Cause[E])(path: P)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit]
 
-      def isDirectory(path: P): IO[IOException, Boolean]
-      def listDirectory(path: P): Stream[IOException, P]
+      def isDirectory(path: P): IO[Throwable, Boolean]
+      def listDirectory(path: P): Stream[Throwable, P]
 
-      def openZipFile[R, E](errorHandler: IOException => E)(path: P): Managed[E, ZipFileReader[R, E]]
+      def openZipFile[R, E](errorHandler: Throwable => Cause[E])(path: P): Managed[E, ZipFileReader[R, E]]
     }
 
   }
 
   object FileIOLite {
     trait Service {
-      def zipEntries[R, E](errorHandler: IOException => E)(entries: ZStream[R, E, ZipEntryInfo[R, E]]): ZStream[R, E, Byte]
+      def zipEntries[R, E <: Throwable](errorHandler: Throwable => Cause[E])(entries: ZStream[R, E, ZipEntryInfo[R, E]]): ZStream[R, E, Byte]
 
-      def deserializeProtocolBuffer[R, E, A <: GeneratedMessage]
-      (errorHandler: IOException => E)
+      def deserializeProtocolBuffer[R, E <: Throwable, A <: GeneratedMessage]
+      (errorHandler: Throwable => Cause[E])
       (companion: GeneratedMessageCompanion[A])
       (data: ZStream[R, E, Byte])
       : ZIO[R, E, A]
 
-      def serializeProtocolBuffer[R, E](errorHandler: IOException => E)(message: GeneratedMessage): ZStream[R, E, Byte]
+      def serializeProtocolBuffer[E <: Throwable](errorHandler: Throwable => Cause[E])(message: GeneratedMessage): Stream[E, Byte]
     }
   }
 

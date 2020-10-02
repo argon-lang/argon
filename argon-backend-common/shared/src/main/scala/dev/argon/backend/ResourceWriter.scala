@@ -23,15 +23,11 @@ object ResourceWriter {
   private trait ServiceCommon[I <: ResourceIndicator] extends Service[I] {
     protected val fileIOLite: FileIOLite.Service
 
-    protected def ioExceptionToError(ex: IOException): CompilationError =
-      Compilation.errorForIOException(ex)
-
-
     override def zipFromEntries(entries: Stream[CompilationError, ZipEntryInfo[Any, CompilationError]]): Stream[CompilationError, Byte] =
-      fileIOLite.zipEntries(ioExceptionToError)(entries)
+      fileIOLite.zipEntries(Compilation.unwrapThrowableCause)(entries)
 
     override def serializeProtocolBuffer(message: GeneratedMessage): Stream[CompilationError, Byte] =
-      fileIOLite.serializeProtocolBuffer(ioExceptionToError)(message)
+      fileIOLite.serializeProtocolBuffer(Compilation.unwrapThrowableCause)(message)
 
   }
 
@@ -42,8 +38,8 @@ object ResourceWriter {
         override protected val fileIOLite: FileIOLite.Service = prevLayer.get[FileIOLite.Service]
 
         override def writeToResource(id: PathResourceIndicator[P])(data: Stream[CompilationError, Byte]): Comp[Unit] =
-          fileIO.ensureParentDirectory(id.path).mapError(ioExceptionToError) *>
-            fileIO.writeToFile(ioExceptionToError)(id.path)(data)
+          fileIO.ensureParentDirectory(id.path).catchAll(Compilation.unwrapThrowable) *>
+            fileIO.writeToFile(Compilation.unwrapThrowableCause)(id.path)(data)
       }
     }
 

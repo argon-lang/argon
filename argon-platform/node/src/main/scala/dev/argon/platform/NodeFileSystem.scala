@@ -9,16 +9,16 @@ import scala.scalajs.js.{|}
 @JSImport("fs", JSImport.Namespace)
 private[platform] object NodeFileSystem extends js.Any {
 
-  def readFile(path: String, encoding: String, callback: js.Function2[js.Error, String, Any]): Unit = js.native
-  def stat(path: String, callback: js.Function2[js.Error, NodeStats, Unit]): Unit = js.native
-  def readdir(path: String, callback: js.Function2[js.Error, js.Array[String], Unit]): Unit = js.native
-  def mkdir(path: String, options: NodeFSMkdirOptions, callback: js.Function1[js.Error, Unit]): Unit = js.native
+  def readFile(path: String, encoding: String, callback: js.Function2[Any, String, Any]): Unit = js.native
+  def stat(path: String, callback: js.Function2[Any, NodeStats, Unit]): Unit = js.native
+  def readdir(path: String, callback: js.Function2[Any, js.Array[String], Unit]): Unit = js.native
+  def mkdir(path: String, options: NodeFSMkdirOptions, callback: js.Function1[Any, Unit]): Unit = js.native
 
 
-  def open(path: String, flags: String | Double, callback: js.Function2[js.Error, Integer, Any]): Unit = js.native
-  def read(fd: Integer, buffer: Uint8Array, offset: Int, length: Int, position: Integer, callback: js.Function3[js.Error, Integer, Any, Any]): Unit = js.native
-  def write(fd: Integer, buffer: Uint8Array, callback: js.Function3[js.Error, Integer, Any, Any]): Unit = js.native
-  def close(fd: Integer, callback: js.Function1[js.Error, Any]): Unit = js.native
+  def open(path: String, flags: String | Double, callback: js.Function2[Any, Integer, Any]): Unit = js.native
+  def read(fd: Integer, buffer: Uint8Array, offset: Int, length: Int, position: Integer, callback: js.Function3[Any, Integer, Any, Any]): Unit = js.native
+  def write(fd: Integer, buffer: Uint8Array, callback: js.Function3[Any, Integer, Any, Any]): Unit = js.native
+  def close(fd: Integer, callback: js.Function1[Any, Any]): Unit = js.native
 
 }
 

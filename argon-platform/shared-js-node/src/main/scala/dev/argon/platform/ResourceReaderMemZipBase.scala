@@ -12,21 +12,18 @@ import scala.scalajs.js.JSConverters._
 import scala.scalajs.js.|
 
 @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
-trait ResourceReaderMemZipBase {
+trait ResourceReaderMemZipBase extends JSErrorHandler {
 
-  private def promiseToIO[E, A](errorHandler: IOException => E)(promise: => js.Promise[A]): IO[E, A] =
+  private def promiseToIO[E, A](errorHandler: Throwable => Cause[E])(promise: => js.Promise[A]): IO[E, A] =
     IO.effectAsync { register =>
       val _ = promise
         .`then`[Unit](
           onFulfilled = data => register(IO.succeed(data)),
-          onRejected = {
-            case e: js.Error => register(IO.fail(errorHandler(JSIOException(e))))
-            case _ => register(IO.fail(errorHandler(new IOException("An unknown error occurred"))))
-          } : js.Function1[Any, Unit | js.Thenable[Unit]]
+          onRejected = (e => register(IO.halt(errorHandler(handleJSError(e))))) : js.Function1[Any, Unit | js.Thenable[Unit]]
         )
     }
 
-  def zipReaderForStream[R, E](errorHandler: IOException => E)(data: ZStream[R, E, Byte]): ZIO[R, E, ZipFileReader[Any, E]] =
+  def zipReaderForStream[R, E](errorHandler: Throwable => Cause[E])(data: ZStream[R, E, Byte]): ZIO[R, E, ZipFileReader[Any, E]] =
       data.run(ZSink.foldLeftChunks(Chunk.empty : Chunk[Byte]) { _ ++ _ })
         .flatMap { data =>
           promiseToIO(errorHandler)(new JSZip().loadAsync {

@@ -25,11 +25,8 @@ object ResourceReader {
 
     protected val fileIOLite: FileIOLite.Service
 
-    protected def ioExceptionToError(ex: IOException): CompilationError =
-      Compilation.errorForIOException(ex)
-
     override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompilationError, Byte]): Comp[A] =
-      fileIOLite.deserializeProtocolBuffer(ioExceptionToError)(companion)(data)
+      fileIOLite.deserializeProtocolBuffer(Compilation.unwrapThrowableCause)(companion)(data)
 
   }
 

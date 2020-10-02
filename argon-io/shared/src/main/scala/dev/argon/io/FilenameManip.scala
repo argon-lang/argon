@@ -19,12 +19,12 @@ import scala.annotation.tailrec
 object FilenameManip {
 
   @SuppressWarnings(Array("org.wartremover.warts.ToString", "org.wartremover.warts.Equals"))
-  def findGlob[P : Path: Tag](baseDir: P, path: P): ZStream[FileIO[P], IOException, P] = {
+  def findGlob[P : Path: Tag](baseDir: P, path: P): ZStream[FileIO[P], Throwable, P] = {
 
     def globSegmentMatches(glob: String)(path: P): Boolean =
       glob.split("\\*").map(Regex.quote).mkString(".*").r.matches(path.toString)
 
-    def findGlobImpl(globs: List[P])(baseDir: P): ZStream[FileIO[P], IOException, P] =
+    def findGlobImpl(globs: List[P])(baseDir: P): ZStream[FileIO[P], Throwable, P] =
       globs match {
         case Nil => Stream(baseDir)
         case head :: tail =>
@@ -51,7 +51,7 @@ object FilenameManip {
 
 
     @tailrec
-    def findTrueBase(baseDir: P, path: List[P]): ZStream[FileIO[P], IOException, P] =
+    def findTrueBase(baseDir: P, path: List[P]): ZStream[FileIO[P], Throwable, P] =
       path match {
         case head :: _ if head.toString contains "*" =>
           ZStream.fromEffect(ZIO.accessM[FileIO[P]] { _.get.isDirectory(baseDir) }).flatMap {
