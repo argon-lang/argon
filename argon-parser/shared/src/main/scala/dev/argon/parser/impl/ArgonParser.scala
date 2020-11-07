@@ -134,9 +134,6 @@ object ArgonParser {
       override def createError(error: GrammarError[Token, TokenCategory]): SyntaxError =
         SyntaxError.ParserError(error)
 
-      override def createAmbiguityError(location: SourceLocation): SyntaxError =
-        SyntaxError.AmbiguousParse(location)
-
       override def errorEndLocationOrder: Order[SyntaxError] =
         Order.from((a, b) => implicitly[Order[FilePosition]].compare(a.location.end, b.location.end))
     }

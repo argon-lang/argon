@@ -37,7 +37,6 @@ object DiagnosticError {
       case SyntaxError.UnexpectedCombingCharacter(cp, _) => s"Unexpected combing character: ${(cp.toLong & 0xFFFFFFFF).toHexString}"
       case SyntaxError.LexerError(error) => convertGrammarError("character", formatCharacter, formatCharacterCategory, error)
       case SyntaxError.ParserError(error) => convertGrammarError("token", formatToken, formatTokenCategory, error)
-      case SyntaxError.AmbiguousParse(_) => "Parse was ambiguous"
     }
 
     private def convertGrammarError[TToken, TTokenCategory]

@@ -43,9 +43,6 @@ object Lexer {
         override def createError(error: GrammarError[String, CharacterCategory]): SyntaxError =
           SyntaxError.LexerError(error)
 
-        override def createAmbiguityError(location: SourceLocation): SyntaxError =
-          SyntaxError.AmbiguousParse(location)
-
         override def errorEndLocationOrder: Order[SyntaxError] =
           (a, b) => implicitly[Order[FilePosition]].compare(a.location.end, b.location.end)
       }

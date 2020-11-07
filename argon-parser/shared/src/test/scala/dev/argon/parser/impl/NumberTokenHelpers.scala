@@ -25,9 +25,6 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
     override def createError(error: GrammarError[Int, String]): WithSource[String] =
       WithSource(error.toString, error.location)
 
-    override def createAmbiguityError(location: SourceLocation): WithSource[String] =
-      WithSource("Ambiguity", location)
-
     override def errorEndLocationOrder: Order[WithSource[String]] =
       (a, b) => implicitly[Order[FilePosition]].compare(a.location.end, b.location.end)
   }

@@ -52,7 +52,7 @@ object TestCaseLoader {
       }
 
   def loadTestCases[P: Path : Tag](path: P): ZIO[FileIO[P], Throwable, TestCaseStructure] =
-    ZIO.accessM[FileIO[P]](_.get.listDirectory(path).foldM[FileIO[P], Throwable, P, (Seq[(String, TestCaseStructure)], Seq[TestCase])](
+    ZIO.accessM[FileIO[P]](_.get.listDirectory(path).foldM(
       (Seq.empty[(String, TestCaseStructure)], Seq.empty[TestCase])
     ) { case ((dirs, tests), path) =>
 

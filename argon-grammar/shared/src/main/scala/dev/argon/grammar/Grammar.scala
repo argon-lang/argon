@@ -289,6 +289,12 @@ object Grammar {
   : Grammar[TToken, TSyntaxError, TLabel, TToken] =
     matcher(category, (t: TToken) => Some(t).filter(tokenMatches))
 
+  def eof[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, TResult]
+  (result: TResult)
+  (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
+  : Grammar[TToken, TSyntaxError, TLabel, TResult] =
+    EndOfFileGrammar(result)
+
   def matcher[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, Result]
   (category: TTokenCategory, tokenMatcher: TToken => Option[Result])
   (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
@@ -307,6 +313,11 @@ object Grammar {
   (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
   : Grammar[TToken, TSyntaxError, TLabel, Result] =
     TokenGrammar(category, tokenMatcher)
+
+  def reject[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, TResult]
+  (grammarErrors: NonEmptyVector[TSyntaxError])
+  : Grammar[TToken, TSyntaxError, TLabel, TResult] =
+    RejectGrammar(grammarErrors)
 
   def parseAll[TToken, TSyntaxError, TLabel <: RuleLabel, T]
   (factory: GrammarFactory[TToken, TSyntaxError, TLabel])
@@ -378,7 +389,6 @@ object Grammar {
 
   trait ErrorFactory[-TToken, -TTokenCategory, TSyntaxError] {
     def createError(error: GrammarError[TToken, TTokenCategory]): TSyntaxError
-    def createAmbiguityError(location: SourceLocation): TSyntaxError
     def errorEndLocationOrder: Order[TSyntaxError]
   }
 
@@ -402,6 +412,19 @@ object Grammar {
     override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
       GrammarResultSuccess(Vector(), WithSource(result, SourceLocation(pos, pos)))
 
+  }
+
+  private final case class EndOfFileGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, T]
+  (
+    result: T
+  )(
+    implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError]
+  ) extends Grammar[TToken, TSyntaxError, TLabel, T] {
+    override def parseTokens(tokens: NonEmptyVector[WithSource[TToken]], options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
+      GrammarResultFailure(NonEmptyVector.of(errorFactory.createError(GrammarError.ExpectedEndOfFile(tokens.head))))
+
+    override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+      GrammarResultSuccess(Vector(), WithSource(result, SourceLocation(pos, pos)))
   }
 
   private final case class TokenGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, T]

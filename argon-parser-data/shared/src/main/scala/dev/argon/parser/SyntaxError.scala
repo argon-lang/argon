@@ -20,6 +20,4 @@ object SyntaxError {
     override def location: SourceLocation = error.location
   }
 
-  final case class AmbiguousParse(override val location: SourceLocation) extends SyntaxError
-
 }
