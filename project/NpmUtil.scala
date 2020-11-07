@@ -57,8 +57,9 @@ object NpmUtil extends AutoPlugin {
         }
         catch { case NonFatal(_) => true }
 
-      if(needsUpdate) {
-        IO.write(packageJson, newJson.spaces2)
+
+      if(needsUpdate || !(dir / "node_modules").exists()) {
+        if(needsUpdate) IO.write(packageJson, newJson.spaces2)
         if(packageLock.exists()) IO.copyFile(packageLock, packageLockDest)
         Process("npm" :: "install" :: Nil, dir).!
         IO.copyFile(packageLockDest, packageLock)
