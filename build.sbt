@@ -120,7 +120,9 @@ lazy val compilerOptions = Seq(
 
   javacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "--release", "11"
+    "--release", "11",
+    "-Werror",
+    "-Xlint:all,-serial,-try"
   ),
 
   scalacOptions ++= Seq(
@@ -480,8 +482,8 @@ lazy val armoduleJS = armodule.js
 lazy val armoduleNode = armodule.node
 
 
-lazy val backend_jvm = project.in(file("argon-backend-jvm"))
-  .dependsOn(armoduleJVM)
+lazy val backend_jvm_classmodule = project.in(file("argon-backend-jvm-classmodule"))
+  .dependsOn(modulefmtJVM, utilJVM)
   .settings(
     commonJVMSettings,
 
@@ -493,7 +495,23 @@ lazy val backend_jvm = project.in(file("argon-backend-jvm"))
     commonSettings,
     compilerOptions,
 
-    name := "argon-backend-js",
+    name := "argon-backend-jvm-classmodule",
+  )
+
+lazy val backend_jvm = project.in(file("argon-backend-jvm"))
+  .dependsOn(armoduleJVM, backend_jvm_classmodule)
+  .settings(
+    commonJVMSettings,
+
+    libraryDependencies ++= Seq(
+      "org.ow2.asm" % "asm" % "9.0",
+      "org.ow2.asm" % "asm-tree" % "9.0",
+    ),
+
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-backend-jvm",
   )
 
 lazy val backend_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-backend-js"))

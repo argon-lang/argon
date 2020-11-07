@@ -2,6 +2,7 @@ package dev.argon.backend.jvm
 
 import dev.argon.backend.ResourceAccess
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
+import dev.argon.backend.jvm.classmodule.Constants
 import org.objectweb.asm.{AnnotationVisitor, ClassReader, ClassVisitor, MethodVisitor, Opcodes}
 import org.objectweb.asm.tree.MethodNode
 import zio._

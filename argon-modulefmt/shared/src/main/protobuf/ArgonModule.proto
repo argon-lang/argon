@@ -4,6 +4,7 @@ import "google/protobuf/empty.proto";
 import "scalapb/scalapb.proto";
 
 option java_package = "dev.argon.module.java_format";
+option java_multiple_files = true;
 
 option (scalapb.options) = {
     scope: FILE

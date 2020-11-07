@@ -10,7 +10,7 @@ import cats.data._
 import cats.evidence.===
 import cats.implicits._
 import com.google.protobuf.ByteString
-import dev.argon.armodule.{ModuleFormatVersion, ModulePaths}
+import dev.argon.module.{ModuleFormatVersion, ModulePaths}
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
 import dev.argon.compiler.types.TypeSystem

@@ -12,7 +12,7 @@ import cats.{Id => _, _}
 import cats.evidence.{===, Is}
 import cats.data.{NonEmptyList, NonEmptyVector}
 import cats.implicits._
-import dev.argon.armodule.{ModuleFormatVersion, ModulePaths}
+import dev.argon.module.{ModuleFormatVersion, ModulePaths}
 import dev.argon.backend.ResourceAccess
 import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
