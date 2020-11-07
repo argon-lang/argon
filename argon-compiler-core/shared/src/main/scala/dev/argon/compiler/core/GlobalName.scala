@@ -13,5 +13,5 @@ object GlobalName {
   case object Unnamed extends GlobalName
 
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
-  implicit val eqInstance: Eq[GlobalName] = cats.derived.semi.eq
+  implicit val eqInstance: Eq[GlobalName] = cats.derived.semiauto.eq
 }

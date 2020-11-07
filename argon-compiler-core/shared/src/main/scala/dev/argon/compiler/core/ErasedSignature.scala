@@ -13,11 +13,11 @@ sealed trait ErasedSignature[TContext <: Context with Singleton]
 
 object ErasedSignature {
 
-  implicit def erasedSignatureEqInstance[TContext <: Context with Singleton]: Eq[ErasedSignature[TContext]] = cats.derived.semi.eq
+  implicit def erasedSignatureEqInstance[TContext <: Context with Singleton]: Eq[ErasedSignature[TContext]] = cats.derived.semiauto.eq
 
   sealed trait SigType[TContext <: Context with Singleton]
   object SigType {
-    implicit def eqInstance[TContext <: Context with Singleton]: Eq[SigType[TContext]] = cats.derived.semi.eq
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[SigType[TContext]] = cats.derived.semiauto.eq
   }
 
   final case class BlankType[TContext <: Context with Singleton]() extends SigType[TContext]
@@ -49,7 +49,7 @@ object ErasedSignature {
   final case class ParameterOnlySignature[TContext <: Context with Singleton](paramTypes: Vector[SigType[TContext]])
 
   object ParameterOnlySignature {
-    implicit def eqInstance[TContext <: Context with Singleton]: Eq[ParameterOnlySignature[TContext]] = cats.derived.semi.eq
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[ParameterOnlySignature[TContext]] = cats.derived.semiauto.eq
 
   }
 

@@ -4,7 +4,7 @@ import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
 val graalVersion = "20.2.0"
-val zioVersion = "1.0.1"
+val zioVersion = "1.0.3"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -17,7 +17,7 @@ lazy val nodeConfig =
     .withArgs(List("--no-warnings", "--experimental-vm-modules"))
 
 val esParseDeps = Seq(
-  "acorn" -> "^8.0.2",
+  "acorn" -> "^8.0.4",
 )
 
 lazy val commonSettings = Seq(
@@ -36,10 +36,10 @@ lazy val commonSettings = Seq(
     "org.scala-lang.modules" %%% "scala-xml" % "2.0.0-M2",
 
     "org.typelevel" %%% "cats-core" % "2.2.0",
-    "org.typelevel" %%% "kittens" % "2.1.0",
+    "org.typelevel" %%% "kittens" % "2.2.0",
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
-    "dev.zio" %%% "zio-interop-cats" % "2.1.4.0",
+    "dev.zio" %%% "zio-interop-cats" % "2.2.0.1",
 
 
     "com.chuusai" %%% "shapeless" % "2.3.3",
@@ -98,7 +98,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ S
 
   npmDependencies ++= Seq(
     "memory-streams" -> "^0.1.3",
-    "node-stream-zip" -> "^1.11.3",
+    "node-stream-zip" -> "^1.11.7",
   ),
 
   jsEnv := new NodeJSEnv(nodeConfig),

@@ -21,7 +21,7 @@ trait Source[R, E, A] {
           success = _ => queue.offer(Exit.fail(None)).unit
         ).fork
 
-      } yield ZStream.fromQueue(queue).collectWhileSuccess
+      } yield ZStream.fromQueue(queue).flattenExitOption
     )
 
 

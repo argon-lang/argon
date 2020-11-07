@@ -9,6 +9,6 @@ object VariableName {
   case object Unnamed extends VariableName
 
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
-  implicit val eqInstance: Eq[VariableName] = cats.derived.semi.eq
+  implicit val eqInstance: Eq[VariableName] = cats.derived.semiauto.eq
 
 }

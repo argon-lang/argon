@@ -8,6 +8,6 @@ final case class NamespacePath(ns: Vector[String])
 object NamespacePath {
   val empty: NamespacePath = NamespacePath(Vector())
 
-  implicit val eqInstance: Eq[NamespacePath] = derived.semi.eq
+  implicit val eqInstance: Eq[NamespacePath] = derived.semiauto.eq
 
 }

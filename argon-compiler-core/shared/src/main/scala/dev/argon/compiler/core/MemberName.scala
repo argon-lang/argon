@@ -17,7 +17,7 @@ object MemberName {
   case object New extends MemberName
 
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
-  implicit val eqInstance: Eq[MemberName] = cats.derived.semi.eq
+  implicit val eqInstance: Eq[MemberName] = cats.derived.semiauto.eq
 
   def fromMethodNameSpecifier(specifier: parser.MethodNameSpecifier): MemberName =
     MethodName.fromMethodNameSpecifier(specifier)
@@ -27,7 +27,7 @@ object MemberName {
 sealed trait MethodName extends MemberName
 object MethodName {
   @SuppressWarnings(Array("org.wartremover.warts.Equals"))
-  implicit val eqInstance: Eq[MethodName] = cats.derived.semi.eq
+  implicit val eqInstance: Eq[MethodName] = cats.derived.semiauto.eq
 
   def fromMethodNameSpecifier(specifier: parser.MethodNameSpecifier): MethodName =
     specifier match {

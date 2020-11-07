@@ -7,6 +7,6 @@ final case class FileID(id: Int)
 
 object FileID {
 
-  implicit val eqInstance: Eq[FileID] = derived.semi.eq
+  implicit val eqInstance: Eq[FileID] = derived.semiauto.eq
 
 }

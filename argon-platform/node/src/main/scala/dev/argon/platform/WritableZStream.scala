@@ -9,6 +9,9 @@ import cats.implicits._
 import zio.interop.catz.core._
 
 private[platform] class WritableZStream[R] private(runtime: Runtime[R], queue: Queue[Exit[Option[js.Error], Chunk[Byte]]]) extends NodeWritable {
+  {
+    val _ = js.constructorOf[NodeWritable]
+  }
 
   private def bufferToChunk(buffer: NodeBuffer): Chunk[Byte] = {
     val array = new Array[Byte](buffer.length)
@@ -53,7 +56,7 @@ object WritableZStream {
 
         _ <- (fill(wzs) *> IO.effectTotal { wzs.destroy() }).forkManaged
 
-      } yield ZStream.fromQueueWithShutdown(queue).collectWhileSuccess.flattenChunks
+      } yield ZStream.fromQueueWithShutdown(queue).flattenExitOption.flattenChunks
     )
 
 }

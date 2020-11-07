@@ -48,7 +48,7 @@ private[platform] object OutputStreamWriterStream {
           )
           .fork
 
-      } yield ZStream.fromQueueWithShutdown(queue).collectWhileSuccess.flattenChunks ++ ZStream.fromEffect(writeTask.interrupt).drain
+      } yield ZStream.fromQueueWithShutdown(queue).flattenExitOption.flattenChunks ++ ZStream.fromEffect(writeTask.interrupt).drain
     )
 
 
