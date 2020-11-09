@@ -41,6 +41,13 @@ object fileio {
       : ZIO[R, E, A]
 
       def serializeProtocolBuffer[E <: Throwable](errorHandler: Throwable => Cause[E])(message: GeneratedMessage): Stream[E, Byte]
+
+      def deserializeProtocolBufferStream[R, E <: Throwable, A >: Null <: AnyRef]
+      (errorHandler: Throwable => Cause[E])
+      (companion: StreamableMessage[A])
+      (data: ZStream[R, E, Byte])
+      : ZStream[R, E, A]
+
     }
   }
 

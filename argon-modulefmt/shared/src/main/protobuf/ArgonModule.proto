@@ -20,13 +20,7 @@ option (scalapb.options) = {
 message Metadata {
     required int32 formatVersion = 1;
     required string name = 2;
-    required ModuleType moduleType = 5;
-
-    repeated ModuleReference references = 9;
-    repeated GlobalDeclarationType globalTraits = 10;
-    repeated GlobalDeclarationType globalClasses = 11;
-    repeated GlobalDeclarationType globalDataConstructors = 12;
-    repeated GlobalDeclarationFunction globalFunctions = 13;
+    required ModuleType moduleType = 3;
 }
 
 enum ModuleType {
@@ -34,24 +28,42 @@ enum ModuleType {
     DefinitionModule = 1;
 }
 
+message ModuleReferencesList {
+    repeated ModuleReference references = 1;
+}
+
 message ModuleReference {
     required string name = 1;
 }
 
+message NamespaceDeclarationList {
+    repeated NamespaceDeclaration namespaces = 1;
+}
+
+message NamespaceDeclaration {
+    required Namespace ns = 1;
+    required uint32 id = 2;
+}
+
+message GlobalDeclarationList {
+    repeated GlobalDeclarationType globalTraits = 1;
+    repeated GlobalDeclarationType globalClasses = 2;
+    repeated GlobalDeclarationType globalDataConstructors = 3;
+    repeated GlobalDeclarationFunction globalFunctions = 4;
+}
+
 message GlobalDeclarationType {
     required uint32 id = 1;
-    required Namespace ns = 2;
-    required GlobalName name = 3;
-    required AccessModifier accessModifier = 4;
-    required ErasedSignatureParameterOnly sig = 5;
+    required GlobalName name = 2;
+    required AccessModifier accessModifier = 3;
+    required ErasedSignatureParameterOnly sig = 4;
 }
 
 message GlobalDeclarationFunction {
     required uint32 id = 1;
-    required Namespace ns = 2;
-    required GlobalName name = 3;
-    required AccessModifier accessModifier = 4;
-    required ErasedSignature sig = 5;
+    required GlobalName name = 2;
+    required AccessModifier accessModifier = 3;
+    required ErasedSignature sig = 4;
 }
 
 message FileID {

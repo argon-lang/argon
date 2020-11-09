@@ -3,7 +3,7 @@ package dev.argon.build.testrunner
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 
-import dev.argon.io.{Path, ZipFileReader}
+import dev.argon.io.{Path, StreamableMessage, ZipFileReader}
 import dev.argon.build.BuildProcess
 import dev.argon.compiler._
 import dev.argon.compiler.core.ModuleId
@@ -105,8 +105,11 @@ object TestCaseRunnerCompilePhase {
             case TestCaseOtherRes(id) => env.get.getZipReader(id)
           }
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: stream.Stream[CompilationError, Byte]): Comp[A] =
+        override def deserializeProtocolBuffer[A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: stream.Stream[CompilationError, Byte]): Comp[A] =
           env.get.deserializeProtocolBuffer(companion)(data)
+
+        override def deserializeProtocolBufferStream[R, A >: Null <: AnyRef](companion: StreamableMessage[A])(data: ZStream[R, CompilationError, Byte]): ZStream[R, CompilationError, A] =
+          env.get.deserializeProtocolBufferStream(companion)(data)
       }
     }
 

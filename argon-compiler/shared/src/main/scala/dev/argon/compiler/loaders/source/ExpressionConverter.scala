@@ -728,12 +728,12 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   (args: Vector[ArgumentInfo])
   : ExprFactory = {
 
-    def resolveClass[ClassPS[_, _]](arClassOptComp: Comp[Vector[ArClass[context.type, ClassPS]]]): ExprFactory =
+    def resolveClass[ClassPS[_, _]](arClassStream: CompStream[ArClass[context.type, ClassPS]]): ExprFactory =
       compFactory(
         for {
-          classesVec <- arClassOptComp
+          classesChunk <- arClassStream.runCollect
           classes <- Compilation.requireSome(
-            NonEmptyVector.fromVector(classesVec)
+            NonEmptyVector.fromVector(classesChunk.toVector)
           )(DiagnosticError.NamespaceElementNotFound(moduleDesc, namespacePath, name, DiagnosticSource.SourceFile(env.fileSpec, location)))
 
           classFactories <- classes.traverse { arClass =>
@@ -758,7 +758,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     val noArgs = ErasedSignature.ParameterOnlySignature[context.type](Vector())
 
     if(moduleDesc === env.currentModule.id)
-      resolveClass(env.currentModule.lookupNamespaceValues(namespacePath, name)(ModuleLookup.lookupGlobalClass(context)(noArgs)))
+      resolveClass(env.currentModule.lookupNamespaceBindings(namespacePath, name)(ModuleLookup.lookupGlobalClass(context)(noArgs)))
     else
       resolveClass(ModuleLookup.lookupValues(context)(env.referencedModules)(moduleDesc)(namespacePath, name)(ModuleLookup.lookupGlobalClass(context)(noArgs)))
   }
@@ -901,8 +901,9 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
       case LookupResult.Failed =>
         new ExprFactory {
-          private def error[A]: Comp[A] =
+          private def error[A]: Comp[A] = {
             Compilation.forErrors(DiagnosticError.LookupFailedError(description, DiagnosticSource.SourceFile(env.fileSpec, location)))
+          }
 
           override def forExpectedType(expectedType: typeSystem.TType): Comp[SimpleExpr] = error
 

@@ -1,9 +1,6 @@
 package dev.argon.compiler.types
 
-import dev.argon.compiler.{Comp, CompilationError}
-import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
-import dev.argon.compiler.core.{AbsRef, ArModule, ArTrait, ModuleId, Namespace}
-import dev.argon.compiler.expr.ArExpr.TraitType
+
 import zio.test.{DefaultRunnableSpec, ZSpec}
 import shapeless.Id
 import zio._

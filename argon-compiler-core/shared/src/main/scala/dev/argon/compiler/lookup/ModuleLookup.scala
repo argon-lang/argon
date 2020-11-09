@@ -6,9 +6,10 @@ import dev.argon.util.NamespacePath
 import scala.collection.immutable.Vector
 import cats._
 import cats.implicits._
-import dev.argon.compiler.{Comp, Compilation}
+import dev.argon.compiler.{Comp, CompStream, Compilation}
 import zio.interop.catz.core._
 import zio._
+import zio.stream.Stream
 
 object ModuleLookup {
 
@@ -17,11 +18,13 @@ object ModuleLookup {
   (referencedModules: Vector[ArModule[context.type, TPayloadSpec]])
   (moduleDesc: ModuleId)
   (namespace: NamespacePath, name: GlobalName)
-  (f: GlobalBinding[context.type, TPayloadSpec] => Comp[Option[T]])
-  : Comp[Vector[T]] =
-    findModule(context)(referencedModules)(moduleDesc).toList.toVector.flatTraverse { module =>
-      module.lookupNamespaceValues(namespace, name)(f)
-    }
+  (f: GlobalBinding.NonNamespace[context.type, TPayloadSpec] => Comp[Option[T]])
+  : CompStream[T] =
+    Stream(findModule(context)(referencedModules)(moduleDesc))
+      .collectSome
+      .flatMap { module =>
+        module.lookupNamespaceBindings(namespace, name)(f)
+      }
 
   def findModule[TPayloadSpec[_, _]]
   (context: Context)
@@ -30,34 +33,7 @@ object ModuleLookup {
   : Option[ArModule[context.type, TPayloadSpec]] =
     referencedModules.find { _.id === moduleDesc }
 
-  def lookupNamespaceValuesInGlobalNS[T, TPayloadSpec[_, _]]
-  (context: Context)
-  (globalNamespace: Namespace[context.type, TPayloadSpec])
-  (namespace: NamespacePath, name: GlobalName)
-  (f: GlobalBinding[context.type, TPayloadSpec] => Comp[Option[T]])
-  : Comp[Vector[T]] = {
-    def impl(namespaceParts: Vector[String])(namespaceValues: Namespace[context.type, TPayloadSpec]): Comp[Vector[T]] =
-      namespaceParts match {
-        case head +: tail =>
-          namespaceValues.bindings
-            .filter(_.name === GlobalName.Normal(head))
-            .flatTraverse {
-              case GlobalBinding.NestedNamespace(_, nestedNS) => impl(tail)(nestedNS)
-              case _ => IO.succeed(Vector.empty)
-            }
-
-        case Vector() =>
-          namespaceValues.bindings
-            .filter { _.name === name }
-            .flatTraverse { binding =>
-              f(binding).map { _.toList.toVector }
-            }
-      }
-
-    impl(namespace.ns)(globalNamespace)
-  }
-
-  def lookupGlobalClass[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArClass[context.type, TPayloadSpec]]] = {
+  def lookupGlobalClass[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding.NonNamespace[context.type, TPayloadSpec] => Comp[Option[ArClass[context.type, TPayloadSpec]]] = {
     case GlobalBinding.GlobalClass(_, _, Some(bindingSig), arClass) if sig === bindingSig =>
       arClass.asSome
 
@@ -74,7 +50,7 @@ object ModuleLookup {
     case _ => IO.none
   }
 
-  def lookupGlobalTrait[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArTrait[context.type, TPayloadSpec]]] = {
+  def lookupGlobalTrait[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding.NonNamespace[context.type, TPayloadSpec] => Comp[Option[ArTrait[context.type, TPayloadSpec]]] = {
     case GlobalBinding.GlobalTrait(_, _, Some(bindingSig), arTrait) if sig === bindingSig =>
       arTrait.asSome
 
@@ -90,7 +66,7 @@ object ModuleLookup {
     case _ => IO.none
   }
 
-  def lookupGlobalDataConstructor[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[DataConstructor[context.type, TPayloadSpec]]] = {
+  def lookupGlobalDataConstructor[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature.ParameterOnlySignature[context.type]): GlobalBinding.NonNamespace[context.type, TPayloadSpec] => Comp[Option[DataConstructor[context.type, TPayloadSpec]]] = {
     case GlobalBinding.GlobalDataConstructor(_, _, Some(bindingSig), ctor) if sig === bindingSig =>
       ctor.asSome
 
@@ -106,7 +82,7 @@ object ModuleLookup {
     case _ => IO.none
   }
 
-  def lookupGlobalFunction[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature[context.type]): GlobalBinding[context.type, TPayloadSpec] => Comp[Option[ArFunc[context.type, TPayloadSpec]]] = {
+  def lookupGlobalFunction[TPayloadSpec[_, _]](context: Context)(sig: ErasedSignature[context.type]): GlobalBinding.NonNamespace[context.type, TPayloadSpec] => Comp[Option[ArFunc[context.type, TPayloadSpec]]] = {
     case GlobalBinding.GlobalFunction(_, _, Some(bindingSig), func) if sig === bindingSig =>
       func.asSome
 

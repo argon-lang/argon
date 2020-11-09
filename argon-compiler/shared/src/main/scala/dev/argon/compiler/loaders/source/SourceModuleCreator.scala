@@ -2,7 +2,7 @@ package dev.argon.compiler.loaders.source
 
 import dev.argon.compiler._
 import dev.argon.compiler.core._
-import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, NamespaceBuilder, ResourceIndicator, ResourceReader, SourceParser}
+import dev.argon.compiler.loaders.{ModuleLoad, ModuleLoader, ResourceIndicator, ResourceReader, SourceParser}
 import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.parser.{NameSpecifier, SourceAST}
@@ -25,44 +25,59 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
   (context: TContext)
   (input: CompilerInput[I, context.BackendOptions])
   : ZManaged[ModuleLoad[I, TContext] with ResourceReader[I] with SourceParser, CompilationError, ArModule[context.type, DeclarationPayloadSpecifier]] =
-    ModuleLoader.loadReferencedModules[I, TContext](context)(input.options.references.files.toVector).mapM { refModules =>
-      createModuleWithRefs(context)(input)(refModules)
-    }
+    ModuleLoader.loadReferencedModules[I, TContext](context)(input.options.references.files.toVector)
+      .flatMap { refModules =>
+        createModuleWithRefs(context)(input)(refModules)
+      }
 
   private def createModuleWithRefs[I <: ResourceIndicator: Tag]
   (context2: Context)
   (input: CompilerInput[I, context2.BackendOptions])
   (referencedModules2: Vector[ArModule[context2.type, ReferencePayloadSpecifier]])
-    : RComp[ResourceReader[I] with SourceParser, ArModule[context2.type, DeclarationPayloadSpecifier]] = {
+    : ZManaged[ResourceReader[I] with SourceParser, CompilationError, ArModule[context2.type, DeclarationPayloadSpecifier]] = {
     for {
-      env <- ZIO.environment[ResourceReader[I] with SourceParser]
-      globalNamespaceCache <- ValueCache.make[CompilationError, Namespace[context2.type, DeclarationPayloadSpecifier]]
+      env <- ZManaged.environment[ResourceReader[I] with SourceParser]
+
+      parsedCodeStream <- StreamMemo.make(
+        Stream.fromIterable(input.options.inputFiles.files)
+          .zipWithIndex
+          .flatMap { case (file, index) =>
+            val fileSpec = FileSpec(FileID(index.toInt), file.show)
+            val fileStream = env.get[ResourceReader.Service[I]].readTextFile(file)
+
+            env.get[SourceParser.Service].parse(fileSpec)(fileStream)
+          }
+      )
+
+      namespacesStream <- StreamMemo.make(
+        distinctStream(parsedCodeStream.map { _.currentNamespace })
+      )
+
+      bindingStreamCache <- ValueCacheManaged.make[CompilationError, Stream[CompilationError, ModuleElement[context2.type, DeclarationPayloadSpecifier]]]
     } yield new ArModule[context2.type, DeclarationPayloadSpecifier] {
       override val context: context2.type = context2
 
       override val id: ModuleId = ModuleId(input.options.moduleName)
-      override val globalNamespace: Comp[Namespace[context.type, DeclarationPayloadSpecifier]] =
-        globalNamespaceCache.get(
-          NamespaceBuilder.createNamespace[ResourceReader[I] with SourceParser, context.type, DeclarationPayloadSpecifier](
-            Stream.fromIterable(input.options.inputFiles.files)
-              .zipWithIndex
-              .flatMap { case (file, index) =>
-                val fileSpec = FileSpec(FileID(index.toInt), file.show)
+      override val namespaces: CompStream[NamespacePath] = namespacesStream
+      override val referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]] = referencedModules2
 
-                Stream.unwrap(
-                  ZIO.access[ResourceReader[I]](_.get.readTextFile(file))
-                    .flatMap { fileStream =>
-                      ZIO.access[SourceParser](_.get.parse(fileSpec)(fileStream))
-                    }
-                )
-              }
-              .mapM { ast =>
-                createNamespaceElementFromAST(context2)(input.options)(this)(referencedModules2)(ast)
-              }
-          ).provide(env)
+      override def getNamespace(ns: NamespacePath): CompStream[GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] =
+        bindingStream
+          .filter { element => element.namespacePath === ns }
+          .map { element => element.binding }
+
+      override def bindings: CompStream[GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] =
+        bindingStream.map { element => element.binding }
+
+      private def bindingStream: Stream[CompilationError, ModuleElement[context2.type, DeclarationPayloadSpecifier]] =
+        ZStream.unwrap(
+          bindingStreamCache.get(StreamMemo.make(
+            parsedCodeStream.mapM { sourceAST =>
+              createNamespaceElementFromAST(context2)(input.options)(this)(referencedModules2)(sourceAST)
+            }
+          ))
         )
 
-      override val referencedModules: Vector[ArModule[context2.type, ReferencePayloadSpecifier]] = referencedModules2
     }
   }
 
@@ -115,6 +130,20 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
       }
     }
 
+  private def distinctStream[R, E, A](stream: ZStream[R, E, A]): ZStream[R, E, A] =
+    ZStream.unwrap(
+      for {
+        seenElements <- Ref.make(Set.empty[A])
+      } yield stream.filterM { a =>
+        seenElements.get.flatMap { seen =>
+          if(seen.contains(a))
+            IO.succeed(false)
+          else
+            seenElements.update { _ + a }.as(true)
+        }
+      }
+    )
+
   private def createScope
   (context: Context)
   (currentModule: ArModule[context.type, DeclarationPayloadSpecifier])
@@ -148,13 +177,13 @@ private[compiler] object SourceModuleCreator extends AccessModifierHelpers {
   (currentModule: ArModule[context.type, DeclarationPayloadSpecifier])
   (envF: FileSpec => EnvCreator[context.type])
   (sourceAST: SourceAST)
-  : Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] = {
+  : Comp[GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] = {
 
     import context._
 
     val env = envF(sourceAST.fileSpec)
 
-    def createBinding(name: parser.NameSpecifier, modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]]): Comp[GlobalBinding[context.type, DeclarationPayloadSpecifier]] =
+    def createBinding(name: parser.NameSpecifier, modifiers: Vector[WithSource[parser.Modifier]])(f: (GlobalName, AccessModifierGlobal) => Comp[GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]]): Comp[GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] =
       parseGlobalAccessModifier(sourceAST.fileSpec, sourceAST.statement.location, getAccessModifiers(modifiers)).flatMap { accessModifier =>
         val globalName = name match {
           case NameSpecifier.Identifier(n) => GlobalName.Normal(n)

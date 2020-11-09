@@ -1,7 +1,7 @@
 package dev.argon.backend.js
 
 import dev.argon.compiler.RComp
-import dev.argon.compiler.core.{ArModule, ErasedSignature, GlobalBinding, GlobalId, Namespace}
+import dev.argon.compiler.core.{ArModule, ErasedSignature, GlobalBinding, GlobalId}
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import dev.argon.compiler.lookup.LookupNames
@@ -34,9 +34,8 @@ abstract class JSEmitterModule[I <: ResourceIndicator: Tag] extends JSEmitterGlo
             resourceReader.readTextFileAsString(singleFile.file)
           }
 
-          globalNamespace <- module.globalNamespace
           vtableBuilder <- VTableBuilder(context)
-          topLevelStmts <- allNamespaceElements(globalNamespace).foldM(ArModuleElements(Vector.empty, Vector.empty, Vector.empty, Vector.empty))(createObjectsForScopeValue(vtableBuilder))
+          topLevelStmts <- module.bindings.foldM(ArModuleElements(Vector.empty, Vector.empty, Vector.empty, Vector.empty))(createObjectsForScopeValue(vtableBuilder))
           createModule <- coreLibExport("createModule")
         } yield JSModule(
           Vector(
@@ -77,12 +76,6 @@ abstract class JSEmitterModule[I <: ResourceIndicator: Tag] extends JSEmitterGlo
           Map.empty,
         ))
       } yield jsModule
-    }
-
-  private def allNamespaceElements(namespace: Namespace[context.type, DeclarationPayloadSpecifier]): Stream[Nothing, GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] =
-    Stream.fromIterable(namespace.bindings).flatMap {
-      case GlobalBinding.NestedNamespace(_, ns) => allNamespaceElements(ns)
-      case binding: GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier] => Stream(binding)
     }
 
 

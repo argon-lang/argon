@@ -24,18 +24,19 @@ object StandardTypeLoaders {
 
     {
       if(currentModule.id === arCore)
-        currentModule.lookupNamespaceValues(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass(context)(noArgs))
-            .map { _.map(AbsRef.apply) }
+        currentModule.lookupNamespaceBindings(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass(context)(noArgs))
+            .map(AbsRef.apply)
       else
         ModuleLookup.lookupValues(context)(referencedModules)(arCore)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass(context)(noArgs))
-          .map { _.map(AbsRef.apply) }
+          .map(AbsRef.apply)
 
     }
+      .take(2)
+      .runCollect
       .flatMap { foundClasses =>
-        val unitClassOpt = foundClasses match {
-          case Vector(singleClass) => Some(singleClass)
-          case _ => None
-        }
+        val unitClassOpt =
+          if(foundClasses.size === 1) foundClasses.headOption
+          else None
 
         Compilation.requireSome(unitClassOpt)(
           DiagnosticError.NamespaceElementNotFound(arCore, NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"), messageSource)

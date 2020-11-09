@@ -2,11 +2,14 @@ package dev.argon.platform
 
 import java.io.IOException
 
-import dev.argon.io.ZipEntryInfo
+import com.google.protobuf.CodedInputStream
+import dev.argon.io.{StreamableMessage, ZipEntryInfo}
 import dev.argon.io.fileio.FileIOLite
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 import zio._
 import zio.stream.ZStream
+
+import scala.collection.mutable
 
 @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 private[platform] trait FileIOLiteServiceCommon extends FileIOLite.Service with FileIOCommon {
@@ -53,5 +56,32 @@ private[platform] trait FileIOLiteServiceCommon extends FileIOLite.Service with 
         .map { data => ZStream.fromChunk(Chunk.fromArray(data)) }
     )
 
+  @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null", "org.wartremover.warts.NonUnitStatements"))
+  override def deserializeProtocolBufferStream[R, E <: Throwable, A >: Null <: AnyRef](errorHandler: Throwable => Cause[E])(companion: StreamableMessage[A])(data: ZStream[R, E, Byte]): ZStream[R, E, A] = {
+    ZStream.unwrap(
+      dataStreamToArray(data)
+        .flatMap { data =>
+          IO.effect {
+            val input = CodedInputStream.newInstance(data)
+            val buffer = new mutable.ArrayBuffer[A]()
 
+            def iter(): Unit = {
+              val elem = companion.readElement(input)
+              if(elem eq null) {
+                ()
+              }
+              else {
+                buffer += elem
+                iter()
+              }
+            }
+
+            iter()
+
+            ZStream.fromIterable(buffer.toSeq)
+          }
+        }
+        .catchAll { ex => IO.halt(errorHandler(ex)) }
+    )
+  }
 }

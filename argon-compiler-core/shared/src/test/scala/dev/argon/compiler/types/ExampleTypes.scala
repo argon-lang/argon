@@ -1,7 +1,7 @@
 package dev.argon.compiler.types
 
-import dev.argon.compiler.Comp
-import dev.argon.compiler.core.{AbsRef, ArModule, ArTrait, GlobalBinding, ModuleId, Namespace, TraitId}
+import dev.argon.compiler.{Comp, CompStream}
+import dev.argon.compiler.core.{AbsRef, ArModule, ArTrait, GlobalBinding, ModuleId, TraitId}
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.expr.ArExpr.TraitType
 import dev.argon.util.{NamespacePath, UniqueIdentifier}
@@ -17,8 +17,13 @@ trait ExampleTypes {
   lazy val module = new ArModule[context.type, DeclarationPayloadSpecifier] {
     override val context: ExampleTypes.this.context.type = ExampleTypes.this.context
     override val id: ModuleId = DummyModule.id
-    override val globalNamespace: Comp[Namespace[context.type, DeclarationPayloadSpecifier]] =
-      IO.die(new UnsupportedOperationException)
+
+
+    override val namespaces: CompStream[NamespacePath] =
+      Stream.die(new UnsupportedOperationException)
+
+    override def getNamespace(ns: NamespacePath): CompStream[GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] =
+      Stream.die(new UnsupportedOperationException)
 
     override val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]] = Vector.empty
   }

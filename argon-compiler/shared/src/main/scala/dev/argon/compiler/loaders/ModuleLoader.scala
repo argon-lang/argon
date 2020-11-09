@@ -30,14 +30,14 @@ object ModuleLoader {
     type PayloadResult = ArModule[context.type, ReferencePayloadSpecifier]
 
     val dependencyTreeOps
-    : DependencyTreeOperations[Comp, ModInfo, ModuleId, PayloadResult, Either[CompilationError, ?]] =
-      new DependencyTreeOperations[Comp, ModInfo, ModuleId, PayloadResult, Either[CompilationError, ?]] {
+    : DependencyTreeOperations[CompManaged, ModInfo, ModuleId, PayloadResult, Either[CompilationError, ?]] =
+      new DependencyTreeOperations[CompManaged, ModInfo, ModuleId, PayloadResult, Either[CompilationError, ?]] {
         override def getItemKey(item: ModInfo): ModuleId = item.descriptor
 
         override def getItemDependencies(item: ModInfo): Vector[ModuleId] =
           item.referencedModules
 
-        override def loadItem(item: ModInfo, dependencies: Vector[PayloadResult]): Comp[PayloadResult] =
+        override def loadItem(item: ModInfo, dependencies: Vector[PayloadResult]): CompManaged[PayloadResult] =
           item.loadReference(context)(dependencies)
 
         override def circularReferenceHandler(item: ModInfo): Either[CompilationError, Nothing] =
@@ -50,8 +50,8 @@ object ModuleLoader {
 
     def loadModuleRefFromData
     (refDataPairs: Vector[ModInfo])
-    : RComp[ModuleLoad[I, TContext], Vector[Either[CompilationError, PayloadResult]]] =
-      loadDependencies[Comp, ModInfo, ModuleId, PayloadResult, Either[CompilationError, *]](dependencyTreeOps)(refDataPairs)
+    : RCompManaged[ModuleLoad[I, TContext], Vector[Either[CompilationError, PayloadResult]]] =
+      loadDependencies[CompManaged, ModInfo, ModuleId, PayloadResult, Either[CompilationError, *]](dependencyTreeOps)(refDataPairs)
 
 
 
@@ -62,13 +62,11 @@ object ModuleLoader {
           findWorkingLoader(id).flatMap { loadedFile => impl(tail, loadedFiles :+ loadedFile) }
 
         case Vector() =>
-          ZManaged.fromEffect(
-            loadModuleRefFromData(loadedFiles)
-              .map { moduleResults =>
-                moduleResults.sequence
-              }
-              .absolve
-          )
+          loadModuleRefFromData(loadedFiles)
+            .map { moduleResults =>
+              moduleResults.sequence
+            }
+            .absolve
       }
 
     impl(refFiles, Vector())

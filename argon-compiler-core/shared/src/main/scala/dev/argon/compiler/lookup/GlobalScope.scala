@@ -10,6 +10,7 @@ import cats.data.NonEmptyVector
 import cats.implicits._
 import dev.argon.compiler.Comp
 import zio.IO
+import zio.stream.Stream
 import zio.interop.catz.core._
 
 object GlobalScope {
@@ -42,8 +43,7 @@ object GlobalScope {
   )
   : Comp[context.scopeContext.LookupResult] =
     resolveName(context)(imports)(modules)(name)(NotFound).flatMap {
-      case NotFound =>
-        IO.succeed(context.scopeContext.LookupResult.Failed)
+      case NotFound => IO.succeed(context.scopeContext.LookupResult.Failed)
 
       case FoundOverloadable =>
         overloadResult(context)(imports)(modules)(name).map {
@@ -104,22 +104,19 @@ object GlobalScope {
   (name: GlobalName.NonEmpty)
   (acc: ResolvedName)
   : Comp[ResolvedName] =
-    imports
-      .flatTraverse { importNS =>
-        modules.flatTraverse { module =>
-          module.value.lookupNamespaceValues(importNS, name) {
-            case GlobalBinding.NestedNamespace(name2, _) => IO.some(NestedNamespaces(Set(NamespacePath(importNS.ns :+ name2.name))))
-            case _ => IO.some(FoundOverloadable)
-          }
+    Stream.fromIterable(imports).flatMap { importNS =>
+      Stream.fromIterable(modules).flatMap { module =>
+        module.value.lookupNamespaceValues(importNS, name) {
+          case GlobalBinding.NestedNamespace(name2) => IO.some(NestedNamespaces(Set(NamespacePath(importNS.ns :+ name2.name))))
+          case _ => IO.some(FoundOverloadable)
         }
       }
-      .map { foundValue =>
-        foundValue.foldLeft(NotFound : ResolvedName) {
-          case (prev, NotFound) => prev
-          case (NotFound | FoundOverloadable, curr) => curr
-          case (prev @ NestedNamespaces(_), FoundOverloadable) => prev
-          case (NestedNamespaces(paths1), NestedNamespaces(paths2)) => NestedNamespaces(paths1 ++ paths2)
-        }
+    }
+      .fold(NotFound : ResolvedName){
+        case (prev, NotFound) => prev
+        case (NotFound | FoundOverloadable, curr) => curr
+        case (prev @ NestedNamespaces(_), FoundOverloadable) => prev
+        case (NestedNamespaces(paths1), NestedNamespaces(paths2)) => NestedNamespaces(paths1 ++ paths2)
       }
 
 
@@ -156,25 +153,22 @@ object GlobalScope {
   (modules: Vector[AbsRef[context.type, ArModule]])
   (name: GlobalName.NonEmpty)
   (nextResult: OverloadResult[context.scopeContext.ScopeValueOverload])
-  : Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] =
-    imports
-      .flatTraverse { importNS =>
-        modules.flatTraverse { module =>
-          module.value.lookupNamespaceValues(importNS, name) {
-            case binding: GlobalBinding.NonNamespace[context.type, module.PayloadSpec] =>
-              getScopeValue(context)(binding).asSome
-
-            case _ => IO.none
-          }
-            .map { _.toList.toVector }
+  : Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] = {
+    Stream.fromIterable(imports).flatMap { importNS =>
+      Stream.fromIterable(modules).flatMap { module =>
+        module.value.lookupNamespaceBindings(importNS, name){ binding =>
+            getScopeValue(context)(binding).asSome
         }
       }
+    }
+      .runCollect
       .map { overloads =>
-        NonEmptyVector.fromVector(overloads) match {
+        NonEmptyVector.fromVector(overloads.toVector) match {
           case Some(overloads) => OverloadResult.List(overloads, nextResult)
           case None => nextResult
         }
       }
+  }
 
   private def getScopeValue[TPayloadSpec[_, _]]
   (context: Context)

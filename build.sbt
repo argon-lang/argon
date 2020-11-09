@@ -122,7 +122,7 @@ lazy val compilerOptions = Seq(
     "-encoding", "UTF-8",
     "--release", "11",
     "-Werror",
-    "-Xlint:all,-serial,-try"
+    "-Xlint:all,-serial,-try",
   ),
 
   scalacOptions ++= Seq(
@@ -713,7 +713,8 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
       .settings(
         javacOptions ++= Seq(
           "-encoding", "UTF-8",
-          "--release", "11"
+          "--release", "11",
+          "-Xlint:-deprecation",
         ),
 
         PB.targets in Compile += PB.gens.java -> (sourceManaged in Compile).value,

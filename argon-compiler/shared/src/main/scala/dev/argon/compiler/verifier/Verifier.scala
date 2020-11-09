@@ -12,8 +12,8 @@ class Verifier {
   def passes: Set[VerifyPass] = Set()
 
   def verifyModule(context: Context)(module: ArModule[context.type, DeclarationPayloadSpecifier]): Comp[Unit] =
-    module.globalNamespace.flatMap { globalNamespace =>
-      passes.toVector.traverse_ { _.verifyNamespace(context)(globalNamespace) }
+    module.namespaces.foreach { ns =>
+      passes.toVector.traverse_ { _.verifyNamespace(context)(module, ns) }
     }
 
 }

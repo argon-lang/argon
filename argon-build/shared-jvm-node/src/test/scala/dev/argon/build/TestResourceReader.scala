@@ -6,7 +6,7 @@ import cats.data.NonEmptyList
 import dev.argon.backend.{PathResourceIndicator, ResourceAccess}
 import dev.argon.compiler.{Comp, Compilation, CompilationError, DiagnosticError, DiagnosticSource}
 import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
-import dev.argon.io.{Path, ZipEntryInfo, ZipFileReader}
+import dev.argon.io.{Path, StreamableMessage, ZipEntryInfo, ZipFileReader}
 import dev.argon.io.fileio.{FileIO, FileIOLite}
 import dev.argon.stream.builder.Source
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
@@ -66,8 +66,12 @@ object TestResourceReader {
                 }
           }
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompilationError, Byte]): Comp[A] =
+        override def deserializeProtocolBuffer[A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompilationError, Byte]): Comp[A] =
           liveResReader.deserializeProtocolBuffer(companion)(data)
+
+        override def deserializeProtocolBufferStream[R, A >: Null <: AnyRef](companion: StreamableMessage[A])(data: ZStream[R, CompilationError, Byte]): ZStream[R, CompilationError, A] =
+          liveResReader.deserializeProtocolBufferStream(companion)(data)
+
       } : Service[P])
     })
 

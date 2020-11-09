@@ -2,7 +2,7 @@ package dev.argon.backend.js
 
 import dev.argon.compiler.Comp
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
-import dev.argon.armodule.loader.ArgonModuleLoader.PayloadLoader
+import dev.argon.armodule.loader.PayloadLoader
 
 class JSPayloadLoader[TContext <: JSContext] extends PayloadLoader[TContext, ReferencePayloadSpecifier] {
 

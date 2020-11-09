@@ -6,8 +6,8 @@ import java.nio.charset.StandardCharsets
 import cats.implicits._
 import cats.data.NonEmptyList
 import dev.argon.compiler.loaders.ResourceReader
-import dev.argon.compiler.{Comp, CompilationError, Compilation, DiagnosticSource}
-import dev.argon.io.ZipFileReader
+import dev.argon.compiler.{Comp, Compilation, CompilationError, DiagnosticSource}
+import dev.argon.io.{StreamableMessage, ZipFileReader}
 import dev.argon.io.fileio.FileIOLite
 import dev.argon.platform.ResourceReaderMemZipBase
 import dev.argon.stream.builder.Source
@@ -98,8 +98,11 @@ object HttpResourceReader {
         override def getZipReader(id: WebDemoResourceIndicator): Managed[CompilationError, ZipFileReader[Any, CompilationError]] =
           ZManaged.fromEffect(zipReaderForStream(Compilation.unwrapThrowableCause)(readResource(id)))
 
-        override def deserializeProtocolBuffer[L[_, _], A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompilationError, Byte]): Comp[A] =
+        override def deserializeProtocolBuffer[A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: Stream[CompilationError, Byte]): Comp[A] =
           env.get.deserializeProtocolBuffer(Compilation.unwrapThrowableCause)(companion)(data)
+
+        override def deserializeProtocolBufferStream[R, A >: Null <: AnyRef](companion: StreamableMessage[A])(data: ZStream[R, CompilationError, Byte]): ZStream[R, CompilationError, A] =
+          env.get.deserializeProtocolBufferStream[R, CompilationError, A](Compilation.unwrapThrowableCause)(companion)(data)
       }
     }
 

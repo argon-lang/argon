@@ -10,7 +10,8 @@ import cats.data._
 import cats.evidence.===
 import cats.implicits._
 import com.google.protobuf.ByteString
-import dev.argon.module.{ModuleFormatVersion, ModulePaths}
+import dev.argon.armodule.ModulePaths
+import dev.argon.module.{GlobalDeclarationElement, ModuleFormatVersion}
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
 import dev.argon.compiler.types.TypeSystem
@@ -18,7 +19,6 @@ import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.compiler.vtable.VTableBuilder.Aux
 import dev.argon.util.{FileID, NamespacePath}
 import dev.argon.module
-import dev.argon.module.Metadata
 import dev.argon.stream.builder.Source
 import shapeless._
 import dev.argon.util.AnyExtensions._
@@ -38,6 +38,7 @@ abstract class ModuleEmitter {
     val vtableBuilder: VTableBuilder.Aux[context.type]
 
     def getModuleIdNum[TPayloadSpec[_, _]](arModule: ArModule[context.type, TPayloadSpec]): Comp[Option[Int]]
+    def currentReferencedModules: UIO[Seq[ModuleId]]
 
     def getClassIdNum[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[Int]
     def getTraitIdNum[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): Comp[Int]
@@ -48,8 +49,12 @@ abstract class ModuleEmitter {
 
     def getLocalVariableIdNum[TPayloadSpec[_, _]](variable: LocalVariable[context.type, Id]): Comp[Int]
 
-    def updateMetadataElement(f: module.Metadata => module.Metadata): UIO[Unit]
-    def currentMetadata: UIO[module.Metadata]
+    def addNamespace(ns: NamespacePath): UIO[Unit]
+    def currentNamespaces: UIO[Set[NamespacePath]]
+
+    def addGlobalDeclaration(namespace: NamespacePath, element: module.GlobalDeclarationElement): UIO[Unit]
+    def currentGlobalDeclarations: UIO[Map[NamespacePath, module.GlobalDeclarationList]]
+
     def produceStreamElement[R](path: String)(element: => RComp[R, GeneratedMessage]): RComp[R, Unit]
   }
 
@@ -59,30 +64,22 @@ abstract class ModuleEmitter {
   def convertMethodBody(body: context.TMethodImplementation): Emit[Option[module.FunctionBody]]
   def convertClassConstructorBody(body: context.TClassConstructorImplementation): Emit[module.ClassConstructorBody]
 
-
-  private def addGlobalDeclaration[TDecl](lens: scalapb.lenses.Lens[module.Metadata, module.Metadata] => scalapb.lenses.Lens[module.Metadata, Vector[TDecl]])(declaration: TDecl): URIO[EmitEnv, Unit] =
-    ZIO.accessM[EmitEnv] { emitEnv =>
-      emitEnv.updateMetadataElement { metadata =>
-        metadata.update { metadataLens => lens(metadataLens).modify(_ :+ declaration) }
-      }
-    }
-
-  private def produceGlobalElement[TDecl, TElem[_ <: Context with Singleton, _[_, _]], TSig]
+  private def produceGlobalElement[TElem[_ <: Context with Singleton, _[_, _]], TSig]
   (accessor: EmitEnv => TElem[context.type, DeclarationPayloadSpecifier] => Comp[Int])
   (elem: TElem[context.type, DeclarationPayloadSpecifier])
   (ns: NamespacePath, name: GlobalName, accessModifier: AccessModifierGlobal, sig: TSig)
-  (createDecl: (Int, module.Namespace, module.GlobalName, module.AccessModifier, TSig) => TDecl)
-  (metadataLens: scalapb.lenses.Lens[module.Metadata, module.Metadata] => scalapb.lenses.Lens[module.Metadata, Vector[TDecl]])
+  (createDecl: (Int, module.GlobalName, module.AccessModifier, TSig) => module.GlobalDeclarationElement)
   (pathTypeName: String)
   (message: TElem[context.type, DeclarationPayloadSpecifier] => Emit[GeneratedMessage])
   : Emit[Unit] =
     ZIO.accessM[EmitEnv] { emitEnv =>
       accessor(emitEnv)(elem).flatMap { idNum =>
         val path = ModulePaths.elementDef(pathTypeName, idNum)
-        val decl = createDecl(idNum, convertNamespace(ns), convertGlobalName(name), convertAccessModifier(accessModifier), sig)
+        val decl = createDecl(idNum, convertGlobalName(name), convertAccessModifier(accessModifier), sig)
 
         emitEnv.produceStreamElement(path)(message(elem)) *>
-          addGlobalDeclaration(metadataLens)(decl)
+          emitEnv.addGlobalDeclaration(ns, decl) *>
+          emitEnv.addNamespace(ns)
       }
     }
 
@@ -101,15 +98,26 @@ abstract class ModuleEmitter {
 
   def processModule(armodule: ArModule[context.type, DeclarationPayloadSpecifier]): Emit[Unit] = {
 
-    def processNamespace(nsPath: NamespacePath, ns: Namespace[context.type, DeclarationPayloadSpecifier]): Emit[Unit] =
-      ZIO.foreach_(ns.bindings) {
-        case GlobalBinding.NestedNamespace(GlobalName.Normal(name), nestedNS) => processNamespace(NamespacePath(nsPath.ns :+ name), nestedNS)
+    def createTraitDecl(id: Int, name: module.GlobalName, accessModifier: module.AccessModifier, sig: module.ErasedSignatureParameterOnly): module.GlobalDeclarationElement =
+      module.GlobalDeclarationElement.TraitElement(module.GlobalDeclarationType(id, name, accessModifier, sig))
+
+    def createClassDecl(id: Int, name: module.GlobalName, accessModifier: module.AccessModifier, sig: module.ErasedSignatureParameterOnly): module.GlobalDeclarationElement =
+      module.GlobalDeclarationElement.ClassElement(module.GlobalDeclarationType(id, name, accessModifier, sig))
+
+    def createDataCtorDecl(id: Int, name: module.GlobalName, accessModifier: module.AccessModifier, sig: module.ErasedSignatureParameterOnly): module.GlobalDeclarationElement =
+      module.GlobalDeclarationElement.DataConstructorElement(module.GlobalDeclarationType(id, name, accessModifier, sig))
+
+    def createFuncDecl(id: Int, name: module.GlobalName, accessModifier: module.AccessModifier, sig: module.ErasedSignature): module.GlobalDeclarationElement =
+      module.GlobalDeclarationElement.FunctionElement(module.GlobalDeclarationFunction(id, name, accessModifier, sig))
+
+    def processNamespace(nsPath: NamespacePath): Emit[Unit] =
+      armodule.getNamespace(nsPath).foreach {
         case GlobalBinding.GlobalTrait(name, access, _, arTraitComp) =>
           for {
             arTrait <- arTraitComp
             sig <- arTrait.signature
             erasedSig <- convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig))
-            _ <- produceGlobalElement[module.GlobalDeclarationType, ArTrait, module.ErasedSignatureParameterOnly](_.getTraitIdNum)(arTrait)(nsPath, name, access, erasedSig)(module.GlobalDeclarationType(_, _, _, _, _))(_.globalTraits)(ModulePaths.traitTypeName)(createTraitDefMessage)
+            _ <- produceGlobalElement[ArTrait, module.ErasedSignatureParameterOnly](_.getTraitIdNum)(arTrait)(nsPath, name, access, erasedSig)(createTraitDecl)(ModulePaths.traitTypeName)(createTraitDefMessage)
 
             instMethods <- arTrait.methods
             _ <- processMethods(instMethods)
@@ -120,7 +128,7 @@ abstract class ModuleEmitter {
             arClass <- arClassComp
             sig <- arClass.signature
             erasedSig <- convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig))
-            _ <- produceGlobalElement[module.GlobalDeclarationType, ArClass, module.ErasedSignatureParameterOnly](_.getClassIdNum)(arClass)(nsPath, name, access, erasedSig)(module.GlobalDeclarationType(_, _, _, _, _))(_.globalClasses)(ModulePaths.classTypeName)(createClassDefMessage)
+            _ <- produceGlobalElement[ArClass, module.ErasedSignatureParameterOnly](_.getClassIdNum)(arClass)(nsPath, name, access, erasedSig)(createClassDecl)(ModulePaths.classTypeName)(createClassDefMessage)
 
             instMethods <- arClass.methods
             _ <- processMethods(instMethods)
@@ -137,7 +145,7 @@ abstract class ModuleEmitter {
             dataCtor <- dataCtorComp
             sig <- dataCtor.signature
             erasedSig <- convertErasedSignatureParameterOnly(ErasedSignature.fromSignatureParameters(context)(sig))
-            _ <- produceGlobalElement[module.GlobalDeclarationType, DataConstructor, module.ErasedSignatureParameterOnly](_.getDataCtorIdNum)(dataCtor)(nsPath, name, access, erasedSig)(module.GlobalDeclarationType(_, _, _, _, _))(_.globalDataConstructors)(ModulePaths.dataCtorTypeName)(createDataCtorDefMessage)
+            _ <- produceGlobalElement[DataConstructor, module.ErasedSignatureParameterOnly](_.getDataCtorIdNum)(dataCtor)(nsPath, name, access, erasedSig)(createDataCtorDecl)(ModulePaths.dataCtorTypeName)(createDataCtorDefMessage)
 
             instMethods <- dataCtor.methods
             instEntries <- processMethods(instMethods)
@@ -148,7 +156,7 @@ abstract class ModuleEmitter {
             func <- funcComp
             sig <- func.signature
             erasedSig <- convertErasedSignature(ErasedSignature.fromSignature(context)(sig))
-            _ <- produceGlobalElement[module.GlobalDeclarationFunction, ArFunc, module.ErasedSignature](_.getFunctionIdNum)(func)(nsPath, name, access, erasedSig)(module.GlobalDeclarationFunction(_, _, _, _, _))(_.globalFunctions)(ModulePaths.funcTypeName)(createFuncDefMessage)
+            _ <- produceGlobalElement[ArFunc, module.ErasedSignature](_.getFunctionIdNum)(func)(nsPath, name, access, erasedSig)(createFuncDecl)(ModulePaths.funcTypeName)(createFuncDefMessage)
           } yield ()
 
       }
@@ -166,8 +174,7 @@ abstract class ModuleEmitter {
       }
 
 
-    armodule.globalNamespace
-      .flatMap(processNamespace(NamespacePath.empty, _))
+    armodule.namespaces.foreach(processNamespace)
   }
 
 
@@ -988,13 +995,53 @@ object ModuleEmitter {
   def emitModule(moduleEmitter: ModuleEmitter)(emitOptions: ModuleEmitOptions)(currentModule: ArModule[moduleEmitter.context.type, DeclarationPayloadSpecifier]): zstream.Stream[CompilationError, StreamElem] =
     new Source[Any, CompilationError, StreamElem] {
 
+      private def moduleMetadata: module.Metadata = module.Metadata(
+        formatVersion = ModuleFormatVersion.currentVersion,
+        name = currentModule.id.name,
+        moduleType = emitOptions.moduleType match {
+          case ModuleEmitOptions.ReferenceModule => module.ModuleType.ReferenceModule
+          case ModuleEmitOptions.DeclarationModule => module.ModuleType.DefinitionModule
+        },
+      )
+
+      private def encodeNamespaces(namespaces: Vector[NamespacePath]): module.NamespaceDeclarationList =
+        module.NamespaceDeclarationList(
+          namespaces
+            .zipWithIndex
+            .map { case (ns, i) =>
+              module.NamespaceDeclaration(
+                moduleEmitter.convertNamespace(ns),
+                i
+              )
+            }
+        )
+
       override def foreach(f: StreamElem => Comp[Unit]): Comp[Unit] =
         for {
           emitEnv <- createEmitEnv(moduleEmitter)(emitOptions)(currentModule)(f)
 
           _ <- moduleEmitter.processModule(currentModule).provide(emitEnv)
-          metadataValue <- emitEnv.currentMetadata
-          _ <- f(ModulePaths.metadata -> metadataValue)
+
+          _ <- f(ModulePaths.metadata -> moduleMetadata)
+
+          references <- emitEnv.currentReferencedModules
+          _ <- f(ModulePaths.referencedModules -> module.ModuleReferencesList(
+            references.toVector.map { id =>
+              module.ModuleReference(id.name)
+            }
+          ))
+
+          namespaceSet <- emitEnv.currentNamespaces
+          namespaceSeq = namespaceSet.toVector
+          namespaceMap = namespaceSet.zipWithIndex.toMap
+          _ <- f(ModulePaths.namespaceIndex -> encodeNamespaces(namespaceSeq))
+
+          globalDecls <- emitEnv.currentGlobalDeclarations
+          _ <- ZIO.foreach_(globalDecls) { case (ns, decls) =>
+            val index = namespaceMap(ns)
+            f(ModulePaths.namespaceContent(index) -> decls)
+          }
+
         } yield ()
 
     }.toZStream
@@ -1003,18 +1050,12 @@ object ModuleEmitter {
     import moduleEmitter.context
 
     for {
-      metadata <- Ref.make(module.Metadata(
-        formatVersion = ModuleFormatVersion.currentVersion,
-        name = currentModule.id.name,
-        moduleType = emitOptions.moduleType match {
-          case ModuleEmitOptions.ReferenceModule => module.ModuleType.ReferenceModule
-          case ModuleEmitOptions.DeclarationModule => module.ModuleType.DefinitionModule
-        },
-      ))
+      namespaces <- Ref.make(Set.empty[NamespacePath])
+      globalDeclarations <- Ref.make(Map.empty[NamespacePath, module.GlobalDeclarationList])
 
       vtableBuilderObj <- VTableBuilder(context)
 
-      moduleIds <- Ref.make(IdentifierState.initial[ModuleId])
+      moduleIds <- Ref.make((0, Seq.empty[ModuleId]))
 
       classIds <- Ref.make(IdentifierState.initial[ClassId])
       traitIds <- Ref.make(IdentifierState.initial[TraitId])
@@ -1096,7 +1137,15 @@ object ModuleEmitter {
         if(isCurrentModule(arModule))
           IO.none
         else
-          getElementIdNum(moduleIds)(arModule.id).asSome
+          moduleIds.modify { moduleIdState =>
+            val (nextId, idSeq) = moduleIdState
+            val index = idSeq.indexOf(arModule.id)
+            if(index >= 0) (index, moduleIdState)
+            else (nextId, (nextId + 1, idSeq :+ arModule.id))
+          }.asSome
+
+      override def currentReferencedModules: UIO[Seq[ModuleId]] =
+        moduleIds.get.map { case (_, idSeq) => idSeq }
 
       override def getClassIdNum[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[Int] =
         getDefOrRefId(arClass)(classFromCurrentModule)(_.id)(classIds, classRefIds)(ModulePaths.classTypeName)(
@@ -1155,10 +1204,29 @@ object ModuleEmitter {
       override def getLocalVariableIdNum[TPayloadSpec[_, _]](variable: LocalVariable[moduleEmitter.context.type, Id]): Comp[Int] =
         getElementIdNum(localVarIds)(variable.id)
 
-      override def updateMetadataElement(f: Metadata => Metadata): UIO[Unit] =
-        metadata.update(f)
 
-      override def currentMetadata: UIO[Metadata] = metadata.get
+      override def addNamespace(ns: NamespacePath): UIO[Unit] =
+        namespaces.update { _ + ns }
+
+      override def currentNamespaces: UIO[Set[NamespacePath]] =
+        namespaces.get
+
+      override def addGlobalDeclaration(namespace: NamespacePath, element: module.GlobalDeclarationElement): UIO[Unit] =
+        globalDeclarations.update { decls =>
+          val list = decls.getOrElse(namespace, module.GlobalDeclarationList())
+
+          val list2 = element match {
+            case GlobalDeclarationElement.TraitElement(traitElement) => list.addGlobalTraits(traitElement)
+            case GlobalDeclarationElement.ClassElement(classElement) => list.addGlobalClasses(classElement)
+            case GlobalDeclarationElement.DataConstructorElement(dataConstructorElement) => list.addGlobalDataConstructors(dataConstructorElement)
+            case GlobalDeclarationElement.FunctionElement(functionElement) => list.addGlobalFunctions(functionElement)
+          }
+
+          decls.updated(namespace, list2)
+        }
+
+      override def currentGlobalDeclarations: UIO[Map[NamespacePath, module.GlobalDeclarationList]] =
+        globalDeclarations.get
 
       override def produceStreamElement[R](path: String)(element: => RComp[R, GeneratedMessage]): RComp[R, Unit] =
         emittedPaths.modifySome(false) {

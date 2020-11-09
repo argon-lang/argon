@@ -10,7 +10,7 @@ object GlobalBinding {
   sealed trait NonNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]] extends GlobalBinding[TContext, TPayloadSpec]
 
   final case class NestedNamespace[TContext <: Context with Singleton, TPayloadSpec[_, _]]
-  (name: GlobalName.Normal, namespace: Namespace[TContext, TPayloadSpec])
+  (name: GlobalName.Normal)
     extends GlobalBinding[TContext, TPayloadSpec]
 
   final case class GlobalClass[TContext <: Context with Singleton, TPayloadSpec[_, _]]

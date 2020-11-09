@@ -2,7 +2,7 @@ package dev.argon.backend.generic
 
 import dev.argon.compiler.Comp
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
-import dev.argon.armodule.loader.ArgonModuleLoader.PayloadLoader
+import dev.argon.armodule.loader.PayloadLoader
 
 private[generic] class GenericPayloadLoader[TContext <: ModuleContext] extends PayloadLoader[TContext, ReferencePayloadSpecifier] {
 

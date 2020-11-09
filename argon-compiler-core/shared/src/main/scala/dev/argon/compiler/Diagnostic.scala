@@ -224,7 +224,25 @@ object DiagnosticError {
   }
 
   final case class LookupFailedError(description: LookupDescription, source: DiagnosticSource) extends DiagnosticError {
-    override def message: String = "Could not find identifier"
+    override def message: String = "Could not find identifier: " + descriptionMessage(description)
+
+    private def descriptionMessage(description: LookupDescription): String =
+      description match {
+        case LookupDescription.Identifier(name) => name
+        case LookupDescription.Operator(op) => s"($op)"
+        case LookupDescription.Call(methodDesc) => "(call)"
+        case LookupDescription.Other => "(other)"
+        case LookupDescription.Member(objectDesc, memberName) => descriptionMessage(objectDesc) + "." + memberNameMessage(memberName)
+      }
+
+    private def memberNameMessage(memberName: MemberName): String =
+      memberName match {
+        case MemberName.New => "(new)"
+        case MemberName.Normal(name) => name
+        case MemberName.Mutator(name) => name + ":="
+        case MemberName.Call => "(call)"
+        case MemberName.Unnamed => "(unnamed)"
+      }
   }
 
   final case class AmbiguousLookupError(alternatives: NonEmptyVector[Callable], source: DiagnosticSource) extends DiagnosticError {
