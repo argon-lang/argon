@@ -27,7 +27,7 @@ trait DataConstructor[TContext <: Context with Singleton, TPayloadSpec[_, _]] ex
 
   val methods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]
 
-  val payload: TPayloadSpec[Comp[TDataConstructorImplementation], TDataConstructorMetadata]
+  val payload: TPayloadSpec[Comp[TDataConstructorImplementation], Unit]
 }
 
 object DataConstructor {

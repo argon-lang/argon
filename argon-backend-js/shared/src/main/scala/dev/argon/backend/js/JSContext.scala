@@ -14,13 +14,6 @@ import cats.implicits._
 
 abstract class JSContext private[js] extends ContextWithModule {
 
-  override type TTraitMetadata = Unit
-  override type TClassMetadata = Unit
-  override type TFunctionMetadata = Unit
-  override type TMethodMetadata = Unit
-  override type TDataConstructorMetadata = Unit
-  override type TClassConstructorMetadata = Unit
-
   override type TFunctionImplementation = JSImpl.Function
   override type TMethodImplementation = JSImpl.Method
   override type TClassConstructorImplementation = JSImpl.ClassConstructor

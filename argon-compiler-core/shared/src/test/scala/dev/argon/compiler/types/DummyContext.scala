@@ -16,12 +16,6 @@ class DummyContext extends Context {
   override type TMethodImplementation = Unit
   override type TDataConstructorImplementation = Unit
   override type TClassConstructorImplementation = Unit
-  override type TFunctionMetadata = Unit
-  override type TMethodMetadata = Unit
-  override type TTraitMetadata = Unit
-  override type TClassMetadata = Unit
-  override type TDataConstructorMetadata = Unit
-  override type TClassConstructorMetadata = Unit
   override type BackendOptions = Unit
 
   override def createExprFunctionImplementation(expr: typeSystem.SimpleExpr): Unit = ()

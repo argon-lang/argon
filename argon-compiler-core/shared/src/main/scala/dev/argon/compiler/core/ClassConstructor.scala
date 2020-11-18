@@ -37,7 +37,7 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] extends Callable
 
 
 
-  val payload: TPayloadSpec[Comp[TClassConstructorImplementation], TClassConstructorMetadata]
+  val payload: TPayloadSpec[Comp[TClassConstructorImplementation], Unit]
 }
 
 object ClassConstructor {

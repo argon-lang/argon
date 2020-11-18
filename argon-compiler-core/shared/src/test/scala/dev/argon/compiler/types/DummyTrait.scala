@@ -32,7 +32,6 @@ object DummyTrait {
 
       override val methods: Comp[Vector[MethodBinding[ctx.type, DeclarationPayloadSpecifier]]] = IO.succeed(Vector.empty)
       override val staticMethods: Comp[Vector[MethodBinding[ctx.type, DeclarationPayloadSpecifier]]] = IO.succeed(Vector.empty)
-      override val payload: DeclarationPayloadSpecifier[Unit, Unit] = ()
     }
 
 }

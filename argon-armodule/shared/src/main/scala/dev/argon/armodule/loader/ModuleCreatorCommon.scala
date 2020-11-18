@@ -468,8 +468,6 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]] extends M
 
             override val staticMethods: Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =
               getMethodMembers(definition.staticMethods)
-
-            override lazy val payload: TPayloadSpec[Unit, context.TTraitMetadata] = payloadLoader.createTraitPayload(context)
           }
         }
       ).get(id)
@@ -558,8 +556,6 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]] extends M
 
             override lazy val staticMethods: Comp[Vector[MethodBinding[context.type, TPayloadSpec]]] =
               getMethodMembers(definition.staticMethods)
-
-            override lazy val payload: TPayloadSpec[Unit, context.TClassMetadata] = payloadLoader.createClassPayload(context)
 
             override val classConstructors: Comp[Vector[ClassConstructorBinding[context.type, TPayloadSpec]]] =
               definition.constructors
@@ -669,7 +665,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]] extends M
                   }
               }
 
-            override val payload: TPayloadSpec[Comp[context.TFunctionImplementation], context.TFunctionMetadata] =
+            override val payload: TPayloadSpec[Comp[context.TFunctionImplementation], Unit] =
               payloadLoader.createFunctionPayload(context)
           }
         }
@@ -763,7 +759,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]] extends M
                     }
                 }
 
-              override val payload: TPayloadSpec[Comp[context.TMethodImplementation], context.TMethodMetadata] =
+              override val payload: TPayloadSpec[Comp[context.TMethodImplementation], Unit] =
                 payloadLoader.createMethodPayload(context)
             }
         }
@@ -833,7 +829,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]] extends M
                     }
                 }
 
-              override lazy val payload: TPayloadSpec[Comp[context.TClassConstructorImplementation], context.TClassConstructorMetadata] =
+              override lazy val payload: TPayloadSpec[Comp[context.TClassConstructorImplementation], Unit] =
                 payloadLoader.createClassConstructorPayload(context)
 
             }

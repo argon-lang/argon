@@ -28,8 +28,6 @@ trait ArTrait[TContext <: Context with Singleton, TPayloadSpec[_, _]] extends Ca
   val methods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]
   val staticMethods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]
 
-  val payload: TPayloadSpec[Unit, TTraitMetadata]
-
   override def hashCode(): Int = id.hashCode()
 
   override def equals(o: Any): Boolean = o match {

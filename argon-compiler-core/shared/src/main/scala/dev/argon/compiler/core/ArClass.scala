@@ -34,8 +34,6 @@ abstract class ArClass[TContext <: Context with Singleton, TPayloadSpec[_, _]] e
   val staticMethods: Comp[Vector[MethodBinding[TContext, TPayloadSpec]]]
   val classConstructors: Comp[Vector[ClassConstructorBinding[TContext, TPayloadSpec]]]
 
-  val payload: TPayloadSpec[Unit, TClassMetadata]
-
   override def hashCode(): Int = id.hashCode()
 
   override def equals(o: Any): Boolean = o match {

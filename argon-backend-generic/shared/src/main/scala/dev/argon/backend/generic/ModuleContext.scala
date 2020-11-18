@@ -11,13 +11,6 @@ import dev.argon.compiler.options.CompilerInput
 import zio._
 
 sealed abstract class ModuleContext extends ContextWithModule {
-  override type TFunctionMetadata = Unit
-  override type TMethodMetadata = Unit
-  override type TTraitMetadata = Unit
-  override type TClassMetadata = Unit
-  override type TDataConstructorMetadata = Unit
-  override type TClassConstructorMetadata = Unit
-
   override type TFunctionImplementation = typeSystem.SimpleExpr
   override type TMethodImplementation = Option[typeSystem.SimpleExpr]
   override type TClassConstructorImplementation = ClassConstructorBody[this.type]

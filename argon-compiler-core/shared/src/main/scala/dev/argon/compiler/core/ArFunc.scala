@@ -17,7 +17,7 @@ abstract class ArFunc[TContext <: Context, TPayloadSpec[_, _]] extends CallableF
 
   val signature: Comp[Signature[FunctionResultInfo, _ <: Nat]]
 
-  val payload: TPayloadSpec[Comp[TFunctionImplementation], TFunctionMetadata]
+  val payload: TPayloadSpec[Comp[TFunctionImplementation], Unit]
 
   override def hashCode(): Int = id.hashCode()
 

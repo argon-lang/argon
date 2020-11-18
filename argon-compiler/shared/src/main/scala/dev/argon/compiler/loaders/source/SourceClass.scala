@@ -189,8 +189,6 @@ private[compiler] object SourceClass extends AccessModifierHelpers {
           }
         })
 
-
-      override val payload: Unit = ()
     }
   }
 

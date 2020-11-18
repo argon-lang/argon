@@ -138,7 +138,6 @@ private[compiler] object SourceTrait extends AccessModifierHelpers {
             }
           }
         })
-      override val payload: Unit = ()
 
 
     }

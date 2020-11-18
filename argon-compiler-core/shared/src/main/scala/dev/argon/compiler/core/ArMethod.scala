@@ -57,7 +57,7 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
     } yield newSig
   }
 
-  val payload: TPayloadSpec[Comp[TMethodImplementation], TMethodMetadata]
+  val payload: TPayloadSpec[Comp[TMethodImplementation], Unit]
 
   override def hashCode(): Int = id.hashCode()
 

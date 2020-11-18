@@ -22,13 +22,6 @@ trait Context {
   type TDataConstructorImplementation
   type TClassConstructorImplementation
 
-  type TFunctionMetadata
-  type TMethodMetadata
-  type TTraitMetadata
-  type TClassMetadata
-  type TDataConstructorMetadata
-  type TClassConstructorMetadata
-
   type BackendOptions
 
   def createExprFunctionImplementation(expr: typeSystem.SimpleExpr): TFunctionImplementation
@@ -88,4 +81,6 @@ trait Context {
 
 object Context {
   type WithRes[I <: ResourceIndicator] = Context { type ResIndicator = I }
+
+
 }

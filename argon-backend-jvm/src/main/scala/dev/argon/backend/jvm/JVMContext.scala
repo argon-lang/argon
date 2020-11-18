@@ -15,13 +15,6 @@ import zio.stream.Stream
 
 abstract class JVMContext private[jvm] extends ContextWithModule {
 
-  override type TTraitMetadata = org.objectweb.asm.Type
-  override type TClassMetadata = org.objectweb.asm.Type
-  override type TFunctionMetadata = MethodMetadata
-  override type TMethodMetadata = MethodMetadata
-  override type TDataConstructorMetadata = MethodMetadata
-  override type TClassConstructorMetadata = MethodMetadata
-
   override type TFunctionImplementation = JVMImpl.Function
   override type TMethodImplementation = JVMImpl.Method
   override type TClassConstructorImplementation = JVMImpl.ClassConstructor
