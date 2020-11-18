@@ -1,15 +1,17 @@
 package dev.argon.backend.jvm.classmodule.jdkloader;
 
+import dev.argon.backend.jvm.classmodule.loader.InvalidModuleException;
+import dev.argon.util.ExIterable;
+import dev.argon.util.ExIterator;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
-import java.nio.file.FileSystems;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.*;
 import java.util.*;
+import java.util.stream.StreamSupport;
 
 public class JDKLibraryLoader {
     private JDKLibraryLoader() {}
@@ -175,19 +177,66 @@ public class JDKLibraryLoader {
         }
     }
 
-    private static @NotNull Path packageDir(@NotNull Path baseDir, @NotNull String pkg) {
+    private static @NotNull Path packageDir(@NotNull Path baseDir, @NotNull String pkg) throws Exception {
         if(pkg.isEmpty()) {
             return baseDir;
         }
 
         final var pkgParts = pkg.split("\\.");
+        return packageDir(baseDir, Arrays.asList(pkgParts));
+    }
 
+    private static @NotNull Path packageDir(@NotNull Path baseDir, @NotNull Iterable<String> pkg) throws Exception {
         Path p = baseDir;
-        for(var pkgPart : pkgParts) {
+        for(var pkgPart : pkg) {
+            if(pkgPart.contains(".")) throw new InvalidModuleException();
             p = p.resolve(pkgPart);
         }
 
         return p;
+    }
+
+    private static ExIterable<Path> listClassFiles(@NotNull Path packageDir) {
+        return new ExIterable<Path>() {
+            @Override
+            public ExIterator<Path> iterator() throws Exception {
+                if(!Files.exists(packageDir)) return ExIterable.<Path>empty().iterator();
+
+                var stream = Files.newDirectoryStream(packageDir, "*.class");
+                var iterator = stream.iterator();
+                return new ExIterator<Path>() {
+                    @Override
+                    public @Nullable Path next() throws Exception {
+                        if(iterator.hasNext()) return iterator.next();
+                        else return null;
+                    }
+
+                    @Override
+                    public void close() throws Exception {
+                        stream.close();
+                    }
+                };
+            }
+        };
+    }
+
+    private static String appendToInternalName(String pkg, String name) {
+        if(pkg.isEmpty()) return name;
+        else return pkg + "/" + name;
+    }
+
+    private interface PackageSplitHandler<T> {
+        T handleSplit(List<String> pkg, String className) throws Exception;
+    }
+
+    private static  <T> @Nullable T splitPackage(String name, PackageSplitHandler<T> handler) throws Exception {
+        final var pkgParts = name.split("/");
+
+        if(pkgParts[0].equals("META-INF")) {
+            return null;
+        }
+
+        return handler.handleSplit(Arrays.asList(pkgParts).subList(0, pkgParts.length - 1), pkgParts[pkgParts.length - 1]);
     }
 
     private static final class JrtModule extends JavaModule {
@@ -206,47 +255,63 @@ public class JDKLibraryLoader {
         }
 
         @Override
+        public boolean exportsPackage(String pkg) {
+            return moduleInfo.packages.contains(pkg);
+        }
+
+        @Override
         public @NotNull Set<String> getRequires() {
             return new HashSet<>(moduleInfo.packages);
         }
 
         @Override
-        public InputStream findClass(String pkg, String name) throws IOException {
-            final var pkgParts = pkg.split("\\.");
+        public @NotNull ExIterable<String> packages() {
+            return ExIterable.fromIterable(moduleInfo.packages);
+        }
 
-            if(pkgParts[0].equals("META-INF")) {
-                return null;
+        @Override
+        public @NotNull ExIterable<String> classesInPackage(@NotNull String pkg) throws Exception {
+            return listClassFiles(packageDir(moduleDir, pkg)).map(path -> appendToInternalName(pkg, path.getFileName().toString()));
+        }
+
+        @Override
+        public InputStream findClass(String name) throws Exception {
+            return splitPackage(name, (pkg, className) -> {
+                final var classFile = packageDir(moduleDir, pkg).resolve(className + ".class");
+
+                if(!Files.exists(classFile)) {
+                    return null;
+                }
+
+                return Files.newInputStream(classFile);
+            });
+        }
+    }
+
+    private static InputStream findCtSymClass(Collection<Path> classDirs, String name) throws Exception {
+        return splitPackage(name, (pkg, className) -> {
+            Path classFile = null;
+            for(var classDir : classDirs) {
+                final Path classFileCandidate = packageDir(classDir, pkg).resolve(className + ".sym");
+
+                if(Files.exists(classFileCandidate)) {
+                    classFile = classFileCandidate;
+                    break;
+                }
             }
-            else if(pkgParts[0].indexOf('-') >= 0) {
-                return null;
-            }
 
-            final var classFile = packageDir(moduleDir, pkg).resolve(name + ".class");
-
-            if(!Files.exists(classFile)) {
+            if(classFile == null) {
                 return null;
             }
 
             return Files.newInputStream(classFile);
-        }
+        });
     }
 
-    private static InputStream findCtSymClass(Iterable<Path> classDirs, String pkg, String name) throws IOException {
-        Path classFile = null;
-        for(var classDir : classDirs) {
-            final Path classFileCandidate = packageDir(classDir, pkg).resolve(name + ".sym");
-
-            if(Files.exists(classFileCandidate)) {
-                classFile = classFileCandidate;
-                break;
-            }
-        }
-
-        if(classFile == null) {
-            return null;
-        }
-
-        return Files.newInputStream(classFile);
+    private static ExIterable<String> findCtSymClassesInPackage(Collection<Path> classDirs, String pkg) {
+        return ExIterable.fromIterable(classDirs)
+            .flatMap(classDir -> listClassFiles(packageDir(classDir, pkg)))
+            .map(path -> appendToInternalName(pkg, path.getFileName().toString()));
     }
 
     private static final class CtSymModule extends JavaModule {
@@ -271,14 +336,48 @@ public class JDKLibraryLoader {
         }
 
         @Override
-        public InputStream findClass(String pkg, String name) throws IOException {
+        public boolean exportsPackage(String pkg) {
+            return moduleInfo.packages.contains(pkg);
+        }
+
+        @Override
+        public @NotNull ExIterable<String> packages() {
+            return ExIterable.fromIterable(moduleInfo.packages);
+        }
+
+        @Override
+        public @NotNull ExIterable<String> classesInPackage(@NotNull String pkg) throws Exception {
             if(moduleInfo.packages.contains(pkg)) {
-                return findCtSymClass(classDirs, pkg, name);
+                return findCtSymClassesInPackage(classDirs, pkg);
             }
             else {
-                return null;
+                return ExIterable.empty();
             }
         }
+
+        @Override
+        public InputStream findClass(String name) throws Exception {
+            return splitPackage(name, (pkg, className) -> {
+                String pkgStr = String.join("/", pkg);
+
+                if(moduleInfo.packages.contains(pkgStr)) {
+                    return findCtSymClass(classDirs, name);
+                }
+                else {
+                    return null;
+                }
+            });
+        }
+    }
+
+    private static final class PackageDirPair {
+        private PackageDirPair(String packageName, Path path) {
+            this.packageName = packageName;
+            this.path = path;
+        }
+
+        public final String packageName;
+        public final Path path;
     }
 
     private static final class CtSymClassPath extends ClassPath {
@@ -290,8 +389,72 @@ public class JDKLibraryLoader {
         private final List<Path> classDirs;
 
         @Override
-        public InputStream findClass(String pkg, String name) throws IOException {
-            return findCtSymClass(classDirs, pkg, name);
+        public @NotNull ExIterable<String> packages() {
+            return new ExIterable<>() {
+                @Override
+                public ExIterator<String> iterator() throws Exception {
+                    final Queue<PackageDirPair> packageDirs = new ArrayDeque<>();
+                    for(var classDir : classDirs) {
+                        packageDirs.add(new PackageDirPair("", classDir));
+                    }
+
+                    final Set<String> seenPackages = new HashSet<>();
+
+                    return new ExIterator<>() {
+                        private String currentPackageName = null;
+                        private DirectoryStream<Path> currentDirStream = null;
+                        private Iterator<Path> currentDirStreamIterator = null;
+
+                        @Override
+                        public @Nullable String next() throws Exception {
+                            while(!packageDirs.isEmpty()) {
+                                if(currentDirStream == null) {
+                                    var packageDirPair = packageDirs.remove();
+
+                                    currentDirStream = Files.newDirectoryStream(packageDirPair.path);
+                                    currentPackageName = packageDirPair.packageName;
+                                    currentDirStreamIterator = currentDirStream.iterator();
+                                }
+
+                                while(currentDirStreamIterator.hasNext()) {
+                                    var entry = currentDirStreamIterator.next();
+                                    String segment = entry.getFileName().toString();
+                                    if(Files.isDirectory(entry)) {
+                                        packageDirs.add(new PackageDirPair(appendToInternalName(currentPackageName, segment), entry));
+                                    }
+                                    else if(segment.endsWith(".class") && !seenPackages.contains(currentPackageName)) {
+                                        seenPackages.add(currentPackageName);
+                                        return currentPackageName;
+                                    }
+                                }
+
+                                currentDirStreamIterator = null;
+                                currentPackageName = null;
+                                var prevDirStream = currentDirStream;
+                                currentDirStream = null;
+                                prevDirStream.close();
+                            }
+
+                            return null;
+                        }
+
+                        @Override
+                        public void close() throws Exception {
+                            currentDirStream.close();
+                        }
+                    };
+                }
+            };
+        }
+
+        @Override
+        public @NotNull ExIterable<String> classesInPackage(@NotNull String pkg) throws Exception {
+            return findCtSymClassesInPackage(classDirs, pkg);
+        }
+
+        @Override
+        public InputStream findClass(String name) throws Exception {
+            return findCtSymClass(classDirs, name);
         }
     }
 

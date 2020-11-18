@@ -1,5 +1,6 @@
 syntax = "proto2";
 
+import "google/protobuf/descriptor.proto";
 import "google/protobuf/empty.proto";
 import "scalapb/scalapb.proto";
 
@@ -14,10 +15,17 @@ option (scalapb.options) = {
     preserve_unknown_fields: false
 };
 
+extend google.protobuf.MessageOptions {
+    optional int32 currentFormatVersion = 50000;
+}
+
+
 // File Formats
 
 // argon-metadata
 message Metadata {
+    option (currentFormatVersion) = 1;
+
     required int32 formatVersion = 1;
     required string name = 2;
     required ModuleType moduleType = 3;

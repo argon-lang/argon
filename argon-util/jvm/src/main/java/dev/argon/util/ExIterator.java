@@ -1,5 +1,7 @@
 package dev.argon.util;
 
+import org.jetbrains.annotations.Nullable;
+
 public interface ExIterator<T> extends AutoCloseable {
-    T next() throws Exception;
+    @Nullable T next() throws Exception;
 }
