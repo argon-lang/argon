@@ -296,6 +296,8 @@ private[emitter] abstract class ZipModuleWriter[R <: MaybeBlocking] {
       case Expression.ExprType.Sequence(_) => IO.unit
       case Expression.ExprType.StoreVariable(_) => IO.unit
 
+      case Expression.ExprType.Empty => IO.dieMessage("Invalid empty expression")
+
     })
 
   def writePatternExpr(patternExpr: PatternExpr): RComp[R, Unit] =

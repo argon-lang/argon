@@ -64,7 +64,7 @@ public class ArgonModuleSourceJava implements ArgonModuleSourceImpure {
         return Metadata.newBuilder()
             .setFormatVersion(ModuleFormatVersion.currentVersion())
             .setName(library.visit(new LibraryNameVisitor()))
-            .setModuleType(ModuleType.ReferenceModule)
+            .setModuleType(ModuleType.InterfaceModule)
             .build();
     }
 

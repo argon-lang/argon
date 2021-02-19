@@ -5,70 +5,54 @@ import zio.stream.{ZStream, Stream}
 
 import scala.reflect.ClassTag
 
-@SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null", "org.wartremover.warts.Var", "dev.argon.warts.ZioEffect"))
 object StreamMemo {
 
-  def make[R, E >: Null, A: ClassTag](stream: ZStream[R, E, A]): URManaged[R, Stream[E, A]] = for {
+  def make[R, E, A](stream: ZStream[R, E, A]): URManaged[R, Stream[E, A]] = for {
     env <- ZManaged.environment[R]
-    data <- Managed.effectTotal { new MemoData[E, A]() }
+    data <- ZManaged.fromEffect(MemoData.empty[E, A])
     dataLock <- Managed.fromEffect(Semaphore.make(1))
     process <- stream.process
   } yield ZStream(
     for {
       readCount <- Managed.fromEffect(Ref.make(0))
-    } yield
+    } yield dataLock.withPermit(
       readCount.get.flatMap { prevRead =>
-        dataLock.withPermit(
-          IO.effectTotal { data.valueCount }.flatMap { count =>
-            if(prevRead < count)
-              readCount.set(count) *>
-                getNewDataChunk(data, prevRead = prevRead, count = count)
-            else
-              IO.effectTotal { data.result }.flatMap { result =>
-                if(result ne null)
-                  IO.halt(result)
-                else
-                  readNext(data, process) <*
-                    IO.effectTotal { data.valueCount }.flatMap(readCount.set)
-              }
-          }
-        )
-      }
-  ).provide(env)
-
-  private def getNewDataChunk[A: ClassTag](data: MemoData[_, A], prevRead: Int, count: Int): UIO[Chunk[A]] =
-    IO.effectTotal {
-      val arr = new Array[A](count - prevRead)
-      val _ = System.arraycopy(data.values, prevRead, arr, 0, arr.length)
-      Chunk.fromArray(arr)
-    }
-
-  private def readNext[R, E >: Null, A: ClassTag](data: MemoData[E, A], process: ZIO[R, Option[E], Chunk[A]]): ZIO[R, Option[E], Chunk[A]] =
-    process.foldCauseM(
-      failure = cause => IO.effectTotal { data.result = cause } *> IO.halt(cause),
-      success = chunk => IO.effectTotal {
-        val count = data.valueCount
-        if(data.values.length - count < chunk.size) {
-          val newArr = new Array[A](Math.max(2 * data.values.length, count + chunk.size))
-          val _ = System.arraycopy(data.values, 0, newArr, 0, count)
-          data.values = newArr
+        data.values.get.flatMap { values =>
+          if(prevRead < values.size)
+            readCount.set(values.size).as(values.drop(prevRead))
+          else
+            data.result.get.flatMap {
+              case Some(result) => IO.halt(result)
+              case None =>
+                readNext(data, process, readCount)
+            }
         }
-
-        { val _ = chunk.copyToArray(data.values, count, chunk.size) }
-        data.valueCount = count + chunk.size
-
-        chunk
       }
     )
+  ).provide(env)
 
+  private def readNext[R, E, A](data: MemoData[E, A], process: ZIO[R, Option[E], Chunk[A]], readCount: Ref[Int]): ZIO[R, Option[E], Chunk[A]] =
+    process.foldCauseM(
+      failure = cause => data.result.set(Some(cause)) *> IO.halt(cause),
+      success = chunk =>
+        for {
+          newCount <- data.values.modify { prev =>
+            val newValues = prev ++ chunk
+            (newValues.size, newValues)
+          }
+          _ <- readCount.set(newCount)
+        } yield chunk
+    )
 
-  private class MemoData[E >: Null, A: ClassTag] {
-    @volatile
-    var values = new Array[A](16)
+  private final case class MemoData[E, A](values: Ref[Chunk[A]], result: Ref[Option[Cause[Option[E]]]])
 
-    @volatile
-    var valueCount = 0
+  private object MemoData {
 
-    var result: Cause[Option[E]] = null
+    def empty[E, A]: UIO[MemoData[E, A]] = for {
+      valuesRef <- Ref.make[Chunk[A]](Chunk.empty)
+      resultRef <- Ref.make[Option[Cause[Option[E]]]](None)
+    } yield MemoData(valuesRef, resultRef)
+
   }
+
 }

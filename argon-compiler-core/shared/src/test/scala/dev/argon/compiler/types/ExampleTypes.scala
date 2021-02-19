@@ -1,7 +1,7 @@
 package dev.argon.compiler.types
 
 import dev.argon.compiler.{Comp, CompStream}
-import dev.argon.compiler.core.{AbsRef, ArModule, ArTrait, Context, GlobalBinding, ModuleId, TraitId}
+import dev.argon.compiler.core.{AbsRef, ArModule, ArTrait, Context, GlobalBinding, ModuleId, PayloadSpecInfo, TraitId}
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.expr.ArExpr.TraitType
 import dev.argon.compiler.options.{CompilerInput, CompilerOptionID}
@@ -30,7 +30,7 @@ trait ExampleTypes {
     override val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]] = Vector.empty
   }
 
-  def traitType[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): TraitType[context.type, Id] =
+  def traitType[TPayloadSpec[_, _]: PayloadSpecInfo](arTrait: ArTrait[context.type, TPayloadSpec]): TraitType[context.type, Id] =
     TraitType[context.type, Id](AbsRef(arTrait), Vector.empty)
 
   val traitA: ArTrait[context.type, DeclarationPayloadSpecifier]
