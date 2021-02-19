@@ -1,9 +1,11 @@
 package dev.argon.compiler.types
 
 import dev.argon.compiler.{Comp, CompStream}
-import dev.argon.compiler.core.{AbsRef, ArModule, ArTrait, GlobalBinding, ModuleId, TraitId}
+import dev.argon.compiler.core.{AbsRef, ArModule, ArTrait, Context, GlobalBinding, ModuleId, TraitId}
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.expr.ArExpr.TraitType
+import dev.argon.compiler.options.{CompilerInput, CompilerOptionID}
+import dev.argon.options.{FileList, Options}
 import dev.argon.util.{NamespacePath, UniqueIdentifier}
 import shapeless.Id
 import zio.{IO, UIO}
@@ -12,7 +14,7 @@ import zio.test.{Gen, Sample}
 
 trait ExampleTypes {
 
-  val context = new DummyContext
+  val context: Context.Aux[DummyBackend]
 
   lazy val module = new ArModule[context.type, DeclarationPayloadSpecifier] {
     override val context: ExampleTypes.this.context.type = ExampleTypes.this.context
@@ -42,17 +44,34 @@ trait ExampleTypes {
 
 object ExampleTypes {
 
-  def make: UIO[ExampleTypes] = for {
-    traitAId <- UniqueIdentifier.make
-    traitBId <- UniqueIdentifier.make
-    traitCId <- UniqueIdentifier.make
-    traitDId <- UniqueIdentifier.make
-    traitEId <- UniqueIdentifier.make
-  } yield new ExampleTypes {
-    override val traitA: ArTrait[context.type, DeclarationPayloadSpecifier] = DummyTrait(context)(module, "A", TraitId(traitAId))
-    override val traitB: ArTrait[context.type, DeclarationPayloadSpecifier] = DummyTrait(context)(module, "B", TraitId(traitBId), traitType(traitA))
-    override val traitC: ArTrait[context.type, DeclarationPayloadSpecifier] = DummyTrait(context)(module, "C", TraitId(traitCId), traitType(traitB))
-    override val traitD: ArTrait[context.type, DeclarationPayloadSpecifier] = DummyTrait(context)(module, "D", TraitId(traitDId), traitType(traitA))
-    override val traitE: ArTrait[context.type, DeclarationPayloadSpecifier] = DummyTrait(context)(module, "E", TraitId(traitEId), traitType(traitB), traitType(traitD))
+  def make: UIO[ExampleTypes] = {
+    val backend = new DummyBackend
+    for {
+      ctx <- Context.make(backend)(CompilerInput[Nothing](
+        options = Options.fromFunction(new Options.OptionValueFunction[Id, CompilerOptionID] {
+          override def apply[E](id: CompilerOptionID { type ElementType = E }): Id[E] = id match {
+            case CompilerOptionID.ModuleName => "dummy"
+            case CompilerOptionID.InputFiles => new FileList(Nil)
+            case CompilerOptionID.References => new FileList(Nil)
+          }
+        }),
+
+        backendOptions = Options.fromFunction[Id, Nothing](new Options.OptionValueFunction[Id, Nothing] {
+          override def apply[E](id: Nothing { type ElementType = E }): Id[E] = id
+        })
+      ))
+      traitAId <- UniqueIdentifier.make
+      traitBId <- UniqueIdentifier.make
+      traitCId <- UniqueIdentifier.make
+      traitDId <- UniqueIdentifier.make
+      traitEId <- UniqueIdentifier.make
+    } yield new ExampleTypes {
+      override val context: Context.Aux[DummyBackend] = ctx
+      override val traitA: ArTrait[context.type, DeclarationPayloadSpecifier] = DummyTrait(context)(module, "A", TraitId(traitAId))
+      override val traitB: ArTrait[context.type, DeclarationPayloadSpecifier] = DummyTrait(context)(module, "B", TraitId(traitBId), traitType(traitA))
+      override val traitC: ArTrait[context.type, DeclarationPayloadSpecifier] = DummyTrait(context)(module, "C", TraitId(traitCId), traitType(traitB))
+      override val traitD: ArTrait[context.type, DeclarationPayloadSpecifier] = DummyTrait(context)(module, "D", TraitId(traitDId), traitType(traitA))
+      override val traitE: ArTrait[context.type, DeclarationPayloadSpecifier] = DummyTrait(context)(module, "E", TraitId(traitEId), traitType(traitB), traitType(traitD))
+    }
   }
 }

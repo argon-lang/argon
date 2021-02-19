@@ -1,117 +1,57 @@
 package dev.argon.build.testrunner
 
-import java.io.IOException
-import java.nio.charset.StandardCharsets
-
-import dev.argon.io.{Path, StreamableMessage, ZipFileReader}
 import dev.argon.build.BuildProcess
 import dev.argon.compiler._
-import dev.argon.compiler.core.ModuleId
+import dev.argon.compiler.core.{Context, ModuleId}
 import cats._
-import cats.data.NonEmptyList
 import zio._
 import zio.stream._
-import dev.argon.backend.{Backend, ResourceWriter}
-import dev.argon.io.fileio.FileIO
+import dev.argon.backend.Backend
+import dev.argon.io.fileio.{FileIO, ZipRead}
 import dev.argon.build._
-import dev.argon.build.testrunner.TestCaseRunnerCompilePhase.{TestCaseInputSource, TestCaseOtherRes, TestCompileResource}
-import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
-import dev.argon.compiler.options.{CompilerOptions, FileList}
-import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
+import dev.argon.compiler.options.{CompilerInput, CompilerOptions}
+import dev.argon.io.ZipCreator
+import dev.argon.options.{FileList, Options}
+import dev.argon.parser.impl.ArgonSourceParser
+import dev.argon.util.{FileID, FileSpec, MaybeBlocking, ProtoBufCodecs, StreamableMessage}
 
-private[testrunner] abstract class TestCaseRunnerCompilePhase[I <: ResourceIndicator: Tag, -R <: ResourceReader[I]] extends TestCaseRunner[R] {
+private[testrunner] abstract class TestCaseRunnerCompilePhase[-R <: FileIO with ZipRead with MaybeBlocking] extends TestCaseRunner[R] {
 
   protected val moduleName = "TestProgram"
-  private val compilerOptions = CompilerOptions[Id, TestCompileResource[I]](
-    moduleName = moduleName,
-    inputFiles = new FileList(List.empty),
-    references = new FileList(List.empty),
-  )
 
   protected val backend: Backend
 
-  protected def backendOptions: Task[backend.BackendOptions[Id, TestCompileResource[I]]]
-
-  protected final def compileTestCase(testCase: TestCase, references: Vector[I]): ZManaged[R, CompilationError, backend.TCompilationOutput] =
-    ZManaged.fromEffect(backendOptions)
-      .orDie
-      .flatMap { backendOpts =>
-        BuildProcess.compile[TestCompileResource[I]](
-          backend : backend.type
-        )(
-          compilerOptions.copy[Id, TestCompileResource[I]](
-            inputFiles = new FileList[TestCompileResource[I]](testCase.sourceCode.map(TestCaseInputSource[I]).toList),
-            references = new FileList[TestCompileResource[I]](references.map(TestCaseOtherRes.apply).toList),
-          ) : CompilerOptions[Id, TestCompileResource[I]],
-          backendOpts : backend.BackendOptions[Id, TestCompileResource[I]],
-        )
-          .provideSomeLayer[R](TestCaseRunnerCompilePhase.testCompileResourceReaderLayer[I])
-      }
-
-
-}
-
-object TestCaseRunnerCompilePhase {
-
-  sealed trait TestCompileResource[I <: ResourceIndicator] extends ResourceIndicator
-  final case class TestCaseInputSource[I <: ResourceIndicator](inputSource: InputSourceData) extends TestCompileResource[I] {
-    override def extension: String = {
-      val slash = inputSource.name.lastIndexOf('/')
-      val dot = inputSource.name.lastIndexOf('.')
-
-      if(dot < 0 || dot < slash)
-        ""
-      else
-        inputSource.name.substring(dot + 1)
+  protected def backendOptions: Task[Options[Id, backend.BackendOptionID]] =
+    backend.backendOptions.inferDefaults(backend.backendOptions.empty[Id]) match {
+      case Left(id) =>
+        val optionName = backend.backendOptions.info.get(id).name
+        IO.fail(new RuntimeException("Missing field in backend options: " + optionName))
+      case Right(value) => IO.succeed(value)
     }
 
-    override def show: String = inputSource.name
-  }
-  final case class TestCaseOtherRes[I <: ResourceIndicator](id: I) extends TestCompileResource[I] {
-    override def extension: String = id.extension
-    override def show: String = id.show
-  }
+  protected final def compileTestCase(testCase: TestCase, references: FileList): ZManaged[R, CompilationError, BuildResult.Aux[backend.type]] = {
+    val compilerOptions = CompilerOptions[Id](
+      moduleName = moduleName,
+      inputFiles = new FileList(List.empty),
+      references = references,
+    )
 
-  private def testCompileResourceReaderLayer[I <: ResourceIndicator : Tag]: URLayer[ResourceReader[I], ResourceReader[TestCompileResource[I]]] =
-    ZLayer.fromFunction { env =>
-      new ResourceReader.Service[TestCompileResource[I]] with TestCaseRunnerCompilePhasePlatformSpecific.ResourceReaderService[I] {
-        protected val outerReaderEnv: ResourceReader[I] = env
-        protected val resIndicatorTag: Tag[I] = implicitly[Tag[I]]
+    val sourceCodeStream = ZStream.fromIterable(testCase.sourceCode.zipWithIndex)
+      .flatMap { case (inputSourceData, index) =>
+        val inputFile = FileSpec(FileID(index), inputSourceData.name)
 
-        override def readFile(id: TestCompileResource[I]): Stream[CompilationError, Byte] =
-          id match {
-            case TestCaseInputSource(inputSource) => Stream.fromChunk(Chunk.fromArray(inputSource.data.getBytes(StandardCharsets.UTF_8)))
-            case TestCaseOtherRes(id) => env.get.readFile(id)
-          }
+        val fileStream = ZStream.fromChunk(Chunk.fromArray(inputSourceData.data.toCharArray))
 
-        override def readTextFile(id: TestCompileResource[I]): Stream[CompilationError, Char] =
-          id match {
-            case TestCaseInputSource(inputSource) => Stream.fromChunk(Chunk.fromArray(inputSource.data.toCharArray))
-            case TestCaseOtherRes(id) => env.get.readTextFile(id)
-          }
-
-        override def readTextFileAsString(id: TestCompileResource[I]): Comp[String] =
-          id match {
-            case TestCaseInputSource(inputSource) => IO.succeed(inputSource.data)
-            case TestCaseOtherRes(id) => env.get.readTextFileAsString(id)
-          }
-
-        override def getZipReader(id: TestCompileResource[I]): Managed[CompilationError, ZipFileReader[Any, CompilationError]] =
-          id match {
-            case TestCaseInputSource(_) =>
-              Managed.fail(DiagnosticError.ResourceIOError(
-                DiagnosticSource.ThrownException(new IOException("Invalid file format. Not a zip file."))
-              ))
-            case TestCaseOtherRes(id) => env.get.getZipReader(id)
-          }
-
-        override def deserializeProtocolBuffer[A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(data: stream.Stream[CompilationError, Byte]): Comp[A] =
-          env.get.deserializeProtocolBuffer(companion)(data)
-
-        override def deserializeProtocolBufferStream[R, A >: Null <: AnyRef](companion: StreamableMessage[A])(data: ZStream[R, CompilationError, Byte]): ZStream[R, CompilationError, A] =
-          env.get.deserializeProtocolBufferStream(companion)(data)
+        ArgonSourceParser.parse(inputFile)(fileStream)
       }
-    }
+
+    for {
+      backendOpts <- ZManaged.fromEffect(backendOptions.orDie)
+      compilerInput = CompilerInput(compilerOptions, backendOpts)
+      buildResult <- BuildProcess.buildResult(backend)(compilerInput, sourceCodeStream)
+    } yield buildResult
+  }
+
 
 }
 

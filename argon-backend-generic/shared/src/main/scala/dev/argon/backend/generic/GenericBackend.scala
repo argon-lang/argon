@@ -1,132 +1,54 @@
 package dev.argon.backend.generic
 
 import cats.{Applicative, Monad}
-import cats.implicits._
-import dev.argon.compiler._
-import dev.argon.stream._
-import scalapb.GeneratedMessage
-import cats.instances._
-import cats.data.NonEmptyList
-import dev.argon.armodule.emitter.{ModuleEmitOptions, ModuleEmitter}
-import dev.argon.compiler.options.SingleFile
-import dev.argon.backend.{Backend, CompilationOutput, ResourceAccess, ResourceWriter}
-import dev.argon.compiler.core.Context
-import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader, SourceParser}
-import dev.argon.compiler.options.{CompilerInput, OptionInfo, OptionsConverter, OptionsConverterFunction, OptionsHandler, OptionsLoader, SingleFile}
-import dev.argon.io.ZipEntryInfo
-import dev.argon.stream.builder.Source
+import dev.argon.backend.Backend
+import dev.argon.compiler.core.Context.Aux
+import dev.argon.compiler.core.{ArModule, Context}
+import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
+import dev.argon.compiler.loaders.ModuleLoader
+import dev.argon.options.{OptionDecoder, OptionInfo, Options, OptionsHandler, SingleFile}
 import shapeless._
 import zio._
-import zio.stream._
-import dev.argon.compiler.options.CodecSelector.Instances._
-
+import dev.argon.util.ProtoBufCodecs
 
 object GenericBackend extends Backend {
-
-  override type BackendOptions[F[_], I] = GenericBackendOptions[F, I]
-  override type BackendOutputOptions[F[_], I] = GenericOutputOptions[F, I]
-  override type TCompilationOutput = CompilationOutput[BackendOutputOptionsId]
-
-
   override val id: String = "generic"
   override val name: String = "Generic"
+  override val platformIds: Set[String] = Set.empty
 
-  override val backendOptions: OptionsHandler[GenericBackendOptions] = new OptionsHandler[GenericBackendOptions] {
-    override def info[I]: GenericBackendOptions[OptionInfo[*, I], I] =
-      GenericBackendOptions()
+  override type BackendOptionID = Nothing
+  override val backendOptions: OptionsHandler[BackendOptionID, Id] = new OptionsHandler[BackendOptionID, Id] {
+    override type OptRepr[A[_]] = HNil
 
-    override def converter[I]: OptionsConverter[GenericBackendOptions[*[_], I]] =
-      new OptionsConverter[GenericBackendOptions[*[_], I]] {
-        override def convert[A[_], B[_], C[_], F[_] : Applicative](optionsA: GenericBackendOptions[A, I], optionsB: GenericBackendOptions[B, I])(f: OptionsConverterFunction[A, B, C, F]): F[GenericBackendOptions[C, I]] =
-          Applicative[F].pure(GenericBackendOptions())
-      }
+    override def ids: HNil = HNil
 
-    override def optionsLoader[IOld, I]: OptionsLoader[GenericBackendOptions[Id, IOld], GenericBackendOptions[Id, I], IOld, I] = {
-      import dev.argon.compiler.options.OptionsLoader.Implicits._
-      OptionsLoader.apply
-    }
+    override def combineRepr[A[_], B[_], C[_], F[_] : Applicative](lista: HNil, listb: HNil)(f: OptionsHandler.CombineFunction[BackendOptionID, A, B, C, F]): F[HNil] =
+      Applicative[F].pure(HNil)
 
+    override def reprToOptions[A[_]](list: HNil): Options[A, Nothing] =
+      Options.fromFunction[A, Nothing](new Options.OptionValueFunction[A, Nothing] {
+        override def apply[E](id: Nothing { type ElementType = E }): A[E] = id
+      })
+
+    override def info: Options[OptionInfo, Nothing] = reprToOptions(HNil)
+
+    override def decoder: Options[OptionDecoder, Nothing] = reprToOptions(HNil)
   }
 
-  override val outputOptions: OptionsHandler[GenericOutputOptions] = new OptionsHandler[GenericOutputOptions] {
-    override def info[I]: GenericOutputOptions[OptionInfo[*, I], I] =
-      GenericOutputOptions[OptionInfo[*, I], I](
-        referenceModule = OptionInfo(
-          name = "referenceModule",
-          description = "The reference module that will contain the interface of the compiled module",
-          defaultValue = None
-        ),
-        declarationModule = OptionInfo(
-          name = "declarationModule",
-          description = "The declaration module that will contain the serialized compiled module",
-          defaultValue = None
-        ),
-      )
+  override type OutputOptionID = Nothing
 
-    override def converter[I]: OptionsConverter[GenericOutputOptions[*[_], I]] =
-      new OptionsConverter[GenericOutputOptions[*[_], I]] {
-        override def convert[A[_], B[_], C[_], F[_] : Applicative](optionsA: GenericOutputOptions[A, I], optionsB: GenericOutputOptions[B, I])(f: OptionsConverterFunction[A, B, C, F]): F[GenericOutputOptions[C, I]] =
-          Applicative[F].map2(
-            f(optionsA.referenceModule, optionsB.referenceModule),
-            f(optionsA.declarationModule, optionsB.declarationModule),
-          ) { (convRefModule, convDeclModule) =>
-            GenericOutputOptions(
-              referenceModule = convRefModule,
-              declarationModule = convDeclModule,
-            )
-          }
-      }
 
-    override def optionsLoader[IOld, I]: OptionsLoader[GenericOutputOptions[Id, IOld], GenericOutputOptions[Id, I], IOld, I] = {
-      import dev.argon.compiler.options.OptionsLoader.Implicits._
-      OptionsLoader.apply
-    }
-  }
+  override val outputOptions: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]] = new OptionsHandler.Empty[Lambda[X => SingleFile]]
 
-  override def testOutputOptions[I](dummyFile: I): GenericOutputOptions[Id, I] =
-    GenericOutputOptions[Id, I](
-      referenceModule = Some(new SingleFile(dummyFile)),
-      declarationModule = Some(new SingleFile(dummyFile)),
-    )
+  override def moduleLoaders(options: Options[Id, BackendOptionID]): Seq[ModuleLoader[Context.Aux[this.type]]] = Seq()
 
-  override def compile[I <: ResourceIndicator : Tag](input: CompilerInput[I, GenericBackendOptions[Id, I]]): ZManaged[ResourceReader[I] with SourceParser, CompilationError, TCompilationOutput] = {
-    val ctx = ModuleContext(input)
+  override type TExternHandler = GenericExternHandler
+  override def externHandler(options: Options[Id, BackendOptionID]): UIO[GenericExternHandler] =
+    IO.succeed(new GenericExternHandler)
 
-    val moduleEmitter = new ModuleEmitterImpl {
-      override val context: ctx.type = ctx
-    }
-
-    ctx.module[ModuleContext with Context.WithRes[I]].map { module =>
-      createOutput(
-        refModuleGen = ModuleEmitter.emitModule(moduleEmitter)(ModuleEmitOptions(ModuleEmitOptions.ReferenceModule))(module),
-        declModuleGen = ModuleEmitter.emitModule(moduleEmitter)(ModuleEmitOptions(ModuleEmitOptions.DeclarationModule))(module),
-      )
-    }
-      .provideSomeLayer[ResourceReader[I] with SourceParser](GenericBackendLoadService.forResourceReader[I, ModuleContext with Context.WithRes[I]])
-  }
-
-  private def createOutput(refModuleGen: Stream[CompilationError, ModuleEmitter.StreamElem], declModuleGen: Stream[CompilationError, ModuleEmitter.StreamElem]): CompilationOutput[BackendOutputOptionsId] =
-    new CompilationOutput[BackendOutputOptionsId] {
-
-      private def outputModule[I <: ResourceIndicator : Tag](outputFile: Option[SingleFile[I]])(moduleGen: Stream[CompilationError, ModuleEmitter.StreamElem]): RComp[ResourceWriter[I], Unit] =
-        ZIO.foreach(outputFile) { outputFile =>
-          ZIO.accessM[ResourceWriter[I]] { env =>
-            val res = env.get
-
-            val zipEntries = moduleGen.map { case (path, message) =>
-              ZipEntryInfo(path, res.serializeProtocolBuffer(message))
-            }
-
-            val zipData = res.zipFromEntries(zipEntries)
-
-            res.writeToResource(outputFile.file)(zipData)
-          }
-        }.unit
-
-      override def write[I <: ResourceIndicator : Tag](options: BackendOutputOptionsId[I]): RComp[ResourceWriter[I], Unit] =
-        outputModule(options.referenceModule)(refModuleGen) *>
-          outputModule(options.declarationModule)(declModuleGen)
-
-    }
-
+  override def emitModule(options: Options[Id, BackendOptionID])(context: Aux[GenericBackend.this.type])(module: ArModule[context.type, DeclarationPayloadSpecifier]): Options[Id, OutputOptionID] =
+    Options.fromFunction[Id, Nothing](new Options.OptionValueFunction[Id, OutputOptionID] {
+      override def apply[E](id: Nothing { type ElementType = E }): Id[E] = id
+    })
 }
+

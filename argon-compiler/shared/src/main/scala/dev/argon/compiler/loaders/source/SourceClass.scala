@@ -16,8 +16,9 @@ import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import shapeless.{Id, Nat}
 import zio.{IO, ZIO}
 import zio.interop.catz.core._
+import AccessModifierHelpers._
 
-private[compiler] object SourceClass extends AccessModifierHelpers {
+private[compiler] object SourceClass {
 
   final case class GroupedStaticStatements
   (

@@ -1,37 +1,36 @@
 package dev.argon.compiler.core
 
-import PayloadSpecifiers._
 import dev.argon.compiler._
-import dev.argon.compiler.loaders.{ModuleLoad, ResourceIndicator, ResourceReader, SourceParser}
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types._
 import cats._
-import cats.data.NonEmptyList
-import cats.evidence.{===, Is}
-import cats.implicits._
+import dev.argon.backend.{Backend, ExternHandler}
 import dev.argon.compiler.expr.{ClassConstructorBody, UniverseExpr, WrapperInstance}
 import dev.argon.compiler.options.CompilerInput
-import shapeless.Nat
 import zio._
 
 
 trait Context {
 
-  type TFunctionImplementation
-  type TMethodImplementation
-  type TDataConstructorImplementation
-  type TClassConstructorImplementation
+  val backend: Backend
+  val externHandler: backend.TExternHandler
 
-  type BackendOptions
+  type TFunctionImplementation = FunctionImplementation[externHandler.ExternFunction, typeSystem.SimpleExpr]
+  type TMethodImplementation = MethodImplementation[externHandler.ExternMethod, typeSystem.SimpleExpr]
+  type TDataConstructorImplementation = DataConstructorImplementation[typeSystem.SimpleExpr]
+  type TClassConstructorImplementation = ClassConstructorImplementation[ClassConstructorBody[this.type]]
 
-  def createExprFunctionImplementation(expr: typeSystem.SimpleExpr): TFunctionImplementation
-  def createExprMethodImplementation(expr: typeSystem.SimpleExpr): TMethodImplementation
-  def abstractMethodImplementation: TMethodImplementation
-  def createClassConstructorBodyImplementation(body: ClassConstructorBody[this.type]): TClassConstructorImplementation
-  def createDataConstructorImplementation(body: typeSystem.SimpleExpr): TDataConstructorImplementation
+  def createExprFunctionImplementation(expr: typeSystem.SimpleExpr): TFunctionImplementation = FunctionImplementation.Expression(expr)
+  def createExprMethodImplementation(expr: typeSystem.SimpleExpr): TMethodImplementation = MethodImplementation.Expression(expr)
+  def abstractMethodImplementation: TMethodImplementation = MethodImplementation.Abstract
+  def createClassConstructorBodyImplementation(body: ClassConstructorBody[this.type]): TClassConstructorImplementation = ClassConstructorImplementation(body)
+  def createDataConstructorImplementation(body: typeSystem.SimpleExpr): TDataConstructorImplementation = DataConstructorImplementation(body)
 
-  def createExternFunctionImplementation(specifier: String, source: DiagnosticSource): Comp[TFunctionImplementation]
-  def createExternMethodImplementation(specifier: String, source: DiagnosticSource): Comp[TMethodImplementation]
+  def createExternFunctionImplementation(specifier: String, source: DiagnosticSource): Comp[TFunctionImplementation] =
+    externHandler.loadExternFunction(source, specifier).map(FunctionImplementation.Extern(source, _))
+
+  def createExternMethodImplementation(specifier: String, source: DiagnosticSource): Comp[TMethodImplementation] =
+    externHandler.loadExternMethod(source, specifier).map(MethodImplementation.Extern(source, _))
 
   object ContextTypeSystem extends TypeSystem {
     override val context: Context.this.type = Context.this
@@ -71,16 +70,15 @@ trait Context {
 
   final lazy val signatureContext: ContextSignatureContext.type = ContextSignatureContext
 
-  type ResIndicator <: ResourceIndicator
-  implicit val resIndicatorTag: Tag[ResIndicator]
-  protected val compilerInput: CompilerInput[ResIndicator, BackendOptions]
-
-  def module[TContext >: this.type <: Context.WithRes[ResIndicator]: Tag]: ZManaged[ModuleLoad[ResIndicator, TContext] with ResourceReader[ResIndicator] with SourceParser, CompilationError, ArModule[this.type, DeclarationPayloadSpecifier]]
-
 }
 
 object Context {
-  type WithRes[I <: ResourceIndicator] = Context { type ResIndicator = I }
+  type Aux[TBackend <: Backend] = Context { val backend: TBackend }
 
-
+  def make(backend2: Backend)(input: CompilerInput[backend2.BackendOptionID]): UIO[Aux[backend2.type]] = for {
+    externs <- backend2.externHandler(input.backendOptions)
+  } yield new Context {
+    override val backend: backend2.type = backend2
+    override val externHandler: backend.TExternHandler = externs
+  }
 }

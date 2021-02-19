@@ -8,46 +8,27 @@ import zio.stream._
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 
 object fileio {
-  type FileIOLite = Has[FileIOLite.Service]
-  type FileIO[P] = Has[FileIO.Service[P]]
+  type FileIO = Has[FileIO.Service]
+  type ZipRead = Has[ZipRead.Service]
 
   object FileIO {
 
-    trait Service[P] extends FileIOServicePlatformSpecific[P] {
-      def getAbsolutePath(path: P): IO[Throwable, P]
-      def ensureParentDirectory(path: P): IO[Throwable, Unit]
+    trait Service {
+      def readFile(path: String): Stream[Throwable, Byte]
+      def readAllText(path: String): IO[Throwable, String]
+      def readText(path: String): Stream[Throwable, Char]
+      def writeToFile[R](path: String)(data: ZStream[R, Throwable, Byte]): ZIO[R, Throwable, Unit]
 
-      def readFile[E](errorHandler: Throwable => Cause[E])(path: P): Stream[E, Byte]
-      def readAllText(path: P): IO[Throwable, String]
-      def readText[E](errorHandler: Throwable => Cause[E])(path: P): Stream[E, Char]
-      def writeToFile[R, E](errorHandler: Throwable => Cause[E])(path: P)(data: ZStream[R, E, Byte]): ZIO[R, E, Unit]
+      def isDirectory(path: String): IO[Throwable, Boolean]
+      def listDirectory(path: String): Stream[Throwable, String]
 
-      def isDirectory(path: P): IO[Throwable, Boolean]
-      def listDirectory(path: P): Stream[Throwable, P]
-
-      def openZipFile[R, E](errorHandler: Throwable => Cause[E])(path: P): Managed[E, ZipFileReader[R, E]]
     }
 
   }
 
-  object FileIOLite {
+  object ZipRead {
     trait Service {
-      def zipEntries[R, E <: Throwable](errorHandler: Throwable => Cause[E])(entries: ZStream[R, E, ZipEntryInfo[R, E]]): ZStream[R, E, Byte]
-
-      def deserializeProtocolBuffer[R, E <: Throwable, A <: GeneratedMessage]
-      (errorHandler: Throwable => Cause[E])
-      (companion: GeneratedMessageCompanion[A])
-      (data: ZStream[R, E, Byte])
-      : ZIO[R, E, A]
-
-      def serializeProtocolBuffer[E <: Throwable](errorHandler: Throwable => Cause[E])(message: GeneratedMessage): Stream[E, Byte]
-
-      def deserializeProtocolBufferStream[R, E <: Throwable, A >: Null <: AnyRef]
-      (errorHandler: Throwable => Cause[E])
-      (companion: StreamableMessage[A])
-      (data: ZStream[R, E, Byte])
-      : ZStream[R, E, A]
-
+      def openZipFile(path: String): Managed[Throwable, ZipFileReader[Throwable]]
     }
   }
 

@@ -1,18 +1,22 @@
 package dev.argon.build.testrunner
 
+import dev.argon.build.BuildResult
 import dev.argon.compiler.CompilationError
-import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
+import dev.argon.options.FileList
+import dev.argon.io.ZipCreator
+import dev.argon.io.fileio.{FileIO, ZipRead}
+import dev.argon.util.{MaybeBlocking, ProtoBufCodecs}
 import zio._
 
-private[testrunner] abstract class TestCaseRunnerExecutionPhase[I <: ResourceIndicator: Tag, -R <: ResourceReader[I]] extends TestCaseRunnerCompilePhase[I, R] {
+private[testrunner] abstract class TestCaseRunnerExecutionPhase[-R <: FileIO with ZipRead with MaybeBlocking] extends TestCaseRunnerCompilePhase[R] {
 
-  protected val references: Vector[I]
+  protected val references: FileList
 
   override def runTest(testCase: TestCase): ZIO[R, CompilationError, TestCaseCompletedResult] =
     compileTestCase(testCase, references)
       .use(getProgramOutput)
       .map(TestCaseActualResult.Output)
 
-  protected def getProgramOutput(compOutput: backend.TCompilationOutput): ZIO[R, CompilationError, String]
+  protected def getProgramOutput(compOutput: BuildResult.Aux[backend.type]): ZIO[R, CompilationError, String]
 
 }

@@ -23,14 +23,15 @@ import zio.stream._
 import zio.interop.catz.core._
 import cats.implicits._
 import ModuleCreatorCommon._
+import dev.argon.compiler.output.ArgonModuleSerialized
 
 import scala.collection.immutable.{Map, Vector}
 
-private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]] extends ModuleCreatorBase[TPayloadSpec] {
+private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSpecInfo] extends ModuleCreatorBase[TPayloadSpec] {
 
   import context.{typeSystem, signatureContext}, typeSystem.{ context => _, _ }, signatureContext.{ context => _, TTypeWrapper => _, typeWrapperInstances => _, _ }
 
-  val source: ArgonModuleSource
+  val source: ArgonModuleSerialized
   val currentModuleDescriptor: ModuleId
   val referenceList: ArgonModule.ModuleReferencesList
   val referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]]
@@ -344,8 +345,8 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]] extends M
    )(
      moduleObjectType: DiagnosticError.ModuleObjectType,
    )(
-     getReference: (ArgonModuleSource, Int) => Comp[TRef],
-     getDefinition: (ArgonModuleSource, Int) => Comp[TDef],
+       getReference: (ArgonModuleSerialized, Int) => Comp[TRef],
+       getDefinition: (ArgonModuleSerialized, Int) => Comp[TDef],
    )(
      refOwnerLens: TRef => TValueOwner,
      defOwnerLens: TDef => TValueOwner,
@@ -357,7 +358,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]] extends M
    ): MemoCache[Any, CompilationError, Int, ModuleObjectLoadResult[TDefResult, TDefResult { val owner: TGlobalOwner[context.type, TPayloadSpec] }, TRefResult]] =
     cache.usingCreate { id =>
       if(id < 0) {
-        getReference(source, id).flatMap { refValue =>
+        getReference(source, -id).flatMap { refValue =>
           parseDescriptor(refOwnerLens(refValue)).flatMap {
             case ModuleObjectReference(owner) =>
               referenceHandler(refValue)(owner).flatMap {

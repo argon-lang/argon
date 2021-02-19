@@ -16,4 +16,7 @@ object ModulePaths {
   val methodTypeName = "method"
   val classCtorTypeName = "classCtor"
 
+
+  def extern(platformId: String, typeName: String, id: Int): String = s"$typeName/extern/$platformId/${id.abs.toString}"
+
 }

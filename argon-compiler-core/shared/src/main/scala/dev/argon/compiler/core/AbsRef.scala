@@ -1,27 +1,35 @@
 package dev.argon.compiler.core
 
+import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
+
 sealed trait AbsRef[TContext <: Context with Singleton, T[_ <: Context with Singleton, _[_, _]]] {
   type PayloadSpec[_, _]
   val value: T[TContext, PayloadSpec]
+
+  implicit val payloadSpecInfo: PayloadSpecInfo[PayloadSpec]
 }
 
 object AbsRef {
 
-  def apply[TContext <: Context with Singleton, TPayloadSpec[_, _], T[_ <: Context with Singleton, _[_, _]]](instance: T[TContext, TPayloadSpec]): AbsRef[TContext, T] =
-    new AbsRef[TContext, T] {
-      override type PayloadSpec[A, B] = TPayloadSpec[A, B]
-      override val value: T[TContext, PayloadSpec] = instance
+  final case class Declaration[TContext <: Context with Singleton, T[_ <: Context with Singleton, _[_, _]]](value: T[TContext, DeclarationPayloadSpecifier]) extends AbsRef[TContext, T] {
+    override type PayloadSpec[A, B] = DeclarationPayloadSpecifier[A, B]
+    override implicit val payloadSpecInfo: PayloadSpecInfo[DeclarationPayloadSpecifier] = PayloadSpecInfo.declarationPayloadSpecInfo
+  }
 
-      override def hashCode(): Int = value.hashCode()
+  final case class Reference[TContext <: Context with Singleton, T[_ <: Context with Singleton, _[_, _]]](value: T[TContext, ReferencePayloadSpecifier]) extends AbsRef[TContext, T] {
+    override type PayloadSpec[A, B] = ReferencePayloadSpecifier[A, B]
+    override implicit val payloadSpecInfo: PayloadSpecInfo[ReferencePayloadSpecifier] = PayloadSpecInfo.referencePayloadSpecInfo
+  }
 
-      @SuppressWarnings(Array("org.wartremover.warts.Equals"))
-      override def equals(o: Any): Boolean = o match {
-        case other: AbsRef[_, _] => value.equals(other.value)
-        case _ => false
-      }
 
-      @SuppressWarnings(Array("org.wartremover.warts.ToString"))
-      override def toString: String = value.toString
-    }
+
+  def apply[TContext <: Context with Singleton, TPayloadSpec[_, _]: PayloadSpecInfo, T[_ <: Context with Singleton, _[_, _]]](instance: T[TContext, TPayloadSpec]): AbsRef[TContext, T] =
+    implicitly[PayloadSpecInfo[TPayloadSpec]].visit(instance)(new PayloadSpecVisitor[T[TContext, *[_, _]], AbsRef[TContext, T]] {
+      override def visitDeclaration(container: T[TContext, DeclarationPayloadSpecifier]): AbsRef[TContext, T] =
+        Declaration(container)
+
+      override def visitReference(container: T[TContext, ReferencePayloadSpecifier]): AbsRef[TContext, T] =
+        Reference(container)
+    })
 
 }

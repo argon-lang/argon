@@ -15,9 +15,9 @@ sealed abstract class VTableBuilder {
   val vtableContext: VTableContext
   import vtableContext._
 
-  def fromClass[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[VTable]
-  def fromTrait[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): Comp[VTable]
-  def fromDataConstructor[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): Comp[VTable]
+  def fromClass[TPayloadSpec[_, _]: PayloadSpecInfo](arClass: ArClass[context.type, TPayloadSpec]): Comp[VTable]
+  def fromTrait[TPayloadSpec[_, _]: PayloadSpecInfo](arTrait: ArTrait[context.type, TPayloadSpec]): Comp[VTable]
+  def fromDataConstructor[TPayloadSpec[_, _]: PayloadSpecInfo](ctor: DataConstructor[context.type, TPayloadSpec]): Comp[VTable]
 }
 
 object VTableBuilder {
@@ -77,7 +77,7 @@ object VTableBuilder {
         }
       }
 
-      private def overrideMethod[TPayloadSpec[_, _]](method: MethodBinding[context.type, TPayloadSpec])(source: EntrySource)(baseTypeVTable: VT): Comp[VT] = {
+      private def overrideMethod[TPayloadSpec[_, _]: PayloadSpecInfo](method: MethodBinding[context.type, TPayloadSpec])(source: EntrySource)(baseTypeVTable: VT): Comp[VT] = {
 
         val newEntryImpl =
           if(method.method.isAbstract)
@@ -121,7 +121,7 @@ object VTableBuilder {
         )
       }
 
-      private def addNewMethods[TPayloadSpec[_, _]](methods: Vector[MethodBinding[context.type, TPayloadSpec]])(source: EntrySource)(baseTypeVTable: VT): Comp[VT] =
+      private def addNewMethods[TPayloadSpec[_, _]: PayloadSpecInfo](methods: Vector[MethodBinding[context.type, TPayloadSpec]])(source: EntrySource)(baseTypeVTable: VT): Comp[VT] =
         methods
           .traverse { method => overrideMethod(method)(source)(baseTypeVTable) }
           .map { baseTypeVTable |+| _.combineAll }
@@ -176,7 +176,9 @@ object VTableBuilder {
           case VTableEntry(_, _, VTableEntryAmbiguous(_)) => ???
         }
 
-      private def getBaseTraitVTable(bt: TTraitType): Comp[VT] =
+      private def getBaseTraitVTable(bt: TTraitType): Comp[VT] = {
+        import bt.arTrait.payloadSpecInfo
+
         for {
           btSig <- bt.arTrait.value.signature
           baseTraitVTable <- fromTrait(bt.arTrait.value)
@@ -186,9 +188,11 @@ object VTableBuilder {
               key -> VTableEntry(newSig, entrySource, impl)
           }
         } yield VTable(newMap.toMap)
+      }
 
-      override def fromClass[TPayloadSpec[_, _]](arClass: ArClass[context.type, TPayloadSpec]): Comp[VT] =
+      override def fromClass[TPayloadSpec[_, _]: PayloadSpecInfo](arClass: ArClass[context.type, TPayloadSpec]): Comp[VT] =
         classVtableCache.usingCreate { arClassWrap =>
+          import arClassWrap.payloadSpecInfo
           val arClass = arClassWrap.value
 
           for {
@@ -197,6 +201,8 @@ object VTableBuilder {
             baseClass = baseTypes.baseClass
             baseTraits = baseTypes.baseTraits
             baseClassVTable <- baseClass.traverse[Comp, VT] { bc =>
+              import bc.arClass.payloadSpecInfo
+
               for {
                 bcSig <- bc.arClass.value.signature
                 baseClassVTable <- fromClass(bc.arClass.value)
@@ -226,8 +232,9 @@ object VTableBuilder {
           } yield newVTable
         }.get(AbsRef(arClass))
 
-      override def fromTrait[TPayloadSpec[_, _]](arTrait: ArTrait[context.type, TPayloadSpec]): Comp[VT] =
+      override def fromTrait[TPayloadSpec[_, _]: PayloadSpecInfo](arTrait: ArTrait[context.type, TPayloadSpec]): Comp[VT] =
         traitVtableCache.usingCreate { arTraitWrap =>
+          import arTraitWrap.payloadSpecInfo
           val arTrait = arTraitWrap.value
 
           for {
@@ -246,8 +253,9 @@ object VTableBuilder {
           } yield newVTable
         }.get(AbsRef(arTrait))
 
-      override def fromDataConstructor[TPayloadSpec[_, _]](ctor: DataConstructor[context.type, TPayloadSpec]): Comp[VT] =
+      override def fromDataConstructor[TPayloadSpec[_, _]: PayloadSpecInfo](ctor: DataConstructor[context.type, TPayloadSpec]): Comp[VT] =
         dataCtorVtableCache.usingCreate { dataCtorWrap =>
+          import dataCtorWrap.payloadSpecInfo
           val ctor = dataCtorWrap.value
 
           for {

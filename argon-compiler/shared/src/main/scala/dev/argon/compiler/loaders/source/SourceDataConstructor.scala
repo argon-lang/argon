@@ -15,8 +15,9 @@ import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import shapeless.Nat
 import zio.IO
 import zio.interop.catz.core._
+import AccessModifierHelpers._
 
-private[compiler] object SourceDataConstructor extends AccessModifierHelpers {
+private[compiler] object SourceDataConstructor {
 
   final case class GroupedInstanceStatements
   (

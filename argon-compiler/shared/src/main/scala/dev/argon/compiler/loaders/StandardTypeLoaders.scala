@@ -12,7 +12,7 @@ object StandardTypeLoaders {
 
   private val arCore = ModuleId(LookupNames.argonCoreLib)
 
-  def loadUnitType[TPayloadSpec[_, _]]
+  def loadUnitType[TPayloadSpec[_, _]: PayloadSpecInfo]
   (context: Context)
   (messageSource: => DiagnosticSource)
   (currentModule: ArModule[context.type, TPayloadSpec])
@@ -25,10 +25,10 @@ object StandardTypeLoaders {
     {
       if(currentModule.id === arCore)
         currentModule.lookupNamespaceBindings(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass(context)(noArgs))
-            .map(AbsRef.apply)
+            .map(AbsRef(_))
       else
         ModuleLookup.lookupValues(context)(referencedModules)(arCore)(NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"))(ModuleLookup.lookupGlobalClass(context)(noArgs))
-          .map(AbsRef.apply)
+          .map(AbsRef(_))
 
     }
       .take(2)

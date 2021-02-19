@@ -73,6 +73,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                       .map {
                         case sig: Signature[FunctionResultInfo, len] =>
                           signatureFactory[FunctionResultInfo, len](env)(location)(method.value.method)(sig) { (args, result) =>
+                            import method.payloadSpecInfo
                             MethodCall(AbsRef(method.value.method), fromSimpleType(thisExpr), instanceType, args, result.returnType)
                           }
                       }
@@ -128,7 +129,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   reduceExprToValue(t).flatMap { t =>
 
                     def methodBindingsToOverloads
-                    [TPayloadSpec[_, _]]
+                    [TPayloadSpec[_, _]: PayloadSpecInfo]
                     (bindings: Vector[MethodBinding[context.type, TPayloadSpec]])
                     : OverloadResult[MemberValue[context.type]] =
                       NonEmptyVector.fromVector(bindings) match {
@@ -144,6 +145,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
                     unwrapType(t).collect[Comp[Vector[List[NonEmptyVector[OverloadExprFactory]]]]] {
                       case t @ ClassType(_, _) =>
+                        import t.arClass.payloadSpecInfo
+
                         memberName match {
                           case MemberName.New =>
                             if (!env.allowAbstractConstructor && t.arClass.value.isAbstract)
@@ -176,12 +179,14 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                                       AccessCheck.checkInstance[context.type, t.arClass.PayloadSpec](env.accessTokens, AccessToken.OfClass(t.arClass), env.currentModule.id, env.fileSpec.fileID, binding)
                                     }
                                 }
-                                .map(methodBindingsToOverloads)
+                                .map(methodBindingsToOverloads(_))
                             )
 
                         }
 
                       case t @ TraitType(_, _) =>
+                        import t.arTrait.payloadSpecInfo
+
                         memberName match {
                           case MemberName.New => Vector.empty[List[NonEmptyVector[OverloadExprFactory]]].pure[Comp]
                           case methodName: MethodName =>
@@ -193,7 +198,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                                       AccessCheck.checkInstance[context.type, t.arTrait.PayloadSpec](env.accessTokens, AccessToken.OfTrait(t.arTrait), env.currentModule.id, env.fileSpec.fileID, binding)
                                     }
                                 }
-                                .map(methodBindingsToOverloads)
+                                .map(methodBindingsToOverloads(_))
                             )
 
                         }
@@ -728,7 +733,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
   (args: Vector[ArgumentInfo])
   : ExprFactory = {
 
-    def resolveClass[ClassPS[_, _]](arClassStream: CompStream[ArClass[context.type, ClassPS]]): ExprFactory =
+    def resolveClass[ClassPS[_, _]: PayloadSpecInfo](arClassStream: CompStream[ArClass[context.type, ClassPS]]): ExprFactory =
       compFactory(
         for {
           classesChunk <- arClassStream.runCollect

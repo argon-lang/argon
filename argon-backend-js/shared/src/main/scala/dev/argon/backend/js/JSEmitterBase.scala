@@ -1,14 +1,12 @@
 package dev.argon.backend.js
 
-import cats.data.NonEmptyList
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.core.PayloadSpecifiers._
-import dev.argon.compiler.loaders.ResourceIndicator
 import zio._
 
 private[js] trait JSEmitterBase {
-  val context: JSContext
+  val context: Context.Aux[JSBackend]
 
   import JSDSL._
 

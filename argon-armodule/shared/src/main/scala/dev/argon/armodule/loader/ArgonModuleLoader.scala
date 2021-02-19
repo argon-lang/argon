@@ -4,7 +4,7 @@ import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, R
 import dev.argon.compiler.{core, _}
 import dev.argon.compiler.core.{ErasedSignature, _}
 import dev.argon.compiler.lookup._
-import dev.argon.compiler.loaders.{ModuleLoad, ModuleMetadata, ResourceIndicator, ResourceReader, StandardTypeLoaders}
+import dev.argon.compiler.loaders.{ModuleLoader, UnlinkedModule}
 import dev.argon.compiler.types._
 import dev.argon.{module => ArgonModule}
 import dev.argon.util._
@@ -14,55 +14,77 @@ import cats.data.{NonEmptyList, NonEmptyVector}
 import cats.implicits._
 import dev.argon.armodule.ModulePaths
 import dev.argon.module.{GlobalDeclarationElement, ModuleFormatVersion, ModuleReferencesList}
-import dev.argon.backend.ResourceAccess
 import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
-import dev.argon.io.ZipFileReader
+import dev.argon.io.{FileNameUtil, ZipFileReader}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import shapeless.ops.nat.{LT, Pred, ToInt}
 import shapeless.{Id, Nat, Sized, Succ, _0}
 import shapeless.syntax.sized._
-import zio.{IO, Managed, ZIO, ZManaged}
+import zio.{IO, Managed, URIO, ZIO, ZManaged}
 import zio.stream._
 import zio.interop.catz.core._
 import ModuleCreatorCommon._
+import dev.argon.compiler.output.ArgonModuleSerialized
+import dev.argon.io.fileio.ZipRead
+import dev.argon.util.MaybeBlocking
 
 import scala.collection.immutable.{Map, Vector}
+import zio.NeedsEnv.needsEnv
 
 object ArgonModuleLoader {
 
-  def apply[I <: ResourceIndicator, TContext <: Context.WithRes[I]](res: ResourceReader.Service[I])(implicit referencePayloadLoader: PayloadLoader[TContext, ReferencePayloadSpecifier]): ModuleLoad.Service[I, TContext] = new ModuleLoad.Service[I, TContext] {
+  private def createReferencePayloadLoader[TContext <: Context]: PayloadLoader[TContext, ReferencePayloadSpecifier] =
+    new PayloadLoader[TContext, ReferencePayloadSpecifier] {
+      override def createDataConstructorPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TDataConstructorImplementation], Unit] = ()
 
-    override def loadResource(id: I): Managed[CompilationError, Option[ModuleMetadata[TContext]]] =
-      id.extension match {
+      override def createFunctionPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TFunctionImplementation], Unit] = ()
+
+      override def createMethodPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TMethodImplementation], Unit] = ()
+
+      override def createClassConstructorPayload(context: TContext): ReferencePayloadSpecifier[Comp[context.TClassConstructorImplementation], Unit] = ()
+    }
+
+  def make[TContext <: Context]: URIO[ZipRead with MaybeBlocking, ModuleLoader[TContext]] =
+    for {
+      protoBufEnv <- ZIO.environment[MaybeBlocking]
+      zipRead <- ZIO.access[ZipRead](_.get)
+    } yield new ModuleLoader[TContext] {
+
+    val referencePayloadLoader = createReferencePayloadLoader[TContext]
+
+    override def loadResource(fileName: String): CompManaged[Option[UnlinkedModule[TContext, ReferencePayloadSpecifier]]] =
+      FileNameUtil.getExtension(fileName) match {
         case "armodule" =>
-          res.getZipReader(id).mapM { zip =>
-            ZipModuleSource.tryOpen(zip, res).flatMap { sourceOpt =>
+          zipRead.openZipFile(fileName).catchAll(Compilation.unwrapThrowableManaged).mapM { zip =>
+            ZipModuleSource.tryOpen(zip.catchAll(Compilation.unwrapThrowable)).provide(protoBufEnv).flatMap { sourceOpt =>
               ZIO.foreach(sourceOpt) { source =>
                 source.references.map { references =>
-                  ArModuleMetadata(source, references)
+                  ArUnlinkedModule(source, references)
                 }
               }
             }
           }
 
-        case _ => ZManaged.succeed(None)
+        case _ =>
+          println("loadResource: fileName=" + fileName)
+          ZManaged.succeed(None)
       }
 
-    private final case class ArModuleMetadata(source: ArgonModuleSource, references: ArgonModule.ModuleReferencesList) extends ModuleMetadata[TContext] {
+    private final case class ArUnlinkedModule(source: ArgonModuleSerialized, references: ArgonModule.ModuleReferencesList) extends UnlinkedModule[TContext, ReferencePayloadSpecifier] {
       override val descriptor: ModuleId = ModuleId(source.metadata.name)
       override val referencedModules: Vector[ModuleId] =
         references.references.map {
           case ArgonModule.ModuleReference(name) => ModuleId(name)
         }
 
-      override def loadReference(context: TContext)(referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]]): CompManaged[ArModule[context.type, ReferencePayloadSpecifier]] =
+      override def load(context: TContext)(referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]]): CompManaged[ArModule[context.type, ReferencePayloadSpecifier]] =
         loadModule[ReferencePayloadSpecifier](context)(source, references)(referencedModules)(referencePayloadLoader)
     }
 
-    private def loadModule[TPayloadSpec[_, _]]
+    private def loadModule[TPayloadSpec[_, _]: PayloadSpecInfo]
     (context: TContext)
-    (source: ArgonModuleSource, referenceList: ArgonModule.ModuleReferencesList)
+    (source: ArgonModuleSerialized, referenceList: ArgonModule.ModuleReferencesList)
     (referencedModules: Vector[ArModule[context.type, ReferencePayloadSpecifier]])
     (payloadLoader: PayloadLoader[TContext, TPayloadSpec])
     : Managed[CompilationError, ArModule[context.type, TPayloadSpec]] = {
@@ -98,7 +120,7 @@ object ArgonModuleLoader {
 
         module <- ZManaged.fromEffect(new ModuleCreatorCommon[TPayloadSpec] {
           override val context: context2.type = context2
-          override val source: ArgonModuleSource = source2
+          override val source: ArgonModuleSerialized = source2
           override val payloadLoader: PayloadLoader[_ >: context.type, TPayloadSpec] = payloadLoader2
 
           override val currentModuleDescriptor: ModuleId = currentModuleId
@@ -118,11 +140,6 @@ object ArgonModuleLoader {
     }
 
   }
-
-
-
-
-
 
 
 }

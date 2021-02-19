@@ -157,7 +157,8 @@ object GlobalScope {
     Stream.fromIterable(imports).flatMap { importNS =>
       Stream.fromIterable(modules).flatMap { module =>
         module.value.lookupNamespaceBindings(importNS, name){ binding =>
-            getScopeValue(context)(binding).asSome
+          import module.payloadSpecInfo
+          getScopeValue(context)(binding).asSome
         }
       }
     }
@@ -170,7 +171,7 @@ object GlobalScope {
       }
   }
 
-  private def getScopeValue[TPayloadSpec[_, _]]
+  private def getScopeValue[TPayloadSpec[_, _]: PayloadSpecInfo]
   (context: Context)
   (binding: GlobalBinding.NonNamespace[context.type, TPayloadSpec])
   : Comp[context.scopeContext.ScopeValueOverload] = binding match {

@@ -29,10 +29,11 @@ message Metadata {
     required int32 formatVersion = 1;
     required string name = 2;
     required ModuleType moduleType = 3;
+    repeated string platforms = 4;
 }
 
 enum ModuleType {
-    ReferenceModule = 0;
+    InterfaceModule = 0;
     DefinitionModule = 1;
 }
 
@@ -166,7 +167,7 @@ message FunctionDefinition {
 message FunctionBody {
     oneof bodyType {
         Expression expressionBody = 1;
-        uint32 externalImplementation = 2;
+        google.protobuf.Empty externalImplementation = 2;
     }
 }
 

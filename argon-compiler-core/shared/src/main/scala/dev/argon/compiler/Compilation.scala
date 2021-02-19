@@ -6,6 +6,7 @@ import cats._
 import cats.implicits._
 import cats.data.NonEmptyList
 import zio._
+import zio.stream._
 
 object Compilation {
 
@@ -68,6 +69,9 @@ object Compilation {
 
   def unwrapThrowableManaged(ex: Throwable): Managed[CompilationError, Nothing] =
     Managed.halt(unwrapThrowableCause(ex))
+
+  def unwrapThrowableStream(ex: Throwable): Stream[CompilationError, Nothing] =
+    Stream.halt(unwrapThrowableCause(ex))
 
 }
 

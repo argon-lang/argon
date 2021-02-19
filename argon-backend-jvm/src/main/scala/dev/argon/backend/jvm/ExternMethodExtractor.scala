@@ -1,14 +1,13 @@
 package dev.argon.backend.jvm
 
-import dev.argon.backend.ResourceAccess
-import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
 import dev.argon.backend.jvm.classmodule.Constants
 import org.objectweb.asm.{AnnotationVisitor, ClassReader, ClassVisitor, MethodVisitor, Opcodes}
 import org.objectweb.asm.tree.MethodNode
 import zio._
-import zio.blocking.Blocking
+import zio.blocking.{Blocking, effectBlocking, effectBlockingInterrupt}
 import zio.stream.{Stream, ZStream}
 import cats.implicits._
+import dev.argon.io.fileio.FileIO
 
 import scala.collection.mutable
 import scala.collection.mutable.ListBuffer
@@ -50,13 +49,13 @@ object ExternMethodExtractor {
 
   }
 
-  def getExterns[I <: ResourceIndicator: Tag](classFiles: Stream[Nothing, I]): RIO[Blocking with ResourceReader[I], Map[String, ResolvedExtern]] =
+  def getExterns(classFiles: Stream[Nothing, String]): RIO[Blocking with FileIO, Map[String, ResolvedExtern]] =
     classFiles
       .flatMap { classFile =>
         ZStream.unwrap(
-          ZIO.access[ResourceReader[I]](_.get.readFile(classFile)).flatMap { classFileContent =>
+          ZIO.access[FileIO](_.get.readFile(classFile)).flatMap { classFileContent =>
             classFileContent.toInputStream.use { classFileIS =>
-              ZIO.accessM[Blocking](_.get.effectBlocking {
+              ZIO.accessM[Blocking](_.get.effectBlockingInterrupt {
                 val reader = new ClassReader(classFileIS)
                 val foundMethods = ListBuffer[MethodNode]()
                 reader.accept(new MethodFindClassVisitor(foundMethods), ClassReader.SKIP_DEBUG)
@@ -67,7 +66,7 @@ object ExternMethodExtractor {
         )
       }
       .mapM { method =>
-        IO.effect {
+        effectBlockingInterrupt {
           val specifierVisitor = new SpecifierMethodVisitor
           method.accept(specifierVisitor)
           specifierVisitor.specifier.map { (_, ResolvedExtern.Method(method)) }

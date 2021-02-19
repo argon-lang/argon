@@ -12,7 +12,7 @@ import zio.IO
 
 object DummyTrait {
 
-  def apply(ctx: DummyContext)(module: ArModule[ctx.type, DeclarationPayloadSpecifier], name: String, traitId: TraitId, baseTraits: TraitType[ctx.type, Id]*): ArTrait[ctx.type, DeclarationPayloadSpecifier] =
+  def apply(ctx: Context.Aux[DummyBackend])(module: ArModule[ctx.type, DeclarationPayloadSpecifier], name: String, traitId: TraitId, baseTraits: TraitType[ctx.type, Id]*): ArTrait[ctx.type, DeclarationPayloadSpecifier] =
     new ArTrait[ctx.type, DeclarationPayloadSpecifier] {
       override val context: ctx.type = ctx
       override val contextProof: Is[context.type, ctx.type] = Is.refl

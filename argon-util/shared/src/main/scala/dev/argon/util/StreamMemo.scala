@@ -18,28 +18,21 @@ object StreamMemo {
       readCount <- Managed.fromEffect(Ref.make(0))
     } yield
       readCount.get.flatMap { prevRead =>
-        IO.effectTotal { data.valueCount }.flatMap { staleCount =>
-          if(prevRead < staleCount)
-            readCount.set(staleCount) *>
-              getNewDataChunk(data, prevRead = prevRead, count = staleCount)
-          else {
-            dataLock.withPermit(
-              IO.effectTotal { data.valueCount }.flatMap { count =>
-                if(prevRead < count)
-                  readCount.set(count) *>
-                    getNewDataChunk(data, prevRead = prevRead, count = count)
+        dataLock.withPermit(
+          IO.effectTotal { data.valueCount }.flatMap { count =>
+            if(prevRead < count)
+              readCount.set(count) *>
+                getNewDataChunk(data, prevRead = prevRead, count = count)
+            else
+              IO.effectTotal { data.result }.flatMap { result =>
+                if(result ne null)
+                  IO.halt(result)
                 else
-                  IO.effectTotal { data.result }.flatMap { result =>
-                    if(result ne null)
-                      IO.halt(result)
-                    else
-                      readNext(data, process) <*
-                        IO.effectTotal { data.valueCount }.flatMap(readCount.set)
-                  }
+                  readNext(data, process) <*
+                    IO.effectTotal { data.valueCount }.flatMap(readCount.set)
               }
-            )
           }
-        }
+        )
       }
   ).provide(env)
 

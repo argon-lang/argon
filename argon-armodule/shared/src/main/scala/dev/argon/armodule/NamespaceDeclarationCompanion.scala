@@ -1,8 +1,8 @@
 package dev.argon.armodule
 
 import com.google.protobuf.{CodedInputStream, CodedOutputStream}
-import dev.argon.io.StreamableMessage
 import dev.argon.module.{NamespaceDeclaration, NamespaceDeclarationList}
+import dev.argon.util.StreamableMessage
 import scalapb.LiteParser
 
 object NamespaceDeclarationCompanion extends StreamableMessage[NamespaceDeclaration] {

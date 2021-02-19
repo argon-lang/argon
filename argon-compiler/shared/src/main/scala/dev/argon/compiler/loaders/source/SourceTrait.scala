@@ -16,8 +16,9 @@ import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr.BaseTypeInfoTrait
 import shapeless.{Id, Nat}
 import zio.interop.catz.core._
+import AccessModifierHelpers._
 
-private[compiler] object SourceTrait extends AccessModifierHelpers {
+private[compiler] object SourceTrait {
 
   final case class GroupedStaticStatements
   (

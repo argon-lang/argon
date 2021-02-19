@@ -6,75 +6,57 @@ import zio.interop.catz.core._
 import dev.argon.build._
 import java.io.IOException
 
-import dev.argon.io.{Path, ZipEntryInfo}
 import cats.data.NonEmptyList
-import dev.argon.backend.{Backend, ResourceAccess, ResourceWriter}
+import dev.argon.backend.Backend
 import dev.argon.compiler._
 import zio._
 import zio.stream._
 import shapeless.{Id => _, Path => _, _}
 import dev.argon.build._
-import dev.argon.build.testrunner.BuildTestCaseRunner.{DummyOutputPath, dummyOutputPath}
-import dev.argon.build.testrunner.TestCaseRunnerCompilePhase.TestCompileResource
-import dev.argon.compiler.loaders.{ResourceIndicator, ResourceReader}
-import dev.argon.compiler.options.{CompilerOptions, OptionsFileHandler}
-import dev.argon.io.fileio.FileIO
+import dev.argon.build.testrunner.BuildTestCaseRunner.EmitDrainCombineFunction
+import dev.argon.compiler.options.{CompilerOptions, GeneralOutputOptions}
+import dev.argon.options.{FileList, OptionID, OptionInfo, Options, OptionsHandler, SingleFile}
+import dev.argon.compiler.output.BuildArtifact
+import dev.argon.io.fileio.{FileIO, ZipRead}
 import dev.argon.stream.builder.Source
-import scalapb.GeneratedMessage
+import dev.argon.util.MaybeBlocking
 
-final class BuildTestCaseRunner[I <: ResourceIndicator: Tag](protected val backend: Backend, referencePaths: Vector[I]) extends TestCaseRunnerCompilePhase[I, ResourceReader[I] with ResourceWriter[Nothing]] {
+final class BuildTestCaseRunner(protected val backend: Backend, referencePaths: FileList) extends TestCaseRunnerCompilePhase[FileIO with ZipRead with MaybeBlocking] {
 
   override val name: String = s"Compilation (${backend.name})"
 
-  override protected def backendOptions: Task[backend.BackendOptions[Id, TestCompileResource[I]]] = {
-    implicit val fileHandler: OptionsFileHandler[Any, Nothing, Nothing, TestCompileResource[I]] = OptionsFileHandler.nothingFileHandler
-
-    IO.fromEither(
-      backend.backendOptions.inferDefaults(backend.backendOptions.empty)
-    )
-      .mapError { field => new RuntimeException("Missing field in backend options: " + field.name) }
-      .flatMap(backend.backendOptions.optionsLoader.loadOptions(_))
-  }
-
-
-
-
-  override def runTest(testCase: TestCase): ZIO[ResourceReader[I] with ResourceWriter[Nothing], CompilationError, TestCaseCompletedResult] =
-    compileTestCase(testCase, referencePaths)
-      .use { output =>
-        val emptyOutputOptions = backend.testOutputOptions[DummyOutputPath](dummyOutputPath)
-
-        output.write(emptyOutputOptions)
-          .provideLayer(BuildTestCaseRunner.dummyWriterService)
+  private def emitDrain[OutputOptionID <: OptionID { type ElementType <: BuildArtifact }](handler: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]])(data: Options[Id, OutputOptionID]): RComp[FileIO, Unit] =
+    handler.combineRepr[
+      OptionInfo,
+      Id,
+      Lambda[CX => Unit],
+      Comp
+    ](handler.optionsToRepr(handler.info), handler.optionsToRepr(data))(
+      new EmitDrainCombineFunction[BuildArtifact, OutputOptionID, OptionInfo, Comp] {
+        override def baToBuildArtifact(ba: BuildArtifact): BuildArtifact = ba
+        override def compToF[A](comp: Comp[A]): Comp[A] = comp
       }
+    ).unit
+
+  override def runTest(testCase: TestCase): RComp[FileIO with ZipRead with MaybeBlocking, TestCaseCompletedResult] =
+    compileTestCase(testCase, referencePaths).use { buildResult =>
+      emitDrain(GeneralOutputOptions.handler)(buildResult.generalOutput) *>
+        emitDrain(backend.outputOptions)(buildResult.backendOutput)
+    }
       .as(TestCaseActualResult.NotExecuted)
 
 }
 
 object BuildTestCaseRunner {
 
-  private class DummyOutputPath extends ResourceIndicator {
-    override def extension: String = ""
-    override def show: String = "dummy-file"
+  // Needed to avoid AbstractMethodError
+  abstract class EmitDrainCombineFunction[BA, OutputOptionID <: OptionID { type ElementType <: BA }, A[_], F[_]] extends OptionsHandler.CombineFunction[OutputOptionID, A, Id, Lambda[CX => Unit], F] {
+
+    def baToBuildArtifact(ba: BA): BuildArtifact
+    def compToF[X](comp: Comp[X]): F[X]
+
+    override def apply(id: OutputOptionID)(ax: A[id.ElementType], bx: Id[id.ElementType]): F[Unit] =
+      compToF(baToBuildArtifact(bx).asStream.runDrain)
   }
-
-  private val dummyOutputPath: DummyOutputPath = new DummyOutputPath
-
-  private def dummyWriterService: ZLayer[ResourceWriter[Nothing], Nothing, ResourceWriter[DummyOutputPath]] =
-    ZLayer.fromFunction { env =>
-      val res = env.get
-
-      new ResourceWriter.Service[DummyOutputPath] {
-        override def writeToResource(id: DummyOutputPath)(data: Stream[CompilationError, Byte]): Comp[Unit] =
-          data.runDrain
-
-        override def zipFromEntries(entries: Stream[CompilationError, ZipEntryInfo[Any, CompilationError]]): Stream[CompilationError, Byte] =
-          res.zipFromEntries(entries)
-
-        override def serializeProtocolBuffer(message: GeneratedMessage): Stream[CompilationError, Byte] =
-          res.serializeProtocolBuffer(message)
-      }
-    }
-
 }
 

@@ -8,16 +8,16 @@ import cats._
 import cats.implicits._
 import zio.IO
 
-trait AccessModifierHelpers {
+object AccessModifierHelpers {
 
-  protected def getAccessModifiers(modifiers: Vector[WithSource[parser.Modifier]]): List[WithSource[parser.AccessModifier]] =
+  def getAccessModifiers(modifiers: Vector[WithSource[parser.Modifier]]): List[WithSource[parser.AccessModifier]] =
     modifiers
       .collect {
         case WithSource(modifier: parser.AccessModifier, loc) => WithSource(modifier, loc)
       }
       .toList
 
-  protected def parseGlobalAccessModifier(fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): Comp[AccessModifierGlobal] =
+  def parseGlobalAccessModifier(fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): Comp[AccessModifierGlobal] =
     parseAccessModifier(fileSpec, stmtLocation, access).flatMap {
       case accessModifier: AccessModifierGlobal => IO.succeed(accessModifier)
       case AccessModifier.Private => IO.succeed(AccessModifier.PrivateInternal)
@@ -26,7 +26,7 @@ trait AccessModifierHelpers {
         Compilation.forErrors(DiagnosticError.AccessModifierNotAllowedForGlobal(accessModifier, DiagnosticSource.SourceFile(fileSpec, loc)))
     }
 
-  protected def parseAccessModifier(fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): Comp[AccessModifier] =
+  def parseAccessModifier(fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): Comp[AccessModifier] =
     access match {
       case WithSource(parser.PublicModifier, _) :: Nil =>
         IO.succeed(AccessModifier.Public)

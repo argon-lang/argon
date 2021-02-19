@@ -8,9 +8,9 @@ import zio._
 import cats.implicits._
 
 
-private[platform] object FileIOPlatform {
+object FileIOPlatform {
 
-  val live: ZLayer[Any, Nothing, FileIO[FilePath]] =
+  val live: ZLayer[Any, Nothing, FileIO] =
     ZLayer.succeed(new NodeIOService())
 
 }

@@ -84,9 +84,15 @@ object MethodLookup {
           .flatMap { newBaseTypes =>
             unseenInstanceTypes
               .flatTraverse {
-                case ClassType(arClass, _) => arClass.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
-                case TraitType(arTrait, _) => arTrait.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
-                case DataConstructorType(ctor, _, _) => ctor.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+                case ClassType(arClass, _) =>
+                  import arClass.payloadSpecInfo
+                  arClass.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+                case TraitType(arTrait, _) =>
+                  import arTrait.payloadSpecInfo
+                  arTrait.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
+                case DataConstructorType(ctor, _, _) =>
+                  import ctor.payloadSpecInfo
+                  ctor.value.methods.map { _.map { method => MemberValue.Method(AbsRef(method)) } }
               }
               .flatMap { memberValues =>
                 memberValues

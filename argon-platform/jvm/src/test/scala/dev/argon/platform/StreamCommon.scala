@@ -14,7 +14,7 @@ object StreamCommon {
     IO.succeed(())
 
   def usingSingleByteRead(inputStream: InputStream): RIO[Blocking, List[Byte]] =
-    ZIO.accessM[Blocking] { _.get.effectBlocking {
+    ZIO.accessM[Blocking] { _.get.effectBlockingInterrupt {
       val allData = new ArrayBuffer[Byte]()
 
       def readMore(): Unit = {
@@ -33,7 +33,7 @@ object StreamCommon {
   val retryCount = 10
 
   def usingSingleByteReadExtra(inputStream: InputStream): RIO[Blocking, Int] =
-    ZIO.accessM[Blocking] { _.get.effectBlocking {
+    ZIO.accessM[Blocking] { _.get.effectBlockingInterrupt {
       var eofCount = 0
       while(inputStream.read() >= 0) {}
       for(_ <- 0 until retryCount) {
@@ -45,7 +45,7 @@ object StreamCommon {
     } }
 
   def usingBufferReader(inputStream: InputStream): RIO[Blocking, List[Byte]] =
-    ZIO.accessM[Blocking] { _.get.effectBlocking {
+    ZIO.accessM[Blocking] { _.get.effectBlockingInterrupt {
       val allData = new ArrayBuffer[Byte]()
 
       val buff = new Array[Byte](1024)
@@ -63,7 +63,7 @@ object StreamCommon {
     } }
 
   def usingBufferReaderExtra(inputStream: InputStream): RIO[Blocking, Int] =
-    ZIO.accessM[Blocking] { _.get.effectBlocking {
+    ZIO.accessM[Blocking] { _.get.effectBlockingInterrupt {
       var eofCount = 0
       val buff = new Array[Byte](1024)
       while(inputStream.read(buff, 0, buff.length) >= 0) {}
@@ -76,14 +76,14 @@ object StreamCommon {
     } }
 
   def usingSingleByteWrite(data: Chunk[Byte])(outputStream: OutputStream): RIO[Blocking, Unit] =
-    ZIO.accessM[Blocking] { _.get.effectBlocking {
+    ZIO.accessM[Blocking] { _.get.effectBlockingInterrupt {
       for(b <- data) {
         outputStream.write(b.toInt)
       }
     } }
 
   def usingBufferWriter(data: Chunk[Byte])(outputStream: OutputStream): RIO[Blocking, Unit] =
-    ZIO.accessM[Blocking] { _.get.effectBlocking {
+    ZIO.accessM[Blocking] { _.get.effectBlockingInterrupt {
       outputStream.write(data.toArray)
     } }
 }

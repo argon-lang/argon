@@ -1,9 +1,9 @@
 package dev.argon.armodule
 
 import com.google.protobuf.{CodedInputStream, CodedOutputStream}
-import dev.argon.io.StreamableMessage
 import dev.argon.module.{GlobalDeclarationElement, GlobalDeclarationFunction, GlobalDeclarationList, GlobalDeclarationType}
 import dev.argon.module.GlobalDeclarationElement._
+import dev.argon.util.StreamableMessage
 import scalapb.LiteParser
 
 object GlobalDeclarationElementCompanion extends StreamableMessage[GlobalDeclarationElement] {

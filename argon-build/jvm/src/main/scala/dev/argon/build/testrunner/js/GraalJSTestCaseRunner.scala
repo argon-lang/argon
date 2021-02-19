@@ -1,15 +1,9 @@
 package dev.argon.build.testrunner.js
 
-import dev.argon.build.BuildEnvironment
-import dev.argon.io.Path
 import zio._
 import cats._
 import cats.implicits._
 import org.graalvm.polyglot.Context
-import org.graalvm.polyglot.Value
-import javax.script.ScriptEngineManager
-import javax.script.ScriptEngine
-import javax.script.Invocable
 import java.io.{ByteArrayOutputStream, FileNotFoundException, IOException}
 import java.net.URI
 import java.nio.channels.SeekableByteChannel
@@ -21,19 +15,18 @@ import java.util
 import java.util.Locale
 
 import dev.argon.backend.js.JSBackend
-import dev.argon.compiler.loaders.ResourceIndicator
-import dev.argon.io.fileio.FileIO
+import dev.argon.options.FileList
 import org.apache.commons.compress.utils.SeekableInMemoryByteChannel
 import org.apache.commons.io.input.NullInputStream
 import org.apache.commons.text.StringEscapeUtils
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.io.FileSystem
 
-final class GraalJSTestCaseRunner[I <: ResourceIndicator: Tag, P: Path : Tag](protected val backend: JSBackend, protected val references: Vector[I], pathResolver: I => UIO[P]) extends JavaScriptTestCaseRunnerBase[I, P](pathResolver) {
+final class GraalJSTestCaseRunner(protected val backend: JSBackend, protected val references: FileList, blocking: zio.blocking.Blocking.Service) extends JavaScriptTestCaseRunnerBase {
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): Task[String] =
-    IO.effect {
+    blocking.effectBlockingInterrupt {
 
       val output = new ByteArrayOutputStream()
 

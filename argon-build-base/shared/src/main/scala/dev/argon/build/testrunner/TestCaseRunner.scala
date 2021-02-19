@@ -11,7 +11,7 @@ trait TestCaseRunner[-R] {
 
   val name: String
 
-  def runTest(testCase: TestCase): ZIO[R, CompilationError, TestCaseCompletedResult]
+  def runTest(testCase: TestCase): RComp[R, TestCaseCompletedResult]
 
   def isResultExpected(actual: TestCaseActualResult, expected: TestCaseExpectedResult): Boolean =
     (actual, expected) match {

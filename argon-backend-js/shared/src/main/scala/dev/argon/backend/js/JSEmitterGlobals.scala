@@ -20,10 +20,10 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
   def createGlobalFunction(func: ArFunc[context.type, DeclarationPayloadSpecifier]): Emit[JSExpression] =
     for {
       sig <- func.signature
-      impl <- func.payload : Comp[context.JSImpl.Function]
+      impl <- func.payload : Comp[context.TFunctionImplementation]
       body <- impl match {
-        case context.JSImpl.Function.JSExpressionBody(expr) => expr.pure[Comp]
-        case context.JSImpl.Function.ExpressionBody(expr) =>
+        case FunctionImplementation.Extern(_, expr) => JSExpressionRaw(expr).pure[Comp]
+        case FunctionImplementation.Expression(expr) =>
           for {
             (paramList, paramMap) <- createParameterList(sig)
             jsBody <- addToVarMap(paramMap.map { case (variable, name) => variable.id -> new LocalVariableLoader(variable, JSIdentifier(name)) }: _*)(convertStmt(useReturn = true)(expr))
@@ -213,9 +213,9 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
       localFieldMappingRef <- Ref.make(Map.empty[LocalVariableId, JSIdentifier])
 
 
-      ctorImpl <- ctor.payload : Comp[context.JSImpl.DataConstructor]
+      ctorImpl <- ctor.payload : Comp[context.TDataConstructorImplementation]
       (ctorFunc, paramMapping) <- ctorImpl match {
-        case context.JSImpl.DataConstructor.ExpressionBody(expr) =>
+        case DataConstructorImplementation(expr) =>
           for {
             thisVarId <- getNextSymbolId
             thisVarName = id"this_$thisVarId"
@@ -293,10 +293,10 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
   private def createMethodObject(method: ArMethod[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier], instanceVarMap: JSExpression => VarMap): Emit[JSExpression] =
     for {
       sig <- method.signatureUnsubstituted
-      impl <- method.payload : Comp[context.JSImpl.Method]
+      impl <- method.payload : Comp[context.TMethodImplementation]
       jsImpl <- impl match {
-        case context.JSImpl.Method.JSExpressionBody(expr) => expr.pure[Comp]
-        case context.JSImpl.Method.ExpressionBody(expr) =>
+        case MethodImplementation.Extern(_, expr) => JSExpressionRaw(expr).pure[Comp]
+        case MethodImplementation.Expression(expr) =>
           for {
             thisVarNum <- getNextSymbolId
             thisVarName = id"this_$thisVarNum"
@@ -313,7 +313,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
             body
           )
 
-        case context.JSImpl.Method.Abstract => JSNull.pure[Comp]
+        case MethodImplementation.Abstract => JSNull.pure[Comp]
       }
 
       createMethod <- coreLibExport("createMethod")
@@ -374,13 +374,13 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
   private def createClassCtorObject(ctor: ClassConstructor[context.type, PayloadSpecifiers.DeclarationPayloadSpecifier]): Emit[JSExpression] =
     for {
       sig <- ctor.signatureUnsubstituted
-      impl <- ctor.payload : Comp[context.JSImpl.ClassConstructor]
+      impl <- ctor.payload : Comp[context.TClassConstructorImplementation]
 
       ownerClassSig <- ctor.ownerClass.signature
       ownerClassObj <- getClassJSObject(ctor.ownerClass, ErasedSignature.fromSignatureParameters(context)(ownerClassSig))
 
       func <- impl match {
-        case context.JSImpl.ClassConstructor.StatementBody(body) =>
+        case ClassConstructorImplementation(body) =>
           for {
             thisVarNum <- getNextSymbolId
             thisVarName = id"this_$thisVarNum"

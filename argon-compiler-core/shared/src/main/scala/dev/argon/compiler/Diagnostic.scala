@@ -14,7 +14,6 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.types.TypeSystem
 import cats._
 import cats.data.{NonEmptyList, NonEmptyVector}
-import dev.argon.compiler.loaders.ResourceIndicator
 import zio.{Cause, FiberFailure, IO, Managed}
 
 sealed trait Diagnostic {
@@ -368,6 +367,14 @@ object DiagnosticError {
     override def message: String = "An external function is invalid."
   }
 
+  final case class ExternPlatformNotSupported(source: DiagnosticSource, platformId: String) extends DiagnosticError {
+    override def message: String = "The current backend does not support platform: " + platformId
+  }
+
+  final case class ExternMustHavePlatform(source: DiagnosticSource) extends DiagnosticError {
+    override def message: String = "An extern implementation can only be used in platform specific modules"
+  }
+
   final case class AmbiguousExtern(name: String, source: DiagnosticSource) extends DiagnosticError {
     override def message: String = "Extern \"" + name + "\" is ambiguous."
   }
@@ -539,12 +546,16 @@ object DiagnosticSource {
     override def formatted: String = s"module ${moduleDescriptor.name}"
   }
 
-  final case class ResourceIdentifier(id: ResourceIndicator) extends DiagnosticSource {
-    override def formatted: String = id.show
+  final case class FileName(name: String) extends DiagnosticSource {
+    override def formatted: String = "File: " + name
   }
 
   final case class ThrownException(ex: Exception) extends DiagnosticSource {
     override def formatted: String = ex.toString
+  }
+
+  final case class LinkPhase() extends DiagnosticSource {
+    override def formatted: String = "link phase"
   }
 
   final case class EmitPhase() extends DiagnosticSource {

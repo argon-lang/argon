@@ -1,54 +1,93 @@
 package dev.argon.compiler.options
-import cats.Applicative
-import shapeless.Id
-import CodecSelector.Instances._
+import cats.{Applicative, Id}
+import dev.argon.options.{FileList, OptionDecoder, OptionID, OptionInfo, Options, OptionsHandler}
 
-final case class CompilerOptions[F[_], I]
-(
-  moduleName: F[String],
-  inputFiles: F[FileList[I]],
-  references: F[FileList[I]],
-)
+
+sealed trait CompilerOptionID extends OptionID
+object CompilerOptionID {
+  case object ModuleName extends CompilerOptionID {
+    override type ElementType = String
+  }
+
+  case object InputFiles extends CompilerOptionID {
+    override type ElementType = FileList
+  }
+
+  case object References extends CompilerOptionID {
+    override type ElementType = FileList
+  }
+
+
+}
 
 object CompilerOptions {
 
-  val handler: OptionsHandler[CompilerOptions] = new OptionsHandler[CompilerOptions] {
-    override def info[I]: CompilerOptions[OptionInfo[*, I], I] = CompilerOptions[OptionInfo[*, I], I](
-      moduleName = OptionInfo(
-        name = "moduleName",
-        description = "The name of the module to be compiled.",
-      ),
-      inputFiles = OptionInfo(
-        name = "inputFiles",
-        description = "Argon source code to be compiled.",
-        defaultValue = new FileList[I](List.empty),
-      ),
-      references = OptionInfo(
-        name = "references",
-        description = "Libraries to be referenced.",
-        defaultValue = new FileList[I](List.empty)
-      ),
-    )
-
-    override def converter[I]: OptionsConverter[CompilerOptions[*[_], I]] =
-      new OptionsConverter[CompilerOptions[*[_], I]] {
-        override def convert[A[_], B[_], C[_], F[_] : Applicative](optionsA: CompilerOptions[A, I], optionsB: CompilerOptions[B, I])(f: OptionsConverterFunction[A, B, C, F]): F[CompilerOptions[C, I]] =
-          Applicative[F].map3(
-            f(optionsA.moduleName, optionsB.moduleName),
-            f(optionsA.inputFiles, optionsB.inputFiles),
-            f(optionsA.references, optionsB.references),
-          ) { (moduleName, inputFiles, references) =>
-            CompilerOptions(
-              moduleName = moduleName,
-              inputFiles = inputFiles,
-              references = references
-            )
-          }
+  def apply[A[_]]
+  (
+    moduleName: A[String],
+    inputFiles: A[FileList],
+    references: A[FileList],
+  ): Options[A, CompilerOptionID] =
+    Options.fromFunction[A, CompilerOptionID](new Options.OptionValueFunction[A, CompilerOptionID] {
+      override def apply[E](id: CompilerOptionID { type ElementType = E }): A[E] = id match {
+        case CompilerOptionID.ModuleName => moduleName
+        case CompilerOptionID.InputFiles => inputFiles
+        case CompilerOptionID.References => references
       }
+    })
 
-    override def optionsLoader[IOld, I]: OptionsLoader[CompilerOptions[Id, IOld], CompilerOptions[Id, I], IOld, I] = {
-      import dev.argon.compiler.options.OptionsLoader.Implicits._
-      OptionsLoader.apply
+  val handler: OptionsHandler[CompilerOptionID, Id] = new OptionsHandler[CompilerOptionID, Id] {
+    import shapeless.{Id => _, _}
+
+    override type OptRepr[A[_]] = A[String] :: A[FileList] :: A[FileList] :: HNil
+
+    override def ids: OptRepr[Lambda[X => CompilerOptionID { type ElementType = X }]] =
+      CompilerOptionID.ModuleName :: CompilerOptionID.InputFiles :: CompilerOptionID.References :: HNil
+
+    override def combineRepr[A[_], B[_], C[_], F[_] : Applicative](lista: OptRepr[A], listb: OptRepr[B])(f: OptionsHandler.CombineFunction[CompilerOptionID, A, B, C, F]): F[OptRepr[C]] = {
+      import dev.argon.options.OptionCombineHelper._
+      combineHLists(ids, lista, listb)(f)
+    }
+
+    override def reprToOptions[A[_]](list: OptRepr[A]): Options[A, CompilerOptionID] =
+      Options.fromFunction(new Options.OptionValueFunction[A, CompilerOptionID] {
+        override def apply[E](id: CompilerOptionID { type ElementType = E }): A[E] = id match {
+          case CompilerOptionID.ModuleName => list.head
+          case CompilerOptionID.InputFiles => list.tail.head
+          case CompilerOptionID.References => list.tail.tail.head
+        }
+
+      })
+
+    override def info: Options[OptionInfo, CompilerOptionID] =
+      Options.fromFunction(new Options.OptionValueFunction[OptionInfo, CompilerOptionID] {
+        override def apply[E](id: CompilerOptionID { type ElementType = E }): OptionInfo[E] = id match {
+          case CompilerOptionID.ModuleName =>
+            OptionInfo(
+              name = "moduleName",
+              description = "The name of the module to be compiled.",
+            )
+
+          case CompilerOptionID.InputFiles =>
+            OptionInfo(
+              name = "inputFiles",
+              description = "Argon source code to be compiled.",
+              defaultValue = new FileList(List.empty),
+            )
+
+          case CompilerOptionID.References =>
+            OptionInfo(
+              name = "references",
+              description = "Libraries to be referenced.",
+              defaultValue = new FileList(List.empty)
+            )
+        }
+      })
+
+
+    override def decoder: Options[OptionDecoder, CompilerOptionID] = {
+      import dev.argon.options.OptionDecoderHelper._
+      reprToOptions(createDecoders[OptRepr[OptionDecoder]])
     }
   }
 

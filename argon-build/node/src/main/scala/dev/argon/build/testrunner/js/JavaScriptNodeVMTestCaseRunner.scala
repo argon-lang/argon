@@ -2,18 +2,17 @@ package dev.argon.build.testrunner.js
 
 import java.io.IOException
 
-import dev.argon.io.Path
 import cats.implicits._
 import dev.argon.backend.js.JSBackend
 import zio._
 import dev.argon.build._
-import dev.argon.compiler.loaders.ResourceIndicator
+import dev.argon.options.FileList
 import dev.argon.io.fileio.FileIO
 
 import scala.scalajs.js
 import scala.scalajs.js.{JSON, |}
 
-final class JavaScriptNodeVMTestCaseRunner[I <: ResourceIndicator: Tag, P: Path : Tag](protected val backend: JSBackend, protected val references: Vector[I], pathResolver: I => UIO[P]) extends JavaScriptTestCaseRunnerBase[I, P](pathResolver) {
+final class JavaScriptNodeVMTestCaseRunner(protected val backend: JSBackend, protected val references: FileList) extends JavaScriptTestCaseRunnerBase {
 
   @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null", "org.wartremover.warts.ToString", "dev.argon.warts.ZioEffect"))
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): Task[String] =

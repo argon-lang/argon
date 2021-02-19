@@ -1,160 +1,193 @@
 package dev.argon
 
-import dev.argon.build.{BackendProvider, BackendProviderImpl, BuildEnvironment, Pipeline}
+import dev.argon.build.{BackendProvider, BackendProviderImpl, BuildProcess}
 import cats._
+import cats.data.State
 import cats.implicits._
-import dev.argon.backend.{Backend, BuildInfo, PathResourceIndicator}
-import zio.{BuildInfo => _, _}
+import dev.argon.backend.{Backend, BuildInfo}
+import dev.argon.compiler.CompilationError
+import zio.{ZEnv, BuildInfo => _, _}
 import zio.console._
 import zio.interop.catz.core._
-import dev.argon.compiler.options.{CompilerOptions, FileList, OptionsField, OptionsHandler, PrimitiveCodecs, SingleFile}
-import dev.argon.io.Path
-import dev.argon.io.fileio.{FileIO, FileIOLite}
+import dev.argon.compiler.options.{CompilerInput, CompilerOptionID, CompilerOptions, CompilerOutput, GeneralOutputOptionID, GeneralOutputOptions}
+import dev.argon.options.{FileList, OptionDecodeResult, OptionID, OptionInfo, Options, OptionsHandler, SingleFile}
+import dev.argon.io.fileio.{FileIO, ZipRead}
 import dev.argon.platform._
+import dev.argon.util.MaybeBlocking
 
 object Program extends PlatformApp {
 
-
-
-  override def runApp(args: List[String]): ZIO[ZEnv with FileIO[FilePath] with FileIOLite, Nothing, ExitCode] =
-    parseArgs(args)
-      .provideSomeLayer[ZEnv with FileIO[FilePath] with FileIOLite](BackendProviderImpl.live)
-      .flatMap {
-        case CommandLineArguments(cmd: BuildCommand) =>
-          runCompilation(cmd).as(ExitCode.success)
-      }
+  override def runApp(args: List[String]): ZIO[ZEnv with FileIO with ZipRead, Nothing, ExitCode] =
+    baseCommand(args)
+      .provideSomeLayer[ZEnv with FileIO with ZipRead](BackendProviderImpl.live)
+      .as(ExitCode.success)
       .catchAll(IO.succeed(_))
 
+  private def errorMessage(message: String): ZIO[Console, ExitCode, Nothing] =
+    putStrLn(message) *> IO.fail(ExitCode.failure)
 
-  private def resolveOptions[Options[_[_], _]](options: Options[Option, String], handler: OptionsHandler[Options]): ZIO[Console with FileIO[FilePath], ExitCode, Options[Id, PathResourceIndicator[FilePath]]] =
-    IO.fromEither(handler.inferDefaults(options))
-      .flatMapError { field => putStrLn("Missing value for option: " + field.name).as(ExitCode.failure) }
-      .flatMap { options2 =>
-        Path.of[FilePath](".")
-          .flatMap { currentDir =>
-            implicit val fileHandler = PathResourceIndicator.fileHandlerPath(currentDir)
-            handler.optionsLoader[String, PathResourceIndicator[FilePath]].loadOptions(options2)
-          }
-          .flatMapError { ex => putStrLn("Error: " + ex.getMessage).as(ExitCode.failure) }
-      }
-
-  private def runCompilation(args: BuildCommand): ZIO[BuildEnvironment with Console with FileIO[FilePath] with FileIOLite, ExitCode, Unit] = for {
-    resCompilerOpts <- resolveOptions(args.compilerOptions, CompilerOptions.handler)
-    resBackendOpts <- resolveOptions(args.backendOptions, args.backend.backendOptions)
-    resOutputOpts <- resolveOptions(args.outputOptions, args.backend.outputOptions)
-    buildInfo = BuildInfo(args.backend)(resCompilerOpts, resBackendOpts, resOutputOpts)
-    _ <- Pipeline.run(buildInfo)
-  } yield ()
-
-
-  private def parseArgs(args: List[String]): ZIO[Console with BackendProvider, ExitCode, CommandLineArguments] =
-    parseCommands(args).map { CommandLineArguments(_) }
-
-  private def parseCommands(args: List[String]): ZIO[Console with BackendProvider, ExitCode, ArgonCommand] =
+  private def baseCommand(args: List[String]): ZIO[ZEnv with FileIO with ZipRead with BackendProvider, ExitCode, Unit] =
     args match {
-      case Nil =>
-        putStrLn("No command specified") *> IO.fail(ExitCode.failure)
-
       case "build" :: backendName :: tail =>
-        parseBuildCommand(backendName, tail)
+        ZIO.access[BackendProvider](_.get.findBackend(backendName)).flatMap {
+          case Some(backend) =>
+            buildCommand(backend)(
+              CompilerOptions.handler.empty[Id],
+              backend.backendOptions.empty[Id],
+              GeneralOutputOptions.handler.empty[Lambda[X => SingleFile]],
+              backend.outputOptions.empty[Lambda[X => SingleFile]],
+            )(tail)
+          case None =>
+            errorMessage("Could not find backend: " + backendName)
+        }
+
+      case Nil =>
+        errorMessage("No command specified")
 
       case cmdName :: _ =>
-        putStrLn(s"Unknown command: $cmdName") *> IO.fail(ExitCode.failure)
+        errorMessage(s"Unknown command: $cmdName")
     }
 
-  private trait ArgDecoder[A] {
-    def decode(prevValue: Option[A], value: String): Either[String, A]
+  object CLISwitch {
+    def unapply(arg: String): Option[String] =
+      if(arg.startsWith("--")) Some(arg.stripPrefix("--"))
+      else None
   }
 
-  private def parseBuildCommand(backendName: String, args: List[String]): ZIO[Console with BackendProvider, ExitCode, ArgonCommand] =
-    ZIO.access[BackendProvider](_.get.findBackend(backendName))
-      .flatMap {
-        case Some(b) =>
-          implicit val primitiveCodecs: PrimitiveCodecs[ArgDecoder, String] = new PrimitiveCodecs[ArgDecoder, String] {
-            override def stringCodec: ArgDecoder[String] = new ArgDecoder[String] {
-              override def decode(prevValue: Option[String], value: String): Either[String, String] =
-                if(prevValue.isDefined)
-                  Left("already has a value")
-                else
-                  Right(value)
+  private def buildCommand
+  (backend: Backend)
+  (
+    compilerOptions: Options[Option, CompilerOptionID],
+    backendOptions: Options[Option, backend.BackendOptionID],
+    generalOutputOptions: Options[Lambda[X => Option[SingleFile]], GeneralOutputOptionID],
+    backendOutputOptions: Options[Lambda[X => Option[SingleFile]], backend.OutputOptionID],
+  )
+  (args: List[String]): ZIO[ZEnv with FileIO with ZipRead, ExitCode, Unit] =
+    args match {
+      case CLISwitch(name) :: value :: t =>
+
+        def compOpt =
+          parseOption[CompilerOptionID, Id](name, value, CompilerOptions.handler, compilerOptions)
+            .flatMap { opts =>
+              buildCommand(backend)(opts, backendOptions, generalOutputOptions, backendOutputOptions)(t).asSomeError
             }
 
-            override def resourceIndicatorCodec: ArgDecoder[String] = stringCodec
-
-            override def fileListCodec[A](codec: ArgDecoder[A]): ArgDecoder[FileList[A]] =
-              new ArgDecoder[FileList[A]] {
-                override def decode(prevValue: Option[FileList[A]], value: String): Either[String, FileList[A]] =
-                  codec.decode(None, value).map { a =>
-                    new FileList[A](prevValue.getOrElse { new FileList[A](List.empty) }.files :+ a)
-                  }
-              }
-
-            override def singleFileCodec[A](codec: ArgDecoder[A]): ArgDecoder[SingleFile[A]] = new ArgDecoder[SingleFile[A]] {
-              override def decode(prevValue: Option[SingleFile[A]], value: String): Either[String, SingleFile[A]] =
-                if(prevValue.isDefined)
-                  Left("already has a value")
-                else
-                  codec.decode(None, value).map { new SingleFile[A](_) }
+        def backendOpts =
+          parseOption[backend.BackendOptionID, Id](name, value, backend.backendOptions, backendOptions)
+            .flatMap { opts =>
+              buildCommand(backend)(compilerOptions, opts, generalOutputOptions, backendOutputOptions)(t).asSomeError
             }
 
-            override def optionCodec[A](codec: ArgDecoder[A]): ArgDecoder[Option[A]] = new ArgDecoder[Option[A]] {
-              override def decode(prevValue: Option[Option[A]], value: String): Either[String, Option[A]] =
-                codec.decode(prevValue.flatten, value).map { Some(_) }
+        def genOutOpt =
+          parseOption[GeneralOutputOptionID, Lambda[X => SingleFile]](name, value, GeneralOutputOptions.handler, generalOutputOptions)
+            .flatMap { opts =>
+              buildCommand(backend)(compilerOptions, backendOptions, opts, backendOutputOptions)(t).asSomeError
             }
 
+        def backendOutOpt =
+          parseOption[backend.OutputOptionID, Lambda[X => SingleFile]](name, value, backend.outputOptions, backendOutputOptions)
+            .flatMap { opts =>
+              buildCommand(backend)(compilerOptions, backendOptions, generalOutputOptions, opts)(t).asSomeError
+            }
+
+        compOpt
+          .orElseOptional(backendOpts)
+          .orElseOptional(genOutOpt)
+          .orElseOptional(backendOutOpt)
+          .flatMapError {
+            case Some(error) => IO.succeed(error)
+            case None => errorMessage("Unknown option: " + name).flip
           }
 
-          def generateSwitches(namePrefix: String, fields: Seq[OptionsField[Option, String]]): Map[String, OptionsField[Option, String]] =
-            fields
-              .map { field => ("--" + namePrefix + field.info.name) -> field }
-              .toMap
 
-          def parseBuildArgs(args: List[String], fields: Map[String, OptionsField[Option, String]]): ZIO[Console, ExitCode, Unit] =
-            args match {
-              case switch :: value :: tail if switch.startsWith("--") =>
-                (
-                  fields.get(switch) match {
-                    case Some(field) =>
-                      for {
-                        prevValue <- field.fieldRef.get
-                        newValue <- IO.fromEither(field.info.codecSelector.codec[ArgDecoder].decode(prevValue, value))
-                          .flatMapError { msg =>
-                            putStrLn(s"Error parsing value for switch $switch: $msg").as(ExitCode.failure)
-                          }
-                        _ <- field.fieldRef.set(Some(newValue))
-                      } yield ()
+      case CLISwitch(name) :: Nil =>
+        errorMessage("Option " + name + "is missing a value")
 
-                    case None =>
-                      putStrLn(s"Unknown switch: $switch") *> IO.fail(ExitCode.failure)
-                  }
-                ).flatMap { _ => parseBuildArgs(tail, fields) }
 
-              case switch :: Nil if switch.startsWith("--") =>
-                putStrLn(s"Switch $switch missing value.") *> IO.fail(ExitCode.failure)
+      case x :: _ => errorMessage("Unexpected option: " + x)
 
-              case Nil => IO.unit
-            }
+      case Nil =>
+        for {
+          compilerOptsResolved <- resolveOptions(compilerOptions, CompilerOptions.handler)
+          backendOptsResolved <- resolveOptions(backendOptions, backend.backendOptions)
 
-          for {
-            (compilerOptsFields, createCompilerOpts) <- CompilerOptions.handler.fields(CompilerOptions.handler.empty[String])
-            (backendOptsFields, createBackendOpts) <- b.backendOptions.fields(b.backendOptions.empty[String])
-            (outputOptsFields, createOutputOpts) <- b.outputOptions.fields(b.outputOptions.empty[String])
-            _ <- parseBuildArgs(args, generateSwitches(b.id + ":", backendOptsFields ++ outputOptsFields) ++ generateSwitches("",  compilerOptsFields))
-            compilerOpts <- createCompilerOpts
-            backendOpts <- createBackendOpts
-            outputOpts <- createOutputOpts
-          } yield new BuildCommand {
-            override val backend: b.type = b
+          compilerInput = CompilerInput(compilerOptsResolved, backendOptsResolved)
+          compilerOutput = CompilerOutput(generalOutputOptions, backendOutputOptions)
+          _ <- BuildProcess.compile(backend)(compilerInput, compilerOutput).catchAllCause(printCompilationErrors)
+        } yield ()
 
-            override val compilerOptions: CompilerOptions[Option, String] = compilerOpts
-            override val backendOptions: backend.BackendOptions[Option, String] = backendOpts
-            override val outputOptions: backend.BackendOutputOptions[Option, String] = outputOpts
-          }
+    }
 
-        case None =>
-          putStrLn(s"Unknown backend: $backendName") *> IO.fail(ExitCode.failure)
+
+  private def findOptionID[O <: OptionID, Decoded[_]]
+  (
+    name: String,
+    optionsHandler: OptionsHandler[O, Decoded],
+  ): Option[O] = {
+    val info = optionsHandler.optionsToRepr(optionsHandler.info)
+    optionsHandler.combineRepr(info, info)(
+      new OptionsHandler.CombineFunction[O, OptionInfo, OptionInfo, Lambda[X => Unit], Either[O, *]] {
+        override def apply(id: O)(ax: OptionInfo[id.ElementType], bx: OptionInfo[id.ElementType]): Either[O, Unit] =
+          if(ax.name === name) Left(id)
+          else Right(())
       }
+    ).swap.toOption
+  }
 
+
+  private def parseOption[O <: OptionID, Decoded[_]]
+  (
+    name: String,
+    value: String,
+    optionsHandler: OptionsHandler[O, Decoded],
+    options: Options[Lambda[X => Option[Decoded[X]]], O]
+  ): ZIO[Console, Option[ExitCode], Options[Lambda[X => Option[Decoded[X]]], O]] =
+    ZIO.fromOption(findOptionID(name, optionsHandler)).flatMap { id =>
+      val decoder = optionsHandler.decoder.get(id)
+      val decodedRes =
+        options.get(id) match {
+          case Some(prevValue) => decoder.decodeAdditionalValue(prevValue, value)
+          case None => decoder.decodeValue(value)
+        }
+
+      decodedRes match {
+        case OptionDecodeResult.Result(decodedValue) =>
+          IO.succeed(options.set(id)(Some(decodedValue)))
+
+        case OptionDecodeResult.CouldNotDecode =>
+          errorMessage("Could not decode value for option " + name).asSomeError
+
+        case OptionDecodeResult.MultipleValuesNotSupported =>
+          errorMessage("Multiple values were specified for option " + name).asSomeError
+      }
+    }
+
+
+  private def resolveOptions[O <: OptionID, Decoded[_]](options: Options[Option, O], handler: OptionsHandler[O, Decoded]): ZIO[Console, ExitCode, Options[Id, O]] =
+    IO.fromEither(handler.inferDefaults(options))
+      .flatMapError { id => putStrLn("Missing value for option: " + handler.info.get(id).name).as(ExitCode.failure) }
+
+
+  def printMessages(msgs: List[CompilationError]): URIO[Console, Unit] =
+    ZIO.foreach_(msgs) { msg =>
+      putStrLn(msg.toString)
+    }
+
+  private def printCompilationErrors(cause: Cause[CompilationError]): ZIO[Console, ExitCode, Nothing] = {
+    val errors = cause.failures
+    val remaining = cause.stripFailures
+
+    if(errors.nonEmpty) {
+      val errorAction =
+        if(remaining.isEmpty) IO.fail(ExitCode.failure)
+        else IO.halt(remaining)
+
+      printMessages(errors) *> errorAction
+    }
+    else {
+      IO.halt(remaining)
+    }
+  }
 
 
 }

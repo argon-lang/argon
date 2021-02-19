@@ -25,7 +25,7 @@ private[js] final case class JSModuleExtractorImpl(blocking: Blocking.Service) e
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
   private[js] def exportedFunctions(module: String): Task[Map[String, String]] =
-    blocking.effectBlocking {
+    blocking.effectBlockingInterrupt {
       val context = Context.newBuilder("js")
         .out(NullOutputStream.NULL_OUTPUT_STREAM)
         .err(NullOutputStream.NULL_OUTPUT_STREAM)

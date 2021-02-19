@@ -2,7 +2,7 @@ package dev.argon
 
 import cats.data.NonEmptyList
 import zio.{IO, Managed, ZIO, ZManaged}
-import zio.stream.Stream
+import zio.stream.{Stream, ZStream}
 
 package object compiler {
   type CompilationError = DiagnosticError
@@ -11,6 +11,7 @@ package object compiler {
   type RComp[-R, +A] = ZIO[R, CompilationError, A]
 
   type CompStream[+A] = Stream[CompilationError, A]
+  type RCompStream[-R, +A] = ZStream[R, CompilationError, A]
 
   type CompManaged[+A] = Managed[CompilationError, A]
   type RCompManaged[-R, +A] = ZManaged[R, CompilationError, A]
