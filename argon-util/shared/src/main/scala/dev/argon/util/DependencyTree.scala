@@ -52,7 +52,7 @@ object DependencyTree {
                 loadDependencyTreeImpl(depItem)(allDeps)(ops)
 
               case None =>
-                ops.missingDependencyHandler(item, dep).pure[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), ?]]
+                ops.missingDependencyHandler(item, dep).pure[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), *]]
             }
         }
         .flatMap { depItemResults =>
@@ -72,10 +72,10 @@ object DependencyTree {
   : StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), LoadResult[LoadedValue]] =
     StateT.get[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey])].flatMap { case (cache, loadingItems) =>
       cache.get(key) match {
-        case Some(loadedDep) => loadedDep.pure[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), ?]]
+        case Some(loadedDep) => loadedDep.pure[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), *]]
         case None =>
           if(loadingItems.exists(key === _))
-            ops.circularReferenceHandler(item).pure[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), ?]]
+            ops.circularReferenceHandler(item).pure[StateT[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey]), *]]
           else
             for {
               _ <- StateT.modify[LoadAction, (Map[ItemKey, LoadResult[LoadedValue]], Vector[ItemKey])] { case (cache, loadingItems) => (cache, loadingItems :+ key) }

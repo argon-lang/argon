@@ -57,7 +57,7 @@ sealed abstract class JSBackend extends Backend {
             OptionInfo(
               name = "js.extern",
               description = "JS module defining extern function implementations",
-              defaultValue = new FileList(List.empty),
+              defaultValue = new FileList(Seq.empty),
             )
 
           case JSBackendOptionID.InjectBefore =>

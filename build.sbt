@@ -4,7 +4,7 @@ import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
 val graalVersion = "20.2.0"
-val zioVersion = "1.0.3"
+val zioVersion = "1.0.4-2"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -17,15 +17,15 @@ lazy val nodeConfig =
     .withArgs(List("--no-warnings", "--experimental-vm-modules"))
 
 val esParseDeps = Seq(
-  "acorn" -> "^8.0.4",
+  "acorn" -> "^8.0.5",
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.3",
+  scalaVersion := "2.13.4",
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
-  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.0" cross CrossVersion.full),
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.11.3" cross CrossVersion.full),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
 
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
@@ -33,13 +33,13 @@ lazy val commonSettings = Seq(
   libraryDependencies ++= Seq(
     "org.jetbrains" % "annotations" % "20.1.0",
 
-    "org.scala-lang.modules" %%% "scala-xml" % "2.0.0-M2",
+    "org.scala-lang.modules" %%% "scala-xml" % "2.0.0-M5",
 
-    "org.typelevel" %%% "cats-core" % "2.2.0",
-    "org.typelevel" %%% "kittens" % "2.2.0",
+    "org.typelevel" %%% "cats-core" % "2.4.2",
+    "org.typelevel" %%% "kittens" % "2.2.1",
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
-    "dev.zio" %%% "zio-interop-cats" % "2.2.0.1",
+    "dev.zio" %%% "zio-interop-cats" % "2.3.1.0",
 
 
     "com.chuusai" %%% "shapeless" % "2.3.3",
@@ -64,8 +64,8 @@ lazy val sharedJSNodeSettings = Seq(
   ),
 
   npmDependencies ++= Seq(
-    "jszip" -> "^3.5.0",
-    "xmldom" -> "^0.3.0",
+    "jszip" -> "^3.6.0",
+    "xmldom" -> "^0.4.0",
   ) ++ esParseDeps,
   
   scalaJSLinkerConfig ~= {
@@ -98,7 +98,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ S
 
   npmDependencies ++= Seq(
     "memory-streams" -> "^0.1.3",
-    "node-stream-zip" -> "^1.11.7",
+    "node-stream-zip" -> "^1.13.1",
   ),
 
   jsEnv := new NodeJSEnv(nodeConfig),
@@ -132,6 +132,7 @@ lazy val compilerOptions = Seq(
       "cat=deprecation:error," +
       "cat=feature:error," +
       "cat=optimizer:error," +
+      "msg=match may not be exhaustive\\.:silent," +
       "cat=unchecked&msg=The outer reference in this type test cannot be checked at run time\\.:silent," +
       "cat=unchecked:error," +
       "cat=java-source:error," +
@@ -140,7 +141,7 @@ lazy val compilerOptions = Seq(
       "cat=w-flag-dead-code:silent," +
       "cat=w-flag:error," +
       "cat=other-match-analysis&msg=unreachable code:silent",
-    "-Ypatmat-exhaust-depth", "500",
+    "-Ypatmat-exhaust-depth", "2000",
     "-Yrangepos",
     "-Ywarn-unused",
     "-language:higherKinds",
@@ -235,9 +236,6 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).in(file("argon-cli"))
     compilerOptions,
 
     name := "argon-cli",
-
-    libraryDependencies += "com.github.scopt" %% "scopt" % "4.0.0-RC2",
-
   )
 
 lazy val cliJVM = cli.jvm

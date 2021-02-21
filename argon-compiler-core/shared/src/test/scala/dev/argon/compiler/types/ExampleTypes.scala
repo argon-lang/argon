@@ -51,8 +51,8 @@ object ExampleTypes {
         options = Options.fromFunction(new Options.OptionValueFunction[Id, CompilerOptionID] {
           override def apply[E](id: CompilerOptionID { type ElementType = E }): Id[E] = id match {
             case CompilerOptionID.ModuleName => "dummy"
-            case CompilerOptionID.InputFiles => new FileList(Nil)
-            case CompilerOptionID.References => new FileList(Nil)
+            case CompilerOptionID.InputFiles => new FileList(Seq.empty)
+            case CompilerOptionID.References => new FileList(Seq.empty)
           }
         }),
 

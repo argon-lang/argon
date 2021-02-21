@@ -1,5 +1,5 @@
 package dev.argon.options
 
-final class FileList(files2: List[String]) {
-  val files: List[String] = files2
+final class FileList(files2: Seq[String]) {
+  val files: Seq[String] = files2
 }

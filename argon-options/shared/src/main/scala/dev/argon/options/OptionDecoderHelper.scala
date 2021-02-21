@@ -27,7 +27,7 @@ object OptionDecoderHelper {
   implicit def decoderFactoryFileListElem: DecoderFactory[OptionDecoder[FileList]] = new DecoderFactory[OptionDecoder[FileList]] {
     override def create: OptionDecoder[FileList] = new OptionDecoder[FileList] {
       override def decodeValue(value: String): OptionDecodeResult.Single[FileList] =
-        OptionDecodeResult.Result(new FileList(List(value)))
+        OptionDecodeResult.Result(new FileList(Seq(value)))
 
       override def decodeAdditionalValue(prev: FileList, value: String): OptionDecodeResult[FileList] =
         OptionDecodeResult.Result(new FileList(prev.files :+ value))
@@ -60,14 +60,14 @@ object OptionDecoderHelper {
     }
   }
 
-  implicit def decoderFactoryListElem[A](implicit innerDecoderFactory: DecoderFactory[OptionDecoder[A]]): DecoderFactory[OptionDecoder[List[A]]] = new DecoderFactory[OptionDecoder[List[A]]] {
-    override def create: OptionDecoder[List[A]] = new OptionDecoder[List[A]] {
+  implicit def decoderFactoryListElem[A](implicit innerDecoderFactory: DecoderFactory[OptionDecoder[A]]): DecoderFactory[OptionDecoder[Seq[A]]] = new DecoderFactory[OptionDecoder[Seq[A]]] {
+    override def create: OptionDecoder[Seq[A]] = new OptionDecoder[Seq[A]] {
       private val innerDecoder = innerDecoderFactory.create
 
-      override def decodeValue(value: String): OptionDecodeResult.Single[List[A]] =
+      override def decodeValue(value: String): OptionDecodeResult.Single[Seq[A]] =
         innerDecoder.decodeValue(value).map(List(_))
 
-      override def decodeAdditionalValue(prev: List[A], value: String): OptionDecodeResult[List[A]] =
+      override def decodeAdditionalValue(prev: Seq[A], value: String): OptionDecodeResult[Seq[A]] =
         innerDecoder.decodeValue(value).map { decoded => prev :+ decoded }
     }
   }

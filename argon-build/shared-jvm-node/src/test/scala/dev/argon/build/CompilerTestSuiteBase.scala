@@ -31,7 +31,7 @@ abstract class CompilerTestSuiteBase extends PlatformRunnableSpec {
     live(ZIO.accessM[System](_.get.env("ARGON_LIB_DIR"))).orDie.flatMap {
       case None => IO.die(new RuntimeException("Library directory was unspecified"))
       case Some(libDir) =>
-        IO.succeed(new FileList(libraries.map { lib => FileNameUtil.combine(libDir, FileNameUtil.combine(lib, FileNameUtil.combine("bin", lib + ".armodule"))) }.toList))
+        IO.succeed(new FileList(libraries.map { lib => FileNameUtil.combine(libDir, FileNameUtil.combine(lib, FileNameUtil.combine("bin", lib + ".armodule"))) }))
     }
   }
 

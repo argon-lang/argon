@@ -32,7 +32,7 @@ private[testrunner] abstract class TestCaseRunnerCompilePhase[-R <: FileIO with 
   protected final def compileTestCase(testCase: TestCase, references: FileList): ZManaged[R, CompilationError, BuildResult.Aux[backend.type]] = {
     val compilerOptions = CompilerOptions[Id](
       moduleName = moduleName,
-      inputFiles = new FileList(List.empty),
+      inputFiles = new FileList(Seq.empty),
       references = references,
     )
 

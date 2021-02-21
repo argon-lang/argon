@@ -72,14 +72,14 @@ object CompilerOptions {
             OptionInfo(
               name = "inputFiles",
               description = "Argon source code to be compiled.",
-              defaultValue = new FileList(List.empty),
+              defaultValue = new FileList(Seq.empty),
             )
 
           case CompilerOptionID.References =>
             OptionInfo(
               name = "references",
               description = "Libraries to be referenced.",
-              defaultValue = new FileList(List.empty)
+              defaultValue = new FileList(Seq.empty)
             )
         }
       })

@@ -25,8 +25,8 @@ object ModuleLinker {
     type PayloadResult = ArModule[context.type, ReferencePayloadSpecifier]
 
     val dependencyTreeOps
-    : DependencyTreeOperations[CompManaged, ModInfo, ModuleId, PayloadResult, Either[CompilationError, ?]] =
-      new DependencyTreeOperations[CompManaged, ModInfo, ModuleId, PayloadResult, Either[CompilationError, ?]] {
+    : DependencyTreeOperations[CompManaged, ModInfo, ModuleId, PayloadResult, Either[CompilationError, *]] =
+      new DependencyTreeOperations[CompManaged, ModInfo, ModuleId, PayloadResult, Either[CompilationError, *]] {
         override def getItemKey(item: ModInfo): ModuleId = item.descriptor
 
         override def getItemDependencies(item: ModInfo): Vector[ModuleId] =
