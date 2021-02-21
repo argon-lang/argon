@@ -9,31 +9,29 @@ import zio.stream.{ZSink, ZStream}
 private[io] object ZipEntryStreamTransformation {
 
   def apply[R <: Blocking](entries: ZStream[R, Throwable, ZipEntryInfo[R, Throwable]]): ZStream[R, Throwable, Byte] =
-    ZStream.unwrap(ZIO.runtime[R].map { runtime =>
-      OutputStreamWriterStream { outputStream =>
-        blocking.effectBlockingInterrupt { new ZipOutputStream(outputStream) }.orDie.bracketAuto { zipStream =>
-          entries.foreach { case ZipEntryInfo(path, dataStream) =>
-            blocking.effectBlockingInterrupt {
-              val entry = new ZipEntry(path)
-              zipStream.putNextEntry(entry)
-              entry
-            }
-              .bracket(_ =>
-                blocking.effectBlockingInterrupt { zipStream.closeEntry() }.orDie
-              ) { _ =>
-                ZSink.fromOutputStream(zipStream).push.use { push =>
-                  dataStream
-                    .run(
-                      ZSink.fromPush { chunkOpt: Option[Chunk[Byte]] =>
-                        push(chunkOpt)
-                      }
-                    )
-                }
-              }
-
+    OutputStreamWriterStream { outputStream =>
+      blocking.effectBlockingInterrupt { new ZipOutputStream(outputStream) }.orDie.bracketAuto { zipStream =>
+        entries.foreach { case ZipEntryInfo(path, dataStream) =>
+          blocking.effectBlockingInterrupt {
+            val entry = new ZipEntry(path)
+            zipStream.putNextEntry(entry)
+            entry
           }
+            .bracket(_ =>
+              blocking.effectBlockingInterrupt { zipStream.closeEntry() }.orDie
+            ) { _ =>
+              ZSink.fromOutputStream(zipStream).push.use { push =>
+                dataStream
+                  .run(
+                    ZSink.fromPush { chunkOpt: Option[Chunk[Byte]] =>
+                      push(chunkOpt)
+                    }
+                  )
+              }
+            }
+
         }
       }
-    })
+    }
 
 }
