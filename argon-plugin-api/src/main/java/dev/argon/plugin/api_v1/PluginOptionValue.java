@@ -4,9 +4,22 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 
 public abstract class PluginOptionValue {
     private PluginOptionValue() {}
+
+    public static final class OptionalValue<T extends PluginOptionValue> {
+        public OptionalValue(@NotNull Optional<T> optional) {
+            this.optional = optional;
+        }
+
+        private final Optional<T> optional;
+
+        public @NotNull Optional<T> getOptional() {
+            return optional;
+        }
+    }
 
     public static final class StringValue {
         public StringValue(@NotNull String value) {
