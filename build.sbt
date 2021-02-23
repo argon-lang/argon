@@ -20,8 +20,15 @@ val esParseDeps = Seq(
   "acorn" -> "^8.0.5",
 )
 
-lazy val commonSettings = Seq(
+lazy val commonSettingsNoLibs = Seq(
   scalaVersion := "2.13.5",
+)
+
+lazy val commonSettingsAnnotations = Seq(
+  libraryDependencies += "org.jetbrains" % "annotations" % "20.1.0",
+)
+
+lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ Seq(
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
@@ -31,8 +38,6 @@ lazy val commonSettings = Seq(
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
 
   libraryDependencies ++= Seq(
-    "org.jetbrains" % "annotations" % "20.1.0",
-
     "org.scala-lang.modules" %%% "scala-xml" % "2.0.0-M5",
 
     "org.typelevel" %%% "cats-core" % "2.4.2",
@@ -298,6 +303,17 @@ lazy val argon_build_baseJVM = argon_build_base.jvm
 lazy val argon_build_baseJS = argon_build_base.js
 lazy val argon_build_baseNode = argon_build_base.node
 
+
+lazy val argon_plugin_api = project.in(file("argon-plugin-api"))
+  .dependsOn(modulefmtJVM)
+  .settings(
+    commonSettingsNoLibs,
+    commonSettingsAnnotations,
+    compilerOptions,
+
+    name := "argon-plugin-api",
+  )
+
 lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-grammar"))
   .dependsOn(arstream, util)
   .jvmConfigure(
@@ -444,7 +460,7 @@ lazy val armoduleNode = armodule.node
 
 
 lazy val backend_jvm_classmodule = project.in(file("argon-backend-jvm-classmodule"))
-  .dependsOn(modulefmtJVM, utilJVM)
+  .dependsOn(modulefmtJVM, utilJVM, argon_plugin_api)
   .settings(
     commonJVMSettings,
 

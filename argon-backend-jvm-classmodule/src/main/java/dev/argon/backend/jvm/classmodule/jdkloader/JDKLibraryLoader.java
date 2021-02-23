@@ -11,7 +11,6 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.*;
 import java.util.*;
-import java.util.stream.StreamSupport;
 
 public class JDKLibraryLoader {
     private JDKLibraryLoader() {}

@@ -1,4 +1,4 @@
-package dev.argon.util;
+package dev.argon.plugin.api_v1.util;
 
 import org.jetbrains.annotations.Nullable;
 
