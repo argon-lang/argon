@@ -1,6 +1,6 @@
 package dev.argon.parser.impl
 
-import dev.argon.util.{FilePosition, SourceLocation, WithSource}
+import dev.argon.util.{FilePosition, SourceLocation, VectorUnCons, WithSource}
 import cats.data.NonEmptyVector
 import dev.argon.grammar.Grammar
 import Grammar.{GrammarResult, GrammarResultComplete, GrammarResultSuspend, ParseOptions}
@@ -30,7 +30,7 @@ trait GrammarTestHelpers {
 trait GrammarTestHelpersEntireSequence extends GrammarTestHelpers {
   override def parseTokens[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: Vector[WithSource[TToken]]): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
     tokens match {
-      case head +: tail =>
+      case VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
         grammar
           .parseTokens(
             NonEmptyVector(head, tail),
@@ -38,7 +38,7 @@ trait GrammarTestHelpersEntireSequence extends GrammarTestHelpers {
           )
           .completeResult(FilePosition(1, tokens.size + 1))
 
-      case Vector() =>
+      case VectorUnCons(VectorUnCons.Empty) =>
         grammar
           .parseEnd(
             FilePosition(1, 1),
@@ -61,18 +61,18 @@ trait GrammarTestHelpersSingleTokens extends GrammarTestHelpers {
 
     def impl(suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T])(tokens: Vector[WithSource[TToken]]): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
       tokens match {
-        case head +: tail =>
+        case VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
           handleResult(suspend.continue(NonEmptyVector.of(head)), tail)
 
-        case Vector() =>
+        case VectorUnCons(VectorUnCons.Empty) =>
           suspend.completeResult(endPos)
       }
 
     tokens match {
-      case head +: tail =>
+      case VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
         handleResult(grammar.parseTokens(NonEmptyVector.of(head), ParseOptions(Set.empty, None, grammarFactory)), tail)
 
-      case Vector() =>
+      case VectorUnCons(VectorUnCons.Empty) =>
         grammar.parseEnd(endPos, ParseOptions(Set.empty, None, grammarFactory))
     }
   }

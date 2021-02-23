@@ -132,7 +132,7 @@ lazy val compilerOptions = Seq(
       "cat=deprecation:error," +
       "cat=feature:error," +
       "cat=optimizer:error," +
-      "msg=match may not be exhaustive\\.:silent," +
+      "msg=match may not be exhaustive\\.:error," +
       "cat=unchecked&msg=The outer reference in this type test cannot be checked at run time\\.:silent," +
       "cat=unchecked:error," +
       "cat=java-source:error," +

@@ -136,6 +136,9 @@ trait SignatureContext {
         case DataConstructorCall(dataCtorInstanceType, args) =>
           checkArExpr(dataCtorInstanceType) || args.exists(checkWrapExpr)
 
+        case EnsureExecuted(body, ensuring) =>
+          checkWrapExpr(body) || checkWrapExpr(ensuring)
+
         case FunctionCall(_, args, _) =>
           args.exists(checkWrapExpr)
 
@@ -153,11 +156,15 @@ trait SignatureContext {
         case LoadConstantString(_, _) => false
         case LoadLambda(argVariable, body) => checkVariable(argVariable) || checkWrapExpr(body)
         case LoadTuple(values) => values.exists { case TupleElement(value) => checkWrapExpr(value) }
+        case LoadTupleElement(value, _, _) => checkWrapExpr(value)
         case LoadUnit(_) => false
         case LoadVariable(variable) if variable === parameter.paramVar => true
         case LoadVariable(variable) => checkVariable(variable)
         case MethodCall(_, instance, _, args, _) =>
           checkWrapExpr(instance) || args.exists(checkWrapExpr)
+
+        case PatternMatch(expr, cases) =>
+          checkWrapExpr(expr) || cases.exists { case PatternCase(pattern, body) => checkPatternExpr(pattern) || checkWrapExpr(body) }
 
         case Sequence(first, second) =>
           checkWrapExpr(first) || checkWrapExpr(second)
@@ -181,7 +188,15 @@ trait SignatureContext {
         case FunctionType(argumentType, resultType) => checkWrapExpr(argumentType) || checkWrapExpr(resultType)
         case UnionType(first, second) => checkWrapExpr(first) || checkWrapExpr(second)
         case IntersectionType(first, second) => checkWrapExpr(first) || checkWrapExpr(second)
+        case ExistentialType(variable, body) => checkVariable(variable) || checkWrapExpr(body)
 
+      }
+
+    def checkPatternExpr(expr: PatternExpr[context.type, TTypeWrapper]): Boolean =
+      expr match {
+        case PatternExpr.DataDeconstructor(_, args) => args.exists(checkPatternExpr)
+        case PatternExpr.Binding(variable) => checkVariable(variable)
+        case PatternExpr.CastBinding(variable) => checkVariable(variable)
       }
 
     def checkWrapExpr(expr: ArExprWrap[context.type, TTypeWrapper]): Boolean =

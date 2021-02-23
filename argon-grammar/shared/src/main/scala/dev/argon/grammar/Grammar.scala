@@ -485,19 +485,19 @@ object Grammar {
 
     override def parseTokens(tokens: NonEmptyVector[WithSource[TToken]], options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
       grammarA.parseTokens(tokens, options).flatMap {
-        case (nextHead +: nextTail, valueA) =>
+        case (VectorUnCons(VectorUnCons.NonEmpty(nextHead, nextTail)), valueA) =>
           nextHandler(valueA, options).continue(NonEmptyVector(nextHead, nextTail))
 
-        case (Vector(), valueA) =>
+        case (VectorUnCons(VectorUnCons.Empty), valueA) =>
           nextHandler(valueA, options)
       }
 
     override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
       grammarA.parseEnd(pos, options).flatMap {
-        case (Vector(), valueA) =>
+        case (VectorUnCons(VectorUnCons.Empty), valueA) =>
           nextHandler(valueA, options).completeResult(pos)
 
-        case (tokenHead +: tokenTail, valueA) =>
+        case (VectorUnCons(VectorUnCons.NonEmpty(tokenHead, tokenTail)), valueA) =>
           nextHandler(valueA, options).continue(NonEmptyVector(tokenHead, tokenTail)).completeResult(pos)
       }
 
@@ -552,8 +552,9 @@ object Grammar {
 
     override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
       prevTokens match {
-        case headToken +: tailToken => inner.parseTokens(NonEmptyVector(headToken, tailToken), prevOptions).completeResult(pos)
-        case Vector() => inner.parseEnd(pos, prevOptions)
+        case VectorUnCons(VectorUnCons.NonEmpty(headToken, tailToken)) =>
+          inner.parseTokens(NonEmptyVector(headToken, tailToken), prevOptions).completeResult(pos)
+        case VectorUnCons(VectorUnCons.Empty) => inner.parseEnd(pos, prevOptions)
       }
 
   }
@@ -627,10 +628,10 @@ object Grammar {
     (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
     : Grammar[TToken, TSyntaxError, TLabel, T] =
       grammars.tail match {
-        case head2 +: tail =>
+        case VectorUnCons(VectorUnCons.NonEmpty(head2, tail)) =>
           tail.foldLeft(apply(grammars.head.value, head2.value)) { (a, b) => apply(a, b.value) }
 
-        case Vector() =>
+        case VectorUnCons(VectorUnCons.Empty) =>
           grammars.head.value
       }
 
@@ -648,9 +649,13 @@ object Grammar {
 
     private def itemsLocation(pos: FilePosition, items: Vector[WithSource[T]]): SourceLocation =
       items match {
-        case WithSource(_, SourceLocation(start, _)) +: _ :+ WithSource(_, SourceLocation(_, end)) => SourceLocation(start, end)
-        case Vector(WithSource(_, loc)) => loc
-        case Vector() => SourceLocation(pos, pos)
+        case VectorUnCons(VectorUnCons.NonEmpty(WithSource(_, SourceLocation(start, _)), VectorUnCons.Rev(VectorUnCons.Rev.NonEmpty(_, WithSource(_, SourceLocation(_, end)))))) =>
+          SourceLocation(start, end)
+
+        case VectorUnCons(VectorUnCons.NonEmpty(WithSource(_, loc), VectorUnCons.Rev(VectorUnCons.Rev.Empty))) =>
+          loc
+
+        case VectorUnCons(VectorUnCons.Empty) => SourceLocation(pos, pos)
       }
 
     private def finalItems(items: Vector[WithSource[T]], pos: FilePosition): WithSource[Vector[T]] =
@@ -658,7 +663,7 @@ object Grammar {
 
     private def parseInner(tokens: NonEmptyVector[WithSource[TToken]], options: TParseOptions, items: Vector[WithSource[T]]): GrammarResult[TToken, TSyntaxError, TLabel, Vector[T]] =
       inner.parseTokens(tokens, options).flatMap {
-        case (Vector(), item) =>
+        case (VectorUnCons(VectorUnCons.Empty), item) =>
           new GrammarResultSuspend[TToken, TSyntaxError, TLabel, Vector[T]] {
             override def continue(tokens: NonEmptyVector[WithSource[TToken]]): GrammarResult[TToken, TSyntaxError, TLabel, Vector[T]] =
               parseInner(tokens, options.notLeftRec, items :+ item)
@@ -667,7 +672,7 @@ object Grammar {
               GrammarResultSuccess(Vector(), finalItems(items :+ item, pos))
           }
 
-        case (head +: tail, item) =>
+        case (VectorUnCons(VectorUnCons.NonEmpty(head, tail)), item) =>
           parseInner(NonEmptyVector(head, tail), options.notLeftRec, items :+ item)
       }
       .recoverFailure { (laterTokens, _) => GrammarResultSuccess(tokens.toVector ++ laterTokens, finalItems(items, tokens.head.location.start)) }
@@ -730,10 +735,10 @@ object Grammar {
                 case GrammarResultFailure(failure) => GrammarResultFailure(failure)
                 case GrammarResultError(error) => GrammarResultError(error)
 
-                case GrammarResultSuccess(Vector(), value) =>
+                case GrammarResultSuccess(VectorUnCons(VectorUnCons.Empty), value) =>
                   GrammarResultSuccess(extra, value)
 
-                case GrammarResultSuccess(head +: _, _) =>
+                case GrammarResultSuccess(VectorUnCons(VectorUnCons.NonEmpty(head, _)), _) =>
                   GrammarResultFailure(NonEmptyVector.of(unexpectedToken(head)))
               }
 
@@ -745,10 +750,10 @@ object Grammar {
                   case innerResult: GrammarResultSuspend[TTokenB, TSyntaxError, TLabelB, T] =>
                     handleFinalResult(innerResult.completeResult(tokenB.location.start))
 
-                  case GrammarResultSuccess(Vector(), value) =>
+                  case GrammarResultSuccess(VectorUnCons(VectorUnCons.Empty), value) =>
                     GrammarResultSuccess(extra, value)
 
-                  case GrammarResultSuccess(head +: _, _) =>
+                  case GrammarResultSuccess(VectorUnCons(VectorUnCons.NonEmpty(head, _)), _) =>
                     GrammarResultFailure(NonEmptyVector.of(unexpectedToken(head)))
                 }
 
@@ -757,7 +762,7 @@ object Grammar {
             }
 
 
-          case GrammarResultSuccess(Vector(), tokenB) =>
+          case GrammarResultSuccess(VectorUnCons(VectorUnCons.Empty), tokenB) =>
             new GrammarResultSuspend[TTokenA, TSyntaxError, TLabelA, T] {
               override def continue(tokens: NonEmptyVector[WithSource[TTokenA]]): GrammarResult[TTokenA, TSyntaxError, TLabelA, T] =
                 handleResult(outerGrammar.parseTokens(tokens, options), acc :+ tokenB)
@@ -766,7 +771,7 @@ object Grammar {
                 GrammarResultFailure(NonEmptyVector.of(unexpectedEndOfFileError(pos)))
             }
 
-          case GrammarResultSuccess(head +: tail, tokenB) =>
+          case GrammarResultSuccess(VectorUnCons(VectorUnCons.NonEmpty(head, tail)), tokenB) =>
             handleResult(outerGrammar.parseTokens(NonEmptyVector(head, tail), options), acc :+ tokenB)
 
         }

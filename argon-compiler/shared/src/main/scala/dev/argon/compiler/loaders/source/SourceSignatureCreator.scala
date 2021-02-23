@@ -4,7 +4,7 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.types._
 import dev.argon.parser
-import dev.argon.util.WithSource
+import dev.argon.util.{VectorUnCons, WithSource}
 import cats.{Id => _, _}
 import cats.data.NonEmptyList
 import cats.implicits._
@@ -33,7 +33,7 @@ object SourceSignatureCreator {
     (paramIndex: Int)
     : Comp[Signature[TResult, _ <: Nat]] =
       params match {
-        case WithSource(parser.FunctionParameterList(listType, isErased, Vector()), location) +: tail =>
+        case VectorUnCons(VectorUnCons.NonEmpty(WithSource(parser.FunctionParameterList(listType, isErased, VectorUnCons(VectorUnCons.Empty)), location), tail)) =>
           ExpressionConverter.resolveUnitType(context)(env)(location)
             .flatMap { unitType =>
               impl(env)(tail)(paramIndex + 1)
@@ -50,8 +50,7 @@ object SourceSignatureCreator {
                 }
             }
 
-        case WithSource(parser.FunctionParameterList(listType, isErased, headH +: headT), location) +: tail =>
-
+        case VectorUnCons(VectorUnCons.NonEmpty(WithSource(parser.FunctionParameterList(listType, isErased, VectorUnCons(VectorUnCons.NonEmpty(headH, headT))), location), tail)) =>
           NonEmptyList(headH, headT.toList)
             .zipWithIndex
             .traverse {
@@ -108,7 +107,7 @@ object SourceSignatureCreator {
                   }
             }
 
-        case Vector() =>
+        case VectorUnCons(VectorUnCons.Empty) =>
           resultCreator.createResult(env)
               .map(result => SignatureResult[TResult](result))
       }

@@ -134,11 +134,11 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
   private def parseTraitOwner(desc: ArgonModule.TraitOwner): Comp[ModuleObjectLoadResult[TraitOwner[context.type, TPayloadSpec], TraitOwner.ByNamespace[context.type, TPayloadSpec], TraitOwner[context.type, ReferencePayloadSpecifier]]] =
     desc.owner match {
       case ArgonModule.TraitOwner.Owner.InNamespace(
-      ArgonModule.ByNamespaceOwner(
-      moduleId,
-      ns,
-      ValidGlobalName(name)
-      )
+        ArgonModule.ByNamespaceOwner(
+          moduleId,
+          ns,
+          ValidGlobalName(name)
+        )
       ) =>
         getModule(moduleId).map {
           case ModuleObjectReference(module) => ModuleObjectReference(TraitOwner.ByNamespace(module, parseNamespacePath(ns), name))
@@ -146,18 +146,18 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
           case ModuleObjectGlobalDefinition(value) => value
         }
 
-      case ArgonModule.TraitOwner.Owner.Empty =>
+      case _ =>
         Compilation.forErrors(invalidModuleFormatError)
     }
 
   private def parseClassOwner(desc: ArgonModule.ClassOwner): Comp[ModuleObjectLoadResult[ClassOwner[context.type, TPayloadSpec], ClassOwner.ByNamespace[context.type, TPayloadSpec], ClassOwner[context.type, ReferencePayloadSpecifier]]] =
     desc.owner match {
       case ArgonModule.ClassOwner.Owner.InNamespace(
-      ArgonModule.ByNamespaceOwner(
-      moduleId,
-      ns,
-      ValidGlobalName(name)
-      )
+        ArgonModule.ByNamespaceOwner(
+          moduleId,
+          ns,
+          ValidGlobalName(name)
+        )
       ) =>
         getModule(moduleId).map {
           case ModuleObjectReference(module) => ModuleObjectReference(ClassOwner.ByNamespace(module, parseNamespacePath(ns), name))
@@ -165,18 +165,18 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
           case ModuleObjectGlobalDefinition(value) => value
         }
 
-      case ArgonModule.ClassOwner.Owner.Empty =>
+      case _ =>
         Compilation.forErrors(invalidModuleFormatError)
     }
 
   private def parseDataCtorOwner(desc: ArgonModule.DataConstructorOwner): Comp[ModuleObjectLoadResult[DataConstructorOwner[context.type, TPayloadSpec], DataConstructorOwner.ByNamespace[context.type, TPayloadSpec], DataConstructorOwner[context.type, ReferencePayloadSpecifier]]] =
     desc.owner match {
       case ArgonModule.DataConstructorOwner.Owner.InNamespace(
-      ArgonModule.ByNamespaceOwner(
-      moduleId,
-      ns,
-      ValidGlobalName(name)
-      )
+        ArgonModule.ByNamespaceOwner(
+          moduleId,
+          ns,
+          ValidGlobalName(name)
+        )
       ) =>
         getModule(moduleId).map {
           case ModuleObjectReference(module) => ModuleObjectReference(DataConstructorOwner.ByNamespace(module, parseNamespacePath(ns), name))
@@ -184,18 +184,18 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
           case ModuleObjectGlobalDefinition(value) => value
         }
 
-      case ArgonModule.DataConstructorOwner.Owner.Empty =>
+      case _ =>
         Compilation.forErrors(invalidModuleFormatError)
     }
 
   private def parseFunctionOwner(desc: ArgonModule.FunctionOwner): Comp[ModuleObjectLoadResult[FunctionOwner[context.type, TPayloadSpec], FunctionOwner.ByNamespace[context.type, TPayloadSpec], FunctionOwner[context.type, ReferencePayloadSpecifier]]] =
     desc.owner match {
       case ArgonModule.FunctionOwner.Owner.InNamespace(
-      ArgonModule.ByNamespaceOwner(
-      moduleId,
-      ns,
-      ValidGlobalName(name)
-      )
+        ArgonModule.ByNamespaceOwner(
+          moduleId,
+          ns,
+          ValidGlobalName(name)
+        )
       ) =>
         getModule(moduleId).map {
           case ModuleObjectReference(module) => ModuleObjectReference(FunctionOwner.ByNamespace(module, parseNamespacePath(ns), name))
@@ -203,7 +203,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
           case ModuleObjectGlobalDefinition(value) => value
         }
 
-      case ArgonModule.FunctionOwner.Owner.Empty =>
+      case _ =>
         Compilation.forErrors(invalidModuleFormatError)
     }
 
@@ -310,13 +310,13 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
 
     def impl(paramTypes: Vector[ArgonModule.SigType]): Comp[ErasedSignature[context.type]] =
       paramTypes match {
-        case head +: tail =>
+        case VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
           for {
             paramType <- parseErasedSigType(head)
             rest <- impl(tail)
           } yield ErasedSignature.Parameter(paramType, rest)
 
-        case Vector() =>
+        case VectorUnCons(VectorUnCons.Empty) =>
           parseErasedSigType(sig.resultType).map(ErasedSignature.Result.apply)
       }
 
@@ -1384,7 +1384,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
           .map { t => (t, varName) }
       }
       .flatMap {
-        case Vector() =>
+        case VectorUnCons(VectorUnCons.Empty) =>
           for {
             currentModule <- module
             unitType <- StandardTypeLoaders.loadUnitType(context)(
@@ -1397,14 +1397,14 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
             Vector()
           )
 
-        case Vector((t, varName)) =>
+        case VectorUnCons(VectorUnCons.NonEmpty((t, varName), VectorUnCons(VectorUnCons.Empty))) =>
           Parameter(
             parameterStyle,
             ParameterVariable[context.type, Id](owner, index, varName, Mutability.NonMutable, isErased = parameter.isErased.getOrElse(false), t),
             Vector()
           ).pure[Comp]
 
-        case elems @ head +: tail =>
+        case elems @ VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
 
           val paramType = context.typeSystem.fromSimpleType(LoadTuple(
             NonEmptyList(head, tail.toList).map { case (t, _) => TupleElement[context.type, Id](t) }

@@ -94,7 +94,7 @@ object SourceClassConstructor {
         }
 
         body.value match {
-          case WithSource(parser.FieldInitializationStmt(name, value), location) +: tail =>
+          case VectorUnCons(VectorUnCons.NonEmpty(WithSource(parser.FieldInitializationStmt(name, value), location), tail)) =>
             convertUnconverted.flatMap { case (newConvertedNoInit, env2) =>
               findField(name, location).flatMap { field =>
                 if(initializedFields.contains(field.name))
@@ -113,7 +113,7 @@ object SourceClassConstructor {
               }
             }
 
-          case WithSource(parser.InitializeStmt(thisName, baseCtorExprOpt), location) +: tail =>
+          case VectorUnCons(VectorUnCons.NonEmpty(WithSource(parser.InitializeStmt(thisName, baseCtorExprOpt), location), tail)) =>
             ownerClass.fields.flatMap { fields =>
               if(fields.size =!= initializedFields.size)
                 Compilation.forErrors(DiagnosticError.FieldNotInitializedError(DiagnosticSource.SourceFile(env.fileSpec, location)))
@@ -157,14 +157,14 @@ object SourceClassConstructor {
                 }
             }
 
-          case stmt +: tail =>
+          case VectorUnCons(VectorUnCons.NonEmpty(stmt, tail)) =>
             val newUnconverted = WithSource(
               unconverted.value :+ stmt,
               SourceLocation.merge(unconverted.location, stmt.location)
             )
             convertCtorBody(unitType)(env)(newUnconverted)(converted)(initializedFields)(nextBody(tail))
 
-          case Vector() =>
+          case VectorUnCons(VectorUnCons.Empty) =>
             ownerClass.signature.flatMap { ownerSig =>
               ownerSig.unsubstitutedResult.baseTypes.flatMap { baseTypes =>
                 if(baseTypes.baseClass.isDefined)

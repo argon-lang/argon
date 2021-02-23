@@ -5,7 +5,7 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types._
 import dev.argon.parser
-import dev.argon.util.{FileSpec, NamespacePath, SourceLocation, UniqueIdentifier, WithSource}
+import dev.argon.util.{FileSpec, NamespacePath, SourceLocation, UniqueIdentifier, VectorUnCons, WithSource}
 import dev.argon.util.AnyExtensions._
 
 import scala.collection.immutable.Set
@@ -229,8 +229,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
         def dedupOverloads(overloads: Vector[OverloadExprFactory], seenOverloads: Set[CallableId], acc: Vector[OverloadExprFactory]): Vector[OverloadExprFactory] =
           overloads match {
-            case Vector() => Vector()
-            case head +: tail =>
+            case VectorUnCons(VectorUnCons.Empty) => Vector()
+            case VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
               head.overloadId match {
                 case Some(id) if seenOverloads.contains(id) => dedupOverloads(tail, seenOverloads, acc)
                 case Some(id) => dedupOverloads(tail, seenOverloads + id, acc :+ head)
@@ -661,9 +661,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
   def convertStmts(env: Env)(stmts: WithSource[Vector[WithSource[parser.Stmt]]]): ExprFactory =
     stmts.value match {
-      case Vector() => loadUnitLiteral(env)(stmts.location)
-
-      case WithSource(stmt: parser.VariableDeclarationStmt, location) +: tail =>
+      case VectorUnCons(VectorUnCons.Empty) => loadUnitLiteral(env)(stmts.location)
+      case VectorUnCons(VectorUnCons.NonEmpty(WithSource(stmt: parser.VariableDeclarationStmt, location), tail)) =>
         new ExprFactory {
           override def forExpectedType(expectedType: typeSystem.TType): Comp[SimpleExpr] = {
             val mutability = Mutability.fromIsMutable(stmt.isMutable)
@@ -703,15 +702,17 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
           }
         }
 
-      case Vector(stmt) => convertStmt(env)(stmt)
-      case head +: tail =>
+      case VectorUnCons(VectorUnCons.NonEmpty(stmt, VectorUnCons(VectorUnCons.Empty))) =>
+        convertStmt(env)(stmt)
+
+      case VectorUnCons(VectorUnCons.NonEmpty(head, tail @ VectorUnCons(VectorUnCons.NonEmpty(head2, _)))) =>
         new ExprFactory {
           override def forExpectedType(expectedType: typeSystem.TType): Comp[SimpleExpr] =
             for {
               unitType <- resolveUnitType(env)(head.location)
               first <- convertStmt(env)(head).forExpectedType(unitType)
 
-              secondStartPos = tail.headOption.map { _.location.start }.getOrElse(stmts.location.end)
+              secondStartPos = head2.location.start
               second <- convertStmts(env)(WithSource(tail, SourceLocation(secondStartPos, stmts.location.end))).forExpectedType(expectedType)
             } yield Sequence(fromSimpleType(first), fromSimpleType(second))
         }
@@ -988,12 +989,12 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
         (acc: Either[NonEmptyVector[FailedOverload], NonEmptyVector[GoodOverload]])
         : Either[NonEmptyVector[FailedOverload], NonEmptyVector[GoodOverload]] =
           (results, acc) match {
-            case ((_, Exit.Failure(_)) +: tail, Right(_)) => impl(tail)(acc)
-            case ((desc, Exit.Success(expr)) +: tail, Right(exprs)) => impl(tail)(Right(exprs :+ ((desc, expr))))
-            case ((desc, Exit.Failure(errors)) +: tail, Left(errorLists)) => impl(tail)(Left(errorLists :+ ((desc, errors))))
-            case ((desc, Exit.Success(expr)) +: tail, Left(_)) => impl(tail)(Right(NonEmptyVector.of((desc, expr))))
+            case (VectorUnCons(VectorUnCons.NonEmpty((_, Exit.Failure(_)), tail)), Right(_)) => impl(tail)(acc)
+            case (VectorUnCons(VectorUnCons.NonEmpty((desc, Exit.Success(expr)), tail)), Right(exprs)) => impl(tail)(Right(exprs :+ ((desc, expr))))
+            case (VectorUnCons(VectorUnCons.NonEmpty((desc, Exit.Failure(errors)), tail)), Left(errorLists)) => impl(tail)(Left(errorLists :+ ((desc, errors))))
+            case (VectorUnCons(VectorUnCons.NonEmpty((desc, Exit.Success(expr)), tail)), Left(_)) => impl(tail)(Right(NonEmptyVector.of((desc, expr))))
 
-            case (Vector(), _) => acc
+            case (VectorUnCons(VectorUnCons.Empty), _) => acc
           }
 
         results match {
@@ -1165,7 +1166,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       signature.visit(new SignatureVisitor[TResult, Len, Comp[SimpleExpr]] {
         override def visitParameters[RestLen <: Nat](sigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): Comp[SimpleExpr] =
           prevArgs match {
-            case Vector() =>
+            case VectorUnCons(VectorUnCons.Empty) =>
               for {
                 varId <- UniqueIdentifier.make
                 newVar = LocalVariable(LocalVariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, isErased = false, sigParams.parameter.paramType)
@@ -1176,7 +1177,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 result <- partiallyApply(env2, prevArgs, argVariables :+ fromSimpleType(newVarExpr), nextSig, inner => wrapInLambda(LoadLambda(newVar, fromSimpleType(inner))))
               } yield result
 
-            case head +: tail =>
+            case VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
               for {
                 varId <- UniqueIdentifier.make
                 newVar = LocalVariable(LocalVariableId(varId), env.variableOwner, VariableName.Unnamed, Mutability.NonMutable, isErased = false, sigParams.parameter.paramType)

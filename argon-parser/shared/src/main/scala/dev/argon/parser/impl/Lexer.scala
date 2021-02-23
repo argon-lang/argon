@@ -1,7 +1,7 @@
 package dev.argon.parser.impl
 
 import dev.argon.parser._
-import dev.argon.util.{FilePosition, SourceLocation, WithSource}
+import dev.argon.util.{FilePosition, SourceLocation, VectorUnCons, WithSource}
 
 import scala.language.postfixOps
 import cats._
@@ -164,11 +164,11 @@ object Lexer {
             case WithSource((_, parts, _), location) =>
               def combineParts(parts: Vector[Token.StringToken.Part]): Vector[Token.StringToken.Part] =
                 parts match {
-                  case Vector() => Vector()
-                  case Token.StringToken.StringPart(WithSource(s1, SourceLocation(start, _))) +: Token.StringToken.StringPart(WithSource(s2, SourceLocation(_, end))) +: rest =>
+                  case VectorUnCons(VectorUnCons.Empty) => Vector()
+                  case VectorUnCons(VectorUnCons.NonEmpty(Token.StringToken.StringPart(WithSource(s1, SourceLocation(start, _))), VectorUnCons(VectorUnCons.NonEmpty(Token.StringToken.StringPart(WithSource(s2, SourceLocation(_, end))), rest)))) =>
                     combineParts(Token.StringToken.StringPart(WithSource(s1 + s2, SourceLocation(start, end))) +: rest)
 
-                  case head +: tail =>
+                  case VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
                     head +: combineParts(tail)
                 }
 

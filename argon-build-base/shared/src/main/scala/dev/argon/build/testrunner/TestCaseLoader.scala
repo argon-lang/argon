@@ -10,7 +10,7 @@ import zio.interop.catz.core._
 import dev.argon.build._
 import dev.argon.io.FileNameUtil
 import dev.argon.io.fileio._
-import dev.argon.util.XmlParser
+import dev.argon.util.{VectorUnCons, XmlParser}
 
 object TestCaseLoader {
 
@@ -64,33 +64,6 @@ object TestCaseLoader {
     .map { case (dirs, tests) =>
       TestCaseStructure(dirs, tests)
     }
-
-  def findTestCases(testCases: Seq[(Seq[String], TestCase)]): TestCaseStructure = {
-    val groupedTestCases = testCases
-      .map {
-        case (head +: tail, testCase) => (Some(head), tail, testCase)
-        case (Seq(), testCase) => (None, Seq(), testCase)
-      }
-      .groupMap {
-        case (key, _, _) => key
-      } {
-        case (_, path, testCase) => (path, testCase)
-      }
-
-    val subDirCases = groupedTestCases
-      .collect {
-        case (Some(k), v) => (k, findTestCases(v))
-      }
-      .toSeq
-      .sortBy { case (k, _) => k }
-
-    val fileCases = groupedTestCases
-      .getOrElse(None, Seq())
-      .map { case (_, testCase) => testCase }
-      .sortBy { _.name }
-
-    TestCaseStructure(subDirCases, fileCases)
-  }
 
 
 }

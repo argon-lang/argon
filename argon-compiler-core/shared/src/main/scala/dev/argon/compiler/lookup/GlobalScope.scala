@@ -2,7 +2,7 @@ package dev.argon.compiler.lookup
 
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
-import dev.argon.util.{FileSpec, NamespacePath, SourceLocation}
+import dev.argon.util.{FileSpec, NamespacePath, SourceLocation, VectorUnCons}
 
 import scala.collection.Set
 import cats._
@@ -72,8 +72,8 @@ object GlobalScope {
   (acc: ResolvedName)
   : Comp[ResolvedName] =
     modules match {
-      case Vector() => IO.succeed(acc)
-      case head +: tail =>
+      case VectorUnCons(VectorUnCons.Empty) => IO.succeed(acc)
+      case VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
         resolveNameStage1(context)(imports)(head)(name)(acc).flatMap {
           case NotFound => resolveName(context)(imports)(tail)(name)(NotFound)
           case FoundOverloadable => IO.succeed(FoundOverloadable)
@@ -89,8 +89,8 @@ object GlobalScope {
   (acc: ResolvedName)
   : Comp[ResolvedName] =
     imports match {
-      case Vector() => IO.succeed(acc)
-      case head +: tail =>
+      case VectorUnCons(VectorUnCons.Empty) => IO.succeed(acc)
+      case VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
         resolveNameStage2(context)(head)(modules)(name)(acc).flatMap {
           case FoundOverloadable => IO.succeed(FoundOverloadable)
           case next => resolveNameStage1(context)(tail)(modules)(name)(next)
@@ -127,8 +127,8 @@ object GlobalScope {
   (name: GlobalName.NonEmpty)
   : Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] =
     modules match {
-      case Vector() => IO.succeed(OverloadResult.End)
-      case head +: tail =>
+      case VectorUnCons(VectorUnCons.Empty) => IO.succeed(OverloadResult.End)
+      case VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
         overloadResult(context)(imports)(tail)(name)
           .flatMap(overloadResultStage1(context)(imports)(head)(name)(_))
     }
@@ -141,8 +141,8 @@ object GlobalScope {
   (nextResult: OverloadResult[context.scopeContext.ScopeValueOverload])
   : Comp[OverloadResult[context.scopeContext.ScopeValueOverload]] =
     imports match {
-      case Vector() => IO.succeed(nextResult)
-      case head +: tail =>
+      case VectorUnCons(VectorUnCons.Empty) => IO.succeed(nextResult)
+      case VectorUnCons(VectorUnCons.NonEmpty(head, tail)) =>
         overloadResultStage1(context)(tail)(modules)(name)(nextResult)
           .flatMap(overloadResultStage2(context)(head)(modules)(name)(_))
     }

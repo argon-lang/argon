@@ -79,6 +79,9 @@ sealed abstract class Substitutions[Wrap[+_]: Monad] {
       case DataConstructorCall(dataCtorInstanceType, args) =>
         fromSimpleType(DataConstructorCall(substDataCtorType(dataCtorInstanceType), args.map(substWrapExpr)))
 
+      case EnsureExecuted(body, ensuring) =>
+        fromSimpleType(EnsureExecuted(substWrapExpr(body), substWrapExpr(ensuring)))
+
       case FunctionCall(function, args, returnType) =>
         fromSimpleType(FunctionCall(function, args.map(substWrapExpr), substWrapExpr(returnType)))
 
@@ -96,11 +99,18 @@ sealed abstract class Substitutions[Wrap[+_]: Monad] {
       case LoadConstantString(value, exprType) => fromSimpleType(LoadConstantString(value, substWrapExpr(exprType)))
       case LoadLambda(argVariable, body) => fromSimpleType(LoadLambda(substLocalVariable(argVariable), substWrapExpr(body)))
       case LoadTuple(values) => fromSimpleType(LoadTuple(values.map { case TupleElement(value) => TupleElement(substWrapExpr(value)) }))
+      case LoadTupleElement(tupleValue, elemType, index) => fromSimpleType(LoadTupleElement(substWrapExpr(tupleValue), substWrapExpr(elemType), index))
       case LoadUnit(exprType) => fromSimpleType(LoadUnit(substWrapExpr(exprType)))
       case LoadVariable(variable) if variable === oldVariable => replacement
       case LoadVariable(variable) => fromSimpleType(LoadVariable(substVariable(variable)))
       case MethodCall(method, instance, instanceType, args, returnType) =>
         fromSimpleType(MethodCall(method, substWrapExpr(instance), substTypeWithMethods(instanceType), args.map(substWrapExpr), substWrapExpr(returnType)))
+
+      case PatternMatch(expr, cases) =>
+        fromSimpleType(PatternMatch(
+          substWrapExpr(expr),
+          cases.map { case PatternCase(pattern, body) => PatternCase(substPatternExpr(pattern), substWrapExpr(body)) }
+        ))
 
       case Sequence(first, second) =>
         fromSimpleType(Sequence(substWrapExpr(first), substWrapExpr(second)))
@@ -136,6 +146,19 @@ sealed abstract class Substitutions[Wrap[+_]: Monad] {
           substWrapExpr(first),
           substWrapExpr(second)
         ))
+
+      case ExistentialType(variable, inner) =>
+        fromSimpleType(ExistentialType(
+          substLocalVariable(variable),
+          substWrapExpr(inner)
+        ))
+    }
+
+  def substPatternExpr(value: PatternExpr[context.type, Wrap]): PatternExpr[context.type, Wrap] =
+    value match {
+      case PatternExpr.DataDeconstructor(ctor, args) => PatternExpr.DataDeconstructor(ctor, args.map(substPatternExpr))
+      case PatternExpr.Binding(variable) => PatternExpr.Binding(substLocalVariable(variable))
+      case PatternExpr.CastBinding(variable) => PatternExpr.Binding(substLocalVariable(variable))
     }
 
   def substWrapExpr(expr: ArExprWrap[context.type, Wrap]): ArExprWrap[context.type, Wrap] =
