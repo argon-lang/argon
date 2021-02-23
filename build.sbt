@@ -21,7 +21,7 @@ val esParseDeps = Seq(
 )
 
 lazy val commonSettings = Seq(
-  scalaVersion := "2.13.4",
+  scalaVersion := "2.13.5",
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
