@@ -14,7 +14,6 @@ import dev.argon.util.ProtoBufCodecs
 object GenericBackend extends Backend {
   override val id: String = "generic"
   override val name: String = "Generic"
-  override val platformIds: Set[String] = Set.empty
 
   override type BackendOptionID = Nothing
   override val backendOptions: OptionsHandler[BackendOptionID, Id] = new OptionsHandler[BackendOptionID, Id] {
@@ -40,7 +39,7 @@ object GenericBackend extends Backend {
 
   override val outputOptions: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]] = new OptionsHandler.Empty[Lambda[X => SingleFile]]
 
-  override def moduleLoaders(options: Options[Id, BackendOptionID]): Seq[ModuleLoader[Context.Aux[this.type]]] = Seq()
+  override def moduleLoaders(options: Options[Id, BackendOptionID]): Seq[ModuleLoader] = Seq()
 
   override type TExternHandler = GenericExternHandler
   override def externHandler(options: Options[Id, BackendOptionID]): UIO[GenericExternHandler] =

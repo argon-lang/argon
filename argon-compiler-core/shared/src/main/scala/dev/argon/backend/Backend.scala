@@ -12,7 +12,6 @@ import zio._
 trait Backend {
   val id: String
   val name: String
-  val platformIds: Set[String]
 
   type BackendOptionID <: OptionID
   val backendOptions: OptionsHandler[BackendOptionID, Id]
@@ -20,7 +19,7 @@ trait Backend {
   type OutputOptionID <: OptionID { type ElementType <: BuildArtifact }
   val outputOptions: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]]
 
-  def moduleLoaders(options: Options[Id, BackendOptionID]): Seq[ModuleLoader[Context.Aux[this.type]]]
+  def moduleLoaders(options: Options[Id, BackendOptionID]): Seq[ModuleLoader]
 
   type TExternHandler <: ExternHandler
   def externHandler(options: Options[Id, BackendOptionID]): UIO[TExternHandler]

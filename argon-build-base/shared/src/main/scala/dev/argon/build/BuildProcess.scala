@@ -6,7 +6,7 @@ import cats._
 import cats.arrow.FunctionK
 import cats.implicits._
 import cats.data.{NonEmptyList, NonEmptyVector}
-import dev.argon.armodule.loader.{AggregateModuleLoader, ArgonModuleLoader}
+import dev.argon.armodule.loader.{AggregateModuleLoader, ArgonModuleDeserializer, ArgonModuleLoader}
 import dev.argon.armodule.emitter.{ModuleEmitOptions, ModuleSerializer, ZipModuleWriter}
 import dev.argon.backend.Backend
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
@@ -43,13 +43,13 @@ object BuildProcess {
   }
 
   def loadReferences(backend: Backend)(input: CompilerInput[backend.BackendOptionID]): RCompManaged[ZipRead with MaybeBlocking, Vector[UnlinkedModule[Context.Aux[backend.type], ReferencePayloadSpecifier]]] = for {
-    arModuleLoader <- ZManaged.fromEffect(ArgonModuleLoader.make[Context.Aux[backend.type]])
+    arModuleLoader <- ZManaged.fromEffect(ArgonModuleLoader.make)
     moduleLoaders = backend.moduleLoaders(input.backendOptions)
     aggLoader = new AggregateModuleLoader(arModuleLoader +: moduleLoaders.toVector)
 
     unlinkedModules <- Managed.foreach(input.options.get(CompilerOptionID.References).files) { referenceFile =>
       aggLoader.loadResource(referenceFile).mapM {
-        case Some(value) => IO.succeed(value)
+        case Some(value) => ArgonModuleDeserializer.deserialize(value)
         case None => Compilation.forErrors(DiagnosticError.CouldNotFindCompatibleModuleLoader(DiagnosticSource.LinkPhase()))
       }
     }

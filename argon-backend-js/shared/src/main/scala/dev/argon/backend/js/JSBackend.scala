@@ -22,7 +22,6 @@ sealed abstract class JSBackend extends Backend {
 
   final override val id: String = PlatformId
   final override val name: String = "JavaScript"
-  final override val platformIds: Set[String] = Set(PlatformId)
 
 
   override type BackendOptionID = JSBackendOptionID
@@ -118,7 +117,7 @@ sealed abstract class JSBackend extends Backend {
   }
 
 
-  override def moduleLoaders(options: Options[Id, JSBackendOptionID]): Seq[ModuleLoader[Context.Aux[JSBackend.this.type]]] = Seq()
+  override def moduleLoaders(options: Options[Id, JSBackendOptionID]): Seq[ModuleLoader] = Seq()
 
   override type TExternHandler = JSExternHandler
 }

@@ -14,14 +14,13 @@ import zio.stream._
 class DummyBackend extends Backend {
   override val id: String = "dummy"
   override val name: String = "Dummy"
-  override val platformIds: Set[String] = Set.empty
 
   override type BackendOptionID = Nothing
   override val backendOptions: OptionsHandler[Nothing, Id] = new OptionsHandler.Empty[Id]
   override type OutputOptionID = Nothing
   override val outputOptions: OptionsHandler[Nothing, Lambda[X => SingleFile]] = new OptionsHandler.Empty[Lambda[X => SingleFile]]
 
-  override def moduleLoaders(options: Options[Id, Nothing]): Seq[ModuleLoader[Context.Aux[DummyBackend.this.type]]] = Seq.empty
+  override def moduleLoaders(options: Options[Id, Nothing]): Seq[ModuleLoader] = Seq.empty
 
   override type TExternHandler = ExternHandler
   override def externHandler(options: Options[Id, Nothing]): UIO[ExternHandler] =
