@@ -67,7 +67,6 @@ object ArgonModuleLoader {
           }
 
         case _ =>
-          println("loadResource: fileName=" + fileName)
           ZManaged.succeed(None)
       }
 

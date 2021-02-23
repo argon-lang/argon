@@ -29,9 +29,3 @@ trait Backend {
 
 }
 
-object Backend {
-
-  type OptionIDOutput = OptionID { type ElementType <: BuildArtifact }
-
-}
-
