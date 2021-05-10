@@ -17,7 +17,7 @@ lazy val nodeConfig =
     .withArgs(List("--no-warnings", "--experimental-vm-modules"))
 
 val esParseDeps = Seq(
-  "acorn" -> "^8.0.5",
+  "acorn" -> "^8.2.4",
 )
 
 lazy val commonSettingsNoLibs = Seq(
@@ -70,7 +70,7 @@ lazy val sharedJSNodeSettings = Seq(
 
   npmDependencies ++= Seq(
     "jszip" -> "^3.6.0",
-    "xmldom" -> "^0.4.0",
+    "xmldom" -> "^0.6.0",
   ) ++ esParseDeps,
   
   scalaJSLinkerConfig ~= {
@@ -103,7 +103,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ S
 
   npmDependencies ++= Seq(
     "memory-streams" -> "^0.1.3",
-    "node-stream-zip" -> "^1.13.1",
+    "node-stream-zip" -> "^1.13.4",
   ),
 
   jsEnv := new NodeJSEnv(nodeConfig),
