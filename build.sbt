@@ -65,7 +65,7 @@ lazy val sharedJVMNodeSettings = Seq(
 lazy val sharedJSNodeSettings = Seq(
 
   libraryDependencies ++= Seq(
-    "io.github.cquiroz" %%% "scala-java-time" % "2.0.0",
+    "io.github.cquiroz" %%% "scala-java-time" % "2.2.2",
   ),
 
   npmDependencies ++= Seq(
