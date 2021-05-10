@@ -111,7 +111,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ S
 
 lazy val zioEffectWarts = project.in(file("zio-effect-warts"))
   .settings(
-    scalaVersion := "2.13.3",
+    scalaVersion := "2.13.5",
     libraryDependencies ++= Seq(
       "org.wartremover" % "wartremover" % wartremover.Wart.PluginVersion cross CrossVersion.full,
       "dev.zio" %%% "zio" % zioVersion,
