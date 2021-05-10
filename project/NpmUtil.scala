@@ -66,8 +66,8 @@ object NpmUtil extends AutoPlugin {
       }
     },
 
-    run in Compile := (run in Compile).dependsOn(npmInstall).evaluated,
-    test in Test := (test in Test).dependsOn(npmInstall).value,
+    Compile / run := (Compile / run).dependsOn(npmInstall).evaluated,
+    Test / test := (Test / test).dependsOn(npmInstall).value,
   )
 }
 

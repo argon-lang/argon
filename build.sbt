@@ -58,8 +58,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
 )
 
 lazy val sharedJVMNodeSettings = Seq(
-  unmanagedSourceDirectories in Compile += baseDirectory.value / "../shared-jvm-node/src/main/scala",
-  unmanagedSourceDirectories in Test += baseDirectory.value / "../shared-jvm-node/src/test/scala",
+  Compile / unmanagedSourceDirectories += baseDirectory.value / "../shared-jvm-node/src/main/scala",
+  Test / unmanagedSourceDirectories += baseDirectory.value / "../shared-jvm-node/src/test/scala",
 )
 
 lazy val sharedJSNodeSettings = Seq(
@@ -79,8 +79,8 @@ lazy val sharedJSNodeSettings = Seq(
       .withBatchMode(true)
   },
 
-  unmanagedSourceDirectories in Compile += baseDirectory.value / "../shared-js-node/src/main/scala",
-  unmanagedSourceDirectories in Test += baseDirectory.value / "../shared-js-node/src/test/scala",
+  Compile / unmanagedSourceDirectories += baseDirectory.value / "../shared-js-node/src/main/scala",
+  Test / unmanagedSourceDirectories += baseDirectory.value / "../shared-js-node/src/test/scala",
 
 )
 
@@ -92,8 +92,8 @@ lazy val commonJVMSettings = sharedJVMNodeSettings ++ Seq(
     "commons-io" % "commons-io" % "2.8.0",
   ),
 
-  fork in Test := true,
-  envVars in Test ++= envValues,
+  Test / fork := true,
+  Test / envVars ++= envValues,
 
 )
 
@@ -180,7 +180,7 @@ lazy val compilerOptions = Seq(
   wartremoverExcluded += sourceManaged.value,
 
   wartremoverClasspaths ++= {
-    (fullClasspath in (zioEffectWarts, Compile)).value.map(_.data.toURI.toString)
+    (zioEffectWarts / Compile / fullClasspath).value.map(_.data.toURI.toString)
   }
 )
 
@@ -685,8 +685,8 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
           "-Xlint:-deprecation",
         ),
 
-        PB.targets in Compile += PB.gens.java -> (sourceManaged in Compile).value,
-        PB.targets in Compile += scalapb.gen(javaConversions=true) -> (sourceManaged in Compile).value,
+        Compile / PB.targets += PB.gens.java -> (Compile / sourceManaged).value,
+        Compile / PB.targets += scalapb.gen(javaConversions=true) -> (Compile / sourceManaged).value,
       )
   )
   .jsConfigure(
@@ -698,7 +698,7 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
       .settings(commonNodeSettings)
   )
   .platformsSettings(JSPlatform, NodePlatform)(
-    PB.targets in Compile += scalapb.gen() -> (sourceManaged in Compile).value / "protobuf",
+    Compile / PB.targets += scalapb.gen() -> (Compile / sourceManaged).value / "protobuf",
   )
   .settings(
     commonSettings,
@@ -713,7 +713,7 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
       "-language:implicitConversions",
     ),
 
-    PB.protoSources in Compile += file("argon-modulefmt/shared/src/main/protobuf"),
+    Compile / PB.protoSources += file("argon-modulefmt/shared/src/main/protobuf"),
   )
 
 lazy val modulefmtJVM = modulefmt.jvm
