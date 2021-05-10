@@ -458,39 +458,6 @@ lazy val armoduleJVM = armodule.jvm
 lazy val armoduleJS = armodule.js
 lazy val armoduleNode = armodule.node
 
-
-lazy val backend_jvm_classmodule = project.in(file("argon-backend-jvm-classmodule"))
-  .dependsOn(modulefmtJVM, utilJVM, argon_plugin_api)
-  .settings(
-    commonJVMSettings,
-
-    libraryDependencies ++= Seq(
-      "org.ow2.asm" % "asm" % "9.0",
-      "org.ow2.asm" % "asm-tree" % "9.0",
-    ),
-
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-backend-jvm-classmodule",
-  )
-
-lazy val backend_jvm = project.in(file("argon-backend-jvm"))
-  .dependsOn(argon_compiler_coreJVM, backend_jvm_classmodule)
-  .settings(
-    commonJVMSettings,
-
-    libraryDependencies ++= Seq(
-      "org.ow2.asm" % "asm" % "9.0",
-      "org.ow2.asm" % "asm-tree" % "9.0",
-    ),
-
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-backend-jvm",
-  )
-
 lazy val backend_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-backend-js"))
   .dependsOn(argon_compiler)
   .jvmConfigure(
