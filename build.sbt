@@ -47,7 +47,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
     "dev.zio" %%% "zio-interop-cats" % "2.3.1.0",
 
 
-    "com.chuusai" %%% "shapeless" % "2.3.3",
+    "com.chuusai" %%% "shapeless" % "2.3.6",
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 
