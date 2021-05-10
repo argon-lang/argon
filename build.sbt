@@ -3,7 +3,7 @@ import sbt.internal.util.ManagedLogger
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
-val graalVersion = "20.2.0"
+val graalVersion = "21.1.0"
 val zioVersion = "1.0.7"
 
 lazy val envValues = Map(
