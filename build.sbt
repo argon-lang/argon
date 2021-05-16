@@ -22,6 +22,7 @@ val esParseDeps = Seq(
 
 lazy val commonSettingsNoLibs = Seq(
   scalaVersion := "2.13.5",
+  crossScalaVersions := Seq("3.0.0", "2.13.5"),
 )
 
 lazy val commonSettingsAnnotations = Seq(
@@ -31,9 +32,6 @@ lazy val commonSettingsAnnotations = Seq(
 lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ Seq(
 
   resolvers += Resolver.sonatypeRepo("releases"),
-
-  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.13.0" cross CrossVersion.full),
-  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
 
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
 
@@ -53,7 +51,15 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
 
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
-  ),
+  ) ++ (CrossVersion.partialVersion(scalaVersion.value) match {
+    case Some((3, _)) => Seq(
+
+    )
+    case _ => Seq(
+      compilerPlugin("org.typelevel" %% "kind-projector" % "0.13.0" cross CrossVersion.full),
+      compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
+    )
+  }),
 
 )
 
@@ -65,7 +71,7 @@ lazy val sharedJVMNodeSettings = Seq(
 lazy val sharedJSNodeSettings = Seq(
 
   libraryDependencies ++= Seq(
-    "io.github.cquiroz" %%% "scala-java-time" % "2.2.2",
+    "io.github.cquiroz" %%% "scala-java-time" % "2.3.0",
   ),
 
   npmDependencies ++= Seq(
@@ -109,18 +115,6 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ S
   jsEnv := new NodeJSEnv(nodeConfig),
 )
 
-lazy val zioEffectWarts = project.in(file("zio-effect-warts"))
-  .settings(
-    scalaVersion := "2.13.5",
-    libraryDependencies ++= Seq(
-      "org.wartremover" % "wartremover" % wartremover.Wart.PluginVersion cross CrossVersion.full,
-      "dev.zio" %%% "zio" % zioVersion,
-      "dev.zio" %%% "zio-streams" % zioVersion,
-    ),
-
-
-  )
-
 lazy val compilerOptions = Seq(
 
   javacOptions ++= Seq(
@@ -149,40 +143,18 @@ lazy val compilerOptions = Seq(
     "-Ypatmat-exhaust-depth", "2000",
     "-Yrangepos",
     "-Ywarn-unused",
-    "-Xsource:3",
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
-  ),
-
-
-  Compile / compile / wartremoverErrors ++= Warts.allBut(
-    Wart.Recursion,
-    Wart.Any,
-    Wart.Nothing,
-    Wart.Product,
-    Wart.Serializable,
-    Wart.JavaSerializable,
-    Wart.LeakingSealed,
-    Wart.Overloading,
-    Wart.ImplicitConversion,
-    Wart.ImplicitParameter,
-    Wart.ExplicitImplicitTypes,
-    Wart.DefaultArguments,
-    Wart.PublicInference,
-    Wart.FinalVal,
-
-    Wart.Throw,
-  ) ++ Seq(
-    Wart.custom("dev.argon.warts.ZioEffect"),
-  ),
-  Test / compile / wartremoverErrors := (Compile / compile / wartremoverErrors).value,
-
-  wartremoverExcluded += sourceManaged.value,
-
-  wartremoverClasspaths ++= {
-    (zioEffectWarts / Compile / fullClasspath).value.map(_.data.toURI.toString)
-  }
+  ) ++ (CrossVersion.partialVersion(scalaVersion.value) match {
+    case Some((3, _)) => Seq(
+      "-Ykind-projector",
+      "-source:3.0-migration",
+    )
+    case _ => Seq (
+      "-Xsource:3",
+    )
+  }),
 )
 
 def argonLibraries = Seq("Argon.Core")
@@ -723,7 +695,7 @@ lazy val modulefmtJS = modulefmt.js
 lazy val js_module_extractor = project.in(file("argon-js-module-extractor"))
   .enablePlugins(ScalaJSPlugin, NpmUtil)
   .settings(
-    scalaVersion := "2.13.3",
+    commonSettingsNoLibs,
 
     scalacOptions ++= Seq(
       "-encoding", "UTF-8",
