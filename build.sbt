@@ -40,7 +40,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
   libraryDependencies ++= Seq(
     "org.scala-lang.modules" %%% "scala-xml" % "2.0.0",
 
-    "org.typelevel" %%% "cats-core" % "2.6.0",
+    "org.typelevel" %%% "cats-core" % "2.6.1",
     "org.typelevel" %%% "kittens" % "2.3.1",
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
