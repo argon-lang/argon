@@ -149,6 +149,7 @@ lazy val compilerOptions = Seq(
     "-Ypatmat-exhaust-depth", "2000",
     "-Yrangepos",
     "-Ywarn-unused",
+    "-Xsource:3",
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
