@@ -6,7 +6,7 @@ import zio.{IO, UIO}
 sealed trait UniqueIdentifier
 object UniqueIdentifier {
 
-  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
+  @SuppressWarnings(Array("scalafix:Disable.effect"))
   def make: UIO[UniqueIdentifier] =
     IO.effectTotal { new UniqueIdentifier {} }
 

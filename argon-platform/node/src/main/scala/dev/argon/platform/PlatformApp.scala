@@ -8,7 +8,7 @@ trait PlatformApp extends App {
 
   def runApp(args: List[String]): ZIO[ZEnv with FileIO with ZipRead, Nothing, ExitCode]
 
-  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
+  @SuppressWarnings(Array("scalafix:Disable.effectTotal"))
   private def getCommandLineArgs: UIO[List[String]] =
     IO.effectTotal { NodeProcess.argv.toArray.drop(2).toList }
 

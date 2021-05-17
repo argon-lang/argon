@@ -10,7 +10,7 @@ import scalajs.js.JSConverters._
 
 object WritableZStreamTests extends DefaultRunnableSpec {
 
-  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
+  @SuppressWarnings(Array("scalafix:Disable.effectAsync"))
   def writeDataToWritable(writable: NodeWritable, data: Chunk[Byte]): IO[js.Error, Unit] =
     IO.effectAsync { register =>
       val buffer = NodeBuffer.from(data.toArray.toJSArray.map(_.toInt))

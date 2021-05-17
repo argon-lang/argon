@@ -6,7 +6,7 @@ import FileIOUtil._
 
 object ZipCreator {
 
-  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
+  @SuppressWarnings(Array("scalafix:Disable.effect"))
   def zipEntries[R](entries: ZStream[R, Throwable, ZipEntryInfo[R, Throwable]]): ZStream[R, Throwable, Byte] =
     ZStream.unwrap(
       IO.effectTotal { new JSZip() }

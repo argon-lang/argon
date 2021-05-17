@@ -5,7 +5,7 @@ import zio.{IO, Task}
 import scala.xml.{PrefixedAttribute, UnprefixedAttribute, Elem => SElem, MetaData => SMetaData, Node => SNode, Null => SAttrNull, Text => SText}
 
 object XmlParser {
-  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
+  @SuppressWarnings(Array("scalafix:Disable.effect"))
   def parseString(xml: String): Task[SElem] = IO.effect {
     val dom = new DOMParser()
     val doc = dom.parseFromString(xml, "text/xml")

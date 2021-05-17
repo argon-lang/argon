@@ -5,7 +5,7 @@ import zio.system._
 
 import scala.scalajs.js
 
-@SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
+@SuppressWarnings(Array("scalafix:Disable.effectTotal"))
 private[platform] object NodeSystem {
 
   val live: ZLayer[Any, Nothing, System] =

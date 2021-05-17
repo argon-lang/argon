@@ -23,7 +23,7 @@ trait TextBuildArtifact extends BuildArtifact {
 object TextBuildArtifact {
 
 
-  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
+  @SuppressWarnings(Array("scalafix:Disable.effectTotal"))
   private def stringBuilderSink: Sink[Nothing, String, Nothing, String] =
     ZSink.fromEffect(IO.effectTotal { new StringBuilder }).flatMap { sb =>
       ZSink.fromPush {

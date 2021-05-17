@@ -18,7 +18,7 @@ private[platform] class WritableZStream[R] private(runtime: Runtime[R], queue: Q
     Chunk.fromArray(array)
   }
 
-  @SuppressWarnings(Array("scalafix:DisableSyntax.null", "dev.argon.warts.ZioEffect"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.null"))
   override protected def _write(buffer: NodeBuffer, encoding: String, callback: js.Function1[Any, Unit]): Unit =
     runtime.unsafeRunAsync(
       queue.offer(Exit.Success(bufferToChunk(buffer)))
@@ -39,7 +39,7 @@ private[platform] class WritableZStream[R] private(runtime: Runtime[R], queue: Q
 
 object WritableZStream {
 
-  @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
+  @SuppressWarnings(Array("scalafix:Disable.effectTotal"))
   def apply[R](fill: NodeWritable => ZIO[R, Any, Unit]): ZStream[R, Any, Byte] =
     ZStream.unwrapManaged(
       for {
