@@ -1,8 +1,6 @@
 package dev.argon.backend.js
 
-import cats.data.NonEmptyList
 import dev.argon.compiler._
-import dev.argon.compiler.core.PayloadSpecifiers._
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup.LookupNames
 import dev.argon.util.NamespacePath

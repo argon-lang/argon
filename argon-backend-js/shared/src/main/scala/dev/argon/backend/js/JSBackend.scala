@@ -2,9 +2,8 @@ package dev.argon.backend.js
 
 import cats.{Applicative, Id}
 import dev.argon.compiler._
-import cats.implicits._
 import dev.argon.backend._
-import dev.argon.backend.js.JSBackend.{JSOutputId, PlatformId}
+import dev.argon.backend.js.JSBackend.PlatformId
 import dev.argon.compiler.core.{ArModule, Context}
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.ModuleLoader
@@ -13,7 +12,7 @@ import dev.argon.compiler.output.TextBuildArtifact
 import zio._
 import dev.argon.io.fileio.FileIO
 import dev.argon.io.fileio.ZipRead
-import dev.argon.util.{MaybeBlocking, ProtoBufCodecs, ValueCache}
+import dev.argon.util.MaybeBlocking
 import shapeless.{::, HNil}
 import zio.stream.ZStream
 

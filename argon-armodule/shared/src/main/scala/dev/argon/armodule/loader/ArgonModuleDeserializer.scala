@@ -54,7 +54,7 @@ object ArgonModuleDeserializer {
       import source.metadata
 
       val context2: context.type = context
-      import context.{typeSystem, signatureContext}, typeSystem.{ context => _, _ }, signatureContext.{ context => _, TTypeWrapper => _, typeWrapperInstances => _, _ }
+      import context.{typeSystem, signatureContext}, typeSystem.{ context => _ }, signatureContext.{ context => _, TTypeWrapper => _, typeWrapperInstances => _ }
 
       val source2 = source
       val referenceList2 = referenceList

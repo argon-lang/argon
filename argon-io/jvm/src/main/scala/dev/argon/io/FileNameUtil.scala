@@ -4,7 +4,6 @@ import java.nio.file.Path
 
 import org.apache.commons.io.FilenameUtils
 
-import scala.jdk.CollectionConverters._
 
 object FileNameUtil {
   def getBaseName(fileName: String): String = FilenameUtils.getName(fileName)

@@ -1,9 +1,6 @@
 package dev.argon.build.testrunner
 
 import scala.collection.immutable._
-import scala.xml.Elem
-import cats._
-import cats.implicits._
 
 final case class TestCase(name: String, enabled: Boolean, sourceCode: Vector[InputSourceData], expectedResult: TestCaseExpectedResult)
 

@@ -1,6 +1,6 @@
 package dev.argon.build.testrunner.js
 
-import java.io.{FileNotFoundException, IOException}
+import java.io.FileNotFoundException
 
 import dev.argon.build.testrunner._
 import cats.implicits._

@@ -13,7 +13,7 @@ import cats.{Id => _, _}
 import cats.data._
 import cats.implicits._
 import PayloadSpecifiers._
-import cats.evidence.{===, Is}
+import cats.evidence.===
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
 import dev.argon.parser.{BindingPattern, DeconstructPattern, DiscardPattern, TuplePattern, TypeTestPattern}
@@ -22,8 +22,6 @@ import shapeless.ops.nat.{LT, Pred}
 import zio.{Cause, Exit, IO, Ref, UIO, ZIO}
 import zio.interop.catz.core._
 
-import Function.const
-import scala.collection.immutable
 
 sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
@@ -360,8 +358,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.Assign, _), left, right) =>
         convertExpr(env)(left).mutateValue(env, expr.location, convertExpr(env)(right))
 
-      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.BoolAnd, _), left, right) => ???
-      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.BoolOr, _), left, right) => ???
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.BoolAnd, _), _, _) => ???
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.BoolOr, _), _, _) => ???
 
       case parser.BinaryOperatorExpr(WithSource(op, opLocation), left, right) =>
         compFactory(
@@ -486,8 +484,8 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
           private def convertPattern(env: Env)(t: TType)(pattern: WithSource[parser.Pattern]): Comp[(PatternExpr[context.type, TTypeWrapper], Env)] =
             pattern.value match {
-              case DeconstructPattern(constructor, args) => ???
-              case TuplePattern(values) => ???
+              case DeconstructPattern(_, _) => ???
+              case TuplePattern(_) => ???
               case DiscardPattern =>
                 for {
                   varId <- UniqueIdentifier.make

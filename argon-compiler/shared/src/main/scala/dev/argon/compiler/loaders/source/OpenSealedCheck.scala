@@ -3,7 +3,6 @@ package dev.argon.compiler.loaders.source
 import dev.argon.compiler.core._
 import dev.argon.compiler._
 import dev.argon.util.FileID
-import cats._
 import cats.implicits._
 import zio.IO
 

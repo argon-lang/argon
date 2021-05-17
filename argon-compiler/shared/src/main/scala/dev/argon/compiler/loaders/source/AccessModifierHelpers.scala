@@ -4,8 +4,6 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.util._
 import dev.argon.parser
-import cats._
-import cats.implicits._
 import zio.IO
 
 object AccessModifierHelpers {

@@ -6,7 +6,6 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.parser
 import dev.argon.util._
-import cats.{Id => _, _}
 import cats.implicits._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.expr.ArExpr.ClassConstructorCall
@@ -33,7 +32,7 @@ object SourceClassConstructor {
       import context.typeSystem
       import context.scopeContext.ScopeExtensions
       import context.scopeContext.Scope
-      import typeSystem.{SimpleExpr, TType}
+      import typeSystem.TType
 
 
       override val id: ClassConstructorId = ClassConstructorId(uniqId)
@@ -113,7 +112,7 @@ object SourceClassConstructor {
               }
             }
 
-          case VectorUnCons(VectorUnCons.NonEmpty(WithSource(parser.InitializeStmt(thisName, baseCtorExprOpt), location), tail)) =>
+          case VectorUnCons(VectorUnCons.NonEmpty(WithSource(parser.InitializeStmt(_, baseCtorExprOpt), location), tail)) =>
             ownerClass.fields.flatMap { fields =>
               if(fields.size =!= initializedFields.size)
                 Compilation.forErrors(DiagnosticError.FieldNotInitializedError(DiagnosticSource.SourceFile(env.fileSpec, location)))

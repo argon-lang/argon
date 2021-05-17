@@ -1,16 +1,12 @@
 package dev.argon.build.testrunner
 
-import java.io.IOException
 
-import scala.xml.{Elem, XML}
-import cats._
+import scala.xml.Elem
 import cats.implicits._
 import zio._
-import zio.interop.catz.core._
-import dev.argon.build._
 import dev.argon.io.FileNameUtil
 import dev.argon.io.fileio._
-import dev.argon.util.{VectorUnCons, XmlParser}
+import dev.argon.util.XmlParser
 
 object TestCaseLoader {
 

@@ -5,9 +5,7 @@ import dev.argon.compiler.core.{ArModule, ErasedSignature, GlobalBinding, Global
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.lookup.LookupNames
 import dev.argon.compiler.vtable.VTableBuilder
-import shapeless.Id
-import zio.{Ref, Tag, ZIO}
-import zio.stream.Stream
+import zio.{Ref, ZIO}
 import cats.implicits._
 import dev.argon.io.fileio.FileIO
 

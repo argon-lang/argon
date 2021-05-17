@@ -6,9 +6,7 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.parser
 import dev.argon.util._
-import cats.{Id => _, _}
 import cats.evidence.Is
-import cats.implicits._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import shapeless.{Id, Nat}
 import zio.IO
@@ -20,7 +18,6 @@ object SourceMethod {
   (stmt: parser.MethodDeclarationStmt, location: SourceLocation)
   (methodOwner: MethodOwner[context2.type, DeclarationPayloadSpecifier])
   : Comp[ArMethod[context2.type, DeclarationPayloadSpecifier]] = {
-    import context2._
     
     for {
       uniqId <- UniqueIdentifier.make

@@ -8,12 +8,10 @@ import scala.reflect.ClassTag
 import scala.language.postfixOps
 import cats._
 import cats.data._
-import cats.implicits._
 import dev.argon.grammar.{Grammar, GrammarError, TokenMatcher}
 import Grammar.Operators._
 import Grammar.{GrammarFactory, UnionGrammar}
 import dev.argon.stream._
-import zio.ZIO
 
 import Function.const
 

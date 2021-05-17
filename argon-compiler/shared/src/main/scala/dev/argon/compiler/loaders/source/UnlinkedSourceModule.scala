@@ -7,7 +7,6 @@ import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.parser.{NameSpecifier, SourceAST}
 import dev.argon.util._
-import cats.{Id => _, _}
 import cats.implicits._
 import PayloadSpecifiers._
 import dev.argon.compiler.expr.{Parameter, Variable}
@@ -15,7 +14,6 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import shapeless.Id
 import zio._
 import zio.stream._
-import zio.interop.catz.core._
 import AccessModifierHelpers._
 
 final class UnlinkedSourceModule[TContext <: Context]
@@ -144,12 +142,7 @@ final class UnlinkedSourceModule[TContext <: Context]
       context.scopeContext.EmptyScope
     )
 
-  private def createId(sourceAST: SourceAST): BigInt = {
-    val a: BigInt = sourceAST.fileSpec.fileID.id
-    val b: BigInt = sourceAST.index
-
-    (a + b) * (a + b + 1) / 2 + b
-  }
+  
 
   private def createNamespaceElementFromASTWithScope
   (context: Context)
@@ -158,7 +151,6 @@ final class UnlinkedSourceModule[TContext <: Context]
   (sourceAST: SourceAST)
   : Comp[GlobalBinding.NonNamespace[context.type, DeclarationPayloadSpecifier]] = {
 
-    import context._
 
     val env = envF(sourceAST.fileSpec)
 

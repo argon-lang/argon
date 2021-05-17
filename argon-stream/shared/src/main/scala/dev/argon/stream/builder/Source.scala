@@ -1,11 +1,7 @@
 package dev.argon.stream.builder
 
-import cats._
-import cats.arrow.FunctionK
-import cats.data.{NonEmptyVector, StateT}
-import cats.implicits._
 import zio.stream.ZStream
-import zio.{Exit, IO, Queue, Ref, ZIO}
+import zio.{Exit, Queue, ZIO}
 
 trait Source[R, E, A] {
 

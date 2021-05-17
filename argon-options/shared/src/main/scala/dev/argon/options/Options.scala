@@ -18,9 +18,9 @@ object Options {
 
     def this(getDefault: OptionValueFunction[A, O]) = this(getDefault, Map.empty)
 
-    @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+    @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
     final override def get(id: O): A[id.ElementType] =
-      map.get(id).asInstanceOf[Option[A[id.ElementType]]].getOrElse(getDefault(id))
+      map.get(id).map(_.asInstanceOf[A[id.ElementType]]).getOrElse(getDefault(id))
 
 
     final override def set(id: O)(value: A[id.ElementType]): Options[A, O] =
@@ -29,9 +29,9 @@ object Options {
 
   private[options] final class MapBackedOptionOptions[A[_], O <: OptionID](map: Map[O, Any]) extends Options[Lambda[X => Option[A[X]]], O] {
 
-    @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+    @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
     override def get(id: O): Option[A[id.ElementType]] =
-      map.get(id).asInstanceOf[Option[A[id.ElementType]]]
+      map.get(id).map(_.asInstanceOf[A[id.ElementType]])
 
     override def set(id: O)(value: Option[A[id.ElementType]]): Options[Lambda[X => Option[A[X]]], O] =
       value match {

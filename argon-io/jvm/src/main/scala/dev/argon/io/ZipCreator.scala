@@ -1,7 +1,6 @@
 package dev.argon.io
 
 import zio.blocking.Blocking
-import zio.{Cause, Has}
 import zio.stream.ZStream
 
 object ZipCreator {

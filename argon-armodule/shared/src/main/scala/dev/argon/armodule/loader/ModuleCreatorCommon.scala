@@ -2,7 +2,6 @@ package dev.argon.armodule.loader
 
 import cats.data.{NonEmptyList, NonEmptyVector}
 import cats.evidence.{===, Is}
-import dev.argon.armodule.loader.ArgonModuleLoader._
 import dev.argon.compiler._
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
@@ -17,9 +16,8 @@ import scalapb.GeneratedMessage
 import shapeless.{Id, Nat, Sized, Succ, _0}
 import shapeless.ops.nat.{LT, Pred, ToInt}
 import shapeless.syntax.sized._
-import zio.{IO, Managed, ZIO}
+import zio.{IO, ZIO}
 import zio.stream.{Stream, ZStream}
-import zio.stream._
 import zio.interop.catz.core._
 import cats.implicits._
 import ModuleCreatorCommon._
@@ -1333,7 +1331,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
         }
 
 
-      case ArgonModule.Expression.ExprType.PatternMatch(patternMatch) => ???
+      case ArgonModule.Expression.ExprType.PatternMatch(_) => ???
 
 
       case ArgonModule.Expression.ExprType.Sequence(_) =>

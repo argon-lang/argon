@@ -1,13 +1,12 @@
 package dev.argon.compiler.lookup
 
 import dev.argon.compiler.core._
-import dev.argon.util.{FileID, FileSpec}
+import dev.argon.util.FileID
 import dev.argon.compiler.types.TypeSystem
-import cats._
 import cats.data.NonEmptyVector
 import cats.implicits._
 import dev.argon.compiler.expr.ArExpr._
-import dev.argon.compiler.{Comp, Compilation}
+import dev.argon.compiler.Comp
 import zio.IO
 import zio.interop.catz.core._
 

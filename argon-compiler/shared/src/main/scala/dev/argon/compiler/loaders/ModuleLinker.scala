@@ -4,8 +4,6 @@ import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.util.DependencyTree._
-import cats._
-import cats.data.NonEmptyList
 import cats.implicits._
 import zio._
 import zio.interop.catz.core._

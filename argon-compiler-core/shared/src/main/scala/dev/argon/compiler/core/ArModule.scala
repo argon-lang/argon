@@ -2,7 +2,6 @@ package dev.argon.compiler.core
 
 import PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.{Comp, CompStream}
-import dev.argon.compiler.lookup.ModuleLookup
 import dev.argon.util.NamespacePath
 import cats.implicits._
 import zio.stream.Stream

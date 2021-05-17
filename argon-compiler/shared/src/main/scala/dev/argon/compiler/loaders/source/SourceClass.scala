@@ -7,7 +7,6 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.ClassDeclarationStmt
 import dev.argon.util.{FileID, SourceLocation, UniqueIdentifier, ValueCache, WithSource}
-import cats.{Id => _, _}
 import cats.implicits._
 import cats.evidence.Is
 import dev.argon.compiler.expr.ArExpr._
@@ -38,7 +37,6 @@ private[compiler] object SourceClass {
   (stmt: ClassDeclarationStmt)
   (classOwner: ClassOwner[context2.type, DeclarationPayloadSpecifier])
   : Comp[ArClass[context2.type, DeclarationPayloadSpecifier] { val owner: classOwner.type }] = {
-    import context2._
 
     for {
       unqId <- UniqueIdentifier.make
@@ -232,7 +230,6 @@ private[compiler] object SourceClass {
     (location: SourceLocation)
     (acc: BaseTypeInfoClass[context.type, Id])
     : Comp[BaseTypeInfoClass[context.type, Id]] = {
-      import context._
       t match {
         case t @ ClassType(_, _) =>
           if(acc.baseClass.isDefined)

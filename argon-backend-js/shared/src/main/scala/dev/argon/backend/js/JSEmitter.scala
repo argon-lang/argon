@@ -1,8 +1,6 @@
 package dev.argon.backend.js
 
-import dev.argon.compiler._
-import cats.{Id => _, _}
-import shapeless.Id
+import cats.{Id => _}
 import dev.argon.compiler.core._
 
 private[js] object JSEmitter {

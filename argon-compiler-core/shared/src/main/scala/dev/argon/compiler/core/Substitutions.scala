@@ -1,6 +1,5 @@
 package dev.argon.compiler.core
 
-import dev.argon.compiler.types.TypeSystem
 import cats._
 import cats.implicits._
 import dev.argon.compiler.expr.ArExpr._

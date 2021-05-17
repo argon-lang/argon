@@ -7,7 +7,6 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.DataConstructorDeclarationStmt
 import dev.argon.util.{FileID, SourceLocation, UniqueIdentifier, ValueCache, WithSource}
-import cats._
 import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.loaders.StandardTypeLoaders

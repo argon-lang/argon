@@ -2,7 +2,6 @@ package dev.argon.build.testrunner
 
 import dev.argon.build.BuildProcess
 import dev.argon.compiler._
-import dev.argon.compiler.core.{Context, ModuleId}
 import cats._
 import zio._
 import zio.stream._
@@ -10,10 +9,9 @@ import dev.argon.backend.Backend
 import dev.argon.io.fileio.{FileIO, ZipRead}
 import dev.argon.build._
 import dev.argon.compiler.options.{CompilerInput, CompilerOptions}
-import dev.argon.io.ZipCreator
 import dev.argon.options.{FileList, Options}
 import dev.argon.parser.impl.ArgonSourceParser
-import dev.argon.util.{FileID, FileSpec, MaybeBlocking, ProtoBufCodecs, StreamableMessage}
+import dev.argon.util.{FileID, FileSpec, MaybeBlocking}
 
 private[testrunner] abstract class TestCaseRunnerCompilePhase[-R <: FileIO with ZipRead with MaybeBlocking] extends TestCaseRunner[R] {
 

@@ -1,10 +1,8 @@
 package dev.argon.compiler.core
 
-import dev.argon.util.{NamespacePath, UniqueIdentifier}
-import cats._
+import dev.argon.util.UniqueIdentifier
 import cats.implicits._
 import cats.Eq
-import zio.{IO, UIO}
 
 final case class ModuleId(name: String)
 

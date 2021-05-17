@@ -2,14 +2,13 @@ package dev.argon.compiler.core
 
 import dev.argon.compiler._
 import dev.argon.compiler.types._
-import cats._
 import cats.evidence.===
 import cats.implicits._
 import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
 import shapeless.ops.nat.{LT, Pred, ToInt}
 import shapeless.{Nat, Sized, Succ, _0}
-import zio.{IO, ZIO}
+import zio.IO
 
 trait SignatureContext {
   val context: Context

@@ -1,9 +1,6 @@
 package dev.argon.backend.js
 
-import java.io.PrintWriter
 
-import cats._
-import cats.implicits._
 import cats.data.NonEmptyList
 import dev.argon.stream.builder.Source
 import dev.argon.util.StringHelpers

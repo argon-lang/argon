@@ -1,10 +1,8 @@
 package dev.argon.compiler.core
 
-import dev.argon.compiler.{Comp, Compilation}
-import dev.argon.util.{FileID, FileSpec}
-import cats._
+import dev.argon.compiler.Comp
+import dev.argon.util.FileID
 import cats.implicits._
-import dev.argon.compiler.expr.ArExpr.TypeWithMethods
 import zio.IO
 
 object AccessCheck {

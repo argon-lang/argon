@@ -4,7 +4,7 @@ import dev.argon.compiler._
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types._
 import cats._
-import dev.argon.backend.{Backend, ExternHandler}
+import dev.argon.backend.Backend
 import dev.argon.compiler.expr.{ClassConstructorBody, UniverseExpr, WrapperInstance}
 import dev.argon.compiler.options.CompilerInput
 import zio._

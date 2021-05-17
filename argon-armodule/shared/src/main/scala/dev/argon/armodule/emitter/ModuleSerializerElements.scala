@@ -9,7 +9,6 @@ import shapeless.{Id, Nat, _0}
 import zio.{IO, ZIO}
 import cats.implicits._
 import com.google.protobuf.ByteString
-import dev.argon.armodule.ModulePaths
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
@@ -207,7 +206,7 @@ private[emitter] trait ModuleSerializerElements {
             isErased = if(isErased) Some(true) else None
           )))
 
-        case ThisParameterVariable(owner, name, mutability, varType) => ???
+        case ThisParameterVariable(_, _, _, _) => ???
 
         case variable: FieldVariable[context.type, Id] =>
           convertFieldVariable(variable).map { convVar =>
@@ -886,7 +885,7 @@ private[emitter] trait ModuleSerializerElements {
     }
 
   private def convertFunctionBody(body: context.TFunctionImplementation): Comp[module.FunctionBody] = body match {
-    case FunctionImplementation.Extern(source, extern) =>
+    case FunctionImplementation.Extern(_, _) =>
       IO.succeed(module.FunctionBody(module.FunctionBody.BodyType.ExternalImplementation(com.google.protobuf.empty.Empty())))
 
     case FunctionImplementation.Expression(body) =>
@@ -895,7 +894,7 @@ private[emitter] trait ModuleSerializerElements {
 
   def convertMethodBody(body: context.TMethodImplementation): Comp[Option[module.FunctionBody]] = body match {
     case MethodImplementation.Abstract => IO.none
-    case MethodImplementation.Extern(source, extern) =>
+    case MethodImplementation.Extern(_, _) =>
       IO.succeed(Some(module.FunctionBody(module.FunctionBody.BodyType.ExternalImplementation(com.google.protobuf.empty.Empty()))))
 
     case MethodImplementation.Expression(body) =>

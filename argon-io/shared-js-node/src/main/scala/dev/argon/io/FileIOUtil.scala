@@ -1,11 +1,9 @@
 package dev.argon.io
 
-import zio.{Cause, Chunk, IO, ZIO}
+import zio.ZIO
 import zio.stream.ZStream
 
-import scala.scalajs.js
 import scala.scalajs.js.typedarray.Uint8Array
-import scala.scalajs.js.|
 
 @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 object FileIOUtil {

@@ -1,7 +1,6 @@
 package dev.argon.platform
 
 import zio._
-import zio.system.System
 
 trait PlatformApp extends App {
 

@@ -1,12 +1,9 @@
 package dev.argon.compiler.verifier
 
-import dev.argon.compiler.{Comp, Compilation}
+import dev.argon.compiler.Comp
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.core._
-import cats._
-import cats.implicits._
 import dev.argon.util.NamespacePath
-import zio.interop.catz.core._
 
 trait VerifyPass {
 

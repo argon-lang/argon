@@ -7,7 +7,6 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
 import zio.IO
-import zio.interop.catz.core._
 
 
 sealed trait HoleTypeSystem extends TypeSystem {

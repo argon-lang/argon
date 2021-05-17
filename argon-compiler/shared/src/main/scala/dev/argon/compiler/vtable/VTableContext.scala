@@ -1,6 +1,5 @@
 package dev.argon.compiler.vtable
 
-import dev.argon.compiler._
 import dev.argon.compiler.core._
 import cats._
 import cats.implicits._

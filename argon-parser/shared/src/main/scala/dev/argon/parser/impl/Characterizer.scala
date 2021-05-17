@@ -1,10 +1,7 @@
 package dev.argon.parser.impl
 
-import cats._
-import cats.data._
 import cats.implicits._
 import dev.argon.stream.StreamTransformation
-import dev.argon.stream.builder._
 import dev.argon.util._
 import zio.{Chunk, IO, NonEmptyChunk, UIO, ZIO}
 

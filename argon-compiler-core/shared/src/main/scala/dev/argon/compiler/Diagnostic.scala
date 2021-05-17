@@ -1,6 +1,5 @@
 package dev.argon.compiler
 
-import java.io.IOException
 import java.nio.charset.StandardCharsets
 
 import dev.argon.compiler.core.GlobalName
@@ -12,9 +11,8 @@ import dev.argon.util._
 import dev.argon.module
 import dev.argon.compiler.core._
 import dev.argon.compiler.types.TypeSystem
-import cats._
-import cats.data.{NonEmptyList, NonEmptyVector}
-import zio.{Cause, FiberFailure, IO, Managed}
+import cats.data.NonEmptyVector
+import zio.Cause
 
 sealed trait Diagnostic {
   val source: DiagnosticSource
@@ -229,7 +227,7 @@ object DiagnosticError {
       description match {
         case LookupDescription.Identifier(name) => name
         case LookupDescription.Operator(op) => s"($op)"
-        case LookupDescription.Call(methodDesc) => "(call)"
+        case LookupDescription.Call(_) => "(call)"
         case LookupDescription.Other => "(other)"
         case LookupDescription.Member(objectDesc, memberName) => descriptionMessage(objectDesc) + "." + memberNameMessage(memberName)
       }

@@ -9,10 +9,7 @@ import cats.data._
 import cats.implicits._
 import dev.argon.grammar.{Grammar, GrammarError}
 import Grammar.Operators._
-import dev.argon.grammar.Grammar.ParseOptions
-import dev.argon.parser.impl.Lexer.LexerGrammarFactory
 import dev.argon.stream.StreamTransformation
-import zio.ZIO
 
 import Function.const
 

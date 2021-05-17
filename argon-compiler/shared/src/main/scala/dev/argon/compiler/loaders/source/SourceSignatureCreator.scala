@@ -2,12 +2,9 @@ package dev.argon.compiler.loaders.source
 
 import dev.argon.compiler._
 import dev.argon.compiler.core._
-import dev.argon.compiler.types._
 import dev.argon.parser
 import dev.argon.util.{VectorUnCons, WithSource}
-import cats.{Id => _, _}
 import cats.data.NonEmptyList
-import cats.implicits._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
 import shapeless.{Id, Nat}
@@ -50,7 +47,7 @@ object SourceSignatureCreator {
                 }
             }
 
-        case VectorUnCons(VectorUnCons.NonEmpty(WithSource(parser.FunctionParameterList(listType, isErased, VectorUnCons(VectorUnCons.NonEmpty(headH, headT))), location), tail)) =>
+        case VectorUnCons(VectorUnCons.NonEmpty(WithSource(parser.FunctionParameterList(listType, isErased, VectorUnCons(VectorUnCons.NonEmpty(headH, headT))), _), tail)) =>
           NonEmptyList(headH, headT.toList)
             .zipWithIndex
             .traverse {

@@ -14,7 +14,6 @@ object ArTypeSystemConverter {
   (context2: Context)
   : TypeSystemConverter.Aux[context2.type, context2.typeSystem.TTypeWrapper, Wrap] = {
     new TypeSystemConverter {
-      import context2.typeSystem.typeWrapperInstances
 
       override val context: context2.type = context2
       override type FromWrap[+A] = context2.typeSystem.TTypeWrapper[A]

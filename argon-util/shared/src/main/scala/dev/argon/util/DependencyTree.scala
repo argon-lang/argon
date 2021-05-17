@@ -64,7 +64,7 @@ object DependencyTree {
         }
     }
 
-  private def handleDependencyCache[LoadAction[_]: Monad, Item, ItemKey : Eq, LoadedValue, LoadResult[_] : Monad]
+  private def handleDependencyCache[LoadAction[_]: Monad, Item, ItemKey : Eq, LoadedValue, LoadResult[_]]
   (ops: DependencyTreeOperations[LoadAction, Item, ItemKey, LoadedValue, LoadResult])
   (item: Item)
   (key: ItemKey)

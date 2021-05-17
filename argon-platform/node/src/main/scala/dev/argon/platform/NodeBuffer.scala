@@ -1,7 +1,7 @@
 package dev.argon.platform
 
 import scala.scalajs.js
-import scala.scalajs.js.annotation.{JSBracketAccess, JSGlobal, JSImport}
+import scala.scalajs.js.annotation.{JSBracketAccess, JSGlobal}
 
 @js.native
 @JSGlobal("Buffer")

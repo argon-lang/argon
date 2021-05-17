@@ -1,11 +1,8 @@
 package dev.argon.armodule.loader
 
-import dev.argon.compiler.{CompManaged, CompilationError}
-import dev.argon.compiler.core.Context
-import dev.argon.compiler.loaders.{ModuleLoader, UnlinkedModule}
-import zio.Managed
+import dev.argon.compiler.CompManaged
+import dev.argon.compiler.loaders.ModuleLoader
 import cats.implicits._
-import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.output.ArgonModuleSerialized
 import zio.interop.catz.core._
 

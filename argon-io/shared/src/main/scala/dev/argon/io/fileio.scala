@@ -1,11 +1,8 @@
 package dev.argon.io
 
-import dev.argon.stream._
-import java.io._
 
 import zio._
 import zio.stream._
-import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 
 object fileio {
   type FileIO = Has[FileIO.Service]

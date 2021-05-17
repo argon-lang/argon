@@ -119,7 +119,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
 
 
   def convertExpr(expr: context.typeSystem.SimpleExpr): Emit[JSExpression] = {
-    import context.typeSystem. { context => _, _ }
+    import context.typeSystem. { context => _ }
     expr match {
       case ClassConstructorCall(classType, ctor, args) =>
         for {
@@ -222,7 +222,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
 
         def convertPattern(patternValue: JSExpression)(pattern: PatternExpr[context.type, Id])(bodyEmitter: Emit[Vector[JSStatement]]): Emit[Vector[JSStatement]] =
           pattern match {
-            case PatternExpr.DataDeconstructor(ctor, args) =>  ???
+            case PatternExpr.DataDeconstructor(_, _) =>  ???
             case PatternExpr.Binding(variable) =>
               for {
                 loader <- StatementConverterLocalBinding.declareLocalVariable(variable)

@@ -1,6 +1,6 @@
 package dev.argon.build
 
-import dev.argon.backend.js.{JSBackend, JSModuleExtractorFactory}
+import dev.argon.backend.js.JSBackend
 import dev.argon.backend.generic.GenericBackend
 import dev.argon.backend.Backend
 import zio._

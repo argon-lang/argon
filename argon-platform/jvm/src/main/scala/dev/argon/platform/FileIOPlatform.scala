@@ -1,23 +1,14 @@
 package dev.argon.platform
 
-import java.io.{File, IOException}
+import java.io.IOException
 import java.nio.charset.StandardCharsets
-import java.nio.file.{Files, Path, StandardOpenOption}
-import java.util.jar.{JarFile, Manifest}
-import java.util.zip.ZipFile
+import java.nio.file.{Files, Path}
 
-import dev.argon.io.ZipFileReader
-import scalapb.{GeneratedMessage, GeneratedMessageCompanion, Message}
 import zio._
 import zio.blocking.Blocking
-import zio.console.Console
 import zio.stream._
-import zio.system.System
 import dev.argon.io.fileio.FileIO
 
-import scala.jdk.CollectionConverters._
-import scala.jdk.StreamConverters._
-import java.lang.Runtime.{Version => JDKVersion}
 
 @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
 object FileIOPlatform {

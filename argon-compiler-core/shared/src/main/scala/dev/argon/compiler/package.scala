@@ -1,6 +1,5 @@
 package dev.argon
 
-import cats.data.NonEmptyList
 import zio.{IO, Managed, ZIO, ZManaged}
 import zio.stream.{Stream, ZStream}
 

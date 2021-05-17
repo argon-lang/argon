@@ -1,11 +1,8 @@
 package dev.argon.build.testrunner
 
 import dev.argon.compiler._
-import cats._
 import cats.data.NonEmptyList
 import cats.implicits._
-import zio._
-import dev.argon.build._
 
 trait TestCaseRunner[-R] {
 

@@ -1,6 +1,5 @@
 package dev.argon.options
 
-import shapeless.Id
 
 final class OptionInfo[A]
 (

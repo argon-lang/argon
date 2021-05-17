@@ -3,11 +3,8 @@ package dev.argon.compiler.loaders.source
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
-import dev.argon.compiler.lookup._
 import dev.argon.parser
-import dev.argon.util.{FileID, FileSpec, UniqueIdentifier, WithSource}
-import cats.{Id => _, _}
-import cats.implicits._
+import dev.argon.util.{FileID, UniqueIdentifier, WithSource}
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import shapeless.{Id, Nat}
@@ -23,7 +20,6 @@ private[compiler] object SourceFunction {
     uniqId <- UniqueIdentifier.make
   } yield new ArFunc[context2.type, DeclarationPayloadSpecifier] {
     override val context: context2.type = context2
-    import context._
 
     import context.scopeContext.ScopeExtensions
 

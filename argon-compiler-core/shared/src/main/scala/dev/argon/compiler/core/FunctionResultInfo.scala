@@ -1,8 +1,6 @@
 package dev.argon.compiler.core
 
 import dev.argon.compiler.types._
-import cats._
-import cats.implicits._
 import dev.argon.compiler.Comp
 import dev.argon.compiler.expr.ArExprWrap
 import zio.IO

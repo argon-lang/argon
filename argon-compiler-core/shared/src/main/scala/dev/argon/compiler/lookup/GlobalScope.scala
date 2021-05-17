@@ -1,17 +1,13 @@
 package dev.argon.compiler.lookup
 
-import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
 import dev.argon.util.{FileSpec, NamespacePath, SourceLocation, VectorUnCons}
 
 import scala.collection.Set
-import cats._
 import cats.data.NonEmptyVector
-import cats.implicits._
 import dev.argon.compiler.Comp
 import zio.IO
 import zio.stream.Stream
-import zio.interop.catz.core._
 
 object GlobalScope {
 

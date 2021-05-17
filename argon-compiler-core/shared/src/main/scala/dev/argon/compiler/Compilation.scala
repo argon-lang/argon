@@ -2,9 +2,6 @@ package dev.argon.compiler
 
 import java.io.IOException
 
-import cats._
-import cats.implicits._
-import cats.data.NonEmptyList
 import zio._
 import zio.stream._
 

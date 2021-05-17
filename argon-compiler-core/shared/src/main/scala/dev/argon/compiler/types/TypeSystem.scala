@@ -3,14 +3,10 @@ package dev.argon.compiler.types
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.util.AnyExtensions._
-import cats._
 import cats.implicits._
 import cats.data._
-import cats.evidence.===
-import dev.argon.compiler.core.ErasedSignature.TupleType
 import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
-import shapeless.Nat
 import zio.IO
 import zio.interop.catz.core._
 

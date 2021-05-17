@@ -1,21 +1,12 @@
 package dev.argon.armodule.emitter
 
-import cats.Id
-import cats.implicits._
-import com.google.protobuf.GeneratedMessage
-import dev.argon.armodule.ModulePaths
 import dev.argon.compiler._
-import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
+import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.core._
-import dev.argon.compiler.expr.LocalVariable
-import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.module.ModuleFormatVersion
-import dev.argon.util.NamespacePath
 import zio._
 import zio.stream._
 import dev.argon.{module => ArgonModule}
-import scalapb.GeneratedMessage
-import ModuleSerializerElements._
 import dev.argon.armodule.errors.ImplementationIsNotExtern
 import dev.argon.compiler.output.ArgonModuleSerialized
 

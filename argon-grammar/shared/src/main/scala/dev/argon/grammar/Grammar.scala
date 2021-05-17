@@ -1,7 +1,6 @@
 package dev.argon.grammar
 
 import dev.argon.grammar.Grammar._
-import dev.argon.util._
 
 import scala.collection.immutable.{Stream => _, _}
 import scala.language.postfixOps
@@ -31,12 +30,12 @@ object Grammar {
   abstract class GrammarFactory[TToken, TSyntaxError, TLabel <: RuleLabel] {
     type TGrammar[+T] = Grammar[TToken, TSyntaxError, TLabel, T]
 
-    @SuppressWarnings(Array("org.wartremover.warts.Var"))
+    @SuppressWarnings(Array("scalafix:DisableSyntax.var"))
     private var cache: Map[TLabel, AnyRef] = Map.empty
 
     protected def createGrammar[T](label: TLabel { type RuleType = T }): TGrammar[T]
 
-    @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+    @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
     final def apply[T](label: TLabel { type RuleType = T }): TGrammar[T] = {
       cache.get(label) match {
         case Some(value) => value.asInstanceOf[TGrammar[T]]
@@ -281,7 +280,6 @@ object Grammar {
 
   }
 
-  import Operators._
 
   def token[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory]
   (category: TTokenCategory, tokenMatches: TToken => Boolean)

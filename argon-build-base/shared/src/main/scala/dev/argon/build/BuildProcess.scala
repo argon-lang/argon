@@ -1,11 +1,9 @@
 package dev.argon.build
 
-import dev.argon.compiler.{options, _}
-import dev.argon.parser.{SourceAST, SyntaxError, SyntaxErrorData}
+import dev.argon.compiler._
+import dev.argon.parser.SourceAST
 import cats._
-import cats.arrow.FunctionK
 import cats.implicits._
-import cats.data.{NonEmptyList, NonEmptyVector}
 import dev.argon.armodule.loader.{AggregateModuleLoader, ArgonModuleDeserializer, ArgonModuleLoader}
 import dev.argon.armodule.emitter.{ModuleEmitOptions, ModuleSerializer, ZipModuleWriter}
 import dev.argon.backend.Backend
@@ -16,13 +14,9 @@ import dev.argon.compiler.loaders.source.UnlinkedSourceModule
 import dev.argon.compiler.options.{CompilerInput, CompilerOptionID, CompilerOutput, GeneralOutputOptionID, GeneralOutputOptions}
 import dev.argon.options.{FileList, OptionID, Options, OptionsHandler, SingleFile}
 import dev.argon.compiler.output.{ArgonModuleSerialized, BuildArtifact, ModuleBuildArtifact}
-import dev.argon.io.{ZipCreator, ZipEntryInfo}
 import dev.argon.io.fileio.{FileIO, ZipRead}
-import dev.argon.parser.impl.{ArgonSourceParser, ParseHandler}
-import dev.argon.util.{FileID, FileSpec, MaybeBlocking, ProtoBufCodecs}
-import dev.argon.stream._
-import dev.argon.stream.builder.Source
-import dev.argon.util.AnyExtensions._
+import dev.argon.parser.impl.ArgonSourceParser
+import dev.argon.util.{FileID, FileSpec, MaybeBlocking}
 import zio._
 import zio.interop.catz.core._
 import zio.stream._

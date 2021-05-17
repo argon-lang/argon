@@ -3,9 +3,7 @@ package dev.argon.compiler.core
 import dev.argon.compiler.types._
 
 import scala.collection.immutable._
-import cats._
 import cats.evidence.Is
-import cats.implicits._
 import dev.argon.compiler.expr.ArExpr.TraitType
 import dev.argon.compiler.{Comp, DiagnosticSource}
 import dev.argon.util.FileID

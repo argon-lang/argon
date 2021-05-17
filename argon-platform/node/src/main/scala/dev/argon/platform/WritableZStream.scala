@@ -4,9 +4,6 @@ import zio.Chunk
 import scala.scalajs.js
 import zio._
 import zio.stream.ZStream
-import cats._
-import cats.implicits._
-import zio.interop.catz.core._
 
 private[platform] class WritableZStream[R] private(runtime: Runtime[R], queue: Queue[Exit[Option[js.Error], Chunk[Byte]]]) extends NodeWritable {
   {

@@ -23,7 +23,6 @@ object ExpressionScopeExtractor {
   }
 
   def addDeclarationsCreator(context: Context)(stmt: ArExpr[context.type, Id], env: ExpressionConverter.EnvCreator[context.type]): ExpressionConverter.EnvCreator[context.type] = {
-    import context._
 
     stmt match {
       case LetBinding(variable, _, next) =>

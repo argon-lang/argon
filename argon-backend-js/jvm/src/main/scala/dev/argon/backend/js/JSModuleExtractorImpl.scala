@@ -3,7 +3,6 @@ package dev.argon.backend.js
 import java.io.FileNotFoundException
 import java.net.{URI, URL}
 import java.nio.channels.SeekableByteChannel
-import java.nio.charset.StandardCharsets
 import java.nio.file.attribute.FileAttribute
 
 import org.apache.commons.io.{FilenameUtils, IOUtils}
@@ -12,8 +11,8 @@ import org.apache.commons.io.output.NullOutputStream
 import org.graalvm.polyglot.io.FileSystem
 import org.graalvm.polyglot.{Context, Source}
 import zio.blocking.Blocking
-import zio.{IO, RIO, Task, ZIO}
-import java.nio.file.{AccessMode, DirectoryStream, LinkOption, OpenOption, Path, FileSystems => NIOFileSystems}
+import zio.Task
+import java.nio.file.{AccessMode, DirectoryStream, LinkOption, OpenOption, Path}
 import java.util
 
 import dev.argon.backend.js.JSModuleExtractorImpl.ResourceFileSystem

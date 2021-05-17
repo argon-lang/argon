@@ -2,9 +2,7 @@ package dev.argon.compiler.core
 
 import cats.Eq
 import cats.data.NonEmptyList
-import dev.argon.compiler.core.ErasedSignature.TraitType
 import dev.argon.compiler.expr.ArExpr
-import dev.argon.compiler.types.TypeSystem
 import shapeless.Id
 import cats.implicits._
 

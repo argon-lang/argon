@@ -3,7 +3,6 @@ package dev.argon.compiler.core
 import dev.argon.compiler._
 import dev.argon.compiler.types._
 import dev.argon.util.FileID
-import cats._
 import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.expr.BaseTypeInfoTrait

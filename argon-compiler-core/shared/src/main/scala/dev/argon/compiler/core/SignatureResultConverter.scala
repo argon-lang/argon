@@ -1,7 +1,6 @@
 package dev.argon.compiler.core
 
 import dev.argon.compiler.types._
-import cats.Monad
 import dev.argon.compiler.Comp
 
 trait SignatureResultConverter[TResult[TContext2 <: Context with Singleton, Wrap[+_]]] {

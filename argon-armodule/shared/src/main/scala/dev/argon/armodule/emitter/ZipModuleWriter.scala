@@ -2,7 +2,7 @@ package dev.argon.armodule.emitter
 
 import dev.argon.armodule.ModulePaths
 import dev.argon.compiler.output.ArgonModuleSerialized
-import dev.argon.compiler.{Comp, CompStream, Compilation, CompilationError, RComp, RCompStream}
+import dev.argon.compiler.{Comp, Compilation, CompilationError, RComp, RCompStream}
 import dev.argon.io.{ZipCreator, ZipEntryInfo}
 import dev.argon.module._
 import dev.argon.stream.builder.Source

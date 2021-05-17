@@ -1,10 +1,9 @@
 package dev.argon.build.testrunner.js
 
 import zio._
-import cats._
 import cats.implicits._
 import org.graalvm.polyglot.Context
-import java.io.{ByteArrayOutputStream, FileNotFoundException, IOException}
+import java.io.{ByteArrayOutputStream, FileNotFoundException}
 import java.net.URI
 import java.nio.channels.SeekableByteChannel
 import java.nio.charset.StandardCharsets

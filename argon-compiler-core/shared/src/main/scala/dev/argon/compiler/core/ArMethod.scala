@@ -1,10 +1,9 @@
 package dev.argon.compiler.core
 
-import cats._
 import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.expr.ArExpr._
-import dev.argon.compiler.{Comp, Compilation}
+import dev.argon.compiler.Comp
 import dev.argon.compiler.types._
 import dev.argon.util.FileID
 import shapeless.Nat

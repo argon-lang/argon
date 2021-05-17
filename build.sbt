@@ -53,7 +53,6 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
   ) ++ (CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((3, _)) => Seq(
-
     )
     case _ => Seq(
       compilerPlugin("org.typelevel" %% "kind-projector" % "0.13.0" cross CrossVersion.full),
@@ -134,15 +133,14 @@ lazy val compilerOptions = Seq(
       "msg=match may not be exhaustive\\.:error," +
       "cat=unchecked&msg=The outer reference in this type test cannot be checked at run time\\.:silent," +
       "cat=unchecked:error," +
+      "cat=unused-imports:warning," +
       "cat=java-source:error," +
-      "cat=unused-imports:silent," +
-      "cat=unused:silent," +
       "cat=w-flag-dead-code:silent," +
       "cat=w-flag:error," +
       "cat=other-match-analysis&msg=unreachable code:silent",
     "-Ypatmat-exhaust-depth", "2000",
     "-Yrangepos",
-    "-Ywarn-unused",
+    "-Wunused",
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
@@ -155,6 +153,9 @@ lazy val compilerOptions = Seq(
       "-Xsource:3",
     )
   }),
+
+  semanticdbEnabled := true,
+  semanticdbVersion := scalafixSemanticdb.revision,
 )
 
 def argonLibraries = Seq("Argon.Core")

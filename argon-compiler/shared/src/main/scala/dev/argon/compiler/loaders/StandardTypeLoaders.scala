@@ -4,7 +4,6 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.lookup.{LookupNames, ModuleLookup}
 import dev.argon.util.NamespacePath
-import cats._
 import cats.implicits._
 import dev.argon.compiler.expr.ArExpr.ClassType
 
@@ -18,7 +17,6 @@ object StandardTypeLoaders {
   (currentModule: ArModule[context.type, TPayloadSpec])
   (referencedModules: Vector[ArModule[context.type, PayloadSpecifiers.ReferencePayloadSpecifier]])
   : Comp[context.typeSystem.TType] = {
-    import context._
 
     val noArgs = ErasedSignature.ParameterOnlySignature[context.type](Vector())
 

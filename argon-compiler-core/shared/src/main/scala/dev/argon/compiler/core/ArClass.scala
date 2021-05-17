@@ -4,7 +4,6 @@ import dev.argon.compiler._
 import dev.argon.compiler.types._
 
 import scala.collection.immutable._
-import cats._
 import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.DiagnosticSource

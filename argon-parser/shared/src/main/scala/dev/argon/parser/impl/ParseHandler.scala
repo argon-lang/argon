@@ -1,14 +1,10 @@
 package dev.argon.parser.impl
 
-import dev.argon.parser.{SourceAST, SyntaxError, SyntaxErrorData}
+import dev.argon.parser.{SourceAST, SyntaxError}
 import dev.argon.util._
-import cats._
-import cats.data._
-import cats.implicits._
 import dev.argon.parser.impl.TopLevelStatement.NSAndImports
 import dev.argon.stream._
-import zio.{Chunk, IO, NonEmptyChunk, ZIO}
-import zio.stream.ZStream
+import zio.{Chunk, IO, NonEmptyChunk}
 
 private[impl] object ParseHandler {
 

@@ -1,7 +1,6 @@
 package dev.argon.build.testrunner
 
 import dev.argon.compiler.CompilationError
-import cats.data.NonEmptyList
 import zio.Cause
 
 final case class TestCaseFailure(actualResult: TestCaseActualResult, expectedResult: TestCaseExpectedResult)

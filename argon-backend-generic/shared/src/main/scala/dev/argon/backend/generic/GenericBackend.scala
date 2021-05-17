@@ -1,15 +1,14 @@
 package dev.argon.backend.generic
 
-import cats.{Applicative, Monad}
+import cats.Applicative
 import dev.argon.backend.Backend
 import dev.argon.compiler.core.Context.Aux
-import dev.argon.compiler.core.{ArModule, Context}
+import dev.argon.compiler.core.ArModule
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.ModuleLoader
 import dev.argon.options.{OptionDecoder, OptionInfo, Options, OptionsHandler, SingleFile}
 import shapeless._
 import zio._
-import dev.argon.util.ProtoBufCodecs
 
 object GenericBackend extends Backend {
   override val id: String = "generic"

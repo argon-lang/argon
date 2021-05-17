@@ -2,8 +2,6 @@ package dev.argon.compiler.core
 
 import dev.argon.compiler._
 import dev.argon.compiler.types._
-import cats._
-import cats.implicits._
 import dev.argon.compiler.expr.ArExpr.ClassType
 import dev.argon.util.FileID
 import shapeless.Nat

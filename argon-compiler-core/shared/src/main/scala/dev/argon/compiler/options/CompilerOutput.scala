@@ -1,6 +1,5 @@
 package dev.argon.compiler.options
 
-import cats.Id
 import dev.argon.compiler.output.BuildArtifact
 import dev.argon.options.{OptionID, Options, SingleFile}
 

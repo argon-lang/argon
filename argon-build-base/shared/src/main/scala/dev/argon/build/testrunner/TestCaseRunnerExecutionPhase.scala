@@ -3,9 +3,8 @@ package dev.argon.build.testrunner
 import dev.argon.build.BuildResult
 import dev.argon.compiler.CompilationError
 import dev.argon.options.FileList
-import dev.argon.io.ZipCreator
 import dev.argon.io.fileio.{FileIO, ZipRead}
-import dev.argon.util.{MaybeBlocking, ProtoBufCodecs}
+import dev.argon.util.MaybeBlocking
 import zio._
 
 private[testrunner] abstract class TestCaseRunnerExecutionPhase[-R <: FileIO with ZipRead with MaybeBlocking] extends TestCaseRunnerCompilePhase[R] {

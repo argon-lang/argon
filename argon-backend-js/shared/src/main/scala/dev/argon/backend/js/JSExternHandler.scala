@@ -8,7 +8,7 @@ import zio.stream.ZStream
 import zio._
 import cats.implicits._
 import cats.Id
-import dev.argon.options.{OptionCombineHelper, Options}
+import dev.argon.options.Options
 import dev.argon.io.fileio.FileIO
 import dev.argon.util.{MaybeBlocking, ValueCache}
 import zio.interop.catz.core._

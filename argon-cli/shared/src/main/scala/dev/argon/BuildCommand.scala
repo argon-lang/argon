@@ -1,6 +1,5 @@
 package dev.argon
 
-import shapeless._
 import dev.argon.backend.Backend
 import dev.argon.compiler.options.{CompilerOptionID, GeneralOutputOptionID}
 import dev.argon.options.Options

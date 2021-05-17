@@ -19,9 +19,6 @@ object ValueCacheManaged {
         case None => IO.unit
       }
     )
-
-    releaseMap <- ZManaged.releaseMap
-
   } yield new ValueCacheManaged[E, A] {
     override def get[R](create: ZManaged[R, E, A]): ZIO[R, E, A] = for {
       env <- ZIO.environment[R]

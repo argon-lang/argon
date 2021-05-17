@@ -5,11 +5,9 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
-import dev.argon.compiler.lookup._
 import dev.argon.parser
 import dev.argon.parser.TraitDeclarationStmt
 import dev.argon.util.{FileID, SourceLocation, UniqueIdentifier, ValueCache, WithSource}
-import cats.{Id => _, _}
 import cats.implicits._
 import cats.evidence.Is
 import dev.argon.compiler.expr.ArExpr._
@@ -36,7 +34,6 @@ private[compiler] object SourceTrait {
   (stmt: TraitDeclarationStmt)
   (traitOwner: TraitOwner[context2.type, DeclarationPayloadSpecifier])
   : Comp[ArTrait[context2.type, DeclarationPayloadSpecifier] { val owner: traitOwner.type }] = {
-    import context2._
     
     for {
       uniqId <- UniqueIdentifier.make
@@ -116,7 +113,7 @@ private[compiler] object SourceTrait {
         methodCache.get(groupedInst.flatMap { inst =>
           inst.methods.zipWithIndex.traverse { case (method, i) =>
             parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
-              val memberName = MethodName.fromMethodNameSpecifier(method.value.name)
+              MethodName.fromMethodNameSpecifier(method.value.name)
 
               paramsEnv.flatMap { env2 =>
                 SourceMethod(context)(env2)(method.value, method.location)(MethodOwner.ByTrait(this))
@@ -130,7 +127,7 @@ private[compiler] object SourceTrait {
         staticMethodCache.get(groupedStatic.flatMap { statics =>
           statics.staticMethods.zipWithIndex.traverse { case (method, i) =>
             parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
-              val memberName = MethodName.fromMethodNameSpecifier(method.value.name)
+              MethodName.fromMethodNameSpecifier(method.value.name)
 
               paramsEnv.flatMap { env2 =>
                 SourceMethod(context)(env2)(method.value, method.location)(MethodOwner.ByTraitObject(this))
@@ -179,7 +176,6 @@ private[compiler] object SourceTrait {
   (location: SourceLocation)
   (acc: BaseTypeInfoTrait[context.type, Id])
   : Comp[BaseTypeInfoTrait[context.type, Id]] = {
-    import context._
     t match {
       case t @ TraitType(_, _) =>
         acc.copy(baseTraits = acc.baseTraits :+ t).pure[Comp]

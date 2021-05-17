@@ -3,7 +3,6 @@ package dev.argon.util
 import zio._
 import zio.stream.{ZStream, Stream}
 
-import scala.reflect.ClassTag
 
 object StreamMemo {
 

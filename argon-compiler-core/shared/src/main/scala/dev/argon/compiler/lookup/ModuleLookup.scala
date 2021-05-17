@@ -4,10 +4,8 @@ import dev.argon.compiler.core._
 import dev.argon.util.NamespacePath
 
 import scala.collection.immutable.Vector
-import cats._
 import cats.implicits._
-import dev.argon.compiler.{Comp, CompStream, Compilation}
-import zio.interop.catz.core._
+import dev.argon.compiler.{Comp, CompStream}
 import zio._
 import zio.stream.Stream
 

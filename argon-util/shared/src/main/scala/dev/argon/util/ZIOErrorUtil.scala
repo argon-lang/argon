@@ -3,7 +3,6 @@ package dev.argon.util
 import cats.data.{NonEmptyList, NonEmptyVector}
 import zio.{Cause, NonEmptyChunk}
 
-import scala.reflect.ClassTag
 
 object ZIOErrorUtil {
 

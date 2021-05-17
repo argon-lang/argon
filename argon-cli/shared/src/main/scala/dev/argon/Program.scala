@@ -2,18 +2,15 @@ package dev.argon
 
 import dev.argon.build.{BackendProvider, BackendProviderImpl, BuildProcess}
 import cats._
-import cats.data.State
 import cats.implicits._
-import dev.argon.backend.{Backend, BuildInfo}
+import dev.argon.backend.Backend
 import dev.argon.compiler.CompilationError
 import zio.{ZEnv, BuildInfo => _, _}
 import zio.console._
-import zio.interop.catz.core._
 import dev.argon.compiler.options.{CompilerInput, CompilerOptionID, CompilerOptions, CompilerOutput, GeneralOutputOptionID, GeneralOutputOptions}
-import dev.argon.options.{FileList, OptionDecodeResult, OptionID, OptionInfo, Options, OptionsHandler, SingleFile}
+import dev.argon.options.{OptionDecodeResult, OptionID, OptionInfo, Options, OptionsHandler, SingleFile}
 import dev.argon.io.fileio.{FileIO, ZipRead}
 import dev.argon.platform._
-import dev.argon.util.MaybeBlocking
 
 object Program extends PlatformApp {
 

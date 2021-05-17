@@ -1,13 +1,10 @@
 package dev.argon.compiler.types
 
-import cats._
 import cats.implicits._
 import dev.argon.compiler.Comp
 import dev.argon.compiler.core._
 import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
-import dev.argon.util.AnyExtensions._
-import zio.IO
 import zio.interop.catz.core._
 
 abstract class TypeSystemConverter {

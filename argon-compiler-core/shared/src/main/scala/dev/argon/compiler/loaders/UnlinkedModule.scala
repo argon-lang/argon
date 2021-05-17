@@ -1,9 +1,8 @@
 package dev.argon.compiler.loaders
 
-import dev.argon.compiler.{Comp, CompManaged, CompilationError}
-import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
+import dev.argon.compiler.CompManaged
+import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
-import zio.Managed
 
 trait UnlinkedModule[-TContext <: Context, PayloadSpecifier[_, _]] {
   val descriptor: ModuleId

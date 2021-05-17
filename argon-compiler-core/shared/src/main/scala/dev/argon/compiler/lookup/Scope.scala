@@ -1,10 +1,9 @@
 package dev.argon.compiler.lookup
 
 import dev.argon.compiler._
-import dev.argon.util.{FileSpec, MemoCache, NamespacePath, SourceLocation}
+import dev.argon.util.{FileSpec, MemoCache, SourceLocation}
 import dev.argon.compiler.core._
 import dev.argon.compiler.types.{TypeSystem, TypeSystemConverter}
-import cats._
 import cats.implicits._
 import dev.argon.compiler.expr._
 import zio.IO

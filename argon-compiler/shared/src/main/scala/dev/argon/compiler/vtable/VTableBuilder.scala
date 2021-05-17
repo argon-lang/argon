@@ -2,10 +2,9 @@ package dev.argon.compiler.vtable
 
 import dev.argon.compiler._
 import dev.argon.compiler.core._
-import cats._
 import cats.implicits._
 import dev.argon.compiler.expr.ArExpr._
-import dev.argon.util.{MemoCache, MemoCacheStore}
+import dev.argon.util.MemoCacheStore
 import shapeless.Nat
 import zio.UIO
 import zio.interop.catz.core._
@@ -27,7 +26,6 @@ object VTableBuilder {
   }
 
   def apply(context: Context): UIO[VTableBuilder.Aux[context.type]] = {
-    import context._
     val ctx: context.type = context
 
     val vtableCtx: VTableContext.Aux[ctx.type] = new VTableContext {

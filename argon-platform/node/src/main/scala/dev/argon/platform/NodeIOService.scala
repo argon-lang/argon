@@ -1,6 +1,5 @@
 package dev.argon.platform
 
-import cats._
 import cats.implicits._
 
 import dev.argon.io._
@@ -9,8 +8,6 @@ import zio._
 import zio.stream._
 
 import scala.scalajs.js.typedarray.Uint8Array
-import scala.scalajs.js.JSConverters._
-import scala.scalajs.js.|
 
 import dev.argon.util.JSErrorHandler._
 

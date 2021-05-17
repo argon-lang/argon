@@ -1,7 +1,6 @@
 package dev.argon.options
 
 import cats.{Applicative, Id, ~>}
-import cats.arrow.FunctionK
 import dev.argon.options.OptionsHandler.{CombineFunction, InferDefaultsFunction}
 import shapeless.HNil
 
