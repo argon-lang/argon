@@ -11,12 +11,12 @@ object FileNameUtil {
   def getBaseNameWithoutExtension(fileName: String): String =
     FilenameUtils.getBaseName(fileName)
 
-  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+  @SuppressWarnings(Array("scalafix:Disable.toString"))
   def getParentDirectory(fileName: String): Option[String] =
     Option(Path.of(fileName).getParent).map(_.toString)
 
   def getExtension(fileName: String): String = FilenameUtils.getExtension(fileName)
 
-  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+  @SuppressWarnings(Array("scalafix:Disable.toString"))
   def combine(a: String, b: String): String = java.nio.file.Path.of(a, b).toString
 }

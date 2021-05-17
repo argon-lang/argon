@@ -6,7 +6,7 @@ import cats.data.NonEmptyList
 import scala.collection.immutable.Seq
 
 sealed trait Stmt {
-  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+  @SuppressWarnings(Array("scalafix:Disable.toString"))
   def dumpInfo: String = toString
 }
 final case class TraitDeclarationStmt

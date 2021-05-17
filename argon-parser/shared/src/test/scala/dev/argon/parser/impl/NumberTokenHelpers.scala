@@ -21,7 +21,7 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
 
 
   protected implicit val errorFactory: Grammar.ErrorFactory[Int, String, WithSource[String]] = new Grammar.ErrorFactory[Int, String, WithSource[String]] {
-    @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+    @SuppressWarnings(Array("scalafix:Disable.toString"))
     override def createError(error: GrammarError[Int, String]): WithSource[String] =
       WithSource(error.toString, error.location)
 

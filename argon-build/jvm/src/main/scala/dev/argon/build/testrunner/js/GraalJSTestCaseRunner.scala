@@ -59,7 +59,7 @@ final class GraalJSTestCaseRunner(protected val backend: JSBackend, protected va
       finally context.close()
     }
 
-  @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+  @SuppressWarnings(Array("scalafix:Disable.toString"))
   class JSFileSystem(modules: Seq[FileInfo]) extends FileSystem {
 
     private def getFileInfo(path: file.Path): FileInfo =

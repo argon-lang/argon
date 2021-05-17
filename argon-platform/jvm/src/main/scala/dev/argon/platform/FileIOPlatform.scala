@@ -40,7 +40,7 @@ object FileIOPlatform {
       override def isDirectory(path: String): IO[Throwable, Boolean] =
         blocking.effectBlockingInterrupt { Files.isDirectory(Path.of(path)) }
 
-      @SuppressWarnings(Array("org.wartremover.warts.ToString"))
+      @SuppressWarnings(Array("scalafix:Disable.toString"))
       override def listDirectory(path: String): Stream[Throwable, String] =
         ZStream[Any, Throwable, String](
           ZManaged.fromAutoCloseable(blocking.effectBlockingInterrupt { Files.list(Path.of(path)) })
