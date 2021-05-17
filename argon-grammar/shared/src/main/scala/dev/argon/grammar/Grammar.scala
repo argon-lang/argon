@@ -331,7 +331,6 @@ object Grammar {
 
       override def start: ZIO[Any, TSyntaxError, ParseStep] = IO.succeed(ParseStepReady)
 
-      @SuppressWarnings(Array("org.wartremover.warts.TraversableOps"))
       private def nonEmptyChunkToVector[A](chunk: NonEmptyChunk[A]): NonEmptyVector[A] =
         NonEmptyVector.of(chunk.head, chunk.tail.toVector: _*)
 

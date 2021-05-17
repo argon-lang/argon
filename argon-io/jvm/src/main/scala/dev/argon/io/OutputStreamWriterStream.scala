@@ -8,10 +8,6 @@ import zio.stream.ZStream
 
 private[io] object OutputStreamWriterStream {
 
-  @SuppressWarnings(Array(
-    "org.wartremover.warts.NonUnitStatements",
-    "org.wartremover.warts.Var",
-  ))
   private final class TransformOutputStream[R, E]
   (
     runtime: Runtime[R],
