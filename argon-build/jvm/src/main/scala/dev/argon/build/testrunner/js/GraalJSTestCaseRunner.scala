@@ -21,6 +21,8 @@ import org.apache.commons.text.StringEscapeUtils
 import org.graalvm.polyglot.Source
 import org.graalvm.polyglot.io.FileSystem
 
+import scala.annotation.unused
+
 final class GraalJSTestCaseRunner(protected val backend: JSBackend, protected val references: FileList, blocking: zio.blocking.Blocking.Service) extends JavaScriptTestCaseRunnerBase {
 
   @SuppressWarnings(Array("dev.argon.warts.ZioEffect"))
@@ -69,27 +71,27 @@ final class GraalJSTestCaseRunner(protected val backend: JSBackend, protected va
 
     override def parsePath(path: String): file.Path = file.Path.of(path)
 
-    override def checkAccess(path: file.Path, modes: util.Set[_ <: AccessMode], linkOptions: LinkOption*): Unit = {
+    override def checkAccess(path: file.Path, @unused modes: util.Set[_ <: AccessMode], @unused linkOptions: LinkOption*): Unit = {
       val _ = getFileInfo(path)
     }
 
-    override def createDirectory(dir: file.Path, attrs: FileAttribute[_]*): Unit =
+    override def createDirectory(@unused dir: file.Path, @unused attrs: FileAttribute[_]*): Unit =
       throw new UnsupportedOperationException()
 
-    override def delete(path: file.Path): Unit =
+    override def delete(@unused path: file.Path): Unit =
       throw new UnsupportedOperationException()
 
-    override def newByteChannel(path: file.Path, options: util.Set[_ <: OpenOption], attrs: FileAttribute[_]*): SeekableByteChannel = {
+    override def newByteChannel(path: file.Path, @unused options: util.Set[_ <: OpenOption], @unused attrs: FileAttribute[_]*): SeekableByteChannel = {
       val bytes = getFileInfo(path).content.getBytes(StandardCharsets.UTF_8)
       new SeekableInMemoryByteChannel(bytes)
     }
 
-    override def newDirectoryStream(dir: file.Path, filter: DirectoryStream.Filter[_ >: file.Path]): DirectoryStream[file.Path] =
+    override def newDirectoryStream(@unused dir: file.Path, @unused filter: DirectoryStream.Filter[_ >: file.Path]): DirectoryStream[file.Path] =
       throw new UnsupportedOperationException()
 
-    override def toAbsolutePath(path: file.Path): file.Path = path
+    override def toAbsolutePath(@unused path: file.Path): file.Path = path
 
-    override def toRealPath(path: file.Path, linkOptions: LinkOption*): file.Path = {
+    override def toRealPath(path: file.Path, @unused linkOptions: LinkOption*): file.Path = {
       val p = path.normalize()
       if(p.toString.toUpperCase(Locale.US).endsWith(".MJS"))
         p
@@ -97,7 +99,7 @@ final class GraalJSTestCaseRunner(protected val backend: JSBackend, protected va
         file.Path.of(p.toString + ".mjs")
     }
 
-    override def readAttributes(path: file.Path, attributes: String, options: LinkOption*): util.Map[String, AnyRef] =
+    override def readAttributes(@unused path: file.Path, @unused attributes: String, @unused options: LinkOption*): util.Map[String, AnyRef] =
       throw new UnsupportedOperationException()
   }
 

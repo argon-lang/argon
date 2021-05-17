@@ -20,11 +20,9 @@ object GlobalScope {
   (context: Context)
   (imports: Vector[Vector[NamespacePath]])
   (modules: Vector[Vector[AbsRef[context.type, ArModule]]])
-  (parentScope: context.scopeContext.NamespacesOnlyScope)
   : Comp[context.scopeContext.Scope] =
     context.scopeContext.NamespaceScope(
-      (name, fileSpec, sourceLocation) => createLookupResult(context)(imports)(modules)(name, fileSpec, sourceLocation),
-      parentScope
+      (name, fileSpec, sourceLocation) => createLookupResult(context)(imports)(modules)(name, fileSpec, sourceLocation)
     )
 
 
@@ -51,7 +49,7 @@ object GlobalScope {
         }
 
       case NestedNamespaces(paths) =>
-        createNSScope(context)(Vector(paths.toVector))(modules)(context.scopeContext.EmptyScope)
+        createNSScope(context)(Vector(paths.toVector))(modules)
           .map(context.scopeContext.LookupResult.ScopeResult)
     }
 
@@ -108,7 +106,7 @@ object GlobalScope {
         }
       }
     }
-      .fold(NotFound : ResolvedName){
+      .fold(acc){
         case (prev, NotFound) => prev
         case (NotFound | FoundOverloadable, curr) => curr
         case (prev @ NestedNamespaces(_), FoundOverloadable) => prev

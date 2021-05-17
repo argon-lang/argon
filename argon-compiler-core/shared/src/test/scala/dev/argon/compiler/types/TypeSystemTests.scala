@@ -2,7 +2,6 @@ package dev.argon.compiler.types
 
 
 import zio.test.{DefaultRunnableSpec, ZSpec}
-import shapeless.Id
 import zio._
 import zio.test._
 import zio.test.Assertion._

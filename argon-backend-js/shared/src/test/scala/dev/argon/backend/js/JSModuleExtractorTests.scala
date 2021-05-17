@@ -1,7 +1,5 @@
 package dev.argon.backend.js
 
-import zio.IO
-import zio.test.Assertion.Render.param
 import zio.test._
 import zio.test.Assertion._
 

@@ -111,8 +111,8 @@ private[compiler] object SourceTrait {
 
       override val methods: Comp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
         methodCache.get(groupedInst.flatMap { inst =>
-          inst.methods.zipWithIndex.traverse { case (method, i) =>
-            parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
+          inst.methods.traverse { method =>
+            parseAccessModifier(env.fileSpec, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
               MethodName.fromMethodNameSpecifier(method.value.name)
 
               paramsEnv.flatMap { env2 =>
@@ -125,8 +125,8 @@ private[compiler] object SourceTrait {
 
       override val staticMethods: Comp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
         staticMethodCache.get(groupedStatic.flatMap { statics =>
-          statics.staticMethods.zipWithIndex.traverse { case (method, i) =>
-            parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
+          statics.staticMethods.traverse { method =>
+            parseAccessModifier(env.fileSpec, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
               MethodName.fromMethodNameSpecifier(method.value.name)
 
               paramsEnv.flatMap { env2 =>

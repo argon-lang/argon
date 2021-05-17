@@ -32,13 +32,12 @@ object DiagnosticError {
     override def message: String = syntaxError.syntaxError match {
       case SyntaxError.InvalidSurrogatePairs(ch, _) => s"Invalid surrogate: ${ch.toInt.toHexString}"
       case SyntaxError.UnexpectedCombingCharacter(cp, _) => s"Unexpected combing character: ${(cp.toLong & 0xFFFFFFFF).toHexString}"
-      case SyntaxError.LexerError(error) => convertGrammarError("character", formatCharacter, formatCharacterCategory, error)
-      case SyntaxError.ParserError(error) => convertGrammarError("token", formatToken, formatTokenCategory, error)
+      case SyntaxError.LexerError(error) => convertGrammarError(formatCharacter, formatCharacterCategory, error)
+      case SyntaxError.ParserError(error) => convertGrammarError(formatToken, formatTokenCategory, error)
     }
 
     private def convertGrammarError[TToken, TTokenCategory]
     (
-      tokenName: String,
       tokenFormatter: TToken => String,
       categoryFormatter: TTokenCategory => String,
       grammarError: GrammarError[TToken, TTokenCategory]

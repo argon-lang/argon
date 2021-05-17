@@ -1,6 +1,6 @@
 package dev.argon.compiler.types
 
-import dev.argon.compiler.{Comp, CompStream}
+import dev.argon.compiler.CompStream
 import dev.argon.compiler.core.{AbsRef, ArModule, ArTrait, Context, GlobalBinding, ModuleId, PayloadSpecInfo, TraitId}
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.expr.ArExpr.TraitType
@@ -8,7 +8,7 @@ import dev.argon.compiler.options.{CompilerInput, CompilerOptionID}
 import dev.argon.options.{FileList, Options}
 import dev.argon.util.{NamespacePath, UniqueIdentifier}
 import shapeless.Id
-import zio.{IO, UIO}
+import zio.UIO
 import zio.stream.Stream
 import zio.test.{Gen, Sample}
 

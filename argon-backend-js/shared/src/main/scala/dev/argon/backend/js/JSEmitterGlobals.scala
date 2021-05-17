@@ -206,9 +206,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
   def createGlobalDataConstructor(vtableBuilder: VTableBuilder.Aux[context.type])(ctor: DataConstructor[context.type, DeclarationPayloadSpecifier]): Emit[Seq[JSStatement]] =
     for {
       sig <- ctor.signature
-      erasedSig = ErasedSignature.fromSignatureParameters(context)(sig)
 
-      ctorObj <- getDataCtorJSObject(ctor, erasedSig)
       localFieldMappingRef <- Ref.make(Map.empty[LocalVariableId, JSIdentifier])
 
 

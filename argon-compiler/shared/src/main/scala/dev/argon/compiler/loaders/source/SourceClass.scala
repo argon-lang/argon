@@ -148,8 +148,8 @@ private[compiler] object SourceClass {
 
       override val methods: Comp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
         methodCache.get(groupedInst.flatMap { inst =>
-          inst.methods.zipWithIndex.traverse { case (method, i) =>
-            parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
+          inst.methods.traverse { method =>
+            parseAccessModifier(env.fileSpec, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
               paramsEnv.flatMap { env2 =>
                 fields.flatMap { fieldVars =>
                   val env3 = env2.addVariables(context)(fieldVars)
@@ -165,8 +165,8 @@ private[compiler] object SourceClass {
 
       override val staticMethods: Comp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
         staticMethodCache.get(groupedStatic.flatMap { statics =>
-          statics.staticMethods.zipWithIndex.traverse { case (method, i) =>
-            parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
+          statics.staticMethods.traverse { method =>
+            parseAccessModifier(env.fileSpec, getAccessModifiers(method.value.modifiers)).flatMap { modifiers =>
               paramsEnv.flatMap { env2 =>
                 SourceMethod(context)(env2)(method.value, method.location)(MethodOwner.ByClassObject(this))
                   .map { method =>
@@ -180,7 +180,7 @@ private[compiler] object SourceClass {
       override val classConstructors: Comp[Vector[ClassConstructorBinding[context2.type, DeclarationPayloadSpecifier]]] =
         classCtorCache.get(groupedInst.flatMap { inst =>
           inst.classCtors.traverse { classCtor =>
-            parseAccessModifier(env.fileSpec, classCtor.location, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
+            parseAccessModifier(env.fileSpec, getAccessModifiers(classCtor.value.modifiers)).flatMap { modifiers =>
               paramsEnv.flatMap { env2 =>
                 SourceClassConstructor(context)(env2)(this)(classCtor.value).map(ClassConstructorBinding(modifiers, _))
               }

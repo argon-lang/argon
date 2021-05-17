@@ -1,12 +1,13 @@
 package dev.argon.util
 
+import scala.annotation.unused
 import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSImport, JSName}
 
 @js.native
 @JSImport("xmldom", name = "DOMParser")
 private[util] class DOMParser() extends js.Object {
-  def parseFromString(xmlsource: String, mimetype: String): Document = js.native
+  def parseFromString(@unused xmlsource: String, @unused mimetype: String): Document = js.native
 }
 
 @js.native

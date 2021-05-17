@@ -7,23 +7,23 @@ import zio.stream._
 
 object Compilation {
 
-  def forErrors[A](errors: NonEmptyChunk[CompilationError], messages: Vector[DiagnosticNonFatal] = Vector()): Comp[A] =
+  def forErrors[A](errors: NonEmptyChunk[CompilationError]): Comp[A] =
     IO.halt(errors.reduceMapLeft(Cause.fail(_))((cause, compError) => Cause.Both(cause, Cause.fail(compError))))
 
-  def forErrors[A](head: CompilationError, tail: CompilationError*): Comp[A] =
-    forErrors(NonEmptyChunk(head, tail: _*))
+  def forErrors[A](head: CompilationError): Comp[A] =
+    forErrors(NonEmptyChunk(head))
 
-  def require(value: Boolean)(head: CompilationError, tail: CompilationError*): Comp[Unit] =
+  def require(value: Boolean)(head: CompilationError): Comp[Unit] =
     if(value) IO.unit
-    else forErrors(head, tail: _*)
+    else forErrors(head)
 
-  def requireM(value: Comp[Boolean])(head: CompilationError, tail: CompilationError*): Comp[Unit] =
-    value.flatMap(require(_)(head, tail: _*))
+  def requireM(value: Comp[Boolean])(head: CompilationError): Comp[Unit] =
+    value.flatMap(require(_)(head))
 
-  final def requireSome[A](option: Option[A])(head: CompilationError, tail: CompilationError*): Comp[A] =
+  final def requireSome[A](option: Option[A])(head: CompilationError): Comp[A] =
     option match {
       case Some(a) => IO.succeed(a)
-      case None => forErrors(head, tail: _*)
+      case None => forErrors(head)
     }
 
   def errorForIOException(ex: IOException): CompilationError =

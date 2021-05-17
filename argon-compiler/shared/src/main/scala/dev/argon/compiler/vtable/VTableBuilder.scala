@@ -47,7 +47,7 @@ object VTableBuilder {
 
       import context.typeSystem.{ context => _, _ }
 
-      private def signatureMatches[PS[_, _], PSSlot[_, _]](method: ArMethod[context.type, PS])(slotMethod: ArMethod[context.type, PSSlot], slotSig: EntrySignature): Comp[Boolean] = {
+      private def signatureMatches[PS[_, _], PSSlot[_, _]](method: ArMethod[context.type, PS])(slotSig: EntrySignature): Comp[Boolean] = {
 
         import context.signatureContext.{ context => _, _ }
 
@@ -97,7 +97,7 @@ object VTableBuilder {
                     slotMethod.value.name =!= MemberName.Unnamed
                 }
                 .toVector
-                .filterA { case (slotMethod, VTableEntry(slotSig, _, _)) => signatureMatches(method.method)(slotMethod.value, slotSig) }
+                .filterA { case (_, VTableEntry(slotSig, _, _)) => signatureMatches(method.method)(slotSig) }
                 .map { slotMethods =>
                   VTable(
                     methodMap = slotMethods

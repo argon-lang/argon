@@ -1,5 +1,6 @@
 package dev.argon.platform
 
+import scala.annotation.unused
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
 
@@ -7,7 +8,7 @@ import scala.scalajs.js.annotation.JSImport
 @JSImport("stream", "Readable")
 private[platform] class NodeReadable extends js.Object {
 
-  def on(event: "end", callback: js.Function0[Unit]): Unit = js.native
+  def on(@unused event: "end", @unused callback: js.Function0[Unit]): Unit = js.native
 
-  def pipe(writable: NodeWritable): Unit = js.native
+  def pipe(@unused writable: NodeWritable): Unit = js.native
 }

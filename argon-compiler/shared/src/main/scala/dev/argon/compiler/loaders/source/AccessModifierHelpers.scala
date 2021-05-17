@@ -16,7 +16,7 @@ object AccessModifierHelpers {
       .toList
 
   def parseGlobalAccessModifier(fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): Comp[AccessModifierGlobal] =
-    parseAccessModifier(fileSpec, stmtLocation, access).flatMap {
+    parseAccessModifier(fileSpec, access).flatMap {
       case accessModifier: AccessModifierGlobal => IO.succeed(accessModifier)
       case AccessModifier.Private => IO.succeed(AccessModifier.PrivateInternal)
       case accessModifier =>
@@ -24,7 +24,7 @@ object AccessModifierHelpers {
         Compilation.forErrors(DiagnosticError.AccessModifierNotAllowedForGlobal(accessModifier, DiagnosticSource.SourceFile(fileSpec, loc)))
     }
 
-  def parseAccessModifier(fileSpec: FileSpec, stmtLocation: SourceLocation, access: List[WithSource[parser.AccessModifier]]): Comp[AccessModifier] =
+  def parseAccessModifier(fileSpec: FileSpec, access: List[WithSource[parser.AccessModifier]]): Comp[AccessModifier] =
     access match {
       case WithSource(parser.PublicModifier, _) :: Nil =>
         IO.succeed(AccessModifier.Public)

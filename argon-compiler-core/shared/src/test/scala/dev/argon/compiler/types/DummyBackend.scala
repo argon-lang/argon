@@ -1,15 +1,14 @@
 package dev.argon.compiler.types
 
 import dev.argon.backend.{Backend, ExternHandler}
-import dev.argon.compiler.core.{ArModule, Context}
+import dev.argon.compiler.core.ArModule
 import dev.argon.compiler.core.Context.Aux
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
-import dev.argon.compiler.{Comp, CompStream, CompilationError, DiagnosticError, DiagnosticSource}
+import dev.argon.compiler.{Comp, CompStream, DiagnosticError, DiagnosticSource}
 import dev.argon.compiler.loaders.ModuleLoader
 import dev.argon.options.{Options, OptionsHandler, SingleFile}
 import shapeless.Id
 import zio._
-import zio.stream._
 
 class DummyBackend extends Backend {
   override val id: String = "dummy"

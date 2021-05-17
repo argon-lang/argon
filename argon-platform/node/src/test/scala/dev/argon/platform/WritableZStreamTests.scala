@@ -4,7 +4,6 @@ import zio._
 import zio.test._
 import zio.test.Assertion._
 import cats.implicits._
-import zio.interop.catz.core._
 
 import scalajs.js
 import scalajs.js.JSConverters._

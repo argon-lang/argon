@@ -1,8 +1,6 @@
 package dev.argon.parser.impl
 
-import dev.argon.grammar.Grammar
-import dev.argon.parser.impl.ArgonParser.Rule
-import dev.argon.parser.{SyntaxError, Token}
+import dev.argon.parser.Token
 import dev.argon.util.NamespacePath
 import zio.test._
 import zio.test.Assertion._

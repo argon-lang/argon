@@ -1,5 +1,6 @@
 package dev.argon.io
 
+import scala.annotation.unused
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
 
@@ -7,10 +8,10 @@ import scala.scalajs.js.annotation.JSImport
 @js.native
 @JSImport("path", JSImport.Default)
 private[io] object NodePath extends js.Any {
-  def basename(path: String, ext: js.UndefOr[String] = js.undefined): String = js.native
-  def extname(path: String): String = js.native
-  def parse(path: String): NodeParsedPath = js.native
-  def join(paths: String*): String = js.native
+  def basename(@unused path: String, @unused ext: js.UndefOr[String] = js.undefined): String = js.native
+  def extname(@unused path: String): String = js.native
+  def parse(@unused path: String): NodeParsedPath = js.native
+  def join(@unused paths: String*): String = js.native
 }
 
 @js.native

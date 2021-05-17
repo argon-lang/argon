@@ -1,5 +1,6 @@
 package dev.argon.platform
 
+import scala.annotation.unused
 import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSBracketAccess, JSGlobal}
 
@@ -13,5 +14,5 @@ private[platform] object NodeProcess extends js.Object {
 @js.native
 private[platform] trait NodeProcessEnvironment extends js.Object {
   @JSBracketAccess
-  def apply(name: String): js.UndefOr[String] = js.native
+  def apply(@unused name: String): js.UndefOr[String] = js.native
 }

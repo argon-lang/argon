@@ -138,8 +138,6 @@ final class UnlinkedSourceModule[TContext <: Context]
         Vector(AbsRef(currentModule)),
         referencedModules.map(AbsRef(_)),
       )
-    )(
-      context.scopeContext.EmptyScope
     )
 
   

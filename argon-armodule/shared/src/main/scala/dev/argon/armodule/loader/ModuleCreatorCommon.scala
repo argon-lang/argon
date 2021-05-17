@@ -74,14 +74,6 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
       }
   }
 
-  private object ParsedGlobalAccessModifier {
-    def unapply(accessModifier: ArgonModule.AccessModifier): Option[AccessModifierGlobal] =
-      accessModifier match {
-        case ParsedAccessModifier(accessModifier: AccessModifierGlobal) => Some(accessModifier)
-        case _ => None
-      }
-  }
-
   private def parseMutability(mutability: ArgonModule.Mutability): Comp[Mutability] =
     mutability match {
       case ArgonModule.Mutability.Mutable => IO.succeed(Mutability.Mutable)

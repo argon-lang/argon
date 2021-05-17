@@ -1,7 +1,7 @@
 package dev.argon.build
 
 import cats.implicits._
-import dev.argon.backend.js.{JSBackend, JSModuleExtractorImpl}
+import dev.argon.backend.js.JSBackend
 import dev.argon.backend.generic.GenericBackend
 import dev.argon.backend.Backend
 import dev.argon.build.testrunner.js.JavaScriptNodeVMTestCaseRunner

@@ -93,7 +93,7 @@ trait ScopeContext[TContext <: Context with Singleton] {
       IO.succeed(LookupResult.Failed)
   }
 
-  final class NamespaceScope private(findId: MemoCache[Any, CompilationError, (GlobalName.NonEmpty, FileSpec, SourceLocation), LookupResult], parentScope: NamespacesOnlyScope) extends NamespacesOnlyScope {
+  final class NamespaceScope private(findId: MemoCache[Any, CompilationError, (GlobalName.NonEmpty, FileSpec, SourceLocation), LookupResult]) extends NamespacesOnlyScope {
 
     override def findIdentifier(name: String, fileSpec: FileSpec, sourceLocation: SourceLocation): Comp[LookupResult] =
       findId.get((GlobalName.Normal(name), fileSpec, sourceLocation))
@@ -104,9 +104,9 @@ trait ScopeContext[TContext <: Context with Singleton] {
 
   object NamespaceScope {
 
-    def apply(findId: (GlobalName.NonEmpty, FileSpec, SourceLocation) => Comp[LookupResult], parentScope: NamespacesOnlyScope): Comp[NamespaceScope] =
+    def apply(findId: (GlobalName.NonEmpty, FileSpec, SourceLocation) => Comp[LookupResult]): Comp[NamespaceScope] =
       MemoCache.make(findId.tupled).map { findIdMemo =>
-        new NamespaceScope(findIdMemo, parentScope)
+        new NamespaceScope(findIdMemo)
       }
 
   }

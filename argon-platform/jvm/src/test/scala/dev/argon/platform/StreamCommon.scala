@@ -1,16 +1,16 @@
 package dev.argon.platform
 
-import java.io.{ByteArrayInputStream, InputStream, OutputStream}
+import java.io.{InputStream, OutputStream}
 
 import zio._
 import zio.blocking.Blocking
-import zio.stream.ZStream
 
+import scala.annotation.unused
 import scala.collection.mutable.ArrayBuffer
 
 @SuppressWarnings(Array("org.wartremover.warts.All"))
 object StreamCommon {
-  def noReads(inputStream: InputStream): RIO[Blocking, Unit] =
+  def noReads(@unused inputStream: InputStream): RIO[Blocking, Unit] =
     IO.succeed(())
 
   def usingSingleByteRead(inputStream: InputStream): RIO[Blocking, List[Byte]] =

@@ -1,6 +1,6 @@
 package dev.argon.parser.impl
 
-import dev.argon.util.{FilePosition, SourceLocation, WithSource}
+import dev.argon.util.{FilePosition, WithSource}
 import cats._
 import cats.implicits._
 import dev.argon.grammar.{Grammar, GrammarError}

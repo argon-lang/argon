@@ -49,9 +49,8 @@ object SourceSignatureCreator {
 
         case VectorUnCons(VectorUnCons.NonEmpty(WithSource(parser.FunctionParameterList(listType, isErased, VectorUnCons(VectorUnCons.NonEmpty(headH, headT))), _), tail)) =>
           NonEmptyList(headH, headT.toList)
-            .zipWithIndex
             .traverse {
-              case (WithSource(parser.FunctionParameter(paramTypeOpt, _, paramName), loc), tupleIndex) =>
+              case WithSource(parser.FunctionParameter(paramTypeOpt, _, paramName), loc) =>
                 (paramTypeOpt match {
                   case Some(paramType) =>
                     ExpressionConverter.convertTypeExpression(context)(env)(paramType)

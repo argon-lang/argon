@@ -18,6 +18,7 @@ import java.util
 import dev.argon.backend.js.JSModuleExtractorImpl.ResourceFileSystem
 import org.apache.commons.compress.utils.SeekableInMemoryByteChannel
 
+import scala.annotation.unused
 import scala.jdk.CollectionConverters._
 
 private[js] final case class JSModuleExtractorImpl(blocking: Blocking.Service) extends JSModuleExtractor {
@@ -82,17 +83,17 @@ object JSModuleExtractorImpl {
 
     override def parsePath(path: String): Path = Path.of(path)
 
-    override def checkAccess(path: Path, modes: util.Set[_ <: AccessMode], linkOptions: LinkOption*): Unit = {
+    override def checkAccess(path: Path, @unused modes: util.Set[_ <: AccessMode], @unused linkOptions: LinkOption*): Unit = {
       val _ = getResURL(path)
     }
 
-    override def createDirectory(dir: Path, attrs: FileAttribute[_]*): Unit =
+    override def createDirectory(@unused dir: Path, @unused attrs: FileAttribute[_]*): Unit =
       throw new UnsupportedOperationException()
 
     override def delete(path: Path): Unit =
       throw new UnsupportedOperationException()
 
-    override def newByteChannel(path: Path, options: util.Set[_ <: OpenOption], attrs: FileAttribute[_]*): SeekableByteChannel = {
+    override def newByteChannel(path: Path, @unused options: util.Set[_ <: OpenOption], @unused attrs: FileAttribute[_]*): SeekableByteChannel = {
       val url = getResURL(path)
       val content = IOUtils.toByteArray(url)
       new SeekableInMemoryByteChannel(content)
@@ -104,7 +105,7 @@ object JSModuleExtractorImpl {
     override def toAbsolutePath(path: Path): Path =
       Path.of("/").resolve(path)
 
-    override def toRealPath(path: Path, linkOptions: LinkOption*): Path = {
+    override def toRealPath(@unused path: Path, @unused linkOptions: LinkOption*): Path = {
       val norm = FilenameUtils.normalize(Path.of(resourcePath).resolve(path).toString)
       if(norm == null || !norm.startsWith(resourcePath)) {
         throw new FileNotFoundException()
@@ -116,7 +117,7 @@ object JSModuleExtractorImpl {
       })
     }
 
-    override def readAttributes(path: Path, attributes: String, options: LinkOption*): util.Map[String, AnyRef] =
+    override def readAttributes(@unused path: Path, @unused attributes: String, @unused options: LinkOption*): util.Map[String, AnyRef] =
       throw new UnsupportedOperationException()
   }
 

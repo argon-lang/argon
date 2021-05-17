@@ -40,11 +40,8 @@ object StandardTypeLoaders {
           DiagnosticError.NamespaceElementNotFound(arCore, NamespacePath(Vector("Ar")), GlobalName.Normal("Unit"), messageSource)
         )
       }
-      .flatMap { unitClass =>
-        unitClass.value.signature
-          .map { sig =>
-            context.typeSystem.fromSimpleType(ClassType(unitClass, Vector()))
-          }
+      .map { unitClass =>
+        context.typeSystem.fromSimpleType(ClassType(unitClass, Vector()))
       }
   }
 

@@ -104,11 +104,9 @@ private[compiler] object SourceDataConstructor {
 
       override val methods: Comp[Vector[MethodBinding[context2.type, DeclarationPayloadSpecifier]]] =
         methodCache.get(
-          groupedInst.methods.zipWithIndex.traverse { case (method, i) =>
+          groupedInst.methods.traverse { method =>
             for {
-              modifiers <- parseAccessModifier(env.fileSpec, method.location, getAccessModifiers(method.value.modifiers))
-
-              memberName = MethodName.fromMethodNameSpecifier(method.value.name)
+              modifiers <- parseAccessModifier(env.fileSpec, getAccessModifiers(method.value.modifiers))
 
               bEnv <- bodyEnv
 

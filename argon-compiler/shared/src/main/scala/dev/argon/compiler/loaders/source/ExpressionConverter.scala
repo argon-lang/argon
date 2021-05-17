@@ -22,6 +22,8 @@ import shapeless.ops.nat.{LT, Pred}
 import zio.{Cause, Exit, IO, Ref, UIO, ZIO}
 import zio.interop.catz.core._
 
+import scala.annotation.unused
+
 
 sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
@@ -285,7 +287,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
     def forArguments(argInfo: ArgumentInfo): ExprFactory =
       memberAccessExpr(MemberName.Call, argInfo.env, argInfo.location).forArguments(argInfo)
 
-    def mutateValue(env: Env, location: SourceLocation, newValue: ExprFactory): ExprFactory =
+    def mutateValue(env: Env, location: SourceLocation, @unused newValue: ExprFactory): ExprFactory =
       compFactory(
         Compilation.forErrors(DiagnosticError.InvalidLValue(DiagnosticSource.SourceFile(env.fileSpec, location)))
       )
@@ -554,7 +556,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             case parser.Token.StringToken.ExprPart(None, expr) =>
               WithSource(convertExpr(env)(expr), expr.location)
 
-            case parser.Token.StringToken.ExprPart(Some(_), expr) => ???
+            case parser.Token.StringToken.ExprPart(Some(_), _) => ???
 
           }
           .reduceLeft[WithSource[ExprFactory]] { case (WithSource(a, aLocation), WithSource(b, bLocation)) =>
@@ -746,7 +748,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 case classSig: context.signatureContext.Signature[ArClass.ResultInfo, len] =>
                   convertSignature[ArClass.ResultInfo, len](classSig).map { convSig =>
                     val classFactory =
-                      signatureFactory[ArClass.ResultInfo, len](env)(location)(arClass)(convSig) { (args, classResult) =>
+                      signatureFactory[ArClass.ResultInfo, len](env)(location)(arClass)(convSig) { (args, _) =>
                         ClassType(AbsRef[context.type, ClassPS, ArClass](arClass), args)
                       }
 
@@ -864,7 +866,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   .flatMap {
                     case sig: context.signatureContext.Signature[ArTrait.ResultInfo, len] =>
                       convertSignature[ArTrait.ResultInfo, len](sig).map { convSig =>
-                        signatureFactory(env)(location)(arTrait.value)(convSig) { (args, result) =>
+                        signatureFactory(env)(location)(arTrait.value)(convSig) { (args, _) =>
                           TraitType(arTrait, args)
                         }
                       }
@@ -875,7 +877,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   .flatMap {
                     case sig: context.signatureContext.Signature[ArClass.ResultInfo, len] =>
                       convertSignature[ArClass.ResultInfo, len](sig).map { convSig =>
-                        signatureFactory(env)(location)(arClass.value)(convSig) { (args, result) =>
+                        signatureFactory(env)(location)(arClass.value)(convSig) { (args, _) =>
                           ClassType(arClass, args)
                         }
                       }
@@ -1144,7 +1146,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 createFactory { expectedType => argInfo.argFactory.forExpectedType(expectedType).map(fromSimpleType) }
 
               case (_, ParameterStyle.Inferrable) =>
-                createFactory { expectedType =>
+                createFactory { _ =>
                   createHole
                 }.forArguments(argInfo)
 

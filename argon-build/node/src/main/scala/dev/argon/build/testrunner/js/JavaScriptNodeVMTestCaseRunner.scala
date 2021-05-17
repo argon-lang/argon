@@ -1,16 +1,12 @@
 package dev.argon.build.testrunner.js
 
-import java.io.IOException
 
-import cats.implicits._
 import dev.argon.backend.js.JSBackend
 import zio._
-import dev.argon.build._
 import dev.argon.options.FileList
-import dev.argon.io.fileio.FileIO
 
 import scala.scalajs.js
-import scala.scalajs.js.{JSON, |}
+import scala.scalajs.js.JSON
 
 final class JavaScriptNodeVMTestCaseRunner(protected val backend: JSBackend, protected val references: FileList) extends JavaScriptTestCaseRunnerBase {
 
@@ -40,7 +36,7 @@ final class JavaScriptNodeVMTestCaseRunner(protected val backend: JSBackend, pro
         fileInfo.name -> new NodeVM.SourceTextModule(fileInfo.content, NodeVMUtil.SourceTextModuleOptions(sandbox))
       }.toMap
 
-      val linker: js.Function2[String, NodeVM.SourceTextModule, js.Promise[NodeVM.SourceTextModule]] = (specifier, referencingModule) => {
+      val linker: js.Function2[String, NodeVM.SourceTextModule, js.Promise[NodeVM.SourceTextModule]] = (specifier, _) => {
         val module = vmModules.getOrElse(specifier, throw js.JavaScriptException(js.Error("Unknown module \"" + specifier + "\"")))
         js.Promise.resolve[NodeVM.SourceTextModule](module)
       }
