@@ -6,7 +6,7 @@ import zio._
 import zio.blocking.Blocking
 import zio.stream._
 
-@SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null", "dev.argon.warts.ZioEffect"))
+@SuppressWarnings(Array("scalafix:DisableSyntax.null", "scalafix:Disable.eq", "dev.argon.warts.ZioEffect"))
 object ProtoBufCodecs {
 
   def deserializeProtocolBuffer[R <: Blocking, A <: GeneratedMessage]
@@ -21,10 +21,6 @@ object ProtoBufCodecs {
 
   def serializeProtocolBuffer(message: GeneratedMessage): ZStream[Blocking, Throwable, Byte] =
     ZStream.fromChunk(Chunk.fromArray(message.toByteArray))
-    /*
-    ZStream.fromOutputStreamWriter { stream =>
-      message.writeTo(stream)
-    }*/
 
 
   def deserializeProtocolBufferStream[R <: Blocking, A >: Null <: AnyRef]

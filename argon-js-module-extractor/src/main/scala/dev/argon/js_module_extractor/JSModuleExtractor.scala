@@ -2,7 +2,7 @@ package dev.argon.js_module_extractor
 
 import scala.scalajs.js
 import js.JSConverters._
-import scala.scalajs.js.annotation.{JSExport, JSExportTopLevel}
+import scala.scalajs.js.annotation.JSExportTopLevel
 
 object JSModuleExtractor {
 
@@ -10,7 +10,7 @@ object JSModuleExtractor {
   def usingJSObject(module: String): js.Dictionary[String] =
     usingScalaMap(module).toJSDictionary
 
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Equals"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf", "scalafix:DisableSyntax.=="))
   def usingScalaMap(module: String): Map[String, String] = {
 
     val mod = Acorn.parse(module, AcornParserOptions(ecmaVersion = 11, sourceType = "module")).asInstanceOf[js.Dynamic]

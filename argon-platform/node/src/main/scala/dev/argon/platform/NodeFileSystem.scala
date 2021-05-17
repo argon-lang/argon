@@ -28,7 +28,7 @@ trait NodeFSMkdirOptions extends js.Object {
 }
 
 object NodeFSMkdirOptions {
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
   def apply(recursive: js.UndefOr[Boolean] = js.undefined): NodeFSMkdirOptions =
     js.Dynamic.literal(
       recursive = recursive

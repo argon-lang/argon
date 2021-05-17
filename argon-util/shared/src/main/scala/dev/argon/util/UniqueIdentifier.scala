@@ -11,7 +11,7 @@ object UniqueIdentifier {
     IO.effectTotal { new UniqueIdentifier {} }
 
   implicit val eqInstance: Eq[UniqueIdentifier] = new Eq[UniqueIdentifier] {
-    @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+    @SuppressWarnings(Array("scalafix:Disable.eq"))
     override def eqv(x: UniqueIdentifier, y: UniqueIdentifier): Boolean = x eq y
   }
 

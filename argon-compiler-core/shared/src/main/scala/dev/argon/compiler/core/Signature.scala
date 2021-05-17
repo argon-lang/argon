@@ -82,7 +82,7 @@ trait SignatureContext {
 
     override def visit[A](visitor: SignatureVisitor[TResult, Succ[RestLen], A]): A = visitor.visitParameters(this)
 
-    @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+    @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
     override def toSignatureParameters[RestLen2 <: Nat](implicit pred: Pred.Aux[Succ[RestLen], RestLen2]): SignatureParameters[TResult, RestLen2] =
       this.asInstanceOf[SignatureParameters[TResult, RestLen2]]
 
@@ -115,7 +115,6 @@ trait SignatureContext {
 
     override def visit[A](visitor: SignatureVisitor[TResult, _0, A]): A = visitor.visitResult(this)
 
-    @SuppressWarnings(Array("org.wartremover.warts.Throw"))
     override def toSignatureParameters[RestLen <: Nat](implicit pred: Pred.Aux[_0, RestLen]): SignatureParameters[TResult, RestLen] =
       throw new UnsupportedOperationException()
   }

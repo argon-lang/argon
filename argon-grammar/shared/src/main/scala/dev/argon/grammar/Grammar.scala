@@ -703,6 +703,7 @@ object Grammar {
       options.factory(label).parseEnd(pos, options)
   }
 
+  @SuppressWarnings(Array("scalafix:MissingFinal.trait"))
   trait EmbeddedGrammar[TSyntaxError, TTokenA, TLabelA <: RuleLabel, TTokenB, TLabelB <: RuleLabel, T] extends Grammar[TTokenA, TSyntaxError, TLabelA, T] {
 
     protected val outerGrammar: Grammar[TTokenA, TSyntaxError, TLabelA, TTokenB]

@@ -21,8 +21,8 @@ sealed trait Diagnostic {
   override def toString: String =
     s"${source.formatted}: ${message}"
 }
-trait DiagnosticError extends Exception with Diagnostic
-trait DiagnosticNonFatal extends Diagnostic
+sealed trait DiagnosticError extends Exception with Diagnostic
+sealed trait DiagnosticNonFatal extends Diagnostic
 
 object DiagnosticError {
 

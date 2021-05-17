@@ -2,15 +2,15 @@ package dev.argon.js_module_extractor
 
 import dev.argon.js_module_extractor.AcornParserOptions.{AllowedEcmaVersions, SourceType}
 
+import scala.annotation.unused
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
-import scala.scalajs.js.|
 
 @js.native
 @JSImport("acorn", JSImport.Namespace)
 object Acorn extends js.Object {
 
-  def parse(code: String, parserOptions: AcornParserOptions): js.Object = js.native
+  def parse(@unused code: String, @unused parserOptions: AcornParserOptions): js.Object = js.native
 
 }
 
@@ -24,7 +24,7 @@ object AcornParserOptions {
   type AllowedEcmaVersions = Int
   type SourceType = String
 
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
   def apply
   (
     ecmaVersion: js.UndefOr[AllowedEcmaVersions] = js.undefined,

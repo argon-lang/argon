@@ -8,7 +8,7 @@ import dev.argon.util.JSErrorHandler._
 
 object ZipReadPlatform {
 
-  @SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null", "dev.argon.warts.ZioEffect"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.==", "scalafix:DisableSyntax.null", "dev.argon.warts.ZioEffect"))
   def live: ULayer[ZipRead] =
     ZLayer.succeed[ZipRead.Service](new ZipRead.Service {
       override def openZipFile(path: String): Managed[Throwable, ZipFileReader[Throwable]] =

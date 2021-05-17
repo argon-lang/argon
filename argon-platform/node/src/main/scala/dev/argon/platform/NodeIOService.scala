@@ -11,7 +11,7 @@ import scala.scalajs.js.typedarray.Uint8Array
 
 import dev.argon.util.JSErrorHandler._
 
-@SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null", "dev.argon.warts.ZioEffect"))
+@SuppressWarnings(Array("scalafix:DisableSyntax.!=", "scalafix:DisableSyntax.null", "dev.argon.warts.ZioEffect"))
 private[platform] class NodeIOService extends FileIO.Service {
 
   override def readFile(path: String): Stream[Throwable, Byte] =

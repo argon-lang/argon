@@ -14,11 +14,9 @@ object AccessModifier {
   case object Private extends AccessModifier
   case object PrivateInternal extends AccessModifierGlobal
 
-  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
   implicit val eqInstance: Eq[AccessModifier] = cats.derived.semiauto.eq
 }
 
 object AccessModifierGlobal {
-  @SuppressWarnings(Array("org.wartremover.warts.Equals"))
   implicit val eqInstance: Eq[AccessModifierGlobal] = cats.derived.semiauto.eq
 }

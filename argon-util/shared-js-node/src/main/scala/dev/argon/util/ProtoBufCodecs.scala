@@ -7,7 +7,7 @@ import zio.stream._
 
 import scala.collection.mutable
 
-@SuppressWarnings(Array("org.wartremover.warts.Equals", "org.wartremover.warts.Null", "dev.argon.warts.ZioEffect"))
+@SuppressWarnings(Array("scalafix:Disable.eq", "scalafix:DisableSyntax.null", "scalafix:Disable.mutable", "dev.argon.warts.ZioEffect"))
 object ProtoBufCodecs {
 
   def deserializeProtocolBuffer[R, A <: GeneratedMessage]

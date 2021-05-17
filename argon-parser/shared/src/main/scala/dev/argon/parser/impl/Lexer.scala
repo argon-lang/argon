@@ -57,7 +57,7 @@ object Lexer {
           (lf.discard | (cr ++ lf).discard) --> const(Token.NewLine)
 
         case Rule.Whitespace =>
-          (tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0)) && s != "\r" && s != "\n")+~) --> const(())
+          (tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0)) && s =!= "\r" && s =!= "\n")+~) --> const(())
 
         case Rule.DoubleQuoteString =>
           val doubleQuote = token(CharacterCategory.Quote, "\"")
@@ -71,6 +71,7 @@ object Lexer {
 
           def isValidStringChar(c: String): Boolean = c =!= "\"" && c =!= "\\" && c =!= "#"
           val anyChar = tokenF(CharacterCategory.StringChar, isValidStringChar).observeSource --> Token.StringToken.StringPart.apply
+
 
           val unicodeEscape: TGrammar[Token.StringToken.StringPart] =
             (esc ++!

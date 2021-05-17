@@ -87,7 +87,7 @@ trait TypeSystem {
         case (Some(LoadUnit(_)), Some(LoadUnit(_))) => fromIsSame(true)
 
         case (Some(LoadLambda(aVar, aBody)), Some(LoadLambda(bVar, bBody))) =>
-          @SuppressWarnings(Array("org.wartremover.warts.Equals"))
+          @SuppressWarnings(Array("scalafix:DisableSyntax.=="))
           def isSameLambda = aBody == Substitutions(context)(bVar, fromSimpleType(LoadVariable(aVar))).substWrapExpr(bBody)
           fromIsSame(isSameLambda)
 

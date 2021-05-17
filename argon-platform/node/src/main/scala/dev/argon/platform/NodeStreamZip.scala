@@ -21,7 +21,7 @@ private[platform] object NodeStreamZip {
     val file: String
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
   object Options {
     def apply(file: String): Options =
       js.Dynamic.literal(

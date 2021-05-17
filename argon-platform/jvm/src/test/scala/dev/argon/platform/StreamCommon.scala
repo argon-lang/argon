@@ -8,7 +8,7 @@ import zio.blocking.Blocking
 import scala.annotation.unused
 import scala.collection.mutable.ArrayBuffer
 
-@SuppressWarnings(Array("org.wartremover.warts.All"))
+@SuppressWarnings(Array("scalafix:DisableSyntax.var", "scalafix:DisableSyntax.while"))
 object StreamCommon {
   def noReads(@unused inputStream: InputStream): RIO[Blocking, Unit] =
     IO.succeed(())

@@ -17,7 +17,7 @@ object GlobalDeclarationElementCompanion extends StreamableMessage[GlobalDeclara
     list.writeTo(output)
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Null"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.null"))
   override def readElement(input: CodedInputStream): GlobalDeclarationElement =
    input.readTag() match {
       case 0 => null

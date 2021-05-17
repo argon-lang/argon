@@ -12,7 +12,7 @@ object XmlParser {
     convertElem(doc.documentElement)
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null", "org.wartremover.warts.Equals"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf", "scalafix:DisableSyntax.null", "scalafix:Disable.eq"))
   private def convertChildNodes(node: Node): Seq[SNode] = {
     def convertSibs(node: Node): List[SNode] =
       if(node eq null) Nil
@@ -43,7 +43,7 @@ object XmlParser {
     )
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null", "org.wartremover.warts.Equals"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf", "scalafix:DisableSyntax.null", "scalafix:Disable.eq"))
   def convertAttrMap(attributes: NamedNodeMap, index: Int): SMetaData =
     if(index < attributes.length) {
       val attr = attributes(index).asInstanceOf[Attr]

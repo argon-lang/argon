@@ -62,7 +62,7 @@ private[js] final case class JSModuleExtractorImpl(blocking: Blocking.Service) e
 
 object JSModuleExtractorImpl {
 
-  @SuppressWarnings(Array("org.wartremover.warts.All"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.==", "scalafix:DisableSyntax.null"))
   final class ResourceFileSystem(resourcePath: String) extends FileSystem {
 
     private def getResURL(path: Path): URL = {

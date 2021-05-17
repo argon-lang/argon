@@ -10,7 +10,7 @@ import scala.scalajs.js.JSON
 
 final class JavaScriptNodeVMTestCaseRunner(protected val backend: JSBackend, protected val references: FileList) extends JavaScriptTestCaseRunnerBase {
 
-  @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf", "org.wartremover.warts.Null", "org.wartremover.warts.ToString", "dev.argon.warts.ZioEffect"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf", "scalafix:DisableSyntax.null", "org.wartremover.warts.ToString", "dev.argon.warts.ZioEffect"))
   override protected def executeJS(compiledFile: String)(modules: Seq[FileInfo]): Task[String] =
     IO.effectSuspend {
       val stdout = new MemoryWritableStream()

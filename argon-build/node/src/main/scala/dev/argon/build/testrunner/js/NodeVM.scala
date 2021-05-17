@@ -27,7 +27,7 @@ object NodeVM extends js.Any {
 
 }
 
-@SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+@SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
 object NodeVMUtil {
   import NodeVM.SourceTextModuleOptions
 

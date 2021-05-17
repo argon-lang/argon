@@ -18,7 +18,7 @@ private[platform] class WritableZStream[R] private(runtime: Runtime[R], queue: Q
     Chunk.fromArray(array)
   }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Null", "dev.argon.warts.ZioEffect"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.null", "dev.argon.warts.ZioEffect"))
   override protected def _write(buffer: NodeBuffer, encoding: String, callback: js.Function1[Any, Unit]): Unit =
     runtime.unsafeRunAsync(
       queue.offer(Exit.Success(bufferToChunk(buffer)))
@@ -27,7 +27,7 @@ private[platform] class WritableZStream[R] private(runtime: Runtime[R], queue: Q
       case Exit.Failure(cause) => callback(cause)
     }
 
-  @SuppressWarnings(Array("org.wartremover.warts.Null", "org.wartremover.warts.Equals"))
+  @SuppressWarnings(Array("scalafix:DisableSyntax.null"))
   override protected def _destroy(err: Any, callback: js.Function1[Any, Unit]): Unit =
     runtime.unsafeRunAsync(
       queue.offer(Exit.fail(None))

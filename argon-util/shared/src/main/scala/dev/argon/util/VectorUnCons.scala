@@ -16,7 +16,7 @@ object VectorUnCons {
     final case class NonEmpty[+A](init: Vector[A], last: A) extends Result[A]
     case object Empty extends Result[Nothing]
 
-    @SuppressWarnings(Array("org.wartremover.warts.TraversableOps"))
+
     def unapply[A](arg: Vector[A]): Some[Result[A]] =
       Some(arg.lastOption.fold[Result[A]](Empty) { last => NonEmpty(arg.take(arg.size - 1), last) })
   }

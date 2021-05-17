@@ -6,6 +6,8 @@ import NodePlatformImplicits._
 val graalVersion = "21.1.0"
 val zioVersion = "1.0.7"
 
+ThisBuild / scalafixDependencies += "com.github.vovapolu" %% "scaluzzi" % "0.1.18"
+
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
   "ARGON_TEST_CASES" -> file("testcases").getAbsolutePath,
@@ -156,6 +158,7 @@ lazy val compilerOptions = Seq(
 
   semanticdbEnabled := true,
   semanticdbVersion := scalafixSemanticdb.revision,
+  scalafixOnCompile := true,
 )
 
 def argonLibraries = Seq("Argon.Core")
@@ -697,17 +700,7 @@ lazy val js_module_extractor = project.in(file("argon-js-module-extractor"))
   .enablePlugins(ScalaJSPlugin, NpmUtil)
   .settings(
     commonSettingsNoLibs,
-
-    scalacOptions ++= Seq(
-      "-encoding", "UTF-8",
-      "-unchecked",
-      "-deprecation",
-      "-Xfatal-warnings",
-      "-Ypatmat-exhaust-depth", "500",
-      "-language:higherKinds",
-      "-language:existentials",
-      "-language:implicitConversions",
-    ),
+    compilerOptions,
 
     scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
 

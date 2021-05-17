@@ -37,7 +37,7 @@ private[io] object JSZip {
   }
   object JSZipGeneratorOptions {
 
-    @SuppressWarnings(Array("org.wartremover.warts.AsInstanceOf"))
+    @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
     def apply(`type`: "uint8array"): JSZipGeneratorOptions =
       js.Dynamic.literal(
         `type` = `type`,
