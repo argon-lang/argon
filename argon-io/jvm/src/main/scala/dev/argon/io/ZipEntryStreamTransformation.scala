@@ -23,7 +23,7 @@ private[io] object ZipEntryStreamTransformation {
               ZSink.fromOutputStream(zipStream).push.use { push =>
                 dataStream
                   .run(
-                    ZSink.fromPush { chunkOpt: Option[Chunk[Byte]] =>
+                    ZSink.fromPush { (chunkOpt: Option[Chunk[Byte]]) =>
                       push(chunkOpt)
                     }
                   )

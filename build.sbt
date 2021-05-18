@@ -53,6 +53,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
   ) ++ (CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((3, _)) => Seq(
+      "com.softwaremill.magnolia" %% "magnolia-core" % "2.0.0-M3",
     )
     case _ => Seq(
       "org.typelevel" %%% "kittens" % "2.3.1",

@@ -490,12 +490,14 @@ object Grammar {
       }
 
     override def parseEnd(pos: FilePosition, options: TParseOptions): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
-      grammarA.parseEnd(pos, options).flatMap {
-        case (VectorUnCons(VectorUnCons.Empty), valueA) =>
-          nextHandler(valueA, options).completeResult(pos)
+      grammarA.parseEnd(pos, options).flatMap[T] { (remaining: Vector[WithSource[TToken]], valueA: WithSource[A]) =>
+        remaining match {
+          case VectorUnCons(VectorUnCons.Empty) =>
+            nextHandler(valueA, options).completeResult(pos)
 
-        case (VectorUnCons(VectorUnCons.NonEmpty(tokenHead, tokenTail)), valueA) =>
-          nextHandler(valueA, options).continue(NonEmptyVector(tokenHead, tokenTail)).completeResult(pos)
+          case VectorUnCons(VectorUnCons.NonEmpty(tokenHead, tokenTail)) =>
+            nextHandler(valueA, options).continue(NonEmptyVector(tokenHead, tokenTail)).completeResult(pos)
+        }
       }
 
   }
