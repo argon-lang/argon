@@ -13,7 +13,7 @@ object JSModuleExtractor {
   @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf", "scalafix:DisableSyntax.=="))
   def usingScalaMap(module: String): Map[String, String] = {
 
-    val mod = Acorn.parse(module, AcornParserOptions(ecmaVersion = 11, sourceType = "module")).asInstanceOf[js.Dynamic]
+    val mod = Acorn.parse(module, new AcornParserOptions { val ecmaVersion = 11; val sourceType = "module" }).asInstanceOf[js.Dynamic]
 
     mod.body.asInstanceOf[js.Array[js.Dynamic]]
       .toSeq

@@ -477,10 +477,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               casesNE = NonEmptyList.fromList(cases.toList).getOrElse { ??? }
               patternCases <- casesNE.traverse {
                 case WithSource(parser.MatchExprCase(pattern, body), _) =>
-                  for {
-                    (patternExpr, env2) <- convertPattern(env)(valueExprType)(pattern)
-                    bodyExpr <- convertStmts(env2)(body).forExpectedType(expectedType)
-                  } yield PatternCase(patternExpr, fromSimpleType(bodyExpr))
+                  convertPattern(env)(valueExprType)(pattern).flatMap { case (patternExpr, env2) =>
+                    convertStmts(env2)(body).forExpectedType(expectedType).map { bodyExpr =>
+                      PatternCase(patternExpr, fromSimpleType(bodyExpr))
+                    }
+                  }
               }
             } yield PatternMatch(fromSimpleType(valueExpr), patternCases)
 
@@ -1502,34 +1503,37 @@ object ExpressionConverter {
 
     val ts = HoleTypeSystem(context.typeSystem)
 
-    for {
-      converter <- createConverter(context)(ts)
+    createConverter(context)(ts)
+      .flatMap { converter =>
+        val tsConverter = HoleTypeSystem.holeTypeConverter(context)(context.typeSystem)(ts)
+        val env2 = Env(
+          effectInfo = env.effectInfo,
+          callerId = env.callerId,
+          variableOwner = env.variableOwner,
+          fileSpec = env.fileSpec,
+          currentModule = env.currentModule,
+          referencedModules = env.referencedModules,
+          scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
+          allowAbstractConstructor = env.allowAbstractConstructor,
+          accessTokens = env.accessTokens,
+        )
 
-      tsConverter = HoleTypeSystem.holeTypeConverter(context)(context.typeSystem)(ts)
-
-      env2 = Env(
-        effectInfo = env.effectInfo,
-        callerId = env.callerId,
-        variableOwner = env.variableOwner,
-        fileSpec = env.fileSpec,
-        currentModule = env.currentModule,
-        referencedModules = env.referencedModules,
-        scope = env.scope.convertScopeContext(converter.scopeContext)(tsConverter),
-        allowAbstractConstructor = env.allowAbstractConstructor,
-        accessTokens = env.accessTokens,
-      )
-
-      convExpectedType <- tsConverter.convertTypeSystem(expectedType)
-      convExpr <- fillHoles(context)(ts)(converter)(
-        converter
-          .convertStmts(env2)(stmts)
-          .forExpectedType(convExpectedType)
-          .map(ts.fromSimpleType)
-      )
-
-      _ <- Compilation.requireM(Erasure(context)(context.typeSystem).isExprErased(convExpr).map { !_ })(DiagnosticError.NonErasedExpressionExpected(DiagnosticSource.SourceFile(env.fileSpec, stmts.location)))
-
-    } yield convExpr
+        tsConverter.convertTypeSystem(expectedType)
+          .flatMap(convExpectedType =>
+            fillHoles(context)(ts)(converter)(
+              converter
+                .convertStmts(env2)(stmts)
+                .forExpectedType(convExpectedType)
+                .map(ts.fromSimpleType)
+            )
+              .flatMap(convExpr =>
+                Compilation.requireM(Erasure(context)(context.typeSystem).isExprErased(convExpr).map {
+                  !_
+                })(DiagnosticError.NonErasedExpressionExpected(DiagnosticSource.SourceFile(env.fileSpec, stmts.location)))
+                  .map(_ => convExpr)
+              )
+          )
+      }
   }
 
   def convertExpression

@@ -23,10 +23,10 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
       body <- impl match {
         case FunctionImplementation.Extern(_, expr) => JSExpressionRaw(expr).pure[Comp]
         case FunctionImplementation.Expression(expr) =>
-          for {
-            (paramList, paramMap) <- createParameterList(sig)
-            jsBody <- addToVarMap(paramMap.map { case (variable, name) => variable.id -> new LocalVariableLoader(variable, JSIdentifier(name)) }: _*)(convertStmt(useReturn = true)(expr))
-          } yield JSFunctionExpression(None, paramList, jsBody)
+          createParameterList(sig).flatMap { case (paramList, paramMap) =>
+            addToVarMap(paramMap.map { case (variable, name) => variable.id -> new LocalVariableLoader(variable, JSIdentifier(name)) }: _*)(convertStmt(useReturn = true)(expr))
+              .map { jsBody => JSFunctionExpression(None, paramList, jsBody) }
+          }
       }
 
       createFunction <- coreLibExport("createFunction")
@@ -211,7 +211,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
 
       ctorImpl <- ctor.payload : Comp[context.TDataConstructorImplementation]
-      (ctorFunc, paramMapping) <- ctorImpl match {
+      ctorData <- ctorImpl match {
         case DataConstructorImplementation(expr) =>
           for {
             thisVarId <- getNextSymbolId
@@ -219,7 +219,8 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
             statementConverter = StatementConverterDataCtorFieldBinding(thisVarName, localFieldMappingRef)
 
-            (paramListNoThis, paramMapping) <- createParameterList(sig)
+            paramListData <- createParameterList(sig)
+            (paramListNoThis, paramMapping) = paramListData
             paramList = JSFunctionParameter(JSBindingIdentifier(thisVarName), paramListNoThis)
 
             initObjectExprs = paramMapping
@@ -237,6 +238,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
             )
           } yield (JSFunctionExpression(None, paramList, initObjectExprs ++ body), paramMapping)
       }
+      (ctorFunc, paramMapping) = ctorData
 
       localFieldMapping <- localFieldMappingRef.get
 
@@ -298,7 +300,8 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
             thisVarNum <- getNextSymbolId
             thisVarName = id"this_$thisVarNum"
 
-            (paramListNoThis, paramMap) <- createParameterList(sig)
+            paramListData <- createParameterList(sig)
+            (paramListNoThis, paramMap) = paramListData
             paramList = JSFunctionParameter(JSBindingIdentifier(thisVarName), paramListNoThis)
 
             body <- addToVarMap(
@@ -382,14 +385,15 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
             thisVarNum <- getNextSymbolId
             thisVarName = id"this_$thisVarNum"
 
-            (paramListNoThis, paramMap) <- createParameterList(sig)
+            paramListData <- createParameterList(sig)
+            (paramListNoThis, paramMap) = paramListData
             paramList = JSFunctionParameter(JSBindingIdentifier(thisVarName), paramListNoThis)
             paramVarMapping = paramMap
               .map { case (variable, name) =>
                 variable.id -> VariableLoader.fromExpr(JSIdentifier(name))
               }
 
-            (initStmts, initVarMapping) <- body.initStatements.foldLeftM[Emit, (Vector[JSStatement], Seq[(VariableId, VariableLoader)])]((Vector.empty[JSStatement], paramVarMapping)) {
+            initStmtData <- body.initStatements.foldLeftM[Emit, (Vector[JSStatement], Seq[(VariableId, VariableLoader)])]((Vector.empty[JSStatement], paramVarMapping)) {
               case ((acc, varMapping), ClassConstructorStatementExpr(expr)) =>
                 for {
                   localVarMapRef <- Ref.make[VarMap](Map.empty)
@@ -413,6 +417,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
                 } yield (acc :+ initFieldStatement, newMapping)
             }
+            (initStmts, initVarMapping) = initStmtData
 
             baseCall <- body.baseConstructorCall.traverse { baseCallExpr =>
               val baseClass = baseCallExpr.classCtor.value.ownerClass

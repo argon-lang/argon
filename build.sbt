@@ -41,13 +41,11 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
     "org.scala-lang.modules" %%% "scala-xml" % "2.0.0",
 
     "org.typelevel" %%% "cats-core" % "2.6.1",
-    "org.typelevel" %%% "kittens" % "2.3.1",
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
     "dev.zio" %%% "zio-interop-cats" % "3.0.2.0",
 
 
-    "com.chuusai" %%% "shapeless" % "2.3.6",
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 
@@ -57,8 +55,9 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
     case Some((3, _)) => Seq(
     )
     case _ => Seq(
+      "org.typelevel" %%% "kittens" % "2.3.1",
+      "com.chuusai" %%% "shapeless" % "2.3.6",
       compilerPlugin("org.typelevel" %% "kind-projector" % "0.13.0" cross CrossVersion.full),
-      compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1"),
     )
   }),
 
@@ -128,8 +127,6 @@ lazy val compilerOptions = Seq(
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
     "-release", "11",
-    "-Yrangepos",
-    "-Wunused",
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
@@ -140,6 +137,8 @@ lazy val compilerOptions = Seq(
     )
     case _ => Seq (
       "-Xsource:3",
+      "-Yrangepos",
+      "-Wunused",
       "-Wconf:cat=lint:error," +
         "cat=deprecation:error," +
         "cat=feature:error," +
@@ -158,7 +157,7 @@ lazy val compilerOptions = Seq(
 
   semanticdbEnabled := true,
   semanticdbVersion := scalafixSemanticdb.revision,
-  scalafixOnCompile := true,
+  scalafixOnCompile := CrossVersion.partialVersion(scalaVersion.value).forall { case (3, _) => false case _ => true },
 )
 
 def argonLibraries = Seq("Argon.Core")
@@ -280,16 +279,6 @@ lazy val argon_build_baseJVM = argon_build_base.jvm
 lazy val argon_build_baseJS = argon_build_base.js
 lazy val argon_build_baseNode = argon_build_base.node
 
-
-lazy val argon_plugin_api = project.in(file("argon-plugin-api"))
-  .dependsOn(modulefmtJVM)
-  .settings(
-    commonSettingsNoLibs,
-    commonSettingsAnnotations,
-    compilerOptions,
-
-    name := "argon-plugin-api",
-  )
 
 lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-grammar"))
   .dependsOn(arstream, util)
@@ -662,8 +651,7 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
           "-Xlint:-deprecation",
         ),
 
-        Compile / PB.targets += PB.gens.java -> (Compile / sourceManaged).value,
-        Compile / PB.targets += scalapb.gen(javaConversions=true) -> (Compile / sourceManaged).value,
+        Compile / PB.targets += scalapb.gen() -> (Compile / sourceManaged).value,
       )
   )
   .jsConfigure(
@@ -682,9 +670,7 @@ lazy val modulefmt = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file
 
     scalacOptions ++= Seq(
       "-encoding", "UTF-8",
-      "-Wconf:cat=deprecation&msg=Auto-application:silent",
       "-Xfatal-warnings",
-      "-Ypatmat-exhaust-depth", "500",
       "-language:higherKinds",
       "-language:existentials",
       "-language:implicitConversions",

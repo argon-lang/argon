@@ -14,11 +14,11 @@ object StreamExtensions {
             stream.mapChunksM { chunk =>
               NonEmptyChunk.fromChunk(chunk) match {
                 case Some(chunk) =>
-                  for {
-                    s <- state.get
-                    (s, outChunk) <- transformation.consume(s, chunk)
-                    _ <- state.set(s)
-                  } yield outChunk
+                  state.get.flatMap { s =>
+                    transformation.consume(s, chunk).flatMap { case (s, outChunk) =>
+                      state.set(s).as(outChunk)
+                    }
+                  }
                 case None => IO.succeed(Chunk.empty)
               }
             } ++ ZStream.unwrap(

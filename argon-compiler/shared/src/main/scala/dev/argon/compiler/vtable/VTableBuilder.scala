@@ -83,10 +83,8 @@ object VTableBuilder {
           else
             VTableEntryMethod(AbsRef(method.method))
 
-        for {
-          sig <- method.method.signatureUnsubstituted
-
-          VTable(methodMap) <-
+        method.method.signatureUnsubstituted.flatMap { sig =>
+          (
             if(method.method.isImplicitOverride)
               baseTypeVTable.methodMap
                 .toSeq
@@ -112,11 +110,12 @@ object VTableBuilder {
               VTable(
                 methodMap = Map.empty
               ).pure[Comp]
-
-
-        } yield VTable(
-          methodMap = methodMap + (AbsRef(method.method) -> VTableEntry(sig, source, newEntryImpl))
-        )
+          ).map { case VTable(methodMap) =>
+            VTable(
+              methodMap = methodMap + (AbsRef(method.method) -> VTableEntry(sig, source, newEntryImpl))
+            )
+          }
+        }
       }
 
       private def addNewMethods[TPayloadSpec[_, _]: PayloadSpecInfo](methods: Vector[MethodBinding[context.type, TPayloadSpec]])(source: EntrySource)(baseTypeVTable: VT): Comp[VT] =

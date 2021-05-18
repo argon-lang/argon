@@ -1190,23 +1190,25 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
         for {
           ctor <- findClassConstructor(id)
           args <- ZIO.foreach(t.args)(resolveExpr(_))
-          (classType, ctorArgs) <- args match {
+          classAndArgs <- args match {
             case (classType: ClassType[context.type, TTypeWrapper]) +: ctorArgs =>
               IO.succeed((classType, ctorArgs))
 
             case _ => Compilation.forErrors(invalidModuleFormatError)
           }
+          (classType, ctorArgs) = classAndArgs
         } yield ClassConstructorCall(classType, ctor, ctorArgs.toVector)
 
       case ArgonModule.Expression.ExprType.DataConstructorCall(_) =>
         for {
           args <- ZIO.foreach(t.args)(resolveExpr(_))
-          (dataCtor, ctorArgs) <- args match {
+          dataCtorArgs <- args match {
             case (dataCtor: DataConstructorType[context.type, TTypeWrapper]) +: ctorArgs =>
               IO.succeed((dataCtor, ctorArgs))
 
             case _ => Compilation.forErrors(invalidModuleFormatError)
           }
+          (dataCtor, ctorArgs) = dataCtorArgs
         } yield DataConstructorCall(dataCtor, ctorArgs.toVector)
 
       case ArgonModule.Expression.ExprType.EnsureExecuted(_) =>

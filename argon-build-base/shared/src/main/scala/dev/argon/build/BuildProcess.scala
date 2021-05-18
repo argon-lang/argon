@@ -109,44 +109,46 @@ object BuildProcess {
     compilerInput: CompilerInput[backend.BackendOptionID],
     sourceCodeStream: CompStream[SourceAST]
   )
-  : RCompManaged[FileIO with ZipRead with MaybeBlocking, BuildResult.Aux[backend.type]] = for {
-    env <- ZManaged.environment[MaybeBlocking]
-    ctx <- ZManaged.fromEffect(Context.make(backend)(compilerInput))
+  : RCompManaged[FileIO with ZipRead with MaybeBlocking, BuildResult.Aux[backend.type]] =
+    ZManaged.environment[MaybeBlocking].flatMap { env =>
+      ZManaged.fromEffect(Context.make(backend)(compilerInput)).flatMap { ctx =>
+        val backend2: backend.type = backend
+        loadReferences(backend)(compilerInput).flatMap { references =>
+          createModule(compilerInput.options)(ctx)(references)(sourceCodeStream).map { module =>
+            new BuildResult {
+              override val backend: backend2.type = backend2
+              override val context: ctx.type = ctx
 
-    backend2: backend.type = backend
-
-    references <- loadReferences(backend)(compilerInput)
-    module <- createModule(compilerInput.options)(ctx)(references)(sourceCodeStream)
-  } yield new BuildResult {
-    override val backend: backend2.type = backend2
-    override val context: ctx.type = ctx
-
-    private final class ModuleBuildArtifactImpl(moduleOptions: ModuleEmitOptions) extends ModuleBuildArtifact {
+              private final class ModuleBuildArtifactImpl(moduleOptions: ModuleEmitOptions) extends ModuleBuildArtifact {
 
 
-      override def serialized: UIO[ArgonModuleSerialized] =
-        ModuleSerializer.serialize(context)(moduleOptions)(module)
+                override def serialized: UIO[ArgonModuleSerialized] =
+                  ModuleSerializer.serialize(context)(moduleOptions)(module)
 
-      override def asStream: CompStream[Byte] =
-        ZStream.unwrap(serialized.map(ZipModuleWriter.writeModule)).provide(env)
+                override def asStream: CompStream[Byte] =
+                  ZStream.unwrap(serialized.map(ZipModuleWriter.writeModule)).provide(env)
 
-    }
+              }
 
-    override val generalOutput: Options[Id, GeneralOutputOptionID] =
-      Options.fromFunction(new Options.OptionValueFunction[Id, GeneralOutputOptionID] {
-        override def apply[E](id: GeneralOutputOptionID { type ElementType = E }): Id[E] = id match {
-          case GeneralOutputOptionID.DeclarationModule =>
-            new ModuleBuildArtifactImpl(ModuleEmitOptions(moduleType = ModuleEmitOptions.DeclarationModule))
+              override val generalOutput: Options[Id, GeneralOutputOptionID] =
+                Options.fromFunction(new Options.OptionValueFunction[Id, GeneralOutputOptionID] {
+                  override def apply[E](id: GeneralOutputOptionID {type ElementType = E}): Id[E] = id match {
+                    case GeneralOutputOptionID.DeclarationModule =>
+                      new ModuleBuildArtifactImpl(ModuleEmitOptions(moduleType = ModuleEmitOptions.DeclarationModule))
 
-          case GeneralOutputOptionID.InterfaceModule =>
-            new ModuleBuildArtifactImpl(ModuleEmitOptions(moduleType = ModuleEmitOptions.ReferenceModule))
+                    case GeneralOutputOptionID.InterfaceModule =>
+                      new ModuleBuildArtifactImpl(ModuleEmitOptions(moduleType = ModuleEmitOptions.ReferenceModule))
 
+                  }
+                })
+
+              override val backendOutput: Options[Id, backend.OutputOptionID] =
+                backend.emitModule(compilerInput.backendOptions)(ctx)(module)
+            }
+          }
         }
-      })
-
-    override val backendOutput: Options[Id, backend.OutputOptionID] =
-      backend.emitModule(compilerInput.backendOptions)(ctx)(module)
-  }
+      }
+    }
 
 
 

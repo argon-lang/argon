@@ -52,23 +52,28 @@ trait StreamTransformation[-R, +E, -A, -X, +B, +Y] {
         s2 <- other.start
       } yield (s1, s2)
 
-      override def consume(state: TransformState, values: NonEmptyChunk[A]): ZIO[R2, E2, (TransformState, Chunk[C])] = for {
-        (s1, chunkB) <- StreamTransformation.this.consume(state._1, values)
-        (s2, chunkC) <- NonEmptyChunk.fromChunk(chunkB) match {
-          case Some(chunkB) => other.consume(state._2, chunkB)
-          case None => IO.succeed((state._2, Chunk.empty))
+      override def consume(state: TransformState, values: NonEmptyChunk[A]): ZIO[R2, E2, (TransformState, Chunk[C])] =
+        StreamTransformation.this.consume(state._1, values).flatMap { case (s1, chunkB) =>
+          (NonEmptyChunk.fromChunk(chunkB) match {
+            case Some(chunkB) => other.consume(state._2, chunkB)
+            case None => IO.succeed((state._2, Chunk.empty))
+          }).map { case (s2, chunkC) =>
+            ((s1, s2), chunkC)
+          }
         }
-      } yield ((s1, s2), chunkC)
 
 
-      override def finish(state: TransformState, value: X): ZIO[R2, E2, (Chunk[C], Z)] = for {
-        (chunkB, y) <- StreamTransformation.this.finish(state._1, value)
-        (s2, chunkC1) <- NonEmptyChunk.fromChunk(chunkB) match {
-          case Some(chunkB) => other.consume(state._2, chunkB)
-          case None => IO.succeed((state._2, Chunk.empty))
+      override def finish(state: TransformState, value: X): ZIO[R2, E2, (Chunk[C], Z)] =
+        StreamTransformation.this.finish(state._1, value).flatMap { case (chunkB, y) =>
+          (NonEmptyChunk.fromChunk(chunkB) match {
+            case Some(chunkB) => other.consume(state._2, chunkB)
+            case None => IO.succeed((state._2, Chunk.empty))
+          }).flatMap { case (s2, chunkC1) =>
+            other.finish(s2, y).map { case (chunkC2, z) =>
+              (chunkC1 ++ chunkC2, z)
+            }
+          }
         }
-        (chunkC2, z) <- other.finish(s2, y)
-      } yield (chunkC1 ++ chunkC2, z)
     }
 
 }

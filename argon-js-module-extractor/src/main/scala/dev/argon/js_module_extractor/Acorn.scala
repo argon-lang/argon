@@ -24,16 +24,5 @@ object AcornParserOptions {
   type AllowedEcmaVersions = Int
   type SourceType = String
 
-  @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
-  def apply
-  (
-    ecmaVersion: js.UndefOr[AllowedEcmaVersions] = js.undefined,
-    sourceType: js.UndefOr[SourceType] = js.undefined,
-  ): AcornParserOptions =
-    js.Dynamic.literal(
-      ecmaVersion = ecmaVersion,
-      sourceType = sourceType,
-    ).asInstanceOf[AcornParserOptions]
-
 }
 
