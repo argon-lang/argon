@@ -1,18 +1,13 @@
 package dev.argon.backend.js
 
-import dev.argon.options.{FileList, OptionID, SingleFile}
+import cats.Id
+import dev.argon.options.{FileList, OptionID, SingleFile, TypedOptionID}
 
-sealed trait JSBackendOptionID extends OptionID
+sealed trait JSBackendOptionID extends OptionID {
+  override type Decoded[A] = A
+}
 object JSBackendOptionID {
-  case object Externs extends JSBackendOptionID {
-    override type ElementType = FileList
-  }
-
-  case object InjectBefore extends JSBackendOptionID {
-    override type ElementType = Option[SingleFile]
-  }
-
-  case object InjectAfter extends JSBackendOptionID {
-    override type ElementType = Option[SingleFile]
-  }
+  case object Externs extends TypedOptionID[Id, FileList] with JSBackendOptionID
+  case object InjectBefore extends TypedOptionID[Id, Option[SingleFile]] with JSBackendOptionID
+  case object InjectAfter extends TypedOptionID[Id, Option[SingleFile]] with JSBackendOptionID
 }

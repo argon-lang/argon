@@ -116,10 +116,10 @@ object Program extends PlatformApp {
     }
 
 
-  private def findOptionID[O <: OptionID, Decoded[_]]
+  private def findOptionID[O <: OptionID { type Decoded[A] = Dec[A] }, Dec[_]]
   (
     name: String,
-    optionsHandler: OptionsHandler[O, Decoded],
+    optionsHandler: OptionsHandler[O, Dec],
   ): Option[O] = {
     val info = optionsHandler.optionsToRepr(optionsHandler.info)
     optionsHandler.combineRepr(info, info)(
@@ -132,13 +132,13 @@ object Program extends PlatformApp {
   }
 
 
-  private def parseOption[O <: OptionID, Decoded[_]]
+  private def parseOption[O <: OptionID { type Decoded[A] = Dec[A] }, Dec[_]]
   (
     name: String,
     value: String,
-    optionsHandler: OptionsHandler[O, Decoded],
-    options: Options[Lambda[X => Option[Decoded[X]]], O]
-  ): ZIO[Console, Option[ExitCode], Options[Lambda[X => Option[Decoded[X]]], O]] =
+    optionsHandler: OptionsHandler[O, Dec],
+    options: Options[Lambda[X => Option[Dec[X]]], O]
+  ): ZIO[Console, Option[ExitCode], Options[Lambda[X => Option[Dec[X]]], O]] =
     ZIO.fromOption(findOptionID(name, optionsHandler)).flatMap { id =>
       val decoder = optionsHandler.decoder.get(id)
       val decodedRes =
@@ -160,7 +160,7 @@ object Program extends PlatformApp {
     }
 
 
-  private def resolveOptions[O <: OptionID, Decoded[_]](options: Options[Option, O], handler: OptionsHandler[O, Decoded]): ZIO[Console, ExitCode, Options[Id, O]] =
+  private def resolveOptions[O <: OptionID { type Decoded[A] = Dec[A] }, Dec[_]](options: Options[Option, O], handler: OptionsHandler[O, Dec]): ZIO[Console, ExitCode, Options[Id, O]] =
     IO.fromEither(handler.inferDefaults(options))
       .flatMapError { id => putStrLn("Missing value for option: " + handler.info.get(id).name).orDie.as(ExitCode.failure) }
 

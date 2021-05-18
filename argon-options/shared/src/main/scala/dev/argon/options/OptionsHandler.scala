@@ -4,7 +4,7 @@ import cats.{Applicative, Id, ~>}
 import dev.argon.options.OptionsHandler.{CombineFunction, InferDefaultsFunction}
 import shapeless.HNil
 
-trait OptionsHandler[O <: OptionID, Decoded[_]] {
+trait OptionsHandler[O <: OptionID { type Decoded[A] = Dec[A] }, Dec[A]] {
   type OptRepr[A[_]]
   def ids: OptRepr[Lambda[X => O { type ElementType = X }]]
   def combineRepr[A[_], B[_], C[_], F[_]: Applicative](lista: OptRepr[A], listb: OptRepr[B])(f: CombineFunction[O, A, B, C, F]): F[OptRepr[C]]
@@ -23,7 +23,12 @@ trait OptionsHandler[O <: OptionID, Decoded[_]] {
   def reprToOptions[A[_]](list: OptRepr[A]): Options[A, O]
 
   def info: Options[OptionInfo, O]
-  def decoder: Options[Lambda[X => OptionDecoder[Decoded[X]]], O]
+  final def decoder: Options[Lambda[X => OptionDecoder[Dec[X]]], O] = Options.fromFunction(
+    new Options.OptionValueFunction[Lambda[X => OptionDecoder[Dec[X]]], O] {
+      override def apply[E](id: O { type ElementType = E }): OptionDecoder[Dec[E]] =
+        id.decoder
+    }
+  )
 
   final def empty[A[_]]: Options[Lambda[X => Option[A[X]]], O] = new Options.MapBackedOptionOptions[A, O](Map.empty)
 
@@ -62,8 +67,6 @@ object OptionsHandler {
       })
 
     override def info: Options[OptionInfo, Nothing] = reprToOptions(HNil)
-
-    override def decoder: Options[Lambda[X => OptionDecoder[Decoded[X]]], Nothing] = reprToOptions(HNil)
   }
 
   // This is only needed to prevent AbstractMethodError

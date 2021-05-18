@@ -12,10 +12,10 @@ trait Backend {
   val id: String
   val name: String
 
-  type BackendOptionID <: OptionID
+  type BackendOptionID <: OptionID { type Decoded[A] = A }
   val backendOptions: OptionsHandler[BackendOptionID, Id]
 
-  type OutputOptionID <: OptionID { type ElementType <: BuildArtifact }
+  type OutputOptionID <: OptionID { type ElementType <: BuildArtifact; type Decoded[_] = SingleFile }
   val outputOptions: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]]
 
   def moduleLoaders(options: Options[Id, BackendOptionID]): Seq[ModuleLoader]

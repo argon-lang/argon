@@ -56,7 +56,7 @@ object BuildProcess {
     }
 
 
-  private def emit[OutputOptionID <: OptionID { type ElementType <: BuildArtifact }](emittedFiles: Ref[Set[String]])(handler: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]])(fileNames: Options[Lambda[X => Option[SingleFile]], OutputOptionID], data: Options[Id, OutputOptionID]): RComp[FileIO, Unit] =
+  private def emit[OutputOptionID <: OptionID { type ElementType <: BuildArtifact; type Decoded[_] = SingleFile }](emittedFiles: Ref[Set[String]])(handler: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]])(fileNames: Options[Lambda[X => Option[SingleFile]], OutputOptionID], data: Options[Id, OutputOptionID]): RComp[FileIO, Unit] =
     handler.combineRepr[
         Lambda[AX => Option[SingleFile]],
         Id,

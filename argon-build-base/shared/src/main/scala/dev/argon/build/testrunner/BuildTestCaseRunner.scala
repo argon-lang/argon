@@ -17,7 +17,7 @@ final class BuildTestCaseRunner(protected val backend: Backend, referencePaths: 
 
   override val name: String = s"Compilation (${backend.name})"
 
-  private def emitDrain[OutputOptionID <: OptionID { type ElementType <: BuildArtifact }](handler: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]])(data: Options[Id, OutputOptionID]): RComp[FileIO, Unit] =
+  private def emitDrain[OutputOptionID <: OptionID { type ElementType <: BuildArtifact; type Decoded[_] = SingleFile }](handler: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]])(data: Options[Id, OutputOptionID]): RComp[FileIO, Unit] =
     handler.combineRepr[
       OptionInfo,
       Id,

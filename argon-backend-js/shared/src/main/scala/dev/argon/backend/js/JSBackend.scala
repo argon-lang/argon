@@ -1,19 +1,18 @@
 package dev.argon.backend.js
 
-import cats.{Applicative, Id}
+import cats.Id
 import dev.argon.compiler._
 import dev.argon.backend._
 import dev.argon.backend.js.JSBackend.PlatformId
 import dev.argon.compiler.core.{ArModule, Context}
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.ModuleLoader
-import dev.argon.options.{FileList, OptionDecoder, OptionInfo, Options, OptionsHandler, SingleFile}
+import dev.argon.options.{FileList, OptionInfo, Options, OptionsHandler, OptionsHandlerImpl, SingleFile}
 import dev.argon.compiler.output.TextBuildArtifact
 import zio._
 import dev.argon.io.fileio.FileIO
 import dev.argon.io.fileio.ZipRead
 import dev.argon.util.MaybeBlocking
-import shapeless.{::, HNil}
 import zio.stream.ZStream
 
 
@@ -24,30 +23,7 @@ sealed abstract class JSBackend extends Backend {
 
 
   override type BackendOptionID = JSBackendOptionID
-  final override val backendOptions: OptionsHandler[JSBackendOptionID, Id] = new OptionsHandler[JSBackendOptionID, Id] {
-
-
-    override type OptRepr[A[_]] = A[FileList] :: A[Option[SingleFile]] :: A[Option[SingleFile]] :: HNil
-
-
-    override def ids: OptRepr[Lambda[X => BackendOptionID { type ElementType = X }]] =
-      JSBackendOptionID.Externs :: JSBackendOptionID.InjectAfter :: JSBackendOptionID.InjectBefore :: HNil
-
-
-    override def combineRepr[A[_], B[_], C[_], F[_] : Applicative](lista: OptRepr[A], listb: OptRepr[B])(f: OptionsHandler.CombineFunction[JSBackendOptionID, A, B, C, F]): F[OptRepr[C]] = {
-      import dev.argon.options.OptionCombineHelper._
-      combineHLists(ids, lista, listb)(f)
-    }
-
-    override def reprToOptions[A[_]](list: OptRepr[A]): Options[A, JSBackendOptionID] =
-      Options.fromFunction(new Options.OptionValueFunction[A, JSBackendOptionID] {
-        override def apply[E](id: JSBackendOptionID { type ElementType = E }): A[E] = id match {
-          case JSBackendOptionID.Externs => list.head
-          case JSBackendOptionID.InjectBefore => list.tail.head
-          case JSBackendOptionID.InjectAfter => list.tail.tail.head
-        }
-      })
-
+  final override val backendOptions: OptionsHandler[JSBackendOptionID, Id] = new OptionsHandlerImpl[JSBackendOptionID, Id] {
     override def info: Options[OptionInfo, JSBackendOptionID] =
       Options.fromFunction(new Options.OptionValueFunction[OptionInfo, JSBackendOptionID] {
         override def apply[E](id: JSBackendOptionID { type ElementType = E }): OptionInfo[E] = id match {
@@ -73,46 +49,19 @@ sealed abstract class JSBackend extends Backend {
             )
         }
       })
-
-    override def decoder: Options[OptionDecoder, JSBackendOptionID] = {
-      import dev.argon.options.OptionDecoderHelper._
-      reprToOptions(createDecoders[OptRepr[OptionDecoder]])
-    }
   }
 
 
   override type OutputOptionID = JSOutputOptionID
 
 
-  override val outputOptions: OptionsHandler[JSOutputOptionID, Lambda[X => SingleFile]] = new OptionsHandler[JSOutputOptionID, Lambda[X => SingleFile]] {
-    override type OptRepr[A[_]] = A[TextBuildArtifact] :: HNil
-
-    override def ids: OptRepr[Lambda[X => JSOutputOptionID { type ElementType = X }]] =
-      JSOutputOptionID.JSModule :: HNil
-
-    override def combineRepr[A[_], B[_], C[_], F[_] : Applicative](lista: OptRepr[A], listb: OptRepr[B])(f: OptionsHandler.CombineFunction[JSOutputOptionID, A, B, C, F]): F[OptRepr[C]] = {
-      import dev.argon.options.OptionCombineHelper._
-      combineHLists(ids, lista, listb)(f)
-    }
-
-    override def reprToOptions[A[_]](list: OptRepr[A]): Options[A, JSOutputOptionID] =
-      Options.fromFunction(new Options.OptionValueFunction[A, JSOutputOptionID] {
-        override def apply[E](id: JSOutputOptionID { type ElementType = E }): A[E] = id match {
-          case JSOutputOptionID.JSModule => list.head
-        }
-      })
-
+  override val outputOptions: OptionsHandler[JSOutputOptionID, Lambda[X => SingleFile]] = new OptionsHandlerImpl[JSOutputOptionID, Lambda[X => SingleFile]] {
     override def info: Options[OptionInfo, JSOutputOptionID] =
       Options.fromFunction(new Options.OptionValueFunction[OptionInfo, JSOutputOptionID] {
         override def apply[E](id: JSOutputOptionID { type ElementType = E }): OptionInfo[E] = id match {
           case JSOutputOptionID.JSModule => OptionInfo("output.js.module", "The compiled JS module file")
         }
       })
-
-    override def decoder: Options[Lambda[X => OptionDecoder[SingleFile]], JSOutputOptionID] = {
-      import dev.argon.options.OptionDecoderHelper._
-      reprToOptions(createDecoders[OptRepr[Lambda[X => OptionDecoder[SingleFile]]]])
-    }
   }
 
 

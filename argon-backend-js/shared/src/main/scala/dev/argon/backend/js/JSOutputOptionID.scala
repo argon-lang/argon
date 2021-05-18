@@ -1,14 +1,14 @@
 package dev.argon.backend.js
 
-import dev.argon.options.OptionID
+import dev.argon.options.{OptionID, SingleFile, TypedOptionID}
 import dev.argon.compiler.output.{BuildArtifact, TextBuildArtifact}
 
 sealed trait JSOutputOptionID extends OptionID {
   override type ElementType <: BuildArtifact
+  override type Decoded[_] = SingleFile
 }
 
 object JSOutputOptionID {
-  case object JSModule extends JSOutputOptionID {
-    override type ElementType = TextBuildArtifact
-  }
+  type AsFile[_] = SingleFile
+  case object JSModule extends TypedOptionID[AsFile, TextBuildArtifact] with JSOutputOptionID
 }
