@@ -4,7 +4,7 @@ import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
 val graalVersion = "21.1.0"
-val zioVersion = "1.0.7"
+val zioVersion = "1.0.8"
 
 ThisBuild / scalafixDependencies += "com.github.vovapolu" %% "scaluzzi" % "0.1.18"
 
@@ -128,19 +128,6 @@ lazy val compilerOptions = Seq(
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
     "-release", "11",
-    "-Wconf:cat=lint:error," +
-      "cat=deprecation:error," +
-      "cat=feature:error," +
-      "cat=optimizer:error," +
-      "msg=match may not be exhaustive\\.:error," +
-      "cat=unchecked&msg=The outer reference in this type test cannot be checked at run time\\.:silent," +
-      "cat=unchecked:error," +
-      "cat=unused-imports:warning," +
-      "cat=java-source:error," +
-      "cat=w-flag-dead-code:silent," +
-      "cat=w-flag:error," +
-      "cat=other-match-analysis&msg=unreachable code:silent",
-    "-Ypatmat-exhaust-depth", "2000",
     "-Yrangepos",
     "-Wunused",
     "-language:higherKinds",
@@ -153,6 +140,19 @@ lazy val compilerOptions = Seq(
     )
     case _ => Seq (
       "-Xsource:3",
+      "-Wconf:cat=lint:error," +
+        "cat=deprecation:error," +
+        "cat=feature:error," +
+        "cat=optimizer:error," +
+        "msg=match may not be exhaustive\\.:error," +
+        "cat=unchecked&msg=The outer reference in this type test cannot be checked at run time\\.:silent," +
+        "cat=unchecked:error," +
+        "cat=unused-imports:warning," +
+        "cat=java-source:error," +
+        "cat=w-flag-dead-code:silent," +
+        "cat=w-flag:error," +
+        "cat=other-match-analysis&msg=unreachable code:silent",
+      "-Ypatmat-exhaust-depth", "2000",
     )
   }),
 

@@ -21,7 +21,7 @@ object Program extends PlatformApp {
       .catchAll(IO.succeed(_))
 
   private def errorMessage(message: String): ZIO[Console, ExitCode, Nothing] =
-    putStrLn(message) *> IO.fail(ExitCode.failure)
+    putStrLn(message).orDie *> IO.fail(ExitCode.failure)
 
   private def baseCommand(args: List[String]): ZIO[ZEnv with FileIO with ZipRead with BackendProvider, ExitCode, Unit] =
     args match {
@@ -162,12 +162,12 @@ object Program extends PlatformApp {
 
   private def resolveOptions[O <: OptionID, Decoded[_]](options: Options[Option, O], handler: OptionsHandler[O, Decoded]): ZIO[Console, ExitCode, Options[Id, O]] =
     IO.fromEither(handler.inferDefaults(options))
-      .flatMapError { id => putStrLn("Missing value for option: " + handler.info.get(id).name).as(ExitCode.failure) }
+      .flatMapError { id => putStrLn("Missing value for option: " + handler.info.get(id).name).orDie.as(ExitCode.failure) }
 
 
   def printMessages(msgs: List[CompilationError]): URIO[Console, Unit] =
     ZIO.foreach_(msgs) { msg =>
-      putStrLn(msg.toString)
+      putStrLn(msg.toString).orDie
     }
 
   private def printCompilationErrors(cause: Cause[CompilationError]): ZIO[Console, ExitCode, Nothing] = {
