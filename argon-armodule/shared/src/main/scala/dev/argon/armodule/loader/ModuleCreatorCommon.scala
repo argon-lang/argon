@@ -1,7 +1,7 @@
 package dev.argon.armodule.loader
 
 import cats.data.{NonEmptyList, NonEmptyVector}
-import cats.evidence.{===, Is}
+import cats.evidence.Is
 import dev.argon.compiler._
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
@@ -13,9 +13,6 @@ import dev.argon.module.GlobalDeclarationElement
 import dev.argon.util._
 import dev.argon.{module => ArgonModule}
 import scalapb.GeneratedMessage
-import shapeless.{Id, Nat, Sized, Succ, _0}
-import shapeless.ops.nat.{LT, Pred, ToInt}
-import shapeless.syntax.sized._
 import zio.{IO, ZIO}
 import zio.stream.{Stream, ZStream}
 import zio.interop.catz.core._
@@ -987,19 +984,20 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
     }
 
   def resolveSignatureTypeArgs[TResult[TContext2 <: Context with Singleton, Wrap[+_]], Len <: Nat, T]
-  (sig: Signature[TResult, Len], args: Sized[Vector[ArgonModule.Expression], Len], convArgs: Vector[WrapExpr])
+  (sig: Signature[TResult, Len], args: NList[Len, ArgonModule.Expression], convArgs: Vector[WrapExpr])
   (f: (Vector[WrapExpr], TResult[context.type, Id]) => T)
   : Comp[T] =
     sig.visit(new SignatureVisitor[TResult, Len, Comp[T]] {
 
-      override def visitParameters[RestLen <: Nat](sigParams: SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): Comp[T] = {
-        resolveExpr(args.head).flatMap { argType =>
+      override def visitParameters[RestLen <: Nat](sigParams: SignatureParameters[TResult, RestLen])(implicit lenIsSuccRest: Len Is Succ[RestLen]): Comp[T] = {
+        val argsAsCons = args.asCons
+        resolveExpr(argsAsCons.head).flatMap { argType =>
           val nextSig = sigParams.next(argType)
-          resolveSignatureTypeArgs(nextSig, args.tail, convArgs :+ argType)(f)
+          resolveSignatureTypeArgs(nextSig, argsAsCons.tail, convArgs :+ argType)(f)
         }
       }
 
-      override def visitResult(sigResult: SignatureResult[TResult])(implicit lenEq: Len === _0): Comp[T] =
+      override def visitResult(sigResult: SignatureResult[TResult])(implicit lenZero: Len Is Zero): Comp[T] =
         f(convArgs, sigResult.result).pure[Comp]
     })
 
@@ -1012,7 +1010,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
     sigOwner.flatMap { owner =>
       sigGetter(owner).flatMap {
         case sig: Signature[TResult, len] =>
-          args.sized((sig : Signature[TResult, len]).parameterCountToInt) match {
+          NList.sized[len, ArgonModule.Expression](args)((sig : Signature[TResult, len]).parameterCountToInt) match {
             case Some(sizedArgs) =>
               resolveSignatureTypeArgs[TResult, len, T](sig, sizedArgs, Vector.empty)(f(owner))
 
@@ -1130,8 +1128,8 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
     def requireArgsLength(len: Int): Comp[Unit] =
       Compilation.require(t.args.size === len)(invalidModuleFormatError)
 
-    def sizedArgs[N <: Nat: ToInt]: Comp[Sized[Vector[ArgonModule.Expression], N]] =
-      IO.fromEither(t.args.sized[N].toRight(invalidModuleFormatError))
+    def sizedArgs[N <: Nat: Nat.ToInt]: Comp[NList[N, ArgonModule.Expression]] =
+      IO.fromEither(NList.sized(t.args).toRight(invalidModuleFormatError))
 
     t.exprType match {
       case ArgonModule.Expression.ExprType.TraitType(traitType) => resolveTraitType(ArgonModule.TraitType(traitType, t.args))
@@ -1139,7 +1137,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
       case ArgonModule.Expression.ExprType.DataConstructorType(dataConstructorType) => resolveDataConstructorType(ArgonModule.DataConstructorType(dataConstructorType, t.args))
       case ArgonModule.Expression.ExprType.TypeOfType(_) =>
         for {
-          args <- sizedArgs[Succ[_0]]
+          args <- sizedArgs[Succ[Zero]]
           inner <- resolveExpr(args.head)
         } yield TypeOfType[context.type, TTypeWrapper](inner)
 
@@ -1153,21 +1151,21 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
 
       case ArgonModule.Expression.ExprType.FunctionType(_) =>
         for {
-          args <- sizedArgs[Succ[Succ[_0]]]
+          args <- sizedArgs[Succ[Succ[Zero]]]
           argType <- resolveExpr(args.head)
           resultType <- resolveExpr(args.tail.head)
         } yield FunctionType[context.type, TTypeWrapper](argType, resultType)
 
       case ArgonModule.Expression.ExprType.UnionType(_) =>
         for {
-          args <- sizedArgs[Succ[Succ[_0]]]
+          args <- sizedArgs[Succ[Succ[Zero]]]
           a <- resolveExpr(args.head)
           b <- resolveExpr(args.tail.head)
         } yield UnionType[context.type, TTypeWrapper](a, b)
 
       case ArgonModule.Expression.ExprType.IntersectionType(_) =>
         for {
-          args <- sizedArgs[Succ[Succ[_0]]]
+          args <- sizedArgs[Succ[Succ[Zero]]]
           a <- resolveExpr(args.head)
           b <- resolveExpr(args.tail.head)
         } yield IntersectionType[context.type, TTypeWrapper](a, b)
@@ -1175,7 +1173,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
       case ArgonModule.Expression.ExprType.ExistentialType(variable) =>
         for {
           localVar <- resolveLocalVariable(variable)
-          args <- sizedArgs[Succ[_0]]
+          args <- sizedArgs[Succ[Zero]]
           inner <- resolveExpr(args.head)
         } yield ExistentialType[context.type, TTypeWrapper](localVar, inner)
 
@@ -1206,7 +1204,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
 
       case ArgonModule.Expression.ExprType.EnsureExecuted(_) =>
         for {
-          args <- sizedArgs[Succ[Succ[_0]]]
+          args <- sizedArgs[Succ[Succ[Zero]]]
           body <- resolveExpr(args.head)
           ensuring <- resolveExpr(args.tail.head)
         } yield EnsureExecuted[context.type, TTypeWrapper](body, ensuring)
@@ -1218,7 +1216,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
 
       case ArgonModule.Expression.ExprType.FunctionObjectCall(_) =>
         for {
-          args <- sizedArgs[Succ[Succ[Succ[_0]]]]
+          args <- sizedArgs[Succ[Succ[Succ[Zero]]]]
           func <- resolveExpr(args.head)
           arg <- resolveExpr(args.tail.head)
           returnType <- resolveExpr(args.tail.tail.head)
@@ -1226,7 +1224,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
 
       case ArgonModule.Expression.ExprType.IfElse(_) =>
         for {
-          args <- sizedArgs[Succ[Succ[Succ[_0]]]]
+          args <- sizedArgs[Succ[Succ[Succ[Zero]]]]
           cond <- resolveExpr(args.head)
           ifBody <- resolveExpr(args.tail.head)
           elseBody <- resolveExpr(args.tail.tail.head)
@@ -1235,33 +1233,33 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
       case ArgonModule.Expression.ExprType.LetBinding(localVariable) =>
         for {
           variable <- resolveLocalVariable(localVariable)
-          args <- sizedArgs[Succ[Succ[_0]]]
+          args <- sizedArgs[Succ[Succ[Zero]]]
           value <- resolveExpr(args.head)
           next <- resolveExpr(args.tail.head)
         } yield LetBinding[context.type, TTypeWrapper](variable, value, next)
 
       case ArgonModule.Expression.ExprType.LoadConstantBool(b) =>
         for {
-          args <- sizedArgs[Succ[_0]]
+          args <- sizedArgs[Succ[Zero]]
           boolType <- resolveExpr(args.head)
         } yield LoadConstantBool[context.type, TTypeWrapper](b, boolType)
 
       case ArgonModule.Expression.ExprType.LoadConstantInt(i) =>
         for {
-          args <- sizedArgs[Succ[_0]]
+          args <- sizedArgs[Succ[Zero]]
           intType <- resolveExpr(args.head)
           value <- resolveBigInt(i)
         } yield LoadConstantInt[context.type, TTypeWrapper](value, intType)
 
       case ArgonModule.Expression.ExprType.LoadConstantString(s) =>
         for {
-          args <- sizedArgs[Succ[_0]]
+          args <- sizedArgs[Succ[Zero]]
           strType <- resolveExpr(args.head)
         } yield LoadConstantString[context.type, TTypeWrapper](s, strType)
 
       case ArgonModule.Expression.ExprType.LoadLambda(variable) =>
         for {
-          args <- sizedArgs[Succ[_0]]
+          args <- sizedArgs[Succ[Zero]]
           convVariable <- resolveLocalVariable(variable)
           body <- resolveExpr(args.head)
         } yield LoadLambda[context.type, TTypeWrapper](convVariable, body)
@@ -1284,14 +1282,14 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
 
       case ArgonModule.Expression.ExprType.LoadTupleElement(index) =>
         for {
-          args <- sizedArgs[Succ[Succ[_0]]]
+          args <- sizedArgs[Succ[Succ[Zero]]]
           tuple <- resolveExpr(args.head)
           elemType <- resolveExpr(args.tail.head)
         } yield LoadTupleElement[context.type, TTypeWrapper](tuple, elemType, index)
 
       case ArgonModule.Expression.ExprType.LoadUnit(_) =>
         for {
-          args <- sizedArgs[Succ[_0]]
+          args <- sizedArgs[Succ[Zero]]
           unitType <- resolveExpr(args.head)
         } yield LoadUnit[context.type, TTypeWrapper](unitType)
 
@@ -1343,7 +1341,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
       case ArgonModule.Expression.ExprType.StoreVariable(variable) =>
         for {
           v <- resolveVariable(variable)
-          args <- sizedArgs[Succ[Succ[_0]]]
+          args <- sizedArgs[Succ[Succ[Zero]]]
           exprType <- resolveExpr(args.head)
           value <- resolveExpr(args.tail.head)
         } yield StoreVariable[context.type, TTypeWrapper](v, exprType, value)

@@ -6,13 +6,12 @@ import dev.argon.compiler.core.{ArClass, _}
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.ClassDeclarationStmt
-import dev.argon.util.{FileID, SourceLocation, UniqueIdentifier, ValueCache, WithSource, Id}
+import dev.argon.util.{FileID, SourceLocation, UniqueIdentifier, ValueCache, WithSource, Id, Nat}
 import cats.implicits._
 import cats.evidence.Is
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
-import shapeless.Nat
 import zio.{IO, ZIO}
 import zio.interop.catz.core._
 import AccessModifierHelpers._
@@ -121,7 +120,7 @@ private[compiler] object SourceClass {
       private val paramsEnv: Comp[EnvCreator[context.type]] =
         paramsEnvCache.get(
           signature.map { sig =>
-            env.addAccessToken(AccessToken.OfClass(AbsRef(this))).addParameters(context)(sig.unsubstitutedParameters.unsized)
+            env.addAccessToken(AccessToken.OfClass(AbsRef(this))).addParameters(context)(sig.unsubstitutedParameters.toVector)
           }
         )
 

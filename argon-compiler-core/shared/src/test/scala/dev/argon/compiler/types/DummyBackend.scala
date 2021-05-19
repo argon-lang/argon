@@ -7,7 +7,7 @@ import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.{Comp, CompStream, DiagnosticError, DiagnosticSource}
 import dev.argon.compiler.loaders.ModuleLoader
 import dev.argon.options.{Options, OptionsHandler, SingleFile, TypedOptionID}
-import shapeless.Id
+import dev.argon.util.Id
 import zio._
 
 class DummyBackend extends Backend {

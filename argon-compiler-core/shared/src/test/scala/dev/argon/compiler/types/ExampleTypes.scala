@@ -6,8 +6,7 @@ import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, R
 import dev.argon.compiler.expr.ArExpr.TraitType
 import dev.argon.compiler.options.{CompilerInput, CompilerOptionID}
 import dev.argon.options.{FileList, Options, TypedOptionID}
-import dev.argon.util.{NamespacePath, UniqueIdentifier}
-import shapeless.Id
+import dev.argon.util.{Id, NamespacePath, UniqueIdentifier}
 import zio.UIO
 import zio.stream.Stream
 import zio.test.{Gen, Sample}

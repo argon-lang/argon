@@ -4,8 +4,7 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import cats.implicits._
 import dev.argon.compiler.expr.ArExpr._
-import dev.argon.util.MemoCacheStore
-import shapeless.Nat
+import dev.argon.util.{MemoCacheStore, Nat}
 import zio.UIO
 import zio.interop.catz.core._
 
@@ -181,7 +180,7 @@ object VTableBuilder {
           baseTraitVTable <- fromTrait(bt.arTrait.value)
           newMap = baseTraitVTable.methodMap.toSeq.map {
             case (key, VTableEntry(signature, entrySource, impl)) =>
-              val newSig = signature.substituteTypeArguments(btSig.unsubstitutedParameters.unsized)(bt.args)
+              val newSig = signature.substituteTypeArguments(btSig.unsubstitutedParameters.toVector)(bt.args)
               key -> VTableEntry(newSig, entrySource, impl)
           }
         } yield VTable(newMap.toMap)
@@ -205,7 +204,7 @@ object VTableBuilder {
                 baseClassVTable <- fromClass(bc.arClass.value)
                 newMap = baseClassVTable.methodMap.toSeq.map {
                   case (key, VTableEntry(signature, entrySource, impl)) =>
-                    val substSig = signature.substituteTypeArguments(bcSig.unsubstitutedParameters.unsized)(bc.args)
+                    val substSig = signature.substituteTypeArguments(bcSig.unsubstitutedParameters.toVector)(bc.args)
                     key -> VTableEntry(
                       substSig,
                       entrySource,

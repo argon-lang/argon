@@ -11,7 +11,6 @@ import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.expr.ArExpr.ClassConstructorCall
 import dev.argon.compiler.expr._
 import dev.argon.compiler.loaders.StandardTypeLoaders
-import shapeless.Nat
 import zio.IO
 
 object SourceClassConstructor {
@@ -56,7 +55,7 @@ object SourceClassConstructor {
           sig <- signatureUnsubstituted
           env2 = env(context)(effectInfo, id, localVarOwner)
           env3 = env2.copy(scope = env2.scope.addParameters(
-            sig.unsubstitutedParameters.unsized
+            sig.unsubstitutedParameters.toVector
           ))
 
           unitType <- StandardTypeLoaders.loadUnitType(context)(

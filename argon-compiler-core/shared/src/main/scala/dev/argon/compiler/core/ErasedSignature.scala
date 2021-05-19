@@ -65,7 +65,7 @@ object ErasedSignature {
   }
 
   def fromSignatureParameters[TResult[TContext2 <: Context with Singleton, Wrap[+_]]](context: Context)(sig: context.signatureContext.Signature[TResult, _]): ParameterOnlySignature[context.type] =
-    ParameterOnlySignature(sig.unsubstitutedParameters.unsized.map { param => typeToSigType(context)(param.paramType) })
+    ParameterOnlySignature(sig.unsubstitutedParameters.toVector.map { param => typeToSigType(context)(param.paramType) })
 
   private def typeToSigType(context: Context)(t: ArExpr[context.type, Id]): SigType[context.type] =
     t match {

@@ -5,7 +5,7 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.lookup._
 import dev.argon.compiler.types._
 import dev.argon.parser
-import dev.argon.util.{FileSpec, NamespacePath, SourceLocation, UniqueIdentifier, VectorUnCons, WithSource}
+import dev.argon.util.{FileSpec, Id, Lens, NamespacePath, Nat, SourceLocation, Succ, UniqueIdentifier, VectorUnCons, WithSource, Zero}
 import dev.argon.util.AnyExtensions._
 
 import scala.collection.immutable.Set
@@ -13,15 +13,12 @@ import cats.{Id => _, _}
 import cats.data._
 import cats.implicits._
 import PayloadSpecifiers._
-import cats.evidence.===
+import cats.evidence.Is
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
 import dev.argon.parser.{BindingPattern, DeconstructPattern, DiscardPattern, TuplePattern, TypeTestPattern}
-import shapeless.{Lens, Nat, _0}
-import shapeless.ops.nat.{LT, Pred}
 import zio.{Cause, Exit, IO, Ref, UIO, ZIO}
 import zio.interop.catz.core._
-import dev.argon.util.Id
 
 import scala.annotation.unused
 
@@ -1112,25 +1109,25 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
       override def callable: Callable = callable2
 
       override def usedParamTypes: Vector[TType] = prevParamTypes
-      override lazy val remainingParameterTypes: Vector[TType] = unsubSig.unsubstitutedParameters.unsized.map { _.paramType }
+      override lazy val remainingParameterTypes: Vector[TType] = unsubSig.unsubstitutedParameters.toVector.map { _.paramType }
 
       override def forExpectedType(expectedType: TType): Comp[SimpleExpr] =
         acc.flatMap {
           case (sig, args) =>
             sig.visit(new SignatureVisitor[TResult, Len, Comp[SimpleExpr]] {
-              override def visitParameters[RestLen <: Nat](sigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): Comp[SimpleExpr] =
+              override def visitParameters[RestLen <: Nat](sigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenIsSuccRest: Len Is Succ[RestLen]): Comp[SimpleExpr] =
                 partiallyApply(env, args, Vector(), fullSignature, identity).flatMap { expr =>
                   convertExprType(env)(location)(expr)(expectedType)
                 }
 
-              override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenEq: Len === _0): Comp[SimpleExpr] =
+              override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenZero: Len Is Zero): Comp[SimpleExpr] =
                 convertExprType(env)(location)(f(args, sigResult.result))(expectedType)
             })
         }
 
       override def forArguments(argInfo: ArgumentInfo): OverloadExprFactory =
         unsubSig.visit(new SignatureVisitor[TResult, Len, OverloadExprFactory] {
-          override def visitParameters[RestLen <: Nat](unsubSigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): OverloadExprFactory = {
+          override def visitParameters[RestLen <: Nat](unsubSigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenIsSuccRest: Len Is Succ[RestLen]): OverloadExprFactory = {
             def createFactory(createExpr: TType => Comp[WrapExpr]) =
               new SigFactory(env)(unsubSigParams.nextUnsubstituted)(prevParamTypes :+ unsubSigParams.parameter.paramType)(
                 acc.flatMap {
@@ -1157,7 +1154,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             }
           }
 
-          override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenEq: Len === _0): OverloadExprFactory =
+          override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenZero: Len Is Zero): OverloadExprFactory =
             wrapNonOverloadFactory(
               toExprFactory.memberAccessExpr(MemberName.Call, argInfo.env, argInfo.location).forArguments(argInfo)
             )
@@ -1167,7 +1164,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
 
     def partiallyApply[Len <: Nat](env: Env, prevArgs: Vector[WrapExpr], argVariables: Vector[WrapExpr], signature: Signature[TResult, Len], wrapInLambda: SimpleExpr => SimpleExpr): Comp[SimpleExpr] =
       signature.visit(new SignatureVisitor[TResult, Len, Comp[SimpleExpr]] {
-        override def visitParameters[RestLen <: Nat](sigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): Comp[SimpleExpr] =
+        override def visitParameters[RestLen <: Nat](sigParams: signatureContext.SignatureParameters[TResult, RestLen])(implicit lenIsSuccRest: Len Is Succ[RestLen]): Comp[SimpleExpr] =
           prevArgs match {
             case VectorUnCons(VectorUnCons.Empty) =>
               for {
@@ -1191,7 +1188,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               } yield result
           }
 
-        override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenEq: Len === _0): Comp[SimpleExpr] =
+        override def visitResult(sigResult: signatureContext.SignatureResult[TResult])(implicit lenZero: Len Is Zero): Comp[SimpleExpr] =
           wrapInLambda(f(argVariables, sigResult.result)).pure[Comp]
       })
 

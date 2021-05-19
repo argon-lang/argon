@@ -2,8 +2,7 @@ package dev.argon.compiler.core
 
 import cats.implicits._
 import dev.argon.compiler.Comp
-import dev.argon.util.FileID
-import shapeless.Nat
+import dev.argon.util.{FileID, Nat}
 
 abstract class ArFunc[TContext <: Context, TPayloadSpec[_, _]] extends CallableFunction {
   val context: TContext

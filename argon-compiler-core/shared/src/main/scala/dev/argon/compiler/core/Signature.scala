@@ -2,12 +2,11 @@ package dev.argon.compiler.core
 
 import dev.argon.compiler._
 import dev.argon.compiler.types._
-import cats.evidence.===
+import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.expr._
 import dev.argon.compiler.expr.ArExpr._
-import shapeless.ops.nat.{LT, Pred, ToInt}
-import shapeless.{Nat, Sized, Succ, _0}
+import dev.argon.util.{IsHelpers, NList, NNil, Nat, Succ, Zero}
 import zio.IO
 
 trait SignatureContext {
@@ -18,16 +17,16 @@ trait SignatureContext {
   type TParameter = dev.argon.compiler.expr.Parameter[context.type, TTypeWrapper]
 
   trait SignatureVisitor[TResult[TContext2 <: Context with Singleton, Wrap[+_]], Len <: Nat, A] {
-    def visitParameters[RestLen <: Nat](sigParams: SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): A
-    def visitResult(sigResult: SignatureResult[TResult])(implicit lenEq: Len === _0): A
+    def visitParameters[RestLen <: Nat](sigParams: SignatureParameters[TResult, RestLen])(implicit lenIsSuccRest: Len Is Succ[RestLen]): A
+    def visitResult(sigResult: SignatureResult[TResult])(implicit lenZero: Len Is Zero): A
   }
 
   sealed trait Signature[TResult[TContext2 <: Context with Singleton, Wrap[+_]], Len <: Nat] {
 
     val parameterCount: Len
-    implicit val parameterCountToInt: ToInt[Len]
+    implicit val parameterCountToInt: Nat.ToInt[Len]
 
-    def unsubstitutedParameters: Sized[Vector[TParameter], Len]
+    def unsubstitutedParameters: NList[Len, TParameter]
     def unsubstitutedResult: TResult[context.type, TTypeWrapper]
 
     def convertTypeSystem(newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter.Aux[context.type, TTypeWrapper, newContext.TTypeWrapper]): Comp[newContext.Signature[TResult, Len]]
@@ -42,7 +41,7 @@ trait SignatureContext {
       }
 
     def visit[A](visitor: SignatureVisitor[TResult, Len, A]): A
-    def toSignatureParameters[RestLen <: Nat](implicit pred: Pred.Aux[Len, RestLen]): SignatureParameters[TResult, RestLen]
+    def toSignatureParameters[RestLen <: Nat](implicit lenIsSuccRest: Len Is Succ[RestLen]): SignatureParameters[TResult, RestLen]
   }
 
   final case class SignatureParameters[TResult[TContext2 <: Context with Singleton, Wrap[+_]], RestLen <: Nat]
@@ -54,10 +53,10 @@ trait SignatureContext {
     type Len = Succ[RestLen]
 
     override val parameterCount: Len = Succ()
-    override implicit val parameterCountToInt: ToInt[Succ[RestLen]] =
-      ToInt.toIntSucc(nextUnsubstituted.parameterCountToInt)
+    override val parameterCountToInt: Nat.ToInt[Succ[RestLen]] =
+      Nat.toIntSucc(nextUnsubstituted.parameterCountToInt)
 
-    override def unsubstitutedParameters: Sized[Vector[TParameter], Len] =
+    override def unsubstitutedParameters: NList[Len, TParameter] =
       parameter +: nextUnsubstituted.unsubstitutedParameters
 
     override def unsubstitutedResult: TResult[context.type, TTypeWrapper] = nextUnsubstituted.unsubstitutedResult
@@ -82,10 +81,11 @@ trait SignatureContext {
 
     override def visit[A](visitor: SignatureVisitor[TResult, Succ[RestLen], A]): A = visitor.visitParameters(this)
 
-    @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
-    override def toSignatureParameters[RestLen2 <: Nat](implicit pred: Pred.Aux[Succ[RestLen], RestLen2]): SignatureParameters[TResult, RestLen2] =
-      this.asInstanceOf[SignatureParameters[TResult, RestLen2]]
-
+    override def toSignatureParameters[RestLen2 <: Nat](implicit lenIsSuccRest: Len Is Succ[RestLen2]): SignatureParameters[TResult, RestLen2] = {
+      implicit val restLenIsRestLen2: RestLen Is RestLen2 = IsHelpers.unwrapBounded(lenIsSuccRest)
+      type BindSigParams[RestLen3 <: Nat] = SignatureParameters[TResult, RestLen3]
+      IsHelpers.substituteBounded[Nat, Nothing, BindSigParams, RestLen, RestLen2](restLenIsRestLen2)(this)
+    }
 
 
   }
@@ -93,16 +93,16 @@ trait SignatureContext {
   final case class SignatureResult[TResult[TContext2 <: Context with Singleton, Wrap[+_]] : SignatureResultConverter]
   (
     result: TResult[context.type, TTypeWrapper]
-  ) extends Signature[TResult, _0] {
+  ) extends Signature[TResult, Zero] {
 
-    override val parameterCount: _0 = Nat._0
-    override val parameterCountToInt: ToInt[_0] = implicitly
+    override val parameterCount: Zero = Zero
+    override val parameterCountToInt: Nat.ToInt[Zero] = implicitly
 
-    override def unsubstitutedParameters: Sized[Vector[TParameter], _0] = Sized[Vector]()
+    override def unsubstitutedParameters: NList[Zero, TParameter] = NNil
 
     override def unsubstitutedResult: TResult[context.type, TTypeWrapper] = result
 
-    override def convertTypeSystem(newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter.Aux[context.type, TTypeWrapper, newContext.TTypeWrapper]): Comp[newContext.Signature[TResult, _0]] =
+    override def convertTypeSystem(newContext: SignatureContext.Aux[context.type])(converter: TypeSystemConverter.Aux[context.type, TTypeWrapper, newContext.TTypeWrapper]): Comp[newContext.Signature[TResult, Zero]] =
       for {
         newResult <- implicitly[SignatureResultConverter[TResult]].convertTypeSystem(context)(converter)(result)
       } yield newContext.SignatureResult(newResult)
@@ -110,13 +110,13 @@ trait SignatureContext {
     override def referencesParameter(parameter: TParameter): Comp[Boolean] =
       implicitly[SignatureResultConverter[TResult]].referencesParameter(SignatureContext.this)(new RefChecker(parameter))(result)
 
-    override def substitute(parameter: TParameter)(replacement: ArExprWrap[context.type, TTypeWrapper]): Signature[TResult, _0] =
+    override def substitute(parameter: TParameter)(replacement: ArExprWrap[context.type, TTypeWrapper]): Signature[TResult, Zero] =
       SignatureResult(implicitly[SignatureResultConverter[TResult]].substitute(SignatureContext.this)(Substitutions(context)(parameter.paramVar, replacement))(result))
 
-    override def visit[A](visitor: SignatureVisitor[TResult, _0, A]): A = visitor.visitResult(this)
+    override def visit[A](visitor: SignatureVisitor[TResult, Zero, A]): A = visitor.visitResult(this)
 
-    override def toSignatureParameters[RestLen <: Nat](implicit pred: Pred.Aux[_0, RestLen]): SignatureParameters[TResult, RestLen] =
-      throw new UnsupportedOperationException()
+    override def toSignatureParameters[RestLen <: Nat](implicit lenIsSuccRest: Zero Is Succ[RestLen]): SignatureParameters[TResult, RestLen] =
+      IsHelpers.absurd[Zero, Succ[RestLen]](Zero)
   }
 
   type Subst = Substitutions.Aux[context.type, TTypeWrapper]
@@ -221,7 +221,7 @@ object SignatureContext {
 
     for {
       convSig <- sig.convertTypeSystem(sigContext)(conv)
-      substSig = convSig.substituteTypeArguments(convSig.unsubstitutedParameters.unsized)(args)
+      substSig = convSig.substituteTypeArguments(convSig.unsubstitutedParameters.toVector)(args)
     } yield substSig.unsubstitutedResult
   }
 

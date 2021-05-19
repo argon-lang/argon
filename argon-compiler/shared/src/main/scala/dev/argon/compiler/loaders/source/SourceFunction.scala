@@ -4,10 +4,9 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.parser
-import dev.argon.util.{FileID, UniqueIdentifier, WithSource, Id}
+import dev.argon.util.{FileID, Id, Nat, UniqueIdentifier, WithSource}
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
-import shapeless.Nat
 
 private[compiler] object SourceFunction {
 
@@ -47,7 +46,7 @@ private[compiler] object SourceFunction {
           sig <- signature
           env2 = env(context)(effectInfo, id, localVarOwner)
           env3 = env2.copy(scope = env2.scope.addParameters(
-            sig.unsubstitutedParameters.unsized
+            sig.unsubstitutedParameters.toVector
           ))
           expr <- ExpressionConverter.convertExpression(context)(env3)(sig.unsubstitutedResult.returnType)(stmt.body)
         } yield context.createExprFunctionImplementation(expr)

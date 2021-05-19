@@ -3,7 +3,7 @@ package dev.argon.compiler.vtable
 import dev.argon.compiler.core._
 import cats._
 import cats.implicits._
-import shapeless.Nat
+import dev.argon.util.Nat
 
 
 trait VTableContext {

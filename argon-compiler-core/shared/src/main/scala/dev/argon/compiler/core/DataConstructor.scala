@@ -6,8 +6,7 @@ import scala.collection.immutable._
 import cats.evidence.Is
 import dev.argon.compiler.expr.ArExpr.TraitType
 import dev.argon.compiler.{Comp, DiagnosticSource}
-import dev.argon.util.FileID
-import shapeless.Nat
+import dev.argon.util.{FileID, Nat}
 import zio.IO
 
 

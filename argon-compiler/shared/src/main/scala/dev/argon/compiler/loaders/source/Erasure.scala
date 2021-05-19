@@ -5,10 +5,10 @@ import dev.argon.compiler.core.Context
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr.{FieldVariable, LocalVariable, ParameterVariable, PatternCase, ThisParameterVariable, Variable}
 import dev.argon.compiler.types.TypeSystem
-import shapeless.Nat
 import zio.IO
 import zio.interop.catz.core._
 import cats.implicits._
+import dev.argon.util.Nat
 
 sealed trait Erasure {
 
@@ -21,7 +21,7 @@ sealed trait Erasure {
 
   private def isParamListErased[TResult[_ <: Context with Singleton, _[+_]]](sigComp: Comp[context.signatureContext.Signature[TResult, _ <: Nat]])(args: Vector[WrapExpr]): Comp[Boolean] =
     sigComp.flatMap { sig =>
-      sig.unsubstitutedParameters.unsized.zip(args).existsM { case (param, arg) =>
+      sig.unsubstitutedParameters.toVector.zip(args).existsM { case (param, arg) =>
         if(param.paramVar.isErased)
           IO.succeed(false)
         else

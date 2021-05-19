@@ -6,8 +6,7 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.expr.ArExpr.TraitType
 import dev.argon.compiler.expr.BaseTypeInfoTrait
-import dev.argon.util.{FileID, NamespacePath}
-import shapeless.{Id, Nat}
+import dev.argon.util.{FileID, Id, NamespacePath, Nat}
 import zio.IO
 
 object DummyTrait {

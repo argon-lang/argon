@@ -2,11 +2,10 @@ package dev.argon.compiler.core
 
 import dev.argon.compiler._
 import dev.argon.compiler.types._
-import dev.argon.util.FileID
+import dev.argon.util.{FileID, Nat}
 import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.expr.BaseTypeInfoTrait
-import shapeless.Nat
 import zio.{IO, ZIO}
 
 import scala.collection.immutable._

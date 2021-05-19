@@ -3,11 +3,10 @@ package dev.argon.compiler.loaders.source
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.parser
-import dev.argon.util.{VectorUnCons, WithSource, Id}
+import dev.argon.util.{Id, Nat, VectorUnCons, WithSource}
 import cats.data.NonEmptyList
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
-import shapeless.Nat
 import zio.interop.catz.core._
 
 object SourceSignatureCreator {

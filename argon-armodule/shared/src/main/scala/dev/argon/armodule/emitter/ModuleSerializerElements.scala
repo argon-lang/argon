@@ -1,19 +1,16 @@
 package dev.argon.armodule.emitter
 
-import cats.evidence.===
+import cats.evidence.Is
 import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.module
-import dev.argon.util.{FileID, NamespacePath}
-import shapeless.{Nat, _0}
+import dev.argon.util.{FileID, Id, NamespacePath, Nat, Succ, Zero}
 import zio.{IO, ZIO}
 import cats.implicits._
 import com.google.protobuf.ByteString
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
-import dev.argon.util.Id
-import shapeless.ops.nat.{LT, Pred}
 import zio.interop.catz.core._
 
 private[emitter] trait ModuleSerializerElements {
@@ -33,7 +30,7 @@ private[emitter] trait ModuleSerializerElements {
 
     def impl[Len <: Nat](sig: Signature[TResult, Len], prevParams: Vector[module.Parameter]): Comp[A] =
       sig.visit(new SignatureVisitor[TResult, Len, Comp[A]] {
-        override def visitParameters[RestLen <: Nat](sigParams: SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): Comp[A] =
+        override def visitParameters[RestLen <: Nat](sigParams: SignatureParameters[TResult, RestLen])(implicit lenIsSuccRest: Len Is Succ[RestLen]): Comp[A] =
           sigParams.parameter.elements
             .traverse { elem =>
               convertExpr(elem.elemType).map { paramType =>
@@ -55,7 +52,7 @@ private[emitter] trait ModuleSerializerElements {
               impl(sigParams.nextUnsubstituted, prevParams :+ module.Parameter(style, isErased = if(sigParams.parameter.paramVar.isErased) Some(true) else None, elems))
             }
 
-        override def visitResult(sigResult: SignatureResult[TResult])(implicit lenEq: Len === _0): Comp[A] =
+        override def visitResult(sigResult: SignatureResult[TResult])(implicit lenZero: Len Is Zero): Comp[A] =
           f(prevParams, sigResult.result)
 
       })

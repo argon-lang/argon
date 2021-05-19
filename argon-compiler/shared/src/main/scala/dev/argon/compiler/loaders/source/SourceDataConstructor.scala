@@ -6,12 +6,11 @@ import dev.argon.compiler.core._
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.parser
 import dev.argon.parser.DataConstructorDeclarationStmt
-import dev.argon.util.{FileID, SourceLocation, UniqueIdentifier, ValueCache, WithSource}
+import dev.argon.util.{FileID, Nat, SourceLocation, UniqueIdentifier, ValueCache, WithSource}
 import cats.evidence.Is
 import cats.implicits._
 import dev.argon.compiler.loaders.StandardTypeLoaders
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
-import shapeless.Nat
 import zio.IO
 import zio.interop.catz.core._
 import AccessModifierHelpers._
@@ -77,7 +76,7 @@ private[compiler] object SourceDataConstructor {
       private def paramEnv = for {
         sig <- signature
       } yield env.addAccessToken(AccessToken.OfDataConstructor(AbsRef(this))).addParameters(context)(
-        sig.unsubstitutedParameters.unsized
+        sig.unsubstitutedParameters.toVector
       )
 
       private val bodyStmt =

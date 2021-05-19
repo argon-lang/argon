@@ -5,7 +5,6 @@ import zio.interop.catz.core._
 
 import dev.argon.backend.Backend
 import dev.argon.compiler._
-import shapeless.{Id => _, Path => _}
 import dev.argon.build.testrunner.BuildTestCaseRunner.EmitDrainCombineFunction
 import dev.argon.compiler.options.GeneralOutputOptions
 import dev.argon.options.{FileList, OptionID, OptionInfo, Options, OptionsHandler, SingleFile}

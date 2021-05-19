@@ -5,8 +5,7 @@ import cats.implicits._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.Comp
 import dev.argon.compiler.types._
-import dev.argon.util.FileID
-import shapeless.Nat
+import dev.argon.util.{FileID, Nat}
 
 abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] extends CallableMethod {
   val context: TContext
@@ -55,7 +54,7 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
       case ClassType(_, args) => args
       case DataConstructorType(_, args, _) => args
     }
-  } yield convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters.unsized)(instTypeArgs)
+  } yield convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters.toVector)(instTypeArgs)
 
   val payload: TPayloadSpec[Comp[TMethodImplementation], Unit]
 

@@ -46,7 +46,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
     }
 
   private def loadTypeParametersFromSig[TResult[_ <: Context with Singleton, Wrap[+_]]](sig: Signature[TResult, _], typeInfo: JSExpression, thisExpr: JSExpression): VarMap =
-    sig.unsubstitutedParameters.unsized
+    sig.unsubstitutedParameters.toVector
       .filterNot { param => param.paramVar.isErased }
       .map { param =>
         param.paramVar.id -> loadTypeParameter(param.paramVar, typeInfo, thisExpr)
@@ -154,7 +154,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
           paramVarNames <- ZIO.access[EmitEnv] { emitEnv =>
             sig.unsubstitutedParameters
-              .unsized
+              .toVector
               .zipWithIndex
               .map {
                 case (param, i) =>
@@ -344,6 +344,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
       paramVarNames <- ZIO.access[EmitEnv] { emitEnv =>
         ownerSig.unsubstitutedParameters
+          .toVector
           .zipWithIndex
           .map {
             case (param, i) =>
@@ -486,7 +487,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
   }
 
   def createParameterList[TResult[_ <: Context with Singleton, Wrap[+_]]](sig: context.signatureContext.Signature[TResult, _]): UEmit[(JSFunctionParameterList, Seq[(ParameterVariable[context.type, Id], String)])] =
-    ZIO.foldRight(sig.unsubstitutedParameters.unsized)((JSFunctionEmptyParameterList : JSFunctionParameterList, Seq.empty[(ParameterVariable[context.type, Id], String)])) {
+    ZIO.foldRight(sig.unsubstitutedParameters.toVector)((JSFunctionEmptyParameterList : JSFunctionParameterList, Seq.empty[(ParameterVariable[context.type, Id], String)])) {
       case (param, prev) if param.paramVar.isErased => IO.succeed(prev)
 
       case (param, (list, map)) =>
