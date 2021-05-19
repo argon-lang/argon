@@ -4,11 +4,12 @@ import dev.argon.build.{BackendProvider, BackendProviderImpl, BuildProcess}
 import cats._
 import cats.implicits._
 import dev.argon.backend.Backend
+import dev.argon.backend.Backend.{AsFile, AsFileOption, AsUnit}
 import dev.argon.compiler.CompilationError
 import zio.{ZEnv, BuildInfo => _, _}
 import zio.console._
 import dev.argon.compiler.options.{CompilerInput, CompilerOptionID, CompilerOptions, CompilerOutput, GeneralOutputOptionID, GeneralOutputOptions}
-import dev.argon.options.{OptionDecodeResult, OptionID, OptionInfo, Options, OptionsHandler, SingleFile}
+import dev.argon.options.{OptionDecodeResult, OptionID, OptionInfo, Options, OptionsHandler}
 import dev.argon.io.fileio.{FileIO, ZipRead}
 import dev.argon.platform._
 
@@ -31,8 +32,8 @@ object Program extends PlatformApp {
             buildCommand(backend)(
               CompilerOptions.handler.empty[Id],
               backend.backendOptions.empty[Id],
-              GeneralOutputOptions.handler.empty[Lambda[X => SingleFile]],
-              backend.outputOptions.empty[Lambda[X => SingleFile]],
+              GeneralOutputOptions.handler.empty[AsFile],
+              backend.outputOptions.empty[AsFile],
             )(tail)
           case None =>
             errorMessage("Could not find backend: " + backendName)
@@ -56,8 +57,8 @@ object Program extends PlatformApp {
   (
     compilerOptions: Options[Option, CompilerOptionID],
     backendOptions: Options[Option, backend.BackendOptionID],
-    generalOutputOptions: Options[Lambda[X => Option[SingleFile]], GeneralOutputOptionID],
-    backendOutputOptions: Options[Lambda[X => Option[SingleFile]], backend.OutputOptionID],
+    generalOutputOptions: Options[AsFileOption, GeneralOutputOptionID],
+    backendOutputOptions: Options[AsFileOption, backend.OutputOptionID],
   )
   (args: List[String]): ZIO[ZEnv with FileIO with ZipRead, ExitCode, Unit] =
     args match {
@@ -76,13 +77,13 @@ object Program extends PlatformApp {
             }
 
         def genOutOpt =
-          parseOption[GeneralOutputOptionID, Lambda[X => SingleFile]](name, value, GeneralOutputOptions.handler, generalOutputOptions)
+          parseOption[GeneralOutputOptionID, AsFile](name, value, GeneralOutputOptions.handler, generalOutputOptions)
             .flatMap { opts =>
               buildCommand(backend)(compilerOptions, backendOptions, opts, backendOutputOptions)(t).asSomeError
             }
 
         def backendOutOpt =
-          parseOption[backend.OutputOptionID, Lambda[X => SingleFile]](name, value, backend.outputOptions, backendOutputOptions)
+          parseOption[backend.OutputOptionID, AsFile](name, value, backend.outputOptions, backendOutputOptions)
             .flatMap { opts =>
               buildCommand(backend)(compilerOptions, backendOptions, generalOutputOptions, opts)(t).asSomeError
             }
@@ -105,8 +106,8 @@ object Program extends PlatformApp {
 
       case Nil =>
         for {
-          compilerOptsResolved <- resolveOptions(compilerOptions, CompilerOptions.handler)
-          backendOptsResolved <- resolveOptions(backendOptions, backend.backendOptions)
+          compilerOptsResolved <- resolveOptions[CompilerOptionID, Id](compilerOptions, CompilerOptions.handler)
+          backendOptsResolved <- resolveOptions[backend.BackendOptionID, Id](backendOptions, backend.backendOptions)
 
           compilerInput = CompilerInput(compilerOptsResolved, backendOptsResolved)
           compilerOutput = CompilerOutput(generalOutputOptions, backendOutputOptions)
@@ -123,7 +124,7 @@ object Program extends PlatformApp {
   ): Option[O] = {
     val info = optionsHandler.optionsToRepr(optionsHandler.info)
     optionsHandler.combineRepr(info, info)(
-      new OptionsHandler.CombineFunction[O, OptionInfo, OptionInfo, Lambda[X => Unit], Either[O, *]] {
+      new OptionsHandler.CombineFunction[O, OptionInfo, OptionInfo, AsUnit, Either[O, *]] {
         override def apply(id: O)(ax: OptionInfo[id.ElementType], bx: OptionInfo[id.ElementType]): Either[O, Unit] =
           if(ax.name === name) Left(id)
           else Right(())
@@ -132,13 +133,15 @@ object Program extends PlatformApp {
   }
 
 
+  type AsOptionDec[Dec[_], X] = Option[Dec[X]]
+
   private def parseOption[O <: OptionID { type Decoded[A] = Dec[A] }, Dec[_]]
   (
     name: String,
     value: String,
     optionsHandler: OptionsHandler[O, Dec],
-    options: Options[Lambda[X => Option[Dec[X]]], O]
-  ): ZIO[Console, Option[ExitCode], Options[Lambda[X => Option[Dec[X]]], O]] =
+    options: Options[AsOptionDec[Dec, *], O]
+  ): ZIO[Console, Option[ExitCode], Options[AsOptionDec[Dec, *], O]] =
     ZIO.fromOption(findOptionID(name, optionsHandler)).flatMap { id =>
       val decoder = optionsHandler.decoder.get(id)
       val decodedRes =

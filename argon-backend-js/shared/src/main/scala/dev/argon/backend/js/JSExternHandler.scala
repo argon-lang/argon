@@ -30,7 +30,7 @@ object JSExternHandler {
           for {
             jsModule <- env.get.readAllText(file).catchAll(Compilation.unwrapThrowable)
             map <- moduleExtractor.exportedFunctions(jsModule).mapError { _ => DiagnosticError.InvalidExternFunction(source) }
-          } yield map.view.mapValues(ResolvedExtern.Function.apply).toMap
+          } yield map.view.mapValues[ResolvedExtern](ResolvedExtern.Function.apply).toMap
         }
       )
 

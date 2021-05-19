@@ -2,8 +2,8 @@ package dev.argon.build.testrunner
 
 import cats._
 import zio.interop.catz.core._
-
 import dev.argon.backend.Backend
+import dev.argon.backend.Backend.{AsFile, AsUnit}
 import dev.argon.compiler._
 import dev.argon.build.testrunner.BuildTestCaseRunner.EmitDrainCombineFunction
 import dev.argon.compiler.options.GeneralOutputOptions
@@ -16,11 +16,11 @@ final class BuildTestCaseRunner(protected val backend: Backend, referencePaths: 
 
   override val name: String = s"Compilation (${backend.name})"
 
-  private def emitDrain[OutputOptionID <: OptionID { type ElementType <: BuildArtifact; type Decoded[_] = SingleFile }](handler: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]])(data: Options[Id, OutputOptionID]): RComp[FileIO, Unit] =
+  private def emitDrain[OutputOptionID <: OptionID { type ElementType <: BuildArtifact; type Decoded[_] = SingleFile }](handler: OptionsHandler[OutputOptionID, AsFile])(data: Options[Id, OutputOptionID]): RComp[FileIO, Unit] =
     handler.combineRepr[
       OptionInfo,
       Id,
-      Lambda[CX => Unit],
+      AsUnit,
       Comp
     ](handler.optionsToRepr(handler.info), handler.optionsToRepr(data))(
       new EmitDrainCombineFunction[BuildArtifact, OutputOptionID, OptionInfo, Comp] {
@@ -41,7 +41,7 @@ final class BuildTestCaseRunner(protected val backend: Backend, referencePaths: 
 object BuildTestCaseRunner {
 
   // Needed to avoid AbstractMethodError
-  abstract class EmitDrainCombineFunction[BA, OutputOptionID <: OptionID { type ElementType <: BA }, A[_], F[_]] extends OptionsHandler.CombineFunction[OutputOptionID, A, Id, Lambda[CX => Unit], F] {
+  abstract class EmitDrainCombineFunction[BA, OutputOptionID <: OptionID { type ElementType <: BA }, A[_], F[_]] extends OptionsHandler.CombineFunction[OutputOptionID, A, Id, AsUnit, F] {
 
     def baToBuildArtifact(ba: BA): BuildArtifact
     def compToF[X](comp: Comp[X]): F[X]

@@ -31,5 +31,6 @@ trait Backend {
 object Backend {
   type AsFile[_] = SingleFile
   type AsFileOption[_] = Option[SingleFile]
+  type AsUnit[_] = Unit
 }
 

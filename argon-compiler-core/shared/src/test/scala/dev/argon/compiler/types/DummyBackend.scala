@@ -1,5 +1,6 @@
 package dev.argon.compiler.types
 
+import dev.argon.backend.Backend.AsFile
 import dev.argon.backend.{Backend, ExternHandler}
 import dev.argon.compiler.core.ArModule
 import dev.argon.compiler.core.Context.Aux
@@ -17,7 +18,7 @@ class DummyBackend extends Backend {
   override type BackendOptionID = Nothing
   override val backendOptions: OptionsHandler[Nothing, Id] = new OptionsHandler.Empty[Id]
   override type OutputOptionID = Nothing
-  override val outputOptions: OptionsHandler[Nothing, Lambda[X => SingleFile]] = new OptionsHandler.Empty[Lambda[X => SingleFile]]
+  override val outputOptions: OptionsHandler[Nothing, AsFile] = new OptionsHandler.Empty[AsFile]
 
   override def moduleLoaders(options: Options[Id, Nothing]): Seq[ModuleLoader] = Seq.empty
 

@@ -42,19 +42,19 @@ abstract class GrammarTestsCommon extends DefaultRunnableSpec with GrammarTestHe
       ),
       suite("Repeated grammar (*)")(
         test("succeed for EOF") {
-          assert(parse(numberToken(7)*)())(isRight(equalTo((Vector[TToken](), Vector[Int]()))))
+          assert(parse(numberToken(7).*)())(isRight(equalTo((Vector[TToken](), Vector[Int]()))))
         },
         test("not consume wrong token") {
-          assert(parse(numberToken(7)*)(4))(isRight(equalTo((Vector(4), Vector[Int]()))))
+          assert(parse(numberToken(7).*)(4))(isRight(equalTo((Vector(4), Vector[Int]()))))
         },
         test("succeed for correct token") {
-          assert(parse(numberToken(7)*)(7))(isRight(equalTo((Vector[TToken](), Vector(7)))))
+          assert(parse(numberToken(7).*)(7))(isRight(equalTo((Vector[TToken](), Vector(7)))))
         },
         test("succeed for 2 correct tokens") {
-          assert(parse(numberToken(7)*)(7, 7))(isRight(equalTo((Vector[TToken](), Vector(7, 7)))))
+          assert(parse(numberToken(7).*)(7, 7))(isRight(equalTo((Vector[TToken](), Vector(7, 7)))))
         },
         test("succeed with trailing token") {
-          assert(parse(((numberToken(7) ++ numberToken(8))*) ++ numberToken(4))(7, 8, 7, 8, 4))(isRight(equalTo((Vector[TToken](), (Vector((7, 8), (7, 8)), 4)))))
+          assert(parse(((numberToken(7) ++ numberToken(8)).*) ++ numberToken(4))(7, 8, 7, 8, 4))(isRight(equalTo((Vector[TToken](), (Vector((7, 8), (7, 8)), 4)))))
         },
       ),
       suite("Repeated grammar (+~)")(

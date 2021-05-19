@@ -1,4 +1,5 @@
 package dev.argon.compiler.options
+
 import cats.Id
 import dev.argon.options.{FileList, OptionID, OptionIDBase, OptionInfo, Options, OptionsHandler, OptionsHandlerImpl, TypedOptionID}
 

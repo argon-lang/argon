@@ -30,7 +30,7 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
   final def signature
   (newSigContext: SignatureContext.Aux[context.type])
   (instanceType: TypeWithMethods[context.type, newSigContext.TTypeWrapper])
-  : Comp[newSigContext.Signature[FunctionResultInfo, _]] = {
+  : Comp[newSigContext.Signature[FunctionResultInfo, _ <: Nat]] = {
     val converter = ArTypeSystemConverter[newSigContext.TTypeWrapper](context)(newSigContext.typeWrapperInstances)
     owner match {
       case MethodOwner.ByClass(ownerClass) => ownerClass.signature.flatMap { _.convertTypeSystem(newSigContext)(converter) }.flatMap(signatureByOwnerSig(newSigContext)(instanceType)(_))
@@ -45,7 +45,7 @@ abstract class ArMethod[TContext <: Context with Singleton, TPayloadSpec[_, _]] 
   (newSigContext: SignatureContext.Aux[context.type])
   (instanceType: TypeWithMethods[context.type, newSigContext.TTypeWrapper])
   (ownerSig: newSigContext.Signature[TResult, _ <: Nat])
-  : Comp[newSigContext.Signature[FunctionResultInfo, _]] = for {
+  : Comp[newSigContext.Signature[FunctionResultInfo, _ <: Nat]] = for {
     sig <- signatureUnsubstituted
     converter = ArTypeSystemConverter[newSigContext.TTypeWrapper](context)(newSigContext.typeWrapperInstances)
     convSig <- sig.convertTypeSystem(newSigContext)(converter)

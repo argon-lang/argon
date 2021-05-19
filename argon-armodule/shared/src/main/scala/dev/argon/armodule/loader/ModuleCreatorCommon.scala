@@ -2,7 +2,7 @@ package dev.argon.armodule.loader
 
 import cats.data.{NonEmptyList, NonEmptyVector}
 import cats.evidence.Is
-import dev.argon.compiler._
+import dev.argon.compiler.{core, _}
 import dev.argon.compiler.core.PayloadSpecifiers.ReferencePayloadSpecifier
 import dev.argon.compiler.core._
 import dev.argon.compiler.expr.ArExpr._
@@ -1001,9 +1001,13 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
         f(convArgs, sigResult.result).pure[Comp]
     })
 
-  def resolveUsingSignature[TResult[TContext2 <: Context with Singleton, Wrap[+_]], TOwner[_ <: Context with Singleton, _[_, _]], T]
+  trait SignatureGetter[TResult[_ <: Context with Singleton, Wrap[+_]], TOwner[_ <: Context with Singleton, _[_, _]]] {
+    def apply(owner: AbsRef[context.type, TOwner]): Comp[Signature[TResult, _ <: Nat]]
+  }
+
+  def resolveUsingSignature[TResult[_ <: Context with Singleton, Wrap[+_]], TOwner[_ <: Context with Singleton, _[_, _]], T]
   (sigOwner: Comp[AbsRef[context.type, TOwner]])
-  (sigGetter: AbsRef[context.type, TOwner] => Comp[Signature[TResult, _]])
+  (sigGetter: SignatureGetter[TResult, TOwner])
   (args: Vector[ArgonModule.Expression])
   (f: AbsRef[context.type, TOwner] => (Vector[WrapExpr], TResult[context.type, Id]) => T)
   : Comp[T] =
@@ -1019,21 +1023,26 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
       }
     }
 
-
-  def resolveTraitType(traitType: ArgonModule.TraitType): Comp[TTraitType] =
-    resolveUsingSignature(findTrait(traitType.traitId))(_.value.signature)(traitType.typeArguments) {
+  def resolveTraitType(traitType: ArgonModule.TraitType): Comp[TTraitType] = {
+    val signatureGetter: SignatureGetter[ArTrait.ResultInfo, ArTrait] = owner => owner.value.signature
+    resolveUsingSignature(findTrait(traitType.traitId))(signatureGetter)(traitType.typeArguments) {
       arTrait => (args, _) => TraitType[context.type, TTypeWrapper](arTrait, args)
     }
+  }
 
-  def resolveClassType(classType: ArgonModule.ClassType): Comp[TClassType] =
-    resolveUsingSignature(findClass(classType.classId))(_.value.signature)(classType.typeArguments) {
+  def resolveClassType(classType: ArgonModule.ClassType): Comp[TClassType] = {
+    val signatureGetter: SignatureGetter[ArClass.ResultInfo, ArClass] = owner => owner.value.signature
+    resolveUsingSignature(findClass(classType.classId))(signatureGetter)(classType.typeArguments) {
       arClass => (args, _) => ClassType[context.type, TTypeWrapper](arClass, args)
     }
+  }
 
-  def resolveDataConstructorType(dataConstructorType: ArgonModule.DataConstructorType): Comp[TDataConstructorType] =
-    resolveUsingSignature(findDataConstructor(dataConstructorType.constructorId))(_.value.signature)(dataConstructorType.typeArguments) {
+  def resolveDataConstructorType(dataConstructorType: ArgonModule.DataConstructorType): Comp[TDataConstructorType] = {
+    val signatureGetter: SignatureGetter[DataConstructor.ResultInfo, DataConstructor] = owner => owner.value.signature
+    resolveUsingSignature(findDataConstructor(dataConstructorType.constructorId))(signatureGetter)(dataConstructorType.typeArguments) {
       dataCtor => (args, result) => DataConstructorType[context.type, TTypeWrapper](dataCtor, args, result.instanceType)
     }
+  }
 
   def resolveBigInt(i: ArgonModule.BigInt): Comp[BigInt] =
     i.intType match {
@@ -1210,7 +1219,8 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
         } yield EnsureExecuted[context.type, TTypeWrapper](body, ensuring)
 
       case ArgonModule.Expression.ExprType.FunctionCall(id) =>
-        resolveUsingSignature(findFunction(id))(_.value.signature)(t.args) {
+        val signatureGetter: SignatureGetter[FunctionResultInfo, ArFunc] = owner => owner.value.signature
+        resolveUsingSignature(findFunction(id))(signatureGetter)(t.args) {
           func => (args, resultInfo) => FunctionCall[context.type, TTypeWrapper](func, args, resultInfo.returnType)
         }
 
@@ -1361,7 +1371,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
 
     parameter.elements
       .traverse { case ArgonModule.ParameterElement(name, paramType) =>
-        val varName = name.map(VariableName.Normal).getOrElse(VariableName.Unnamed)
+        val varName = name.map(VariableName.Normal.apply).getOrElse(VariableName.Unnamed)
 
         resolveExpr(paramType)
           .map { t => (t, varName) }

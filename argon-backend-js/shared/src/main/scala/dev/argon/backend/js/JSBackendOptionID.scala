@@ -1,7 +1,7 @@
 package dev.argon.backend.js
 
 import cats.Id
-import dev.argon.options.{FileList, OptionID, OptionIDBase, OptionInfo, SingleFile}
+import dev.argon.options.{FileList, OptionID, OptionIDBase, OptionInfo, OptionsHandler, OptionsHandlerImpl, SingleFile}
 
 sealed trait JSBackendOptionID extends OptionID {
   override type Decoded[A] = A
@@ -31,4 +31,6 @@ object JSBackendOptionID {
         defaultValue = None,
       )
   }
+
+  val handler: OptionsHandler[JSBackendOptionID, Id] = new OptionsHandlerImpl[JSBackendOptionID, Id]
 }

@@ -7,7 +7,7 @@ import cats.implicits._
 import dev.argon.armodule.loader.{AggregateModuleLoader, ArgonModuleDeserializer, ArgonModuleLoader}
 import dev.argon.armodule.emitter.{ModuleEmitOptions, ModuleSerializer, ZipModuleWriter}
 import dev.argon.backend.Backend
-import dev.argon.backend.Backend.{AsFile, AsFileOption}
+import dev.argon.backend.Backend.{AsFile, AsFileOption, AsUnit}
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.core.{ArModule, Context, ModuleId}
 import dev.argon.compiler.loaders.{ModuleLinker, UnlinkedModule}
@@ -61,14 +61,14 @@ object BuildProcess {
     handler.combineRepr[
         AsFileOption,
         Id,
-        Lambda[CX => Unit],
+        AsUnit,
         RComp[FileIO, *]
       ](handler.optionsToRepr(fileNames), handler.optionsToRepr(data))(
         new OptionsHandler.CombineFunction[
           OutputOptionID,
-          Lambda[AX => Option[SingleFile]],
+          AsFileOption,
           Id,
-          Lambda[CX => Unit],
+          AsUnit,
           RComp[FileIO, *]
         ] {
           override def apply(id: OutputOptionID)(ax: Option[SingleFile], bx: Id[id.ElementType]): RComp[FileIO, Unit] =

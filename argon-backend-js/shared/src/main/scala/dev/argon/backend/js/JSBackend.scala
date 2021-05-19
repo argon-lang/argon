@@ -24,7 +24,7 @@ sealed abstract class JSBackend extends Backend {
 
 
   override type BackendOptionID = JSBackendOptionID
-  final override val backendOptions: OptionsHandler[JSBackendOptionID, Id] = new OptionsHandlerImpl[JSBackendOptionID, Id]
+  final override val backendOptions: OptionsHandler[JSBackendOptionID, Id] = JSBackendOptionID.handler
 
 
   override type OutputOptionID = JSOutputOptionID
