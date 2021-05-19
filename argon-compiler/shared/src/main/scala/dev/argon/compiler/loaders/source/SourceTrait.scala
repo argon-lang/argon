@@ -7,12 +7,12 @@ import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
 import dev.argon.compiler.loaders.source.SourceSignatureCreator.ResultCreator
 import dev.argon.parser
 import dev.argon.parser.TraitDeclarationStmt
-import dev.argon.util.{FileID, SourceLocation, UniqueIdentifier, ValueCache, WithSource}
+import dev.argon.util.{FileID, SourceLocation, UniqueIdentifier, ValueCache, WithSource, Id}
 import cats.implicits._
 import cats.evidence.Is
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr.BaseTypeInfoTrait
-import shapeless.{Id, Nat}
+import shapeless.Nat
 import zio.interop.catz.core._
 import AccessModifierHelpers._
 
@@ -81,7 +81,7 @@ private[compiler] object SourceTrait {
       private val paramsEnv: Comp[EnvCreator[context.type]] =
         paramsEnvCache.get(
           signature.map { sig =>
-            env.addAccessToken(AccessToken.OfTrait(AbsRef(this))).addParameters(context)(sig.unsubstitutedParameters)
+            env.addAccessToken(AccessToken.OfTrait(AbsRef(this))).addParameters(context)(sig.unsubstitutedParameters.unsized)
           }
         )
 

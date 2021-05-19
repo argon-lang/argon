@@ -161,14 +161,25 @@ object ArgonParser {
             tokenIdentifier --> Some.apply
 
         case Rule.OperatorName =>
-          NonEmptyList.of(
-            OP_EQUALS, OP_NOTEQUALS, OP_LESSTHANEQ, OP_GREATERTHANEQ,
-            OP_SHIFTLEFT, OP_SHIFTRIGHT, OP_BOOLNOT,
-            OP_ADD, OP_SUB, OP_MUL, OP_DIV,
-            OP_BITAND, OP_BITOR, OP_BITXOR, OP_BITNOT,
-            OP_LESSTHAN, OP_GREATERTHAN,
-            OP_UNION, OP_INTERSECTION,
-          ).map(matchToken).reduceLeft { _ | _ }
+          matchToken(OP_EQUALS) |
+            matchToken(OP_NOTEQUALS) |
+            matchToken(OP_LESSTHANEQ) |
+            matchToken(OP_GREATERTHANEQ) |
+            matchToken(OP_SHIFTLEFT) |
+            matchToken(OP_SHIFTRIGHT) |
+            matchToken(OP_BOOLNOT) |
+            matchToken(OP_ADD) |
+            matchToken(OP_SUB) |
+            matchToken(OP_MUL) |
+            matchToken(OP_DIV) |
+            matchToken(OP_BITAND) |
+            matchToken(OP_BITOR) |
+            matchToken(OP_BITXOR) |
+            matchToken(OP_BITNOT) |
+            matchToken(OP_LESSTHAN) |
+            matchToken(OP_GREATERTHAN) |
+            matchToken(OP_UNION) |
+            matchToken(OP_INTERSECTION)
 
         case Rule.NameSpecifier =>
           tokenUnderscore --> const(NameSpecifier.Blank) |
@@ -703,7 +714,7 @@ object ArgonParser {
         case Rule.TopLevelStatementRule =>
           rule(Rule.NamespaceDeclaration) |
             rule(Rule.ImportNamespace) |
-            rule(Rule.Statement).observeSource --> TopLevelStatement.Statement
+            rule(Rule.Statement).observeSource --> TopLevelStatement.Statement.apply
 
         case Rule.PaddedTopLevelStatement =>
           (rule(Rule.StatementSeparator)*) ++ rule(Rule.TopLevelStatementRule) ++ (rule(Rule.StatementSeparator)*) --> {

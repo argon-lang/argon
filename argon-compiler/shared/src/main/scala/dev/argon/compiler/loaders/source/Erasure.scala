@@ -21,7 +21,7 @@ sealed trait Erasure {
 
   private def isParamListErased[TResult[_ <: Context with Singleton, _[+_]]](sigComp: Comp[context.signatureContext.Signature[TResult, _ <: Nat]])(args: Vector[WrapExpr]): Comp[Boolean] =
     sigComp.flatMap { sig =>
-      sig.unsubstitutedParameters.zip(args).existsM { case (param, arg) =>
+      sig.unsubstitutedParameters.unsized.zip(args).existsM { case (param, arg) =>
         if(param.paramVar.isErased)
           IO.succeed(false)
         else

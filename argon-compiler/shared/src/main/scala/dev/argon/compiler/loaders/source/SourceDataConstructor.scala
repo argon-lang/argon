@@ -77,7 +77,7 @@ private[compiler] object SourceDataConstructor {
       private def paramEnv = for {
         sig <- signature
       } yield env.addAccessToken(AccessToken.OfDataConstructor(AbsRef(this))).addParameters(context)(
-        sig.unsubstitutedParameters
+        sig.unsubstitutedParameters.unsized
       )
 
       private val bodyStmt =

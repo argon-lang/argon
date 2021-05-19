@@ -5,7 +5,8 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
-import shapeless.{Id, Nat}
+import dev.argon.util.Id
+import shapeless.Nat
 import zio._
 import zio.interop.catz.core._
 import cats.implicits._
@@ -112,7 +113,7 @@ private[js] trait JSEmitterExpressions extends JSEmitterReferenceLoader {
 
   def convertArgs[TResult[_ <: Context with Singleton, _[+_]]](sigComp: Comp[context.signatureContext.Signature[TResult, _ <: Nat]])(args: Vector[context.typeSystem.WrapExpr]): Emit[Vector[JSExpression]] =
     sigComp.flatMap { sig =>
-      sig.unsubstitutedParameters.zip(args)
+      sig.unsubstitutedParameters.unsized.zip(args)
         .collect { case (parameter, arg) if !parameter.paramVar.isErased => arg }
         .traverse(convertExpr(_))
     }

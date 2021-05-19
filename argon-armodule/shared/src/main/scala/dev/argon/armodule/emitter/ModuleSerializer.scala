@@ -109,8 +109,8 @@ object ModuleSerializer {
         emitEnv.functions.getDeclaration(id)
           .flatMap { func => func.payload }
           .map {
-            case FunctionImplementation.Extern(source, extern) =>
-              context.externHandler.encodeExternalFunction(source, extern)(platformId)
+            case impl: FunctionImplementation.Extern[context.externHandler.ExternFunction] =>
+              context.externHandler.encodeExternalFunction(impl.source, impl.extern)(platformId)
 
             case FunctionImplementation.Expression(_) => Stream.die(new ImplementationIsNotExtern())
           }
@@ -127,8 +127,8 @@ object ModuleSerializer {
         emitEnv.methods.getDeclaration(id)
           .flatMap { method => method.payload }
           .map {
-            case MethodImplementation.Extern(source, extern) =>
-              context.externHandler.encodeExternalMethod(source, extern)(platformId)
+            case impl: MethodImplementation.Extern[context.externHandler.ExternMethod] =>
+              context.externHandler.encodeExternalMethod(impl.source, impl.extern)(platformId)
 
             case MethodImplementation.Expression(_) | MethodImplementation.Abstract => Stream.die(new ImplementationIsNotExtern())
           }

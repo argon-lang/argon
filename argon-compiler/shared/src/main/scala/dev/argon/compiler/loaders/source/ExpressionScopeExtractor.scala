@@ -3,7 +3,7 @@ package dev.argon.compiler.loaders.source
 import dev.argon.compiler.core._
 import dev.argon.compiler.expr.ArExpr
 import dev.argon.compiler.expr.ArExpr._
-import shapeless.Id
+import dev.argon.util.Id
 
 object ExpressionScopeExtractor {
 

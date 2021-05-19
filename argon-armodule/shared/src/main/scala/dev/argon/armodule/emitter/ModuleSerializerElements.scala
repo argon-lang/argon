@@ -5,13 +5,14 @@ import dev.argon.compiler._
 import dev.argon.compiler.core._
 import dev.argon.module
 import dev.argon.util.{FileID, NamespacePath}
-import shapeless.{Id, Nat, _0}
+import shapeless.{Nat, _0}
 import zio.{IO, ZIO}
 import cats.implicits._
 import com.google.protobuf.ByteString
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
+import dev.argon.util.Id
 import shapeless.ops.nat.{LT, Pred}
 import zio.interop.catz.core._
 

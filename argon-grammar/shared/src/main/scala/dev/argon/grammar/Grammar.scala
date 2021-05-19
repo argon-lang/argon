@@ -27,7 +27,7 @@ object Grammar {
     type TGrammar[+T] = Grammar[TToken, TSyntaxError, TLabel, T]
 
     @SuppressWarnings(Array("scalafix:DisableSyntax.var"))
-    private var cache: Map[TLabel[_], AnyRef] = Map.empty
+    private var cache: Map[Any, AnyRef] = Map.empty
 
     protected def createGrammar[T](label: TLabel[T]): TGrammar[T]
 
@@ -166,20 +166,34 @@ object Grammar {
 
   }
 
-  final case class ParseOptions[TToken, TSyntaxError, TLabel[_]](leftRecRules: Set[Grammar[TToken, TSyntaxError, TLabel, _]], currentLabel: Option[TLabel[_]], factory: GrammarFactory[TToken, TSyntaxError, TLabel]) {
+  sealed trait ParseOptions[TToken, TSyntaxError, TLabel[_]] {
+    val factory: GrammarFactory[TToken, TSyntaxError, TLabel]
 
-    def notLeftRec: ParseOptions[TToken, TSyntaxError, TLabel] =
-      if(leftRecRules.isEmpty)
-        this
-      else
-        copy(leftRecRules = Set.empty)
+    def notLeftRec: ParseOptions[TToken, TSyntaxError, TLabel]
+    def addLeftRec(rule: Grammar[TToken, TSyntaxError, TLabel, _]): ParseOptions[TToken, TSyntaxError, TLabel]
+    def setLabel[T](label: TLabel[T]): ParseOptions[TToken, TSyntaxError, TLabel]
+  }
 
-    def addLeftRec(rule: Grammar[TToken, TSyntaxError, TLabel, _]): ParseOptions[TToken, TSyntaxError, TLabel] =
-      copy(leftRecRules = leftRecRules + rule)
+  object ParseOptions {
+    def apply[TToken, TSyntaxError, TLabel[_], T](leftRecRules: Set[Grammar[TToken, TSyntaxError, TLabel, _]], currentLabel: Option[TLabel[T]], factory: GrammarFactory[TToken, TSyntaxError, TLabel]): ParseOptions[TToken, TSyntaxError, TLabel] = {
+      val factory2 = factory
 
-    def setLabel(label: TLabel[_]): ParseOptions[TToken, TSyntaxError, TLabel] =
-      copy(currentLabel = Some(label))
+      new ParseOptions[TToken, TSyntaxError, TLabel] {
+        override val factory: GrammarFactory[TToken, TSyntaxError, TLabel] = factory2
 
+        override def notLeftRec: ParseOptions[TToken, TSyntaxError, TLabel] =
+          if(leftRecRules.isEmpty)
+            this
+          else
+            ParseOptions(leftRecRules = Set.empty, currentLabel = currentLabel, factory = factory)
+
+        override def addLeftRec(rule: Grammar[TToken, TSyntaxError, TLabel, _]): ParseOptions[TToken, TSyntaxError, TLabel] =
+          ParseOptions(leftRecRules = leftRecRules + rule, currentLabel = currentLabel, factory = factory)
+
+        override def setLabel[T2](label: TLabel[T2]): ParseOptions[TToken, TSyntaxError, TLabel] =
+          ParseOptions(leftRecRules = leftRecRules, currentLabel = Some(label), factory = factory)
+      }
+    }
   }
 
   trait CombinerBase {

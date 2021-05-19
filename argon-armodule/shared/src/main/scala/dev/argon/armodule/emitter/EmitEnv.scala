@@ -1,12 +1,12 @@
 package dev.argon.armodule.emitter
 
-import shapeless.Id
 import dev.argon.armodule.emitter.DeclRefIDPair
 import dev.argon.compiler.Comp
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.core._
 import dev.argon.compiler.expr.LocalVariable
 import dev.argon.compiler.vtable.VTableBuilder
+import dev.argon.util.Id
 import dev.argon.util.NamespacePath
 import zio.{IO, Ref, UIO}
 
@@ -66,8 +66,10 @@ private[emitter] object EmitEnv {
 
         def getID[TPayloadSpec[_, _]](elem: TElem[context.type, TPayloadSpec]): ID
 
+        type BindElem[A[_, _]] = TElem[context.type, A]
+
         override def getIdNum[TPayloadSpec[_, _] : PayloadSpecInfo](elem: TElem[context.type, TPayloadSpec]): Comp[Int] =
-          implicitly[PayloadSpecInfo[TPayloadSpec]].visit(elem)(new PayloadSpecVisitor[TElem[context.type, *[_, _]], Comp[Int]] {
+          implicitly[PayloadSpecInfo[TPayloadSpec]].visit(elem)(new PayloadSpecVisitor[BindElem, Comp[Int]] {
             override def visitDeclaration(container: TElem[context.type, DeclarationPayloadSpecifier]): Comp[Int] =
               IdentifierState.getIdNum(declIds)(getID(container), container)
 
@@ -91,10 +93,11 @@ private[emitter] object EmitEnv {
 
       override val vtableBuilder: VTableBuilder.Aux[context.type] = vtableBuilderObj
 
+      type BindModule[A[_, _]] = ArModule[context.type, A]
 
       override def getModuleIdNum[TPayloadSpec[_, _] : PayloadSpecInfo](module: ArModule[context.type, TPayloadSpec]): Comp[Option[Int]] =
         IO.succeed(
-          implicitly[PayloadSpecInfo[TPayloadSpec]].visit(module)(new PayloadSpecVisitor[ArModule[context.type, *[_, _]], Option[Int]] {
+          implicitly[PayloadSpecInfo[TPayloadSpec]].visit(module)(new PayloadSpecVisitor[BindModule, Option[Int]] {
             override def visitDeclaration(container: ArModule[context.type, DeclarationPayloadSpecifier]): Option[Int] = None
 
             override def visitReference(container: ArModule[context.type, ReferencePayloadSpecifier]): Option[Int] = {

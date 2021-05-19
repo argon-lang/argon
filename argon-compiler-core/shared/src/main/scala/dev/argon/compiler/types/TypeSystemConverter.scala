@@ -273,11 +273,6 @@ abstract class TypeSystemConverter {
         newSup <- supertypeConstraint.traverse(convertTypeSystem(_))
       } yield TypeN(universe, newSub, newSup)
 
-    case LoadVariable(variable) =>
-      for {
-        newVar <- convertVariableTypeSystem(variable)
-      } yield LoadVariable(newVar)
-
     case FunctionType(argumentType, resultType) =>
       for {
         newArgType <- convertTypeSystem(argumentType)

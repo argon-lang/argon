@@ -33,8 +33,6 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] extends Callable
       newSig = convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters.unsized)(instanceType.args)
     } yield newSig
 
-
-
   val payload: TPayloadSpec[Comp[TClassConstructorImplementation], Unit]
 }
 

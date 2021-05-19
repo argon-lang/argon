@@ -56,7 +56,7 @@ abstract class JSEmitterModule extends JSEmitterGlobals {
                   "globalFunctions" -> JSArrayLiteral(topLevelStmts.functions),
                 )
               )),
-              export default currentModuleVarName,
+              `export` default currentModuleVarName,
             ),
 
             injectAfter.map(JSModuleRaw.apply).toList.toVector,

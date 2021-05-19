@@ -11,7 +11,6 @@ import cats.implicits._
 import PayloadSpecifiers._
 import dev.argon.compiler.expr.{Parameter, Variable}
 import dev.argon.compiler.loaders.source.ExpressionConverter.EnvCreator
-import shapeless.Id
 import zio._
 import zio.stream._
 import AccessModifierHelpers._
@@ -74,7 +73,7 @@ final class UnlinkedSourceModule[TContext <: Context]
       val referencedModules2 = referencedModules
 
       final class EnvCreatorInstance(envFileSpec: FileSpec, scope: context2.scopeContext.Scope, accessTokens: Set[AccessToken]) extends EnvCreator[context2.type] {
-        override def apply(context: context2.type)(effectInfo: EffectInfo, callerId: CallerId, varOwner: LocalVariableOwner[context.type]): ExpressionConverter.Env[context.type, context.scopeContext.Scope] =
+        override def apply(context: context2.type)(effectInfo: EffectInfo, callerId: CallerId, varOwner: LocalVariableOwner[context2.type]): ExpressionConverter.Env[context.type, context.scopeContext.Scope] =
           ExpressionConverter.Env(
             effectInfo = effectInfo,
             callerId = callerId,

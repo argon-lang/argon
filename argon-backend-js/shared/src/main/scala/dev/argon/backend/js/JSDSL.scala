@@ -53,7 +53,7 @@ object JSDSL {
       JSImportDefaultAndAllStatement(defaultExport, `* as`, modulePath)
   }
 
-  object export {
+  object `export` {
     def default(expr: JSExpression): JSExportDefaultStatement =
       JSExportDefaultStatement(expr)
   }

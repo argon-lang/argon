@@ -8,7 +8,7 @@ import dev.argon.compiler.vtable.{VTableBuilder, VTableContext}
 import zio._
 import zio.interop.catz.core._
 import cats.implicits._
-import shapeless.Id
+import dev.argon.util.Id
 
 private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
   import JSDSL._
@@ -154,6 +154,7 @@ private[js] trait JSEmitterGlobals extends JSEmitterExpressions {
 
           paramVarNames <- ZIO.access[EmitEnv] { emitEnv =>
             sig.unsubstitutedParameters
+              .unsized
               .zipWithIndex
               .map {
                 case (param, i) =>

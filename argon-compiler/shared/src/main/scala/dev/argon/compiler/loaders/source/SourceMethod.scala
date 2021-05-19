@@ -8,7 +8,7 @@ import dev.argon.parser
 import dev.argon.util._
 import cats.evidence.Is
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
-import shapeless.{Id, Nat}
+import shapeless.Nat
 import zio.IO
 
 object SourceMethod {
@@ -86,7 +86,7 @@ object SourceMethod {
                   sig <- signatureUnsubstituted
                   env2 = env(context)(effectInfo, id, localVarOwner)
                   env3 = env2.copy(scope = env2.scope.addParameters(
-                    sig.unsubstitutedParameters
+                    sig.unsubstitutedParameters.unsized
                   ))
                   expr <- ExpressionConverter.convertExpression(context)(env3)(sig.unsubstitutedResult.returnType)(body)
                 } yield context.createExprMethodImplementation(expr)

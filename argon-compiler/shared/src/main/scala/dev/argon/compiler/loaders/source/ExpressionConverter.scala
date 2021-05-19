@@ -17,10 +17,11 @@ import cats.evidence.===
 import dev.argon.compiler.expr.ArExpr._
 import dev.argon.compiler.expr._
 import dev.argon.parser.{BindingPattern, DeconstructPattern, DiscardPattern, TuplePattern, TypeTestPattern}
-import shapeless.{:: => _, _}
+import shapeless.{Lens, Nat, _0}
 import shapeless.ops.nat.{LT, Pred}
 import zio.{Cause, Exit, IO, Ref, UIO, ZIO}
 import zio.interop.catz.core._
+import dev.argon.util.Id
 
 import scala.annotation.unused
 
@@ -449,7 +450,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
               argVar = LocalVariable(
                 LocalVariableId(varId),
                 env.variableOwner,
-                varName.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
+                varName.map(VariableName.Normal.apply).getOrElse(VariableName.Unnamed),
                 Mutability.NonMutable,
                 isErased = false,
                 argHole
@@ -529,7 +530,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                   variable = LocalVariable(
                     LocalVariableId(varId),
                     env.variableOwner,
-                    name.map(VariableName.Normal).getOrElse(VariableName.Unnamed),
+                    name.map(VariableName.Normal.apply).getOrElse(VariableName.Unnamed),
                     Mutability.NonMutable,
                     isErased = false,
                     patT
@@ -615,7 +616,7 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
             sup <- supertypeOf.traverse(evaluateTypeExprAST(env)(_))
             inferredUniverse <- (sub.toList ++ sup.toList)
               .traverse(universeOfWrapExpr)
-              .map { _.foldLeft[UniverseExpr](FixedUniverse(0))(LargestUniverse) }
+              .map { _.foldLeft[UniverseExpr](FixedUniverse(0))(LargestUniverse.apply) }
 
             universe <- level match {
               case Some(WithSource(levelExpr @ parser.IntValueExpr(_, _, _), _)) =>

@@ -318,11 +318,10 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
     FileID(id.id)
 
   trait ObjectDefinitionLoader[TDef, TOwner <: AnyRef, TDefResult] {
-    def apply(id: Int, definition: TDef, objOwner: TOwner): Comp[TDefResult { val owner: objOwner.type }]
+    def apply[TOwner2 <: TOwner](id: Int, definition: TDef, objOwner: TOwner2): Comp[TDefResult { val owner: objOwner.type }]
   }
 
-  private def handleModuleObjectLoading
-  [
+  private def handleModuleObjectLoading[
     TRef <: GeneratedMessage,
     TDef <: GeneratedMessage,
     TValueOwner,
@@ -371,8 +370,8 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
             case ModuleObjectDefinition(owner) =>
               definitionHandler(id, defValue, owner).map(ModuleObjectDefinition.apply)
 
-            case ModuleObjectGlobalDefinition(owner) =>
-              definitionHandler(id, defValue, owner).map(ModuleObjectGlobalDefinition.apply)
+            case ModuleObjectGlobalDefinition(owner2) =>
+              definitionHandler[owner2.type](id, defValue, owner2).map(ModuleObjectGlobalDefinition.apply)
           }
         }
       }
@@ -400,8 +399,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
   }
 
   private def getTrait(id: Int): Comp[TraitLoadResult[context.type, TPayloadSpec]] =
-    handleModuleObjectLoading
-      [
+    handleModuleObjectLoading[
         ArgonModule.TraitReference,
         ArgonModule.TraitDefinition,
         ArgonModule.TraitOwner,
@@ -424,7 +422,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
       )(
         referenceHandler = lookupTrait,
         definitionHandler = new ObjectDefinitionLoader[ArgonModule.TraitDefinition, TraitOwner[context.type, TPayloadSpec], ArTrait[context.type, TPayloadSpec]] {
-          override def apply(id: Int, definition: ArgonModule.TraitDefinition, traitOwner: TraitOwner[context.type, TPayloadSpec]): Comp[ArTrait[context.type, TPayloadSpec] { val owner: traitOwner.type }] = for {
+          override def apply[TOwner2 <: TraitOwner[context.type, TPayloadSpec]](id: Int, definition: ArgonModule.TraitDefinition, traitOwner: TOwner2): Comp[ArTrait[context.type, TPayloadSpec] { val owner: traitOwner.type }] = for {
             uniqId <- UniqueIdentifier.make
           } yield new ArTrait[context.type, TPayloadSpec] {
             override val context: ModuleCreatorCommon.this.context.type = ModuleCreatorCommon.this.context
@@ -471,8 +469,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
   }
 
   private def getArClass(id: Int): Comp[ClassLoadResult[context.type, TPayloadSpec]] =
-    handleModuleObjectLoading
-      [
+    handleModuleObjectLoading[
         ArgonModule.ClassReference,
         ArgonModule.ClassDefinition,
         ArgonModule.ClassOwner,
@@ -495,7 +492,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
       )(
         referenceHandler =  lookupClass,
         definitionHandler = new ObjectDefinitionLoader[ArgonModule.ClassDefinition, ClassOwner[context.type, TPayloadSpec], ArClass[context.type, TPayloadSpec]] {
-          override def apply(id: Int, definition: ArgonModule.ClassDefinition, classOwner: ClassOwner[context.type, TPayloadSpec]): Comp[ArClass[context.type, TPayloadSpec] { val owner: classOwner.type }] = for {
+          override def apply[TOwner2 <: ClassOwner[context.type, TPayloadSpec]](id: Int, definition: ArgonModule.ClassDefinition, classOwner: TOwner2): Comp[ArClass[context.type, TPayloadSpec] { val owner: classOwner.type }] = for {
             uniqId <- UniqueIdentifier.make
           } yield new ArClass[context.type, TPayloadSpec] {
             override val context: ModuleCreatorCommon.this.context.type = ModuleCreatorCommon.this.context
@@ -565,8 +562,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
       ).get(id)
 
   private def getDataCtor(id: Int): Comp[DataCtorLoadResult[context.type, TPayloadSpec]] =
-    handleModuleObjectLoading
-      [
+    handleModuleObjectLoading[
         ArgonModule.DataConstructorReference,
         ArgonModule.DataConstructorDefinition,
         ArgonModule.DataConstructorOwner,
@@ -594,13 +590,12 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
             }
         },
         definitionHandler = new ObjectDefinitionLoader[ArgonModule.DataConstructorDefinition, DataConstructorOwner[context.type, TPayloadSpec], DataConstructor[context.type, TPayloadSpec]] {
-          override def apply(id: Int, definition: ArgonModule.DataConstructorDefinition, ctorOwner: DataConstructorOwner[context.type, TPayloadSpec]): Comp[DataConstructor[context.type, TPayloadSpec] { val owner: ctorOwner.type }] = ???
+          override def apply[TOwner2 <: DataConstructorOwner[context.type, TPayloadSpec]](id: Int, definition: ArgonModule.DataConstructorDefinition, ctorOwner: TOwner2): Comp[DataConstructor[context.type, TPayloadSpec] { val owner: ctorOwner.type }] = ???
         }
       ).get(id)
 
   private def getFunction(id: Int): Comp[FunctionLoadResult[context.type, TPayloadSpec]] =
-    handleModuleObjectLoading
-      [
+    handleModuleObjectLoading[
         ArgonModule.FunctionReference,
         ArgonModule.FunctionDefinition,
         ArgonModule.FunctionOwner,
@@ -628,7 +623,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
             }
         },
         definitionHandler = new ObjectDefinitionLoader[ArgonModule.FunctionDefinition, FunctionOwner[context.type, TPayloadSpec], ArFunc[context.type, TPayloadSpec]] {
-          override def apply(id: Int, definition: ArgonModule.FunctionDefinition, functionOwner: FunctionOwner[context.type, TPayloadSpec]): Comp[ArFunc[context.type, TPayloadSpec] { val owner: functionOwner.type }] = for {
+          override def apply[TOwner2 <: FunctionOwner[context.type, TPayloadSpec]](id: Int, definition: ArgonModule.FunctionDefinition, functionOwner: TOwner2): Comp[ArFunc[context.type, TPayloadSpec] { val owner: functionOwner.type }] = for {
             uniqId <- UniqueIdentifier.make
           } yield new ArFunc[context.type, TPayloadSpec] {
             override val context: ModuleCreatorCommon.this.context.type = ModuleCreatorCommon.this.context
@@ -663,8 +658,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
       ).get(id)
 
   private lazy val getMethod: Int => Comp[MethodLoadResult[context.type, TPayloadSpec]] =
-    handleModuleObjectLoading
-      [
+    handleModuleObjectLoading[
         ArgonModule.MethodReference,
         ArgonModule.MethodDefinition,
         ArgonModule.MethodOwner,
@@ -708,7 +702,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
 
         } yield method,
         definitionHandler = new ObjectDefinitionLoader[ArgonModule.MethodDefinition, MethodOwner[context.type, TPayloadSpec], ArMethod[context.type, TPayloadSpec]] {
-          override def apply(id: Int, definition: ArgonModule.MethodDefinition, methodOwner: MethodOwner[context.type, TPayloadSpec]): Comp[ArMethod[context.type, TPayloadSpec] { val owner: methodOwner.type }] =
+          override def apply[TOwner2 <: MethodOwner[context.type, TPayloadSpec]](id: Int, definition: ArgonModule.MethodDefinition, methodOwner: TOwner2): Comp[ArMethod[context.type, TPayloadSpec] { val owner: methodOwner.type }] =
             for {
               uniqId <- UniqueIdentifier.make
               methodName <- IO.fromEither(
@@ -757,8 +751,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
       ).toFunction
 
   private lazy val getClassCtor: Int => Comp[ClassCtorLoadResult[context.type, TPayloadSpec]] =
-    handleModuleObjectLoading
-      [
+    handleModuleObjectLoading[
         ArgonModule.ClassConstructorReference,
         ArgonModule.ClassConstructorDefinition,
         Int,
@@ -790,7 +783,7 @@ private[loader] abstract class ModuleCreatorCommon[TPayloadSpec[_, _]: PayloadSp
               .map { _.ctor }
           },
         definitionHandler = new ObjectDefinitionLoader[ArgonModule.ClassConstructorDefinition, ClassConstructorOwner[context.type, TPayloadSpec], ClassConstructor[context.type, TPayloadSpec]] {
-          override def apply(id: Int, definition: ArgonModule.ClassConstructorDefinition, ctorOwner: ClassConstructorOwner[context.type, TPayloadSpec]): Comp[ClassConstructor[context.type, TPayloadSpec] { val owner: ctorOwner.type }] =
+          override def apply[TOwner2 <: ClassConstructorOwner[context.type, TPayloadSpec]](id: Int, definition: ArgonModule.ClassConstructorDefinition, ctorOwner: TOwner2): Comp[ClassConstructor[context.type, TPayloadSpec] { val owner: ctorOwner.type }] =
             for {
               uniqId <- UniqueIdentifier.make
             } yield new ClassConstructor[context.type, TPayloadSpec] {
