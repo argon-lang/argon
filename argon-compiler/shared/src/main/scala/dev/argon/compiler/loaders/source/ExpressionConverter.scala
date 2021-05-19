@@ -128,10 +128,11 @@ sealed trait ExpressionConverter[TContext <: Context with Singleton] {
                 _.toList.toVector.flatTraverse { t =>
                   reduceExprToValue(t).flatMap { t =>
 
-                    def methodBindingsToOverloads
-                    [TPayloadSpec[_, _]: PayloadSpecInfo]
-                    (bindings: Vector[MethodBinding[context.type, TPayloadSpec]])
-                    : OverloadResult[MemberValue[context.type]] =
+                    def methodBindingsToOverloads[
+                      TPayloadSpec[_, _]: PayloadSpecInfo
+                    ](
+                      bindings: Vector[MethodBinding[context.type, TPayloadSpec]]
+                    ): OverloadResult[MemberValue[context.type]] =
                       NonEmptyVector.fromVector(bindings) match {
                         case Some(bindings) =>
                           OverloadResult.List(

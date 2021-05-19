@@ -30,7 +30,7 @@ trait ClassConstructor[TContext <: Context, TPayloadSpec[_, _]] extends Callable
       ownerSigUnConv <- ownerClass.signature
       ownerSig <- ownerSigUnConv.convertTypeSystem(newSigContext)(converter)
       convSig <- sig.convertTypeSystem(newSigContext)(converter)
-      newSig = convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters)(instanceType.args)
+      newSig = convSig.substituteTypeArguments(ownerSig.unsubstitutedParameters.unsized)(instanceType.args)
     } yield newSig
 
 

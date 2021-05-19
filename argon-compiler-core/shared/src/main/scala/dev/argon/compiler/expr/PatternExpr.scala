@@ -14,8 +14,8 @@ object PatternExpr {
     args: Vector[PatternExpr[TContext, Wrap]]
   ) extends PatternExpr[TContext, Wrap]
 
-  final case class Binding[TContext, Wrap[+_]](variable: LocalVariable[TContext, Wrap]) extends PatternExpr[TContext, Wrap]
-  final case class CastBinding[TContext, Wrap[+_]](variable: LocalVariable[TContext, Wrap]) extends PatternExpr[TContext, Wrap]
+  final case class Binding[TContext <: Context with Singleton, Wrap[+_]](variable: LocalVariable[TContext, Wrap]) extends PatternExpr[TContext, Wrap]
+  final case class CastBinding[TContext <: Context with Singleton, Wrap[+_]](variable: LocalVariable[TContext, Wrap]) extends PatternExpr[TContext, Wrap]
 }
 
 final case class PatternCase[TContext, Wrap[+_]](pattern: PatternExpr[TContext, Wrap], body: ArExprWrap[TContext, Wrap])

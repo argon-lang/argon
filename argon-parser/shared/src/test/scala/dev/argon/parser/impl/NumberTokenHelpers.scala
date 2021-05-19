@@ -9,12 +9,12 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
 
   override type TToken = Int
   override type TSyntaxError = WithSource[String]
-  override type TLabel = NumberTokenHelpers.NumberTokenLabel
+  override type TLabel[T] = NumberTokenHelpers.NumberTokenLabel[T]
 
   override protected val grammarFactory: Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] =
     new Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] {
 
-      override protected def createGrammar[T](label: NumberTokenHelpers.NumberTokenLabel { type RuleType = T }): TGrammar[T] =
+      override protected def createGrammar[T](label: NumberTokenHelpers.NumberTokenLabel[T]): TGrammar[T] =
         throw new Exception("No labels exist")
 
     }
@@ -37,8 +37,6 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
 
 object NumberTokenHelpers {
 
-  sealed trait NumberTokenLabel extends Grammar.RuleLabel {
-    override type RuleType = Nothing
-  }
+  sealed trait NumberTokenLabel[T]
 
 }

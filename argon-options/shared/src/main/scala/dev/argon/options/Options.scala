@@ -1,5 +1,7 @@
 package dev.argon.options
 
+import scala.annotation.nowarn
+
 trait Options[A[_], O <: OptionID] {
   def get(id: O): A[id.ElementType]
   def set(id: O)(value: A[id.ElementType]): Options[A, O]
@@ -8,7 +10,7 @@ trait Options[A[_], O <: OptionID] {
 object Options {
 
   trait OptionValueFunction[A[_], O <: OptionID] {
-    def apply[E](id: O { type ElementType = E }): A[E]
+    def apply[E](id: O with TypedOptionID[E]): A[E]
   }
 
   def fromFunction[A[_], O <: OptionID](f: OptionValueFunction[A, O]): Options[A, O] =
@@ -20,20 +22,23 @@ object Options {
 
     @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
     final override def get(id: O): A[id.ElementType] =
-      map.get(id).map(_.asInstanceOf[A[id.ElementType]]).getOrElse(getDefault(id))
+      map.get(id).map(_.asInstanceOf[A[id.ElementType]]).getOrElse(getDefault(id.asTypedOption))
 
 
     final override def set(id: O)(value: A[id.ElementType]): Options[A, O] =
       new FunctionBackedOptionOptions(getDefault, map.updated(id, value))
   }
 
-  private[options] final class MapBackedOptionOptions[A[_], O <: OptionID](map: Map[O, Any]) extends Options[Lambda[X => Option[A[X]]], O] {
+  @nowarn("cat=unused")
+  private type MapBackedValue[A[_], X] = Option[A[X]]
+
+  private[options] final class MapBackedOptionOptions[A[_], O <: OptionID](map: Map[O, Any]) extends Options[MapBackedValue[A, *], O] {
 
     @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
     override def get(id: O): Option[A[id.ElementType]] =
       map.get(id).map(_.asInstanceOf[A[id.ElementType]])
 
-    override def set(id: O)(value: Option[A[id.ElementType]]): Options[Lambda[X => Option[A[X]]], O] =
+    override def set(id: O)(value: Option[A[id.ElementType]]): Options[MapBackedValue[A, *], O] =
       value match {
         case Some(value) => new MapBackedOptionOptions[A, O](map.updated(id, value))
         case None => new MapBackedOptionOptions[A, O](map.removed(id))

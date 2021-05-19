@@ -5,7 +5,7 @@ import dev.argon.options.OptionsHandler.CombineFunction
 import dev.argon.options.OptionsHandlerImpl.OptionIDList
 import shapeless.{Id => _, _}
 
-abstract class OptionsHandlerImpl[O <: OptionID { type Decoded[A] = Dec[A] }, Dec[_]](implicit val idList: OptionIDList[O]) extends OptionsHandler[O, Dec] {
+final class OptionsHandlerImpl[O <: OptionID { type Decoded[A] = Dec[A] }, Dec[_]](implicit val idList: OptionIDList[O]) extends OptionsHandler[O, Dec] {
   override type OptRepr[A[_]] = idList.OptRepr[A]
 
   override def ids: OptRepr[Lambda[X => O { type ElementType = X }]] = idList.ids
@@ -74,7 +74,7 @@ object OptionsHandlerImpl {
     override def reprToOptions[A[_]](list: OptRepr[A]): Options[A, O] =
       Options.fromFunction(new Options.OptionValueFunction[A, O] {
         @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
-        override def apply[E](id: O { type ElementType = E }): A[E] =
+        override def apply[E](id: O with TypedOptionID[E]): A[E] =
           listPart.getOptionValue(listGeneric.to(id), list).asInstanceOf[A[E]]
       })
   }

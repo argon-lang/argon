@@ -2,6 +2,7 @@ package dev.argon.compiler.core
 
 import cats._
 import cats.implicits._
+import dev.argon.util.DeriveHelpers
 
 sealed trait GlobalName
 object GlobalName {
@@ -12,5 +13,5 @@ object GlobalName {
 
   case object Unnamed extends GlobalName
 
-  implicit val eqInstance: Eq[GlobalName] = cats.derived.semiauto.eq
+  implicit val eqInstance: Eq[GlobalName] = DeriveHelpers.eq
 }

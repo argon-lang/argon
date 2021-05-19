@@ -48,7 +48,7 @@ object ArExpr {
     elseBody: ArExprWrap[TContext, Wrap]
   ) extends ArExpr[TContext, Wrap]
   
-  final case class LetBinding[TContext, Wrap[+_]]
+  final case class LetBinding[TContext <: Context with Singleton, Wrap[+_]]
   (
     variable: LocalVariable[TContext, Wrap],
     value: ArExprWrap[TContext, Wrap],
@@ -73,7 +73,7 @@ object ArExpr {
     exprType: ArExprWrap[TContext, Wrap]
   ) extends ArExpr[TContext, Wrap]
   
-  final case class LoadLambda[TContext, Wrap[+_]]
+  final case class LoadLambda[TContext <: Context with Singleton, Wrap[+_]]
   (
     argVariable: LocalVariable[TContext, Wrap],
     body: ArExprWrap[TContext, Wrap]
@@ -98,7 +98,7 @@ object ArExpr {
     exprType: ArExprWrap[TContext, Wrap]
   ) extends ArExpr[TContext, Wrap]
   
-  final case class LoadVariable[TContext, Wrap[+_]]
+  final case class LoadVariable[TContext <: Context with Singleton, Wrap[+_]]
   (
     variable: Variable[TContext, Wrap]
   ) extends ArExpr[TContext, Wrap]
@@ -124,7 +124,7 @@ object ArExpr {
     second: ArExprWrap[TContext, Wrap]
   ) extends ArExpr[TContext, Wrap]
   
-  final case class StoreVariable[TContext, Wrap[+_]]
+  final case class StoreVariable[TContext <: Context with Singleton, Wrap[+_]]
   (
     variable: Variable[TContext, Wrap],
     value: ArExprWrap[TContext, Wrap],
@@ -184,7 +184,7 @@ object ArExpr {
     second: ArExprWrap[TContext, Wrap]
   ) extends TypeIsTypeOfTypeExpr[TContext, Wrap]
 
-  final case class ExistentialType[TContext, Wrap[+_]]
+  final case class ExistentialType[TContext <: Context with Singleton, Wrap[+_]]
   (
     variable: LocalVariable[TContext, Wrap],
     inner: ArExprWrap[TContext, Wrap]

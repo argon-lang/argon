@@ -50,7 +50,7 @@ object GlobalScope {
 
       case NestedNamespaces(paths) =>
         createNSScope(context)(Vector(paths.toVector))(modules)
-          .map(context.scopeContext.LookupResult.ScopeResult)
+          .map(context.scopeContext.LookupResult.ScopeResult(_))
     }
 
   // First resolve from higher-precedence modules.

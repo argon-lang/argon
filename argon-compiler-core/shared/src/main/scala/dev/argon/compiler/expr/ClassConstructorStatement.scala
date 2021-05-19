@@ -2,7 +2,7 @@ package dev.argon.compiler.expr
 
 import dev.argon.compiler.core.Context
 import dev.argon.compiler.expr.ArExpr.ClassConstructorCall
-import shapeless.Id
+import dev.argon.util.Id
 
 import scala.collection.immutable.Vector
 

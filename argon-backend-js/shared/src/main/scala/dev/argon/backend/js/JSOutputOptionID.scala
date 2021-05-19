@@ -1,6 +1,7 @@
 package dev.argon.backend.js
 
-import dev.argon.options.{OptionID, SingleFile, TypedOptionID}
+import dev.argon.backend.Backend.AsFile
+import dev.argon.options.{OptionID, OptionIDBase, OptionInfo, SingleFile}
 import dev.argon.compiler.output.{BuildArtifact, TextBuildArtifact}
 
 sealed trait JSOutputOptionID extends OptionID {
@@ -9,6 +10,7 @@ sealed trait JSOutputOptionID extends OptionID {
 }
 
 object JSOutputOptionID {
-  type AsFile[_] = SingleFile
-  case object JSModule extends TypedOptionID[AsFile, TextBuildArtifact] with JSOutputOptionID
+  case object JSModule extends OptionIDBase[AsFile, TextBuildArtifact] with JSOutputOptionID {
+    override val info: OptionInfo[TextBuildArtifact] = OptionInfo("output.js.module", "The compiled JS module file")
+  }
 }

@@ -15,7 +15,7 @@ trait SignatureContext {
   type TTypeWrapper[+_]
   implicit val typeWrapperInstances: WrapperInstance[TTypeWrapper]
 
-  private type TParameter = dev.argon.compiler.expr.Parameter[context.type, TTypeWrapper]
+  type TParameter = dev.argon.compiler.expr.Parameter[context.type, TTypeWrapper]
 
   trait SignatureVisitor[TResult[TContext2 <: Context with Singleton, Wrap[+_]], Len <: Nat, A] {
     def visitParameters[RestLen <: Nat](sigParams: SignatureParameters[TResult, RestLen])(implicit lenPred: Pred.Aux[Len, RestLen], lenPositive: LT[_0, Len]): A
@@ -221,7 +221,7 @@ object SignatureContext {
 
     for {
       convSig <- sig.convertTypeSystem(sigContext)(conv)
-      substSig = convSig.substituteTypeArguments(convSig.unsubstitutedParameters)(args)
+      substSig = convSig.substituteTypeArguments(convSig.unsubstitutedParameters.unsized)(args)
     } yield substSig.unsubstitutedResult
   }
 

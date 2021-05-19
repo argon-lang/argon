@@ -1,10 +1,10 @@
 package dev.argon.compiler.expr
 
-import dev.argon.compiler.core.VariableName
+import dev.argon.compiler.core.{Context, VariableName}
 
 import scala.collection.immutable.Vector
 
-final case class ParameterElement[TContext, Wrap[+_]]
+final case class ParameterElement[TContext <: Context with Singleton, Wrap[+_]]
 (
   paramVar: ParameterVariable[TContext, Wrap],
   name: VariableName,
@@ -12,7 +12,7 @@ final case class ParameterElement[TContext, Wrap[+_]]
   index: Int
 )
 
-final case class Parameter[TContext, Wrap[+_]]
+final case class Parameter[TContext <: Context with Singleton, Wrap[+_]]
 (
   style: ParameterStyle,
   paramVar: ParameterVariable[TContext, Wrap],

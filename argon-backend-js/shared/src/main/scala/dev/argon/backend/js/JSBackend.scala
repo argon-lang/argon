@@ -1,13 +1,14 @@
 package dev.argon.backend.js
 
 import cats.Id
+import dev.argon.backend.Backend.AsFile
 import dev.argon.compiler._
 import dev.argon.backend._
 import dev.argon.backend.js.JSBackend.PlatformId
 import dev.argon.compiler.core.{ArModule, Context}
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.ModuleLoader
-import dev.argon.options.{FileList, OptionInfo, Options, OptionsHandler, OptionsHandlerImpl, SingleFile}
+import dev.argon.options.{Options, OptionsHandler, OptionsHandlerImpl, TypedOptionID}
 import dev.argon.compiler.output.TextBuildArtifact
 import zio._
 import dev.argon.io.fileio.FileIO
@@ -23,46 +24,13 @@ sealed abstract class JSBackend extends Backend {
 
 
   override type BackendOptionID = JSBackendOptionID
-  final override val backendOptions: OptionsHandler[JSBackendOptionID, Id] = new OptionsHandlerImpl[JSBackendOptionID, Id] {
-    override def info: Options[OptionInfo, JSBackendOptionID] =
-      Options.fromFunction(new Options.OptionValueFunction[OptionInfo, JSBackendOptionID] {
-        override def apply[E](id: JSBackendOptionID { type ElementType = E }): OptionInfo[E] = id match {
-          case JSBackendOptionID.Externs =>
-            OptionInfo(
-              name = "js.extern",
-              description = "JS module defining extern function implementations",
-              defaultValue = new FileList(Seq.empty),
-            )
-
-          case JSBackendOptionID.InjectBefore =>
-            OptionInfo(
-              name = "js.inject.before",
-              description = "JS code injected at the top of the module",
-              defaultValue = None,
-            )
-
-          case JSBackendOptionID.InjectAfter =>
-            OptionInfo(
-              name = "inject.after",
-              description = "JS code injected at the bottom of the module",
-              defaultValue = None,
-            )
-        }
-      })
-  }
+  final override val backendOptions: OptionsHandler[JSBackendOptionID, Id] = new OptionsHandlerImpl[JSBackendOptionID, Id]
 
 
   override type OutputOptionID = JSOutputOptionID
 
 
-  override val outputOptions: OptionsHandler[JSOutputOptionID, Lambda[X => SingleFile]] = new OptionsHandlerImpl[JSOutputOptionID, Lambda[X => SingleFile]] {
-    override def info: Options[OptionInfo, JSOutputOptionID] =
-      Options.fromFunction(new Options.OptionValueFunction[OptionInfo, JSOutputOptionID] {
-        override def apply[E](id: JSOutputOptionID { type ElementType = E }): OptionInfo[E] = id match {
-          case JSOutputOptionID.JSModule => OptionInfo("output.js.module", "The compiled JS module file")
-        }
-      })
-  }
+  override val outputOptions: OptionsHandler[JSOutputOptionID, AsFile] = new OptionsHandlerImpl[JSOutputOptionID, AsFile]
 
 
   override def moduleLoaders(options: Options[Id, JSBackendOptionID]): Seq[ModuleLoader] = Seq()
@@ -87,7 +55,7 @@ object JSBackend {
 
     override def emitModule(options: Options[Id, JSBackendOptionID])(context: Context.Aux[this.type])(module: ArModule[context.type, DeclarationPayloadSpecifier]): Options[Id, JSOutputOptionID] =
       Options.fromFunction(new Options.OptionValueFunction[Id, JSOutputOptionID] {
-        override def apply[E](id: JSOutputOptionID { type ElementType = E }): Id[E] = id match {
+        override def apply[E](id: JSOutputOptionID with TypedOptionID[E]): Id[E] = id match {
           case JSOutputOptionID.JSModule =>
             new TextBuildArtifact {
               override def asStringStream: CompStream[String] = {

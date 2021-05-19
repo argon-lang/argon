@@ -1,6 +1,7 @@
 package dev.argon.backend
 
 import cats.Id
+import dev.argon.backend.Backend.AsFile
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.core.{ArModule, Context}
 import dev.argon.compiler.loaders.ModuleLoader
@@ -16,7 +17,7 @@ trait Backend {
   val backendOptions: OptionsHandler[BackendOptionID, Id]
 
   type OutputOptionID <: OptionID { type ElementType <: BuildArtifact; type Decoded[_] = SingleFile }
-  val outputOptions: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]]
+  val outputOptions: OptionsHandler[OutputOptionID, AsFile]
 
   def moduleLoaders(options: Options[Id, BackendOptionID]): Seq[ModuleLoader]
 
@@ -25,5 +26,10 @@ trait Backend {
 
   def emitModule(options: Options[Id, BackendOptionID])(context: Context.Aux[this.type])(module: ArModule[context.type, DeclarationPayloadSpecifier]): Options[Id, OutputOptionID]
 
+}
+
+object Backend {
+  type AsFile[_] = SingleFile
+  type AsFileOption[_] = Option[SingleFile]
 }
 

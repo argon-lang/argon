@@ -11,7 +11,7 @@ import dev.argon.stream.StreamTransformation
 import dev.argon.util._
 import zio.{Chunk, IO, NonEmptyChunk, ZIO}
 
-sealed trait Grammar[TToken, TSyntaxError, TLabel <: RuleLabel, +T] {
+sealed trait Grammar[TToken, TSyntaxError, TLabel[_], +T] {
 
   type TErrorList = NonEmptyVector[TSyntaxError]
   type TParseOptions = ParseOptions[TToken, TSyntaxError, TLabel]
@@ -23,20 +23,16 @@ sealed trait Grammar[TToken, TSyntaxError, TLabel <: RuleLabel, +T] {
 
 object Grammar {
 
-  trait RuleLabel {
-    type RuleType
-  }
-
-  abstract class GrammarFactory[TToken, TSyntaxError, TLabel <: RuleLabel] {
+  abstract class GrammarFactory[TToken, TSyntaxError, TLabel[_]] {
     type TGrammar[+T] = Grammar[TToken, TSyntaxError, TLabel, T]
 
     @SuppressWarnings(Array("scalafix:DisableSyntax.var"))
-    private var cache: Map[TLabel, AnyRef] = Map.empty
+    private var cache: Map[TLabel[_], AnyRef] = Map.empty
 
-    protected def createGrammar[T](label: TLabel { type RuleType = T }): TGrammar[T]
+    protected def createGrammar[T](label: TLabel[T]): TGrammar[T]
 
     @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
-    final def apply[T](label: TLabel { type RuleType = T }): TGrammar[T] = {
+    final def apply[T](label: TLabel[T]): TGrammar[T] = {
       cache.get(label) match {
         case Some(value) => value.asInstanceOf[TGrammar[T]]
         case None =>
@@ -46,11 +42,11 @@ object Grammar {
       }
     }
 
-    def rule(label: TLabel): Grammar[TToken, TSyntaxError, TLabel, label.RuleType] =
-      new LabelRefGrammar[TToken, TSyntaxError, TLabel, label.RuleType](label)
+    def rule[T](label: TLabel[T]): Grammar[TToken, TSyntaxError, TLabel, T] =
+      new LabelRefGrammar[TToken, TSyntaxError, TLabel, T](label)
   }
 
-  sealed trait GrammarResult[TToken, TSyntaxError, TLabel <: RuleLabel, +T] {
+  sealed trait GrammarResult[TToken, TSyntaxError, TLabel[_], +T] {
     def map[U](f: (Vector[WithSource[TToken]], WithSource[T]) => (Vector[WithSource[TToken]], WithSource[U])): GrammarResult[TToken, TSyntaxError, TLabel, U]
     def flatMap[U](f: (Vector[WithSource[TToken]], WithSource[T]) => GrammarResult[TToken, TSyntaxError, TLabel, U]): GrammarResult[TToken, TSyntaxError, TLabel, U]
 
@@ -62,9 +58,9 @@ object Grammar {
     def completeResult(pos: FilePosition): GrammarResultComplete[TToken, TSyntaxError, TLabel, T]
   }
 
-  sealed trait GrammarResultNonSuccess[TToken, TSyntaxError, TLabel <: RuleLabel, +T] extends GrammarResult[TToken, TSyntaxError, TLabel, T]
+  sealed trait GrammarResultNonSuccess[TToken, TSyntaxError, TLabel[_], +T] extends GrammarResult[TToken, TSyntaxError, TLabel, T]
 
-  sealed trait GrammarResultComplete[TToken, TSyntaxError, TLabel <: RuleLabel, +T] extends GrammarResult[TToken, TSyntaxError, TLabel, T] {
+  sealed trait GrammarResultComplete[TToken, TSyntaxError, TLabel[_], +T] extends GrammarResult[TToken, TSyntaxError, TLabel, T] {
     def toEither: Either[NonEmptyVector[TSyntaxError], (Vector[WithSource[TToken]], WithSource[T])]
 
     def flatMap[U](f: (Vector[WithSource[TToken]], WithSource[T]) => GrammarResultComplete[TToken, TSyntaxError, TLabel, U]): GrammarResultComplete[TToken, TSyntaxError, TLabel, U]
@@ -80,7 +76,7 @@ object Grammar {
     override def completeResult(pos: FilePosition): GrammarResultComplete[TToken, TSyntaxError, TLabel, T] = this
   }
 
-  final case class GrammarResultSuccess[TToken, TSyntaxError, TLabel <: RuleLabel, +T](tokens: Vector[WithSource[TToken]], value: WithSource[T]) extends GrammarResultComplete[TToken, TSyntaxError, TLabel, T] {
+  final case class GrammarResultSuccess[TToken, TSyntaxError, TLabel[_], +T](tokens: Vector[WithSource[TToken]], value: WithSource[T]) extends GrammarResultComplete[TToken, TSyntaxError, TLabel, T] {
     override def map[U](f: (Vector[WithSource[TToken]], WithSource[T]) => (Vector[WithSource[TToken]], WithSource[U])): GrammarResultComplete[TToken, TSyntaxError, TLabel, U] =
       f(tokens, value) match { case (tokens2, value2) => GrammarResultSuccess(tokens2, value2) }
 
@@ -98,7 +94,7 @@ object Grammar {
     override def toEither: Either[NonEmptyVector[TSyntaxError], (Vector[WithSource[TToken]], WithSource[T])] = Right((tokens, value))
   }
 
-  final case class GrammarResultFailure[TToken, TSyntaxError, TLabel <: RuleLabel](failure: NonEmptyVector[TSyntaxError])
+  final case class GrammarResultFailure[TToken, TSyntaxError, TLabel[_]](failure: NonEmptyVector[TSyntaxError])
     extends GrammarResultComplete[TToken, TSyntaxError, TLabel, Nothing]
       with GrammarResultNonSuccess[TToken, TSyntaxError, TLabel, Nothing] {
 
@@ -116,7 +112,7 @@ object Grammar {
     override def toEither: Either[NonEmptyVector[TSyntaxError], Nothing] = Left(failure)
   }
 
-  final case class GrammarResultError[TToken, TSyntaxError, TLabel <: RuleLabel](error: NonEmptyVector[TSyntaxError])
+  final case class GrammarResultError[TToken, TSyntaxError, TLabel[_]](error: NonEmptyVector[TSyntaxError])
     extends GrammarResultComplete[TToken, TSyntaxError, TLabel, Nothing]
       with GrammarResultNonSuccess[TToken, TSyntaxError, TLabel, Nothing] {
 
@@ -134,7 +130,7 @@ object Grammar {
     override def toEither: Either[NonEmptyVector[TSyntaxError], Nothing] = Left(error)
   }
 
-  sealed trait GrammarResultSuspend[TToken, TSyntaxError, TLabel <: RuleLabel, +T] extends GrammarResultNonSuccess[TToken, TSyntaxError, TLabel, T] {
+  sealed trait GrammarResultSuspend[TToken, TSyntaxError, TLabel[_], +T] extends GrammarResultNonSuccess[TToken, TSyntaxError, TLabel, T] {
 
     def continue(tokens: NonEmptyVector[WithSource[TToken]]): GrammarResult[TToken, TSyntaxError, TLabel, T]
 
@@ -170,7 +166,7 @@ object Grammar {
 
   }
 
-  final case class ParseOptions[TToken, TSyntaxError, TLabel <: RuleLabel](leftRecRules: Set[Grammar[TToken, TSyntaxError, TLabel, _]], currentLabel: Option[TLabel], factory: GrammarFactory[TToken, TSyntaxError, TLabel]) {
+  final case class ParseOptions[TToken, TSyntaxError, TLabel[_]](leftRecRules: Set[Grammar[TToken, TSyntaxError, TLabel, _]], currentLabel: Option[TLabel[_]], factory: GrammarFactory[TToken, TSyntaxError, TLabel]) {
 
     def notLeftRec: ParseOptions[TToken, TSyntaxError, TLabel] =
       if(leftRecRules.isEmpty)
@@ -181,7 +177,7 @@ object Grammar {
     def addLeftRec(rule: Grammar[TToken, TSyntaxError, TLabel, _]): ParseOptions[TToken, TSyntaxError, TLabel] =
       copy(leftRecRules = leftRecRules + rule)
 
-    def setLabel(label: TLabel): ParseOptions[TToken, TSyntaxError, TLabel] =
+    def setLabel(label: TLabel[_]): ParseOptions[TToken, TSyntaxError, TLabel] =
       copy(currentLabel = Some(label))
 
   }
@@ -198,7 +194,7 @@ object Grammar {
 
   object Operators extends CombinerBase {
 
-    final implicit class GrammarOperatorsImpl[TToken, TSyntaxError, TLabel <: RuleLabel, T](grammar1: => Grammar[TToken, TSyntaxError, TLabel, T]) {
+    final implicit class GrammarOperatorsImpl[TToken, TSyntaxError, TLabel[_], T](grammar1: => Grammar[TToken, TSyntaxError, TLabel, T]) {
 
       def --> [U](f: T => U): Grammar[TToken, TSyntaxError, TLabel, U] = -+>(WithSource.lift(f))
       def -+> [U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, TLabel, U] =
@@ -281,45 +277,45 @@ object Grammar {
   }
 
 
-  def token[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory]
+  def token[TToken, TSyntaxError, TLabel[_], TTokenCategory]
   (category: TTokenCategory, tokenMatches: TToken => Boolean)
   (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
   : Grammar[TToken, TSyntaxError, TLabel, TToken] =
     matcher(category, (t: TToken) => Some(t).filter(tokenMatches))
 
-  def eof[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, TResult]
+  def eof[TToken, TSyntaxError, TLabel[_], TTokenCategory, TResult]
   (result: TResult)
   (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
   : Grammar[TToken, TSyntaxError, TLabel, TResult] =
     EndOfFileGrammar(result)
 
-  def matcher[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, Result]
+  def matcher[TToken, TSyntaxError, TLabel[_], TTokenCategory, Result]
   (category: TTokenCategory, tokenMatcher: TToken => Option[Result])
   (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
   : Grammar[TToken, TSyntaxError, TLabel, Result] =
     matcher(category, TokenMatcher.Anything(tokenMatcher))
 
-  def partialMatcher[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, Result]
+  def partialMatcher[TToken, TSyntaxError, TLabel[_], TTokenCategory, Result]
   (category: TTokenCategory)
   (f: PartialFunction[TToken, Result])
   (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
   : Grammar[TToken, TSyntaxError, TLabel, Result] =
     matcher(category, f.lift)
 
-  def matcher[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, Result]
+  def matcher[TToken, TSyntaxError, TLabel[_], TTokenCategory, Result]
   (category: TTokenCategory, tokenMatcher: TokenMatcher[TToken, Result])
   (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
   : Grammar[TToken, TSyntaxError, TLabel, Result] =
     TokenGrammar(category, tokenMatcher)
 
-  def reject[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, TResult]
+  def reject[TToken, TSyntaxError, TLabel[_], TTokenCategory, TResult]
   (grammarErrors: NonEmptyVector[TSyntaxError])
   : Grammar[TToken, TSyntaxError, TLabel, TResult] =
     RejectGrammar(grammarErrors)
 
-  def parseAll[TToken, TSyntaxError, TLabel <: RuleLabel, T]
+  def parseAll[TToken, TSyntaxError, TLabel[_], T]
   (factory: GrammarFactory[TToken, TSyntaxError, TLabel])
-  (label: TLabel { type RuleType = T })
+  (label: TLabel[T])
   : StreamTransformation[Any, TSyntaxError, WithSource[TToken], FilePosition, T, FilePosition] =
     new StreamTransformation[Any, TSyntaxError, WithSource[TToken], FilePosition, T, FilePosition] {
       sealed trait ParseStep
@@ -391,7 +387,7 @@ object Grammar {
 
   type TokenMatcherFunc[TToken, T] = WithSource[TToken] => Option[WithSource[T]]
 
-  private final case class RejectGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, T](grammarErrors: NonEmptyVector[TSyntaxError]) extends Grammar[TToken, TSyntaxError, TLabel, T] {
+  private final case class RejectGrammar[TToken, TSyntaxError, TLabel[_], T](grammarErrors: NonEmptyVector[TSyntaxError]) extends Grammar[TToken, TSyntaxError, TLabel, T] {
 
     override def parseTokens(tokens: NonEmptyVector[WithSource[TToken]], options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
       GrammarResultFailure(grammarErrors)
@@ -401,7 +397,7 @@ object Grammar {
 
   }
 
-  private final case class EmptyStrGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, T](result: T) extends Grammar[TToken, TSyntaxError, TLabel, T] {
+  private final case class EmptyStrGrammar[TToken, TSyntaxError, TLabel[_], T](result: T) extends Grammar[TToken, TSyntaxError, TLabel, T] {
 
     override def parseTokens(tokens: NonEmptyVector[WithSource[TToken]], options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
       GrammarResultSuccess(tokens.toVector, WithSource(result, SourceLocation(tokens.head.location.start, tokens.head.location.start)))
@@ -411,7 +407,7 @@ object Grammar {
 
   }
 
-  private final case class EndOfFileGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, T]
+  private final case class EndOfFileGrammar[TToken, TSyntaxError, TLabel[_], TTokenCategory, T]
   (
     result: T
   )(
@@ -424,7 +420,7 @@ object Grammar {
       GrammarResultSuccess(Vector(), WithSource(result, SourceLocation(pos, pos)))
   }
 
-  private final case class TokenGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, TTokenCategory, T]
+  private final case class TokenGrammar[TToken, TSyntaxError, TLabel[_], TTokenCategory, T]
   (
     category: TTokenCategory,
     tokenMatcher: TokenMatcher[TToken, T]
@@ -454,7 +450,7 @@ object Grammar {
 
   }
 
-  private final class ConcatGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, A, B, T]
+  private final class ConcatGrammar[TToken, TSyntaxError, TLabel[_], A, B, T]
   (
     grammarAUncached: => Grammar[TToken, TSyntaxError, TLabel, A],
     grammarBUncached: => Grammar[TToken, TSyntaxError, TLabel, B],
@@ -503,7 +499,7 @@ object Grammar {
   }
 
   private object ConcatGrammar {
-    def apply[TToken, TSyntaxError, TLabel <: RuleLabel, A, B, T]
+    def apply[TToken, TSyntaxError, TLabel[_], A, B, T]
     (
       grammarA: => Grammar[TToken, TSyntaxError, TLabel, A],
       grammarB: => Grammar[TToken, TSyntaxError, TLabel, B]
@@ -514,7 +510,7 @@ object Grammar {
 
   }
 
-  private final class StrictGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, T]
+  private final class StrictGrammar[TToken, TSyntaxError, TLabel[_], T]
   (
     innerUncached: => Grammar[TToken, TSyntaxError, TLabel, T]
   ) extends Grammar[TToken, TSyntaxError, TLabel, T] {
@@ -529,7 +525,7 @@ object Grammar {
   }
 
   private object StrictGrammar {
-    def apply[TToken, TSyntaxError, TLabel <: RuleLabel, T]
+    def apply[TToken, TSyntaxError, TLabel[_], T]
     (
       inner: => Grammar[TToken, TSyntaxError, TLabel, T]
     ): StrictGrammar[TToken, TSyntaxError, TLabel, T] =
@@ -537,7 +533,7 @@ object Grammar {
 
   }
 
-  private final class ParseStateGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, T]
+  private final class ParseStateGrammar[TToken, TSyntaxError, TLabel[_], T]
   (
     innerUncached: => Grammar[TToken, TSyntaxError, TLabel, T],
     prevTokens: Vector[WithSource[TToken]],
@@ -558,7 +554,7 @@ object Grammar {
 
   }
 
-  private final class UnionGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, T]
+  private final class UnionGrammar[TToken, TSyntaxError, TLabel[_], T]
   (grammarAUncached: => Grammar[TToken, TSyntaxError, TLabel, T], grammarBUncached: => Grammar[TToken, TSyntaxError, TLabel, T])
   (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
     extends Grammar[TToken, TSyntaxError, TLabel, T] {
@@ -616,13 +612,13 @@ object Grammar {
 
   object UnionGrammar {
 
-    def apply[TToken, TSyntaxError, TLabel <: RuleLabel, T]
+    def apply[TToken, TSyntaxError, TLabel[_], T]
     (grammarA: => Grammar[TToken, TSyntaxError, TLabel, T], grammarB: => Grammar[TToken, TSyntaxError, TLabel, T])
     (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
     : Grammar[TToken, TSyntaxError, TLabel, T] =
       new UnionGrammar[TToken, TSyntaxError, TLabel, T](grammarA, grammarB)
 
-    def fromList[TToken, TSyntaxError, TLabel <: RuleLabel, T]
+    def fromList[TToken, TSyntaxError, TLabel[_], T]
     (grammars: NonEmptyVector[Lazy[Grammar[TToken, TSyntaxError, TLabel, T]]])
     (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
     : Grammar[TToken, TSyntaxError, TLabel, T] =
@@ -636,7 +632,7 @@ object Grammar {
 
   }
 
-  private final class RepeatGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, T]
+  private final class RepeatGrammar[TToken, TSyntaxError, TLabel[_], T]
   (innerUncached: => Grammar[TToken, TSyntaxError, TLabel, T])
     extends Grammar[TToken, TSyntaxError, TLabel, Vector[T]] {
 
@@ -683,7 +679,7 @@ object Grammar {
   }
 
 
-  private final class MapGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, T, U](innerUncached: => Grammar[TToken, TSyntaxError, TLabel, T], f: GrammarResult[TToken, TSyntaxError, TLabel, T] => GrammarResult[TToken, TSyntaxError, TLabel, U]) extends Grammar[TToken, TSyntaxError, TLabel, U] {
+  private final class MapGrammar[TToken, TSyntaxError, TLabel[_], T, U](innerUncached: => Grammar[TToken, TSyntaxError, TLabel, T], f: GrammarResult[TToken, TSyntaxError, TLabel, T] => GrammarResult[TToken, TSyntaxError, TLabel, U]) extends Grammar[TToken, TSyntaxError, TLabel, U] {
 
     private lazy val inner = innerUncached
 
@@ -696,7 +692,7 @@ object Grammar {
 
   }
 
-  private final class LabelRefGrammar[TToken, TSyntaxError, TLabel <: RuleLabel, T](label: TLabel { type RuleType = T }) extends Grammar[TToken, TSyntaxError, TLabel, T] {
+  private final class LabelRefGrammar[TToken, TSyntaxError, TLabel[_], T](label: TLabel[T]) extends Grammar[TToken, TSyntaxError, TLabel, T] {
     override def parseTokens(tokens: NonEmptyVector[WithSource[TToken]], options: TParseOptions): GrammarResult[TToken, TSyntaxError, TLabel, T] =
       options.factory(label).parseTokens(tokens, options)
 
@@ -705,7 +701,7 @@ object Grammar {
   }
 
   @SuppressWarnings(Array("scalafix:MissingFinal.trait"))
-  trait EmbeddedGrammar[TSyntaxError, TTokenA, TLabelA <: RuleLabel, TTokenB, TLabelB <: RuleLabel, T] extends Grammar[TTokenA, TSyntaxError, TLabelA, T] {
+  trait EmbeddedGrammar[TSyntaxError, TTokenA, TLabelA[_], TTokenB, TLabelB[_], T] extends Grammar[TTokenA, TSyntaxError, TLabelA, T] {
 
     protected val outerGrammar: Grammar[TTokenA, TSyntaxError, TLabelA, TTokenB]
     protected val innerGrammar: Grammar[TTokenB, TSyntaxError, TLabelB, T]

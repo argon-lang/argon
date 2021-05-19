@@ -5,8 +5,8 @@ import dev.argon.compiler.core.Context.Aux
 import dev.argon.compiler.core.ArModule
 import dev.argon.compiler.core.PayloadSpecifiers.DeclarationPayloadSpecifier
 import dev.argon.compiler.loaders.ModuleLoader
-import dev.argon.options.{Options, OptionsHandler, SingleFile}
-import shapeless._
+import dev.argon.options.{Options, OptionsHandler, SingleFile, TypedOptionID}
+import dev.argon.util.Id
 import zio._
 
 object GenericBackend extends Backend {
@@ -29,7 +29,7 @@ object GenericBackend extends Backend {
 
   override def emitModule(options: Options[Id, BackendOptionID])(context: Aux[GenericBackend.this.type])(module: ArModule[context.type, DeclarationPayloadSpecifier]): Options[Id, OutputOptionID] =
     Options.fromFunction[Id, Nothing](new Options.OptionValueFunction[Id, OutputOptionID] {
-      override def apply[E](id: Nothing { type ElementType = E }): Id[E] = id
+      override def apply[E](id: Nothing with TypedOptionID[E]): Id[E] = id
     })
 }
 

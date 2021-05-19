@@ -491,14 +491,14 @@ trait TypeSystem {
     def universeOfTypeArgs(args: Vector[WrapExpr]): Comp[UniverseExpr] =
       args
         .traverse(universeOfWrapExpr)
-        .map { _.reduceLeftOption(LargestUniverse).getOrElse { FixedUniverse(0) } }
+        .map { _.reduceLeftOption(LargestUniverse.apply).getOrElse { FixedUniverse(0) } }
 
     expr match {
-      case ClassConstructorCall(classType, _, _) => universeOfTypeArgs(classType.args).map(NextLargestUniverse)
-      case DataConstructorCall(dataCtorInstanceType, _) => universeOfTypeArgs(dataCtorInstanceType.args).map(NextLargestUniverse)
+      case ClassConstructorCall(classType, _, _) => universeOfTypeArgs(classType.args).map(NextLargestUniverse.apply)
+      case DataConstructorCall(dataCtorInstanceType, _) => universeOfTypeArgs(dataCtorInstanceType.args).map(NextLargestUniverse.apply)
       case EnsureExecuted(body, _) => universeOfWrapExpr(body)
-      case FunctionCall(_, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse)
-      case FunctionObjectCall(_, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse)
+      case FunctionCall(_, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse.apply)
+      case FunctionObjectCall(_, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse.apply)
       case IfElse(_, ifBody, elseBody) =>
         for {
           ifUniv <- universeOfWrapExpr(ifBody)
@@ -516,21 +516,21 @@ trait TypeSystem {
       case LoadTuple(values) =>
         values
           .traverse { case TupleElement(elem) => universeOfWrapExpr(elem) }
-          .map { _.reduceLeft(LargestUniverse) }
-      case LoadTupleElement(_, elemType, _) => universeOfWrapExpr(elemType).map(PreviousUniverse)
+          .map { _.reduceLeft(LargestUniverse.apply) }
+      case LoadTupleElement(_, elemType, _) => universeOfWrapExpr(elemType).map(PreviousUniverse.apply)
       case LoadUnit(_) => FixedUniverse(0).upcast[UniverseExpr].pure[Comp]
-      case LoadVariable(variable) => universeOfWrapExpr(variable.varType).map(PreviousUniverse)
-      case MethodCall(_, _, _, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse)
+      case LoadVariable(variable) => universeOfWrapExpr(variable.varType).map(PreviousUniverse.apply)
+      case MethodCall(_, _, _, _, returnType) => universeOfWrapExpr(returnType).map(PreviousUniverse.apply)
       case PatternMatch(_, cases) =>
         cases
           .traverse { patCase => universeOfWrapExpr(patCase.body) }
-          .map { _.reduceLeft(LargestUniverse) }
+          .map { _.reduceLeft(LargestUniverse.apply) }
       case Sequence(_, second) => universeOfWrapExpr(second)
-      case StoreVariable(_, _, exprType) => universeOfWrapExpr(exprType).map(PreviousUniverse)
+      case StoreVariable(_, _, exprType) => universeOfWrapExpr(exprType).map(PreviousUniverse.apply)
       case TraitType(_, args) => universeOfTypeArgs(args)
       case ClassType(_, args) => universeOfTypeArgs(args)
       case DataConstructorType(_, args, _) => universeOfTypeArgs(args)
-      case TypeOfType(inner) => universeOfWrapExpr(inner).map(NextLargestUniverse)
+      case TypeOfType(inner) => universeOfWrapExpr(inner).map(NextLargestUniverse.apply)
       case TypeN(universe, _, _) => universe.pure[Comp]
       case FunctionType(argumentType, resultType) =>
         for {

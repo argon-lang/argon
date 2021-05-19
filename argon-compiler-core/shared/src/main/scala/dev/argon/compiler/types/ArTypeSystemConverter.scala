@@ -1,12 +1,12 @@
 package dev.argon.compiler.types
 
 import dev.argon.compiler.core.Context
-import cats.{ Id => _, _ }
+import cats.{Id => _, _}
 import cats.implicits._
 import dev.argon.compiler.Comp
 import dev.argon.compiler.expr.{ArExpr, WrapperInstance}
+import dev.argon.util.Id
 import zio.IO
-import shapeless.Id
 
 object ArTypeSystemConverter {
 

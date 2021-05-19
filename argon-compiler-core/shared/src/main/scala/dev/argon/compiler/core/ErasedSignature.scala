@@ -3,19 +3,18 @@ package dev.argon.compiler.core
 import cats.Eq
 import cats.data.NonEmptyList
 import dev.argon.compiler.expr.ArExpr
-import shapeless.Id
 import cats.implicits._
-
+import dev.argon.util.{DeriveHelpers, Id}
 
 sealed trait ErasedSignature[TContext <: Context with Singleton]
 
 object ErasedSignature {
 
-  implicit def erasedSignatureEqInstance[TContext <: Context with Singleton]: Eq[ErasedSignature[TContext]] = cats.derived.semiauto.eq
+  implicit def erasedSignatureEqInstance[TContext <: Context with Singleton]: Eq[ErasedSignature[TContext]] = DeriveHelpers.eq
 
   sealed trait SigType[TContext <: Context with Singleton]
   object SigType {
-    implicit def eqInstance[TContext <: Context with Singleton]: Eq[SigType[TContext]] = cats.derived.semiauto.eq
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[SigType[TContext]] = DeriveHelpers.eq
   }
 
   final case class BlankType[TContext <: Context with Singleton]() extends SigType[TContext]
@@ -47,7 +46,7 @@ object ErasedSignature {
   final case class ParameterOnlySignature[TContext <: Context with Singleton](paramTypes: Vector[SigType[TContext]])
 
   object ParameterOnlySignature {
-    implicit def eqInstance[TContext <: Context with Singleton]: Eq[ParameterOnlySignature[TContext]] = cats.derived.semiauto.eq
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[ParameterOnlySignature[TContext]] = DeriveHelpers.eq
 
   }
 
@@ -66,7 +65,7 @@ object ErasedSignature {
   }
 
   def fromSignatureParameters[TResult[TContext2 <: Context with Singleton, Wrap[+_]]](context: Context)(sig: context.signatureContext.Signature[TResult, _]): ParameterOnlySignature[context.type] =
-    ParameterOnlySignature(sig.unsubstitutedParameters.map { param => typeToSigType(context)(param.paramType) })
+    ParameterOnlySignature(sig.unsubstitutedParameters.unsized.map { param => typeToSigType(context)(param.paramType) })
 
   private def typeToSigType(context: Context)(t: ArExpr[context.type, Id]): SigType[context.type] =
     t match {

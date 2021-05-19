@@ -16,21 +16,18 @@ import Function.const
 object Lexer {
 
   private[Lexer] object Rule {
-    sealed trait LexerRuleName extends Grammar.RuleLabel
-    sealed trait LexerRuleNameTyped[T] extends LexerRuleName {
-      override type RuleType = T
-    }
+    sealed trait LexerRuleName[T]
 
-    final case object NewLine extends LexerRuleNameTyped[Token]
-    final case object Whitespace extends LexerRuleNameTyped[Unit]
-    final case object DoubleQuoteString extends LexerRuleNameTyped[Token]
-    final case object SingleQuoteString extends LexerRuleNameTyped[Token]
-    final case object HexDigit extends LexerRuleNameTyped[BigInt]
-    final case object Integer extends LexerRuleNameTyped[Token]
-    final case object Identifier extends LexerRuleNameTyped[Token]
-    final case object Operator extends LexerRuleNameTyped[Token]
-    final case object ResultToken extends LexerRuleNameTyped[Option[WithSource[Token]]]
-    final case object NonEmptyToken extends LexerRuleNameTyped[Token]
+    case object NewLine extends LexerRuleName[Token]
+    case object Whitespace extends LexerRuleName[Unit]
+    case object DoubleQuoteString extends LexerRuleName[Token]
+    case object SingleQuoteString extends LexerRuleName[Token]
+    case object HexDigit extends LexerRuleName[BigInt]
+    case object Integer extends LexerRuleName[Token]
+    case object Identifier extends LexerRuleName[Token]
+    case object Operator extends LexerRuleName[Token]
+    case object ResultToken extends LexerRuleName[Option[WithSource[Token]]]
+    case object NonEmptyToken extends LexerRuleName[Token]
   }
 
   private[Lexer] object LexerGrammarFactory extends Grammar.GrammarFactory[String, SyntaxError, Rule.LexerRuleName] {
@@ -48,7 +45,7 @@ object Lexer {
     private def tokenF(category: CharacterCategory, f: String => Boolean): TGrammar[String] = Grammar.token(category, f)
     private def partialMatcher[T](category: CharacterCategory)(f: PartialFunction[String, T]): TGrammar[T] = Grammar.matcher(category, f.lift)
 
-    protected override def createGrammar[T](label: Rule.LexerRuleName { type RuleType = T }): TGrammar[T] =
+    protected override def createGrammar[T](label: Rule.LexerRuleName[T]): TGrammar[T] =
       label match {
         case Rule.NewLine =>
           val cr = token(CharacterCategory.CR, "\r")

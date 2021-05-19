@@ -9,7 +9,7 @@ trait GrammarTestHelpers {
 
   type TToken
   type TSyntaxError
-  type TLabel <: Grammar.RuleLabel
+  type TLabel[_]
 
   type TGrammar[T] = Grammar[TToken, TSyntaxError, TLabel, T]
 

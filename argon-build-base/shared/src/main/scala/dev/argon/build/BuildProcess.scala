@@ -7,12 +7,13 @@ import cats.implicits._
 import dev.argon.armodule.loader.{AggregateModuleLoader, ArgonModuleDeserializer, ArgonModuleLoader}
 import dev.argon.armodule.emitter.{ModuleEmitOptions, ModuleSerializer, ZipModuleWriter}
 import dev.argon.backend.Backend
+import dev.argon.backend.Backend.{AsFile, AsFileOption}
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.core.{ArModule, Context, ModuleId}
 import dev.argon.compiler.loaders.{ModuleLinker, UnlinkedModule}
 import dev.argon.compiler.loaders.source.UnlinkedSourceModule
 import dev.argon.compiler.options.{CompilerInput, CompilerOptionID, CompilerOutput, GeneralOutputOptionID, GeneralOutputOptions}
-import dev.argon.options.{FileList, OptionID, Options, OptionsHandler, SingleFile}
+import dev.argon.options.{FileList, OptionID, Options, OptionsHandler, SingleFile, TypedOptionID}
 import dev.argon.compiler.output.{ArgonModuleSerialized, BuildArtifact, ModuleBuildArtifact}
 import dev.argon.io.fileio.{FileIO, ZipRead}
 import dev.argon.parser.impl.ArgonSourceParser
@@ -56,9 +57,9 @@ object BuildProcess {
     }
 
 
-  private def emit[OutputOptionID <: OptionID { type ElementType <: BuildArtifact; type Decoded[_] = SingleFile }](emittedFiles: Ref[Set[String]])(handler: OptionsHandler[OutputOptionID, Lambda[X => SingleFile]])(fileNames: Options[Lambda[X => Option[SingleFile]], OutputOptionID], data: Options[Id, OutputOptionID]): RComp[FileIO, Unit] =
+  private def emit[OutputOptionID <: OptionID { type ElementType <: BuildArtifact; type Decoded[_] = SingleFile }](emittedFiles: Ref[Set[String]])(handler: OptionsHandler[OutputOptionID, AsFile])(fileNames: Options[AsFileOption, OutputOptionID], data: Options[Id, OutputOptionID]): RComp[FileIO, Unit] =
     handler.combineRepr[
-        Lambda[AX => Option[SingleFile]],
+        AsFileOption,
         Id,
         Lambda[CX => Unit],
         RComp[FileIO, *]
@@ -132,7 +133,7 @@ object BuildProcess {
 
               override val generalOutput: Options[Id, GeneralOutputOptionID] =
                 Options.fromFunction(new Options.OptionValueFunction[Id, GeneralOutputOptionID] {
-                  override def apply[E](id: GeneralOutputOptionID {type ElementType = E}): Id[E] = id match {
+                  override def apply[E](id: GeneralOutputOptionID with TypedOptionID[E]): Id[E] = id match {
                     case GeneralOutputOptionID.DeclarationModule =>
                       new ModuleBuildArtifactImpl(ModuleEmitOptions(moduleType = ModuleEmitOptions.DeclarationModule))
 

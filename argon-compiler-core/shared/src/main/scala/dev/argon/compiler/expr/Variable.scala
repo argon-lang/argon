@@ -4,7 +4,7 @@ import cats.Eq
 import cats.implicits._
 import dev.argon.compiler.core._
 
-sealed trait Variable[TContext, Wrap[+_]] {
+sealed trait Variable[TContext <: Context with Singleton, Wrap[+_]] {
   def id: VariableId
   val owner: VariableOwner[TContext]
   val name: VariableName
@@ -31,7 +31,7 @@ object Variable {
   }
 }
 
-final case class LocalVariable[TContext, Wrap[+_]]
+final case class LocalVariable[TContext <: Context with Singleton, Wrap[+_]]
 (
   id: LocalVariableId,
   owner: LocalVariableOwner[TContext],
@@ -41,7 +41,7 @@ final case class LocalVariable[TContext, Wrap[+_]]
   varType: ArExprWrap[TContext, Wrap]
 ) extends Variable[TContext, Wrap]
 
-final case class ParameterVariable[TContext, Wrap[+_]]
+final case class ParameterVariable[TContext <: Context with Singleton, Wrap[+_]]
 (
   owner: ParameterVariableOwner[TContext],
   index: Int,

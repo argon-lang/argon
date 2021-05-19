@@ -74,6 +74,29 @@ sealed trait VariableOwner[TContext]
 
 sealed trait LocalVariableOwner[TContext] extends VariableOwner[TContext]
 object LocalVariableOwner {
+  implicit def eqInstance[TContext <: Context with Singleton]: Eq[LocalVariableOwner[TContext]] =
+    new Eq[LocalVariableOwner[TContext]] {
+      override def eqv(x: LocalVariableOwner[TContext], y: LocalVariableOwner[TContext]): Boolean =
+        (x, y) match {
+          case (x: ByClass[TContext], y: ByClass[TContext]) => x.ownerClass.value.id === y.ownerClass.value.id
+          case (_: ByClass[TContext], _) | (_, _: ByClass[TContext]) => false
+
+          case (x: ByTrait[TContext], y: ByTrait[TContext]) => x.ownerTrait.value.id === y.ownerTrait.value.id
+          case (_: ByTrait[TContext], _) | (_, _: ByTrait[TContext]) => false
+
+          case (x: ByDataConstructor[TContext], y: ByDataConstructor[TContext]) => x.ownerCtor.value.id === y.ownerCtor.value.id
+          case (_: ByDataConstructor[TContext], _) | (_, _: ByDataConstructor[TContext]) => false
+
+          case (x: ByFunction[TContext], y: ByFunction[TContext]) => x.ownerFunc.value.id === y.ownerFunc.value.id
+          case (_: ByFunction[TContext], _) | (_, _: ByFunction[TContext]) => false
+
+          case (x: ByMethod[TContext], y: ByMethod[TContext]) => x.ownerMethod.value.id === y.ownerMethod.value.id
+          case (_: ByMethod[TContext], _) | (_, _: ByMethod[TContext]) => false
+
+          case (x: ByClassConstructor[TContext], y: ByClassConstructor[TContext]) => x.ownerCtor.value.id === y.ownerCtor.value.id
+        }
+    }
+
   final case class ByClass[TContext <: Context with Singleton](ownerClass: AbsRef[TContext, ArClass]) extends LocalVariableOwner[TContext]
   final case class ByTrait[TContext <: Context with Singleton](ownerTrait: AbsRef[TContext, ArTrait]) extends LocalVariableOwner[TContext]
   final case class ByDataConstructor[TContext <: Context with Singleton](ownerCtor: AbsRef[TContext, DataConstructor]) extends LocalVariableOwner[TContext]

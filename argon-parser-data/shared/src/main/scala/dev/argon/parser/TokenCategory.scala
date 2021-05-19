@@ -1,12 +1,11 @@
 package dev.argon.parser
 
-import dev.argon.grammar.Grammar
-
-sealed trait TokenCategory extends Grammar.RuleLabel {
-  override type RuleType = Token.TokenWithCategory[this.type]
+sealed trait TokenCategory {
+  type TokenType = this.type
 }
 
 object TokenCategory {
+  final case class Wrap[T](value: TokenCategory { type TokenType = T })
 
   case object StringToken extends TokenCategory
   case object IntToken extends TokenCategory

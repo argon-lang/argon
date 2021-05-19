@@ -5,7 +5,7 @@ import dev.argon.compiler.core.{AbsRef, ArModule, ArTrait, Context, GlobalBindin
 import dev.argon.compiler.core.PayloadSpecifiers.{DeclarationPayloadSpecifier, ReferencePayloadSpecifier}
 import dev.argon.compiler.expr.ArExpr.TraitType
 import dev.argon.compiler.options.{CompilerInput, CompilerOptionID}
-import dev.argon.options.{FileList, Options}
+import dev.argon.options.{FileList, Options, TypedOptionID}
 import dev.argon.util.{NamespacePath, UniqueIdentifier}
 import shapeless.Id
 import zio.UIO
@@ -49,7 +49,7 @@ object ExampleTypes {
     for {
       ctx <- Context.make(backend)(CompilerInput[Nothing](
         options = Options.fromFunction(new Options.OptionValueFunction[Id, CompilerOptionID] {
-          override def apply[E](id: CompilerOptionID { type ElementType = E }): Id[E] = id match {
+          override def apply[E](id: CompilerOptionID with TypedOptionID[E]): Id[E] = id match {
             case CompilerOptionID.ModuleName => "dummy"
             case CompilerOptionID.InputFiles => new FileList(Seq.empty)
             case CompilerOptionID.References => new FileList(Seq.empty)
@@ -57,7 +57,7 @@ object ExampleTypes {
         }),
 
         backendOptions = Options.fromFunction[Id, Nothing](new Options.OptionValueFunction[Id, Nothing] {
-          override def apply[E](id: Nothing { type ElementType = E }): Id[E] = id
+          override def apply[E](id: Nothing with TypedOptionID[E]): Id[E] = id
         })
       ))
       traitAId <- UniqueIdentifier.make

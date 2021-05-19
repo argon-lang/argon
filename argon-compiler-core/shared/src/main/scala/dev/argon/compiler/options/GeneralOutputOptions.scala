@@ -1,7 +1,8 @@
 package dev.argon.compiler.options
 
+import dev.argon.backend.Backend.AsFile
 import dev.argon.compiler.output.{BuildArtifact, ModuleBuildArtifact}
-import dev.argon.options.{OptionID, OptionInfo, Options, OptionsHandler, OptionsHandlerImpl, SingleFile, TypedOptionID}
+import dev.argon.options.{OptionID, OptionIDBase, OptionInfo, OptionsHandler, OptionsHandlerImpl, SingleFile}
 
 sealed trait GeneralOutputOptionID extends OptionID {
   override type ElementType <: BuildArtifact
@@ -9,31 +10,25 @@ sealed trait GeneralOutputOptionID extends OptionID {
 }
 
 object GeneralOutputOptionID {
-  type AsFile[_] = SingleFile
-  case object DeclarationModule extends TypedOptionID[AsFile, ModuleBuildArtifact] with GeneralOutputOptionID
-  case object InterfaceModule extends TypedOptionID[AsFile, ModuleBuildArtifact] with GeneralOutputOptionID
+  case object DeclarationModule extends OptionIDBase[AsFile, ModuleBuildArtifact] with GeneralOutputOptionID {
+    override val info: OptionInfo[ModuleBuildArtifact] =
+      OptionInfo(
+        name = "referenceModule",
+        description = "The reference module that will contain the interface of the compiled module"
+      )
+  }
+  case object InterfaceModule extends OptionIDBase[AsFile, ModuleBuildArtifact] with GeneralOutputOptionID {
+    override val info: OptionInfo[ModuleBuildArtifact] =
+      OptionInfo(
+        name = "declarationModule",
+        description = "The declaration module that will contain the serialized compiled module"
+      )
+  }
 }
 
 object GeneralOutputOptions {
 
-  val handler: OptionsHandler[GeneralOutputOptionID, Lambda[X => SingleFile]] =
-    new OptionsHandlerImpl[GeneralOutputOptionID, Lambda[X => SingleFile]] {
-      override def info: Options[OptionInfo, GeneralOutputOptionID] =
-        Options.fromFunction(new Options.OptionValueFunction[OptionInfo, GeneralOutputOptionID] {
-          override def apply[E](id: GeneralOutputOptionID { type ElementType = E }): OptionInfo[E] = id match {
-            case GeneralOutputOptionID.DeclarationModule =>
-              OptionInfo(
-                name = "referenceModule",
-                description = "The reference module that will contain the interface of the compiled module"
-              )
-
-            case GeneralOutputOptionID.InterfaceModule =>
-              OptionInfo(
-                name = "declarationModule",
-                description = "The declaration module that will contain the serialized compiled module"
-              )
-          }
-        })
-    }
+  val handler: OptionsHandler[GeneralOutputOptionID, AsFile] =
+    new OptionsHandlerImpl[GeneralOutputOptionID, AsFile]
 
 }

@@ -25,110 +25,107 @@ object ArgonParser {
     case object ParenDisallowed extends ParenAllowedState
     
 
-    sealed trait ArgonRuleName extends Grammar.RuleLabel
-    sealed trait ArgonRuleNameTyped[T] extends ArgonRuleName {
-      override type RuleType = T
-    }
+    sealed trait ArgonRuleName[T]
 
-    case object Identifier extends ArgonRuleNameTyped[Option[String]]
-    case object OperatorName extends ArgonRuleNameTyped[OperatorToken]
-    case object NameSpecifier extends ArgonRuleNameTyped[NameSpecifier]
-    case object MethodName extends ArgonRuleNameTyped[MethodNameSpecifier]
-    case object NewLines extends ArgonRuleNameTyped[Unit]
-    case object StatementSeparator extends ArgonRuleNameTyped[Unit]
-    case object ImportNamespace extends ArgonRuleNameTyped[TopLevelStatement]
+    case object Identifier extends ArgonRuleName[Option[String]]
+    case object OperatorName extends ArgonRuleName[OperatorToken]
+    case object NameSpecifier extends ArgonRuleName[NameSpecifier]
+    case object MethodName extends ArgonRuleName[MethodNameSpecifier]
+    case object NewLines extends ArgonRuleName[Unit]
+    case object StatementSeparator extends ArgonRuleName[Unit]
+    case object ImportNamespace extends ArgonRuleName[TopLevelStatement]
 
     // If
-    case object IfExpr extends ArgonRuleNameTyped[Expr]
-    case object IfExprStart extends ArgonRuleNameTyped[(WithSource[Expr], WithSource[Vector[WithSource[Stmt]]])]
-    case object IfExprPart extends ArgonRuleNameTyped[Expr]
+    case object IfExpr extends ArgonRuleName[Expr]
+    case object IfExprStart extends ArgonRuleName[(WithSource[Expr], WithSource[Vector[WithSource[Stmt]]])]
+    case object IfExprPart extends ArgonRuleName[Expr]
 
     // Pattern Matching
-    case object ParenPattern extends ArgonRuleNameTyped[Pattern]
-    case object VariablePattern extends ArgonRuleNameTyped[Pattern]
-    case object DiscardPattern extends ArgonRuleNameTyped[Pattern]
-    case object ConstructorExprPattern extends ArgonRuleNameTyped[Expr]
-    case object ConstructorExprPatternIdPath extends ArgonRuleNameTyped[Expr]
-    case object ContainedPattern extends ArgonRuleNameTyped[Pattern]
-    case object PatternSeq extends ArgonRuleNameTyped[Vector[WithSource[Pattern]]]
-    case object DeconstructPattern extends ArgonRuleNameTyped[Pattern]
-    case object PatternSpec extends ArgonRuleNameTyped[Pattern]
-    case object MatchCase extends ArgonRuleNameTyped[MatchExprCase]
-    case object MatchExpr extends ArgonRuleNameTyped[Expr]
+    case object ParenPattern extends ArgonRuleName[Pattern]
+    case object VariablePattern extends ArgonRuleName[Pattern]
+    case object DiscardPattern extends ArgonRuleName[Pattern]
+    case object ConstructorExprPattern extends ArgonRuleName[Expr]
+    case object ConstructorExprPatternIdPath extends ArgonRuleName[Expr]
+    case object ContainedPattern extends ArgonRuleName[Pattern]
+    case object PatternSeq extends ArgonRuleName[Vector[WithSource[Pattern]]]
+    case object DeconstructPattern extends ArgonRuleName[Pattern]
+    case object PatternSpec extends ArgonRuleName[Pattern]
+    case object MatchCase extends ArgonRuleName[MatchExprCase]
+    case object MatchExpr extends ArgonRuleName[Expr]
 
     // Common Expressions
-    final case class PrimaryExpr(parenAllowed: ParenAllowedState) extends ArgonRuleNameTyped[Expr]
-    final case class PostfixExpr(parenAllowed: ParenAllowedState) extends ArgonRuleNameTyped[Expr]
-    case object CurryCallExpr extends ArgonRuleNameTyped[Expr]
-    case object ParenArgList extends ArgonRuleNameTyped[(FunctionParameterListType, Expr)]
-    case object MemberAccess extends ArgonRuleNameTyped[WithSource[Expr] => Expr]
-    case object UnaryExpr extends ArgonRuleNameTyped[Expr]
-    case object ConstrainedTypeExpr extends ArgonRuleNameTyped[Expr]
-    case object IntersectionExpr extends ArgonRuleNameTyped[Expr]
-    case object UnionExpr extends ArgonRuleNameTyped[Expr]
-    case object MultiplicativeExpr extends ArgonRuleNameTyped[Expr]
-    case object AdditiveExpr extends ArgonRuleNameTyped[Expr]
-    case object ShiftExpr extends ArgonRuleNameTyped[Expr]
-    case object AndExpr extends ArgonRuleNameTyped[Expr]
-    case object XorExpr extends ArgonRuleNameTyped[Expr]
-    case object OrExpr extends ArgonRuleNameTyped[Expr]
-    case object LambdaTypeExpr extends ArgonRuleNameTyped[Expr]
-    case object RelationalExpr extends ArgonRuleNameTyped[Expr]
-    case object EqualityExpr extends ArgonRuleNameTyped[Expr]
-    case object AsExpr extends ArgonRuleNameTyped[Expr]
-    case object LambdaExpr extends ArgonRuleNameTyped[Expr]
-    case object PatternType extends ArgonRuleNameTyped[Expr]
-    case object Type extends ArgonRuleNameTyped[Expr]
-    case object TupleExpr extends ArgonRuleNameTyped[Expr]
-    case object AssignExpr extends ArgonRuleNameTyped[Expr]
-    case object Expression extends ArgonRuleNameTyped[Expr]
-    case object ExpressionStmt extends ArgonRuleNameTyped[Expr]
+    final case class PrimaryExpr(parenAllowed: ParenAllowedState) extends ArgonRuleName[Expr]
+    final case class PostfixExpr(parenAllowed: ParenAllowedState) extends ArgonRuleName[Expr]
+    case object CurryCallExpr extends ArgonRuleName[Expr]
+    case object ParenArgList extends ArgonRuleName[(FunctionParameterListType, Expr)]
+    case object MemberAccess extends ArgonRuleName[WithSource[Expr] => Expr]
+    case object UnaryExpr extends ArgonRuleName[Expr]
+    case object ConstrainedTypeExpr extends ArgonRuleName[Expr]
+    case object IntersectionExpr extends ArgonRuleName[Expr]
+    case object UnionExpr extends ArgonRuleName[Expr]
+    case object MultiplicativeExpr extends ArgonRuleName[Expr]
+    case object AdditiveExpr extends ArgonRuleName[Expr]
+    case object ShiftExpr extends ArgonRuleName[Expr]
+    case object AndExpr extends ArgonRuleName[Expr]
+    case object XorExpr extends ArgonRuleName[Expr]
+    case object OrExpr extends ArgonRuleName[Expr]
+    case object LambdaTypeExpr extends ArgonRuleName[Expr]
+    case object RelationalExpr extends ArgonRuleName[Expr]
+    case object EqualityExpr extends ArgonRuleName[Expr]
+    case object AsExpr extends ArgonRuleName[Expr]
+    case object LambdaExpr extends ArgonRuleName[Expr]
+    case object PatternType extends ArgonRuleName[Expr]
+    case object Type extends ArgonRuleName[Expr]
+    case object TupleExpr extends ArgonRuleName[Expr]
+    case object AssignExpr extends ArgonRuleName[Expr]
+    case object Expression extends ArgonRuleName[Expr]
+    case object ExpressionStmt extends ArgonRuleName[Expr]
 
     // Variable Declaration
-    case object VariableMutSpec extends ArgonRuleNameTyped[Boolean]
-    case object VariableDeclaration extends ArgonRuleNameTyped[Stmt]
+    case object VariableMutSpec extends ArgonRuleName[Boolean]
+    case object VariableDeclaration extends ArgonRuleName[Stmt]
 
     // Fields
-    case object FieldDeclarationStmt extends ArgonRuleNameTyped[Stmt]
-    case object FieldInitializationStmt extends ArgonRuleNameTyped[Stmt]
-    case object InitializeStmt extends ArgonRuleNameTyped[Stmt]
+    case object FieldDeclarationStmt extends ArgonRuleName[Stmt]
+    case object FieldInitializationStmt extends ArgonRuleName[Stmt]
+    case object InitializeStmt extends ArgonRuleName[Stmt]
 
 
-    case object Modifiers extends ArgonRuleNameTyped[Vector[WithSource[Modifier]]]
+    case object Modifiers extends ArgonRuleName[Vector[WithSource[Modifier]]]
 
     // Functions and Methods
-    case object MethodParameter extends ArgonRuleNameTyped[FunctionParameter]
-    case object MethodParameterList extends ArgonRuleNameTyped[Vector[WithSource[FunctionParameter]]]
-    case object MethodParameters extends ArgonRuleNameTyped[Vector[WithSource[FunctionParameterList]]]
-    case object MethodBody extends ArgonRuleNameTyped[Expr]
-    case object BlockBody extends ArgonRuleNameTyped[BlockExpr]
-    case object MethodPurity extends ArgonRuleNameTyped[Boolean]
-    case object FunctionDefinitionStmt extends ArgonRuleNameTyped[Stmt]
-    case object MethodDefinitionStmt extends ArgonRuleNameTyped[Stmt]
-    case object ClassConstructorDefinitionStmt extends ArgonRuleNameTyped[Stmt]
+    case object MethodParameter extends ArgonRuleName[FunctionParameter]
+    case object MethodParameterList extends ArgonRuleName[Vector[WithSource[FunctionParameter]]]
+    case object MethodParameters extends ArgonRuleName[Vector[WithSource[FunctionParameterList]]]
+    case object MethodBody extends ArgonRuleName[Expr]
+    case object BlockBody extends ArgonRuleName[BlockExpr]
+    case object MethodPurity extends ArgonRuleName[Boolean]
+    case object FunctionDefinitionStmt extends ArgonRuleName[Stmt]
+    case object MethodDefinitionStmt extends ArgonRuleName[Stmt]
+    case object ClassConstructorDefinitionStmt extends ArgonRuleName[Stmt]
 
     // Types
-    case object StaticInstanceBody extends ArgonRuleNameTyped[(Vector[WithSource[Stmt]], Vector[WithSource[Stmt]])]
-    case object BaseTypeSpecifier extends ArgonRuleNameTyped[Option[WithSource[Expr]]]
-    case object TraitDeclarationStmt extends ArgonRuleNameTyped[Stmt]
-    case object DataConstructorDeclarationStmt extends ArgonRuleNameTyped[Stmt]
-    case object ClassDeclarationStmt extends ArgonRuleNameTyped[Stmt]
+    case object StaticInstanceBody extends ArgonRuleName[(Vector[WithSource[Stmt]], Vector[WithSource[Stmt]])]
+    case object BaseTypeSpecifier extends ArgonRuleName[Option[WithSource[Expr]]]
+    case object TraitDeclarationStmt extends ArgonRuleName[Stmt]
+    case object DataConstructorDeclarationStmt extends ArgonRuleName[Stmt]
+    case object ClassDeclarationStmt extends ArgonRuleName[Stmt]
 
 
-    case object Statement extends ArgonRuleNameTyped[Stmt]
-    case object StatementList extends ArgonRuleNameTyped[Vector[WithSource[Stmt]]]
-    case object NamespacePathRule extends ArgonRuleNameTyped[NamespacePath]
-    case object NamespaceDeclaration extends ArgonRuleNameTyped[TopLevelStatement]
+    case object Statement extends ArgonRuleName[Stmt]
+    case object StatementList extends ArgonRuleName[Vector[WithSource[Stmt]]]
+    case object NamespacePathRule extends ArgonRuleName[NamespacePath]
+    case object NamespaceDeclaration extends ArgonRuleName[TopLevelStatement]
 
-    case object TopLevelStatementRule extends ArgonRuleNameTyped[TopLevelStatement]
-    case object PaddedTopLevelStatement extends ArgonRuleNameTyped[TopLevelStatement]
+    case object TopLevelStatementRule extends ArgonRuleName[TopLevelStatement]
+    case object PaddedTopLevelStatement extends ArgonRuleName[TopLevelStatement]
 
 
   }
 
   private[parser] object ArgonGrammarFactory extends GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] {
 
-    private implicit val errorFactory = new Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] {
+    private implicit val errorFactory: Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] = new Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] {
       override def createError(error: GrammarError[Token, TokenCategory]): SyntaxError =
         SyntaxError.ParserError(error)
 
@@ -157,7 +154,7 @@ object ArgonParser {
         }.value
       }
 
-    protected override def createGrammar[T](name: Rule.ArgonRuleName { type RuleType = T }): TGrammar[T] =
+    protected override def createGrammar[T](name: Rule.ArgonRuleName[T]): TGrammar[T] =
       name match {
         case Rule.Identifier =>
           tokenUnderscore --> const(None : Option[String]) |
@@ -306,7 +303,7 @@ object ArgonParser {
           }
 
         case Rule.MemberAccess =>
-          matchTokenFactory(Identifier) --> { case Identifier(id) => baseExpr: WithSource[Expr] => DotExpr(baseExpr, id) } |
+          matchTokenFactory(Identifier) --> { case Identifier(id) => (baseExpr: WithSource[Expr]) => DotExpr(baseExpr, id) } |
             matchToken(KW_NEW) --> const(ClassConstructorExpr.apply _) |
             matchToken(KW_TYPE) --> const(TypeOfExpr.apply _)
 
@@ -726,7 +723,7 @@ object ArgonParser {
       val opGrammarsNev = NonEmptyVector(firstOpGrammar, opGrammars.toVector)
 
       val rightGrammars = opGrammarsNev.map { opGrammar =>
-        Lazy { (opGrammar.observeSource ++! nextGrammar.observeSource) --> { case (op, right) => left: WithSource[Expr] => BinaryOperatorExpr(op, left, right) } }
+        Lazy { (opGrammar.observeSource ++! nextGrammar.observeSource) --> { case (op, right) => (left: WithSource[Expr]) => BinaryOperatorExpr(op, left, right) } }
       }
 
       nextGrammar.observeSource ++ (UnionGrammar.fromList(rightGrammars).observeSource*) --> {
