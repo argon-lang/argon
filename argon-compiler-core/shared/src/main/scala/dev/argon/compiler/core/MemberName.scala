@@ -10,14 +10,30 @@ sealed trait MemberName
 object MemberName {
 
   final case class Normal(name: String) extends MethodName
+  object Normal {
+    implicit val eqInstance: Eq[Normal] = DeriveHelpers.eq
+  }
   final case class Mutator(name: String) extends MethodName
+  object Mutator {
+    implicit val eqInstance: Eq[Mutator] = DeriveHelpers.eq
+  }
 
-  case object Unnamed extends MethodName
+  case object Unnamed extends MethodName {
+    implicit val eqInstance: Eq[Unnamed.type] = DeriveHelpers.eq
+  }
 
-  case object Call extends MethodName
-  case object New extends MemberName
+  case object Call extends MethodName {
+    implicit val eqInstance: Eq[Call.type] = DeriveHelpers.eq
+  }
+  case object New extends MemberName{
+    implicit val eqInstance: Eq[New.type] = DeriveHelpers.eq
+  }
 
-  implicit val eqInstance: Eq[MemberName] = DeriveHelpers.eq
+  implicit val eqInstance: Eq[MemberName] = {
+    case (a: MethodName, b: MethodName) => a === b
+    case (New, New) => true
+    case _ => false
+  }
 
   def fromMethodNameSpecifier(specifier: parser.MethodNameSpecifier): MemberName =
     MethodName.fromMethodNameSpecifier(specifier)

@@ -18,6 +18,9 @@ object ErasedSignature {
   }
 
   final case class BlankType[TContext <: Context with Singleton]() extends SigType[TContext]
+  object BlankType {
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[BlankType[TContext]] = DeriveHelpers.eq
+  }
 
   final case class TraitType[TContext <: Context with Singleton](arTrait: AbsRef[TContext, ArTrait], typeArgs: Vector[SigType[TContext]]) extends SigType[TContext]
   object TraitType {
@@ -38,10 +41,22 @@ object ErasedSignature {
   }
 
   final case class TupleType[TContext <: Context with Singleton](elements: NonEmptyList[SigType[TContext]]) extends SigType[TContext]
+  object TupleType {
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[TupleType[TContext]] = DeriveHelpers.eq
+  }
   final case class FunctionType[TContext <: Context with Singleton](argumentType: SigType[TContext], resultType: SigType[TContext]) extends SigType[TContext]
+  object FunctionType {
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[FunctionType[TContext]] = DeriveHelpers.eq
+  }
 
   final case class Parameter[TContext <: Context with Singleton](paramType: SigType[TContext], next: ErasedSignature[TContext]) extends ErasedSignature[TContext]
+  object Parameter {
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[Parameter[TContext]] = DeriveHelpers.eq
+  }
   final case class Result[TContext <: Context with Singleton](resultType: SigType[TContext]) extends ErasedSignature[TContext]
+  object Result {
+    implicit def eqInstance[TContext <: Context with Singleton]: Eq[Result[TContext]] = DeriveHelpers.eq
+  }
 
   final case class ParameterOnlySignature[TContext <: Context with Singleton](paramTypes: Vector[SigType[TContext]])
 

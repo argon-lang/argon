@@ -13,5 +13,10 @@ object GlobalName {
 
   case object Unnamed extends GlobalName
 
-  implicit val eqInstance: Eq[GlobalName] = DeriveHelpers.eq
+  implicit val eqInstance: Eq[GlobalName] = {
+    case (Normal(a), Normal(b)) => a === b
+    case (Operator(a), Operator(b)) => a === b
+    case (Unnamed, Unnamed) => true
+    case _ => false
+  }
 }

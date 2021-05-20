@@ -3,9 +3,10 @@ package dev.argon.util
 import magnolia._
 
 import cats.Eq
+import scala.deriving.Mirror
 
 object DeriveHelpers {
-  def eq[A]: Eq[A] = ???
+  inline def eq[A: Mirror.Of]: Eq[A] = EqDerivation.derived
 
   object EqDerivation extends Derivation[Eq] {
     def join[T](ctx: CaseClass[Eq, T]): Eq[T] = (a, b) =>
@@ -14,7 +15,7 @@ object DeriveHelpers {
       }
 
     override def split[T](ctx: SealedTrait[Eq, T]): Eq[T] = (a, b) =>
-      ctx.choose(a) { sub =>
+      a.getClass == b.getClass && ctx.choose(a) { sub =>
         sub.typeclass.eqv(sub.value, sub.cast(b))
       }
   }
