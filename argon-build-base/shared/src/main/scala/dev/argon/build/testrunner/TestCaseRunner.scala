@@ -28,13 +28,21 @@ trait TestCaseRunner[-R] {
   protected def isExpectedError(errors: NonEmptyList[CompilationError], errorName: String): Boolean =
     errors match {
       case NonEmptyList(error, Nil) =>
-        val realName = error.getClass.getName
-        val expectedName = DiagnosticError.getClass.getName + errorName
+        realNames(error.getClass, Set.empty).exists { realName =>
+          val expectedName = DiagnosticError.getClass.getName + errorName
 
-        realName.startsWith(expectedName) &&
-          (expectedName.length === realName.length || realName.charAt(expectedName.length) === '$')
+          realName.startsWith(expectedName) &&
+            (expectedName.length === realName.length || realName.charAt(expectedName.length) === '$')
+        }
 
       case _ => false
+    }
+
+  @SuppressWarnings(Array("scalafix:DisableSyntax.==", "scalafix:DisableSyntax.null"))
+  private def realNames(cls: Class[_], acc: Set[String]): Set[String] =
+    if(cls == null || acc.contains(cls.getName)) acc
+    else {
+      realNames(cls.getSuperclass, acc + cls.getName)
     }
 
   protected def normalizeOutput(output: String): String =

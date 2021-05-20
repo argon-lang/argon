@@ -488,7 +488,7 @@ object DiagnosticError {
     override def message: String = "Expression must not be erased."
   }
 
-  sealed trait CouldNotConvertType extends DiagnosticError {
+  sealed abstract class CouldNotConvertType extends DiagnosticError {
     val typeSystem: TypeSystem
     val fromType: typeSystem.TType
     val toType: typeSystem.TType
