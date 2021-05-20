@@ -35,6 +35,8 @@ object NpmUtil extends AutoPlugin {
       val packageJson = dir / "package.json"
 
       val newJson = Json.obj(
+        "name" -> Json.fromString(name.value),
+        "private" -> Json.fromBoolean(true),
         "type" -> Json.fromString(linkerConfig.moduleKind match {
           case ModuleKind.CommonJSModule => "commonjs"
           case ModuleKind.ESModule => "module"
