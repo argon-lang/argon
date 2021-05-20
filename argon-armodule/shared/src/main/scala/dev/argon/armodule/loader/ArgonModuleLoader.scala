@@ -9,8 +9,6 @@ import dev.argon.compiler.output.ArgonModuleSerialized
 import dev.argon.io.fileio.ZipRead
 import dev.argon.util.MaybeBlocking
 
-import zio.NeedsEnv.needsEnv
-
 object ArgonModuleLoader {
 
   def make: URIO[ZipRead with MaybeBlocking, ModuleLoader] =
@@ -22,7 +20,7 @@ object ArgonModuleLoader {
 
       override def loadResource(fileName: String): CompManaged[Option[ArgonModuleSerialized]] =
         zipRead.openZipFile(fileName).catchAll(Compilation.unwrapThrowableManaged).mapM { zip =>
-          ZipModuleSource.tryOpen(zip.catchAll(Compilation.unwrapThrowable)).provide(protoBufEnv)
+          ZipModuleSource.tryOpen(zip.catchAll(Compilation.unwrapThrowable)).provide(protoBufEnv)(zio.NeedsEnv)
         }
 
   }

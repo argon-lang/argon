@@ -10,7 +10,6 @@ import dev.argon.util.{MaybeBlocking, ProtoBufCodecs, StreamableMessage}
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 import zio._
 import zio.stream._
-import zio.NeedsEnv.needsEnv
 
 object ZipModuleSource {
 
@@ -18,7 +17,7 @@ object ZipModuleSource {
     ZIO.environment[MaybeBlocking].flatMap { protoBufEnv =>
       def tryReadZipMessage[A <: GeneratedMessage](companion: GeneratedMessageCompanion[A])(path: String): Comp[Option[A]] =
         zip.getEntryStream(path).flatMap {
-          case Some(stream) => ProtoBufCodecs.deserializeProtocolBuffer(companion)(stream).provide(protoBufEnv).catchAll(Compilation.unwrapThrowable).asSome
+          case Some(stream) => ProtoBufCodecs.deserializeProtocolBuffer(companion)(stream).provide(protoBufEnv)(zio.NeedsEnv).catchAll(Compilation.unwrapThrowable).asSome
           case None => IO.none
         }
 
@@ -34,7 +33,7 @@ object ZipModuleSource {
 
             private def readZipStream[A >: Null <: AnyRef](companion: StreamableMessage[A])(path: String): CompStream[A] =
               ZStream.unwrap(zip.getEntryStream(path).map {
-                case Some(stream) => ProtoBufCodecs.deserializeProtocolBufferStream(companion)(stream).provide(protoBufEnv).catchAll(Compilation.unwrapThrowableStream)
+                case Some(stream) => ProtoBufCodecs.deserializeProtocolBufferStream(companion)(stream).provide(protoBufEnv)(zio.NeedsEnv).catchAll(Compilation.unwrapThrowableStream)
                 case None => Stream.fail(DiagnosticError.ModuleFormatInvalid(DiagnosticSource.ReferencedModule(ModuleId(metadata.name))))
               })
 

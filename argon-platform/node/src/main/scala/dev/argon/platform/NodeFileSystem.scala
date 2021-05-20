@@ -26,11 +26,3 @@ private[platform] object NodeFileSystem extends js.Any {
 trait NodeFSMkdirOptions extends js.Object {
   val recursive: js.UndefOr[Boolean]
 }
-
-object NodeFSMkdirOptions {
-  @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
-  def apply(recursive: js.UndefOr[Boolean] = js.undefined): NodeFSMkdirOptions =
-    js.Dynamic.literal(
-      recursive = recursive
-    ).asInstanceOf[NodeFSMkdirOptions]
-}

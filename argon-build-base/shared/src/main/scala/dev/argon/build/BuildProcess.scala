@@ -21,7 +21,6 @@ import dev.argon.util.{FileID, FileSpec, MaybeBlocking}
 import zio._
 import zio.interop.catz.core._
 import zio.stream._
-import zio.NeedsEnv.needsEnv
 
 object BuildProcess {
 
@@ -127,7 +126,7 @@ object BuildProcess {
                   ModuleSerializer.serialize(context)(moduleOptions)(module)
 
                 override def asStream: CompStream[Byte] =
-                  ZStream.unwrap(serialized.map(ZipModuleWriter.writeModule)).provide(env)
+                  ZStream.unwrap(serialized.map(ZipModuleWriter.writeModule)).provide(env)(zio.NeedsEnv)
 
               }
 
