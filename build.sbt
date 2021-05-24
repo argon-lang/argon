@@ -23,8 +23,7 @@ val esParseDeps = Seq(
 )
 
 lazy val commonSettingsNoLibs = Seq(
-  scalaVersion := "2.13.5",
-  crossScalaVersions := Seq("3.0.0", "2.13.5"),
+  scalaVersion := "3.0.0",
 )
 
 lazy val commonSettingsAnnotations = Seq(
@@ -51,15 +50,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
 
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
-  ) ++ (CrossVersion.partialVersion(scalaVersion.value) match {
-    case Some((3, _)) => Seq(
-    )
-    case _ => Seq(
-      "org.typelevel" %%% "kittens" % "2.3.1",
-      "com.chuusai" %%% "shapeless" % "2.3.6",
-      compilerPlugin("org.typelevel" %% "kind-projector" % "0.13.0" cross CrossVersion.full),
-    )
-  }),
+  ),
 
 )
 
@@ -130,34 +121,12 @@ lazy val compilerOptions = Seq(
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
-  ) ++ (CrossVersion.partialVersion(scalaVersion.value) match {
-    case Some((3, _)) => Seq(
-      "-Ykind-projector",
-      "-source:3.0-migration",
-    )
-    case _ => Seq (
-      "-Xsource:3",
-      "-Yrangepos",
-      "-Wunused",
-      "-Wconf:cat=lint:error," +
-        "cat=deprecation:error," +
-        "cat=feature:error," +
-        "cat=optimizer:error," +
-        "msg=match may not be exhaustive\\.:error," +
-        "cat=unchecked&msg=The outer reference in this type test cannot be checked at run time\\.:silent," +
-        "cat=unchecked:error," +
-        "cat=unused-imports:warning," +
-        "cat=java-source:error," +
-        "cat=w-flag-dead-code:silent," +
-        "cat=w-flag:error," +
-        "cat=other-match-analysis&msg=unreachable code:silent",
-      "-Ypatmat-exhaust-depth", "2000",
-    )
-  }),
+    "-Ykind-projector",
+    "-source:3.0-migration",
+  ),
 
   semanticdbEnabled := true,
   semanticdbVersion := scalafixSemanticdb.revision,
-  scalafixOnCompile := CrossVersion.partialVersion(scalaVersion.value).forall { case (3, _) => false case _ => true },
 )
 
 def argonLibraries = Seq("Argon.Core")
