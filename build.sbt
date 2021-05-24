@@ -43,6 +43,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
     "org.typelevel" %%% "cats-core" % "2.6.1",
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
+    "dev.zio" %%% "zio-interop-cats" % "2.5.1.0",
 
 
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
@@ -52,10 +53,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
   ) ++ (CrossVersion.partialVersion(scalaVersion.value) match {
     case Some((3, _)) => Seq(
-      "dev.zio" %%% "zio-interop-cats" % "3.1.1.0",
     )
     case _ => Seq(
-      "dev.zio" %%% "zio-interop-cats" % "3.0.2.0",
       "org.typelevel" %%% "kittens" % "2.3.1",
       "com.chuusai" %%% "shapeless" % "2.3.6",
       compilerPlugin("org.typelevel" %% "kind-projector" % "0.13.0" cross CrossVersion.full),
@@ -626,9 +625,6 @@ lazy val argon_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in
   .nodeConfigure(
     _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
-  )
-  .platformsSettings(JVMPlatform, NodePlatform)(
-    libraryDependencies += "dev.zio" %%% "zio-test" % zioVersion % "optional",
   )
   .settings(
     commonSettings,

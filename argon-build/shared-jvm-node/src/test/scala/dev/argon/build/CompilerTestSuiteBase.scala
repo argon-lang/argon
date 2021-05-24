@@ -35,7 +35,7 @@ abstract class CompilerTestSuiteBase extends PlatformRunnableSpec {
   protected def testCases: ZIO[FileIO with Live, TestFailure[Failure], TestCaseStructure]
 
   private def execEnvLayer: ZLayer[Environment, Throwable, TestExecEnv] =
-    FileIOPlatform.live ++ ZipReadPlatform.live ++ ZLayer.requires[MaybeBlocking]
+    FileIOPlatform.live ++ ZipReadPlatform.live ++ ZLayer.requires[Environment]
 
   private def isExpectedResult(runner: TestCaseRunner[_])(expected: TestCaseExpectedResult): Assertion[TestCaseActualResult] =
     Assertion.assertion("isExpectedResult")(Assertion.Render.param(expected)) { actual =>
