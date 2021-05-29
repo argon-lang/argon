@@ -27,7 +27,7 @@ lazy val commonSettingsNoLibs = Seq(
 )
 
 lazy val commonSettingsAnnotations = Seq(
-  libraryDependencies += "org.jetbrains" % "annotations" % "20.1.0",
+  libraryDependencies += "org.jetbrains" % "annotations" % "21.0.1",
 )
 
 lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ Seq(
@@ -86,7 +86,7 @@ lazy val commonJVMSettings = sharedJVMNodeSettings ++ Seq(
   libraryDependencies ++= Seq(
     "org.apache.commons" % "commons-text" % "1.9",
     "org.apache.commons" % "commons-compress" % "1.20",
-    "commons-io" % "commons-io" % "2.8.0",
+    "commons-io" % "commons-io" % "2.9.0",
   ),
 
   Test / fork := true,
