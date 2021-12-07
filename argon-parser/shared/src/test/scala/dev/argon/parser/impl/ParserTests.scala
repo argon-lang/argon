@@ -1,9 +1,10 @@
 package dev.argon.parser.impl
 
-import dev.argon.parser.Token
-import dev.argon.util.NamespacePath
+import dev.argon.parser.{Token, ImportStmt, ImportPathSegment}
 import zio.test._
 import zio.test.Assertion._
+import zio.Chunk
+import dev.argon.util.NonEmptyList
 
 abstract class ArgonParserTestsCommon extends DefaultRunnableSpec with GrammarTestHelpers with GrammarTokenHelpers {
 
@@ -13,11 +14,11 @@ abstract class ArgonParserTestsCommon extends DefaultRunnableSpec with GrammarTe
     suite(suiteName)(
       test("Import statement parsing") {
         assert(
-          parse(ArgonParser.grammarFactory(ArgonParser.Rule.ImportNamespace))(
-            Token.KW_IMPORT, Token.Identifier("Ar"), Token.OP_DOT, Token.KW_UNDERSCORE
+          parse(ArgonParser.grammarFactory(ArgonParser.Rule.ImportStatement))(
+            Token.KW_IMPORT, Token.Identifier("Ar"), Token.OP_SLASH, Token.OP_STAR
           )
         )(
-          isRight(equalTo((Vector[TToken](), TopLevelStatement.Import(NamespacePath(Vector("Ar"))) : TopLevelStatement)))
+          isRight(equalTo((Chunk.empty, ImportStmt.Package(NonEmptyList("Ar"), ImportPathSegment.Wildcard))))
         )
       }
     )

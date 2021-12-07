@@ -72,6 +72,9 @@ object TokenCategory {
   case object KW_MAINTAINS extends TokenCategory
   case object KW_ASSERT extends TokenCategory
   case object KW_GIVEN extends TokenCategory
+  case object KW_EXTENSION extends TokenCategory
+  case object KW_INVERSE extends TokenCategory
+  case object KW_UPDATE extends TokenCategory
 
   case object OP_BOOLAND extends TokenCategory
   case object OP_BOOLOR extends TokenCategory
@@ -83,6 +86,7 @@ object TokenCategory {
   case object OP_SHIFTRIGHT extends TokenCategory
   case object OP_ASSIGN extends TokenCategory
   case object OP_DOT extends TokenCategory
+  case object OP_DOTDOT extends TokenCategory
   case object OP_COMMA extends TokenCategory
   case object OP_OPENPAREN extends TokenCategory
   case object OP_CLOSEPAREN extends TokenCategory

@@ -11,7 +11,7 @@ sealed trait Stmt {
 final case class TraitDeclarationStmt
 (
   baseType: Option[WithSource[Expr]],
-  name: NameSpecifier,
+  name: Option[IdentifierExpr],
   parameters: Vector[WithSource[FunctionParameterList]],
   body: Seq[WithSource[Stmt]],
   instanceBody: Vector[WithSource[Stmt]],
@@ -19,7 +19,7 @@ final case class TraitDeclarationStmt
 ) extends Stmt
 final case class DataConstructorDeclarationStmt
 (
-  name: WithSource[NameSpecifier],
+  name: WithSource[Option[IdentifierExpr]],
   parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
   body: WithSource[Vector[WithSource[Stmt]]],
@@ -28,7 +28,7 @@ final case class DataConstructorDeclarationStmt
 final case class ClassDeclarationStmt
 (
   baseType: Option[WithSource[Expr]],
-  name: WithSource[NameSpecifier],
+  name: WithSource[Option[IdentifierExpr]],
   parameters: Vector[WithSource[FunctionParameterList]],
   body: Vector[WithSource[Stmt]],
   instanceBody: Vector[WithSource[Stmt]],
@@ -36,7 +36,7 @@ final case class ClassDeclarationStmt
 ) extends Stmt
 final case class FunctionDeclarationStmt
 (
-  name: NameSpecifier,
+  name: Option[IdentifierExpr],
   parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
   body: WithSource[Expr],
@@ -45,8 +45,8 @@ final case class FunctionDeclarationStmt
 ) extends Stmt
 final case class MethodDeclarationStmt
 (
-  instanceName: Option[String],
-  name: MethodNameSpecifier,
+  instanceName: Option[IdentifierExpr],
+  name: Option[IdentifierExpr],
   parameters: Vector[WithSource[FunctionParameterList]],
   returnType: WithSource[Expr],
   body: Option[WithSource[Expr]],
@@ -64,23 +64,23 @@ final case class VariableDeclarationStmt
 (
   isMutable: Boolean,
   varType: Option[WithSource[Expr]],
-  name: Option[String],
+  name: Option[IdentifierExpr],
   value: WithSource[Expr]
 ) extends Stmt
 final case class InitializeStmt
 (
-  name: Option[String],
+  name: Option[IdentifierExpr],
   value: Option[WithSource[Expr]]
 ) extends Stmt
 final case class FieldDeclarationStmt
 (
   isMutable: Boolean,
-  name: Option[String],
+  name: IdentifierExpr,
   fieldType: WithSource[Expr]
 ) extends Stmt
 final case class FieldInitializationStmt
 (
-  name: String,
+  name: IdentifierExpr,
   value: WithSource[Expr]
 ) extends Stmt
 
@@ -96,10 +96,16 @@ final case class BlockExpr
 ) extends Expr
 final case class BoolValueExpr(value: Boolean) extends Expr
 final case class ClassConstructorExpr(classExpr: WithSource[Expr]) extends Expr
-final case class DotExpr(left: WithSource[Expr], right: String) extends Expr
+final case class DotExpr(left: WithSource[Expr], right: IdentifierExpr) extends Expr
 final case class ExternExpr(specifier: String) extends Expr
 final case class FunctionCallExpr(func: WithSource[Expr], listType: FunctionParameterListType, arg: WithSource[Expr]) extends Expr
-final case class IdentifierExpr(name: String) extends Expr
+enum IdentifierExpr extends Expr {
+  case Named(name: String)
+  case OperatorIdentifier(op: Token.OperatorToken)
+  case Extension(inner: IdentifierExpr)
+  case Inverse(inner: IdentifierExpr)
+  case Update(inner: IdentifierExpr)
+}
 final case class IfExpr(condition: WithSource[Expr], body: WithSource[Vector[WithSource[Stmt]]]) extends Expr
 final case class IfElseExpr(condition: WithSource[Expr], ifBody: WithSource[Vector[WithSource[Stmt]]], elseBody: WithSource[Vector[WithSource[Stmt]]]) extends Expr
 final case class IntValueExpr(sign: Int, base: BigInt, digits: Vector[BigInt]) extends Expr {
@@ -110,7 +116,7 @@ object IntValueExpr {
     IntValueExpr(token.sign, token.base, token.digits)
 }
 final case class LambdaTypeExpr(argType: WithSource[Expr], resultType: WithSource[Expr]) extends Expr
-final case class LambdaExpr(name: Option[String], body: WithSource[Expr]) extends Expr
+final case class LambdaExpr(name: Option[IdentifierExpr], body: WithSource[Expr]) extends Expr
 final case class MatchExpr(value: WithSource[Expr], cases: Seq[WithSource[MatchExprCase]]) extends Expr
 final case class RaiseExpr(exception: Expr) extends Expr
 final case class StringValueExpr(value: Token.StringToken) extends Expr
@@ -125,15 +131,16 @@ case object UnitLiteral extends Expr
 sealed trait Pattern
 final case class DeconstructPattern(constructor: WithSource[Expr], args: Vector[WithSource[Pattern]]) extends Pattern
 final case class TuplePattern(values: Vector[WithSource[Pattern]]) extends Pattern
-case object DiscardPattern extends Pattern
-final case class BindingPattern(name: String) extends Pattern
-final case class TypeTestPattern(name: Option[String], patternType: WithSource[Expr]) extends Pattern
+final case class BindingPattern(name: Option[IdentifierExpr]) extends Pattern
+final case class TypeTestPattern(name: Option[IdentifierExpr], patternType: WithSource[Expr]) extends Pattern
 
 
-final case class FunctionParameter(paramType: Option[WithSource[Expr]], subTypeOf: Option[WithSource[Expr]], name: String)
+final case class FunctionParameter(paramType: Option[WithSource[Expr]], subTypeOf: Option[WithSource[Expr]], name: IdentifierExpr)
 final case class FunctionParameterList(listType: FunctionParameterListType, isErased: Boolean, parameters: Vector[WithSource[FunctionParameter]])
 
-sealed trait BinaryOperator {
+sealed trait Operator derives CanEqual
+
+sealed trait BinaryOperator extends Operator derives CanEqual {
   def symbol: String
 }
 
@@ -203,7 +210,7 @@ object BinaryOperator {
   }
 }
 
-sealed trait UnaryOperator {
+sealed trait UnaryOperator extends Operator derives CanEqual {
   def symbol: String
 }
 object UnaryOperator {
@@ -230,9 +237,18 @@ object FunctionParameterListType {
 
 final case class MatchExprCase(pattern: WithSource[Pattern], body: WithSource[Vector[WithSource[Stmt]]])
 
-sealed trait MethodNameSpecifier
-object MethodNameSpecifier {
-  case object Unnamed extends MethodNameSpecifier
-  final case class Named(name: String) extends MethodNameSpecifier
-  final case class Mutator(name: String) extends MethodNameSpecifier
+
+enum ImportStmt extends Stmt {
+  case Absolute(path: ImportPathSegment)
+  case Relative(upCount: Int, path: ImportPathSegment)
+  case Package(packageName: NonEmptyList[String], path: ImportPathSegment)
+  case Member(memberPath: ImportPathSegment)
+}
+
+enum ImportPathSegment {
+  case Cons(id: String, subPath: ImportPathSegment)
+  case Many(segments: Seq[ImportPathSegment])
+  case Renaming(importing: IdentifierExpr, viewedName: Option[IdentifierExpr])
+  case Imported(id: IdentifierExpr)
+  case Wildcard
 }

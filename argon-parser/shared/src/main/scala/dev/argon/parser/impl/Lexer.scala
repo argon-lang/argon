@@ -299,9 +299,14 @@ object Lexer {
             case "requires" => Token.KW_REQUIRES
             case "ensures" => Token.KW_ENSURES
             case "maintains" => Token.KW_MAINTAINS
+            case "assert" => Token.KW_ASSERT
+            case "given" => Token.KW_GIVEN
+            case "extension" => Token.KW_EXTENSION
+            case "inverse" => Token.KW_INVERSE
+            case "update" => Token.KW_UPDATE
             case "_" => Token.KW_UNDERSCORE
 
-            case _ => Token.Identifier(id);
+            case _ => Token.Identifier(id)
           }
 
 
@@ -356,6 +361,7 @@ object Lexer {
             op(minus ++ greaterThan, Token.OP_LAMBDA_TYPE) |
             op(equal ++ greaterThan, Token.OP_LAMBDA) |
             op(plus ++ plus, Token.OP_CONCAT) |
+            op(dot ++ dot, Token.OP_DOTDOT) |
             op(equal, Token.OP_EQUALS) |
             op(token(CharacterCategory.NotEquals, "≠"), Token.OP_NOTEQUALS) |
             op(token(CharacterCategory.LessThanEq, "≤"), Token.OP_LESSTHANEQ) |
@@ -372,9 +378,9 @@ object Lexer {
             op(exclaim, Token.OP_BOOLNOT) |
             op(plus, Token.OP_ADD) |
             op(minus, Token.OP_SUB) |
-            op(star, Token.OP_MUL) |
+            op(star, Token.OP_STAR) |
             op(token(CharacterCategory.Times, "×"), Token.OP_MUL) |
-            op(slash, Token.OP_DIV) |
+            op(slash, Token.OP_SLASH) |
             op(token(CharacterCategory.Divide, "÷"), Token.OP_DIV) |
             op(and, Token.OP_INTERSECTION) |
             op(or, Token.OP_UNION) |

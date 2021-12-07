@@ -4,13 +4,16 @@ import dev.argon.util._
 
 sealed trait Token derives CanEqual {
   def category: TokenCategory
-
 }
 
 object Token {
 
-  class TokenWithCategory[+TCategory <: TokenCategory](val category: TCategory)
-  trait TokenFactory[TToken <: Token]
+  class TokenWithCategory[+TCategory <: TokenCategory](val category: TCategory) { self: Token =>
+    
+  }
+  trait TokenFactory[TToken <: Token] {
+    val category: TokenCategory
+  }
 
   sealed trait OperatorToken extends Token
 
@@ -26,24 +29,23 @@ object Token {
     def modifier: Modifier
   }
 
-  final case class StringToken(parts: NonEmptyList[StringToken.Part]) extends Token {
-    override def category: TokenCategory = StringToken.category
-  }
-  object StringToken extends TokenWithCategory(TokenCategory.StringToken) with TokenFactory[StringToken] {
+  final case class StringToken(parts: NonEmptyList[StringToken.Part]) extends TokenWithCategory(TokenCategory.StringToken) with Token
+  object StringToken extends TokenFactory[StringToken] {
+    override val category: TokenCategory = TokenCategory.StringToken
     sealed trait Part
     final case class StringPart(str: WithSource[String]) extends Part
     final case class ExprPart(format: Option[WithSource[String]], expr: WithSource[Expr]) extends Part
   }
 
-  final case class IntToken(sign: Int, base: BigInt, digits: Vector[BigInt]) extends Token {
-    override def category: TokenCategory = IntToken.category
+  final case class IntToken(sign: Int, base: BigInt, digits: Vector[BigInt]) extends TokenWithCategory(TokenCategory.IntToken) with Token
+  object IntToken extends TokenFactory[IntToken] {
+    override val category: TokenCategory = TokenCategory.IntToken
   }
-  object IntToken extends TokenWithCategory(TokenCategory.IntToken) with TokenFactory[IntToken]
 
-  final case class Identifier(name: String) extends Token {
-    override def category: TokenCategory = IntToken.category
+  final case class Identifier(name: String) extends TokenWithCategory(TokenCategory.Identifier) with Token
+  object Identifier extends TokenFactory[Identifier] {
+    override val category: TokenCategory = TokenCategory.Identifier
   }
-  object Identifier extends TokenWithCategory(TokenCategory.Identifier) with TokenFactory[Identifier]
 
   case object NewLine extends TokenWithCategory(TokenCategory.NewLine) with Token
   case object Semicolon extends TokenWithCategory(TokenCategory.Semicolon) with Token
@@ -122,9 +124,17 @@ object Token {
   case object KW_MAINTAINS extends TokenWithCategory(TokenCategory.KW_MAINTAINS) with Token
   case object KW_ASSERT extends TokenWithCategory(TokenCategory.KW_ASSERT) with Token
   case object KW_GIVEN extends TokenWithCategory(TokenCategory.KW_GIVEN) with Token
+  case object KW_EXTENSION extends TokenWithCategory(TokenCategory.KW_EXTENSION) with Token
+  case object KW_INVERSE extends TokenWithCategory(TokenCategory.KW_INVERSE) with Token
+  case object KW_UPDATE extends TokenWithCategory(TokenCategory.KW_UPDATE) with Token
+  
 
-  case object OP_BOOLAND extends TokenWithCategory(TokenCategory.OP_BOOLAND) with Token
-  case object OP_BOOLOR extends TokenWithCategory(TokenCategory.OP_BOOLOR) with Token
+  case object OP_BOOLAND extends TokenWithCategory(TokenCategory.OP_BOOLAND) with BinaryOperatorToken {
+    override def binaryOperator: BinaryOperator = BinaryOperator.BoolAnd
+  }
+  case object OP_BOOLOR extends TokenWithCategory(TokenCategory.OP_BOOLOR) with BinaryOperatorToken {
+    override def binaryOperator: BinaryOperator = BinaryOperator.BoolOr
+  }
   case object OP_EQUALS extends TokenWithCategory(TokenCategory.OP_EQUALS) with BinaryOperatorToken {
     override def binaryOperator: BinaryOperator = BinaryOperator.Equal
   }
@@ -145,6 +155,7 @@ object Token {
   }
   case object OP_ASSIGN extends TokenWithCategory(TokenCategory.OP_ASSIGN) with Token
   case object OP_DOT extends TokenWithCategory(TokenCategory.OP_DOT) with Token
+  case object OP_DOTDOT extends TokenWithCategory(TokenCategory.OP_DOT) with Token
   case object OP_COMMA extends TokenWithCategory(TokenCategory.OP_COMMA) with Token
   case object OP_OPENPAREN extends TokenWithCategory(TokenCategory.OP_OPENPAREN) with Token
   case object OP_CLOSEPAREN extends TokenWithCategory(TokenCategory.OP_CLOSEPAREN) with Token
@@ -163,12 +174,22 @@ object Token {
     override def binaryOperator: BinaryOperator = BinaryOperator.Sub
     override def unaryOperator: UnaryOperator = UnaryOperator.UnaryMinus
   }
-  case object OP_MUL extends TokenWithCategory(TokenCategory.OP_MUL) with BinaryOperatorToken {
+  sealed class MultiplicationOperator extends TokenWithCategory(TokenCategory.OP_MUL) with BinaryOperatorToken {
     override def binaryOperator: BinaryOperator = BinaryOperator.Mul
   }
-  case object OP_DIV extends TokenWithCategory(TokenCategory.OP_DIV) with BinaryOperatorToken {
+  object MultiplicationOperator extends TokenFactory[MultiplicationOperator] {
+    override val category: TokenCategory = TokenCategory.OP_MUL
+  }
+  case object OP_STAR extends MultiplicationOperator
+  case object OP_MUL extends MultiplicationOperator
+  sealed class DivisionOperator extends TokenWithCategory(TokenCategory.OP_DIV) with BinaryOperatorToken {
     override def binaryOperator: BinaryOperator = BinaryOperator.Div
   }
+  object DivisionOperator extends TokenFactory[DivisionOperator] {
+    override val category: TokenCategory = TokenCategory.OP_DIV
+  }
+  case object OP_SLASH extends DivisionOperator
+  case object OP_DIV extends DivisionOperator
   case object OP_BITAND extends TokenWithCategory(TokenCategory.OP_BITAND) with BinaryOperatorToken {
     override def binaryOperator: BinaryOperator = BinaryOperator.BitAnd
   }

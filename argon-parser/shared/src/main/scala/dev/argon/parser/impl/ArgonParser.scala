@@ -29,13 +29,15 @@ object ArgonParser {
       given [T, U]: CanEqual[ArgonRuleName[T], ArgonRuleName[U]] = CanEqual.canEqualAny
     }
 
-    case object Identifier extends ArgonRuleName[Option[String]]
+    case object IdentifierOptional extends ArgonRuleName[Option[IdentifierExpr]]
+    case object OperatorIdentifier extends ArgonRuleName[IdentifierExpr]
+    final case class IdentifierParen(parenAllowed: ParenAllowedState) extends ArgonRuleName[IdentifierExpr]
+    val Identifier: IdentifierParen = IdentifierParen(ParenAllowed)
     case object OperatorName extends ArgonRuleName[OperatorToken]
-    case object NameSpecifier extends ArgonRuleName[NameSpecifier]
-    case object MethodName extends ArgonRuleName[MethodNameSpecifier]
+    case object MethodName extends ArgonRuleName[Option[IdentifierExpr]]
     case object NewLines extends ArgonRuleName[Unit]
     case object StatementSeparator extends ArgonRuleName[Unit]
-    case object ImportNamespace extends ArgonRuleName[TopLevelStatement]
+    case object ImportStatement extends ArgonRuleName[ImportStmt]
 
     // If
     case object IfExpr extends ArgonRuleName[Expr]
@@ -116,11 +118,18 @@ object ArgonParser {
 
     case object Statement extends ArgonRuleName[Stmt]
     case object StatementList extends ArgonRuleName[Vector[WithSource[Stmt]]]
-    case object NamespacePathRule extends ArgonRuleName[NamespacePath]
-    case object NamespaceDeclaration extends ArgonRuleName[TopLevelStatement]
+    case object ImportPathAbsolute extends ArgonRuleName[ImportStmt]
+    case object ImportPathRelative extends ArgonRuleName[ImportStmt]
+    case object ImportPathPackage extends ArgonRuleName[ImportStmt]
+    case object ImportPathMember extends ArgonRuleName[ImportStmt]
+    case object ImportPathPackageName extends ArgonRuleName[NonEmptyList[String]]
+    final case class ImportPathSegmentRule(separator: ImportPathSegmentSeparator) extends ArgonRuleName[ImportPathSegment]
 
-    case object TopLevelStatementRule extends ArgonRuleName[TopLevelStatement]
-    case object PaddedTopLevelStatement extends ArgonRuleName[TopLevelStatement]
+    enum ImportPathSegmentSeparator derives CanEqual {
+      case Slash, Dot
+    }
+
+    case object PaddedStatement extends ArgonRuleName[Stmt]
 
 
   }
@@ -137,7 +146,7 @@ object ArgonParser {
 
     def second[T](pair: (_, T)): T = pair._2
 
-    private def matchTokenFactory[TTokenCategory <: TokenCategory, TToken <: Token : ClassTag](factory: TokenWithCategory[TTokenCategory] with TokenFactory[TToken]): TGrammar[TToken] =
+    private def matchTokenFactory[TToken <: Token : ClassTag](factory: TokenFactory[TToken]): TGrammar[TToken] =
       Grammar.matcher(factory.category, TokenMatcher.Subtype[Token, TToken](implicitly[ClassTag[TToken]]))
 
     private def matchToken[TToken <: TokenWithCategory[_ <: TokenCategory] with Token : ClassTag](token: TToken): TGrammar[TToken] =
@@ -158,9 +167,22 @@ object ArgonParser {
 
     protected override def createGrammar[T](name: Rule.ArgonRuleName[T]): TGrammar[T] =
       name match {
-        case Rule.Identifier =>
-          tokenUnderscore --> const(None : Option[String]) |
-            tokenIdentifier --> Some.apply
+        case Rule.IdentifierOptional =>
+          tokenUnderscore --> const(None : Option[IdentifierExpr]) |
+            rule(Rule.Identifier) --> Some.apply
+
+        case Rule.OperatorIdentifier =>
+          matchToken(OP_OPENPAREN) ++ rule(Rule.OperatorName) ++ matchToken(OP_CLOSEPAREN) --> { case (_, op, _) => IdentifierExpr.OperatorIdentifier(op) }
+
+        case Rule.IdentifierParen(Rule.ParenDisallowed) =>
+          tokenIdentifier --> IdentifierExpr.Named.apply |
+            matchToken(KW_EXTENSION) ++! rule(Rule.Identifier) --> { case (_, inner) => IdentifierExpr.Extension(inner) } |
+            matchToken(KW_INVERSE) ++! rule(Rule.Identifier) --> { case (_, inner) => IdentifierExpr.Inverse(inner) } |
+            matchToken(KW_UPDATE) ++! rule(Rule.Identifier) --> { case (_, inner) => IdentifierExpr.Update(inner) }
+
+        case Rule.IdentifierParen(Rule.ParenAllowed) =>
+          rule(Rule.IdentifierParen(Rule.ParenDisallowed)) |
+            rule(Rule.OperatorIdentifier)
 
         case Rule.OperatorName =>
           matchToken(OP_EQUALS) |
@@ -173,7 +195,7 @@ object ArgonParser {
             matchToken(OP_ADD) |
             matchToken(OP_SUB) |
             matchToken(OP_MUL) |
-            matchToken(OP_DIV) |
+            matchTokenFactory(DivisionOperator) |
             matchToken(OP_BITAND) |
             matchToken(OP_BITOR) |
             matchToken(OP_BITXOR) |
@@ -183,24 +205,25 @@ object ArgonParser {
             matchToken(OP_UNION) |
             matchToken(OP_INTERSECTION)
 
-        case Rule.NameSpecifier =>
-          tokenUnderscore --> const(NameSpecifier.Blank) |
-            (tokenIdentifier --> NameSpecifier.Identifier.apply) |
-            ((matchToken(OP_OPENPAREN) ++ rule(Rule.OperatorName) ++ matchToken(OP_CLOSEPAREN)) --> { case (_, op, _) => NameSpecifier.Operator(op) } : TGrammar[NameSpecifier])
-
         case Rule.MethodName =>
-          tokenUnderscore --> const(MethodNameSpecifier.Unnamed : MethodNameSpecifier) |
-            (tokenIdentifier ++ matchToken(OP_ASSIGN).?) --> {
-              case (name, None) => MethodNameSpecifier.Named(name)
-              case (name, Some(_)) => MethodNameSpecifier.Mutator(name)
+          tokenUnderscore --> const(None) |
+            rule(Rule.Identifier) ++ matchToken(OP_ASSIGN).? --> {
+              case (name, None) => Some(name)
+              case (name, Some(_)) => Some(IdentifierExpr.Update(name))
             }
 
         case Rule.NewLines => (matchToken(NewLine)*).discard
         case Rule.StatementSeparator => matchToken(NewLine).discard | matchToken(Semicolon).discard
 
-        case Rule.ImportNamespace =>
-          matchToken(KW_IMPORT) ++! (rule(Rule.NamespacePathRule) ++ matchToken(OP_DOT) ++ matchToken(KW_UNDERSCORE)) --> {
-            case (_, (ns, _, _)) => TopLevelStatement.Import(ns)
+        case Rule.ImportStatement =>
+          matchToken(KW_IMPORT) ++! (rule(Rule.NewLines) ++ (
+            rule(Rule.ImportPathAbsolute) |
+              rule(Rule.ImportPathRelative) |
+              rule(Rule.ImportPathPackage) |
+              rule(Rule.ImportPathMember)
+
+          )) --> {
+            case (_, (_, ns)) => ns
           }
 
 
@@ -224,14 +247,13 @@ object ArgonParser {
           }
 
         case Rule.VariablePattern =>
-          matchToken(KW_VAL) ++! rule(Rule.Identifier) ++ ((matchToken(OP_COLON) ++ rule(Rule.PatternType).observeSource)?) --> {
+          matchToken(KW_VAL) ++! rule(Rule.IdentifierOptional) ++ ((matchToken(OP_COLON) ++ rule(Rule.PatternType).observeSource)?) --> {
             case (_, idOpt, Some((_, varType))) => TypeTestPattern(idOpt, varType)
-            case (_, Some(id), None) => BindingPattern(id)
-            case (_, None, None) => DiscardPattern
+            case (_, idOpt, None) => BindingPattern(idOpt)
           }
 
         case Rule.DiscardPattern =>
-          matchToken(KW_UNDERSCORE) --> const(DiscardPattern)
+          matchToken(KW_UNDERSCORE) --> const(BindingPattern(None))
 
         case Rule.ConstructorExprPattern =>
           rule(Rule.ConstructorExprPatternIdPath) |
@@ -239,9 +261,9 @@ object ArgonParser {
 
         case Rule.ConstructorExprPatternIdPath =>
           createLeftRec(
-            tokenIdentifier --> { id => IdentifierExpr(id) : Expr }
+            rule(Rule.Identifier)
           )(
-            (matchToken(OP_DOT) ++ tokenIdentifier) --> {
+            (matchToken(OP_DOT) ++ rule(Rule.Identifier)) --> {
               case (_, id) => (baseExpr: WithSource[Expr]) => DotExpr(baseExpr, id)
             }
           )
@@ -275,7 +297,7 @@ object ArgonParser {
           }
 
         case Rule.PrimaryExpr(Rule.ParenDisallowed) =>
-          matchTokenFactory(Identifier) --> { case Identifier(id) => IdentifierExpr(id) : Expr } |
+          rule(Rule.IdentifierParen(Rule.ParenDisallowed)) |
             matchTokenFactory(StringToken) --> { str => StringValueExpr(str) } |
             matchTokenFactory(IntToken) --> IntValueExpr.apply |
             matchToken(KW_TRUE) --> const(BoolValueExpr(true)) |
@@ -291,6 +313,7 @@ object ArgonParser {
 
         case Rule.PrimaryExpr(Rule.ParenAllowed) =>
           matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(UnitLiteral) |
+            rule(Rule.OperatorIdentifier) |
             matchToken(OP_OPENPAREN) ++ rule(Rule.Expression) ++ matchToken(OP_CLOSEPAREN) --> {
               case (_, expr, _) => expr
             } | rule(Rule.PrimaryExpr(Rule.ParenDisallowed))
@@ -318,7 +341,7 @@ object ArgonParser {
           }
 
         case Rule.MemberAccess =>
-          matchTokenFactory(Identifier) --> { case Identifier(id) => (baseExpr: WithSource[Expr]) => DotExpr(baseExpr, id) } |
+          rule(Rule.Identifier) --> { id => (baseExpr: WithSource[Expr]) => DotExpr(baseExpr, id) } |
             matchToken(KW_NEW) --> const(ClassConstructorExpr.apply _) |
             matchToken(KW_TYPE) --> const(TypeOfExpr.apply _)
 
@@ -429,7 +452,7 @@ object ArgonParser {
           }
 
         case Rule.LambdaExpr =>
-          rule(Rule.Identifier) ++ matchToken(OP_LAMBDA) ++! rule(Rule.LambdaExpr).observeSource -->
+          rule(Rule.IdentifierOptional) ++ matchToken(OP_LAMBDA) ++! rule(Rule.LambdaExpr).observeSource -->
             { case (id, _, body) => LambdaExpr(id, body) } |
             rule(Rule.AsExpr)
 
@@ -466,7 +489,7 @@ object ArgonParser {
 
         case Rule.VariableDeclaration =>
           rule(Rule.VariableMutSpec) ++! (
-            rule(Rule.Identifier) ++
+            rule(Rule.IdentifierOptional) ++
               ((matchToken(OP_COLON) ++ rule(Rule.Type).observeSource --> second)?) ++
               matchToken(OP_EQUALS) ++
               rule(Rule.Expression).observeSource
@@ -485,7 +508,7 @@ object ArgonParser {
 
         case Rule.FieldInitializationStmt =>
           matchToken(KW_FIELD) ++
-            tokenIdentifier ++
+            rule(Rule.Identifier) ++
             matchToken(OP_EQUALS) ++!
             rule(Rule.Expression).observeSource --> { case (_, id, _, value) =>
               FieldInitializationStmt(id, value)
@@ -493,7 +516,7 @@ object ArgonParser {
 
         case Rule.InitializeStmt =>
           matchToken(KW_INITIALIZE) ++
-            rule(Rule.Identifier) ++
+            rule(Rule.IdentifierOptional) ++
             (
               (matchToken(OP_EQUALS) ++ rule(Rule.Expression).observeSource --> second)?
             ) --> { case (_, id, value) =>
@@ -518,7 +541,7 @@ object ArgonParser {
           (anyModifier.observeSource*) --> { _.toVector }
 
         case Rule.MethodParameter =>
-          tokenIdentifier ++
+          rule(Rule.Identifier) ++
             rule(Rule.NewLines) ++
             ((matchToken(OP_COLON) ++! (rule(Rule.NewLines) ++ rule(Rule.Type).observeSource) --> { case (_, (_, t)) => t })?) ++
             ((matchToken(OP_SUBTYPE) ++! (rule(Rule.NewLines) ++ rule(Rule.Type).observeSource) --> { case (_, (_, t)) => t })?) --> {
@@ -582,7 +605,7 @@ object ArgonParser {
         case Rule.FunctionDefinitionStmt =>
           rule(Rule.Modifiers) ++
             rule(Rule.MethodPurity) ++
-            rule(Rule.NameSpecifier) ++
+            rule(Rule.IdentifierOptional) ++
             rule(Rule.NewLines) ++
             rule(Rule.MethodParameters) ++! (
               matchToken(OP_COLON) ++
@@ -598,7 +621,7 @@ object ArgonParser {
         case Rule.MethodDefinitionStmt =>
           rule(Rule.Modifiers) ++
             rule(Rule.MethodPurity) ++
-            rule(Rule.Identifier) ++
+            rule(Rule.IdentifierOptional) ++
             rule(Rule.NewLines) ++
             matchToken(OP_DOT) ++
             rule(Rule.NewLines) ++
@@ -645,7 +668,7 @@ object ArgonParser {
         case Rule.TraitDeclarationStmt =>
           rule(Rule.Modifiers) ++
             matchToken(KW_TRAIT) ++! (
-              rule(Rule.NameSpecifier) ++
+              rule(Rule.IdentifierOptional) ++
                 rule(Rule.NewLines) ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_SUBTYPE) ++
@@ -661,7 +684,7 @@ object ArgonParser {
         case Rule.DataConstructorDeclarationStmt =>
           rule(Rule.Modifiers) ++
             matchToken(KW_CONSTRUCTOR) ++! (
-              rule(Rule.NameSpecifier).observeSource ++
+              rule(Rule.IdentifierOptional).observeSource ++
                 rule(Rule.NewLines) ++
                 rule(Rule.MethodParameters) ++
                 rule(Rule.NewLines) ++
@@ -679,7 +702,7 @@ object ArgonParser {
         case Rule.ClassDeclarationStmt =>
           rule(Rule.Modifiers) ++
             matchToken(KW_CLASS) ++! (
-              rule(Rule.NameSpecifier).observeSource ++
+              rule(Rule.IdentifierOptional).observeSource ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_SUBTYPE) ++
                 rule(Rule.BaseTypeSpecifier) ++
@@ -709,21 +732,81 @@ object ArgonParser {
             case (_, stmts) => stmts.toVector
           }
 
-        case Rule.NamespacePathRule =>
-          tokenIdentifier ++ ((matchToken(OP_DOT) ++ tokenIdentifier --> second)*) --> {
-            case (head, tail) => NamespacePath(head +: tail.toVector)
+        case Rule.ImportPathAbsolute =>
+          matchToken(OP_SLASH) ++ rule(Rule.NewLines) ++! rule(Rule.ImportPathSegmentRule(Rule.ImportPathSegmentSeparator.Slash)) --> {
+            case (_, _, path) => ImportStmt.Absolute(path)
           }
 
-        case Rule.NamespaceDeclaration =>
-          matchToken(KW_NAMESPACE) ++! rule(Rule.NamespacePathRule) --> { case (_, ns) => TopLevelStatement.Namespace(ns) }
+        case Rule.ImportPathRelative =>
+          val currentLevel =
+            matchToken(OP_DOT) ++ matchToken(OP_SLASH) ++ rule(Rule.NewLines) ++! rule(Rule.ImportPathSegmentRule(Rule.ImportPathSegmentSeparator.Slash)) --> {
+              case (_, _, _, path) => ImportStmt.Relative(0, path)
+            }
 
-        case Rule.TopLevelStatementRule =>
-          rule(Rule.NamespaceDeclaration) |
-            rule(Rule.ImportNamespace) |
-            rule(Rule.Statement).observeSource --> TopLevelStatement.Statement.apply
+          val fromParent =
+            (matchToken(OP_DOTDOT) ++ matchToken(OP_SLASH) ++ rule(Rule.NewLines)).+~ ++! rule(Rule.ImportPathPackageName) ++ rule(Rule.ImportPathSegmentRule(Rule.ImportPathSegmentSeparator.Slash)) --> {
+              case (parentDirs, packageName, path) => ImportStmt.Relative(parentDirs.size, path)
+            }
 
-        case Rule.PaddedTopLevelStatement =>
-          (rule(Rule.StatementSeparator)*) ++ rule(Rule.TopLevelStatementRule) ++ (rule(Rule.StatementSeparator)*) --> {
+          currentLevel | fromParent
+
+        case Rule.ImportPathPackage =>
+          rule(Rule.ImportPathPackageName) ++ matchToken(OP_SLASH) ++ rule(Rule.NewLines) ++! rule(Rule.ImportPathSegmentRule(Rule.ImportPathSegmentSeparator.Slash)) --> {
+            case (packageName, _, _, path) => ImportStmt.Package(packageName, path)
+          }
+
+        case Rule.ImportPathMember =>
+          rule(Rule.ImportPathSegmentRule(Rule.ImportPathSegmentSeparator.Dot)) --> ImportStmt.Member.apply
+
+        case Rule.ImportPathPackageName =>
+          tokenIdentifier ++ (
+              matchToken(OP_DOT) ++ rule(Rule.NewLines) ++ tokenIdentifier --> { case (_, _, id) => id }
+            ).* --> {
+              case (h, t) => NonEmptyList.cons(h, t.toList)
+            }
+          
+
+        case Rule.ImportPathSegmentRule(sep) =>
+          val sepGrammar = sep match {
+            case Rule.ImportPathSegmentSeparator.Slash => matchToken(OP_SLASH)
+            case Rule.ImportPathSegmentSeparator.Dot => matchToken(OP_DOT)
+          }
+
+          val cons =
+            tokenIdentifier ++ rule(Rule.NewLines) ++ sepGrammar ++ rule(Rule.NewLines) ++! rule(Rule.ImportPathSegmentRule(sep)) --> {
+              case (id, _, _, _, subPath) => ImportPathSegment.Cons(id, subPath)
+            }
+            
+          val many =
+            matchToken(OP_OPENCURLY) ++ rule(Rule.NewLines) ++! (
+              (
+                rule(Rule.ImportPathSegmentRule(sep)) ++
+                  (
+                    rule(Rule.NewLines) ++ rule(Rule.ImportPathSegmentRule(sep)) ++ rule(Rule.NewLines) ++ matchToken(OP_COMMA) ++ rule(Rule.NewLines) --> {
+                      case (_, seg, _, _, _) => seg
+                    }
+                  ).* ++
+                  matchToken(OP_COMMA).?
+              ).? --> {
+                case Some((headSeg, tailSegs, _)) => headSeg +: tailSegs
+                case None => Seq.empty
+              }
+            ) --> {
+              case (_, _, segs) => ImportPathSegment.Many(segs)
+            }
+            
+          val renaming =
+            rule(Rule.Identifier) ++ rule(Rule.NewLines) ++ matchToken(OP_LAMBDA) ++ rule(Rule.NewLines) ++ rule(Rule.IdentifierOptional) --> {
+              case (importing, _, _, _, viewedName) => ImportPathSegment.Renaming(importing, viewedName)
+            }
+
+          val imported = rule(Rule.Identifier) --> ImportPathSegment.Imported.apply
+          val wildcard = matchToken(OP_STAR) --> const(ImportPathSegment.Wildcard)
+
+          cons | many | renaming | imported | wildcard
+
+        case Rule.PaddedStatement =>
+          (rule(Rule.StatementSeparator)*) ++ rule(Rule.Statement) ++ (rule(Rule.StatementSeparator)*) --> {
             case (_, stmt, _) => stmt
           }
       }
@@ -758,8 +841,8 @@ object ArgonParser {
 
   private[impl] def grammarFactory: GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] = ArgonGrammarFactory
 
-  def parse[E]: ZChannel[Any, E, Chunk[WithSource[Token]], FilePosition, E | SyntaxError, Chunk[TopLevelStatement], FilePosition] =
-    Grammar.parseAll(ArgonGrammarFactory)(Rule.PaddedTopLevelStatement)
+  def parse[E]: ZChannel[Any, E, Chunk[WithSource[Token]], FilePosition, E | SyntaxError, Chunk[Stmt], FilePosition] =
+    Grammar.parseAll(ArgonGrammarFactory)(Rule.PaddedStatement)
       
 
 }
