@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Construct abstract class</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+        
+        abstract open class A <: Object
+
+            public new()
+            end
+
+            public abstract proc self.say_hello(): Unit
+        end
+
+        proc main(): Unit do
+            val a: A = A.new()
+            a.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedError>AbstractClassConstructorCalledError</ExpectedError>
+
+</ArgonTest>

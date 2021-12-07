@@ -1,0 +1,54 @@
+<ArgonTest>
+
+    <Name>Type lambda</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+
+        trait Functor(F: type -> type) <: Object
+            public abstract def _.map (A: type) (B: type) (f: A -> B) (input: F A): F B
+        end
+
+        def intToStringInFunctor (F: type -> type) (f: Functor F) (fInt: F Int): F String =
+            f.map Int String (i => i.to_s()) fInt
+
+        class ValueBox(T: type) <: Object
+
+            field value: T
+
+            public new(value: T)
+                field value = value
+            end
+
+            public def _.value: T = value
+        end
+
+        class ValueBoxFunctor <: Functor ValueBox
+
+            public new
+            end
+
+            public override def _.map (A: type) (B: type) (f: A -> B) (input: ValueBox A): ValueBox B =
+                ValueBox(B).new(f input.value)
+
+        end
+
+        proc main(): Unit do
+            val valueBoxFunctor = ValueBoxFunctor.new
+
+            val sBox = intToStringInFunctor ValueBox valueBoxFunctor (ValueBox(Int).new 88)
+
+            puts sBox.value
+
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        88
+    </ExpectedOutput>
+
+</ArgonTest>

@@ -1,0 +1,31 @@
+<ArgonTest>
+
+    <Name>Box type (class)</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+        
+        class ValueBox(T: type) <: Object
+
+            field value: T
+
+            public new(value: T)
+                field value = value
+            end
+
+            public def _.value: T = value
+        end
+        
+        proc main(): Unit do
+            val box = ValueBox(String).new 'Hello World'
+            puts box.value
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

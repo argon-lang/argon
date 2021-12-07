@@ -1,0 +1,18 @@
+<ArgonTest>
+
+    <Name>Hello World (Purity Error)</Name>
+
+    <InputSource name="test.argon">
+
+        import Ar._
+
+        def main(): Unit do
+            puts 'Hello World'
+        end
+
+
+    </InputSource>
+
+    <ExpectedError>ImpureFunctionCalledError</ExpectedError>
+
+</ArgonTest>

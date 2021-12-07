@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Method implementation in datatype</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+        
+        trait MyType <: Object
+            public proc self.say_hello(): Unit =
+                puts 'Hello World'
+        end
+        
+        constructor MyCtor(): MyType
+        end
+        
+        proc main(): Unit do
+            MyCtor().say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

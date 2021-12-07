@@ -1,0 +1,20 @@
+<ArgonTest>
+
+    <Name>Hello World (val with type annotation)</Name>
+
+
+    <InputSource name="test.argon">
+            
+        import Ar._
+        
+        proc main(): Unit do
+            val msg: String = 'Hello World'
+            puts msg
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

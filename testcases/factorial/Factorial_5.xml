@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Factorial 5</Name>
+
+
+    <InputSource name="test.argon">
+            
+        import Ar._
+        
+        def factorial(n: Int): Int =
+            if n = 1 then
+                1
+            else
+                n * factorial(n - 1)
+            end
+        
+        proc main(): Unit do
+            puts (factorial(5).to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>120</ExpectedOutput>
+
+</ArgonTest>

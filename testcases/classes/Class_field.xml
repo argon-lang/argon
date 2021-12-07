@@ -1,0 +1,35 @@
+<ArgonTest>
+
+    <Name>Class field</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+        
+        class MyClass <: Object
+            public new()
+                field name = 'World'
+            end
+
+            field name: String
+
+
+            public proc self.say_hello(): Unit do
+                puts 'Hello'
+                puts name
+            end
+        end
+        
+        proc main(): Unit do
+            MyClass.new().say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Hello
+        World
+    </ExpectedOutput>
+
+</ArgonTest>

@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>99 + 2 partial application</Name>
+
+
+    <InputSource name="test.argon">
+            
+        import Ar._
+        
+        def add(a: Int)(b: Int): Int =
+            a + b
+
+        def callWithTwo(f: Int -> Int): Int =
+            f 2
+
+        proc main(): Unit do
+            val result = callWithTwo (add 99)
+            puts (result.to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>101</ExpectedOutput>
+
+</ArgonTest>

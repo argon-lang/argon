@@ -1,0 +1,16 @@
+<ArgonTest>
+
+    <Name>Hello World (Expression Body)</Name>
+
+    <InputSource name="test.argon">
+
+        import Ar._
+
+        proc main(): Unit =
+            puts 'Hello World'
+
+    </InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

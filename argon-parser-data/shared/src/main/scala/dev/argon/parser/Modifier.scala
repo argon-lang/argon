@@ -1,0 +1,16 @@
+package dev.argon.parser
+
+sealed trait Modifier
+sealed trait AccessModifier extends Modifier
+sealed trait OverridabilityModifier extends Modifier
+sealed trait ExtendabilityModifier extends Modifier
+case object PublicModifier extends AccessModifier
+case object ProtectedModifier extends AccessModifier
+case object PrivateModifier extends AccessModifier
+case object InternalModifier extends AccessModifier
+case object VirtualModifier extends OverridabilityModifier
+case object AbstractModifier extends OverridabilityModifier
+case object OverrideModifier extends OverridabilityModifier
+case object FinalModifier extends OverridabilityModifier
+case object SealedModifier extends ExtendabilityModifier
+case object OpenModifier extends ExtendabilityModifier

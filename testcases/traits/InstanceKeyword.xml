@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>Instance Keyword</Name>
+
+    <InputSource name="test.argon"><![CDATA[
+
+        import Ar._
+
+        trait MyTrait <: Object
+        instance
+            public proc self.say_hello(): Unit do
+                puts 'Hello World'
+            end
+
+        end
+
+        constructor MyCtor(): MyTrait
+        end
+
+        proc main(): Unit do
+            MyCtor().say_hello()
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

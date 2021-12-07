@@ -1,0 +1,28 @@
+<ArgonTest>
+
+    <Name>Constructor purity 4</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+
+        class MyClass <: Object
+
+            public proc new(name: String)
+                initialize _
+                puts name
+            end
+
+        end
+        
+        proc main(): Unit do
+        end
+
+        def func(): MyClass = MyClass.new 'Bad'
+            
+    ]]></InputSource>
+
+    <ExpectedError>ImpureFunctionCalledError</ExpectedError>
+
+</ArgonTest>

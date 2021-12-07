@@ -1,0 +1,35 @@
+<ArgonTest>
+
+    <Name>Print class parameter instance method base class</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+        
+        open class MyClass1(str: String) <: Object
+
+            public new()
+            end
+
+            public proc _.printMessage(): Unit =
+                puts str
+
+        end
+
+        class MyClass2(str: String) <: MyClass1(str)
+            public new()
+                initialize _ = MyClass1(str).new()
+            end
+        end
+        
+        proc main(): Unit do
+            MyClass2('Hello World').new().printMessage()
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

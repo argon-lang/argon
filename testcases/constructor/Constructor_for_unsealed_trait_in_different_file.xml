@@ -1,0 +1,35 @@
+<ArgonTest>
+
+    <Name>Constructor for unsealed trait in different file</Name>
+
+
+    <InputSource name="MyType.argon"><![CDATA[
+            
+        import Ar._
+        
+        trait MyType <: Object
+            public abstract proc self.say_hello(): Unit
+        end
+        
+              
+    ]]></InputSource>
+    
+    <InputSource name="MyCtor.argon"><![CDATA[
+            
+        import Ar._
+        
+        constructor MyCtor(): MyType
+            public override proc self.say_hello(): Unit =
+                puts 'Hello World'
+        end
+        
+        proc main(): Unit do
+            MyCtor().say_hello()
+        end
+        
+              
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

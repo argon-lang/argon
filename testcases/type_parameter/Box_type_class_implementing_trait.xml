@@ -1,0 +1,35 @@
+<ArgonTest>
+
+    <Name>Box type (class implementing trait)</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+
+        trait BoxBase(T: type) <: Object
+            public abstract def _.value: T
+        end
+        
+        class ValueBox(T: type) <: BoxBase T
+
+            field value: T
+
+            public new(value: T)
+                field value = value
+            end
+
+            public override def _.value: T = value
+        end
+        
+        proc main(): Unit do
+            val box: BoxBase String = ValueBox(String).new 'Hello World'
+            puts box.value
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

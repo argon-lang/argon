@@ -1,0 +1,22 @@
+<ArgonTest>
+
+    <Name>Capture local</Name>
+
+    <InputSource name="test.argon">
+
+        import Ar._
+
+        proc callFunc (f: Int -> Int) (i: Int): Int =
+            f i
+
+        proc main(): Unit do
+            val addNum: Int = 25
+            puts ((callFunc (x => x + addNum) 10).to_s())
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>35</ExpectedOutput>
+
+</ArgonTest>

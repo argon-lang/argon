@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Hello World - no param</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+        
+        trait MyType <: Object
+            public abstract proc self.say_hello(): Unit
+        end
+        
+        constructor MyCtor: MyType
+            public override proc self.say_hello(): Unit =
+                puts 'Hello World'
+        end
+        
+        proc main(): Unit do
+            MyCtor.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

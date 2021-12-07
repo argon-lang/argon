@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Trait private static method</Name>
+
+    <InputSource name="test.argon"><![CDATA[
+
+        import Ar._
+
+        trait MyTrait <: Object
+        static
+            private proc self.say_hello(): Unit do
+                puts 'Hello World'
+            end
+        end
+
+        proc main(): Unit do
+            MyTrait.say_hello()
+        end
+
+    ]]></InputSource>
+
+    <ExpectedError>LookupFailedError</ExpectedError>
+
+</ArgonTest>

@@ -1,0 +1,20 @@
+<ArgonTest>
+
+    <Name>Modify Local</Name>
+
+    <InputSource name="test.argon">
+
+        import Ar._
+
+        proc main(): Unit do
+            var x = 5
+            x := x + 1
+            puts (x.to_s())
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>6</ExpectedOutput>
+
+</ArgonTest>

@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Constructor purity 5</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+
+        class MyClass <: Object
+
+            public proc new(name: String)
+                initialize _
+                puts name
+            end
+
+        end
+        
+        proc main(): Unit do
+            val _ = MyClass.new 'Good'
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Good</ExpectedOutput>
+
+</ArgonTest>

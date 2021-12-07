@@ -1,0 +1,31 @@
+<ArgonTest>
+
+    <Name>Modify Field (Purity Error)</Name>
+
+    <InputSource name="test.argon"><![CDATA[
+
+        import Ar._
+
+        class MyClass <: Object
+            public new()
+                field msg = 'Hello World'
+            end
+
+            field var msg: String
+
+            public def _.msg: String = msg
+            public def _.msg:=(value: String): Unit = msg := value
+        end
+
+        proc main(): Unit do
+            val o = MyClass.new()
+            o.msg := 'Goodbye World'
+            puts o.msg
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedError>MutableVariableNotPureError</ExpectedError>
+
+</ArgonTest>

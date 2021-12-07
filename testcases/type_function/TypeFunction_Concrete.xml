@@ -1,0 +1,30 @@
+<ArgonTest>
+
+    <Name>Type function concrete</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+
+        def withInt(T: type): (T, Int).type = T, Int
+
+        proc printStringInt (s: String, i: Int): Unit do
+            puts s
+            puts (i.to_s())
+        end
+
+        proc main(): Unit do
+            val pair: withInt String = 'Hello World', 5
+            printStringInt pair
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Hello World
+        5
+    </ExpectedOutput>
+
+</ArgonTest>

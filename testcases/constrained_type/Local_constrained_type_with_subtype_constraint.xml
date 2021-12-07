@@ -1,0 +1,19 @@
+<ArgonTest>
+
+    <Name>Local constrained type with subtype constraint</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+        
+        proc main(): Unit do
+            val t: type <: String = String
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput></ExpectedOutput>
+
+</ArgonTest>

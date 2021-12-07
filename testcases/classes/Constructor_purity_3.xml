@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Constructor purity 3</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+
+        class MyClass <: Object
+
+            public new(name: String)
+                initialize _
+                puts name
+            end
+
+        end
+        
+        proc main(): Unit do
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedError>ImpureFunctionCalledError</ExpectedError>
+
+</ArgonTest>

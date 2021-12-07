@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>Virtual method in datatype</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+        
+        trait MyType <: Object
+            public virtual proc _.say_hello(): Unit =
+                puts 'Hello'
+        end
+        
+        constructor MyCtor(): MyType
+        end
+        
+        proc main(): Unit do
+            val obj: MyType = MyCtor()
+            obj.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Hello
+    </ExpectedOutput>
+
+</ArgonTest>

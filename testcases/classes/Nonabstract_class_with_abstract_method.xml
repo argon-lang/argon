@@ -1,0 +1,40 @@
+<ArgonTest>
+
+    <Name>Non-abstract class with abstract method</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+        
+        open class A <: Object
+
+            public new()
+            end
+
+            public abstract proc self.say_hello(): Unit
+        end
+
+        class B <: A
+
+            public new()
+                initialize _ = A.new()
+            end
+
+            public override proc self.say_hello(): Unit do
+                puts 'Hello World'
+            end
+
+        end
+
+        
+        proc main(): Unit do
+            val a: A = B.new()
+            a.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedError>AbstractMethodNotImplementedError</ExpectedError>
+
+</ArgonTest>

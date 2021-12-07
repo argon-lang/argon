@@ -1,0 +1,25 @@
+<ArgonTest>
+
+    <Name>Addition</Name>
+
+
+    <InputSource name="test.argon">
+            
+        import Ar._
+        
+        def add(a: Int, b: Int): Int =
+            a + b
+        
+        def add(a: Int, b: Int, c: Int): Int =
+            a + b + c
+        
+        proc main(): Unit do
+            puts (add(add(90, 3), 3, 3).to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>99</ExpectedOutput>
+
+</ArgonTest>

@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Trait meta type</Name>
+
+
+    <InputSource name="test.argon"><![CDATA[
+            
+        import Ar._
+        
+        trait MyTrait <: Object
+        static
+            public proc self.say_hello(): Unit do
+                puts 'Hello World'
+            end
+        end
+        
+        proc main(): Unit do
+            val t = MyTrait
+            t.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>
