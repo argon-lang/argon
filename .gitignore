@@ -4,6 +4,7 @@
 .metals
 
 target/
-/project/metals.sbt
+metals.sbt
 
 *.semanticdb
+
