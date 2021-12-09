@@ -2,8 +2,8 @@ package dev.argon.prover
 
 import dev.argon.prover.SimplePrologContext.VariableProvider
 import zio.{URIO, ZIO}
-import zio.test.Assertion._
-import zio.test._
+import zio.test.Assertion.*
+import zio.test.*
 
 object PrologFuelTests extends DefaultRunnableSpec {
 
@@ -14,7 +14,7 @@ object PrologFuelTests extends DefaultRunnableSpec {
   case object A extends TestCtor derives CanEqual
 
   val prologSyntax = new SimplePrologSyntax[TestPredicate, TestCtor]
-  import prologSyntax._
+  import prologSyntax.*
 
   val fuel = 100
 

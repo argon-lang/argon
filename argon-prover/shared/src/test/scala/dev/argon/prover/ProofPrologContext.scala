@@ -1,13 +1,13 @@
 package dev.argon.prover
 
 import dev.argon.prover.SimplePrologContext.VariableProvider
-import zio._
+import zio.*
 import zio.stream.{Stream, ZStream}
 
 abstract class ProofPrologContext[R <: VariableProvider & Random, E]
     extends PrologContext[R, E] with CommonProofRelations[R, E] {
   override val syntax: SimplePrologSyntaxBase
-  import syntax._
+  import syntax.*
 
   override type ProofAtom = String
 

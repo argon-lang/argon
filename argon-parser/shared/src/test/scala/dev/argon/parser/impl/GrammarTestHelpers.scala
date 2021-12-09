@@ -1,9 +1,9 @@
 package dev.argon.parser.impl
 
-import dev.argon.util._
+import dev.argon.util.*
 import dev.argon.grammar.Grammar
 import Grammar.{GrammarResult, GrammarResultComplete, GrammarResultSuspend, ParseOptions}
-import zio._
+import zio.*
 
 trait GrammarTestHelpers {
 

@@ -1,9 +1,9 @@
 package dev.argon.prover
 
 import dev.argon.prover.SimplePrologContext.VariableProvider
-import zio.test.Assertion._
-import zio.test._
-import zio.test.Assertion.Render._
+import zio.test.Assertion.*
+import zio.test.*
+import zio.test.Assertion.Render.*
 
 trait ProofAssertions[R <: VariableProvider & zio.Random, E] extends ProofPrologContext[R, E] {
 

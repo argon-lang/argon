@@ -1,7 +1,7 @@
 package dev.argon.util
 
 import zio.{IO, Task}
-import scala.xml._
+import scala.xml.*
 
 object XmlParser {
 

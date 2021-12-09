@@ -22,6 +22,7 @@ object Options {
   ) extends Options[A, O] {
 
     def this(getDefault: OptionValueFunction[A, O]) = this(getDefault, Map.empty)
+    end this
 
     @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
     final override def get(id: O): A[id.ElementType] =

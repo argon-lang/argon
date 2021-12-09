@@ -1,7 +1,7 @@
 package dev.argon.compiler.pkg
 
-import dev.argon.compiler._
-import dev.argon.compiler.module._
+import dev.argon.compiler.*
+import dev.argon.compiler.module.*
 
 trait ArPackageC extends UsingContext {
   val packageName: PackageName

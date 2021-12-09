@@ -1,6 +1,6 @@
 package dev.argon.io
 
-import zio.stream._
+import zio.stream.*
 import java.nio.file.Path
 import zio.ZManaged
 

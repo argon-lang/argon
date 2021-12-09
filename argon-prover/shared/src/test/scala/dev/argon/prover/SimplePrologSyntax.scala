@@ -23,7 +23,7 @@ class SimplePrologSyntax[PredFunc, Constructor]
   def pred(predicateFunction: PredFunc, args: Expr*): Predicate = PredicateFunction(predicateFunction, args)
 
   extension(sc: StringContext) {
-    def v(args: Any*): Variable = Variable(sc.s(args: _*))
+    def v(args: Any*): Variable = Variable(sc.s(args*))
   }
 
   extension(pred: Predicate) {

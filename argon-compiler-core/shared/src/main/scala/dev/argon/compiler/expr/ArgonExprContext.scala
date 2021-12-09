@@ -1,7 +1,7 @@
 package dev.argon.compiler.expr
 
-import dev.argon.compiler._
-import dev.argon.expr._
+import dev.argon.compiler.*
+import dev.argon.expr.*
 import dev.argon.util.UniqueIdentifier
 
 abstract class ArgonExprContext extends ExprContext with UsingContext {

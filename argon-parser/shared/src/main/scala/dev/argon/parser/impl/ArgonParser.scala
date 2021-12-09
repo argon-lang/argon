@@ -1,12 +1,12 @@
 package dev.argon.parser.impl
 
-import dev.argon.parser.Token._
-import dev.argon.parser._
-import dev.argon.util.{_, given}
+import dev.argon.parser.Token.*
+import dev.argon.parser.*
+import dev.argon.util.{*, given}
 import scala.reflect.ClassTag
 import scala.language.postfixOps
 import dev.argon.grammar.{Grammar, GrammarError, TokenMatcher}
-import Grammar.Operators._
+import Grammar.Operators.*
 import Grammar.{GrammarFactory, UnionGrammar}
 import zio.{Chunk, NonEmptyChunk}
 import zio.stream.ZChannel
@@ -142,12 +142,12 @@ object ArgonParser {
 
       }
 
-    def second[T](pair: (_, T)): T = pair._2
+    def second[T](pair: (?, T)): T = pair._2
 
     private def matchTokenFactory[TToken <: Token : ClassTag](factory: TokenFactory[TToken]): TGrammar[TToken] =
       Grammar.matcher(factory.category, TokenMatcher.Subtype[Token, TToken](implicitly[ClassTag[TToken]]))
 
-    private def matchToken[TToken <: TokenWithCategory[_ <: TokenCategory] with Token : ClassTag](token: TToken)
+    private def matchToken[TToken <: TokenWithCategory[? <: TokenCategory] with Token : ClassTag](token: TToken)
       : TGrammar[TToken] =
       Grammar.matcher(token.category, TokenMatcher.Subtype[Token, TToken](implicitly[ClassTag[TToken]]))
 
@@ -375,7 +375,7 @@ object ArgonParser {
           )
 
         case Rule.UnaryExpr =>
-          def matchUnaryOp[TToken <: TokenWithCategory[_ <: TokenCategory] with UnaryOperatorToken : ClassTag]
+          def matchUnaryOp[TToken <: TokenWithCategory[? <: TokenCategory] with UnaryOperatorToken : ClassTag]
             (token: TToken)
             : TGrammar[Expr] =
             matchToken(token).observeSource ++! rule(Rule.UnaryExpr).observeSource --> { case (opToken, inner) =>
@@ -552,7 +552,7 @@ object ArgonParser {
             }
 
         case Rule.Modifiers =>
-          def ruleModifier[TToken <: TokenWithCategory[_ <: TokenCategory] with ModifierToken : ClassTag](token: TToken)
+          def ruleModifier[TToken <: TokenWithCategory[? <: TokenCategory] with ModifierToken : ClassTag](token: TToken)
             : TGrammar[Modifier] = matchToken(token) --> const(token.modifier)
 
           val anyModifier =
@@ -604,7 +604,7 @@ object ArgonParser {
               ) ++ matchToken(OP_CLOSEPAREN)) --> {
                 case (_, (_, requiresToken, _, erasedToken, _, params, _, _)) =>
                   val listType =
-                    if(requiresToken.isDefined) FunctionParameterListType.RequiresList
+                    if requiresToken.isDefined then FunctionParameterListType.RequiresList
                     else FunctionParameterListType.NormalList
                   FunctionParameterList(listType, isErased = erasedToken.isDefined, params)
               }
@@ -886,7 +886,7 @@ object ArgonParser {
     private def createLeftAssociativeOperatorRule
       (firstOpGrammar: TGrammar[BinaryOperator], opGrammars: TGrammar[BinaryOperator]*)(nextGrammar: TGrammar[Expr])
       : TGrammar[Expr] = {
-      val opGrammarsNec = NonEmptyChunk(firstOpGrammar, opGrammars: _*)
+      val opGrammarsNec = NonEmptyChunk(firstOpGrammar, opGrammars*)
 
       val rightGrammars =
         opGrammarsNec.map { opGrammar =>
@@ -905,7 +905,7 @@ object ArgonParser {
       }
     }
 
-    private def ruleBinaryOperator[TToken <: TokenWithCategory[_ <: TokenCategory] with BinaryOperatorToken : ClassTag]
+    private def ruleBinaryOperator[TToken <: TokenWithCategory[? <: TokenCategory] with BinaryOperatorToken : ClassTag]
       (token: TToken)
       : TGrammar[BinaryOperator] = matchToken(token) --> const(token.binaryOperator)
 

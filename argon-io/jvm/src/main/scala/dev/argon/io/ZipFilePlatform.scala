@@ -1,9 +1,9 @@
 package dev.argon.io
 
-import zio.stream._
+import zio.stream.*
 import dev.argon.util.ZStreamFromOutputStreamWriterZIO
 import org.apache.commons.compress.archivers.zip.ZipArchiveOutputStream
-import zio._
+import zio.*
 
 private[io] object ZipFilePlatform {
 

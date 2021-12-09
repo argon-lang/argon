@@ -1,10 +1,10 @@
 package dev.argon.io
 
 import dev.argon.util.given
-import zio._
-import zio.stream._
+import zio.*
+import zio.stream.*
 import org.apache.commons.compress.utils.SeekableInMemoryByteChannel
-import org.apache.commons.compress.archivers.zip.{ZipFile => ACZipFile}
+import org.apache.commons.compress.archivers.zip.ZipFile as ACZipFile
 import java.nio.channels.SeekableByteChannel
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry
 

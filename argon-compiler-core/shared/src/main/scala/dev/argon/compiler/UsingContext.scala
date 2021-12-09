@@ -1,8 +1,8 @@
 package dev.argon.compiler
 
-import dev.argon.compiler.module._
-import dev.argon.compiler.pkg._
-import dev.argon.compiler.definitions._
+import dev.argon.compiler.module.*
+import dev.argon.compiler.pkg.*
+import dev.argon.compiler.definitions.*
 
 trait UsingContext {
   val context: Context

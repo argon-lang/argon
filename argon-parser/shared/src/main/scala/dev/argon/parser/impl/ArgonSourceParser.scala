@@ -1,9 +1,9 @@
 package dev.argon.parser.impl
 
 import dev.argon.parser.{Stmt, SyntaxError, SyntaxErrorData}
-import dev.argon.util._
+import dev.argon.util.*
 import zio.Chunk
-import zio.stream._
+import zio.stream.*
 
 object ArgonSourceParser {
 

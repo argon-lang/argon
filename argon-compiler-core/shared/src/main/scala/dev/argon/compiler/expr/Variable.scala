@@ -1,6 +1,6 @@
 package dev.argon.compiler.expr
 
-import dev.argon.compiler._
+import dev.argon.compiler.*
 
 sealed trait Variable[TContext <: Context] {}
 

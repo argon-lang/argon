@@ -1,11 +1,11 @@
 package dev.argon.parser.impl
 
 import dev.argon.grammar.Grammar
-import Grammar.Operators._
+import Grammar.Operators.*
 import scala.language.postfixOps
 import zio.NonEmptyChunk
-import zio.test._
-import zio.test.Assertion._
+import zio.test.*
+import zio.test.Assertion.*
 
 abstract class GrammarTestsCommon extends DefaultRunnableSpec with GrammarTestHelpers with NumberTokenHelpers {
 

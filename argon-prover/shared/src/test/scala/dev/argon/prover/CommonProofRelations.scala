@@ -1,12 +1,12 @@
 package dev.argon.prover
 
 import dev.argon.prover.SimplePrologContext.VariableProvider
-import zio._
-import zio.stream._
+import zio.*
+import zio.stream.*
 
 trait CommonProofRelations[R <: VariableProvider & Random, E] extends PrologContext[R, E] {
   override val syntax: SimplePrologSyntaxBase
-  import syntax._
+  import syntax.*
 
   override type TRelation = Unit
   override type TConstraints = syntax.Expr

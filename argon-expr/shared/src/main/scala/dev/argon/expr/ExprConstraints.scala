@@ -1,6 +1,6 @@
 package dev.argon.expr
 
-import dev.argon.util.{_, given}
+import dev.argon.util.{*, given}
 
 sealed trait ExprConstraints[+T] {
   def map[T2 >: T, U](f: T2 => U): ExprConstraints[U]

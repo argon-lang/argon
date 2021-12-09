@@ -2,8 +2,8 @@ package dev.argon.expr
 
 import dev.argon.util.UniqueIdentifier
 import zio.{URIO, ZIO}
-import zio.test.Assertion._
-import zio.test._
+import zio.test.Assertion.*
+import zio.test.*
 import java.time.Duration
 
 object TypeCheckTests extends DefaultRunnableSpec {
@@ -12,7 +12,7 @@ object TypeCheckTests extends DefaultRunnableSpec {
 
   private val resolver: TestResolver[zio.Random] = new TestResolver[zio.Random]()
 
-  import TestExprContext._
+  import TestExprContext.*
   import resolver.{traitA, traitB, traitC, traitD, traitE, traitType, genTraitType}
 
   private def unionType(a: WrapExpr, b: WrapExpr): WrapExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.UnionType, (a, b)))

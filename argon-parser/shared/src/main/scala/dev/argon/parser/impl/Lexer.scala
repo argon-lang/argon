@@ -1,10 +1,10 @@
 package dev.argon.parser.impl
 
-import dev.argon.parser._
-import dev.argon.util._
+import dev.argon.parser.*
+import dev.argon.util.*
 import scala.language.postfixOps
 import dev.argon.grammar.{Grammar, GrammarError}
-import Grammar.Operators._
+import Grammar.Operators.*
 import zio.Chunk
 import zio.stream.ZChannel
 import Function.const
@@ -86,7 +86,7 @@ object Lexer {
                 val codepoint = digits.reduceLeft { (prev, digit) => prev * 16 + digit }
 
                 val mask = (1L << 32) - 1
-                if(codepoint != (codepoint & mask)) {
+                if codepoint != (codepoint & mask) then {
                   throw new Exception("Invalid codepoint")
                 }
 
@@ -338,7 +338,7 @@ object Lexer {
           }
 
         case Rule.Operator =>
-          def op(grammar: TGrammar[_], t: Token): TGrammar[Token] = grammar --> const(t)
+          def op(grammar: TGrammar[?], t: Token): TGrammar[Token] = grammar --> const(t)
 
           val and = token(CharacterCategory.And, "&")
           val or = token(CharacterCategory.Or, "|")

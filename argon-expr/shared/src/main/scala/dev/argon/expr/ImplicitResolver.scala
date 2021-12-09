@@ -1,15 +1,15 @@
 package dev.argon.expr
 
-import dev.argon.util.{_, given}
+import dev.argon.util.{*, given}
 import dev.argon.prover.{PrologContext, PrologSyntax, Proof}
 import dev.argon.util.UniqueIdentifier
-import zio._
+import zio.*
 import zio.stream.{Stream, ZStream}
 
 abstract class ImplicitResolver[R <: Random, E] {
 
   val exprContext: ExprContext
-  import exprContext._
+  import exprContext.*
 
   def createHole: ZIO[R, E, THole]
 
@@ -70,7 +70,7 @@ abstract class ImplicitResolver[R <: Random, E] {
 
   private final class TCPrologContext(createdHoles: Ref[Set[THole]]) extends PrologContext[R, E] {
     override val syntax: ExprPrologSyntax.type = ExprPrologSyntax
-    import syntax._
+    import syntax.*
     override type ProofAtom = TCAtomicProof
 
     override type TRelation = ExprRelation
@@ -409,7 +409,7 @@ abstract class ImplicitResolver[R <: Random, E] {
               ExprConstructor.SubtypeWitnessType,
               Seq(a @ Value(ExprConstructor.LoadTuple, argsA), b @ Value(ExprConstructor.LoadTuple, argsB)),
             ) =>
-          if(argsA.size != argsB.size) {
+          if argsA.size != argsB.size then {
             ZStream.unwrap(
               for {
                 a2 <- exprToWrapExprError(a)
@@ -472,7 +472,7 @@ abstract class ImplicitResolver[R <: Random, E] {
               ExprConstructor.SubtypeWitnessType,
               Seq(a @ Value(ExprConstructor.OmegaTypeN(n1), Seq()), b @ Value(ExprConstructor.OmegaTypeN(n2), Seq())),
             ) =>
-          if(n1 <= n2) {
+          if n1 <= n2 then {
             ZStream.unwrap(
               for {
                 a2 <- exprToWrapExprError(a)

@@ -1,11 +1,11 @@
 package dev.argon.expr
 
 import zio.{ZIO, IO}
-import dev.argon.util.{_, given}
+import dev.argon.util.{*, given}
 
 trait Evaluator[R, E] {
   val exprContext: ExprContext
-  import exprContext._
+  import exprContext.*
 
   def getFunctionBody(function: TFunction, args: Vector[WrapExpr], fuel: Int): ZIO[R, E, Option[WrapExpr]]
   def getMethodBody(method: TMethod, instance: WrapExpr, args: Vector[WrapExpr], fuel: Int): ZIO[R, E, Option[WrapExpr]]

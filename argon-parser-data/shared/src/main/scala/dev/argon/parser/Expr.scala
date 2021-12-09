@@ -1,6 +1,6 @@
 package dev.argon.parser
 
-import dev.argon.util._
+import dev.argon.util.*
 import scala.collection.immutable.Seq
 
 sealed trait Stmt {

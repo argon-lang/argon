@@ -1,7 +1,7 @@
 package dev.argon.util
 
-import zio._
-import zio.stream._
+import zio.*
+import zio.stream.*
 
 given [L]: Monad[[R] =>> Either[L, R]] with
   override def flatMap[A, B](fa: Either[L, A])(f: A => Either[L, B]): Either[L, B] = fa.flatMap(f)
@@ -61,7 +61,7 @@ given TraverseNonEmpty[NonEmptyChunk] with Monad[NonEmptyChunk] with
 
   override def traverse[F[+_]: Applicative, A, B](ca: NonEmptyChunk[A])(f: A => F[B]): F[NonEmptyChunk[B]] =
     Applicative[F].map2(f(ca.head), summon[Traverse[Chunk]].traverse(ca.tail)(f)) { (h2, t2) =>
-      NonEmptyChunk(h2, t2: _*)
+      NonEmptyChunk(h2, t2*)
     }
 
   def foldLeftM[F[+_]: Monad, S, A](ca: NonEmptyChunk[A])(s: S)(f: (S, A) => F[S]): F[S] =

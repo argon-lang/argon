@@ -11,7 +11,7 @@ object TokenMatcher {
   final case class Value[T](value: T)(using CanEqual[T, T]) extends TokenMatcher[T, T] {
 
     override def matchToken(other: T): Option[T] =
-      if(value == other)
+      if value == other then
         Some(other)
       else
         None

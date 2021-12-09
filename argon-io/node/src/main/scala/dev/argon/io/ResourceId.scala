@@ -1,7 +1,7 @@
 package dev.argon.io
 
-import zio.stream._
-import zio._
+import zio.stream.*
+import zio.*
 import scala.scalajs.js.typedarray.Uint8Array
 
 trait ResourceId {

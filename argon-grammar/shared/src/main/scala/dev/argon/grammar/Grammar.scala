@@ -1,11 +1,11 @@
 package dev.argon.grammar
 
-import dev.argon.grammar.Grammar._
-import scala.collection.immutable.{Stream => _, _}
+import dev.argon.grammar.Grammar.*
+import scala.collection.immutable.{Stream as _, *}
 import scala.language.postfixOps
-import dev.argon.util.{_, given}
-import zio._
-import zio.stream._
+import dev.argon.util.{*, given}
+import zio.*
+import zio.stream.*
 
 sealed trait Grammar[TToken, TSyntaxError, TLabel[_], +T] {
 
@@ -246,7 +246,7 @@ object Grammar {
     val factory: GrammarFactory[TToken, TSyntaxError, TLabel]
 
     def notLeftRec: ParseOptions[TToken, TSyntaxError, TLabel]
-    def addLeftRec(rule: Grammar[TToken, TSyntaxError, TLabel, _]): ParseOptions[TToken, TSyntaxError, TLabel]
+    def addLeftRec(rule: Grammar[TToken, TSyntaxError, TLabel, ?]): ParseOptions[TToken, TSyntaxError, TLabel]
     def setLabel[T](label: TLabel[T]): ParseOptions[TToken, TSyntaxError, TLabel]
   }
 
@@ -254,7 +254,7 @@ object Grammar {
 
     def apply[TToken, TSyntaxError, TLabel[_], T]
       (
-        leftRecRules: Set[Grammar[TToken, TSyntaxError, TLabel, _]],
+        leftRecRules: Set[Grammar[TToken, TSyntaxError, TLabel, ?]],
         currentLabel: Option[TLabel[T]],
         factory: GrammarFactory[TToken, TSyntaxError, TLabel],
       )
@@ -265,12 +265,12 @@ object Grammar {
         override val factory: GrammarFactory[TToken, TSyntaxError, TLabel] = factory2
 
         override def notLeftRec: ParseOptions[TToken, TSyntaxError, TLabel] =
-          if(leftRecRules.isEmpty)
+          if leftRecRules.isEmpty then
             this
           else
             ParseOptions(leftRecRules = Set.empty, currentLabel = currentLabel, factory = factory)
 
-        override def addLeftRec(rule: Grammar[TToken, TSyntaxError, TLabel, _])
+        override def addLeftRec(rule: Grammar[TToken, TSyntaxError, TLabel, ?])
           : ParseOptions[TToken, TSyntaxError, TLabel] =
           ParseOptions(leftRecRules = leftRecRules + rule, currentLabel = currentLabel, factory = factory)
 
@@ -301,7 +301,7 @@ object Grammar {
         new MapGrammar[TToken, TSyntaxError, TLabel, T, U](grammar1, _.map { (state, value) => (state, f(value)) })
 
       def |[U >: T](grammar2: => Grammar[TToken, TSyntaxError, TLabel, U])
-        (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+        (implicit errorFactory: ErrorFactory[TToken, ?, TSyntaxError])
         : Grammar[TToken, TSyntaxError, TLabel, U] =
         new UnionGrammar[TToken, TSyntaxError, TLabel, U](grammar1, grammar2)
 
@@ -321,12 +321,12 @@ object Grammar {
 
       def discard: Grammar[TToken, TSyntaxError, TLabel, Unit] = --> { _ => () }
 
-      def ?(implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      def ?(implicit errorFactory: ErrorFactory[TToken, ?, TSyntaxError])
         : Grammar[TToken, TSyntaxError, TLabel, Option[T]] = -->(Some.apply) | EmptyStrGrammar(None)
 
       def +~ : Grammar[TToken, TSyntaxError, TLabel, NonEmptyChunk[T]] = {
         lazy val grammar1Cached = grammar1
-        grammar1Cached ++ (grammar1Cached*) --> { case (head, tail) => NonEmptyChunk(head, tail: _*) }
+        grammar1Cached ++ (grammar1Cached*) --> { case (head, tail) => NonEmptyChunk(head, tail*) }
       }
 
       def * : Grammar[TToken, TSyntaxError, TLabel, Chunk[T]] = new RepeatGrammar(grammar1)
@@ -485,6 +485,8 @@ object Grammar {
       )
 
     parse(ParseStepReady)
+
+  end parseAll
 
   trait ErrorFactory[-TToken, -TTokenCategory, TSyntaxError] {
     def createError(error: GrammarError[TToken, TTokenCategory]): TSyntaxError
@@ -689,7 +691,7 @@ object Grammar {
     (
       grammarAUncached: => Grammar[TToken, TSyntaxError, TLabel, T],
       grammarBUncached: => Grammar[TToken, TSyntaxError, TLabel, T],
-    )(implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+    )(implicit errorFactory: ErrorFactory[TToken, ?, TSyntaxError])
       extends Grammar[TToken, TSyntaxError, TLabel, T] {
     import errorFactory.errorEndLocationOrder
 
@@ -750,12 +752,12 @@ object Grammar {
 
     def apply[TToken, TSyntaxError, TLabel[_], T]
       (grammarA: => Grammar[TToken, TSyntaxError, TLabel, T], grammarB: => Grammar[TToken, TSyntaxError, TLabel, T])
-      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      (implicit errorFactory: ErrorFactory[TToken, ?, TSyntaxError])
       : Grammar[TToken, TSyntaxError, TLabel, T] = new UnionGrammar[TToken, TSyntaxError, TLabel, T](grammarA, grammarB)
 
     def fromList[TToken, TSyntaxError, TLabel[_], T]
       (grammars: NonEmptyChunk[Lazy[Grammar[TToken, TSyntaxError, TLabel, T]]])
-      (implicit errorFactory: ErrorFactory[TToken, _, TSyntaxError])
+      (implicit errorFactory: ErrorFactory[TToken, ?, TSyntaxError])
       : Grammar[TToken, TSyntaxError, TLabel, T] =
       grammars.tail match {
         case ChunkUnCons(grammarsTail) =>

@@ -1,6 +1,6 @@
 package dev.argon.parser.impl
 
-import dev.argon.util._
+import dev.argon.util.*
 import zio.{Chunk, IO, NonEmptyChunk, UIO, ZIO}
 import zio.stream.ZChannel
 

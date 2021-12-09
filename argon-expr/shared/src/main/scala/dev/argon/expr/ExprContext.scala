@@ -1,7 +1,7 @@
 package dev.argon.expr
 
 import scala.reflect.ClassTag
-import dev.argon.util.{_, given}
+import dev.argon.util.{*, given}
 
 trait ExprContext {
 

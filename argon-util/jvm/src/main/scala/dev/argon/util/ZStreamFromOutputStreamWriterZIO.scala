@@ -1,7 +1,7 @@
 package dev.argon.util
 
 import java.io.OutputStream
-import zio._
+import zio.*
 import zio.stream.ZStream
 import java.io.PipedOutputStream
 import java.io.PipedInputStream

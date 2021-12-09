@@ -1,6 +1,6 @@
 package dev.argon.options
 
-import dev.argon.util.{_, given}
+import dev.argon.util.{*, given}
 import dev.argon.options.OptionsHandler.CombineFunction
 import dev.argon.options.OptionsHandlerImpl.OptionIDList
 import scala.deriving.Mirror

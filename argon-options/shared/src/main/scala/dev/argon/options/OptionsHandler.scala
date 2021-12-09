@@ -1,6 +1,6 @@
 package dev.argon.options
 
-import dev.argon.util.{_, given}
+import dev.argon.util.{*, given}
 import dev.argon.options.OptionsHandler.CombineFunction
 
 trait OptionsHandler[O <: OptionID { type Decoded[A] = Dec[A] }, Dec[A]] {

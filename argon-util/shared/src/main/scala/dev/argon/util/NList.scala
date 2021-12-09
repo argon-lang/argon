@@ -12,7 +12,7 @@ sealed trait NList[N <: Nat, +A] derives CanEqual:
     new Iterator[A] {
 
       @SuppressWarnings(Array("scalafix:DisableSyntax.var"))
-      private var list: NList[_, A] = NList.this
+      private var list: NList[?, A] = NList.this
 
       override def hasNext: Boolean =
         list match {
@@ -71,15 +71,15 @@ object NList {
   def sized[N <: Nat : Nat.ToInt, A](s: Iterable[A]): Option[NList[N, A]] =
     sizedImpl(implicitly[Nat.ToInt[N]].value)(s.iterator).asInstanceOf[Option[NList[N, A]]]
 
-  def from[A](s: Seq[A]): NList[_, A] =
+  def from[A](s: Seq[A]): NList[?, A] =
     s match {
       case h +: t => NCons(h, from(t))
       case _ => NNil
     }
 
-  private def sizedImpl[N <: Nat, A](n: Int)(s: Iterator[A]): Option[NList[_, A]] =
-    if(n > 0) {
-      if(s.hasNext) {
+  private def sizedImpl[N <: Nat, A](n: Int)(s: Iterator[A]): Option[NList[?, A]] =
+    if n > 0 then {
+      if s.hasNext then {
         val value = s.next()
         sizedImpl(n - 1)(s).map { t => value +: t }
       }
@@ -87,7 +87,7 @@ object NList {
         None
       }
     }
-    else if(s.hasNext) None
+    else if s.hasNext then None
     else Some(NNil)
 
   implicit class NListOps[N <: Nat, A](private val list: NList[N, A]) extends AnyVal {

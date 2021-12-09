@@ -7,7 +7,7 @@ import zio.test.{Gen, Sample}
 
 class TestResolver[R <: zio.Random] extends ImplicitResolver[R, String] {
   override val exprContext: TestExprContext.type = TestExprContext
-  import exprContext._
+  import exprContext.*
 
   override def createHole: ZIO[R, String, THole] = UniqueIdentifier.make
 
@@ -56,7 +56,7 @@ class TestResolver[R <: zio.Random] extends ImplicitResolver[R, String] {
 
   protected override def isSubTrait(traitA: TTrait, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr])
     : ZIO[R, String, SubClassResult] =
-    if(checkSubTraits(traitA, traitB)) {
+    if checkSubTraits(traitA, traitB) then {
       IO.succeed(SubClassResult.SubClassProof(wrapExpr(
         ExprConstructor.AssumeErasedValue,
         wrapExpr(

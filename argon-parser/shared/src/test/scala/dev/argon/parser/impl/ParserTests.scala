@@ -1,8 +1,8 @@
 package dev.argon.parser.impl
 
 import dev.argon.parser.{Token, ImportStmt, ImportPathSegment}
-import zio.test._
-import zio.test.Assertion._
+import zio.test.*
+import zio.test.Assertion.*
 import zio.Chunk
 import dev.argon.util.NonEmptyList
 

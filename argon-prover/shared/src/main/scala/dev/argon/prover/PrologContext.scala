@@ -1,13 +1,13 @@
 package dev.argon.prover
 
-import dev.argon.util.{_, given}
-import zio._
+import dev.argon.util.{*, given}
+import zio.*
 import zio.stream.{Stream, ZStream}
 import dev.argon.util.UniqueIdentifier
 
 abstract class PrologContext[R <: Random, E] {
   val syntax: PrologSyntax
-  import syntax._
+  import syntax.*
 
   type ProofAtom
 

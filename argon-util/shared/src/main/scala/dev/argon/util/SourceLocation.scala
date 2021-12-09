@@ -3,13 +3,13 @@ package dev.argon.util
 final case class FilePosition(line: Int, position: Int) derives CanEqual {
 
   def compareTo(other: FilePosition): Int =
-    if(line > other.line)
+    if line > other.line then
       1
-    else if(line < other.line)
+    else if line < other.line then
       -1
-    else if(position > other.position)
+    else if position > other.position then
       1
-    else if(position < other.position)
+    else if position < other.position then
       -1
     else
       0

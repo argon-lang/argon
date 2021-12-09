@@ -2,8 +2,8 @@ package dev.argon.prover
 
 import dev.argon.prover.SimplePrologContext.VariableProvider
 import zio.{ZIO, IO, URIO}
-import zio.test.Assertion._
-import zio.test._
+import zio.test.Assertion.*
+import zio.test.*
 
 object PrologProofTests extends DefaultRunnableSpec {
 
@@ -19,7 +19,7 @@ object PrologProofTests extends DefaultRunnableSpec {
   case object Zero extends TestCtor derives CanEqual
 
   val prologSyntax = new SimplePrologSyntax[TestPredicate, TestCtor]
-  import prologSyntax._
+  import prologSyntax.*
 
   val fuel = 100
 
@@ -52,7 +52,7 @@ object PrologProofTests extends DefaultRunnableSpec {
 
   private val prologContext: TestContext = new TestContext
 
-  import prologContext.{check => _, _}
+  import prologContext.{check as _, *}
 
   override def spec: ZSpec[Environment, Failure] =
     suite("Proofs")(
