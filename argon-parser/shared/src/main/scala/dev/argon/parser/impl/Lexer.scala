@@ -2,19 +2,18 @@ package dev.argon.parser.impl
 
 import dev.argon.parser._
 import dev.argon.util._
-
 import scala.language.postfixOps
 import dev.argon.grammar.{Grammar, GrammarError}
 import Grammar.Operators._
 import zio.Chunk
 import zio.stream.ZChannel
-
 import Function.const
 
 object Lexer {
 
   private[Lexer] object Rule {
     sealed trait LexerRuleName[T]
+
     object LexerRuleName {
       given [T, U]: CanEqual[LexerRuleName[T], LexerRuleName[U]] = CanEqual.canEqualAny
     }
@@ -35,16 +34,20 @@ object Lexer {
 
     implicit val errorFactory: Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] =
       new Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] {
+
         override def createError(error: GrammarError[String, CharacterCategory]): SyntaxError =
           SyntaxError.LexerError(error)
 
         override def errorEndLocationOrder: Ordering[SyntaxError] =
           (a, b) => implicitly[Ordering[FilePosition]].compare(a.location.end, b.location.end)
+
       }
 
     private def token(category: CharacterCategory, s: String): TGrammar[String] = Grammar.token(category, t => t == s)
     private def tokenF(category: CharacterCategory, f: String => Boolean): TGrammar[String] = Grammar.token(category, f)
-    private def partialMatcher[T](category: CharacterCategory)(f: PartialFunction[String, T]): TGrammar[T] = Grammar.matcher(category, f.lift)
+
+    private def partialMatcher[T](category: CharacterCategory)(f: PartialFunction[String, T]): TGrammar[T] =
+      Grammar.matcher(category, f.lift)
 
     protected override def createGrammar[T](label: Rule.LexerRuleName[T]): TGrammar[T] =
       label match {
@@ -55,7 +58,10 @@ object Lexer {
           (lf.discard | (cr ++ lf).discard) --> const(Token.NewLine)
 
         case Rule.Whitespace =>
-          (tokenF(CharacterCategory.Whitespace, s => Character.isWhitespace(s.codePointAt(0)) && s != "\r" && s != "\n")+~) --> const(())
+          (tokenF(
+            CharacterCategory.Whitespace,
+            s => Character.isWhitespace(s.codePointAt(0)) && s != "\r" && s != "\n",
+          ) +~) --> const(())
 
         case Rule.DoubleQuoteString =>
           val doubleQuote = token(CharacterCategory.Quote, "\"")
@@ -64,19 +70,18 @@ object Lexer {
           def singleEscape(ch: String, value: String): TGrammar[Token.StringToken.StringPart] =
             (esc ++! token(CharacterCategory.StringEscape, ch)).observeSource --> {
               case WithSource(_, location) =>
-              Token.StringToken.StringPart(WithSource(value, location))
+                Token.StringToken.StringPart(WithSource(value, location))
             }
 
           def isValidStringChar(c: String): Boolean = c != "\"" && c != "\\" && c != "#"
-          val anyChar = tokenF(CharacterCategory.StringChar, isValidStringChar).observeSource --> Token.StringToken.StringPart.apply
-
+          val anyChar =
+            tokenF(CharacterCategory.StringChar, isValidStringChar).observeSource --> Token.StringToken.StringPart.apply
 
           val unicodeEscape: TGrammar[Token.StringToken.StringPart] =
             (esc ++!
               token(CharacterCategory.OpenCurly, "{") ++
               rule(Rule.HexDigit).+~ ++
-              token(CharacterCategory.CloseCurly, "}")
-            ).observeSource --> {
+              token(CharacterCategory.CloseCurly, "}")).observeSource --> {
               case WithSource((_, _, digits, _), location) =>
                 val codepoint = digits.reduceLeft { (prev, digit) => prev * 16 + digit }
 
@@ -117,40 +122,49 @@ object Lexer {
 
             val subExprStart = token(CharacterCategory.OpenCurly, "{")
 
-            val formatStr = formatStart ++ (formatChar | escapeSequenceStr).* ++ formatEnd --> {
-              case (_, parts, _) =>
-                parts.mkString
-            }
+            val formatStr =
+              formatStart ++ (formatChar | escapeSequenceStr).* ++ formatEnd --> {
+                case (_, parts, _) =>
+                  parts.mkString
+              }
 
-            val innerExprGrammar = new Grammar.EmbeddedGrammar[SyntaxError, String, Rule.LexerRuleName, Token, ArgonParser.Rule.ArgonRuleName, Expr] {
-              override protected val outerGrammar: Grammar[String, SyntaxError, Rule.LexerRuleName, Token] =
-                rule(Rule.Whitespace).* ++ rule(Rule.NonEmptyToken) --> { case (_, token) => token }
+            val innerExprGrammar =
+              new Grammar.EmbeddedGrammar[
+                SyntaxError,
+                String,
+                Rule.LexerRuleName,
+                Token,
+                ArgonParser.Rule.ArgonRuleName,
+                Expr,
+              ] {
+                protected override val outerGrammar: Grammar[String, SyntaxError, Rule.LexerRuleName, Token] =
+                  rule(Rule.Whitespace).* ++ rule(Rule.NonEmptyToken) --> { case (_, token) => token }
 
-              override protected val innerGrammar: Grammar[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName, Expr] =
-                ArgonParser.ArgonGrammarFactory.rule(ArgonParser.Rule.Expression)
+                protected override val innerGrammar: Grammar[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName, Expr] =
+                  ArgonParser.ArgonGrammarFactory.rule(ArgonParser.Rule.Expression)
 
-              override protected val innerFactory: Grammar.GrammarFactory[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName] =
-                ArgonParser.ArgonGrammarFactory
+                protected override val innerFactory
+                  : Grammar.GrammarFactory[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName] =
+                  ArgonParser.ArgonGrammarFactory
 
-              override def stopToken(token: Token): Boolean =
-                token match {
-                  case Token.OP_CLOSECURLY => true
-                  case _ => false
-                }
+                override def stopToken(token: Token): Boolean =
+                  token match {
+                    case Token.OP_CLOSECURLY => true
+                    case _ => false
+                  }
 
-              override def unexpectedEndOfFileError(pos: FilePosition): SyntaxError =
-                SyntaxError.LexerError(GrammarError.UnexpectedEndOfFile(CharacterCategory.CloseCurly, pos))
+                override def unexpectedEndOfFileError(pos: FilePosition): SyntaxError =
+                  SyntaxError.LexerError(GrammarError.UnexpectedEndOfFile(CharacterCategory.CloseCurly, pos))
 
-              override def unexpectedToken(token: WithSource[Token]): SyntaxError =
-                SyntaxError.ParserError(GrammarError.UnexpectedToken(TokenCategory.OP_CLOSECURLY, token))
-            }
+                override def unexpectedToken(token: WithSource[Token]): SyntaxError =
+                  SyntaxError.ParserError(GrammarError.UnexpectedToken(TokenCategory.OP_CLOSECURLY, token))
+              }
 
             interpStart ++! (formatStr.observeSource.? ++ subExprStart ++ innerExprGrammar.observeSource) --> {
               case (_, (format, _, expr)) =>
                 Token.StringToken.ExprPart(format, expr)
             }
           }
-
 
           (
             doubleQuote ++
@@ -160,9 +174,10 @@ object Lexer {
             case WithSource((_, parts, _), location) =>
               def combineParts(parts: Chunk[Token.StringToken.Part]): Chunk[Token.StringToken.Part] =
                 parts match {
-                  case Token.StringToken.StringPart(WithSource(s1, SourceLocation(start, _))) +: Token.StringToken.StringPart(WithSource(s2, SourceLocation(_, end))) +: rest =>
+                  case Token.StringToken.StringPart(
+                        WithSource(s1, SourceLocation(start, _))
+                      ) +: Token.StringToken.StringPart(WithSource(s2, SourceLocation(_, end))) +: rest =>
                     combineParts(Token.StringToken.StringPart(WithSource(s1 + s2, SourceLocation(start, end))) +: rest)
-
 
                   case head +: tail =>
                     head +: combineParts(tail)
@@ -176,7 +191,6 @@ object Lexer {
               )
           }
 
-
         case Rule.SingleQuoteString =>
           val singleQuote = token(CharacterCategory.Quote, "'")
 
@@ -185,7 +199,7 @@ object Lexer {
           (singleQuote ++ ((
             singleQuote ++ singleQuote --> const("'") |
               anyChar
-            ).*).observeSource ++ singleQuote) --> {
+          ).*).observeSource ++ singleQuote) --> {
             case (_, chs, _) =>
               Token.StringToken(NonEmptyList(
                 Token.StringToken.StringPart(chs.map(_.mkString))
@@ -215,24 +229,26 @@ object Lexer {
         case Rule.Integer =>
           val digit = rule(Rule.HexDigit)
 
-          val decDigit = partialMatcher[BigInt](CharacterCategory.NonZeroDigit) {
-            case "0" => 0
-            case "1" => 1
-            case "2" => 2
-            case "3" => 3
-            case "4" => 4
-            case "5" => 5
-            case "6" => 6
-            case "7" => 7
-            case "8" => 8
-            case "9" => 9
-          }
+          val decDigit =
+            partialMatcher[BigInt](CharacterCategory.NonZeroDigit) {
+              case "0" => 0
+              case "1" => 1
+              case "2" => 2
+              case "3" => 3
+              case "4" => 4
+              case "5" => 5
+              case "6" => 6
+              case "7" => 7
+              case "8" => 8
+              case "9" => 9
+            }
 
-          val numBase = partialMatcher[BigInt](CharacterCategory.BaseSpecifier) {
-            case "X" | "x" => 16
-            case "B" | "b" => 2
-            case "o" => 8
-          }
+          val numBase =
+            partialMatcher[BigInt](CharacterCategory.BaseSpecifier) {
+              case "X" | "x" => 16
+              case "B" | "b" => 2
+              case "o" => 8
+            }
 
           val withBaseSpec =
             (token(CharacterCategory.Zero, "0") ++ numBase ++ (digit*)) --> {
@@ -240,85 +256,89 @@ object Lexer {
             }
 
           val decimalNum =
-            decDigit ++ decDigit ++ (digit*) --> { case (d1, d2, tail) => Token.IntToken(1, 10, Vector(d1, d2) ++ tail) }
+            decDigit ++ decDigit ++ (digit*) --> { case (d1, d2, tail) =>
+              Token.IntToken(1, 10, Vector(d1, d2) ++ tail)
+            }
 
           val singleDigit = decDigit --> { d => Token.IntToken(1, 10, Vector(d)) }
 
           withBaseSpec | decimalNum | singleDigit
 
         case Rule.Identifier =>
-          def startChar = tokenF(CharacterCategory.Letter, ch => Character.isLetter(ch.codePointAt(0))) | token(CharacterCategory.Underscore, "_")
+          def startChar =
+            tokenF(CharacterCategory.Letter, ch => Character.isLetter(ch.codePointAt(0))) | token(
+              CharacterCategory.Underscore,
+              "_",
+            )
           def idChar = startChar | tokenF(CharacterCategory.Digit, ch => Character.isDigit(ch.codePointAt(0)))
           def idTerminator = token(CharacterCategory.QMark, "?") | token(CharacterCategory.Exclaim, "!")
 
-          def createToken(id: String): Token = id match {
-            case "def" => Token.KW_DEF
-            case "proc" => Token.KW_PROC
-            case "instance" => Token.KW_INSTANCE
-            case "constructor" => Token.KW_CONSTRUCTOR
-            case "do" => Token.KW_DO
-            case "end" => Token.KW_END
-            case "var" => Token.KW_VAR
-            case "val" => Token.KW_VAL
-            case "true" => Token.KW_TRUE
-            case "false" => Token.KW_FALSE
-            case "as" => Token.KW_AS
-            case "namespace" => Token.KW_NAMESPACE
-            case "import" => Token.KW_IMPORT
-            case "trait" => Token.KW_TRAIT
-            case "static" => Token.KW_STATIC
-            case "data" => Token.KW_DATA
-            case "public" => Token.KW_PUBLIC
-            case "protected" => Token.KW_PROTECTED
-            case "private" => Token.KW_PRIVATE
-            case "internal" => Token.KW_INTERNAL
-            case "base" => Token.KW_BASE
-            case "if" => Token.KW_IF
-            case "then" => Token.KW_THEN
-            case "else" => Token.KW_ELSE
-            case "elsif" => Token.KW_ELSIF
-            case "open" => Token.KW_OPEN
-            case "sealed" => Token.KW_SEALED
-            case "virtual" => Token.KW_VIRTUAL
-            case "abstract" => Token.KW_ABSTRACT
-            case "override" => Token.KW_OVERRIDE
-            case "final" => Token.KW_FINAL
-            case "type" => Token.KW_TYPE
-            case "match" => Token.KW_MATCH
-            case "case" => Token.KW_CASE
-            case "class" => Token.KW_CLASS
-            case "new" => Token.KW_NEW
-            case "field" => Token.KW_FIELD
-            case "initialize" => Token.KW_INITIALIZE
-            case "extern" => Token.KW_EXTERN
-            case "raise" => Token.KW_RAISE
-            case "begin" => Token.KW_BEGIN
-            case "rescue" => Token.KW_RESCUE
-            case "ensure" => Token.KW_ENSURE
-            case "erased" => Token.KW_ERASED
-            case "requires" => Token.KW_REQUIRES
-            case "ensures" => Token.KW_ENSURES
-            case "maintains" => Token.KW_MAINTAINS
-            case "assert" => Token.KW_ASSERT
-            case "given" => Token.KW_GIVEN
-            case "extension" => Token.KW_EXTENSION
-            case "inverse" => Token.KW_INVERSE
-            case "update" => Token.KW_UPDATE
-            case "_" => Token.KW_UNDERSCORE
+          def createToken(id: String): Token =
+            id match {
+              case "def" => Token.KW_DEF
+              case "proc" => Token.KW_PROC
+              case "instance" => Token.KW_INSTANCE
+              case "constructor" => Token.KW_CONSTRUCTOR
+              case "do" => Token.KW_DO
+              case "end" => Token.KW_END
+              case "var" => Token.KW_VAR
+              case "val" => Token.KW_VAL
+              case "true" => Token.KW_TRUE
+              case "false" => Token.KW_FALSE
+              case "as" => Token.KW_AS
+              case "namespace" => Token.KW_NAMESPACE
+              case "import" => Token.KW_IMPORT
+              case "trait" => Token.KW_TRAIT
+              case "static" => Token.KW_STATIC
+              case "data" => Token.KW_DATA
+              case "public" => Token.KW_PUBLIC
+              case "protected" => Token.KW_PROTECTED
+              case "private" => Token.KW_PRIVATE
+              case "internal" => Token.KW_INTERNAL
+              case "base" => Token.KW_BASE
+              case "if" => Token.KW_IF
+              case "then" => Token.KW_THEN
+              case "else" => Token.KW_ELSE
+              case "elsif" => Token.KW_ELSIF
+              case "open" => Token.KW_OPEN
+              case "sealed" => Token.KW_SEALED
+              case "virtual" => Token.KW_VIRTUAL
+              case "abstract" => Token.KW_ABSTRACT
+              case "override" => Token.KW_OVERRIDE
+              case "final" => Token.KW_FINAL
+              case "type" => Token.KW_TYPE
+              case "match" => Token.KW_MATCH
+              case "case" => Token.KW_CASE
+              case "class" => Token.KW_CLASS
+              case "new" => Token.KW_NEW
+              case "field" => Token.KW_FIELD
+              case "initialize" => Token.KW_INITIALIZE
+              case "extern" => Token.KW_EXTERN
+              case "raise" => Token.KW_RAISE
+              case "begin" => Token.KW_BEGIN
+              case "rescue" => Token.KW_RESCUE
+              case "ensure" => Token.KW_ENSURE
+              case "erased" => Token.KW_ERASED
+              case "requires" => Token.KW_REQUIRES
+              case "ensures" => Token.KW_ENSURES
+              case "maintains" => Token.KW_MAINTAINS
+              case "assert" => Token.KW_ASSERT
+              case "given" => Token.KW_GIVEN
+              case "extension" => Token.KW_EXTENSION
+              case "inverse" => Token.KW_INVERSE
+              case "update" => Token.KW_UPDATE
+              case "_" => Token.KW_UNDERSCORE
 
-            case _ => Token.Identifier(id)
-          }
+              case _ => Token.Identifier(id)
+            }
 
-
-          (startChar ++ (idChar*) ++ (idTerminator?)) --> {
+          (startChar ++ (idChar*) ++ (idTerminator ?)) --> {
             case (start, inner, term) =>
               createToken(start + inner.mkString + term.toList.mkString)
           }
 
         case Rule.Operator =>
-
-          def op(grammar: TGrammar[_], t: Token): TGrammar[Token] =
-            grammar --> const(t)
+          def op(grammar: TGrammar[_], t: Token): TGrammar[Token] = grammar --> const(t)
 
           val and = token(CharacterCategory.And, "&")
           val or = token(CharacterCategory.Or, "|")
@@ -342,7 +362,6 @@ object Lexer {
           val slash = token(CharacterCategory.Slash, "/")
           val caret = token(CharacterCategory.Caret, "^")
           val tilde = token(CharacterCategory.Tilde, "~")
-
 
           op(and ++ and ++ and, Token.OP_BITAND) |
             op(or ++ or ++ or, Token.OP_BITOR) |
@@ -390,8 +409,7 @@ object Lexer {
 
         case Rule.ResultToken =>
           (rule(Rule.NonEmptyToken).observeSource --> Some.apply) |
-            (rule(Rule.Whitespace) --> const(None : Option[WithSource[Token]]))
-
+            (rule(Rule.Whitespace) --> const(None: Option[WithSource[Token]]))
 
         case Rule.NonEmptyToken =>
           rule(Rule.NewLine) |
@@ -402,12 +420,12 @@ object Lexer {
             rule(Rule.Operator)
 
       }
+
   }
 
-
-  def lex[E]: ZChannel[Any, E, Chunk[WithSource[String]], FilePosition, E | SyntaxError, Chunk[WithSource[Token]], FilePosition] =
+  def lex[E]
+    : ZChannel[Any, E, Chunk[WithSource[String]], FilePosition, E | SyntaxError, Chunk[WithSource[Token]], FilePosition] =
     Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken)
       .pipeTo(ZChannelUtil.mapElements(_.flatten))
-
 
 }

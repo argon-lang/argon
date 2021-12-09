@@ -23,9 +23,4 @@ object Nat {
   given succIsNotZero[P <: Nat]: Is[Zero & Succ[P], Nothing] =
     Is.refl[Zero & Succ[P]].asInstanceOf[(Zero & Succ[P]) Is Nothing]
 
-    
-
 }
-
-
-

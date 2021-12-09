@@ -7,4 +7,3 @@ import zio.ZManaged
 trait ResourceId {
   def asStream: ZStream[Any, Nothing, Byte]
 }
-

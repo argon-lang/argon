@@ -8,6 +8,7 @@ final case class SyntaxErrorData(fileSpec: FileSpec, syntaxError: SyntaxError)
 sealed trait SyntaxError {
   def location: SourceLocation
 }
+
 object SyntaxError {
   final case class InvalidSurrogatePairs(ch: Char, override val location: SourceLocation) extends SyntaxError
   final case class UnexpectedCombingCharacter(cp: Int, override val location: SourceLocation) extends SyntaxError

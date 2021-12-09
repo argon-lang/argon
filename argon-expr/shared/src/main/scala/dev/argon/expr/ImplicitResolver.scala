@@ -17,12 +17,20 @@ abstract class ImplicitResolver[R <: Random, E] {
     case SubClassProof(proof: WrapExpr)
     case NotSubClassProof(proof: WrapExpr)
   }
-  
-  protected def isSubClass(classA: TClass, aArgs: Seq[WrapExpr], classB: TClass, bArgs: Seq[WrapExpr]): ZIO[R, E, SubClassResult]
-  protected def isSubTrait(traitA: TTrait, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr]): ZIO[R, E, SubClassResult]
-  protected def classImplementsTrait(classA: TClass, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr]): ZIO[R, E, SubClassResult]
-  protected def dataCtorImplementsTrait(dataCtorA: TDataConstructor, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr]): ZIO[R, E, SubClassResult]
-  
+
+  protected def isSubClass(classA: TClass, aArgs: Seq[WrapExpr], classB: TClass, bArgs: Seq[WrapExpr])
+    : ZIO[R, E, SubClassResult]
+
+  protected def isSubTrait(traitA: TTrait, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr])
+    : ZIO[R, E, SubClassResult]
+
+  protected def classImplementsTrait(classA: TClass, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr])
+    : ZIO[R, E, SubClassResult]
+
+  protected def dataCtorImplementsTrait
+    (dataCtorA: TDataConstructor, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr])
+    : ZIO[R, E, SubClassResult]
+
   // These relation methods must match the arguments for the expression constructors
   protected def traitRelations(arTrait: TTrait): ZIO[R, E, Seq[ExprRelation]]
   protected def classRelations(arClass: TClass): ZIO[R, E, Seq[ExprRelation]]
@@ -30,7 +38,7 @@ abstract class ImplicitResolver[R <: Random, E] {
   protected def functionRelations(function: TFunction): ZIO[R, E, Seq[ExprRelation]]
   protected def methodRelations(method: TMethod): ZIO[R, E, Seq[ExprRelation]]
   protected def classConstructorRelations(classCtor: TClassConstructor): ZIO[R, E, Seq[ExprRelation]]
-  
+
   protected val natLessThanFunction: TFunction
   protected val boolType: WrapExpr
 
@@ -68,276 +76,361 @@ abstract class ImplicitResolver[R <: Random, E] {
     override type TRelation = ExprRelation
     override type TConstraints = ExprConstraints[Expr]
 
-
-    override protected def normalize(expr: Expr, fuel: Int): ZIO[R, E, Expr] =
+    protected override def normalize(expr: Expr, fuel: Int): ZIO[R, E, Expr] =
       exprToWrapExpr(expr).flatMap { expr =>
         evaluator.normalizeTopLevelWrap(expr, fuel)
           .map(wrapExprToExpr)
       }
 
-    private def builtinAssertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] = ZIO.collectAll(List(
-      // A <: A
-      (for {
-        a <- newVariable
-      } yield (
-        Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-          wrapExpr(ExprConstructor.SubtypeWitnessType,
+    private def builtinAssertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] =
+      ZIO.collectAll(List(
+        // A <: A
+        (for {
+          a <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+            ExprConstructor.AssumeErasedValue,
+            wrapExpr(
+              ExprConstructor.SubtypeWitnessType,
+              (
+                WrapExpr.OfHole(a),
+                WrapExpr.OfHole(a),
+              ),
+            ),
+          ))) -> PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(a)))
+        )),
+
+        // A <: B1 and A <: B2
+        // -------------------
+        // A <: (B1 & B2)
+        (for {
+          a <- newVariable
+          b1 <- newVariable
+          b2 <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+            ExprConstructor.AssumeErasedValue,
+            wrapExpr(
+              ExprConstructor.SubtypeWitnessType,
+              (
+                WrapExpr.OfHole(a),
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.IntersectionType, (WrapExpr.OfHole(b1), WrapExpr.OfHole(b2)))),
+              ),
+            ),
+          ))) -> Implies(
+            And(
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(b1))),
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(b2))),
+            ),
+            PredicateFunction(
+              ExprConstructor.SubtypeWitnessType,
+              Seq(Variable(a), Value(ExprConstructor.IntersectionType, Seq(Variable(b1), Variable(b2)))),
+            ),
+          )
+        )),
+
+        // A <: B1 or A <: B2
+        // ------------------
+        // A <: (B1 | B2)
+        (for {
+          a <- newVariable
+          b1 <- newVariable
+          b2 <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+            ExprConstructor.AssumeErasedValue,
+            wrapExpr(
+              ExprConstructor.SubtypeWitnessType,
+              (
+                WrapExpr.OfHole(a),
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.UnionType, (WrapExpr.OfHole(b1), WrapExpr.OfHole(b2)))),
+              ),
+            ),
+          ))) -> Implies(
+            Or(
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(b1))),
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(b2))),
+            ),
+            PredicateFunction(
+              ExprConstructor.SubtypeWitnessType,
+              Seq(Variable(a), Value(ExprConstructor.UnionType, Seq(Variable(b1), Variable(b2)))),
+            ),
+          )
+        )),
+
+        // A1 <: B or A2 <: B
+        // ------------------
+        // A1 & A2 <: B
+        (for {
+          a1 <- newVariable
+          a2 <- newVariable
+          b <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+            ExprConstructor.AssumeErasedValue,
+            wrapExpr(
+              ExprConstructor.SubtypeWitnessType,
+              (
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.IntersectionType, (WrapExpr.OfHole(a1), WrapExpr.OfHole(a2)))),
+                WrapExpr.OfHole(b),
+              ),
+            ),
+          ))) -> Implies(
+            Or(
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a1), Variable(b))),
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a2), Variable(b))),
+            ),
+            PredicateFunction(
+              ExprConstructor.SubtypeWitnessType,
+              Seq(Value(ExprConstructor.IntersectionType, Seq(Variable(a1), Variable(a2))), Variable(b)),
+            ),
+          )
+        )),
+
+        // A1 <: B and A2 <: B
+        // -------------------
+        // (A1 | A2) <: B
+        (for {
+          a1 <- newVariable
+          a2 <- newVariable
+          b <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+            ExprConstructor.AssumeErasedValue,
+            wrapExpr(
+              ExprConstructor.SubtypeWitnessType,
+              (
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.UnionType, (WrapExpr.OfHole(a1), WrapExpr.OfHole(a2)))),
+                WrapExpr.OfHole(b),
+              ),
+            ),
+          ))) -> Implies(
+            And(
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a1), Variable(b))),
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a2), Variable(b))),
+            ),
+            PredicateFunction(
+              ExprConstructor.SubtypeWitnessType,
+              Seq(Value(ExprConstructor.UnionType, Seq(Variable(a1), Variable(a2))), Variable(b)),
+            ),
+          )
+        )),
+
+        // A <: (A,)
+        (for {
+          a <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+            ExprConstructor.AssumeErasedValue,
+            wrapExpr(
+              ExprConstructor.SubtypeWitnessType,
+              (
+                WrapExpr.OfHole(a),
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadTuple, NonEmptyList(WrapExpr.OfHole(a)))),
+              ),
+            ),
+          ))) -> PredicateFunction(
+            ExprConstructor.SubtypeWitnessType,
+            Seq(Variable(a), Value(ExprConstructor.LoadTuple, Seq(Variable(a)))),
+          )
+        )),
+
+        // (A,) <: A
+        (for {
+          a <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+            ExprConstructor.AssumeErasedValue,
+            wrapExpr(
+              ExprConstructor.SubtypeWitnessType,
+              (
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadTuple, NonEmptyList(WrapExpr.OfHole(a)))),
+                WrapExpr.OfHole(a),
+              ),
+            ),
+          ))) -> PredicateFunction(
+            ExprConstructor.SubtypeWitnessType,
+            Seq(Value(ExprConstructor.LoadTuple, Seq(Variable(a))), Variable(a)),
+          )
+        )),
+
+        // A <: B and C <: D
+        // --------------------
+        // (B -> C) <: (A -> D)
+        (for {
+          a <- newVariable
+          b <- newVariable
+          c <- newVariable
+          d <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+            ExprConstructor.AssumeErasedValue,
+            wrapExpr(
+              ExprConstructor.SubtypeWitnessType,
+              (
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionType, (WrapExpr.OfHole(b), WrapExpr.OfHole(c)))),
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionType, (WrapExpr.OfHole(a), WrapExpr.OfHole(d)))),
+              ),
+            ),
+          ))) -> Implies(
+            And(
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(b))),
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(c), Variable(d))),
+            ),
+            PredicateFunction(
+              ExprConstructor.SubtypeWitnessType,
+              Seq(
+                Value(ExprConstructor.FunctionType, Vector(Variable(b), Variable(c))),
+                Value(ExprConstructor.FunctionType, Vector(Variable(a), Variable(d))),
+              ),
+            ),
+          )
+        )),
+
+        // (B < A) == true
+        // ------------------
+        // TypeN A <: TypeN B
+        (for {
+          a <- newVariable
+          b <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+            ExprConstructor.AssumeErasedValue,
+            wrapExpr(
+              ExprConstructor.SubtypeWitnessType,
+              (
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, WrapExpr.OfHole(a))),
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, WrapExpr.OfHole(b))),
+              ),
+            ),
+          ))) -> Implies(
+            PredicateFunction(
+              ExprConstructor.EqualTo,
+              Seq(
+                Value(ExprConstructor.FunctionCall(natLessThanFunction), Seq(Variable(b), Variable(a))),
+                Value(ExprConstructor.LoadConstantBool(true), Seq(wrapExprToExpr(boolType))),
+              ),
+            ),
+            PredicateFunction(
+              ExprConstructor.SubtypeWitnessType,
+              Seq(
+                Value(ExprConstructor.TypeN, Seq(Variable(a))),
+                Value(ExprConstructor.TypeN, Seq(Variable(b))),
+              ),
+            ),
+          )
+        )),
+
+        // ------
+        // A == A
+        (for {
+          a <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
+            ExprConstructor.EqualTo,
             (
               WrapExpr.OfHole(a),
               WrapExpr.OfHole(a),
-            )
-          )
-        ))) -> PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(a)))
+            ),
+          )))) -> PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(a)))
         )),
+      ))
 
-      // A <: B1 and A <: B2
-      // -------------------
-      // A <: (B1 & B2)
-      (for {
-        a <- newVariable
-        b1 <- newVariable
-        b2 <- newVariable
-      } yield (
-        Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-          wrapExpr(ExprConstructor.SubtypeWitnessType,
-            (
-              WrapExpr.OfHole(a),
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.IntersectionType, (WrapExpr.OfHole(b1), WrapExpr.OfHole(b2)))),
-            )
-          )
-        ))) -> Implies(
-          And(
-            PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(b1))),
-            PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(b2)))
-          ),
-          PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Value(ExprConstructor.IntersectionType, Seq(Variable(b1), Variable(b2)))))
-        )
-        )),
-
-      // A <: B1 or A <: B2
-      // ------------------
-      // A <: (B1 | B2)
-      (for {
-        a <- newVariable
-        b1 <- newVariable
-        b2 <- newVariable
-      } yield (
-        Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-          wrapExpr(ExprConstructor.SubtypeWitnessType,
-            (
-              WrapExpr.OfHole(a),
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.UnionType, (WrapExpr.OfHole(b1), WrapExpr.OfHole(b2)))),
-            )
-          )
-        ))) -> Implies(
-          Or(
-            PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(b1))),
-            PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(b2)))
-          ),
-          PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Value(ExprConstructor.UnionType, Seq(Variable(b1), Variable(b2)))))
-        )
-        )),
-
-      // A1 <: B or A2 <: B
-      // ------------------
-      // A1 & A2 <: B
-      (for {
-        a1 <- newVariable
-        a2 <- newVariable
-        b <- newVariable
-      } yield (
-        Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-          wrapExpr(ExprConstructor.SubtypeWitnessType,
-            (
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.IntersectionType, (WrapExpr.OfHole(a1), WrapExpr.OfHole(a2)))),
-              WrapExpr.OfHole(b),
-            )
-          )
-        ))) -> Implies(
-          Or(
-            PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a1), Variable(b))),
-            PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a2), Variable(b)))
-          ),
-          PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Value(ExprConstructor.IntersectionType, Seq(Variable(a1), Variable(a2))), Variable(b)))
-        )
-        )),
-
-      // A1 <: B and A2 <: B
-      // -------------------
-      // (A1 | A2) <: B
-      (for {
-        a1 <- newVariable
-        a2 <- newVariable
-        b <- newVariable
-      } yield (
-        Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-          wrapExpr(ExprConstructor.SubtypeWitnessType,
-            (
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.UnionType, (WrapExpr.OfHole(a1), WrapExpr.OfHole(a2)))),
-              WrapExpr.OfHole(b),
-            )
-          )
-        ))) -> Implies(
-          And(
-            PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a1), Variable(b))),
-            PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a2), Variable(b)))
-          ),
-          PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Value(ExprConstructor.UnionType, Seq(Variable(a1), Variable(a2))), Variable(b)))
-        )
-        )),
-
-      // A <: (A,)
-      (for {
-        a <- newVariable
-      } yield (
-        Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-          wrapExpr(ExprConstructor.SubtypeWitnessType,
-            (
-              WrapExpr.OfHole(a),
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadTuple, NonEmptyList(WrapExpr.OfHole(a)))),
-            )
-          )
-        ))) -> PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Value(ExprConstructor.LoadTuple, Seq(Variable(a)))))
-        )),
-
-      // (A,) <: A
-      (for {
-        a <- newVariable
-      } yield (
-        Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-          wrapExpr(ExprConstructor.SubtypeWitnessType,
-            (
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadTuple, NonEmptyList(WrapExpr.OfHole(a)))),
-              WrapExpr.OfHole(a),
-            )
-          )
-        ))) -> PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Value(ExprConstructor.LoadTuple, Seq(Variable(a))), Variable(a)))
-        )),
-
-      // A <: B and C <: D
-      // --------------------
-      // (B -> C) <: (A -> D)
-      (for {
-        a <- newVariable
-        b <- newVariable
-        c <- newVariable
-        d <- newVariable
-      } yield (
-        Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-          wrapExpr(ExprConstructor.SubtypeWitnessType,
-            (
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionType, (WrapExpr.OfHole(b), WrapExpr.OfHole(c)))),
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionType, (WrapExpr.OfHole(a), WrapExpr.OfHole(d)))),
-            )
-          )
-        ))) -> Implies(
-          And(
-            PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(b))),
-            PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(c), Variable(d)))
-          ),
-          PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(
-            Value(ExprConstructor.FunctionType, Vector(Variable(b), Variable(c))),
-            Value(ExprConstructor.FunctionType, Vector(Variable(a), Variable(d))),
-          ))
-        )
-        )),
-
-      // (B < A) == true
-      // ------------------
-      // TypeN A <: TypeN B
-      (for {
-        a <- newVariable
-        b <- newVariable
-      } yield (
-        Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-          wrapExpr(ExprConstructor.SubtypeWitnessType,
-            (
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, WrapExpr.OfHole(a))),
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, WrapExpr.OfHole(b))),
-            )
-          )
-        ))) -> Implies(
-          PredicateFunction(ExprConstructor.EqualTo, Seq(Value(ExprConstructor.FunctionCall(natLessThanFunction), Seq(Variable(b), Variable(a))), Value(ExprConstructor.LoadConstantBool(true), Seq(wrapExprToExpr(boolType))))),
-          PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(
-            Value(ExprConstructor.TypeN, Seq(Variable(a))),
-            Value(ExprConstructor.TypeN, Seq(Variable(b)))
-          ))
-        )
-      )),
-
-      // ------
-      // A == A
-      (for {
-        a <- newVariable
-      } yield (
-        Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (
-          WrapExpr.OfHole(a),
-          WrapExpr.OfHole(a),
-        ))))) -> PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(a)))
-      )),
-    ))
-
-    override protected def assertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] = builtinAssertions
+    protected override def assertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] = builtinAssertions
 
     private def newVariable: ZIO[R, E, ExprPrologSyntax.TVariable] =
       createHole.tap { hole =>
         createdHoles.update(_ + hole)
       }
 
-    override protected def variableIsFromRules(variable: exprContext.THole): UIO[Boolean] = createdHoles.get.map(_.contains(variable))
+    protected override def variableIsFromRules(variable: exprContext.THole): UIO[Boolean] =
+      createdHoles.get.map(_.contains(variable))
 
-    override protected def intrinsicPredicate(predicate: ExprConstructor, args: Seq[Expr], substitutions: Model, fuel: Int): ZStream[R, Error, PrologResult.Yes] =
+    protected override def intrinsicPredicate
+      (predicate: ExprConstructor, args: Seq[Expr], substitutions: Model, fuel: Int)
+      : ZStream[R, Error, PrologResult.Yes] =
       (predicate, args) match {
-        case (ExprConstructor.SubtypeWitnessType, Seq(Value(ExprConstructor.ClassType(classA), aArgs), Value(ExprConstructor.ClassType(classB), bArgs))) =>
+        case (
+              ExprConstructor.SubtypeWitnessType,
+              Seq(Value(ExprConstructor.ClassType(classA), aArgs), Value(ExprConstructor.ClassType(classB), bArgs)),
+            ) =>
           ZStream.unwrap(
             for {
               convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
               convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
-            } yield resultIOToStream(isSubClass(classA, convAArgs, classB, convBArgs).map(subClassResultToPrologResult(substitutions)))
+            } yield resultIOToStream(
+              isSubClass(classA, convAArgs, classB, convBArgs).map(subClassResultToPrologResult(substitutions))
+            )
           )
 
-        case (ExprConstructor.SubtypeWitnessType, Seq(Value(ExprConstructor.TraitType(traitA), aArgs), Value(ExprConstructor.TraitType(traitB), bArgs))) =>
+        case (
+              ExprConstructor.SubtypeWitnessType,
+              Seq(Value(ExprConstructor.TraitType(traitA), aArgs), Value(ExprConstructor.TraitType(traitB), bArgs)),
+            ) =>
           ZStream.unwrap(
             for {
               convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
               convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
-            } yield resultIOToStream(isSubTrait(traitA, convAArgs, traitB, convBArgs).map(subClassResultToPrologResult(substitutions)))
+            } yield resultIOToStream(
+              isSubTrait(traitA, convAArgs, traitB, convBArgs).map(subClassResultToPrologResult(substitutions))
+            )
           )
 
-        case (ExprConstructor.SubtypeWitnessType, Seq(Value(ExprConstructor.ClassType(classA), aArgs), Value(ExprConstructor.TraitType(traitB), bArgs))) =>
+        case (
+              ExprConstructor.SubtypeWitnessType,
+              Seq(Value(ExprConstructor.ClassType(classA), aArgs), Value(ExprConstructor.TraitType(traitB), bArgs)),
+            ) =>
           ZStream.unwrap(
             for {
               convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
               convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
-            } yield resultIOToStream(classImplementsTrait(classA, convAArgs, traitB, convBArgs).map(subClassResultToPrologResult(substitutions)))
+            } yield resultIOToStream(
+              classImplementsTrait(classA, convAArgs, traitB, convBArgs).map(subClassResultToPrologResult(substitutions))
+            )
           )
 
-
-        case (ExprConstructor.SubtypeWitnessType, Seq(Value(ExprConstructor.DataConstructorType(dataCtorA), aArgs), Value(ExprConstructor.TraitType(traitB), bArgs))) =>
+        case (
+              ExprConstructor.SubtypeWitnessType,
+              Seq(
+                Value(ExprConstructor.DataConstructorType(dataCtorA), aArgs),
+                Value(ExprConstructor.TraitType(traitB), bArgs),
+              ),
+            ) =>
           ZStream.unwrap(
             for {
               convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
               convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
-            } yield resultIOToStream(dataCtorImplementsTrait(dataCtorA, convAArgs, traitB, convBArgs).map(subClassResultToPrologResult(substitutions)))
+            } yield resultIOToStream(dataCtorImplementsTrait(dataCtorA, convAArgs, traitB, convBArgs).map(
+              subClassResultToPrologResult(substitutions)
+            ))
           )
 
-        case (ExprConstructor.SubtypeWitnessType, Seq(a @ Value(ExprConstructor.LoadTuple, argsA), b @ Value(ExprConstructor.LoadTuple, argsB))) =>
+        case (
+              ExprConstructor.SubtypeWitnessType,
+              Seq(a @ Value(ExprConstructor.LoadTuple, argsA), b @ Value(ExprConstructor.LoadTuple, argsB)),
+            ) =>
           if(argsA.size != argsB.size) {
             ZStream.unwrap(
               for {
                 a2 <- exprToWrapExprError(a)
                 b2 <- exprToWrapExprError(b)
-                proof = Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-                  wrapExpr(ExprConstructor.FunctionType, (
-                    wrapExpr(ExprConstructor.SubtypeWitnessType,
+                proof =
+                  Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+                    ExprConstructor.AssumeErasedValue,
+                    wrapExpr(
+                      ExprConstructor.FunctionType,
                       (
-                        a2,
-                        b2
-                      )
+                        wrapExpr(
+                          ExprConstructor.SubtypeWitnessType,
+                          (
+                            a2,
+                            b2,
+                          ),
+                        ),
+                        wrapExpr(ExprConstructor.NeverType, EmptyTuple),
+                      ),
                     ),
-                    wrapExpr(ExprConstructor.NeverType, EmptyTuple)
-                  ))
-                )))
+                  )))
 
               } yield Stream.fail(Right(PrologResult.No(proof, substitutions)))
             )
@@ -349,37 +442,52 @@ abstract class ImplicitResolver[R <: Random, E] {
               .fold(Stream.empty) { solve(_, substitutions, fuel) }
           }
 
-        case (ExprConstructor.SubtypeWitnessType, Seq(a @ Value(ExprConstructor.TypeN, Seq(_)), b @ Value(ExprConstructor.OmegaTypeN(_) | ExprConstructor.AnyType, Seq()))) =>
+        case (
+              ExprConstructor.SubtypeWitnessType,
+              Seq(
+                a @ Value(ExprConstructor.TypeN, Seq(_)),
+                b @ Value(ExprConstructor.OmegaTypeN(_) | ExprConstructor.AnyType, Seq()),
+              ),
+            ) =>
           ZStream.unwrap(
             for {
               a2 <- exprToWrapExprError(a)
               b2 <- exprToWrapExprError(b)
-              proof = Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-                wrapExpr(ExprConstructor.SubtypeWitnessType,
-                  (
-                    a2,
-                    b2
-                  )
-                )
-              )))
+              proof =
+                Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+                  ExprConstructor.AssumeErasedValue,
+                  wrapExpr(
+                    ExprConstructor.SubtypeWitnessType,
+                    (
+                      a2,
+                      b2,
+                    ),
+                  ),
+                )))
 
             } yield ZStream(PrologResult.Yes(proof, substitutions))
           )
 
-        case (ExprConstructor.SubtypeWitnessType, Seq(a @ Value(ExprConstructor.OmegaTypeN(n1), Seq()), b @ Value(ExprConstructor.OmegaTypeN(n2), Seq()))) =>
+        case (
+              ExprConstructor.SubtypeWitnessType,
+              Seq(a @ Value(ExprConstructor.OmegaTypeN(n1), Seq()), b @ Value(ExprConstructor.OmegaTypeN(n2), Seq())),
+            ) =>
           if(n1 <= n2) {
             ZStream.unwrap(
               for {
                 a2 <- exprToWrapExprError(a)
                 b2 <- exprToWrapExprError(b)
-                proof = Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-                  wrapExpr(ExprConstructor.SubtypeWitnessType,
-                    (
-                      a2,
-                      b2
-                    )
-                  )
-                )))
+                proof =
+                  Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+                    ExprConstructor.AssumeErasedValue,
+                    wrapExpr(
+                      ExprConstructor.SubtypeWitnessType,
+                      (
+                        a2,
+                        b2,
+                      ),
+                    ),
+                  )))
 
               } yield ZStream(PrologResult.Yes(proof, substitutions))
             )
@@ -389,35 +497,47 @@ abstract class ImplicitResolver[R <: Random, E] {
               for {
                 a2 <- exprToWrapExprError(a)
                 b2 <- exprToWrapExprError(b)
-                proof = Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-                  wrapExpr(ExprConstructor.FunctionType, (
-                    wrapExpr(ExprConstructor.SubtypeWitnessType,
+                proof =
+                  Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+                    ExprConstructor.AssumeErasedValue,
+                    wrapExpr(
+                      ExprConstructor.FunctionType,
                       (
-                        a2,
-                        b2
-                      )
+                        wrapExpr(
+                          ExprConstructor.SubtypeWitnessType,
+                          (
+                            a2,
+                            b2,
+                          ),
+                        ),
+                        wrapExpr(ExprConstructor.NeverType, EmptyTuple),
+                      ),
                     ),
-                    wrapExpr(ExprConstructor.NeverType, EmptyTuple)
-                  ))
-                )))
+                  )))
 
               } yield Stream.fail(Right(PrologResult.No(proof, substitutions)))
             )
           }
 
-        case (ExprConstructor.SubtypeWitnessType, Seq(a @ Value(ExprConstructor.OmegaTypeN(_), Seq()), b @ Value(ExprConstructor.AnyType, Seq()))) =>
+        case (
+              ExprConstructor.SubtypeWitnessType,
+              Seq(a @ Value(ExprConstructor.OmegaTypeN(_), Seq()), b @ Value(ExprConstructor.AnyType, Seq())),
+            ) =>
           ZStream.unwrap(
             for {
               a2 <- exprToWrapExprError(a)
               b2 <- exprToWrapExprError(b)
-              proof = Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(ExprConstructor.AssumeErasedValue,
-                wrapExpr(ExprConstructor.SubtypeWitnessType,
-                  (
-                    a2,
-                    b2
-                  )
-                )
-              )))
+              proof =
+                Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+                  ExprConstructor.AssumeErasedValue,
+                  wrapExpr(
+                    ExprConstructor.SubtypeWitnessType,
+                    (
+                      a2,
+                      b2,
+                    ),
+                  ),
+                )))
 
             } yield ZStream(PrologResult.Yes(proof, substitutions))
           )
@@ -425,8 +545,8 @@ abstract class ImplicitResolver[R <: Random, E] {
         case _ => Stream.empty
       }
 
-
-    override protected def mergeRelations(parentExprRelation: ExprRelation, subExprRelation: ExprRelation): ExprRelation =
+    protected override def mergeRelations(parentExprRelation: ExprRelation, subExprRelation: ExprRelation)
+      : ExprRelation =
       (parentExprRelation, subExprRelation) match {
         case (ExprRelation.SyntacticEquality, _) | (_, ExprRelation.SyntacticEquality) => ExprRelation.SyntacticEquality
         case (ExprRelation.TypeEquality, _) | (_, ExprRelation.TypeEquality) => ExprRelation.TypeEquality
@@ -437,24 +557,25 @@ abstract class ImplicitResolver[R <: Random, E] {
         case (ExprRelation.SuperType, ExprRelation.SubType) => ExprRelation.SuperType
       }
 
-    override protected def createConstraints(relation: ExprRelation, other: syntax.Expr): ExprConstraints[syntax.Expr] =
+    protected override def createConstraints(relation: ExprRelation, other: syntax.Expr): ExprConstraints[syntax.Expr] =
       relation match {
         case ExprRelation.SubType => ExprTypeBounds(subTypeBounds = Seq(other), superTypeBounds = Seq.empty)
         case ExprRelation.SuperType => ExprTypeBounds(superTypeBounds = Seq(other), subTypeBounds = Seq.empty)
         case ExprRelation.TypeEquality | ExprRelation.SyntacticEquality => ExprEqualConstraint(other)
       }
 
-    override protected def createEqualityConstraint(other: syntax.Expr): ExprConstraints[syntax.Expr] =
+    protected override def createEqualityConstraint(other: syntax.Expr): ExprConstraints[syntax.Expr] =
       ExprEqualConstraint(other)
 
-    override protected def swapRelation(relation: ExprRelation): ExprRelation =
+    protected override def swapRelation(relation: ExprRelation): ExprRelation =
       relation match {
         case ExprRelation.SubType => ExprRelation.SuperType
         case ExprRelation.SuperType => ExprRelation.SubType
         case ExprRelation.TypeEquality | ExprRelation.SyntacticEquality => relation
       }
 
-    override protected def mergeConstraints(a: ExprConstraints[syntax.Expr], b: ExprConstraints[syntax.Expr]): Option[ExprConstraints[syntax.Expr]] =
+    protected override def mergeConstraints(a: ExprConstraints[syntax.Expr], b: ExprConstraints[syntax.Expr])
+      : Option[ExprConstraints[syntax.Expr]] =
       (a, b) match {
         case (ExprTypeBounds(aSuper, aSub), ExprTypeBounds(bSuper, bSub)) =>
           Some(ExprTypeBounds(aSuper ++ bSuper, aSub ++ bSub))
@@ -465,19 +586,23 @@ abstract class ImplicitResolver[R <: Random, E] {
         case (ExprEqualConstraint(_), ExprEqualConstraint(_)) => None
       }
 
-    override protected def predicateArgRelations(predicate: exprContext.ExprConstructor, arity: Int): ZIO[R, E, Seq[ExprRelation]] =
-      constructorArgRelations(predicate, arity)
+    protected override def predicateArgRelations(predicate: exprContext.ExprConstructor, arity: Int)
+      : ZIO[R, E, Seq[ExprRelation]] = constructorArgRelations(predicate, arity)
 
-
-    override protected def constructorArgRelations(constructor: exprContext.ExprConstructor, arity: Int): ZIO[R, E, Seq[ExprRelation]] =
+    protected override def constructorArgRelations(constructor: exprContext.ExprConstructor, arity: Int)
+      : ZIO[R, E, Seq[ExprRelation]] =
       constructor match {
         case ExprConstructor.ClassConstructorCall(ctor) => classConstructorRelations(ctor)
         case ExprConstructor.DataConstructorCall(ctor) => dataConstructorRelations(ctor)
-        case ExprConstructor.EnsureExecuted => IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
+        case ExprConstructor.EnsureExecuted =>
+          IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.FunctionCall(func) => functionRelations(func)
-        case ExprConstructor.FunctionObjectCall => IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
-        case ExprConstructor.IfElse => IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
-        case ExprConstructor.LetBinding(_) => IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
+        case ExprConstructor.FunctionObjectCall =>
+          IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
+        case ExprConstructor.IfElse =>
+          IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
+        case ExprConstructor.LetBinding(_) =>
+          IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.LoadConstantBool(_) => IO.succeed(Seq(ExprRelation.TypeEquality))
         case ExprConstructor.LoadConstantInt(_) => IO.succeed(Seq(ExprRelation.TypeEquality))
         case ExprConstructor.LoadConstantString(_) => IO.succeed(Seq(ExprRelation.TypeEquality))
@@ -507,25 +632,28 @@ abstract class ImplicitResolver[R <: Random, E] {
         case ExprConstructor.AssumeErasedValue => IO.succeed(Seq(ExprRelation.TypeEquality))
       }
 
-
-
-    override protected def checkRelation(a: syntax.Expr, b: syntax.Expr, relation: ExprRelation, substitutions: Model, fuel: Int): ZStream[R, Error, PrologResult.Yes] =
+    protected override def checkRelation
+      (a: syntax.Expr, b: syntax.Expr, relation: ExprRelation, substitutions: Model, fuel: Int)
+      : ZStream[R, Error, PrologResult.Yes] =
       relation match {
-        case ExprRelation.SyntacticEquality => solve(PredicateFunction(ExprConstructor.EqualTo, Seq(a, b)), substitutions, fuel)
-        case ExprRelation.SubType => solve(PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(a, b)), substitutions, fuel)
-        case ExprRelation.SuperType => solve(PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(b, a)), substitutions, fuel)
+        case ExprRelation.SyntacticEquality =>
+          solve(PredicateFunction(ExprConstructor.EqualTo, Seq(a, b)), substitutions, fuel)
+        case ExprRelation.SubType =>
+          solve(PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(a, b)), substitutions, fuel)
+        case ExprRelation.SuperType =>
+          solve(PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(b, a)), substitutions, fuel)
         case ExprRelation.TypeEquality =>
           solve(
             And(
               PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(a, b)),
-              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(b, a))
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(b, a)),
             ),
             substitutions,
-            fuel
+            fuel,
           )
       }
 
-    override protected def otherForEquivalenceRelation(constraints: ExprConstraints[syntax.Expr]): Option[syntax.Expr] =
+    protected override def otherForEquivalenceRelation(constraints: ExprConstraints[syntax.Expr]): Option[syntax.Expr] =
       constraints match {
         case ExprEqualConstraint(other) => Some(other)
         case ExprTypeBounds(_, _) => None
@@ -538,10 +666,13 @@ abstract class ImplicitResolver[R <: Random, E] {
           case ExprRelation.SubType => wrapExpr(ExprConstructor.SubtypeWitnessType, (a, b))
           case ExprRelation.SuperType => wrapExpr(ExprConstructor.SubtypeWitnessType, (b, a))
           case ExprRelation.TypeEquality =>
-            wrapExpr(ExprConstructor.ConjunctionType, (
-              wrapExpr(ExprConstructor.SubtypeWitnessType, (a, b)),
-              wrapExpr(ExprConstructor.SubtypeWitnessType, (b, a))
-            ))
+            wrapExpr(
+              ExprConstructor.ConjunctionType,
+              (
+                wrapExpr(ExprConstructor.SubtypeWitnessType, (a, b)),
+                wrapExpr(ExprConstructor.SubtypeWitnessType, (b, a)),
+              ),
+            )
         }
 
       Proof.Atomic(TCAtomicProof.ExprProof(
@@ -549,22 +680,23 @@ abstract class ImplicitResolver[R <: Random, E] {
       ))
     end buildRelationProof
 
-    override protected def variableRelationProof(relation: ExprRelation, a: exprContext.THole, b: exprContext.THole): ZIO[R, E, Proof[TCAtomicProof]] =
+    protected override def variableRelationProof(relation: ExprRelation, a: exprContext.THole, b: exprContext.THole)
+      : ZIO[R, E, Proof[TCAtomicProof]] =
       IO.succeed(buildRelationProof(relation, WrapExpr.OfHole(a), WrapExpr.OfHole(b)))
 
-    override protected def variableExprRelationProof(relation: ExprRelation, a: exprContext.THole, b: syntax.Expr): ZIO[R, E, Proof[TCAtomicProof]] =
+    protected override def variableExprRelationProof(relation: ExprRelation, a: exprContext.THole, b: syntax.Expr)
+      : ZIO[R, E, Proof[TCAtomicProof]] =
       exprToWrapExpr(b).map { b2 =>
         buildRelationProof(relation, WrapExpr.OfHole(a), b2)
       }
 
-
-    override protected def valueRelationProof(relation: ExprRelation, a: syntax.Value, b: syntax.Value, argProofs: Seq[Proof[TCAtomicProof]]): ZIO[R, E, Proof[TCAtomicProof]] =
+    protected override def valueRelationProof
+      (relation: ExprRelation, a: syntax.Value, b: syntax.Value, argProofs: Seq[Proof[TCAtomicProof]])
+      : ZIO[R, E, Proof[TCAtomicProof]] =
       for {
         a2 <- exprToWrapExpr(a)
         b2 <- exprToWrapExpr(b)
       } yield buildRelationProof(relation, a2, b2)
-
-
 
     def exprToWrapExpr(expr: Expr): ZIO[R, E, WrapExpr] =
       expr match {
@@ -579,8 +711,7 @@ abstract class ImplicitResolver[R <: Random, E] {
         case Variable(variable) => IO.succeed(WrapExpr.OfHole(variable))
       }
 
-    def exprToWrapExprError(expr: Expr): ZIO[R, Error, WrapExpr] =
-      exprToWrapExpr(expr).mapError(Left.apply)
+    def exprToWrapExprError(expr: Expr): ZIO[R, Error, WrapExpr] = exprToWrapExpr(expr).mapError(Left.apply)
 
     def wrapExprToExpr(e: WrapExpr): Expr =
       e match {
@@ -624,15 +755,20 @@ abstract class ImplicitResolver[R <: Random, E] {
         case WrapExpr.OfHole(_) => invalidPredicateExpr
       }
 
-    private def subClassResultToPrologResult(substitutions: Model)(result: SubClassResult): PrologResult = result match {
-      case SubClassResult.SubClassProof(proof) => PrologResult.Yes(Proof.Atomic(TCAtomicProof.ExprProof(proof)), substitutions)
-      case SubClassResult.NotSubClassProof(proof) => PrologResult.No(Proof.Atomic(TCAtomicProof.ExprProof(proof)), substitutions)
-    }
+    private def subClassResultToPrologResult(substitutions: Model)(result: SubClassResult): PrologResult =
+      result match {
+        case SubClassResult.SubClassProof(proof) =>
+          PrologResult.Yes(Proof.Atomic(TCAtomicProof.ExprProof(proof)), substitutions)
+        case SubClassResult.NotSubClassProof(proof) =>
+          PrologResult.No(Proof.Atomic(TCAtomicProof.ExprProof(proof)), substitutions)
+      }
+
   }
 
   final case class ResolvedImplicit(proof: Proof[TCAtomicProof], model: Map[THole, ExprConstraints[WrapExpr]])
 
-  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], fuel: Int): ZIO[R, E, Option[ResolvedImplicit]] =
+  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], fuel: Int)
+    : ZIO[R, E, Option[ResolvedImplicit]] =
     Ref.make(Set.empty[THole]).flatMap { createdHoles =>
       val context = new TCPrologContext(createdHoles)
       context.arExprToGoal(implicitType, fuel).flatMap { goal =>
@@ -650,8 +786,8 @@ abstract class ImplicitResolver[R <: Random, E] {
       }
     }
 
-
-  final def resolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], fuel: Int): ZIO[R, E, ResolvedImplicit] =
+  final def resolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], fuel: Int)
+    : ZIO[R, E, ResolvedImplicit] =
     tryResolve(implicitType, model, fuel)
       .flatMap {
         case Some(result) => IO.succeed(result)

@@ -8,14 +8,20 @@ trait ResourceLoader[+T <: Resource] {
 }
 
 object BinaryResourceLoader extends ResourceLoader[BinaryResource] {
-  override def load(id: ResourceId): BinaryResource = new BinaryResource {
-    override def asBytes: UStream[Byte] = id.asStream
-  }
+
+  override def load(id: ResourceId): BinaryResource =
+    new BinaryResource {
+      override def asBytes: UStream[Byte] = id.asStream
+    }
+
 }
 
 object TextResourceLoader extends ResourceLoader[TextResource] {
-  override def load(id: ResourceId): TextResource = new TextResource {
-    override def asText: UStream[String] = ZPipeline.utf8Decode(id.asStream)
-    override def asBytes: UStream[Byte] = id.asStream
-  }
+
+  override def load(id: ResourceId): TextResource =
+    new TextResource {
+      override def asText: UStream[String] = ZPipeline.utf8Decode(id.asStream)
+      override def asBytes: UStream[Byte] = id.asStream
+    }
+
 }

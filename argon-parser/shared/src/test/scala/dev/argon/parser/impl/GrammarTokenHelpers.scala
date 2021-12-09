@@ -8,6 +8,7 @@ trait GrammarTokenHelpers extends GrammarTestHelpers {
   override type TSyntaxError = SyntaxError
   override type TLabel[T] = ArgonParser.Rule.ArgonRuleName[T]
 
-  override protected val grammarFactory: Grammar.GrammarFactory[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName] =
+  protected override val grammarFactory: Grammar.GrammarFactory[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName] =
     ArgonParser.grammarFactory
+
 }

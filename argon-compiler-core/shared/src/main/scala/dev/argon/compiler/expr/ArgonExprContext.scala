@@ -16,10 +16,19 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
 
   override def classCanEqual: CanEqual[TClass, TClass] = summon[CanEqual[TClass, TClass]]
   override def traitCanEqual: CanEqual[TTrait, TTrait] = summon[CanEqual[TTrait, TTrait]]
-  override def dataConstructorCanEqual: CanEqual[TDataConstructor, TDataConstructor] = summon[CanEqual[TDataConstructor, TDataConstructor]]
+
+  override def dataConstructorCanEqual: CanEqual[TDataConstructor, TDataConstructor] =
+    summon[CanEqual[TDataConstructor, TDataConstructor]]
+
   override def functionCanEqual: CanEqual[TFunction, TFunction] = summon[CanEqual[TFunction, TFunction]]
   override def methodCanEqual: CanEqual[TMethod, TMethod] = summon[CanEqual[TMethod, TMethod]]
-  override def classConstructorCanEqual: CanEqual[TClassConstructor, TClassConstructor] = summon[CanEqual[TClassConstructor, TClassConstructor]]
+
+  override def classConstructorCanEqual: CanEqual[TClassConstructor, TClassConstructor] =
+    summon[CanEqual[TClassConstructor, TClassConstructor]]
+
   override def variableCanEqual: CanEqual[TVariable, TVariable] = summon[CanEqual[TVariable, TVariable]]
-  override def localVariableCanEqual: CanEqual[TLocalVariable, TLocalVariable] = summon[CanEqual[TLocalVariable, TLocalVariable]]  
+
+  override def localVariableCanEqual: CanEqual[TLocalVariable, TLocalVariable] =
+    summon[CanEqual[TLocalVariable, TLocalVariable]]
+
 }

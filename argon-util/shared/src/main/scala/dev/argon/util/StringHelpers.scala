@@ -1,5 +1,3 @@
 package dev.argon.util
 
-object StringHelpers extends StringHelpersPlatform {
-
-}
+object StringHelpers extends StringHelpersPlatform {}

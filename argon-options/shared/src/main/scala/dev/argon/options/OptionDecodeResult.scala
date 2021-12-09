@@ -3,7 +3,9 @@ package dev.argon.options
 sealed trait OptionDecodeResult[+A] {
   def map[B](f: A => B): OptionDecodeResult[B]
 }
+
 object OptionDecodeResult {
+
   sealed trait Single[+A] extends OptionDecodeResult[A] {
     override def map[B](f: A => B): OptionDecodeResult.Single[B]
   }
@@ -19,4 +21,5 @@ object OptionDecodeResult {
   case object MultipleValuesNotSupported extends OptionDecodeResult[Nothing] {
     override def map[B](f: Nothing => B): OptionDecodeResult[B] = MultipleValuesNotSupported
   }
+
 }

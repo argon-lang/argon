@@ -15,7 +15,7 @@ object ZChannelUtil {
       ZChannel.readWithCause(
         in = processChunk(state),
         halt = ZChannel.failCause(_),
-        done = _ => ZChannel.succeed(state)
+        done = _ => ZChannel.succeed(state),
       )
 
     process(state)
@@ -27,17 +27,14 @@ object ZChannelUtil {
   def mapAccumMany[E, A, B, S](state: S)(f: (S, A) => (S, Chunk[B])): ZChannel[Any, E, Chunk[A], Any, E, Chunk[B], S] =
     mapAccum(state)(f).pipeTo(mapElements(_.flatten))
 
-  def mapAccumOption[E, A, B, S](state: S)(f: (S, A) => (S, Option[B])): ZChannel[Any, E, Chunk[A], Any, E, Chunk[B], S] =
-    mapAccum(state)(f).pipeTo(mapElements(_.flatten))
+  def mapAccumOption[E, A, B, S](state: S)(f: (S, A) => (S, Option[B]))
+    : ZChannel[Any, E, Chunk[A], Any, E, Chunk[B], S] = mapAccum(state)(f).pipeTo(mapElements(_.flatten))
 
   def mapElements[E, A, B, X](f: A => B): ZChannel[Any, E, A, X, E, B, X] =
-      ZChannel.readWithCause(
-        in = a => ZChannel.write(f(a)) *> mapElements(f),
-        halt = ZChannel.failCause(_),
-        done = ZChannel.succeed(_)
-      )
-  
+    ZChannel.readWithCause(
+      in = a => ZChannel.write(f(a)) *> mapElements(f),
+      halt = ZChannel.failCause(_),
+      done = ZChannel.succeed(_),
+    )
 
 }
-
-

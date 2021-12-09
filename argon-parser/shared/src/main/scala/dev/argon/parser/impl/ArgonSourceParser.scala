@@ -11,5 +11,5 @@ object ArgonSourceParser {
     Characterizer.characterize
       .pipeTo(Lexer.lex)
       .pipeTo(ArgonParser.parse)
-  
+
 }

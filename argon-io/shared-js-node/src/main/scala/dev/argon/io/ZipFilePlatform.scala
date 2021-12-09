@@ -4,6 +4,7 @@ import zio.stream._
 import zio._
 
 private[io] object ZipFilePlatform {
+
   def serializeZipFile(zipFile: ZipFile): UStream[Byte] =
     ZStream.unwrap(
       IO.effectTotal { new JSZip() }
@@ -31,4 +32,5 @@ private[io] object ZipFilePlatform {
             }
         }
     )
+
 }

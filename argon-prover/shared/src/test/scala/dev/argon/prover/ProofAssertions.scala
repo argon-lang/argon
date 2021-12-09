@@ -5,7 +5,6 @@ import zio.test.Assertion._
 import zio.test._
 import zio.test.Assertion.Render._
 
-
 trait ProofAssertions[R <: VariableProvider & zio.Random, E] extends ProofPrologContext[R, E] {
 
   def hasProof(proof: Proof[String]): Assertion[PrologResult] =
@@ -19,4 +18,5 @@ trait ProofAssertions[R <: VariableProvider & zio.Random, E] extends ProofProlog
       case PrologResult.No(p, _) => Some(p)
       case PrologResult.Unknown | PrologResult.Yes(_, _) => None
     }
+
 }

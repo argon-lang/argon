@@ -20,7 +20,6 @@ object Characterizer {
       case (None, cp) => (Some(codePointToString(cp)), None)
     }
 
-
   private def withSource[E]: ZChannel[Any, E, Chunk[String], Any, E, Chunk[WithSource[String]], FilePosition] =
     ZChannelUtil.mapAccum[E, String, WithSource[String], FilePosition](FilePosition(1, 1)) { (pos, item) =>
       val nextPos =
@@ -37,9 +36,7 @@ object Characterizer {
       case _ => false
     }
 
-  private def codePointToString(cp: Int): String =
-    new String(Character.toChars(cp))
-
+  private def codePointToString(cp: Int): String = new String(Character.toChars(cp))
 
   def characterize[E]: ZChannel[Any, E, Chunk[Char], Any, E, Chunk[WithSource[String]], FilePosition] =
     toCodePoints.pipeTo(toGraphemes).pipeTo(withSource)

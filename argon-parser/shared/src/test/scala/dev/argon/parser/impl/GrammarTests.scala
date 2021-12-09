@@ -3,7 +3,6 @@ package dev.argon.parser.impl
 import dev.argon.grammar.Grammar
 import Grammar.Operators._
 import scala.language.postfixOps
-
 import zio.NonEmptyChunk
 import zio.test._
 import zio.test.Assertion._
@@ -12,9 +11,7 @@ abstract class GrammarTestsCommon extends DefaultRunnableSpec with GrammarTestHe
 
   def suiteName: String
 
-  private lazy val rightRec: TGrammar[Int] =
-    numberToken(0) | numberToken(1) ++ rightRec --> { case (a, b) => a + b }
-
+  private lazy val rightRec: TGrammar[Int] = numberToken(0) | numberToken(1) ++ rightRec --> { case (a, b) => a + b }
 
   override def spec: ZSpec[Environment, Failure] =
     suite(suiteName)(
@@ -31,13 +28,13 @@ abstract class GrammarTestsCommon extends DefaultRunnableSpec with GrammarTestHe
       ),
       suite("Optional grammar")(
         test("succeed for EOF") {
-          assert(parse(numberToken(6)?)())(isRight(equalTo((Vector[TToken](), Option.empty[Int]))))
+          assert(parse(numberToken(6) ?)())(isRight(equalTo((Vector[TToken](), Option.empty[Int]))))
         },
         test("not consume wrong token") {
-          assert(parse(numberToken(6)?)(2))(isRight(equalTo((Vector(2), Option.empty[Int]))))
+          assert(parse(numberToken(6) ?)(2))(isRight(equalTo((Vector(2), Option.empty[Int]))))
         },
         test("succeed for EOF") {
-          assert(parse(numberToken(6)?)(6))(isRight(equalTo((Vector[TToken](), Some(6) : Option[Int]))))
+          assert(parse(numberToken(6) ?)(6))(isRight(equalTo((Vector[TToken](), Some(6): Option[Int]))))
         },
       ),
       suite("Repeated grammar (*)")(
@@ -54,21 +51,24 @@ abstract class GrammarTestsCommon extends DefaultRunnableSpec with GrammarTestHe
           assert(parse(numberToken(7).*)(7, 7))(isRight(equalTo((Vector[TToken](), Vector(7, 7)))))
         },
         test("succeed with trailing token") {
-          assert(parse(((numberToken(7) ++ numberToken(8)).*) ++ numberToken(4))(7, 8, 7, 8, 4))(isRight(equalTo((Vector[TToken](), (Vector((7, 8), (7, 8)), 4)))))
+          assert(parse(((numberToken(7) ++ numberToken(8)).*) ++ numberToken(4))(7, 8, 7, 8, 4))(isRight(equalTo((
+            Vector[TToken](),
+            (Vector((7, 8), (7, 8)), 4),
+          ))))
         },
       ),
       suite("Repeated grammar (+~)")(
         test("fail for EOF") {
-          assert(parse(numberToken(7)+~)())(isLeft(anything))
+          assert(parse(numberToken(7) +~)())(isLeft(anything))
         },
         test("fail for wrong token") {
-          assert(parse(numberToken(7)+~)(4))(isLeft(anything))
+          assert(parse(numberToken(7) +~)(4))(isLeft(anything))
         },
         test("succeed for correct token") {
-          assert(parse(numberToken(7)+~)(7))(isRight(equalTo((Vector[TToken](), NonEmptyChunk(7)))))
+          assert(parse(numberToken(7) +~)(7))(isRight(equalTo((Vector[TToken](), NonEmptyChunk(7)))))
         },
         test("succeed for 2 correct tokens") {
-          assert(parse(numberToken(7)+~)(7, 7))(isRight(equalTo((Vector[TToken](), NonEmptyChunk(7, 7)))))
+          assert(parse(numberToken(7) +~)(7, 7))(isRight(equalTo((Vector[TToken](), NonEmptyChunk(7, 7)))))
         },
       ),
       suite("Union grammar")(
@@ -133,13 +133,20 @@ abstract class GrammarTestsCommon extends DefaultRunnableSpec with GrammarTestHe
       ),
       suite("Strict grammar")(
         test("succeed when first option fails") {
-          assert(parse(numberToken(3) ++! (numberToken(9) | numberToken(1)))(3, 1))(isRight(equalTo((Vector[TToken](), (3, 1)))))
+          assert(parse(numberToken(3) ++! (numberToken(9) | numberToken(1)))(3, 1))(isRight(equalTo((
+            Vector[TToken](),
+            (3, 1),
+          ))))
         },
         test("succeed when token trails repeated list") {
-          assert(parse(numberToken(3) ++! (numberToken(9)*) ++ numberToken(1))(3, 9, 1))(isRight(equalTo((Vector[TToken](), (3, Vector(9), 1)))))
+          assert(parse(numberToken(3) ++! (numberToken(9)*) ++ numberToken(1))(3, 9, 1))(isRight(equalTo((
+            Vector[TToken](),
+            (3, Vector(9), 1),
+          ))))
         },
-      )
+      ),
     )
+
 }
 
 object GrammarTestsEntireSequence extends GrammarTestsCommon with GrammarTestHelpersEntireSequence {
@@ -149,4 +156,3 @@ object GrammarTestsEntireSequence extends GrammarTestsCommon with GrammarTestHel
 object GrammarTestsSingleTokens extends GrammarTestsCommon with GrammarTestHelpersSingleTokens {
   override def suiteName: String = "Grammar parsing with single tokens"
 }
-

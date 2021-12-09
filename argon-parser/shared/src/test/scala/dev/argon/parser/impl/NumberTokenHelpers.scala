@@ -9,27 +9,28 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
   override type TSyntaxError = WithSource[String]
   override type TLabel[T] = NumberTokenHelpers.NumberTokenLabel[T]
 
-  override protected val grammarFactory: Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] =
+  protected override val grammarFactory
+    : Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] =
     new Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] {
 
-      override protected def createGrammar[T](label: NumberTokenHelpers.NumberTokenLabel[T]): TGrammar[T] =
+      protected override def createGrammar[T](label: NumberTokenHelpers.NumberTokenLabel[T]): TGrammar[T] =
         throw new Exception("No labels exist")
 
     }
 
+  protected implicit val errorFactory: Grammar.ErrorFactory[Int, String, WithSource[String]] =
+    new Grammar.ErrorFactory[Int, String, WithSource[String]] {
 
-  protected implicit val errorFactory: Grammar.ErrorFactory[Int, String, WithSource[String]] = new Grammar.ErrorFactory[Int, String, WithSource[String]] {
-    @SuppressWarnings(Array("scalafix:Disable.toString"))
-    override def createError(error: GrammarError[Int, String]): WithSource[String] =
-      WithSource(error.toString, error.location)
+      @SuppressWarnings(Array("scalafix:Disable.toString"))
+      override def createError(error: GrammarError[Int, String]): WithSource[String] =
+        WithSource(error.toString, error.location)
 
-    override def errorEndLocationOrder: Ordering[WithSource[String]] =
-      (a, b) => implicitly[Ordering[FilePosition]].compare(a.location.end, b.location.end)
-  }
+      override def errorEndLocationOrder: Ordering[WithSource[String]] =
+        (a, b) => implicitly[Ordering[FilePosition]].compare(a.location.end, b.location.end)
+
+    }
 
   protected def numberToken(n: Int): TGrammar[Int] = Grammar.matcher(n.toString, (m: Int) => Some(m).filter(_ == n))
-
-
 
 }
 

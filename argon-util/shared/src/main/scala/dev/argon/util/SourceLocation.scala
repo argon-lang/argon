@@ -17,18 +17,17 @@ final case class FilePosition(line: Int, position: Int) derives CanEqual {
 }
 
 object FilePosition:
+
   given Ordering[FilePosition] with
-    def compare(x: FilePosition, y: FilePosition): Int =
-      x.compareTo(y)
+    def compare(x: FilePosition, y: FilePosition): Int = x.compareTo(y)
   end given
+
 end FilePosition
 
 final case class SourceLocation(start: FilePosition, end: FilePosition)
 
 object SourceLocation {
-  def merge(first: SourceLocation, second: SourceLocation): SourceLocation =
-    SourceLocation(first.start, second.end)
+  def merge(first: SourceLocation, second: SourceLocation): SourceLocation = SourceLocation(first.start, second.end)
 
   val empty: SourceLocation = SourceLocation(FilePosition(-1, -1), FilePosition(-1, -1))
 }
-

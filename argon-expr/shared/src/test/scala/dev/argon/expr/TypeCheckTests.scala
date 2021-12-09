@@ -4,7 +4,6 @@ import dev.argon.util.UniqueIdentifier
 import zio.{URIO, ZIO}
 import zio.test.Assertion._
 import zio.test._
-
 import java.time.Duration
 
 object TypeCheckTests extends DefaultRunnableSpec {
@@ -12,19 +11,11 @@ object TypeCheckTests extends DefaultRunnableSpec {
   private val fuel = 100
 
   private val resolver: TestResolver[zio.Random] = new TestResolver[zio.Random]()
-  import TestExprContext._
-  import resolver.{
-    traitA,
-    traitB,
-    traitC,
-    traitD,
-    traitE,
-    traitType,
-    genTraitType,
-  }
 
-  private def unionType(a: WrapExpr, b: WrapExpr): WrapExpr =
-    WrapExpr.OfExpr(ArExpr(ExprConstructor.UnionType, (a, b)))
+  import TestExprContext._
+  import resolver.{traitA, traitB, traitC, traitD, traitE, traitType, genTraitType}
+
+  private def unionType(a: WrapExpr, b: WrapExpr): WrapExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.UnionType, (a, b)))
 
   private def intersectionType(a: WrapExpr, b: WrapExpr): WrapExpr =
     WrapExpr.OfExpr(ArExpr(ExprConstructor.IntersectionType, (a, b)))
@@ -46,21 +37,18 @@ object TypeCheckTests extends DefaultRunnableSpec {
             assertM(checkSubType(x, x))(anything)
           }
         ),
-        
         testM("B <: A")(
           assertM(checkSubType(traitType(traitB), traitType(traitA)))(isRight(anything))
         ),
         testM("A !<: B")(
           assertM(checkSubType(traitType(traitA), traitType(traitB)))(isLeft(anything))
         ),
-
         testM("C <: B")(
           assertM(checkSubType(traitType(traitC), traitType(traitB)))(isRight(anything))
         ),
         testM("B !<: C")(
           assertM(checkSubType(traitType(traitB), traitType(traitC)))(isLeft(anything))
         ),
-        
         testM("D <: A")(
           assertM(checkSubType(traitType(traitD), traitType(traitA)))(isRight(anything))
         ),
@@ -73,7 +61,6 @@ object TypeCheckTests extends DefaultRunnableSpec {
         testM("B !<: D")(
           assertM(checkSubType(traitType(traitB), traitType(traitD)))(isLeft(anything))
         ),
-
         testM("E <: B")(
           assertM(checkSubType(traitType(traitE), traitType(traitB)))(isRight(anything))
         ),
@@ -93,7 +80,6 @@ object TypeCheckTests extends DefaultRunnableSpec {
           assertM(checkSubType(traitType(traitD), traitType(traitE)))(isLeft(anything))
         ),
       ),
-
       suite("Union Type Tests")(
         testM("forall trait X, Y :: X <: X | Y")(
           checkM(genTraitType, genTraitType) { (x, y) =>
@@ -111,7 +97,6 @@ object TypeCheckTests extends DefaultRunnableSpec {
           }
         ),
       ),
-
       suite("Intersection Type Tests")(
         testM("forall trait X, Y :: X & Y <: X")(
           checkM(genTraitType, genTraitType) { (x, y) =>
@@ -125,4 +110,5 @@ object TypeCheckTests extends DefaultRunnableSpec {
         ),
       ),
     )
+
 }

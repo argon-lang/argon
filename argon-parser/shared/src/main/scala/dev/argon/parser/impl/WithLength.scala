@@ -6,7 +6,7 @@ final case class WithLength[+A](value: A, length: Int, lengthAfterNewLine: Boole
     WithLength(
       f(value, len2.value),
       if(len2.lengthAfterNewLine) len2.length else length + len2.length,
-      lengthAfterNewLine || len2.lengthAfterNewLine
+      lengthAfterNewLine || len2.lengthAfterNewLine,
     )
 
 }

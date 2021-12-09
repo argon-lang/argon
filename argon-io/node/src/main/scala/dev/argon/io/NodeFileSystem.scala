@@ -14,9 +14,7 @@ private[io] object NodeFileSystem extends js.Any {
   def stat(@unused path: String): Promise[NodeStats] = js.native
   def readdir(@unused path: String, @unused options: NodeReadDirOptions): Promise[NodeDirent] = js.native
 
-
   def open(@unused path: String, @unused flags: String | Double): Promise[NodeFileHandle] = js.native
-  
 
 }
 
@@ -40,7 +38,10 @@ private[io] trait NodeDirent extends js.Object {
 
 @js.native
 private[io] trait NodeFileHandle extends js.Object {
-  def read(@unused buffer: Uint8Array, @unused offset: Int, @unused length: Int, @unused position: Integer): Promise[NodeFileHandleReadResult]
+
+  def read(@unused buffer: Uint8Array, @unused offset: Int, @unused length: Int, @unused position: Integer)
+    : Promise[NodeFileHandleReadResult]
+
   def write(@unused buffer: Uint8Array): Promise[NodeFileHandleWriteResult]
   def close(): Promise[Unit]
 }

@@ -12,7 +12,6 @@ object TokenCategory {
 
   case object Identifier extends TokenCategory
 
-
   case object NewLine extends TokenCategory
   case object Semicolon extends TokenCategory
 

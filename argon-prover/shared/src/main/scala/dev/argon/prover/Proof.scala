@@ -3,12 +3,13 @@ package dev.argon.prover
 import dev.argon.util.UniqueIdentifier
 
 sealed trait Proof[+A] derives CanEqual
+
 object Proof {
   final case class Atomic[+A](atom: A) extends Proof[A]
-  
+
   // Reference an indentifier bound by a ImplicationAbstraction
   final case class Identifier(id: UniqueIdentifier) extends Proof[Nothing]
-  
+
   // proves A -> B given an expression of B in terms of A
   final case class ImplicaitonAbstraction[A](id: UniqueIdentifier, body: Proof[A]) extends Proof[A]
 
@@ -41,13 +42,13 @@ object Proof {
 
   // given not (A | B) proves (not A) & (not B)
   final case class DeMorganOrPushNotIn[A](p: Proof[A]) extends Proof[A]
-  
+
   // given A proves not not A
   final case class DoubleNegIntro[A](p: Proof[A]) extends Proof[A]
-  
+
   // given A, not A proves false
   final case class Contradiction[A](p: Proof[A], notP: Proof[A]) extends Proof[A]
-  
+
   // given P -> Q, Q -> R, P -> R
   final case class HypotheticalSyllogism[A](pImpliesQ: Proof[A], qImpliesR: Proof[A]) extends Proof[A]
 }

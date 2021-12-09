@@ -11,12 +11,14 @@ trait ResourceId {
 }
 
 object ResourceId {
-  def fromPath(path: Path): ResourceId = new ResourceId {
-    override def asStream: ZStream[Any, Nothing, Byte] =
-      ZStream.fromFile(path).refineOrDie(PartialFunction.empty)
-    
-    override def asSeekableByteChannel: Option[ZManaged[Any, Nothing, SeekableByteChannel]] =
-      Some(ZManaged.fromAutoCloseable(ZIO.succeed(Files.newByteChannel(path, StandardOpenOption.READ))))
-  }
-}
 
+  def fromPath(path: Path): ResourceId =
+    new ResourceId {
+      override def asStream: ZStream[Any, Nothing, Byte] = ZStream.fromFile(path).refineOrDie(PartialFunction.empty)
+
+      override def asSeekableByteChannel: Option[ZManaged[Any, Nothing, SeekableByteChannel]] =
+        Some(ZManaged.fromAutoCloseable(ZIO.succeed(Files.newByteChannel(path, StandardOpenOption.READ))))
+
+    }
+
+}

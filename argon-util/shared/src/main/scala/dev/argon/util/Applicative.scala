@@ -8,9 +8,7 @@ trait Applicative[F[+_]] extends Functor[F]:
 
   def map2[A, B, Z](fa: F[A], fb: F[B])(f: (A, B) => Z): F[Z] =
     ap[A, Z](fa) {
-      map(fb) { b =>
-        a => f(a, b)
-      }
+      map(fb) { b => a => f(a, b) }
     }
 
 end Applicative
@@ -18,6 +16,3 @@ end Applicative
 object Applicative:
   def apply[F[+_]](using ap: Applicative[F]): Applicative[F] = ap
 end Applicative
-
-
-

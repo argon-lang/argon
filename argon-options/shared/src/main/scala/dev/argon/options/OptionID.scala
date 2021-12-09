@@ -18,4 +18,3 @@ trait TypedOptionID[E] extends OptionID {
 abstract class OptionIDBase[Dec[_], E](implicit val decoder: OptionDecoder[Dec[E]]) extends TypedOptionID[E] {
   override type Decoded[A] = Dec[A]
 }
-

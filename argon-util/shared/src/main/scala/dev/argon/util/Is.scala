@@ -2,7 +2,6 @@ package dev.argon.util
 
 import scala.annotation.unused
 
-
 sealed trait Is[A, B]:
   def convert(a: A): B
   def flip: B Is A
@@ -11,8 +10,8 @@ sealed trait Is[A, B]:
   def both(a: A): A & B
 end Is
 
-
 object Is:
+
   given refl[A]: Is[A, A] with
     def convert(a: A): A = a
     def flip: A Is A = this

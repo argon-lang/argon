@@ -21,13 +21,14 @@ object PrologFuelTests extends DefaultRunnableSpec {
   private object TestContext extends SimplePrologContext[VariableProvider & zio.Random, Nothing] {
     override val syntax: prologSyntax.type = prologSyntax
 
-    override protected val assertions: URIO[VariableProvider, List[(Proof[Unit], Predicate)]] = ZIO.foreach(List(
-      (for {
-        x <- VariableProvider.next
-      } yield pred(Infinite, v"$x") ==> pred(Infinite, v"$x")),
-    )) { predicateIO => predicateIO.map { Proof.Atomic(()) -> _ } }
-  }
+    protected override val assertions: URIO[VariableProvider, List[(Proof[Unit], Predicate)]] =
+      ZIO.foreach(List(
+        (for {
+          x <- VariableProvider.next
+        } yield pred(Infinite, v"$x") ==> pred(Infinite, v"$x"))
+      )) { predicateIO => predicateIO.map { Proof.Atomic(()) -> _ } }
 
+  }
 
   import TestContext.PrologResult
 
@@ -35,6 +36,7 @@ object PrologFuelTests extends DefaultRunnableSpec {
     suite("Fuel tests")(
       testM("recursive predicate") {
         assertM(TestContext.check(pred(Infinite, expr(A)), fuel))(equalTo(PrologResult.Unknown))
-      },
+      }
     ).provideCustomLayer(VariableProvider.live)
+
 }

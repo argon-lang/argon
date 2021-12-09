@@ -15,7 +15,10 @@ abstract class ArgonParserTestsCommon extends DefaultRunnableSpec with GrammarTe
       test("Import statement parsing") {
         assert(
           parse(ArgonParser.grammarFactory(ArgonParser.Rule.ImportStatement))(
-            Token.KW_IMPORT, Token.Identifier("Ar"), Token.OP_SLASH, Token.OP_STAR
+            Token.KW_IMPORT,
+            Token.Identifier("Ar"),
+            Token.OP_SLASH,
+            Token.OP_STAR,
           )
         )(
           isRight(equalTo((Chunk.empty, ImportStmt.Package(NonEmptyList("Ar"), ImportPathSegment.Wildcard))))
@@ -32,4 +35,3 @@ object ArgonParserTestsEntireSequence extends ArgonParserTestsCommon with Gramma
 object ArgonParserTestsSingleTokens extends ArgonParserTestsCommon with GrammarTestHelpersSingleTokens {
   override def suiteName: String = "Parse with single tokens"
 }
-

@@ -7,4 +7,3 @@ trait ArPackageC extends UsingContext {
   val packageName: PackageName
   def module(path: ModulePath): Comp[ArModule]
 }
-

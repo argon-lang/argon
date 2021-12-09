@@ -1,6 +1,7 @@
 package dev.argon.parser
 
 sealed trait CharacterCategory
+
 object CharacterCategory {
   case object StringChar extends CharacterCategory
   case object CR extends CharacterCategory

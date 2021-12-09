@@ -41,4 +41,5 @@ private[util] trait NamedNodeMap extends js.Object {
 
   @JSName("item")
   def apply(index: Int): Node
+
 }

@@ -4,6 +4,5 @@ import zio.Chunk
 import zio.NonEmptyChunk
 
 object ChunkUnCons {
-  def unapply[A](arg: Chunk[A]): Option[NonEmptyChunk[A]] =
-    NonEmptyChunk.fromChunk(arg)
+  def unapply[A](arg: Chunk[A]): Option[NonEmptyChunk[A]] = NonEmptyChunk.fromChunk(arg)
 }
