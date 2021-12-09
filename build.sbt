@@ -60,8 +60,8 @@ lazy val sharedJSNodeSettings = Seq(
   ),
 
   npmDependencies ++= Seq(
-    "jszip" -> "^3.6.0",
-    "xmldom" -> "^0.6.0",
+    "jszip" -> "^3.7.1",
+    "@xmldom/xmldom" -> "^0.7.5",
   ) ++ esParseDeps,
   
   scalaJSLinkerConfig ~= {
@@ -79,8 +79,8 @@ lazy val commonJVMSettings = sharedJVMNodeSettings ++ Seq(
 
   libraryDependencies ++= Seq(
     "org.apache.commons" % "commons-text" % "1.9",
-    "org.apache.commons" % "commons-compress" % "1.20",
-    "commons-io" % "commons-io" % "2.9.0",
+    "org.apache.commons" % "commons-compress" % "1.21",
+    "commons-io" % "commons-io" % "2.11.0",
   ),
 
   Test / fork := true,
@@ -94,7 +94,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ S
 
   npmDependencies ++= Seq(
     "memory-streams" -> "^0.1.3",
-    "node-stream-zip" -> "^1.13.4",
+    "node-stream-zip" -> "^1.15.0",
   ),
 
   jsEnv := new NodeJSEnv(nodeConfig),

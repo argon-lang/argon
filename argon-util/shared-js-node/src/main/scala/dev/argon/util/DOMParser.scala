@@ -5,7 +5,7 @@ import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSImport, JSName}
 
 @js.native
-@JSImport("xmldom", name = "DOMParser")
+@JSImport("@xmldom/xmldom", name = "DOMParser")
 private[util] class DOMParser() extends js.Object {
   def parseFromString(@unused xmlsource: String, @unused mimetype: String): Document = js.native
 }
