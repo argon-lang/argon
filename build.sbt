@@ -149,6 +149,7 @@ lazy val grammarJVM = grammar.jvm
 lazy val grammarJS = grammar.js
 lazy val grammarNode = grammar.node
 
+
 lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-parser"))
   .dependsOn(parser_data, grammar)
   .jvmConfigure(
@@ -172,6 +173,7 @@ lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("a
 lazy val parserJVM = parser.jvm
 lazy val parserJS = parser.js
 lazy val parserNode = parser.node
+
 
 lazy val parser_data = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-parser-data"))
   .dependsOn(grammar)
@@ -197,6 +199,7 @@ lazy val parser_dataJVM = parser_data.jvm
 lazy val parser_dataJS = parser_data.js
 lazy val parser_dataNode = parser_data.node
 
+
 lazy val util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-util"))
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -219,6 +222,7 @@ lazy val util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("arg
 lazy val utilJVM = util.jvm
 lazy val utilJS = util.js
 lazy val utilNode = util.node
+
 
 lazy val options = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-options"))
   .dependsOn(util)
@@ -269,6 +273,7 @@ lazy val argon_proverJVM = argon_prover.jvm
 lazy val argon_proverJS = argon_prover.js
 lazy val argon_proverNode = argon_prover.node
 
+
 lazy val argon_expr = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-expr"))
   .dependsOn(argon_prover, util)
   .jvmConfigure(
@@ -293,8 +298,9 @@ lazy val argon_exprJVM = argon_expr.jvm
 lazy val argon_exprJS = argon_expr.js
 lazy val argon_exprNode = argon_expr.node
 
+
 lazy val argon_compiler_core = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-compiler-core"))
-  .dependsOn(parser_data, util, argon_expr)
+  .dependsOn(parser_data, util, argon_expr, options, argon_io)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -313,9 +319,9 @@ lazy val argon_compiler_core = crossProject(JVMPlatform, JSPlatform, NodePlatfor
     name := "argon-compiler-core",
   )
 
-lazy val argon_packageJVM = argon_compiler_core.jvm
-lazy val argon_packageJS = argon_compiler_core.js
-lazy val argon_packageNode = argon_compiler_core.node
+lazy val argon_compiler_coreJVM = argon_compiler_core.jvm
+lazy val argon_compiler_coreJS = argon_compiler_core.js
+lazy val argon_compiler_coreNode = argon_compiler_core.node
 
 
 lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-io"))
@@ -341,3 +347,5 @@ lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file(
 lazy val argon_ioJVM = argon_io.jvm
 lazy val argon_ioJS = argon_io.js
 lazy val argon_ioNode = argon_io.node
+
+
