@@ -19,7 +19,7 @@ lazy val nodeConfig =
     .withArgs(List("--no-warnings", "--experimental-vm-modules"))
 
 val esParseDeps = Seq(
-  "acorn" -> "^8.2.4",
+  "acorn" -> "^8.6.0",
 )
 
 lazy val commonSettingsNoLibs = Seq(

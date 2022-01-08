@@ -2,21 +2,22 @@ package dev.argon.io
 
 import zio.*
 import zio.stream.*
+import java.io.IOException
 
 trait Resource
 
 trait BinaryResource extends Resource {
-  def asBytes: UStream[Byte]
+  def asBytes: Stream[IOException, Byte]
 }
 
 trait TextResource extends BinaryResource {
-  def asText: UStream[String]
+  def asText: Stream[IOException, String]
 
-  override def asBytes: UStream[Byte] = ZPipeline.utf8Encode(asText)
+  override def asBytes: Stream[IOException, Byte] = ZPipeline.utf8Encode(asText)
 }
 
 trait ZipFileResource extends BinaryResource {
-  def zipFile: UManaged[ZipFile]
+  def zipFile: Managed[IOException, ZipFile[Any, IOException]]
 
-  override def asBytes: UStream[Byte] = ZStream.unwrapManaged(zipFile.map(ZipFilePlatform.serializeZipFile))
+  override def asBytes: Stream[IOException, Byte] = ZStream.unwrapManaged(zipFile.map(ZipFilePlatform.serializeZipFile))
 }

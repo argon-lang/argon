@@ -14,18 +14,18 @@ object NpmUtil extends AutoPlugin {
     val npmInstall = taskKey[Unit]("Runs npm install")
 
 
-    val packageLockJsonFile = settingKey[File]("The package-lock.json file")
+    val npmPackageLockJsonFile = settingKey[File]("The package-lock.json file")
     val npmDependencies = settingKey[Seq[(String, String)]]("NPM packages")
     val npmDevDependencies = settingKey[Seq[(String, String)]]("NPM dev packages")
   }
   import autoImport._
 
   override def projectSettings: Seq[Def.Setting[_]] = Seq(
-    packageLockJsonFile := baseDirectory.value / "package-lock.json",
+    npmPackageLockJsonFile := baseDirectory.value / "package-lock.json",
     npmDependencies := Seq(),
     npmDevDependencies := Seq(),
     npmInstall := {
-      val packageLock = packageLockJsonFile.value
+      val packageLock = npmPackageLockJsonFile.value
 
       val dir = crossTarget.value
 
