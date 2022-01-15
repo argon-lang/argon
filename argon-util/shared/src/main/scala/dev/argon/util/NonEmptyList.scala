@@ -15,12 +15,15 @@ object NonEmptyList:
       case _: Nil.type => None
     }
 
+  def fromCons[A](l: ::[A]): NonEmptyList[A] = l
+
 end NonEmptyList
 
 extension [A](l: NonEmptyList[A])
   def head: A = l.head
   def tail: List[A] = l.tail
   def toList: List[A] = l
+  def reverse: NonEmptyList[A] = l.reverse.asInstanceOf[NonEmptyList[A]]
 end extension
 
 given TraverseNonEmpty[NonEmptyList] with Monad[NonEmptyList] with

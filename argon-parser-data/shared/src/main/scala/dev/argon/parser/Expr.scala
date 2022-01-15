@@ -119,13 +119,11 @@ final case class FunctionCallExpr(func: WithSource[Expr], listType: FunctionPara
 
 enum IdentifierExpr extends Expr {
   case Named(name: String)
-  case OperatorIdentifier(op: Token.OperatorToken)
+  case OperatorIdentifier(op: Operator)
   case Extension(inner: IdentifierExpr)
   case Inverse(inner: IdentifierExpr)
   case Update(inner: IdentifierExpr)
 }
-
-final case class IfExpr(condition: WithSource[Expr], body: WithSource[Vector[WithSource[Stmt]]]) extends Expr
 
 final case class IfElseExpr
   (
@@ -145,14 +143,17 @@ object IntValueExpr {
 final case class LambdaTypeExpr(argType: WithSource[Expr], resultType: WithSource[Expr]) extends Expr
 final case class LambdaExpr(name: Option[IdentifierExpr], body: WithSource[Expr]) extends Expr
 final case class MatchExpr(value: WithSource[Expr], cases: Seq[WithSource[MatchExprCase]]) extends Expr
-final case class RaiseExpr(exception: Expr) extends Expr
+final case class RaiseExpr(exception: WithSource[Expr]) extends Expr
 final case class StringValueExpr(value: Token.StringToken) extends Expr
 final case class TupleExpr(values: NonEmptyList[WithSource[Expr]]) extends Expr
 final case class TypeExpr(level: Option[WithSource[Expr]]) extends Expr
 final case class MetaTypeExpr(level: BigInt) extends Expr
 final case class TypeOfExpr(ofExpr: WithSource[Expr]) extends Expr
 final case class UnaryOperatorExpr(op: WithSource[UnaryOperator], inner: WithSource[Expr]) extends Expr
-case object UnitLiteral extends Expr
+case object UnitLiteral extends Expr derives CanEqual {
+  given CanEqual[Expr, UnitLiteral.type] = CanEqual.canEqualAny
+  given CanEqual[UnitLiteral.type, Expr] = CanEqual.canEqualAny
+}
 
 sealed trait Pattern
 final case class DeconstructPattern(constructor: WithSource[Expr], args: Vector[WithSource[Pattern]]) extends Pattern
@@ -178,11 +179,11 @@ object BinaryOperator {
     override def symbol: String = ":="
   }
 
-  case object Add extends BinaryOperator {
+  case object Plus extends BinaryOperator with UnaryOperator {
     override def symbol: String = "+"
   }
 
-  case object Sub extends BinaryOperator {
+  case object Minus extends BinaryOperator with UnaryOperator {
     override def symbol: String = "-"
   }
 
@@ -274,22 +275,17 @@ object UnaryOperator {
     override def symbol: String = "!"
   }
 
-  case object UnaryPlus extends UnaryOperator {
-    override def symbol: String = "+"
-  }
-
-  case object UnaryMinus extends UnaryOperator {
-    override def symbol: String = "-"
-  }
-
+  val Plus: BinaryOperator.Plus.type = BinaryOperator.Plus
+  val Minus: BinaryOperator.Minus.type = BinaryOperator.Minus
 }
 
-sealed trait FunctionParameterListType
+sealed trait FunctionParameterListType derives CanEqual
 
 object FunctionParameterListType {
-  case object NormalList extends FunctionParameterListType
-  case object InferrableList extends FunctionParameterListType
-  case object RequiresList extends FunctionParameterListType
+  case object NormalList extends FunctionParameterListType derives CanEqual
+  case object InferrableList extends FunctionParameterListType derives CanEqual
+  case object InferrableList2 extends FunctionParameterListType derives CanEqual
+  case object RequiresList extends FunctionParameterListType derives CanEqual
 }
 
 final case class MatchExprCase(pattern: WithSource[Pattern], body: WithSource[Vector[WithSource[Stmt]]])

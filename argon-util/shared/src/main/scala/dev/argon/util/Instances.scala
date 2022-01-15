@@ -77,6 +77,27 @@ given TraverseNonEmpty[NonEmptyChunk] with Monad[NonEmptyChunk] with
   override def map[A, B](fa: NonEmptyChunk[A])(f: A => B): NonEmptyChunk[B] = fa.map(f).asInstanceOf[NonEmptyChunk[B]]
 end given
 
+given Traverse[Vector] with Monad[Vector] with
+  override def flatMap[A, B](fa: Vector[A])(f: A => Vector[B]): Vector[B] = fa.flatMap(f)
+  override def pure[A](a: A): Vector[A] = Vector(a)
+
+  override def traverse[F[+_]: Applicative, A, B](ca: Vector[A])(f: A => F[B]): F[Vector[B]] =
+    ca match {
+      case h +: t => Applicative[F].map2(f(h), traverse(t)(f)) { (h2, t2) => h2 +: t2 }
+      case _ => Applicative[F].pure(Vector.empty)
+    }
+
+  def foldLeftM[F[+_]: Monad, S, A](ca: Vector[A])(s: S)(f: (S, A) => F[S]): F[S] =
+    ca match {
+      case h +: t => f(s, h).flatMap { s2 => foldLeftM(t)(s2)(f) }
+      case _ => Applicative[F].pure(s)
+    }
+
+  def foldLeft[S, A](ca: Vector[A])(s: S)(f: (S, A) => S): S = ca.foldLeft(s)(f)
+
+  override def map[A, B](fa: Vector[A])(f: A => B): Vector[B] = fa.map(f)
+end given
+
 given [R, E]: Monad[[A] =>> ZIO[R, E, A]] with
   override def flatMap[A, B](fa: ZIO[R, E, A])(f: A => ZIO[R, E, B]): ZIO[R, E, B] = fa.flatMap(f)
   override def pure[A](a: A): ZIO[R, E, A] = ZIO.succeed(a)

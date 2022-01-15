@@ -324,6 +324,31 @@ lazy val argon_compiler_coreJS = argon_compiler_core.js
 lazy val argon_compiler_coreNode = argon_compiler_core.node
 
 
+lazy val argon_compiler_source = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-compiler-source"))
+  .dependsOn(argon_compiler_core)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-compiler-source",
+  )
+
+lazy val argon_compiler_sourceJVM = argon_compiler_source.jvm
+lazy val argon_compiler_sourceJS = argon_compiler_source.js
+lazy val argon_compiler_sourceNode = argon_compiler_source.node
+
+
 lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-io"))
   .dependsOn(util)
   .jvmConfigure(

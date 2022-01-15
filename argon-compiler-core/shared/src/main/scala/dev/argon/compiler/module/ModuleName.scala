@@ -1,5 +1,5 @@
 package dev.argon.compiler.module
 
-import dev.argon.compiler.pkg.*
+import dev.argon.compiler.tube.*
 
-final case class ModuleName(packageName: PackageName, path: ModulePath) derives CanEqual
+final case class ModuleName(tubeName: TubeName, path: ModulePath) derives CanEqual

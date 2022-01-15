@@ -170,7 +170,7 @@ object ArgonParser {
 
         case Rule.OperatorIdentifier =>
           matchToken(OP_OPENPAREN) ++ rule(Rule.OperatorName) ++ matchToken(OP_CLOSEPAREN) --> { case (_, op, _) =>
-            IdentifierExpr.OperatorIdentifier(op)
+            IdentifierExpr.OperatorIdentifier(op.operator)
           }
 
         case Rule.IdentifierParen(Rule.ParenDisallowed) =>
@@ -233,8 +233,8 @@ object ArgonParser {
           }
 
         case Rule.IfExprPart =>
-          rule(Rule.IfExprStart) ++ matchToken(KW_END) --> { case (condition, body, _) =>
-            IfExpr(condition, body): Expr
+          rule(Rule.IfExprStart) ++ matchToken(KW_END).observeSource --> { case (condition, body, WithSource(_, endLocation)) =>
+            IfElseExpr(condition, body, WithSource(Vector.empty, endLocation)): Expr
           } |
             rule(Rule.IfExprStart) ++ matchToken(KW_ELSE) ++! rule(Rule.StatementList).observeSource ++ matchToken(
               KW_END
@@ -379,7 +379,7 @@ object ArgonParser {
             (token: TToken)
             : TGrammar[Expr] =
             matchToken(token).observeSource ++! rule(Rule.UnaryExpr).observeSource --> { case (opToken, inner) =>
-              UnaryOperatorExpr(opToken.map(_.unaryOperator), inner)
+              UnaryOperatorExpr(opToken.map(_.operator), inner)
             }
 
           matchUnaryOp(OP_BITNOT) |
@@ -907,7 +907,7 @@ object ArgonParser {
 
     private def ruleBinaryOperator[TToken <: TokenWithCategory[? <: TokenCategory] with BinaryOperatorToken : ClassTag]
       (token: TToken)
-      : TGrammar[BinaryOperator] = matchToken(token) --> const(token.binaryOperator)
+      : TGrammar[BinaryOperator] = matchToken(token) --> const(token.operator)
 
   }
 

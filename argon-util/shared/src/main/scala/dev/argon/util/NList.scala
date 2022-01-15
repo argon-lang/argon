@@ -124,3 +124,32 @@ given nListFactorySucc[P <: Nat : NListFactory]: NListFactory[Succ[P]] with {
     }
 
 }
+
+given [N <: Nat]: Traverse[[A] =>> NList[N, A]] with
+  override def traverse[F[+_]: Applicative, A, B](ca: NList[N, A])(f: A => F[B]): F[NList[N, B]] =
+    ca match {
+      case NCons(h, t) =>
+        def consImpl[Prev <: Nat](h: A, t: NList[Prev, A]): F[NList[Succ[Prev], B]] =
+          Applicative[F].map2(f(h), Traverse[[X] =>> NList[Prev, X]].traverse(t)(f)) { (h2, t2) => h2 +: t2 }
+
+        consImpl(h, t)
+
+      case ca: NNil.type =>
+        Applicative[F].pure(NNil)
+    }
+
+  def foldLeftM[F[+_]: Monad, S, A](ca: NList[N, A])(s: S)(f: (S, A) => F[S]): F[S] =
+    ca match {
+      case NCons(h, t) =>
+        def consImpl[Prev <: Nat](h: A, t: NList[Prev, A]): F[S] =
+          f(s, h).flatMap { s2 => Traverse[[X] =>> NList[Prev, X]].foldLeftM(t)(s2)(f) }
+
+        consImpl(h, t)
+
+      case ca: NNil.type => Applicative[F].pure(s)
+    }
+
+  def foldLeft[S, A](ca: NList[N, A])(s: S)(f: (S, A) => S): S = ca.toSeq.foldLeft(s)(f)
+
+  override def map[A, B](fa: NList[N, A])(f: A => B): NList[N, B] = fa.map(f)
+end given

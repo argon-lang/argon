@@ -7,7 +7,6 @@ trait ExprContext {
 
   type TClass
   type TTrait
-  type TDataConstructor
   type TFunction
   type TMethod
   type TClassConstructor
@@ -18,7 +17,6 @@ trait ExprContext {
 
   given classCanEqual: CanEqual[TClass, TClass]
   given traitCanEqual: CanEqual[TTrait, TTrait]
-  given dataConstructorCanEqual: CanEqual[TDataConstructor, TDataConstructor]
   given functionCanEqual: CanEqual[TFunction, TFunction]
   given methodCanEqual: CanEqual[TMethod, TMethod]
   given classConstructorCanEqual: CanEqual[TClassConstructor, TClassConstructor]
@@ -135,7 +133,7 @@ trait ExprContext {
     def argsToExprs(args: ConstructorArgs): Seq[WrapExpr]
   }
 
-  sealed abstract class ExprConstructorWithArgsBase[Args] {
+  sealed abstract class ExprConstructorWithArgsBase[Args] extends ExprConstructor {
     type ConstructorArgs = Args
 
     def constructorArgsCodec: ArgumentCodec[Args]
@@ -148,18 +146,18 @@ trait ExprContext {
     final def argsToExprs(args: ConstructorArgs): Seq[WrapExpr] = constructorArgsCodec.toExprs(args)
   }
 
-  sealed class ExprConstructorWithArgs[Args: ArgumentCodec] extends ExprConstructorWithArgsBase[Args] {
+  sealed abstract class ExprConstructorWithArgs[Args: ArgumentCodec] extends ExprConstructorWithArgsBase[Args] {
     override def constructorArgsCodec: ArgumentCodec[Args] = summon[ArgumentCodec[Args]]
   }
 
   object ExprConstructor {
-    type TypeWithMethods = TraitType | ClassType | DataConstructorType
+    type TypeWithMethods = TraitType | ClassType
+
+    final case class BindVariable(variable: TLocalVariable)
+        extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor derives CanEqual
 
     final case class ClassConstructorCall(classCtor: TClassConstructor)
         extends ExprConstructorWithArgs[ClassConstructorCallArgs] with ExprConstructor derives CanEqual
-
-    final case class DataConstructorCall(dataCtor: TDataConstructor)
-        extends ExprConstructorWithArgs[ArgList] with ExprConstructor derives CanEqual
 
     case object EnsureExecuted extends ExprConstructorWithArgs[EnsureExecutedArgs] with ExprConstructor derives CanEqual
 
@@ -171,16 +169,13 @@ trait ExprContext {
 
     case object IfElse extends ExprConstructorWithArgs[IfElseArgs] with ExprConstructor derives CanEqual
 
-    final case class LetBinding(variable: TLocalVariable)
-        extends ExprConstructorWithArgs[LetBindingArgs] with ExprConstructor derives CanEqual
-
-    final case class LoadConstantBool(b: Boolean) extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor
+    final case class LoadConstantBool(b: Boolean) extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor
         derives CanEqual
 
-    final case class LoadConstantInt(i: BigInt) extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor
+    final case class LoadConstantInt(i: BigInt) extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor
         derives CanEqual
 
-    final case class LoadConstantString(s: String) extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor
+    final case class LoadConstantString(s: String) extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor
         derives CanEqual
 
     final case class LoadLambda(argVariable: TLocalVariable)
@@ -191,7 +186,7 @@ trait ExprContext {
     final case class LoadTupleElement(index: Int) extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor
         derives CanEqual
 
-    case object LoadUnit extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor derives CanEqual
+    case object LoadUnit extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor derives CanEqual
 
     final case class LoadVariable(variable: TVariable) extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor
         derives CanEqual
@@ -208,6 +203,8 @@ trait ExprContext {
       end constructorArgsCodec
 
     }
+
+    case object RaiseException extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor derives CanEqual
 
     case object Sequence extends ExprConstructorWithArgs[NonEmptyArgList] with ExprConstructor derives CanEqual
 
@@ -226,9 +223,6 @@ trait ExprContext {
 
     final case class ClassType(arClass: TClass) extends ExprConstructorWithArgs[ArgList] with ExprConstructor
         derives CanEqual
-
-    final case class DataConstructorType(ctor: TDataConstructor)
-        extends ExprConstructorWithArgs[ArgList] with ExprConstructor derives CanEqual
 
     case object FunctionType extends ExprConstructorWithArgs[FunctionTypeArgs] with ExprConstructor derives CanEqual
     case object UnionType extends ExprConstructorWithArgs[UnionTypeArgs] with ExprConstructor derives CanEqual
@@ -257,8 +251,7 @@ trait ExprContext {
     type EnsureExecutedArgs = (WrapExpr, WrapExpr)
     type FunctionObjectCallArgs = (WrapExpr, WrapExpr)
     type IfElseArgs = (WrapExpr, WrapExpr, WrapExpr)
-    type LetBindingArgs = (WrapExpr, WrapExpr)
-    type MethodCallArgs = (WrapExpr, ArExpr[TypeWithMethods], Vector[WrapExpr])
+    type MethodCallArgs = (WrapExpr, Vector[WrapExpr])
     type PatternMatchArgs[N <: Nat] = (WrapExpr, NList[N, WrapExpr])
     type FunctionTypeArgs = (WrapExpr, WrapExpr)
     type UnionTypeArgs = (WrapExpr, WrapExpr)
@@ -276,10 +269,6 @@ trait ExprContext {
   sealed trait PatternExpr derives CanEqual
 
   object PatternExpr {
-
-    final case class DataDeconstructor(ctor: TDataConstructor, args: Vector[PatternExpr]) extends PatternExpr
-        derives CanEqual
-
     final case class Binding(variable: TLocalVariable) extends PatternExpr derives CanEqual
     final case class CastBinding(variable: TLocalVariable) extends PatternExpr derives CanEqual
   }

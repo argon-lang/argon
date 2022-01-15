@@ -5,5 +5,6 @@ import dev.argon.parser.IdentifierExpr
 
 trait ArModuleC extends UsingContext {
   val moduleName: ModuleName
-  def imports(name: IdentifierExpr): Comp[Seq[ModuleEntry]]
+  def allExports(): Comp[Seq[ModuleEntry]]
+  def exports(name: IdentifierExpr): Comp[Seq[ModuleEntry]]
 }

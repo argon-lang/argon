@@ -22,7 +22,7 @@ trait Evaluator[R, E] {
       case ExprConstructor.EnsureExecuted => ???
       case ExprConstructor.IfElse => ???
       case ExprConstructor.PatternMatch(_) => ???
-      case ExprConstructor.LetBinding(_) => ???
+      case ExprConstructor.BindVariable(_) => ???
       case ExprConstructor.Sequence => ???
       case ExprConstructor.StoreVariable(_) => ???
 
@@ -34,7 +34,7 @@ trait Evaluator[R, E] {
         }
 
       case ctor: (expr.constructor.type & ExprConstructor.MethodCall) =>
-        val (instance, _, args) = expr.getArgs(ctor)
+        val (instance, args) = expr.getArgs(ctor)
         getMethodBody(ctor.method, instance, args, fuel - 1).flatMap {
           case Some(body) => normalizeTopLevelWrap(body, fuel - 1)
           case None => IO.succeed(WrapExpr.OfExpr(expr))
@@ -75,13 +75,14 @@ trait Evaluator[R, E] {
           case WrapExpr.OfHole(_) => WrapExpr.OfExpr(expr)
         }
 
-      case ExprConstructor.ClassConstructorCall(_) | ExprConstructor.DataConstructorCall(_) |
+      case ExprConstructor.ClassConstructorCall(_) |
           ExprConstructor.LoadConstantBool(_) | ExprConstructor.LoadConstantInt(_) | ExprConstructor.LoadConstantString(_) |
           ExprConstructor.LoadLambda(
             _
           ) | ExprConstructor.LoadTuple | ExprConstructor.LoadUnit | ExprConstructor.LoadVariable(_) |
+          ExprConstructor.RaiseException |
           ExprConstructor.TypeN | ExprConstructor.OmegaTypeN(_) | ExprConstructor.AnyType |
-          ExprConstructor.ClassType(_) | ExprConstructor.TraitType(_) | ExprConstructor.DataConstructorType(_) |
+          ExprConstructor.ClassType(_) | ExprConstructor.TraitType(_) |
           ExprConstructor.FunctionType | ExprConstructor.UnionType | ExprConstructor.IntersectionType |
           ExprConstructor.ExistentialType(_) | ExprConstructor.NeverType |
           ExprConstructor.ConjunctionType | ExprConstructor.DisjunctionType |

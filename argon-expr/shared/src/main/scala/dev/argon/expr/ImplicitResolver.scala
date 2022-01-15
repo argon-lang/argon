@@ -27,14 +27,9 @@ abstract class ImplicitResolver[R <: Random, E] {
   protected def classImplementsTrait(classA: TClass, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr])
     : ZIO[R, E, SubClassResult]
 
-  protected def dataCtorImplementsTrait
-    (dataCtorA: TDataConstructor, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr])
-    : ZIO[R, E, SubClassResult]
-
   // These relation methods must match the arguments for the expression constructors
   protected def traitRelations(arTrait: TTrait): ZIO[R, E, Seq[ExprRelation]]
   protected def classRelations(arClass: TClass): ZIO[R, E, Seq[ExprRelation]]
-  protected def dataConstructorRelations(dataConstructor: TDataConstructor): ZIO[R, E, Seq[ExprRelation]]
   protected def functionRelations(function: TFunction): ZIO[R, E, Seq[ExprRelation]]
   protected def methodRelations(method: TMethod): ZIO[R, E, Seq[ExprRelation]]
   protected def classConstructorRelations(classCtor: TClassConstructor): ZIO[R, E, Seq[ExprRelation]]
@@ -391,22 +386,6 @@ abstract class ImplicitResolver[R <: Random, E] {
 
         case (
               ExprConstructor.SubtypeWitnessType,
-              Seq(
-                Value(ExprConstructor.DataConstructorType(dataCtorA), aArgs),
-                Value(ExprConstructor.TraitType(traitB), bArgs),
-              ),
-            ) =>
-          ZStream.unwrap(
-            for {
-              convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
-              convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
-            } yield resultIOToStream(dataCtorImplementsTrait(dataCtorA, convAArgs, traitB, convBArgs).map(
-              subClassResultToPrologResult(substitutions)
-            ))
-          )
-
-        case (
-              ExprConstructor.SubtypeWitnessType,
               Seq(a @ Value(ExprConstructor.LoadTuple, argsA), b @ Value(ExprConstructor.LoadTuple, argsB)),
             ) =>
           if argsA.size != argsB.size then {
@@ -593,7 +572,6 @@ abstract class ImplicitResolver[R <: Random, E] {
       : ZIO[R, E, Seq[ExprRelation]] =
       constructor match {
         case ExprConstructor.ClassConstructorCall(ctor) => classConstructorRelations(ctor)
-        case ExprConstructor.DataConstructorCall(ctor) => dataConstructorRelations(ctor)
         case ExprConstructor.EnsureExecuted =>
           IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.FunctionCall(func) => functionRelations(func)
@@ -601,7 +579,7 @@ abstract class ImplicitResolver[R <: Random, E] {
           IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.IfElse =>
           IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
-        case ExprConstructor.LetBinding(_) =>
+        case ExprConstructor.BindVariable(_) =>
           IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.LoadConstantBool(_) => IO.succeed(Seq(ExprRelation.TypeEquality))
         case ExprConstructor.LoadConstantInt(_) => IO.succeed(Seq(ExprRelation.TypeEquality))
@@ -613,13 +591,13 @@ abstract class ImplicitResolver[R <: Random, E] {
         case ExprConstructor.LoadVariable(_) => IO.succeed(Seq.empty)
         case ExprConstructor.MethodCall(method) => methodRelations(method)
         case ExprConstructor.PatternMatch(_) => IO.succeed(Seq.fill(arity)(ExprRelation.SyntacticEquality))
+        case ExprConstructor.RaiseException => IO.succeed(Seq(ExprRelation.SyntacticEquality))
         case ExprConstructor.Sequence => IO.succeed(Seq.fill(arity)(ExprRelation.SyntacticEquality))
         case ExprConstructor.StoreVariable(_) => IO.succeed(Seq(ExprRelation.SyntacticEquality))
         case ExprConstructor.TypeN => IO.succeed(Seq(ExprRelation.SyntacticEquality))
         case ExprConstructor.OmegaTypeN(_) | ExprConstructor.AnyType => IO.succeed(Seq.empty)
         case ExprConstructor.TraitType(arTrait) => traitRelations(arTrait)
         case ExprConstructor.ClassType(arClass) => classRelations(arClass)
-        case ExprConstructor.DataConstructorType(ctor) => dataConstructorRelations(ctor)
         case ExprConstructor.FunctionType => IO.succeed(Seq(ExprRelation.SuperType, ExprRelation.SubType))
         case ExprConstructor.UnionType => IO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
         case ExprConstructor.IntersectionType => IO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
@@ -793,5 +771,6 @@ abstract class ImplicitResolver[R <: Random, E] {
         case Some(result) => IO.succeed(result)
         case None => couldNotResolveImplicit
       }
+
 
 }
