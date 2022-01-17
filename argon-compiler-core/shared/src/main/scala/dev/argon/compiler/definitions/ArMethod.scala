@@ -8,7 +8,7 @@ abstract class ArMethodC extends UsingContext derives CanEqual {
   import context.ExprContext.*
 
   val id: UniqueIdentifier
-  def signature: Comp[Signature[WrapExpr, WrapExpr]]
+  def signatureUnsubstituted: Comp[Signature[WrapExpr, WrapExpr]]
 
   override final def equals(obj: Any): Boolean =
     obj match {

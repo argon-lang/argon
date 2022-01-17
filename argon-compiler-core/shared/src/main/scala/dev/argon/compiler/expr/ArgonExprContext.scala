@@ -52,6 +52,23 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
       id.hashCode()
   }
 
+  final class InstanceVariable
+    (
+      val method: ArMethod,
+      override val varType: WrapExpr,
+      override val name: Option[IdentifierExpr],
+      override val isMutable: Boolean,
+    ) extends Variable {
+    override def equals(obj: Any): Boolean =
+      obj match {
+        case other: InstanceVariable => other.method == method
+        case _ => false
+      }
+
+    override def hashCode(): Int =
+      method.hashCode()
+    }
+
 
 }
 
@@ -297,6 +314,12 @@ object ArgonExprContext {
     variable match {
       case variable: ec1.LocalVariable =>
         convertLocalVariable(context)(ec1, ec2)(f)(variable)
+
+      case variable: ec1.InstanceVariable =>
+        for {
+          varType2 <- convertWrapExpr(context)(ec1, ec2)(f)(variable.varType)
+        } yield ec2.InstanceVariable(variable.method, varType2, variable.name, variable.isMutable)
+
     }
 
   def convertLocalVariable[F[+_]: Monad](
