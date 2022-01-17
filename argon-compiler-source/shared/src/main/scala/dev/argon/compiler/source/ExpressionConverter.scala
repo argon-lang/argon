@@ -16,7 +16,7 @@ import dev.argon.util.{*, given}
 import dev.argon.compiler.tube.TubeName
 import dev.argon.compiler.module.ModulePath
 
-sealed abstract class ExpressionConverter extends UsingContext {
+sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
   val exprContext: ArgonExprContext with HasContext[context.type]
   import exprContext.{
@@ -31,6 +31,10 @@ sealed abstract class ExpressionConverter extends UsingContext {
   protected val evaluator: Evaluator[CompEnv, CompError] { val exprContext: ExpressionConverter.this.exprContext.type }
   protected val implicitResolver: ImplicitResolver[CompEnv, CompError] { val exprContext: ExpressionConverter.this.exprContext.type }
   protected val fuel: Int
+
+  type ClassResultConv = (WrapExpr, Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])
+  type TraitResultConv = (WrapExpr, Seq[ArExpr[ExprConstructor.TraitType]])
+
 
   trait Scope {
     def lookup(id: IdentifierExpr): LookupResult[ScopeElement]
@@ -76,6 +80,12 @@ sealed abstract class ExpressionConverter extends UsingContext {
 
   final case class ArgumentInfo(arg: Env => ExprFactory, location: SourceLocation, listType: FunctionParameterListType)
   final case class MutatorValue(arg: Env => ExprFactory, location: SourceLocation)
+
+
+  trait SignatureHandlerPlus[Res1, Res2] extends SignatureHandler[Res2] {
+    def convertResult(res: Res1): Res2
+  }
+
 
   final case class ExprResult(expr: WrapExpr, env: Env)
   final case class ExprTypeResult(expr: WrapExpr, env: Env, exprType: WrapExpr)
@@ -618,8 +628,22 @@ sealed abstract class ExpressionConverter extends UsingContext {
       args: Seq[ArgumentInfo],
       convArgs: Vector[WrapExpr],
     )(
+      sigHandler: SignatureHandler[Res]
+    )(
       f: (Env, Vector[WrapExpr], Res) => ExprTypeResult
     ): Comp[Option[ExprTypeResult]] = ???
+
+
+
+    // Returns substituted signature and (possibly) modified replacement expression
+    protected def substituteArg[Res](variable: Variable)(replacement: WrapExpr)(sigHandler: SignatureHandler[Res])(sig: Signature[WrapExpr, Res]): Comp[(Signature[WrapExpr, Res], WrapExpr)] =
+      if referencesVariableSig(variable)(sigHandler)(sig) then
+        asStableExpression(replacement).map { case (replacement2, replacementStable) =>
+          val sig2 = substituteSignature(variable)(replacement)(sigHandler)(sig)
+          (sig2, replacement)
+        }
+      else
+        IO.succeed((sig, replacement))
 
   }
 
@@ -642,13 +666,13 @@ sealed abstract class ExpressionConverter extends UsingContext {
           IO.succeed(Signature.Result(()))
 
         case ModuleElementC.ClassElement(arClass) =>
-          arClass.signature.map(convertSig(convertClassResult))
+          arClass.signature.map(convertSig(ClassSigHandler))
 
         case ModuleElementC.TraitElement(arTrait) =>
-          arTrait.signature.map(convertSig(convertTraitResult))
+          arTrait.signature.map(convertSig(TraitSigHandler))
 
         case ModuleElementC.FunctionElement(arFunc) =>
-          arFunc.signature.map(convertSig(convertFunctionResult))
+          arFunc.signature.map(convertSig(FunctionSigHandler))
       }
 
     protected override def checkOverload(overload: ScopeElement): Comp[Option[ExprTypeResult]] =
@@ -661,7 +685,7 @@ sealed abstract class ExpressionConverter extends UsingContext {
           )))
 
         case ModuleElementC.ClassElement(arClass) =>
-          createSigResultConv(env, arClass.signature, args, Vector.empty)(convertClassResult) { case (env, args, (typeOfClassType, _, _)) =>
+          createSigResultConv(env, arClass.signature, args, Vector.empty)(ClassSigHandler) { case (env, args, (typeOfClassType, _, _)) =>
             ExprTypeResult(
               WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassType(arClass), args)),
               env,
@@ -670,7 +694,7 @@ sealed abstract class ExpressionConverter extends UsingContext {
           }
 
         case ModuleElementC.TraitElement(arTrait) =>
-          createSigResultConv(env, arTrait.signature, args, Vector.empty)(convertTraitResult) { case (env, args, (typeOfTraitType, _)) =>
+          createSigResultConv(env, arTrait.signature, args, Vector.empty)(TraitSigHandler) { case (env, args, (typeOfTraitType, _)) =>
             ExprTypeResult(
               WrapExpr.OfExpr(ArExpr(ExprConstructor.TraitType(arTrait), args)),
               env,
@@ -679,7 +703,7 @@ sealed abstract class ExpressionConverter extends UsingContext {
           }
 
         case ModuleElementC.FunctionElement(func) =>
-          createSigResultConv(env, func.signature, args, Vector.empty)(convertFunctionResult) { (env, args, returnType) =>
+          createSigResultConv(env, func.signature, args, Vector.empty)(FunctionSigHandler) { (env, args, returnType) =>
             ExprTypeResult(
               WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionCall(func), args)),
               env,
@@ -696,12 +720,12 @@ sealed abstract class ExpressionConverter extends UsingContext {
       args: Seq[ArgumentInfo],
       convArgs: Vector[WrapExpr],
     )(
-      convertRes: Res1 => Res2
+      sigHandler: SignatureHandlerPlus[Res1, Res2]
     )(
       f: (Env, Vector[WrapExpr], Res2) => ExprTypeResult
     ): Comp[Option[ExprTypeResult]] =
       sig.flatMap { sig =>
-        createSigResult(env, convertSig(convertRes)(sig), args, convArgs)(f)
+        createSigResult(env, convertSig(sigHandler)(sig), args, convArgs)(sigHandler)(f)
       }
       
 
@@ -747,25 +771,21 @@ sealed abstract class ExpressionConverter extends UsingContext {
     protected def lookup: LookupResult[ArMethod] = ???
 
     protected override def signatureOf(element: ArMethod): Comp[Signature[WrapExpr, ?]] =
-      element.signatureUnsubstituted.map(convertSig(convertFunctionResult))
+      element.signatureUnsubstituted.map(convertSig(FunctionSigHandler))
 
-    // Returns substituted signature and stable replacement expression
-    private def substituteArg(variable: Variable)(replacement: WrapExpr)(sig: Signature[WrapExpr, WrapExpr]): (Signature[WrapExpr, WrapExpr], WrapExpr) =
-      ???
-
-    // Checks if the current overload is applicable
     protected override def checkOverload(overload: ArMethod): Comp[Option[ExprTypeResult]] =
       overload.signatureUnsubstituted.flatMap { sig =>
         val thisVar = InstanceVariable(overload, instanceType, None, false)
-        val sig2 = convertSig(convertFunctionResult)(sig)
-        val (sig3, stableInstance) = substituteArg(thisVar)(instance)(sig2)
-
-        createSigResult(env, sig3, args, Vector.empty) { (env, args, returnType) =>
-          ExprTypeResult(
-            WrapExpr.OfExpr(ArExpr(ExprConstructor.MethodCall(overload), (stableInstance, args))),
-            env,
-            returnType
-          )
+        val sig2 = convertSig(FunctionSigHandler)(sig)
+        
+        substituteArg(thisVar)(instance)(FunctionSigHandler)(sig2).flatMap { case (sig3, stableInstance) =>
+          createSigResult(env, sig3, args, Vector.empty)(FunctionSigHandler) { (env, args, returnType) =>
+            ExprTypeResult(
+              WrapExpr.OfExpr(ArExpr(ExprConstructor.MethodCall(overload), (stableInstance, args))),
+              env,
+              returnType
+            )
+          }
         }
       }
       
@@ -793,41 +813,89 @@ sealed abstract class ExpressionConverter extends UsingContext {
     override def invoke(arg: ArgumentInfo): ExprFactory = CompExprFactory(inner.map(_.invoke(arg)))
   }
 
-  private def convertSig[Res1, Res2](convertRes: Res1 => Res2)(sig: Signature[context.ExprContext.WrapExpr, Res1]): Signature[WrapExpr, Res2] =
+  private def convertSig[Res1, Res2](sigHandler: SignatureHandlerPlus[Res1, Res2])(sig: Signature[context.ExprContext.WrapExpr, Res1]): Signature[WrapExpr, Res2] =
     sig match {
       case Signature.Parameter(paramListType, paramType, next) =>
         Signature.Parameter(
           paramListType,
           ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(paramType),
-          convertSig(convertRes)(next)
+          convertSig(sigHandler)(next)
         )
 
       case Signature.Result(res) =>
-        Signature.Result(convertRes(res))
+        Signature.Result(sigHandler.convertResult(res))
     }
 
-  private def convertClassResult(res: ArClass#ClassResult): (WrapExpr, Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]]) =
-    val (level, baseClass, baseTraits) = res
-    
-    val level2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(level)
-    val baseClass2 = baseClass.map(ArgonExprContext.convertClassType[Id](context)(context.ExprContext, exprContext)(identity))
-    val baseTraits2 = baseTraits.map(ArgonExprContext.convertTraitType[Id](context)(context.ExprContext, exprContext)(identity))
+  private object ClassSigHandler extends SignatureHandlerPlus[ArClass#ClassResult, ClassResultConv]:
 
-    (level2, baseClass2, baseTraits2)
-  end convertClassResult
+    override def convertResult(res: ArClass#ClassResult): ClassResultConv =
+      val (classType, baseClass, baseTraits) = res
+      
+      val classType2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(classType)
+      val baseClass2 = baseClass.map(ArgonExprContext.convertClassType[Id](context)(context.ExprContext, exprContext)(identity))
+      val baseTraits2 = baseTraits.map(ArgonExprContext.convertTraitType[Id](context)(context.ExprContext, exprContext)(identity))
 
-  private def convertTraitResult(res: ArTrait#TraitResult): (WrapExpr, Seq[ArExpr[ExprConstructor.TraitType]]) =
-    val (level, baseTraits) = res
+      (classType2, baseClass2, baseTraits2)
+    end convertResult
 
-    val level2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(level)
-    val baseTraits2 = baseTraits.map(ArgonExprContext.convertTraitType[Id](context)(context.ExprContext, exprContext)(identity))
 
-    (level2, baseTraits2)
-  end convertTraitResult
+    override def substituteResult(variable: Variable)(replacement: WrapExpr)(res: ClassResultConv): ClassResultConv =
+      val (classType, baseClass, baseTraits) = res
+      
+      val classType2 = substituteWrapExpr(variable)(replacement)(classType)
+      val baseClass2 = baseClass.map(substituteClassType(variable)(replacement))
+      val baseTraits2 = baseTraits.map(substituteTraitType(variable)(replacement))
+
+      (classType2, baseClass2, baseTraits2)
+    end substituteResult
+
+    override def resultReferences(variable: Variable)(res: ClassResultConv): Boolean =
+      val (classType, baseClass, baseTraits) = res
+
+      referencesVariable(variable)(classType) ||
+        baseClass.exists { e => referencesVariable(variable)(WrapExpr.OfExpr(e)) } ||
+        baseTraits.exists { e => referencesVariable(variable)(WrapExpr.OfExpr(e)) }
+    end resultReferences
+  end ClassSigHandler
+
+  private object TraitSigHandler extends SignatureHandlerPlus[ArTrait#TraitResult, TraitResultConv]:
+    override def convertResult(res: ArTrait#TraitResult): TraitResultConv =
+      val (traitType, baseTraits) = res
+
+      val traitType2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(traitType)
+      val baseTraits2 = baseTraits.map(ArgonExprContext.convertTraitType[Id](context)(context.ExprContext, exprContext)(identity))
+
+      (traitType2, baseTraits2)
+    end convertResult
+
+    override def substituteResult(variable: Variable)(replacement: WrapExpr)(res: TraitResultConv): TraitResultConv =
+      val (traitType, baseTraits) = res
+
+      val traitType2 = substituteWrapExpr(variable)(replacement)(traitType)
+      val baseTraits2 = baseTraits.map(substituteTraitType(variable)(replacement))
+
+      (traitType2, baseTraits2)
+    end substituteResult
+
+    override def resultReferences(variable: Variable)(res: TraitResultConv): Boolean =
+      val (traitType, baseTraits) = res
+
+      referencesVariable(variable)(traitType) ||
+        baseTraits.exists { e => referencesVariable(variable)(WrapExpr.OfExpr(e)) }
+    end resultReferences
+  end TraitSigHandler
+
+  private object FunctionSigHandler extends SignatureHandlerPlus[context.ExprContext.WrapExpr, WrapExpr]:
+    override def convertResult(res: context.ExprContext.WrapExpr): WrapExpr =
+      ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(res)
+
+    override def substituteResult(variable: Variable)(replacement: WrapExpr)(res: WrapExpr): WrapExpr =
+      substituteWrapExpr(variable)(replacement)(res)
+
+    override def resultReferences(variable: Variable)(res: WrapExpr): Boolean =
+      referencesVariable(variable)(res)
+  end FunctionSigHandler
   
-  private def convertFunctionResult(res: context.ExprContext.WrapExpr): WrapExpr =
-    ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(res)
-
 
 
   private def loadKnownExport(tubeName: TubeName, modulePath: ModulePath, id: IdentifierExpr): Comp[WrapExpr] =

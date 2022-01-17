@@ -3,9 +3,16 @@ package dev.argon.compiler.source
 import dev.argon.compiler.expr.ArgonExprContext
 import dev.argon.compiler.signature.Signature
 
-object ExprUtil {
-  def referencesVariable(exprContext: ArgonExprContext)(variable: exprContext.Variable)(expr: exprContext.WrapExpr): Boolean =
-    import exprContext._
+trait ExprUtil {
+  val exprContext: ArgonExprContext
+  import exprContext.{
+    WrapExpr,
+    ArExpr,
+    ExprConstructor,
+    Variable,
+  }
+
+  def referencesVariable(variable: Variable)(expr: WrapExpr): Boolean =
     expr match {
       case WrapExpr.OfExpr(e) =>
         val hasVariableTop = e.constructor match {
@@ -17,36 +24,65 @@ object ExprUtil {
         if hasVariableTop then
           true
         else
-          e.constructor.argsToExprs(e.args).exists(referencesVariable(exprContext)(variable))
+          e.constructor.argsToExprs(e.args).exists(referencesVariable(variable))
 
       case WrapExpr.OfHole(_) => false
     }
-  end referencesVariable
+
+  def referencesVariableSig[Res](variable: Variable)(sigHandler: SignatureHandler[Res])(sig: Signature[WrapExpr, Res]): Boolean =
+    sig match {
+      case Signature.Parameter(_, paramType, next) =>
+        referencesVariable(variable)(paramType) || referencesVariableSig(variable)(sigHandler)(next)
+
+      case Signature.Result(res) =>
+        sigHandler.resultReferences(variable)(res)
+    }
+
+  // Returns the possibly modified expression and the stable version of it
+  // Declares a variable if needed
+  def asStableExpression(expr: WrapExpr): exprContext.context.Comp[(WrapExpr, WrapExpr)] = ???
+
+
+
+  def substituteWrapExpr
+  (variable: Variable)
+  (replacement: WrapExpr)
+  (expr: WrapExpr)
+  : WrapExpr = ???
+
+  def substituteClassType
+  (variable: Variable)
+  (replacement: WrapExpr)
+  (expr: ArExpr[ExprConstructor.ClassType])
+  : ArExpr[ExprConstructor.ClassType] = ???
+
+  def substituteTraitType
+  (variable: Variable)
+  (replacement: WrapExpr)
+  (expr: ArExpr[ExprConstructor.TraitType])
+  : ArExpr[ExprConstructor.TraitType] = ???
 
 
   def substituteSignature[Res]
-  (exprContext: ArgonExprContext)
-  (variable: exprContext.Variable)
-  (replacement: exprContext.WrapExpr)
-  (substResult: Res => Res)
-  (sig: Signature[exprContext.WrapExpr, Res])
-  : Signature[exprContext.WrapExpr, Res] =
+  (variable: Variable)
+  (replacement: WrapExpr)
+  (sigHandler: SignatureHandler[Res])
+  (sig: Signature[WrapExpr, Res])
+  : Signature[WrapExpr, Res] =
     sig match {
       case Signature.Parameter(listType, paramType, next) =>
         Signature.Parameter(
           listType,
-          substituteWrapExpr(exprContext)(variable)(replacement)(paramType),
-          substituteSignature(exprContext)(variable)(replacement)(substResult)(next)
+          substituteWrapExpr(variable)(replacement)(paramType),
+          substituteSignature(variable)(replacement)(sigHandler)(next)
         )
 
       case Signature.Result(res) =>
-        Signature.Result(substResult(res))
+        Signature.Result(sigHandler.substituteResult(variable)(replacement)(res))
     }
 
-  def substituteWrapExpr
-  (exprContext: ArgonExprContext)
-  (variable: exprContext.Variable)
-  (replacement: exprContext.WrapExpr)
-  (expr: exprContext.WrapExpr)
-  : exprContext.WrapExpr = ???
+  trait SignatureHandler[Res] {
+    def substituteResult(variable: Variable)(replacement: WrapExpr)(res: Res): Res
+    def resultReferences(variable: Variable)(res: Res): Boolean
+  }
 }
