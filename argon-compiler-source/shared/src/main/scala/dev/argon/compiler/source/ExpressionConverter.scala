@@ -7,18 +7,18 @@ import dev.argon.compiler.signature.Signature
 import dev.argon.util.{WithSource, SourceLocation}
 import dev.argon.parser
 import dev.argon.parser.{IdentifierExpr, FunctionParameterListType}
-import dev.argon.expr.Evaluator
-import dev.argon.expr.ImplicitResolver
+import dev.argon.expr.{Evaluator, ImplicitResolver, ExprConstraints}
 import zio.Random
 import dev.argon.util.UniqueIdentifier
 import zio.*
 import dev.argon.util.{*, given}
 import dev.argon.compiler.tube.TubeName
 import dev.argon.compiler.module.ModulePath
+import dev.argon.prover.Proof
 
 sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
-  val exprContext: ArgonExprContext with HasContext[context.type]
+  val exprContext: SourceCompilerExprContext with HasContext[context.type]
   import exprContext.{
     WrapExpr,
     ArExpr,
@@ -26,6 +26,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
     Variable,
     LocalVariable,
     InstanceVariable,
+    ParameterVariable,
   }
 
   protected val evaluator: Evaluator[CompEnv, CompError] { val exprContext: ExpressionConverter.this.exprContext.type }
@@ -70,6 +71,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
   final case class Env(
     scope: Scope,
+    model: Map[exprContext.THole, ExprConstraints[WrapExpr]],
   ) {
     def withScope(f: Scope => Scope): Env =
       copy(scope = f(scope))
@@ -91,7 +93,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
   final case class ExprTypeResult(expr: WrapExpr, env: Env, exprType: WrapExpr)
 
   trait ExprFactory {
-    def synth(): Comp[ExprTypeResult]
+    def synth: Comp[ExprTypeResult]
     def check(t: WrapExpr): Comp[ExprResult]
 
     def mutate(value: MutatorValue): ExprFactory = CompExprFactory(IO.fail(DiagnosticError.CanNotMutate()))
@@ -103,18 +105,18 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
   private trait ExprFactorySynth extends ExprFactory {
     override def check(t: WrapExpr): Comp[ExprResult] =
       for {
-        res <- synth()
+        res <- synth
         env <- checkSubType(res.env, res.exprType, t)
       } yield ExprResult(res.expr, env)
   }
 
   private trait ExprFactoryCheck extends ExprFactory {
-    override def synth(): Comp[ExprTypeResult] =
+    override def synth: Comp[ExprTypeResult] =
       IO.fail(DiagnosticError.UnknownTypeForExpression())
   }
 
   private final class ExprFactoryError(error: CompError) extends ExprFactory {
-    override def synth(): Comp[ExprTypeResult] = IO.fail(error)
+    override def synth: Comp[ExprTypeResult] = IO.fail(error)
     override def check(t: WrapExpr): Comp[ExprResult] = IO.fail(error)
   }
 
@@ -125,7 +127,20 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
       case None => IO.fail(DiagnosticError.TypeError())
     }
 
-  private def isSubType(env: Env, a: WrapExpr, b: WrapExpr): Comp[Option[Env]] = ???
+  private def isSubType(env: Env, a: WrapExpr, b: WrapExpr): Comp[Option[Env]] =
+    val prop = WrapExpr.OfExpr(ArExpr(ExprConstructor.SubtypeWitnessType, (a, b)))
+    implicitResolver.tryResolve(prop, env.model, fuel).map(_.map {
+      case implicitResolver.ResolvedImplicit(_, model) =>
+        env.copy(model = model)
+    })
+  end isSubType
+
+  private def proofToExpr(proof: Proof[implicitResolver.TCAtomicProof]): Comp[WrapExpr] =
+    proof match {
+      case Proof.Atomic(implicitResolver.TCAtomicProof.ExprProof(expr)) => IO.succeed(expr)
+      case _ => ???
+    }
+    
 
 
   def convertStmtList(env: Env, stmts: WithSource[Vector[WithSource[parser.Stmt]]]): ExprFactory =
@@ -162,7 +177,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
               case None =>
                 for {
                   id <- UniqueIdentifier.make
-                  value <- convertExpr(env, varDecl.value).synth()
+                  value <- convertExpr(env, varDecl.value).synth
                   localVar = LocalVariable(id, value.exprType, varDecl.name, varDecl.isMutable)
                 } yield (localVar, value.expr, value.env)
             }
@@ -179,10 +194,10 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
         }
 
         new ExprFactory {
-          override def synth(): Comp[ExprTypeResult] =
+          override def synth: Comp[ExprTypeResult] =
             for {
               exprRes <- headResult
-              tailRes <- convertStmtList(exprRes.env, tailStmts).synth()
+              tailRes <- convertStmtList(exprRes.env, tailStmts).synth
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.Sequence, NonEmptyList(exprRes.expr, tailRes.expr)))
             } yield ExprTypeResult(e, tailRes.env, tailRes.exprType)
 
@@ -217,7 +232,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
     expr.value match {
       case parser.AsExpr(value, valueType) =>
         new ExprFactorySynth {
-          override def synth(): Comp[ExprTypeResult] =
+          override def synth: Comp[ExprTypeResult] =
             convertExpr(env, valueType).check(anyType)
               .flatMap { case ExprResult(t, env) =>
                 convertExpr(env, value).check(t)
@@ -237,11 +252,11 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
       case parser.BlockExpr(body, rescueCases, elseBody, Some(ensureBody)) =>
         new ExprFactory {
-          override def synth(): Comp[ExprTypeResult] =
+          override def synth: Comp[ExprTypeResult] =
             val inner = WithSource(parser.BlockExpr(body, rescueCases, elseBody, None), expr.location)
             for {
               uType <- unitType
-              innerRes <- convertExpr(env, inner).synth()
+              innerRes <- convertExpr(env, inner).synth
               ensuring <- convertStmtList(innerRes.env, ensureBody).check(uType)
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.EnsureExecuted, (innerRes.expr, ensuring.expr)))
             } yield ExprTypeResult(e, ensuring.env, innerRes.exprType)
@@ -266,7 +281,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
         
       case parser.BoolValueExpr(b) =>
         new ExprFactorySynth {
-          override def synth(): Comp[ExprTypeResult] =
+          override def synth: Comp[ExprTypeResult] =
             for {
               t <- boolType
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(b), EmptyTuple))
@@ -288,12 +303,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
       case parser.IfElseExpr(condition, ifBody, elseBody) =>
         new ExprFactory {
-          override def synth(): Comp[ExprTypeResult] =
+          override def synth: Comp[ExprTypeResult] =
             for {
               bType <- boolType
               condRes <- convertExpr(env, condition).check(bType)
-              trueRes <- convertStmtList(condRes.env, ifBody).synth()
-              falseRes <- convertStmtList(condRes.env, elseBody).synth()
+              trueRes <- convertStmtList(condRes.env, ifBody).synth
+              falseRes <- convertStmtList(condRes.env, elseBody).synth
               resEnv = condRes.env.mergeBranches(trueRes.env, falseRes.env)
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.IfElse, (condRes.expr, trueRes.expr, falseRes.expr)))
               t = WrapExpr.OfExpr(ArExpr(ExprConstructor.UnionType, (trueRes.exprType, falseRes.exprType)))
@@ -313,7 +328,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
       case i: parser.IntValueExpr =>
         new ExprFactorySynth {
-          override def synth(): Comp[ExprTypeResult] =
+          override def synth: Comp[ExprTypeResult] =
             for {
               t <- boolType
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(i.value), EmptyTuple))
@@ -348,7 +363,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
       case parser.RaiseExpr(exception) =>
         new ExprFactorySynth {
-          override def synth(): Comp[ExprTypeResult] =
+          override def synth: Comp[ExprTypeResult] =
             for {
               exType <- exceptionType
               ex <- convertExpr(env, exception).check(exType)
@@ -358,7 +373,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
       case parser.StringValueExpr(parser.Token.StringToken(parser.Token.StringToken.StringPart(str) :: Nil)) =>
         new ExprFactorySynth {
-          override def synth(): Comp[ExprTypeResult] =
+          override def synth: Comp[ExprTypeResult] =
             for {
               strType <- stringType
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantString(str.value), EmptyTuple))
@@ -369,11 +384,11 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
       case parser.TupleExpr(values) =>
         new ExprFactory {
-          override def synth(): Comp[ExprTypeResult] =
+          override def synth: Comp[ExprTypeResult] =
             synthPart(env, values, Nil, Nil)
 
           private def synthPart(env: Env, values: NonEmptyList[WithSource[parser.Expr]], valuesAcc: List[WrapExpr], typeAcc: List[WrapExpr]): Comp[ExprTypeResult] =
-            convertExpr(env, values.head).synth().flatMap { currentRes =>
+            convertExpr(env, values.head).synth.flatMap { currentRes =>
               values.tail match {
                 case tail: ::[WithSource[parser.Expr]] =>
                   synthPart(currentRes.env, NonEmptyList.fromCons(tail), currentRes.expr :: valuesAcc, currentRes.exprType :: typeAcc)
@@ -427,7 +442,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
       case parser.MetaTypeExpr(level) =>
         new ExprFactorySynth {
-          override def synth(): Comp[ExprTypeResult] =
+          override def synth: Comp[ExprTypeResult] =
             val e = WrapExpr.OfExpr(ArExpr(ExprConstructor.OmegaTypeN(level), EmptyTuple))
             val t = WrapExpr.OfExpr(ArExpr(ExprConstructor.OmegaTypeN(level + 1), EmptyTuple))
             IO.succeed(ExprTypeResult(e, env, t))
@@ -445,7 +460,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
       case parser.UnitLiteral =>
         new ExprFactorySynth {
-          override def synth(): Comp[ExprTypeResult] =
+          override def synth: Comp[ExprTypeResult] =
             for {
               uType <- unitType
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadUnit, EmptyTuple))
@@ -455,7 +470,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
   private abstract class OverloadExprFactoryBase extends ExprFactorySynth {
 
-    override def synth(): Comp[ExprTypeResult] = resolveOverload(lookup)
+    override def synth: Comp[ExprTypeResult] = resolveOverload(lookup)
 
 
     protected type TElement
@@ -467,7 +482,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
     protected def signatureOf(element: TElement): Comp[Signature[WrapExpr, ?]]
 
     // Checks if the current overload is applicable
-    protected def checkOverload(overload: TElement): Comp[Option[ExprTypeResult]]
+    protected def checkOverload(overload: TElement): Comp[Option[Comp[ExprTypeResult]]]
 
     protected def resolveOverload(lookup: LookupResult[TElement]): Comp[ExprTypeResult] =
       lookup match {
@@ -477,7 +492,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
             overloads match {
               case rank +: tail =>
                 ZIO.foreach(rank)(checkOverload).map(_.flatten).flatMap {
-                  case Seq(single) => IO.succeed(single)
+                  case Seq(single) => single
                   case Seq() => checkEachRank(tail)
                   case _ => IO.fail(DiagnosticError.AmbiguousOverload())
                 }
@@ -623,15 +638,84 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
     protected def createSigResult[Res]
     (
+      owner: exprContext.ParameterVariableOwner,
       env: Env,
       sig: Signature[WrapExpr, Res],
-      args: Seq[ArgumentInfo],
+      args: List[ArgumentInfo],
       convArgs: Vector[WrapExpr],
     )(
       sigHandler: SignatureHandler[Res]
     )(
       f: (Env, Vector[WrapExpr], Res) => ExprTypeResult
-    ): Comp[Option[ExprTypeResult]] = ???
+    ): Comp[Option[Comp[ExprTypeResult]]] =
+
+      def handleArg(arg: ArgumentInfo, paramType: WrapExpr, tailArgs: List[ArgumentInfo], next: Signature[WrapExpr, Res]): Comp[Option[Comp[ExprTypeResult]]] =
+        arg.arg(env).check(paramType)
+          .foldZIO(
+            failure = _ => IO.none,
+            success = result => {
+              val variable = ParameterVariable(owner, convArgs.size, paramType)
+              substituteArg(variable)(result.expr)(sigHandler)(next).flatMap { case (next, resultExpr) =>
+                createSigResult(owner, env, next, tailArgs, convArgs :+ resultExpr)(sigHandler)(f)
+              }
+            }
+          )
+
+      def inferArg(paramType: WrapExpr, next: Signature[WrapExpr, Res]): Comp[Option[Comp[ExprTypeResult]]] =
+        UniqueIdentifier.make.flatMap { hole =>
+          val variable = ParameterVariable(owner, convArgs.size, paramType)
+          substituteArg(variable)(WrapExpr.OfHole(hole))(sigHandler)(next).flatMap { case (next, resultExpr) =>
+            createSigResult(owner, env, next, args, convArgs :+ resultExpr)(sigHandler)(f)
+          }
+        }
+
+      def resolveReqArg(paramType: WrapExpr, next: Signature[WrapExpr, Res]): Comp[Option[Comp[ExprTypeResult]]] =
+        implicitResolver.tryResolve(paramType, env.model, fuel).flatMap {
+          case Some(implicitResolver.ResolvedImplicit(proof, model)) =>
+            proofToExpr(proof).flatMap { paramValue =>
+              val variable = ParameterVariable(owner, convArgs.size, paramType)
+              substituteArg(variable)(paramValue)(sigHandler)(next).flatMap { case (next, resultExpr) =>
+                createSigResult(owner, env, next, args, convArgs :+ resultExpr)(sigHandler)(f)
+              }
+            }
+
+          case None => IO.none
+        }
+
+      (args, sig) match {
+        case ((arg @ ArgumentInfo(_, _, FunctionParameterListType.NormalList)) :: tailArgs, Signature.Parameter(FunctionParameterListType.NormalList, paramType, next)) =>
+          handleArg(arg, paramType, tailArgs, next)
+
+        case (_, Signature.Parameter(FunctionParameterListType.NormalList, paramType, next)) =>
+          ???
+
+        case ((arg @ ArgumentInfo(_, _, FunctionParameterListType.InferrableList)) :: tailArgs, Signature.Parameter(FunctionParameterListType.InferrableList, paramType, next)) =>
+          handleArg(arg, paramType, tailArgs, next)
+
+        case (_, Signature.Parameter(FunctionParameterListType.InferrableList, paramType, next)) =>
+          inferArg(paramType, next)
+
+        case ((arg @ ArgumentInfo(_, _, FunctionParameterListType.InferrableList2)) :: tailArgs, Signature.Parameter(FunctionParameterListType.InferrableList2, paramType, next)) =>
+          handleArg(arg, paramType, tailArgs, next)
+
+        case (_, Signature.Parameter(FunctionParameterListType.InferrableList2, paramType, next)) =>
+          inferArg(paramType, next)
+
+        case ((arg @ ArgumentInfo(_, _, FunctionParameterListType.RequiresList)) :: tailArgs, Signature.Parameter(FunctionParameterListType.RequiresList, paramType, next)) =>
+          handleArg(arg, paramType, tailArgs, next)
+
+        case (_, Signature.Parameter(FunctionParameterListType.RequiresList, paramType, next)) =>
+          resolveReqArg(paramType, next)
+
+        case (_, Signature.Result(res)) =>
+          val overloadExpr = f(env, convArgs, res)
+          IO.succeed(Some(
+            args.foldLeft(ConstExprFactory(overloadExpr) : ExprFactory)(_.invoke(_))
+              .synth
+          ))
+      }
+
+    end createSigResult
 
 
 
@@ -675,17 +759,17 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
           arFunc.signature.map(convertSig(FunctionSigHandler))
       }
 
-    protected override def checkOverload(overload: ScopeElement): Comp[Option[ExprTypeResult]] =
+    protected override def checkOverload(overload: ScopeElement): Comp[Option[Comp[ExprTypeResult]]] =
       overload match {
         case variable: Variable =>
-          IO.succeed(Some(ExprTypeResult(
+          IO.succeed(Some(IO.succeed(ExprTypeResult(
             WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(variable), EmptyTuple)),
             env,
             variable.varType
-          )))
+          ))))
 
         case ModuleElementC.ClassElement(arClass) =>
-          createSigResultConv(env, arClass.signature, args, Vector.empty)(ClassSigHandler) { case (env, args, (typeOfClassType, _, _)) =>
+          createSigResultConv(arClass, env, arClass.signature, args)(ClassSigHandler) { case (env, args, (typeOfClassType, _, _)) =>
             ExprTypeResult(
               WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassType(arClass), args)),
               env,
@@ -694,7 +778,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
           }
 
         case ModuleElementC.TraitElement(arTrait) =>
-          createSigResultConv(env, arTrait.signature, args, Vector.empty)(TraitSigHandler) { case (env, args, (typeOfTraitType, _)) =>
+          createSigResultConv(arTrait, env, arTrait.signature, args)(TraitSigHandler) { case (env, args, (typeOfTraitType, _)) =>
             ExprTypeResult(
               WrapExpr.OfExpr(ArExpr(ExprConstructor.TraitType(arTrait), args)),
               env,
@@ -703,7 +787,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
           }
 
         case ModuleElementC.FunctionElement(func) =>
-          createSigResultConv(env, func.signature, args, Vector.empty)(FunctionSigHandler) { (env, args, returnType) =>
+          createSigResultConv(func, env, func.signature, args)(FunctionSigHandler) { (env, args, returnType) =>
             ExprTypeResult(
               WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionCall(func), args)),
               env,
@@ -715,17 +799,17 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
     protected def createSigResultConv[Res1, Res2]
     (
+      owner: exprContext.ParameterVariableOwner,
       env: Env,
       sig: Comp[Signature[context.ExprContext.WrapExpr, Res1]],
       args: Seq[ArgumentInfo],
-      convArgs: Vector[WrapExpr],
     )(
       sigHandler: SignatureHandlerPlus[Res1, Res2]
     )(
       f: (Env, Vector[WrapExpr], Res2) => ExprTypeResult
-    ): Comp[Option[ExprTypeResult]] =
+    ): Comp[Option[Comp[ExprTypeResult]]] =
       sig.flatMap { sig =>
-        createSigResult(env, convertSig(sigHandler)(sig), args, convArgs)(sigHandler)(f)
+        createSigResult(owner, env, convertSig(sigHandler)(sig), args.toList, Vector.empty)(sigHandler)(f)
       }
       
 
@@ -746,7 +830,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
       }
 
     private final class MutateVariableExprFactory(variable: Variable, value: MutatorValue) extends ExprFactorySynth {
-      override def synth(): Comp[ExprTypeResult] =
+      override def synth: Comp[ExprTypeResult] =
         for {
           valueExpr <- value.arg(env).check(variable.varType)
           unitT <- unitType
@@ -768,18 +852,45 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
     protected override type TElement = ArMethod
 
-    protected def lookup: LookupResult[ArMethod] = ???
+    private enum InstanceType {
+      case ByClass(c: ArExpr[ExprConstructor.ClassType])
+      case ByTrait(t: ArExpr[ExprConstructor.TraitType])
+      case ByClassStatic(c: ArExpr[ExprConstructor.ClassType])
+      case ByTraitStatic(t: ArExpr[ExprConstructor.TraitType])
+    }
+
+    protected def lookup: LookupResult[ArMethod] =
+      LookupResult.Suspended(
+        evaluator.normalizeTopLevelWrap(instance, fuel)
+          .flatMap {
+            case WrapExpr.OfExpr(normalizedInstance) =>
+              normalizedInstance.constructor match {
+                case ctor: (normalizedInstance.constructor.type & ExprConstructor.ClassType) =>
+                  lookupMethods(Seq(InstanceType.ByClassStatic(ArExpr(ctor, normalizedInstance.getArgs(ctor)))), Set.empty, Set.empty)
+
+                case ctor: (normalizedInstance.constructor.type & ExprConstructor.TraitType) =>
+                  lookupMethods(Seq(InstanceType.ByTraitStatic(ArExpr(ctor, normalizedInstance.getArgs(ctor)))), Set.empty, Set.empty)
+                  
+                case _ =>
+                  getInstanceType(instanceType).flatMap { types =>
+                    lookupMethods(types, Set.empty, Set.empty)
+                  }
+              }
+
+            case WrapExpr.OfHole(_) => IO.succeed(LookupResult.NotFound())
+          }
+      )
 
     protected override def signatureOf(element: ArMethod): Comp[Signature[WrapExpr, ?]] =
       element.signatureUnsubstituted.map(convertSig(FunctionSigHandler))
 
-    protected override def checkOverload(overload: ArMethod): Comp[Option[ExprTypeResult]] =
+    protected override def checkOverload(overload: ArMethod): Comp[Option[Comp[ExprTypeResult]]] =
       overload.signatureUnsubstituted.flatMap { sig =>
-        val thisVar = InstanceVariable(overload, instanceType, None, false)
+        val thisVar = InstanceVariable(overload, instanceType, None)
         val sig2 = convertSig(FunctionSigHandler)(sig)
         
         substituteArg(thisVar)(instance)(FunctionSigHandler)(sig2).flatMap { case (sig3, stableInstance) =>
-          createSigResult(env, sig3, args, Vector.empty)(FunctionSigHandler) { (env, args, returnType) =>
+          createSigResult(overload, env, sig3, args.toList, Vector.empty)(FunctionSigHandler) { (env, args, returnType) =>
             ExprTypeResult(
               WrapExpr.OfExpr(ArExpr(ExprConstructor.MethodCall(overload), (stableInstance, args))),
               env,
@@ -788,6 +899,103 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
           }
         }
       }
+
+    
+
+    private def getInstanceType(instanceType: WrapExpr): Comp[Seq[InstanceType]] =
+      evaluator.normalizeTopLevelWrap(instanceType, fuel).flatMap {
+        case WrapExpr.OfExpr(normalizedType) =>
+          normalizedType.constructor match {
+            case ctor: (normalizedType.constructor.type & ExprConstructor.IntersectionType.type) =>
+              val (a, b) = normalizedType.getArgs(ctor)
+              for {
+                a2 <- getInstanceType(a)
+                b2 <- getInstanceType(b)
+              } yield a2 ++ b2
+
+            case ctor: (normalizedType.constructor.type & ExprConstructor.ClassType) =>
+              IO.succeed(Seq(InstanceType.ByClass(ArExpr(ctor, normalizedType.getArgs(ctor)))))
+
+            case ctor: (normalizedType.constructor.type & ExprConstructor.TraitType) =>
+              IO.succeed(Seq(InstanceType.ByTrait(ArExpr(ctor, normalizedType.getArgs(ctor)))))
+
+            case _ => IO.succeed(Seq.empty)
+          }
+
+        case _ => IO.succeed(Seq.empty)
+      }
+
+    private def methodsOfType(t: InstanceType): Comp[Seq[ArMethod]] =
+      t match {
+        case InstanceType.ByClass(classType) => classType.constructor.arClass.methods.map(_.getOrElse(Some(memberName), Seq.empty))
+        case InstanceType.ByClassStatic(classType) => classType.constructor.arClass.staticMethods.map(_.getOrElse(Some(memberName), Seq.empty))
+        case InstanceType.ByTrait(traitType) => traitType.constructor.arTrait.methods.map(_.getOrElse(Some(memberName), Seq.empty))
+        case InstanceType.ByTraitStatic(traitType) => traitType.constructor.arTrait.staticMethods.map(_.getOrElse(Some(memberName), Seq.empty))
+      }
+
+    private def resolveTypeSignatureResult[Res](owner: exprContext.ParameterVariableOwner)(sigHandler: SignatureHandler[Res])(paramIndex: Int, args: List[WrapExpr])(sig: Signature[WrapExpr, Res]): Comp[Res] =
+      (args, sig) match {
+        case (arg :: tailArgs, Signature.Parameter(_, paramType, next)) =>
+          val variable = ParameterVariable(owner, paramIndex, paramType)
+          substituteArg(variable)(arg)(sigHandler)(next).flatMap { case (next, _) =>
+            resolveTypeSignatureResult(owner)(sigHandler)(paramIndex + 1, tailArgs)(next)
+          }
+
+        case (Nil, Signature.Parameter(_, _, _)) => ???
+
+        case (Nil, Signature.Result(res)) => IO.succeed(res)
+
+        case (_ :: _, Signature.Result(_)) => ???
+      }
+
+    private def getBaseTypes(t: InstanceType): Comp[Seq[InstanceType]] =
+      t match {
+        case InstanceType.ByClass(classType) =>
+          classType.constructor.arClass.signature
+            .map(convertSig(ClassSigHandler))
+            .flatMap(resolveTypeSignatureResult(classType.constructor.arClass)(ClassSigHandler)(0, classType.args.toList))
+            .map { case (_, baseClass, baseTraits) =>
+              baseClass.map(InstanceType.ByClass.apply).toSeq ++ baseTraits.map(InstanceType.ByTrait.apply)
+            }
+        
+        case InstanceType.ByTrait(traitType) =>
+          traitType.constructor.arTrait.signature
+            .map(convertSig(TraitSigHandler))
+            .flatMap(resolveTypeSignatureResult(traitType.constructor.arTrait)(TraitSigHandler)(0, traitType.args.toList))
+            .map { case (_, baseTraits) =>
+              baseTraits.map(InstanceType.ByTrait.apply)
+            }
+        
+        case _ => IO.succeed(Seq.empty)
+      }
+
+    private def toSeenTypes(t: InstanceType): Set[ArClass | ArTrait] =
+      t match {
+        case InstanceType.ByClass(e) => Set(e.constructor.arClass)
+        case InstanceType.ByTrait(e) => Set(e.constructor.arTrait)
+        case _ => Set.empty
+      }
+
+    private def isSeenType(seenTypes: Set[ArClass | ArTrait])(t: InstanceType): Boolean =
+      val asSeen = toSeenTypes(t)
+      asSeen.nonEmpty && asSeen.subsetOf(seenTypes)
+    end isSeenType
+
+    private def lookupMethods(types: Seq[InstanceType], seenTypes: Set[ArClass | ArTrait], seenMethods: Set[ArMethod]): Comp[LookupResult[ArMethod]] =
+      ZIO.foreach(types)(methodsOfType).map { methods =>
+        val methods2 = methods.flatten.filterNot(seenMethods.contains).distinct
+        
+        val next = LookupResult.Suspended(
+          ZIO.foreach(types)(getBaseTypes).flatMap { baseTypes =>
+            val seenTypes2 = seenTypes ++ types.flatMap(toSeenTypes)
+            val baseTypes2 = baseTypes.flatten.filter(isSeenType(seenTypes2))
+            val seenMethods2 = seenMethods ++ methods2
+            lookupMethods(baseTypes2, seenTypes2, seenMethods2)
+          }
+        )
+
+        LookupResult.Success(methods2, next)
+      }
       
   }
 
@@ -795,22 +1003,26 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
     def fromInstanceFactory(instance: ExprFactory, memberName: IdentifierExpr): ExprFactory =
         CompExprFactory(
           for {
-            instanceExpr <- instance.synth()
+            instanceExpr <- instance.synth
           } yield OverloadExprFactoryMethod(instanceExpr.env, instanceExpr.expr, instanceExpr.exprType, memberName, Seq.empty)
         )
   }
 
   private final class EndOverloadExprFactory(inner: ExprFactory) extends ExprFactory {
-    override def synth(): Comp[ExprTypeResult] = inner.synth()
+    override def synth: Comp[ExprTypeResult] = inner.synth
     override def check(t: WrapExpr): Comp[ExprResult] = inner.check(t)
   }
 
   private final class CompExprFactory(inner: Comp[ExprFactory]) extends ExprFactory {
-    override def synth(): Comp[ExprTypeResult] = inner.flatMap(_.synth())
+    override def synth: Comp[ExprTypeResult] = inner.flatMap(_.synth)
     override def check(t: WrapExpr): Comp[ExprResult] = inner.flatMap(_.check(t))
     
     override def mutate(value: MutatorValue): ExprFactory = CompExprFactory(inner.map(_.mutate(value)))
     override def invoke(arg: ArgumentInfo): ExprFactory = CompExprFactory(inner.map(_.invoke(arg)))
+  }
+
+  private final class ConstExprFactory(result: ExprTypeResult) extends ExprFactorySynth {
+    def synth: Comp[ExprTypeResult] = IO.succeed(result)
   }
 
   private def convertSig[Res1, Res2](sigHandler: SignatureHandlerPlus[Res1, Res2])(sig: Signature[context.ExprContext.WrapExpr, Res1]): Signature[WrapExpr, Res2] =
@@ -901,8 +1113,8 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
   private def loadKnownExport(tubeName: TubeName, modulePath: ModulePath, id: IdentifierExpr): Comp[WrapExpr] =
     context.getTube(tubeName).flatMap { argonCore =>
       argonCore.module(modulePath).flatMap { rootModule =>
-        rootModule.exports(id).flatMap { entries =>
-          ZIO.foreach(entries.map { _.element }) {
+        rootModule.exports(id).flatMap { elements =>
+          ZIO.foreach(elements) {
             case ModuleElementC.ClassElement(arClass) =>
               arClass.signature.map { _.parameterCount == 0 }.map {
                 case true => Some(WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassType(arClass), Vector.empty)))

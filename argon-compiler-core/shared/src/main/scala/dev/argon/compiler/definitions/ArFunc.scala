@@ -4,7 +4,7 @@ import dev.argon.compiler.*
 import dev.argon.util.UniqueIdentifier
 import dev.argon.compiler.signature.Signature
 
-abstract class ArFuncC extends UsingContext derives CanEqual {
+abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
   import context.ExprContext.*
 
   val id: UniqueIdentifier

@@ -18,7 +18,7 @@ object SourceModule {
     for {
       exportEntries <-
         moduleFile.parsed
-          .mapAccumZIO(IO.succeed(Map.empty))(loadEntry(context, importer))
+          .mapAccumZIO(IO.succeed(Map.empty))(loadElement(context, importer))
           .collect {
             case Some(entry) => entry
           }
@@ -35,8 +35,8 @@ object SourceModule {
       override val context: context2.type = context2
       override val moduleName: ModuleName = moduleName2
 
-      override def allExports(): Comp[Seq[ModuleEntry]] = exportEntries
-      override def exports(name: IdentifierExpr): Comp[Seq[ModuleEntry]] =
+      override def allExports(): Comp[Seq[ModuleElement]] = exportEntries
+      override def exports(name: IdentifierExpr): Comp[Seq[ModuleElement]] =
         exportMap.map { exp =>
           exp.get(Some(name)).toList.flatten
         }
@@ -44,13 +44,13 @@ object SourceModule {
     }
   end make
 
-  private def loadEntry(
+  private def loadElement(
     context: Context,
     importer: ImporterC with HasContext[context.type]
   )(
     imports: context.Comp[Imports[context.type]],
     stmt: Stmt
-  ): context.Comp[(context.Comp[Imports[context.type]], Option[ModuleEntryC[context.type]])] =
+  ): context.Comp[(context.Comp[Imports[context.type]], Option[ModuleElementC[context.type]])] =
     stmt match {
       case stmt: ImportStmt => IO.succeed(imports.flatMap(loadImport(context, importer, _, stmt)), None)
       case stmt: TraitDeclarationStmt => loadTrait(context, importer, imports, stmt).map { entry => (imports, Some(entry)) }
@@ -72,28 +72,28 @@ object SourceModule {
     importer: ImporterC with HasContext[context.type],
     imports: context.Comp[Imports[context.type]],
     stmt: TraitDeclarationStmt
-  ): context.Comp[ModuleEntryC[context.type]] = ???
+  ): context.Comp[ModuleElementC[context.type]] = ???
 
   private def loadDataConstructor(
     context: Context,
     importer: ImporterC with HasContext[context.type],
     imports: context.Comp[Imports[context.type]],
     stmt: DataConstructorDeclarationStmt
-  ): context.Comp[ModuleEntryC[context.type]] = ???
+  ): context.Comp[ModuleElementC[context.type]] = ???
 
   private def loadClass(
     context: Context,
     importer: ImporterC with HasContext[context.type],
     imports: context.Comp[Imports[context.type]],
     stmt: ClassDeclarationStmt
-  ): context.Comp[ModuleEntryC[context.type]] = ???
+  ): context.Comp[ModuleElementC[context.type]] = ???
 
   private def loadFunction(
     context: Context,
     importer: ImporterC with HasContext[context.type],
     imports: context.Comp[Imports[context.type]],
     stmt: FunctionDeclarationStmt
-  ): context.Comp[ModuleEntryC[context.type]] = ???
+  ): context.Comp[ModuleElementC[context.type]] = ???
 
 
 }

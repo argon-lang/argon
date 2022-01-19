@@ -31,8 +31,8 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
 
   sealed trait Variable derives CanEqual {
     val varType: WrapExpr
-    val name: Option[IdentifierExpr]
-    val isMutable: Boolean
+    def name: Option[IdentifierExpr]
+    def isMutable: Boolean
   }
 
   final class LocalVariable
@@ -57,8 +57,10 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
       val method: ArMethod,
       override val varType: WrapExpr,
       override val name: Option[IdentifierExpr],
-      override val isMutable: Boolean,
     ) extends Variable {
+
+    override def isMutable: Boolean = false
+
     override def equals(obj: Any): Boolean =
       obj match {
         case other: InstanceVariable => other.method == method
@@ -68,6 +70,29 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
     override def hashCode(): Int =
       method.hashCode()
     }
+
+  type ParameterVariableOwner = ArMethod | ArFunc | ArClass | ArTrait | ClassConstructor
+
+  final class ParameterVariable
+    (
+      val owner: ParameterVariableOwner,
+      val parameterIndex: Int,
+      override val varType: WrapExpr,
+    ) extends Variable {
+
+    override def name: Option[IdentifierExpr] = None
+    override def isMutable: Boolean = false
+
+    override def equals(obj: Any): Boolean =
+      obj match {
+        case other: ParameterVariable => parameterIndex == other.parameterIndex && other.owner.equals(owner)
+        case _ => false
+      }
+
+    override def hashCode(): Int =
+      owner.hashCode() + 3 * parameterIndex.hashCode()
+    }
+
 
 
 }
@@ -318,7 +343,12 @@ object ArgonExprContext {
       case variable: ec1.InstanceVariable =>
         for {
           varType2 <- convertWrapExpr(context)(ec1, ec2)(f)(variable.varType)
-        } yield ec2.InstanceVariable(variable.method, varType2, variable.name, variable.isMutable)
+        } yield ec2.InstanceVariable(variable.method, varType2, variable.name)
+
+      case variable: ec1.ParameterVariable =>
+        for {
+          varType2 <- convertWrapExpr(context)(ec1, ec2)(f)(variable.varType)
+        } yield ec2.ParameterVariable(variable.owner, variable.parameterIndex, varType2)
 
     }
 

@@ -11,10 +11,17 @@ trait UsingContext {
   protected type ArTube = ArTubeC with HasContext[context.type]
   protected type ArModule = ArModuleC with HasContext[context.type]
   protected type ModuleElement = ModuleElementC[context.type]
-  protected type ModuleEntry = ModuleEntryC[context.type]
   protected type ArClass = ArClassC with HasContext[context.type]
   protected type ArTrait = ArTraitC with HasContext[context.type]
   protected type ArFunc = ArFuncC with HasContext[context.type]
   protected type ArMethod = ArMethodC with HasContext[context.type]
   protected type ClassConstructor = ClassConstructorC with HasContext[context.type]
+
+
+  protected type OwnedByModule = OwnedByModuleC[context.type]
+  protected type OwnedByClass = OwnedByClassC[context.type]
+  protected type OwnedByClassStatic = OwnedByClassStaticC[context.type]
+  protected type OwnedByTrait = OwnedByTraitC[context.type]
+  protected type OwnedByTraitStatic = OwnedByTraitStaticC[context.type]
+  
 }
