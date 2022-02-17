@@ -1327,7 +1327,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
   end FunctionSigHandler
   
 
-  private def loadKnownExport[TElement <: ModuleElement](tubeName: TubeName, modulePath: ModulePath, id: IdentifierExpr, paramTypes: Seq[WrapExpr])(using typeTest: TypeTest[ModuleElement, TElement]): Comp[TElement] =
+  private def loadKnownExport[TElement <: ModuleElement](tubeName: TubeName, modulePath: ModulePath, id: IdentifierExpr, paramTypes: Seq[WrapExpr])(using TypeTest[ModuleElement, TElement]): Comp[TElement] =
     def matchesOverload(paramTypes: Seq[WrapExpr])(moduleElement: ModuleElement): Comp[Boolean] =
       (moduleElement match {
         case ModuleElementC.ClassElement(c) => c.signature.map(convertSig(ClassSigHandler))

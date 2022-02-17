@@ -1,6 +1,6 @@
 package dev.argon.expr
 
-import scala.reflect.ClassTag
+import scala.reflect.TypeTest
 import dev.argon.util.{*, given}
 
 trait ExprContext {
@@ -56,7 +56,7 @@ trait ExprContext {
       override def toExprs(args: WrapExpr): Seq[WrapExpr] = Seq(args)
     }
 
-  given [Ctor <: ExprConstructor : ClassTag]: ArgumentCodec[ArExpr[Ctor]] =
+  given [Ctor <: ExprConstructor](using TypeTest[ExprConstructor, Ctor]): ArgumentCodec[ArExpr[Ctor]] =
     new ArgumentCodec[ArExpr[Ctor]] {
 
       override def fromExprs(exprs: Seq[WrapExpr]): Option[(ArExpr[Ctor], Seq[WrapExpr])] =

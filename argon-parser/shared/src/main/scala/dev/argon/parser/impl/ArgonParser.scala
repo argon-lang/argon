@@ -3,7 +3,7 @@ package dev.argon.parser.impl
 import dev.argon.parser.Token.*
 import dev.argon.parser.*
 import dev.argon.util.{*, given}
-import scala.reflect.ClassTag
+import scala.reflect.TypeTest
 import scala.language.postfixOps
 import dev.argon.grammar.{Grammar, GrammarError, TokenMatcher}
 import Grammar.Operators.*
@@ -144,12 +144,12 @@ object ArgonParser {
 
     def second[T](pair: (?, T)): T = pair._2
 
-    private def matchTokenFactory[TToken <: Token : ClassTag](factory: TokenFactory[TToken]): TGrammar[TToken] =
-      Grammar.matcher(factory.category, TokenMatcher.Subtype[Token, TToken](implicitly[ClassTag[TToken]]))
+    private def matchTokenFactory[TToken <: Token](factory: TokenFactory[TToken])(using tt: TypeTest[Token, TToken]): TGrammar[TToken] =
+      Grammar.matcher(factory.category, TokenMatcher.Subtype[Token, TToken](tt))
 
-    private def matchToken[TToken <: TokenWithCategory[? <: TokenCategory] with Token : ClassTag](token: TToken)
+    private def matchToken[TToken <: TokenWithCategory[? <: TokenCategory] with Token](token: TToken)(using tt: TypeTest[Token, TToken])
       : TGrammar[TToken] =
-      Grammar.matcher(token.category, TokenMatcher.Subtype[Token, TToken](implicitly[ClassTag[TToken]]))
+      Grammar.matcher(token.category, TokenMatcher.Subtype[Token, TToken](tt))
 
     private val tokenUnderscore: TGrammar[Unit] = matchToken(KW_UNDERSCORE).discard
 
@@ -375,8 +375,9 @@ object ArgonParser {
           )
 
         case Rule.UnaryExpr =>
-          def matchUnaryOp[TToken <: TokenWithCategory[? <: TokenCategory] with UnaryOperatorToken : ClassTag]
+          def matchUnaryOp[TToken <: TokenWithCategory[? <: TokenCategory] with UnaryOperatorToken]
             (token: TToken)
+            (using TypeTest[Token, TToken])
             : TGrammar[Expr] =
             matchToken(token).observeSource ++! rule(Rule.UnaryExpr).observeSource --> { case (opToken, inner) =>
               UnaryOperatorExpr(opToken.map(_.operator), inner)
@@ -552,7 +553,7 @@ object ArgonParser {
             }
 
         case Rule.Modifiers =>
-          def ruleModifier[TToken <: TokenWithCategory[? <: TokenCategory] with ModifierToken : ClassTag](token: TToken)
+          def ruleModifier[TToken <: TokenWithCategory[? <: TokenCategory] with ModifierToken](token: TToken)(using TypeTest[Token, TToken])
             : TGrammar[Modifier] = matchToken(token) --> const(token.modifier)
 
           val anyModifier =
@@ -905,8 +906,9 @@ object ArgonParser {
       }
     }
 
-    private def ruleBinaryOperator[TToken <: TokenWithCategory[? <: TokenCategory] with BinaryOperatorToken : ClassTag]
+    private def ruleBinaryOperator[TToken <: TokenWithCategory[? <: TokenCategory] with BinaryOperatorToken]
       (token: TToken)
+      (using TypeTest[Token, TToken])
       : TGrammar[BinaryOperator] = matchToken(token) --> const(token.operator)
 
   }

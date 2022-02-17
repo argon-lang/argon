@@ -1,6 +1,6 @@
 package dev.argon.grammar
 
-import scala.reflect.ClassTag
+import scala.reflect.TypeTest
 
 trait TokenMatcher[T, TParsed] {
   def matchToken(other: T): Option[TParsed]
@@ -18,7 +18,7 @@ object TokenMatcher {
 
   }
 
-  final case class Subtype[T, TParsed <: T](tag: ClassTag[TParsed]) extends TokenMatcher[T, TParsed] {
+  final case class Subtype[T, TParsed <: T](tag: TypeTest[T, TParsed]) extends TokenMatcher[T, TParsed] {
 
     override def matchToken(other: T): Option[TParsed] = {
       implicit val tag2 = tag
