@@ -1,3 +1,5 @@
 package dev.argon.compiler.tube
 
-final case class TubeName(name: String) derives CanEqual
+import dev.argon.util.NonEmptyList
+
+final case class TubeName(name: NonEmptyList[String]) derives CanEqual

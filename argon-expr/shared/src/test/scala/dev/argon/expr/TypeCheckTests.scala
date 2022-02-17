@@ -1,10 +1,11 @@
 package dev.argon.expr
 
 import dev.argon.util.UniqueIdentifier
-import zio.{URIO, ZIO}
+import zio.*
 import zio.test.Assertion.*
 import zio.test.*
 import java.time.Duration
+import dev.argon.util.{*, given}
 
 object TypeCheckTests extends DefaultRunnableSpec {
 
@@ -24,7 +25,11 @@ object TypeCheckTests extends DefaultRunnableSpec {
     WrapExpr.OfExpr(ArExpr(ExprConstructor.SubtypeWitnessType, (a, b)))
 
   private def resolve(t: WrapExpr): ZIO[zio.Random, String, resolver.ResolvedImplicit] =
-    resolver.resolve(t, Map.empty, fuel)
+    resolver.tryResolve(t, Map.empty, fuel)
+      .flatMap {
+        case Some(res) => IO.succeed(res)
+        case None => IO.fail("Could not resolve implicit")
+      }
 
   private def checkSubType(a: WrapExpr, b: WrapExpr): URIO[zio.Random, Either[String, resolver.ResolvedImplicit]] =
     resolve(subTypeOf(a, b)).either

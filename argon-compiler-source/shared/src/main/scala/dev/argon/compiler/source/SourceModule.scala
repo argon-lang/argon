@@ -5,10 +5,12 @@ import dev.argon.compiler.tube.*
 import dev.argon.compiler.module.*
 import zio.*
 import dev.argon.parser.*
+import dev.argon.util.given
 
 object SourceModule {
   def make(
     context: Context,
+    currentTube: ArTubeC with HasContext[context.type],
     moduleName: ModuleName,
     importer: ImporterC with HasContext[context.type],
     moduleFile: SourceCodeResource,
@@ -18,7 +20,7 @@ object SourceModule {
     for {
       exportEntries <-
         moduleFile.parsed
-          .mapAccumZIO(IO.succeed(Map.empty))(loadElement(context, importer))
+          .mapAccumZIO(IO.succeed(Map.empty))(loadElement(context, currentTube, moduleName, importer))
           .collect {
             case Some(entry) => entry
           }
@@ -46,54 +48,140 @@ object SourceModule {
 
   private def loadElement(
     context: Context,
+    currentTube: ArTubeC with HasContext[context.type],
+    moduleName: ModuleName,
     importer: ImporterC with HasContext[context.type]
   )(
     imports: context.Comp[Imports[context.type]],
     stmt: Stmt
   ): context.Comp[(context.Comp[Imports[context.type]], Option[ModuleElementC[context.type]])] =
+    import context.Comp
+
+    def flattenImportPaths(pathSegment: ImportPathSegment, modulePath: Seq[String]): List[(ModulePath, ImportPathSegment.End)] =
+      pathSegment match {
+        case ImportPathSegment.Cons(id, rest) => flattenImportPaths(rest, modulePath :+ id)
+        case ImportPathSegment.Many(segments) =>
+          segments.toList.flatMap(flattenImportPaths(_, modulePath))
+
+        case pathSegment: ImportPathSegment.End => List((ModulePath(modulePath), pathSegment))
+      }
+
+    type ImportsUngrouped = Seq[(IdentifierExpr, ModuleElementC[context.type])]
+    def loadModuleImports(module: ArModuleC with HasContext[context.type], imports: List[ImportPathSegment.End], importedIds: Set[IdentifierExpr], acc: ImportsUngrouped): Comp[ImportsUngrouped] =
+      imports match {
+        case ImportPathSegment.Imported(id) :: tail if imports.contains(id) =>
+          ???
+
+        case ImportPathSegment.Imported(id) :: tail =>
+          module.exports(id).flatMap { newImports =>
+            loadModuleImports(module, tail, importedIds + id, acc ++ newImports.map((id, _)))
+          }
+        case ImportPathSegment.Renaming(id, _) :: tail if imports.contains(id) =>
+          ???
+
+        case ImportPathSegment.Renaming(id, None) :: tail =>
+          module.exports(id).flatMap { _ =>
+            loadModuleImports(module, tail, importedIds + id, acc)
+          }
+
+
+        case ImportPathSegment.Renaming(id, Some(viewedName)) :: tail =>
+          module.exports(id).flatMap { newImports =>
+            loadModuleImports(module, tail, importedIds + id, acc ++ newImports.map((viewedName, _)))
+          }
+          
+        case ImportPathSegment.Wildcard :: _ :: _ =>
+          ???
+          
+        case ImportPathSegment.Wildcard :: Nil =>
+          module.allExports().map { newImports =>
+            newImports
+              .flatMap { element =>
+                element.name match {
+                  case Some(name) if importedIds.contains(name) => Seq.empty
+                  case Some(name) => Seq((name, element))
+                  case None => Seq.empty
+                }
+              }
+            
+          }
+
+        case Nil => IO.succeed(acc)
+      }
+
+    def loadTubeImports(tube: ArTubeC with HasContext[context.type], pathSegment: ImportPathSegment): Comp[ImportsUngrouped] =
+      ZIO.foreach(
+        flattenImportPaths(pathSegment, Seq.empty)
+          .groupMap(_._1)(_._2)
+          .toSeq
+      ) { case (modulePath, imports) =>
+        tube.module(modulePath).flatMap { module =>
+          loadModuleImports(module, imports, Set.empty, Seq.empty)
+        }
+      }
+        .map { _.flatten }
+
+
+    def loadImport
+    (stmt: ImportStmt)
+    (imports: Imports[context.type])
+    : context.Comp[Imports[context.type]] =
+      (stmt match {
+        case ImportStmt.Absolute(pathSegment) => loadTubeImports(currentTube, pathSegment)
+        case ImportStmt.Relative(upCount, path) =>
+          def appendRelative(currentPath: Seq[String], path: ImportPathSegment): ImportPathSegment =
+            currentPath match {
+              case front :+ last => appendRelative(front, ImportPathSegment.Cons(last, path))
+              case _ => path
+            }
+
+          def resolveRelative(currentPath: Seq[String], upCount: Int): ImportPathSegment =
+            if upCount > 0 then
+              currentPath match {
+                case front :+ _ => resolveRelative(front, upCount - 1)
+                case _ => ???
+              }
+            else
+              appendRelative(currentPath, path)
+
+          loadTubeImports(currentTube, resolveRelative(moduleName.path.ids, upCount))
+
+        case ImportStmt.Tube(tubeName, path) =>
+          context.getTube(TubeName(tubeName)).flatMap { tube =>
+            loadTubeImports(tube, path)
+          }
+
+        case ImportStmt.Member(_) => ???
+
+      }).map { newImports =>
+        (imports.toSeq.flatMap { case (id, elements) => elements.map { (id, _) } } ++ newImports)
+          .groupMap(_._1)(_._2)
+      }
+
+    def loadTrait(
+      stmt: TraitDeclarationStmt
+    ): context.Comp[ModuleElementC[context.type]] = ???
+
+    def loadDataConstructor(
+      stmt: DataConstructorDeclarationStmt
+    ): context.Comp[ModuleElementC[context.type]] = ???
+
+    def loadClass(
+      stmt: ClassDeclarationStmt
+    ): context.Comp[ModuleElementC[context.type]] = ???
+
+    def loadFunction(
+      stmt: FunctionDeclarationStmt
+    ): context.Comp[ModuleElementC[context.type]] = ???
+
     stmt match {
-      case stmt: ImportStmt => IO.succeed(imports.flatMap(loadImport(context, importer, _, stmt)), None)
-      case stmt: TraitDeclarationStmt => loadTrait(context, importer, imports, stmt).map { entry => (imports, Some(entry)) }
-      case stmt: DataConstructorDeclarationStmt => loadDataConstructor(context, importer, imports, stmt).map { entry => (imports, Some(entry)) }
-      case stmt: ClassDeclarationStmt => loadClass(context, importer, imports, stmt).map { entry => (imports, Some(entry)) }
-      case stmt: FunctionDeclarationStmt => loadFunction(context, importer, imports, stmt).map { entry => (imports, Some(entry)) }
+      case stmt: ImportStmt => imports.flatMap(loadImport(stmt)).memoize.map((_, None))
+      case stmt: TraitDeclarationStmt => loadTrait(stmt).map { entry => (imports, Some(entry)) }
+      case stmt: DataConstructorDeclarationStmt => loadDataConstructor(stmt).map { entry => (imports, Some(entry)) }
+      case stmt: ClassDeclarationStmt => loadClass(stmt).map { entry => (imports, Some(entry)) }
+      case stmt: FunctionDeclarationStmt => loadFunction(stmt).map { entry => (imports, Some(entry)) }
       case _ => IO.fail(DiagnosticError.InvalidTopLevelStatement(stmt))
     }
-
-  private def loadImport(
-    context: Context,
-    importer: ImporterC with HasContext[context.type],
-    imports: Imports[context.type],
-    stmt: ImportStmt
-  ): context.Comp[Imports[context.type]] = ???
-
-  private def loadTrait(
-    context: Context,
-    importer: ImporterC with HasContext[context.type],
-    imports: context.Comp[Imports[context.type]],
-    stmt: TraitDeclarationStmt
-  ): context.Comp[ModuleElementC[context.type]] = ???
-
-  private def loadDataConstructor(
-    context: Context,
-    importer: ImporterC with HasContext[context.type],
-    imports: context.Comp[Imports[context.type]],
-    stmt: DataConstructorDeclarationStmt
-  ): context.Comp[ModuleElementC[context.type]] = ???
-
-  private def loadClass(
-    context: Context,
-    importer: ImporterC with HasContext[context.type],
-    imports: context.Comp[Imports[context.type]],
-    stmt: ClassDeclarationStmt
-  ): context.Comp[ModuleElementC[context.type]] = ???
-
-  private def loadFunction(
-    context: Context,
-    importer: ImporterC with HasContext[context.type],
-    imports: context.Comp[Imports[context.type]],
-    stmt: FunctionDeclarationStmt
-  ): context.Comp[ModuleElementC[context.type]] = ???
 
 
 }

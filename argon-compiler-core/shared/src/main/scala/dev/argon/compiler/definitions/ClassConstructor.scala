@@ -10,6 +10,8 @@ abstract class ClassConstructorC extends Definition with UsingContext derives Ca
   val id: UniqueIdentifier
   def signature: Comp[Signature[WrapExpr, Unit]]
 
+  val owner: (ArClass, AccessModifier)
+
   override final def equals(obj: Any): Boolean =
     obj match {
       case other: ClassConstructorC => id == other.id

@@ -116,9 +116,9 @@ object ArgonParser {
     case object StatementList extends ArgonRuleName[Vector[WithSource[Stmt]]]
     case object ImportPathAbsolute extends ArgonRuleName[ImportStmt]
     case object ImportPathRelative extends ArgonRuleName[ImportStmt]
-    case object ImportPathPackage extends ArgonRuleName[ImportStmt]
+    case object ImportPathTube extends ArgonRuleName[ImportStmt]
     case object ImportPathMember extends ArgonRuleName[ImportStmt]
-    case object ImportPathPackageName extends ArgonRuleName[NonEmptyList[String]]
+    case object ImportPathTubeName extends ArgonRuleName[NonEmptyList[String]]
 
     final case class ImportPathSegmentRule(separator: ImportPathSegmentSeparator)
         extends ArgonRuleName[ImportPathSegment]
@@ -220,7 +220,7 @@ object ArgonParser {
           matchToken(KW_IMPORT) ++! (rule(Rule.NewLines) ++ (
             rule(Rule.ImportPathAbsolute) |
               rule(Rule.ImportPathRelative) |
-              rule(Rule.ImportPathPackage) |
+              rule(Rule.ImportPathTube) |
               rule(Rule.ImportPathMember)
           )) --> {
             case (_, (_, ns)) => ns
@@ -801,26 +801,26 @@ object ArgonParser {
 
           val fromParent =
             (matchToken(OP_DOTDOT) ++ matchToken(OP_SLASH) ++ rule(Rule.NewLines)).+~ ++! rule(
-              Rule.ImportPathPackageName
+              Rule.ImportPathTubeName
             ) ++ rule(Rule.ImportPathSegmentRule(Rule.ImportPathSegmentSeparator.Slash)) --> {
               case (parentDirs, packageName, path) => ImportStmt.Relative(parentDirs.size, path)
             }
 
           currentLevel | fromParent
 
-        case Rule.ImportPathPackage =>
-          rule(Rule.ImportPathPackageName) ++ matchToken(OP_SLASH) ++ rule(Rule.NewLines) ++! rule(
+        case Rule.ImportPathTube =>
+          rule(Rule.ImportPathTubeName) ++ matchToken(OP_SLASH) ++ rule(Rule.NewLines) ++! rule(
             Rule.ImportPathSegmentRule(Rule.ImportPathSegmentSeparator.Slash)
           ) --> {
-            case (packageName, _, _, path) => ImportStmt.Package(packageName, path)
+            case (packageName, _, _, path) => ImportStmt.Tube(packageName, path)
           }
 
         case Rule.ImportPathMember =>
           rule(Rule.ImportPathSegmentRule(Rule.ImportPathSegmentSeparator.Dot)) --> ImportStmt.Member.apply
 
-        case Rule.ImportPathPackageName =>
+        case Rule.ImportPathTubeName =>
           tokenIdentifier ++ (
-            matchToken(OP_DOT) ++ rule(Rule.NewLines) ++ tokenIdentifier --> { case (_, _, id) => id }
+            rule(Rule.NewLines) ++ matchToken(OP_DOT) ++ rule(Rule.NewLines) ++ tokenIdentifier --> { case (_, _, _, id) => id }
           ).* --> {
             case (h, t) => NonEmptyList.cons(h, t.toList)
           }

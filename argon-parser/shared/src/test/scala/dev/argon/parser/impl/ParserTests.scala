@@ -21,7 +21,7 @@ abstract class ArgonParserTestsCommon extends DefaultRunnableSpec with GrammarTe
             Token.OP_STAR,
           )
         )(
-          isRight(equalTo((Chunk.empty, ImportStmt.Package(NonEmptyList("Ar"), ImportPathSegment.Wildcard))))
+          isRight(equalTo((Chunk.empty, ImportStmt.Tube(NonEmptyList("Ar"), ImportPathSegment.Wildcard))))
         )
       }
     )

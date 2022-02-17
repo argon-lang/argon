@@ -19,9 +19,9 @@ trait UsingContext {
 
 
   protected type OwnedByModule = OwnedByModuleC[context.type]
-  protected type OwnedByClass = OwnedByClassC[context.type]
-  protected type OwnedByClassStatic = OwnedByClassStaticC[context.type]
-  protected type OwnedByTrait = OwnedByTraitC[context.type]
-  protected type OwnedByTraitStatic = OwnedByTraitStaticC[context.type]
+  protected type OwnedByClass[+ClassOwner] = OwnedByClassC[context.type, ClassOwner]
+  protected type OwnedByClassStatic[+ClassOwner] = OwnedByClassStaticC[context.type, ClassOwner]
+  protected type OwnedByTrait[+TraitOwner] = OwnedByTraitC[context.type, TraitOwner]
+  protected type OwnedByTraitStatic[+TraitOwner] = OwnedByTraitStaticC[context.type, TraitOwner]
   
 }

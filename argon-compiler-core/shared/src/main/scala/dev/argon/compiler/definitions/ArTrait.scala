@@ -10,8 +10,8 @@ abstract class ArTraitC extends Definition with UsingContext derives CanEqual {
 
   val id: UniqueIdentifier
   def signature: Comp[Signature[WrapExpr, TraitResult]]
-  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByTrait]]]]
-  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByTraitStatic]]]]
+  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByTrait[owner.type]]]]]
+  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByTraitStatic[owner.type]]]]]
 
   type TraitResult = (WrapExpr, Seq[ArExpr[ExprConstructor.TraitType]])
 

@@ -25,19 +25,11 @@ class TestResolver[R <: zio.Random] extends ImplicitResolver[R, String] {
   private def impliesFalse(p: WrapExpr): WrapExpr =
     wrapExpr(ExprConstructor.FunctionType, (p, wrapExpr(ExprConstructor.NeverType, EmptyTuple)))
 
-  protected override def isSubClass(classA: TClass, aArgs: Seq[WrapExpr], classB: TClass, bArgs: Seq[WrapExpr])
+  protected override def isSubClass(classA: TClass, aArgs: Seq[WrapExpr], classB: TClass, bArgs: Seq[WrapExpr], fuel: Int)
     : ZIO[R, String, SubClassResult] =
     IO.succeed(SubClassResult.NotSubClassProof(wrapExpr(
       ExprConstructor.AssumeErasedValue,
-      impliesFalse(
-        wrapExpr(
-          ExprConstructor.SubtypeWitnessType,
-          (
-            WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassType(classA), aArgs.toVector)),
-            WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassType(classB), bArgs.toVector)),
-          ),
-        )
-      ),
+      EmptyTuple,
     )))
 
   private val subTraits: Seq[(String, String)] =
@@ -54,73 +46,32 @@ class TestResolver[R <: zio.Random] extends ImplicitResolver[R, String] {
       t1 == st1 && (t2 == st2 || checkSubTraits(st2, t2))
     }
 
-  protected override def isSubTrait(traitA: TTrait, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr])
+  protected override def isSubTrait(traitA: TTrait, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr], fuel: Int)
     : ZIO[R, String, SubClassResult] =
     if checkSubTraits(traitA, traitB) then {
       IO.succeed(SubClassResult.SubClassProof(wrapExpr(
         ExprConstructor.AssumeErasedValue,
-        wrapExpr(
-          ExprConstructor.SubtypeWitnessType,
-          (
-            WrapExpr.OfExpr(ArExpr(ExprConstructor.TraitType(traitA), aArgs.toVector)),
-            WrapExpr.OfExpr(ArExpr(ExprConstructor.TraitType(traitB), bArgs.toVector)),
-          ),
-        ),
+        EmptyTuple,
       )))
     }
     else {
       IO.succeed(SubClassResult.NotSubClassProof(wrapExpr(
         ExprConstructor.AssumeErasedValue,
-        impliesFalse(
-          wrapExpr(
-            ExprConstructor.SubtypeWitnessType,
-            (
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.TraitType(traitA), aArgs.toVector)),
-              WrapExpr.OfExpr(ArExpr(ExprConstructor.TraitType(traitB), bArgs.toVector)),
-            ),
-          )
-        ),
+        EmptyTuple,
       )))
     }
 
   protected override def classImplementsTrait
-    (classA: TClass, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr])
+    (classA: TClass, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr], fuel: Int)
     : ZIO[R, String, SubClassResult] =
     IO.succeed(SubClassResult.NotSubClassProof(wrapExpr(
       ExprConstructor.AssumeErasedValue,
-      impliesFalse(
-        wrapExpr(
-          ExprConstructor.SubtypeWitnessType,
-          (
-            WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassType(classA), aArgs.toVector)),
-            WrapExpr.OfExpr(ArExpr(ExprConstructor.TraitType(traitB), bArgs.toVector)),
-          ),
-        )
-      ),
-    )))
-
-  protected override def dataCtorImplementsTrait
-    (dataCtorA: TDataConstructor, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr])
-    : ZIO[R, String, SubClassResult] =
-    IO.succeed(SubClassResult.NotSubClassProof(wrapExpr(
-      ExprConstructor.AssumeErasedValue,
-      impliesFalse(
-        wrapExpr(
-          ExprConstructor.SubtypeWitnessType,
-          (
-            WrapExpr.OfExpr(ArExpr(ExprConstructor.DataConstructorType(dataCtorA), aArgs.toVector)),
-            WrapExpr.OfExpr(ArExpr(ExprConstructor.TraitType(traitB), bArgs.toVector)),
-          ),
-        )
-      ),
+      EmptyTuple,
     )))
 
   protected override def traitRelations(arTrait: String): ZIO[R, String, Seq[ExprRelation]] = IO.succeed(Seq.empty)
 
   protected override def classRelations(arClass: String): ZIO[R, String, Seq[ExprRelation]] = IO.succeed(Seq.empty)
-
-  protected override def dataConstructorRelations(dataConstructor: String): ZIO[R, String, Seq[ExprRelation]] =
-    IO.succeed(Seq.empty)
 
   protected override def functionRelations(function: String): ZIO[R, String, Seq[ExprRelation]] =
     function match {
@@ -133,12 +84,12 @@ class TestResolver[R <: zio.Random] extends ImplicitResolver[R, String] {
   protected override def classConstructorRelations(classCtor: String): ZIO[R, String, Seq[ExprRelation]] =
     IO.succeed(Seq.empty)
 
-  protected override val natLessThanFunction: String = "natLessThan"
-  protected override val boolType: WrapExpr = wrapExpr(ExprConstructor.ClassType("Ar.Bool"), Vector())
+  protected override val natLessThanFunction: ZIO[R, String, String] = IO.succeed("natLessThan")
+  protected override val boolType: ZIO[R, String, WrapExpr] =
+    IO.succeed(wrapExpr(ExprConstructor.ClassType("Ar.Bool"), Vector()))
 
   protected override def invalidExpr: ZIO[R, String, Nothing] = IO.fail("Invalid expression")
   protected override def invalidPredicateExpr: ZIO[R, String, Nothing] = IO.fail("Invalid predicate expression")
-  protected override def couldNotResolveImplicit: ZIO[R, String, Nothing] = IO.fail("Could not resolve implicit")
 
   protected override val evaluator: Evaluator[R, String] { val exprContext: TestResolver.this.exprContext.type } =
     new TestEvaluator[R, String]

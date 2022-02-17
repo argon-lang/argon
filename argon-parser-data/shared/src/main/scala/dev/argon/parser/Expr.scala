@@ -15,7 +15,7 @@ final case class TraitDeclarationStmt
     baseType: Option[WithSource[Expr]],
     name: Option[IdentifierExpr],
     parameters: Vector[WithSource[FunctionParameterList]],
-    body: Seq[WithSource[Stmt]],
+    body: Vector[WithSource[Stmt]],
     instanceBody: Vector[WithSource[Stmt]],
     modifiers: Vector[WithSource[Modifier]],
   ) extends Stmt
@@ -293,14 +293,17 @@ final case class MatchExprCase(pattern: WithSource[Pattern], body: WithSource[Ve
 enum ImportStmt extends Stmt {
   case Absolute(path: ImportPathSegment)
   case Relative(upCount: Int, path: ImportPathSegment)
-  case Package(packageName: NonEmptyList[String], path: ImportPathSegment)
+  case Tube(tubeName: NonEmptyList[String], path: ImportPathSegment)
   case Member(memberPath: ImportPathSegment)
 }
 
-enum ImportPathSegment {
-  case Cons(id: String, subPath: ImportPathSegment)
-  case Many(segments: Seq[ImportPathSegment])
-  case Renaming(importing: IdentifierExpr, viewedName: Option[IdentifierExpr])
-  case Imported(id: IdentifierExpr)
-  case Wildcard
+sealed trait ImportPathSegment derives CanEqual
+object ImportPathSegment {
+  sealed trait End extends ImportPathSegment derives CanEqual
+
+  final case class Cons(id: String, subPath: ImportPathSegment) extends ImportPathSegment
+  final case class Many(segments: Seq[ImportPathSegment]) extends ImportPathSegment
+  final case class Renaming(importing: IdentifierExpr, viewedName: Option[IdentifierExpr]) extends End
+  final case class Imported(id: IdentifierExpr) extends End
+  case object Wildcard extends End
 }

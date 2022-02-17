@@ -18,10 +18,11 @@ object SourceTube {
     val context2: context.type = context
     val tubeName2 = tubeName
     for {
-      loadModule <- ZIO.memoize { (path: ModulePath) =>
+      loadModule <- ZIO.memoize { (args: (ArTubeC with HasContext[context.type], ModulePath)) =>
+        val (tube, path) = args
         val moduleName = ModuleName(tubeName, path)
         modules.get(path) match {
-          case Some(module) => SourceModule.make(context, moduleName, importer, module)
+          case Some(module) => SourceModule.make(context, tube, moduleName, importer, module)
           case None => IO.fail(DiagnosticError.UnknownModuleException(moduleName))
         }
       }
@@ -30,7 +31,7 @@ object SourceTube {
       override val tubeName: TubeName = tubeName2
 
       override def module(path: ModulePath): Comp[ArModule] =
-        loadModule(path)
+        loadModule((this, path))
     }
   end make
 }

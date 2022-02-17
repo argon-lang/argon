@@ -1,6 +1,7 @@
 package dev.argon.compiler.expr
 
 import dev.argon.compiler.*
+import dev.argon.compiler.definitions.*
 import dev.argon.expr.*
 import dev.argon.util.{*, given}
 import dev.argon.parser.IdentifierExpr
@@ -71,7 +72,7 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
       method.hashCode()
     }
 
-  type ParameterVariableOwner = ArMethod | ArFunc | ArClass | ArTrait | ClassConstructor
+  type ParameterVariableOwner = ParameterVariableOwnerC[context.type]
 
   final class ParameterVariable
     (
@@ -292,7 +293,7 @@ object ArgonExprContext {
         convertPairArgs(ec2.ExprConstructor.EqualTo)(e.getArgs(ctor))
 
       case ctor: (e.constructor.type & ec1.ExprConstructor.AssumeErasedValue.type) =>
-        convertExprArgs(ec2.ExprConstructor.AssumeErasedValue)(e.getArgs(ctor))
+        Monad[F].pure(ec2.ArExpr(ec2.ExprConstructor.AssumeErasedValue, EmptyTuple))
         
     }
   end convertArExpr
@@ -384,3 +385,10 @@ object ArgonExprContext {
     }
     
 }
+
+type ParameterVariableOwnerC[TContext <: Context] =
+  ArMethodC with HasContext[TContext] |
+  ArFuncC with HasContext[TContext] |
+  ArClassC with HasContext[TContext] |
+  ArTraitC with HasContext[TContext] |
+  ClassConstructorC with HasContext[TContext]

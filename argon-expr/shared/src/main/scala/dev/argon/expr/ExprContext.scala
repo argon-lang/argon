@@ -245,7 +245,7 @@ trait ExprContext {
         derives CanEqual
 
     case object EqualTo extends ExprConstructorWithArgs[EqualToArgs] with ExprConstructor derives CanEqual
-    case object AssumeErasedValue extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor derives CanEqual
+    case object AssumeErasedValue extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor derives CanEqual
 
     type ClassConstructorCallArgs = (ArExpr[ClassType], Vector[WrapExpr])
     type EnsureExecutedArgs = (WrapExpr, WrapExpr)

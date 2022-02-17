@@ -10,9 +10,9 @@ abstract class ArClassC extends Definition with UsingContext derives CanEqual {
 
   val id: UniqueIdentifier
   def signature: Comp[Signature[WrapExpr, ClassResult]]
-  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByClass]]]]
-  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByClassStatic]]]]
-  def constructors: Comp[Seq[ClassConstructor with HasOwner[OwnedByClassStatic]]]
+  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByClass[owner.type]]]]]
+  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByClassStatic[owner.type]]]]]
+  def constructors: Comp[Seq[ClassConstructor]]
 
   type ClassResult = (WrapExpr, Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])
 
