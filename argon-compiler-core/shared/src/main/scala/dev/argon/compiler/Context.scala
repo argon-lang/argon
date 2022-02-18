@@ -24,4 +24,3 @@ object Context {
 
 type CompEnv = Random
 type CompError = IOException | SyntaxError | DiagnosticError
-

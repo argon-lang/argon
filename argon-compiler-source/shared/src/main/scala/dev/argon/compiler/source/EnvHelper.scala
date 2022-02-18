@@ -8,35 +8,33 @@ import dev.argon.compiler.expr.ArgonExprContext
 
 object EnvHelper {
 
-  def createOuterEnv
-  (exprConverter: ExpressionConverter)
-  (outerEnvCell: MemoCell[CompEnv, CompError, exprConverter.Env])
-  (imports: exprConverter.context.Comp[Imports[exprConverter.context.type]])
-  : exprConverter.context.Comp[exprConverter.Env] =
+  def createOuterEnv(exprConverter: ExpressionConverter)(outerEnvCell: MemoCell[CompEnv, CompError, exprConverter.Env])
+    (imports: exprConverter.context.Comp[Imports[exprConverter.context.type]])
+    : exprConverter.context.Comp[exprConverter.Env] =
     outerEnvCell.get(
       imports
         .map { imports =>
           exprConverter.Env(
             scope = exprConverter.Scope.fromImports(imports),
-            model = Map.empty
+            model = Map.empty,
           )
         }
     )
 
-  def createInnerEnv
-  (exprConverter: ExpressionConverter)
-  (innerEnvCell: MemoCell[CompEnv, CompError, exprConverter.Env])
-  (outerEnv: exprConverter.context.Comp[exprConverter.Env])
-  (owner: exprConverter.exprContext.ParameterVariableOwner)
-  (signature: exprConverter.context.Comp[Signature[exprConverter.context.ExprContext.WrapExpr, ?]])
-  : exprConverter.context.Comp[exprConverter.Env] =
+  def createInnerEnv(exprConverter: ExpressionConverter)(innerEnvCell: MemoCell[CompEnv, CompError, exprConverter.Env])
+    (outerEnv: exprConverter.context.Comp[exprConverter.Env])(owner: exprConverter.exprContext.ParameterVariableOwner)
+    (signature: exprConverter.context.Comp[Signature[exprConverter.context.ExprContext.WrapExpr, ?]])
+    : exprConverter.context.Comp[exprConverter.Env] =
     import exprConverter.context.ExprContext.WrapExpr
     import exprConverter.Env
     def impl(index: Int)(sig: Signature[WrapExpr, ?])(env: Env): Env =
       sig match {
         case Signature.Parameter(_, paramType, next) =>
           import exprConverter.context
-          val paramType2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(paramType)
+          val paramType2 =
+            ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(
+              paramType
+            )
           val variable = exprConverter.exprContext.ParameterVariable(owner, index, paramType2)
           impl(index + 1)(next)(env.withScope(_.addVariable(variable)))
 
@@ -50,4 +48,5 @@ object EnvHelper {
       } yield impl(0)(sig)(env)
     )
   end createInnerEnv
+
 }

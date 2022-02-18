@@ -15,4 +15,3 @@ end extension
 object Monad:
   def apply[F[+_]: Monad](using instance: Monad[F]): Monad[F] = instance
 end Monad
-

@@ -6,7 +6,6 @@ trait DiagnosticMessage
 trait DiagnosticError
 trait DiagnosticSource
 
-
 object DiagnosticError {
   final case class UnknownModuleException(moduleName: ModuleName) extends DiagnosticError
   final case class InvalidTopLevelStatement(stmt: dev.argon.parser.Stmt) extends DiagnosticError
@@ -20,4 +19,3 @@ object DiagnosticError {
   final case class CanNotMutate() extends DiagnosticError
   final case class TypeError() extends DiagnosticError
 }
-

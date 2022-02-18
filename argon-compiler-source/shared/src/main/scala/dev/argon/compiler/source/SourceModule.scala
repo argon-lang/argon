@@ -8,13 +8,16 @@ import dev.argon.parser.*
 import dev.argon.util.given
 
 object SourceModule {
-  def make(
-    context: Context,
-    currentTube: ArTubeC with HasContext[context.type],
-    moduleName: ModuleName,
-    importer: ImporterC with HasContext[context.type],
-    moduleFile: SourceCodeResource,
-  ): UIO[ArModuleC with HasContext[context.type]] =
+
+  def make
+    (
+      context: Context,
+      currentTube: ArTubeC with HasContext[context.type],
+      moduleName: ModuleName,
+      importer: ImporterC with HasContext[context.type],
+      moduleFile: SourceCodeResource,
+    )
+    : UIO[ArModuleC with HasContext[context.type]] =
     val context2: context.type = context
     val moduleName2 = moduleName
     for {
@@ -31,8 +34,8 @@ object SourceModule {
         exportEntries.map { exp =>
           exp.groupBy { entry => entry.name }
         }
-        .memoize
-        
+          .memoize
+
     } yield new ArModuleC {
       override val context: context2.type = context2
       override val moduleName: ModuleName = moduleName2
@@ -46,18 +49,22 @@ object SourceModule {
     }
   end make
 
-  private def loadElement(
-    context: Context,
-    currentTube: ArTubeC with HasContext[context.type],
-    moduleName: ModuleName,
-    importer: ImporterC with HasContext[context.type]
-  )(
-    imports: context.Comp[Imports[context.type]],
-    stmt: Stmt
-  ): context.Comp[(context.Comp[Imports[context.type]], Option[ModuleElementC[context.type]])] =
+  private def loadElement
+    (
+      context: Context,
+      currentTube: ArTubeC with HasContext[context.type],
+      moduleName: ModuleName,
+      importer: ImporterC with HasContext[context.type],
+    )
+    (
+      imports: context.Comp[Imports[context.type]],
+      stmt: Stmt,
+    )
+    : context.Comp[(context.Comp[Imports[context.type]], Option[ModuleElementC[context.type]])] =
     import context.Comp
 
-    def flattenImportPaths(pathSegment: ImportPathSegment, modulePath: Seq[String]): List[(ModulePath, ImportPathSegment.End)] =
+    def flattenImportPaths(pathSegment: ImportPathSegment, modulePath: Seq[String])
+      : List[(ModulePath, ImportPathSegment.End)] =
       pathSegment match {
         case ImportPathSegment.Cons(id, rest) => flattenImportPaths(rest, modulePath :+ id)
         case ImportPathSegment.Many(segments) =>
@@ -67,7 +74,14 @@ object SourceModule {
       }
 
     type ImportsUngrouped = Seq[(IdentifierExpr, ModuleElementC[context.type])]
-    def loadModuleImports(module: ArModuleC with HasContext[context.type], imports: List[ImportPathSegment.End], importedIds: Set[IdentifierExpr], acc: ImportsUngrouped): Comp[ImportsUngrouped] =
+    def loadModuleImports
+      (
+        module: ArModuleC with HasContext[context.type],
+        imports: List[ImportPathSegment.End],
+        importedIds: Set[IdentifierExpr],
+        acc: ImportsUngrouped,
+      )
+      : Comp[ImportsUngrouped] =
       imports match {
         case ImportPathSegment.Imported(id) :: tail if imports.contains(id) =>
           ???
@@ -84,15 +98,14 @@ object SourceModule {
             loadModuleImports(module, tail, importedIds + id, acc)
           }
 
-
         case ImportPathSegment.Renaming(id, Some(viewedName)) :: tail =>
           module.exports(id).flatMap { newImports =>
             loadModuleImports(module, tail, importedIds + id, acc ++ newImports.map((viewedName, _)))
           }
-          
+
         case ImportPathSegment.Wildcard :: _ :: _ =>
           ???
-          
+
         case ImportPathSegment.Wildcard :: Nil =>
           module.allExports().map { newImports =>
             newImports
@@ -103,13 +116,14 @@ object SourceModule {
                   case None => Seq.empty
                 }
               }
-            
+
           }
 
         case Nil => IO.succeed(acc)
       }
 
-    def loadTubeImports(tube: ArTubeC with HasContext[context.type], pathSegment: ImportPathSegment): Comp[ImportsUngrouped] =
+    def loadTubeImports(tube: ArTubeC with HasContext[context.type], pathSegment: ImportPathSegment)
+      : Comp[ImportsUngrouped] =
       ZIO.foreach(
         flattenImportPaths(pathSegment, Seq.empty)
           .groupMap(_._1)(_._2)
@@ -121,11 +135,7 @@ object SourceModule {
       }
         .map { _.flatten }
 
-
-    def loadImport
-    (stmt: ImportStmt)
-    (imports: Imports[context.type])
-    : context.Comp[Imports[context.type]] =
+    def loadImport(stmt: ImportStmt)(imports: Imports[context.type]): context.Comp[Imports[context.type]] =
       (stmt match {
         case ImportStmt.Absolute(pathSegment) => loadTubeImports(currentTube, pathSegment)
         case ImportStmt.Relative(upCount, path) =>
@@ -158,21 +168,29 @@ object SourceModule {
           .groupMap(_._1)(_._2)
       }
 
-    def loadTrait(
-      stmt: TraitDeclarationStmt
-    ): context.Comp[ModuleElementC[context.type]] = ???
+    def loadTrait
+      (
+        stmt: TraitDeclarationStmt
+      )
+      : context.Comp[ModuleElementC[context.type]] = ???
 
-    def loadDataConstructor(
-      stmt: DataConstructorDeclarationStmt
-    ): context.Comp[ModuleElementC[context.type]] = ???
+    def loadDataConstructor
+      (
+        stmt: DataConstructorDeclarationStmt
+      )
+      : context.Comp[ModuleElementC[context.type]] = ???
 
-    def loadClass(
-      stmt: ClassDeclarationStmt
-    ): context.Comp[ModuleElementC[context.type]] = ???
+    def loadClass
+      (
+        stmt: ClassDeclarationStmt
+      )
+      : context.Comp[ModuleElementC[context.type]] = ???
 
-    def loadFunction(
-      stmt: FunctionDeclarationStmt
-    ): context.Comp[ModuleElementC[context.type]] = ???
+    def loadFunction
+      (
+        stmt: FunctionDeclarationStmt
+      )
+      : context.Comp[ModuleElementC[context.type]] = ???
 
     stmt match {
       case stmt: ImportStmt => imports.flatMap(loadImport(stmt)).memoize.map((_, None))
@@ -183,5 +201,6 @@ object SourceModule {
       case _ => IO.fail(DiagnosticError.InvalidTopLevelStatement(stmt))
     }
 
+  end loadElement
 
 }

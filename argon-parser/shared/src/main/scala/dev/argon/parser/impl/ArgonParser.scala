@@ -144,12 +144,12 @@ object ArgonParser {
 
     def second[T](pair: (?, T)): T = pair._2
 
-    private def matchTokenFactory[TToken <: Token](factory: TokenFactory[TToken])(using tt: TypeTest[Token, TToken]): TGrammar[TToken] =
-      Grammar.matcher(factory.category, TokenMatcher.Subtype[Token, TToken](tt))
+    private def matchTokenFactory[TToken <: Token](factory: TokenFactory[TToken])(using tt: TypeTest[Token, TToken])
+      : TGrammar[TToken] = Grammar.matcher(factory.category, TokenMatcher.Subtype[Token, TToken](tt))
 
-    private def matchToken[TToken <: TokenWithCategory[? <: TokenCategory] with Token](token: TToken)(using tt: TypeTest[Token, TToken])
-      : TGrammar[TToken] =
-      Grammar.matcher(token.category, TokenMatcher.Subtype[Token, TToken](tt))
+    private def matchToken[TToken <: TokenWithCategory[? <: TokenCategory] with Token](token: TToken)
+      (using tt: TypeTest[Token, TToken])
+      : TGrammar[TToken] = Grammar.matcher(token.category, TokenMatcher.Subtype[Token, TToken](tt))
 
     private val tokenUnderscore: TGrammar[Unit] = matchToken(KW_UNDERSCORE).discard
 
@@ -233,8 +233,9 @@ object ArgonParser {
           }
 
         case Rule.IfExprPart =>
-          rule(Rule.IfExprStart) ++ matchToken(KW_END).observeSource --> { case (condition, body, WithSource(_, endLocation)) =>
-            IfElseExpr(condition, body, WithSource(Vector.empty, endLocation)): Expr
+          rule(Rule.IfExprStart) ++ matchToken(KW_END).observeSource --> {
+            case (condition, body, WithSource(_, endLocation)) =>
+              IfElseExpr(condition, body, WithSource(Vector.empty, endLocation)): Expr
           } |
             rule(Rule.IfExprStart) ++ matchToken(KW_ELSE) ++! rule(Rule.StatementList).observeSource ++ matchToken(
               KW_END
@@ -375,8 +376,7 @@ object ArgonParser {
           )
 
         case Rule.UnaryExpr =>
-          def matchUnaryOp[TToken <: TokenWithCategory[? <: TokenCategory] with UnaryOperatorToken]
-            (token: TToken)
+          def matchUnaryOp[TToken <: TokenWithCategory[? <: TokenCategory] with UnaryOperatorToken](token: TToken)
             (using TypeTest[Token, TToken])
             : TGrammar[Expr] =
             matchToken(token).observeSource ++! rule(Rule.UnaryExpr).observeSource --> { case (opToken, inner) =>
@@ -553,7 +553,8 @@ object ArgonParser {
             }
 
         case Rule.Modifiers =>
-          def ruleModifier[TToken <: TokenWithCategory[? <: TokenCategory] with ModifierToken](token: TToken)(using TypeTest[Token, TToken])
+          def ruleModifier[TToken <: TokenWithCategory[? <: TokenCategory] with ModifierToken](token: TToken)
+            (using TypeTest[Token, TToken])
             : TGrammar[Modifier] = matchToken(token) --> const(token.modifier)
 
           val anyModifier =
@@ -821,7 +822,9 @@ object ArgonParser {
 
         case Rule.ImportPathTubeName =>
           tokenIdentifier ++ (
-            rule(Rule.NewLines) ++ matchToken(OP_DOT) ++ rule(Rule.NewLines) ++ tokenIdentifier --> { case (_, _, _, id) => id }
+            rule(Rule.NewLines) ++ matchToken(OP_DOT) ++ rule(Rule.NewLines) ++ tokenIdentifier --> {
+              case (_, _, _, id) => id
+            }
           ).* --> {
             case (h, t) => NonEmptyList.cons(h, t.toList)
           }
@@ -907,8 +910,7 @@ object ArgonParser {
     }
 
     private def ruleBinaryOperator[TToken <: TokenWithCategory[? <: TokenCategory] with BinaryOperatorToken]
-      (token: TToken)
-      (using TypeTest[Token, TToken])
+      (token: TToken)(using TypeTest[Token, TToken])
       : TGrammar[BinaryOperator] = matchToken(token) --> const(token.operator)
 
   }

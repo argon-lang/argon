@@ -17,4 +17,5 @@ enum Signature[Type, Res] {
       case Parameter(_, p, next) => p +: next.parameterTypes
       case Result(_) => Seq.empty
     }
+
 }

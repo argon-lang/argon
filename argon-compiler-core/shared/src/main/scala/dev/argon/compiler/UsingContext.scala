@@ -17,11 +17,10 @@ trait UsingContext {
   protected type ArMethod = ArMethodC with HasContext[context.type]
   protected type ClassConstructor = ClassConstructorC with HasContext[context.type]
 
-
   protected type OwnedByModule = OwnedByModuleC[context.type]
   protected type OwnedByClass[+ClassOwner] = OwnedByClassC[context.type, ClassOwner]
   protected type OwnedByClassStatic[+ClassOwner] = OwnedByClassStaticC[context.type, ClassOwner]
   protected type OwnedByTrait[+TraitOwner] = OwnedByTraitC[context.type, TraitOwner]
   protected type OwnedByTraitStatic[+TraitOwner] = OwnedByTraitStaticC[context.type, TraitOwner]
-  
+
 }

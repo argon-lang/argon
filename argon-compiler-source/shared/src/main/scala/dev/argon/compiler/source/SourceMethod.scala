@@ -9,11 +9,9 @@ import dev.argon.parser.{MethodDeclarationStmt, IdentifierExpr}
 import zio.*
 
 object SourceMethod {
-  def make[TOwner]
-  (ctx: Context)
-  (exprConverter: ExpressionConverter with HasContext[ctx.type])
-  (outerEnv: ctx.Comp[exprConverter.Env])
-  (methodOwner: TOwner)
-  (stmt: MethodDeclarationStmt)
-  : ctx.Comp[ArMethodC with HasContext[ctx.type] with HasOwner[TOwner]] = ???
+
+  def make[TOwner](ctx: Context)(exprConverter: ExpressionConverter with HasContext[ctx.type])
+    (outerEnv: ctx.Comp[exprConverter.Env])(methodOwner: TOwner)(stmt: MethodDeclarationStmt)
+    : ctx.Comp[ArMethodC with HasContext[ctx.type] with HasOwner[TOwner]] = ???
+
 }

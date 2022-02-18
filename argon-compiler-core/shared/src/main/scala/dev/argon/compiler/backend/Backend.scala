@@ -20,7 +20,10 @@ trait BackendBase {
   type TExternHandler <: ExternHandler
   def externHandler(options: Options[Id, BackendOptionID]): UIO[TExternHandler]
 
-  def emitModule(options: Options[Id, BackendOptionID])(context: Context.WithBackend[this.type])(module: ArModuleC with HasContext[context.type]): Options[Id, OutputOptionID]
+  def emitModule(options: Options[Id, BackendOptionID])(context: Context.WithBackend[this.type])
+    (module: ArModuleC with HasContext[context.type])
+    : Options[Id, OutputOptionID]
+
 }
 
 trait Backend extends BackendBase {

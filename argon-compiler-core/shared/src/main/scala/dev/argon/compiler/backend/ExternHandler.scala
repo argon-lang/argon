@@ -1,7 +1,7 @@
 package dev.argon.compiler.backend
 
-import dev.argon.compiler._
-import dev.argon.io._
+import dev.argon.compiler.*
+import dev.argon.io.*
 import zio.*
 
 trait ExternHandler {

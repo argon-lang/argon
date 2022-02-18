@@ -12,11 +12,11 @@ abstract class ClassConstructorC extends Definition with UsingContext derives Ca
 
   val owner: (ArClass, AccessModifier)
 
-  override final def equals(obj: Any): Boolean =
+  final override def equals(obj: Any): Boolean =
     obj match {
       case other: ClassConstructorC => id == other.id
       case _ => false
     }
 
-  override final def hashCode(): Int = id.hashCode
+  final override def hashCode(): Int = id.hashCode
 }

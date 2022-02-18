@@ -126,6 +126,7 @@ given nListFactorySucc[P <: Nat : NListFactory]: NListFactory[Succ[P]] with {
 }
 
 given [N <: Nat]: Traverse[[A] =>> NList[N, A]] with
+
   override def traverse[F[+_]: Applicative, A, B](ca: NList[N, A])(f: A => F[B]): F[NList[N, B]] =
     ca match {
       case NCons(h, t) =>

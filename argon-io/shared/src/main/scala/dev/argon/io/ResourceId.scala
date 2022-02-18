@@ -1,5 +1,3 @@
 package dev.argon.io
 
-trait ResourceId {
-  
-}
+trait ResourceId {}

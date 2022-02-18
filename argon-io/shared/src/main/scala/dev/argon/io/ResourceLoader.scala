@@ -12,6 +12,7 @@ trait ResourceLoader[+T] {
 final class BinaryResourceLoader extends ResourceLoader[BinaryResource] {
 
   override def loadResourceId: PartialFunction[ResourceId, BinaryResource] = PartialFunction.empty
+
   override def loadStream(stream: Stream[IOException, Byte]): BinaryResource =
     new BinaryResource {
       override def asBytes: Stream[IOException, Byte] = stream
@@ -22,6 +23,7 @@ final class BinaryResourceLoader extends ResourceLoader[BinaryResource] {
 object TextResourceLoader extends ResourceLoader[TextResource] {
 
   override def loadResourceId: PartialFunction[ResourceId, TextResource] = PartialFunction.empty
+
   override def loadStream(stream: Stream[IOException, Byte]): TextResource =
     new TextResource {
       override def asText: Stream[IOException, String] = ZPipeline.utf8Decode.apply(stream)

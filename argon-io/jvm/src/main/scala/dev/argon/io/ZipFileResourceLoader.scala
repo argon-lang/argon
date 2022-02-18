@@ -13,23 +13,24 @@ import java.nio.file.StandardOpenOption
 
 object ZipFileResourceLoader extends ResourceLoader[ZipFileResource] {
 
-
   def loadResourceId: PartialFunction[ResourceId, ZipFileResource] = {
     case FileNameResourceId(path) =>
-      val channel = ZManaged.fromAutoCloseable(
-        IO.attempt { Files.newByteChannel(path, StandardOpenOption.READ) }
-          .refineToOrDie[IOException]
-      )
-      
+      val channel =
+        ZManaged.fromAutoCloseable(
+          IO.attempt { Files.newByteChannel(path, StandardOpenOption.READ) }
+            .refineToOrDie[IOException]
+        )
+
       new ChannelZipResource(channel)
   }
 
   def loadStream(stream: Stream[IOException, Byte]): ZipFileResource =
-    val channel = ZManaged.fromZIO(
-      stream.runCollect.flatMap { chunk =>
-        IO.succeed { new SeekableInMemoryByteChannel(chunk.toArray) }
-      }
-    )
+    val channel =
+      ZManaged.fromZIO(
+        stream.runCollect.flatMap { chunk =>
+          IO.succeed { new SeekableInMemoryByteChannel(chunk.toArray) }
+        }
+      )
     new ChannelZipResource(channel) {
       override def asBytes: Stream[IOException, Byte] = stream
     }
@@ -37,13 +38,13 @@ object ZipFileResourceLoader extends ResourceLoader[ZipFileResource] {
 
   private class ChannelZipResource(channel: Managed[IOException, SeekableByteChannel]) extends ZipFileResource {
 
-      override def zipFile: Managed[IOException, ZipFile[Any, IOException]] =
-        channel
-          .mapZIO { channel =>
-            IO.attemptBlockingInterrupt { new ACZipFile(channel) }
-              .refineToOrDie[IOException]
-          }
-          .map(new ZipFileImpl(_))
+    override def zipFile: Managed[IOException, ZipFile[Any, IOException]] =
+      channel
+        .mapZIO { channel =>
+          IO.attemptBlockingInterrupt { new ACZipFile(channel) }
+            .refineToOrDie[IOException]
+        }
+        .map(new ZipFileImpl(_))
 
   }
 

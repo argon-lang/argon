@@ -14,6 +14,7 @@ abstract class ImplicitResolver[R <: Random, E] {
   def createHole: ZIO[R, E, THole]
 
   sealed trait SubClassResult
+
   object SubClassResult {
     final case class SubClassProof(proof: WrapExpr) extends SubClassResult
     final case class NotSubClassProof(proof: WrapExpr) extends SubClassResult
@@ -30,7 +31,8 @@ abstract class ImplicitResolver[R <: Random, E] {
   protected def isSubTrait(traitA: TTrait, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr], fuel: Int)
     : ZIO[R, E, SubClassResult]
 
-  protected def classImplementsTrait(classA: TClass, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr], fuel: Int)
+  protected def classImplementsTrait
+    (classA: TClass, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr], fuel: Int)
     : ZIO[R, E, SubClassResult]
 
   // These relation methods must match the arguments for the expression constructors
@@ -333,7 +335,9 @@ abstract class ImplicitResolver[R <: Random, E] {
               convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
               convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
             } yield resultIOToStream(
-              classImplementsTrait(classA, convAArgs, traitB, convBArgs, fuel - 1).map(subClassResultToPrologResult(substitutions))
+              classImplementsTrait(classA, convAArgs, traitB, convBArgs, fuel - 1).map(
+                subClassResultToPrologResult(substitutions)
+              )
             )
           )
 
@@ -661,6 +665,5 @@ abstract class ImplicitResolver[R <: Random, E] {
         }
       }
     }
-
 
 }

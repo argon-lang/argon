@@ -10,11 +10,11 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
   val id: UniqueIdentifier
   def signature: Comp[Signature[WrapExpr, WrapExpr]]
 
-  override final def equals(obj: Any): Boolean =
+  final override def equals(obj: Any): Boolean =
     obj match {
       case other: ArFuncC => id == other.id
       case _ => false
     }
 
-  override final def hashCode(): Int = id.hashCode
+  final override def hashCode(): Int = id.hashCode
 }

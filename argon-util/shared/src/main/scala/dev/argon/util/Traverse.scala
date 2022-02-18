@@ -17,4 +17,3 @@ end extension
 object Traverse:
   def apply[C[+_]](using instance: Traverse[C]): Traverse[C] = instance
 end Traverse
-

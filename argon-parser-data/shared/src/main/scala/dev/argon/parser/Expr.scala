@@ -150,6 +150,7 @@ final case class TypeExpr(level: Option[WithSource[Expr]]) extends Expr
 final case class MetaTypeExpr(level: BigInt) extends Expr
 final case class TypeOfExpr(ofExpr: WithSource[Expr]) extends Expr
 final case class UnaryOperatorExpr(op: WithSource[UnaryOperator], inner: WithSource[Expr]) extends Expr
+
 case object UnitLiteral extends Expr derives CanEqual {
   given CanEqual[Expr, UnitLiteral.type] = CanEqual.canEqualAny
   given CanEqual[UnitLiteral.type, Expr] = CanEqual.canEqualAny
@@ -298,6 +299,7 @@ enum ImportStmt extends Stmt {
 }
 
 sealed trait ImportPathSegment derives CanEqual
+
 object ImportPathSegment {
   sealed trait End extends ImportPathSegment derives CanEqual
 

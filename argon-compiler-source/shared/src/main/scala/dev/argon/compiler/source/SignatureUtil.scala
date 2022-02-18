@@ -4,33 +4,33 @@ import dev.argon.compiler.*
 import dev.argon.util.{*, given}
 import dev.argon.parser
 import dev.argon.compiler.signature.Signature
-
 import zio.*
 
-
 object SignatureUtil {
-  def create[Res]
-  (context: Context)
-  (exprConverter: ExpressionConverter with HasContext[context.type])
-  (env: exprConverter.Env)
-  (parameters: Vector[WithSource[parser.FunctionParameterList]])
-  (createResult: exprConverter.Env => context.Comp[(Res, exprConverter.Env)])
-  : context.Comp[(Signature[exprConverter.exprContext.WrapExpr, Res], exprConverter.Env)] = ???
 
-  def createTraitResult
-  (context: Context)
-  (exprConverter: ExpressionConverter with HasContext[context.type])
-  (stmt: parser.TraitDeclarationStmt)
-  (env: exprConverter.Env)
-  : context.Comp[((exprConverter.exprContext.WrapExpr, Seq[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.TraitType]]), exprConverter.Env)] =
+  def create[Res](context: Context)(exprConverter: ExpressionConverter with HasContext[context.type])
+    (env: exprConverter.Env)(parameters: Vector[WithSource[parser.FunctionParameterList]])
+    (createResult: exprConverter.Env => context.Comp[(Res, exprConverter.Env)])
+    : context.Comp[(Signature[exprConverter.exprContext.WrapExpr, Res], exprConverter.Env)] = ???
+
+  def createTraitResult(context: Context)(exprConverter: ExpressionConverter with HasContext[context.type])
+    (stmt: parser.TraitDeclarationStmt)(env: exprConverter.Env)
+    : context.Comp[(
+      (
+        exprConverter.exprContext.WrapExpr,
+        Seq[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.TraitType]],
+      ),
+      exprConverter.Env,
+    )] =
     import context.Comp
     import exprConverter.Env
     import exprConverter.exprContext.{WrapExpr, ArExpr, ExprConstructor}
 
     val zero = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(0), EmptyTuple))
     val traitType = WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, zero))
-    
-    def impl(baseType: WrapExpr, baseTraits: Seq[ArExpr[ExprConstructor.TraitType]]): Comp[Seq[ArExpr[ExprConstructor.TraitType]]] =
+
+    def impl(baseType: WrapExpr, baseTraits: Seq[ArExpr[ExprConstructor.TraitType]])
+      : Comp[Seq[ArExpr[ExprConstructor.TraitType]]] =
       exprConverter.evaluator.normalizeTopLevelWrap(baseType, exprConverter.fuel).flatMap {
         case WrapExpr.OfExpr(expr) =>
           expr.constructor match {
@@ -44,7 +44,7 @@ object SignatureUtil {
             case _ => ???
           }
 
-        case WrapExpr.OfHole(_) => ???        
+        case WrapExpr.OfHole(_) => ???
       }
 
     val baseTypes: Comp[(Seq[ArExpr[ExprConstructor.TraitType]], Env)] =
@@ -64,20 +64,30 @@ object SignatureUtil {
     }
   end createTraitResult
 
-  def createClassResult
-  (context: Context)
-  (exprConverter: ExpressionConverter with HasContext[context.type])
-  (stmt: parser.ClassDeclarationStmt)
-  (env: exprConverter.Env)
-  : context.Comp[((exprConverter.exprContext.WrapExpr, Option[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.ClassType]], Seq[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.TraitType]]), exprConverter.Env)] =
+  def createClassResult(context: Context)(exprConverter: ExpressionConverter with HasContext[context.type])
+    (stmt: parser.ClassDeclarationStmt)(env: exprConverter.Env)
+    : context.Comp[(
+      (
+        exprConverter.exprContext.WrapExpr,
+        Option[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.ClassType]],
+        Seq[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.TraitType]],
+      ),
+      exprConverter.Env,
+    )] =
     import context.Comp
     import exprConverter.Env
     import exprConverter.exprContext.{WrapExpr, ArExpr, ExprConstructor}
 
     val zero = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(0), EmptyTuple))
     val classType = WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, zero))
-    
-    def impl(baseType: WrapExpr, baseClass: Option[ArExpr[ExprConstructor.ClassType]], baseTraits: Seq[ArExpr[ExprConstructor.TraitType]]): Comp[(Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])] =
+
+    def impl
+      (
+        baseType: WrapExpr,
+        baseClass: Option[ArExpr[ExprConstructor.ClassType]],
+        baseTraits: Seq[ArExpr[ExprConstructor.TraitType]],
+      )
+      : Comp[(Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])] =
       exprConverter.evaluator.normalizeTopLevelWrap(baseType, exprConverter.fuel).flatMap {
         case WrapExpr.OfExpr(expr) =>
           expr.constructor match {
@@ -97,7 +107,7 @@ object SignatureUtil {
             case _ => ???
           }
 
-        case WrapExpr.OfHole(_) => ???        
+        case WrapExpr.OfHole(_) => ???
       }
 
     val baseTypes: Comp[(Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]], Env)] =
@@ -118,14 +128,10 @@ object SignatureUtil {
     }
   end createClassResult
 
-
-  def resolveHolesSig[Res1, Res2]
-  (context: Context)
-  (exprConverter: ExpressionConverter with HasContext[context.type])
-  (env: exprConverter.Env)
-  (sigHandler: exprConverter.SignatureHandlerPlus[Res1, Res2])
-  (sig: Signature[exprConverter.exprContext.WrapExpr, Res2])
-  : context.Comp[(Signature[context.ExprContext.WrapExpr, Res1], exprConverter.Env)] =
+  def resolveHolesSig[Res1, Res2](context: Context)(exprConverter: ExpressionConverter with HasContext[context.type])
+    (env: exprConverter.Env)(sigHandler: exprConverter.SignatureHandlerPlus[Res1, Res2])
+    (sig: Signature[exprConverter.exprContext.WrapExpr, Res2])
+    : context.Comp[(Signature[context.ExprContext.WrapExpr, Res1], exprConverter.Env)] =
     sig match {
       case Signature.Parameter(listType, paramType, next) =>
         for {

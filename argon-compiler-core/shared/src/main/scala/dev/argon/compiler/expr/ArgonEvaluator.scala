@@ -9,19 +9,25 @@ abstract class ArgonEvaluator extends UsingContext with Evaluator[CompEnv, CompE
   import exprContext.WrapExpr
 
   override def getFunctionBody(function: ArFunc, args: Vector[WrapExpr], fuel: Int): Comp[Option[WrapExpr]] = IO.none
-  override def getMethodBody(method: ArMethod, instance: WrapExpr, args: Vector[WrapExpr], fuel: Int): Comp[Option[WrapExpr]] = IO.none
+
+  override def getMethodBody(method: ArMethod, instance: WrapExpr, args: Vector[WrapExpr], fuel: Int)
+    : Comp[Option[WrapExpr]] = IO.none
+
 }
 
 object ArgonEvaluator {
+
   type Aux[TContext <: Context, TExprContext <: ArgonExprContext with HasContext[TContext]] =
     ArgonEvaluator {
       val context: TContext
       val exprContext: TExprContext
     }
 
-  def apply(ctx: Context)(exprCtx: ArgonExprContext with HasContext[ctx.type]): ArgonEvaluator.Aux[ctx.type, exprCtx.type] =
+  def apply(ctx: Context)(exprCtx: ArgonExprContext with HasContext[ctx.type])
+    : ArgonEvaluator.Aux[ctx.type, exprCtx.type] =
     new ArgonEvaluator {
       override val context: ctx.type = ctx
       override val exprContext: exprCtx.type = exprCtx
     }
+
 }

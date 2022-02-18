@@ -5,8 +5,6 @@ given [A, B](using CanEqual[A, B]): CanEqual[Option[A], Option[B]] = CanEqual.ca
 given [A]: CanEqual[None.type, Option[A]] = CanEqual.canEqualAny
 given [A]: CanEqual[Option[A], None.type] = CanEqual.canEqualAny
 
-
-
 given [A, B](using CanEqual[A, B]): CanEqual[List[A], List[B]] = CanEqual.canEqualAny
 
 given given_Nil_List[A]: CanEqual[List[Nothing], List[A]] = CanEqual.canEqualAny

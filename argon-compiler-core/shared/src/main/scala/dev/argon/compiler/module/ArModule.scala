@@ -14,6 +14,5 @@ abstract class ArModuleC extends UsingContext {
       case _ => false
     }
 
-  final override def hashCode(): Int =
-    moduleName.hashCode()
+  final override def hashCode(): Int = moduleName.hashCode()
 }

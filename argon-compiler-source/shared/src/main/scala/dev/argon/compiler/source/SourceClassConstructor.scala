@@ -9,14 +9,13 @@ import dev.argon.parser.{ClassConstructorDeclarationStmt, IdentifierExpr}
 import zio.*
 
 object SourceClassConstructor {
-  def make
-  (ctx: Context)
-  (exprConverter: ExpressionConverter with HasContext[ctx.type])
-  (outerEnv: ctx.Comp[exprConverter.Env])
-  (
-    owningClass: ArClassC with HasContext[ctx.type],
-    accessModifier: AccessModifier,
-  )
-  (stmt: ClassConstructorDeclarationStmt)
-  : ctx.Comp[ClassConstructorC with HasContext[ctx.type]] = ???
+
+  def make(ctx: Context)(exprConverter: ExpressionConverter with HasContext[ctx.type])
+    (outerEnv: ctx.Comp[exprConverter.Env])
+    (
+      owningClass: ArClassC with HasContext[ctx.type],
+      accessModifier: AccessModifier,
+    )(stmt: ClassConstructorDeclarationStmt)
+    : ctx.Comp[ClassConstructorC with HasContext[ctx.type]] = ???
+
 }

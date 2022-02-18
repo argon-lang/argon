@@ -16,12 +16,11 @@ abstract class ArClassC extends Definition with UsingContext derives CanEqual {
 
   type ClassResult = (WrapExpr, Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])
 
-
-  override final def equals(obj: Any): Boolean =
+  final override def equals(obj: Any): Boolean =
     obj match {
       case other: ArClassC => id == other.id
       case _ => false
     }
 
-  override final def hashCode(): Int = id.hashCode
+  final override def hashCode(): Int = id.hashCode
 }
