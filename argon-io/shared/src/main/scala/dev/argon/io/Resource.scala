@@ -13,7 +13,7 @@ trait BinaryResource extends Resource {
 trait TextResource extends BinaryResource {
   def asText: Stream[IOException, String]
 
-  override def asBytes: Stream[IOException, Byte] = ZPipeline.utf8Encode(asText)
+  override def asBytes: Stream[IOException, Byte] = ZPipeline.utf8Encode.apply(asText)
 }
 
 trait ZipFileResource extends BinaryResource {

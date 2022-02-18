@@ -24,7 +24,7 @@ object TextResourceLoader extends ResourceLoader[TextResource] {
   override def loadResourceId: PartialFunction[ResourceId, TextResource] = PartialFunction.empty
   override def loadStream(stream: Stream[IOException, Byte]): TextResource =
     new TextResource {
-      override def asText: Stream[IOException, String] = ZPipeline.utf8Decode(stream)
+      override def asText: Stream[IOException, String] = ZPipeline.utf8Decode.apply(stream)
       override def asBytes: Stream[IOException, Byte] = stream
     }
 

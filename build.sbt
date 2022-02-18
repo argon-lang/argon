@@ -4,7 +4,7 @@ import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
 val graalVersion = "21.1.0"
-val zioVersion = "2.0.0-M6-2"
+val zioVersion = "2.0.0-RC2"
 
 ThisBuild / scalafixDependencies += "com.github.vovapolu" %% "scaluzzi" % "0.1.20"
 
@@ -19,7 +19,7 @@ lazy val nodeConfig =
     .withArgs(List("--no-warnings", "--experimental-vm-modules"))
 
 val esParseDeps = Seq(
-  "acorn" -> "^8.6.0",
+  "acorn" -> "^8.7.0",
 )
 
 lazy val commonSettingsNoLibs = Seq(
@@ -61,7 +61,7 @@ lazy val sharedJSNodeSettings = Seq(
 
   npmDependencies ++= Seq(
     "jszip" -> "^3.7.1",
-    "@xmldom/xmldom" -> "^0.7.5",
+    "@xmldom/xmldom" -> "^0.8.1",
   ) ++ esParseDeps,
   
   scalaJSLinkerConfig ~= {

@@ -76,7 +76,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
               case (_, None, _) => IO.succeed(SubClassResult.NotSubClassProof(WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple))))
             }
       
-      private def getSubClassResultSink[E]: Sink[E, SubClassResult, E, SubClassResult, Option[SubClassResult]] =
+      private def getSubClassResultSink[E]: Sink[E, SubClassResult, SubClassResult, Option[SubClassResult]] =
         ZSink.fold(Option.empty[SubClassResult]) {
           case Some(SubClassResult.SubClassProof(_)) => false
           case _ => true
