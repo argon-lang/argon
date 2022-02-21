@@ -104,21 +104,21 @@ lazy val compilerOptions = Seq(
 
   javacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "--release", "11",
+    "--release", "17",
     "-Werror",
     "-Xlint:all,-serial,-try",
   ),
 
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "-release", "11",
+    "-release", "17",
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
     "-language:strictEquality",
     "-Ycheck-all-patmat",
     "-Xmax-inlines", "128",
-    "-Wconf:id=E029:e"
+    "-Wconf:id=E029:e,cat=unchecked:e"
   ),
 
 )
@@ -373,4 +373,53 @@ lazy val argon_ioJVM = argon_io.jvm
 lazy val argon_ioJS = argon_io.js
 lazy val argon_ioNode = argon_io.node
 
+
+lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-vm"))
+  .dependsOn(util)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-vm",
+  )
+
+lazy val argon_vmJVM = argon_vm.jvm
+lazy val argon_vmJS = argon_vm.js
+lazy val argon_vmNode = argon_vm.node
+
+
+lazy val argon_vm_interpreter = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-vm-interpreter"))
+  .dependsOn(util, argon_vm)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-vm-interpreter",
+  )
+
+lazy val argon_vm_interpreterJVM = argon_vm_interpreter.jvm
+lazy val argon_vm_interpreterJS = argon_vm_interpreter.js
+lazy val argon_vm_interpreterNode = argon_vm_interpreter.node
 
