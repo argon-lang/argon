@@ -7,7 +7,7 @@ import dev.argon.util.{*, given}
 
 object Interpreter {
 
-  private type BlockError = GCObject | Throwable
+  private type BlockError = GCObjectNotNull | Throwable
   private type BlockResult = VMValue | JumpInstruction.TailCall | LabelId
 
   def executeFunctionVirtual(program: VMProgram)(function: VMFunction)(args: Seq[VMValue]): IO[GCObject | Throwable, VMValue] =
@@ -26,8 +26,11 @@ object Interpreter {
                 case JumpInstruction.TailCall(nextFuncId, argLocals, virtual) =>
                   interpreter.callFunction(nextFuncId, argLocals, virtual)
 
-                case value: VMValue =>
+                case value: VMValueNotNull =>
                   IO.succeed(value)
+
+                case null =>
+                  IO.succeed(null)
               }
           }
         }
@@ -118,7 +121,7 @@ object Interpreter {
         case None => IO.fail(new UnknownLocalException())
       }
 
-    def setLocalRef(local: LocalId, ref: AnyRef | Null): Task[Unit] =
+    def setLocalRef(local: LocalId, ref: GCObject | VMCell | VMTuple): Task[Unit] =
       locals.get(local) match {
         case Some(cell: VMCell.RefCell) =>
           IO.succeed { cell.value = ref }
@@ -135,8 +138,10 @@ object Interpreter {
         case l: Long => setLocal(local, l)
         case f: Float => setLocal(local, f)
         case d: Double => setLocal(local, d)
-        case value: (GCObject | VMCell | VMTuple) =>
+        case value: (GCObjectNotNull | VMCell | VMTuple) =>
           setLocalRef(local, value)
+        case null =>
+          setLocalRef(local, null)
       }
 
     def withLocal[E >: Throwable, A](local: LocalId)(f: PartialFunction[VMCell, IO[E, A]]): IO[E, A] =
@@ -155,19 +160,18 @@ object Interpreter {
       }
 
     def runCFG(graph: ControlFlowGraph): IO[BlockError, BlockResult] =
-      IO.attempt { graph.blocks.head }
+      IO.attempt { graph.blocks(graph.start) }
         .flatMap(runCFG(graph, _))
 
     def runCFG(graph: ControlFlowGraph, block: BasicBlock): IO[BlockError, BlockResult] =
       object LabelTarget {
-        def unapply(label: LabelId): Option[Int] =
-          graph.labels.get(label)
+        def unapply(label: LabelId): Option[BasicBlock] =
+          graph.blocks.get(label)
       }
 
       runBlock(block).flatMap {
-        case LabelTarget(offset) =>
-          IO.attempt { graph.blocks(offset) }
-            .flatMap(runCFG(graph, _))
+        case LabelTarget(target) =>
+          runCFG(graph, target)
 
         case result => IO.succeed(result)
       }
@@ -177,7 +181,8 @@ object Interpreter {
       runCFG(graph)
         .flatMap {
           case _: (LabelId | JumpInstruction.TailCall) => IO.fail(new InvalidJumpException())
-          case value: VMValue => IO.succeed(value)
+          case value: VMValueNotNull => IO.succeed(value)
+          case null => IO.succeed(null)
         }
 
     def runBlock(block: BasicBlock): IO[BlockError, BlockResult] =
@@ -185,37 +190,21 @@ object Interpreter {
         case InstructionBlock(insns, jump) =>
           ZIO.foreachDiscard(insns)(run) *> runJump(jump)
 
-        case CatchBlock(body, handlers) =>
+        case CatchBlock(body, exceptionVariable, handler) =>
           runCFG(body)
             .catchSome {
-              case e: GCObject =>
-                def catchError(handlers: List[ExceptionHandler]): IO[BlockError, BlockResult] =
-                  handlers match {
-                    case ExceptionHandler(exception, filter, handler) :: t =>
-                      setLocal(exception, e).flatMap { _ =>
-                        runCFGNoJump(filter).flatMap {
-                          case shouldHandle: Int =>
-                            if shouldHandle != 0 then
-                              runCFG(handler)
-                            else
-                              catchError(t)
-
-                          case _ => IO.fail(new LocalTypeMismatchException())
-                        }
-                      }
-
-                    case Nil => IO.fail(e)
-                  }
-
-                catchError(handlers.toList)
+              case e: GCObjectNotNull =>
+                setLocal(exceptionVariable, e).flatMap { _ =>
+                  IO.succeed(handler)
+                }
             }
 
-        case FinallyBlock(body, handler) =>
-          runCFG(body)
-            .foldZIO(
-              failure = e => runCFGNoJump(handler) *> IO.fail(e),
-              success = _ => runCFGNoJump(handler)
-            )
+        case WithLocalReference(refHolder, referenced, block) =>
+          locals.get(referenced) match {
+            case Some(cell) => setLocal(refHolder, cell) *> runCFG(block)
+            case None => IO.fail(new UnknownLocalException())
+          }
+
 
       }
 
@@ -263,9 +252,9 @@ object Interpreter {
         case ConstI64(out, l) => setLocal(out, l)
         case ConstF32(out, f) => setLocal(out, f)
         case ConstF64(out, d) => setLocal(out, d)
-        case ConstInt(out, i) => setLocal(out, i)
-        case ConstString(out, s) => setLocal(out, s)
-
+        case ConstInt(out, i) => setLocalRef(out, i)
+        case ConstString(out, s) => setLocalRef(out, s)
+        case ConstNull(out) => setLocalRef(out, null)
 
 
 
@@ -1170,73 +1159,99 @@ object Interpreter {
         case Call(id, args, result, virtual) =>
           callFunction(id, args, virtual).flatMap(setLocal(result, _))
 
-        case LoadLocalReference(out, id) =>
-          locals.get(id) match {
-            case Some(cell) => setLocal(out, cell)
-            case None => IO.fail(new UnknownLocalException())
-          }
-
-        case DerefLoad(out, ptr, elementType, false) =>
+        case DerefLoad(out, ptr, elementType, volatile) =>
           withLocal(ptr) {
-            case VMCell.RefCell(cell) =>
-              (cell, elementType) match {
-                case (VMCell.ByteCell(value), VMType.I8) => setLocal(out, value)
-                case (VMCell.ShortCell(value), VMType.I16) => setLocal(out, value)
-                case (VMCell.IntCell(value), VMType.I32) => setLocal(out, value)
-                case (VMCell.LongCell(value), VMType.I64) => setLocal(out, value)
-                case (VMCell.FloatCell(value), VMType.F32) => setLocal(out, value)
-                case (VMCell.DoubleCell(value), VMType.F64) => setLocal(out, value)
-                case (VMCell.RefCell(value), VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => setLocalRef(out, value)
-                case _ => IO.fail(new LocalTypeMismatchException())
-              }
+            case VMCell.RefCell(cell: VMCell) =>
+              readCell(out, cell, elementType, volatile)
 
           }
 
-        case DerefLoad(out, ptr, elementType, true) =>
-          withLocal(ptr) {
-            case VMCell.RefCell(cell) =>
-              (cell, elementType) match {
-                case (cell: VMCell.ByteCell, VMType.I8) => setLocal(out, cell.readVolatile)
-                case (cell: VMCell.ShortCell, VMType.I16) => setLocal(out, cell.readVolatile)
-                case (cell: VMCell.IntCell, VMType.I32) => setLocal(out, cell.readVolatile)
-                case (cell: VMCell.LongCell, VMType.I64) => setLocal(out, cell.readVolatile)
-                case (cell: VMCell.FloatCell, VMType.F32) => setLocal(out, cell.readVolatile)
-                case (cell: VMCell.DoubleCell, VMType.F64) => setLocal(out, cell.readVolatile)
-                case (cell: VMCell.RefCell, VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => setLocalRef(out, cell.readVolatile)
-                case _ => IO.fail(new LocalTypeMismatchException())
-              }
-
-          }
-
-        case DerefStore(ptr, src, elementType, false) =>
+        case DerefStore(ptr, src, elementType, volatile) =>
           withLocal(ptr, src) {
-            case (VMCell.RefCell(cell), valueCell) =>
-              (cell, valueCell, elementType) match {
-                case (cell: VMCell.ByteCell, valueCell: VMCell.ByteCell, VMType.I8) => IO.succeed { cell.value = valueCell.value }
-                case (cell: VMCell.ShortCell, valueCell: VMCell.ShortCell, VMType.I16) => IO.succeed { cell.value = valueCell.value }
-                case (cell: VMCell.IntCell, valueCell: VMCell.IntCell, VMType.I32) => IO.succeed { cell.value = valueCell.value }
-                case (cell: VMCell.LongCell, valueCell: VMCell.LongCell, VMType.I64) => IO.succeed { cell.value = valueCell.value }
-                case (cell: VMCell.FloatCell, valueCell: VMCell.FloatCell, VMType.F32) => IO.succeed { cell.value = valueCell.value }
-                case (cell: VMCell.DoubleCell, valueCell: VMCell.DoubleCell, VMType.F64) => IO.succeed { cell.value = valueCell.value }
-                case (cell: VMCell.RefCell, valueCell: VMCell.RefCell, VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => IO.succeed { cell.value = valueCell.value }
-                case _ => IO.fail(new LocalTypeMismatchException())
+            case (VMCell.RefCell(cell: VMCell), valueCell) =>
+              writeCell(cell, valueCell, elementType, volatile)
+          }
+
+          
+          
+
+        case CreateObject(out, clsId) =>
+          for {
+            fields <- initClassFields(clsId)
+            _ <- setLocal(out, GCObjectMap(clsId, fields, Seq.empty))
+          } yield ()
+
+        case CreateArray(out, clsId, length) =>
+          def impl(len: Int): IO[BlockError, Unit] =
+            for {
+              fields <- initClassFields(clsId)
+              arrayType <- getArrayType(clsId)
+              elements <- ZIO.foreach(0 until len) { _ => createCell(arrayType) }
+              _ <- setLocalRef(out, GCObjectMap(clsId, fields, elements))
+            } yield ()
+
+          
+          withLocal(length)(getArrayIndex).flatMap(impl)
+
+        case LoadField(out, instance, field, volatile) =>
+          withLocal(instance) {
+            case VMCell.RefCell(obj: GCObjectMap) =>
+              getField(obj, field).flatMap { case (cell, t) =>
+                readCell(out, cell, t, volatile)
               }
           }
 
-        case DerefStore(ptr, src, elementType, true) =>
-          withLocal(ptr, src) {
-            case (VMCell.RefCell(cell), valueCell) =>
-              (cell, valueCell, elementType) match {
-                case (cell: VMCell.ByteCell, valueCell: VMCell.ByteCell, VMType.I8) => IO.succeed { cell.writeVolatile(valueCell.value) }
-                case (cell: VMCell.ShortCell, valueCell: VMCell.ShortCell, VMType.I16) => IO.succeed { cell.writeVolatile(valueCell.value) }
-                case (cell: VMCell.IntCell, valueCell: VMCell.IntCell, VMType.I32) => IO.succeed { cell.writeVolatile(valueCell.value) }
-                case (cell: VMCell.LongCell, valueCell: VMCell.LongCell, VMType.I64) => IO.succeed { cell.writeVolatile(valueCell.value) }
-                case (cell: VMCell.FloatCell, valueCell: VMCell.FloatCell, VMType.F32) => IO.succeed { cell.writeVolatile(valueCell.value) }
-                case (cell: VMCell.DoubleCell, valueCell: VMCell.DoubleCell, VMType.F64) => IO.succeed { cell.writeVolatile(valueCell.value) }
-                case (cell: VMCell.RefCell, valueCell: VMCell.RefCell, VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => IO.succeed { cell.writeVolatile(valueCell.value) }
-                case _ => IO.fail(new LocalTypeMismatchException())
+        case StoreField(instance, value, field, volatile) =>
+          withLocal(instance, value) {
+            case (VMCell.RefCell(obj: GCObjectMap), valueCell) =>
+              getField(obj, field).flatMap { case (cell, t) =>
+                writeCell(cell, valueCell, t, volatile)
               }
           }
+
+        case LoadFieldReference(out, instance, field) =>
+          withLocal(instance) {
+            case VMCell.RefCell(obj: GCObjectMap) =>
+              getField(obj, field).flatMap { case (cell, _) =>
+                setLocal(out, cell)
+              }
+          }
+
+        case ArrayLength(out, instance, _) =>
+          withLocal(instance) {
+            case VMCell.RefCell(obj: GCObjectMap) =>
+              setLocal(out, obj.arrayElements.size)
+          }
+
+        case LoadArrayElement(out, instance, index, cls, volatile) =>
+          withLocal(instance) {
+            case VMCell.RefCell(obj: GCObjectMap) =>
+              withLocal(index)(getArrayIndex).flatMap { i =>
+                getArrayType(cls).flatMap { t =>
+                  readCell(out, obj.arrayElements(i), t, volatile)
+                }
+              }
+          }
+
+        case StoreArrayElement(instance, value, index, cls, volatile) =>
+          withLocal(instance, value) {
+            case (VMCell.RefCell(obj: GCObjectMap), valueCell) =>
+              withLocal(index)(getArrayIndex).flatMap { i =>
+                getArrayType(cls).flatMap { t =>
+                writeCell(obj.arrayElements(i), valueCell, t, volatile)
+                }
+              }
+          }
+
+        case LoadArrayElementReference(out, instance, index, cls) =>
+          withLocal(instance) {
+            case VMCell.RefCell(obj: GCObjectMap) =>
+              withLocal(index)(getArrayIndex).flatMap { i =>
+                setLocal(out, obj.arrayElements(i))
+              }
+          }
+
+
 
       }
     end run
@@ -1255,8 +1270,7 @@ object Interpreter {
             case Some(VMCell.LongCell(value)) => IO.succeed(value)
             case Some(VMCell.FloatCell(value)) => IO.succeed(value)
             case Some(VMCell.DoubleCell(value)) => IO.succeed(value)
-            case Some(VMCell.RefCell(value: (GCObject | VMCell | VMTuple))) => IO.succeed(value)
-            case Some(VMCell.RefCell(_)) => IO.fail(new LocalTypeMismatchException())
+            case Some(VMCell.RefCell(value)) => IO.succeed(value)
             case None => IO.fail(new UnknownLocalException())
           }
 
@@ -1274,11 +1288,107 @@ object Interpreter {
 
         case Throw(exception) =>
           withLocal(exception) {
-            case VMCell.RefCell(value: GCObject) =>
+            case VMCell.RefCell(value: GCObjectNotNull) =>
               IO.fail(value)
           }
       }
     end runJump
+
+    private def initClassFields(clsId: ClassId): Task[Map[FieldId, VMCell]] =
+      for {
+        cls <- IO.fromOption(program.classes.lift(clsId)).mapError { _ => new UnknownClassException() }
+        fields <- ZIO.foreach(cls.fields.zipWithIndex) { case (t, i) =>
+          createCell(t).map { cell => FieldId(clsId.id, i) -> cell }
+        }
+        baseClassFields <- ZIO.foreach(cls.baseClass)(initClassFields)
+      } yield baseClassFields.getOrElse(Map.empty) ++ fields
+
+    private def readCell(out: LocalId, cell: VMCell, t: VMType, volatile: Boolean): IO[BlockError, Unit] =
+      if volatile then
+        (cell, t) match {
+          case (cell: VMCell.ByteCell, VMType.I8) => setLocal(out, cell.readVolatile)
+          case (cell: VMCell.ShortCell, VMType.I16) => setLocal(out, cell.readVolatile)
+          case (cell: VMCell.IntCell, VMType.I32) => setLocal(out, cell.readVolatile)
+          case (cell: VMCell.LongCell, VMType.I64) => setLocal(out, cell.readVolatile)
+          case (cell: VMCell.FloatCell, VMType.F32) => setLocal(out, cell.readVolatile)
+          case (cell: VMCell.DoubleCell, VMType.F64) => setLocal(out, cell.readVolatile)
+          case (cell: VMCell.RefCell, VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => setLocalRef(out, cell.readVolatile)
+          case _ => IO.fail(new LocalTypeMismatchException())
+        }
+      else
+        (cell, t) match {
+          case (VMCell.ByteCell(value), VMType.I8) => setLocal(out, value)
+          case (VMCell.ShortCell(value), VMType.I16) => setLocal(out, value)
+          case (VMCell.IntCell(value), VMType.I32) => setLocal(out, value)
+          case (VMCell.LongCell(value), VMType.I64) => setLocal(out, value)
+          case (VMCell.FloatCell(value), VMType.F32) => setLocal(out, value)
+          case (VMCell.DoubleCell(value), VMType.F64) => setLocal(out, value)
+          case (VMCell.RefCell(value), VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => setLocalRef(out, value)
+          case _ => IO.fail(new LocalTypeMismatchException())
+        }
+
+    private def writeCell(cell: VMCell, valueCell: VMCell, t: VMType, volatile: Boolean) =
+      if volatile then
+        (cell, valueCell, t) match {
+          case (cell: VMCell.ByteCell, valueCell: VMCell.ByteCell, VMType.I8) => IO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.ShortCell, valueCell: VMCell.ShortCell, VMType.I16) => IO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.IntCell, valueCell: VMCell.IntCell, VMType.I32) => IO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.LongCell, valueCell: VMCell.LongCell, VMType.I64) => IO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.FloatCell, valueCell: VMCell.FloatCell, VMType.F32) => IO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.DoubleCell, valueCell: VMCell.DoubleCell, VMType.F64) => IO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.RefCell, valueCell: VMCell.RefCell, VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => IO.succeed { cell.writeVolatile(valueCell.value) }
+          case _ => IO.fail(new LocalTypeMismatchException())
+        }
+      else
+        (cell, valueCell, t) match {
+          case (cell: VMCell.ByteCell, valueCell: VMCell.ByteCell, VMType.I8) => IO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.ShortCell, valueCell: VMCell.ShortCell, VMType.I16) => IO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.IntCell, valueCell: VMCell.IntCell, VMType.I32) => IO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.LongCell, valueCell: VMCell.LongCell, VMType.I64) => IO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.FloatCell, valueCell: VMCell.FloatCell, VMType.F32) => IO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.DoubleCell, valueCell: VMCell.DoubleCell, VMType.F64) => IO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.RefCell, valueCell: VMCell.RefCell, VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => IO.succeed { cell.value = valueCell.value }
+          case _ => IO.fail(new LocalTypeMismatchException())
+        }
+
+    private def getField(obj: GCObjectMap, fieldId: FieldId): IO[BlockError, (VMCell, VMType)] =
+      for {
+        cls <- IO.fromOption(program.classes.get(ClassId(fieldId.classId))).mapError { _ => UnknownClassException() }
+        fieldType <- IO.fromOption(cls.fields.lift(fieldId.id)).mapError { _ => UnknownFieldException() }
+        cell <- IO.fromOption(obj.fields.get(fieldId)).mapError { _ => UnknownFieldException() }
+      } yield (cell, fieldType)
+
+    private def getArrayType(clsId: ClassId): IO[BlockError, VMType] =
+      for {
+        cls <- IO.fromOption(program.classes.get(clsId)).mapError { _ => UnknownClassException() }
+        arrayType <- IO.fromOption(cls.arrayType).mapError { _ => MissingArrayTypeException() }
+      } yield arrayType
+
+    private def getArrayIndex: PartialFunction[VMCell, IO[BlockError, Int]] = {
+      case VMCell.ByteCell(len) => IO.succeed(java.lang.Byte.toUnsignedInt(len))
+      case VMCell.ShortCell(len) => IO.succeed(java.lang.Short.toUnsignedInt(len))
+      case VMCell.IntCell(len) =>
+        if len < 0 then
+          IO.fail(new OutOfMemoryError())
+        else
+          IO.succeed(len)
+
+      case VMCell.LongCell(len) =>
+        if java.lang.Long.compareUnsigned(len, Int.MaxValue) <= 0 then
+          IO.succeed(len.toInt)
+        else
+          IO.fail(new OutOfMemoryError())
+
+      case VMCell.RefCell(len: BigInt) =>
+        if len < 0 then
+          IO.fail(new IllegalArgumentException())
+        else if len > Int.MaxValue then
+          IO.fail(new OutOfMemoryError())
+        else
+          IO.succeed(len.toInt)
+    }
+
+
 
   }
 

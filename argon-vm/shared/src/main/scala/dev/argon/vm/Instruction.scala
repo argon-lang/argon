@@ -10,6 +10,7 @@ enum Instruction {
   case ConstF64(out: LocalId, d: Double)
   case ConstInt(out: LocalId, i: BigInt)
   case ConstString(out: LocalId, s: String)
+  case ConstNull(out: LocalId)
 
   // Conversions
   case ConvertS8(out: LocalId, in: LocalId, overflow: OverflowMode)
@@ -70,21 +71,21 @@ enum Instruction {
   case Call(id: FunctionId, args: Seq[LocalId], result: LocalId, virtual: Boolean)
 
   // Memory
-  case LoadLocalReference(out: LocalId, id: LocalId)
   case DerefLoad(out: LocalId, ptr: LocalId, elementType: VMType, volatile: Boolean)
   case DerefStore(ptr: LocalId, src: LocalId, elementType: VMType, volatile: Boolean)
 
   // Objects
-  case CreateObject(objClass: VMClass)
+  case CreateObject(out: LocalId, objClass: ClassId)
+  case CreateArray(out: LocalId, objClass: ClassId, length: LocalId)
 
-  case LoadField(out: LocalId, instance: LocalId, cls: ClassId, field: FieldId, volatile: Boolean)
-  case StoreField(instance: LocalId, value: LocalId, cls: ClassId, field: FieldId, volatile: Boolean)
-  case LoadFieldReference(out: LocalId, instance: LocalId, cls: ClassId, field: FieldId)
+  case LoadField(out: LocalId, instance: LocalId, field: FieldId, volatile: Boolean)
+  case StoreField(instance: LocalId, value: LocalId, field: FieldId, volatile: Boolean)
+  case LoadFieldReference(out: LocalId, instance: LocalId, field: FieldId)
 
   case ArrayLength(out: LocalId, instance: LocalId, cls: ClassId)
-  case LoadArrayElement(out: LocalId, instance: LocalId, cls: ClassId, volatile: Boolean)
-  case StoreArrayElement(instance: LocalId, value: LocalId, cls: ClassId, volatile: Boolean)
-  case LoadArrayElementReference(out: LocalId, instance: LocalId, cls: ClassId)
+  case LoadArrayElement(out: LocalId, instance: LocalId, index: LocalId, cls: ClassId, volatile: Boolean)
+  case StoreArrayElement(instance: LocalId, value: LocalId, index: LocalId, cls: ClassId, volatile: Boolean)
+  case LoadArrayElementReference(out: LocalId, instance: LocalId, index: LocalId, cls: ClassId)
 }
 
 enum OverflowMode derives CanEqual {
@@ -99,13 +100,10 @@ enum JumpInstruction {
   case Throw(exception: LocalId)
 }
 
-final case class ControlFlowGraph(labels: Map[LabelId, Int], blocks: Seq[BasicBlock])
+final case class ControlFlowGraph(blocks: Map[LabelId, BasicBlock], start: LabelId)
 
 sealed trait BasicBlock
 
 final case class InstructionBlock(instructions: Seq[Instruction], jump: JumpInstruction) extends BasicBlock
-final case class CatchBlock(body: ControlFlowGraph, handlers: Seq[ExceptionHandler]) extends BasicBlock
-final case class FinallyBlock(body: ControlFlowGraph, handler: ControlFlowGraph) extends BasicBlock
-
-final case class ExceptionHandler(exception: LocalId, filter: ControlFlowGraph, handler: ControlFlowGraph)
-
+final case class CatchBlock(body: ControlFlowGraph, exceptionVariable: LocalId, handler: LabelId) extends BasicBlock
+final case class WithLocalReference(refHolder: LocalId, referenced: LocalId, block: ControlFlowGraph) extends BasicBlock

@@ -65,9 +65,9 @@ object VMCell {
         .findVarHandle(classOf[DoubleCell], "value", classOf[Double])
   }
   
-  final case class RefCell(var value: AnyRef | Null) extends VMCell {
-    def readVolatile: AnyRef | Null = VarHandleHelper.readVolatileRef(this, RefCell.varHandle)
-    def writeVolatile(x: AnyRef | Null): Unit = VarHandleHelper.writeVolatileRef(this, RefCell.varHandle, x)
+  final case class RefCell(var value: GCObject | VMCell | VMTuple) extends VMCell {
+    def readVolatile: GCObject | VMCell | VMTuple = VarHandleHelper.readVolatileRef(this, RefCell.varHandle).asInstanceOf[GCObject | VMCell | VMTuple]
+    def writeVolatile(x: GCObject | VMCell | VMTuple): Unit = VarHandleHelper.writeVolatileRef(this, RefCell.varHandle, x)
   }
   object RefCell {
     private val varHandle: VarHandle =

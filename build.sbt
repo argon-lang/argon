@@ -42,6 +42,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
 
+    "dev.zio" %%% "zio-json" % "0.3.0-RC3",
+
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
   ),
@@ -422,4 +424,28 @@ lazy val argon_vm_interpreter = crossProject(JVMPlatform, JSPlatform, NodePlatfo
 lazy val argon_vm_interpreterJVM = argon_vm_interpreter.jvm
 lazy val argon_vm_interpreterJS = argon_vm_interpreter.js
 lazy val argon_vm_interpreterNode = argon_vm_interpreter.node
+
+lazy val argon_vm_emit = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-vm-emit"))
+  .dependsOn(util, argon_vm)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-vm-emit",
+  )
+
+lazy val argon_vm_emitJVM = argon_vm_emit.jvm
+lazy val argon_vm_emitJS = argon_vm_emit.js
+lazy val argon_vm_emitNode = argon_vm_emit.node
 

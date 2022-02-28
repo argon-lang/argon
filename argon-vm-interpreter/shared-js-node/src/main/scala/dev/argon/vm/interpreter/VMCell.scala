@@ -33,9 +33,9 @@ object VMCell {
     def writeVolatile(x: Double): Unit = value = x
   }
   
-  final case class RefCell(var value: AnyRef | Null) extends VMCell {
-    def readVolatile: AnyRef | Null = value
-    def writeVolatile(x: AnyRef | Null): Unit = value = x
+  final case class RefCell(var value: GCObject | VMCell | VMTuple) extends VMCell {
+    def readVolatile: GCObject | VMCell | VMTuple = value
+    def writeVolatile(x: GCObject | VMCell | VMTuple): Unit = value = x
   }
   
 }

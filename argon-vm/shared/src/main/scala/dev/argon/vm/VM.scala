@@ -26,6 +26,7 @@ trait VM {
 
 
   final case class VMProgram(
+    classes: Map[ClassId, VMClass],
     functions: Map[FunctionId, VMFunction],
   )
 

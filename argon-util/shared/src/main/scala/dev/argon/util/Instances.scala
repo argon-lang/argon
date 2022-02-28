@@ -109,3 +109,41 @@ given [R, E]: Monad[[A] =>> ZStream[R, E, A]] with
   override def pure[A](a: A): ZStream[R, E, A] = ZStream.succeed(a)
   override def map[A, B](fa: ZStream[R, E, A])(f: A => B): ZStream[R, E, B] = fa.map(f)
 end given
+
+
+given [A]: Monoid[Set[A]] with
+  override def identity: Set[A] = Set.empty
+  override def combine(x: Set[A], y: Set[A]): Set[A] = x ++ y
+end given
+
+given [K, V: Semigroup]: Monoid[Map[K, V]] with
+  override def identity: Map[K, V] = Map.empty
+  override def combine(x: Map[K, V], y: Map[K, V]): Map[K, V] =
+    y.foldLeft(x) { case (m, (k, v)) =>
+      val combinedValue = m.get(k) match {
+        case Some(v2) => Semigroup[V].combine(v, v2)
+        case None => v
+      }
+      m.updated(k, combinedValue)
+    }
+end given
+
+given Monoid[EmptyTuple] with
+  override def identity: EmptyTuple = EmptyTuple
+  override def combine(x: EmptyTuple, y: EmptyTuple): EmptyTuple = EmptyTuple
+end given
+
+given [H: Monoid, T <: Tuple: Monoid]: Monoid[H *: T] with
+  override def identity: H *: T = Monoid[H].identity *: Monoid[T].identity
+  override def combine(x: H *: T, y: H *: T): H *: T =
+    (x, y) match {
+      case (xh *: xt, yh *: yt) =>
+        Monoid[H].combine(xh, yh) *: Monoid[T].combine(xt, yt)
+    }
+end given
+
+
+
+
+
+
