@@ -1,0 +1,3 @@
+[submodule "tools/verilization"]
+	path = tools/verilization
+	url = ../verilization.git
