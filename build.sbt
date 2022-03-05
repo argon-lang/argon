@@ -127,6 +127,7 @@ lazy val compilerOptions = Seq(
 )
 
 
+
 lazy val generateVerilization = taskKey[Seq[File]]("Run verilization compiler to generate source code.")
 
 
@@ -135,6 +136,45 @@ lazy val generateVerilization = taskKey[Seq[File]]("Run verilization compiler to
 
 lazy val verilization_runtimeJVM = ProjectRef(file("tools/verilization/scala"), "scalaRuntimeJVM")
 lazy val verilization_runtimeJS = ProjectRef(file("tools/verilization/scala"), "scalaRuntimeJS")
+
+lazy val verRuntime = Map("" -> "dev.argon.verilization.runtime.zio")
+lazy val verTube = Map("argon.tube" -> "dev.argon.tube")
+lazy val verPlugin = Map("argon.plugin" -> "dev.argon.plugin")
+
+def runVerilization(libraries: Map[String, String], packageMap: Map[String, String], inputFiles: Set[String]): Def.Initialize[Task[Seq[File]]] = Def.task {
+  val log = streams.value.log
+  val cached = FileFunction.cached(streams.value.cacheDirectory / "verilization") { (inputFiles: Set[File]) =>
+    val outputDir = sourceManaged.value / "verilization"
+    log.info(s"Generating verilization definitions to ${outputDir}")
+
+    val libraryFiles = (file("tools/verilization/verilization/runtime") ** "*.verilization").get()
+
+
+    val command =
+      Seq(
+        "cargo", "run", "--quiet", "--manifest-path", "tools/verilization/rust/compiler-cli/Cargo.toml", "--",
+        "generate", "scala",
+      ) ++
+        (libraryFiles ++ inputFiles.toSeq).flatMap { inputFile => Seq("-i", inputFile.toString) } ++
+        Seq("-o:out_dir", outputDir.toString) ++
+        libraries.toSeq.flatMap { case (verPkg, targetPkg) => Seq(s"-o:lib:$verPkg", targetPkg) } ++
+        packageMap.toSeq.flatMap { case (verPkg, targetPkg) => Seq(s"-o:pkg:$verPkg", targetPkg) }
+
+    IO.delete(outputDir)
+
+    val exitCode = Process(command) ! log
+
+    if(exitCode != 0) {
+      throw new Exception("Could not generate verilization definitions")
+    }
+
+    (outputDir ** "*.scala").get().toSet
+  }
+
+  cached(
+    inputFiles.map { file("plugins/verilization") / _ }
+  ).toSeq
+}
 
 
 
@@ -362,6 +402,31 @@ lazy val argon_compiler_sourceJS = argon_compiler_source.js
 lazy val argon_compiler_sourceNode = argon_compiler_source.node
 
 
+lazy val argon_compiler_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-compiler-tube"))
+  .dependsOn(argon_compiler_core, argon_tube)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-compiler-tube",
+  )
+
+lazy val argon_compiler_tubeJVM = argon_compiler_tube.jvm
+lazy val argon_compiler_tubeJS = argon_compiler_tube.js
+lazy val argon_compiler_tubeNode = argon_compiler_tube.node
+
+
 lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-tube"))
   .dependsOn(util)
   .jvmConfigure(
@@ -385,47 +450,51 @@ lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(fil
     name := "argon-tube",
 
     Compile / sourceGenerators += generateVerilization,
-    generateVerilization := {
-      val log = streams.value.log
-
-      val cached = FileFunction.cached(streams.value.cacheDirectory / "verilization") { (inputFiles: Set[File]) =>
-        println("Generating verilization definitions")
-
-        val libraryFiles = (file("tools/verilization/verilization/runtime") ** "*.verilization").get()
-
-        val outputDir = sourceManaged.value / "verilization"
-
-        val command =
-          Seq(
-            "cargo", "run", "--quiet", "--manifest-path", "tools/verilization/rust/compiler-cli/Cargo.toml", "--",
-            "generate", "scala",
-          ) ++ (libraryFiles ++ inputFiles.toSeq).flatMap { inputFile => Seq("-i", inputFile.toString) } ++ Seq(
-            "-o:out_dir", outputDir.toString,
-            "-o:lib:", "dev.argon.verilization.runtime.zio",
-            "-o:pkg:argon.tube", "dev.argon.tube",
-            "-o:pkg:argon.plugin", "dev.argon.plugin",
-          )
-
-        IO.delete(outputDir)
-
-        val exitCode = Process(command) ! log
-
-        if(exitCode != 0) {
-          throw new Exception("Could not generate verilization definitions")
-        }
-
-        (outputDir ** "*.scala").get().toSet
-      }
-
-      cached(
-        (file("plugins/verilization") ** "*.verilization").get().toSet
-      ).toSeq
-    },
+    generateVerilization := runVerilization(
+      libraries = verRuntime,
+      packageMap = verTube,
+      inputFiles = Set("tube.verilization"),
+    ).value,
   )
 
 lazy val argon_tubeJVM = argon_tube.jvm
 lazy val argon_tubeJS = argon_tube.js
 lazy val argon_tubeNode = argon_tube.node
+
+
+lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin"))
+  .dependsOn(util, argon_tube)
+  .jvmConfigure(
+    _.dependsOn(verilization_runtimeJVM)
+      .settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.dependsOn(verilization_runtimeJS)
+      .enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.dependsOn(verilization_runtimeJS)
+      .enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-plugin",
+
+    Compile / sourceGenerators += generateVerilization,
+    generateVerilization := runVerilization(
+      libraries = verRuntime ++ verTube,
+      packageMap = verPlugin,
+      inputFiles = Set("tube.verilization", "plugin-api.verilization"),
+    ).value,
+  )
+
+lazy val argon_pluginJVM = argon_plugin.jvm
+lazy val argon_pluginJS = argon_plugin.js
+lazy val argon_pluginNode = argon_plugin.node
 
 
 lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-io"))
