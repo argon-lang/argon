@@ -1,0 +1,556 @@
+version 1;
+
+package argon.tube;
+
+const CurrentFormatVersion: FormatVersion {
+	version 1 = {
+		major = 1;
+		minor = 0;
+	};
+}
+
+final struct FormatVersion {
+	version 1 {
+		major: nat;
+		minor: nat;
+	}
+}
+
+struct Metadata {
+	version 1 {
+		name: string;
+		moduleType: TubeType;
+		platforms: list<string>;
+		references: list<TubeReference>;
+		moduleCount: nat;
+	}
+}
+
+enum TubeType {
+	version 1 {
+		interface: unit;
+		definition: unit;
+	}
+}
+
+
+struct TubeReference {
+	version 1 {
+		name: string;
+	}
+}
+
+struct ModuleDeclaration {
+	version 1 {
+		path: ModulePath;
+	}
+}
+
+struct ModuleDefinition {
+	version 1 {
+		exports: list<ModuleExport>;
+	}
+}
+
+struct ModuleExport {
+	version 1 {
+		trait: ModuleElementDeclaration<ErasedSignatureParameterOnly>;
+		class: ModuleElementDeclaration<ErasedSignatureParameterOnly>;
+		function: ModuleElementDeclaration<ErasedSignatureParameterOnly>;
+	}
+}
+
+struct ModuleElementDeclaration<TSig> {
+	version 1 {
+		id: nat;
+		name: option<Identifier>;
+		accessModifier: AccessModifier;
+		sig: TSig;
+	}
+}
+
+
+
+
+struct ModulePath {
+	version 1 {
+		parts: list<string>;
+	}
+}
+
+enum Identifier {
+	version 1 {
+		normalName: string;
+		operator: string;
+		extension: Identifier;
+		inverse: Identifier;
+		update: Identifier;
+	}
+}
+
+enum AccessModifier {
+	version 1 {
+		public: unit;
+		tubePrivate: unit;
+		filePrivate: unit;
+		tubeOrProtected: unit;
+		tubeAndProtected: unit;
+		protected: unit;
+	}
+}
+
+enum Mutability {
+	version 1 {
+		mutable: unit;
+		nonMutable: unit;
+	}
+}
+
+enum EffectInfo {
+	version 1 {
+		isPure: bool;
+	}
+}
+
+
+struct ByModuleOwner<Tube> {
+	version 1 {
+		tube: Tube;
+		path: ModulePath;
+	}
+}
+
+enum TraitOwner<Tube> {
+	version 1 {
+		byModule: ByModuleOwner<Tube>;
+	}
+}
+
+enum ClassOwner<Tube> {
+	version 1 {
+		byModule: ByModuleOwner<Tube>;
+	}
+}
+
+enum FunctionOwner<Tube> {
+	version 1 {
+		byModule: ByModuleOwner<Tube>;
+	}
+}
+
+enum MethodOwner {
+	version 1 {
+		byClass: int;
+		byClassStatic: int;
+		byTrait: int;
+		byTraitStatic: int;
+	}
+}
+
+
+struct TraitReference {
+	version 1 {
+		owner: TraitOwner<nat>;
+		name: option<Identifier>;
+		signature: ErasedSignatureParameterOnly;
+	}
+}
+
+struct ClassReference {
+	version 1 {
+		owner: ClassOwner<nat>;
+		name: option<Identifier>;
+		signature: ErasedSignatureParameterOnly;
+	}
+}
+
+struct FunctionReference {
+	version 1 {
+		owner: FunctionOwner<nat>;
+		name: option<Identifier>;
+		signature: ErasedSignature;
+	}
+}
+
+struct MethodReference {
+	version 1 {
+		owner: MethodOwner;
+		name: option<Identifier>;
+		signature: ErasedSignature;
+	}
+}
+
+struct ClassConstructorReference {
+	version 1 {
+		ownerClass: int;
+		signature: ErasedSignatureParameterOnly;
+	}
+}
+
+
+
+
+
+
+struct MethodMember {
+	version 1 {
+		id: int;
+		name: Identifier;
+		accessModifier: AccessModifier;
+	}
+}
+
+struct ConstructorMember {
+	version 1 {
+		id: int;
+		accessModifier: AccessModifier;
+	}
+}
+
+const TraitSealedFlag: nat {
+	version 1 = 1;
+}
+
+struct TraitDefinition {
+	version 1 {
+		owner: TraitOwner<unit>;
+		flags: nat;
+		signature: TraitSignature;
+		methods: list<MethodMember>;
+		staticMethods: list<MethodMember>;
+	}
+}
+
+const ClassSealedFlag: nat {
+	version 1 = 1;
+}
+const ClassOpenFlag: nat {
+	version 1 = 2;
+}
+const ClassAbstractFlag: nat {
+	version 1 = 4;
+}
+
+struct ClassDefinition {
+	version 1 {
+		owner: ClassOwner<unit>;
+		flags: nat;
+		signature: ClassSignature;
+		fields: list<ClassField>;
+		methods: list<MethodMember>;
+		staticMethods: list<MethodMember>;
+		constructors: list<ConstructorMember>;
+	}
+}
+
+struct ClassField {
+	version 1 {
+		mutability: Mutability;
+		name: string;
+		fieldType: ExpressionWithVariables;
+	}
+}
+
+struct FunctionDefinition {
+	version 1 {
+		owner: FunctionOwner<unit>;
+		signature: FunctionSignature;
+		effects: EffectInfo;
+		body: FunctionBody;
+	}
+}
+
+enum FunctionBody {
+	version 1 {
+		expressionBody: ExpressionWithVariables;
+		externalImplementation: unit;
+	}
+}
+
+const MethodVirtualFlag: nat {
+	version 1 = 1;
+}
+const MethodAbstractFlag: nat {
+	version 1 = 2;
+}
+const MethodImplicitOverrideFlag: nat {
+	version 1 = 4;
+}
+const MethodFinalFlag: nat {
+	version 1 = 8;
+}
+
+struct MethodDefinition {
+	version 1 {
+		owner: MethodOwner;
+		flags: nat;
+		signature: FunctionSignature;
+		effects: EffectInfo;
+		body: option<FunctionBody>;
+	}
+}
+
+struct ClassConstructorDefinition {
+	version 1 {
+		ownerClass: int;
+		signature: ClassConstructorSignature;
+		effects: EffectInfo;
+		body: ClassConstructorBody;
+	}
+}
+
+
+struct FieldInitializer {
+	version 1 {
+		fieldName: string;
+		value: ExpressionWithVariables;
+	}
+}
+
+enum PreInitClassConstructorStatement {
+	version 1 {
+		expression: Expression;
+		fieldInitializer: FieldInitializer;
+	}
+}
+
+struct BaseClassConstructorCall {
+	version 1 {
+		baseConstructorId: int;
+		args: list<Expression>;
+	}
+}
+
+struct ClassConstructorExpressionBody {
+	version 1 {
+		variables: list<LocalVariableDeclaration>;
+		preInit: list<PreInitClassConstructorStatement>;
+		baseConstructorCall: BaseClassConstructorCall;
+		endExpr: Expression;
+	}
+}
+
+enum ClassConstructorBody {
+	version 1 {
+		expressionBody: ClassConstructorExpressionBody;
+		externalImplementation: unit;
+	}
+}
+
+
+
+
+
+
+
+enum ExpressionConstructor {
+	version 1 {
+		bindVariable: nat;
+		classConstructorCall: int;
+		ensureExecuted: unit;
+		functionCall: int;
+		functionObjectCall: unit;
+		ifElse: unit;
+		loadConstantBool: bool;
+		loadConstantInt: int;
+		loadConstantString: string;
+		loadLambda: nat;
+		loadTuple: unit;
+		loadTupleElement: nat;
+		loadVariable: Variable;
+		methodCall: int;
+		patternMatch: list<PatternExpr>;
+		raiseException: unit;
+		sequence: unit;
+		storeVariable: Variable;
+		typeN: unit;
+		omegaTypeN: nat;
+		anyType: unit;
+		traitType: int;
+		classType: int;
+		functionType: unit;
+		unionType: unit;
+		intersectionType: unit;
+		existentialType: nat;
+		conjunctionType: unit;
+		disjunctionType: unit;
+		neverType: unit;
+		subtypeWitnessType: unit;
+		equalTo: unit;
+		assumeErasedValue: unit;
+	}
+}
+
+struct Expression {
+	version 1 {
+		constructor: ExpressionConstructor;
+		args: list<Expression>;
+	}
+}
+
+struct ExpressionWithVariables {
+	version 1 {
+		variables: list<LocalVariableDeclaration>;
+		expression: Expression;
+	}
+}
+
+struct TraitType {
+	version 1 {
+		id: int;
+		arguments: list<Expression>;
+	}
+}
+
+struct ClassType {
+	version 1 {
+		id: int;
+		arguments: list<Expression>;
+	}
+}
+
+enum PatternExpr {
+	version 1 {
+		binding: nat;
+		castBinding: nat;
+	}
+}
+
+
+
+
+
+enum ParameterListType {
+	version 1 {
+		normalList: unit;
+		inferrableList: unit;
+		inferrableList2: unit;
+		requiresList: unit;
+	}
+}
+
+struct Parameter {
+	version 1 {
+		listType: ParameterListType;
+		isErased: bool;
+		type: Expression;
+	}
+}
+
+struct TraitSignature {
+	version 1 {
+		variables: list<LocalVariableDeclaration>;
+		parameters: list<Parameter>;
+		baseTraits: list<TraitType>;
+	}
+}
+
+struct ClassSignature {
+	version 1 {
+		variables: list<LocalVariableDeclaration>;
+		parameters: list<Parameter>;
+		baseClass: option<ClassType>;
+		baseTraits: list<TraitType>;
+	}
+}
+
+struct FunctionSignature {
+	version 1 {
+		variables: list<LocalVariableDeclaration>;
+		parameters: list<Parameter>;
+		returnType: Expression;
+	}
+}
+
+struct ClassConstructorSignature {
+	version 1 {
+		variables: list<LocalVariableDeclaration>;
+		parameters: list<Parameter>;
+	}
+}
+
+struct LocalVariableDeclaration {
+	version 1 {
+		varType: Expression;
+		name: option<Identifier>;
+		isMutable: bool;
+	}
+}
+
+enum Variable {
+	version 1 {
+		localVariable: nat;
+		instanceVariable: nat;
+		parameter: ParameterVariable;
+	}
+}
+
+struct ParameterVariable {
+	version 1 {
+		owner: ParameterVariableOwner;
+		index: nat;
+	}
+}
+
+enum ParameterVariableOwner {
+	version 1 {
+		byMethod: nat;
+		byFunction: nat;
+		byClass: nat;
+		byTrait: nat;
+		byClassConstructor: nat;
+	}
+}
+
+
+struct SigType {
+	version 1 {
+		erased: unit;
+		class: SigTypeClass;
+		trait: SigTypeTrait;
+		tuple: SigTypeTuple;
+		function: SigTypeFunction;
+	}
+}
+
+struct SigTypeClass {
+	version 1 {
+		id: int;
+		arguments: list<SigType>;
+	}
+}
+
+struct SigTypeTrait {
+	version 1 {
+		id: int;
+		arguments: list<SigType>;
+	}
+}
+
+struct SigTypeTuple {
+	version 1 {
+		arguments: list<SigType>;
+	}
+}
+
+struct SigTypeFunction {
+	version 1 {
+		argumentType: SigType;
+		resultType: SigType;
+	}
+}
+
+struct ErasedSignatureParameterOnly {
+	version 1 {
+		parameterTypes: list<SigType>;
+	}
+}
+
+struct ErasedSignature {
+	version 1 {
+		parameterTypes: list<SigType>;
+		resultType: SigType;
+	}
+}
+
+

@@ -1,7 +1,8 @@
-import sbtcrossproject.CrossPlugin.autoImport.{crossProject, CrossType}
-import sbt.internal.util.ManagedLogger
+import sbtcrossproject.CrossPlugin.autoImport.{CrossType, crossProject}
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
+
+import scala.sys.process.Process
 
 val graalVersion = "21.1.0"
 val zioVersion = "2.0.0-RC2"
@@ -124,6 +125,16 @@ lazy val compilerOptions = Seq(
   ),
 
 )
+
+
+lazy val generateVerilization = taskKey[Seq[File]]("Run verilization compiler to generate source code.")
+
+
+
+
+
+lazy val verilization_runtimeJVM = ProjectRef(file("tools/verilization/scala"), "scalaRuntimeJVM")
+lazy val verilization_runtimeJS = ProjectRef(file("tools/verilization/scala"), "scalaRuntimeJS")
 
 
 
@@ -349,6 +360,72 @@ lazy val argon_compiler_source = crossProject(JVMPlatform, JSPlatform, NodePlatf
 lazy val argon_compiler_sourceJVM = argon_compiler_source.jvm
 lazy val argon_compiler_sourceJS = argon_compiler_source.js
 lazy val argon_compiler_sourceNode = argon_compiler_source.node
+
+
+lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-tube"))
+  .dependsOn(util)
+  .jvmConfigure(
+    _.dependsOn(verilization_runtimeJVM)
+      .settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.dependsOn(verilization_runtimeJS)
+      .enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.dependsOn(verilization_runtimeJS)
+      .enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-tube",
+
+    Compile / sourceGenerators += generateVerilization,
+    generateVerilization := {
+      val log = streams.value.log
+
+      val cached = FileFunction.cached(streams.value.cacheDirectory / "verilization") { (inputFiles: Set[File]) =>
+        println("Generating verilization definitions")
+
+        val libraryFiles = (file("tools/verilization/verilization/runtime") ** "*.verilization").get()
+
+        val outputDir = sourceManaged.value / "verilization"
+
+        val command =
+          Seq(
+            "cargo", "run", "--quiet", "--manifest-path", "tools/verilization/rust/compiler-cli/Cargo.toml", "--",
+            "generate", "scala",
+          ) ++ (libraryFiles ++ inputFiles.toSeq).flatMap { inputFile => Seq("-i", inputFile.toString) } ++ Seq(
+            "-o:out_dir", outputDir.toString,
+            "-o:lib:", "dev.argon.verilization.runtime.zio",
+            "-o:pkg:argon.tube", "dev.argon.tube",
+            "-o:pkg:argon.plugin", "dev.argon.plugin",
+          )
+
+        IO.delete(outputDir)
+
+        val exitCode = Process(command) ! log
+
+        if(exitCode != 0) {
+          throw new Exception("Could not generate verilization definitions")
+        }
+
+        (outputDir ** "*.scala").get().toSet
+      }
+
+      cached(
+        (file("plugins/verilization") ** "*.verilization").get().toSet
+      ).toSeq
+    },
+  )
+
+lazy val argon_tubeJVM = argon_tube.jvm
+lazy val argon_tubeJS = argon_tube.js
+lazy val argon_tubeNode = argon_tube.node
 
 
 lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-io"))

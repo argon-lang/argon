@@ -8,7 +8,7 @@ import dev.argon.compiler.expr.CompleteExprContext
 import dev.argon.compiler.tube.{TubeName, ArTubeC}
 
 trait Context {
-  val backend: BackendBase
+  val backend: BackendBase#BackendHandler
   type Comp[+A] = ZIO[CompEnv, CompError, A]
 
   object ExprContext extends CompleteExprContext {
@@ -19,7 +19,7 @@ trait Context {
 }
 
 object Context {
-  type WithBackend[TBackend <: BackendBase] = Context { val backend: TBackend }
+  type WithBackend[TBackend <: BackendBase#BackendHandler] = Context { val backend: TBackend }
 }
 
 type CompEnv = Random

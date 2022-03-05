@@ -4,7 +4,13 @@ import zio.*
 import zio.stream.*
 import java.io.IOException
 
-trait Resource
+sealed trait Resource
+
+trait DirectoryResource extends Resource {
+  def contents: Stream[IOException, DirectoryEntry]
+}
+
+final case class DirectoryEntry(name: String, resource: Resource)
 
 trait BinaryResource extends Resource {
   def asBytes: Stream[IOException, Byte]

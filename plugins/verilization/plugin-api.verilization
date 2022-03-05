@@ -1,0 +1,123 @@
+version 1;
+
+package argon.plugin;
+
+
+interface Tube {
+	version 1 {
+		metadata(): argon.tube.Metadata;
+
+		moduleDeclaration(id: nat): argon.tube.ModuleDeclaration;
+		moduleDefinition(id: nat): argon.tube.ModuleDeclaration;
+
+
+		traitRef(id: nat): argon.tube.TraitReference;
+		traitDef(id: nat): argon.tube.TraitDefinition;
+
+		classRef(id: nat): argon.tube.ClassReference;
+		classDef(id: nat): argon.tube.ClassDefinition;
+
+		functionRef(id: nat): argon.tube.FunctionReference;
+		functionDef(id: nat): argon.tube.FunctionDefinition;
+		externFunctionImplementation(id: nat, platform: string): Stream;
+
+		methodRef(id: nat): argon.tube.MethodReference;
+		methodDef(id: nat): argon.tube.MethodDefinition;
+		externMethodImplementation(id: nat, platform: string): Stream;
+
+		classConstructorRef(id: nat): argon.tube.ClassConstructorReference;
+		classConstructorDef(id: nat): argon.tube.ClassConstructorDefinition;
+	}
+}
+
+
+final struct Map<K, V> {
+	version 1 {
+		entries: list<MapEntry<K, V>>;
+	}
+}
+
+final struct MapEntry<K, V> {
+	version 1 {
+		key: K;
+		value: V;
+	}
+}
+
+enum OptionValue {
+	version 1 {
+		stringValue: string;
+		fileList: list<string>;
+		singleFile: string;
+		listValue: list<OptionValue>;
+	}
+}
+
+
+enum Either<A, B> {
+	version 1 {
+		a: A;
+		b: B;
+	}
+}
+
+
+
+
+interface Backend<BackendOptions, EmitOutput, ExternFunction, ExternMethod> {
+	version 1 {
+		createOptions(entries: Map<string, OptionValue>): BackendOptions;
+
+		tubeLoaders(): list<TubeLoader>;
+
+		loadExternFunction(name: string): ExternFunction;
+		loadExternMethod(name: string): ExternMethod;
+		externFunctionToResource(func: ExternFunction): BinaryResource;
+		externMethodToResource(func: ExternFunction): BinaryResource;
+
+		emit(tube: Tube): EmitOutput;
+		getOutputResource(name: string): Either<BinaryResource, DirectoryResource>;
+	}
+}
+
+
+interface TubeLoader {
+	version 1 {
+		supportedExtensions(): list<string>;
+		loadTube(path: string): Tube;
+	}
+}
+
+interface BinaryResource {
+	version 1 {
+		fileName(): option<string>;
+		writeToFile(path: string): unit;
+		stream(): Stream;
+	}
+}
+
+interface DirectoryResource {
+	version 1 {
+		fileName(): option<string>;
+		writeToDirectory(path: string): unit;
+		stream(): DirectoryStream;
+	}
+}
+
+
+interface Stream {
+	version 1 {
+		read(): list<u8>;
+		close(): unit;
+	}
+}
+
+interface DirectoryStream {
+	version 1 {
+		read(): option<Either<BinaryResource, DirectoryResource>>;
+		close(): unit;
+	}
+}
+
+
+
