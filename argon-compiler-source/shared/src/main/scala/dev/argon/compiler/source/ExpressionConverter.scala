@@ -407,7 +407,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
         }
 
-      case _ => convertExpr(WithSource(parser.UnitLiteral, stmts.location))
+      case _ => convertExpr(WithSource(parser.TupleExpr(Vector.empty), stmts.location))
     }
 
   def convertExpr(expr: WithSource[parser.Expr]): ExprFactory =
@@ -580,34 +580,34 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
 
       case parser.TupleExpr(values) =>
         new ExprFactory {
-          override def synth(env: Env): Comp[ExprTypeResult] = synthPart(env, values, Nil, Nil)
+          override def synth(env: Env): Comp[ExprTypeResult] = synthPart(env, values.toList, Vector.empty, Vector.empty)
 
           private def synthPart
-            (env: Env, values: NonEmptyList[WithSource[parser.Expr]], valuesAcc: List[WrapExpr], typeAcc: List[WrapExpr])
+            (env: Env, values: List[WithSource[parser.Expr]], valuesAcc: Vector[WrapExpr], typeAcc: Vector[WrapExpr])
             : Comp[ExprTypeResult] =
-            convertExpr(values.head).synth(env).flatMap { currentRes =>
-              values.tail match {
-                case tail: ::[WithSource[parser.Expr]] =>
+            values match {
+              case head :: tail =>
+                convertExpr(head).synth(env).flatMap { currentRes =>
                   synthPart(
                     currentRes.env,
-                    NonEmptyList.fromCons(tail),
-                    currentRes.expr :: valuesAcc,
-                    currentRes.exprType :: typeAcc,
+                    tail,
+                    valuesAcc :+ currentRes.expr,
+                    typeAcc :+ currentRes.exprType,
                   )
+                }
 
-                case Nil =>
-                  val valuesExpr =
-                    WrapExpr.OfExpr(ArExpr(
-                      ExprConstructor.LoadTuple,
-                      NonEmptyList.cons(currentRes.expr, valuesAcc).reverse,
-                    ))
-                  val typesExpr =
-                    WrapExpr.OfExpr(ArExpr(
-                      ExprConstructor.LoadTuple,
-                      NonEmptyList.cons(currentRes.exprType, typeAcc).reverse,
-                    ))
-                  IO.succeed(ExprTypeResult(valuesExpr, currentRes.env, typesExpr))
-              }
+              case Nil =>
+                val valuesExpr =
+                  WrapExpr.OfExpr(ArExpr(
+                    ExprConstructor.LoadTuple,
+                    valuesAcc,
+                  ))
+                val typesExpr =
+                  WrapExpr.OfExpr(ArExpr(
+                    ExprConstructor.LoadTuple,
+                    typeAcc,
+                  ))
+                IO.succeed(ExprTypeResult(valuesExpr, env, typesExpr))
             }
 
           override def check(env: Env, t: WrapExpr): Comp[ExprResult] =
@@ -615,8 +615,8 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
               case WrapExpr.OfExpr(normalizedType) =>
                 normalizedType.constructor match {
                   case tupleTypeCtor: (normalizedType.constructor.type & ExprConstructor.LoadTuple.type) =>
-                    val tupleType: NonEmptyList[WrapExpr] = normalizedType.getArgs(tupleTypeCtor)
-                    checkPart(env, values, Nil, tupleType.toList)
+                    val tupleType: Vector[WrapExpr] = normalizedType.getArgs(tupleTypeCtor)
+                    checkPart(env, values.toList, Vector.empty, tupleType.toList)
 
                   case _ => IO.fail(DiagnosticError.InvalidTypeForFunction())
                 }
@@ -627,34 +627,34 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
           private def checkPart
             (
               env: Env,
-              values: NonEmptyList[WithSource[parser.Expr]],
-              valuesAcc: List[WrapExpr],
+              values: List[WithSource[parser.Expr]],
+              valuesAcc: Vector[WrapExpr],
               expectedTypes: List[WrapExpr],
             )
             : Comp[ExprResult] =
             expectedTypes match {
               case currentExpected :: tailExpectedTypes =>
-                convertExpr(values.head).check(env, currentExpected).flatMap { currentRes =>
-                  values.tail match {
-                    case tail: ::[WithSource[parser.Expr]] =>
+                values match {
+                  case head :: tail =>
+                    convertExpr(head).check(env, currentExpected).flatMap { currentRes =>
                       checkPart(
                         currentRes.env,
-                        NonEmptyList.fromCons(tail),
-                        currentRes.expr :: valuesAcc,
+                        tail,
+                        valuesAcc :+ currentRes.expr,
                         tailExpectedTypes,
                       )
+                    }
 
-                    case Nil if tailExpectedTypes.nonEmpty =>
-                      IO.fail(DiagnosticError.TupleSizeMismatch())
+                  case Nil if tailExpectedTypes.nonEmpty =>
+                    IO.fail(DiagnosticError.TupleSizeMismatch())
 
-                    case Nil =>
-                      val valuesExpr =
-                        WrapExpr.OfExpr(ArExpr(
-                          ExprConstructor.LoadTuple,
-                          NonEmptyList.cons(currentRes.expr, valuesAcc).reverse,
-                        ))
-                      IO.succeed(ExprResult(valuesExpr, currentRes.env))
-                  }
+                  case Nil =>
+                    val valuesExpr =
+                      WrapExpr.OfExpr(ArExpr(
+                        ExprConstructor.LoadTuple,
+                        valuesAcc,
+                      ))
+                    IO.succeed(ExprResult(valuesExpr, env))
                 }
 
               case Nil =>
@@ -684,17 +684,6 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
             ArgumentInfo(convertExpr(inner), inner.location, FunctionParameterListType.NormalList)
           ))
         )
-
-      case parser.UnitLiteral =>
-        new ExprFactorySynth {
-
-          override def synth(env: Env): Comp[ExprTypeResult] =
-            for {
-              uType <- unitType
-              e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadUnit, EmptyTuple))
-            } yield ExprTypeResult(e, env, uType)
-
-        }
     }
 
   def resolveHoles(env: Env, expr: WrapExpr): Comp[(context.ExprContext.WrapExpr, Env)] = ???

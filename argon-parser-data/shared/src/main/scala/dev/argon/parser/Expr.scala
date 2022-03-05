@@ -145,16 +145,11 @@ final case class LambdaExpr(name: Option[IdentifierExpr], body: WithSource[Expr]
 final case class MatchExpr(value: WithSource[Expr], cases: Seq[WithSource[MatchExprCase]]) extends Expr
 final case class RaiseExpr(exception: WithSource[Expr]) extends Expr
 final case class StringValueExpr(value: Token.StringToken) extends Expr
-final case class TupleExpr(values: NonEmptyList[WithSource[Expr]]) extends Expr
+final case class TupleExpr(values: Vector[WithSource[Expr]]) extends Expr
 final case class TypeExpr(level: Option[WithSource[Expr]]) extends Expr
 final case class MetaTypeExpr(level: BigInt) extends Expr
 final case class TypeOfExpr(ofExpr: WithSource[Expr]) extends Expr
 final case class UnaryOperatorExpr(op: WithSource[UnaryOperator], inner: WithSource[Expr]) extends Expr
-
-case object UnitLiteral extends Expr derives CanEqual {
-  given CanEqual[Expr, UnitLiteral.type] = CanEqual.canEqualAny
-  given CanEqual[UnitLiteral.type, Expr] = CanEqual.canEqualAny
-}
 
 sealed trait Pattern
 final case class DeconstructPattern(constructor: WithSource[Expr], args: Vector[WithSource[Pattern]]) extends Pattern

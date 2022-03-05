@@ -181,12 +181,10 @@ trait ExprContext {
     final case class LoadLambda(argVariable: TLocalVariable)
         extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor derives CanEqual
 
-    case object LoadTuple extends ExprConstructorWithArgs[NonEmptyArgList] with ExprConstructor derives CanEqual
+    case object LoadTuple extends ExprConstructorWithArgs[ArgList] with ExprConstructor derives CanEqual
 
     final case class LoadTupleElement(index: Int) extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor
         derives CanEqual
-
-    case object LoadUnit extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor derives CanEqual
 
     final case class LoadVariable(variable: TVariable) extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor
         derives CanEqual

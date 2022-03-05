@@ -240,13 +240,10 @@ object ArgonExprContext {
         }
 
       case ctor: (e.constructor.type & ec1.ExprConstructor.LoadTuple.type) =>
-        convertNonEmptyListArgs(ec2.ExprConstructor.LoadTuple)(e.getArgs(ctor))
+        convertVectorArgs(ec2.ExprConstructor.LoadTuple)(e.getArgs(ctor))
 
       case ctor: (e.constructor.type & ec1.ExprConstructor.LoadTupleElement) =>
         convertExprArgs(ec2.ExprConstructor.LoadTupleElement(ctor.index))(e.getArgs(ctor))
-
-      case ctor: (e.constructor.type & ec1.ExprConstructor.LoadUnit.type) =>
-        Monad[F].pure(ec2.ArExpr(ec2.ExprConstructor.LoadUnit, EmptyTuple))
 
       case ctor: (e.constructor.type & ec1.ExprConstructor.LoadVariable) =>
         convertVariable(context)(ec1, ec2)(f)(ctor.variable).map { var2 =>

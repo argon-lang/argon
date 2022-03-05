@@ -326,7 +326,7 @@ object ArgonParser {
             }
 
         case Rule.PrimaryExpr(Rule.ParenAllowed) =>
-          matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(UnitLiteral) |
+          matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(TupleExpr(Vector.empty)) |
             rule(Rule.OperatorIdentifier) |
             matchToken(OP_OPENPAREN) ++ rule(Rule.Expression) ++ matchToken(OP_CLOSEPAREN) --> {
               case (_, expr, _) => expr
@@ -351,9 +351,9 @@ object ArgonParser {
             OP_CLOSEPAREN
           ) --> {
             case (_, Some(_), Some(argList), _) => (FunctionParameterListType.RequiresList, argList)
-            case (_, Some(_), None, _) => (FunctionParameterListType.RequiresList, UnitLiteral)
+            case (_, Some(_), None, _) => (FunctionParameterListType.RequiresList, TupleExpr(Vector.empty))
             case (_, None, Some(argList), _) => (FunctionParameterListType.NormalList, argList)
-            case (_, None, None, _) => (FunctionParameterListType.NormalList, UnitLiteral)
+            case (_, None, None, _) => (FunctionParameterListType.NormalList, TupleExpr(Vector.empty))
           }
 
         case Rule.MemberAccess =>
@@ -495,7 +495,7 @@ object ArgonParser {
           val nextRule = rule(Rule.LambdaExpr)
           nextRule.observeSource ++ ((matchToken(OP_COMMA) ++! nextRule.observeSource --> second)*) --> {
             case (WithSource(expr, _), Chunk()) => expr
-            case (head, tail) => TupleExpr(NonEmptyList.cons(head, tail.toList))
+            case (head, tail) => TupleExpr((head +: tail).toVector)
           }
 
         case Rule.AssignExpr =>

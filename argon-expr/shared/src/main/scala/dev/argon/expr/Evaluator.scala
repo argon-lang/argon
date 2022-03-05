@@ -63,8 +63,8 @@ trait Evaluator[R, E] {
           case WrapExpr.OfExpr(tupleExpr) =>
             tupleExpr.constructor match {
               case tupleCtor: (tupleExpr.constructor.type & ExprConstructor.LoadTuple.type) =>
-                val tupleArgs: NonEmptyList[WrapExpr] = tupleExpr.getArgs(tupleCtor)
-                tupleArgs.toList
+                val tupleArgs: Vector[WrapExpr] = tupleExpr.getArgs(tupleCtor)
+                tupleArgs
                   .slice(ctor.index, ctor.index + 1)
                   .headOption
                   .getOrElse { WrapExpr.OfExpr(expr) }
@@ -79,7 +79,7 @@ trait Evaluator[R, E] {
           ExprConstructor.LoadConstantBool(_) | ExprConstructor.LoadConstantInt(_) | ExprConstructor.LoadConstantString(_) |
           ExprConstructor.LoadLambda(
             _
-          ) | ExprConstructor.LoadTuple | ExprConstructor.LoadUnit | ExprConstructor.LoadVariable(_) |
+          ) | ExprConstructor.LoadTuple | ExprConstructor.LoadVariable(_) |
           ExprConstructor.RaiseException |
           ExprConstructor.TypeN | ExprConstructor.OmegaTypeN(_) | ExprConstructor.AnyType |
           ExprConstructor.ClassType(_) | ExprConstructor.TraitType(_) |

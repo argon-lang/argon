@@ -502,7 +502,6 @@ abstract class ImplicitResolver[R <: Random, E] {
         case ExprConstructor.LoadLambda(_) => IO.succeed(Seq(ExprRelation.SyntacticEquality))
         case ExprConstructor.LoadTuple => IO.succeed(Seq.fill(arity)(ExprRelation.SubType))
         case ExprConstructor.LoadTupleElement(_) => IO.succeed(Seq(ExprRelation.SubType))
-        case ExprConstructor.LoadUnit => IO.succeed(Seq(ExprRelation.TypeEquality))
         case ExprConstructor.LoadVariable(_) => IO.succeed(Seq.empty)
         case ExprConstructor.MethodCall(method) => methodRelations(method)
         case ExprConstructor.PatternMatch(_) => IO.succeed(Seq.fill(arity)(ExprRelation.SyntacticEquality))
