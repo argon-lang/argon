@@ -1,15 +1,13 @@
 package dev.argon.plugin
 
-import dev.argon.io.{Resource, ResourceTag}
+import dev.argon.compiler.tube.TubeName
+import dev.argon.io.Resource
 import zio.IO
 
 import java.io.IOException
 import scala.reflect.TypeTest
+import zio.ExitCode
 
-trait BuildOutputExecutor {
-  type BuildOutput <: Resource
-  type BuildOutputTag <: ResourceTag[BuildOutput]
-  given buildOutputTagTypeTest: TypeTest[ResourceTag[BuildOutput], BuildOutputTag]
-
-  def execute(buildOutput: BuildOutput): IO[IOException, String]
+trait BuildOutputExecutor[Output] {
+  def execute(libraries: Map[TubeName, Output], buildOutput: Output): IO[IOException, (ExitCode, String)]
 }

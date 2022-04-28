@@ -7,6 +7,7 @@ import scala.sys.process.Process
 val graalVersion = "21.1.0"
 val zioVersion = "2.0.0-RC2"
 
+ThisBuild / semanticdbEnabled := true
 ThisBuild / scalafixDependencies += "com.github.vovapolu" %% "scaluzzi" % "0.1.20"
 
 lazy val envValues = Map(
@@ -28,7 +29,7 @@ lazy val commonSettingsNoLibs = Seq(
 )
 
 lazy val commonSettingsAnnotations = Seq(
-  libraryDependencies += "org.jetbrains" % "annotations" % "23.0.0",
+  libraryDependencies += "org.checkerframework" % "checker-qual" % "3.21.3",
 )
 
 lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ Seq(
@@ -38,8 +39,6 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
 
   libraryDependencies ++= Seq(
-    "org.scala-lang.modules" %%% "scala-xml" % "2.0.1",
-
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
 
@@ -81,8 +80,6 @@ lazy val sharedJSNodeSettings = Seq(
 lazy val commonJVMSettings = sharedJVMNodeSettings ++ Seq(
 
   libraryDependencies ++= Seq(
-    "org.apache.commons" % "commons-text" % "1.9",
-    "org.apache.commons" % "commons-compress" % "1.21",
     "commons-io" % "commons-io" % "2.11.0",
   ),
 
@@ -121,7 +118,7 @@ lazy val compilerOptions = Seq(
     "-language:strictEquality",
     "-Ycheck-all-patmat",
     "-Xmax-inlines", "128",
-    "-Wconf:id=E029:e,cat=unchecked:e"
+    "-Wconf:id=E029:e,cat=unchecked:e",
   ),
 
 )
@@ -134,12 +131,13 @@ lazy val generateVerilization = taskKey[Seq[File]]("Run verilization compiler to
 
 
 
+
 lazy val verilization_runtimeJVM = ProjectRef(file("tools/verilization/scala"), "scalaRuntimeJVM")
 lazy val verilization_runtimeJS = ProjectRef(file("tools/verilization/scala"), "scalaRuntimeJS")
 
 lazy val verRuntime = Map("" -> "dev.argon.verilization.runtime.zio")
 lazy val verTube = Map("argon.tube" -> "dev.argon.tube")
-lazy val verPlugin = Map("argon.plugin" -> "dev.argon.plugin")
+lazy val verPlugin = Map("argon.plugin" -> "dev.argon.plugin.rpc")
 
 def runVerilization(libraries: Map[String, String], packageMap: Map[String, String], inputFiles: Set[String]): Def.Initialize[Task[Seq[File]]] = Def.task {
   val log = streams.value.log
@@ -172,7 +170,7 @@ def runVerilization(libraries: Map[String, String], packageMap: Map[String, Stri
   }
 
   cached(
-    inputFiles.map { file("plugins/verilization") / _ }
+    inputFiles.map { file("plugins/api/verilization") / _ }
   ).toSeq
 }
 
@@ -278,7 +276,7 @@ lazy val utilNode = util.node
 
 
 lazy val options = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-options"))
-  .dependsOn(util)
+  .dependsOn(util, argon_io)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -402,31 +400,6 @@ lazy val argon_compiler_sourceJS = argon_compiler_source.js
 lazy val argon_compiler_sourceNode = argon_compiler_source.node
 
 
-lazy val argon_compiler_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-compiler-tube"))
-  .dependsOn(argon_compiler_core, argon_tube)
-  .jvmConfigure(
-    _.settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-compiler-tube",
-  )
-
-lazy val argon_compiler_tubeJVM = argon_compiler_tube.jvm
-lazy val argon_compiler_tubeJS = argon_compiler_tube.js
-lazy val argon_compiler_tubeNode = argon_compiler_tube.node
-
-
 lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-tube"))
   .dependsOn(util)
   .jvmConfigure(
@@ -466,7 +439,16 @@ lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(f
   .dependsOn(util, argon_tube, argon_compiler_core)
   .jvmConfigure(
     _.dependsOn(verilization_runtimeJVM)
-      .settings(commonJVMSettings)
+      .settings(
+        commonJVMSettings,
+
+        Seq(Compile, Runtime).map {
+          _ / dependencyClasspath ++= Seq(
+            file("plugins/api/java/target/argon-plugin-api.jar"),
+            file("tools/verilization/java/runtime/target/runtime-0.2.0.jar"),
+          ),
+        },
+      )
   )
   .jsConfigure(
     _.dependsOn(verilization_runtimeJS)
@@ -522,7 +504,7 @@ lazy val argon_ioJS = argon_io.js
 lazy val argon_ioNode = argon_io.node
 
 
-lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-vm"))
+lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-build"))
   .dependsOn(util)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -539,59 +521,13 @@ lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file(
     commonSettings,
     compilerOptions,
 
-    name := "argon-vm",
+    name := "argon-build",
   )
 
-lazy val argon_vmJVM = argon_vm.jvm
-lazy val argon_vmJS = argon_vm.js
-lazy val argon_vmNode = argon_vm.node
+lazy val argon_buildJVM = argon_build.jvm
+lazy val argon_buildJS = argon_build.js
+lazy val argon_buildNode = argon_build.node
 
 
-lazy val argon_vm_interpreter = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-vm-interpreter"))
-  .dependsOn(util, argon_vm)
-  .jvmConfigure(
-    _.settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
 
-    name := "argon-vm-interpreter",
-  )
-
-lazy val argon_vm_interpreterJVM = argon_vm_interpreter.jvm
-lazy val argon_vm_interpreterJS = argon_vm_interpreter.js
-lazy val argon_vm_interpreterNode = argon_vm_interpreter.node
-
-lazy val argon_vm_emit = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-vm-emit"))
-  .dependsOn(util, argon_vm)
-  .jvmConfigure(
-    _.settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-vm-emit",
-  )
-
-lazy val argon_vm_emitJVM = argon_vm_emit.jvm
-lazy val argon_vm_emitJS = argon_vm_emit.js
-lazy val argon_vm_emitNode = argon_vm_emit.node
 

@@ -9,12 +9,14 @@ import scala.scalajs.js.Promise
 
 @js.native
 @JSImport("fs/promises", JSImport.Namespace)
-private[io] object NodeFileSystem extends js.Any {
+private[io] object NodeFileSystem extends js.Object {
 
   def stat(@unused path: String): Promise[NodeStats] = js.native
-  def readdir(@unused path: String, @unused options: NodeReadDirOptions): Promise[NodeDirent] = js.native
+  def readdir(@unused path: String): Promise[js.Array[String]] = js.native
 
   def open(@unused path: String, @unused flags: String | Double): Promise[NodeFileHandle] = js.native
+
+  def access(@unused path: String): Promise[Unit] = js.native
 
 }
 
@@ -31,15 +33,9 @@ private[io] trait NodeStats extends js.Object {
 }
 
 @js.native
-private[io] trait NodeDirent extends js.Object {
-  def isDirectory(): Boolean
-  val name: String
-}
-
-@js.native
 private[io] trait NodeFileHandle extends js.Object {
 
-  def read(@unused buffer: Uint8Array, @unused offset: Int, @unused length: Int, @unused position: Integer)
+  def read(@unused buffer: Uint8Array, @unused offset: Int, @unused length: Int)
     : Promise[NodeFileHandleReadResult]
 
   def write(@unused buffer: Uint8Array): Promise[NodeFileHandleWriteResult]
@@ -53,3 +49,10 @@ private[io] trait NodeFileHandleReadResult extends js.Object {
 private[io] trait NodeFileHandleWriteResult extends js.Object {
   val bytesWritten: Int
 }
+
+@js.native
+@JSImport("path", JSImport.Namespace)
+private[io] object NodePath extends js.Object {
+  def join(args: String*): String = js.native
+}
+

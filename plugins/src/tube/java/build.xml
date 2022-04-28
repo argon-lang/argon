@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<project
+	name="Argon Plugin API for Java"
+	default="dist"
+	xmlns:ivy="antlib:org.apache.ivy.ant"
+>
+	<target name="build" depends="resolve">
+		<mkdir dir="target/classes" />
+		<mkdir dir="target/src-gen" />
+		<delete includeemptydirs="true">
+			<fileset dir="target/classes" includes="**/*"/>
+			<fileset dir="target/src-gen" includes="**/*"/>
+		</delete>
+		<javac
+			release="17"
+			destdir="target/classes"
+			includeantruntime="false"
+			modulepathref="modulepath.compile"
+			fork="true"
+		>
+			<src path="src" />
+			<compilerarg value="-Xlint:all,-missing-explicit-ctor,-requires-automatic,-requires-transitive-automatic,-preview,-serial" />
+			<compilerarg value="-Werror" />
+			<compilerarg value="--enable-preview" />
+			<compilerarg value="-processorpath" />
+			<compilerarg pathref="classpath.processor" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED" />
+			<compilerarg value="-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED" />
+			<compilerarg value="-s" />
+			<compilerarg value="target/src-gen" />
+			<compilerarg value="-processor" />
+			<compilerarg value="dev.argon.plugin.util.javasourcegen.OptionsProcessor,org.checkerframework.checker.nullness.NullnessChecker" />
+		</javac>
+	</target>
+
+	<target name="resolve">
+		<ivy:resolve />
+        <ivy:cachepath pathId="modulepath.compile.base" conf="compile" />
+		<path id="modulepath.compile">
+			<path refid="modulepath.compile.base" />
+			<pathelement location="../../../api/java/target/argon-plugin-api.jar" />
+			<pathelement location="../../../../tools/verilization/java/runtime/target/runtime-0.2.0.jar" />
+		</path>
+
+		<ivy:resolve file="../../../util/java-sourcegen/ivy.xml" />
+		<ivy:cachepath pathId="classpath.processor.base" conf="runtime" />
+		<path id="classpath.processor">
+			<path refid="classpath.processor.base" />
+			<pathelement location="../../../util/java-sourcegen/target/javasourcegen.jar" />
+			<pathelement location="../../../shared/java/checkerframework/jars/checker-3.21.3-all.jar" />
+		</path>
+    </target>
+
+	<target name="jar" depends="build">
+		<mkdir dir="target" />
+		<delete file="target/argon-plugins-tube.jar" failonerror="false" />
+		<jar basedir="build" destfile="target/argon-plugins-tube.jar">
+			<metainf dir="src/META-INF" />
+		</jar>
+	</target>
+
+	<target name="dist" depends="jar">
+		<mkdir dir="../../../dist/tube/java" />
+		<delete includeemptydirs="true">
+			<fileset dir="../../../dist/tube/java" includes="**/*"/>
+		</delete>
+		<copy file="target/argon-plugins-tube.jar" todir="../../../dist/tube/java" />
+
+		<ivy:resolve />
+		<ivy:retrieve sync="false" conf="runtime" type="jar" pattern="../../../dist/tube/java/[organisation]-[artifact].[ext]" />
+	</target>
+
+	<target name="clean">
+		<delete dir="target" failonerror="false" />
+	</target>
+</project>

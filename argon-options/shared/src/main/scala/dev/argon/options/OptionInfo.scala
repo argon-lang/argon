@@ -1,26 +1,22 @@
 package dev.argon.options
 
-final class OptionInfo[A]
-  (
-    val name: String,
-    val description: String,
-    val defaultValueOption: Option[A],
-  )
+import dev.argon.io.BinaryResource
+import java.io.IOException
+import zio.*
 
-object OptionInfo {
+sealed trait OptionInfo[E, A, Options, Builder] {
+  val name: String
+  val description: String
 
-  def apply[A](name: String, description: String): OptionInfo[A] =
-    new OptionInfo(
-      name = name,
-      description = description,
-      defaultValueOption = None,
-    )
-
-  def apply[A](name: String, description: String, defaultValue: A): OptionInfo[A] =
-    new OptionInfo(
-      name = name,
-      description = description,
-      defaultValueOption = Some(defaultValue),
-    )
-
+  
+  def getValue(options: Options): A
 }
+
+trait OptionInfoValue[E, A, Options, Builder] extends OptionInfo[E, A, Options, Builder] {
+  def addOptionValue(prev: Builder, value: String): Either[OptionsError.ParseError, Builder]
+}
+
+trait OptionInfoResource[E, A, Options, Builder] extends OptionInfo[E, A, Options, Builder] {
+  def addOptionValue(prev: Builder, value: BinaryResource[E]): Either[OptionsError.ParseError, Builder]
+}
+

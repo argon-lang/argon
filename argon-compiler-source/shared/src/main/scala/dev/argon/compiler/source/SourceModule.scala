@@ -83,14 +83,15 @@ object SourceModule {
       )
       : Comp[ImportsUngrouped] =
       imports match {
-        case ImportPathSegment.Imported(id) :: tail if imports.contains(id) =>
+        case ImportPathSegment.Imported(id) :: tail if importedIds.contains(id) =>
           ???
 
         case ImportPathSegment.Imported(id) :: tail =>
           module.exports(id).flatMap { newImports =>
             loadModuleImports(module, tail, importedIds + id, acc ++ newImports.map((id, _)))
           }
-        case ImportPathSegment.Renaming(id, _) :: tail if imports.contains(id) =>
+
+        case ImportPathSegment.Renaming(id, _) :: tail if importedIds.contains(id) =>
           ???
 
         case ImportPathSegment.Renaming(id, None) :: tail =>

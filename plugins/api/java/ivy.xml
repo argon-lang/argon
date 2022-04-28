@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<ivy-module version="2.0">
+    <info organisation="dev.argon" module="plugin-api-java" />
+    <configurations>
+        <conf name="default" />
+        <conf name="provided" />
+        <conf name="compile" extends="default,provided" />
+        <conf name="runtime" extends="default" />
+    </configurations>
+    <dependencies>
+        <dependency org="org.checkerframework" name="checker-qual" rev="3.21.3" conf="default" />
+    </dependencies>
+</ivy-module>

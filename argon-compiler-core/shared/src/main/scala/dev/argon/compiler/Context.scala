@@ -1,6 +1,5 @@
 package dev.argon.compiler
 
-import dev.argon.compiler.backend.*
 import zio.*
 import java.io.IOException
 import dev.argon.parser.SyntaxError
@@ -8,7 +7,6 @@ import dev.argon.compiler.expr.CompleteExprContext
 import dev.argon.compiler.tube.{TubeName, ArTubeC}
 
 trait Context {
-  val backend: BackendBase
   type Comp[+A] = ZIO[CompEnv, CompError, A]
 
   object ExprContext extends CompleteExprContext {
@@ -16,10 +14,6 @@ trait Context {
   }
 
   def getTube(tubeName: TubeName): Comp[ArTubeC with HasContext[this.type]]
-}
-
-object Context {
-  type WithBackend[TBackend <: BackendBase] = Context { val backend: TBackend }
 }
 
 type CompEnv = Random

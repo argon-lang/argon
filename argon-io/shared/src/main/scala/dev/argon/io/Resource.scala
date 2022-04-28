@@ -4,26 +4,20 @@ import zio.*
 import zio.stream.*
 import java.io.IOException
 
-sealed trait Resource
+sealed trait Resource[+E]
 
-trait DirectoryResource extends Resource {
-  def contents: Stream[IOException, DirectoryEntry]
+trait DirectoryResource[+E] extends Resource[E] {
+  def contents: Stream[E, DirectoryEntry[E]]
 }
 
-final case class DirectoryEntry(name: String, resource: Resource)
+final case class DirectoryEntry[+E](name: String, resource: Resource[E])
 
-trait BinaryResource extends Resource {
-  def asBytes: Stream[IOException, Byte]
+trait BinaryResource[+E] extends Resource[E] with BinaryResourcePlatformSpecific[E] {
+  def asBytes: Stream[E, Byte]
 }
 
-trait TextResource extends BinaryResource {
-  def asText: Stream[IOException, String]
+trait TextResource[+E] extends BinaryResource[E] {
+  def asText: Stream[E, String]
 
-  override def asBytes: Stream[IOException, Byte] = ZPipeline.utf8Encode.apply(asText)
-}
-
-trait ZipFileResource extends BinaryResource {
-  def zipFile: Managed[IOException, ZipFile[Any, IOException]]
-
-  override def asBytes: Stream[IOException, Byte] = ZStream.unwrapManaged(zipFile.map(ZipFilePlatform.serializeZipFile))
+  override def asBytes: Stream[E, Byte] = ZPipeline.utf8Encode.apply(asText)
 }

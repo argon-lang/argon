@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<project
+	name="Argon Checker Framework Download"
+	default="download"
+>
+	<target name="download">
+		<mkdir dir="jars" />
+        <get skipexisting="true" src="https://repo1.maven.org/maven2/org/checkerframework/checker/3.21.3/checker-3.21.3-all.jar" dest="jars" />
+	</target>
+
+	<target name="clean">
+		<delete dir="target" failonerror="false" />
+	</target>
+</project>

@@ -98,6 +98,48 @@ given Traverse[Vector] with Monad[Vector] with
   override def map[A, B](fa: Vector[A])(f: A => B): Vector[B] = fa.map(f)
 end given
 
+given Traverse[Seq] with Monad[Seq] with
+  override def flatMap[A, B](fa: Seq[A])(f: A => Seq[B]): Seq[B] = fa.flatMap(f)
+  override def pure[A](a: A): Seq[A] = Seq(a)
+
+  override def traverse[F[+_]: Applicative, A, B](ca: Seq[A])(f: A => F[B]): F[Seq[B]] =
+    ca match {
+      case h +: t => Applicative[F].map2(f(h), traverse(t)(f)) { (h2, t2) => h2 +: t2 }
+      case _ => Applicative[F].pure(Seq.empty)
+    }
+
+  def foldLeftM[F[+_]: Monad, S, A](ca: Seq[A])(s: S)(f: (S, A) => F[S]): F[S] =
+    ca match {
+      case h +: t => f(s, h).flatMap { s2 => foldLeftM(t)(s2)(f) }
+      case _ => Applicative[F].pure(s)
+    }
+
+  def foldLeft[S, A](ca: Seq[A])(s: S)(f: (S, A) => S): S = ca.foldLeft(s)(f)
+
+  override def map[A, B](fa: Seq[A])(f: A => B): Seq[B] = fa.map(f)
+end given
+
+given Traverse[Option] with Monad[Option] with
+  override def flatMap[A, B](fa: Option[A])(f: A => Option[B]): Option[B] = fa.flatMap(f)
+  override def pure[A](a: A): Option[A] = Some(a)
+
+  override def traverse[F[+_]: Applicative, A, B](ca: Option[A])(f: A => F[B]): F[Option[B]] =
+    ca match {
+      case Some(a) => f(a).map(Some.apply)
+      case _ => Applicative[F].pure(None)
+    }
+
+  def foldLeftM[F[+_]: Monad, S, A](ca: Option[A])(s: S)(f: (S, A) => F[S]): F[S] =
+    ca match {
+      case Some(a) => f(s, a)
+      case _ => Applicative[F].pure(s)
+    }
+
+  def foldLeft[S, A](ca: Option[A])(s: S)(f: (S, A) => S): S = ca.foldLeft(s)(f)
+
+  override def map[A, B](fa: Option[A])(f: A => B): Option[B] = fa.map(f)
+end given
+
 given [R, E]: Monad[[A] =>> ZIO[R, E, A]] with
   override def flatMap[A, B](fa: ZIO[R, E, A])(f: A => ZIO[R, E, B]): ZIO[R, E, B] = fa.flatMap(f)
   override def pure[A](a: A): ZIO[R, E, A] = ZIO.succeed(a)

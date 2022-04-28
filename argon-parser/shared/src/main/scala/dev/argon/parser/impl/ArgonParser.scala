@@ -2,6 +2,7 @@ package dev.argon.parser.impl
 
 import dev.argon.parser.Token.*
 import dev.argon.parser.*
+import dev.argon.parser.tubespec.*
 import dev.argon.util.{*, given}
 import scala.reflect.TypeTest
 import scala.language.postfixOps
@@ -119,6 +120,11 @@ object ArgonParser {
     case object ImportPathTube extends ArgonRuleName[ImportStmt]
     case object ImportPathMember extends ArgonRuleName[ImportStmt]
     case object ImportPathTubeName extends ArgonRuleName[NonEmptyList[String]]
+
+    // TubeSpec
+    case object ModulePatternMappingStmt extends ArgonRuleName[ModulePatternMapping]
+    case object ModulePatternExpr extends ArgonRuleName[Seq[ModulePatternSegment]]
+    case object ModulePatternSegmentExpr extends ArgonRuleName[ModulePatternSegment]
 
     final case class ImportPathSegmentRule(separator: ImportPathSegmentSeparator)
         extends ArgonRuleName[ImportPathSegment]
@@ -879,6 +885,25 @@ object ArgonParser {
           (rule(Rule.StatementSeparator) *) ++ rule(Rule.Statement) ++ (rule(Rule.StatementSeparator)*) --> {
             case (_, stmt, _) => stmt
           }
+
+        // TubeSpec
+        case Rule.ModulePatternMappingStmt =>
+          rule(Rule.NewLines) ++ rule(Rule.ModulePatternExpr) ++! rule(Rule.NewLines) ++ matchToken(KW_AS) ++ matchTokenFactory(StringToken) ++ rule(Rule.NewLines) --> {
+            case (_, module, _, _, fileNameTemplate, _) => ModulePatternMapping(module, fileNameTemplate)
+          }
+
+        case Rule.ModulePatternExpr =>
+          matchToken(OP_SLASH) --> { _ => Seq() } |
+            rule(Rule.ModulePatternSegmentExpr) ++ (rule(Rule.NewLines) ++ matchToken(OP_SLASH) ++ rule(Rule.NewLines) ++ rule(Rule.ModulePatternSegmentExpr)).* --> {
+              case (head, tailSegs) =>
+                val tail = tailSegs.map { case (_, _, _, seg) => seg }
+                head +: tail
+            }
+
+        case Rule.ModulePatternSegmentExpr =>
+          tokenIdentifier --> ModulePatternSegment.Named.apply |
+            matchToken(OP_STAR) ++ rule(Rule.NewLines) ++ matchToken(KW_AS) ++ rule(Rule.NewLines) ++ rule(Rule.Identifier) --> { case (_, _, _, _, id) => ModulePatternSegment.Star(id) } |
+            matchToken(OP_STARSTAR) ++ rule(Rule.NewLines) ++ matchToken(KW_AS) ++ rule(Rule.NewLines) ++ rule(Rule.Identifier) --> { case (_, _, _, _, id) => ModulePatternSegment.DoubleStar(id) }
       }
 
     // Expressions
@@ -919,5 +944,8 @@ object ArgonParser {
 
   def parse[E]: ZChannel[Any, E, Chunk[WithSource[Token]], FilePosition, E | SyntaxError, Chunk[Stmt], FilePosition] =
     Grammar.parseAll(ArgonGrammarFactory)(Rule.PaddedStatement)
+
+  def parseTubeSpec[E]: ZChannel[Any, E, Chunk[WithSource[Token]], FilePosition, E | SyntaxError, Chunk[ModulePatternMapping], FilePosition] =
+    Grammar.parseAll(ArgonGrammarFactory)(Rule.ModulePatternMappingStmt)
 
 }

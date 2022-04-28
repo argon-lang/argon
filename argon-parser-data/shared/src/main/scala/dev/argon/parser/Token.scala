@@ -187,10 +187,12 @@ object Token {
   case object OP_CLOSEBRACKET extends TokenWithCategory(TokenCategory.OP_CLOSEBRACKET) with Token
   case object OP_OPENCURLY extends TokenWithCategory(TokenCategory.OP_OPENCURLY) with Token
   case object OP_CLOSECURLY extends TokenWithCategory(TokenCategory.OP_CLOSECURLY) with Token
+  case object OP_STARSTAR extends TokenWithCategory(TokenCategory.OP_STARSTAR) with Token
 
   case object OP_BOOLNOT extends TokenWithCategory(TokenCategory.OP_BOOLNOT) with UnaryOperatorToken {
     override def operator: UnaryOperator = UnaryOperator.BoolNot
   }
+
 
   case object OP_ADD extends TokenWithCategory(TokenCategory.OP_ADD) with BinaryOperatorToken with UnaryOperatorToken {
     override def operator: BinaryOperator & UnaryOperator = BinaryOperator.Plus

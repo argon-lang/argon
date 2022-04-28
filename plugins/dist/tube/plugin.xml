@@ -1,0 +1,12 @@
+<plugin id="tube" name="Tube" version="0.1.0">
+    <api-version>
+        <major>1</major>
+        <minor>0</minor>
+    </api-version>
+
+    <executors>
+        <java>
+            <jar>java/</jar>
+        </java>
+    </executors>
+</plugin>
