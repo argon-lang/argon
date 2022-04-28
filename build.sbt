@@ -21,15 +21,15 @@ lazy val nodeConfig =
     .withArgs(List("--no-warnings", "--experimental-vm-modules"))
 
 val esParseDeps = Seq(
-  "acorn" -> "^8.7.0",
+  "acorn" -> "^8.7.1",
 )
 
 lazy val commonSettingsNoLibs = Seq(
-  scalaVersion := "3.1.0",
+  scalaVersion := "3.1.2",
 )
 
 lazy val commonSettingsAnnotations = Seq(
-  libraryDependencies += "org.checkerframework" % "checker-qual" % "3.21.3",
+  libraryDependencies += "org.checkerframework" % "checker-qual" % "3.21.4",
 )
 
 lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ Seq(
@@ -61,7 +61,7 @@ lazy val sharedJSNodeSettings = Seq(
 
   npmDependencies ++= Seq(
     "jszip" -> "^3.7.1",
-    "@xmldom/xmldom" -> "^0.8.1",
+    "@xmldom/xmldom" -> "^0.8.2",
   ) ++ esParseDeps,
   
   scalaJSLinkerConfig ~= {

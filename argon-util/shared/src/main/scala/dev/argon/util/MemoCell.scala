@@ -2,7 +2,7 @@ package dev.argon.util
 
 import zio.*
 
-opaque type MemoCell[-R, +E, +A] = Ref.Synchronized[Option[ZIO[R, E, A]]]
+opaque type MemoCell[R, E, A] = Ref.Synchronized[Option[ZIO[R, E, A]]]
 
 extension [R, E, A](cell: MemoCell[R, E, A])
 

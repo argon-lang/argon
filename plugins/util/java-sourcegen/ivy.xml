@@ -9,6 +9,6 @@
     </configurations>
     <dependencies>
         <dependency org="org.apache.commons" name="commons-text" rev="1.9" conf="default" />
-        <dependency org="org.checkerframework" name="checker-qual" rev="3.21.3" conf="default" />
+        <dependency org="org.checkerframework" name="checker-qual" rev="3.21.4" conf="default" />
     </dependencies>
 </ivy-module>

@@ -54,7 +54,7 @@
 		<path id="classpath.processor">
 			<path refid="classpath.processor.base" />
 			<pathelement location="../../../util/java-sourcegen/target/javasourcegen.jar" />
-			<pathelement location="../../../shared/java/checkerframework/jars/checker-3.21.3-all.jar" />
+			<pathelement location="../../../shared/java/checkerframework/jars/checker-3.21.4-all.jar" />
 		</path>
     </target>
 
