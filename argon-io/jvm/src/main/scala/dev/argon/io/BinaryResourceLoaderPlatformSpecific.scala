@@ -12,7 +12,7 @@ trait BinaryResourceLoaderPlatformSpecific {
   def loadInputStream[E >: IOException](inputStream: IO[E, InputStream]): BinaryResource[E] =
     new BinaryResource[E] {
       override def asBytes: Stream[E, Byte] =
-        ZStream.unwrapManaged(ZManaged.fromAutoCloseable(inputStream).map(ZStream.fromInputStream(_)))
+        ZStream.unwrapScoped(ZIO.fromAutoCloseable(inputStream).map(ZStream.fromInputStream(_)))
 
       override def asInputStream: IO[E, Option[InputStream]] =
         inputStream.asSome

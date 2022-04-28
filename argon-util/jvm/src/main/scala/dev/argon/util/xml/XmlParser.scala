@@ -17,7 +17,11 @@ object XmlParser {
     parse(new StringReader(text)).refineToOrDie[XMLException]
 
   def parse[R, E >: XMLException <: Throwable](stream: ZStream[R, E, Char])(using TypeTest[Throwable, E]): ZIO[R, E, Element] =
-    stream.toReader.use(parse).refineOrDie { case ex: E => ex }
+    ZIO.scoped(
+      stream.toReader
+        .flatMap(parse)
+        .refineOrDie { case ex: E => ex }
+    )
 
   private given Releasable[XMLStreamReader] with
     def release(reader: XMLStreamReader): Unit =

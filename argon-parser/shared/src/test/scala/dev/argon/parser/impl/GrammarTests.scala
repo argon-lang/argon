@@ -3,17 +3,17 @@ package dev.argon.parser.impl
 import dev.argon.grammar.Grammar
 import Grammar.Operators.*
 import scala.language.postfixOps
-import zio.NonEmptyChunk
+import zio.*
 import zio.test.*
 import zio.test.Assertion.*
 
-abstract class GrammarTestsCommon extends DefaultRunnableSpec with GrammarTestHelpers with NumberTokenHelpers {
+abstract class GrammarTestsCommon extends ZIOSpecDefault with GrammarTestHelpers with NumberTokenHelpers {
 
   def suiteName: String
 
   private lazy val rightRec: TGrammar[Int] = numberToken(0) | numberToken(1) ++ rightRec --> { case (a, b) => a + b }
 
-  override def spec: ZSpec[Environment, Failure] =
+  override def spec: ZSpec[Environment & Scope, Any] =
     suite(suiteName)(
       suite("Token grammar")(
         test("fail for EOF") {

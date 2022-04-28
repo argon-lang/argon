@@ -3,14 +3,14 @@ package dev.argon.parser.impl
 import dev.argon.parser.{Token, ImportStmt, ImportPathSegment}
 import zio.test.*
 import zio.test.Assertion.*
-import zio.Chunk
+import zio.*
 import dev.argon.util.NonEmptyList
 
-abstract class ArgonParserTestsCommon extends DefaultRunnableSpec with GrammarTestHelpers with GrammarTokenHelpers {
+abstract class ArgonParserTestsCommon extends ZIOSpecDefault with GrammarTestHelpers with GrammarTokenHelpers {
 
   def suiteName: String
 
-  override def spec: ZSpec[Environment, Failure] =
+  override def spec: ZSpec[Environment & Scope, Any] =
     suite(suiteName)(
       test("Import statement parsing") {
         assert(

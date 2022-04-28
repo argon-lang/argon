@@ -8,8 +8,8 @@ import scala.scalajs.js.typedarray.Uint8Array
 
 trait BinaryResourceLoaderPlatformSpecific {
 
-  private def fileHandle(path: String, flags: String | Double): UManaged[NodeFileHandle] =
-    ZManaged.acquireReleaseWith(
+  private def fileHandle(path: String, flags: String | Double): URIO[Scope, NodeFileHandle] =
+    ZIO.acquireRelease(
       Task.fromPromiseJS(NodeFileSystem.open(path, flags))
     ) { handle =>
       Task.fromPromiseJS(handle.close()).orDie
@@ -20,7 +20,7 @@ trait BinaryResourceLoaderPlatformSpecific {
       ZStream.fromPull[Any, Throwable, Byte](
         for {
           handle <- fileHandle(path, "r")
-          buffer <- ZManaged.succeed { new Uint8Array(ZStream.DefaultChunkSize) }
+          buffer <- IO.succeed { new Uint8Array(ZStream.DefaultChunkSize) }
         } yield (
           for {
             readRes <- Task.fromPromiseJS(handle.read(buffer, 0, buffer.length)).asSomeError

@@ -4,7 +4,7 @@ import zio.*
 import zio.test.*
 import zio.test.Assertion.*
 
-object JavaExecuteIOTests extends DefaultRunnableSpec {
+object JavaExecuteIOTests extends ZIOSpecDefault {
 
   final case class WrappedStringCause(cause: Cause[String]) extends Exception
 
@@ -26,7 +26,7 @@ object JavaExecuteIOTests extends DefaultRunnableSpec {
     }
 
 
-  override def spec: ZSpec[Environment, Failure] =
+  override def spec: ZSpec[Environment & Scope, Any] =
     suite("JavaExecuteIO")(
       test("Success")(
         assertM(runHelper(IO.succeed(4)))(equalTo(4))
@@ -39,7 +39,7 @@ object JavaExecuteIOTests extends DefaultRunnableSpec {
           for {
             didRelease <- Ref.make(false)
             fiber <- runHelper(
-              IO.bracket[Nothing, Unit, Nothing](
+              IO.acquireReleaseWith[Any, Nothing, Unit, Int](
                 acquire = IO.unit,
                 release = _ => didRelease.set(true),
                 use = _ => IO.never,

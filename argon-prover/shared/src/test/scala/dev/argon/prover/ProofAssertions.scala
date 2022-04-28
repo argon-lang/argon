@@ -5,7 +5,7 @@ import zio.test.Assertion.*
 import zio.test.*
 import zio.test.Assertion.Render.*
 
-trait ProofAssertions[R <: VariableProvider & zio.Random, E] extends ProofPrologContext[R, E] {
+trait ProofAssertions[R <: VariableProvider, E] extends ProofPrologContext[R, E] {
 
   def hasProof(proof: Proof[String]): Assertion[PrologResult] =
     Assertion.assertion[PrologResult]("hasProof")(param(proof)) {

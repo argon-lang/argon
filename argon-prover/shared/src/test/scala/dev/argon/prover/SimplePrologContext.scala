@@ -4,7 +4,7 @@ import dev.argon.prover.SimplePrologContext.VariableProvider
 import zio.*
 import zio.stream.{Stream, ZStream}
 
-abstract class SimplePrologContext[R <: VariableProvider & Random, E]
+abstract class SimplePrologContext[R <: VariableProvider, E]
     extends PrologContext[R, E] with CommonProofRelations[R, E] {
   override val syntax: SimplePrologSyntaxBase
   import syntax.*
@@ -40,7 +40,7 @@ object SimplePrologContext {
   object VariableProvider {
 
     def live: ULayer[VariableProvider] =
-      ZLayer.fromEffect(for {
+      ZLayer(for {
         nextId <- Ref.make(0)
       } yield new VariableProvider {
 
@@ -51,7 +51,7 @@ object SimplePrologContext {
 
       })
 
-    def next: URIO[VariableProvider, String] = ZIO.accessM[VariableProvider](_.get.nextVariable)
+    def next: URIO[VariableProvider, String] = ZIO.serviceWithZIO[VariableProvider](_.nextVariable)
   }
 
 }

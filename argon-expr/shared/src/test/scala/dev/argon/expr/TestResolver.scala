@@ -5,7 +5,7 @@ import zio.stream.Stream
 import zio.{IO, ZIO}
 import zio.test.{Gen, Sample}
 
-class TestResolver[R <: zio.Random] extends ImplicitResolver[R, String] {
+class TestResolver[R] extends ImplicitResolver[R, String] {
   override val exprContext: TestExprContext.type = TestExprContext
   import exprContext.*
 

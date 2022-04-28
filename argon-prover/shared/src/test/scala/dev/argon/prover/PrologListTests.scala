@@ -1,11 +1,11 @@
 package dev.argon.prover
 
-import zio.{URIO, ZIO}
+import zio.*
 import zio.test.*
 import zio.test.Assertion.*
 import SimplePrologContext.VariableProvider
 
-object PrologListTests extends DefaultRunnableSpec {
+object PrologListTests extends ZIOSpecDefault {
 
   sealed trait TestPredicate derives CanEqual
   case object Member extends TestPredicate derives CanEqual
@@ -21,7 +21,7 @@ object PrologListTests extends DefaultRunnableSpec {
 
   val fuel = 100
 
-  private object FuelContext extends SimplePrologContext[VariableProvider & zio.Random, Nothing] {
+  private object FuelContext extends SimplePrologContext[VariableProvider, Nothing] {
     override val syntax: prologSyntax.type = prologSyntax
 
     protected override val assertions: URIO[VariableProvider, List[(Proof[Unit], Predicate)]] =
@@ -42,39 +42,39 @@ object PrologListTests extends DefaultRunnableSpec {
   private val prologContext = FuelContext
   import prologContext.PrologResult
 
-  override def spec: ZSpec[Environment, Failure] =
+  override def spec: ZSpec[Environment & Scope, Any] =
     suite("Lists")(
-      testM("member with head value (size=1)") {
+      test("member with head value (size=1)") {
         assertM(prologContext.check(pred(Member, expr(A), expr(Cons, expr(A), expr(Nil))), fuel))(
           isSubtype[PrologResult.Yes](anything)
         )
       },
-      testM("member with head value (size=2)") {
+      test("member with head value (size=2)") {
         assertM(prologContext.check(pred(Member, expr(A), expr(Cons, expr(A), expr(Cons, expr(B), expr(Nil)))), fuel))(
           isSubtype[PrologResult.Yes](anything)
         )
       },
-      testM("member with non-head value (size=2)") {
+      test("member with non-head value (size=2)") {
         assertM(prologContext.check(pred(Member, expr(A), expr(Cons, expr(B), expr(Cons, expr(A), expr(Nil)))), fuel))(
           isSubtype[PrologResult.Yes](anything)
         )
       },
-      testM("member with non-head value (size=3)") {
+      test("member with non-head value (size=3)") {
         assertM(prologContext.check(
           pred(Member, expr(A), expr(Cons, expr(B), expr(Cons, expr(B), expr(Cons, expr(A), expr(Nil))))),
           fuel,
         ))(isSubtype[PrologResult.Yes](anything))
       },
-      testM("member with missing value (size=1)") {
+      test("member with missing value (size=1)") {
         assertM(prologContext.check(pred(Member, expr(A), expr(Cons, expr(B), expr(Nil))), fuel))(equalTo(
           PrologResult.Unknown
         ))
       },
-      testM("member with missing value (size=2)") {
+      test("member with missing value (size=2)") {
         assertM(prologContext.check(pred(Member, expr(A), expr(Cons, expr(B), expr(Cons, expr(B), expr(Nil)))), fuel))(
           equalTo(PrologResult.Unknown)
         )
       },
-    ).provideCustomLayer(VariableProvider.live)
+    ).provideSome[Environment](VariableProvider.live)
 
 }

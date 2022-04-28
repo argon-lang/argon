@@ -7,6 +7,6 @@ sealed trait UniqueIdentifier derives CanEqual
 object UniqueIdentifier {
 
   @SuppressWarnings(Array("scalafix:Disable.effect"))
-  def make: UIO[UniqueIdentifier] = IO.effectTotal { new UniqueIdentifier {} }
+  def make: UIO[UniqueIdentifier] = IO.succeed { new UniqueIdentifier {} }
 
 }

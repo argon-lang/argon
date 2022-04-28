@@ -4,7 +4,7 @@ import dev.argon.prover.SimplePrologContext.VariableProvider
 import zio.*
 import zio.stream.*
 
-trait CommonProofRelations[R <: VariableProvider & Random, E] extends PrologContext[R, E] {
+trait CommonProofRelations[R <: VariableProvider, E] extends PrologContext[R, E] {
   override val syntax: SimplePrologSyntaxBase
   import syntax.*
 

@@ -5,7 +5,7 @@ import zio.*
 import zio.stream.{Stream, ZStream}
 import dev.argon.util.UniqueIdentifier
 
-abstract class PrologContext[R <: Random, E] {
+abstract class PrologContext[R, E] {
   val syntax: PrologSyntax
   import syntax.*
 
@@ -143,7 +143,7 @@ abstract class PrologContext[R <: Random, E] {
         solve(Or(Implies(a, PropFalse), Implies(b, PropFalse)), substitutions, fuel)
           .catchSome {
             case Right(PrologResult.No(proof, model)) =>
-              ZStream.fromEffect(
+              ZStream.fromZIO(
                 UniqueIdentifier.make.flatMap { id =>
                   IO.fail(Right(PrologResult.No(
                     Proof.HypotheticalSyllogism(
@@ -322,7 +322,7 @@ abstract class PrologContext[R <: Random, E] {
 
             val unifiedResult =
               addSubstitution(substitutions, variable, constraints)
-                .mapM { substitutions =>
+                .mapZIO { substitutions =>
                   variableExprRelationProof(relation, variable, other)
                     .mapError(Left.apply)
                     .map { proof =>
@@ -352,7 +352,7 @@ abstract class PrologContext[R <: Random, E] {
                               (substitutions, argProofs :+ argProof)
                             }
                       }
-                        .mapM { case (substitutions, argProofs) =>
+                        .mapZIO { case (substitutions, argProofs) =>
                           valueRelationProof(relation, v1, v2, argProofs)
                             .mapError(Left.apply)
                             .map { proof => PrologResult.Yes(proof, substitutions) }
@@ -361,7 +361,7 @@ abstract class PrologContext[R <: Random, E] {
                 ) ++ customRelations
 
               case (Variable(var1), Variable(var2)) if var1 == var2 =>
-                Stream.fromEffect(
+                Stream.fromZIO(
                   variableRelationProof(relation, var1, var2)
                     .mapError(Left.apply)
                     .map { proof =>
@@ -397,5 +397,5 @@ abstract class PrologContext[R <: Random, E] {
 }
 
 object PrologContext {
-  type Aux[R <: Random, E, TSyntax <: PrologSyntax] = PrologContext[R, E] { val syntax: TSyntax }
+  type Aux[R, E, TSyntax <: PrologSyntax] = PrologContext[R, E] { val syntax: TSyntax }
 }

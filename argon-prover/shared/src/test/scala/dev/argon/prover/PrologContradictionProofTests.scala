@@ -1,11 +1,11 @@
 package dev.argon.prover
 
 import dev.argon.prover.SimplePrologContext.VariableProvider
-import zio.{ZIO, IO, URIO}
+import zio.*
 import zio.test.Assertion.*
 import zio.test.*
 
-object PrologContradictionProofTests extends DefaultRunnableSpec {
+object PrologContradictionProofTests extends ZIOSpecDefault {
 
   sealed trait TestPredicate derives CanEqual
   case object A extends TestPredicate derives CanEqual
@@ -20,12 +20,12 @@ object PrologContradictionProofTests extends DefaultRunnableSpec {
 
   val fuel = 100
 
-  override def spec: ZSpec[Environment, Failure] =
+  override def spec: ZSpec[Environment & Scope, Any] =
     suite("Contradiction Proofs")(
-      testM("A or B, not A, not B") {
+      test("A or B, not A, not B") {
         val prologContext =
-          new ProofPrologContext[VariableProvider & zio.Random, Nothing]
-            with ProofAssertions[VariableProvider & zio.Random, Nothing] {
+          new ProofPrologContext[VariableProvider, Nothing]
+            with ProofAssertions[VariableProvider, Nothing] {
             override val syntax: prologSyntax.type = prologSyntax
 
             protected override def assertions: URIO[VariableProvider, List[(Proof[String], syntax.Predicate)]] =
@@ -45,6 +45,6 @@ object PrologContradictionProofTests extends DefaultRunnableSpec {
           ))
         )
       }
-    ).provideCustomLayer(VariableProvider.live)
+    ).provideSome[Environment](VariableProvider.live)
 
 }

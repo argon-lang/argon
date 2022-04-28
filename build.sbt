@@ -5,7 +5,7 @@ import NodePlatformImplicits._
 import scala.sys.process.Process
 
 val graalVersion = "21.1.0"
-val zioVersion = "2.0.0-RC2"
+val zioVersion = "2.0.0-RC5"
 
 ThisBuild / semanticdbEnabled := true
 ThisBuild / scalafixDependencies += "com.github.vovapolu" %% "scaluzzi" % "0.1.20"
@@ -41,8 +41,6 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
   libraryDependencies ++= Seq(
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
-
-    "dev.zio" %%% "zio-json" % "0.3.0-RC3",
 
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",

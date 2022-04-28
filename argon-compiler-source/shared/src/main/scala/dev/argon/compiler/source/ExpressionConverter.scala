@@ -8,7 +8,6 @@ import dev.argon.util.{WithSource, SourceLocation}
 import dev.argon.parser
 import dev.argon.parser.{IdentifierExpr, FunctionParameterListType}
 import dev.argon.expr.{Evaluator, ImplicitResolver, ExprConstraints}
-import zio.Random
 import dev.argon.util.UniqueIdentifier
 import zio.*
 import zio.stream.*

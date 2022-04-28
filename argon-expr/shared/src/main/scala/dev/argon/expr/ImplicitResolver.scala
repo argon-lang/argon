@@ -6,7 +6,7 @@ import dev.argon.util.UniqueIdentifier
 import zio.*
 import zio.stream.{Stream, ZStream}
 
-abstract class ImplicitResolver[R <: Random, E] {
+abstract class ImplicitResolver[R, E] {
 
   val exprContext: ExprContext
   import exprContext.*

@@ -11,9 +11,10 @@ import java.io.IOException
 private[plugin] object JavaInputStreamWrap {
 
   def fromZStream[R, E >: IOException, EX <: Exception](stream: ZStream[R, E, Byte])(using Runtime[R], ErrorWrapper[E, EX]): InputStream =
-    val reservation = JavaExecuteIO.runInterruptable(stream.channel.toPull.reserve)
+    val scope = JavaExecuteIO.runInterruptable(Scope.make)
 
-    val pull = JavaExecuteIO.runInterruptable(reservation.acquire)
+
+    val pull = JavaExecuteIO.runInterruptable(stream.channel.toPull.provideSomeLayer(ZLayer.succeed(scope)))
 
     new InputStream {
 
@@ -47,7 +48,7 @@ private[plugin] object JavaInputStreamWrap {
 
       override def close(): Unit =
         super.close()
-        JavaExecuteIO.runInterruptable(reservation.release(Exit.unit))
+        JavaExecuteIO.runInterruptable(scope.close(Exit.unit))
       end close
     }
   end fromZStream

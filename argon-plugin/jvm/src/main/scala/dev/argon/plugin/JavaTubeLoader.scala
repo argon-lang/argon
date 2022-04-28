@@ -10,8 +10,8 @@ import scala.reflect.TypeTest
 
 final class JavaTubeLoader[E >: IOException, EX <: Exception, Options](inner: japi.TubeLoader[EX, Options])(using Runtime[Any], ErrorWrapper[E, EX], TypeTest[Throwable, EX]) extends TubeLoader[E, Options] {
   
-  override def load(options: Options)(resource: BinaryResource[E]): Managed[E, SerializedTube[E]] =
-    ZManaged.acquireReleaseWith(
+  override def load(options: Options)(resource: BinaryResource[E]): ZIO[Scope, E, SerializedTube[E]] =
+    ZIO.acquireRelease(
       IO.attemptBlockingInterrupt {
         inner.load(options, new JavaBinaryResourceWrap[E, EX](resource))
       }

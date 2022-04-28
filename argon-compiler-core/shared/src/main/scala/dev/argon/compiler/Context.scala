@@ -16,5 +16,5 @@ trait Context {
   def getTube(tubeName: TubeName): Comp[ArTubeC with HasContext[this.type]]
 }
 
-type CompEnv = Random
+type CompEnv = Any
 type CompError = IOException | SyntaxError | DiagnosticError

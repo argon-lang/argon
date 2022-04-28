@@ -427,8 +427,8 @@ object Grammar {
             case None => IO.succeed((ParseStepReady, acc :+ value))
           }
 
-        case GrammarResultFailure(failure) => IO.halt(ZIOErrorUtil.multiCauseChunk(failure))
-        case GrammarResultError(error) => IO.halt(ZIOErrorUtil.multiCauseChunk(error))
+        case GrammarResultFailure(failure) => IO.failCause(ZIOErrorUtil.multiCauseChunk(failure))
+        case GrammarResultError(error) => IO.failCause(ZIOErrorUtil.multiCauseChunk(error))
         case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] =>
           IO.succeed((ParseStepPartial(suspend), acc))
       }

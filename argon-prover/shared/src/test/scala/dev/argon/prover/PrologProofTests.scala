@@ -1,11 +1,11 @@
 package dev.argon.prover
 
 import dev.argon.prover.SimplePrologContext.VariableProvider
-import zio.{ZIO, IO, URIO}
+import zio.*
 import zio.test.Assertion.*
 import zio.test.*
 
-object PrologProofTests extends DefaultRunnableSpec {
+object PrologProofTests extends ZIOSpecDefault {
 
   sealed trait TestPredicate derives CanEqual
   case object Gt extends TestPredicate derives CanEqual
@@ -24,8 +24,8 @@ object PrologProofTests extends DefaultRunnableSpec {
   val fuel = 100
 
   private final class TestContext
-      extends ProofPrologContext[VariableProvider & zio.Random, Nothing]
-      with ProofAssertions[VariableProvider & zio.Random, Nothing] {
+      extends ProofPrologContext[VariableProvider, Nothing]
+      with ProofAssertions[VariableProvider, Nothing] {
     override val syntax: prologSyntax.type = prologSyntax
 
     val succIsGreaterThanZero = Proof.Atomic("succIsGreaterThanZero")
@@ -54,97 +54,97 @@ object PrologProofTests extends DefaultRunnableSpec {
 
   import prologContext.{check as _, *}
 
-  override def spec: ZSpec[Environment, Failure] =
+  override def spec: ZSpec[Environment & Scope, Any] =
     suite("Proofs")(
-      testM("1 > 0") {
+      test("1 > 0") {
         assertM(prologContext.check(pred(Gt, expr(Succ, expr(Zero)), expr(Zero)), fuel))(hasProof(succIsGreaterThanZero))
       },
-      testM("2 > 1") {
+      test("2 > 1") {
         assertM(prologContext.check(pred(Gt, expr(Succ, expr(Succ, expr(Zero))), expr(Succ, expr(Zero))), fuel))(
           hasProof(Proof.ModusPonens(succIsGreaterThanSucc, succIsGreaterThanZero))
         )
       },
-      testM("3 > 1") {
+      test("3 > 1") {
         assertM(prologContext.check(
           pred(Gt, expr(Succ, expr(Succ, expr(Succ, expr(Zero)))), expr(Succ, expr(Zero))),
           fuel,
         ))(hasProof(Proof.ModusPonens(succIsGreaterThanSucc, succIsGreaterThanZero)))
       },
-      testM("not 0 > 0") {
+      test("not 0 > 0") {
         assertM(prologContext.check(pred(Gt, expr(Zero), expr(Zero)), fuel))(equalTo(PrologResult.Unknown))
       },
-      testM("not 1 > 1") {
+      test("not 1 > 1") {
         assertM(prologContext.check(pred(Gt, expr(Succ, expr(Zero)), expr(Succ, expr(Zero))), fuel))(equalTo(
           PrologResult.Unknown
         ))
       },
-      testM("not 1 > 2") {
+      test("not 1 > 2") {
         assertM(prologContext.check(pred(Gt, expr(Succ, expr(Zero)), expr(Succ, expr(Succ, expr(Zero)))), fuel))(equalTo(
           PrologResult.Unknown
         ))
       },
-      testM("true") {
+      test("true") {
         assertM(prologContext.check(pred(KnownTrue), fuel))(
           hasProof(knownTrue)
         )
       },
-      testM("false") {
+      test("false") {
         assertM(prologContext.check(pred(KnownFalse), fuel))(disproved(equalTo(knownFalse)))
       },
-      testM("disjunct") {
+      test("disjunct") {
         assertM(prologContext.check(Or(pred(KnownDisjunctLeft), pred(KnownDisjunctRight)), fuel))(hasProof(knownDisjunct))
       },
-      testM("disjunct left") {
+      test("disjunct left") {
         assertM(prologContext.check(Or(pred(KnownTrue), pred(KnownFalse)), fuel))(
           hasProof(Proof.DisjunctIntroLeft(knownTrue))
         )
       },
-      testM("disjunct right") {
+      test("disjunct right") {
         assertM(prologContext.check(Or(pred(KnownFalse), pred(KnownTrue)), fuel))(
           hasProof(Proof.DisjunctIntroRight(knownTrue))
         )
       },
-      testM("not false") {
+      test("not false") {
         assertM(prologContext.check(not(pred(KnownFalse)), fuel))(hasProof(knownFalse))
       },
-      testM("not (false | false)") {
+      test("not (false | false)") {
         assertM(prologContext.check(not(Or(pred(KnownFalse), pred(KnownFalse))), fuel))(hasProof(
           Proof.DeMorganAndPullNotOut(Proof.ConjunctIntro(knownFalse, knownFalse))
         ))
       },
-      testM("not (true | false)") {
+      test("not (true | false)") {
         assertM(prologContext.check(not(Or(pred(KnownTrue), pred(KnownFalse))), fuel))(equalTo(PrologResult.Unknown))
       },
-      testM("not (false | true)") {
+      test("not (false | true)") {
         assertM(prologContext.check(not(Or(pred(KnownFalse), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
       },
-      testM("not (true | true)") {
+      test("not (true | true)") {
         assertM(prologContext.check(not(Or(pred(KnownTrue), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
       },
-      testM("not (false & false)") {
+      test("not (false & false)") {
         assertM(prologContext.check(not(And(pred(KnownFalse), pred(KnownFalse))), fuel))(
           hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroLeft(knownFalse))) ||
             hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroRight(knownFalse)))
         )
       },
-      testM("not (false & true)") {
+      test("not (false & true)") {
         assertM(prologContext.check(not(And(pred(KnownFalse), pred(KnownTrue))), fuel))(
           hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroLeft(knownFalse)))
         )
       },
-      testM("not (true & false)") {
+      test("not (true & false)") {
         assertM(prologContext.check(not(And(pred(KnownTrue), pred(KnownFalse))), fuel))(
           hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroRight(knownFalse)))
         )
       },
-      testM("not (true & true)") {
+      test("not (true & true)") {
         assertM(prologContext.check(not(And(pred(KnownTrue), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
       },
-      testM("not not true") {
+      test("not not true") {
         assertM(prologContext.check(not(not(pred(KnownTrue))), fuel))(
           hasProof(Proof.DoubleNegIntro(knownTrue))
         )
       },
-    ).provideCustomLayer(VariableProvider.live)
+    ).provideSome[Environment](VariableProvider.live)
 
 }

@@ -17,7 +17,7 @@ private[plugin] object JavaErrorHandler {
     }
 
   def handleErrorsStream[E >: IOException, EX <: Exception](ex: Throwable)(using TypeTest[Throwable, EX], ErrorWrapper[E, EX]): Stream[E, Nothing] =
-    ZStream.fromEffect(handleErrors(ex))
+    ZStream.fromZIO(handleErrors(ex))
 
   def handleOptionsExceptions: PartialFunction[Throwable, OptionsError.ParseError] = {
     case ex: japi.options.DuplicateOptionValueException => OptionsError.MultipleValuesNotSupported(ex.optionName)
