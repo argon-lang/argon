@@ -27,6 +27,8 @@ final class TubeImpl implements Tube {
     private final @Nullable ConstantPoolEntry[] entries;
     private final Map<Name, Integer> exports;
 
+
+
     @Override
     public int tubeNum() {
         return tubeNum;
@@ -42,8 +44,8 @@ final class TubeImpl implements Tube {
         return getEntry(exportIndex);
     }
 
-
-    synchronized ConstantPoolEntry getEntry(int index) {
+    @Override
+    public synchronized ConstantPoolEntry getEntry(int index) {
         var entry = entries[index];
         if(entry == null) {
             entry = createEntry(constantPool.entries().get(index), index);
