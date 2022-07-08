@@ -356,14 +356,14 @@ abstract class ImplicitResolver[R, E] {
                     EmptyTuple,
                   )))
 
-              } yield Stream.fail(Right(PrologResult.No(proof, substitutions)))
+              } yield ZStream.fail(Right(PrologResult.No(proof, substitutions)))
             )
           }
           else {
             argsA.zip(argsB)
               .map { case (argA, argB) => PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(argA, argB)) }
               .reduceOption(And.apply)
-              .fold(Stream.empty) { solve(_, substitutions, fuel) }
+              .fold(ZStream.empty) { solve(_, substitutions, fuel) }
           }
 
         case (
@@ -415,7 +415,7 @@ abstract class ImplicitResolver[R, E] {
                     EmptyTuple,
                   )))
 
-              } yield Stream.fail(Right(PrologResult.No(proof, substitutions)))
+              } yield ZStream.fail(Right(PrologResult.No(proof, substitutions)))
             )
           }
 
@@ -436,7 +436,7 @@ abstract class ImplicitResolver[R, E] {
             } yield ZStream(PrologResult.Yes(proof, substitutions))
           )
 
-        case _ => Stream.empty
+        case _ => ZStream.empty
       }
 
     protected override def mergeRelations(parentExprRelation: ExprRelation, subExprRelation: ExprRelation)
@@ -488,40 +488,40 @@ abstract class ImplicitResolver[R, E] {
       constructor match {
         case ExprConstructor.ClassConstructorCall(ctor) => classConstructorRelations(ctor)
         case ExprConstructor.EnsureExecuted =>
-          IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
+          ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.FunctionCall(func) => functionRelations(func)
         case ExprConstructor.FunctionObjectCall =>
-          IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
+          ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.IfElse =>
-          IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
+          ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.BindVariable(_) =>
-          IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
-        case ExprConstructor.LoadConstantBool(_) => IO.succeed(Seq(ExprRelation.TypeEquality))
-        case ExprConstructor.LoadConstantInt(_) => IO.succeed(Seq(ExprRelation.TypeEquality))
-        case ExprConstructor.LoadConstantString(_) => IO.succeed(Seq(ExprRelation.TypeEquality))
-        case ExprConstructor.LoadLambda(_) => IO.succeed(Seq(ExprRelation.SyntacticEquality))
-        case ExprConstructor.LoadTuple => IO.succeed(Seq.fill(arity)(ExprRelation.SubType))
-        case ExprConstructor.LoadTupleElement(_) => IO.succeed(Seq(ExprRelation.SubType))
-        case ExprConstructor.LoadVariable(_) => IO.succeed(Seq.empty)
+          ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
+        case ExprConstructor.LoadConstantBool(_) => ZIO.succeed(Seq(ExprRelation.TypeEquality))
+        case ExprConstructor.LoadConstantInt(_) => ZIO.succeed(Seq(ExprRelation.TypeEquality))
+        case ExprConstructor.LoadConstantString(_) => ZIO.succeed(Seq(ExprRelation.TypeEquality))
+        case ExprConstructor.LoadLambda(_) => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
+        case ExprConstructor.LoadTuple => ZIO.succeed(Seq.fill(arity)(ExprRelation.SubType))
+        case ExprConstructor.LoadTupleElement(_) => ZIO.succeed(Seq(ExprRelation.SubType))
+        case ExprConstructor.LoadVariable(_) => ZIO.succeed(Seq.empty)
         case ExprConstructor.MethodCall(method) => methodRelations(method)
-        case ExprConstructor.PatternMatch(_) => IO.succeed(Seq.fill(arity)(ExprRelation.SyntacticEquality))
-        case ExprConstructor.RaiseException => IO.succeed(Seq(ExprRelation.SyntacticEquality))
-        case ExprConstructor.Sequence => IO.succeed(Seq.fill(arity)(ExprRelation.SyntacticEquality))
-        case ExprConstructor.StoreVariable(_) => IO.succeed(Seq(ExprRelation.SyntacticEquality))
-        case ExprConstructor.TypeN => IO.succeed(Seq(ExprRelation.SyntacticEquality))
-        case ExprConstructor.OmegaTypeN(_) | ExprConstructor.AnyType => IO.succeed(Seq.empty)
+        case ExprConstructor.PatternMatch(_) => ZIO.succeed(Seq.fill(arity)(ExprRelation.SyntacticEquality))
+        case ExprConstructor.RaiseException => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
+        case ExprConstructor.Sequence => ZIO.succeed(Seq.fill(arity)(ExprRelation.SyntacticEquality))
+        case ExprConstructor.StoreVariable(_) => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
+        case ExprConstructor.TypeN => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
+        case ExprConstructor.OmegaTypeN(_) | ExprConstructor.AnyType => ZIO.succeed(Seq.empty)
         case ExprConstructor.TraitType(arTrait) => traitRelations(arTrait)
         case ExprConstructor.ClassType(arClass) => classRelations(arClass)
-        case ExprConstructor.FunctionType => IO.succeed(Seq(ExprRelation.SuperType, ExprRelation.SubType))
-        case ExprConstructor.UnionType => IO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
-        case ExprConstructor.IntersectionType => IO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
-        case ExprConstructor.ExistentialType(_) => IO.succeed(Seq(ExprRelation.SubType))
-        case ExprConstructor.ConjunctionType => IO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
-        case ExprConstructor.DisjunctionType => IO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
-        case ExprConstructor.NeverType => IO.succeed(Seq.empty)
-        case ExprConstructor.SubtypeWitnessType => IO.succeed(Seq(ExprRelation.SuperType, ExprRelation.SubType))
-        case ExprConstructor.EqualTo => IO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
-        case ExprConstructor.AssumeErasedValue => IO.succeed(Seq(ExprRelation.TypeEquality))
+        case ExprConstructor.FunctionType => ZIO.succeed(Seq(ExprRelation.SuperType, ExprRelation.SubType))
+        case ExprConstructor.UnionType => ZIO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
+        case ExprConstructor.IntersectionType => ZIO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
+        case ExprConstructor.ExistentialType(_) => ZIO.succeed(Seq(ExprRelation.SubType))
+        case ExprConstructor.ConjunctionType => ZIO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
+        case ExprConstructor.DisjunctionType => ZIO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
+        case ExprConstructor.NeverType => ZIO.succeed(Seq.empty)
+        case ExprConstructor.SubtypeWitnessType => ZIO.succeed(Seq(ExprRelation.SuperType, ExprRelation.SubType))
+        case ExprConstructor.EqualTo => ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
+        case ExprConstructor.AssumeErasedValue => ZIO.succeed(Seq(ExprRelation.TypeEquality))
       }
 
     protected override def checkRelation
@@ -558,7 +558,7 @@ abstract class ImplicitResolver[R, E] {
 
     protected override def variableRelationProof(relation: ExprRelation, a: exprContext.THole, b: exprContext.THole)
       : ZIO[R, E, Proof[TCAtomicProof]] =
-      IO.succeed(buildRelationProof(relation, WrapExpr.OfHole(a), WrapExpr.OfHole(b)))
+      ZIO.succeed(buildRelationProof(relation, WrapExpr.OfHole(a), WrapExpr.OfHole(b)))
 
     protected override def variableExprRelationProof(relation: ExprRelation, a: exprContext.THole, b: syntax.Expr)
       : ZIO[R, E, Proof[TCAtomicProof]] =
@@ -579,12 +579,12 @@ abstract class ImplicitResolver[R, E] {
         case Value(ctor, args) =>
           ZIO.foreach(args)(exprToWrapExpr).flatMap { argExprs =>
             ctor.argsFromExprs(argExprs) match {
-              case Some(ctorArgs) => IO.succeed(WrapExpr.OfExpr(ArExpr(ctor, ctorArgs)))
+              case Some(ctorArgs) => ZIO.succeed(WrapExpr.OfExpr(ArExpr(ctor, ctorArgs)))
               case None => invalidExpr
             }
           }
 
-        case Variable(variable) => IO.succeed(WrapExpr.OfHole(variable))
+        case Variable(variable) => ZIO.succeed(WrapExpr.OfHole(variable))
       }
 
     def exprToWrapExprError(expr: Expr): ZIO[R, Error, WrapExpr] = exprToWrapExpr(expr).mapError(Left.apply)
@@ -621,11 +621,11 @@ abstract class ImplicitResolver[R, E] {
                 b2 <- arExprToGoal(b, fuel - 1)
               } yield Implies(a2, b2)
 
-            case ExprConstructor.NeverType => IO.succeed(PropFalse)
+            case ExprConstructor.NeverType => ZIO.succeed(PropFalse)
 
             case _ =>
               val args = expr.constructor.argsToExprs(expr.args).map(wrapExprToExpr)
-              IO.succeed(PredicateFunction(expr.constructor, args))
+              ZIO.succeed(PredicateFunction(expr.constructor, args))
           }
 
         case WrapExpr.OfHole(_) => invalidPredicateExpr
@@ -660,7 +660,7 @@ abstract class ImplicitResolver[R, E] {
             }.map { model =>
               Some(ResolvedImplicit(proof, model))
             }
-          case context.PrologResult.No(_, _) | _: context.PrologResult.Unknown.type => IO.none
+          case context.PrologResult.No(_, _) | _: context.PrologResult.Unknown.type => ZIO.none
         }
       }
     }

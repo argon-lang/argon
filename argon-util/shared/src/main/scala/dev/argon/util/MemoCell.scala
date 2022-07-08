@@ -8,7 +8,7 @@ extension [R, E, A](cell: MemoCell[R, E, A])
 
   def get(io: => ZIO[R, E, A]): ZIO[R, E, A] =
     cell.modifyZIO {
-      case res @ Some(eff) => IO.succeed((eff, res))
+      case res @ Some(eff) => ZIO.succeed((eff, res))
       case None => io.memoize.map { res => (res, Some(res)) }
     }.flatten
 

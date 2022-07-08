@@ -13,7 +13,7 @@ abstract class GrammarTestsCommon extends ZIOSpecDefault with GrammarTestHelpers
 
   private lazy val rightRec: TGrammar[Int] = numberToken(0) | numberToken(1) ++ rightRec --> { case (a, b) => a + b }
 
-  override def spec: ZSpec[Environment & Scope, Any] =
+  override def spec: Spec[Environment & Scope, Any] =
     suite(suiteName)(
       suite("Token grammar")(
         test("fail for EOF") {

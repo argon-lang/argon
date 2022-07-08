@@ -12,12 +12,12 @@ final class JavaTubeLoader[E >: IOException, EX <: Exception, Options](inner: ja
   
   override def load(options: Options)(resource: BinaryResource[E]): ZIO[Scope, E, SerializedTube[E]] =
     ZIO.acquireRelease(
-      IO.attemptBlockingInterrupt {
+      ZIO.attemptBlockingInterrupt {
         inner.load(options, new JavaBinaryResourceWrap[E, EX](resource))
       }
         .catchAll(JavaErrorHandler.handleErrors[E, EX])
     )(tube =>
-      IO.succeedBlocking {
+      ZIO.succeedBlocking {
         tube.close()
       }
     ).map { tube => new JavaSerializedTubeUnwrap[E, EX](tube.tube()) }

@@ -26,17 +26,17 @@ final class JavaPlugin[E >: IOException, EX <: Exception, TOptions, TOutput](inn
     
 
   def backend: IO[E, Backend[E, Options, Output]] =
-    IO.attemptBlockingInterrupt {
+    ZIO.attemptBlockingInterrupt {
       new JavaBackend[E, EX, Options, Output](inner.backend())
     }.catchAll(JavaErrorHandler.handleErrors[E, EX])
 
   def tubeLoaders: IO[E, Seq[TubeLoader[E, Options]]] =
-    IO.attemptBlockingInterrupt {
+    ZIO.attemptBlockingInterrupt {
       inner.tubeLoaders().asScala.toSeq
     }
       .catchAll(JavaErrorHandler.handleErrors[E, EX])
       .flatMap { loaders =>
-        IO.runtime.map { runtime =>
+        ZIO.runtime.map { runtime =>
           given Runtime[Any] = runtime
           loaders.map(new JavaTubeLoader(_))
         }
@@ -44,12 +44,12 @@ final class JavaPlugin[E >: IOException, EX <: Exception, TOptions, TOutput](inn
       }
 
   def buildOutputExecutor: IO[E, Option[BuildOutputExecutor[Output]]] =
-    IO.attemptBlockingInterrupt {
+    ZIO.attemptBlockingInterrupt {
       Option(inner.outputExecutor())
     }
       .catchAll(JavaErrorHandler.handleErrors[E, EX])
       .flatMap { executor =>
-        IO.runtime.map { runtime =>
+        ZIO.runtime.map { runtime =>
           given Runtime[Any] = runtime
           executor.map(new JavaBuildOutputExecutors(_))
         }

@@ -43,9 +43,9 @@ object PrologProofTests extends ZIOSpecDefault {
           x <- VariableProvider.next
           y <- VariableProvider.next
         } yield pred(Gt, v"$x", v"$y") ==> pred(Gt, expr(Succ, v"$x"), expr(Succ, v"$y"))),
-        knownDisjunct -> IO.succeed(Or(pred(KnownDisjunctLeft), pred(KnownDisjunctRight))),
-        knownTrue -> IO.succeed(pred(KnownTrue)),
-        knownFalse -> IO.succeed(not(pred(KnownFalse))),
+        knownDisjunct -> ZIO.succeed(Or(pred(KnownDisjunctLeft), pred(KnownDisjunctRight))),
+        knownTrue -> ZIO.succeed(pred(KnownTrue)),
+        knownFalse -> ZIO.succeed(not(pred(KnownFalse))),
       )) { case (proof, predicateIO) => predicateIO.map { proof -> _ } }
 
   }
@@ -54,94 +54,94 @@ object PrologProofTests extends ZIOSpecDefault {
 
   import prologContext.{check as _, *}
 
-  override def spec: ZSpec[Environment & Scope, Any] =
+  override def spec: Spec[Environment & Scope, Any] =
     suite("Proofs")(
       test("1 > 0") {
-        assertM(prologContext.check(pred(Gt, expr(Succ, expr(Zero)), expr(Zero)), fuel))(hasProof(succIsGreaterThanZero))
+        assertZIO(prologContext.check(pred(Gt, expr(Succ, expr(Zero)), expr(Zero)), fuel))(hasProof(succIsGreaterThanZero))
       },
       test("2 > 1") {
-        assertM(prologContext.check(pred(Gt, expr(Succ, expr(Succ, expr(Zero))), expr(Succ, expr(Zero))), fuel))(
+        assertZIO(prologContext.check(pred(Gt, expr(Succ, expr(Succ, expr(Zero))), expr(Succ, expr(Zero))), fuel))(
           hasProof(Proof.ModusPonens(succIsGreaterThanSucc, succIsGreaterThanZero))
         )
       },
       test("3 > 1") {
-        assertM(prologContext.check(
+        assertZIO(prologContext.check(
           pred(Gt, expr(Succ, expr(Succ, expr(Succ, expr(Zero)))), expr(Succ, expr(Zero))),
           fuel,
         ))(hasProof(Proof.ModusPonens(succIsGreaterThanSucc, succIsGreaterThanZero)))
       },
       test("not 0 > 0") {
-        assertM(prologContext.check(pred(Gt, expr(Zero), expr(Zero)), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(prologContext.check(pred(Gt, expr(Zero), expr(Zero)), fuel))(equalTo(PrologResult.Unknown))
       },
       test("not 1 > 1") {
-        assertM(prologContext.check(pred(Gt, expr(Succ, expr(Zero)), expr(Succ, expr(Zero))), fuel))(equalTo(
+        assertZIO(prologContext.check(pred(Gt, expr(Succ, expr(Zero)), expr(Succ, expr(Zero))), fuel))(equalTo(
           PrologResult.Unknown
         ))
       },
       test("not 1 > 2") {
-        assertM(prologContext.check(pred(Gt, expr(Succ, expr(Zero)), expr(Succ, expr(Succ, expr(Zero)))), fuel))(equalTo(
+        assertZIO(prologContext.check(pred(Gt, expr(Succ, expr(Zero)), expr(Succ, expr(Succ, expr(Zero)))), fuel))(equalTo(
           PrologResult.Unknown
         ))
       },
       test("true") {
-        assertM(prologContext.check(pred(KnownTrue), fuel))(
+        assertZIO(prologContext.check(pred(KnownTrue), fuel))(
           hasProof(knownTrue)
         )
       },
       test("false") {
-        assertM(prologContext.check(pred(KnownFalse), fuel))(disproved(equalTo(knownFalse)))
+        assertZIO(prologContext.check(pred(KnownFalse), fuel))(disproved(equalTo(knownFalse)))
       },
       test("disjunct") {
-        assertM(prologContext.check(Or(pred(KnownDisjunctLeft), pred(KnownDisjunctRight)), fuel))(hasProof(knownDisjunct))
+        assertZIO(prologContext.check(Or(pred(KnownDisjunctLeft), pred(KnownDisjunctRight)), fuel))(hasProof(knownDisjunct))
       },
       test("disjunct left") {
-        assertM(prologContext.check(Or(pred(KnownTrue), pred(KnownFalse)), fuel))(
+        assertZIO(prologContext.check(Or(pred(KnownTrue), pred(KnownFalse)), fuel))(
           hasProof(Proof.DisjunctIntroLeft(knownTrue))
         )
       },
       test("disjunct right") {
-        assertM(prologContext.check(Or(pred(KnownFalse), pred(KnownTrue)), fuel))(
+        assertZIO(prologContext.check(Or(pred(KnownFalse), pred(KnownTrue)), fuel))(
           hasProof(Proof.DisjunctIntroRight(knownTrue))
         )
       },
       test("not false") {
-        assertM(prologContext.check(not(pred(KnownFalse)), fuel))(hasProof(knownFalse))
+        assertZIO(prologContext.check(not(pred(KnownFalse)), fuel))(hasProof(knownFalse))
       },
       test("not (false | false)") {
-        assertM(prologContext.check(not(Or(pred(KnownFalse), pred(KnownFalse))), fuel))(hasProof(
+        assertZIO(prologContext.check(not(Or(pred(KnownFalse), pred(KnownFalse))), fuel))(hasProof(
           Proof.DeMorganAndPullNotOut(Proof.ConjunctIntro(knownFalse, knownFalse))
         ))
       },
       test("not (true | false)") {
-        assertM(prologContext.check(not(Or(pred(KnownTrue), pred(KnownFalse))), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(prologContext.check(not(Or(pred(KnownTrue), pred(KnownFalse))), fuel))(equalTo(PrologResult.Unknown))
       },
       test("not (false | true)") {
-        assertM(prologContext.check(not(Or(pred(KnownFalse), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(prologContext.check(not(Or(pred(KnownFalse), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
       },
       test("not (true | true)") {
-        assertM(prologContext.check(not(Or(pred(KnownTrue), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(prologContext.check(not(Or(pred(KnownTrue), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
       },
       test("not (false & false)") {
-        assertM(prologContext.check(not(And(pred(KnownFalse), pred(KnownFalse))), fuel))(
+        assertZIO(prologContext.check(not(And(pred(KnownFalse), pred(KnownFalse))), fuel))(
           hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroLeft(knownFalse))) ||
             hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroRight(knownFalse)))
         )
       },
       test("not (false & true)") {
-        assertM(prologContext.check(not(And(pred(KnownFalse), pred(KnownTrue))), fuel))(
+        assertZIO(prologContext.check(not(And(pred(KnownFalse), pred(KnownTrue))), fuel))(
           hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroLeft(knownFalse)))
         )
       },
       test("not (true & false)") {
-        assertM(prologContext.check(not(And(pred(KnownTrue), pred(KnownFalse))), fuel))(
+        assertZIO(prologContext.check(not(And(pred(KnownTrue), pred(KnownFalse))), fuel))(
           hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroRight(knownFalse)))
         )
       },
       test("not (true & true)") {
-        assertM(prologContext.check(not(And(pred(KnownTrue), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(prologContext.check(not(And(pred(KnownTrue), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
       },
       test("not not true") {
-        assertM(prologContext.check(not(not(pred(KnownTrue))), fuel))(
+        assertZIO(prologContext.check(not(not(pred(KnownTrue))), fuel))(
           hasProof(Proof.DoubleNegIntro(knownTrue))
         )
       },

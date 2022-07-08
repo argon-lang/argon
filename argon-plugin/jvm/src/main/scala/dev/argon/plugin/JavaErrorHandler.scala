@@ -11,9 +11,9 @@ import dev.argon.plugin.{api => japi}
 private[plugin] object JavaErrorHandler {
   def handleErrors[E >: IOException, EX <: Exception](ex: Throwable)(using TypeTest[Throwable, EX], ErrorWrapper[E, EX]): IO[E, Nothing] =
     ex match {
-      case ex: EX => IO.failCause(summon[ErrorWrapper[E, EX]].unwrap(ex))
-      case ex: IOException => IO.fail(ex)
-      case ex => IO.die(ex)
+      case ex: EX => ZIO.failCause(summon[ErrorWrapper[E, EX]].unwrap(ex))
+      case ex: IOException => ZIO.fail(ex)
+      case ex => ZIO.die(ex)
     }
 
   def handleErrorsStream[E >: IOException, EX <: Exception](ex: Throwable)(using TypeTest[Throwable, EX], ErrorWrapper[E, EX]): Stream[E, Nothing] =

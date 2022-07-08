@@ -9,7 +9,7 @@ import dev.argon.util.{*, given}
 
 final class JavaBuildOutputExecutors[Output](inner: japi.OutputExecutor[Output]) extends BuildOutputExecutor[Output] {
   override def execute(libraries: Map[TubeName, Output], buildOutput: Output): IO[IOException, (ExitCode, String)] =
-    IO.attemptBlockingInterrupt {
+    ZIO.attemptBlockingInterrupt {
       val javaLibs = libraries
         .map { case (name, output) => name.name.toList.asJava -> output }
         .asJava

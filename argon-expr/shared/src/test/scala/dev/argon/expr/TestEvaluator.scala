@@ -7,9 +7,9 @@ class TestEvaluator[R, E] extends Evaluator[R, E] {
   import exprContext.*
 
   override def getFunctionBody(function: TFunction, args: Vector[WrapExpr], fuel: Int): ZIO[R, E, Option[WrapExpr]] =
-    IO.none
+    ZIO.none
 
   override def getMethodBody(method: TMethod, instance: WrapExpr, args: Vector[WrapExpr], fuel: Int)
-    : ZIO[R, E, Option[WrapExpr]] = IO.none
+    : ZIO[R, E, Option[WrapExpr]] = ZIO.none
 
 }

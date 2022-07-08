@@ -26,7 +26,7 @@ object SourceTube {
           val moduleName = ModuleName(tubeName, path)
           modules.get(path) match {
             case Some(module) => SourceModule.make(context, tube, moduleName, importer, module)
-            case None => IO.fail(DiagnosticError.UnknownModuleException(moduleName))
+            case None => ZIO.fail(DiagnosticError.UnknownModuleException(moduleName))
           }
         }
     } yield new ArTubeC {

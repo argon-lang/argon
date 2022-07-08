@@ -21,10 +21,10 @@ final case class JavaPlatformUnwrap[E >: IOException, EX <: Exception, EFunc, EM
 
   private def externCodec[T](innerCodec: japi.ExternCodec[EX, T]): ExternCodec[E, T] = new ExternCodec[E, T] {
     override def decode(resource: BinaryResource[E]): IO[E, T] =
-      IO.runtime.flatMap { runtime =>
+      ZIO.runtime.flatMap { runtime =>
         given Runtime[Any] = runtime
         val res2 = new JavaBinaryResourceWrap(resource)
-        IO.attemptBlockingInterrupt {
+        ZIO.attemptBlockingInterrupt {
           innerCodec.decode(res2)
         }.catchAll(JavaErrorHandler.handleErrors[E, EX])
       }

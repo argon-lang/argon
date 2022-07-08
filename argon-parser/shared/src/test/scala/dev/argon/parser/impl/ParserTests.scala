@@ -10,7 +10,7 @@ abstract class ArgonParserTestsCommon extends ZIOSpecDefault with GrammarTestHel
 
   def suiteName: String
 
-  override def spec: ZSpec[Environment & Scope, Any] =
+  override def spec: Spec[Environment & Scope, Any] =
     suite(suiteName)(
       test("Import statement parsing") {
         assert(

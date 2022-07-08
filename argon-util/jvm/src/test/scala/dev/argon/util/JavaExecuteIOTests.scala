@@ -16,34 +16,30 @@ object JavaExecuteIOTests extends ZIOSpecDefault {
   def runHelper(task: IO[String, Int]): IO[String, Int] =
     ZIO.runtime[Any].flatMap { runtime =>
       given runtime2: Runtime[Any] = runtime
-      IO.attemptBlockingInterrupt {
+      ZIO.attemptBlockingInterrupt {
         JavaExecuteIO.runInterruptable(task)
       }
         .catchAll {
-          case ex: WrappedStringCause => IO.failCause(ex.cause)
-          case ex => IO.die(ex)
+          case ex: WrappedStringCause => ZIO.failCause(ex.cause)
+          case ex => ZIO.die(ex)
         }
     }
 
 
-  override def spec: ZSpec[Environment & Scope, Any] =
+  override def spec: Spec[Environment & Scope, Any] =
     suite("JavaExecuteIO")(
       test("Success")(
-        assertM(runHelper(IO.succeed(4)))(equalTo(4))
+        assertZIO(runHelper(ZIO.succeed(4)))(equalTo(4))
       ),
       test("Error")(
-        assertM(runHelper(IO.fail("A")).flip)(equalTo("A"))
+        assertZIO(runHelper(ZIO.fail("A")).flip)(equalTo("A"))
       ),
       test("Interrupt")(
-        assertM(
+        assertZIO(
           for {
             didRelease <- Ref.make(false)
             fiber <- runHelper(
-              IO.acquireReleaseWith[Any, Nothing, Unit, Int](
-                acquire = IO.unit,
-                release = _ => didRelease.set(true),
-                use = _ => IO.never,
-              )
+              ZIO.acquireReleaseWith(acquire = ZIO.unit)(release = _ => didRelease.set(true))(use = _ => ZIO.never)
             ).fork
             _ <- live(ZIO.sleep(1.second))
             _ <- fiber.interrupt

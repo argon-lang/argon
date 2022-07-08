@@ -39,7 +39,7 @@ object SignatureUtil {
               impl(a, baseTraits).flatMap { baseTraits => impl(b, baseTraits) }
 
             case ctor: (expr.constructor.type & ExprConstructor.TraitType) =>
-              IO.succeed(baseTraits :+ ArExpr(ctor, expr.getArgs(ctor)))
+              ZIO.succeed(baseTraits :+ ArExpr(ctor, expr.getArgs(ctor)))
 
             case _ => ???
           }
@@ -56,7 +56,7 @@ object SignatureUtil {
           } yield (baseTraits, baseTypeResult.env)
 
         case None =>
-          IO.succeed((Seq.empty, env))
+          ZIO.succeed((Seq.empty, env))
       }
 
     baseTypes.map { case (baseTraits, env) =>
@@ -96,13 +96,13 @@ object SignatureUtil {
               impl(a, baseClass, baseTraits).flatMap { case (baseClass, baseTraits) => impl(b, baseClass, baseTraits) }
 
             case ctor: (expr.constructor.type & ExprConstructor.TraitType) =>
-              IO.succeed((baseClass, baseTraits :+ ArExpr(ctor, expr.getArgs(ctor))))
+              ZIO.succeed((baseClass, baseTraits :+ ArExpr(ctor, expr.getArgs(ctor))))
 
             case ctor: (expr.constructor.type & ExprConstructor.ClassType) =>
               if baseClass.isDefined then
                 ???
               else
-                IO.succeed((Some(ArExpr(ctor, expr.getArgs(ctor))), baseTraits))
+                ZIO.succeed((Some(ArExpr(ctor, expr.getArgs(ctor))), baseTraits))
 
             case _ => ???
           }
@@ -120,7 +120,7 @@ object SignatureUtil {
           } yield (baseClass, baseTraits, baseTypeResult.env)
 
         case None =>
-          IO.succeed((None, Seq.empty, env))
+          ZIO.succeed((None, Seq.empty, env))
       }
 
     baseTypes.map { case (baseClass, baseTraits, env) =>

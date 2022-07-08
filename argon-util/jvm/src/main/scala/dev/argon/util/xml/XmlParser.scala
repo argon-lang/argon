@@ -29,7 +29,7 @@ object XmlParser {
   end given
 
   def parse(reader: Reader): Task[Element] =
-    IO.attemptBlockingInterrupt {
+    ZIO.attemptBlockingInterrupt {
       val xmlif = XMLInputFactory.newFactory()
       Using.resource(xmlif.createXMLStreamReader(reader))(parseImpl)
     }

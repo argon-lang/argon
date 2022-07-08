@@ -5,7 +5,7 @@ import NodePlatformImplicits._
 import scala.sys.process.Process
 
 val graalVersion = "21.1.0"
-val zioVersion = "2.0.0-RC5"
+val zioVersion = "2.0.0"
 
 ThisBuild / semanticdbEnabled := true
 ThisBuild / scalafixDependencies += "com.github.vovapolu" %% "scaluzzi" % "0.1.20"

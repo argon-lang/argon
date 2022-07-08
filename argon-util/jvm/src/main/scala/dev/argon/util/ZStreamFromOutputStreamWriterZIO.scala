@@ -17,7 +17,7 @@ object ZStreamFromOutputStreamWriterZIO {
             done.await
           )).drainFork(
             ZStream.fromZIO(
-              write(out).ensuring { IO.attemptBlockingInterrupt { out.close() }.orDie }
+              write(out).ensuring { ZIO.attemptBlockingInterrupt { out.close() }.orDie }
             ) ++ ZStream.fromZIO(done.fail(None))
           )
         }

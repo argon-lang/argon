@@ -15,12 +15,12 @@ final class JavaBinaryResourceUnwrap[E >: IOException, EX <: Exception](resource
     JavaInputStreamUnwrap.toZStream(resource.asInputStream)
 
   override def asInputStream: IO[E, Option[InputStream]] =
-    IO.attemptBlockingInterrupt {
+    ZIO.attemptBlockingInterrupt {
       Some(resource.asInputStream)
     }.catchAll(JavaErrorHandler.handleErrors)
 
   override def asSeekableByteChannel: IO[E, Option[SeekableByteChannel]] =
-    IO.attemptBlockingInterrupt {
+    ZIO.attemptBlockingInterrupt {
       Option(resource.asSeekableByteChannel)
     }.catchAll(JavaErrorHandler.handleErrors)
 

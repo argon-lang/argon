@@ -22,22 +22,22 @@ object Interpreter {
           interpreter.initParameters(body, args).flatMap { _ =>
             interpreter.runBlock(body.block)
               .flatMap {
-                case _: LabelId => IO.fail(new UnknownLabelException())
+                case _: LabelId => ZIO.fail(new UnknownLabelException())
                 case JumpInstruction.TailCall(nextFuncId, argLocals, virtual) =>
                   interpreter.callFunction(nextFuncId, argLocals, virtual)
 
                 case value: VMValueNotNull =>
-                  IO.succeed(value)
+                  ZIO.succeed(value)
 
                 case null =>
-                  IO.succeed(null)
+                  ZIO.succeed(null)
               }
           }
         }
 
       case Some(func: ExternFunctionBody) => func(args)
 
-      case None => IO.fail(new MissingFunctionBodyException())
+      case None => ZIO.fail(new MissingFunctionBodyException())
     }
 
   private def createLocals(function: FunctionBody): UIO[Map[LocalId, VMCell]] =
@@ -46,7 +46,7 @@ object Interpreter {
     }
 
   private def createCell(t: VMType): UIO[VMCell] =
-    IO.succeed {
+    ZIO.succeed {
       t match {
         case VMType.I8 => new VMCell.ByteCell(0)
         case VMType.I16 => new VMCell.ShortCell(0)
@@ -63,71 +63,71 @@ object Interpreter {
 
     def initParameters(body: FunctionBody, args: Seq[VMValue]): Task[Unit] =
       if body.parameters.size != args.size then
-        IO.fail(new ArgumentMismatchException())
+        ZIO.fail(new ArgumentMismatchException())
       else
         ZIO.foreachDiscard(body.parameters.zip(args))(setLocal(_, _))
 
     def setLocal(local: LocalId, b: Byte): Task[Unit] =
       locals.get(local) match {
         case Some(cell: VMCell.ByteCell) =>
-          IO.succeed { cell.value = b }
+          ZIO.succeed { cell.value = b }
 
-        case Some(_) => IO.fail(new LocalTypeMismatchException())
-        case None => IO.fail(new UnknownLocalException())
+        case Some(_) => ZIO.fail(new LocalTypeMismatchException())
+        case None => ZIO.fail(new UnknownLocalException())
       }
 
     def setLocal(local: LocalId, s: Short): Task[Unit] =
       locals.get(local) match {
         case Some(cell: VMCell.ShortCell) =>
-          IO.succeed { cell.value = s }
+          ZIO.succeed { cell.value = s }
 
-        case Some(_) => IO.fail(new LocalTypeMismatchException())
-        case None => IO.fail(new UnknownLocalException())
+        case Some(_) => ZIO.fail(new LocalTypeMismatchException())
+        case None => ZIO.fail(new UnknownLocalException())
       }
 
     def setLocal(local: LocalId, i: Int): Task[Unit] =
       locals.get(local) match {
         case Some(cell: VMCell.IntCell) =>
-          IO.succeed { cell.value = i }
+          ZIO.succeed { cell.value = i }
 
-        case Some(_) => IO.fail(new LocalTypeMismatchException())
-        case None => IO.fail(new UnknownLocalException())
+        case Some(_) => ZIO.fail(new LocalTypeMismatchException())
+        case None => ZIO.fail(new UnknownLocalException())
       }
 
     def setLocal(local: LocalId, l: Long): Task[Unit] =
       locals.get(local) match {
         case Some(cell: VMCell.LongCell) =>
-          IO.succeed { cell.value = l }
+          ZIO.succeed { cell.value = l }
 
-        case Some(_) => IO.fail(new LocalTypeMismatchException())
-        case None => IO.fail(new UnknownLocalException())
+        case Some(_) => ZIO.fail(new LocalTypeMismatchException())
+        case None => ZIO.fail(new UnknownLocalException())
       }
 
     def setLocal(local: LocalId, f: Float): Task[Unit] =
       locals.get(local) match {
         case Some(cell: VMCell.FloatCell) =>
-          IO.succeed { cell.value = f }
+          ZIO.succeed { cell.value = f }
 
-        case Some(_) => IO.fail(new LocalTypeMismatchException())
-        case None => IO.fail(new UnknownLocalException())
+        case Some(_) => ZIO.fail(new LocalTypeMismatchException())
+        case None => ZIO.fail(new UnknownLocalException())
       }
 
     def setLocal(local: LocalId, d: Double): Task[Unit] =
       locals.get(local) match {
         case Some(cell: VMCell.DoubleCell) =>
-          IO.succeed { cell.value = d }
+          ZIO.succeed { cell.value = d }
 
-        case Some(_) => IO.fail(new LocalTypeMismatchException())
-        case None => IO.fail(new UnknownLocalException())
+        case Some(_) => ZIO.fail(new LocalTypeMismatchException())
+        case None => ZIO.fail(new UnknownLocalException())
       }
 
     def setLocalRef(local: LocalId, ref: GCObject | VMCell | VMTuple): Task[Unit] =
       locals.get(local) match {
         case Some(cell: VMCell.RefCell) =>
-          IO.succeed { cell.value = ref }
+          ZIO.succeed { cell.value = ref }
 
-        case Some(_) => IO.fail(new LocalTypeMismatchException())
-        case None => IO.fail(new UnknownLocalException())
+        case Some(_) => ZIO.fail(new LocalTypeMismatchException())
+        case None => ZIO.fail(new UnknownLocalException())
       }
 
     def setLocal(local: LocalId, value: VMValue): Task[Unit] =
@@ -146,8 +146,8 @@ object Interpreter {
 
     def withLocal[E >: Throwable, A](local: LocalId)(f: PartialFunction[VMCell, IO[E, A]]): IO[E, A] =
       locals.get(local) match {
-        case Some(cell) => f.applyOrElse(cell, _ => IO.fail(new LocalTypeMismatchException()))
-        case None => IO.fail(new UnknownLocalException())
+        case Some(cell) => f.applyOrElse(cell, _ => ZIO.fail(new LocalTypeMismatchException()))
+        case None => ZIO.fail(new UnknownLocalException())
       }
 
     def withLocal[E >: Throwable, A](l1: LocalId, l2: LocalId)(f: PartialFunction[(VMCell, VMCell), IO[E, A]]): IO[E, A] =
@@ -160,7 +160,7 @@ object Interpreter {
       }
 
     def runCFG(graph: ControlFlowGraph): IO[BlockError, BlockResult] =
-      IO.attempt { graph.blocks(graph.start) }
+      ZIO.attempt { graph.blocks(graph.start) }
         .flatMap(runCFG(graph, _))
 
     def runCFG(graph: ControlFlowGraph, block: BasicBlock): IO[BlockError, BlockResult] =
@@ -173,16 +173,16 @@ object Interpreter {
         case LabelTarget(target) =>
           runCFG(graph, target)
 
-        case result => IO.succeed(result)
+        case result => ZIO.succeed(result)
       }
     end runCFG
 
     def runCFGNoJump(graph: ControlFlowGraph): IO[BlockError, VMValue] =
       runCFG(graph)
         .flatMap {
-          case _: (LabelId | JumpInstruction.TailCall) => IO.fail(new InvalidJumpException())
-          case value: VMValueNotNull => IO.succeed(value)
-          case null => IO.succeed(null)
+          case _: (LabelId | JumpInstruction.TailCall) => ZIO.fail(new InvalidJumpException())
+          case value: VMValueNotNull => ZIO.succeed(value)
+          case null => ZIO.succeed(null)
         }
 
     def runBlock(block: BasicBlock): IO[BlockError, BlockResult] =
@@ -195,25 +195,25 @@ object Interpreter {
             .catchSome {
               case e: GCObjectNotNull =>
                 setLocal(exceptionVariable, e).flatMap { _ =>
-                  IO.succeed(handler)
+                  ZIO.succeed(handler)
                 }
             }
 
         case WithLocalReference(refHolder, referenced, block) =>
           locals.get(referenced) match {
             case Some(cell) => setLocal(refHolder, cell) *> runCFG(block)
-            case None => IO.fail(new UnknownLocalException())
+            case None => ZIO.fail(new UnknownLocalException())
           }
 
 
       }
 
     def callFunction(id: FunctionId, args: Seq[LocalId], virtual: Boolean): IO[GCObject | Throwable, VMValue] =
-      IO.fromOption(program.functions.get(id))
+      ZIO.fromOption(program.functions.get(id))
         .mapError { _ => new UnknownFunctionException() }
         .flatMap { nextFunc =>
           ZIO.foreach(args) { local =>
-            IO.fromOption(locals.get(local)).mapError { _ => new UnknownLocalException() }
+            ZIO.fromOption(locals.get(local)).mapError { _ => new UnknownLocalException() }
           }
             .flatMap { argValues =>
               if virtual then
@@ -260,34 +260,34 @@ object Interpreter {
 
         case ConvertS8(out, in, OverflowMode.None) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b)
-            case VMCell.ShortCell(s) => IO.succeed(s.toByte)
-            case VMCell.IntCell(i) => IO.succeed(i.toByte)
-            case VMCell.LongCell(l) => IO.succeed(l.toByte)
-            case VMCell.FloatCell(f) => IO.succeed(f.toByte)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toByte)
+            case VMCell.ByteCell(b) => ZIO.succeed(b)
+            case VMCell.ShortCell(s) => ZIO.succeed(s.toByte)
+            case VMCell.IntCell(i) => ZIO.succeed(i.toByte)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toByte)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toByte)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toByte)
           }.flatMap(setLocal(out, _))
 
         case ConvertS8(out, in, OverflowMode.Signed) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b)
+            case VMCell.ByteCell(b) => ZIO.succeed(b)
             case VMCell.ShortCell(s) =>
               if s.isValidByte then
-                IO.succeed(s.toByte)
+                ZIO.succeed(s.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.IntCell(i) =>
               if i.isValidByte then
-                IO.succeed(i.toByte)
+                ZIO.succeed(i.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.LongCell(l) =>
               if l.isValidByte then
-                IO.succeed(l.toByte)
+                ZIO.succeed(l.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
@@ -295,446 +295,446 @@ object Interpreter {
           withLocal(in) {
             case VMCell.ByteCell(b) =>
               if java.lang.Byte.compareUnsigned(b, Byte.MaxValue) <= 0 then
-                IO.succeed(b)
+                ZIO.succeed(b)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.ShortCell(s) =>
               if java.lang.Short.compareUnsigned(s, Byte.MaxValue) <= 0 then
-                IO.succeed(s.toByte)
+                ZIO.succeed(s.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.IntCell(i) =>
               if java.lang.Integer.compareUnsigned(i, Byte.MaxValue) <= 0 then
-                IO.succeed(i.toByte)
+                ZIO.succeed(i.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.LongCell(l) =>
               if java.lang.Long.compareUnsigned(l, Byte.MaxValue) <= 0 then
-                IO.succeed(l.toByte)
+                ZIO.succeed(l.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
 
         case ConvertU8(out, in, OverflowMode.None) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b)
-            case VMCell.ShortCell(s) => IO.succeed(s.toByte)
-            case VMCell.IntCell(i) => IO.succeed(i.toByte)
-            case VMCell.LongCell(l) => IO.succeed(l.toByte)
-            case VMCell.FloatCell(f) => IO.succeed(f.toByte)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toByte)
+            case VMCell.ByteCell(b) => ZIO.succeed(b)
+            case VMCell.ShortCell(s) => ZIO.succeed(s.toByte)
+            case VMCell.IntCell(i) => ZIO.succeed(i.toByte)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toByte)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toByte)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toByte)
           }.flatMap(setLocal(out, _))
 
         case ConvertU8(out, in, OverflowMode.Signed) =>
           withLocal(in) {
             case VMCell.ByteCell(b) =>
               if b >= UByte.MinValue then
-                IO.succeed(b)
+                ZIO.succeed(b)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.ShortCell(s) =>
               if s >= UByte.MinValue && s <= UByte.MaxValue then
-                IO.succeed(s.toByte)
+                ZIO.succeed(s.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.IntCell(i) =>
               if i >= UByte.MinValue && i <= UByte.MaxValue then
-                IO.succeed(i.toByte)
+                ZIO.succeed(i.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.LongCell(l) =>
               if l >= UByte.MinValue && l <= UByte.MaxValue then
-                IO.succeed(l.toByte)
+                ZIO.succeed(l.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
         case ConvertU8(out, in, OverflowMode.Unsigned) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b)
+            case VMCell.ByteCell(b) => ZIO.succeed(b)
 
             case VMCell.ShortCell(s) =>
               if java.lang.Short.compareUnsigned(s, UByte.MaxValue) <= 0 then
-                IO.succeed(s.toByte)
+                ZIO.succeed(s.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.IntCell(i) =>
               if java.lang.Integer.compareUnsigned(i, UByte.MaxValue) <= 0 then
-                IO.succeed(i.toByte)
+                ZIO.succeed(i.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.LongCell(l) =>
               if java.lang.Long.compareUnsigned(l, UByte.MaxValue) <= 0 then
-                IO.succeed(l.toByte)
+                ZIO.succeed(l.toByte)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
         case ConvertS16(out, in, false) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b.toShort)
-            case VMCell.ShortCell(s) => IO.succeed(s)
-            case VMCell.IntCell(i) => IO.succeed(i.toShort)
-            case VMCell.LongCell(l) => IO.succeed(l.toShort)
-            case VMCell.FloatCell(f) => IO.succeed(f.toShort)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toShort)
+            case VMCell.ByteCell(b) => ZIO.succeed(b.toShort)
+            case VMCell.ShortCell(s) => ZIO.succeed(s)
+            case VMCell.IntCell(i) => ZIO.succeed(i.toShort)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toShort)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toShort)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toShort)
           }.flatMap(setLocal(out, _))
 
         case ConvertS16(out, in, true) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b.toShort)
-            case VMCell.ShortCell(s) => IO.succeed(s)
+            case VMCell.ByteCell(b) => ZIO.succeed(b.toShort)
+            case VMCell.ShortCell(s) => ZIO.succeed(s)
 
             case VMCell.IntCell(i) =>
               if i.isValidShort then
-                IO.succeed(i.toShort)
+                ZIO.succeed(i.toShort)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.LongCell(l) =>
               if l.isValidShort then
-                IO.succeed(l.toShort)
+                ZIO.succeed(l.toShort)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
         case ConvertU_S16(out, in, false) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedInt(b).toShort)
-            case VMCell.ShortCell(s) => IO.succeed(s)
-            case VMCell.IntCell(i) => IO.succeed(i.toShort)
-            case VMCell.LongCell(l) => IO.succeed(l.toShort)
-            case VMCell.FloatCell(f) => IO.succeed(f.toShort)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toShort)
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedInt(b).toShort)
+            case VMCell.ShortCell(s) => ZIO.succeed(s)
+            case VMCell.IntCell(i) => ZIO.succeed(i.toShort)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toShort)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toShort)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toShort)
           }.flatMap(setLocal(out, _))
 
         case ConvertU_S16(out, in, true) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedInt(b).toShort)
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedInt(b).toShort)
 
             case VMCell.ShortCell(s) =>
               if java.lang.Short.compareUnsigned(s, Short.MaxValue) <= 0 then
-                IO.succeed(s)
+                ZIO.succeed(s)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.IntCell(i) =>
               if java.lang.Integer.compareUnsigned(i, Short.MaxValue) <= 0 then
-                IO.succeed(i.toShort)
+                ZIO.succeed(i.toShort)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.LongCell(l) =>
               if java.lang.Long.compareUnsigned(l, Short.MaxValue) <= 0 then
-                IO.succeed(l.toShort)
+                ZIO.succeed(l.toShort)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
 
         case ConvertU16(out, in, false) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b.toShort)
-            case VMCell.ShortCell(s) => IO.succeed(s)
-            case VMCell.IntCell(i) => IO.succeed(i.toShort)
-            case VMCell.LongCell(l) => IO.succeed(l.toShort)
-            case VMCell.FloatCell(f) => IO.succeed(f.toShort)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toShort)
+            case VMCell.ByteCell(b) => ZIO.succeed(b.toShort)
+            case VMCell.ShortCell(s) => ZIO.succeed(s)
+            case VMCell.IntCell(i) => ZIO.succeed(i.toShort)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toShort)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toShort)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toShort)
           }.flatMap(setLocal(out, _))
 
         case ConvertU16(out, in, true) =>
           withLocal(in) {
             case VMCell.ByteCell(b) =>
               if b >= UShort.MinValue then
-                IO.succeed(b.toShort)
+                ZIO.succeed(b.toShort)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.ShortCell(s) =>
               if s >= UShort.MinValue then
-                IO.succeed(s)
+                ZIO.succeed(s)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.IntCell(i) =>
               if i >= UShort.MinValue && i <= UShort.MaxValue then
-                IO.succeed(i.toShort)
+                ZIO.succeed(i.toShort)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.LongCell(l) =>
               if l >= UShort.MinValue && l <= UShort.MaxValue then
-                IO.succeed(l.toShort)
+                ZIO.succeed(l.toShort)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
 
         case ConvertU_U16(out, in, false) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedInt(b).toShort)
-            case VMCell.ShortCell(s) => IO.succeed(s)
-            case VMCell.IntCell(i) => IO.succeed(i.toShort)
-            case VMCell.LongCell(l) => IO.succeed(l.toShort)
-            case VMCell.FloatCell(f) => IO.succeed(f.toShort)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toShort)
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedInt(b).toShort)
+            case VMCell.ShortCell(s) => ZIO.succeed(s)
+            case VMCell.IntCell(i) => ZIO.succeed(i.toShort)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toShort)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toShort)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toShort)
           }.flatMap(setLocal(out, _))
 
         case ConvertU_U16(out, in, true) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedInt(b).toShort)
-            case VMCell.ShortCell(s) => IO.succeed(s)
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedInt(b).toShort)
+            case VMCell.ShortCell(s) => ZIO.succeed(s)
 
             case VMCell.IntCell(i) =>
               if java.lang.Integer.compareUnsigned(i, UShort.MaxValue) <= 0 then
-                IO.succeed(i.toShort)
+                ZIO.succeed(i.toShort)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.LongCell(l) =>
               if java.lang.Long.compareUnsigned(l, UShort.MaxValue) <= 0 then
-                IO.succeed(l.toShort)
+                ZIO.succeed(l.toShort)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
         case ConvertS32(out, in, false) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b.toInt)
-            case VMCell.ShortCell(s) => IO.succeed(s.toInt)
-            case VMCell.IntCell(i) => IO.succeed(i)
-            case VMCell.LongCell(l) => IO.succeed(l.toInt)
-            case VMCell.FloatCell(f) => IO.succeed(f.toInt)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toInt)
+            case VMCell.ByteCell(b) => ZIO.succeed(b.toInt)
+            case VMCell.ShortCell(s) => ZIO.succeed(s.toInt)
+            case VMCell.IntCell(i) => ZIO.succeed(i)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toInt)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toInt)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toInt)
           }.flatMap(setLocal(out, _))
 
         case ConvertS32(out, in, true) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b.toInt)
-            case VMCell.ShortCell(s) => IO.succeed(s.toInt)
-            case VMCell.IntCell(i) => IO.succeed(i)
-            case VMCell.LongCell(l) => IO.attempt { java.lang.Math.toIntExact(l) }
+            case VMCell.ByteCell(b) => ZIO.succeed(b.toInt)
+            case VMCell.ShortCell(s) => ZIO.succeed(s.toInt)
+            case VMCell.IntCell(i) => ZIO.succeed(i)
+            case VMCell.LongCell(l) => ZIO.attempt { java.lang.Math.toIntExact(l) }
           }.flatMap(setLocal(out, _))
 
         case ConvertU_S32(out, in, false) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedInt(b))
-            case VMCell.ShortCell(s) => IO.succeed(java.lang.Short.toUnsignedInt(s))
-            case VMCell.IntCell(i) => IO.succeed(i)
-            case VMCell.LongCell(l) => IO.succeed(l.toInt)
-            case VMCell.FloatCell(f) => IO.succeed(f.toInt)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toInt)
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedInt(b))
+            case VMCell.ShortCell(s) => ZIO.succeed(java.lang.Short.toUnsignedInt(s))
+            case VMCell.IntCell(i) => ZIO.succeed(i)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toInt)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toInt)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toInt)
           }.flatMap(setLocal(out, _))
 
         case ConvertU_S32(out, in, true) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedInt(b))
-            case VMCell.ShortCell(s) => IO.succeed(java.lang.Short.toUnsignedInt(s))
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedInt(b))
+            case VMCell.ShortCell(s) => ZIO.succeed(java.lang.Short.toUnsignedInt(s))
 
             case VMCell.IntCell(i) =>
               if java.lang.Integer.compareUnsigned(i, Int.MaxValue) <= 0 then
-                IO.succeed(i.toInt)
+                ZIO.succeed(i.toInt)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.LongCell(l) =>
               if java.lang.Long.compareUnsigned(l, Int.MaxValue) <= 0 then
-                IO.succeed(l.toInt)
+                ZIO.succeed(l.toInt)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
 
         case ConvertU32(out, in, false) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b.toInt)
-            case VMCell.ShortCell(s) => IO.succeed(s.toInt)
-            case VMCell.IntCell(i) => IO.succeed(i)
-            case VMCell.LongCell(l) => IO.succeed(l.toInt)
-            case VMCell.FloatCell(f) => IO.succeed(f.toInt)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toInt)
+            case VMCell.ByteCell(b) => ZIO.succeed(b.toInt)
+            case VMCell.ShortCell(s) => ZIO.succeed(s.toInt)
+            case VMCell.IntCell(i) => ZIO.succeed(i)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toInt)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toInt)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toInt)
           }.flatMap(setLocal(out, _))
 
         case ConvertU32(out, in, true) =>
           withLocal(in) {
             case VMCell.ByteCell(b) =>
               if b >= UInt.MinValue then
-                IO.succeed(b.toInt)
+                ZIO.succeed(b.toInt)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.ShortCell(s) =>
               if s >= UInt.MinValue then
-                IO.succeed(s.toInt)
+                ZIO.succeed(s.toInt)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.IntCell(i) =>
               if i >= UInt.MinValue then
-                IO.succeed(i)
+                ZIO.succeed(i)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.LongCell(l) =>
               if l >= UInt.MinValue && l <= UInt.MaxValue then
-                IO.succeed(l.toInt)
+                ZIO.succeed(l.toInt)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
         case ConvertU_U32(out, in, false) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedInt(b))
-            case VMCell.ShortCell(s) => IO.succeed(java.lang.Short.toUnsignedInt(s))
-            case VMCell.IntCell(i) => IO.succeed(i)
-            case VMCell.LongCell(l) => IO.succeed(l.toInt)
-            case VMCell.FloatCell(f) => IO.succeed(f.toInt)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toInt)
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedInt(b))
+            case VMCell.ShortCell(s) => ZIO.succeed(java.lang.Short.toUnsignedInt(s))
+            case VMCell.IntCell(i) => ZIO.succeed(i)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toInt)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toInt)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toInt)
           }.flatMap(setLocal(out, _))
 
         case ConvertU_U32(out, in, true) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedInt(b))
-            case VMCell.ShortCell(s) => IO.succeed(java.lang.Short.toUnsignedInt(s))
-            case VMCell.IntCell(i) => IO.succeed(i)
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedInt(b))
+            case VMCell.ShortCell(s) => ZIO.succeed(java.lang.Short.toUnsignedInt(s))
+            case VMCell.IntCell(i) => ZIO.succeed(i)
 
             case VMCell.LongCell(l) =>
               if java.lang.Long.compareUnsigned(l, UInt.MaxValue) <= 0 then
-                IO.succeed(l.toInt)
+                ZIO.succeed(l.toInt)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
         case ConvertS64(out, in, false) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b.toLong)
-            case VMCell.ShortCell(s) => IO.succeed(s.toLong)
-            case VMCell.IntCell(i) => IO.succeed(i.toLong)
-            case VMCell.LongCell(l) => IO.succeed(l)
-            case VMCell.FloatCell(f) => IO.succeed(f.toLong)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toLong)
+            case VMCell.ByteCell(b) => ZIO.succeed(b.toLong)
+            case VMCell.ShortCell(s) => ZIO.succeed(s.toLong)
+            case VMCell.IntCell(i) => ZIO.succeed(i.toLong)
+            case VMCell.LongCell(l) => ZIO.succeed(l)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toLong)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toLong)
           }.flatMap(setLocal(out, _))
 
         case ConvertS64(out, in, true) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b.toLong)
-            case VMCell.ShortCell(s) => IO.succeed(s.toLong)
-            case VMCell.IntCell(i) => IO.succeed(i.toLong)
-            case VMCell.LongCell(l) => IO.succeed(l)
+            case VMCell.ByteCell(b) => ZIO.succeed(b.toLong)
+            case VMCell.ShortCell(s) => ZIO.succeed(s.toLong)
+            case VMCell.IntCell(i) => ZIO.succeed(i.toLong)
+            case VMCell.LongCell(l) => ZIO.succeed(l)
           }.flatMap(setLocal(out, _))
 
         case ConvertU_S64(out, in, _) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedLong(b))
-            case VMCell.ShortCell(s) => IO.succeed(java.lang.Short.toUnsignedLong(s))
-            case VMCell.IntCell(i) => IO.succeed(java.lang.Integer.toUnsignedLong(i))
-            case VMCell.LongCell(l) => IO.succeed(l)
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedLong(b))
+            case VMCell.ShortCell(s) => ZIO.succeed(java.lang.Short.toUnsignedLong(s))
+            case VMCell.IntCell(i) => ZIO.succeed(java.lang.Integer.toUnsignedLong(i))
+            case VMCell.LongCell(l) => ZIO.succeed(l)
           }.flatMap(setLocal(out, _))
 
 
         case ConvertU64(out, in, false) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b.toLong)
-            case VMCell.ShortCell(s) => IO.succeed(s.toLong)
-            case VMCell.IntCell(i) => IO.succeed(i.toLong)
-            case VMCell.LongCell(l) => IO.succeed(l)
-            case VMCell.FloatCell(f) => IO.succeed(f.toLong)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toLong)
+            case VMCell.ByteCell(b) => ZIO.succeed(b.toLong)
+            case VMCell.ShortCell(s) => ZIO.succeed(s.toLong)
+            case VMCell.IntCell(i) => ZIO.succeed(i.toLong)
+            case VMCell.LongCell(l) => ZIO.succeed(l)
+            case VMCell.FloatCell(f) => ZIO.succeed(f.toLong)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toLong)
           }.flatMap(setLocal(out, _))
 
         case ConvertU64(out, in, true) =>
           withLocal(in) {
             case VMCell.ByteCell(b) =>
               if b >= ULong.MinValue then
-                IO.succeed(b.toLong)
+                ZIO.succeed(b.toLong)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.ShortCell(s) =>
               if s >= ULong.MinValue then
-                IO.succeed(s.toLong)
+                ZIO.succeed(s.toLong)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.IntCell(i) =>
               if i >= ULong.MinValue then
-                IO.succeed(i.toLong)
+                ZIO.succeed(i.toLong)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case VMCell.LongCell(l) =>
               if l >= ULong.MinValue then
-                IO.succeed(l)
+                ZIO.succeed(l)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
           }.flatMap(setLocal(out, _))
 
         case ConvertU_U64(out, in, _) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedLong(b))
-            case VMCell.ShortCell(s) => IO.succeed(java.lang.Short.toUnsignedLong(s))
-            case VMCell.IntCell(i) => IO.succeed(java.lang.Integer.toUnsignedLong(i))
-            case VMCell.LongCell(l) => IO.succeed(l)
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedLong(b))
+            case VMCell.ShortCell(s) => ZIO.succeed(java.lang.Short.toUnsignedLong(s))
+            case VMCell.IntCell(i) => ZIO.succeed(java.lang.Integer.toUnsignedLong(i))
+            case VMCell.LongCell(l) => ZIO.succeed(l)
           }.flatMap(setLocal(out, _))
 
         case ConvertF32(out, in) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b.toFloat)
-            case VMCell.ShortCell(s) => IO.succeed(s.toFloat)
-            case VMCell.IntCell(i) => IO.succeed(i.toFloat)
-            case VMCell.LongCell(l) => IO.succeed(l.toFloat)
-            case VMCell.FloatCell(f) => IO.succeed(f)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toFloat)
+            case VMCell.ByteCell(b) => ZIO.succeed(b.toFloat)
+            case VMCell.ShortCell(s) => ZIO.succeed(s.toFloat)
+            case VMCell.IntCell(i) => ZIO.succeed(i.toFloat)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toFloat)
+            case VMCell.FloatCell(f) => ZIO.succeed(f)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toFloat)
           }.flatMap(setLocal(out, _))
 
         case ConvertU_F32(out, in) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedInt(b).toFloat)
-            case VMCell.ShortCell(s) => IO.succeed(java.lang.Short.toUnsignedInt(s).toFloat)
-            case VMCell.IntCell(i) => IO.succeed(java.lang.Integer.toUnsignedLong(i).toFloat)
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedInt(b).toFloat)
+            case VMCell.ShortCell(s) => ZIO.succeed(java.lang.Short.toUnsignedInt(s).toFloat)
+            case VMCell.IntCell(i) => ZIO.succeed(java.lang.Integer.toUnsignedLong(i).toFloat)
             case VMCell.LongCell(l) =>
-              if l >= 0 then IO.succeed(l.toFloat)
-              else IO.succeed(((BigInt(1) << 64) + l).toFloat)
+              if l >= 0 then ZIO.succeed(l.toFloat)
+              else ZIO.succeed(((BigInt(1) << 64) + l).toFloat)
           }.flatMap(setLocal(out, _))
 
         case ConvertF64(out, in) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(b.toFloat)
-            case VMCell.ShortCell(s) => IO.succeed(s.toFloat)
-            case VMCell.IntCell(i) => IO.succeed(i.toFloat)
-            case VMCell.LongCell(l) => IO.succeed(l.toFloat)
-            case VMCell.FloatCell(f) => IO.succeed(f)
-            case VMCell.DoubleCell(d) => IO.succeed(d.toFloat)
+            case VMCell.ByteCell(b) => ZIO.succeed(b.toFloat)
+            case VMCell.ShortCell(s) => ZIO.succeed(s.toFloat)
+            case VMCell.IntCell(i) => ZIO.succeed(i.toFloat)
+            case VMCell.LongCell(l) => ZIO.succeed(l.toFloat)
+            case VMCell.FloatCell(f) => ZIO.succeed(f)
+            case VMCell.DoubleCell(d) => ZIO.succeed(d.toFloat)
           }.flatMap(setLocal(out, _))
 
         case ConvertU_F64(out, in) =>
           withLocal(in) {
-            case VMCell.ByteCell(b) => IO.succeed(java.lang.Byte.toUnsignedInt(b).toDouble)
-            case VMCell.ShortCell(s) => IO.succeed(java.lang.Short.toUnsignedInt(s).toDouble)
-            case VMCell.IntCell(i) => IO.succeed(java.lang.Integer.toUnsignedLong(i).toDouble)
+            case VMCell.ByteCell(b) => ZIO.succeed(java.lang.Byte.toUnsignedInt(b).toDouble)
+            case VMCell.ShortCell(s) => ZIO.succeed(java.lang.Short.toUnsignedInt(s).toDouble)
+            case VMCell.IntCell(i) => ZIO.succeed(java.lang.Integer.toUnsignedLong(i).toDouble)
             case VMCell.LongCell(l) =>
-              if l >= 0 then IO.succeed(l.toDouble)
-              else IO.succeed(((BigInt(1) << 64) + l).toDouble)
+              if l >= 0 then ZIO.succeed(l.toDouble)
+              else ZIO.succeed(((BigInt(1) << 64) + l).toDouble)
           }.flatMap(setLocal(out, _))
 
 
@@ -754,12 +754,12 @@ object Interpreter {
             case (VMCell.ByteCell(x), VMCell.ByteCell(y)) =>
               val result = x + y
               if result.isValidByte then setLocal(out, result.toByte)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.ShortCell(x), VMCell.ShortCell(y)) => 
               val result = x + y
               if result.isValidShort then setLocal(out, result.toShort)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.IntCell(x), VMCell.IntCell(y)) => setLocal(out, Math.addExact(x, y))
             case (VMCell.LongCell(x), VMCell.LongCell(y)) => setLocal(out, Math.addExact(x, y))
@@ -770,25 +770,25 @@ object Interpreter {
             case (VMCell.ByteCell(x), VMCell.ByteCell(y)) =>
               val result = java.lang.Byte.toUnsignedInt(x) + java.lang.Byte.toUnsignedInt(y)
               if result <= UByte.MaxValue then setLocal(out, result.toByte)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.ShortCell(x), VMCell.ShortCell(y)) => 
               val result = java.lang.Short.toUnsignedInt(x) + java.lang.Short.toUnsignedInt(y)
               if result <= UShort.MaxValue then setLocal(out, result.toShort)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.IntCell(x), VMCell.IntCell(y)) =>
               val result = x + y
               if java.lang.Integer.compareUnsigned(result, x) < 0 || java.lang.Integer.compareUnsigned(result, y) < 0 then
                 setLocal(out, result)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
             case (VMCell.LongCell(x), VMCell.LongCell(y)) =>
               val result = x + y
               if java.lang.Long.compareUnsigned(result, x) < 0 || java.lang.Long.compareUnsigned(result, y) < 0 then
                 setLocal(out, result)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
           }
 
         case Sub(out, a, b, OverflowMode.None) =>
@@ -806,12 +806,12 @@ object Interpreter {
             case (VMCell.ByteCell(x), VMCell.ByteCell(y)) =>
               val result = x - y
               if result.isValidByte then setLocal(out, result.toByte)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.ShortCell(x), VMCell.ShortCell(y)) => 
               val result = x - y
               if result.isValidShort then setLocal(out, result.toShort)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.IntCell(x), VMCell.IntCell(y)) => setLocal(out, Math.subtractExact(x, y))
             case (VMCell.LongCell(x), VMCell.LongCell(y)) => setLocal(out, Math.subtractExact(x, y))
@@ -822,26 +822,26 @@ object Interpreter {
             case (VMCell.ByteCell(x), VMCell.ByteCell(y)) =>
               val result = java.lang.Byte.toUnsignedInt(x) - java.lang.Byte.toUnsignedInt(y)
               if result >= 0 then setLocal(out, result.toByte)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.ShortCell(x), VMCell.ShortCell(y)) => 
               val result = java.lang.Short.toUnsignedInt(x) - java.lang.Short.toUnsignedInt(y)
               if result >= 0 then setLocal(out, result.toShort)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.IntCell(x), VMCell.IntCell(y)) =>
               val result = x - y
               if java.lang.Integer.compareUnsigned(result, x) > 0 || java.lang.Integer.compareUnsigned(result, y) > 0 then
                 setLocal(out, result)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
 
             case (VMCell.LongCell(x), VMCell.LongCell(y)) =>
               val result = x - y
               if java.lang.Long.compareUnsigned(result, x) < 0 || java.lang.Long.compareUnsigned(result, y) > 0 then
                 setLocal(out, result)
               else
-                IO.fail(new ArithmeticException())
+                ZIO.fail(new ArithmeticException())
           }
 
         case Mul(out, a, b, OverflowMode.None) =>
@@ -859,12 +859,12 @@ object Interpreter {
             case (VMCell.ByteCell(x), VMCell.ByteCell(y)) =>
               val result = x * y
               if result.isValidByte then setLocal(out, result.toByte)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.ShortCell(x), VMCell.ShortCell(y)) => 
               val result = x * y
               if result.isValidShort then setLocal(out, result.toShort)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.IntCell(x), VMCell.IntCell(y)) => setLocal(out, Math.multiplyExact(x, y))
             case (VMCell.LongCell(x), VMCell.LongCell(y)) => setLocal(out, Math.multiplyExact(x, y))
@@ -875,17 +875,17 @@ object Interpreter {
             case (VMCell.ByteCell(x), VMCell.ByteCell(y)) =>
               val result = java.lang.Byte.toUnsignedInt(x) * java.lang.Byte.toUnsignedInt(y)
               if result <= UByte.MaxValue then setLocal(out, result.toByte)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.ShortCell(x), VMCell.ShortCell(y)) => 
               val result = java.lang.Short.toUnsignedInt(x) * java.lang.Short.toUnsignedInt(y)
               if result <= UShort.MaxValue then setLocal(out, result.toShort)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.IntCell(x), VMCell.IntCell(y)) =>
               val result = java.lang.Integer.toUnsignedLong(x) * java.lang.Integer.toUnsignedLong(y)
               if result <= UInt.MaxValue then setLocal(out, result.toInt)
-              else IO.fail(new ArithmeticException())
+              else ZIO.fail(new ArithmeticException())
 
             case (VMCell.LongCell(x), VMCell.LongCell(y)) =>
               // https://stackoverflow.com/a/20060733
@@ -897,7 +897,7 @@ object Interpreter {
                 else (Long.MaxValue - yHalf) / y < xHalf
               }
 
-              if hasOverflow then IO.fail(new ArithmeticException())
+              if hasOverflow then ZIO.fail(new ArithmeticException())
               else setLocal(out, x * y)
           }
 
@@ -914,19 +914,19 @@ object Interpreter {
         case DivS(out, a, b, true) =>
           withLocal(a, b) {
             case (VMCell.ByteCell(x), VMCell.ByteCell(y)) =>
-              if x == Byte.MinValue && y == -1 then IO.fail(new ArithmeticException())
+              if x == Byte.MinValue && y == -1 then ZIO.fail(new ArithmeticException())
               else setLocal(out, (x / y).toByte)
 
             case (VMCell.ShortCell(x), VMCell.ShortCell(y)) =>
-              if x == Short.MinValue && y == -1 then IO.fail(new ArithmeticException())
+              if x == Short.MinValue && y == -1 then ZIO.fail(new ArithmeticException())
               else setLocal(out, (x / y).toShort)
               
             case (VMCell.IntCell(x), VMCell.IntCell(y)) => 
-              if x == Int.MinValue && y == -1 then IO.fail(new ArithmeticException())
+              if x == Int.MinValue && y == -1 then ZIO.fail(new ArithmeticException())
               else setLocal(out, x / y)
 
             case (VMCell.LongCell(x), VMCell.LongCell(y)) =>
-              if x == Long.MinValue && y == -1 then IO.fail(new ArithmeticException())
+              if x == Long.MinValue && y == -1 then ZIO.fail(new ArithmeticException())
               else setLocal(out, x / y)
           }
 
@@ -977,11 +977,11 @@ object Interpreter {
         case Negate(out, a, true) =>
           withLocal(a) {
             case VMCell.ByteCell(x) =>
-              if x == Byte.MinValue then IO.fail(new ArithmeticException())
+              if x == Byte.MinValue then ZIO.fail(new ArithmeticException())
               else setLocal(out, (-x).toByte)
 
             case VMCell.ShortCell(x) =>
-              if x == Short.MinValue then IO.fail(new ArithmeticException())
+              if x == Short.MinValue then ZIO.fail(new ArithmeticException())
               else setLocal(out, (-x).toShort)
               
             case VMCell.IntCell(x) => setLocal(out, Math.negateExact(x))
@@ -1260,27 +1260,27 @@ object Interpreter {
       import JumpInstruction.*
       insn match {
         case tail: TailCall =>
-          IO.succeed(tail)
+          ZIO.succeed(tail)
 
         case Return(value) =>
           locals.get(value) match {
-            case Some(VMCell.ByteCell(value)) => IO.succeed(value)
-            case Some(VMCell.ShortCell(value)) => IO.succeed(value)
-            case Some(VMCell.IntCell(value)) => IO.succeed(value)
-            case Some(VMCell.LongCell(value)) => IO.succeed(value)
-            case Some(VMCell.FloatCell(value)) => IO.succeed(value)
-            case Some(VMCell.DoubleCell(value)) => IO.succeed(value)
-            case Some(VMCell.RefCell(value)) => IO.succeed(value)
-            case None => IO.fail(new UnknownLocalException())
+            case Some(VMCell.ByteCell(value)) => ZIO.succeed(value)
+            case Some(VMCell.ShortCell(value)) => ZIO.succeed(value)
+            case Some(VMCell.IntCell(value)) => ZIO.succeed(value)
+            case Some(VMCell.LongCell(value)) => ZIO.succeed(value)
+            case Some(VMCell.FloatCell(value)) => ZIO.succeed(value)
+            case Some(VMCell.DoubleCell(value)) => ZIO.succeed(value)
+            case Some(VMCell.RefCell(value)) => ZIO.succeed(value)
+            case None => ZIO.fail(new UnknownLocalException())
           }
 
         case Jump(label) =>
-          IO.succeed(label)
+          ZIO.succeed(label)
 
         case JumpZero(value, zTarget, nzTarget) =>
           withLocal(value) {
             case VMCell.IntCell(b) =>
-              IO.succeed(
+              ZIO.succeed(
                 if b == 0 then zTarget
                 else nzTarget
               )
@@ -1289,14 +1289,14 @@ object Interpreter {
         case Throw(exception) =>
           withLocal(exception) {
             case VMCell.RefCell(value: GCObjectNotNull) =>
-              IO.fail(value)
+              ZIO.fail(value)
           }
       }
     end runJump
 
     private def initClassFields(clsId: ClassId): Task[Map[FieldId, VMCell]] =
       for {
-        cls <- IO.fromOption(program.classes.lift(clsId)).mapError { _ => new UnknownClassException() }
+        cls <- ZIO.fromOption(program.classes.lift(clsId)).mapError { _ => new UnknownClassException() }
         fields <- ZIO.foreach(cls.fields.zipWithIndex) { case (t, i) =>
           createCell(t).map { cell => FieldId(clsId.id, i) -> cell }
         }
@@ -1313,7 +1313,7 @@ object Interpreter {
           case (cell: VMCell.FloatCell, VMType.F32) => setLocal(out, cell.readVolatile)
           case (cell: VMCell.DoubleCell, VMType.F64) => setLocal(out, cell.readVolatile)
           case (cell: VMCell.RefCell, VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => setLocalRef(out, cell.readVolatile)
-          case _ => IO.fail(new LocalTypeMismatchException())
+          case _ => ZIO.fail(new LocalTypeMismatchException())
         }
       else
         (cell, t) match {
@@ -1324,68 +1324,68 @@ object Interpreter {
           case (VMCell.FloatCell(value), VMType.F32) => setLocal(out, value)
           case (VMCell.DoubleCell(value), VMType.F64) => setLocal(out, value)
           case (VMCell.RefCell(value), VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => setLocalRef(out, value)
-          case _ => IO.fail(new LocalTypeMismatchException())
+          case _ => ZIO.fail(new LocalTypeMismatchException())
         }
 
     private def writeCell(cell: VMCell, valueCell: VMCell, t: VMType, volatile: Boolean) =
       if volatile then
         (cell, valueCell, t) match {
-          case (cell: VMCell.ByteCell, valueCell: VMCell.ByteCell, VMType.I8) => IO.succeed { cell.writeVolatile(valueCell.value) }
-          case (cell: VMCell.ShortCell, valueCell: VMCell.ShortCell, VMType.I16) => IO.succeed { cell.writeVolatile(valueCell.value) }
-          case (cell: VMCell.IntCell, valueCell: VMCell.IntCell, VMType.I32) => IO.succeed { cell.writeVolatile(valueCell.value) }
-          case (cell: VMCell.LongCell, valueCell: VMCell.LongCell, VMType.I64) => IO.succeed { cell.writeVolatile(valueCell.value) }
-          case (cell: VMCell.FloatCell, valueCell: VMCell.FloatCell, VMType.F32) => IO.succeed { cell.writeVolatile(valueCell.value) }
-          case (cell: VMCell.DoubleCell, valueCell: VMCell.DoubleCell, VMType.F64) => IO.succeed { cell.writeVolatile(valueCell.value) }
-          case (cell: VMCell.RefCell, valueCell: VMCell.RefCell, VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => IO.succeed { cell.writeVolatile(valueCell.value) }
-          case _ => IO.fail(new LocalTypeMismatchException())
+          case (cell: VMCell.ByteCell, valueCell: VMCell.ByteCell, VMType.I8) => ZIO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.ShortCell, valueCell: VMCell.ShortCell, VMType.I16) => ZIO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.IntCell, valueCell: VMCell.IntCell, VMType.I32) => ZIO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.LongCell, valueCell: VMCell.LongCell, VMType.I64) => ZIO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.FloatCell, valueCell: VMCell.FloatCell, VMType.F32) => ZIO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.DoubleCell, valueCell: VMCell.DoubleCell, VMType.F64) => ZIO.succeed { cell.writeVolatile(valueCell.value) }
+          case (cell: VMCell.RefCell, valueCell: VMCell.RefCell, VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => ZIO.succeed { cell.writeVolatile(valueCell.value) }
+          case _ => ZIO.fail(new LocalTypeMismatchException())
         }
       else
         (cell, valueCell, t) match {
-          case (cell: VMCell.ByteCell, valueCell: VMCell.ByteCell, VMType.I8) => IO.succeed { cell.value = valueCell.value }
-          case (cell: VMCell.ShortCell, valueCell: VMCell.ShortCell, VMType.I16) => IO.succeed { cell.value = valueCell.value }
-          case (cell: VMCell.IntCell, valueCell: VMCell.IntCell, VMType.I32) => IO.succeed { cell.value = valueCell.value }
-          case (cell: VMCell.LongCell, valueCell: VMCell.LongCell, VMType.I64) => IO.succeed { cell.value = valueCell.value }
-          case (cell: VMCell.FloatCell, valueCell: VMCell.FloatCell, VMType.F32) => IO.succeed { cell.value = valueCell.value }
-          case (cell: VMCell.DoubleCell, valueCell: VMCell.DoubleCell, VMType.F64) => IO.succeed { cell.value = valueCell.value }
-          case (cell: VMCell.RefCell, valueCell: VMCell.RefCell, VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => IO.succeed { cell.value = valueCell.value }
-          case _ => IO.fail(new LocalTypeMismatchException())
+          case (cell: VMCell.ByteCell, valueCell: VMCell.ByteCell, VMType.I8) => ZIO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.ShortCell, valueCell: VMCell.ShortCell, VMType.I16) => ZIO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.IntCell, valueCell: VMCell.IntCell, VMType.I32) => ZIO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.LongCell, valueCell: VMCell.LongCell, VMType.I64) => ZIO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.FloatCell, valueCell: VMCell.FloatCell, VMType.F32) => ZIO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.DoubleCell, valueCell: VMCell.DoubleCell, VMType.F64) => ZIO.succeed { cell.value = valueCell.value }
+          case (cell: VMCell.RefCell, valueCell: VMCell.RefCell, VMType.GCRef | VMType.GCPtr | VMType.Tuple(_)) => ZIO.succeed { cell.value = valueCell.value }
+          case _ => ZIO.fail(new LocalTypeMismatchException())
         }
 
     private def getField(obj: GCObjectMap, fieldId: FieldId): IO[BlockError, (VMCell, VMType)] =
       for {
-        cls <- IO.fromOption(program.classes.get(ClassId(fieldId.classId))).mapError { _ => UnknownClassException() }
-        fieldType <- IO.fromOption(cls.fields.lift(fieldId.id)).mapError { _ => UnknownFieldException() }
-        cell <- IO.fromOption(obj.fields.get(fieldId)).mapError { _ => UnknownFieldException() }
+        cls <- ZIO.fromOption(program.classes.get(ClassId(fieldId.classId))).mapError { _ => UnknownClassException() }
+        fieldType <- ZIO.fromOption(cls.fields.lift(fieldId.id)).mapError { _ => UnknownFieldException() }
+        cell <- ZIO.fromOption(obj.fields.get(fieldId)).mapError { _ => UnknownFieldException() }
       } yield (cell, fieldType)
 
     private def getArrayType(clsId: ClassId): IO[BlockError, VMType] =
       for {
-        cls <- IO.fromOption(program.classes.get(clsId)).mapError { _ => UnknownClassException() }
-        arrayType <- IO.fromOption(cls.arrayType).mapError { _ => MissingArrayTypeException() }
+        cls <- ZIO.fromOption(program.classes.get(clsId)).mapError { _ => UnknownClassException() }
+        arrayType <- ZIO.fromOption(cls.arrayType).mapError { _ => MissingArrayTypeException() }
       } yield arrayType
 
     private def getArrayIndex: PartialFunction[VMCell, IO[BlockError, Int]] = {
-      case VMCell.ByteCell(len) => IO.succeed(java.lang.Byte.toUnsignedInt(len))
-      case VMCell.ShortCell(len) => IO.succeed(java.lang.Short.toUnsignedInt(len))
+      case VMCell.ByteCell(len) => ZIO.succeed(java.lang.Byte.toUnsignedInt(len))
+      case VMCell.ShortCell(len) => ZIO.succeed(java.lang.Short.toUnsignedInt(len))
       case VMCell.IntCell(len) =>
         if len < 0 then
-          IO.fail(new OutOfMemoryError())
+          ZIO.fail(new OutOfMemoryError())
         else
-          IO.succeed(len)
+          ZIO.succeed(len)
 
       case VMCell.LongCell(len) =>
         if java.lang.Long.compareUnsigned(len, Int.MaxValue) <= 0 then
-          IO.succeed(len.toInt)
+          ZIO.succeed(len.toInt)
         else
-          IO.fail(new OutOfMemoryError())
+          ZIO.fail(new OutOfMemoryError())
 
       case VMCell.RefCell(len: BigInt) =>
         if len < 0 then
-          IO.fail(new IllegalArgumentException())
+          ZIO.fail(new IllegalArgumentException())
         else if len > Int.MaxValue then
-          IO.fail(new OutOfMemoryError())
+          ZIO.fail(new OutOfMemoryError())
         else
-          IO.succeed(len.toInt)
+          ZIO.succeed(len.toInt)
     }
 
 

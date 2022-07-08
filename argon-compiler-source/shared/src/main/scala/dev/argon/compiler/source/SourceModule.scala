@@ -23,7 +23,7 @@ object SourceModule {
     for {
       exportEntries <-
         moduleFile.parsed
-          .mapAccumZIO(IO.succeed(Map.empty))(loadElement(context, currentTube, moduleName, importer))
+          .mapAccumZIO(ZIO.succeed(Map.empty))(loadElement(context, currentTube, moduleName, importer))
           .collect {
             case Some(entry) => entry
           }
@@ -120,7 +120,7 @@ object SourceModule {
 
           }
 
-        case Nil => IO.succeed(acc)
+        case Nil => ZIO.succeed(acc)
       }
 
     def loadTubeImports(tube: ArTubeC with HasContext[context.type], pathSegment: ImportPathSegment)
@@ -199,7 +199,7 @@ object SourceModule {
       case stmt: DataConstructorDeclarationStmt => loadDataConstructor(stmt).map { entry => (imports, Some(entry)) }
       case stmt: ClassDeclarationStmt => loadClass(stmt).map { entry => (imports, Some(entry)) }
       case stmt: FunctionDeclarationStmt => loadFunction(stmt).map { entry => (imports, Some(entry)) }
-      case _ => IO.fail(DiagnosticError.InvalidTopLevelStatement(stmt))
+      case _ => ZIO.fail(DiagnosticError.InvalidTopLevelStatement(stmt))
     }
 
   end loadElement

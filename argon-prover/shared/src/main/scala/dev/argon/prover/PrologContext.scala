@@ -67,9 +67,9 @@ abstract class PrologContext[R, E] {
       io
         .mapError(Left.apply)
         .flatMap {
-          case _: PrologResult.Unknown.type => IO.succeed(Stream.empty)
-          case result: PrologResult.No => IO.fail(Right(result))
-          case result: PrologResult.Yes => IO.succeed(ZStream(result))
+          case _: PrologResult.Unknown.type => ZIO.succeed(ZStream.empty)
+          case result: PrologResult.No => ZIO.fail(Right(result))
+          case result: PrologResult.Yes => ZIO.succeed(ZStream(result))
         }
     )
 
@@ -80,18 +80,18 @@ abstract class PrologContext[R, E] {
       .runHead
       .foldZIO(
         failure = {
-          case Left(e) => IO.fail(e)
-          case Right(no) => IO.succeed(no)
+          case Left(e) => ZIO.fail(e)
+          case Right(no) => ZIO.succeed(no)
         },
         success = {
-          case Some(result) => IO.succeed(result)
-          case None => IO.succeed(PrologResult.Unknown)
+          case Some(result) => ZIO.succeed(result)
+          case None => ZIO.succeed(PrologResult.Unknown)
         },
       )
 
   private def emptyIfNo(stream: ZStream[R, Error, PrologResult.Yes]): ZStream[R, Error, PrologResult.Yes] =
     stream.catchSome {
-      case Right(PrologResult.No(_, _)) => Stream.empty
+      case Right(PrologResult.No(_, _)) => ZStream.empty
     }
 
   protected def solve(goal: Predicate, substitutions: Model, fuel: Int): ZStream[R, Error, PrologResult.Yes] =
@@ -145,7 +145,7 @@ abstract class PrologContext[R, E] {
             case Right(PrologResult.No(proof, model)) =>
               ZStream.fromZIO(
                 UniqueIdentifier.make.flatMap { id =>
-                  IO.fail(Right(PrologResult.No(
+                  ZIO.fail(Right(PrologResult.No(
                     Proof.HypotheticalSyllogism(
                       Proof.ImplicaitonAbstraction(id, Proof.DeMorganAndPushNotIn(Proof.Identifier(id))),
                       proof,
@@ -187,7 +187,7 @@ abstract class PrologContext[R, E] {
       case PredicateFunction(function, args) =>
         intrinsicPredicate(function, args, substitutions, fuel - 1)
 
-      case _ => Stream.empty
+      case _ => ZStream.empty
     })
 
   private def inferAll(goal: Predicate, substitutions: Model, fuel: Int): ZStream[R, Error, PrologResult.Yes] =
@@ -201,8 +201,8 @@ abstract class PrologContext[R, E] {
   private def infer(goal: Predicate, substitutions: Model, kb: List[(Proof[ProofAtom], Predicate)], fuel: Int)
     : ZStream[R, Error, PrologResult.Yes] =
     kb match {
-      case _ if fuel <= 0 => Stream.empty
-      case _: Nil.type => Stream.empty
+      case _ if fuel <= 0 => ZStream.empty
+      case _: Nil.type => ZStream.empty
       case (proof, assertion) :: t =>
         inferOne(goal, assertion, substitutions, proof, fuel) ++ infer(goal, substitutions, t, fuel)
 
@@ -219,7 +219,7 @@ abstract class PrologContext[R, E] {
         case Implies(premise, conclusion) =>
           val implicationCheck =
             premise match {
-              case PropFalse => Stream.empty
+              case PropFalse => ZStream.empty
               case _ =>
                 emptyIfNo(
                   unify(goal, conclusion, substitutions, fuel)
@@ -237,15 +237,15 @@ abstract class PrologContext[R, E] {
               case PropFalse =>
                 unify(goal, premise, substitutions, fuel)
                   .flatMap { model =>
-                    Stream.fail(Right(PrologResult.No(proof, model)))
+                    ZStream.fail(Right(PrologResult.No(proof, model)))
                   }
 
-              case _ => Stream.empty
+              case _ => ZStream.empty
             }
 
           implicationCheck ++ notCheck
 
-        case _ => Stream.empty
+        case _ => ZStream.empty
       }
 
     assertionSpecific ++ unifyAssertion
@@ -260,7 +260,7 @@ abstract class PrologContext[R, E] {
             .mapError(Left.apply)
             .map { relations =>
               if relations.size != args1.size then
-                Stream.empty
+                ZStream.empty
               else
                 args1.zip(args2).zip(relations).toList.foldLeftM(substitutions) {
                   case (substitutions, ((arg1, arg2), argRelation)) =>
@@ -285,9 +285,9 @@ abstract class PrologContext[R, E] {
           unify(right1, right2, substitutions, fuel)
         }
 
-      case (PropFalse, PropFalse) => Stream.succeed(substitutions)
+      case (PropFalse, PropFalse) => ZStream.succeed(substitutions)
 
-      case _ => Stream.empty
+      case _ => ZStream.empty
     }
 
   private def normalizeExpr(e: Expr, substitutions: Model, fuel: Int): ZIO[R, E, Expr] =
@@ -297,7 +297,7 @@ abstract class PrologContext[R, E] {
         case Variable(variable) =>
           substitutions.get(variable).flatMap(otherForEquivalenceRelation) match {
             case Some(value) => normalizeExpr(value, substitutions, fuel)
-            case None => IO.succeed(e)
+            case None => ZIO.succeed(e)
           }
       }
 
@@ -308,7 +308,7 @@ abstract class PrologContext[R, E] {
     (goal: Expr, rule: Expr, relation: TRelation, substitutions: Model, fuel: Int, useCustomRelations: Boolean)
     : ZStream[R, Error, PrologResult.Yes] =
     if fuel <= 0 then
-      Stream.empty
+      ZStream.empty
     else
       val customRelations = checkRelation(goal, rule, relation, substitutions, fuel - 1)
 
@@ -330,7 +330,7 @@ abstract class PrologContext[R, E] {
                     }
                 }
 
-            unifiedResult ++ (if fromRules then Stream.empty else customRelations)
+            unifiedResult ++ (if fromRules then ZStream.empty else customRelations)
           }
         )
 
@@ -361,7 +361,7 @@ abstract class PrologContext[R, E] {
                 ) ++ customRelations
 
               case (Variable(var1), Variable(var2)) if var1 == var2 =>
-                Stream.fromZIO(
+                ZStream.fromZIO(
                   variableRelationProof(relation, var1, var2)
                     .mapError(Left.apply)
                     .map { proof =>
@@ -375,7 +375,7 @@ abstract class PrologContext[R, E] {
               case (other, Variable(var2)) =>
                 unifyVariable(var2, other, swapRelation(relation))
 
-              case _ => Stream.empty
+              case _ => ZStream.empty
             }
           }
         }
@@ -385,7 +385,7 @@ abstract class PrologContext[R, E] {
 
   private def addSubstitution(substitutions: Model, variable: TVariable, constraints: TConstraints)
     : ZStream[R, Error, Model] =
-    Stream.fromIterable(
+    ZStream.fromIterable(
       substitutions.get(variable)
         .fold(Some(constraints))(mergeConstraints(_, constraints))
         .map { constraints =>

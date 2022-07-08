@@ -13,7 +13,7 @@ import dev.argon.io.DirectoryEntry
 
 private[plugin] final class JavaDirectoryResourceUnwrap[E >: IOException, EX <: Exception](resource: japi.resource.DirectoryResource[EX])(using ErrorWrapper[E, EX], TypeTest[Throwable, EX]) extends DirectoryResource[E] {
   override def contents: Stream[E, DirectoryEntry[E]] =
-    ZStream.fromJavaStreamZIO(IO.attemptBlockingInterrupt { resource.contents })
+    ZStream.fromJavaStreamZIO(ZIO.attemptBlockingInterrupt { resource.contents })
       .catchAll(JavaErrorHandler.handleErrorsStream)
       .map { entry =>
         val resource = entry.resource match {

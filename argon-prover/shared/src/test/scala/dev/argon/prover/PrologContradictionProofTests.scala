@@ -20,7 +20,7 @@ object PrologContradictionProofTests extends ZIOSpecDefault {
 
   val fuel = 100
 
-  override def spec: ZSpec[Environment & Scope, Any] =
+  override def spec: Spec[Environment & Scope, Any] =
     suite("Contradiction Proofs")(
       test("A or B, not A, not B") {
         val prologContext =
@@ -29,7 +29,7 @@ object PrologContradictionProofTests extends ZIOSpecDefault {
             override val syntax: prologSyntax.type = prologSyntax
 
             protected override def assertions: URIO[VariableProvider, List[(Proof[String], syntax.Predicate)]] =
-              IO.succeed(List(
+              ZIO.succeed(List(
                 Proof.Atomic("disjunct") -> Or(pred(A), pred(B)),
                 Proof.Atomic("nota") -> Implies(pred(A), PropFalse),
                 Proof.Atomic("notb") -> Implies(pred(B), PropFalse),
@@ -38,7 +38,7 @@ object PrologContradictionProofTests extends ZIOSpecDefault {
 
         import prologContext.hasProof
 
-        assertM(prologContext.check(PropFalse, fuel))(
+        assertZIO(prologContext.check(PropFalse, fuel))(
           hasProof(Proof.Contradiction(
             Proof.Atomic("disjunct"),
             Proof.DeMorganAndPullNotOut(Proof.ConjunctIntro(Proof.Atomic("nota"), Proof.Atomic("notb"))),

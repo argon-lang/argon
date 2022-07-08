@@ -9,7 +9,7 @@ import scala.scalajs.js.JavaScriptException
 object XmlParser {
 
   def parse(xml: String): IO[XMLException, Element] =
-    IO.attempt {
+    ZIO.attempt {
       val dom = new DOMParser()
       val doc = dom.parseFromString(xml, "text/xml")
       convertElem(doc.documentElement)

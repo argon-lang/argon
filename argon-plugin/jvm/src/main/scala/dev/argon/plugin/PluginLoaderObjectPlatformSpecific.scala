@@ -21,12 +21,12 @@ trait PluginLoaderObjectPlatformSpecific {
       } yield new PluginLoader[CompError] {
         override def load: IO[IOException, Seq[Plugin[CompError]]] =
           system.env("ARGON_PLUGINS_DIRECTORY").orDie.flatMap {
-            case None => IO.succeed(Seq.empty)
+            case None => ZIO.succeed(Seq.empty)
             case Some(pluginsDirStr) =>
-              IO.runtime.flatMap { runtime =>
+              ZIO.runtime.flatMap { runtime =>
                 given Runtime[Any] = runtime
                 
-                IO.attemptBlockingInterrupt {
+                ZIO.attemptBlockingInterrupt {
                   val pluginsDir = Path.of(pluginsDirStr)
                   Files.list(pluginsDir)
                     .iterator

@@ -32,10 +32,10 @@ object PrologFuelTests extends ZIOSpecDefault {
 
   import TestContext.PrologResult
 
-  override def spec: ZSpec[Environment & Scope, Any] =
+  override def spec: Spec[Environment & Scope, Any] =
     suite("Fuel tests")(
       test("recursive predicate") {
-        assertM(TestContext.check(pred(Infinite, expr(A)), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(TestContext.check(pred(Infinite, expr(A)), fuel))(equalTo(PrologResult.Unknown))
       }
     ).provideSome[Environment](VariableProvider.live)
 

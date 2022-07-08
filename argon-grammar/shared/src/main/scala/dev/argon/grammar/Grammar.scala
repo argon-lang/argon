@@ -424,13 +424,13 @@ object Grammar {
         case GrammarResultSuccess(remaining, WithSource(value, _)) =>
           NonEmptyChunk.fromChunk(remaining) match {
             case Some(remaining) => runParseStepMulti(ParseStepReady, remaining, acc :+ value)
-            case None => IO.succeed((ParseStepReady, acc :+ value))
+            case None => ZIO.succeed((ParseStepReady, acc :+ value))
           }
 
-        case GrammarResultFailure(failure) => IO.failCause(ZIOErrorUtil.multiCauseChunk(failure))
-        case GrammarResultError(error) => IO.failCause(ZIOErrorUtil.multiCauseChunk(error))
+        case GrammarResultFailure(failure) => ZIO.failCause(ZIOErrorUtil.multiCauseChunk(failure))
+        case GrammarResultError(error) => ZIO.failCause(ZIOErrorUtil.multiCauseChunk(error))
         case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] =>
-          IO.succeed((ParseStepPartial(suspend), acc))
+          ZIO.succeed((ParseStepPartial(suspend), acc))
       }
 
     def runParseStep(s: ParseStep, tokens: NonEmptyChunk[WithSource[TToken]])

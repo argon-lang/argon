@@ -16,12 +16,12 @@ final class JavaSerializedTubeUnwrap[E >: IOException, EX <: Exception](inner: j
   )(
     javaValue: => TJava,
   ): IO[E, TScala] =
-    IO.attemptBlockingInterrupt {
+    ZIO.attemptBlockingInterrupt {
       javaValue
     }
       .catchAll(JavaErrorHandler.handleErrors[E, EX])
       .flatMap { value =>
-        IO.suspendSucceed {
+        ZIO.suspendSucceed {
           val os = new ByteArrayOutputStream()
           val writer = new japi.util.OutputStreamFormatWriter(os)
           jCodec.write(writer, value)
@@ -82,9 +82,9 @@ final class JavaSerializedTubeUnwrap[E >: IOException, EX <: Exception](inner: j
     }
 
   override def externFunctionImplementation(id: BigInt, platform: Platform[E]): IO[E, platform.ExternFunction] =
-    IO.runtime.flatMap { runtime =>
+    ZIO.runtime.flatMap { runtime =>
       given Runtime[Any] = runtime
-      IO.attemptBlockingInterrupt {
+      ZIO.attemptBlockingInterrupt {
         inner.externFunctionImplementation(id.bigInteger, new JavaPlatformWrap(platform))
       }
         .catchAll(JavaErrorHandler.handleErrors[E, EX])
@@ -102,9 +102,9 @@ final class JavaSerializedTubeUnwrap[E >: IOException, EX <: Exception](inner: j
     }
 
   override def externMethodImplementation(id: BigInt, platform: Platform[E]): IO[E, platform.ExternMethod] =
-    IO.runtime.flatMap { runtime =>
+    ZIO.runtime.flatMap { runtime =>
       given Runtime[Any] = runtime
-      IO.attemptBlockingInterrupt {
+      ZIO.attemptBlockingInterrupt {
         inner.externMethodImplementation(id.bigInteger, new JavaPlatformWrap(platform))
       }
         .catchAll(JavaErrorHandler.handleErrors[E, EX])
@@ -121,9 +121,9 @@ final class JavaSerializedTubeUnwrap[E >: IOException, EX <: Exception](inner: j
     }
 
   override def externClassConstructorImplementation(id: BigInt, platform: Platform[E]): IO[E, platform.ExternClassConstructor] =
-    IO.runtime.flatMap { runtime =>
+    ZIO.runtime.flatMap { runtime =>
       given Runtime[Any] = runtime
-      IO.attemptBlockingInterrupt {
+      ZIO.attemptBlockingInterrupt {
         inner.externClassConstructorImplementation(id.bigInteger, new JavaPlatformWrap(platform))
       }
         .catchAll(JavaErrorHandler.handleErrors[E, EX])

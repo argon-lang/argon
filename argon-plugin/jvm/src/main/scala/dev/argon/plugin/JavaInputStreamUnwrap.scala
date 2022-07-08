@@ -12,20 +12,20 @@ import scala.reflect.TypeTest
 private[plugin] object JavaInputStreamUnwrap {
 
   def toZStream[E >: IOException, EX <: Exception](is: => InputStream)(using ErrorWrapper[E, EX], TypeTest[Throwable, EX]): Stream[E, Byte] =
-    new ZStream[Any, E, Byte](
+    ZStream.fromChannel[Any, E, Byte](
       ZChannel.acquireReleaseWith(
-        IO.attemptBlockingInterrupt {
+        ZIO.attemptBlockingInterrupt {
           is
         }
           .catchAll(JavaErrorHandler.handleErrors[E, EX])
       )(is =>
-        IO.attemptBlockingInterrupt {
+        ZIO.attemptBlockingInterrupt {
               is.close()
             }.orDie
       ) { is =>
         lazy val pull: ZChannel[Any, Any, Any, Any, E, Chunk[Byte], Unit] =
           ZChannel.fromZIO(
-            IO.attemptBlockingInterrupt {
+            ZIO.attemptBlockingInterrupt {
               val buff = new Array[Byte](ZStream.DefaultChunkSize)
               val bytesRead = is.read(buff)
               Chunk.fromArray(buff).slice(0, bytesRead)

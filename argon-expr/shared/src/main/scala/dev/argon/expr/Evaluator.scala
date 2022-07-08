@@ -12,9 +12,9 @@ trait Evaluator[R, E] {
 
   def normalizeTopLevelWrap(expr: WrapExpr, fuel: Int): ZIO[R, E, WrapExpr] =
     expr match {
-      case _ if fuel <= 0 => IO.succeed(expr)
+      case _ if fuel <= 0 => ZIO.succeed(expr)
       case WrapExpr.OfExpr(expr) => normalizeTopLevel(expr, fuel)
-      case WrapExpr.OfHole(hole) => IO.succeed(expr)
+      case WrapExpr.OfHole(hole) => ZIO.succeed(expr)
     }
 
   def normalizeTopLevel(expr: ArExpr[ExprConstructor], fuel: Int): ZIO[R, E, WrapExpr] =
@@ -30,14 +30,14 @@ trait Evaluator[R, E] {
         val args = expr.getArgs(ctor)
         getFunctionBody(ctor.function, args, fuel - 1).flatMap {
           case Some(body) => normalizeTopLevelWrap(body, fuel - 1)
-          case None => IO.succeed(WrapExpr.OfExpr(expr))
+          case None => ZIO.succeed(WrapExpr.OfExpr(expr))
         }
 
       case ctor: (expr.constructor.type & ExprConstructor.MethodCall) =>
         val (instance, args) = expr.getArgs(ctor)
         getMethodBody(ctor.method, instance, args, fuel - 1).flatMap {
           case Some(body) => normalizeTopLevelWrap(body, fuel - 1)
-          case None => IO.succeed(WrapExpr.OfExpr(expr))
+          case None => ZIO.succeed(WrapExpr.OfExpr(expr))
         }
 
       case ctor: (expr.constructor.type & ExprConstructor.FunctionObjectCall.type) =>
@@ -51,10 +51,10 @@ trait Evaluator[R, E] {
                   fuel - 1,
                 )
 
-              case _ => IO.succeed(WrapExpr.OfExpr(expr))
+              case _ => ZIO.succeed(WrapExpr.OfExpr(expr))
             }
 
-          case _ => IO.succeed(WrapExpr.OfExpr(expr))
+          case _ => ZIO.succeed(WrapExpr.OfExpr(expr))
         }
 
       case ctor: (expr.constructor.type & ExprConstructor.LoadTupleElement) =>
@@ -87,7 +87,7 @@ trait Evaluator[R, E] {
           ExprConstructor.ExistentialType(_) | ExprConstructor.NeverType |
           ExprConstructor.ConjunctionType | ExprConstructor.DisjunctionType |
           ExprConstructor.SubtypeWitnessType | ExprConstructor.EqualTo | ExprConstructor.AssumeErasedValue =>
-        IO.succeed(WrapExpr.OfExpr(expr))
+        ZIO.succeed(WrapExpr.OfExpr(expr))
     }
 
   def substituteVariables(varMap: Map[TVariable, WrapExpr])(expr: WrapExpr): WrapExpr = ???

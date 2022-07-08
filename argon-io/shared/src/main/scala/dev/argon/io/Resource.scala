@@ -19,5 +19,5 @@ trait BinaryResource[+E] extends Resource[E] with BinaryResourcePlatformSpecific
 trait TextResource[+E] extends BinaryResource[E] {
   def asText: Stream[E, String]
 
-  override def asBytes: Stream[E, Byte] = ZPipeline.utf8Encode.apply(asText)
+  override def asBytes: Stream[E, Byte] = ZPipeline.utf8Encode.orDie.apply(asText)
 }

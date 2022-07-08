@@ -10,9 +10,9 @@ trait BinaryResourceLoaderPlatformSpecific {
 
   private def fileHandle(path: String, flags: String | Double): URIO[Scope, NodeFileHandle] =
     ZIO.acquireRelease(
-      Task.fromPromiseJS(NodeFileSystem.open(path, flags))
+      ZIO.fromPromiseJS(NodeFileSystem.open(path, flags))
     ) { handle =>
-      Task.fromPromiseJS(handle.close()).orDie
+      ZIO.fromPromiseJS(handle.close()).orDie
     }.orDie
   
   def loadFile(path: String): BinaryResource[IOException] =
@@ -20,13 +20,13 @@ trait BinaryResourceLoaderPlatformSpecific {
       ZStream.fromPull[Any, Throwable, Byte](
         for {
           handle <- fileHandle(path, "r")
-          buffer <- IO.succeed { new Uint8Array(ZStream.DefaultChunkSize) }
+          buffer <- ZIO.succeed { new Uint8Array(ZStream.DefaultChunkSize) }
         } yield (
           for {
-            readRes <- Task.fromPromiseJS(handle.read(buffer, 0, buffer.length)).asSomeError
+            readRes <- ZIO.fromPromiseJS(handle.read(buffer, 0, buffer.length)).asSomeError
             data <-
               if readRes.bytesRead > 0 then
-                IO.succeed {
+                ZIO.succeed {
                   val cb = new ChunkBuilder.Byte()
                   cb.sizeHint(readRes.bytesRead)
                   for(i <- 0 until readRes.bytesRead) {
@@ -35,7 +35,7 @@ trait BinaryResourceLoaderPlatformSpecific {
                   cb.result()
                 }
               else
-                IO.fail(None)
+                ZIO.fail(None)
           } yield data
         )
       ).refineToOrDie[IOException]

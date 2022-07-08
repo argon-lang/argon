@@ -21,13 +21,13 @@ final class JavaSerializedTubeWrap[E >: IOException, EX <: Exception](inner: Ser
     JavaExecuteIO.runInterruptable(
       for {
         value <- scalaValue
-        os <- IO.succeed { new ByteArrayOutputStream() }
+        os <- ZIO.succeed { new ByteArrayOutputStream() }
         writer = new ScalaFormatWriter(os)
         _ <- sCodec.write(writer, value)
 
-        is <- IO.succeed { new ByteArrayInputStream(os.toByteArray) }
+        is <- ZIO.succeed { new ByteArrayInputStream(os.toByteArray) }
         reader = new japi.util.InputStreamFormatReader(is)
-        res <- IO.succeed { jCodec.read(reader) }
+        res <- ZIO.succeed { jCodec.read(reader) }
       } yield res
     )
   
