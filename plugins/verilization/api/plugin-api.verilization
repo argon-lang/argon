@@ -1,0 +1,165 @@
+version 1;
+
+package argon.plugin;
+
+
+interface Tube {
+	version 1 {
+		metadata(): argon.tube.Metadata;
+
+		moduleDeclaration(id: nat): argon.tube.ModuleDeclaration;
+		moduleDefinition(id: nat): argon.tube.ModuleDeclaration;
+
+
+		traitRef(id: nat): argon.tube.TraitReference;
+		traitDef(id: nat): argon.tube.TraitDefinition;
+
+		classRef(id: nat): argon.tube.ClassReference;
+		classDef(id: nat): argon.tube.ClassDefinition;
+
+		functionRef(id: nat): argon.tube.FunctionReference;
+		functionDef(id: nat): argon.tube.FunctionDefinition;
+		externFunctionImplementation(id: nat, platform: string): Stream;
+
+		methodRef(id: nat): argon.tube.MethodReference;
+		methodDef(id: nat): argon.tube.MethodDefinition;
+		externMethodImplementation(id: nat, platform: string): Stream;
+
+		classConstructorRef(id: nat): argon.tube.ClassConstructorReference;
+		classConstructorDef(id: nat): argon.tube.ClassConstructorDefinition;
+	}
+}
+
+interface Plugin {
+	version 1 {
+		backend(name: string): Backend;
+		tubeLoader(name: string): TubeLoader;
+		resourceLoader(name: string): ResourceLoader;
+		buildOutputExecutor(name: string): BuildOutputExecutor;
+	}
+}
+
+interface ResourceLoader {
+	version 1 {
+		loadFile(name: string): option<Either<BinaryResource, DirectoryResource>>;
+		loadStream(stream: Stream): Either<BinaryResource, DirectoryResource>;
+	}
+}
+
+interface Backend {
+	version 1 {
+		emit(options: Map<string, OptionValue>, tube: Tube): Map<string, Either<BinaryResource, DirectoryResource>>;
+	}
+}
+
+interface TubeLoader {
+	version 1 {
+		loadTube(path: string): Tube;
+	}
+}
+
+interface BuildOutputExecutor {
+	version 1 {
+		execute(libraries: Map<list<string>, Either<BinaryResource, DirectoryResource>>, buildOutput: Either<BinaryResource, DirectoryResource>): string;
+	}
+}
+
+
+final struct Map<K, V> {
+	version 1 {
+		entries: list<MapEntry<K, V>>;
+	}
+}
+
+final struct MapEntry<K, V> {
+	version 1 {
+		key: K;
+		value: V;
+	}
+}
+
+enum OptionValue {
+	version 1 {
+		stringValue: string;
+		fileList: list<string>;
+		singleFile: string;
+		listValue: list<OptionValue>;
+	}
+}
+
+
+enum Either<A, B> {
+	version 1 {
+		a: A;
+		b: B;
+	}
+}
+
+
+
+
+
+
+interface DirectoryResource {
+	version 1 {
+		fileName(): option<string>;
+		writeToDirectory(path: string): bool;
+		stream(): DirectoryStream;
+	}
+}
+
+interface BinaryResource {
+	version 1 {
+		fileName(): option<string>;
+		writeToFile(path: string): bool;
+		stream(): Stream;
+
+		asText(): option<TextResource>;
+	}
+}
+
+interface TextResource {
+	version 1 {
+		asBinary(): BinaryResource;
+
+		text(): string;
+	}
+}
+
+interface ZipFileResource {
+	version 1 {
+		asBinary(): BinaryResource;
+
+		openZip(): ZipFile;
+	}
+}
+
+interface ZipFile {
+	version 1 {
+		getEntry(path: string): option<ZipFileEntry>;
+		close(): unit;
+	}
+}
+
+interface ZipFileEntry {
+	version 1 {
+		read(): Stream;
+	}
+}
+
+interface Stream {
+	version 1 {
+		read(): list<u8>;
+		close(): unit;
+	}
+}
+
+interface DirectoryStream {
+	version 1 {
+		read(): option<Either<BinaryResource, DirectoryResource>>;
+		close(): unit;
+	}
+}
+
+
+

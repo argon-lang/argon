@@ -168,7 +168,7 @@ def runVerilization(libraries: Map[String, String], packageMap: Map[String, Stri
   }
 
   cached(
-    inputFiles.map { file("plugins/api/verilization") / _ }
+    inputFiles.map { file("plugins/verilization/api") / _ }
   ).toSeq
 }
 
@@ -442,7 +442,7 @@ lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(f
 
         Seq(Compile, Runtime).map {
           _ / dependencyClasspath ++= Seq(
-            file("plugins/api/java/target/argon-plugin-api.jar"),
+            file("plugins/java/api/target/argon-plugin-api.jar"),
             file("tools/verilization/java/runtime/target/runtime-0.2.0.jar"),
           ),
         },

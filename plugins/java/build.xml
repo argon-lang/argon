@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<project
+	name="Argon Java Plugins"
+	default="build"
+>
+	<target name="build">
+        <ant dir="util/java-sourcegen" />
+        <ant dir="api" />
+        <ant dir="tube" />
+        <ant dir="vm" />
+	</target>
+
+	<target name="clean">
+        <ant dir="util/java-sourcegen" target="clean" />
+        <ant dir="api" target="clean" />
+        <ant dir="tube" target="clean" />
+        <ant dir="vm" target="clean" />
+	</target>
+</project>

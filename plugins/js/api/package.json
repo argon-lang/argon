@@ -1,0 +1,22 @@
+{
+  "name": "@argon-lang/plugin-api",
+  "main": "lib/index.js",
+  "type": "module",
+  "exports": {
+    "./tube": "./lib/tube"
+  },
+  "scripts": {
+    "gen-verilization": "rimraf src-gen && cargo run --quiet --manifest-path ../../../tools/verilization/rust/compiler-cli/Cargo.toml -- generate typescript -i ../verilization/tube.verilization -i ../../../tools/verilization/verilization/runtime/bool.verilization -i ../../../tools/verilization/verilization/runtime/integral.verilization -i ../../../tools/verilization/verilization/runtime/list.verilization -i ../../../tools/verilization/verilization/runtime/option.verilization -i ../../../tools/verilization/verilization/runtime/string.verilization -i ../../../tools/verilization/verilization/runtime/unit.verilization -o:out_dir src-gen -o:lib: @verilization/runtime -o:pkg:argon.tube tube",
+    "build": "npm run gen-verilization && tsc --project tsconfig.json && rimraf lib && mkdirp lib && cpy \"**/*\" ../../lib --parents --cwd=out/src && cpy \"**/*\" ../../lib --parents --cwd=out/src-gen"
+  },
+  "dependencies": {
+    "@verilization/runtime": "file:../../../tools/verilization/typescript/runtime"
+  },
+  "devDependencies": {
+    "cpy-cli": "^4.1.0",
+    "mkdirp": "^1.0.4",
+    "rimraf": "^3.0.2",
+    "typescript": "4.6.0-dev.20211210"
+  },
+  "license": "GPL-3.0"
+}

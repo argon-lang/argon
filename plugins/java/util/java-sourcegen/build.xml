@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<project
+	name="Argon Plugin API for Java"
+	default="jar"
+	xmlns:ivy="antlib:org.apache.ivy.ant"
+>
+	<target name="build" depends="resolve">
+		<mkdir dir="target/classes" />
+		<delete includeemptydirs="true">
+			<fileset dir="target/classes" includes="**/*"/>
+		</delete>
+		<javac
+			release="17"
+			destdir="target/classes"
+			includeantruntime="false"
+			modulepathref="modulepath.compile"
+		>
+			<src path="src" />
+		</javac>
+	</target>
+
+	<target name="resolve">
+		<ivy:resolve />
+        <ivy:cachepath pathId="modulepath.compile" conf="compile" />
+    </target>
+
+	<target name="jar" depends="build">
+		<mkdir dir="target" />
+		<delete file="target/javasourcegen.jar" failonerror="false" />
+		<jar basedir="target/classes" destfile="target/javasourcegen.jar">
+			<metainf dir="src/META-INF" />
+		</jar>
+	</target>
+
+	<target name="clean">
+		<delete dir="target" failonerror="false" />
+	</target>
+</project>

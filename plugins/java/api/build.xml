@@ -1,0 +1,146 @@
+<?xml version="1.0"?>
+<project
+	name="Argon Plugin Java Source Generator"
+	default="jar"
+	xmlns:ivy="antlib:org.apache.ivy.ant"
+>
+	<target name="build" depends="resolve">
+		<mkdir dir="target/classes" />
+		<mkdir dir="target/src-gen" />
+		<delete includeemptydirs="true">
+			<fileset dir="target/classes" includes="**/*"/>
+			<fileset dir="target/src-gen" includes="**/*"/>
+		</delete>
+		<exec executable="cargo" failonerror="true">
+			<arg value="run" />
+			<arg value="--quiet" />
+			<arg value="--manifest-path" />
+			<arg value="../../../tools/verilization/rust/compiler-cli/Cargo.toml" />
+			<arg value="--" />
+			<arg value="generate" />
+			<arg value="java" />
+
+			<arg value="-i" />
+			<arg value="../../../tools/verilization/verilization/runtime/bool.verilization" />
+
+			<arg value="-i" />
+			<arg value="../../../tools/verilization/verilization/runtime/integral.verilization" />
+
+			<arg value="-i" />
+			<arg value="../../../tools/verilization/verilization/runtime/list.verilization" />
+
+			<arg value="-i" />
+			<arg value="../../../tools/verilization/verilization/runtime/option.verilization" />
+
+			<arg value="-i" />
+			<arg value="../../../tools/verilization/verilization/runtime/string.verilization" />
+
+			<arg value="-i" />
+			<arg value="../../../tools/verilization/verilization/runtime/unit.verilization" />
+
+			<arg value="-i" />
+			<arg value="../../verilization/api/tube.verilization" />
+
+			<arg value="-o:out_dir" />
+			<arg value="target/src-gen" />
+
+			<arg value="-o:pkg:argon.tube" />
+			<arg value="dev.argon.plugin.api.tube" />
+
+			<arg value="-o:lib:" />
+			<arg value="dev.argon.verilization.runtime" />
+
+			<arg value="-o:extern:nat" />
+			<arg value="java.math.BigInteger" />
+
+			<arg value="-o:extern:int" />
+			<arg value="java.math.BigInteger" />
+
+			<arg value="-o:extern:u8" />
+			<arg value="byte" />
+
+			<arg value="-o:extern:i8" />
+			<arg value="byte" />
+
+			<arg value="-o:extern:u16" />
+			<arg value="short" />
+
+			<arg value="-o:extern:i16" />
+			<arg value="short" />
+
+			<arg value="-o:extern:u32" />
+			<arg value="int" />
+
+			<arg value="-o:extern:i32" />
+			<arg value="int" />
+
+			<arg value="-o:extern:u64" />
+			<arg value="long" />
+
+			<arg value="-o:extern:i64" />
+			<arg value="long" />
+
+			<arg value="-o:extern:string" />
+			<arg value="java.lang.String" />
+
+			<arg value="-o:extern:option" />
+			<arg value="java.util.Optional" />
+
+			<arg value="-o:extern:bool" />
+			<arg value="boolean" />
+
+			<arg value="-o:extern:unit" />
+			<arg value="void" />
+		</exec>
+		<exec executable="mvn" dir="../../../tools/verilization/java/runtime">
+			<arg value="clean" />
+			<arg value="package" />
+		</exec>
+		<javac
+			release="17"
+			destdir="target/classes"
+			includeantruntime="false"
+			modulepathref="modulepath.compile"
+			fork="true"
+		>
+			<src path="src" />
+			<src path="target/src-gen" />
+			<compilerarg value="-Xlint:all,-missing-explicit-ctor,-requires-automatic,-requires-transitive-automatic,-preview,-serial" />
+			<compilerarg value="-Werror" />
+			<compilerarg value="--enable-preview" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.api=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.file=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.main=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.model=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.processing=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.tree=ALL-UNNAMED" />
+			<compilerarg value="-J--add-exports=jdk.compiler/com.sun.tools.javac.util=ALL-UNNAMED" />
+			<compilerarg value="-J--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED" />
+			<compilerarg value="-processorpath" />
+			<compilerarg value="../shared/checkerframework/jars/checker-3.22.2-all.jar" />
+			<compilerarg value="-processor" />
+			<compilerarg value="org.checkerframework.checker.nullness.NullnessChecker" />
+		</javac>
+	</target>
+
+	<target name="resolve">
+		<ant dir="../shared/checkerframework" />
+		<ivy:resolve />
+        <ivy:cachepath pathId="modulepath.compile.ivy" conf="compile" />
+		<path id="modulepath.compile">
+			<path refid="modulepath.compile.ivy" />
+			<pathelement location="../../../tools/verilization/java/runtime/target/runtime-0.2.0.jar" />
+		</path>
+    </target>
+
+	<target name="jar" depends="build">
+		<mkdir dir="target" />
+		<delete file="target/argon-plugin-api.jar" failonerror="false" />
+		<jar basedir="target/classes" destfile="target/argon-plugin-api.jar" />
+	</target>
+
+	<target name="clean">
+		<delete dir="target" failonerror="false" />
+	</target>
+</project>
