@@ -36,14 +36,4 @@ private[io] object JSZip {
     val `type`: "uint8array"
   }
 
-  object JSZipGeneratorOptions {
-
-    @SuppressWarnings(Array("scalafix:DisableSyntax.asInstanceOf"))
-    def apply(`type`: "uint8array"): JSZipGeneratorOptions =
-      js.Dynamic.literal(
-        `type` = `type`
-      ).asInstanceOf[JSZipGeneratorOptions]
-
-  }
-
 }

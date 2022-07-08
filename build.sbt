@@ -29,7 +29,7 @@ lazy val commonSettingsNoLibs = Seq(
 )
 
 lazy val commonSettingsAnnotations = Seq(
-  libraryDependencies += "org.checkerframework" % "checker-qual" % "3.21.4",
+  libraryDependencies += "org.checkerframework" % "checker-qual" % "3.22.2",
 )
 
 lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ Seq(
@@ -56,11 +56,11 @@ lazy val sharedJVMNodeSettings = Seq(
 lazy val sharedJSNodeSettings = Seq(
 
   libraryDependencies ++= Seq(
-    "io.github.cquiroz" %%% "scala-java-time" % "2.3.0",
+    "io.github.cquiroz" %%% "scala-java-time" % "2.4.0",
   ),
 
   npmDependencies ++= Seq(
-    "jszip" -> "^3.7.1",
+    "jszip" -> "^3.10.0",
     "@xmldom/xmldom" -> "^0.8.2",
   ) ++ esParseDeps,
   
