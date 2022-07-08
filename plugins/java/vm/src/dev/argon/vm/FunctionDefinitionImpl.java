@@ -1,5 +1,6 @@
 package dev.argon.vm;
 
+import dev.argon.vm.internal.*;
 import java.util.ArrayList;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.MethodVisitor;

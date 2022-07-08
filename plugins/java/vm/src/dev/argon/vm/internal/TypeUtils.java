@@ -1,11 +1,11 @@
-package dev.argon.vm;
+package dev.argon.vm.internal;
 
 import java.util.List;
 import dev.argon.vm.format.VMType;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.Opcodes;
 
-final class TypeUtils {
+public final class TypeUtils {
     
     public static Type getType(VMType.V1 t) {
         return switch(t) {

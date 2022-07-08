@@ -1,6 +1,7 @@
 package dev.argon.vm.libs.core;
 
 import dev.argon.vm.*;
+import dev.argon.vm.internal.*;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Label;
