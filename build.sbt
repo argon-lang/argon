@@ -137,7 +137,7 @@ lazy val verRuntime = Map("" -> "dev.argon.verilization.runtime.zio")
 lazy val verTube = Map("argon.tube" -> "dev.argon.tube")
 lazy val verPlugin = Map("argon.plugin" -> "dev.argon.plugin.rpc")
 
-def runVerilization(libraries: Map[String, String], packageMap: Map[String, String], inputFiles: Set[String]): Def.Initialize[Task[Seq[File]]] = Def.task {
+def runVerilization(libraries: Map[String, String], packageMap: Map[String, String], inputFiles: Set[File]): Def.Initialize[Task[Seq[File]]] = Def.task {
   val log = streams.value.log
   val cached = FileFunction.cached(streams.value.cacheDirectory / "verilization") { (inputFiles: Set[File]) =>
     val outputDir = sourceManaged.value / "verilization"
@@ -167,9 +167,7 @@ def runVerilization(libraries: Map[String, String], packageMap: Map[String, Stri
     (outputDir ** "*.scala").get().toSet
   }
 
-  cached(
-    inputFiles.map { file("plugins/verilization/api") / _ }
-  ).toSeq
+  cached(inputFiles).toSeq
 }
 
 
@@ -424,7 +422,7 @@ lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(fil
     generateVerilization := runVerilization(
       libraries = verRuntime,
       packageMap = verTube,
-      inputFiles = Set("tube.verilization"),
+      inputFiles = Set(file("argon-tube/tube.verilization")),
     ).value,
   )
 
@@ -439,13 +437,6 @@ lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(f
     _.dependsOn(verilization_runtimeJVM)
       .settings(
         commonJVMSettings,
-
-        Seq(Compile, Runtime).map {
-          _ / dependencyClasspath ++= Seq(
-            file("plugins/java/api/target/argon-plugin-api.jar"),
-            file("tools/verilization/java/runtime/target/runtime-0.2.0.jar"),
-          ),
-        },
       )
   )
   .jsConfigure(
@@ -463,18 +454,42 @@ lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(f
     compilerOptions,
 
     name := "argon-plugin",
-
-    Compile / sourceGenerators += generateVerilization,
-    generateVerilization := runVerilization(
-      libraries = verRuntime ++ verTube,
-      packageMap = verPlugin,
-      inputFiles = Set("tube.verilization", "plugin-api.verilization"),
-    ).value,
   )
 
 lazy val argon_pluginJVM = argon_plugin.jvm
 lazy val argon_pluginJS = argon_plugin.js
 lazy val argon_pluginNode = argon_plugin.node
+
+
+lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-js"))
+  .dependsOn(util, argon_tube, argon_compiler_core)
+  .jvmConfigure(
+    _.dependsOn(verilization_runtimeJVM)
+      .settings(
+        commonJVMSettings,
+      )
+  )
+  .jsConfigure(
+    _.dependsOn(verilization_runtimeJS)
+      .enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.dependsOn(verilization_runtimeJS)
+      .enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-plugin-js",
+  )
+
+lazy val argon_plugin_jsJVM = argon_plugin_js.jvm
+lazy val argon_plugin_jsJS = argon_plugin_js.js
+lazy val argon_plugin_jsNode = argon_plugin_js.node
+
 
 
 lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-io"))
