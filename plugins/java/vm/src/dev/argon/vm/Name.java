@@ -16,6 +16,10 @@ public class Name {
         }
     }
 
+    public static Name parse(String name) {
+        return new Name(List.of(name.split("(?<!\\.)\\.(?!:\\.)")));
+    }
+
     private final List<String> parts;
 
     @Override

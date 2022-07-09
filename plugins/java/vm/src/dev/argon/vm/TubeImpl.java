@@ -5,10 +5,12 @@ import java.util.HashMap;
 import org.checkerframework.checker.nullness.qual.Nullable;
 
 final class TubeImpl implements Tube {
-    TubeImpl(Runtime runtime, Name tubeName, int tubeNum, dev.argon.vm.format.Tube.V1 tube) {
+    TubeImpl(Runtime runtime, int tubeNum, dev.argon.vm.format.Tube.V1 tube) {
         this.runtime = runtime;
-        this.tubeName = tubeName;
         this.tubeNum = tubeNum;
+
+        tubeName = new Name(tube.tubeName());
+
         constantPool = tube.constantPool();
 
         entries = new ConstantPoolEntry[constantPool.entries().size()];
@@ -21,8 +23,8 @@ final class TubeImpl implements Tube {
     }
 
     private final Runtime runtime;
-    private final Name tubeName;
     final int tubeNum;
+    private final Name tubeName;
     private final dev.argon.vm.format.ConstantPool.V1 constantPool;
     private final @Nullable ConstantPoolEntry[] entries;
     private final Map<Name, Integer> exports;
@@ -32,6 +34,11 @@ final class TubeImpl implements Tube {
     @Override
     public int tubeNum() {
         return tubeNum;
+    }
+
+    @Override
+    public Name tubeName() {
+        return tubeName;
     }
 
     @Override

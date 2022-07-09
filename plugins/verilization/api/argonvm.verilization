@@ -277,6 +277,7 @@ struct ConstantPool {
 
 struct Tube {
     version 1 {
+        tubeName: Name;
         constantPool: ConstantPool;
         exports: list<KeyValuePair<Name, ConstantPoolIndex>>;
     }

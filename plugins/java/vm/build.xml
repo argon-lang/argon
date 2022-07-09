@@ -131,6 +131,7 @@
 		<path id="modulepath.compile">
 			<path refid="modulepath.compile.ivy" />
 			<pathelement location="../../../tools/verilization/java/runtime/target/runtime-0.2.0.jar" />
+			<pathelement location="../api/target/argon-plugin-api.jar" />
 		</path>
     </target>
 

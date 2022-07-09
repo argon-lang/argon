@@ -7,14 +7,61 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Label;
 import dev.argon.vm.format.VMType;
 import java.util.Optional;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.List;
 
-public abstract class CoreLibTube implements Tube {
+public final class CoreLibTube implements Tube {
     
+    public CoreLibTube(int tubeNum) {
+        this.tubeNum = tubeNum;
+
+        var printFunction = new PrintFunction();
+
+        exports = new HashMap<>();
+        exports.put(new Name(List.of("print")), printFunction);
+
+        entries = new ConstantPoolEntry[] {
+            printFunction,
+        };
+    }
+
+    private final int tubeNum;
+    private final Map<Name, ConstantPoolEntry> exports;
+    private final ConstantPoolEntry[] entries;
+
     private static final VMType.V1 emptyTupleType = new VMType.V1.Tuple(
         dev.argon.verilization.runtime.List.<VMType.V1>fromSequence()
     );
 
+
+    private static final Name tubeName = new Name(List.of("ArgonVM.CoreLib"));
+
     private static final String FUNCTION_RESULT = "dev/argon/vm/FunctionResult$Value";
+
+    @Override
+    public int tubeNum() {
+        return tubeNum;
+    }
+    
+    @Override
+    public Name tubeName() {
+        return tubeName;
+    }
+
+    @Override
+    public ConstantPoolEntry getExport(Name name) throws Exception {
+        var export = exports.get(name);
+        if(export == null) {
+            throw new UnknownExportException(tubeName, name);
+        }
+        return export;
+    }
+    
+    @Override
+    public ConstantPoolEntry getEntry(int id) {
+        return entries[id];
+    }
 
 
     private class PrintFunction extends FunctionDefinitionBase {
