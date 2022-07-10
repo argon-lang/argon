@@ -1,9 +1,11 @@
 package dev.argon.options
 
-trait OptionHandler[E, Options] {
-  type Builder
-  def options: Set[OptionInfo[E, ?, Options, Builder]]
+import dev.argon.util.*
 
-  def emptyBuilder: Builder
-  def build(builder: Builder): Either[OptionsError.MissingOption, Options]
+trait OptionHandler[Options[_[_], _]] {
+  def options: Set[OptionInfoAny[Options]]
+
+  def empty[E]: Options[Option, E]
+  def build[E](options: Options[Option, E]): Either[OptionsError.MissingOption, Options[Id, E]]
 }
+

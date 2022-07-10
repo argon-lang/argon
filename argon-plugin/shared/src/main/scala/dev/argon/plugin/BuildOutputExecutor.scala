@@ -8,6 +8,6 @@ import java.io.IOException
 import scala.reflect.TypeTest
 import zio.ExitCode
 
-trait BuildOutputExecutor[Output] {
-  def execute(libraries: Map[TubeName, Output], buildOutput: Output): IO[IOException, (ExitCode, String)]
+trait BuildOutputExecutor[Output[_]] {
+  def execute[E](libraries: Map[TubeName, Output[E]], buildOutput: Output[E]): IO[IOException, (ExitCode, String)]
 }

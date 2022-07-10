@@ -21,3 +21,16 @@ trait TextResource[+E] extends BinaryResource[E] {
 
   override def asBytes: Stream[E, Byte] = ZPipeline.utf8Encode.orDie.apply(asText)
 }
+
+object TextResource {
+  def decode[E >: ResourceDecodeException](resource: BinaryResource[E]): TextResource[E] =
+    resource match {
+      case resource: TextResource[E] => resource
+      case _ => new TextResource[E] {
+        override def asText: Stream[E, String] =
+          resource.asBytes.via(ZPipeline.utf8Decode.mapError(ResourceDecodeException("Error decoding UTF-8 text", _)))
+      }
+
+    }
+}
+

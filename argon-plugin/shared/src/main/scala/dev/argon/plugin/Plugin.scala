@@ -7,14 +7,14 @@ import zio.*
 import java.io.IOException
 import dev.argon.options.OptionHandler
 
-trait Plugin[E] {
-  type Options
-  type Output
+trait Plugin {
+  type Options[_[_], _]
+  type Output[_]
 
-  val optionHandler: OptionHandler[E, Options]
-  val outputHandler: OutputHandler[E, Output]
+  val optionHandler: OptionHandler[Options]
+  val outputHandler: OutputHandler[Output]
 
-  def backend: IO[E, Backend[E, Options, Output]]
-  def tubeLoaders: IO[E, Seq[TubeLoader[E, Options]]]
-  def buildOutputExecutor: IO[E, Option[BuildOutputExecutor[Output]]]
+  def backend: Backend[Options, Output]
+  def tubeLoaders: Seq[TubeLoader[Options]]
+  def buildOutputExecutor: Option[BuildOutputExecutor[Output]]
 }

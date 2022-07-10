@@ -1,22 +1,39 @@
 package dev.argon.options
 
-import dev.argon.io.BinaryResource
+import dev.argon.io.{BinaryResource, ResourceDecodeException}
+
 import java.io.IOException
 import zio.*
+import dev.argon.util.*
 
-sealed trait OptionInfo[E, A, Options, Builder] {
+sealed trait OptionInfo[A[_], Options[_[_], _]] {
   val name: String
   val description: String
 
-  
-  def getValue(options: Options): A
+  def getValue[F[_], E](options: Options[F, E]): F[A[E]]
 }
 
-trait OptionInfoValue[E, A, Options, Builder] extends OptionInfo[E, A, Options, Builder] {
-  def addOptionValue(prev: Builder, value: String): Either[OptionsError.ParseError, Builder]
+trait OptionInfoValue[A, Options[_[_], _]] extends OptionInfo[[_] =>> A, Options] {
+  def addOptionValue[E](prev: Options[Option, E], value: String): Either[OptionsError.ParseError, Options[Option, E]]
 }
 
-trait OptionInfoResource[E, A, Options, Builder] extends OptionInfo[E, A, Options, Builder] {
-  def addOptionValue(prev: Builder, value: BinaryResource[E]): Either[OptionsError.ParseError, Builder]
+trait OptionInfoResource[A[_], Options[_[_], _]] extends OptionInfo[A, Options] {
+  def addOptionValue[E >: ResourceDecodeException | IOException](prev: Options[Option, E], value: BinaryResource[E]): Either[OptionsError.ParseError, Options[Option, E]]
+}
+
+
+sealed trait OptionInfoAny[Options[_[_], _]] {
+  type Type[_]
+  val info: OptionInfo[Type, Options]
+}
+
+object OptionInfoAny {
+  def apply[A[_], Options[_[_], _]](oi: OptionInfo[A, Options]): OptionInfoAny[Options] =
+    new OptionInfoAny[Options] {
+      override type Type[E] = A[E]
+      override val info: OptionInfo[A, Options] = oi
+    }
+
+  given [A[_], Options[_[_], _]]: Conversion[OptionInfo[A, Options], OptionInfoAny[Options]] = OptionInfoAny.apply
 }
 
