@@ -4,7 +4,7 @@ import NodePlatformImplicits._
 
 import scala.sys.process.Process
 
-val graalVersion = "21.1.0"
+val graalVersion = "22.1.0.1"
 val zioVersion = "2.0.0"
 
 ThisBuild / semanticdbEnabled := true
@@ -25,14 +25,10 @@ val esParseDeps = Seq(
 )
 
 lazy val commonSettingsNoLibs = Seq(
-  scalaVersion := "3.1.2",
+  scalaVersion := "3.1.3",
 )
 
-lazy val commonSettingsAnnotations = Seq(
-  libraryDependencies += "org.checkerframework" % "checker-qual" % "3.22.2",
-)
-
-lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ Seq(
+lazy val commonSettings = commonSettingsNoLibs ++ Seq(
 
   resolvers += Resolver.sonatypeRepo("releases"),
 
@@ -44,6 +40,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ commonSettingsAnnotations ++ S
 
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
+
+    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.1.4",
   ),
 
 )
@@ -115,6 +113,7 @@ lazy val compilerOptions = Seq(
     "-language:implicitConversions",
     "-language:strictEquality",
     "-Ycheck-all-patmat",
+    "-Yretain-trees",
     "-Xmax-inlines", "128",
     "-Wconf:id=E029:e,cat=unchecked:e",
   ),
@@ -461,12 +460,20 @@ lazy val argon_pluginJS = argon_plugin.js
 lazy val argon_pluginNode = argon_plugin.node
 
 
-lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-js"))
+lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-js"))
   .dependsOn(util, argon_tube, argon_compiler_core)
   .jvmConfigure(
     _.dependsOn(verilization_runtimeJVM)
       .settings(
         commonJVMSettings,
+
+        libraryDependencies ++= Seq(
+          "org.graalvm.sdk" % "graal-sdk" % graalVersion,
+          "org.graalvm.js" % "js" % graalVersion,
+          "org.graalvm.js" % "js-scriptengine" % graalVersion,
+          "org.graalvm.tools" % "profiler" % graalVersion,
+          "org.graalvm.tools" % "chromeinspector" % graalVersion,
+        ),
       )
   )
   .jsConfigure(
@@ -483,7 +490,7 @@ lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
     commonSettings,
     compilerOptions,
 
-    name := "argon-plugin-js",
+    name := "argon-plugins-js",
   )
 
 lazy val argon_plugin_jsJVM = argon_plugin_js.jvm
