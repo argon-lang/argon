@@ -4,58 +4,58 @@ import magnolia1.*
 import dev.argon.util.{*, given}
 import scala.reflect.TypeTest
 
-trait JSValueEncoder[A] {
+trait JSValueCodec[A] {
   def toJSValue(a: A): JSValue
   def skipForField(a: A): Boolean = false
 }
 
-object JSValueEncoder extends Derivation[JSValueEncoder]:
-  given [S <: String]: JSValueEncoder[S] with
+object JSValueCodec extends Derivation[JSValueCodec]:
+  given [S <: String]: JSValueCodec[S] with
     override def toJSValue(a: S): JSValue = a
   end given
 
-  given JSValueEncoder[Double] with
+  given JSValueCodec[Double] with
     override def toJSValue(a: Double): JSValue = a
   end given
 
-  given JSValueEncoder[Int] with
+  given JSValueCodec[Int] with
     override def toJSValue(a: Int): JSValue = a
   end given
 
-  given [B <: Boolean]: JSValueEncoder[B] with
+  given [B <: Boolean]: JSValueCodec[B] with
     override def toJSValue(a: B): JSValue = a
   end given
-  
-  given JSValueEncoder[Nothing] with
+
+  given JSValueCodec[Nothing] with
     override def toJSValue(a: Nothing): JSValue = a
   end given
 
-  given [A: JSValueEncoder]: JSValueEncoder[Seq[A]] with
+  given [A: JSValueCodec]: JSValueCodec[Seq[A]] with
     override def toJSValue(a: Seq[A]): JSValue =
-      JSValue.fromSeq(a.map(summon[JSValueEncoder[A]].toJSValue))
+      JSValue.fromSeq(a.map(summon[JSValueCodec[A]].toJSValue))
 
-  given [A: JSValueEncoder]: JSValueEncoder[Nullable[A]] with
+  given [A: JSValueCodec]: JSValueCodec[Nullable[A]] with
     override def toJSValue(a: Nullable[A]): JSValue =
-      a.fold(JSValue.nullValue, summon[JSValueEncoder[A]].toJSValue)
+      a.map(summon[JSValueCodec[A]].toJSValue).unwrap
   end given
 
-  given [A: JSValueEncoder]: JSValueEncoder[Option[A]] with
+  given [A: JSValueCodec]: JSValueCodec[Option[A]] with
     override def toJSValue(a: Option[A]): JSValue =
-      a.map(summon[JSValueEncoder[A]].toJSValue).orNull
+      a.map(summon[JSValueCodec[A]].toJSValue).orNull
 
     override def skipForField(a: Option[A]): Boolean = a.isEmpty
   end given
 
-  def union[A: JSValueEncoder, B: JSValueEncoder](using TypeTest[A | B, A], TypeTest[A | B, B]): JSValueEncoder[A | B] =
-    new JSValueEncoder[A | B] {
+  def union[A: JSValueCodec, B: JSValueCodec](using TypeTest[A | B, A], TypeTest[A | B, B]): JSValueCodec[A | B] =
+    new JSValueCodec[A | B] {
       override def toJSValue(a: A | B): JSValue =
         a match {
-          case a: A => summon[JSValueEncoder[A]].toJSValue(a)
-          case b: B => summon[JSValueEncoder[B]].toJSValue(b)
+          case a: A => summon[JSValueCodec[A]].toJSValue(a)
+          case b: B => summon[JSValueCodec[B]].toJSValue(b)
         }
     }
 
-  override def join[T](ctx: CaseClass[JSValueEncoder, T]): JSValueEncoder[T] = value =>
+  override def join[T](ctx: CaseClass[JSValueCodec, T]): JSValueCodec[T] = value =>
     JSValue.fromMap(
       ctx.params
         .iterator
@@ -66,10 +66,10 @@ object JSValueEncoder extends Derivation[JSValueEncoder]:
         .toMap
     )
 
-  override def split[T](ctx: SealedTrait[JSValueEncoder, T]): JSValueEncoder[T] = value =>
+  override def split[T](ctx: SealedTrait[JSValueCodec, T]): JSValueCodec[T] = value =>
     ctx.choose(value) { sub => sub.typeclass.toJSValue(sub.cast(value)) }
 
-end JSValueEncoder
+end JSValueCodec
 
 
 

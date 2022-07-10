@@ -1,51 +1,51 @@
 package dev.argon.plugins.js.estree
 
-import dev.argon.plugins.js.JSValueEncoder
+import dev.argon.plugins.js.JSValueCodec
 import dev.argon.util.{*, given}
 
-given variableDeclarationOrExpressionEncoder: JSValueEncoder[VariableDeclaration | Expression] =
-  JSValueEncoder.union[VariableDeclaration, Expression]
+given variableDeclarationOrExpressionEncoder: JSValueCodec[VariableDeclaration | Expression] =
+  JSValueCodec.union[VariableDeclaration, Expression]
 
-given variableDeclarationOrPatternEncoder: JSValueEncoder[VariableDeclaration | Pattern] =
-  JSValueEncoder.union[VariableDeclaration, Pattern]
+given variableDeclarationOrPatternEncoder: JSValueCodec[VariableDeclaration | Pattern] =
+  JSValueCodec.union[VariableDeclaration, Pattern]
 
-given literalOrIdentifierEncoder: JSValueEncoder[Literal | Identifier] =
-  JSValueEncoder.union[Literal, Identifier]
+given literalOrIdentifierEncoder: JSValueCodec[Literal | Identifier] =
+  JSValueCodec.union[Literal, Identifier]
 
-given statementOrModuleDeclarationEncoder: JSValueEncoder[Statement | ModuleDeclaration] =
-  JSValueEncoder.union[Statement, ModuleDeclaration]
+given statementOrModuleDeclarationEncoder: JSValueCodec[Statement | ModuleDeclaration] =
+  JSValueCodec.union[Statement, ModuleDeclaration]
 
-given expressionOrSuperEncoder: JSValueEncoder[Expression | Super] =
-  JSValueEncoder.union[Expression, Super]
+given expressionOrSuperEncoder: JSValueCodec[Expression | Super] =
+  JSValueCodec.union[Expression, Super]
 
-given blockStatementOrExpressionEncoder: JSValueEncoder[BlockStatement | Expression] =
-  JSValueEncoder.union[BlockStatement, Expression]
+given blockStatementOrExpressionEncoder: JSValueCodec[BlockStatement | Expression] =
+  JSValueCodec.union[BlockStatement, Expression]
 
-given expressionOrPatternEncoder: JSValueEncoder[Expression | Pattern] =
-  JSValueEncoder.union[Expression, Pattern]
+given expressionOrPatternEncoder: JSValueCodec[Expression | Pattern] =
+  JSValueCodec.union[Expression, Pattern]
 
-given functionOrClassDeclarationEncoder: JSValueEncoder[FunctionDeclaration | ClassDeclaration] =
-  JSValueEncoder.union[FunctionDeclaration, ClassDeclaration]
+given functionOrClassDeclarationEncoder: JSValueCodec[FunctionDeclaration | ClassDeclaration] =
+  JSValueCodec.union[FunctionDeclaration, ClassDeclaration]
 
-given expressionOrSpreadEncoder: JSValueEncoder[Expression | SpreadElement] =
-  JSValueEncoder.union[Expression, SpreadElement]
+given expressionOrSpreadEncoder: JSValueCodec[Expression | SpreadElement] =
+  JSValueCodec.union[Expression, SpreadElement]
 
-given propertyOrSpreadEncoder: JSValueEncoder[Property | SpreadElement] =
-  JSValueEncoder.union[Property, SpreadElement]
+given propertyOrSpreadEncoder: JSValueCodec[Property | SpreadElement] =
+  JSValueCodec.union[Property, SpreadElement]
 
-given propertyOrRestElementEncoder: JSValueEncoder[Property | RestElement] =
-  JSValueEncoder.union[Property, RestElement]
+given propertyOrRestElementEncoder: JSValueCodec[Property | RestElement] =
+  JSValueCodec.union[Property, RestElement]
 
-given expressionOrPrivateIdentifierEncoder: JSValueEncoder[Expression | PrivateIdentifier] =
-  JSValueEncoder.union[Expression, PrivateIdentifier]
+given expressionOrPrivateIdentifierEncoder: JSValueCodec[Expression | PrivateIdentifier] =
+  JSValueCodec.union[Expression, PrivateIdentifier]
 
-given literalValueEncoder: JSValueEncoder[String | Boolean | Double] =
-  given l1: JSValueEncoder[Boolean | Double] = JSValueEncoder.union[Boolean, Double]
-  JSValueEncoder.union[String, Boolean | Double]
+given literalValueEncoder: JSValueCodec[String | Boolean | Double] =
+  given l1: JSValueCodec[Boolean | Double] = JSValueCodec.union[Boolean, Double]
+  JSValueCodec.union[String, Boolean | Double]
 end literalValueEncoder
 
 
-sealed trait Node derives JSValueEncoder {
+sealed trait Node derives JSValueCodec {
   val `type`: String
   val loc: Nullable[SourceLocation]
 }
@@ -57,7 +57,7 @@ final case class SourceLocation
   source: Nullable[String],
   start: Position,
   end: Position,
-) derives JSValueEncoder
+) derives JSValueCodec
 
 final case class Position
 (
@@ -65,11 +65,11 @@ final case class Position
   source: Nullable[String],
   start: Int,
   end: Int,
-) derives JSValueEncoder
+) derives JSValueCodec
 
 
 
-sealed trait Statement extends Node derives JSValueEncoder
+sealed trait Statement extends Node derives JSValueCodec
 
 
 final case class Program
@@ -78,7 +78,7 @@ final case class Program
   loc: Nullable[SourceLocation] = Nullable(null),
   sourceType: "script" | "module",
   body: Seq[Statement | ModuleDeclaration],
-) extends Node derives JSValueEncoder
+) extends Node derives JSValueCodec
 
 
 final case class ExpressionStatement
@@ -87,33 +87,33 @@ final case class ExpressionStatement
   loc: Nullable[SourceLocation] = Nullable(null),
   expression: Expression,
   directive: Option[String],
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class BlockStatement
 (
   `type`: "BlockStatement" = ("BlockStatement" : "BlockStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   body: Statement,
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class StaticBlock
 (
   `type`: "StaticBlock" = ("StaticBlock" : "StaticBlock"),
   loc: Nullable[SourceLocation] = Nullable(null),
   body: Statement,
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class EmptyStatement
 (
   `type`: "EmptyStatement" = ("EmptyStatement" : "EmptyStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class DebuggerStatement
 (
   `type`: "DebuggerStatement" = ("DebuggerStatement" : "DebuggerStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class WithStatement
 (
@@ -121,14 +121,14 @@ final case class WithStatement
   loc: Nullable[SourceLocation] = Nullable(null),
   `object`: Expression,
   body: Statement,
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class ReturnStatement
 (
   `type`: "ReturnStatement" = ("ReturnStatement" : "ReturnStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   argument: Nullable[Expression],
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class LabeledStatement
 (
@@ -136,21 +136,21 @@ final case class LabeledStatement
   loc: Nullable[SourceLocation] = Nullable(null),
   label: Identifier,
   body: Statement,
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class BreakStatement
 (
   `type`: "BreakStatement" = ("BreakStatement" : "BreakStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   label: Nullable[Identifier],
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class ContinueStatement
 (
   `type`: "ContinueStatement" = ("ContinueStatement" : "ContinueStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   label: Nullable[Identifier],
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class IfStatement
 (
@@ -159,7 +159,7 @@ final case class IfStatement
   test: Expression,
   consequent: Statement,
   alternate: Nullable[Statement],
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class SwitchStatement
 (
@@ -167,7 +167,7 @@ final case class SwitchStatement
   loc: Nullable[SourceLocation] = Nullable(null),
   discriminant: Expression,
   cases: Seq[SwitchCase],
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class SwitchCase
 (
@@ -175,14 +175,14 @@ final case class SwitchCase
   loc: Nullable[SourceLocation] = Nullable(null),
   test: Nullable[Expression],
   consequent: Seq[Statement],
-) extends Node derives JSValueEncoder
+) extends Node derives JSValueCodec
 
 final case class ThrowStatement
 (
   `type`: "ThrowStatement" = ("ThrowStatement" : "ThrowStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   argument: Nullable[Expression],
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class TryStatement
 (
@@ -191,7 +191,7 @@ final case class TryStatement
   block: BlockStatement,
   handler: Nullable[CatchClause],
   finalizer: Nullable[BlockStatement],
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class CatchClause
 (
@@ -199,7 +199,7 @@ final case class CatchClause
   loc: Nullable[SourceLocation] = Nullable(null),
   param: Nullable[Pattern],
   body: BlockStatement,
-) extends Node derives JSValueEncoder
+) extends Node derives JSValueCodec
 
 final case class WhileStatement
 (
@@ -207,7 +207,7 @@ final case class WhileStatement
   loc: Nullable[SourceLocation] = Nullable(null),
   test: Expression,
   body: Statement,
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class DoWhileStatement
 (
@@ -215,7 +215,7 @@ final case class DoWhileStatement
   loc: Nullable[SourceLocation] = Nullable(null),
   test: Expression,
   body: Statement,
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class ForStatement
 (
@@ -225,7 +225,7 @@ final case class ForStatement
   test: Nullable[Expression],
   update: Nullable[Expression],
   body: Statement,
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class ForInStatement
 (
@@ -234,7 +234,7 @@ final case class ForInStatement
   left: Nullable[VariableDeclaration | Pattern],
   right: Nullable[Expression],
   body: Statement,
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 final case class ForOfStatement
 (
@@ -244,10 +244,10 @@ final case class ForOfStatement
   right: Nullable[Expression],
   body: Statement,
   await: Boolean,
-) extends Statement derives JSValueEncoder
+) extends Statement derives JSValueCodec
 
 
-sealed trait Declaration extends Node derives JSValueEncoder
+sealed trait Declaration extends Node derives JSValueCodec
 
 final case class FunctionDeclaration
 (
@@ -260,7 +260,7 @@ final case class FunctionDeclaration
   directive: Option[String],
   generator: Boolean,
   async: Boolean,
-) extends Declaration derives JSValueEncoder
+) extends Declaration derives JSValueCodec
 
 final case class VariableDeclaration
 (
@@ -268,7 +268,7 @@ final case class VariableDeclaration
   loc: Nullable[SourceLocation] = Nullable(null),
   declarations: Seq[VariableDeclarator],
   kind: "var" | "let" | "const",
-) extends Declaration derives JSValueEncoder
+) extends Declaration derives JSValueCodec
 
 final case class VariableDeclarator
 (
@@ -276,7 +276,7 @@ final case class VariableDeclarator
   loc: Nullable[SourceLocation] = Nullable(null),
   id: Pattern,
   init: Nullable[Expression],
-) extends Node derives JSValueEncoder
+) extends Node derives JSValueCodec
 
 final case class ClassDeclaration
 (
@@ -285,14 +285,14 @@ final case class ClassDeclaration
   id: Nullable[Identifier],
   superClass: Nullable[Expression],
   body: ClassBody,
-) extends Declaration derives JSValueEncoder
+) extends Declaration derives JSValueCodec
 
 
 
 
-sealed trait Expression extends Node derives JSValueEncoder
+sealed trait Expression extends Node derives JSValueCodec
 
-sealed trait Pattern extends Node derives JSValueEncoder
+sealed trait Pattern extends Node derives JSValueCodec
 
 
 
@@ -301,7 +301,7 @@ final case class Identifier
   `type`: "Identifier" = ("Identifier" : "Identifier"),
   loc: Nullable[SourceLocation] = Nullable(null),
   name: String,
-) extends Expression with Pattern derives JSValueEncoder
+) extends Expression with Pattern derives JSValueCodec
 
 final case class Literal
 (
@@ -310,11 +310,11 @@ final case class Literal
   value: Nullable[String | Boolean | Double],
   regex: Option[RegExpLiteralOptions] = None,
   bigint: Option[String] = None,
-) extends Expression with Pattern derives JSValueEncoder
+) extends Expression with Pattern derives JSValueCodec
 
 
 
-final case class RegExpLiteralOptions(pattern: String, flags: String) derives JSValueEncoder
+final case class RegExpLiteralOptions(pattern: String, flags: String) derives JSValueCodec
 
 
 
@@ -322,21 +322,21 @@ final case class ThisExpression
 (
   `type`: "ThisExpression" = ("ThisExpression" : "ThisExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
-) extends Expression with Pattern derives JSValueEncoder
+) extends Expression with Pattern derives JSValueCodec
 
 final case class ArrayExpression
 (
   `type`: "ArrayExpression" = ("ArrayExpression" : "ArrayExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   elements: Seq[Nullable[Expression | SpreadElement]],
-) extends Expression with Pattern derives JSValueEncoder
+) extends Expression with Pattern derives JSValueCodec
 
 final case class ObjectExpression
 (
   `type`: "ObjectExpression" = ("ObjectExpression" : "ObjectExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   properties: Seq[Property | SpreadElement],
-) extends Expression with Pattern derives JSValueEncoder
+) extends Expression with Pattern derives JSValueCodec
 
 final case class Property
 (
@@ -348,7 +348,7 @@ final case class Property
   method: Boolean,
   shorthand: Boolean,
   computed: Boolean,
-) extends Node with Pattern derives JSValueEncoder
+) extends Node with Pattern derives JSValueCodec
 
 final case class FunctionExpression
 (
@@ -359,7 +359,7 @@ final case class FunctionExpression
   body: BlockStatement,
   generator: Boolean,
   async: Boolean,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 final case class ArrowFunctionExpression
 (
@@ -368,7 +368,7 @@ final case class ArrowFunctionExpression
   params: Seq[Pattern],
   body: BlockStatement | Expression,
   generator: false = false,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 final case class UnaryExpression
 (
@@ -377,7 +377,7 @@ final case class UnaryExpression
   operator: UnaryOperator,
   prefix: Boolean,
   argument: Expression,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 type UnaryOperator = "-" | "+" | "!" | "~" | "typeof" | "void" | "delete"
 
 final case class UpdateExpression
@@ -387,7 +387,7 @@ final case class UpdateExpression
   operator: UpdateOperator,
   argument: Expression,
   prefix: Boolean,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 type UpdateOperator = "++" | "--"
 
 final case class BinaryExpression
@@ -397,7 +397,7 @@ final case class BinaryExpression
   operator: BinaryOperator,
   left: Expression | PrivateIdentifier,
   right: Expression,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 type BinaryOperator = "==" | "!=" | "===" | "!=="
   | "<" | "<=" | ">" | ">="
   | "<<" | ">>" | ">>>"
@@ -413,7 +413,7 @@ final case class AssignmentExpression
   operator: AssignmentOperator,
   left: Pattern,
   right: Expression,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 type AssignmentOperator = "=" | "+=" | "-=" | "*=" | "/=" | "%="
   | "<<=" | ">>=" | ">>>="
   | "|=" | "^=" | "&="
@@ -427,7 +427,7 @@ final case class LogicalExpression
   operator: LogicalOperator,
   left: Expression,
   right: Expression,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 type LogicalOperator = "||" | "&&" | "??"
 
 final case class MemberExpression
@@ -438,7 +438,7 @@ final case class MemberExpression
   property: Expression | PrivateIdentifier,
   computed: Boolean,
   optional: Boolean,
-) extends Expression with ChainElement derives JSValueEncoder
+) extends Expression with ChainElement derives JSValueCodec
 
 final case class ConditionalExpression
 (
@@ -447,13 +447,13 @@ final case class ConditionalExpression
   test: Expression,
   alternate: Expression,
   consequent: Expression,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 final case class Super
 (
   `type`: "Super" = ("Super" : "Super"),
   loc: Nullable[SourceLocation] = Nullable(null),
-) extends Node derives JSValueEncoder
+) extends Node derives JSValueCodec
 
 final case class CallExpression
 (
@@ -462,7 +462,7 @@ final case class CallExpression
   callee: Expression | Super,
   arguments: Seq[Expression | SpreadElement],
   optional: Boolean,
-) extends Expression with ChainElement derives JSValueEncoder
+) extends Expression with ChainElement derives JSValueCodec
 
 final case class NewExpression
 (
@@ -470,14 +470,14 @@ final case class NewExpression
   loc: Nullable[SourceLocation] = Nullable(null),
   callee: Expression,
   arguments: Seq[Expression | SpreadElement],
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 final case class SequenceExpression
 (
   `type`: "SequenceExpression" = ("SequenceExpression" : "SequenceExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   expressions: Seq[Expression],
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 final case class YieldExpression
 (
@@ -485,7 +485,7 @@ final case class YieldExpression
   loc: Nullable[SourceLocation] = Nullable(null),
   argument: Nullable[Expression],
   delegate: Boolean,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 final case class TemplateLiteral
 (
@@ -493,7 +493,7 @@ final case class TemplateLiteral
   loc: Nullable[SourceLocation] = Nullable(null),
   quasis: Seq[TemplateElement],
   expressions: Seq[Expression],
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 final case class TaggedTemplateExpression
 (
@@ -501,7 +501,7 @@ final case class TaggedTemplateExpression
   loc: Nullable[SourceLocation] = Nullable(null),
   tag: Expression,
   quasi: TemplateLiteral,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 final case class TemplateElement
 (
@@ -509,13 +509,13 @@ final case class TemplateElement
   loc: Nullable[SourceLocation] = Nullable(null),
   tail: Boolean,
   value: TemplateElementValue,
-) extends Node derives JSValueEncoder
+) extends Node derives JSValueCodec
 
 final case class TemplateElementValue
 (
   cooked: Nullable[String],
   raw: String,
-) derives JSValueEncoder
+) derives JSValueCodec
 
 final case class ClassExpression
 (
@@ -524,7 +524,7 @@ final case class ClassExpression
   id: Nullable[Identifier],
   superClass: Nullable[Expression],
   body: ClassBody,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 final case class MetaProperty
 (
@@ -532,23 +532,23 @@ final case class MetaProperty
   loc: Nullable[SourceLocation] = Nullable(null),
   meta: Identifier,
   property: Identifier,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 final case class AwaitExpression
 (
   `type`: "AwaitExpression" = ("AwaitExpression" : "AwaitExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   argument: Expression,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 final case class ChainExpression
 (
   `type`: "ChainExpression" = ("ChainExpression" : "ChainExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   expression: ChainElement,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
-sealed trait ChainElement extends Node derives JSValueEncoder {
+sealed trait ChainElement extends Node derives JSValueCodec {
   val optional: Boolean
 }
 
@@ -557,7 +557,7 @@ final case class ImportExpression
   `type`: "ImportExpression" = ("ImportExpression" : "ImportExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   source: Expression,
-) extends Expression derives JSValueEncoder
+) extends Expression derives JSValueCodec
 
 
 
@@ -567,7 +567,7 @@ final case class SpreadElement
   `type`: "SpreadElement" = ("SpreadElement" : "SpreadElement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   argument: Expression,
-) extends Node derives JSValueEncoder
+) extends Node derives JSValueCodec
 
 
 
@@ -577,21 +577,21 @@ final case class ObjectPattern
   `type`: "ObjectPattern" = ("ObjectPattern" : "ObjectPattern"),
   loc: Nullable[SourceLocation] = Nullable(null),
   properties: Seq[Property | RestElement],
-) extends Pattern derives JSValueEncoder
+) extends Pattern derives JSValueCodec
 
 final case class ArrayPattern
 (
   `type`: "ArrayPattern" = ("ArrayPattern" : "ArrayPattern"),
   loc: Nullable[SourceLocation] = Nullable(null),
   elements: Seq[Nullable[Pattern]],
-) extends Pattern derives JSValueEncoder
+) extends Pattern derives JSValueCodec
 
 final case class RestElement
 (
   `type`: "RestElement" = ("RestElement" : "RestElement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   elements: Pattern,
-) extends Pattern derives JSValueEncoder
+) extends Pattern derives JSValueCodec
 
 final case class AssignmentPattern
 (
@@ -599,7 +599,7 @@ final case class AssignmentPattern
   loc: Nullable[SourceLocation] = Nullable(null),
   left: Pattern,
   right: Expression,
-) extends Pattern derives JSValueEncoder
+) extends Pattern derives JSValueCodec
 
 
 
@@ -611,10 +611,10 @@ final case class ClassBody
   `type`: "ClassBody" = ("ClassBody" : "ClassBody"),
   loc: Nullable[SourceLocation] = Nullable(null),
   body: Seq[MethodDefinition | PropertyDefinition | StaticBlock],
-) extends Node derives JSValueEncoder
-given classBodyBodyEncoder: JSValueEncoder[MethodDefinition | PropertyDefinition | StaticBlock] =
-  given JSValueEncoder[PropertyDefinition | StaticBlock] = JSValueEncoder.union[PropertyDefinition, StaticBlock]
-  JSValueEncoder.union[MethodDefinition, PropertyDefinition | StaticBlock]
+) extends Node derives JSValueCodec
+given classBodyBodyEncoder: JSValueCodec[MethodDefinition | PropertyDefinition | StaticBlock] =
+  given JSValueCodec[PropertyDefinition | StaticBlock] = JSValueCodec.union[PropertyDefinition, StaticBlock]
+  JSValueCodec.union[MethodDefinition, PropertyDefinition | StaticBlock]
 
 final case class MethodDefinition
 (
@@ -625,7 +625,7 @@ final case class MethodDefinition
   kind: "constructor" | "method" | "get" | "set",
   computed: Boolean,
   static: Boolean,
-) extends Node derives JSValueEncoder
+) extends Node derives JSValueCodec
 
 final case class PropertyDefinition
 (
@@ -635,23 +635,23 @@ final case class PropertyDefinition
   value: Nullable[Expression],
   computed: Boolean,
   static: Boolean,
-) extends Node derives JSValueEncoder
+) extends Node derives JSValueCodec
 
 final case class PrivateIdentifier
 (
   `type`: "PrivateIdentifier" = ("PrivateIdentifier" : "PrivateIdentifier"),
   loc: Nullable[SourceLocation] = Nullable(null),
   name: String,
-) extends Node derives JSValueEncoder
+) extends Node derives JSValueCodec
 
 
 
 
 
 
-sealed trait ModuleDeclaration extends Node derives JSValueEncoder
+sealed trait ModuleDeclaration extends Node derives JSValueCodec
 
-sealed trait ModuleSpecifier extends Node derives JSValueEncoder {
+sealed trait ModuleSpecifier extends Node derives JSValueCodec {
   val local: Literal | Identifier
 }
 
@@ -661,10 +661,10 @@ final case class ImportDeclaration
   `type`: "ImportDeclaration" = ("ImportDeclaration" : "ImportDeclaration"),
   loc: Nullable[SourceLocation] = Nullable(null),
   specifiers: Seq[ModuleImportSpecifier]
-) extends ModuleDeclaration derives JSValueEncoder
+) extends ModuleDeclaration derives JSValueCodec
 
 
-sealed trait ModuleImportSpecifier extends ModuleSpecifier derives JSValueEncoder
+sealed trait ModuleImportSpecifier extends ModuleSpecifier derives JSValueCodec
 
 
 final case class ImportSpecifier
@@ -673,21 +673,21 @@ final case class ImportSpecifier
   loc: Nullable[SourceLocation] = Nullable(null),
   local: Identifier,
   imported: Identifier | Literal,
-) extends ModuleImportSpecifier derives JSValueEncoder
+) extends ModuleImportSpecifier derives JSValueCodec
 
 final case class ImportDefaultSpecifier
 (
   `type`: "ImportDefaultSpecifier" = ("ImportDefaultSpecifier" : "ImportDefaultSpecifier"),
   loc: Nullable[SourceLocation] = Nullable(null),
   local: Identifier,
-) extends ModuleImportSpecifier derives JSValueEncoder
+) extends ModuleImportSpecifier derives JSValueCodec
 
 final case class ImportNamespaceSpecifier
 (
   `type`: "ImportNamespaceSpecifier" = ("ImportNamespaceSpecifier" : "ImportNamespaceSpecifier"),
   loc: Nullable[SourceLocation] = Nullable(null),
   local: Identifier,
-) extends ModuleImportSpecifier derives JSValueEncoder
+) extends ModuleImportSpecifier derives JSValueCodec
 
 
 final case class ExportNamedDeclaration
@@ -697,7 +697,7 @@ final case class ExportNamedDeclaration
   declaration: Nullable[Declaration],
   specifiers: Seq[ExportSpecifier],
   source: Nullable[Literal],
-) extends ModuleDeclaration derives JSValueEncoder
+) extends ModuleDeclaration derives JSValueCodec
 
 final case class ExportSpecifier
 (
@@ -705,14 +705,14 @@ final case class ExportSpecifier
   loc: Nullable[SourceLocation] = Nullable(null),
   local: Literal | Identifier,
   exported: Literal | Identifier,
-) extends ModuleImportSpecifier derives JSValueEncoder
+) extends ModuleImportSpecifier derives JSValueCodec
 
 final case class ExportDefaultDeclaration
 (
   `type`: "ExportDefaultDeclaration" = ("ExportDefaultDeclaration" : "ExportDefaultDeclaration"),
   loc: Nullable[SourceLocation] = Nullable(null),
   declaration: FunctionDeclaration | ClassDeclaration,
-) extends ModuleDeclaration derives JSValueEncoder
+) extends ModuleDeclaration derives JSValueCodec
 
 final case class ExportAllDeclaration
 (
@@ -720,6 +720,6 @@ final case class ExportAllDeclaration
   loc: Nullable[SourceLocation] = Nullable(null),
   source: Literal,
   exported: Nullable[Literal | Identifier],
-) extends ModuleDeclaration derives JSValueEncoder
+) extends ModuleDeclaration derives JSValueCodec
 
 
