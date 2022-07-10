@@ -464,8 +464,13 @@ lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
   .dependsOn(util, argon_tube, argon_compiler_core)
   .jvmConfigure(
     _.dependsOn(verilization_runtimeJVM)
+      .enablePlugins(NpmUtil)
       .settings(
         commonJVMSettings,
+
+        scalaJSLinkerConfig ~= {
+          _.withModuleKind(ModuleKind.CommonJSModule)
+        },
 
         libraryDependencies ++= Seq(
           "org.graalvm.sdk" % "graal-sdk" % graalVersion,
@@ -474,6 +479,19 @@ lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
           "org.graalvm.tools" % "profiler" % graalVersion,
           "org.graalvm.tools" % "chromeinspector" % graalVersion,
         ),
+
+        Compile / resourceGenerators += Def.task {
+          val resourceDir = (Compile / resourceManaged).value
+          val targetDir = crossTarget.value
+
+          val dir = resourceDir / "dev" / "argon" / "plugins" / "js"
+          IO.createDirectory(dir)
+
+          val astringFile = dir / "astring.mjs"
+
+          IO.copyFile(targetDir / "node_modules" / "astring" / "dist" / "astring.mjs", astringFile)
+          Seq(astringFile)
+        }.dependsOn(npmInstall).taskValue
       )
   )
   .jsConfigure(
@@ -490,13 +508,16 @@ lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
     commonSettings,
     compilerOptions,
 
+    npmDependencies ++= Seq(
+      "astring" -> "1.8.3",
+    ),
+
     name := "argon-plugins-js",
   )
 
 lazy val argon_plugin_jsJVM = argon_plugin_js.jvm
 lazy val argon_plugin_jsJS = argon_plugin_js.js
 lazy val argon_plugin_jsNode = argon_plugin_js.node
-
 
 
 lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-io"))

@@ -21,10 +21,6 @@ object JSValueEncoder extends Derivation[JSValueEncoder]:
   given JSValueEncoder[Int] with
     override def toJSValue(a: Int): JSValue = a
   end given
-  
-  given JSValueEncoder[BigInt] with
-    override def toJSValue(a: BigInt): JSValue = JSValue.fromBigInt(a)
-  end given
 
   given [B <: Boolean]: JSValueEncoder[B] with
     override def toJSValue(a: B): JSValue = a
@@ -75,9 +71,5 @@ object JSValueEncoder extends Derivation[JSValueEncoder]:
 
 end JSValueEncoder
 
-
-trait JSFieldEncoder[A] {
-  def toJSValue(a: A): Option[JSValue]
-}
 
 

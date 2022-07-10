@@ -30,16 +30,18 @@ given functionOrClassDeclarationEncoder: JSValueEncoder[FunctionDeclaration | Cl
 given expressionOrSpreadEncoder: JSValueEncoder[Expression | SpreadElement] =
   JSValueEncoder.union[Expression, SpreadElement]
 
+given propertyOrSpreadEncoder: JSValueEncoder[Property | SpreadElement] =
+  JSValueEncoder.union[Property, SpreadElement]
+
 given propertyOrRestElementEncoder: JSValueEncoder[Property | RestElement] =
   JSValueEncoder.union[Property, RestElement]
 
 given expressionOrPrivateIdentifierEncoder: JSValueEncoder[Expression | PrivateIdentifier] =
   JSValueEncoder.union[Expression, PrivateIdentifier]
 
-given literalValueEncoder: JSValueEncoder[String | Boolean | Double | BigInt] =
-  given l1: JSValueEncoder[Double | BigInt] = JSValueEncoder.union[Double, BigInt]
-  given l2: JSValueEncoder[Boolean | Double | BigInt] = JSValueEncoder.union[Boolean, Double | BigInt]
-  JSValueEncoder.union[String, Boolean | Double | BigInt]
+given literalValueEncoder: JSValueEncoder[String | Boolean | Double] =
+  given l1: JSValueEncoder[Boolean | Double] = JSValueEncoder.union[Boolean, Double]
+  JSValueEncoder.union[String, Boolean | Double]
 end literalValueEncoder
 
 
@@ -51,7 +53,7 @@ sealed trait Node derives JSValueEncoder {
 
 final case class SourceLocation
 (
-  `type`: "SourceLocation" = "SourceLocation",
+  `type`: "SourceLocation" = ("SourceLocation" : "SourceLocation"),
   source: Nullable[String],
   start: Position,
   end: Position,
@@ -59,7 +61,7 @@ final case class SourceLocation
 
 final case class Position
 (
-  `type`: "Position" = "Position",
+  `type`: "Position" = ("Position" : "Position"),
   source: Nullable[String],
   start: Int,
   end: Int,
@@ -72,7 +74,7 @@ sealed trait Statement extends Node derives JSValueEncoder
 
 final case class Program
 (
-  `type`: "Program" = "Program",
+  `type`: "Program" = ("Program" : "Program"),
   loc: Nullable[SourceLocation] = Nullable(null),
   sourceType: "script" | "module",
   body: Seq[Statement | ModuleDeclaration],
@@ -81,7 +83,7 @@ final case class Program
 
 final case class ExpressionStatement
 (
-  `type`: "ExpressionStatement" = "ExpressionStatement",
+  `type`: "ExpressionStatement" = ("ExpressionStatement" : "ExpressionStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   expression: Expression,
   directive: Option[String],
@@ -89,33 +91,33 @@ final case class ExpressionStatement
 
 final case class BlockStatement
 (
-  `type`: "BlockStatement" = "BlockStatement",
+  `type`: "BlockStatement" = ("BlockStatement" : "BlockStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   body: Statement,
 ) extends Statement derives JSValueEncoder
 
 final case class StaticBlock
 (
-  `type`: "StaticBlock" = "StaticBlock",
+  `type`: "StaticBlock" = ("StaticBlock" : "StaticBlock"),
   loc: Nullable[SourceLocation] = Nullable(null),
   body: Statement,
 ) extends Statement derives JSValueEncoder
 
 final case class EmptyStatement
 (
-  `type`: "EmptyStatement" = "EmptyStatement",
+  `type`: "EmptyStatement" = ("EmptyStatement" : "EmptyStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
 ) extends Statement derives JSValueEncoder
 
 final case class DebuggerStatement
 (
-  `type`: "DebuggerStatement" = "DebuggerStatement",
+  `type`: "DebuggerStatement" = ("DebuggerStatement" : "DebuggerStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
 ) extends Statement derives JSValueEncoder
 
 final case class WithStatement
 (
-  `type`: "WithStatement" = "WithStatement",
+  `type`: "WithStatement" = ("WithStatement" : "WithStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   `object`: Expression,
   body: Statement,
@@ -123,14 +125,14 @@ final case class WithStatement
 
 final case class ReturnStatement
 (
-  `type`: "ReturnStatement" = "ReturnStatement",
+  `type`: "ReturnStatement" = ("ReturnStatement" : "ReturnStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   argument: Nullable[Expression],
 ) extends Statement derives JSValueEncoder
 
 final case class LabeledStatement
 (
-  `type`: "LabeledStatement" = "LabeledStatement",
+  `type`: "LabeledStatement" = ("LabeledStatement" : "LabeledStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   label: Identifier,
   body: Statement,
@@ -138,21 +140,21 @@ final case class LabeledStatement
 
 final case class BreakStatement
 (
-  `type`: "BreakStatement" = "BreakStatement",
+  `type`: "BreakStatement" = ("BreakStatement" : "BreakStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   label: Nullable[Identifier],
 ) extends Statement derives JSValueEncoder
 
 final case class ContinueStatement
 (
-  `type`: "ContinueStatement" = "ContinueStatement",
+  `type`: "ContinueStatement" = ("ContinueStatement" : "ContinueStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   label: Nullable[Identifier],
 ) extends Statement derives JSValueEncoder
 
 final case class IfStatement
 (
-  `type`: "IfStatement" = "IfStatement",
+  `type`: "IfStatement" = ("IfStatement" : "IfStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   test: Expression,
   consequent: Statement,
@@ -161,7 +163,7 @@ final case class IfStatement
 
 final case class SwitchStatement
 (
-  `type`: "SwitchStatement" = "SwitchStatement",
+  `type`: "SwitchStatement" = ("SwitchStatement" : "SwitchStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   discriminant: Expression,
   cases: Seq[SwitchCase],
@@ -169,7 +171,7 @@ final case class SwitchStatement
 
 final case class SwitchCase
 (
-  `type`: "SwitchCase" = "SwitchCase",
+  `type`: "SwitchCase" = ("SwitchCase" : "SwitchCase"),
   loc: Nullable[SourceLocation] = Nullable(null),
   test: Nullable[Expression],
   consequent: Seq[Statement],
@@ -177,14 +179,14 @@ final case class SwitchCase
 
 final case class ThrowStatement
 (
-  `type`: "ThrowStatement" = "ThrowStatement",
+  `type`: "ThrowStatement" = ("ThrowStatement" : "ThrowStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   argument: Nullable[Expression],
 ) extends Statement derives JSValueEncoder
 
 final case class TryStatement
 (
-  `type`: "TryStatement" = "TryStatement",
+  `type`: "TryStatement" = ("TryStatement" : "TryStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   block: BlockStatement,
   handler: Nullable[CatchClause],
@@ -193,7 +195,7 @@ final case class TryStatement
 
 final case class CatchClause
 (
-  `type`: "CatchClause" = "CatchClause",
+  `type`: "CatchClause" = ("CatchClause" : "CatchClause"),
   loc: Nullable[SourceLocation] = Nullable(null),
   param: Nullable[Pattern],
   body: BlockStatement,
@@ -201,7 +203,7 @@ final case class CatchClause
 
 final case class WhileStatement
 (
-  `type`: "WhileStatement" = "WhileStatement",
+  `type`: "WhileStatement" = ("WhileStatement" : "WhileStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   test: Expression,
   body: Statement,
@@ -209,7 +211,7 @@ final case class WhileStatement
 
 final case class DoWhileStatement
 (
-  `type`: "DoWhileStatement" = "DoWhileStatement",
+  `type`: "DoWhileStatement" = ("DoWhileStatement" : "DoWhileStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   test: Expression,
   body: Statement,
@@ -217,7 +219,7 @@ final case class DoWhileStatement
 
 final case class ForStatement
 (
-  `type`: "ForStatement" = "ForStatement",
+  `type`: "ForStatement" = ("ForStatement" : "ForStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   init: Nullable[VariableDeclaration | Expression],
   test: Nullable[Expression],
@@ -227,7 +229,7 @@ final case class ForStatement
 
 final case class ForInStatement
 (
-  `type`: "ForInStatement" = "ForInStatement",
+  `type`: "ForInStatement" = ("ForInStatement" : "ForInStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   left: Nullable[VariableDeclaration | Pattern],
   right: Nullable[Expression],
@@ -236,7 +238,7 @@ final case class ForInStatement
 
 final case class ForOfStatement
 (
-  `type`: "ForOfStatement" = "ForOfStatement",
+  `type`: "ForOfStatement" = ("ForOfStatement" : "ForOfStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   left: Nullable[VariableDeclaration | Pattern],
   right: Nullable[Expression],
@@ -249,7 +251,7 @@ sealed trait Declaration extends Node derives JSValueEncoder
 
 final case class FunctionDeclaration
 (
-  `type`: "FunctionDeclaration" = "FunctionDeclaration",
+  `type`: "FunctionDeclaration" = ("FunctionDeclaration" : "FunctionDeclaration"),
   loc: Nullable[SourceLocation] = Nullable(null),
   id: Nullable[Identifier],
   params: Seq[Pattern],
@@ -262,7 +264,7 @@ final case class FunctionDeclaration
 
 final case class VariableDeclaration
 (
-  `type`: "VariableDeclaration" = "VariableDeclaration",
+  `type`: "VariableDeclaration" = ("VariableDeclaration" : "VariableDeclaration"),
   loc: Nullable[SourceLocation] = Nullable(null),
   declarations: Seq[VariableDeclarator],
   kind: "var" | "let" | "const",
@@ -270,7 +272,7 @@ final case class VariableDeclaration
 
 final case class VariableDeclarator
 (
-  `type`: "VariableDeclarator" = "VariableDeclarator",
+  `type`: "VariableDeclarator" = ("VariableDeclarator" : "VariableDeclarator"),
   loc: Nullable[SourceLocation] = Nullable(null),
   id: Pattern,
   init: Nullable[Expression],
@@ -278,7 +280,7 @@ final case class VariableDeclarator
 
 final case class ClassDeclaration
 (
-  `type`: "ClassDeclaration" = "ClassDeclaration",
+  `type`: "ClassDeclaration" = ("ClassDeclaration" : "ClassDeclaration"),
   loc: Nullable[SourceLocation] = Nullable(null),
   id: Nullable[Identifier],
   superClass: Nullable[Expression],
@@ -296,16 +298,16 @@ sealed trait Pattern extends Node derives JSValueEncoder
 
 final case class Identifier
 (
-  `type`: "Identifier" = "Identifier",
+  `type`: "Identifier" = ("Identifier" : "Identifier"),
   loc: Nullable[SourceLocation] = Nullable(null),
   name: String,
 ) extends Expression with Pattern derives JSValueEncoder
 
 final case class Literal
 (
-  `type`: "Literal" = "Literal",
+  `type`: "Literal" = ("Literal" : "Literal"),
   loc: Nullable[SourceLocation] = Nullable(null),
-  value: Nullable[String | Boolean | Double | BigInt],
+  value: Nullable[String | Boolean | Double],
   regex: Option[RegExpLiteralOptions] = None,
   bigint: Option[String] = None,
 ) extends Expression with Pattern derives JSValueEncoder
@@ -318,27 +320,27 @@ final case class RegExpLiteralOptions(pattern: String, flags: String) derives JS
 
 final case class ThisExpression
 (
-  `type`: "ThisExpression" = "ThisExpression",
+  `type`: "ThisExpression" = ("ThisExpression" : "ThisExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
 ) extends Expression with Pattern derives JSValueEncoder
 
 final case class ArrayExpression
 (
-  `type`: "ArrayExpression" = "ArrayExpression",
+  `type`: "ArrayExpression" = ("ArrayExpression" : "ArrayExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   elements: Seq[Nullable[Expression | SpreadElement]],
 ) extends Expression with Pattern derives JSValueEncoder
 
 final case class ObjectExpression
 (
-  `type`: "ObjectExpression" = "ObjectExpression",
+  `type`: "ObjectExpression" = ("ObjectExpression" : "ObjectExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
-  elements: Seq[Expression | SpreadElement],
+  properties: Seq[Property | SpreadElement],
 ) extends Expression with Pattern derives JSValueEncoder
 
 final case class Property
 (
-  `type`: "Property" = "Property",
+  `type`: "Property" = ("Property" : "Property"),
   loc: Nullable[SourceLocation] = Nullable(null),
   key: Literal | Identifier,
   value: Expression | Pattern,
@@ -350,7 +352,7 @@ final case class Property
 
 final case class FunctionExpression
 (
-  `type`: "FunctionExpression" = "FunctionExpression",
+  `type`: "FunctionExpression" = ("FunctionExpression" : "FunctionExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   id: Nullable[Identifier],
   params: Seq[Pattern],
@@ -361,7 +363,7 @@ final case class FunctionExpression
 
 final case class ArrowFunctionExpression
 (
-  `type`: "ArrowFunctionExpression" = "ArrowFunctionExpression",
+  `type`: "ArrowFunctionExpression" = ("ArrowFunctionExpression" : "ArrowFunctionExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   params: Seq[Pattern],
   body: BlockStatement | Expression,
@@ -370,7 +372,7 @@ final case class ArrowFunctionExpression
 
 final case class UnaryExpression
 (
-  `type`: "UnaryExpression" = "UnaryExpression",
+  `type`: "UnaryExpression" = ("UnaryExpression" : "UnaryExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   operator: UnaryOperator,
   prefix: Boolean,
@@ -380,7 +382,7 @@ type UnaryOperator = "-" | "+" | "!" | "~" | "typeof" | "void" | "delete"
 
 final case class UpdateExpression
 (
-  `type`: "UpdateExpression" = "UpdateExpression",
+  `type`: "UpdateExpression" = ("UpdateExpression" : "UpdateExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   operator: UpdateOperator,
   argument: Expression,
@@ -390,7 +392,7 @@ type UpdateOperator = "++" | "--"
 
 final case class BinaryExpression
 (
-  `type`: "BinaryExpression" = "BinaryExpression",
+  `type`: "BinaryExpression" = ("BinaryExpression" : "BinaryExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   operator: BinaryOperator,
   left: Expression | PrivateIdentifier,
@@ -406,7 +408,7 @@ type BinaryOperator = "==" | "!=" | "===" | "!=="
 
 final case class AssignmentExpression
 (
-  `type`: "AssignmentExpression" = "AssignmentExpression",
+  `type`: "AssignmentExpression" = ("AssignmentExpression" : "AssignmentExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   operator: AssignmentOperator,
   left: Pattern,
@@ -420,7 +422,7 @@ type AssignmentOperator = "=" | "+=" | "-=" | "*=" | "/=" | "%="
 
 final case class LogicalExpression
 (
-  `type`: "LogicalExpression" = "LogicalExpression",
+  `type`: "LogicalExpression" = ("LogicalExpression" : "LogicalExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   operator: LogicalOperator,
   left: Expression,
@@ -430,7 +432,7 @@ type LogicalOperator = "||" | "&&" | "??"
 
 final case class MemberExpression
 (
-  `type`: "MemberExpression" = "MemberExpression",
+  `type`: "MemberExpression" = ("MemberExpression" : "MemberExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   `object`: Expression | Super,
   property: Expression | PrivateIdentifier,
@@ -440,7 +442,7 @@ final case class MemberExpression
 
 final case class ConditionalExpression
 (
-  `type`: "ConditionalExpression" = "ConditionalExpression",
+  `type`: "ConditionalExpression" = ("ConditionalExpression" : "ConditionalExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   test: Expression,
   alternate: Expression,
@@ -449,13 +451,13 @@ final case class ConditionalExpression
 
 final case class Super
 (
-  `type`: "Super" = "Super",
+  `type`: "Super" = ("Super" : "Super"),
   loc: Nullable[SourceLocation] = Nullable(null),
 ) extends Node derives JSValueEncoder
 
 final case class CallExpression
 (
-  `type`: "CallExpression" = "CallExpression",
+  `type`: "CallExpression" = ("CallExpression" : "CallExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   callee: Expression | Super,
   arguments: Seq[Expression | SpreadElement],
@@ -464,7 +466,7 @@ final case class CallExpression
 
 final case class NewExpression
 (
-  `type`: "NewExpression" = "NewExpression",
+  `type`: "NewExpression" = ("NewExpression" : "NewExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   callee: Expression,
   arguments: Seq[Expression | SpreadElement],
@@ -472,14 +474,14 @@ final case class NewExpression
 
 final case class SequenceExpression
 (
-  `type`: "SequenceExpression" = "SequenceExpression",
+  `type`: "SequenceExpression" = ("SequenceExpression" : "SequenceExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   expressions: Seq[Expression],
 ) extends Expression derives JSValueEncoder
 
 final case class YieldExpression
 (
-  `type`: "YieldExpression" = "YieldExpression",
+  `type`: "YieldExpression" = ("YieldExpression" : "YieldExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   argument: Nullable[Expression],
   delegate: Boolean,
@@ -487,7 +489,7 @@ final case class YieldExpression
 
 final case class TemplateLiteral
 (
-  `type`: "TemplateLiteral" = "TemplateLiteral",
+  `type`: "TemplateLiteral" = ("TemplateLiteral" : "TemplateLiteral"),
   loc: Nullable[SourceLocation] = Nullable(null),
   quasis: Seq[TemplateElement],
   expressions: Seq[Expression],
@@ -495,7 +497,7 @@ final case class TemplateLiteral
 
 final case class TaggedTemplateExpression
 (
-  `type`: "TaggedTemplateExpression" = "TaggedTemplateExpression",
+  `type`: "TaggedTemplateExpression" = ("TaggedTemplateExpression" : "TaggedTemplateExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   tag: Expression,
   quasi: TemplateLiteral,
@@ -503,7 +505,7 @@ final case class TaggedTemplateExpression
 
 final case class TemplateElement
 (
-  `type`: "TemplateElement" = "TemplateElement",
+  `type`: "TemplateElement" = ("TemplateElement" : "TemplateElement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   tail: Boolean,
   value: TemplateElementValue,
@@ -517,7 +519,7 @@ final case class TemplateElementValue
 
 final case class ClassExpression
 (
-  `type`: "ClassExpression" = "ClassExpression",
+  `type`: "ClassExpression" = ("ClassExpression" : "ClassExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   id: Nullable[Identifier],
   superClass: Nullable[Expression],
@@ -526,7 +528,7 @@ final case class ClassExpression
 
 final case class MetaProperty
 (
-  `type`: "MetaProperty" = "MetaProperty",
+  `type`: "MetaProperty" = ("MetaProperty" : "MetaProperty"),
   loc: Nullable[SourceLocation] = Nullable(null),
   meta: Identifier,
   property: Identifier,
@@ -534,14 +536,14 @@ final case class MetaProperty
 
 final case class AwaitExpression
 (
-  `type`: "AwaitExpression" = "AwaitExpression",
+  `type`: "AwaitExpression" = ("AwaitExpression" : "AwaitExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   argument: Expression,
 ) extends Expression derives JSValueEncoder
 
 final case class ChainExpression
 (
-  `type`: "ChainExpression" = "ChainExpression",
+  `type`: "ChainExpression" = ("ChainExpression" : "ChainExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   expression: ChainElement,
 ) extends Expression derives JSValueEncoder
@@ -552,7 +554,7 @@ sealed trait ChainElement extends Node derives JSValueEncoder {
 
 final case class ImportExpression
 (
-  `type`: "ImportExpression" = "ImportExpression",
+  `type`: "ImportExpression" = ("ImportExpression" : "ImportExpression"),
   loc: Nullable[SourceLocation] = Nullable(null),
   source: Expression,
 ) extends Expression derives JSValueEncoder
@@ -562,7 +564,7 @@ final case class ImportExpression
 
 final case class SpreadElement
 (
-  `type`: "SpreadElement" = "SpreadElement",
+  `type`: "SpreadElement" = ("SpreadElement" : "SpreadElement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   argument: Expression,
 ) extends Node derives JSValueEncoder
@@ -572,28 +574,28 @@ final case class SpreadElement
 
 final case class ObjectPattern
 (
-  `type`: "ObjectPattern" = "ObjectPattern",
+  `type`: "ObjectPattern" = ("ObjectPattern" : "ObjectPattern"),
   loc: Nullable[SourceLocation] = Nullable(null),
   properties: Seq[Property | RestElement],
 ) extends Pattern derives JSValueEncoder
 
 final case class ArrayPattern
 (
-  `type`: "ArrayPattern" = "ArrayPattern",
+  `type`: "ArrayPattern" = ("ArrayPattern" : "ArrayPattern"),
   loc: Nullable[SourceLocation] = Nullable(null),
   elements: Seq[Nullable[Pattern]],
 ) extends Pattern derives JSValueEncoder
 
 final case class RestElement
 (
-  `type`: "RestElement" = "RestElement",
+  `type`: "RestElement" = ("RestElement" : "RestElement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   elements: Pattern,
 ) extends Pattern derives JSValueEncoder
 
 final case class AssignmentPattern
 (
-  `type`: "AssignmentPattern" = "AssignmentPattern",
+  `type`: "AssignmentPattern" = ("AssignmentPattern" : "AssignmentPattern"),
   loc: Nullable[SourceLocation] = Nullable(null),
   left: Pattern,
   right: Expression,
@@ -606,7 +608,7 @@ final case class AssignmentPattern
 
 final case class ClassBody
 (
-  `type`: "ClassBody" = "ClassBody",
+  `type`: "ClassBody" = ("ClassBody" : "ClassBody"),
   loc: Nullable[SourceLocation] = Nullable(null),
   body: Seq[MethodDefinition | PropertyDefinition | StaticBlock],
 ) extends Node derives JSValueEncoder
@@ -616,7 +618,7 @@ given classBodyBodyEncoder: JSValueEncoder[MethodDefinition | PropertyDefinition
 
 final case class MethodDefinition
 (
-  `type`: "MethodDefinition" = "MethodDefinition",
+  `type`: "MethodDefinition" = ("MethodDefinition" : "MethodDefinition"),
   loc: Nullable[SourceLocation] = Nullable(null),
   key: Expression | PrivateIdentifier,
   value: FunctionExpression,
@@ -627,7 +629,7 @@ final case class MethodDefinition
 
 final case class PropertyDefinition
 (
-  `type`: "PropertyDefinition" = "PropertyDefinition",
+  `type`: "PropertyDefinition" = ("PropertyDefinition" : "PropertyDefinition"),
   loc: Nullable[SourceLocation] = Nullable(null),
   key: Expression | PrivateIdentifier,
   value: Nullable[Expression],
@@ -637,7 +639,7 @@ final case class PropertyDefinition
 
 final case class PrivateIdentifier
 (
-  `type`: "PrivateIdentifier" = "PrivateIdentifier",
+  `type`: "PrivateIdentifier" = ("PrivateIdentifier" : "PrivateIdentifier"),
   loc: Nullable[SourceLocation] = Nullable(null),
   name: String,
 ) extends Node derives JSValueEncoder
@@ -656,7 +658,7 @@ sealed trait ModuleSpecifier extends Node derives JSValueEncoder {
 
 final case class ImportDeclaration
 (
-  `type`: "ImportDeclaration" = "ImportDeclaration",
+  `type`: "ImportDeclaration" = ("ImportDeclaration" : "ImportDeclaration"),
   loc: Nullable[SourceLocation] = Nullable(null),
   specifiers: Seq[ModuleImportSpecifier]
 ) extends ModuleDeclaration derives JSValueEncoder
@@ -667,7 +669,7 @@ sealed trait ModuleImportSpecifier extends ModuleSpecifier derives JSValueEncode
 
 final case class ImportSpecifier
 (
-  `type`: "ImportSpecifier" = "ImportSpecifier",
+  `type`: "ImportSpecifier" = ("ImportSpecifier" : "ImportSpecifier"),
   loc: Nullable[SourceLocation] = Nullable(null),
   local: Identifier,
   imported: Identifier | Literal,
@@ -675,14 +677,14 @@ final case class ImportSpecifier
 
 final case class ImportDefaultSpecifier
 (
-  `type`: "ImportDefaultSpecifier" = "ImportDefaultSpecifier",
+  `type`: "ImportDefaultSpecifier" = ("ImportDefaultSpecifier" : "ImportDefaultSpecifier"),
   loc: Nullable[SourceLocation] = Nullable(null),
   local: Identifier,
 ) extends ModuleImportSpecifier derives JSValueEncoder
 
 final case class ImportNamespaceSpecifier
 (
-  `type`: "ImportNamespaceSpecifier" = "ImportNamespaceSpecifier",
+  `type`: "ImportNamespaceSpecifier" = ("ImportNamespaceSpecifier" : "ImportNamespaceSpecifier"),
   loc: Nullable[SourceLocation] = Nullable(null),
   local: Identifier,
 ) extends ModuleImportSpecifier derives JSValueEncoder
@@ -690,7 +692,7 @@ final case class ImportNamespaceSpecifier
 
 final case class ExportNamedDeclaration
 (
-  `type`: "ExportNamedDeclaration" = "ExportNamedDeclaration",
+  `type`: "ExportNamedDeclaration" = ("ExportNamedDeclaration" : "ExportNamedDeclaration"),
   loc: Nullable[SourceLocation] = Nullable(null),
   declaration: Nullable[Declaration],
   specifiers: Seq[ExportSpecifier],
@@ -699,7 +701,7 @@ final case class ExportNamedDeclaration
 
 final case class ExportSpecifier
 (
-  `type`: "ExportSpecifier" = "ExportSpecifier",
+  `type`: "ExportSpecifier" = ("ExportSpecifier" : "ExportSpecifier"),
   loc: Nullable[SourceLocation] = Nullable(null),
   local: Literal | Identifier,
   exported: Literal | Identifier,
@@ -707,14 +709,14 @@ final case class ExportSpecifier
 
 final case class ExportDefaultDeclaration
 (
-  `type`: "ExportDefaultDeclaration" = "ExportDefaultDeclaration",
+  `type`: "ExportDefaultDeclaration" = ("ExportDefaultDeclaration" : "ExportDefaultDeclaration"),
   loc: Nullable[SourceLocation] = Nullable(null),
   declaration: FunctionDeclaration | ClassDeclaration,
 ) extends ModuleDeclaration derives JSValueEncoder
 
 final case class ExportAllDeclaration
 (
-  `type`: "ExportAllDeclaration" = "ExportAllDeclaration",
+  `type`: "ExportAllDeclaration" = ("ExportAllDeclaration" : "ExportAllDeclaration"),
   loc: Nullable[SourceLocation] = Nullable(null),
   source: Literal,
   exported: Nullable[Literal | Identifier],
