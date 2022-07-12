@@ -464,15 +464,8 @@ lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
   .dependsOn(util, argon_tube, argon_plugin)
   .jvmConfigure(
     _.dependsOn(verilization_runtimeJVM)
-      .enablePlugins(NpmUtil)
       .settings(
         commonJVMSettings,
-
-        scalaJSLinkerConfig ~= {
-          _.withModuleKind(ModuleKind.CommonJSModule)
-        },
-
-        npmDependencies ++= npmDeps,
 
         libraryDependencies ++= Seq(
           "org.graalvm.sdk" % "graal-sdk" % graalVersion,
@@ -486,6 +479,17 @@ lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
           val resourceDir = (Compile / resourceManaged).value
           val targetDir = crossTarget.value
 
+          NpmUtil.npmInstallCommon(
+            name = name.value,
+            packageLock = baseDirectory.value / "package-lock.json",
+            dir = targetDir,
+            linkerConfig = org.scalajs.linker.interface.StandardConfig()
+              .withModuleKind(ModuleKind.CommonJSModule),
+
+            npmDependencies = npmDeps,
+            npmDevDependencies = Seq.empty,
+          )
+
 
           val dir = resourceDir / "dev" / "argon" / "plugins" / "js"
           IO.createDirectory(dir)
@@ -497,7 +501,7 @@ lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
           IO.copyFile(targetDir / "node_modules" / "acorn" / "dist" / "acorn.mjs", acornFile)
 
           Seq(astringFile, acornFile)
-        }.dependsOn(npmInstall).taskValue
+        }.taskValue
       )
   )
   .jsConfigure(
