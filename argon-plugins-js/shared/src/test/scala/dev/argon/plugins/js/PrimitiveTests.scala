@@ -8,10 +8,9 @@ import zio.*
 import zio.test.*
 import zio.test.Assertion.*
 
-import JSGenerator.generate
 import estree.*
 
-object PrimitiveTests extends ZIOSpecDefault {
+object PrimitiveTests extends ZIOSpecDefault with GenerateTestsHelper {
 
   override def spec: Spec[Environment & Scope, Any] =
     suite("Primitive AST encoding")(
@@ -42,7 +41,7 @@ object PrimitiveTests extends ZIOSpecDefault {
       },
       test("BigInt") {
         assertZIO(generate[Literal](Literal(
-          value = Nullable(null),
+          value = Nullable(999: BigInt),
           bigint = Some("999"),
         )))(equalTo("999n"))
       },

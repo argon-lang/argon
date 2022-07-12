@@ -9,10 +9,10 @@ import java.nio.file.attribute.FileAttribute
 import java.util.{Set as JSet, Map as JMap, HashMap as JHashMap}
 
 
-private[js] class ResourceFileSystem extends FileSystem {
+private[js] final class ResourceFileSystem extends FileSystem {
 
   private def getFileURL(path: Path): URL = {
-    val url = classOf[JSGenerator.type].getResource("/dev/argon/plugins/js/" + path)
+    val url = classOf[ResourceFileSystem].getResource("/dev/argon/plugins/js/" + path)
     if url == null then
       throw new NoSuchFileException(path.toString)
     else

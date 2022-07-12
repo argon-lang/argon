@@ -11,7 +11,7 @@ final class JSPlugin extends Plugin {
   override val optionHandler: OptionHandler[Options] = JSOptions.Handler
   override val outputHandler: OutputHandler[Output] = JSOutput.Handler
 
-  override def backend: Backend[JSOptions, JSOutput] = ???
+  override def backend: Backend[JSOptions, JSOutput] = JSBackend
   override def tubeLoaders: Seq[TubeLoader[JSOptions]] = Seq.empty
   override def buildOutputExecutor: Option[BuildOutputExecutor[JSOutput]] = ???
 }

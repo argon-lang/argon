@@ -39,9 +39,10 @@ given propertyOrRestElementEncoder: JSValueCodec[Property | RestElement] =
 given expressionOrPrivateIdentifierEncoder: JSValueCodec[Expression | PrivateIdentifier] =
   JSValueCodec.union[Expression, PrivateIdentifier]
 
-given literalValueEncoder: JSValueCodec[String | Boolean | Double] =
-  given l1: JSValueCodec[Boolean | Double] = JSValueCodec.union[Boolean, Double]
-  JSValueCodec.union[String, Boolean | Double]
+given literalValueEncoder: JSValueCodec[String | Boolean | Double | BigInt] =
+  given l1: JSValueCodec[Double | BigInt] = JSValueCodec.union[Double, BigInt]
+  given l2: JSValueCodec[Boolean | Double | BigInt] = JSValueCodec.union[Boolean, Double | BigInt]
+  JSValueCodec.union[String, Boolean | Double | BigInt]
 end literalValueEncoder
 
 
@@ -53,7 +54,6 @@ sealed trait Node derives JSValueCodec {
 
 final case class SourceLocation
 (
-  `type`: "SourceLocation" = ("SourceLocation" : "SourceLocation"),
   source: Nullable[String],
   start: Position,
   end: Position,
@@ -61,10 +61,8 @@ final case class SourceLocation
 
 final case class Position
 (
-  `type`: "Position" = ("Position" : "Position"),
-  source: Nullable[String],
-  start: Int,
-  end: Int,
+  line: Int,
+  column: Int,
 ) derives JSValueCodec
 
 
@@ -307,7 +305,7 @@ final case class Literal
 (
   `type`: "Literal" = ("Literal" : "Literal"),
   loc: Nullable[SourceLocation] = Nullable(null),
-  value: Nullable[String | Boolean | Double],
+  value: Nullable[String | Boolean | Double | BigInt],
   regex: Option[RegExpLiteralOptions] = None,
   bigint: Option[String] = None,
 ) extends Expression with Pattern derives JSValueCodec

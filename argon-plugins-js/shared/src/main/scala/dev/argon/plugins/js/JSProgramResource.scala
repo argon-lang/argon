@@ -9,7 +9,9 @@ trait JSProgramResource[+E] extends TextResource[E] {
   def asModule: IO[E, Program]
 
   override def asText: Stream[E, String] =
-    ZStream.fromZIO(asModule.flatMap(JSGenerator.generate))
+    ZStream.fromZIO(asModule.flatMap { module =>
+      ZIO.scoped(JSContext.make.flatMap(_.generate(module)))
+    })
 }
 
 object JSProgramResource {

@@ -20,10 +20,6 @@ lazy val nodeConfig =
     .withEnv(envValues)
     .withArgs(List("--no-warnings", "--experimental-vm-modules"))
 
-val esParseDeps = Seq(
-  "acorn" -> "^8.7.1",
-)
-
 lazy val commonSettingsNoLibs = Seq(
   scalaVersion := "3.1.3",
 )
@@ -51,16 +47,20 @@ lazy val sharedJVMNodeSettings = Seq(
   Test / unmanagedSourceDirectories += baseDirectory.value / "../shared-jvm-node/src/test/scala",
 )
 
+lazy val npmDeps = Seq(
+  "jszip" -> "^3.10.0",
+  "@xmldom/xmldom" -> "^0.8.2",
+  "acorn" -> "^8.7.1",
+  "astring" -> "1.8.3",
+)
+
 lazy val sharedJSNodeSettings = Seq(
 
   libraryDependencies ++= Seq(
     "io.github.cquiroz" %%% "scala-java-time" % "2.4.0",
   ),
 
-  npmDependencies ++= Seq(
-    "jszip" -> "^3.10.0",
-    "@xmldom/xmldom" -> "^0.8.2",
-  ) ++ esParseDeps,
+  npmDependencies ++= npmDeps,
   
   scalaJSLinkerConfig ~= {
     _
@@ -472,6 +472,8 @@ lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
           _.withModuleKind(ModuleKind.CommonJSModule)
         },
 
+        npmDependencies ++= npmDeps,
+
         libraryDependencies ++= Seq(
           "org.graalvm.sdk" % "graal-sdk" % graalVersion,
           "org.graalvm.js" % "js" % graalVersion,
@@ -484,13 +486,17 @@ lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
           val resourceDir = (Compile / resourceManaged).value
           val targetDir = crossTarget.value
 
+
           val dir = resourceDir / "dev" / "argon" / "plugins" / "js"
           IO.createDirectory(dir)
 
           val astringFile = dir / "astring.mjs"
-
           IO.copyFile(targetDir / "node_modules" / "astring" / "dist" / "astring.mjs", astringFile)
-          Seq(astringFile)
+
+          val acornFile = dir / "acorn.mjs"
+          IO.copyFile(targetDir / "node_modules" / "acorn" / "dist" / "acorn.mjs", acornFile)
+
+          Seq(astringFile, acornFile)
         }.dependsOn(npmInstall).taskValue
       )
   )
@@ -507,10 +513,6 @@ lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
   .settings(
     commonSettings,
     compilerOptions,
-
-    npmDependencies ++= Seq(
-      "astring" -> "1.8.3",
-    ),
 
     name := "argon-plugins-js",
   )
