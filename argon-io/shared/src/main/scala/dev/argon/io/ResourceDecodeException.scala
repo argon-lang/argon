@@ -1,3 +1,5 @@
 package dev.argon.io
 
-final case class ResourceDecodeException(message: String, cause: Throwable) extends Exception(message, cause)
+final class ResourceDecodeException(message: String, cause: Throwable) extends Exception(message, cause) {
+  def this(message: String) = this(message, null)
+}

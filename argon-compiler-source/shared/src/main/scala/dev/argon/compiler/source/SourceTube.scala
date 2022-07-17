@@ -34,6 +34,7 @@ object SourceTube {
       override val tubeName: TubeName = tubeName2
 
       override def module(path: ModulePath): Comp[ArModule] = loadModule((this, path))
+      override def modulePaths: Set[ModulePath] = modules.keySet
     }
   end make
 

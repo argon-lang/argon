@@ -4,7 +4,9 @@ import zio.*
 import zio.stream.*
 import java.io.IOException
 
-sealed trait Resource[+E]
+sealed trait Resource[+E] {
+  def fileName: Option[String]
+}
 
 trait DirectoryResource[+E] extends Resource[E] {
   def contents: Stream[E, DirectoryEntry[E]]
@@ -22,15 +24,9 @@ trait BinaryResource[+E] extends Resource[E] with BinaryResourcePlatformSpecific
 }
 
 object BinaryResource:
-  given BinaryResourceDecoder[TextResource] with
-    def decode[E >: ResourceDecodeException](resource: BinaryResource[E]): TextResource[E] =
-      resource match {
-        case resource: TextResource[E] => resource
-        case _ => new TextResource[E] {
-          override def asText: Stream[E, String] =
-            resource.asBytes.via(ZPipeline.utf8Decode.mapError(ResourceDecodeException("Error decoding UTF-8 text", _)))
-        }
-      }
+  given BinaryResourceDecoder[BinaryResource] with
+    def decode[E >: ResourceDecodeException](resource: BinaryResource[E]): BinaryResource[E] =
+      resource
   end given
 end BinaryResource
 
@@ -48,6 +44,9 @@ object TextResource:
         case _ => new TextResource[E] {
           override def asText: Stream[E, String] =
             resource.asBytes.via(ZPipeline.utf8Decode.mapError(ResourceDecodeException("Error decoding UTF-8 text", _)))
+
+          override def fileName: Option[String] =
+            resource.fileName
         }
       }
   end given

@@ -16,6 +16,8 @@ trait BinaryResourceLoaderPlatformSpecific {
 
       override def asInputStream: IO[E, Option[InputStream]] =
         inputStream.asSome
+
+      override def fileName: Option[String] = None
     }
 
   def loadFile(path: Path): BinaryResource[IOException] =
@@ -32,6 +34,8 @@ trait BinaryResourceLoaderPlatformSpecific {
         ZIO.attemptBlockingInterrupt {
           Some(Files.newByteChannel(path))
         }.refineToOrDie[IOException]
+
+      override def fileName: Option[String] = Some(path.toString)
     }
     
 }

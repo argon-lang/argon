@@ -1,6 +1,6 @@
 package dev.argon.plugins.js
 
-import dev.argon.io.{BinaryResourceDecoder, BinaryResource, TextResource}
+import dev.argon.io.{BinaryResource, BinaryResourceDecoder, ResourceDecodeException, TextResource}
 import dev.argon.plugins.js.estree.*
 import zio.*
 import zio.stream.*
@@ -16,11 +16,27 @@ trait JSProgramResource[+E] extends TextResource[E] {
 
 object JSProgramResource:
   given BinaryResourceDecoder[JSProgramResource] with
-    def decode[E](resource: BinaryResource[E]): JSProgramResource[E] =
-      resource match {
+    def decode[E >: ResourceDecodeException](resource: BinaryResource[E]): JSProgramResource[E] =
+      summon[BinaryResourceDecoder[TextResource]].decode(resource) match {
         case resource: JSProgramResource[E] => resource
-        case _ => new JSProgramResource[E]:
-          override def asModule: IO[E, Program] = ???
+        case resource =>
+          new JSProgramResource[E] {
+            override def asModule: IO[E, Program] =
+              resource
+                .asText
+                .runCollect
+                .flatMap { text =>
+                  ZIO.scoped(
+                    JSContext.make.flatMap { ctx =>
+                      ctx.parse(resource.fileName.getOrElse("file.js"), text.mkString)
+                        .mapError { err => ResourceDecodeException("JS Parse Error: " + err) }
+                    }
+                  )
+                }
+
+            override def fileName: Option[String] = resource.fileName
+          }
+
       }
   end given
 end JSProgramResource
