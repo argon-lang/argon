@@ -25,9 +25,6 @@ lazy val commonSettingsNoLibs = Seq(
 )
 
 lazy val commonSettings = commonSettingsNoLibs ++ Seq(
-
-  resolvers += Resolver.sonatypeRepo("releases"),
-
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
 
   libraryDependencies ++= Seq(
