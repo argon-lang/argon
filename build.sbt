@@ -35,6 +35,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
     "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.1.4",
+
+
   ),
 
 )
@@ -74,6 +76,7 @@ lazy val commonJVMSettings = sharedJVMNodeSettings ++ Seq(
 
   libraryDependencies ++= Seq(
     "commons-io" % "commons-io" % "2.11.0",
+    "com.fasterxml.jackson.dataformat" % "jackson-dataformat-toml" % "2.13.3",
   ),
 
   Test / fork := true,
