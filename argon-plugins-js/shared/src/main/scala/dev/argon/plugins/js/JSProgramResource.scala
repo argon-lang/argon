@@ -1,6 +1,6 @@
 package dev.argon.plugins.js
 
-import dev.argon.io.TextResource
+import dev.argon.io.{BinaryResourceDecoder, BinaryResource, TextResource}
 import dev.argon.plugins.js.estree.*
 import zio.*
 import zio.stream.*
@@ -14,11 +14,14 @@ trait JSProgramResource[+E] extends TextResource[E] {
     })
 }
 
-object JSProgramResource {
-  def decode[E](resource: TextResource[E]): JSProgramResource[E] =
-    resource match {
-      case resource: JSProgramResource[E] => resource
-      case _ => new JSProgramResource[E]:
-        override def asModule: IO[E, Program] = ???
-    }
-}
+object JSProgramResource:
+  given BinaryResourceDecoder[JSProgramResource] with
+    def decode[E](resource: BinaryResource[E]): JSProgramResource[E] =
+      resource match {
+        case resource: JSProgramResource[E] => resource
+        case _ => new JSProgramResource[E]:
+          override def asModule: IO[E, Program] = ???
+      }
+  end given
+end JSProgramResource
+

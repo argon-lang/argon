@@ -8,7 +8,7 @@ import java.io.IOException
 import dev.argon.options.OptionHandler
 
 trait Plugin {
-  type Options[_[_], _]
+  type Options[_[_[_]]]
   type Output[_]
 
   val optionHandler: OptionHandler[Options]

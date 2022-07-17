@@ -7,9 +7,9 @@ import dev.argon.options.*
 import dev.argon.util.*
 import zio.*
 
-trait Backend[Options[_[_], _], Output[_]] {
+trait Backend[Options[_[_[_]]], Output[_]] {
   def emitModule[E]
-  (options: Options[Id, E], platforms: Set[Platform[E]])
+  (options: OptionHandler.WithRes[Options, E], platforms: Set[Platform[E]])
   (tube: SerializedTube[E])
   : IO[E, Output[E]]
 }

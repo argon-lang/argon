@@ -5,7 +5,7 @@ import dev.argon.plugin.*
 import zio.IO
 
 final class JSPlugin extends Plugin {
-  override type Options[F[_], E] = JSOptions[F, E]
+  override type Options[Res[_[_]]] = JSOptions[Res]
   override type Output[E] = JSOutput[E]
 
   override val optionHandler: OptionHandler[Options] = JSOptions.Handler
