@@ -42,8 +42,6 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
 )
 
 lazy val sharedJVMNodeSettings = Seq(
-  Compile / unmanagedSourceDirectories += baseDirectory.value / "../shared-jvm-node/src/main/scala",
-  Test / unmanagedSourceDirectories += baseDirectory.value / "../shared-jvm-node/src/test/scala",
 )
 
 lazy val npmDeps = Seq(
@@ -66,9 +64,6 @@ lazy val sharedJSNodeSettings = Seq(
       .withModuleKind(ModuleKind.CommonJSModule)
       .withBatchMode(true)
   },
-
-  Compile / unmanagedSourceDirectories += baseDirectory.value / "../shared-js-node/src/main/scala",
-  Test / unmanagedSourceDirectories += baseDirectory.value / "../shared-js-node/src/test/scala",
 
 )
 
@@ -172,7 +167,7 @@ def runVerilization(libraries: Map[String, String], packageMap: Map[String, Stri
 
 
 
-lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-grammar"))
+lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-grammar"))
   .dependsOn(util)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -197,7 +192,7 @@ lazy val grammarJS = grammar.js
 lazy val grammarNode = grammar.node
 
 
-lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-parser"))
+lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-parser"))
   .dependsOn(parser_data, grammar)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -222,7 +217,7 @@ lazy val parserJS = parser.js
 lazy val parserNode = parser.node
 
 
-lazy val parser_data = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-parser-data"))
+lazy val parser_data = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-parser-data"))
   .dependsOn(grammar)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -271,7 +266,7 @@ lazy val utilJS = util.js
 lazy val utilNode = util.node
 
 
-lazy val options = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-options"))
+lazy val options = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-options"))
   .dependsOn(util, argon_io)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -296,7 +291,7 @@ lazy val optionsJS = options.js
 lazy val optionsNode = options.node
 
 
-lazy val argon_prover = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-prover"))
+lazy val argon_prover = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-prover"))
   .dependsOn(util)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -321,7 +316,7 @@ lazy val argon_proverJS = argon_prover.js
 lazy val argon_proverNode = argon_prover.node
 
 
-lazy val argon_expr = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-expr"))
+lazy val argon_expr = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-expr"))
   .dependsOn(argon_prover, util)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -346,7 +341,7 @@ lazy val argon_exprJS = argon_expr.js
 lazy val argon_exprNode = argon_expr.node
 
 
-lazy val argon_compiler_core = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-compiler-core"))
+lazy val argon_compiler_core = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-compiler-core"))
   .dependsOn(parser_data, util, argon_expr, options, argon_io)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -371,7 +366,7 @@ lazy val argon_compiler_coreJS = argon_compiler_core.js
 lazy val argon_compiler_coreNode = argon_compiler_core.node
 
 
-lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-tube"))
+lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-tube"))
   .dependsOn(util)
   .jvmConfigure(
     _.dependsOn(verilization_runtimeJVM)
@@ -406,7 +401,7 @@ lazy val argon_tubeJS = argon_tube.js
 lazy val argon_tubeNode = argon_tube.node
 
 
-lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin"))
+lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugin"))
   .dependsOn(util, argon_tube, argon_compiler_core)
   .jvmConfigure(
     _.dependsOn(verilization_runtimeJVM)
@@ -436,7 +431,7 @@ lazy val argon_pluginJS = argon_plugin.js
 lazy val argon_pluginNode = argon_plugin.node
 
 
-lazy val argon_plugins_source = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-source"))
+lazy val argon_plugins_source = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugins-source"))
   .dependsOn(argon_compiler_core, parser, argon_plugin)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -552,7 +547,7 @@ lazy val argon_ioJS = argon_io.js
 lazy val argon_ioNode = argon_io.node
 
 
-lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-build"))
+lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-build"))
   .dependsOn(util, options, argon_compiler_core, argon_io)
   .jvmConfigure(
     _.settings(commonJVMSettings)
