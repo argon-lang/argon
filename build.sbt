@@ -437,7 +437,7 @@ lazy val argon_pluginNode = argon_plugin.node
 
 
 lazy val argon_plugins_source = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-source"))
-  .dependsOn(argon_compiler_core, parser)
+  .dependsOn(argon_compiler_core, parser, argon_plugin)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )

@@ -25,6 +25,8 @@ end NonEmptyList
 extension [A](l: NonEmptyList[A])
   def head: A = l.head
   def tail: List[A] = l.tail
+  def last: A = l.last
+  def init: List[A] = l.init
   def toList: List[A] = l
   def reverse: NonEmptyList[A] = l.reverse.asInstanceOf[NonEmptyList[A]]
 end extension

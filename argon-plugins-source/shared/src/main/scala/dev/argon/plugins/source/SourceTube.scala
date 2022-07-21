@@ -4,6 +4,7 @@ import dev.argon.compiler.*
 import dev.argon.compiler.tube.*
 import dev.argon.compiler.module.*
 import dev.argon.io.*
+import dev.argon.plugin.ImporterC
 import zio.*
 import dev.argon.util.{*, given}
 

@@ -15,6 +15,6 @@ trait Plugin[-R0, +E0] {
   given outputHandler[R <: R0, E >: E0]: OutputHandler[R, E, Output[R, E]]
 
   def backend: Backend[Options, Output, R0, E0]
-  def tubeLoaders: Seq[TubeLoader[Options]]
+  def tubeLoaders: Seq[TubeLoader[Options, R0, E0]]
   def buildOutputExecutor: Option[BuildOutputExecutor[Output]]
 }

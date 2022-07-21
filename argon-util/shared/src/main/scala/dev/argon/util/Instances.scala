@@ -140,6 +140,27 @@ given Traverse[Option] with Monad[Option] with
   override def map[A, B](fa: Option[A])(f: A => B): Option[B] = fa.map(f)
 end given
 
+given [L]: Traverse[[R] =>> Either[L, R]] with Monad[[R] =>> Either[L, R]] with
+  override def flatMap[A, B](fa: Either[L, A])(f: A => Either[L, B]): Either[L, B] = fa.flatMap(f)
+  override def pure[A](a: A): Either[L, A] = Right(a)
+
+  override def traverse[F[+_]: Applicative, A, B](ca: Either[L, A])(f: A => F[B]): F[Either[L, B]] =
+    ca match {
+      case Right(a) => f(a).map(Right.apply)
+      case Left(l) => Applicative[F].pure(Left(l))
+    }
+
+  def foldLeftM[F[+_]: Monad, S, A](ca: Either[L, A])(s: S)(f: (S, A) => F[S]): F[S] =
+    ca match {
+      case Right(a) => f(s, a)
+      case _ => Applicative[F].pure(s)
+    }
+
+  def foldLeft[S, A](ca: Either[L, A])(s: S)(f: (S, A) => S): S = ca.toOption.foldLeft(s)(f)
+
+  override def map[A, B](fa: Either[L, A])(f: A => B): Either[L, B] = fa.map(f)
+end given
+
 given [R, E]: Monad[[A] =>> ZIO[R, E, A]] with
   override def flatMap[A, B](fa: ZIO[R, E, A])(f: A => ZIO[R, E, B]): ZIO[R, E, B] = fa.flatMap(f)
   override def pure[A](a: A): ZIO[R, E, A] = ZIO.succeed(a)

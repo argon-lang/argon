@@ -1,4 +1,4 @@
-package dev.argon.plugins.source
+package dev.argon.plugin
 
 import dev.argon.compiler.UsingContext
 

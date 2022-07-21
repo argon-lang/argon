@@ -73,14 +73,14 @@ object JSValueUtil:
       }
 
 
-    override protected def generateImpl(value: JSValue): IO[JSGenerateException, String] =
+    override protected def generateImpl(value: JSValue): IO[JSGenerateError, String] =
       ZIO.attempt {
         Astring.generate(value)
       }.refineOrDie {
-        case NonFatal(ex) => JSGenerateException(ex)
+        case NonFatal(ex) => JSGenerateError(ex)
       }
 
-    override protected def parseImpl(fileName: String, text: String): IO[JSParseException, JSValue] =
+    override protected def parseImpl(fileName: String, text: String): IO[JSParseError, JSValue] =
       ZIO.attempt {
         val options = new Acorn.Options {
           override val ecmaVersion = 2021
@@ -91,7 +91,7 @@ object JSValueUtil:
 
         Acorn.parse(text, options)
       }.refineOrDie {
-        case NonFatal(ex) => JSParseException(ex)
+        case NonFatal(ex) => JSParseError(ex)
       }
 
   }

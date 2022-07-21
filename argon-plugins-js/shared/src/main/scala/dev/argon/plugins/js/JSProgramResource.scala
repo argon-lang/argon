@@ -12,7 +12,7 @@ trait JSProgramResource[-R, +E] extends TextResource[R, E] {
 }
 
 object JSProgramResource:
-  trait Impl[-R, +E >: JSGenerateException | CharacterCodingException] extends JSProgramResource[R, E] with TextResource.Impl[R, E]:
+  trait Impl[-R, +E >: JSGenerateError | CharacterCodingException] extends JSProgramResource[R, E] with TextResource.Impl[R, E]:
     override def asText: ZStream[R, E, String] =
       ZStream.fromZIO(asModule.flatMap { module =>
         ZIO.scoped(JSContext.make.flatMap(_.generate(module)))

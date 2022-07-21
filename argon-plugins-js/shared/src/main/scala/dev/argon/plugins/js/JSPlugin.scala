@@ -18,6 +18,6 @@ final class JSPlugin extends Plugin[Any, JSPluginError] {
     summon[OutputHandler[R, E, Output[R, E]]]
 
   override def backend: Backend[JSOptions, JSOutput, Any, JSPluginError] = JSBackend
-  override def tubeLoaders: Seq[TubeLoader[JSOptions]] = Seq.empty
+  override def tubeLoaders: Seq[TubeLoader[JSOptions, Any, JSPluginError]] = Seq.empty
   override def buildOutputExecutor: Option[BuildOutputExecutor[JSOutput]] = ???
 }

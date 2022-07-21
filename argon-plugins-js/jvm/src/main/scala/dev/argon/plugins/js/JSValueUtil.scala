@@ -97,7 +97,7 @@ object JSValueUtil:
       end if
 
 
-    override protected def generateImpl(value: JSValue): IO[JSGenerateException, String] =
+    override protected def generateImpl(value: JSValue): IO[JSGenerateError, String] =
       ZIO.attempt {
         val source = Source
           .newBuilder("js", astringGenerateScript, "astring_generate.mjs")
@@ -108,10 +108,10 @@ object JSValueUtil:
 
         generate.execute(value).asString()
       }.refineOrDie {
-        case NonFatal(ex) => JSGenerateException(ex)
+        case NonFatal(ex) => JSGenerateError(ex)
       }
 
-    override protected def parseImpl(fileName: String, text: String): IO[JSParseException, JSValue] =
+    override protected def parseImpl(fileName: String, text: String): IO[JSParseError, JSValue] =
       ZIO.attempt {
         val source = Source
           .newBuilder("js", acornParseScript, "acorn_parse.mjs")
@@ -129,7 +129,7 @@ object JSValueUtil:
 
         parse.execute(text, options)
       }.refineOrDie {
-        case NonFatal(ex) => JSParseException(ex)
+        case NonFatal(ex) => JSParseError(ex)
       }
 
 

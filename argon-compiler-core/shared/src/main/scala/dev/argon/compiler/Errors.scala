@@ -2,8 +2,6 @@ package dev.argon.compiler
 
 import dev.argon.compiler.module.ModuleName
 
-trait EmitError
-
 trait DiagnosticMessage
 trait DiagnosticError
 trait DiagnosticSource
@@ -20,4 +18,11 @@ object DiagnosticError {
   final case class AmbiguousOverload() extends DiagnosticError
   final case class CanNotMutate() extends DiagnosticError
   final case class TypeError() extends DiagnosticError
+
+
+  final case class SpecMultiPartGlobUsedWithPrefixSuffix() extends DiagnosticError
+  final case class SpecFileNameTemplateMustBeIdentifier() extends DiagnosticError
+  final case class SpecOneVariablePerTemplateSegment() extends DiagnosticError
+  final case class SpecEmptyTemplateSegment() extends DiagnosticError
+  final case class SpecUndefinedVariable() extends DiagnosticError
 }

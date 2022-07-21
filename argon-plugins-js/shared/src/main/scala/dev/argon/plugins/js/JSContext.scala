@@ -19,18 +19,18 @@ trait JSContext {
   def decode(value: JSValue): DecodedJSObject | DecodedJSArray | String | Boolean | Double | BigInt | JSRegExp
 
 
-  final def generate[A: JSValueCodec](a: A): IO[JSGenerateException, String] =
+  final def generate[A: JSValueCodec](a: A): IO[JSGenerateError, String] =
     generateImpl(summon[JSValueCodec[A]].toJSValue(this)(a))
 
-  final def parse(fileName: String, text: String): IO[JSParseException | JSObjectDecodeException, estree.Program] =
+  final def parse(fileName: String, text: String): IO[JSParseError | JSObjectDecodeError, estree.Program] =
     parseImpl(fileName, text)
       .flatMap { tree =>
         ZIO.fromEither(summon[JSValueCodec[estree.Program]].fromJSValue(this)(tree))
-          .mapError(JSObjectDecodeException(_))
+          .mapError(JSObjectDecodeError(_))
       }
 
-  protected def generateImpl(value: JSValue): IO[JSGenerateException, String]
-  protected def parseImpl(fileName: String, text: String): IO[JSParseException, JSValue]
+  protected def generateImpl(value: JSValue): IO[JSGenerateError, String]
+  protected def parseImpl(fileName: String, text: String): IO[JSParseError, JSValue]
 }
 
 object JSContext extends JSContextPlatformSpecific

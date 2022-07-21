@@ -37,7 +37,7 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
   private def getTubeImportPath(tubeName: TubeName): Comp[String] =
     options.tubes.map.get(tubeName) match {
       case Some(tubeOptions) => ZIO.succeed(tubeOptions.import_path)
-      case None => ZIO.fail(ImportPathNotSpecified(tubeName))
+      case None => ZIO.fail(ImportPathNotSpecifiedError(tubeName))
     }
 
   private def createJSImport(moduleName: ModuleName, identifiers: Seq[(ImportSpecifier, String)]): Comp[estree.ImportDeclaration] =

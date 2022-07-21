@@ -19,4 +19,4 @@ trait Context {
 }
 
 type CompEnv = Any
-type CompError = IOException | SyntaxError | DiagnosticError | EmitError
+type CompError = DiagnosticError
