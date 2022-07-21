@@ -100,6 +100,21 @@ object TomlCodec extends Derivation[TomlCodec] {
       }
   end given
 
+  given [A: TomlCodec]: TomlCodec[NonEmptyList[A]] with
+    override def encode(a: NonEmptyList[A]): Toml =
+      Toml.Array(a.map(summon[TomlCodec[A]].encode).toList)
+
+    override def decode(toml: Toml): Either[String, NonEmptyList[A]] =
+      toml match {
+        case Toml.Array(head +: tail) =>
+          NonEmptyList.cons(head, tail.toList).traverse(summon[TomlCodec[A]].decode)
+
+        case _ => Left("Expected non-empty array")
+      }
+  end given
+
+
+
   given [A: TomlCodec]: TomlCodec[Option[A]] with
     override def encode(a: Option[A]): Toml =
       a.fold(Toml.Table(Map.empty))(summon[TomlCodec[A]].encode)

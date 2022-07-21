@@ -18,10 +18,10 @@ object SourceClass {
       traitId <- UniqueIdentifier.make
       exprConverter2 <- ExpressionConverter.make(ctx)
 
-      outerEnvCell <- MemoCell.make[CompEnv, CompError, exprConverter2.Env]
-      innerEnvCell <- MemoCell.make[CompEnv, CompError, exprConverter2.Env]
+      outerEnvCell <- MemoCell.make[ctx.Env, ctx.Error, exprConverter2.Env]
+      innerEnvCell <- MemoCell.make[ctx.Env, ctx.Error, exprConverter2.Env]
       sigCell <-
-        MemoCell.make[CompEnv, CompError, Signature[
+        MemoCell.make[ctx.Env, ctx.Error, Signature[
           ctx.ExprContext.WrapExpr,
           (
             ctx.ExprContext.WrapExpr,
@@ -30,12 +30,12 @@ object SourceClass {
           ),
         ]]
       methodsCell <-
-        MemoCell.make[CompEnv, CompError, Map[Option[IdentifierExpr], Seq[ArMethodC
+        MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
           with HasContext[ctx.type] with HasOwner[OwnedByClassC[ctx.type, classOwner.type]]]]]
       staticMethodsCell <-
-        MemoCell.make[CompEnv, CompError, Map[Option[IdentifierExpr], Seq[ArMethodC
+        MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
           with HasContext[ctx.type] with HasOwner[OwnedByClassStaticC[ctx.type, classOwner.type]]]]]
-      ctorsCell <- MemoCell.make[CompEnv, CompError, Seq[ClassConstructorC with HasContext[ctx.type]]]
+      ctorsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ClassConstructorC with HasContext[ctx.type]]]
 
     } yield new ArClassC with MethodCreationHelper {
       override val owner: classOwner.type = classOwner

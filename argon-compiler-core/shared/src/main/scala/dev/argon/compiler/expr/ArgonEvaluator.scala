@@ -4,7 +4,8 @@ import dev.argon.compiler.*
 import dev.argon.expr.Evaluator
 import zio.*
 
-abstract class ArgonEvaluator extends UsingContext with Evaluator[CompEnv, CompError] {
+abstract class ArgonEvaluator[R <: CompEnv, E >: CompError] extends UsingContext with Evaluator[R, E] {
+  override val context: Context { type Env = R; type Error = E }
   override val exprContext: ArgonExprContext with HasContext[context.type]
   import exprContext.WrapExpr
 
@@ -17,15 +18,15 @@ abstract class ArgonEvaluator extends UsingContext with Evaluator[CompEnv, CompE
 
 object ArgonEvaluator {
 
-  type Aux[TContext <: Context, TExprContext <: ArgonExprContext with HasContext[TContext]] =
-    ArgonEvaluator {
+  type Aux[R <: CompEnv, E >: CompError, TContext <: Context, TExprContext <: ArgonExprContext with HasContext[TContext]] =
+    ArgonEvaluator[R, E] {
       val context: TContext
       val exprContext: TExprContext
     }
 
   def apply(ctx: Context)(exprCtx: ArgonExprContext with HasContext[ctx.type])
-    : ArgonEvaluator.Aux[ctx.type, exprCtx.type] =
-    new ArgonEvaluator {
+    : ArgonEvaluator.Aux[ctx.Env, ctx.Error, ctx.type, exprCtx.type] =
+    new ArgonEvaluator[ctx.Env, ctx.Error] {
       override val context: ctx.type = ctx
       override val exprContext: exprCtx.type = exprCtx
     }

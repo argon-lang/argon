@@ -1,17 +1,23 @@
 package dev.argon.plugins.js
 
-import dev.argon.options.{OptionHandler, OptionInfo, OptionInfoAny, OptionsError, OutputHandler}
+import dev.argon.options.*
+import dev.argon.io.ResourceFactory
 import dev.argon.plugin.*
 import zio.IO
 
-final class JSPlugin extends Plugin {
-  override type Options[Res[_[_]]] = JSOptions[Res]
-  override type Output[E] = JSOutput[E]
+import java.nio.charset.CharacterCodingException
 
-  override val optionHandler: OptionHandler[Options] = JSOptions.Handler
-  override val outputHandler: OutputHandler[Output] = JSOutput.Handler
+final class JSPlugin extends Plugin[Any, JSPluginError] {
+  override type Options[R, E] = JSOptions[R, E]
+  override type Output[R, E] = JSOutput[R, E]
 
-  override def backend: Backend[JSOptions, JSOutput] = JSBackend
+  override def optionDecoder[R, E >: JSPluginError](using ResourceFactory[R, E]): OptionDecoder[R, E, Options[R, E]] =
+    summon[OptionDecoder[R, E, Options[R, E]]]
+
+  override def outputHandler[R, E >: JSPluginError]: OutputHandler[R, E, Output[R, E]] =
+    summon[OutputHandler[R, E, Output[R, E]]]
+
+  override def backend: Backend[JSOptions, JSOutput, Any, JSPluginError] = JSBackend
   override def tubeLoaders: Seq[TubeLoader[JSOptions]] = Seq.empty
   override def buildOutputExecutor: Option[BuildOutputExecutor[JSOutput]] = ???
 }

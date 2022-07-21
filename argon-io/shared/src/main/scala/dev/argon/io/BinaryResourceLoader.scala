@@ -6,10 +6,9 @@ import java.io.IOException
 
 
 object BinaryResourceLoader extends BinaryResourceLoaderPlatformSpecific {
-  def loadStream[E](stream: Stream[E, Byte]): BinaryResource[E] =
-    new BinaryResource[E] {
-      override def asBytes: Stream[E, Byte] = stream
-      override def fileName: Option[String] = None
+  def loadStream[R, E](stream: ZStream[R, E, Byte]): BinaryResource[R, E] =
+    new BinaryResource[R, E] with Resource.WithoutFileName {
+      override def asBytes: ZStream[R, E, Byte] = stream
     }
 
 }

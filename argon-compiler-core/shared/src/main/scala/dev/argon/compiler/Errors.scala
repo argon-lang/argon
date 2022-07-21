@@ -2,6 +2,8 @@ package dev.argon.compiler
 
 import dev.argon.compiler.module.ModuleName
 
+trait EmitError
+
 trait DiagnosticMessage
 trait DiagnosticError
 trait DiagnosticSource

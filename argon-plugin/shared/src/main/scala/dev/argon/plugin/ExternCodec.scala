@@ -4,7 +4,7 @@ import dev.argon.io.BinaryResource
 
 import zio.*
 
-trait ExternCodec[E, T] {
-  def decode(resource: BinaryResource[E]): IO[E, T]
-  def encode(value: T): BinaryResource[E]
+trait ExternCodec[R, E, T] {
+  def decode(resource: BinaryResource[R, E]): ZIO[R, E, T]
+  def encode(value: T): BinaryResource[R, E]
 }

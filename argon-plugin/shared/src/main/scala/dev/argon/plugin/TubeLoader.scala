@@ -2,12 +2,11 @@ package dev.argon.plugin
 
 import dev.argon.util.*
 import dev.argon.io.*
-import dev.argon.options.OptionHandler
 import zio.*
 import java.io.IOException
 
-trait TubeLoader[Options[_[_[_]]]] {
+trait TubeLoader[Options[_, _]] {
   val supportedExtensions: Seq[String]
   
-  def load[E](options: OptionHandler.WithRes[Options, E])(resource: BinaryResource[E]): ZIO[Scope, E, SerializedTube[E]]
+  def load[R, E](options: Options[R, E])(resource: BinaryResource[R, E]): ZIO[R & Scope, E, SerializedTube[R, E]]
 }

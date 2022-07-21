@@ -112,6 +112,7 @@ lazy val compilerOptions = Seq(
     "-language:existentials",
     "-language:implicitConversions",
     "-language:strictEquality",
+    "-deprecation",
     "-Ycheck-all-patmat",
     "-Yretain-trees",
     "-Xmax-inlines", "128",
@@ -371,7 +372,7 @@ lazy val argon_compiler_coreNode = argon_compiler_core.node
 
 
 lazy val argon_compiler_source = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-compiler-source"))
-  .dependsOn(argon_compiler_core)
+  .dependsOn(argon_compiler_core, parser)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -460,7 +461,7 @@ lazy val argon_pluginJS = argon_plugin.js
 lazy val argon_pluginNode = argon_plugin.node
 
 
-lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-js"))
+lazy val argon_plugins_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-js"))
   .dependsOn(util, argon_tube, argon_plugin)
   .jvmConfigure(
     _.dependsOn(verilization_runtimeJVM)
@@ -521,9 +522,9 @@ lazy val argon_plugin_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
     name := "argon-plugins-js",
   )
 
-lazy val argon_plugin_jsJVM = argon_plugin_js.jvm
-lazy val argon_plugin_jsJS = argon_plugin_js.js
-lazy val argon_plugin_jsNode = argon_plugin_js.node
+lazy val argon_plugins_jsJVM = argon_plugins_js.jvm
+lazy val argon_plugins_jsJS = argon_plugins_js.js
+lazy val argon_plugins_jsNode = argon_plugins_js.node
 
 
 lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-io"))
@@ -552,7 +553,7 @@ lazy val argon_ioNode = argon_io.node
 
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-build"))
-  .dependsOn(util)
+  .dependsOn(util, options, argon_compiler_source, argon_io, parser)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )

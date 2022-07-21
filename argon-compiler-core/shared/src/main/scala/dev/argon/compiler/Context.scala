@@ -7,7 +7,9 @@ import dev.argon.compiler.expr.CompleteExprContext
 import dev.argon.compiler.tube.{TubeName, ArTubeC}
 
 trait Context {
-  type Comp[+A] = ZIO[CompEnv, CompError, A]
+  type Env <: CompEnv
+  type Error >: CompError
+  type Comp[+A] = ZIO[Env, Error, A]
 
   object ExprContext extends CompleteExprContext {
     override val context: Context.this.type = Context.this
@@ -17,4 +19,4 @@ trait Context {
 }
 
 type CompEnv = Any
-type CompError = IOException | SyntaxError | DiagnosticError
+type CompError = IOException | SyntaxError | DiagnosticError | EmitError

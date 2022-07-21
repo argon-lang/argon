@@ -17,6 +17,9 @@ object NonEmptyList:
 
   def fromCons[A](l: ::[A]): NonEmptyList[A] = l
 
+  given [A, B](using CanEqual[A, B]): CanEqual[NonEmptyList[A], NonEmptyList[B]] = CanEqual.canEqualSeqs[A, B]
+
+
 end NonEmptyList
 
 extension [A](l: NonEmptyList[A])

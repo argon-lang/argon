@@ -117,7 +117,7 @@ final case class ExternExpr(specifier: String) extends Expr
 final case class FunctionCallExpr(func: WithSource[Expr], listType: FunctionParameterListType, arg: WithSource[Expr])
     extends Expr
 
-enum IdentifierExpr extends Expr {
+enum IdentifierExpr extends Expr derives CanEqual {
   case Named(name: String)
   case OperatorIdentifier(op: Operator)
   case Extension(inner: IdentifierExpr)
@@ -163,7 +163,9 @@ final case class FunctionParameter
 final case class FunctionParameterList
   (listType: FunctionParameterListType, isErased: Boolean, parameters: Vector[WithSource[FunctionParameter]])
 
-sealed trait Operator derives CanEqual
+sealed trait Operator derives CanEqual {
+  def symbol: String
+}
 
 sealed trait BinaryOperator extends Operator derives CanEqual {
   def symbol: String

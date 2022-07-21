@@ -1,29 +1,23 @@
 package dev.argon.options
 
 import magnolia1.*
-import dev.argon.io.{BinaryResource, BinaryResourceDecoder, DirectoryResource, ResourceDecodeException}
-import dev.argon.options.OptionDecoder.ResourceFactory
+import dev.argon.io.*
 import dev.argon.util.{*, given}
 import dev.argon.util.toml.{Toml, TomlCodec}
 
 import scala.deriving.Mirror
 import scala.util.NotGiven
 
-trait OptionDecoder[A, E] {
-  def decode(resourceFactory: ResourceFactory[E])(value: Toml): Either[String, A]
+trait OptionDecoder[R, E, A] {
+  def decode(resourceFactory: ResourceFactory[R, E])(value: Toml): Either[String, A]
   def defaultValue: Option[A] = None
 }
 
 object OptionDecoder {
-  trait ResourceFactory[E] {
-    def directoryResource(name: String): DirectoryResource[E]
-    def binaryResource(name: String): BinaryResource[E]
-  }
-
-  final class OptionDecoderDerivation[E](using ResourceFactory[E]) extends ProductDerivation[[A] =>> OptionDecoder[A, E]] {
-    override def join[T](ctx: CaseClass[Typeclass, T]): OptionDecoder[T, E] =
-      new OptionDecoder[T, E] {
-        override def decode(resourceFactory: ResourceFactory[E])(value: Toml): Either[String, T] =
+  final class OptionDecoderDerivation[R, E](using ResourceFactory[R, E]) extends ProductDerivation[[A] =>> OptionDecoder[R, E, A]] {
+    override def join[T](ctx: CaseClass[Typeclass, T]): OptionDecoder[R, E, T] =
+      new OptionDecoder[R, E, T] {
+        override def decode(resourceFactory: ResourceFactory[R, E])(value: Toml): Either[String, T] =
           value match {
             case Toml.Table(map) =>
               ctx.constructEither { param =>
@@ -45,48 +39,48 @@ object OptionDecoder {
 
   }
 
-  inline def derive[A, E](using Mirror.Of[A], ResourceFactory[E]): OptionDecoder[A, E] =
-    new OptionDecoderDerivation[E].derivedMirror[A]
+  inline def derive[R, E, A](using Mirror.Of[A], ResourceFactory[R, E]): OptionDecoder[R, E, A] =
+    new OptionDecoderDerivation[R, E].derivedMirror[A]
 
 
-  given tomlOptionDecoder[A: TomlCodec, E]: OptionDecoder[A, E] with
-    override def decode(resourceFactory: ResourceFactory[E])(value: Toml): Either[String, A] =
+  given tomlOptionDecoder[R, E, A: TomlCodec]: OptionDecoder[R, E, A] with
+    override def decode(resourceFactory: ResourceFactory[R, E])(value: Toml): Either[String, A] =
       summon[TomlCodec[A]].decode(value)
 
     override def defaultValue: Option[A] =
       summon[TomlCodec[A]].defaultValue
   end tomlOptionDecoder
 
-  given [A, E](using OptionDecoder[A, E], NotGiven[TomlCodec[A]]): OptionDecoder[Option[A], E] with
-    override def decode(resourceFactory: ResourceFactory[E])(value: Toml): Either[String, Option[A]] =
-      summon[OptionDecoder[A, E]].decode(resourceFactory)(value).map(Some.apply)
+  given [R, E, A](using OptionDecoder[R, E, A], NotGiven[TomlCodec[A]]): OptionDecoder[R, E, Option[A]] with
+    override def decode(resourceFactory: ResourceFactory[R, E])(value: Toml): Either[String, Option[A]] =
+      summon[OptionDecoder[R, E, A]].decode(resourceFactory)(value).map(Some.apply)
 
     override def defaultValue: Option[Option[A]] =
       Some(None)
   end given
 
-  given [A, E](using OptionDecoder[A, E], NotGiven[TomlCodec[A]]): OptionDecoder[Seq[A], E] with
-    override def decode(resourceFactory: ResourceFactory[E])(value: Toml): Either[String, Seq[A]] =
+  given [R, E, A](using OptionDecoder[R, E, A], NotGiven[TomlCodec[A]]): OptionDecoder[R, E, Seq[A]] with
+    override def decode(resourceFactory: ResourceFactory[R, E])(value: Toml): Either[String, Seq[A]] =
       value match {
         case Toml.Array(value) =>
-          value.traverse(summon[OptionDecoder[A, E]].decode(resourceFactory))
+          value.traverse(summon[OptionDecoder[R, E, A]].decode(resourceFactory))
 
         case _ => Left("Expected array")
       }
   end given
 
-  given [E]: OptionDecoder[DirectoryResource[E], E] with
-    override def decode(resourceFactory: ResourceFactory[E])(value: Toml): Either[String, DirectoryResource[E]] =
+  given [Res[-R2, +E2] <: Resource[R2, E2], R, E](using BinaryResourceDecoder[Res, R, E]): OptionDecoder[R, E, DirectoryResource[R, E, Res]] with
+    override def decode(resourceFactory: ResourceFactory[R, E])(value: Toml): Either[String, DirectoryResource[R, E, Res]] =
       value match {
-        case Toml.String(str) => Right(resourceFactory.directoryResource(str))
+        case Toml.String(str) => Right(resourceFactory.directoryResource(str).decode[Res])
         case _ => Left("Expected string")
       }
   end given
 
-  given [Res[+_]: BinaryResourceDecoder, E >: ResourceDecodeException]: OptionDecoder[Res[E], E] with
-    override def decode(resourceFactory: ResourceFactory[E])(value: Toml): Either[String, Res[E]] =
+  given [Res[_, _], R, E](using BinaryResourceDecoder[Res, R, E]): OptionDecoder[R, E, Res[R, E]] with
+    override def decode(resourceFactory: ResourceFactory[R, E])(value: Toml): Either[String, Res[R, E]] =
       value match {
-        case Toml.String(str) => Right(summon[BinaryResourceDecoder[Res]].decode(resourceFactory.binaryResource(str)))
+        case Toml.String(str) => Right(summon[BinaryResourceDecoder[Res, R, E]].decode(resourceFactory.binaryResource(str)))
         case _ => Left("Expected string")
       }
   end given

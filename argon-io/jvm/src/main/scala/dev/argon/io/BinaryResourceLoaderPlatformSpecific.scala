@@ -9,19 +9,17 @@ import java.nio.file.Files
 import java.nio.channels.SeekableByteChannel
 
 trait BinaryResourceLoaderPlatformSpecific {
-  def loadInputStream[E >: IOException](inputStream: IO[E, InputStream]): BinaryResource[E] =
-    new BinaryResource[E] {
-      override def asBytes: Stream[E, Byte] =
+  def loadInputStream[R, E >: IOException](inputStream: ZIO[R, E, InputStream]): BinaryResource[R, E] =
+    new BinaryResource[R, E] with Resource.WithoutFileName {
+      override def asBytes: ZStream[R, E, Byte] =
         ZStream.unwrapScoped(ZIO.fromAutoCloseable(inputStream).map(ZStream.fromInputStream(_)))
 
-      override def asInputStream: IO[E, Option[InputStream]] =
+      override def asInputStream: ZIO[R, E, Option[InputStream]] =
         inputStream.asSome
-
-      override def fileName: Option[String] = None
     }
 
-  def loadFile(path: Path): BinaryResource[IOException] =
-    new BinaryResource[IOException] {
+  def loadFile(path: Path): BinaryResource[Any, IOException] =
+    new BinaryResource[Any, IOException] {
       override def asBytes: Stream[IOException, Byte] =
         ZStream.fromPath(path).refineToOrDie[IOException]
 

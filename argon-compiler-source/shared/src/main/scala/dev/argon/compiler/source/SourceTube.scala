@@ -14,7 +14,7 @@ object SourceTube {
       context: Context,
       tubeName: TubeName,
       importer: ImporterC with HasContext[context.type],
-      modules: Map[ModulePath, SourceCodeResource],
+      modules: Map[ModulePath, ArgonSourceCodeResource[context.Env, context.Error]],
     )
     : UIO[ArTubeC with HasContext[context.type]] =
     val context2: context.type = context
@@ -34,7 +34,7 @@ object SourceTube {
       override val tubeName: TubeName = tubeName2
 
       override def module(path: ModulePath): Comp[ArModule] = loadModule((this, path))
-      override def modulePaths: Set[ModulePath] = modules.keySet
+      override lazy val modulePaths: Set[ModulePath] = modules.keySet
     }
   end make
 

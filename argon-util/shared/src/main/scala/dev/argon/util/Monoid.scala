@@ -10,6 +10,6 @@ object Monoid {
 
 extension [A: Monoid](x: IterableOnce[A])
   def foldMonoid: A =
-    x.fold(Monoid[A].identity)(Monoid[A].combine)
+    x.iterator.fold(Monoid[A].identity)(Monoid[A].combine)
 end extension
 

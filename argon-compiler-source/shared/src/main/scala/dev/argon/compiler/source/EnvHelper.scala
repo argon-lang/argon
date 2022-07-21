@@ -8,7 +8,7 @@ import dev.argon.compiler.expr.ArgonExprContext
 
 object EnvHelper {
 
-  def createOuterEnv(exprConverter: ExpressionConverter)(outerEnvCell: MemoCell[CompEnv, CompError, exprConverter.Env])
+  def createOuterEnv(exprConverter: ExpressionConverter)(outerEnvCell: MemoCell[exprConverter.context.Env, exprConverter.context.Error, exprConverter.Env])
     (imports: exprConverter.context.Comp[Imports[exprConverter.context.type]])
     : exprConverter.context.Comp[exprConverter.Env] =
     outerEnvCell.get(
@@ -21,7 +21,7 @@ object EnvHelper {
         }
     )
 
-  def createInnerEnv(exprConverter: ExpressionConverter)(innerEnvCell: MemoCell[CompEnv, CompError, exprConverter.Env])
+  def createInnerEnv(exprConverter: ExpressionConverter)(innerEnvCell: MemoCell[exprConverter.context.Env, exprConverter.context.Error, exprConverter.Env])
     (outerEnv: exprConverter.context.Comp[exprConverter.Env])(owner: exprConverter.exprContext.ParameterVariableOwner)
     (signature: exprConverter.context.Comp[Signature[exprConverter.context.ExprContext.WrapExpr, ?]])
     : exprConverter.context.Comp[exprConverter.Env] =

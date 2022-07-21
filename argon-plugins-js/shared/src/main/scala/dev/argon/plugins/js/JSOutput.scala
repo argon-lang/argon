@@ -4,22 +4,12 @@ import dev.argon.util.*
 import dev.argon.io.*
 import dev.argon.options.*
 
-final case class JSOutput[E]
+final case class JSOutput[R, E]
 (
-  module: JSProgramResource[E]
+  `package`: DirectoryResource[R, E, JSProgramResource],
 )
 
 object JSOutput {
-  object Module extends OutputInfo[JSProgramResource, JSOutput] {
-    override val name: String = "module"
-    override val description: String = "Compiled JS module"
-
-    override def getValue[E](options: JSOutput[E]): JSProgramResource[E] =
-      options.module
-  }
-
-  object Handler extends OutputHandler[JSOutput] {
-    override val options: Set[OutputInfoAny[JSOutput]] =
-      Set(Module)
-  }
+  given [R, E]: OutputHandler[R, E, JSOutput[R, E]] =
+    OutputHandler.derive
 }

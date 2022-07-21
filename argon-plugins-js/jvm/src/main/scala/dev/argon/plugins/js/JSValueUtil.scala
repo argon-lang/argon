@@ -10,6 +10,8 @@ import org.graalvm.polyglot.{Context, Source, Value}
 import java.util.{List as JList, Map as JMap}
 import zio.*
 
+import scala.util.control.NonFatal
+
 object JSValueUtil:
   type JSValue = Value
 
@@ -95,8 +97,8 @@ object JSValueUtil:
       end if
 
 
-    override protected def generateImpl(value: JSValue): UIO[String] =
-      ZIO.succeed {
+    override protected def generateImpl(value: JSValue): IO[JSGenerateException, String] =
+      ZIO.attempt {
         val source = Source
           .newBuilder("js", astringGenerateScript, "astring_generate.mjs")
           .mimeType("application/javascript+module")
@@ -105,10 +107,12 @@ object JSValueUtil:
         val generate = ctx.eval(source)
 
         generate.execute(value).asString()
+      }.refineOrDie {
+        case NonFatal(ex) => JSGenerateException(ex)
       }
 
-    override protected def parseImpl(fileName: String, text: String): UIO[JSValue] =
-      ZIO.succeed {
+    override protected def parseImpl(fileName: String, text: String): IO[JSParseException, JSValue] =
+      ZIO.attempt {
         val source = Source
           .newBuilder("js", acornParseScript, "acorn_parse.mjs")
           .mimeType("application/javascript+module")
@@ -124,6 +128,8 @@ object JSValueUtil:
         ).asJava)
 
         parse.execute(text, options)
+      }.refineOrDie {
+        case NonFatal(ex) => JSParseException(ex)
       }
 
 

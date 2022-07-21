@@ -2,53 +2,18 @@ package dev.argon.io
 
 import zio.*
 import zio.stream.*
-import java.io.IOException
 
-sealed trait Resource[+E] {
+import java.io.IOException
+import java.nio.charset.CharacterCodingException
+
+trait Resource[-R, +E] {
   def fileName: Option[String]
 }
 
-trait DirectoryResource[+E] extends Resource[E] {
-  def contents: Stream[E, DirectoryEntry[E]]
-}
+object Resource:
+  trait WithoutFileName:
+    def fileName: Option[String] = None
+  end WithoutFileName
+end Resource
 
-final case class DirectoryEntry[+E](name: String, resource: Resource[E])
-
-trait BinaryResourceDecoder[Res[_]] {
-  def decode[E >: ResourceDecodeException](resource: BinaryResource[E]): Res[E]
-}
-
-
-trait BinaryResource[+E] extends Resource[E] with BinaryResourcePlatformSpecific[E] {
-  def asBytes: Stream[E, Byte]
-}
-
-object BinaryResource:
-  given BinaryResourceDecoder[BinaryResource] with
-    def decode[E >: ResourceDecodeException](resource: BinaryResource[E]): BinaryResource[E] =
-      resource
-  end given
-end BinaryResource
-
-trait TextResource[+E] extends BinaryResource[E] {
-  def asText: Stream[E, String]
-
-  override def asBytes: Stream[E, Byte] = ZPipeline.utf8Encode.orDie.apply(asText)
-}
-
-object TextResource:
-  given BinaryResourceDecoder[TextResource] with
-    def decode[E >: ResourceDecodeException](resource: BinaryResource[E]): TextResource[E] =
-      resource match {
-        case resource: TextResource[E] => resource
-        case _ => new TextResource[E] {
-          override def asText: Stream[E, String] =
-            resource.asBytes.via(ZPipeline.utf8Decode.mapError(ResourceDecodeException("Error decoding UTF-8 text", _)))
-
-          override def fileName: Option[String] =
-            resource.fileName
-        }
-      }
-  end given
-end TextResource
 

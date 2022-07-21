@@ -4,6 +4,8 @@ import scala.scalajs.js
 import scala.scalajs.js.JSConverters.given
 import zio.*
 
+import scala.util.control.NonFatal
+
 
 object JSValueUtil:
   opaque type JSValue = js.Any | Null
@@ -71,13 +73,15 @@ object JSValueUtil:
       }
 
 
-    override protected def generateImpl(value: JSValue): UIO[String] =
-      ZIO.succeed {
+    override protected def generateImpl(value: JSValue): IO[JSGenerateException, String] =
+      ZIO.attempt {
         Astring.generate(value)
+      }.refineOrDie {
+        case NonFatal(ex) => JSGenerateException(ex)
       }
 
-    override protected def parseImpl(fileName: String, text: String): UIO[JSValue] =
-      ZIO.succeed {
+    override protected def parseImpl(fileName: String, text: String): IO[JSParseException, JSValue] =
+      ZIO.attempt {
         val options = new Acorn.Options {
           override val ecmaVersion = 2021
           override val sourceType = "module"
@@ -86,6 +90,8 @@ object JSValueUtil:
         }
 
         Acorn.parse(text, options)
+      }.refineOrDie {
+        case NonFatal(ex) => JSParseException(ex)
       }
 
   }

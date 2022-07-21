@@ -84,14 +84,14 @@ final case class ExpressionStatement
   `type`: "ExpressionStatement" = ("ExpressionStatement" : "ExpressionStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
   expression: Expression,
-  directive: Option[String],
+  directive: Option[String] = None,
 ) extends Statement derives JSValueCodec
 
 final case class BlockStatement
 (
   `type`: "BlockStatement" = ("BlockStatement" : "BlockStatement"),
   loc: Nullable[SourceLocation] = Nullable(null),
-  body: Statement,
+  body: Seq[Statement],
 ) extends Statement derives JSValueCodec
 
 final case class StaticBlock
@@ -658,7 +658,8 @@ final case class ImportDeclaration
 (
   `type`: "ImportDeclaration" = ("ImportDeclaration" : "ImportDeclaration"),
   loc: Nullable[SourceLocation] = Nullable(null),
-  specifiers: Seq[ModuleImportSpecifier]
+  specifiers: Seq[ModuleImportSpecifier],
+  source: Literal,
 ) extends ModuleDeclaration derives JSValueCodec
 
 

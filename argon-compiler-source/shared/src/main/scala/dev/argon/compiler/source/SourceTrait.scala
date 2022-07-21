@@ -17,18 +17,18 @@ object SourceTrait {
       traitId <- UniqueIdentifier.make
       exprConverter2 <- ExpressionConverter.make(ctx)
 
-      outerEnvCell <- MemoCell.make[CompEnv, CompError, exprConverter2.Env]
-      innerEnvCell <- MemoCell.make[CompEnv, CompError, exprConverter2.Env]
+      outerEnvCell <- MemoCell.make[ctx.Env, ctx.Error, exprConverter2.Env]
+      innerEnvCell <- MemoCell.make[ctx.Env, ctx.Error, exprConverter2.Env]
       sigCell <-
-        MemoCell.make[CompEnv, CompError, Signature[
+        MemoCell.make[ctx.Env, ctx.Error, Signature[
           ctx.ExprContext.WrapExpr,
           (ctx.ExprContext.WrapExpr, Seq[ctx.ExprContext.ArExpr[ctx.ExprContext.ExprConstructor.TraitType]]),
         ]]
       methodsCell <-
-        MemoCell.make[CompEnv, CompError, Map[Option[IdentifierExpr], Seq[ArMethodC
+        MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
           with HasContext[ctx.type] with HasOwner[OwnedByTraitC[ctx.type, traitOwner.type]]]]]
       staticMethodsCell <-
-        MemoCell.make[CompEnv, CompError, Map[Option[IdentifierExpr], Seq[ArMethodC
+        MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
           with HasContext[ctx.type] with HasOwner[OwnedByTraitStaticC[ctx.type, traitOwner.type]]]]]
 
     } yield new ArTraitC with MethodCreationHelper {

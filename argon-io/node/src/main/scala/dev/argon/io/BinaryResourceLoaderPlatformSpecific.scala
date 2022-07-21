@@ -15,7 +15,7 @@ trait BinaryResourceLoaderPlatformSpecific {
       ZIO.fromPromiseJS(handle.close()).orDie
     }.orDie
   
-  def loadFile(path: String): BinaryResource[IOException] =
+  def loadFile(path: String): BinaryResource[Any, IOException] =
     BinaryResourceLoader.loadStream(
       ZStream.fromPull[Any, Throwable, Byte](
         for {

@@ -8,10 +8,10 @@ import dev.argon.options.*
 import dev.argon.util.*
 import zio.*
 
-trait Backend[Options[_[_[_]]], Output[_]] {
-  def emitTube[E]
-  (context: Context)
-  (options: OptionHandler.WithRes[Options, E])
+trait Backend[Options[_, _], Output[_, _], -R0, +E0] {
+  def emitTube
+  (context: Context { type Env <: R0; type Error >: E0 })
+  (options: Options[context.Env, context.Error])
   (tube: ArTubeC with HasContext[context.type])
-  : IO[E, Output[E]]
+  : context.Comp[Output[context.Env, context.Error]]
 }

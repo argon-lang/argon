@@ -1,20 +1,20 @@
 package dev.argon.plugin
 
 import dev.argon.options.*
+import dev.argon.io.ResourceFactory
 import dev.argon.util.*
 import zio.*
 
 import java.io.IOException
-import dev.argon.options.OptionHandler
 
-trait Plugin {
-  type Options[_[_[_]]]
-  type Output[_]
+trait Plugin[-R0, +E0] {
+  type Options[_, _]
+  type Output[_, _]
 
-  val optionHandler: OptionHandler[Options]
-  val outputHandler: OutputHandler[Output]
+  given optionDecoder[R <: R0, E >: E0](using ResourceFactory[R, E]): OptionDecoder[R, E, Options[R, E]]
+  given outputHandler[R <: R0, E >: E0]: OutputHandler[R, E, Output[R, E]]
 
-  def backend: Backend[Options, Output]
+  def backend: Backend[Options, Output, R0, E0]
   def tubeLoaders: Seq[TubeLoader[Options]]
   def buildOutputExecutor: Option[BuildOutputExecutor[Output]]
 }

@@ -27,13 +27,13 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
   import exprContext.{WrapExpr, ArExpr, ExprConstructor, Variable, LocalVariable, InstanceVariable, ParameterVariable}
 
   val fuel: Int
-  val evaluator: ArgonEvaluator.Aux[context.type, exprContext.type] = ArgonEvaluator(context)(exprContext)
+  val evaluator: ArgonEvaluator.Aux[context.Env, context.Error, context.type, exprContext.type] = ArgonEvaluator(context)(exprContext)
 
   val implicitResolver
-    : ImplicitResolver[CompEnv, CompError] {
+    : ImplicitResolver[context.Env, context.Error] {
       val exprContext: ExpressionConverter.this.exprContext.type
     } =
-    new ImplicitResolver[CompEnv, CompError] {
+    new ImplicitResolver[context.Env, context.Error] {
       override val exprContext: ExpressionConverter.this.exprContext.type = ExpressionConverter.this.exprContext
 
       override def createHole: Comp[UniqueIdentifier] = UniqueIdentifier.make
@@ -186,8 +186,8 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
       protected override def invalidPredicateExpr: Comp[Nothing] = ???
 
       protected override val evaluator
-        : Evaluator[CompEnv, CompError] { val exprContext: ExpressionConverter.this.exprContext.type } =
-        new Evaluator[CompEnv, CompError] {
+        : Evaluator[context.Env, context.Error] { val exprContext: ExpressionConverter.this.exprContext.type } =
+        new Evaluator[context.Env, context.Error] {
           override val exprContext: ExpressionConverter.this.exprContext.type = ExpressionConverter.this.exprContext
 
           override def getFunctionBody(function: ArFunc, args: Vector[WrapExpr], fuel: Int): Comp[Option[WrapExpr]] =
@@ -288,7 +288,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
     override def synth(env: Env): Comp[ExprTypeResult] = ZIO.fail(DiagnosticError.UnknownTypeForExpression())
   }
 
-  private final class ExprFactoryError(error: CompError) extends ExprFactory {
+  private final class ExprFactoryError(error: context.Error) extends ExprFactory {
     override def synth(env: Env): Comp[ExprTypeResult] = ZIO.fail(error)
     override def check(env: Env, t: WrapExpr): Comp[ExprResult] = ZIO.fail(error)
   }
@@ -1506,8 +1506,8 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
         case ModuleElementC.ClassElement(c) => c.signature.map(convertSig(ClassSigHandler))
         case ModuleElementC.TraitElement(t) => t.signature.map(convertSig(TraitSigHandler))
         case ModuleElementC.FunctionElement(f) => f.signature.map(convertSig(FunctionSigHandler))
-      })
-        .flatMap { sig =>
+      } : Comp[Signature[WrapExpr, ?]])
+        .flatMap[context.Env, context.Error, Boolean] { sig =>
           val declParamTypes = sig.parameterTypes
           if paramTypes.size != declParamTypes.size then
             val env: Env =
@@ -1522,9 +1522,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtil {
         }
 
     context.getTube(tubeName)
-      .flatMap(_.module(modulePath))
-      .flatMap(_.exports(id))
-      .flatMap { elements =>
+      .flatMap[context.Env, context.Error, ArModule](_.module(modulePath))
+      .flatMap[context.Env, context.Error, Seq[ModuleElement]](_.exports(id))
+      .flatMap[context.Env, context.Error, Seq[TElement]] { elements =>
         ZIO.filter(elements.collect { case element: TElement => element })(matchesOverload(paramTypes))
       }
       .flatMap {
