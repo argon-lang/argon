@@ -371,31 +371,6 @@ lazy val argon_compiler_coreJS = argon_compiler_core.js
 lazy val argon_compiler_coreNode = argon_compiler_core.node
 
 
-lazy val argon_compiler_source = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-compiler-source"))
-  .dependsOn(argon_compiler_core, parser)
-  .jvmConfigure(
-    _.settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-compiler-source",
-  )
-
-lazy val argon_compiler_sourceJVM = argon_compiler_source.jvm
-lazy val argon_compiler_sourceJS = argon_compiler_source.js
-lazy val argon_compiler_sourceNode = argon_compiler_source.node
-
-
 lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-tube"))
   .dependsOn(util)
   .jvmConfigure(
@@ -459,6 +434,31 @@ lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(f
 lazy val argon_pluginJVM = argon_plugin.jvm
 lazy val argon_pluginJS = argon_plugin.js
 lazy val argon_pluginNode = argon_plugin.node
+
+
+lazy val argon_plugins_source = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-source"))
+  .dependsOn(argon_compiler_core, parser)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-plugins-source",
+  )
+
+lazy val argon_plugins_sourceJVM = argon_plugins_source.jvm
+lazy val argon_plugins_sourceJS = argon_plugins_source.js
+lazy val argon_plugins_sourceNode = argon_plugins_source.node
 
 
 lazy val argon_plugins_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-js"))

@@ -1,4 +1,4 @@
-package dev.argon.compiler.source
+package dev.argon.plugins.source
 
 import dev.argon.compiler.expr.ArgonExprContext
 import dev.argon.compiler.signature.Signature
