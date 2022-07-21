@@ -1,0 +1,18 @@
+{
+  "name": "@argon-lang/runtime",
+  "version": "0.0.0",
+  "description": "Runtime library for Argon",
+  "type": "module",
+  "exports": {
+    "./class": "./lib/class.js",
+    "./trait": "./lib/trait.js",
+    "./trampoline": "./lib/trampoline.js"
+  },
+  "scripts": {
+    "build": "tsc --project tsconfig.json"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "typescript": "^4.7.4"
+  }
+}

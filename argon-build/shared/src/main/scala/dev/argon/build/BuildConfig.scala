@@ -3,7 +3,6 @@ package dev.argon.build
 import dev.argon.util.toml.{Toml, TomlCodec}
 import dev.argon.io.*
 import dev.argon.parser.SyntaxError
-import dev.argon.parser.tubespec.*
 import dev.argon.options.*
 
 import java.nio.charset.CharacterCodingException
@@ -15,7 +14,7 @@ final case class BuildConfig[R, E]
 )
 
 object BuildConfig:
-  given [R, E >: CharacterCodingException | SyntaxError](using ResourceFactory[R, E]): OptionDecoder[R, E, BuildConfig[R, E]] =
+  given [R, E](using ResourceFactory[R, E]): OptionDecoder[R, E, BuildConfig[R, E]] =
     OptionDecoder.derive
 end BuildConfig
 
@@ -27,7 +26,7 @@ final case class TubeOptions[R, E]
 )
 
 object TubeOptions:
-  given [R, E >: CharacterCodingException | SyntaxError](using ResourceFactory[R, E]): OptionDecoder[R, E, TubeOptions[R, E]] =
+  given [R, E](using ResourceFactory[R, E]): OptionDecoder[R, E, TubeOptions[R, E]] =
     OptionDecoder.derive
 end TubeOptions
 

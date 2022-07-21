@@ -553,7 +553,7 @@ lazy val argon_ioNode = argon_io.node
 
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-build"))
-  .dependsOn(util, options, argon_compiler_source, argon_io, parser)
+  .dependsOn(util, options, argon_compiler_core, argon_io)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
