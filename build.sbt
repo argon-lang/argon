@@ -572,5 +572,59 @@ lazy val argon_buildJS = argon_build.js
 lazy val argon_buildNode = argon_build.node
 
 
+lazy val argon_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-platform"))
+  .dependsOn(util, options, argon_compiler_core, argon_io)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-platform",
+  )
+
+lazy val argon_platformJVM = argon_platform.jvm
+lazy val argon_platformJS = argon_platform.js
+lazy val argon_platformNode = argon_platform.node
+
+
+
+lazy val cli = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-cli"))
+  .dependsOn(util, options, argon_compiler_core, argon_io, argon_platform)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+      .settings(
+        Compile / fork := true,
+      )
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+      .settings(
+        scalaJSUseMainModuleInitializer := true,
+      )
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    libraryDependencies += "com.github.scopt" %%% "scopt" % "4.1.0",
+
+    name := "argon-cli",
+  )
+
+lazy val cliJVM = cli.jvm
+lazy val cliNode = cli.node
+
+
 
 
