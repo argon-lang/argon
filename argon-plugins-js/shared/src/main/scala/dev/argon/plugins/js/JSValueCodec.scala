@@ -56,7 +56,7 @@ object JSValueCodec extends Derivation[JSValueCodec]:
   given [B <: Boolean](using TypeTest[Boolean, B]): JSValueCodec[B] with
     override def toJSValue(context: JSContext)(a: B): JSValue = context.fromBoolean(a)
     override def fromJSValue(context: JSContext)(value: JSValue): Either[String, B] =
-      ((value: Any) match {
+      (context.decode(value) match {
         case b: Boolean =>
           b match {
             case b: B => Some(b)
