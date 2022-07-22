@@ -16,7 +16,7 @@ class SourcePlugin extends Plugin[Any, SourceError] {
   override type Options[R, E] = SourceOptions[R, E]
   override type Output[R, E] = SourceOutput[R, E]
 
-  override def optionDecoder[R, E >: SourceError](using ResourceFactory[R, E]): OptionDecoder[R, E, Options[R, E]] =
+  override def optionDecoder[R, E >: SourceError]: OptionDecoder[R, E, Options[R, E]] =
     summon[OptionDecoder[R, E, Options[R, E]]]
 
   override def outputHandler[R, E >: SourceError]: OutputHandler[R, E, Output[R, E]] =

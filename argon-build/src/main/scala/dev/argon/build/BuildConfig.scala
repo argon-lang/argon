@@ -14,7 +14,7 @@ final case class BuildConfig[R, E]
 )
 
 object BuildConfig:
-  given [R, E](using ResourceFactory[R, E]): OptionDecoder[R, E, BuildConfig[R, E]] =
+  given [R, E]: OptionDecoder[R, E, BuildConfig[R, E]] =
     OptionDecoder.derive
 end BuildConfig
 
@@ -26,7 +26,7 @@ final case class TubeOptions[R, E]
 )
 
 object TubeOptions:
-  given [R, E](using ResourceFactory[R, E]): OptionDecoder[R, E, TubeOptions[R, E]] =
+  given [R, E]: OptionDecoder[R, E, TubeOptions[R, E]] =
     OptionDecoder.derive
 end TubeOptions
 

@@ -20,7 +20,7 @@ final case class JSOptions[R, E]
 
 object JSOptions:
 
-  given optionDecoder[R, E >: JSPluginError](using ResourceFactory[R, E]): OptionDecoder[R, E, JSOptions[R, E]] =
+  given optionDecoder[R, E >: JSPluginError]: OptionDecoder[R, E, JSOptions[R, E]] =
     OptionDecoder.derive
 
 end JSOptions

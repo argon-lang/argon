@@ -16,7 +16,7 @@ case class SourceOptions[R, E]
 
 object SourceOptions:
 
-  given optionDecoder[R, E >: CharacterCodingException | SyntaxError](using ResourceFactory[R, E]): OptionDecoder[R, E, SourceOptions[R, E]] =
+  given optionDecoder[R, E >: CharacterCodingException | SyntaxError]: OptionDecoder[R, E, SourceOptions[R, E]] =
     OptionDecoder.derive
 
 end SourceOptions
