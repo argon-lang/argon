@@ -14,10 +14,10 @@ import zio.*
 import zio.stream.*
 
 object SourceTubeLoader extends TubeLoader[SourceOptions, Any, SourceError] {
-  override type LibOptions[R, E] = SourceLibOptions[R, E]
+  override type LibOptions[-R, +E] = SourceLibOptions[R, E]
 
-  override def libOptionDecoder[R, E >: SourceError]: OptionDecoder[R, E, LibOptions[R, E]] =
-    summon[OptionDecoder[R, E, LibOptions[R, E]]]
+  override def libOptionDecoder[E >: SourceError]: OptionDecoder[E, LibOptions[Any, E]] =
+    summon[OptionDecoder[E, LibOptions[Any, E]]]
 
   def load
   (context: Context { type Error >: SourceError })

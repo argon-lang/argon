@@ -9,7 +9,7 @@ import dev.argon.util.toml.{Toml, TomlCodec}
 import java.io.IOException
 import java.nio.charset.CharacterCodingException
 
-final case class JSOptions[R, E]
+final case class JSOptions[-R, +E]
 (
   header: Option[JSProgramResource[R, E]],
   footer: Option[JSProgramResource[R, E]],
@@ -20,7 +20,7 @@ final case class JSOptions[R, E]
 
 object JSOptions:
 
-  given optionDecoder[R, E >: JSPluginError]: OptionDecoder[R, E, JSOptions[R, E]] =
+  given optionDecoder[E >: JSPluginError]: OptionDecoder[E, JSOptions[Any, E]] =
     OptionDecoder.derive
 
 end JSOptions

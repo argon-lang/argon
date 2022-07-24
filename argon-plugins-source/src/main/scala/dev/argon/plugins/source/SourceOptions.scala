@@ -5,11 +5,11 @@ import dev.argon.parser.SyntaxError
 
 import java.nio.charset.CharacterCodingException
 
-final case class SourceOptions[R, E]()
+final case class SourceOptions[-R, +E]()
 
 object SourceOptions:
 
-  given optionDecoder[R, E >: CharacterCodingException | SyntaxError]: OptionDecoder[R, E, SourceOptions[R, E]] =
+  given optionDecoder[E >: CharacterCodingException | SyntaxError]: OptionDecoder[E, SourceOptions[Any, E]] =
     OptionDecoder.derive
 
 end SourceOptions

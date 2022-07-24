@@ -6,7 +6,7 @@ import dev.argon.parser.SyntaxError
 import dev.argon.util.*
 import java.nio.charset.CharacterCodingException
 
-final case class SourceLibOptions[R, E]
+final case class SourceLibOptions[-R, +E]
 (
   name: NonEmptyList[String],
   spec: ArgonTubeSpecResource[R, E],
@@ -16,7 +16,7 @@ final case class SourceLibOptions[R, E]
 
 object SourceLibOptions:
 
-  given optionDecoder[R, E >: CharacterCodingException | SyntaxError]: OptionDecoder[R, E, SourceLibOptions[R, E]] =
+  given optionDecoder[R, E >: CharacterCodingException | SyntaxError]: OptionDecoder[E, SourceLibOptions[Any, E]] =
     OptionDecoder.derive
 
 end SourceLibOptions

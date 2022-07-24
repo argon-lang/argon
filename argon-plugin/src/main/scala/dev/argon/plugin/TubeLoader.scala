@@ -10,8 +10,8 @@ import zio.*
 import java.io.IOException
 
 trait TubeLoader[Options[_, _], -R0, +E0] {
-  type LibOptions[_, _]
-  given libOptionDecoder[R <: R0, E >: E0]: OptionDecoder[R, E, LibOptions[R, E]]
+  type LibOptions[-_, +_]
+  given libOptionDecoder[E >: E0]: OptionDecoder[E, LibOptions[Any, E]]
 
   def load
   (context: Context { type Env <: R0; type Error >: E0 })

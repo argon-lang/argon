@@ -4,7 +4,7 @@ import dev.argon.io.*
 
 import scala.scalajs.js.JavaScriptException
 
-final class PlatformResourceFactory(baseDir: String) extends ResourceFactory[Any, JavaScriptException] {
+final class PlatformResourceFactory(baseDir: String) extends ResourceFactory[JavaScriptException] {
   override def directoryResource(name: String): DirectoryResource[Any, JavaScriptException, BinaryResource] =
     NodeDirectoryResource(name)
 

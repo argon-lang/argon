@@ -10,7 +10,7 @@ import zio.*
 import zio.stm.*
 
 object Compile {
-  def compile[R, E >: BuildError | CompError, RF <: ResourceFactory[R, E]: Tag](buildConfig: Toml, plugins: Map[String, Plugin[R, E]]): ZIO[R & RF, E, Unit] =
+  def compile[E >: BuildError | CompError, RF <: ResourceFactory[E]: Tag, R <: RF](buildConfig: Toml, plugins: Map[String, Plugin[R, E]]): ZIO[R, E, Unit] =
     ZIO.scoped(
       for
         config <- ZIO.fromEither(summon[TomlCodec[BuildConfig]].decode(buildConfig))
@@ -19,7 +19,6 @@ object Compile {
 
 
         runtime <- ZIO.runtime[Any]
-        resFactory <- ZIO.service[RF]
 
         context <- ZIO.succeed {
           new Context with LoadTube {
@@ -45,14 +44,12 @@ object Compile {
                 plugin <- ZIO.fromEither(plugins.get(loaderOptions.plugin).toRight(UnknownPlugin(loaderOptions.plugin)))
                 loader <- ZIO.fromEither(plugin.tubeLoaders.get(loaderOptions.loader).toRight(UnknownTubeLoader(loaderOptions)))
 
-                options <- plugin.optionDecoder[R, E]
+                options <- plugin.optionDecoder[E]
                   .decode[RF](config.plugin.get(loaderOptions.plugin).flatMap(_.options).getOrElse(Toml.Table.empty))
-                  .provideEnvironment(ZEnvironment(resFactory))
                   .mapError(BuildConfigParseError.apply)
 
-                libOptions <- loader.libOptionDecoder[R, E]
+                libOptions <- loader.libOptionDecoder[E]
                   .decode[RF](tubeOptions)
-                  .provideEnvironment(ZEnvironment(resFactory))
                   .mapError(BuildConfigParseError.apply)
 
                 tube <- loader.load(this)(options, libOptions)
@@ -75,7 +72,7 @@ object Compile {
         _ <- ZIO.foreachDiscard(config.plugin) { case (pluginName, pluginConfig) =>
           for
             plugin <- ZIO.fromEither(plugins.get(pluginName).toRight(UnknownPlugin(pluginName)))
-            pluginOptions <- plugin.optionDecoder[R, E].decode(pluginConfig.options.getOrElse(Toml.Table.empty)).mapError(BuildConfigParseError.apply)
+            pluginOptions <- plugin.optionDecoder[E].decode(pluginConfig.options.getOrElse(Toml.Table.empty)).mapError(BuildConfigParseError.apply)
             tubeOutput <- plugin.backend.emitTube(context)(pluginOptions)(tube)
             _ <- handlePluginOutput(Seq(), pluginConfig.output.getOrElse(Toml.Table.empty), tubeOutput, plugin.outputHandler)
           yield ()
