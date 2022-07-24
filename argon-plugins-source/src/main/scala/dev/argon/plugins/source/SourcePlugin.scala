@@ -31,7 +31,7 @@ class SourcePlugin extends Plugin[Any, SourceError] {
       ZIO.succeed(SourceOutput())
   }
 
-  override def tubeLoaders: Seq[TubeLoader[SourceOptions, Any, SourceError]] = Seq(SourceTubeLoader)
+  override def tubeLoaders: Map[String, TubeLoader[SourceOptions, Any, SourceError]] = Map("buildspec" -> SourceTubeLoader)
 
   override def buildOutputExecutor: Option[BuildOutputExecutor[SourceOutput]] = None
 }

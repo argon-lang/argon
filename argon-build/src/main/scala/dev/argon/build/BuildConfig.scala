@@ -7,32 +7,34 @@ import dev.argon.options.*
 
 import java.nio.charset.CharacterCodingException
 
-final case class BuildConfig[R, E]
+final case class BuildConfig
 (
-  tube: TubeOptions[R, E],
-  backend: Map[String, Toml],
-)
+  tube: TubeOptions,
+  plugin: Map[String, PluginOptions],
+  libraries: Seq[LibOptions],
+) derives TomlCodec
 
-object BuildConfig:
-  given [R, E]: OptionDecoder[R, E, BuildConfig[R, E]] =
-    OptionDecoder.derive
-end BuildConfig
-
-final case class TubeOptions[R, E]
+final case class TubeOptions
 (
-  name: String,
-  path: Option[BinaryResource[R, E]],
   loader: Option[TubeLoaderOptions],
-)
+  options: Toml,
+) derives TomlCodec
 
-object TubeOptions:
-  given [R, E]: OptionDecoder[R, E, TubeOptions[R, E]] =
-    OptionDecoder.derive
-end TubeOptions
+final case class LibOptions
+(
+  loader: TubeLoaderOptions,
+  options: Toml,
+) derives TomlCodec
 
 final case class TubeLoaderOptions
 (
   plugin: String,
   loader: String,
+) derives TomlCodec
+
+final case class PluginOptions
+(
+  options: Option[Toml],
+  output: Option[Toml],
 ) derives TomlCodec
 

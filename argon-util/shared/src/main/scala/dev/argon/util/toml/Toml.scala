@@ -17,4 +17,8 @@ object Toml {
     override def encode(a: Toml): Toml = a
     override def decode(toml: Toml): Either[java.lang.String, Toml] = Right(toml)
   end given
+
+  object Table {
+    val empty = Toml.Table(Map.empty)
+  }
 }

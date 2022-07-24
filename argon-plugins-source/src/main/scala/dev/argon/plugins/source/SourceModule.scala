@@ -15,7 +15,6 @@ object SourceModule {
       context: Context,
       currentTube: ArTubeC with HasContext[context.type],
       moduleName: ModuleName,
-      importer: ImporterC with HasContext[context.type],
       moduleFile: ArgonSourceCodeResource[context.Env, context.Error],
     )
     : UIO[ArModuleC with HasContext[context.type]] =
@@ -24,7 +23,7 @@ object SourceModule {
     for {
       exportEntries <-
         moduleFile.parsed
-          .mapAccumZIO[context.Env, context.Error, context.Comp[Imports[context.type]], Option[ModuleElementC[context.type]]](ZIO.succeed(Map.empty))(loadElement(context, currentTube, moduleName, importer))
+          .mapAccumZIO[context.Env, context.Error, context.Comp[Imports[context.type]], Option[ModuleElementC[context.type]]](ZIO.succeed(Map.empty))(loadElement(context, currentTube, moduleName))
           .collect {
             case Some(entry) => entry
           }
@@ -55,7 +54,6 @@ object SourceModule {
       context: Context,
       currentTube: ArTubeC with HasContext[context.type],
       moduleName: ModuleName,
-      importer: ImporterC with HasContext[context.type],
     )
     (
       imports: context.Comp[Imports[context.type]],

@@ -8,23 +8,31 @@ import dev.argon.parser.IdentifierExpr
 import dev.argon.parser.Token.StringToken
 import dev.argon.parser.tubespec.{ModulePatternMapping, ModulePatternSegment}
 import dev.argon.plugin.*
+import dev.argon.options.*
 import dev.argon.util.{*, given}
 import zio.*
 import zio.stream.*
 
 object SourceTubeLoader extends TubeLoader[SourceOptions, Any, SourceError] {
+  override type LibOptions[R, E] = SourceLibOptions[R, E]
+
+  override def libOptionDecoder[R, E >: SourceError]: OptionDecoder[R, E, LibOptions[R, E]] =
+    summon[OptionDecoder[R, E, LibOptions[R, E]]]
+
   def load
   (context: Context { type Error >: SourceError })
-  (importer: ImporterC with HasContext[context.type])
-  (options: SourceOptions[context.Env, context.Error])
+  (
+    options: SourceOptions[context.Env, context.Error],
+    libOptions: SourceLibOptions[context.Env, context.Error],
+  )
   : ZIO[context.Env & Scope, context.Error, ArTubeC with HasContext[context.type]] =
     for
-      mappings <- options.spec.tubeSpec.runCollect
-      sourceCode <- getSourceCode(context)(mappings)(Seq(), options.sources).runCollect
+      mappings <- libOptions.spec.tubeSpec.runCollect
+      sourceCode <- getSourceCode(context)(mappings)(Seq(), libOptions.sources).runCollect
 
-      tubeName = TubeName(options.name)
+      tubeName = TubeName(libOptions.name)
 
-      tube <- SourceTube.make(context, tubeName, importer, sourceCode.toMap)
+      tube <- SourceTube.make(context, tubeName, sourceCode.toMap)
     yield tube
 
 

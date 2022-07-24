@@ -117,7 +117,7 @@ object TomlCodec extends Derivation[TomlCodec] {
 
   given [A: TomlCodec]: TomlCodec[Option[A]] with
     override def encode(a: Option[A]): Toml =
-      a.fold(Toml.Table(Map.empty))(summon[TomlCodec[A]].encode)
+      a.fold(Toml.Table.empty)(summon[TomlCodec[A]].encode)
 
     override def decode(toml: Toml): Either[String, Option[A]] =
       summon[TomlCodec[A]].decode(toml).map(Some.apply)

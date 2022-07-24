@@ -1,12 +1,14 @@
 package dev.argon.compiler
 
 import dev.argon.compiler.module.ModuleName
+import dev.argon.compiler.tube.TubeName
 
 trait DiagnosticMessage
 trait DiagnosticError
 trait DiagnosticSource
 
 object DiagnosticError {
+  final case class UnknownTube(tubeName: TubeName) extends DiagnosticError
   final case class UnknownModuleException(moduleName: ModuleName) extends DiagnosticError
   final case class InvalidTopLevelStatement(stmt: dev.argon.parser.Stmt) extends DiagnosticError
   final case class InvalidTypeForFunction() extends DiagnosticError
