@@ -1,6 +1,6 @@
 package dev.argon.build
 
-import dev.argon.io.ResourceFactory
+import dev.argon.io.{BinaryResource, DirectoryResource, ResourceFactory, ResourceWriter}
 import dev.argon.compiler.*
 import dev.argon.compiler.tube.{ArTubeC, TubeName}
 import dev.argon.options.{OptionDecoder, OutputHandler, OutputInfo}
@@ -10,7 +10,15 @@ import zio.*
 import zio.stm.*
 
 object Compile {
-  def compile[E >: BuildError | CompError, RF <: ResourceFactory[E]: Tag, R <: RF](buildConfig: Toml, plugins: Map[String, Plugin[R, E]]): ZIO[R, E, Unit] =
+  def compile[
+    E >: BuildError | CompError,
+    RF <: ResourceFactory[E]: Tag,
+    RW <: ResourceWriter[E]: Tag,
+    R <: RF & RW
+  ](
+       buildConfig: Toml,
+       plugins: Map[String, Plugin[R, E]],
+  ): ZIO[R, E, Unit] =
     ZIO.scoped(
       for
         config <- ZIO.fromEither(summon[TomlCodec[BuildConfig]].decode(buildConfig))
@@ -74,7 +82,7 @@ object Compile {
             plugin <- ZIO.fromEither(plugins.get(pluginName).toRight(UnknownPlugin(pluginName)))
             pluginOptions <- plugin.optionDecoder[E].decode(pluginConfig.options.getOrElse(Toml.Table.empty)).mapError(BuildConfigParseError.apply)
             tubeOutput <- plugin.backend.emitTube(context)(pluginOptions)(tube)
-            _ <- handlePluginOutput(Seq(), pluginConfig.output.getOrElse(Toml.Table.empty), tubeOutput, plugin.outputHandler)
+            _ <- handlePluginOutput(pluginName, Seq(), pluginConfig.output.getOrElse(Toml.Table.empty), tubeOutput, plugin.outputHandler)
           yield ()
         }
 
@@ -91,8 +99,24 @@ object Compile {
 
   end LoadTube
 
-  private def handlePluginOutput[R, E, Output](prefix: Seq[String], outputOptions: Toml, output: Output, handler: OutputHandler[R, E, Output]): ZIO[R, E, Unit] =
-    ???
+  private def handlePluginOutput[E >: BuildError, RW <: ResourceWriter[E]: Tag, R <: RW, Output](pluginName: String, prefix: Seq[String], outputOptions: Toml, output: Output, handler: OutputHandler[R, E, Output]): ZIO[R, E, Unit] =
+    outputOptions match
+      case Toml.Table(map) =>
+        ZIO.foreachDiscard(map) { case (name, value) =>
+          handlePluginOutput(pluginName, prefix :+ name, value, output, handler)
+        }
+
+      case Toml.String(value) =>
+        for
+          outputInfo <- ZIO.fromEither(handler.options.get(prefix).toRight(UnknownOutput(pluginName, prefix)))
+          _ <- outputInfo.getValue(output) match {
+            case resource: BinaryResource[R, E] => ZIO.serviceWith[RW](_.write(value, resource))
+            case resource: DirectoryResource[R, E, BinaryResource] => ZIO.serviceWith[RW](_.write(value, resource))
+          }
+        yield ()
+
+      case _ => ZIO.fail(BuildConfigParseError("Invalid type for output option. Expected string or table."))
+    end match
 
 
 }

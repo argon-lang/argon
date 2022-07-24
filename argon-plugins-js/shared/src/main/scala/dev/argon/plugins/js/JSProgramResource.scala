@@ -7,7 +7,7 @@ import zio.stream.*
 
 import java.nio.charset.CharacterCodingException
 
-trait JSProgramResource[-R, +E] extends TextResource[R, E] {
+abstract class JSProgramResource[-R, +E] extends TextResource[R, E] {
   def asModule: ZIO[R, E, Program]
 }
 

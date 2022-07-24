@@ -6,7 +6,7 @@ import zio.stream.*
 import java.io.IOException
 import java.nio.charset.CharacterCodingException
 
-trait Resource[-R, +E] {
+abstract class Resource[-R, +E] {
   def fileName: Option[String]
 }
 

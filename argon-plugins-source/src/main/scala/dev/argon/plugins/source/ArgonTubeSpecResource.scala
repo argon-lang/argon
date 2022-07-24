@@ -8,7 +8,7 @@ import zio.stream.*
 
 import java.nio.charset.CharacterCodingException
 
-trait ArgonTubeSpecResource[-R, +E] extends Resource[R, E]:
+abstract class ArgonTubeSpecResource[-R, +E] extends Resource[R, E]:
   def tubeSpec: ZStream[R, E, ModulePatternMapping]
 end ArgonTubeSpecResource
 

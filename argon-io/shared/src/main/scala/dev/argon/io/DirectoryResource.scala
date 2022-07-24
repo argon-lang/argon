@@ -3,7 +3,7 @@ package dev.argon.io
 import zio.stream.*
 
 
-trait DirectoryResource[-R, +E, +FileResource[-R2, +E2] <: Resource[R2, E2]] extends Resource[R, E] {
+abstract class DirectoryResource[-R, +E, +FileResource[-R2, +E2] <: Resource[R2, E2]] extends Resource[R, E] {
   def contents: ZStream[R, E, DirectoryEntry[R, E, FileResource]]
 }
 

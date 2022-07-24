@@ -9,7 +9,7 @@ import zio.stream.*
 import java.io.IOException
 import java.nio.charset.CharacterCodingException
 
-trait ArgonSourceCodeResource[-R, +E] extends Resource[R, E]:
+abstract class ArgonSourceCodeResource[-R, +E] extends Resource[R, E]:
   def parsed: ZStream[R, E, Stmt]
 end ArgonSourceCodeResource
 
