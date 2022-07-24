@@ -10,6 +10,7 @@ import dev.argon.parser.tubespec.{ModulePatternMapping, ModulePatternSegment}
 import dev.argon.plugin.*
 import dev.argon.options.*
 import dev.argon.util.{*, given}
+import java.io.IOException
 import zio.*
 import zio.stream.*
 

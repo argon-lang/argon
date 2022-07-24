@@ -6,7 +6,7 @@ import zio.stream.ZStream
 import java.io.IOException
 import java.nio.file.{Files, Path}
 
-final class PlatformResourceFactory(baseDir: Path) extends ResourceFactory[IOException] {
+private[platform] final class PlatformResourceFactory(baseDir: Path) extends ResourceFactory {
   override def directoryResource(name: String): DirectoryResource[Any, IOException, BinaryResource] =
     PathDirectoryResource(baseDir.resolve(name))
 

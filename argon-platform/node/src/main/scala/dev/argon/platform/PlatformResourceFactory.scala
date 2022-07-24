@@ -2,12 +2,12 @@ package dev.argon.platform
 
 import dev.argon.io.*
 
-import scala.scalajs.js.JavaScriptException
+import java.io.IOException
 
-final class PlatformResourceFactory(baseDir: String) extends ResourceFactory[JavaScriptException] {
-  override def directoryResource(name: String): DirectoryResource[Any, JavaScriptException, BinaryResource] =
+private[platform] final class PlatformResourceFactory(baseDir: String) extends ResourceFactory {
+  override def directoryResource(name: String): DirectoryResource[Any, IOException, BinaryResource] =
     NodeDirectoryResource(name)
 
-  override def binaryResource(name: String): BinaryResource[Any, JavaScriptException] =
+  override def binaryResource(name: String): BinaryResource[Any, IOException] =
     NodeBinaryResource(name)
 }

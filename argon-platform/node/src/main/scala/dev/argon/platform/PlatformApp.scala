@@ -2,7 +2,7 @@ package dev.argon.platform
 
 import zio.*
 
-abstract class PlatformApp extends ZIOApp {
+private[platform] abstract class PlatformApp extends ZIOApp {
   final override type Environment = Any
 
   final override def environmentTag: EnvironmentTag[Environment] = summon[EnvironmentTag[Environment]]

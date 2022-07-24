@@ -5,6 +5,7 @@ import dev.argon.options.OptionDecoder
 import dev.argon.parser.SyntaxError
 import dev.argon.util.*
 import java.nio.charset.CharacterCodingException
+import java.io.IOException
 
 final case class SourceLibOptions[-R, +E]
 (
@@ -16,7 +17,7 @@ final case class SourceLibOptions[-R, +E]
 
 object SourceLibOptions:
 
-  given optionDecoder[R, E >: CharacterCodingException | SyntaxError]: OptionDecoder[E, SourceLibOptions[Any, E]] =
+  given optionDecoder[R, E >: CharacterCodingException | SyntaxError | IOException]: OptionDecoder[E, SourceLibOptions[Any, E]] =
     OptionDecoder.derive
 
 end SourceLibOptions

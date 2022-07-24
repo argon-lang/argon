@@ -2,7 +2,7 @@ package dev.argon.platform
 
 import zio.*
 
-object NodeSystemLayer {
+private[platform] object NodeSystemLayer {
 
   def live: ZLayer[Any, Nothing, System] =
     ZLayer.succeed(new System {

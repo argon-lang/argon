@@ -10,14 +10,9 @@ import zio.*
 import zio.stm.*
 
 object Compile {
-  def compile[
-    E >: BuildError | CompError,
-    RF <: ResourceFactory[E]: Tag,
-    RW <: ResourceWriter[E]: Tag,
-    R <: RF & RW
-  ](
-       buildConfig: Toml,
-       plugins: Map[String, Plugin[R, E]],
+  def compile[R <: ResourceFactory & ResourceWriter, E >: BuildError | CompError](
+    buildConfig: Toml,
+    plugins: Map[String, Plugin[R, E]],
   ): ZIO[R, E, Unit] =
     ZIO.scoped(
       for
@@ -53,11 +48,11 @@ object Compile {
                 loader <- ZIO.fromEither(plugin.tubeLoaders.get(loaderOptions.loader).toRight(UnknownTubeLoader(loaderOptions)))
 
                 options <- plugin.optionDecoder[E]
-                  .decode[RF](config.plugin.get(loaderOptions.plugin).flatMap(_.options).getOrElse(Toml.Table.empty))
+                  .decode(config.plugin.get(loaderOptions.plugin).flatMap(_.options).getOrElse(Toml.Table.empty))
                   .mapError(BuildConfigParseError.apply)
 
                 libOptions <- loader.libOptionDecoder[E]
-                  .decode[RF](tubeOptions)
+                  .decode(tubeOptions)
                   .mapError(BuildConfigParseError.apply)
 
                 tube <- loader.load(this)(options, libOptions)
@@ -99,7 +94,7 @@ object Compile {
 
   end LoadTube
 
-  private def handlePluginOutput[E >: BuildError, RW <: ResourceWriter[E]: Tag, R <: RW, Output](pluginName: String, prefix: Seq[String], outputOptions: Toml, output: Output, handler: OutputHandler[R, E, Output]): ZIO[R, E, Unit] =
+  private def handlePluginOutput[R <: ResourceWriter, E >: BuildError, Output](pluginName: String, prefix: Seq[String], outputOptions: Toml, output: Output, handler: OutputHandler[R, E, Output]): ZIO[R, E, Unit] =
     outputOptions match
       case Toml.Table(map) =>
         ZIO.foreachDiscard(map) { case (name, value) =>
@@ -110,8 +105,8 @@ object Compile {
         for
           outputInfo <- ZIO.fromEither(handler.options.get(prefix).toRight(UnknownOutput(pluginName, prefix)))
           _ <- outputInfo.getValue(output) match {
-            case resource: BinaryResource[R, E] => ZIO.serviceWith[RW](_.write(value, resource))
-            case resource: DirectoryResource[R, E, BinaryResource] => ZIO.serviceWith[RW](_.write(value, resource))
+            case resource: BinaryResource[R, E] => ZIO.serviceWith[ResourceWriter](_.write(value, resource))
+            case resource: DirectoryResource[R, E, BinaryResource] => ZIO.serviceWith[ResourceWriter](_.write(value, resource))
           }
         yield ()
 

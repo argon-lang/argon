@@ -6,11 +6,12 @@ import dev.argon.io.ResourceFactory
 import dev.argon.options.{OptionDecoder, OutputHandler}
 import dev.argon.parser.SyntaxError
 import dev.argon.plugin.*
+import java.io.IOException
 import zio.*
 
 import java.nio.charset.CharacterCodingException
 
-type SourceError = CharacterCodingException | SyntaxError | CompError
+type SourceError = CharacterCodingException | SyntaxError | CompError | IOException
 
 class SourcePlugin extends Plugin[Any, SourceError] {
   override type Options[-R, +E] = SourceOptions[R, E]

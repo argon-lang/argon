@@ -5,7 +5,7 @@ import scala.scalajs.js.annotation.JSImport
 
 @js.native
 @JSImport("node:process", JSImport.Default)
-object NodeProcess extends js.Object {
+private[platform] object NodeProcess extends js.Object {
   var exitCode: Int = js.native
   val argv: js.Array[String] = js.native
   val env: js.Dictionary[String] = js.native
