@@ -1,6 +1,8 @@
 package dev.argon.compiler.definitions
 
-sealed trait AccessModifier
+import dev.argon.compiler.DiagnosticError
+
+sealed trait AccessModifier derives CanEqual
 sealed trait AccessModifierGlobal extends AccessModifier
 
 object AccessModifier {
@@ -10,4 +12,6 @@ object AccessModifier {
   case object TubeOrProtected extends AccessModifier
   case object TubeAndProtected extends AccessModifier
   case object Protected extends AccessModifier
+  case object Private extends AccessModifier
 }
+

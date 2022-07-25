@@ -2,6 +2,7 @@ package dev.argon.compiler
 
 import dev.argon.compiler.module.ModuleName
 import dev.argon.compiler.tube.TubeName
+import dev.argon.compiler.definitions.*
 
 trait DiagnosticMessage
 trait DiagnosticError
@@ -20,7 +21,8 @@ object DiagnosticError {
   final case class AmbiguousOverload() extends DiagnosticError
   final case class CanNotMutate() extends DiagnosticError
   final case class TypeError() extends DiagnosticError
-
+  final case class InvalidAccessModifierCombination() extends DiagnosticError
+  final case class InvalidGlobalAccessModifier(accessModifier: AccessModifier) extends DiagnosticError
 
   final case class SpecMultiPartGlobUsedWithPrefixSuffix() extends DiagnosticError
   final case class SpecFileNameTemplateMustBeIdentifier() extends DiagnosticError

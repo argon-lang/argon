@@ -1,6 +1,6 @@
 package dev.argon.parser
 
-sealed trait Modifier
+sealed trait Modifier derives CanEqual
 sealed trait AccessModifier extends Modifier
 sealed trait OverridabilityModifier extends Modifier
 sealed trait ExtendabilityModifier extends Modifier
