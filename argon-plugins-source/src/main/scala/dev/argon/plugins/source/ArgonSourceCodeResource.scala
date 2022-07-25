@@ -24,7 +24,7 @@ object ArgonSourceCodeResource:
               .asText
               .mapChunks { strings => strings.flatMap(_.toCharArray) }
               .toChannel
-              >>> ArgonSourceParser.parse[E]
+              >>> ArgonSourceParser.parse[E](fileName)
             ).toStream
 
         override def fileName: Option[String] = resource.fileName

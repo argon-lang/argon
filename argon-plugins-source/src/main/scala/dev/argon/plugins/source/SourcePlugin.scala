@@ -13,7 +13,7 @@ import java.nio.charset.CharacterCodingException
 
 type SourceError = CharacterCodingException | SyntaxError | CompError | IOException
 
-class SourcePlugin extends Plugin[Any, SourceError] {
+object SourcePlugin extends Plugin[Any, SourceError] {
   override type Options[-R, +E] = SourceOptions[R, E]
   override type Output[-R, +E] = SourceOutput[R, E]
 

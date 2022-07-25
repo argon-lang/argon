@@ -29,7 +29,9 @@ object SourceTubeLoader extends TubeLoader[SourceOptions, Any, SourceError] {
   : ZIO[context.Env & Scope, context.Error, ArTubeC with HasContext[context.type]] =
     for
       mappings <- libOptions.spec.tubeSpec.runCollect
+      _ <- ZIO.logTrace("Getting source code files")
       sourceCode <- getSourceCode(context)(mappings)(Seq(), libOptions.sources).runCollect
+      _ <- ZIO.logDebug(s"Found ${sourceCode.size} source files")
 
       tubeName = TubeName(libOptions.name)
 
@@ -55,7 +57,9 @@ object SourceTubeLoader extends TubeLoader[SourceOptions, Any, SourceError] {
             .asSomeError
             .flatMap {
               case Some(modulePath) => ZIO.succeed(modulePath -> resource)
-              case None => ZIO.fail(None)
+              case None =>
+                ZIO.logDebug(s"Skipping input file ${path.mkString("/")} as it was not mapped to a module") *>
+                ZIO.fail(None)
             }
         )
     }

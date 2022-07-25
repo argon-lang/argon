@@ -7,7 +7,7 @@ import zio.IO
 
 import java.nio.charset.CharacterCodingException
 
-final class JSPlugin extends Plugin[Any, JSPluginError] {
+object JSPlugin extends Plugin[Any, JSPluginError] {
   override type Options[-R, +E] = JSOptions[R, E]
   override type Output[-R, +E] = JSOutput[R, E]
 

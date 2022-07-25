@@ -1,0 +1,21 @@
+{
+  "tube": {
+    "options": {
+      "name": ["Argon", "Core"],
+      "spec": "Argon.Core.tubespec",
+      "sources": "src"
+    }
+  },
+  "plugin": {
+    "js": {
+      "options": {
+        "extern": ["js/extern.js"]
+      },
+      "output": {
+        "package": "bin/js"
+      }
+    }
+  },
+
+  "libraries": []
+}

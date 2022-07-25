@@ -137,11 +137,11 @@ object ArgonParser {
 
   }
 
-  private[parser] object ArgonGrammarFactory extends GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] {
+  private[parser] final class ArgonGrammarFactory(fileName: Option[String]) extends GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] {
 
     private implicit val errorFactory: Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] =
       new Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] {
-        override def createError(error: GrammarError[Token, TokenCategory]): SyntaxError = SyntaxError.ParserError(error)
+        override def createError(error: GrammarError[Token, TokenCategory]): SyntaxError = SyntaxError.ParserError(fileName, error)
 
         override def errorEndLocationOrder: Ordering[SyntaxError] =
           (a, b) => implicitly[Ordering[FilePosition]].compare(a.location.end, b.location.end)
@@ -201,6 +201,7 @@ object ArgonParser {
             matchToken(OP_BOOLNOT) |
             matchToken(OP_ADD) |
             matchToken(OP_SUB) |
+            matchToken(OP_STAR) |
             matchToken(OP_MUL) |
             matchTokenFactory(DivisionOperator) |
             matchToken(OP_BITAND) |
@@ -888,7 +889,7 @@ object ArgonParser {
 
         // TubeSpec
         case Rule.ModulePatternMappingStmt =>
-          rule(Rule.NewLines) ++ rule(Rule.ModulePatternExpr) ++! rule(Rule.NewLines) ++ matchToken(KW_AS) ++ matchTokenFactory(StringToken) ++ rule(Rule.NewLines) --> {
+          rule(Rule.NewLines) ++ rule(Rule.ModulePatternExpr) ++! rule(Rule.NewLines) ++ matchToken(OP_LAMBDA) ++ matchTokenFactory(StringToken) ++ rule(Rule.NewLines) --> {
             case (_, module, _, _, fileNameTemplate, _) => ModulePatternMapping(module, fileNameTemplate)
           }
 
@@ -940,12 +941,10 @@ object ArgonParser {
 
   }
 
-  private[impl] def grammarFactory: GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] = ArgonGrammarFactory
+  def parse[E](fileName: Option[String]): ZChannel[Any, E, Chunk[WithSource[Token]], FilePosition, E | SyntaxError, Chunk[Stmt], FilePosition] =
+    Grammar.parseAll(ArgonGrammarFactory(fileName))(Rule.PaddedStatement)
 
-  def parse[E]: ZChannel[Any, E, Chunk[WithSource[Token]], FilePosition, E | SyntaxError, Chunk[Stmt], FilePosition] =
-    Grammar.parseAll(ArgonGrammarFactory)(Rule.PaddedStatement)
-
-  def parseTubeSpec[E]: ZChannel[Any, E, Chunk[WithSource[Token]], FilePosition, E | SyntaxError, Chunk[ModulePatternMapping], FilePosition] =
-    Grammar.parseAll(ArgonGrammarFactory)(Rule.ModulePatternMappingStmt)
+  def parseTubeSpec[E](fileName: Option[String]): ZChannel[Any, E, Chunk[WithSource[Token]], FilePosition, E | SyntaxError, Chunk[ModulePatternMapping], FilePosition] =
+    Grammar.parseAll(ArgonGrammarFactory(fileName))(Rule.ModulePatternMappingStmt)
 
 }

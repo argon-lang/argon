@@ -11,5 +11,6 @@ private[platform] final class PlatformResourceFactory(baseDir: Path) extends Res
     PathDirectoryResource(baseDir.resolve(name))
 
 
-  override def binaryResource(name: String): BinaryResource[Any, IOException] = ???
+  override def binaryResource(name: String): BinaryResource[Any, IOException] =
+    PathBinaryResource(baseDir.resolve(name))
 }

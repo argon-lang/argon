@@ -9,3 +9,6 @@ metals.sbt
 
 *.semanticdb
 
+/libraries/*/bin/
+node_modules/
+

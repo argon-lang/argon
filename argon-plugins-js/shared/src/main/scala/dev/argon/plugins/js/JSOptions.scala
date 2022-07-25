@@ -64,6 +64,7 @@ object JSTubeOptionsMap:
           Left("Expected table")
       }
 
+    override def defaultValue: Option[JSTubeOptionsMap] = Some(JSTubeOptionsMap(Map.empty))
   end given
 end JSTubeOptionsMap
 

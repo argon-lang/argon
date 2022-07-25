@@ -30,13 +30,13 @@ object Lexer {
     case object NonEmptyToken extends LexerRuleName[Token]
   }
 
-  private[Lexer] object LexerGrammarFactory extends Grammar.GrammarFactory[String, SyntaxError, Rule.LexerRuleName] {
+  private[Lexer] final class LexerGrammarFactory(fileName: Option[String]) extends Grammar.GrammarFactory[String, SyntaxError, Rule.LexerRuleName] {
 
     implicit val errorFactory: Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] =
       new Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] {
 
         override def createError(error: GrammarError[String, CharacterCategory]): SyntaxError =
-          SyntaxError.LexerError(error)
+          SyntaxError.LexerError(fileName, error)
 
         override def errorEndLocationOrder: Ordering[SyntaxError] =
           (a, b) => implicitly[Ordering[FilePosition]].compare(a.location.end, b.location.end)
@@ -141,11 +141,11 @@ object Lexer {
                   rule(Rule.Whitespace).* ++ rule(Rule.NonEmptyToken) --> { case (_, token) => token }
 
                 protected override val innerGrammar: Grammar[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName, Expr] =
-                  ArgonParser.ArgonGrammarFactory.rule(ArgonParser.Rule.Expression)
+                  ArgonParser.ArgonGrammarFactory(fileName).rule(ArgonParser.Rule.Expression)
 
                 protected override val innerFactory
                   : Grammar.GrammarFactory[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName] =
-                  ArgonParser.ArgonGrammarFactory
+                  ArgonParser.ArgonGrammarFactory(fileName)
 
                 override def stopToken(token: Token): Boolean =
                   token match {
@@ -154,10 +154,10 @@ object Lexer {
                   }
 
                 override def unexpectedEndOfFileError(pos: FilePosition): SyntaxError =
-                  SyntaxError.LexerError(GrammarError.UnexpectedEndOfFile(CharacterCategory.CloseCurly, pos))
+                  SyntaxError.LexerError(fileName, GrammarError.UnexpectedEndOfFile(CharacterCategory.CloseCurly, pos))
 
                 override def unexpectedToken(token: WithSource[Token]): SyntaxError =
-                  SyntaxError.ParserError(GrammarError.UnexpectedToken(TokenCategory.OP_CLOSECURLY, token))
+                  SyntaxError.ParserError(fileName, GrammarError.UnexpectedToken(TokenCategory.OP_CLOSECURLY, token))
               }
 
             interpStart ++! (formatStr.observeSource.? ++ subExprStart ++ innerExprGrammar.observeSource) --> {
@@ -381,6 +381,7 @@ object Lexer {
             op(equal ++ greaterThan, Token.OP_LAMBDA) |
             op(plus ++ plus, Token.OP_CONCAT) |
             op(dot ++ dot, Token.OP_DOTDOT) |
+            op(star ++ star, Token.OP_STARSTAR) |
             op(equal, Token.OP_EQUALS) |
             op(token(CharacterCategory.NotEquals, "≠"), Token.OP_NOTEQUALS) |
             op(token(CharacterCategory.LessThanEq, "≤"), Token.OP_LESSTHANEQ) |
@@ -423,9 +424,9 @@ object Lexer {
 
   }
 
-  def lex[E]
+  def lex[E](fileName: Option[String])
     : ZChannel[Any, E, Chunk[WithSource[String]], FilePosition, E | SyntaxError, Chunk[WithSource[Token]], FilePosition] =
-    Grammar.parseAll(LexerGrammarFactory)(Rule.ResultToken)
+    Grammar.parseAll(LexerGrammarFactory(fileName))(Rule.ResultToken)
       .pipeTo(ZChannelUtil.mapElements(_.flatten))
 
 }

@@ -1,14 +1,17 @@
 package dev.argon.cli
 
+import dev.argon.io.{BinaryResourceDecoder, JsonResource}
 import dev.argon.platform.*
+import dev.argon.util.toml.Toml
+import dev.argon.build.Compile
 import zio.*
-import java.io.IOException
 
-import scopt.{OParser, OEffect}
+import java.io.IOException
+import scopt.{OEffect, OParser}
 
 object Program extends PlatformApp {
-  def runApp: ZIO[Environment & ZIOAppArgs, Any, ExitCode] =
-    val builder = OParser.builder[Config]
+  def runApp: ZIO[Environment & ZIOAppArgs, Error, ExitCode] =
+    val builder = OParser.builder[Options]
     val parser =
       import builder.*
       OParser.sequence(
@@ -36,14 +39,14 @@ object Program extends PlatformApp {
     end parser
 
     ZIOAppArgs.getArgs.flatMap { args =>
-      val (config, effects) = OParser.runParser(parser, args, Config())
+      val (options, effects) = OParser.runParser(parser, args, Options())
       ZIO.foreach(effects)(runOEffect)
         .foldZIO(
           failure = {
             case ex: IOException => ZIO.fail(ex)
             case exitCode: ExitCode => ZIO.succeed(exitCode)
           },
-          success = _ => config match {
+          success = _ => options match {
             case Some(config) => runCommand(config)
             case None => ZIO.succeed(ExitCode.failure)
           }
@@ -61,8 +64,8 @@ object Program extends PlatformApp {
       case OEffect.Terminate(Right(_)) => ZIO.fail(ExitCode.success)
     end match
 
-  private def runCommand(config: Config): ZIO[Environment, Any, ExitCode] =
-    config.command match
+  private def runCommand(options: Options): ZIO[Environment, Error, ExitCode] =
+    options.command match
       case None =>
         for
           _ <- Console.printLineError("No command specified")
@@ -70,12 +73,18 @@ object Program extends PlatformApp {
 
       case Some(Command.Compile) =>
         for
-          _ <- Console.printLineError("Compile command not implemented")
-        yield ExitCode.failure
+          configRes <- ZIO.serviceWith[PathUtil](_.binaryResource(options.buildSpec.get))
+          config <- summon[BinaryResourceDecoder[JsonResource, Environment, Error]].decode(configRes).decode[Toml]
+          baseDir <- ZIO.serviceWithZIO[PathUtil](_.dirname(options.buildSpec.get))
+          layer <- ZIO.serviceWith[PathUtil](_.resourceLayer(baseDir))
+          _ <- Compile.compile(config, plugins).provideSomeLayer[Environment](layer)
+        yield ExitCode.success
+
 
       case Some(Command.Build) =>
         for
           _ <- Console.printLineError("Build command not implemented")
         yield ExitCode.failure
+    end match
 
 }

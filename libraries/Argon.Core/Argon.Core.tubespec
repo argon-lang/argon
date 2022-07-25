@@ -1,0 +1,4 @@
+
+
+** as path => "#{path}/index.argon"
+** as path / * as name => "#{path}/#{name}.argon"

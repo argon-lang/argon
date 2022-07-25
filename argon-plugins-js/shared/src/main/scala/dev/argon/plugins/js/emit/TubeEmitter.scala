@@ -43,16 +43,19 @@ private[js] trait TubeEmitter extends EmitTubeCommon {
     def directory(files: UStream[ModuleFile]): DirectoryResource[R, E, JSProgramResource] =
       new DirectoryResource[R, E, JSProgramResource] with Resource.WithoutFileName {
         override def contents: ZStream[R, E, DirectoryEntry[R, E, JSProgramResource]] =
-          files.groupBy {
-            case ModuleFile(head +: tail, file, path) => ZIO.succeed((Some(head), ModuleFile(tail, file, path)))
-            case file => ZIO.succeed((None, file))
-          } {
-            case (Some(name), files) =>
-              ZStream(DirectoryEntry.Subdirectory(name, directory(files)))
+          val tmp: ZStream[R, E, DirectoryEntry[R, E, JSProgramResource]] =
+            files.groupBy {
+              case ModuleFile(head +: tail, file, path) => ZIO.succeed((Some(head), ModuleFile(tail, file, path)))
+              case file => ZIO.succeed((None, file))
+            } {
+              case (Some(name), files) =>
+                ZStream(DirectoryEntry.Subdirectory(name, directory(files)))
 
-            case (None, files) =>
-              files.map { case ModuleFile(_, file, path) => DirectoryEntry.File(file, f(path)) }
-          }
+              case (None, files) =>
+                files.map { case ModuleFile(_, file, path) => DirectoryEntry.File(file, f(path)) }
+            }
+
+          tmp
       }
 
     directory(ZStream.fromIterable(tube.modulePaths.iterator.map(getModuleFileName(tube)).toSeq))

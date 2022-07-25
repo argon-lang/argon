@@ -1,0 +1,10 @@
+namespace Ar
+
+public class Bool <: Object
+	public def this.to_s(): String = extern Bool_to_s
+end
+
+public def (!) (a: Bool): Bool = extern boolNot
+
+public def (=) (a: Bool) (b: Bool): Bool = extern boolEqual
+public def (!=) (a: Bool) (b: Bool): Bool = !(a = b)

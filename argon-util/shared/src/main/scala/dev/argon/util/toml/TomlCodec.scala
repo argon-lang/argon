@@ -166,6 +166,19 @@ object TomlCodec extends Derivation[TomlCodec] {
       }
   end given
 
+  given TomlCodec[Boolean] with
+    override def encode(a: Boolean): Toml =
+      Toml.Boolean(a)
+
+    override def decode(toml: Toml): Either[String, Boolean] =
+      toml match {
+        case Toml.Boolean(value) =>
+          Right(value)
+
+        case _ => Left("Expected string")
+      }
+  end given
+
   given TomlCodec[OffsetDateTime] with
     override def encode(a: OffsetDateTime): Toml =
       Toml.OffsetDateTime(a)

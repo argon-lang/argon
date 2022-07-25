@@ -23,7 +23,7 @@ object ArgonTubeSpecResource:
               .asText
               .mapChunks { strings => strings.flatMap(_.toCharArray) }
               .toChannel
-              >>> ArgonSourceParser.parseTubeSpec[E]
+              >>> ArgonSourceParser.parseTubeSpec[E](fileName)
             ).toStream
 
         override def fileName: Option[String] = resource.fileName

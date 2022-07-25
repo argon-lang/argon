@@ -2,7 +2,7 @@ package dev.argon.cli
 
 import dev.argon.platform.*
 
-final case class Config
+final case class Options
 (
   command: Option[Command] = None,
   buildSpec: Option[FilePath] = None,

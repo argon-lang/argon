@@ -34,6 +34,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
+    "dev.zio" %%% "zio-json" % "0.3.0-RC10",
     "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.1.4",
 
 
@@ -71,7 +72,7 @@ lazy val commonJVMSettings = sharedJVMNodeSettings ++ Seq(
 
   libraryDependencies ++= Seq(
     "commons-io" % "commons-io" % "2.11.0",
-    "com.fasterxml.jackson.dataformat" % "jackson-dataformat-toml" % "2.13.3",
+    "dev.zio" %% "zio-logging" % "2.0.1",
   ),
 
   Test / fork := true,
@@ -573,7 +574,7 @@ lazy val argon_buildNode = argon_build.node
 
 
 lazy val argon_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-platform"))
-  .dependsOn(util, options, argon_compiler_core, argon_io)
+  .dependsOn(util, options, argon_compiler_core, argon_io, argon_build, argon_plugins_source, argon_plugins_js)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -599,7 +600,7 @@ lazy val argon_platformNode = argon_platform.node
 
 
 lazy val cli = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-cli"))
-  .dependsOn(util, options, argon_compiler_core, argon_io, argon_platform)
+  .dependsOn(util, argon_platform, argon_build)
   .jvmConfigure(
     _.settings(commonJVMSettings)
       .settings(

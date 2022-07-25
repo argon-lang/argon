@@ -9,14 +9,17 @@ import dev.argon.util.toml.{Toml, TomlCodec}
 import zio.*
 import zio.stm.*
 
+import java.io.IOException
+
 object Compile {
-  def compile[R <: ResourceFactory & ResourceWriter, E >: BuildError | CompError](
+  def compile[R <: ResourceFactory & ResourceWriter, E >: BuildError | CompError | IOException](
     buildConfig: Toml,
     plugins: Map[String, Plugin[R, E]],
   ): ZIO[R, E, Unit] =
     ZIO.scoped(
       for
         config <- ZIO.fromEither(summon[TomlCodec[BuildConfig]].decode(buildConfig))
+          .tapError { error => Console.printLineError(error).orDie }
           .mapError(BuildConfigParseError.apply)
         tubeOptions = config.tube
 
@@ -72,6 +75,7 @@ object Compile {
           context.loadTube(lib.loader)(lib.options)
         }
 
+        _ <- ZIO.logTrace(s"Writing output")
         _ <- ZIO.foreachDiscard(config.plugin) { case (pluginName, pluginConfig) =>
           for
             plugin <- ZIO.fromEither(plugins.get(pluginName).toRight(UnknownPlugin(pluginName)))
@@ -94,7 +98,7 @@ object Compile {
 
   end LoadTube
 
-  private def handlePluginOutput[R <: ResourceWriter, E >: BuildError, Output](pluginName: String, prefix: Seq[String], outputOptions: Toml, output: Output, handler: OutputHandler[R, E, Output]): ZIO[R, E, Unit] =
+  private def handlePluginOutput[R <: ResourceWriter, E >: BuildError | IOException, Output](pluginName: String, prefix: Seq[String], outputOptions: Toml, output: Output, handler: OutputHandler[R, E, Output]): ZIO[R, E, Unit] =
     outputOptions match
       case Toml.Table(map) =>
         ZIO.foreachDiscard(map) { case (name, value) =>
@@ -103,10 +107,11 @@ object Compile {
 
       case Toml.String(value) =>
         for
+          _ <- ZIO.logTrace(s"Writing output: ${prefix.mkString(".")} to $value")
           outputInfo <- ZIO.fromEither(handler.options.get(prefix).toRight(UnknownOutput(pluginName, prefix)))
           _ <- outputInfo.getValue(output) match {
-            case resource: BinaryResource[R, E] => ZIO.serviceWith[ResourceWriter](_.write(value, resource))
-            case resource: DirectoryResource[R, E, BinaryResource] => ZIO.serviceWith[ResourceWriter](_.write(value, resource))
+            case resource: BinaryResource[R, E] => ZIO.serviceWithZIO[ResourceWriter](_.write(value, resource))
+            case resource: DirectoryResource[R, E, BinaryResource] => ZIO.serviceWithZIO[ResourceWriter](_.write(value, resource))
           }
         yield ()
 
