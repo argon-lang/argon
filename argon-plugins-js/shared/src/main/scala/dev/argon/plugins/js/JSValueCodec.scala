@@ -128,7 +128,7 @@ object JSValueCodec extends Derivation[JSValueCodec]:
             summon[JSValueCodec[B]].fromJSValue(context)(value) match {
               case Right(b) => Right(b)
               case Left(error2) =>
-                Left(s"Alternatives failed:\n$error\n$error2")
+                Left(s"Alternatives failed:\nValue: $value\nAttempted ${summon[JSValueCodec[A]]}, got $error\nAttempted ${summon[JSValueCodec[B]]}, got $error2")
             }
         }
     }
@@ -160,9 +160,11 @@ object JSValueCodec extends Derivation[JSValueCodec]:
               }
             }.left.map { _.mkString("\n") }
 
-          case _ =>
+          case obj =>
             Left("Invalid object")
         }
+
+      override def toString: String = s"JSValueCodec for ${ctx.typeInfo.full}"
     }
 
   override def split[T](ctx: SealedTrait[JSValueCodec, T]): JSValueCodec[T] =
@@ -178,13 +180,15 @@ object JSValueCodec extends Derivation[JSValueCodec]:
                 case Some(typeName: String) => Right(typeName)
                 case _ => Left(s"Could not get type specifier from $map")
               }
-              subtype <- ctx.subtypes.find(_.typeInfo.short == typeName).toRight { println(ctx.subtypes.toSeq); s"Could not find specified type: $typeName" }
+              subtype <- ctx.subtypes.find(_.typeInfo.short == typeName).toRight { s"Could not find specified type: $typeName, known sub types: ${ctx.subtypes.toSeq}" }
               value <- subtype.typeclass.fromJSValue(context)(value)
             } yield value
 
-          case _ =>
+          case obj =>
             Left("Invalid object")
         }
+
+      override def toString: String = s"JSValueCodec for ${ctx.typeInfo.full}"
     }
 
 end JSValueCodec

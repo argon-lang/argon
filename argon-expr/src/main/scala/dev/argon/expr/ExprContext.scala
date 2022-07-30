@@ -3,6 +3,8 @@ package dev.argon.expr
 import scala.reflect.TypeTest
 import dev.argon.util.{*, given}
 
+import java.util.Objects
+
 trait ExprContext {
 
   type TClass
@@ -29,6 +31,15 @@ trait ExprContext {
     override def toString: String = s"$constructor($args)"
 
     def getArgs(ctor: constructor.type): ctor.ConstructorArgs = args
+
+    override def hashCode(): Int =
+      Objects.hash(constructor, args)
+
+    override def equals(obj: Any): Boolean =
+      obj match
+        case other: ArExpr[_] => other.constructor.equals(constructor) && other.args.equals(args)
+        case _ => false
+      end match
   }
 
   enum WrapExpr {

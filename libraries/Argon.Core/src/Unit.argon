@@ -1,4 +1,0 @@
-namespace Ar
-
-public class Unit <: Object
-end

@@ -111,7 +111,7 @@ final case class BlockExpr
 
 final case class BoolValueExpr(value: Boolean) extends Expr
 final case class ClassConstructorExpr(classExpr: WithSource[Expr]) extends Expr
-final case class DotExpr(left: WithSource[Expr], right: IdentifierExpr) extends Expr
+final case class DotExpr(left: WithSource[Expr], right: WithSource[IdentifierExpr]) extends Expr
 final case class ExternExpr(specifier: String) extends Expr
 
 final case class FunctionCallExpr(func: WithSource[Expr], listType: FunctionParameterListType, arg: WithSource[Expr])
@@ -158,7 +158,7 @@ final case class BindingPattern(name: Option[IdentifierExpr]) extends Pattern
 final case class TypeTestPattern(name: Option[IdentifierExpr], patternType: WithSource[Expr]) extends Pattern
 
 final case class FunctionParameter
-  (paramType: Option[WithSource[Expr]], subTypeOf: Option[WithSource[Expr]], name: IdentifierExpr)
+  (paramType: WithSource[Expr], name: IdentifierExpr)
 
 final case class FunctionParameterList
   (listType: FunctionParameterListType, isErased: Boolean, parameters: Vector[WithSource[FunctionParameter]])
@@ -306,3 +306,5 @@ object ImportPathSegment {
   final case class Imported(id: IdentifierExpr) extends End
   case object Wildcard extends End
 }
+
+final case class ExportStmt(fromImport: ImportStmt) extends Stmt

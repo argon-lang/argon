@@ -3,29 +3,28 @@ package dev.argon.plugins.source
 import dev.argon.compiler.*
 import dev.argon.compiler.module.*
 import dev.argon.compiler.tube.{ArTubeC, TubeName}
-import dev.argon.io.{BinaryResource, DirectoryEntry, DirectoryResource}
+import dev.argon.io.{BinaryResource, DirectoryEntry, DirectoryResource, ResourceFactory}
 import dev.argon.parser.IdentifierExpr
 import dev.argon.parser.Token.StringToken
 import dev.argon.parser.tubespec.{ModulePatternMapping, ModulePatternSegment}
 import dev.argon.plugin.*
 import dev.argon.options.*
+import dev.argon.util.toml.Toml
 import dev.argon.util.{*, given}
+
 import java.io.IOException
 import zio.*
 import zio.stream.*
 
-object SourceTubeLoader extends TubeLoader[SourceOptions, Any, SourceError] {
-  override type LibOptions[-R, +E] = SourceLibOptions[R, E]
+object SourceTubeLoader extends TubeLoader[Any, SourceError] {
+  override type LibOptions[-R, +E, ContextOptions] = SourceLibOptions[R, E, ContextOptions]
 
-  override def libOptionDecoder[E >: SourceError]: OptionDecoder[E, LibOptions[Any, E]] =
-    summon[OptionDecoder[E, LibOptions[Any, E]]]
+  override def libOptionDecoder[E >: SourceError, ContextOptions](using OptionDecoder[E, ContextOptions]): OptionDecoder[E, LibOptions[Any, E, ContextOptions]] =
+    summon[OptionDecoder[E, LibOptions[Any, E, ContextOptions]]]
 
   def load
   (context: Context { type Error >: SourceError })
-  (
-    options: SourceOptions[context.Env, context.Error],
-    libOptions: SourceLibOptions[context.Env, context.Error],
-  )
+  (libOptions: SourceLibOptions[context.Env, context.Error, context.Options])
   : ZIO[context.Env & Scope, context.Error, ArTubeC with HasContext[context.type]] =
     for
       mappings <- libOptions.spec.tubeSpec.runCollect
@@ -35,7 +34,7 @@ object SourceTubeLoader extends TubeLoader[SourceOptions, Any, SourceError] {
 
       tubeName = TubeName(libOptions.name)
 
-      tube <- SourceTube.make(context, tubeName, sourceCode.toMap)
+      tube <- SourceTube.make(context, tubeName, libOptions.plugin, sourceCode.toMap)
     yield tube
 
 
@@ -56,9 +55,11 @@ object SourceTubeLoader extends TubeLoader[SourceOptions, Any, SourceError] {
           ZIO.fromEither(getModulePath((path :+ name).toList)(patterns))
             .asSomeError
             .flatMap {
-              case Some(modulePath) => ZIO.succeed(modulePath -> resource)
+              case Some(modulePath) =>
+                ZIO.logTrace(s"Found input file ${(path :+ name).mkString("/")}. Mapped to module ${modulePath.ids.mkString(".")}") *>
+                ZIO.succeed(modulePath -> resource)
               case None =>
-                ZIO.logDebug(s"Skipping input file ${path.mkString("/")} as it was not mapped to a module") *>
+                ZIO.logDebug(s"Skipping input file ${(path :+ name).mkString("/")} as it was not mapped to a module") *>
                 ZIO.fail(None)
             }
         )
@@ -87,10 +88,12 @@ object SourceTubeLoader extends TubeLoader[SourceOptions, Any, SourceError] {
 
   private def buildTemplate(prefix: String, template: List[StringToken.Part]): Either[CompError, List[FileNameTemplate]] =
     template match {
-      case Nil => Right(Nil)
+      case Nil if prefix.isEmpty => Right(Nil)
+
+      case Nil => Right(prefix.split("/", -1).map(FileNameTemplate.Literal.apply).toList)
 
       case StringToken.StringPart(WithSource(s, _)) :: tail =>
-        (prefix + s).split("/").toSeq match {
+        (prefix + s).split("/", -1).toSeq match {
           case init :+ last =>
             val initItems = init
               .iterator
@@ -114,16 +117,21 @@ object SourceTubeLoader extends TubeLoader[SourceOptions, Any, SourceError] {
       case (expr: StringToken.ExprPart) ::
             StringToken.StringPart(WithSource(suffix, suffixLocation)) ::
             tail =>
-        suffix.split("/").toList match {
+        suffix.split("/", -1).toList match {
           case suffixHead :: (suffixTail @ _ :: _) =>
             for
               current <- buildTemplateExpr(prefix, expr, suffixHead)
-              next <- buildTemplate("", StringToken.StringPart(WithSource(suffixTail.mkString("/"), suffixLocation)) :: tail)
+              next <- buildTemplate(suffixTail.mkString("/"), tail)
             yield current :: next
 
           case _ =>
-            if tail.nonEmpty then Left(DiagnosticError.SpecOneVariablePerTemplateSegment())
-            else buildTemplate(suffix, List(expr))
+            if tail.nonEmpty then
+              Left(DiagnosticError.SpecOneVariablePerTemplateSegment())
+            else
+              for
+                current <- buildTemplateExpr(prefix, expr, suffix)
+              yield List(current)
+
 
         }
 
@@ -174,9 +182,10 @@ object SourceTubeLoader extends TubeLoader[SourceOptions, Any, SourceError] {
                         case Nil => Right(None)
                       }
 
-                    case value => value
+                    case value =>
+                      value
                   }
-                matchGlob(Seq(pathHead))(pathTail)
+                matchGlob(Seq())(path)
               end if
             else
               if pathHead.length > prefix.length + suffix.length && pathHead.startsWith(prefix) && pathHead.endsWith(suffix) then

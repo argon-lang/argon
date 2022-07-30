@@ -24,7 +24,7 @@ object OutputHandler:
                 .map { case (subOptName, subOpt) =>
                   val info =
                     new OutputInfo[R, E, T]:
-                      override def getValue(options: T): BinaryResource[R, E] | DirectoryResource[R, E, BinaryResource] =
+                      override def getValue(options: T): FileSystemResource[R, E] =
                         subOpt.getValue(param.deref(options))
                     end new
 
@@ -43,7 +43,7 @@ object OutputHandler:
   given binaryResourceOutputHandler[R, E, Res <: BinaryResource[R, E]]: OutputHandler[R, E, Res] with
     override lazy val options: Map[Seq[String], OutputInfo[R, E, Res]] =
       Map(Seq() -> new OutputInfo[R, E, Res] {
-        override def getValue(options: Res): BinaryResource[R, E] | DirectoryResource[R, E, BinaryResource] =
+        override def getValue(options: Res): FileSystemResource[R, E] =
           options
       })
   end binaryResourceOutputHandler
@@ -51,7 +51,7 @@ object OutputHandler:
   given directoryResourceOutputHandler[R, E, FileRes[-R2, +E2] <: BinaryResource[R2, E2], Res <: DirectoryResource[R, E, FileRes]]: OutputHandler[R, E, Res] with
     override lazy val options: Map[Seq[String], OutputInfo[R, E, Res]] =
       Map(Seq() -> new OutputInfo[R, E, Res] {
-        override def getValue(options: Res): BinaryResource[R, E] | DirectoryResource[R, E, BinaryResource] =
+        override def getValue(options: Res): FileSystemResource[R, E] =
           options
       })
   end directoryResourceOutputHandler

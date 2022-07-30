@@ -3,9 +3,11 @@ package dev.argon.compiler.definitions
 import dev.argon.compiler.module.ArModuleC
 import dev.argon.compiler.*
 import dev.argon.parser.IdentifierExpr
+import dev.argon.util.UniqueIdentifier
 
-trait Definition {
+trait Definition extends DeclarationMode {
   val owner: Any
+  val id: UniqueIdentifier
 }
 
 final case class OwnedByModuleC[TContext <: Context]

@@ -91,7 +91,7 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
   protected override def invalidExpr: ZIO[R, String, Nothing] = ZIO.fail("Invalid expression")
   protected override def invalidPredicateExpr: ZIO[R, String, Nothing] = ZIO.fail("Invalid predicate expression")
 
-  protected override val evaluator: Evaluator[R, String] { val exprContext: TestResolver.this.exprContext.type } =
+  protected override lazy val evaluator: Evaluator[R, String] { val exprContext: TestResolver.this.exprContext.type } =
     new TestEvaluator[R, String]
 
 }

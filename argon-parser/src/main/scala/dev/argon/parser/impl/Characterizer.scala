@@ -20,13 +20,13 @@ object Characterizer {
       case (None, cp) => (Some(codePointToString(cp)), None)
     }
 
-  private def withSource[E]: ZChannel[Any, E, Chunk[String], Any, E, Chunk[WithSource[String]], FilePosition] =
+  private def withSource[E](fileName: Option[String]): ZChannel[Any, E, Chunk[String], Any, E, Chunk[WithSource[String]], FilePosition] =
     ZChannelUtil.mapAccum[E, String, WithSource[String], FilePosition](FilePosition(1, 1)) { (pos, item) =>
       val nextPos =
         if item == "\n" then FilePosition(pos.line + 1, 1)
         else pos.copy(position = pos.position + 1)
 
-      val newItem = WithSource(item, SourceLocation(pos, nextPos))
+      val newItem = WithSource(item, SourceLocation(fileName, pos, nextPos))
       (nextPos, newItem)
     }
 
@@ -38,7 +38,7 @@ object Characterizer {
 
   private def codePointToString(cp: Int): String = new String(Character.toChars(cp))
 
-  def characterize[E]: ZChannel[Any, E, Chunk[Char], Any, E, Chunk[WithSource[String]], FilePosition] =
-    toCodePoints.pipeTo(toGraphemes).pipeTo(withSource)
+  def characterize[E](fileName: Option[String]): ZChannel[Any, E, Chunk[Char], Any, E, Chunk[WithSource[String]], FilePosition] =
+    toCodePoints.pipeTo(toGraphemes).pipeTo(withSource(fileName))
 
 }

@@ -1,6 +1,7 @@
 package dev.argon.plugins.js.emit
 
 import dev.argon.compiler.signature.*
+import dev.argon.compiler.definitions.HasDeclaration
 import dev.argon.util.*
 import dev.argon.parser.IdentifierExpr
 import zio.*
@@ -8,7 +9,47 @@ import zio.stm.*
 
 trait EmitModuleCommon extends EmitTubeCommon {
   val imports: TMap[ImportSpecifier, String]
-  val module: ArModule
+  val module: ArModule with HasDeclaration[true]
+
+
+  protected def getEscapedName(name: IdentifierExpr): String =
+    name match
+      case IdentifierExpr.Named(name) =>
+        def isValidStart(ch: Int): Boolean =
+          ch == '_' || ch == '$' || Character.isAlphabetic(ch)
+
+        def isValidPart(ch: Int): Boolean =
+          isValidStart(ch) || Character.isDigit(ch)
+
+        val sb = new StringBuilder()
+        var i = 0
+        while i < name.length do
+          val ch = name.codePointAt(i)
+
+          if ch == '$' then
+            sb.append("$$")
+          else if isValidPart(ch) then
+            if i == 0 && !isValidStart(ch) then
+              sb.append("$b")
+            end if
+            sb.append(ch)
+          else if Character.charCount(ch) == 1 then
+            sb.append(String.format("$u%04X", ch))
+          else
+            sb.append(String.format("$U%04X", ch))
+          end if
+
+          i += Character.charCount(ch)
+        end while
+
+        sb.toString()
+
+
+      case IdentifierExpr.OperatorIdentifier(op) => op.symbol
+      case IdentifierExpr.Extension(inner) => "$e" + getEscapedName(inner)
+      case IdentifierExpr.Inverse(inner) => "$i" + getEscapedName(inner)
+      case IdentifierExpr.Update(inner) => "$m" + getEscapedName(inner)
+    end match
 
   // Escape Sequences
   // $a - argument to a type
@@ -27,46 +68,7 @@ trait EmitModuleCommon extends EmitTubeCommon {
   // $v - indicates a signature without a result type
   // $z - indicates a tuple type will follow
   // $_ - indicates an erased type
-  protected def getOverloadExportName(name: IdentifierExpr, signature: ErasedSignature): String =
-    def namePart(name: IdentifierExpr): String =
-      name match
-        case IdentifierExpr.Named(name) =>
-          def isValidStart(ch: Int): Boolean =
-            ch == '_' || ch == '$' || Character.isAlphabetic(ch)
-
-          def isValidPart(ch: Int): Boolean =
-            isValidStart(ch) || Character.isDigit(ch)
-
-          val sb = new StringBuilder()
-          var i = 0
-          while i < name.length do
-            val ch = name.codePointAt(i)
-
-            if ch == '$' then
-              sb.append("$$")
-            else if isValidPart(ch) then
-              if i == 0 && !isValidStart(ch) then
-                sb.append("$b")
-              end if
-              sb.append(ch)
-            else if Character.charCount(ch) == 1 then
-              sb.append(String.format("$u%04X", ch))
-            else
-              sb.append(String.format("$U%04X", ch))
-            end if
-
-            i += Character.charCount(ch)
-          end while
-
-          sb.toString()
-
-
-        case IdentifierExpr.OperatorIdentifier(op) => op.symbol
-        case IdentifierExpr.Extension(inner) => "$e" + namePart(inner)
-        case IdentifierExpr.Inverse(inner) => "$i" + namePart(inner)
-        case IdentifierExpr.Update(inner) => "$m" + namePart(inner)
-      end match
-
+  protected def getOverloadExportName(name: Option[IdentifierExpr], signature: ErasedSignature): String =
     def sigTypePart(t: ErasedSignatureType): String =
       t match
         case ErasedSignatureType.Class(classImport, args) => "$c" + importSpecifierPart(classImport) + argParts(args)
@@ -77,8 +79,8 @@ trait EmitModuleCommon extends EmitTubeCommon {
       end match
 
     def importSpecifierPart(specifier: ImportSpecifier): String =
-      specifier.tube.name.toList.map { part => "$d" + namePart(IdentifierExpr.Named(part)) }.mkString +
-        specifier.module.ids.map { part => "$g" + namePart(IdentifierExpr.Named(part)) }.mkString +
+      specifier.tube.name.toList.map { part => "$d" + getEscapedName(IdentifierExpr.Named(part)) }.mkString +
+        specifier.module.ids.map { part => "$g" + getEscapedName(IdentifierExpr.Named(part)) }.mkString +
         getOverloadExportName(specifier.name, specifier.signature)
 
     def argParts(args: Seq[ErasedSignatureType]): String =
@@ -87,10 +89,10 @@ trait EmitModuleCommon extends EmitTubeCommon {
     val sigPart =
       signature match
         case ErasedSignatureWithResult(params, result) => params.map { param => "$p" + sigTypePart(param) }.mkString + "$r" + sigTypePart(result)
-        case ErasedSignatureNoParams(params) => params.map { param => "$p" + sigTypePart(param) }.mkString + "$v"
+        case ErasedSignatureNoResult(params) => params.map { param => "$p" + sigTypePart(param) }.mkString + "$v"
       end match
 
-    namePart(name) + sigPart
+    name.fold("$_")(getEscapedName) + sigPart
   end getOverloadExportName
 
   protected def getImportName(specifier: ImportSpecifier): UIO[String] =
@@ -103,4 +105,7 @@ trait EmitModuleCommon extends EmitTubeCommon {
           _ <- imports.put(specifier, name)
         yield name
     }.commit
+
+
+  protected val runtimeImportName: String = "argonRuntime"
 }

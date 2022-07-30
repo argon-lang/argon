@@ -1,19 +1,26 @@
 {
+  "plugins": [ "source", "js" ],
+
   "tube": {
+    "loader": {
+      "plugin": "source",
+      "name": "buildspec"
+    },
     "options": {
       "name": ["Argon", "Core"],
       "spec": "Argon.Core.tubespec",
-      "sources": "src"
+      "sources": "src",
+      "plugin": {
+        "js": {
+          "extern": ["js/extern.js"]
+        }
+      }
     }
   },
-  "plugin": {
+
+  "output": {
     "js": {
-      "options": {
-        "extern": ["js/extern.js"]
-      },
-      "output": {
-        "package": "bin/js"
-      }
+      "package": "bin/js"
     }
   },
 

@@ -10,12 +10,14 @@ trait UsingContext {
 
   protected type ArTube = ArTubeC with HasContext[context.type]
   protected type ArModule = ArModuleC with HasContext[context.type]
-  protected type ModuleElement = ModuleElementC[context.type]
+  protected type ModuleElement[IsDeclaration <: Boolean] = ModuleElementC[context.type, IsDeclaration]
   protected type ArClass = ArClassC with HasContext[context.type]
   protected type ArTrait = ArTraitC with HasContext[context.type]
   protected type ArFunc = ArFuncC with HasContext[context.type]
   protected type ArMethod = ArMethodC with HasContext[context.type]
   protected type ClassConstructor = ClassConstructorC with HasContext[context.type]
+
+  protected type MethodImplementation = MethodImplementationC with HasContext[context.type]
 
   protected type OwnedByModule = OwnedByModuleC[context.type]
   protected type OwnedByClass[+ClassOwner] = OwnedByClassC[context.type, ClassOwner]

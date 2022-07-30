@@ -6,7 +6,7 @@ import dev.argon.util.UniqueIdentifier
 import zio.*
 import zio.stream.{Stream, ZStream}
 
-abstract class ImplicitResolver[R, E] {
+abstract class ImplicitResolver[-R, +E] {
 
   val exprContext: ExprContext
   import exprContext.*
@@ -48,7 +48,7 @@ abstract class ImplicitResolver[R, E] {
   protected def invalidExpr: ZIO[R, E, Nothing]
   protected def invalidPredicateExpr: ZIO[R, E, Nothing]
 
-  protected val evaluator: Evaluator[R, E] { val exprContext: ImplicitResolver.this.exprContext.type }
+  protected lazy val evaluator: Evaluator[R, E] { val exprContext: ImplicitResolver.this.exprContext.type }
 
   object ExprPrologSyntax extends PrologSyntax {
     override type TVariable = THole

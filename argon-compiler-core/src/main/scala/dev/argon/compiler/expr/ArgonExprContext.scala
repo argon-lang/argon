@@ -6,6 +6,8 @@ import dev.argon.expr.*
 import dev.argon.util.{*, given}
 import dev.argon.parser.IdentifierExpr
 
+import java.util.Objects
+
 abstract class ArgonExprContext extends ExprContext with UsingContext {
   override type TClass = ArClass
   override type TTrait = ArTrait
@@ -33,6 +35,7 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
     val varType: WrapExpr
     def name: Option[IdentifierExpr]
     def isMutable: Boolean
+    def isErased: Boolean
   }
 
   final class LocalVariable
@@ -42,6 +45,8 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
       override val name: Option[IdentifierExpr],
       override val isMutable: Boolean,
     ) extends Variable {
+
+    override def isErased: Boolean = false
 
     override def equals(obj: Any): Boolean =
       obj match {
@@ -53,13 +58,14 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
   }
 
   final class InstanceVariable
-    (
-      val method: ArMethod,
-      override val varType: WrapExpr,
-      override val name: Option[IdentifierExpr],
-    ) extends Variable {
+  (
+    val method: ArMethod,
+    override val varType: WrapExpr,
+    override val name: Option[IdentifierExpr],
+  ) extends Variable {
 
     override def isMutable: Boolean = false
+    override def isErased: Boolean = false
 
     override def equals(obj: Any): Boolean =
       obj match {
@@ -70,6 +76,26 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
     override def hashCode(): Int = method.hashCode()
   }
 
+  final class MemberVariable
+  (
+    val ownerClass: ArClass,
+    override val varType: WrapExpr,
+    override val name: Some[IdentifierExpr],
+  ) extends Variable {
+
+    override def isMutable: Boolean = false
+    override def isErased: Boolean = false
+
+    override def equals(obj: Any): Boolean =
+      obj match {
+        case other: MemberVariable => other.ownerClass == ownerClass && other.name == name
+        case _ => false
+      }
+
+    override def hashCode(): Int =
+      Objects.hash(ownerClass, name)
+  }
+
   type ParameterVariableOwner = ParameterVariableOwnerC[context.type]
 
   final class ParameterVariable
@@ -77,6 +103,7 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
       val owner: ParameterVariableOwner,
       val parameterIndex: Int,
       override val varType: WrapExpr,
+      override val isErased: Boolean,
     ) extends Variable {
 
     override def name: Option[IdentifierExpr] = None
@@ -104,7 +131,7 @@ object ArgonExprContext {
       ec2: ArgonExprContext with HasContext[context.type],
     )
     (
-      f: ec1.THole => F[ec2.THole]
+      f: ec1.THole => F[ec2.WrapExpr]
     )
     (
       e: ec1.WrapExpr
@@ -112,7 +139,7 @@ object ArgonExprContext {
     : F[ec2.WrapExpr] =
     e match {
       case ec1.WrapExpr.OfExpr(expr) => convertArExpr(context)(ec1, ec2)(f)(expr).map(ec2.WrapExpr.OfExpr.apply)
-      case ec1.WrapExpr.OfHole(hole) => f(hole).map(ec2.WrapExpr.OfHole.apply)
+      case ec1.WrapExpr.OfHole(hole) => f(hole)
     }
 
   def convertArExpr[F[+_]: Monad]
@@ -124,7 +151,7 @@ object ArgonExprContext {
       ec2: ArgonExprContext with HasContext[context.type],
     )
     (
-      f: ec1.THole => F[ec2.THole]
+      f: ec1.THole => F[ec2.WrapExpr]
     )
     (
       e: ec1.ArExpr[ec1.ExprConstructor]
@@ -328,7 +355,7 @@ object ArgonExprContext {
       ec2: ArgonExprContext with HasContext[context.type],
     )
     (
-      f: ec1.THole => F[ec2.THole]
+      f: ec1.THole => F[ec2.WrapExpr]
     )
     (
       e: ec1.ArExpr[ec1.ExprConstructor.ClassType]
@@ -347,7 +374,7 @@ object ArgonExprContext {
       ec2: ArgonExprContext with HasContext[context.type],
     )
     (
-      f: ec1.THole => F[ec2.THole]
+      f: ec1.THole => F[ec2.WrapExpr]
     )
     (
       e: ec1.ArExpr[ec1.ExprConstructor.TraitType]
@@ -366,7 +393,7 @@ object ArgonExprContext {
       ec2: ArgonExprContext with HasContext[context.type],
     )
     (
-      f: ec1.THole => F[ec2.THole]
+      f: ec1.THole => F[ec2.WrapExpr]
     )
     (
       variable: ec1.Variable
@@ -381,11 +408,15 @@ object ArgonExprContext {
           varType2 <- convertWrapExpr(context)(ec1, ec2)(f)(variable.varType)
         } yield ec2.InstanceVariable(variable.method, varType2, variable.name)
 
+      case variable: ec1.MemberVariable =>
+        for {
+          varType2 <- convertWrapExpr(context)(ec1, ec2)(f)(variable.varType)
+        } yield ec2.MemberVariable(variable.ownerClass, varType2, variable.name)
+
       case variable: ec1.ParameterVariable =>
         for {
           varType2 <- convertWrapExpr(context)(ec1, ec2)(f)(variable.varType)
-        } yield ec2.ParameterVariable(variable.owner, variable.parameterIndex, varType2)
-
+        } yield ec2.ParameterVariable(variable.owner, variable.parameterIndex, varType2, variable.isErased)
     }
 
   def convertLocalVariable[F[+_]: Monad]
@@ -397,7 +428,7 @@ object ArgonExprContext {
       ec2: ArgonExprContext with HasContext[context.type],
     )
     (
-      f: ec1.THole => F[ec2.THole]
+      f: ec1.THole => F[ec2.WrapExpr]
     )
     (
       variable: ec1.LocalVariable
@@ -416,7 +447,7 @@ object ArgonExprContext {
       ec2: ArgonExprContext with HasContext[context.type],
     )
     (
-      f: ec1.THole => F[ec2.THole]
+      f: ec1.THole => F[ec2.WrapExpr]
     )
     (
       e: ec1.PatternExpr

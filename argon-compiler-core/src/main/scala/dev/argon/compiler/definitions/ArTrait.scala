@@ -1,6 +1,7 @@
 package dev.argon.compiler.definitions
 
 import dev.argon.compiler.*
+import dev.argon.compiler.module.ArModuleC
 import dev.argon.util.UniqueIdentifier
 import dev.argon.compiler.signature.Signature
 import dev.argon.parser.IdentifierExpr
@@ -8,10 +9,12 @@ import dev.argon.parser.IdentifierExpr
 abstract class ArTraitC extends Definition with UsingContext derives CanEqual {
   import context.ExprContext.*
 
+  override val owner: ArTraitC.Ownership[context.type]
+
   val id: UniqueIdentifier
   def signature: Comp[Signature[WrapExpr, TraitResult]]
-  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByTrait[owner.type]]]]]
-  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByTraitStatic[owner.type]]]]]
+  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[IsDeclaration] with HasOwner[OwnedByTrait[owner.type]]]]]
+  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[IsDeclaration] with HasOwner[OwnedByTraitStatic[owner.type]]]]]
 
   type TraitResult = (WrapExpr, Seq[ArExpr[ExprConstructor.TraitType]])
 
@@ -22,4 +25,11 @@ abstract class ArTraitC extends Definition with UsingContext derives CanEqual {
     }
 
   final override def hashCode(): Int = id.hashCode
+}
+
+object ArTraitC {
+  type Ownership[TContext <: Context] = OwnedByModuleC[TContext]
+
+  def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC with HasContext[TContext] =
+    owner.module
 }

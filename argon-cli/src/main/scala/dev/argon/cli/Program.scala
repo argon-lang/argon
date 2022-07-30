@@ -9,6 +9,8 @@ import zio.*
 import java.io.IOException
 import scopt.{OEffect, OParser}
 
+import java.util.concurrent.TimeUnit
+
 object Program extends PlatformApp {
   def runApp: ZIO[Environment & ZIOAppArgs, Error, ExitCode] =
     val builder = OParser.builder[Options]
@@ -47,7 +49,16 @@ object Program extends PlatformApp {
             case exitCode: ExitCode => ZIO.succeed(exitCode)
           },
           success = _ => options match {
-            case Some(config) => runCommand(config)
+            case Some(config) =>
+              runCommand(config)
+//              for
+//                fiber <- runCommand(config).fork
+//                _ <- Clock.sleep(Duration.fromSeconds(10))
+//                trace <- fiber.trace
+//                _ <- Console.printLineError(trace)
+//                res <- fiber.join
+//              yield res
+
             case None => ZIO.succeed(ExitCode.failure)
           }
         )

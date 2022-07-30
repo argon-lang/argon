@@ -9,12 +9,12 @@ import zio.stream.*
 object ArgonSourceParser {
 
   def parse[E >: SyntaxError](fileName: Option[String]): ZChannel[Any, E, Chunk[Char], Any, E, Chunk[Stmt], Any] =
-    Characterizer.characterize
+    Characterizer.characterize(fileName)
       .pipeTo(Lexer.lex(fileName))
       .pipeTo(ArgonParser.parse(fileName))
 
   def parseTubeSpec[E >: SyntaxError](fileName: Option[String]): ZChannel[Any, E, Chunk[Char], Any, E, Chunk[ModulePatternMapping], Any] =
-    Characterizer.characterize
+    Characterizer.characterize(fileName)
       .pipeTo(Lexer.lex(fileName))
       .pipeTo(ArgonParser.parseTubeSpec(fileName))
 

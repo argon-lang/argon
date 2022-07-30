@@ -17,13 +17,13 @@ object GrammarError {
     override def location: SourceLocation = token.location
   }
 
-  final case class UnexpectedEndOfFile[TTokenCategory](expectedCategory: TTokenCategory, position: FilePosition)
+  final case class UnexpectedEndOfFile[TTokenCategory](expectedCategory: TTokenCategory, fileName: Option[String], position: FilePosition)
       extends GrammarError[Nothing, TTokenCategory] {
-    override def location: SourceLocation = SourceLocation(position, FilePosition(position.line, position.position + 1))
+    override def location: SourceLocation = SourceLocation(fileName, position, FilePosition(position.line, position.position + 1))
   }
 
-  final case class InfiniteRecursion(position: FilePosition) extends GrammarError[Nothing, Nothing] {
-    override def location: SourceLocation = SourceLocation(position, FilePosition(position.line, position.position + 1))
+  final case class InfiniteRecursion(fileName: Option[String], position: FilePosition) extends GrammarError[Nothing, Nothing] {
+    override def location: SourceLocation = SourceLocation(fileName, position, FilePosition(position.line, position.position + 1))
   }
 
 }

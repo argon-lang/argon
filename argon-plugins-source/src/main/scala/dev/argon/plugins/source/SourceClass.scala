@@ -2,6 +2,7 @@ package dev.argon.plugins.source
 
 import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
+import dev.argon.compiler.expr.*
 import dev.argon.util.*
 import dev.argon.compiler.signature.Signature
 import dev.argon.parser
@@ -11,14 +12,16 @@ import scala.reflect.TypeTest
 
 object SourceClass {
 
-  def make[TOwner](ctx: Context)(imports: ctx.Comp[Imports[ctx.type]])(classOwner: TOwner)(stmt: ClassDeclarationStmt)
-    : ctx.Comp[ArClassC with HasContext[ctx.type] with HasOwner[TOwner]] =
-    val imports2 = imports
+  def make[TOwner]
+  (ctx: Context)
+  (exprConverter2: ExpressionConverter with HasContext[ctx.type])
+  (outerEnv: exprConverter2.Env)
+  (classOwner: TOwner & ArClassC.Ownership[ctx.type])
+  (stmt: ClassDeclarationStmt)
+    : ctx.Comp[ArClassC with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[TOwner]] =
     for {
       traitId <- UniqueIdentifier.make
-      exprConverter2 <- ExpressionConverter.make(ctx)
 
-      outerEnvCell <- MemoCell.make[ctx.Env, ctx.Error, exprConverter2.Env]
       innerEnvCell <- MemoCell.make[ctx.Env, ctx.Error, exprConverter2.Env]
       sigCell <-
         MemoCell.make[ctx.Env, ctx.Error, Signature[
@@ -31,10 +34,10 @@ object SourceClass {
         ]]
       methodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
-          with HasContext[ctx.type] with HasOwner[OwnedByClassC[ctx.type, classOwner.type]]]]]
+          with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[OwnedByClassC[ctx.type, classOwner.type]]]]]
       staticMethodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
-          with HasContext[ctx.type] with HasOwner[OwnedByClassStaticC[ctx.type, classOwner.type]]]]]
+          with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[OwnedByClassStaticC[ctx.type, classOwner.type]]]]]
       ctorsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ClassConstructorC with HasContext[ctx.type]]]
 
     } yield new ArClassC with MethodCreationHelper {
@@ -42,23 +45,26 @@ object SourceClass {
       override val context: ctx.type = ctx
       override val id: UniqueIdentifier = traitId
 
+      override type IsDeclaration = true
+
       protected override val exprConverter: exprConverter2.type = exprConverter2
 
       import context.ExprContext.{WrapExpr, ArExpr, ExprConstructor}
 
-      private def outerEnv: Comp[exprConverter.Env] = EnvHelper.createOuterEnv(exprConverter)(outerEnvCell)(imports)
+
+      override def isAbstract: Boolean = stmt.modifiers.exists { _.value == parser.AbstractModifier }
+
+      override def classMessageSource: DiagnosticSource = DiagnosticSource.Location(stmt.name.location)
 
       override def signature: Comp[Signature[WrapExpr, ClassResult]] =
         sigCell.get(
-          outerEnv.flatMap { env =>
-            SignatureUtil.create(context)(exprConverter)(env)(stmt.parameters)(
-              SignatureUtil.createClassResult(context)(exprConverter)(stmt)
-            )
-              .flatMap { (sig, env) =>
-                SignatureUtil.resolveHolesSig(context)(exprConverter)(env)(exprConverter.ClassSigHandler)(sig)
-                  .map { case (sig, _) => sig: Signature[WrapExpr, ClassResult] }
-              }
-          }
+          SignatureUtil.create(context)(exprConverter)(this)(outerEnv)(stmt.parameters)(
+            SignatureUtil.createClassResult(context)(exprConverter)(stmt)
+          )
+            .flatMap { (sig, env) =>
+              SignatureUtil.resolveHolesSig(context)(exprConverter)(env)(exprConverter.classSigHandler)(sig)
+                .map { case (sig, _) => sig: Signature[WrapExpr, ClassResult] }
+            }
         )
 
       override def innerEnv: Comp[exprConverter.Env] =
@@ -80,14 +86,14 @@ object SourceClass {
           case WithSource(s, _) => !isValidClassStmt(s)
         }
 
-      override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByClass[owner.type]]]]] =
+      override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[true] with HasOwner[OwnedByClass[owner.type]]]]] =
         methodsCell.get {
           val body2 = filteredBody[parser.MethodDeclarationStmt](stmt.instanceBody)
           buildMethods[OwnedByClass[owner.type]](OwnedByClassC.apply)(body2)
         }
 
       override def staticMethods
-        : Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasOwner[OwnedByClassStatic[owner.type]]]]] =
+        : Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[true] with HasOwner[OwnedByClassStatic[owner.type]]]]] =
         staticMethodsCell.get(buildMethods[OwnedByClassStatic[owner.type]](OwnedByClassStaticC.apply)(stmt.body))
 
       override def constructors: Comp[Seq[ClassConstructor]] =
@@ -103,7 +109,7 @@ object SourceClass {
           }
         }
 
+      override def fields: Comp[Seq[context.ExprContext.MemberVariable]] = ???
     }
-  end make
 
 }

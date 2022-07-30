@@ -69,6 +69,7 @@ object Token {
   case object KW_AS extends TokenWithCategory(TokenCategory.KW_AS) with Token
   case object KW_NAMESPACE extends TokenWithCategory(TokenCategory.KW_NAMESPACE) with Token
   case object KW_IMPORT extends TokenWithCategory(TokenCategory.KW_IMPORT) with Token
+  case object KW_EXPORT extends TokenWithCategory(TokenCategory.KW_EXPORT) with Token
   case object KW_TRAIT extends TokenWithCategory(TokenCategory.KW_TRAIT) with Token
   case object KW_STATIC extends TokenWithCategory(TokenCategory.KW_STATIC) with Token
   case object KW_DATA extends TokenWithCategory(TokenCategory.KW_DATA) with Token

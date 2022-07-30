@@ -20,8 +20,12 @@ object Nullable:
       else
         whenNotNull(a.asInstanceOf[A])
 
+    def toOption: Option[A] =
+      fold(None, Some.apply)
 
   end extension
 
-end Nullable
+  given [A, B](using CanEqual[A, B]): CanEqual[Nullable[A], Nullable[A]] =
+    CanEqual.derived
 
+end Nullable

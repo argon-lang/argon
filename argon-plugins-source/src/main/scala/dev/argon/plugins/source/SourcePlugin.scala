@@ -1,6 +1,7 @@
 package dev.argon.plugins.source
 
 import dev.argon.compiler.*
+import dev.argon.compiler.definitions.*
 import dev.argon.compiler.tube.ArTubeC
 import dev.argon.io.ResourceFactory
 import dev.argon.options.{OptionDecoder, OutputHandler}
@@ -23,16 +24,23 @@ object SourcePlugin extends Plugin[Any, SourceError] {
   override def outputHandler[R, E >: SourceError]: OutputHandler[R, E, Output[R, E]] =
     summon[OutputHandler[R, E, Output[R, E]]]
 
-  override def backend: Backend[Options, Output, Any, SourceError] = new Backend[Options, Output, Any, SourceError] {
-    override def emitTube
-    (context: Context { type Env; type Error >: SourceError })
-    (options: Options[context.Env, context.Error])
-    (tube: ArTubeC with HasContext[context.type])
-    : context.Comp[Output[context.Env, context.Error]] =
-      ZIO.succeed(SourceOutput())
-  }
 
-  override def tubeLoaders: Map[String, TubeLoader[SourceOptions, Any, SourceError]] = Map("buildspec" -> SourceTubeLoader)
+  override type ExternalMethodImplementation = Unit
+
+
+  override def emitTube
+  (context: Context { type Env; type Error >: SourceError })
+  (adapter: PluginContextAdapter.Aux[context.type, this.type])
+  (options: Options[context.Env, context.Error])
+  (tube: ArTubeC with HasContext[context.type] with HasDeclaration[true])
+  : context.Comp[Output[context.Env, context.Error]] =
+    ZIO.succeed(SourceOutput())
+
+
+  override def loadExternMethod[R <: Any, E >: SourceError](options: SourceOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
+    ZIO.unit.asSome
+
+  override def tubeLoaders: Map[String, TubeLoader[Any, SourceError]] = Map("buildspec" -> SourceTubeLoader)
 
   override def buildOutputExecutor: Option[BuildOutputExecutor[SourceOutput]] = None
 }

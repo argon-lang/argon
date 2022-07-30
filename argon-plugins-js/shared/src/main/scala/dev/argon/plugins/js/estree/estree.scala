@@ -245,7 +245,7 @@ final case class ForOfStatement
 ) extends Statement derives JSValueCodec
 
 
-sealed trait Declaration extends Node derives JSValueCodec
+sealed trait Declaration extends Statement derives JSValueCodec
 
 final case class FunctionDeclaration
 (
@@ -254,7 +254,7 @@ final case class FunctionDeclaration
   id: Nullable[Identifier],
   params: Seq[Pattern],
   body: BlockStatement,
-  expression: Expression,
+  expression: Boolean,
   directive: Option[String],
   generator: Boolean,
   async: Boolean,
@@ -340,7 +340,7 @@ final case class Property
 (
   `type`: "Property" = ("Property" : "Property"),
   loc: Nullable[SourceLocation] = Nullable(null),
-  key: Literal | Identifier,
+  key: Expression,
   value: Expression | Pattern,
   kind: "init" | "get" | "set",
   method: Boolean,
@@ -436,7 +436,7 @@ final case class MemberExpression
   property: Expression | PrivateIdentifier,
   computed: Boolean,
   optional: Boolean,
-) extends Expression with ChainElement derives JSValueCodec
+) extends Expression with Pattern with ChainElement derives JSValueCodec
 
 final case class ConditionalExpression
 (

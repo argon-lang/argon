@@ -1,6 +1,7 @@
 package dev.argon.plugins.source
 
 import dev.argon.compiler.*
+import dev.argon.compiler.definitions.*
 import dev.argon.compiler.tube.*
 import dev.argon.compiler.module.*
 import dev.argon.io.*
@@ -14,6 +15,7 @@ object SourceTube {
     (
       context: Context,
       tubeName: TubeName,
+      opts: context.Options,
       modules: Map[ModulePath, ArgonSourceCodeResource[context.Env, context.Error]],
     )
     : UIO[ArTubeC with HasContext[context.type]] =
@@ -21,7 +23,7 @@ object SourceTube {
     val tubeName2 = tubeName
     for {
       loadModule <-
-        ZIO.memoize[CompEnv, CompError, (ArTubeC with HasContext[context.type], ModulePath), ArModuleC with HasContext[context.type]] { args =>
+        ZIO.memoize[CompEnv, CompError, (ArTubeC with HasContext[context.type], ModulePath), ArModuleC with HasContext[context.type] with HasDeclaration[true]] { args =>
           val (tube, path) = args
           val moduleName = ModuleName(tubeName, path)
           modules.get(path) match {
@@ -30,11 +32,17 @@ object SourceTube {
           }
         }
     } yield new ArTubeC {
+      override type IsDeclaration = true
+
       override val context: context2.type = context2
       override val tubeName: TubeName = tubeName2
 
-      override def module(path: ModulePath): Comp[ArModule] = loadModule((this, path))
+      override val options: context.Options = opts
+
+      override def module(path: ModulePath): Comp[ArModule with HasDeclaration[true]] = loadModule((this, path))
       override lazy val modulePaths: Set[ModulePath] = modules.keySet
+
+      override def asDeclaration: Option[this.type with HasDeclaration[true]] = Some(this)
     }
   end make
 

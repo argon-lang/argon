@@ -24,10 +24,8 @@ object FilePosition:
 
 end FilePosition
 
-final case class SourceLocation(start: FilePosition, end: FilePosition)
+final case class SourceLocation(fileName: Option[String], start: FilePosition, end: FilePosition)
 
 object SourceLocation {
-  def merge(first: SourceLocation, second: SourceLocation): SourceLocation = SourceLocation(first.start, second.end)
-
-  val empty: SourceLocation = SourceLocation(FilePosition(-1, -1), FilePosition(-1, -1))
+  def merge(first: SourceLocation, second: SourceLocation): SourceLocation = SourceLocation(first.fileName, first.start, second.end)
 }

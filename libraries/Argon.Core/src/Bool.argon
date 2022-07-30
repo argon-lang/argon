@@ -1,4 +1,5 @@
-namespace Ar
+
+import ./Object/*
 
 public class Bool <: Object
 	public def this.to_s(): String = extern Bool_to_s

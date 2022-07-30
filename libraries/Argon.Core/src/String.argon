@@ -1,4 +1,5 @@
-namespace Ar
+import ./Object/*
+import ./Bool/*
 
 public class String <: Object
 end

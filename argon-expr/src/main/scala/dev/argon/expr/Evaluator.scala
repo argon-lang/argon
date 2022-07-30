@@ -3,7 +3,7 @@ package dev.argon.expr
 import zio.{ZIO, IO}
 import dev.argon.util.{*, given}
 
-trait Evaluator[R, E] {
+trait Evaluator[-R, +E] {
   val exprContext: ExprContext
   import exprContext.*
 

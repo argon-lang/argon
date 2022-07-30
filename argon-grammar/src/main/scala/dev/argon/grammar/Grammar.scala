@@ -24,6 +24,8 @@ object Grammar {
   abstract class GrammarFactory[TToken, TSyntaxError, TLabel[_]] {
     type TGrammar[+T] = Grammar[TToken, TSyntaxError, TLabel, T]
 
+    val fileName: Option[String]
+
     @SuppressWarnings(Array("scalafix:DisableSyntax.var"))
     private var cache: Map[Any, AnyRef] = Map.empty
 
@@ -513,12 +515,12 @@ object Grammar {
       : GrammarResult[TToken, TSyntaxError, TLabel, T] =
       GrammarResultSuccess(
         tokens,
-        WithSource(result, SourceLocation(tokens.head.location.start, tokens.head.location.start)),
+        WithSource(result, SourceLocation(options.factory.fileName, tokens.head.location.start, tokens.head.location.start)),
       )
 
     override def parseEnd(pos: FilePosition, options: TParseOptions)
       : GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
-      GrammarResultSuccess(Chunk(), WithSource(result, SourceLocation(pos, pos)))
+      GrammarResultSuccess(Chunk(), WithSource(result, SourceLocation(options.factory.fileName, pos, pos)))
 
   }
 
@@ -536,7 +538,7 @@ object Grammar {
 
     override def parseEnd(pos: FilePosition, options: TParseOptions)
       : GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
-      GrammarResultSuccess(Chunk(), WithSource(result, SourceLocation(pos, pos)))
+      GrammarResultSuccess(Chunk(), WithSource(result, SourceLocation(options.factory.fileName, pos, pos)))
 
   }
 
@@ -569,7 +571,7 @@ object Grammar {
 
     override def parseEnd(pos: FilePosition, options: TParseOptions)
       : GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
-      GrammarResultFailure(NonEmptyChunk(errorFactory.createError(GrammarError.UnexpectedEndOfFile(category, pos))))
+      GrammarResultFailure(NonEmptyChunk(errorFactory.createError(GrammarError.UnexpectedEndOfFile(category, options.factory.fileName, pos))))
 
   }
 
@@ -780,19 +782,19 @@ object Grammar {
     override def parseTokens(tokens: NonEmptyChunk[WithSource[TToken]], options: TParseOptions)
       : GrammarResult[TToken, TSyntaxError, TLabel, Chunk[T]] = parseInner(tokens, options, Chunk.empty)
 
-    private def itemsLocation(pos: FilePosition, items: Chunk[WithSource[T]]): SourceLocation =
+    private def itemsLocation(fileName: Option[String], pos: FilePosition, items: Chunk[WithSource[T]]): SourceLocation =
       items match {
-        case WithSource(_, SourceLocation(start, _)) +: _ :+ WithSource(_, SourceLocation(_, end)) =>
-          SourceLocation(start, end)
+        case WithSource(_, loc1) +: _ :+ WithSource(_, loc2) =>
+          SourceLocation.merge(loc1, loc2)
 
         case Chunk(WithSource(_, loc)) =>
           loc
 
-        case _ => SourceLocation(pos, pos)
+        case _ => SourceLocation(fileName, pos, pos)
       }
 
-    private def finalItems(items: Chunk[WithSource[T]], pos: FilePosition): WithSource[Chunk[T]] =
-      WithSource(items.map(removeSource), itemsLocation(pos, items))
+    private def finalItems(items: Chunk[WithSource[T]], fileName: Option[String], pos: FilePosition): WithSource[Chunk[T]] =
+      WithSource(items.map(removeSource), itemsLocation(fileName, pos, items))
 
     private def parseInner
       (tokens: NonEmptyChunk[WithSource[TToken]], options: TParseOptions, items: Chunk[WithSource[T]])
@@ -810,17 +812,17 @@ object Grammar {
 
             override def completeResult(pos: FilePosition)
               : GrammarResultComplete[TToken, TSyntaxError, TLabel, Chunk[T]] =
-              GrammarResultSuccess(Chunk(), finalItems(items :+ item, pos))
+              GrammarResultSuccess(Chunk(), finalItems(items :+ item, options.factory.fileName, pos))
 
           }
       }
         .recoverFailure { (laterTokens, _) =>
-          GrammarResultSuccess(tokens ++ laterTokens, finalItems(items, tokens.head.location.start))
+          GrammarResultSuccess(tokens ++ laterTokens, finalItems(items, options.factory.fileName, tokens.head.location.start))
         }
 
     override def parseEnd(pos: FilePosition, options: TParseOptions)
       : GrammarResultComplete[TToken, TSyntaxError, TLabel, Chunk[T]] =
-      GrammarResultSuccess(Chunk(), WithSource(Chunk.empty, SourceLocation(pos, pos)))
+      GrammarResultSuccess(Chunk(), WithSource(Chunk.empty, SourceLocation(options.factory.fileName, pos, pos)))
 
     private def removeSource[A](ws: WithSource[A]): A = ws.value
   }

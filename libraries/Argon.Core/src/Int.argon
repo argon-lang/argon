@@ -1,4 +1,8 @@
 
+import ./Object/*
+import ./Bool/*
+import ./String/*
+
 public class Int <: Object
 	public def this.to_s(): String = extern Int_to_s
 end

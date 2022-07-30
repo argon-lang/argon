@@ -1,22 +1,29 @@
 
 import { arrayEqual, isEqual } from "./equal.js";
 import { Memo } from "./memo.js";
-import { SymbolMap } from "./symbol-map.js";
+
+export interface ObjectMap<T> {
+    readonly [key: string]: T;
+}
+
+export interface MethodEntry {
+    readonly symbol: Symbol;
+    readonly implementation?: Function;
+}
 
 export interface TraitType {
     readonly symbol: Symbol;
-    readonly baseTraits: readonly TraitType[];
-    readonly methods: SymbolMap;
-    readonly fields: SymbolMap;
+    readonly methods: ObjectMap<MethodEntry>;
+    readonly staticMethods: ObjectMap<Symbol>;
 }
 
 
 export interface ClassType {
-    readonly constructor: Function;
-    readonly baseClass: ClassType | null;
-    readonly baseTraits: readonly TraitType[];
-    readonly methods: SymbolMap;
-    readonly fields: SymbolMap;
+    readonly prototype: {};
+    readonly constructors: ObjectMap<Function>;
+    readonly methods: ObjectMap<MethodEntry>;
+    readonly staticMethods: ObjectMap<Symbol>;
+    readonly fields: ObjectMap<Symbol>;
 }
 
 export class FunctionType {
@@ -61,8 +68,8 @@ export class TupleType {
 type Type = TraitType | ClassType | FunctionType | TupleType;
 
 
-const traitTypeKeys: readonly (keyof TraitType)[] = ["symbol", "baseTraits", "methods", "fields"];
-const classTypeKeys: readonly (keyof ClassType)[] = ["constructor", "baseClass", "baseTraits", "methods", "fields"];
+const traitTypeKeys: readonly (keyof TraitType)[] = ["symbol", "methods", "staticMethods"];
+const classTypeKeys: readonly (keyof ClassType)[] = ["prototype", "constructors", "methods", "staticMethods", "fields"];
 
 function createTypeFactory<TType>(keys: readonly (keyof TType)[]): (f: (...args: any[]) => TType) => (...args: any[]) => TType {
     return f => {

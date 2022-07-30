@@ -3,9 +3,11 @@ package dev.argon.plugins.js.emit
 import dev.argon.compiler.*
 import dev.argon.compiler.module.*
 import dev.argon.compiler.signature.ErasedSignatureType.Erased
-import dev.argon.compiler.signature.{ErasedSignature, ErasedSignatureNoParams, ErasedSignatureType, ErasedSignatureWithResult, ImportSpecifier}
+import dev.argon.compiler.signature.*
 import dev.argon.plugins.js.*
+import dev.argon.plugin.PluginContextAdapter
 import dev.argon.compiler.tube.TubeName
+import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.parser.IdentifierExpr
 import dev.argon.util.*
 import zio.*
@@ -14,6 +16,8 @@ import zio.stm.*
 import scala.collection.mutable
 
 private[emit] trait ModuleEmitter extends EmitModuleCommon {
+
+  import JSExpr.{*, given}
 
   def program: Comp[estree.Program] =
     for
@@ -67,17 +71,11 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
             }
           case _ => normalizeDir((tubeImportPathParts ++ fileName.dir).toList)
         }
-    yield estree.ImportDeclaration(
-      specifiers = identifiers.map { case (specifier, identifier) =>
-        estree.ImportSpecifier(
-          local = estree.Identifier(name = identifier),
-          imported = estree.Identifier(name = getOverloadExportName(specifier.name, specifier.signature))
-        )
-      },
-      source = estree.Literal(
-        value = Nullable(dir.mkString("/") + (if isLocal then ".js" else ""))
-      )
-    )
+    yield `import`(
+      identifiers.map { case (specifier, identifier) =>
+        id(identifier) as id(getOverloadExportName(specifier.name, specifier.signature))
+      }*
+    ) from (dir.mkString("/") + (if isLocal then ".js" else ""))
 
 
   private def normalizeDir(dir: List[String]): List[String] =
@@ -89,21 +87,29 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
       case Nil => Nil
     }
 
-  private def elementExport(element: ModuleElement): Comp[estree.ExportNamedDeclaration] =
+  private def elementExport(element: ModuleElement[true]): Comp[estree.ExportNamedDeclaration] =
     for
       nextLocalIdRef <- TRef.makeCommit(0)
       localNamesRef <- TSet.empty[String].commit
+      localNameMapRef <- TMap.empty[UniqueIdentifier, String].commit
+      instanceNameMapRef <- TMap.empty[UniqueIdentifier, String].commit
+      parameterNameMapRef <- TMap.empty[(UniqueIdentifier, Int), String].commit
       exprEmitter =
         new ExprEmitter:
           override val context: ModuleEmitter.this.context.type = ModuleEmitter.this.context
           override val tube: ModuleEmitter.this.tube.type = ModuleEmitter.this.tube
           override val options: JSOptions[context.Env, context.Error] = ModuleEmitter.this.options
+          override val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type] = ModuleEmitter.this.adapter
 
           override val imports: TMap[ImportSpecifier, String] = ModuleEmitter.this.imports
           override val module: ModuleEmitter.this.module.type = ModuleEmitter.this.module
 
           override val nextLocalId: TRef[RuntimeFlags] = nextLocalIdRef
-          override val localNames: TSet[String] = localNamesRef
+          override val newLocalNames: TSet[String] = localNamesRef
+          override val localNameMap: TMap[UniqueIdentifier, String] = localNameMapRef
+          override val instanceNameMap: TMap[UniqueIdentifier, String] = instanceNameMapRef
+          override val parameterNameMap: TMap[(UniqueIdentifier, RuntimeFlags), String] = parameterNameMapRef
+          override protected val vtableBuilder: VTableBuilder[context.type] = ModuleEmitter.this.vtableBuilder
         end new
 
       declaration <-

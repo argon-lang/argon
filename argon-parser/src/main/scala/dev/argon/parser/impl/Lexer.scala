@@ -30,7 +30,7 @@ object Lexer {
     case object NonEmptyToken extends LexerRuleName[Token]
   }
 
-  private[Lexer] final class LexerGrammarFactory(fileName: Option[String]) extends Grammar.GrammarFactory[String, SyntaxError, Rule.LexerRuleName] {
+  private[Lexer] final class LexerGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[String, SyntaxError, Rule.LexerRuleName] {
 
     implicit val errorFactory: Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] =
       new Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] {
@@ -154,7 +154,7 @@ object Lexer {
                   }
 
                 override def unexpectedEndOfFileError(pos: FilePosition): SyntaxError =
-                  SyntaxError.LexerError(fileName, GrammarError.UnexpectedEndOfFile(CharacterCategory.CloseCurly, pos))
+                  SyntaxError.LexerError(fileName, GrammarError.UnexpectedEndOfFile(CharacterCategory.CloseCurly, fileName, pos))
 
                 override def unexpectedToken(token: WithSource[Token]): SyntaxError =
                   SyntaxError.ParserError(fileName, GrammarError.UnexpectedToken(TokenCategory.OP_CLOSECURLY, token))
@@ -175,9 +175,9 @@ object Lexer {
               def combineParts(parts: Chunk[Token.StringToken.Part]): Chunk[Token.StringToken.Part] =
                 parts match {
                   case Token.StringToken.StringPart(
-                        WithSource(s1, SourceLocation(start, _))
-                      ) +: Token.StringToken.StringPart(WithSource(s2, SourceLocation(_, end))) +: rest =>
-                    combineParts(Token.StringToken.StringPart(WithSource(s1 + s2, SourceLocation(start, end))) +: rest)
+                        WithSource(s1, loc1)
+                      ) +: Token.StringToken.StringPart(WithSource(s2, loc2)) +: rest =>
+                    combineParts(Token.StringToken.StringPart(WithSource(s1 + s2, SourceLocation.merge(loc1, loc2))) +: rest)
 
                   case head +: tail =>
                     head +: combineParts(tail)
@@ -288,6 +288,7 @@ object Lexer {
               case "as" => Token.KW_AS
               case "namespace" => Token.KW_NAMESPACE
               case "import" => Token.KW_IMPORT
+              case "export" => Token.KW_EXPORT
               case "trait" => Token.KW_TRAIT
               case "static" => Token.KW_STATIC
               case "data" => Token.KW_DATA

@@ -5,6 +5,6 @@ import dev.argon.compiler.signature.ErasedSignature
 import dev.argon.compiler.tube.TubeName
 import dev.argon.parser.IdentifierExpr
 
-final case class ImportSpecifier(tube: TubeName, module: ModulePath, name: IdentifierExpr, signature: ErasedSignature) derives CanEqual {
+final case class ImportSpecifier(tube: TubeName, module: ModulePath, name: Option[IdentifierExpr], signature: ErasedSignature) derives CanEqual {
   def moduleName: ModuleName = ModuleName(tube, module)
 }

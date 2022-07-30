@@ -37,6 +37,7 @@ object ArgonParser {
     case object NewLines extends ArgonRuleName[Unit]
     case object StatementSeparator extends ArgonRuleName[Unit]
     case object ImportStatement extends ArgonRuleName[ImportStmt]
+    case object ExportStatement extends ArgonRuleName[ExportStmt]
 
     // If
     case object IfExpr extends ArgonRuleName[Expr]
@@ -137,7 +138,7 @@ object ArgonParser {
 
   }
 
-  private[parser] final class ArgonGrammarFactory(fileName: Option[String]) extends GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] {
+  private[parser] final class ArgonGrammarFactory(override val fileName: Option[String]) extends GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] {
 
     private implicit val errorFactory: Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] =
       new Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] {
@@ -210,8 +211,7 @@ object ArgonParser {
             matchToken(OP_BITNOT) |
             matchToken(OP_LESSTHAN) |
             matchToken(OP_GREATERTHAN) |
-            matchToken(OP_UNION) |
-            matchToken(OP_INTERSECTION)
+            matchToken(OP_CONCAT)
 
         case Rule.MethodName =>
           tokenUnderscore --> const(None) |
@@ -229,8 +229,18 @@ object ArgonParser {
               rule(Rule.ImportPathRelative) |
               rule(Rule.ImportPathTube) |
               rule(Rule.ImportPathMember)
-          )) --> {
+            )) --> {
             case (_, (_, ns)) => ns
+          }
+
+        case Rule.ExportStatement =>
+          matchToken(KW_EXPORT) ++! (rule(Rule.NewLines) ++ (
+            rule(Rule.ImportPathAbsolute) |
+              rule(Rule.ImportPathRelative) |
+              rule(Rule.ImportPathTube) |
+              rule(Rule.ImportPathMember)
+            )) --> {
+            case (_, (_, ns)) => ExportStmt(ns)
           }
 
         case Rule.IfExpr => matchToken(KW_IF) ++! rule(Rule.IfExprPart) --> second
@@ -278,7 +288,7 @@ object ArgonParser {
           createLeftRec(
             rule(Rule.Identifier)
           )(
-            (matchToken(OP_DOT) ++ rule(Rule.Identifier)) --> {
+            (matchToken(OP_DOT) ++ rule(Rule.Identifier).observeSource) --> {
               case (_, id) => (baseExpr: WithSource[Expr]) => DotExpr(baseExpr, id)
             }
           )
@@ -364,7 +374,7 @@ object ArgonParser {
           }
 
         case Rule.MemberAccess =>
-          rule(Rule.Identifier) --> { id => (baseExpr: WithSource[Expr]) => DotExpr(baseExpr, id) } |
+          rule(Rule.Identifier).observeSource --> { id => (baseExpr: WithSource[Expr]) => DotExpr(baseExpr, id) } |
             matchToken(KW_NEW) --> const(ClassConstructorExpr.apply _) |
             matchToken(KW_TYPE) --> const(TypeOfExpr.apply _)
 
@@ -578,16 +588,13 @@ object ArgonParser {
           (anyModifier.observeSource *) --> { _.toVector }
 
         case Rule.MethodParameter =>
-          rule(Rule.Identifier) ++
+          rule(Rule.Identifier) ++!
             rule(Rule.NewLines) ++
-            ((matchToken(OP_COLON) ++! (rule(Rule.NewLines) ++ rule(Rule.Type).observeSource) --> { case (_, (_, t)) =>
-              t
-            }) ?) ++
-            ((matchToken(OP_SUBTYPE) ++! (rule(Rule.NewLines) ++ rule(Rule.Type).observeSource) --> {
-              case (_, (_, t)) => t
-            }) ?) --> {
-              case (name, _, paramType, subTypeOf) =>
-                FunctionParameter(paramType, subTypeOf, name)
+            matchToken(OP_COLON) ++
+            rule(Rule.NewLines) ++
+            rule(Rule.Type).observeSource --> {
+              case (name, _, _, _, paramType) =>
+                FunctionParameter(paramType, name)
             }
 
         case Rule.MethodParameterList =>
@@ -784,7 +791,9 @@ object ArgonParser {
             rule(Rule.TraitDeclarationStmt) |
             rule(Rule.DataConstructorDeclarationStmt) |
             rule(Rule.ClassDeclarationStmt) |
-            rule(Rule.ExpressionStmt)
+            rule(Rule.ExpressionStmt) |
+            rule(Rule.ImportStatement) |
+            rule(Rule.ExportStatement)
 
         case Rule.StatementList =>
           (rule(Rule.StatementSeparator) *) ++ (((rule(Rule.Statement).observeSource ++ (rule(
@@ -930,7 +939,7 @@ object ArgonParser {
       nextGrammar.observeSource ++ (UnionGrammar.fromList(rightGrammars).observeSource*) --> {
         case (left, rightSeq) =>
           rightSeq.foldLeft(left) { case (l, WithSource(f, rightLoc)) =>
-            WithSource(f(l), SourceLocation(l.location.start, rightLoc.end))
+            WithSource(f(l), SourceLocation(fileName, l.location.start, rightLoc.end))
           }.value
       }
     }

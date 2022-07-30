@@ -1,0 +1,30 @@
+
+import ./Object/*
+import ./Bool/*
+
+public class Nat <: Object
+	public def this.to_s(): String = extern Nat_to_s
+end
+
+public def (+) (a: Nat): Nat = a
+public def (-) (a: Nat): Nat = extern negateNat
+public def (~~~) (a: Nat): Nat = extern bitNotNat
+
+public def (+) (a: Nat) (b: Nat): Nat = extern addNat
+public def (-) (a: Nat) (b: Nat): Nat = extern subNat
+public def (*) (a: Nat) (b: Nat): Nat = extern mulNat
+public def (/) (a: Nat) (b: Nat): Nat = extern divNat
+
+public def (|||) (a: Nat) (b: Nat): Nat = extern bitOrNat
+public def (&&&) (a: Nat) (b: Nat): Nat = extern bitAndNat
+public def (^^^) (a: Nat) (b: Nat): Nat = extern bitXOrNat
+public def (<<<) (a: Nat) (b: Nat): Nat = extern shiftLeftNat
+public def (>>>) (a: Nat) (b: Nat): Nat = extern shiftRightNat
+
+public def (=) (a: Nat) (b: Nat): Bool = extern natEqual
+public def (!=) (a: Nat) (b: Nat): Bool = !(a = b)
+public def (<) (a: Nat) (b: Nat): Bool = extern natLessThan
+public def (<=) (a: Nat) (b: Nat): Bool = extern natLessThanEq
+public def (>) (a: Nat) (b: Nat): Bool = extern natGreaterThan
+public def (>=) (a: Nat) (b: Nat): Bool = extern natGreaterThanEq
+

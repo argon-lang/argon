@@ -12,6 +12,7 @@ extension [C[+_], A](ca: C[A])(using traverse: Traverse[C])
   def traverse[F[+_]: Applicative, B](f: A => F[B]): F[C[B]] = traverse.traverse(ca)(f)
 
   def foldLeftM[F[+_]: Monad, S, B](s: S)(f: (S, A) => F[S]): F[S] = traverse.foldLeftM(ca)(s)(f)
+  def foldLeft[S, B](s: S)(f: (S, A) => S): S = traverse.foldLeft(ca)(s)(f)
 end extension
 
 object Traverse:

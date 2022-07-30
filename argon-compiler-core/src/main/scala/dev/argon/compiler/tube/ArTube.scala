@@ -1,10 +1,15 @@
 package dev.argon.compiler.tube
 
 import dev.argon.compiler.*
+import dev.argon.compiler.definitions.*
 import dev.argon.compiler.module.*
 
-trait ArTubeC extends UsingContext {
+trait ArTubeC extends UsingContext with DeclarationMode {
   val tubeName: TubeName
-  def module(path: ModulePath): Comp[ArModule]
+  val options: context.Options
+
+  def module(path: ModulePath): Comp[ArModule with HasDeclaration[IsDeclaration]]
   def modulePaths: Set[ModulePath]
+
+  def asDeclaration: Option[this.type with HasDeclaration[true]]
 }

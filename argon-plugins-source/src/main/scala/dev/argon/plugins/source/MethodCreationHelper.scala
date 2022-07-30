@@ -16,10 +16,10 @@ trait MethodCreationHelper extends Definition {
 
   protected def innerEnv: Comp[Env]
 
-  protected final def buildMethods[TMethodOwner]
+  protected final def buildMethods[TMethodOwner <: ArMethodC.Ownership[context.type]]
     (createMethodOwner: (this.type, Option[IdentifierExpr], AccessModifier) => TMethodOwner)
     (body: Vector[WithSource[parser.Stmt]])
-    : Comp[Map[Option[IdentifierExpr], Seq[ArMethodC with HasContext[context.type] with HasOwner[TMethodOwner]]]] =
+    : Comp[Map[Option[IdentifierExpr], Seq[ArMethodC with HasContext[context.type] with HasDeclaration[true] with HasOwner[TMethodOwner]]]] =
     ZIO.foreach(body) {
       case WithSource(stmt: parser.MethodDeclarationStmt, _) =>
         buildMethod(createMethodOwner)(stmt)
@@ -30,14 +30,15 @@ trait MethodCreationHelper extends Definition {
         methods.groupMap(_._1)(_._2)
       }
 
-  private def buildMethod[TMethodOwner]
+  private def buildMethod[TMethodOwner <: ArMethodC.Ownership[context.type]]
     (createMethodOwner: (this.type, Option[IdentifierExpr], AccessModifier) => TMethodOwner)
     (methodDecl: parser.MethodDeclarationStmt)
-    : Comp[(Option[IdentifierExpr], ArMethodC with HasContext[context.type] with HasOwner[TMethodOwner])] =
+    : Comp[(Option[IdentifierExpr], ArMethodC with HasContext[context.type] with HasDeclaration[true] with HasOwner[TMethodOwner])] =
     for {
       access <- AccessUtil.parse(methodDecl.modifiers)
       owner = createMethodOwner(this, methodDecl.name, access)
-      method <- SourceMethod.make(context)(exprConverter)(innerEnv)(owner)(methodDecl)
+      innerEnv2 <- innerEnv
+      method <- SourceMethod.make(context)(exprConverter)(innerEnv2)(owner)(methodDecl)
     } yield (methodDecl.name, method)
 
   end buildMethod

@@ -21,82 +21,27 @@ object Compile {
         config <- ZIO.fromEither(summon[TomlCodec[BuildConfig]].decode(buildConfig))
           .tapError { error => Console.printLineError(error).orDie }
           .mapError(BuildConfigParseError.apply)
-        tubeOptions = config.tube
 
+        contextFactory <- BuildContextFactory.make(plugins, config)
+        context <- contextFactory.createContext
 
-        runtime <- ZIO.runtime[Any]
+        tube <- context.loadTube(config.tube)
+        declTube <- ZIO.fromEither(tube.asDeclaration.toRight { CouldNotLoadDeclarationTube(tube.tubeName) })
 
-        context <- ZIO.succeed {
-          new Context with LoadTube {
-            override type Env = R
-            override type Error = E
-
-            private val tubes =
-              Unsafe.unsafe {
-                runtime.unsafe.run(TMap.empty[TubeName, ArTubeC with HasContext[this.type]].commit).getOrThrow()
-              }
-
-            override def getTube(tubeName: TubeName): Comp[ArTubeC with HasContext[this.type]] =
-              tubes.get(tubeName).commit
-                .some
-                .orElseFail(DiagnosticError.UnknownTube(tubeName))
-
-
-            def loadTube
-            (loaderOptions: TubeLoaderOptions)
-            (tubeOptions: Toml)
-            : ZIO[R & Scope, E, ArTubeC with HasContext[this.type]] =
-              for
-                plugin <- ZIO.fromEither(plugins.get(loaderOptions.plugin).toRight(UnknownPlugin(loaderOptions.plugin)))
-                loader <- ZIO.fromEither(plugin.tubeLoaders.get(loaderOptions.loader).toRight(UnknownTubeLoader(loaderOptions)))
-
-                options <- plugin.optionDecoder[E]
-                  .decode(config.plugin.get(loaderOptions.plugin).flatMap(_.options).getOrElse(Toml.Table.empty))
-                  .mapError(BuildConfigParseError.apply)
-
-                libOptions <- loader.libOptionDecoder[E]
-                  .decode(tubeOptions)
-                  .mapError(BuildConfigParseError.apply)
-
-                tube <- loader.load(this)(options, libOptions)
-                _ <- ZSTM.ifSTM(tubes.contains(tube.tubeName))(
-                  onTrue = ZSTM.fail(DuplicateTube(tube.tubeName)),
-                  onFalse = tubes.put(tube.tubeName, tube),
-                ).commit
-              yield tube
-
-          }
-        }
-
-        loaderOptions = tubeOptions.loader.getOrElse(TubeLoaderOptions(plugin = "source", loader = "buildspec"))
-        tube <- context.loadTube(loaderOptions)(tubeOptions.options)
-
-        _ <- ZIO.foreachDiscard(config.libraries) { lib =>
-          context.loadTube(lib.loader)(lib.options)
-        }
+        _ <- ZIO.foreachDiscard(config.libraries)(context.loadTube)
 
         _ <- ZIO.logTrace(s"Writing output")
-        _ <- ZIO.foreachDiscard(config.plugin) { case (pluginName, pluginConfig) =>
+        _ <- ZIO.foreachDiscard(config.output) { case (pluginName, outputOptions) =>
           for
-            plugin <- ZIO.fromEither(plugins.get(pluginName).toRight(UnknownPlugin(pluginName)))
-            pluginOptions <- plugin.optionDecoder[E].decode(pluginConfig.options.getOrElse(Toml.Table.empty)).mapError(BuildConfigParseError.apply)
-            tubeOutput <- plugin.backend.emitTube(context)(pluginOptions)(tube)
-            _ <- handlePluginOutput(pluginName, Seq(), pluginConfig.output.getOrElse(Toml.Table.empty), tubeOutput, plugin.outputHandler)
+            pluginHelper <- ZIO.fromEither(contextFactory.getPluginHelper(pluginName).toRight(UnknownPlugin(pluginName)))
+            tubeOutput <- pluginHelper.plugin.emitTube(context)(pluginHelper.adapter(context))(pluginHelper.getOptions(tube.options))(declTube)
+            _ <- handlePluginOutput(pluginName, Seq(), outputOptions, tubeOutput, pluginHelper.plugin.outputHandler)
           yield ()
         }
 
       yield ()
     )
 
-  private trait LoadTube:
-    self: Context =>
-
-    def loadTube
-    (loaderOptions: TubeLoaderOptions)
-    (tubeOptions: Toml)
-    : ZIO[Env & Scope, Error, ArTubeC with HasContext[this.type]]
-
-  end LoadTube
 
   private def handlePluginOutput[R <: ResourceWriter, E >: BuildError | IOException, Output](pluginName: String, prefix: Seq[String], outputOptions: Toml, output: Output, handler: OutputHandler[R, E, Output]): ZIO[R, E, Unit] =
     outputOptions match

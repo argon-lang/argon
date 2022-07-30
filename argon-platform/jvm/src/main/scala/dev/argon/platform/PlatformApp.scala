@@ -24,11 +24,16 @@ abstract class PlatformApp extends ZIOApp {
       ZLayer.succeed(PlatformPathUtil())
 
   final override def run: ZIO[Environment & ZIOAppArgs, Any, Any] =
-    runApp.flatMap(exit).tapDefect { cause =>
-      ZIO.foreach(cause.defects) { ex =>
-        ZIO.succeed { ex.printStackTrace() }
+    runApp.flatMap(exit)
+      .tapDefect { cause =>
+        ZIO.foreach(cause.defects) { ex =>
+          ZIO.succeed { ex.printStackTrace() }
+        }
       }
-    }
+      .tapError {
+        case ex: Throwable => ZIO.succeed { ex.printStackTrace() }
+        case error => Console.printLineError(error)
+      }
 
   def runApp: ZIO[Environment & ZIOAppArgs, Any, ExitCode]
 

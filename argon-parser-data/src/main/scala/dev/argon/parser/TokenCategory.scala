@@ -28,6 +28,7 @@ object TokenCategory {
   case object KW_AS extends TokenCategory
   case object KW_NAMESPACE extends TokenCategory
   case object KW_IMPORT extends TokenCategory
+  case object KW_EXPORT extends TokenCategory
   case object KW_TRAIT extends TokenCategory
   case object KW_STATIC extends TokenCategory
   case object KW_DATA extends TokenCategory

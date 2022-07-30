@@ -2,7 +2,9 @@ package dev.argon.plugins.js.emit
 
 import dev.argon.compiler.*
 import dev.argon.compiler.module.*
+import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.io.{DirectoryEntry, DirectoryResource}
+import dev.argon.plugin.PluginContextAdapter
 import dev.argon.plugins.js.*
 import zio.*
 import zio.stream.*
@@ -11,6 +13,10 @@ private[emit] trait EmitTubeCommon extends UsingContext {
   override val context: Context { type Error >: JSPluginError }
   val tube: ArTube
   val options: JSOptions[context.Env, context.Error]
+  val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type]
+
+
+  protected val vtableBuilder: VTableBuilder[context.type]
 
   protected def getModuleFileName(tube: ArTube)(path: ModulePath): ModuleFile =
     if path.ids.isEmpty then
