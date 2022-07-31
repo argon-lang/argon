@@ -1,14 +1,13 @@
 
 import ./Object/*
 import ./Bool/*
+import ./String/*
 
 public class Nat <: Object
 	public def this.to_s(): String = extern Nat_to_s
 end
 
 public def (+) (a: Nat): Nat = a
-public def (-) (a: Nat): Nat = extern negateNat
-public def (~~~) (a: Nat): Nat = extern bitNotNat
 
 public def (+) (a: Nat) (b: Nat): Nat = extern addNat
 public def (-) (a: Nat) (b: Nat): Nat = extern subNat

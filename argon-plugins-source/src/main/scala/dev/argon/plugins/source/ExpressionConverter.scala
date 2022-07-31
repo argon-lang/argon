@@ -300,10 +300,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                       e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadLambda(paramVar), bodyRes.expr))
                     } yield ExprResult(e, bodyRes.env)
 
-                  case _ => ZIO.fail(DiagnosticError.InvalidTypeForFunction())
+                  case _ =>
+                    ZIO.fail(DiagnosticError.InvalidTypeForFunction())
                 }
 
-              case _ => ZIO.fail(DiagnosticError.InvalidTypeForFunction())
+              case _ =>
+                ZIO.fail(DiagnosticError.InvalidTypeForFunction())
             }
 
         }
@@ -369,16 +371,22 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
           override def check(env: Env, t: WrapExpr): Comp[ExprResult] =
             evaluator.normalizeTopLevelWrap(t, fuel).flatMap {
-              case WrapExpr.OfExpr(normalizedType) =>
+              case normalizedTypeWrap @ WrapExpr.OfExpr(normalizedType) =>
                 normalizedType.constructor match {
                   case tupleTypeCtor: (normalizedType.constructor.type & ExprConstructor.LoadTuple.type) =>
                     val tupleType: Vector[WrapExpr] = normalizedType.getArgs(tupleTypeCtor)
                     checkPart(env, values.toList, Vector.empty, tupleType.toList)
+                    
+                  case _: (ExprConstructor.AnyType.type | ExprConstructor.OmegaTypeN | ExprConstructor.TypeN.type) =>
+                    val tupleType = List.fill(values.size)(normalizedTypeWrap)
+                    checkPart(env, values.toList, Vector.empty, tupleType)
 
-                  case _ => ZIO.fail(DiagnosticError.InvalidTypeForFunction())
+                  case _ =>
+                    ZIO.fail(DiagnosticError.InvalidTypeForTuple())
                 }
 
-              case _ => ZIO.fail(DiagnosticError.InvalidTypeForFunction())
+              case _ =>
+                ZIO.fail(DiagnosticError.InvalidTypeForTuple())
             }
 
           private def checkPart
@@ -389,32 +397,26 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               expectedTypes: List[WrapExpr],
             )
             : Comp[ExprResult] =
-            expectedTypes match {
-              case currentExpected :: tailExpectedTypes =>
-                values match {
-                  case head :: tail =>
-                    convertExpr(head).check(env, currentExpected).flatMap { currentRes =>
-                      checkPart(
-                        currentRes.env,
-                        tail,
-                        valuesAcc :+ currentRes.expr,
-                        tailExpectedTypes,
-                      )
-                    }
-
-                  case Nil if tailExpectedTypes.nonEmpty =>
-                    ZIO.fail(DiagnosticError.TupleSizeMismatch())
-
-                  case Nil =>
-                    val valuesExpr =
-                      WrapExpr.OfExpr(ArExpr(
-                        ExprConstructor.LoadTuple,
-                        valuesAcc,
-                      ))
-                    ZIO.succeed(ExprResult(valuesExpr, env))
+            (expectedTypes, values) match {
+              case (t :: tailTypes, value :: valuesTail) =>
+                convertExpr(value).check(env, t).flatMap { currentRes =>
+                  checkPart(
+                    currentRes.env,
+                    valuesTail,
+                    valuesAcc :+ currentRes.expr,
+                    tailTypes,
+                  )
                 }
 
-              case Nil =>
+              case (Nil, Nil) =>
+                val valuesExpr =
+                  WrapExpr.OfExpr(ArExpr(
+                    ExprConstructor.LoadTuple,
+                    valuesAcc,
+                  ))
+                ZIO.succeed(ExprResult(valuesExpr, env))
+
+              case _ =>
                 ZIO.fail(DiagnosticError.TupleSizeMismatch())
             }
 

@@ -12,7 +12,13 @@
       "sources": "src",
       "plugin": {
         "js": {
-          "extern": ["js/extern.js"]
+          "extern": [
+            "js/extern_bool.js",
+            "js/extern_int.js",
+            "js/extern_nat.js",
+            "js/extern_puts.js",
+            "js/extern_string.js"
+          ]
         }
       }
     }

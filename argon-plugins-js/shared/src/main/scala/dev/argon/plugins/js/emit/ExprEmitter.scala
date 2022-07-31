@@ -122,7 +122,40 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     )
 
 
-  def traitExport(arTrait: ArTrait): Comp[estree.ExportNamedDeclaration] = ???
+  def traitExport(arTrait: ArTrait with HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
+    for
+      sig <- arTrait.signature
+      erasedSig <- SignatureEraser(context).erasedNoResult(sig)
+      exportName = getOverloadExportName(arTrait.owner.ownedName, erasedSig)
+
+      sigParamNames <- getSigParamVarNames(arTrait)(sig)
+
+      // Methods
+      methods <- arTrait.methods
+      methodStmts <- createMethods("methods", methods)
+
+      // Static Methods
+      staticMethods <- arTrait.staticMethods
+      staticMethodStmts <- createMethods("staticMethods", staticMethods)
+
+
+    yield `export` const exportName := (
+      id(runtimeImportName).prop("createTrait").call(
+        arrow(sigParamNames*) ==> (
+          const("methods") := id("Object").prop("create").call(literal(null)),
+          block(methodStmts*),
+
+          const("staticMethods") := id("Object").prop("create").call(literal(null)),
+          block(staticMethodStmts*),
+
+          `return`(obj(
+            id("symbol") := id("Symbol").call(),
+            id("methods") := id("methods"),
+            id("staticMethods") := id("staticMethods"),
+          ))
+        )
+      )
+      )
 
   def functionExport(func: ArFunc with HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
     for
