@@ -24,14 +24,19 @@ object SourceClass {
 
       innerEnvCell <- MemoCell.make[ctx.Env, ctx.Error, exprConverter2.Env]
       sigCell <-
-        MemoCell.make[ctx.Env, ctx.Error, Signature[
-          ctx.ExprContext.WrapExpr,
+        MemoCell.make[ctx.Env, ctx.Error,
           (
-            ctx.ExprContext.WrapExpr,
-            Option[ctx.ExprContext.ArExpr[ctx.ExprContext.ExprConstructor.ClassType]],
-            Seq[ctx.ExprContext.ArExpr[ctx.ExprContext.ExprConstructor.TraitType]],
-          ),
-        ]]
+            Signature[
+              ctx.ExprContext.WrapExpr,
+              (
+                ctx.ExprContext.WrapExpr,
+                Option[ctx.ExprContext.ArExpr[ctx.ExprContext.ExprConstructor.ClassType]],
+                Seq[ctx.ExprContext.ArExpr[ctx.ExprContext.ExprConstructor.TraitType]],
+              ),
+            ],
+            exprConverter2.Env
+          )
+        ]
       methodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
           with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[OwnedByClassC[ctx.type, classOwner.type]]]]]
@@ -39,6 +44,7 @@ object SourceClass {
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
           with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[OwnedByClassStaticC[ctx.type, classOwner.type]]]]]
       ctorsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ClassConstructorC with HasContext[ctx.type]]]
+      fieldsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ctx.ExprContext.MemberVariable]]
 
     } yield new ArClassC with MethodCreationHelper {
       override val owner: classOwner.type = classOwner
@@ -56,19 +62,20 @@ object SourceClass {
 
       override def classMessageSource: DiagnosticSource = DiagnosticSource.Location(stmt.name.location)
 
-      override def signature: Comp[Signature[WrapExpr, ClassResult]] =
+
+
+      private def sigEnv: Comp[(Signature[WrapExpr, ClassResult], exprConverter.Env)] =
         sigCell.get(
           SignatureUtil.create(context)(exprConverter)(this)(outerEnv)(stmt.parameters)(
             SignatureUtil.createClassResult(context)(exprConverter)(stmt)
           )
-            .flatMap { (sig, env) =>
-              SignatureUtil.resolveHolesSig(context)(exprConverter)(env)(exprConverter.classSigHandler)(sig)
-                .map { case (sig, _) => sig: Signature[WrapExpr, ClassResult] }
-            }
         )
 
+      override def signature: Comp[Signature[WrapExpr, ClassResult]] =
+        sigEnv.map { _._1 }
+
       override def innerEnv: Comp[exprConverter.Env] =
-        EnvHelper.createInnerEnv(exprConverter)(innerEnvCell)(outerEnv)(this)(signature)
+        sigEnv.map { _._2 }
 
       private def isValidClassStmt(s: parser.Stmt): Boolean =
         s match {
@@ -98,18 +105,34 @@ object SourceClass {
 
       override def constructors: Comp[Seq[ClassConstructor]] =
         ctorsCell.get {
-          ZIO.foreach(filteredBody[parser.ClassConstructorDeclarationStmt](stmt.instanceBody)) {
+          ZIO.collect(stmt.instanceBody) {
             case WithSource(ctorDecl: parser.ClassConstructorDeclarationStmt, _) =>
-              for {
-                access <- AccessUtil.parse(ctorDecl.modifiers)
-                ctor <- SourceClassConstructor.make(context)(exprConverter)(innerEnv)(this, access)(ctorDecl)
-              } yield ctor
+              (
+                for {
+                  access <- AccessUtil.parse(ctorDecl.modifiers)
+                  ctor <- SourceClassConstructor.make(context)(exprConverter)(innerEnv)(this, access)(ctorDecl)
+                } yield ctor
+              ).asSomeError
 
-            case _ => ???
+            case _ => ZIO.fail(None)
           }
         }
 
-      override def fields: Comp[Seq[context.ExprContext.MemberVariable]] = ???
+      override def fields: Comp[Seq[context.ExprContext.MemberVariable]] =
+        fieldsCell.get(
+          ZIO.collect(stmt.instanceBody) {
+            case WithSource(field: parser.FieldDeclarationStmt, _) =>
+              (
+                for
+                  env <- innerEnv
+                  varType <- exprConverter.convertExpr(field.fieldType).check(env, exprConverter.anyType)
+                  resolvedVarType <- exprConverter.resolveHoles(varType.env, varType.expr)
+                yield context.ExprContext.MemberVariable(this, resolvedVarType._1, Some(field.name))
+              ).asSomeError
+
+            case _ => ZIO.fail(None)
+          }
+        )
     }
 
 }

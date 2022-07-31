@@ -244,20 +244,22 @@ trait ExprUtil extends UsingContext {
         case ModuleElementC.TraitElement(t) => t.signature.flatMap(sigEraser.erasedNoResult)
         case ModuleElementC.FunctionElement(f) => f.signature.flatMap(sigEraser.erasedWithResult)
       }: Comp[ErasedSignature])
-        .map { _ == specifier.signature }
+        .map { erasedSig =>
+        erasedSig == specifier.signature
+      }
     end matchesOverload
 
-    ZIO.logTrace(s"Loading specifier: $specifier") *>
-    context.getTube(specifier.tube)
-      .flatMap[context.Env, context.Error, ArModule](_.module(specifier.module))
-      .flatMap[context.Env, context.Error, Seq[ModuleElement[?]]](module => specifier.name.fold(ZIO.succeed(Seq()))(module.exports))
-      .flatMap[context.Env, context.Error, Seq[TElement]] { elements =>
-        ZIO.filter(elements.collect { case element: TElement => element })(matchesOverload)
-      }
-      .flatMap {
+    for
+      _ <- ZIO.logTrace(s"Loading specifier: $specifier")
+      tube <- context.getTube(specifier.tube)
+      module <- tube.module(specifier.module)
+      elements <- specifier.name.fold(ZIO.succeed(Seq()))(module.exports)
+      elements <- ZIO.filter(elements.collect { case element: TElement => element })(matchesOverload)
+      result <- elements match {
         case Seq(element) => ZIO.succeed(element)
-        case _ => ???
+        case elements => ZIO.logDebug(elements.toString) *> ZIO.succeed(???)
       }
+    yield result
   end loadKnownExport
 
   protected val argonCoreTubeName: TubeName = TubeName(NonEmptyList("Argon", "Core"))

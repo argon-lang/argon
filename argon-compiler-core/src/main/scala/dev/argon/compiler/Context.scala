@@ -18,11 +18,13 @@ trait Context {
   type Options
 
   type ExternMethodImplementation
+  type ExternFunctionImplementation
 
   def getTube(tubeName: TubeName): Comp[ArTubeC with HasContext[this.type]]
 
 
   def getExternMethodImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternMethodImplementation]
+  def getExternFunctionImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternFunctionImplementation]
 
 }
 

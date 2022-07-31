@@ -26,6 +26,7 @@ object SourcePlugin extends Plugin[Any, SourceError] {
 
 
   override type ExternalMethodImplementation = Unit
+  override type ExternalFunctionImplementation = Unit
 
 
   override def emitTube
@@ -38,6 +39,9 @@ object SourcePlugin extends Plugin[Any, SourceError] {
 
 
   override def loadExternMethod[R <: Any, E >: SourceError](options: SourceOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
+    ZIO.unit.asSome
+
+  override def loadExternFunction[R <: Any, E >: SourceError](options: SourceOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
     ZIO.unit.asSome
 
   override def tubeLoaders: Map[String, TubeLoader[Any, SourceError]] = Map("buildspec" -> SourceTubeLoader)

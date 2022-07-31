@@ -18,6 +18,7 @@ trait Plugin[-R0, +E0] {
   given outputHandler[R <: R0, E >: E0]: OutputHandler[R, E, Output[R, E]]
 
   type ExternalMethodImplementation
+  type ExternalFunctionImplementation
 
 
   def emitTube
@@ -32,6 +33,12 @@ trait Plugin[-R0, +E0] {
   (options: Options[R, E])
   (id: String)
   : ZIO[R, E, Option[ExternalMethodImplementation]]
+
+
+  def loadExternFunction[R <: R0, E >: E0]
+  (options: Options[R, E])
+  (id: String)
+  : ZIO[R, E, Option[ExternalFunctionImplementation]]
 
 
   def tubeLoaders: Map[String, TubeLoader[R0, E0]]

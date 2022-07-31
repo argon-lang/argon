@@ -3,7 +3,7 @@ package dev.argon.plugins.js.emit
 import dev.argon.util.*
 import dev.argon.plugins.js.*
 import dev.argon.compiler.*
-import dev.argon.compiler.definitions.{HasDeclaration, MethodImplementationC}
+import dev.argon.compiler.definitions.{FunctionImplementationC, HasDeclaration, MethodImplementationC}
 import dev.argon.compiler.signature.*
 import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.parser.IdentifierExpr
@@ -22,8 +22,11 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   import context.ExprContext.{
     WrapExpr,
+    LocalVariable,
     ParameterVariable,
     ParameterVariableOwner,
+    InstanceVariable,
+    MemberVariable,
   }
 
   private def newLocalVar: USTM[String] =
@@ -44,7 +47,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     }.commit
 
 
-  private def getVariableName(variable: context.ExprContext.LocalVariable | context.ExprContext.InstanceVariable | context.ExprContext.ParameterVariable): UIO[String] =
+  private def getVariableName(variable: LocalVariable | InstanceVariable | ParameterVariable): UIO[String] =
     variable match
       case variable: context.ExprContext.LocalVariable =>
         getOrInsertVariable(localNameMap)(variable.id)
@@ -117,72 +120,46 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         )
       )
     )
-/*
-  private def classPrototype(arClass: ArClass): Comp[Seq[estree.Statement]] =
-    for
-      vtable <- vtableBuilder.diffFromClass(arClass)
-      methods <- arClass.methods
-
-
-      vtableExprs <- ZIO.foreach(vtable.methodMap.toSeq) { case (slot, entry) =>
-        entry.impl match
-          case vtableBuilder.VTableEntryMethod(method) if methods.values.iterator.flatten.contains(method) =>
-            for
-            yield Seq(
-              estree.VariableDeclaration(
-                kind = "const",
-                declarations = Seq(estree.VariableDeclarator(
-                  id = estree.Identifier(slotVarName),
-                  init = Nullable(estree.CallExpression(
-                    callee = estree.Identifier(name = "Symbol"),
-                    arguments = Seq()
-                  )),
-                )),
-              ),
-              estree.ExpressionStatement(
-                expression = estree.AssignmentExpression(
-                  operator = "=",
-                  left = estree.MemberExpression(
-                    `object` = estree.Identifier(name = "proto"),
-                    property = estree.Identifier(name = slotVarName),
-                    computed = true,
-                    optional = false,
-                  ),
-                  right = estree.Identifier
-                )
-              )
-            )
-
-
-          case vtableBuilder.VTableEntryAmbiguous(_) => ZIO.succeed(Seq())
-          case vtableBuilder.VTableEntryAbstract => ZIO.succeed(Seq())
-      }
-
-      sig <- arClass.signature
-      baseClassExpr <- ZIO.foreach(sig.unsubstitutedResult._2)(emitWrapExpr)
-
-    yield Seq(
-      estree.VariableDeclaration(
-        kind = "const",
-        declarations = Seq(estree.VariableDeclarator(
-          id = estree.Identifier("proto"),
-          init = Nullable(estree.CallExpression(
-              callee = estree.MemberExpression(
-                `object` = estree.Identifier(name = "Object"),
-                property = estree.Identifier(name = "create")
-              ),
-              arguments = Seq(baseClassExpr.getOrElse { estree.Literal(value = Nullable(null)) }),
-          )),
-        )),
-      ),
-
-      vtableExprs.flatten*,
-    )*/
 
 
   def traitExport(arTrait: ArTrait): Comp[estree.ExportNamedDeclaration] = ???
 
-  def functionExport(func: ArFunc): Comp[estree.ExportNamedDeclaration] = ???
+  def functionExport(func: ArFunc with HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
+    for
+      sig <- func.signature
+      erasedSig <- SignatureEraser(context).erasedWithResult(sig)
+      funcName = getOverloadExportName(func.owner.ownedName, erasedSig)
+
+      impl <- func.implementation
+      decl <- impl match {
+        case impl: FunctionImplementationC.ExpressionBody =>
+          for
+            sig <- func.signature
+            params <- createSigParams(func, 0, sig)
+            body <- emitWrapExprAsStmt(impl.body)
+          yield estree.FunctionDeclaration(
+            id = Nullable(id(funcName)),
+            params = params,
+            body = block(body*),
+            generator = false,
+            async = false,
+            expression = false,
+            directive = None,
+          )
+
+        case impl: FunctionImplementationC.External =>
+          val funcDecl = adapter.extractExternFunctionImplementation(impl.impl)
+          ZIO.succeed(estree.FunctionDeclaration(
+            id = Nullable(id(funcName)),
+            params = funcDecl.params,
+            body = funcDecl.body,
+            generator = funcDecl.generator,
+            async = funcDecl.async,
+            expression = funcDecl.expression,
+            directive = funcDecl.directive,
+          ))
+      }
+    yield `export`(decl)
 
 
   private def createMethods(methodsVarName: String, methods: Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[true]]]): Comp[Seq[estree.Statement]] =
@@ -282,22 +259,31 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         ???
 
       case ctor: (expr.constructor.type & ExprConstructor.LoadConstantBool) =>
-        ZIO.succeed(estree.Literal(
-          value = Nullable(ctor.b),
-        ))
+        ZIO.succeed(literal(ctor.b))
 
       case ctor: (expr.constructor.type & ExprConstructor.LoadConstantInt) =>
-        ZIO.succeed(estree.Literal(
-          value = Nullable(ctor.i),
-          bigint = Some(ctor.i.toString)
-        ))
+        ZIO.succeed(literal(ctor.i))
 
       case ctor: (expr.constructor.type & ExprConstructor.LoadConstantString) =>
         ZIO.succeed(estree.Literal(
           value = Nullable(ctor.s),
         ))
 
-      case _ => ???
+      case ctor: (expr.constructor.type & ExprConstructor.LoadTupleElement) =>
+        for
+          tupleExpr <- emitWrapExpr(expr.getArgs(ctor))
+        yield tupleExpr.index(literal(ctor.index.toDouble))
+
+      case ctor: (expr.constructor.type & ExprConstructor.LoadVariable) =>
+        ctor.variable match {
+          case variable: LocalVariable => getVariableName(variable).map(id)
+          case variable: ParameterVariable => getVariableName(variable).map(id)
+          case variable: InstanceVariable => getVariableName(variable).map(id)
+          case variable: MemberVariable => ???
+        }
+
+      case _ =>
+        ZIO.logError(s"Unimplemented expression: $expr") *> ZIO.succeed(???)
     end match
 
 }

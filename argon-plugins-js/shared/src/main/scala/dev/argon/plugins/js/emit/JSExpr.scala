@@ -32,6 +32,15 @@ private[emit] object JSExpr {
   def literal(s: String): estree.Literal =
     estree.Literal(value = Nullable(s))
 
+  def literal(d: Double): estree.Literal =
+    estree.Literal(value = Nullable(d))
+
+  def literal(b: Boolean): estree.Literal =
+    estree.Literal(value = Nullable(b))
+
+  def literal(n: BigInt): estree.Literal =
+    estree.Literal(value = Nullable(n), bigint = Some(n.toString))
+
   def literal(n: Null): estree.Literal =
     estree.Literal(value = Nullable(n))
 
@@ -91,6 +100,14 @@ private[emit] object JSExpr {
         specifiers = Seq(),
         source = Nullable(null)
       )
+
+    def apply(declaration: estree.Declaration): estree.ExportNamedDeclaration =
+      estree.ExportNamedDeclaration(
+        declaration = Nullable(declaration),
+        specifiers = Seq(),
+        source = Nullable(null)
+      )
+
   }
 
 

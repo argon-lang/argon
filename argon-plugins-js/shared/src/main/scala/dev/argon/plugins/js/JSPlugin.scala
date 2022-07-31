@@ -8,6 +8,7 @@ import dev.argon.options.*
 import dev.argon.io.ResourceFactory
 import dev.argon.plugin.*
 import dev.argon.plugins.js.emit.TubeEmitter
+import dev.argon.plugins.js.estree.FunctionDeclaration
 import zio.*
 import zio.stream.*
 
@@ -25,8 +26,7 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
 
 
   override type ExternalMethodImplementation = estree.FunctionDeclaration
-
-
+  override type ExternalFunctionImplementation = estree.FunctionDeclaration
 
   override def emitTube
   (ctx: Context { type Error >: JSPluginError })
@@ -66,6 +66,12 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
       }
       .runHead
 
+
+  override def loadExternFunction[R <: Any, E >: JSPluginError]
+  (options: JSOptions[R, E])
+  (id: String)
+  : ZIO[R, E, Option[FunctionDeclaration]] =
+    loadExternMethod(options)(id)
 
   override def tubeLoaders: Map[String, TubeLoader[Any, JSPluginError]] = Map.empty
   override def buildOutputExecutor: Option[BuildOutputExecutor[JSOutput]] = ???

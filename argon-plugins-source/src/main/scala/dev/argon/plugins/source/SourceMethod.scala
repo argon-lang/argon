@@ -2,10 +2,11 @@ package dev.argon.plugins.source
 
 import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
-import dev.argon.util.*
+import dev.argon.compiler.expr.ArgonExprContext
+import dev.argon.util.{*, given}
 import dev.argon.compiler.signature.Signature
 import dev.argon.parser
-import dev.argon.parser.{MethodDeclarationStmt, IdentifierExpr}
+import dev.argon.parser.{IdentifierExpr, MethodDeclarationStmt}
 import zio.*
 
 object SourceMethod {
@@ -19,7 +20,7 @@ object SourceMethod {
   : ctx.Comp[ArMethodC with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[TOwner]] =
     for
       methodId <- UniqueIdentifier.make
-      sigCell <- MemoCell.make[ctx.Env, ctx.Error, Signature[ctx.ExprContext.WrapExpr, ctx.ExprContext.WrapExpr]]
+      sigCell <- MemoCell.make[ctx.Env, ctx.Error, (Signature[ctx.ExprContext.WrapExpr, ctx.ExprContext.WrapExpr], exprConverter.Env)]
       implCell <- MemoCell.make[ctx.Env, ctx.Error, MethodImplementationC with HasContext[ctx.type]]
 
     yield new ArMethodC {
@@ -34,16 +35,18 @@ object SourceMethod {
       override def isVirtual: Boolean = stmt.modifiers.exists(_.value == parser.VirtualModifier)
       override def isFinal: Boolean = stmt.modifiers.exists(_.value == parser.FinalModifier)
 
-      override def signatureUnsubstituted: Comp[Signature[WrapExpr, WrapExpr]] =
+      private def sigEnv: Comp[(Signature[WrapExpr, WrapExpr], exprConverter.Env)] =
         sigCell.get(
           SignatureUtil.create(context)(exprConverter)(this)(outerEnv)(stmt.parameters)(
             SignatureUtil.createFunctionResult(context)(exprConverter)(stmt.returnType)
           )
-            .flatMap { (sig, env) =>
-              SignatureUtil.resolveHolesSig(context)(exprConverter)(env)(exprConverter.functionSigHandler)(sig)
-                .map { case (sig, _) => sig: Signature[WrapExpr, WrapExpr] }
-            }
         )
+
+      private def innerEnv: Comp[exprConverter.Env] =
+        sigEnv.map { _._2 }
+
+      override def signatureUnsubstituted: Comp[Signature[WrapExpr, WrapExpr]] =
+        sigEnv.map { _._1 }
 
       override type IsDeclaration = true
       override def implementation: Comp[MethodImplementation] =
@@ -69,7 +72,16 @@ object SourceMethod {
                 )
 
             case Some(expr) =>
-              ???
+              for
+                sig <- signatureUnsubstituted
+                returnType = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(sig.unsubstitutedResult)
+                env <- innerEnv
+                bodyResult <- exprConverter.convertExpr(expr).check(env, returnType)
+                resolvedBody <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)
+              yield new MethodImplementationC.ExpressionBody {
+                override val context: ctx.type = ctx
+                override val body: WrapExpr = resolvedBody._1
+              }
           }
         )
 

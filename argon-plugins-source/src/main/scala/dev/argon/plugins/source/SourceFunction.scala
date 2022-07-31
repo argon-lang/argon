@@ -1,12 +1,12 @@
 package dev.argon.plugins.source
 
-import dev.argon.compiler.*
+import dev.argon.compiler.{definitions, *}
 import dev.argon.compiler.definitions.*
 import dev.argon.compiler.expr.*
 import dev.argon.compiler.signature.Signature
 import dev.argon.parser
 import dev.argon.parser.{FunctionDeclarationStmt, IdentifierExpr}
-import dev.argon.util.*
+import dev.argon.util.{*, given}
 import zio.*
 
 object SourceFunction {
@@ -15,33 +15,70 @@ object SourceFunction {
   (ctx: Context)
   (exprConverter: ExpressionConverter with HasContext[ctx.type])
   (outerEnv: exprConverter.Env)
-  (functionOwner: TOwner)
+  (functionOwner: TOwner & ArFuncC.Ownership[ctx.type])
   (stmt: FunctionDeclarationStmt)
   : ctx.Comp[ArFuncC with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[TOwner]] =
     for
       funcId <- UniqueIdentifier.make
-      sigCell <- MemoCell.make[ctx.Env, ctx.Error, Signature[ctx.ExprContext.WrapExpr, ctx.ExprContext.WrapExpr]]
+
+      innerEnvCell <- MemoCell.make[ctx.Env, ctx.Error, exprConverter.Env]
+
+      sigCell <- MemoCell.make[ctx.Env, ctx.Error, (Signature[ctx.ExprContext.WrapExpr, ctx.ExprContext.WrapExpr], exprConverter.Env)]
+      implCell <- MemoCell.make[ctx.Env, ctx.Error, FunctionImplementationC with HasContext[ctx.type]]
 
     yield new ArFuncC {
       override val context: ctx.type = ctx
       import context.ExprContext.{WrapExpr, ArExpr, ExprConstructor}
 
       override val id: UniqueIdentifier = funcId
+      override val owner: functionOwner.type = functionOwner
 
       override type IsDeclaration = true
 
-      override def signature: Comp[Signature[WrapExpr, WrapExpr]] =
+      private def sigEnv: Comp[(Signature[WrapExpr, WrapExpr], exprConverter.Env)] =
         sigCell.get(
           SignatureUtil.create(context)(exprConverter)(this)(outerEnv)(stmt.parameters)(
             SignatureUtil.createFunctionResult(context)(exprConverter)(stmt.returnType)
           )
-            .flatMap { (sig, env) =>
-              SignatureUtil.resolveHolesSig(context)(exprConverter)(env)(exprConverter.functionSigHandler)(sig)
-                .map { case (sig, _) => sig: Signature[WrapExpr, WrapExpr] }
-            }
         )
 
-      override val owner: TOwner = functionOwner
+
+      private def innerEnv: Comp[exprConverter.Env] =
+        sigEnv.map { _._2 }
+
+      override def signature: Comp[Signature[WrapExpr, WrapExpr]] =
+        sigEnv.map { _._1 }
+
+      override def implementation: Comp[FunctionImplementation] =
+        implCell.get(
+          stmt.body match {
+            case WithSource(parser.ExternExpr(specifier), location) =>
+              val tube = ArFuncC.getOwningModule(owner).tube
+              context.getExternFunctionImplementation(tube.options, specifier)
+                .mapBoth(
+                  {
+                    case Some(e) => e
+                    case None => DiagnosticError.ExternFunctionNotFound(DiagnosticSource.Location(location), specifier)
+                  },
+                  extern => new FunctionImplementationC.External {
+                    override val context: ctx.type = ctx
+                    override val impl: context.ExternFunctionImplementation = extern
+                  }
+                )
+
+            case expr =>
+              for
+                sig <- signature
+                returnType = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(sig.unsubstitutedResult)
+                env <- innerEnv
+                bodyResult <- exprConverter.convertExpr(expr).check(env, returnType)
+                resolvedBody <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)
+              yield new FunctionImplementationC.ExpressionBody {
+                override val context: ctx.type = ctx
+                override val body: WrapExpr = resolvedBody._1
+              }
+          }
+        )
     }
 
 }

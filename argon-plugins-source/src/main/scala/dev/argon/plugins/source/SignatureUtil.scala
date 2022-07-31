@@ -1,6 +1,7 @@
 package dev.argon.plugins.source
 
 import dev.argon.compiler.*
+import dev.argon.compiler.expr.ArgonExprContext
 import dev.argon.util.{*, given}
 import dev.argon.parser
 import dev.argon.parser.IdentifierExpr
@@ -15,42 +16,49 @@ object SignatureUtil {
   (owner: exprConverter.exprContext.ParameterVariableOwner)
   (env: exprConverter.Env)
   (parameters: Seq[WithSource[parser.FunctionParameterList]])
-  (createResult: exprConverter.Env => context.Comp[(Res, exprConverter.Env)])
-  : context.Comp[(Signature[exprConverter.exprContext.WrapExpr, Res], exprConverter.Env)] =
+  (createResult: exprConverter.Env => context.Comp[Res])
+  : context.Comp[(Signature[context.ExprContext.WrapExpr, Res], exprConverter.Env)] =
     import exprConverter.Env
-    import exprConverter.exprContext.{WrapExpr, ArExpr, ExprConstructor}
 
     def impl
     (env: exprConverter.Env)
     (parameters: Seq[WithSource[parser.FunctionParameterList]])
     (index: Int)
-    : context.Comp[(Signature[exprConverter.exprContext.WrapExpr, Res], exprConverter.Env)] =
+    : context.Comp[(Signature[context.ExprContext.WrapExpr, Res], exprConverter.Env)] =
       parameters match
         case WithSource(param, location) +: tail =>
-          def convertParamElementTypes(parameters: Seq[WithSource[parser.FunctionParameter]], env: exprConverter.Env, acc: Seq[(IdentifierExpr, WrapExpr)]): context.Comp[(Seq[(IdentifierExpr, WrapExpr)], exprConverter.Env)] =
+          def convertParamElementTypes(parameters: Seq[WithSource[parser.FunctionParameter]], env: exprConverter.Env, acc: Seq[(IdentifierExpr, context.ExprContext.WrapExpr)]): context.Comp[Seq[(IdentifierExpr, context.ExprContext.WrapExpr)]] =
             parameters match
               case WithSource(parser.FunctionParameter(paramType, name), _) +: tail =>
                 exprConverter.convertExpr(paramType).check(env, exprConverter.anyType).flatMap { exprResult =>
-                  convertParamElementTypes(tail, exprResult.env, acc :+ (name -> exprResult.expr))
+                  exprConverter.resolveHoles(exprResult.env, exprResult.expr).flatMap { case (resExpr, _) =>
+                    convertParamElementTypes(tail, env, acc :+ (name -> resExpr))
+                  }
                 }
 
               case _ =>
-                ZIO.succeed((acc, env))
+                ZIO.succeed(acc)
 
             end match
 
           val typeExpr = WithSource(parser.TupleExpr(param.parameters.map { case WithSource(parser.FunctionParameter(paramType, _), _) => paramType }), location)
           for
-            paramElementTypesPair <- convertParamElementTypes(param.parameters, env, Seq())
-            (paramElementTypes, env) = paramElementTypesPair
+            paramElementTypes <- convertParamElementTypes(param.parameters, env, Seq())
 
-            paramType = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadTuple, paramElementTypes.map { _._2 }.toVector))
-            paramVar = exprConverter.exprContext.ParameterVariable(owner, index, paramType, param.isErased)
+            paramType = context.ExprContext.WrapExpr.OfExpr(
+              context.ExprContext.ArExpr(
+                context.ExprContext.ExprConstructor.LoadTuple,
+                paramElementTypes.map { _._2 }.toVector
+              )
+            )
+            paramType2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(paramType)
+            paramVar = exprConverter.exprContext.ParameterVariable(owner, index, paramType2, param.isErased)
             paramVarElements = paramElementTypes
               .zipWithIndex
               .map {
                 case ((name, t), i) =>
-                  name -> exprConverter.ParameterVariableElement(paramVar, i, t)
+                  val t2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(t)
+                  name -> exprConverter.ParameterVariableElement(paramVar, i, t2)
               }
               .toMap
 
@@ -59,8 +67,7 @@ object SignatureUtil {
           yield (Signature.Parameter(param.listType, param.isErased, paramType, next), env)
 
         case _ =>
-          createResult(env).map {
-            case (res, env) =>
+          createResult(env).map { res =>
               (Signature.Result(res), env)
           }
 
@@ -70,11 +77,8 @@ object SignatureUtil {
   def createTraitResult(context: Context)(exprConverter: ExpressionConverter with HasContext[context.type])
     (stmt: parser.TraitDeclarationStmt)(env: exprConverter.Env)
     : context.Comp[(
-      (
-        exprConverter.exprContext.WrapExpr,
-        Seq[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.TraitType]],
-      ),
-      exprConverter.Env,
+      context.ExprContext.WrapExpr,
+      Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]],
     )] =
     import context.Comp
     import exprConverter.Env
@@ -113,9 +117,24 @@ object SignatureUtil {
           ZIO.succeed((Seq.empty, env))
       }
 
-    baseTypes.map { case (baseTraits, env) =>
-      ((traitType, baseTraits), env)
-    }
+    for
+      bt <- baseTypes
+      (baseTraits, env) = bt
+
+      traitType2Pair <- exprConverter.resolveHoles(env, traitType)
+      (traitType2, env) = traitType2Pair
+
+      envCell <- Ref.make(env)
+
+      baseTraits2 <- ZIO.foreach(baseTraits) { baseTrait =>
+        for
+          env <- envCell.get
+          resolvedPair <- exprConverter.resolveHolesTraitType(env, baseTrait)
+          (res, env) = resolvedPair
+          _ <- envCell.set(env)
+        yield res
+      }
+    yield (traitType2, baseTraits2)
   end createTraitResult
 
   def createClassResult
@@ -124,12 +143,9 @@ object SignatureUtil {
   (stmt: parser.ClassDeclarationStmt)
   (env: exprConverter.Env)
   : context.Comp[(
-    (
-      exprConverter.exprContext.WrapExpr,
-      Option[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.ClassType]],
-      Seq[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.TraitType]],
-    ),
-    exprConverter.Env,
+    context.ExprContext.WrapExpr,
+    Option[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.ClassType]],
+    Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]],
   )] =
     import context.Comp
     import exprConverter.Env
@@ -180,9 +196,33 @@ object SignatureUtil {
           ZIO.succeed((None, Seq.empty, env))
       }
 
-    baseTypes.map { case (baseClass, baseTraits, env) =>
-      ((classType, baseClass, baseTraits), env)
-    }
+    for
+      bt <- baseTypes
+      (baseClass, baseTraits, env) = bt
+
+      classType2Pair <- exprConverter.resolveHoles(env, classType)
+      (classType2, env) = classType2Pair
+
+      envCell <- Ref.make(env)
+
+      baseClass2 <- ZIO.foreach(baseClass) { baseClass =>
+        for
+          env <- envCell.get
+          resolvedPair <- exprConverter.resolveHolesClassType(env, baseClass)
+          (res, env) = resolvedPair
+          _ <- envCell.set(env)
+        yield res
+      }
+
+      baseTraits2 <- ZIO.foreach(baseTraits) { baseTrait =>
+        for
+          env <- envCell.get
+          resolvedPair <- exprConverter.resolveHolesTraitType(env, baseTrait)
+          (res, env) = resolvedPair
+          _ <- envCell.set(env)
+        yield res
+      }
+    yield (classType2, baseClass2, baseTraits2)
   end createClassResult
 
   def createFunctionResult
@@ -190,12 +230,11 @@ object SignatureUtil {
   (exprConverter: ExpressionConverter with HasContext[context.type])
   (returnTypeExpr: WithSource[parser.Expr])
   (env: exprConverter.Env)
-  : context.Comp[(
-    exprConverter.exprContext.WrapExpr,
-    exprConverter.Env,
-  )] =
+  : context.Comp[context.ExprContext.WrapExpr] =
     exprConverter.convertExpr(returnTypeExpr).check(env, exprConverter.anyType)
-      .map { exprResult => (exprResult.expr, exprResult.env) }
+      .flatMap { exprResult => exprConverter.resolveHoles(exprResult.env, exprResult.expr) }
+      .map { _._1 }
+
 
   def resolveHolesSig[Res1, Res2](context: Context)(exprConverter: ExpressionConverter with HasContext[context.type])
     (env: exprConverter.Env)(sigHandler: exprConverter.SignatureHandlerPlus[Res1, Res2])

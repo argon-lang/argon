@@ -18,6 +18,7 @@ trait UsingContext {
   protected type ClassConstructor = ClassConstructorC with HasContext[context.type]
 
   protected type MethodImplementation = MethodImplementationC with HasContext[context.type]
+  protected type FunctionImplementation = FunctionImplementationC with HasContext[context.type]
 
   protected type OwnedByModule = OwnedByModuleC[context.type]
   protected type OwnedByClass[+ClassOwner] = OwnedByClassC[context.type, ClassOwner]

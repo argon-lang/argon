@@ -23,10 +23,15 @@ object SourceTrait {
 
       innerEnvCell <- MemoCell.make[ctx.Env, ctx.Error, exprConverter2.Env]
       sigCell <-
-        MemoCell.make[ctx.Env, ctx.Error, Signature[
-          ctx.ExprContext.WrapExpr,
-          (ctx.ExprContext.WrapExpr, Seq[ctx.ExprContext.ArExpr[ctx.ExprContext.ExprConstructor.TraitType]]),
-        ]]
+        MemoCell.make[ctx.Env, ctx.Error,
+          (
+            Signature[
+              ctx.ExprContext.WrapExpr,
+              (ctx.ExprContext.WrapExpr, Seq[ctx.ExprContext.ArExpr[ctx.ExprContext.ExprConstructor.TraitType]]),
+            ],
+            exprConverter2.Env
+          )
+        ]
       methodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
           with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[OwnedByTraitC[ctx.type, traitOwner.type]]]]]
@@ -45,19 +50,19 @@ object SourceTrait {
 
       import context.ExprContext.{WrapExpr, ArExpr, ExprConstructor}
 
-      override def signature: Comp[Signature[WrapExpr, TraitResult]] =
+
+      private def sigEnv: Comp[(Signature[WrapExpr, TraitResult], exprConverter.Env)] =
         sigCell.get(
           SignatureUtil.create(context)(exprConverter)(this)(outerEnv)(stmt.parameters)(
             SignatureUtil.createTraitResult(context)(exprConverter)(stmt)
           )
-            .flatMap { (sig, env) =>
-              SignatureUtil.resolveHolesSig(context)(exprConverter)(env)(exprConverter.traitSigHandler)(sig)
-                .map { case (sig, _) => sig: Signature[WrapExpr, TraitResult] }
-            }
         )
 
+      override def signature: Comp[Signature[WrapExpr, TraitResult]] =
+        sigEnv.map { _._1 }
+
       override def innerEnv: Comp[exprConverter.Env] =
-        EnvHelper.createInnerEnv(exprConverter)(innerEnvCell)(outerEnv)(this)(signature)
+        sigEnv.map { _._2 }
 
       override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[true] with HasOwner[OwnedByTrait[owner.type]]]]] =
         methodsCell.get(buildMethods[OwnedByTrait[owner.type]](OwnedByTraitC.apply)(stmt.instanceBody))

@@ -26,6 +26,7 @@ object DiagnosticError {
   final case class InvalidGlobalAccessModifier(accessModifier: AccessModifier) extends DiagnosticError
   final case class AbstractMethodNotImplemented() extends DiagnosticError
   final case class ExternMethodNotFound(source: DiagnosticSource, specifier: String) extends DiagnosticError
+  final case class ExternFunctionNotFound(source: DiagnosticSource, specifier: String) extends DiagnosticError
 
   final case class SpecMultiPartGlobUsedWithPrefixSuffix() extends DiagnosticError
   final case class SpecFileNameTemplateMustBeIdentifier() extends DiagnosticError
