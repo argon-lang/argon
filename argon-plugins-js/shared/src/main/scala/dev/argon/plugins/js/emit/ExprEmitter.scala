@@ -256,7 +256,15 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         )
 
       case ctor: (expr.constructor.type & ExprConstructor.FunctionCall) =>
-        ???
+        for
+          sig <- ctor.function.signature
+          erasedSig <- SignatureEraser(context).erasedWithResult(sig)
+          owner = ctor.function.owner
+          specifier = ImportSpecifier(owner.module.tube.tubeName, owner.module.moduleName.path, owner.ownedName, erasedSig)
+          importName <- getImportName(specifier)
+
+          args <- emitArgExprs(expr.getArgs(ctor), sig, Seq())
+        yield id(importName).call(args*)
 
       case ctor: (expr.constructor.type & ExprConstructor.LoadConstantBool) =>
         ZIO.succeed(literal(ctor.b))
@@ -285,6 +293,17 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       case _ =>
         ZIO.logError(s"Unimplemented expression: $expr") *> ZIO.succeed(???)
     end match
+
+  private def emitArgExprs(args: Seq[WrapExpr], sig: Signature[WrapExpr, ?], prev: Seq[estree.Expression]): Comp[Seq[estree.Expression]] =
+    (args, sig) match {
+      case (_ +: restArgs, Signature.Parameter(_, false, _, nextSig)) => emitArgExprs(restArgs, nextSig, prev)
+      case (arg +: restArgs, Signature.Parameter(_, true, _, nextSig)) =>
+        emitWrapExpr(arg).flatMap { argExpr =>
+          emitArgExprs(restArgs, nextSig, prev :+ argExpr)
+        }
+
+      case _ => ZIO.succeed(prev)
+    }
 
 }
 
