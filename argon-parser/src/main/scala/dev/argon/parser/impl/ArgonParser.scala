@@ -98,7 +98,7 @@ object ArgonParser {
 
     // Functions and Methods
     case object MethodParameter extends ArgonRuleName[FunctionParameter]
-    case object MethodParameterList extends ArgonRuleName[Vector[WithSource[FunctionParameter]]]
+    case object MethodParameterList extends ArgonRuleName[(Vector[WithSource[FunctionParameter]], Boolean)]
     case object MethodParameters extends ArgonRuleName[Vector[WithSource[FunctionParameterList]]]
     case object MethodBody extends ArgonRuleName[Expr]
     case object BlockBody extends ArgonRuleName[BlockExpr]
@@ -605,10 +605,10 @@ object ArgonParser {
                 case (_, param, _) => param
               })*) ++
               (matchToken(OP_COMMA) ?) --> {
-                case (firstParam, _, restParams, _) =>
-                  firstParam +: restParams
+                case (firstParam, _, restParams, trailingComma) =>
+                  (firstParam +: restParams, trailingComma.isDefined)
               }
-          ) ?) --> { _.map(_.toVector).getOrElse(Vector.empty) }
+          ) ?) --> { _.map { case (params, hasTrailingComma) => (params.toVector, hasTrailingComma) }.getOrElse((Vector.empty, false)) }
 
         case Rule.MethodParameters =>
           ((
@@ -618,22 +618,28 @@ object ArgonParser {
               ) ++ matchToken(KW_ERASED).? ++ rule(Rule.NewLines) ++ rule(Rule.MethodParameterList) ++ rule(
                 Rule.NewLines
               ) ++ matchToken(OP_CLOSEPAREN)) --> {
-                case (_, (_, requiresToken, _, erasedToken, _, params, _, _)) =>
+                case (_, (_, requiresToken, _, erasedToken, _, (params, hasTrailingComma), _, _)) =>
                   val listType =
                     if requiresToken.isDefined then FunctionParameterListType.RequiresList
                     else FunctionParameterListType.NormalList
-                  FunctionParameterList(listType, isErased = erasedToken.isDefined, params)
+                  FunctionParameterList(
+                    listType,
+                    isErased = erasedToken.isDefined,
+                    params,
+                    hasTrailingComma = hasTrailingComma,
+                  )
               }
             ) |
               (
                 matchToken(OP_OPENBRACKET) ++! (rule(Rule.NewLines) ++ matchToken(KW_ERASED).? ++ rule(
                   Rule.NewLines
                 ) ++ rule(Rule.MethodParameterList) ++ rule(Rule.NewLines) ++ matchToken(OP_CLOSEBRACKET)) --> {
-                  case (_, (_, erasedToken, _, params, _, _)) =>
+                  case (_, (_, erasedToken, _, (params, hasTrailingComma), _, _)) =>
                     FunctionParameterList(
                       FunctionParameterListType.InferrableList,
                       isErased = erasedToken.isDefined,
                       params,
+                      hasTrailingComma = hasTrailingComma,
                     )
                 }
               )

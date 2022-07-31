@@ -40,7 +40,7 @@ trait ExprUtil extends UsingContext {
   def referencesVariableSig[Res](variable: Variable)(sigHandler: SignatureHandler[Res])(sig: Signature[WrapExpr, Res])
     : Boolean =
     sig match {
-      case Signature.Parameter(_, _, paramType, next) =>
+      case Signature.Parameter(_, _, _, paramType, next) =>
         referencesVariable(variable)(paramType) || referencesVariableSig(variable)(sigHandler)(next)
 
       case Signature.Result(res) =>
@@ -69,10 +69,11 @@ trait ExprUtil extends UsingContext {
                               (sig: Signature[WrapExpr, Res])
   : Signature[WrapExpr, Res] =
     sig match {
-      case Signature.Parameter(listType, isErased, paramType, next) =>
+      case Signature.Parameter(listType, isErased, paramName, paramType, next) =>
         Signature.Parameter(
           listType,
           isErased,
+          paramName,
           substituteWrapExprMany(subst)(paramType),
           substituteSignatureMany(subst)(sigHandler)(next),
         )

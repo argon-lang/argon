@@ -497,25 +497,25 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         (args, sig) match {
           case (
                 ArgumentInfo(_, _, FunctionParameterListType.InferrableList) :: tailArgs,
-                Signature.Parameter(FunctionParameterListType.InferrableList, _, _, nextSig),
+                Signature.Parameter(FunctionParameterListType.InferrableList, _, _, _, nextSig),
               ) =>
             argumentDelta(tailArgs, nextSig, acc)
 
           case (
                 ArgumentInfo(_, _, FunctionParameterListType.InferrableList2) :: tailArgs,
-                Signature.Parameter(FunctionParameterListType.InferrableList2, _, _, nextSig),
+                Signature.Parameter(FunctionParameterListType.InferrableList2, _, _, _, nextSig),
               ) =>
             argumentDelta(tailArgs, nextSig, acc)
 
           case (
                 ArgumentInfo(_, _, FunctionParameterListType.RequiresList) :: tailArgs,
-                Signature.Parameter(FunctionParameterListType.RequiresList, _, _, nextSig),
+                Signature.Parameter(FunctionParameterListType.RequiresList, _, _, _, nextSig),
               ) =>
             argumentDelta(tailArgs, nextSig, acc)
 
           case (
                 ArgumentInfo(_, _, FunctionParameterListType.NormalList) :: tailArgs,
-                Signature.Parameter(_, _, _, nextSig),
+                Signature.Parameter(_, _, _, _, nextSig),
               ) =>
             argumentDelta(tailArgs, nextSig, acc)
 
@@ -532,7 +532,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           case (ArgumentInfo(_, _, FunctionParameterListType.NormalList) :: tailArgs, Signature.Result(_)) =>
             argumentDelta(tailArgs, sig, acc + 1)
 
-          case (Nil, Signature.Parameter(_, _, _, nextSig)) =>
+          case (Nil, Signature.Parameter(_, _, _, _, nextSig)) =>
             argumentDelta(args, sig, acc - 1)
 
           case (Nil, Signature.Result(_)) => acc
@@ -559,32 +559,33 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       def isBetterSig(a: Signature[WrapExpr, ?], b: Signature[WrapExpr, ?], hasFoundBetter: Boolean): Comp[Boolean] =
         (a, b) match {
           case (
-                Signature.Parameter(FunctionParameterListType.InferrableList, _, typeA, nextA),
-                Signature.Parameter(FunctionParameterListType.InferrableList, _, typeB, nextB),
+                Signature.Parameter(FunctionParameterListType.InferrableList, _, _, typeA, nextA),
+                Signature.Parameter(FunctionParameterListType.InferrableList, _, _, typeB, nextB),
               ) =>
             checkBetterParams(typeA, typeB, nextA, nextB, hasFoundBetter)
 
           case (
-                Signature.Parameter(FunctionParameterListType.InferrableList2, _, typeA, nextA),
-                Signature.Parameter(FunctionParameterListType.InferrableList2, _, typeB, nextB),
+                Signature.Parameter(FunctionParameterListType.InferrableList2, _, _, typeA, nextA),
+                Signature.Parameter(FunctionParameterListType.InferrableList2, _, _, typeB, nextB),
               ) =>
             checkBetterParams(typeA, typeB, nextA, nextB, hasFoundBetter)
 
           case (
-                Signature.Parameter(FunctionParameterListType.RequiresList, _, typeA, nextA),
-                Signature.Parameter(FunctionParameterListType.RequiresList, _, typeB, nextB),
+                Signature.Parameter(FunctionParameterListType.RequiresList, _, _, typeA, nextA),
+                Signature.Parameter(FunctionParameterListType.RequiresList, _, _, typeB, nextB),
               ) =>
             checkBetterParams(typeA, typeB, nextA, nextB, hasFoundBetter)
 
           case (
-                Signature.Parameter(FunctionParameterListType.NormalList, _, typeA, nextA),
-                Signature.Parameter(FunctionParameterListType.NormalList, _, typeB, nextB),
+                Signature.Parameter(FunctionParameterListType.NormalList, _, _, typeA, nextA),
+                Signature.Parameter(FunctionParameterListType.NormalList, _, _, typeB, nextB),
               ) =>
             checkBetterParams(typeA, typeB, nextA, nextB, hasFoundBetter)
 
           case (
                 Signature.Parameter(
                   FunctionParameterListType.InferrableList | FunctionParameterListType.InferrableList2 | FunctionParameterListType.RequiresList,
+                  _,
                   _,
                   _,
                   nextA,
@@ -599,6 +600,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                   FunctionParameterListType.InferrableList | FunctionParameterListType.InferrableList2 | FunctionParameterListType.RequiresList,
                   _,
                   _,
+                  _,
                   nextB,
                 ),
               ) =>
@@ -607,10 +609,10 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           case (Signature.Result(_), Signature.Result(_)) =>
             ZIO.succeed(hasFoundBetter)
 
-          case (Signature.Result(_), Signature.Parameter(FunctionParameterListType.NormalList, _, _, _)) =>
+          case (Signature.Result(_), Signature.Parameter(FunctionParameterListType.NormalList, _, _, _, _)) =>
             ZIO.succeed(false)
 
-          case (Signature.Parameter(FunctionParameterListType.NormalList, _, _, _), Signature.Result(_)) =>
+          case (Signature.Parameter(FunctionParameterListType.NormalList, _, _, _, _), Signature.Result(_)) =>
             ZIO.succeed(false)
         }
 
@@ -686,7 +688,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
             failure = _ => ZIO.none,
             success =
               result => {
-                val variable = ParameterVariable(owner, convArgs.size, paramType, paramErased)
+                val variable = ParameterVariable(owner, convArgs.size, paramType, paramErased, None)
                 substituteArg(variable)(result.expr)(sigHandler)(next).flatMap { case (next, resultExpr) =>
                   createSigResult(owner, result.env, next, tailArgs, convArgs :+ resultExpr)(sigHandler)(f)
                 }
@@ -695,7 +697,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       def inferArg(paramErased: Boolean, paramType: WrapExpr, next: Signature[WrapExpr, Res]): Comp[Option[Comp[ExprTypeResult]]] =
         UniqueIdentifier.make.flatMap { hole =>
-          val variable = ParameterVariable(owner, convArgs.size, paramType, paramErased)
+          val variable = ParameterVariable(owner, convArgs.size, paramType, paramErased, None)
           substituteArg(variable)(WrapExpr.OfHole(hole))(sigHandler)(next).flatMap { case (next, resultExpr) =>
             createSigResult(owner, env, next, args, convArgs :+ resultExpr)(sigHandler)(f)
           }
@@ -706,7 +708,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           case Some(implicitResolver.ResolvedImplicit(proof, model)) =>
             val env2 = env.copy(model = model)
             proofToExpr(proof).flatMap { paramValue =>
-              val variable = ParameterVariable(owner, convArgs.size, paramType, paramErased)
+              val variable = ParameterVariable(owner, convArgs.size, paramType, paramErased, None)
               substituteArg(variable)(paramValue)(sigHandler)(next).flatMap { case (next, resultExpr) =>
                 createSigResult(owner, env2, next, args, convArgs :+ resultExpr)(sigHandler)(f)
               }
@@ -718,38 +720,38 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       (args, sig) match {
         case (
               (arg @ ArgumentInfo(_, _, FunctionParameterListType.NormalList)) :: tailArgs,
-              Signature.Parameter(FunctionParameterListType.NormalList, paramErased, paramType, next),
+              Signature.Parameter(FunctionParameterListType.NormalList, paramErased, _, paramType, next),
             ) =>
           handleArg(arg, paramErased, paramType, tailArgs, next)
 
-        case (_, Signature.Parameter(FunctionParameterListType.NormalList, _, paramType, next)) =>
+        case (_, Signature.Parameter(FunctionParameterListType.NormalList, _, _, paramType, next)) =>
           ???
 
         case (
               (arg @ ArgumentInfo(_, _, FunctionParameterListType.InferrableList)) :: tailArgs,
-              Signature.Parameter(FunctionParameterListType.InferrableList, paramErased, paramType, next),
+              Signature.Parameter(FunctionParameterListType.InferrableList, paramErased, _, paramType, next),
             ) =>
           handleArg(arg, paramErased, paramType, tailArgs, next)
 
-        case (_, Signature.Parameter(FunctionParameterListType.InferrableList, paramErased, paramType, next)) =>
+        case (_, Signature.Parameter(FunctionParameterListType.InferrableList, paramErased, _, paramType, next)) =>
           inferArg(paramErased, paramType, next)
 
         case (
               (arg @ ArgumentInfo(_, _, FunctionParameterListType.InferrableList2)) :: tailArgs,
-              Signature.Parameter(FunctionParameterListType.InferrableList2, paramErased, paramType, next),
+              Signature.Parameter(FunctionParameterListType.InferrableList2, paramErased, _, paramType, next),
             ) =>
           handleArg(arg, paramErased, paramType, tailArgs, next)
 
-        case (_, Signature.Parameter(FunctionParameterListType.InferrableList2, paramErased, paramType, next)) =>
+        case (_, Signature.Parameter(FunctionParameterListType.InferrableList2, paramErased, _, paramType, next)) =>
           inferArg(paramErased, paramType, next)
 
         case (
               (arg @ ArgumentInfo(_, _, FunctionParameterListType.RequiresList)) :: tailArgs,
-              Signature.Parameter(FunctionParameterListType.RequiresList, paramErased, paramType, next),
+              Signature.Parameter(FunctionParameterListType.RequiresList, paramErased, _, paramType, next),
             ) =>
           handleArg(arg, paramErased, paramType, tailArgs, next)
 
-        case (_, Signature.Parameter(FunctionParameterListType.RequiresList, paramErased, paramType, next)) =>
+        case (_, Signature.Parameter(FunctionParameterListType.RequiresList, paramErased, _, paramType, next)) =>
           resolveReqArg(paramErased, paramType, next)
 
         case (_, Signature.Result(res)) =>
@@ -1025,13 +1027,13 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       (sigHandler: SignatureHandler[Res])(paramIndex: Int, args: List[WrapExpr])(sig: Signature[WrapExpr, Res])
       : Comp[Res] =
       (args, sig) match {
-        case (arg :: tailArgs, Signature.Parameter(_, paramErased, paramType, next)) =>
-          val variable = ParameterVariable(owner, paramIndex, paramType, paramErased)
+        case (arg :: tailArgs, Signature.Parameter(_, paramErased, paramName, paramType, next)) =>
+          val variable = ParameterVariable(owner, paramIndex, paramType, paramErased, paramName)
           substituteArg(variable)(arg)(sigHandler)(next).flatMap { case (next, _) =>
             resolveTypeSignatureResult(owner)(sigHandler)(paramIndex + 1, tailArgs)(next)
           }
 
-        case (Nil, Signature.Parameter(_, _, _, _)) => ???
+        case (Nil, Signature.Parameter(_, _, _, _, _)) => ???
 
         case (Nil, Signature.Result(res)) => ZIO.succeed(res)
 

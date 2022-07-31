@@ -161,7 +161,12 @@ final case class FunctionParameter
   (paramType: WithSource[Expr], name: IdentifierExpr)
 
 final case class FunctionParameterList
-  (listType: FunctionParameterListType, isErased: Boolean, parameters: Vector[WithSource[FunctionParameter]])
+(
+  listType: FunctionParameterListType,
+  isErased: Boolean,
+  parameters: Vector[WithSource[FunctionParameter]],
+  hasTrailingComma: Boolean,
+)
 
 sealed trait Operator derives CanEqual {
   def symbol: String

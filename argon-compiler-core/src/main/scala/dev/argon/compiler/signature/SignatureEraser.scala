@@ -15,10 +15,10 @@ trait SignatureEraser extends UsingContext {
 
   private def getErasedArgs(sig: Signature[WrapExpr, ?], args: Seq[WrapExpr], prev: Seq[ErasedSignatureType]): Comp[Seq[ErasedSignatureType]] =
     (sig, args) match
-      case (Signature.Parameter(_, true, _, next), _ +: tailArgs) =>
+      case (Signature.Parameter(_, true, _, _, next), _ +: tailArgs) =>
         getErasedArgs(next, tailArgs, prev :+ ErasedSignatureType.Erased)
 
-      case (Signature.Parameter(_, false, t, next), arg +: tailArgs) =>
+      case (Signature.Parameter(_, false, _, t, next), arg +: tailArgs) =>
         getErasedSigType(t).flatMap { erasedT =>
           getErasedArgs(next, tailArgs, prev :+ erasedT)
         }
@@ -89,7 +89,7 @@ trait SignatureEraser extends UsingContext {
 
   private def erasedImpl[TRes](prev: Seq[ErasedSignatureType], sig: Signature[WrapExpr, TRes])(f: (Seq[ErasedSignatureType], TRes) => Comp[ErasedSignature]): Comp[ErasedSignature] =
     sig match
-      case Signature.Parameter(_, _, paramType, next) =>
+      case Signature.Parameter(_, _, _, paramType, next) =>
         getErasedSigType(paramType).flatMap { erased =>
           erasedImpl(prev :+ erased, next)(f)
         }

@@ -104,9 +104,8 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
       val parameterIndex: Int,
       override val varType: WrapExpr,
       override val isErased: Boolean,
+      override val name: Option[IdentifierExpr],
     ) extends Variable {
-
-    override def name: Option[IdentifierExpr] = None
     override def isMutable: Boolean = false
 
     override def equals(obj: Any): Boolean =
@@ -416,7 +415,7 @@ object ArgonExprContext {
       case variable: ec1.ParameterVariable =>
         for {
           varType2 <- convertWrapExpr(context)(ec1, ec2)(f)(variable.varType)
-        } yield ec2.ParameterVariable(variable.owner, variable.parameterIndex, varType2, variable.isErased)
+        } yield ec2.ParameterVariable(variable.owner, variable.parameterIndex, varType2, variable.isErased, variable.name)
     }
 
   def convertLocalVariable[F[+_]: Monad]

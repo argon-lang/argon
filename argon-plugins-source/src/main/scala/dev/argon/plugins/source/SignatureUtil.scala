@@ -27,13 +27,17 @@ object SignatureUtil {
     : context.Comp[(Signature[context.ExprContext.WrapExpr, Res], exprConverter.Env)] =
       parameters match
         case WithSource(param, location) +: tail =>
+          def convertParamElementType(param: parser.FunctionParameter, env: exprConverter.Env): context.Comp[context.ExprContext.WrapExpr] =
+            for
+              exprResult <- exprConverter.convertExpr(param.paramType).check(env, exprConverter.anyType)
+              resExprPair <- exprConverter.resolveHoles(exprResult.env, exprResult.expr)
+            yield resExprPair._1
+
           def convertParamElementTypes(parameters: Seq[WithSource[parser.FunctionParameter]], env: exprConverter.Env, acc: Seq[(IdentifierExpr, context.ExprContext.WrapExpr)]): context.Comp[Seq[(IdentifierExpr, context.ExprContext.WrapExpr)]] =
             parameters match
-              case WithSource(parser.FunctionParameter(paramType, name), _) +: tail =>
-                exprConverter.convertExpr(paramType).check(env, exprConverter.anyType).flatMap { exprResult =>
-                  exprConverter.resolveHoles(exprResult.env, exprResult.expr).flatMap { case (resExpr, _) =>
-                    convertParamElementTypes(tail, env, acc :+ (name -> resExpr))
-                  }
+              case WithSource(param, _) +: tail =>
+                convertParamElementType(param, env).flatMap { resExpr =>
+                  convertParamElementTypes(tail, env, acc :+ (param.name -> resExpr))
                 }
 
               case _ =>
@@ -41,30 +45,42 @@ object SignatureUtil {
 
             end match
 
-          val typeExpr = WithSource(parser.TupleExpr(param.parameters.map { case WithSource(parser.FunctionParameter(paramType, _), _) => paramType }), location)
-          for
-            paramElementTypes <- convertParamElementTypes(param.parameters, env, Seq())
+          param match {
+            case parser.FunctionParameterList(_, _, Vector(WithSource(paramElem, _)), false) =>
+              for
+                paramType <- convertParamElementType(paramElem, env)
+                paramType2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(paramType)
+                paramVar = exprConverter.exprContext.ParameterVariable(owner, index, paramType2, param.isErased, Some(paramElem.name))
 
-            paramType = context.ExprContext.WrapExpr.OfExpr(
-              context.ExprContext.ArExpr(
-                context.ExprContext.ExprConstructor.LoadTuple,
-                paramElementTypes.map { _._2 }.toVector
-              )
-            )
-            paramType2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(paramType)
-            paramVar = exprConverter.exprContext.ParameterVariable(owner, index, paramType2, param.isErased)
-            paramVarElements = paramElementTypes
-              .zipWithIndex
-              .map {
-                case ((name, t), i) =>
-                  val t2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(t)
-                  name -> exprConverter.ParameterVariableElement(paramVar, i, t2)
-              }
-              .toMap
+                nextPair <- impl(env.withScope(_.addVariable(paramVar)))(tail)(index + 1)
+                (next, env) = nextPair
+              yield (Signature.Parameter(param.listType, param.isErased, Some(paramElem.name), paramType, next), env)
 
-            nextPair <- impl(env.withScope(_.addVariable(paramVar).addParameterVariableElements(paramVarElements)))(tail)(index + 1)
-            (next, env) = nextPair
-          yield (Signature.Parameter(param.listType, param.isErased, paramType, next), env)
+            case _ =>
+              for
+                paramElementTypes <- convertParamElementTypes(param.parameters, env, Seq())
+
+                paramType = context.ExprContext.WrapExpr.OfExpr(
+                  context.ExprContext.ArExpr(
+                    context.ExprContext.ExprConstructor.LoadTuple,
+                    paramElementTypes.map { _._2 }.toVector
+                  )
+                )
+                paramType2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(paramType)
+                paramVar = exprConverter.exprContext.ParameterVariable(owner, index, paramType2, param.isErased, None)
+                paramVarElements = paramElementTypes
+                  .zipWithIndex
+                  .map {
+                    case ((name, t), i) =>
+                      val t2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(t)
+                      name -> exprConverter.ParameterVariableElement(paramVar, i, t2)
+                  }
+                  .toMap
+
+                nextPair <- impl(env.withScope(_.addVariable(paramVar).addParameterVariableElements(paramVarElements)))(tail)(index + 1)
+                (next, env) = nextPair
+              yield (Signature.Parameter(param.listType, param.isErased, None, paramType, next), env)
+          }
 
         case _ =>
           createResult(env).map { res =>
@@ -241,13 +257,13 @@ object SignatureUtil {
     (sig: Signature[exprConverter.exprContext.WrapExpr, Res2])
     : context.Comp[(Signature[context.ExprContext.WrapExpr, Res1], exprConverter.Env)] =
     sig match {
-      case Signature.Parameter(listType, paramErased, paramType, next) =>
+      case Signature.Parameter(listType, paramErased, paramName, paramType, next) =>
         for {
           convParamTypeRes <- exprConverter.resolveHoles(env, paramType)
           (convParamType, env) = convParamTypeRes
           convNextRes <- resolveHolesSig(context)(exprConverter)(env)(sigHandler)(next)
           (convNext, env) = convNextRes
-        } yield (Signature.Parameter(listType, paramErased, convParamType, convNext), env)
+        } yield (Signature.Parameter(listType, paramErased, paramName, convParamType, convNext), env)
 
       case Signature.Result(res) =>
         sigHandler.resolveResultHoles(env, res).map { case (res, env) => (Signature.Result(res), env) }

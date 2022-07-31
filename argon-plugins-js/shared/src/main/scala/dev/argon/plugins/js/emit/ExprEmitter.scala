@@ -62,8 +62,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
   private def getSigParamVarNames(owner: context.ExprContext.ParameterVariableOwner)(sig: Signature[WrapExpr, ?]): UIO[Seq[String]] =
     def impl(prev: Seq[String])(sig: Signature[WrapExpr, ?]): UIO[Seq[String]] =
       sig match {
-        case Signature.Parameter(_, paramErased, paramType, next) =>
-          getVariableName(context.ExprContext.ParameterVariable(owner, prev.size, paramType, paramErased)).flatMap { newName =>
+        case Signature.Parameter(_, paramErased, paramName, paramType, next) =>
+          getVariableName(context.ExprContext.ParameterVariable(owner, prev.size, paramType, paramErased, paramName)).flatMap { newName =>
             impl(prev :+ newName)(next)
           }
 
@@ -242,9 +242,9 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   private def createSigParams(owner: ParameterVariableOwner, index: Int, sig: Signature[WrapExpr, WrapExpr]): Comp[Seq[estree.Pattern]] =
     sig match {
-      case Signature.Parameter(_, true, _, next) => createSigParams(owner, index + 1, next)
-      case Signature.Parameter(_, false, paramType, next) =>
-        val paramVar = ParameterVariable(owner, index, paramType, false)
+      case Signature.Parameter(_, true, _, _, next) => createSigParams(owner, index + 1, next)
+      case Signature.Parameter(_, false, paramName, paramType, next) =>
+        val paramVar = ParameterVariable(owner, index, paramType, false, paramName)
         for
           varName <- getVariableName(paramVar)
           tail <- createSigParams(owner, index + 1, next)
@@ -329,8 +329,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   private def emitArgExprs(args: Seq[WrapExpr], sig: Signature[WrapExpr, ?], prev: Seq[estree.Expression]): Comp[Seq[estree.Expression]] =
     (args, sig) match {
-      case (_ +: restArgs, Signature.Parameter(_, true, _, nextSig)) => emitArgExprs(restArgs, nextSig, prev)
-      case (arg +: restArgs, Signature.Parameter(_, false, _, nextSig)) =>
+      case (_ +: restArgs, Signature.Parameter(_, true, _, _, nextSig)) => emitArgExprs(restArgs, nextSig, prev)
+      case (arg +: restArgs, Signature.Parameter(_, false, _, _, nextSig)) =>
         emitWrapExpr(arg).flatMap { argExpr =>
           emitArgExprs(restArgs, nextSig, prev :+ argExpr)
         }

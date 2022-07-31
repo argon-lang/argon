@@ -146,10 +146,11 @@ trait ExprUtilWithHoles extends ExprUtil {
                                   (sig: Signature[context.ExprContext.WrapExpr, Res1])
   : Signature[WrapExpr, Res2] =
     sig match {
-      case Signature.Parameter(paramListType, isErased, paramType, next) =>
+      case Signature.Parameter(paramListType, isErased, paramName, paramType, next) =>
         Signature.Parameter(
           paramListType,
           isErased,
+          paramName,
           ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(paramType),
           convertSig(sigHandler)(next),
         )
@@ -172,8 +173,8 @@ trait ExprUtilWithHoles extends ExprUtil {
                                 (owner: exprContext.ParameterVariableOwner, index: Int, sig: Signature[WrapExpr, Res], args: Seq[WrapExpr])
       : Comp[Res] =
         (sig, args) match {
-          case (Signature.Parameter(_,  isErased, paramType, nextSig), arg +: tailArgs) =>
-            val variable = ParameterVariable(owner, index, paramType, isErased)
+          case (Signature.Parameter(_, isErased, paramName, paramType, nextSig), arg +: tailArgs) =>
+            val variable = ParameterVariable(owner, index, paramType, isErased, paramName)
             val nextSigSubst = substituteSignature(variable)(arg)(sigHandler)(nextSig)
             getResult(sigHandler)(owner, index, nextSigSubst, tailArgs)
 

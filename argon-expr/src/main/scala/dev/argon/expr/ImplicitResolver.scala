@@ -188,32 +188,6 @@ abstract class ImplicitResolver[-R, +E] {
           )
         )),
 
-        // A <: (A,)
-        (for {
-          a <- newVariable
-        } yield (
-          Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
-            ExprConstructor.AssumeErasedValue,
-            EmptyTuple,
-          ))) -> PredicateFunction(
-            ExprConstructor.SubtypeWitnessType,
-            Seq(Variable(a), Value(ExprConstructor.LoadTuple, Seq(Variable(a)))),
-          )
-        )),
-
-        // (A,) <: A
-        (for {
-          a <- newVariable
-        } yield (
-          Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
-            ExprConstructor.AssumeErasedValue,
-            EmptyTuple,
-          ))) -> PredicateFunction(
-            ExprConstructor.SubtypeWitnessType,
-            Seq(Value(ExprConstructor.LoadTuple, Seq(Variable(a))), Variable(a)),
-          )
-        )),
-
         // A <: B and C <: D
         // --------------------
         // (B -> C) <: (A -> D)

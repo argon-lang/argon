@@ -136,7 +136,7 @@ object VTableBuilder {
 
         def impl(sig: Signature[holesExprContext.WrapExpr, holesExprContext.WrapExpr], slotSig: Signature[holesExprContext.WrapExpr, holesExprContext.WrapExpr]): Comp[Boolean] =
           (sig, slotSig) match {
-            case (aParam @ Signature.Parameter(_, _, _, _), bParam @ Signature.Parameter(_, _, _, _)) =>
+            case (aParam @ Signature.Parameter(_, _, _, _, _), bParam @ Signature.Parameter(_, _, _, _, _)) =>
               exprUtil.isSubType(emptyEnv, aParam.paramType, bParam.paramType).map { _.isDefined }
                 .flatMap {
                   case true => exprUtil.isSubType(emptyEnv, bParam.paramType, aParam.paramType).map { _.isDefined }
@@ -263,8 +263,8 @@ object VTableBuilder {
 
       private def getSigParameterVars(owner: exprContext.ParameterVariableOwner, sig: Signature[WrapExpr, ?], acc: Seq[Variable]): Seq[Variable] =
         sig match
-          case Signature.Parameter(_, isErased, paramType, next) =>
-            getSigParameterVars(owner, next, acc :+ ParameterVariable(owner, acc.size, paramType, isErased))
+          case Signature.Parameter(_, isErased, paramName, paramType, next) =>
+            getSigParameterVars(owner, next, acc :+ ParameterVariable(owner, acc.size, paramType, isErased, paramName))
 
           case Signature.Result(_) => acc
         end match
