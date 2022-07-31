@@ -167,8 +167,12 @@ object JSValueCodec extends Derivation[JSValueCodec]:
       override def toString: String = s"JSValueCodec for ${ctx.typeInfo.full}"
     }
 
+  private trait SplitValueCodec[T] extends JSValueCodec[T] {
+    def supportsType(typeName: String): Boolean
+  }
+
   override def split[T](ctx: SealedTrait[JSValueCodec, T]): JSValueCodec[T] =
-    new JSValueCodec[T] {
+    new SplitValueCodec[T] {
       override def toJSValue(context: JSContext)(value: T): JSValue =
         ctx.choose(value) { sub => sub.typeclass.toJSValue(context)(sub.cast(value)) }
 
@@ -180,13 +184,22 @@ object JSValueCodec extends Derivation[JSValueCodec]:
                 case Some(typeName: String) => Right(typeName)
                 case _ => Left(s"Could not get type specifier from $map")
               }
-              subtype <- ctx.subtypes.find(_.typeInfo.short == typeName).toRight { s"Could not find specified type: $typeName, known sub types: ${ctx.subtypes.toSeq}" }
+              subtype <- ctx.subtypes.find(matchingTypeInfo(typeName)).toRight { s"Could not find specified type: $typeName, known sub types: ${ctx.subtypes.toSeq}" }
               value <- subtype.typeclass.fromJSValue(context)(value)
             } yield value
 
           case obj =>
             Left("Invalid object")
         }
+
+      override def supportsType(typeName: String): Boolean =
+        ctx.subtypes.exists(matchingTypeInfo(typeName))
+
+      private def matchingTypeInfo(typeName: String)(subtype: SealedTrait.Subtype[JSValueCodec, T, ?]): Boolean =
+        typeName == subtype.typeInfo.short || (subtype.typeclass match {
+          case typeclass: SplitValueCodec[?] => typeclass.supportsType(typeName)
+          case _ => false
+        })
 
       override def toString: String = s"JSValueCodec for ${ctx.typeInfo.full}"
     }

@@ -12,6 +12,17 @@
       "sources": "src",
       "plugin": {
         "js": {
+          "modules": {
+            "Bool": {
+              "inject_before": "js/inject_bool_before.js"
+            },
+            "Int": {
+              "inject_before": "js/inject_int_before.js"
+            },
+            "String": {
+              "inject_before": "js/inject_string_before.js"
+            }
+          },
           "extern": [
             "js/extern_bool.js",
             "js/extern_int.js",

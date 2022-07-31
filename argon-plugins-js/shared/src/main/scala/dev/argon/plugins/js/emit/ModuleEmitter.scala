@@ -24,18 +24,39 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
       argonExports <- module.allExports()
       jsExports <- ZIO.foreach(argonExports)(elementExport)
 
+      moduleOptions = options.modules.map.getOrElse(module.moduleName.path, JSModuleOptions(None, None))
+
+      injectBefore <- moduleOptions.inject_before.fold(ZIO.succeed(Seq())) { res =>
+        res.asModule.map { _.body }
+      }
+      injectAfter <- moduleOptions.inject_after.fold(ZIO.succeed(Seq())) { res =>
+        res.asModule.map { _.body }
+      }
+
       argonImports <- imports.toMap.commit
       jsImports <-
         ZIO.foreach(
           argonImports
             .toSeq
-            .groupBy { case (specifier, _) => specifier.moduleName }
+            .groupMap(
+              { case (specifier, _) => specifier.moduleName }
+            )(
+              { case (specifier, name) => (getOverloadExportName(specifier.name, specifier.signature), name) }
+            )
             .toSeq
         )(createJSImport)
 
+      additionalArgonImports <- additionalImports.toMap.commit
+      additionalJSImports <- ZIO.foreach(additionalArgonImports.toSeq) { (moduleName, names) =>
+        names.toSet.commit.flatMap { namesSet =>
+          createJSImport(moduleName, namesSet.toSeq.map { name => (name, name) })
+        }
+      }
+
     yield estree.Program(
       sourceType = "module",
-      body = jsImports ++ jsExports
+      body =
+        jsImports ++ additionalJSImports ++ injectBefore ++ jsExports ++ injectAfter
     )
 
   private def getTubeImportPath(tubeName: TubeName): Comp[String] =
@@ -44,7 +65,7 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
       case None => ZIO.fail(ImportPathNotSpecifiedError(tubeName))
     }
 
-  private def createJSImport(moduleName: ModuleName, identifiers: Seq[(ImportSpecifier, String)]): Comp[estree.ImportDeclaration] =
+  private def createJSImport(moduleName: ModuleName, identifiers: Seq[(String, String)]): Comp[estree.ImportDeclaration] =
     for
       importedTube <- context.getTube(moduleName.tubeName)
 
@@ -72,8 +93,12 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
           case _ => normalizeDir(tubeImportPathParts ++ fileName.dir)
         }
     yield `import`(
-      identifiers.map { case (specifier, identifier) =>
-        id(identifier) as id(getOverloadExportName(specifier.name, specifier.signature))
+      identifiers.map {
+        case (exportedName, identifier) if exportedName == identifier =>
+          id(identifier)
+
+        case (exportedName, identifier) =>
+          id(exportedName) as id(identifier)
       }*
     ) from (dir.mkString("/") + "/" + fileName.file + (if isLocal then ".js" else ""))
 
@@ -102,6 +127,7 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
           override val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type] = ModuleEmitter.this.adapter
 
           override val imports: TMap[ImportSpecifier, String] = ModuleEmitter.this.imports
+          override val additionalImports: TMap[ModuleName, TSet[String]] = ModuleEmitter.this.additionalImports
           override val module: ModuleEmitter.this.module.type = ModuleEmitter.this.module
 
           override val nextLocalId: TRef[RuntimeFlags] = nextLocalIdRef

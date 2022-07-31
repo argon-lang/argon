@@ -4,7 +4,9 @@ import dev.argon.util.*
 import dev.argon.plugins.js.*
 import dev.argon.compiler.*
 import dev.argon.compiler.definitions.{FunctionImplementationC, HasDeclaration, MethodImplementationC}
+import dev.argon.compiler.module.{ModuleName, ModulePath}
 import dev.argon.compiler.signature.*
+import dev.argon.compiler.tube.TubeName
 import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.parser.IdentifierExpr
 import zio.*
@@ -300,15 +302,19 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         yield id(importName).call(args*)
 
       case ctor: (expr.constructor.type & ExprConstructor.LoadConstantBool) =>
-        ZIO.succeed(literal(ctor.b))
+        for
+          _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("Bool"))), "createBool")
+        yield id("createBool").call(literal(ctor.b))
 
       case ctor: (expr.constructor.type & ExprConstructor.LoadConstantInt) =>
-        ZIO.succeed(literal(ctor.i))
+        for
+          _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("Int"))), "createInt")
+        yield id("createInt").call(literal(ctor.i))
 
       case ctor: (expr.constructor.type & ExprConstructor.LoadConstantString) =>
-        ZIO.succeed(estree.Literal(
-          value = Nullable(ctor.s),
-        ))
+        for
+          _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("String"))), "createString")
+        yield id("createString").call(literal(ctor.s))
 
       case ctor: (expr.constructor.type & ExprConstructor.LoadTupleElement) =>
         for

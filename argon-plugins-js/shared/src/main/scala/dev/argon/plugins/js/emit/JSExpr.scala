@@ -127,11 +127,11 @@ private[emit] object JSExpr {
     )
 
 
-  final case class ImportOrExportSpecifier(local: estree.Identifier, external: estree.Identifier)
+  final case class ImportOrExportSpecifier(original: estree.Identifier, renamed: estree.Identifier)
 
   extension (id: estree.Identifier)
-    def as(externalId: estree.Identifier): ImportOrExportSpecifier =
-      ImportOrExportSpecifier(id, externalId)
+    def as(renamed: estree.Identifier): ImportOrExportSpecifier =
+      ImportOrExportSpecifier(id, renamed)
 
     @targetName("propertyValue")
     def :=(value: estree.Expression | estree.Pattern): estree.Property =
@@ -157,12 +157,12 @@ private[emit] object JSExpr {
 
   given Conversion[ImportOrExportSpecifier, estree.ImportSpecifier] with
     override def apply(x: ImportOrExportSpecifier): estree.ImportSpecifier =
-      estree.ImportSpecifier(local = x.local, imported = x.external)
+      estree.ImportSpecifier(local = x.renamed, imported = x.original)
   end given
 
   given Conversion[ImportOrExportSpecifier, estree.ExportSpecifier] with
     override def apply(x: ImportOrExportSpecifier): estree.ExportSpecifier =
-      estree.ExportSpecifier(local = x.local, exported = x.external)
+      estree.ExportSpecifier(local = x.original, exported = x.renamed)
   end given
 
   extension (expr: estree.Expression)

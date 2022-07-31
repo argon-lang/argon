@@ -1,7 +1,7 @@
 package dev.argon.plugins.js.emit
 
 import dev.argon.compiler.*
-import dev.argon.compiler.module.ModulePath
+import dev.argon.compiler.module.{ModuleName, ModulePath}
 import dev.argon.compiler.definitions.HasDeclaration
 import dev.argon.compiler.signature.ImportSpecifier
 import dev.argon.compiler.tube.ArTubeC
@@ -12,7 +12,7 @@ import dev.argon.plugins.js.*
 import dev.argon.plugins.js.{JSOutput, JSProgramResource, estree}
 import dev.argon.util.*
 import zio.*
-import zio.stm.TMap
+import zio.stm.*
 import zio.stream.*
 
 private[js] trait TubeEmitter extends EmitTubeCommon {
@@ -28,6 +28,7 @@ private[js] trait TubeEmitter extends EmitTubeCommon {
       override def asModule: Comp[estree.Program] =
         for
           importMap <- TMap.empty[ImportSpecifier, String].commit
+          additionalImportMap <- TMap.empty[ModuleName, TSet[String]].commit
           arModule <- tube.module(path)
           program <-
             new ModuleEmitter {
@@ -36,6 +37,7 @@ private[js] trait TubeEmitter extends EmitTubeCommon {
               override val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type] = TubeEmitter.this.adapter
               override val tube: ArTube = TubeEmitter.this.tube
               override val imports: TMap[ImportSpecifier, String] = importMap
+              override val additionalImports: TMap[ModuleName, TSet[String]] = additionalImportMap
               override val module: ArModule with HasDeclaration[true] = arModule
               override protected val vtableBuilder: VTableBuilder[context.type] = TubeEmitter.this.vtableBuilder
             }.program

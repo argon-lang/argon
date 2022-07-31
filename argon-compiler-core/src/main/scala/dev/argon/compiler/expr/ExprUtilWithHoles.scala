@@ -306,8 +306,8 @@ trait ExprUtilWithHoles extends ExprUtil {
           Some(IdentifierExpr.OperatorIdentifier(parser.BinaryOperator.LessThan)),
           ErasedSignatureWithResult(
             Seq(
-              ErasedSignatureType.Tuple(Seq(ErasedSignatureType.Class(natSpecifier, Seq()))),
-              ErasedSignatureType.Tuple(Seq(ErasedSignatureType.Class(natSpecifier, Seq()))),
+              ErasedSignatureType.Class(natSpecifier, Seq()),
+              ErasedSignatureType.Class(natSpecifier, Seq()),
             ),
             ErasedSignatureType.Class(boolSpecifier, Seq())
           ),

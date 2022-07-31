@@ -2,6 +2,7 @@ package dev.argon.plugins.js.emit
 
 import dev.argon.compiler.signature.*
 import dev.argon.compiler.definitions.HasDeclaration
+import dev.argon.compiler.module.ModuleName
 import dev.argon.util.*
 import dev.argon.parser.IdentifierExpr
 import zio.*
@@ -9,6 +10,7 @@ import zio.stm.*
 
 trait EmitModuleCommon extends EmitTubeCommon {
   val imports: TMap[ImportSpecifier, String]
+  val additionalImports: TMap[ModuleName, TSet[String]]
   val module: ArModule with HasDeclaration[true]
 
 
@@ -61,6 +63,7 @@ trait EmitModuleCommon extends EmitTubeCommon {
   // $g - indicates a module name segment will follow
   // $i - prepended to an inverse identifier
   // $m - prepended to an update identifier
+  // $n - indicates that a name will follow
   // $o - prepended to an operator name
   // $p - indicates a signature parameter type
   // $r - indicates a result type
@@ -82,7 +85,7 @@ trait EmitModuleCommon extends EmitTubeCommon {
     def importSpecifierPart(specifier: ImportSpecifier): String =
       specifier.tube.name.toList.map { part => "$d" + getEscapedName(IdentifierExpr.Named(part)) }.mkString +
         specifier.module.ids.map { part => "$g" + getEscapedName(IdentifierExpr.Named(part)) }.mkString +
-        getOverloadExportName(specifier.name, specifier.signature)
+        "$n" + getOverloadExportName(specifier.name, specifier.signature)
 
     def argParts(args: Seq[ErasedSignatureType]): String =
       args.map(arg => "$a" + sigTypePart(arg)).mkString
@@ -109,6 +112,21 @@ trait EmitModuleCommon extends EmitTubeCommon {
             _ <- imports.put(specifier, name)
           yield name
       }.commit
+
+  protected def ensureRawImportName(module: ModuleName, name: String): UIO[Unit] =
+    additionalImports.get(module)
+      .flatMap {
+        case Some(names) => ZSTM.succeed(names)
+        case None =>
+          for
+            names <- TSet.empty[String]
+            _ <- additionalImports.put(module, names)
+          yield names
+      }
+      .flatMap { names =>
+        names.put(name)
+      }
+      .commit
 
 
   protected val runtimeImportName: String = "argonRuntime"
