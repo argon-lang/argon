@@ -32,7 +32,7 @@ trait EmitModuleCommon extends EmitTubeCommon {
             if i == 0 && !isValidStart(ch) then
               sb.append("$b")
             end if
-            sb.append(ch)
+            sb.underlying.appendCodePoint(ch)
           else if Character.charCount(ch) == 1 then
             sb.append(String.format("$u%04X", ch))
           else
@@ -45,7 +45,7 @@ trait EmitModuleCommon extends EmitTubeCommon {
         sb.toString()
 
 
-      case IdentifierExpr.OperatorIdentifier(op) => op.symbol
+      case IdentifierExpr.OperatorIdentifier(op) => "$o" + getEscapedName(IdentifierExpr.Named(op.symbol))
       case IdentifierExpr.Extension(inner) => "$e" + getEscapedName(inner)
       case IdentifierExpr.Inverse(inner) => "$i" + getEscapedName(inner)
       case IdentifierExpr.Update(inner) => "$m" + getEscapedName(inner)
@@ -61,6 +61,7 @@ trait EmitModuleCommon extends EmitTubeCommon {
   // $g - indicates a module name segment will follow
   // $i - prepended to an inverse identifier
   // $m - prepended to an update identifier
+  // $o - prepended to an operator name
   // $p - indicates a signature parameter type
   // $r - indicates a result type
   // $t - indicates a trait type will follow
@@ -96,15 +97,18 @@ trait EmitModuleCommon extends EmitTubeCommon {
   end getOverloadExportName
 
   protected def getImportName(specifier: ImportSpecifier): UIO[String] =
-    imports.get(specifier).flatMap {
-      case Some(name) => STM.succeed(name)
-      case None =>
-        for
-          size <- imports.size
-          name = s"arimport$size"
-          _ <- imports.put(specifier, name)
-        yield name
-    }.commit
+    if specifier.moduleName == module.moduleName then
+      ZIO.succeed(getOverloadExportName(specifier.name, specifier.signature))
+    else
+      imports.get(specifier).flatMap {
+        case Some(name) => STM.succeed(name)
+        case None =>
+          for
+            size <- imports.size
+            name = s"arimport$size"
+            _ <- imports.put(specifier, name)
+          yield name
+      }.commit
 
 
   protected val runtimeImportName: String = "argonRuntime"

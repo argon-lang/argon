@@ -179,7 +179,7 @@ private[emit] object JSExpr {
       estree.MemberExpression(
         `object` = expr,
         property = property,
-        computed = false,
+        computed = true,
         optional = false,
       )
 

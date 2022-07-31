@@ -329,8 +329,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   private def emitArgExprs(args: Seq[WrapExpr], sig: Signature[WrapExpr, ?], prev: Seq[estree.Expression]): Comp[Seq[estree.Expression]] =
     (args, sig) match {
-      case (_ +: restArgs, Signature.Parameter(_, false, _, nextSig)) => emitArgExprs(restArgs, nextSig, prev)
-      case (arg +: restArgs, Signature.Parameter(_, true, _, nextSig)) =>
+      case (_ +: restArgs, Signature.Parameter(_, true, _, nextSig)) => emitArgExprs(restArgs, nextSig, prev)
+      case (arg +: restArgs, Signature.Parameter(_, false, _, nextSig)) =>
         emitWrapExpr(arg).flatMap { argExpr =>
           emitArgExprs(restArgs, nextSig, prev :+ argExpr)
         }

@@ -69,13 +69,13 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
               case dir @ (("." | "..") :: _) => dir
               case dir => "." :: dir
             }
-          case _ => normalizeDir((tubeImportPathParts ++ fileName.dir).toList)
+          case _ => normalizeDir(tubeImportPathParts ++ fileName.dir)
         }
     yield `import`(
       identifiers.map { case (specifier, identifier) =>
         id(identifier) as id(getOverloadExportName(specifier.name, specifier.signature))
       }*
-    ) from (dir.mkString("/") + (if isLocal then ".js" else ""))
+    ) from (dir.mkString("/") + "/" + fileName.file + (if isLocal then ".js" else ""))
 
 
   private def normalizeDir(dir: List[String]): List[String] =

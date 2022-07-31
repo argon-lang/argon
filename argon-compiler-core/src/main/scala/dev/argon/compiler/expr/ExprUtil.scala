@@ -250,7 +250,6 @@ trait ExprUtil extends UsingContext {
     end matchesOverload
 
     for
-      _ <- ZIO.logTrace(s"Loading specifier: $specifier")
       tube <- context.getTube(specifier.tube)
       module <- tube.module(specifier.module)
       elements <- specifier.name.fold(ZIO.succeed(Seq()))(module.exports)
