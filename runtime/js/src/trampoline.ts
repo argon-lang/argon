@@ -1,6 +1,6 @@
 
 export class Delay<T> {
-    constructor(public readonly value: () => Trampoline<T>) {}
+    constructor(public readonly value: () => Promise<Trampoline<T>>) {}
 }
 
 export class Result<T> {
@@ -9,11 +9,10 @@ export class Result<T> {
 
 export type Trampoline<T> =
     Delay<T> |
-    Promise<Delay<T>> |
     Result<T>;
 
-export async function jump<T>(tramp: Trampoline<T>): Promise<Result<T>> {
-    tramp = await tramp;
+export async function jump<T>(trampPromise: Promise<Trampoline<T>>): Promise<Result<T>> {
+    let tramp = await trampPromise;
     while(tramp instanceof Delay) {
         tramp = await tramp.value();
     }
@@ -21,7 +20,7 @@ export async function jump<T>(tramp: Trampoline<T>): Promise<Result<T>> {
     return tramp;
 }
 
-export function delay<T>(value: () => Trampoline<T>): Trampoline<T> {
+export function delay<T>(value: () => Promise<Trampoline<T>>): Trampoline<T> {
     return new Delay<T>(value);
 }
 

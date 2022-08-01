@@ -190,6 +190,11 @@ private[emit] object JSExpr {
         optional = false,
       )
 
+    def await: estree.AwaitExpression =
+      estree.AwaitExpression(
+        argument = expr,
+      )
+
   end extension
 
   extension (pattern: estree.Pattern)

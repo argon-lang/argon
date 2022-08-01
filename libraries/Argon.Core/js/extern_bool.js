@@ -1,14 +1,14 @@
 
-export function Bool_to_s(self) {
- 	return createString(self[boolValueSymbol].toString());
+export async function Bool_to_s(self) {
+ 	return argonRuntime.trampoline.result(createString(self[boolValueSymbol].toString()));
  }
 
 
-export function boolNot(a) {
-	return createBool(!a[boolValueSymbol]);
+export async function boolNot(a) {
+	return argonRuntime.trampoline.result(createBool(!a[boolValueSymbol]));
 }
 
-export function boolEqual(a, b) {
-	return createBool(a[boolValueSymbol] === b[boolValueSymbol]);
+export async function boolEqual(a, b) {
+	return argonRuntime.trampoline.result(createBool(a[boolValueSymbol] === b[boolValueSymbol]));
 }
 

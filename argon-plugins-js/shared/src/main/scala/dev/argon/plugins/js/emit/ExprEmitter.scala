@@ -171,13 +171,13 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           for
             sig <- func.signature
             params <- createSigParams(func, 0, sig)
-            body <- emitWrapExprAsStmt(impl.body)
+            body <- emitWrapExprAsStmt(true)(impl.body)
           yield estree.FunctionDeclaration(
             id = Nullable(id(funcName)),
             params = params,
             body = block(body*),
             generator = false,
-            async = false,
+            async = true,
             expression = false,
             directive = None,
           )
@@ -223,13 +223,13 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         for
           sig <- method.signatureUnsubstituted
           params <- createSigParams(method, 0, sig)
-          body <- emitWrapExprAsStmt(impl.body)
+          body <- emitWrapExprAsStmt(true)(impl.body)
         yield estree.FunctionExpression(
           id = Nullable(null),
           params = params,
           body = block(body*),
           generator = false,
-          async = false,
+          async = true,
         )
       case impl: MethodImplementationC.External =>
         val funcDecl = adapter.extractExternMethodImplementation(impl.impl)
@@ -255,89 +255,108 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       case Signature.Result(_) => ZIO.succeed(Seq())
     }
 
-  private def emitWrapExprAsStmt(expr: WrapExpr): Comp[Seq[estree.Statement]] =
+  private def emitWrapExprAsStmt(tailPosition: Boolean)(expr: WrapExpr): Comp[Seq[estree.Statement]] =
     expr match
-      case WrapExpr.OfExpr(expr) => emitExprAsStmt(expr)
+      case WrapExpr.OfExpr(expr) => emitExprAsStmt(tailPosition)(expr)
       case WrapExpr.OfHole(hole) => hole
     end match
 
-  private def emitExprAsStmt(expr: ArExpr[ExprConstructor]): Comp[Seq[estree.Statement]] =
+  private def emitExprAsStmt(tailPosition: Boolean)(expr: ArExpr[ExprConstructor]): Comp[Seq[estree.Statement]] =
     expr.constructor match
       case _ =>
         for
-          jsExpr <- emitExpr(expr)
+          jsExpr <- emitExpr(tailPosition)(expr)
         yield Seq(estree.ReturnStatement(
           argument = Nullable(jsExpr)
         ))
     end match
 
-  private def emitWrapExpr(expr: WrapExpr): Comp[estree.Expression] =
+  private def emitWrapExpr(tailPosition: Boolean)(expr: WrapExpr): Comp[estree.Expression] =
     expr match
-      case WrapExpr.OfExpr(expr) => emitExpr(expr)
+      case WrapExpr.OfExpr(expr) => emitExpr(tailPosition)(expr)
       case WrapExpr.OfHole(hole) => hole
     end match
 
-  private def emitExpr(expr: ArExpr[ExprConstructor]): Comp[estree.Expression] =
-    expr.constructor match
-      case ctor: (expr.constructor.type & ExprConstructor.BindVariable) =>
-        val value: WrapExpr = expr.getArgs(ctor)
-        for
-          valueExpr <- emitWrapExpr(value)
-          varName <- getVariableName(ctor.variable)
-        yield estree.AssignmentExpression(
-          operator = "=",
-          left = estree.Identifier(name = varName),
-          right = valueExpr,
-        )
+  private def emitExpr(tailPosition: Boolean)(expr: ArExpr[ExprConstructor]): Comp[estree.Expression] =
+    if tailPosition then
+      expr.constructor match
+        case ctor: (expr.constructor.type & ExprConstructor.FunctionCall) =>
+          emitFunctionCall(expr, ctor).map { expr =>
+            id(runtimeImportName).prop("trampoline").prop("delay").call(arrow() ==> expr)
+          }
 
-      case ctor: (expr.constructor.type & ExprConstructor.FunctionCall) =>
-        for
-          sig <- ctor.function.signature
-          erasedSig <- SignatureEraser(context).erasedWithResult(sig)
-          owner = ctor.function.owner
-          specifier = ImportSpecifier(owner.module.tube.tubeName, owner.module.moduleName.path, owner.ownedName, erasedSig)
-          importName <- getImportName(specifier)
+        case _ =>
+          emitExpr(false)(expr).map { expr =>
+            id(runtimeImportName).prop("trampoline").prop("result").call(expr)
+          }
 
-          args <- emitArgExprs(expr.getArgs(ctor), sig, Seq())
-        yield id(importName).call(args*)
+      end match
+    else
+      expr.constructor match
+        case ctor: (expr.constructor.type & ExprConstructor.BindVariable) =>
+          val value: WrapExpr = expr.getArgs(ctor)
+          for
+            valueExpr <- emitWrapExpr(false)(value)
+            varName <- getVariableName(ctor.variable)
+          yield estree.AssignmentExpression(
+            operator = "=",
+            left = estree.Identifier(name = varName),
+            right = valueExpr,
+          )
 
-      case ctor: (expr.constructor.type & ExprConstructor.LoadConstantBool) =>
-        for
-          _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("Bool"))), "createBool")
-        yield id("createBool").call(literal(ctor.b))
+        case ctor: (expr.constructor.type & ExprConstructor.FunctionCall) =>
+          emitFunctionCall(expr, ctor).map { expr =>
+            id(runtimeImportName).prop("trampoline").prop("result").call(expr).await.prop("value")
+          }
 
-      case ctor: (expr.constructor.type & ExprConstructor.LoadConstantInt) =>
-        for
-          _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("Int"))), "createInt")
-        yield id("createInt").call(literal(ctor.i))
+        case ctor: (expr.constructor.type & ExprConstructor.LoadConstantBool) =>
+          for
+            _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("Bool"))), "createBool")
+          yield id("createBool").call(literal(ctor.b))
 
-      case ctor: (expr.constructor.type & ExprConstructor.LoadConstantString) =>
-        for
-          _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("String"))), "createString")
-        yield id("createString").call(literal(ctor.s))
+        case ctor: (expr.constructor.type & ExprConstructor.LoadConstantInt) =>
+          for
+            _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("Int"))), "createInt")
+          yield id("createInt").call(literal(ctor.i))
 
-      case ctor: (expr.constructor.type & ExprConstructor.LoadTupleElement) =>
-        for
-          tupleExpr <- emitWrapExpr(expr.getArgs(ctor))
-        yield tupleExpr.index(literal(ctor.index.toDouble))
+        case ctor: (expr.constructor.type & ExprConstructor.LoadConstantString) =>
+          for
+            _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("String"))), "createString")
+          yield id("createString").call(literal(ctor.s))
 
-      case ctor: (expr.constructor.type & ExprConstructor.LoadVariable) =>
-        ctor.variable match {
-          case variable: LocalVariable => getVariableName(variable).map(id)
-          case variable: ParameterVariable => getVariableName(variable).map(id)
-          case variable: InstanceVariable => getVariableName(variable).map(id)
-          case variable: MemberVariable => ???
-        }
+        case ctor: (expr.constructor.type & ExprConstructor.LoadTupleElement) =>
+          for
+            tupleExpr <- emitWrapExpr(false)(expr.getArgs(ctor))
+          yield tupleExpr.index(literal(ctor.index.toDouble))
 
-      case _ =>
-        ZIO.logError(s"Unimplemented expression: $expr") *> ZIO.succeed(???)
-    end match
+        case ctor: (expr.constructor.type & ExprConstructor.LoadVariable) =>
+          ctor.variable match {
+            case variable: LocalVariable => getVariableName(variable).map(id)
+            case variable: ParameterVariable => getVariableName(variable).map(id)
+            case variable: InstanceVariable => getVariableName(variable).map(id)
+            case variable: MemberVariable => ???
+          }
+
+        case _ =>
+          ZIO.logError(s"Unimplemented expression: $expr") *> ZIO.succeed(???)
+      end match
+
+  private def emitFunctionCall(expr: ArExpr[ExprConstructor], ctor: expr.constructor.type & ExprConstructor.FunctionCall): Comp[estree.Expression] =
+    for
+      sig <- ctor.function.signature
+      erasedSig <- SignatureEraser(context).erasedWithResult(sig)
+      owner = ctor.function.owner
+      specifier = ImportSpecifier(owner.module.tube.tubeName, owner.module.moduleName.path, owner.ownedName, erasedSig)
+      importName <- getImportName(specifier)
+
+      args <- emitArgExprs(expr.getArgs(ctor), sig, Seq())
+    yield id(importName).call(args*)
 
   private def emitArgExprs(args: Seq[WrapExpr], sig: Signature[WrapExpr, ?], prev: Seq[estree.Expression]): Comp[Seq[estree.Expression]] =
     (args, sig) match {
       case (_ +: restArgs, Signature.Parameter(_, true, _, _, nextSig)) => emitArgExprs(restArgs, nextSig, prev)
       case (arg +: restArgs, Signature.Parameter(_, false, _, _, nextSig)) =>
-        emitWrapExpr(arg).flatMap { argExpr =>
+        emitWrapExpr(false)(arg).flatMap { argExpr =>
           emitArgExprs(restArgs, nextSig, prev :+ argExpr)
         }
 

@@ -1,70 +1,70 @@
 
-export function Int_to_s(self) {
-	return createString(self[intValueSymbol].toString());
+export async function Int_to_s(self) {
+	return argonRuntime.trampoline.result(createString(self[intValueSymbol].toString()));
 }
 
-export function addInt(a, b) {
-	return createInt(a[intValueSymbol] + b[intValueSymbol]);
+export async function addInt(a, b) {
+	return argonRuntime.trampoline.result(createInt(a[intValueSymbol] + b[intValueSymbol]));
 }
 
-export function subInt(a, b) {
-	return createInt(a[intValueSymbol] - b[intValueSymbol]);
+export async function subInt(a, b) {
+	return argonRuntime.trampoline.result(createInt(a[intValueSymbol] - b[intValueSymbol]));
 }
 
-export function mulInt(a, b) {
-	return createInt(a[intValueSymbol] * b[intValueSymbol]);
+export async function mulInt(a, b) {
+	return argonRuntime.trampoline.result(createInt(a[intValueSymbol] * b[intValueSymbol]));
 }
 
-export function divInt(a, b) {
-	return createInt(a[intValueSymbol] / b[intValueSymbol]);
+export async function divInt(a, b) {
+	return argonRuntime.trampoline.result(createInt(a[intValueSymbol] / b[intValueSymbol]));
 }
 
-export function negateInt(a, b) {
-	return createInt(-a[intValueSymbol]);
+export async function negateInt(a, b) {
+	return argonRuntime.trampoline.result(createInt(-a[intValueSymbol]));
 }
 
-export function intEqual(a, b) {
-	return createBool(a[intValueSymbol] === b[intValueSymbol]);
+export async function intEqual(a, b) {
+	return argonRuntime.trampoline.result(createBool(a[intValueSymbol] === b[intValueSymbol]));
 }
 
-export function intLessThan(a, b) {
-	return createBool(a[intValueSymbol] < b[intValueSymbol]);
+export async function intLessThan(a, b) {
+	return argonRuntime.trampoline.result(createBool(a[intValueSymbol] < b[intValueSymbol]));
 }
 
-export function intLessThanEq(a, b) {
-	return createBool(a[intValueSymbol] <= b[intValueSymbol]);
+export async function intLessThanEq(a, b) {
+	return argonRuntime.trampoline.result(createBool(a[intValueSymbol] <= b[intValueSymbol]));
 }
 
-export function intGreaterThan(a, b) {
-	return createBool(a[intValueSymbol] > b[intValueSymbol]);
+export async function intGreaterThan(a, b) {
+	return argonRuntime.trampoline.result(createBool(a[intValueSymbol] > b[intValueSymbol]));
 }
 
-export function intGreaterThanEq(a, b) {
-	return createBool(a[intValueSymbol] >= b[intValueSymbol]);
+export async function intGreaterThanEq(a, b) {
+	return argonRuntime.trampoline.result(createBool(a[intValueSymbol] >= b[intValueSymbol]));
 }
 
-export function bitNotInt(a, b) {
-	return createInt(~a[intValueSymbol]);
+export async function bitNotInt(a, b) {
+	return argonRuntime.trampoline.result(createInt(~a[intValueSymbol]));
 }
 
-export function bitOrInt(a, b) {
-	return createInt(a[intValueSymbol] | b[intValueSymbol]);
+export async function bitOrInt(a, b) {
+	return argonRuntime.trampoline.result(createInt(a[intValueSymbol] | b[intValueSymbol]));
 }
 
-export function bitAndInt(a, b) {
-	return createInt(a[intValueSymbol] & b[intValueSymbol]);
+export async function bitAndInt(a, b) {
+	return argonRuntime.trampoline.result(createInt(a[intValueSymbol] & b[intValueSymbol]));
 }
 
-export function bitXOrInt(a, b) {
-	return createInt(a[intValueSymbol] ^ b[intValueSymbol]);
+export async function bitXOrInt(a, b) {
+	return argonRuntime.trampoline.result(createInt(a[intValueSymbol] ^ b[intValueSymbol]));
 }
 
-export function shiftLeftInt(a, b) {
-	return createInt(a[intValueSymbol] << b[intValueSymbol]);
+export async function shiftLeftInt(a, b) {
+	return argonRuntime.trampoline.result(createInt(a[intValueSymbol] << b[intValueSymbol]));
 }
 
-export function shiftRightInt(a, b) {
-	return createInt(a[intValueSymbol] >> b[intValueSymbol]);
+export async function shiftRightInt(a, b) {
+	return argonRuntime.trampoline.result(createInt(a[intValueSymbol] >> b[intValueSymbol]));
 }
 
 

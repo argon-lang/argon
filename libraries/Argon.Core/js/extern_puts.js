@@ -1,6 +1,6 @@
 
-export function puts(s) {
+export async function puts(s) {
 	console.log(s[stringValueSymbol]);
-	return unitValue;
+	return argonRuntime.trampoline.result(undefined);
 }
 
