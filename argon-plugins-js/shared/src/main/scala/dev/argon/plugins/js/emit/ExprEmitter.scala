@@ -266,8 +266,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       case _ =>
         for
           jsExpr <- emitExpr(expr)
-        yield Seq(estree.ExpressionStatement(
-          expression = jsExpr
+        yield Seq(estree.ReturnStatement(
+          argument = Nullable(jsExpr)
         ))
     end match
 
