@@ -1,0 +1,5 @@
+import Argon.Core/Puts/*
+
+public proc main(): () do
+	puts "Hello World"
+end

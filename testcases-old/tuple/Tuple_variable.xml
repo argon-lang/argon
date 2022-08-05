@@ -1,0 +1,28 @@
+<ArgonTest>
+
+    <Name>Tuple variable</Name>
+
+
+    <InputSource name="index.argon">
+            
+        import Argon.Core/*
+        
+        proc printTuple(a: String, b: String): Unit do
+            puts a
+            puts b
+        end
+        
+        proc main(): Unit do
+            val tupleValue: (String, String) = '1', '2'
+            printTuple tupleValue
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>
+        1
+        2
+    </ExpectedOutput>
+
+</ArgonTest>

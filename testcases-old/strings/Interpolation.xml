@@ -1,0 +1,22 @@
+<ArgonTest>
+
+    <Name>Interpolation</Name>
+
+
+    <InputSource name="index.argon">
+
+        import Argon.Core/*
+
+        proc main(): Unit do
+            val name = "Bob"
+            puts "Hello #{name}"
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>
+        Hello Bob
+    </ExpectedOutput>
+
+</ArgonTest>

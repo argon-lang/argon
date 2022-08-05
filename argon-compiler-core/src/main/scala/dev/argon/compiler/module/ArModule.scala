@@ -7,8 +7,8 @@ import dev.argon.parser.IdentifierExpr
 abstract class ArModuleC extends UsingContext with DeclarationMode {
   val tube: ArTube
   val moduleName: ModuleName
-  def allExports(): Comp[Seq[ModuleElement[IsDeclaration]]]
-  def exports(name: IdentifierExpr): Comp[Seq[ModuleElement[IsDeclaration]]]
+  def allExports(exportingModules: Set[ArModule]): Comp[Seq[ModuleElement[IsDeclaration]]]
+  def exports(exportingModules: Set[ArModule])(name: IdentifierExpr): Comp[Seq[ModuleElement[IsDeclaration]]]
 
   final override def equals(obj: Any): Boolean =
     obj match {

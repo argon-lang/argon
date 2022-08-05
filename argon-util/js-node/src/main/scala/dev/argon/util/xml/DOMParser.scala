@@ -17,11 +17,11 @@ class DOMException extends js.Error
 
 @js.native
 private[util] trait DomNode extends js.Object {
-  val namespaceURI: String | Null
+  val namespaceURI: js.UndefOr[String | Null]
   val nodeType: Int
-  val firstChild: DomNode | Null
-  val nextSibling: DomNode | Null
-  val nodeValue: String | Null
+  val firstChild: js.UndefOr[DomNode | Null]
+  val nextSibling: js.UndefOr[DomNode | Null]
+  val nodeValue: js.UndefOr[String | Null]
 }
 
 @js.native

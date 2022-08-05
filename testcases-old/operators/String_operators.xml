@@ -1,0 +1,29 @@
+<ArgonTest>
+
+    <Name>String operators</Name>
+
+
+    <InputSource name="index.argon">
+
+        import Argon.Core/*
+
+        proc main(): Unit do
+            puts ('A' ++ 'B')
+            puts (('A' = 'A').to_s())
+            puts (('A' = 'B').to_s())
+            puts (('A' != 'A').to_s())
+            puts (('A' != 'B').to_s())
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>
+        AB
+        true
+        false
+        false
+        true
+    </ExpectedOutput>
+
+</ArgonTest>

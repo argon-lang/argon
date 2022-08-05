@@ -1,0 +1,22 @@
+<ArgonTest>
+
+    <Name>Function constrained type parameter - identity</Name>
+
+
+    <InputSource name="index.argon">
+            
+        import Argon.Core/*
+        
+        def identity (T: type) (value: T): T =
+            value
+        
+        proc main(): Unit do
+            puts (identity String 'Zero')
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>Zero</ExpectedOutput>
+
+</ArgonTest>

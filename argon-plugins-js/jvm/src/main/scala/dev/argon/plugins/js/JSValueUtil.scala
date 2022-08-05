@@ -121,7 +121,7 @@ object JSValueUtil:
         val parse = ctx.eval(source)
 
         val options = ProxyObject.fromMap(Map(
-          "ecmaVersion" -> 2021,
+          "ecmaVersion" -> 2022,
           "sourceType" -> "module",
           "locations" -> true,
           "sourceFile" -> fileName,

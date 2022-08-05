@@ -19,6 +19,9 @@
             "Int": {
               "inject_before": "js/inject_int_before.js"
             },
+            "Puts": {
+              "inject_before": "js/inject_puts_before.js"
+            },
             "String": {
               "inject_before": "js/inject_string_before.js"
             }

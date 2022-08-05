@@ -1,0 +1,28 @@
+<ArgonTest>
+
+    <Name>Constructor field</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+        
+        trait MyType <: Object
+            public abstract proc self.say_message(): Unit
+        end
+        
+        constructor MyCtor(msg: String): MyType
+            val m = msg
+            public override proc self.say_message(): Unit =
+                puts m
+        end
+        
+        proc main(): Unit do
+            MyCtor('Hello World').say_message()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

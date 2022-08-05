@@ -1,0 +1,69 @@
+{
+  "plugins": [ "source", "js" ],
+
+  "tube": {
+    "loader": {
+      "plugin": "source",
+      "name": "buildspec"
+    },
+    "options": {
+      "name": ["HelloWorld"],
+      "spec": "HelloWorld.tubespec",
+      "sources": "src",
+      "plugin": {
+        "js": {
+          "tubes": {
+            "Argon.Core": {
+              "import_path": "argon-core"
+            }
+          }
+        }
+      }
+    }
+  },
+
+  "output": {
+    "js": {
+      "package": "bin/js"
+    }
+  },
+
+  "libraries": [
+    {
+      "loader": {
+        "plugin": "source",
+        "name": "buildspec"
+      },
+      "options": {
+        "name": ["Argon", "Core"],
+        "spec": "../../libraries/Argon.Core/Argon.Core.tubespec",
+        "sources": "../../libraries/Argon.Core/src",
+        "plugin": {
+          "js": {
+            "modules": {
+              "Bool": {
+                "inject_before": "../../libraries/Argon.Core/js/inject_bool_before.js"
+              },
+              "Int": {
+                "inject_before": "../../libraries/Argon.Core/js/inject_int_before.js"
+              },
+              "Puts": {
+                "inject_before": "../../libraries/Argon.Core/js/inject_puts_before.js"
+              },
+              "String": {
+                "inject_before": "../../libraries/Argon.Core/js/inject_string_before.js"
+              }
+            },
+            "extern": [
+              "../../libraries/Argon.Core/js/extern_bool.js",
+              "../../libraries/Argon.Core/js/extern_int.js",
+              "../../libraries/Argon.Core/js/extern_nat.js",
+              "../../libraries/Argon.Core/js/extern_puts.js",
+              "../../libraries/Argon.Core/js/extern_string.js"
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

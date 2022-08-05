@@ -13,6 +13,8 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
     : Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] =
     new Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] {
 
+      override val fileName: Option[String] = None
+
       protected override def createGrammar[T](label: NumberTokenHelpers.NumberTokenLabel[T]): TGrammar[T] =
         throw new Exception("No labels exist")
 

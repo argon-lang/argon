@@ -2,11 +2,11 @@
 
     <Name>Hello World (Parenthesis)</Name>
 
-    <InputSource name="test.argon">
+    <InputSource name="index.argon">
 
-        import Ar._
+        import Argon.Core/*
 
-        proc main(): Unit do
+        proc main(): () do
             puts('Hello World')
         end
 

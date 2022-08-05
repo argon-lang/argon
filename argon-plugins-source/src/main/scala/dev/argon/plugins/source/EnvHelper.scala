@@ -19,13 +19,13 @@ object EnvHelper {
     import exprConverter.Env
     def impl(index: Int)(sig: Signature[WrapExpr, ?])(env: Env): Env =
       sig match {
-        case Signature.Parameter(_, isErased, paramType, next) =>
+        case Signature.Parameter(_, isErased, paramName, paramType, next) =>
           import exprConverter.context
           val paramType2 =
             ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(
               paramType
             )
-          val variable = exprConverter.exprContext.ParameterVariable(owner, index, paramType2, isErased)
+          val variable = exprConverter.exprContext.ParameterVariable(owner, index, paramType2, isErased, paramName)
           impl(index + 1)(next)(env.withScope(_.addVariable(variable)))
 
         case Signature.Result(_) => env

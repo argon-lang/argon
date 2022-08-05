@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Identity function</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+
+        def identity (T: type[1]) (value: T): T = value
+
+        proc main(): Unit do
+
+            val str: identity String.type String = '75'
+
+            puts str
+
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        75
+    </ExpectedOutput>
+
+</ArgonTest>

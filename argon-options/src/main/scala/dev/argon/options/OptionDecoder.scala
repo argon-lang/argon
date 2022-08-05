@@ -45,7 +45,7 @@ object OptionDecoder {
                     }
 
                 }
-              }.mapError { _.mkString("\n") }
+              }
 
             case _ =>
               ZIO.fail("Expected table")

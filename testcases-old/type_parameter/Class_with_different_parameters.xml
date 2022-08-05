@@ -1,0 +1,22 @@
+<ArgonTest>
+
+    <Name>Class with different parameters</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        class MyClass(T: type) <: Object
+        end
+
+        def myFunc(a: MyClass Int): MyClass String =
+            a
+
+        def main(): Unit do
+        end
+
+    ]]></InputSource>
+
+    <ExpectedError>CouldNotConvertType</ExpectedError>
+
+</ArgonTest>

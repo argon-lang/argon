@@ -4,6 +4,7 @@ import scala.scalajs.js
 import scala.scalajs.js.JSConverters.given
 import zio.*
 
+import java.util.Objects
 import scala.util.control.NonFatal
 
 
@@ -60,7 +61,7 @@ object JSValueUtil:
     override def fromNull: JSValue =
       null
 
-    override def decode(value: JSValue): DecodedJSObject | DecodedJSArray | String | Boolean | Double | BigInt | JSRegExp =
+    override def decode(value: JSValue): DecodedJSObject | DecodedJSArray | String | Boolean | Double | BigInt | JSRegExp | Null =
       (value : Any | Null) match {
         case value: String => value
         case value: Boolean => value
@@ -69,6 +70,7 @@ object JSValueUtil:
           BigInt(value.toString())
         case value: js.RegExp => value
         case value: js.Array[?] => DecodedJSArray(value.asInstanceOf[js.Array[JSValue]].toSeq)
+        case value if js.isUndefined(value) || Objects.isNull(value) => null
         case _ => DecodedJSObject(value.asInstanceOf[js.Dictionary[JSValue]].toMap)
       }
 
@@ -83,7 +85,7 @@ object JSValueUtil:
     override protected def parseImpl(fileName: String, text: String): IO[JSParseError, JSValue] =
       ZIO.attempt {
         val options = new Acorn.Options {
-          override val ecmaVersion = 2021
+          override val ecmaVersion = 2022
           override val sourceType = "module"
           override val locations = true
           override val sourceFile = fileName

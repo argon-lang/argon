@@ -1,0 +1,22 @@
+<ArgonTest enabled="false">
+
+    <Name>Discard</Name>
+
+
+    <InputSource name="index.argon">
+            
+        import Argon.Core/*
+        
+        proc main(): Unit do
+            match 'Hello World'
+            case _ =
+                puts 'Hey'
+            end
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>Hey</ExpectedOutput>
+
+</ArgonTest>

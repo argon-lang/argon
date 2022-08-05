@@ -10,5 +10,7 @@ metals.sbt
 *.semanticdb
 
 /libraries/*/bin/
+/examples/*/bin/js/*
+!/examples/*/bin/js/main.js
 node_modules/
 

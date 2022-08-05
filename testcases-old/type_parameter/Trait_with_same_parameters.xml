@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Trait with same parameters</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+        
+        trait MyTrait(T: type) <: Object
+        end
+        
+        def myFunc(a: MyTrait Int): MyTrait Int =
+            a
+        
+        def main(): Unit do
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput></ExpectedOutput>
+
+</ArgonTest>

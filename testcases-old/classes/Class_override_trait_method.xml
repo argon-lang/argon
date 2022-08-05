@@ -1,0 +1,37 @@
+<ArgonTest>
+
+    <Name>Class override trait method</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+
+        trait MyTrait <: Object
+
+            public virtual proc self.say_hello(): Unit do
+                puts 'Hello'
+            end
+
+        end
+
+        class MyClass <: MyTrait
+
+            public new()
+            end
+
+            public override proc self.say_hello(): Unit do
+                puts 'Moo'
+            end
+        end
+        
+        proc main(): Unit do
+            val obj: MyTrait = MyClass.new()
+            obj.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Moo</ExpectedOutput>
+
+</ArgonTest>

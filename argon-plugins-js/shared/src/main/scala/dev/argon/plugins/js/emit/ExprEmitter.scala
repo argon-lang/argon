@@ -282,7 +282,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       expr.constructor match
         case ctor: (expr.constructor.type & ExprConstructor.FunctionCall) =>
           emitFunctionCall(expr, ctor).map { expr =>
-            id(runtimeImportName).prop("trampoline").prop("delay").call(arrow() ==> expr)
+            id(runtimeImportName).prop("trampoline").prop("delay").call(arrow.async() ==> expr)
           }
 
         case _ =>
@@ -306,7 +306,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
         case ctor: (expr.constructor.type & ExprConstructor.FunctionCall) =>
           emitFunctionCall(expr, ctor).map { expr =>
-            id(runtimeImportName).prop("trampoline").prop("result").call(expr).await.prop("value")
+            id(runtimeImportName).prop("trampoline").prop("resolve").call(expr).await.prop("value")
           }
 
         case ctor: (expr.constructor.type & ExprConstructor.LoadConstantBool) =>

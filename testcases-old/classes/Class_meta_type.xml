@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Class meta type</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+        
+        class MyClass <: Object
+        static
+            public proc self.say_hello(): Unit do
+                puts 'Hello World'
+            end
+        end
+        
+        proc main(): Unit do
+            val t = MyClass
+            t.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

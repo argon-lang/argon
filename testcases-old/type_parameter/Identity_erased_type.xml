@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>Identity (erased type)</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+
+        def identity (erased T: type[1]) (value: T): T = value
+
+        proc main(): Unit do
+
+            val str = identity (String | Int) 'A'
+
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput></ExpectedOutput>
+
+</ArgonTest>

@@ -15,11 +15,6 @@ lazy val envValues = Map(
   "ARGON_TEST_CASES" -> file("testcases").getAbsolutePath,
 )
 
-lazy val nodeConfig =
-  NodeJSEnv.Config()
-    .withEnv(envValues)
-    .withArgs(List("--no-warnings", "--experimental-vm-modules"))
-
 lazy val commonSettingsNoLibs = Seq(
   scalaVersion := "3.1.3",
 )
@@ -40,9 +35,6 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
 
   ),
 
-)
-
-lazy val sharedJVMNodeSettings = Seq(
 )
 
 lazy val npmDeps = Seq(
@@ -68,9 +60,10 @@ lazy val sharedJSNodeSettings = Seq(
 
 )
 
-lazy val commonJVMSettings = sharedJVMNodeSettings ++ Seq(
+lazy val commonJVMSettings = Seq(
 
   libraryDependencies ++= Seq(
+    "org.apache.commons" % "commons-compress" % "1.21",
     "commons-io" % "commons-io" % "2.11.0",
     "dev.zio" %% "zio-logging" % "2.0.1",
   ),
@@ -82,14 +75,17 @@ lazy val commonJVMSettings = sharedJVMNodeSettings ++ Seq(
 
 lazy val commonBrowserSettings = sharedJSNodeSettings
 
-lazy val commonNodeSettings = sharedJSNodeSettings ++ sharedJVMNodeSettings ++ Seq(
+lazy val commonNodeSettings = sharedJSNodeSettings ++ Seq(
 
   npmDependencies ++= Seq(
-    "memory-streams" -> "^0.1.3",
     "node-stream-zip" -> "^1.15.0",
   ),
 
-  jsEnv := new NodeJSEnv(nodeConfig),
+  jsEnv := new NodeJSEnv(
+    NodeJSEnv.Config()
+      .withEnv(envValues)
+      .withArgs(List("--no-warnings", "--experimental-vm-modules"))
+  ),
 )
 
 lazy val compilerOptions = Seq(
@@ -432,6 +428,38 @@ lazy val argon_pluginJS = argon_plugin.js
 lazy val argon_pluginNode = argon_plugin.node
 
 
+lazy val argon_plugin_test_util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-test-util"))
+  .dependsOn(argon_plugin, argon_plugins_source)
+  .jvmConfigure(
+    _.dependsOn(verilization_runtimeJVM)
+      .settings(
+        commonJVMSettings,
+      )
+  )
+  .jsConfigure(
+    _.dependsOn(verilization_runtimeJS)
+      .enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.dependsOn(verilization_runtimeJS)
+      .enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+    
+    libraryDependencies += "dev.zio" %%% "zio-test" % zioVersion,
+
+    name := "argon-plugin-test-util",
+  )
+
+lazy val argon_plugin_test_utilJVM = argon_plugin_test_util.jvm
+lazy val argon_plugin_test_utilJS = argon_plugin_test_util.js
+lazy val argon_plugin_test_utilNode = argon_plugin_test_util.node
+
+
 lazy val argon_plugins_source = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugins-source"))
   .dependsOn(argon_compiler_core, parser, argon_plugin)
   .jvmConfigure(
@@ -458,7 +486,7 @@ lazy val argon_plugins_sourceNode = argon_plugins_source.node
 
 
 lazy val argon_plugins_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-js"))
-  .dependsOn(util, argon_tube, argon_plugin)
+  .dependsOn(util, argon_tube, argon_plugin, argon_plugin_test_util % "test->compile")
   .jvmConfigure(
     _.dependsOn(verilization_runtimeJVM)
       .settings(

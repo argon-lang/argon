@@ -4,9 +4,7 @@
   "description": "Runtime library for Argon",
   "type": "module",
   "exports": {
-    "./class": "./lib/class.js",
-    "./trait": "./lib/trait.js",
-    "./trampoline": "./lib/trampoline.js"
+    ".": "./lib/index.js"
   },
   "scripts": {
     "build": "tsc --project tsconfig.json"

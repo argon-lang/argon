@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Class instance method</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+        
+        class MyClass <: Object
+            public new()
+            end
+
+            public proc self.say_hello(): Unit do
+                puts 'Hello World'
+            end
+        end
+        
+        proc main(): Unit do
+            MyClass.new().say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

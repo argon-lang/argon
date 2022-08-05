@@ -14,7 +14,7 @@ abstract class ArgonParserTestsCommon extends ZIOSpecDefault with GrammarTestHel
     suite(suiteName)(
       test("Import statement parsing") {
         assert(
-          parse(ArgonParser.grammarFactory(ArgonParser.Rule.ImportStatement))(
+          parse(grammarFactory(ArgonParser.Rule.ImportStatement))(
             Token.KW_IMPORT,
             Token.Identifier("Ar"),
             Token.OP_SLASH,

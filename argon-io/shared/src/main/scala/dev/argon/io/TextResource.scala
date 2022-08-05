@@ -27,4 +27,11 @@ object TextResource:
         }
       }
   end given
+
+  def fromString(str: String): TextResource[Any, CharacterCodingException] =
+    new TextResource[Any, CharacterCodingException] with Impl[Any, CharacterCodingException] {
+      override def asText: ZStream[Any, CharacterCodingException, String] = ZStream.succeed(str)
+      override def fileName: Option[String] = None
+    }
+
 end TextResource

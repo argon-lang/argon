@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Class private static method</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        class MyClass <: Object
+        static
+            private proc self.say_hello(): Unit do
+                puts 'Hello World'
+            end
+        end
+
+        proc main(): Unit do
+            MyClass.say_hello()
+        end
+
+    ]]></InputSource>
+
+    <ExpectedError>LookupFailedError</ExpectedError>
+
+</ArgonTest>

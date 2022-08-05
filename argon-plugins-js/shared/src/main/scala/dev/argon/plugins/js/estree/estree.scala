@@ -366,6 +366,7 @@ final case class ArrowFunctionExpression
   params: Seq[Pattern],
   body: BlockStatement | Expression,
   generator: false = false,
+  async: Boolean,
 ) extends Expression derives JSValueCodec
 
 final case class UnaryExpression
@@ -588,7 +589,7 @@ final case class RestElement
 (
   `type`: "RestElement" = ("RestElement" : "RestElement"),
   loc: Nullable[SourceLocation] = Nullable(null),
-  elements: Pattern,
+  argument: Pattern,
 ) extends Pattern derives JSValueCodec
 
 final case class AssignmentPattern

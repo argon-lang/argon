@@ -240,11 +240,15 @@ trait ExprUtil extends UsingContext {
         override val context: ExprUtil.this.context.type = ExprUtil.this.context
       }
 
-      (moduleElement match {
-        case ModuleElementC.ClassElement(c) => c.signature.flatMap(sigEraser.erasedNoResult)
-        case ModuleElementC.TraitElement(t) => t.signature.flatMap(sigEraser.erasedNoResult)
-        case ModuleElementC.FunctionElement(f) => f.signature.flatMap(sigEraser.erasedWithResult)
-      }: Comp[ErasedSignature])
+      def getElementSig(moduleElement: ModuleElement[?]): Comp[ErasedSignature] =
+        moduleElement match {
+          case ModuleElementC.ClassElement(c) => c.signature.flatMap(sigEraser.erasedNoResult)
+          case ModuleElementC.TraitElement(t) => t.signature.flatMap(sigEraser.erasedNoResult)
+          case ModuleElementC.FunctionElement(f) => f.signature.flatMap(sigEraser.erasedWithResult)
+          case ModuleElementC.ExportedElement(e) => getElementSig(e)
+        }
+
+      getElementSig(moduleElement)
         .map { erasedSig =>
         erasedSig == specifier.signature
       }
@@ -253,7 +257,7 @@ trait ExprUtil extends UsingContext {
     for
       tube <- context.getTube(specifier.tube)
       module <- tube.module(specifier.module)
-      elements <- specifier.name.fold(ZIO.succeed(Seq()))(module.exports)
+      elements <- specifier.name.fold(ZIO.succeed(Seq()))(module.exports(Set.empty))
       elements <- ZIO.filter(elements.collect { case element: TElement => element })(matchesOverload)
       result <- elements match {
         case Seq(element) => ZIO.succeed(element)

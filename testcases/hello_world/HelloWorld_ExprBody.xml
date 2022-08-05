@@ -2,11 +2,11 @@
 
     <Name>Hello World (Expression Body)</Name>
 
-    <InputSource name="test.argon">
+    <InputSource name="index.argon">
 
-        import Ar._
+        import Argon.Core/*
 
-        proc main(): Unit =
+        proc main(): () =
             puts 'Hello World'
 
     </InputSource>

@@ -21,8 +21,8 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
 
   def program: Comp[estree.Program] =
     for
-      argonExports <- module.allExports()
-      jsExports <- ZIO.foreach(argonExports)(elementExport)
+      argonExports <- module.allExports(Set.empty)
+      jsExports <- ZIO.foreach(argonExports)(elementExport).map { _.flatten }
 
       moduleOptions = options.modules.map.getOrElse(module.moduleName.path, JSModuleOptions(None, None))
 
@@ -56,6 +56,7 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
     yield estree.Program(
       sourceType = "module",
       body =
+        Seq(import_* as "argonRuntime" from "@argon-lang/runtime") ++
         jsImports ++ additionalJSImports ++ injectBefore ++ jsExports ++ injectAfter
     )
 
@@ -112,7 +113,7 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
       case Nil => Nil
     }
 
-  private def elementExport(element: ModuleElement[true]): Comp[estree.ExportNamedDeclaration] =
+  private def elementExport(element: ModuleElement[true]): Comp[Option[estree.ExportNamedDeclaration]] =
     for
       nextLocalIdRef <- TRef.makeCommit(0)
       localNamesRef <- TSet.empty[String].commit
@@ -140,9 +141,10 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
 
       declaration <-
         element match
-          case ModuleElementC.ClassElement(arClass) => exprEmitter.classExport(arClass)
-          case ModuleElementC.TraitElement(arTrait) => exprEmitter.traitExport(arTrait)
-          case ModuleElementC.FunctionElement(func) => exprEmitter.functionExport(func)
+          case ModuleElementC.ClassElement(arClass) => exprEmitter.classExport(arClass).asSome
+          case ModuleElementC.TraitElement(arTrait) => exprEmitter.traitExport(arTrait).asSome
+          case ModuleElementC.FunctionElement(func) => exprEmitter.functionExport(func).asSome
+          case ModuleElementC.ExportedElement(_) => ZIO.none
         end match
     yield declaration
 

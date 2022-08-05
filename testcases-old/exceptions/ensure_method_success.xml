@@ -1,0 +1,28 @@
+<ArgonTest>
+
+    <Name>Ensure for Method on Success</Name>
+
+
+    <InputSource name="index.argon">
+            
+        import Argon.Core/*
+        
+        proc add(a: Int, b: Int): Int do
+            a + b
+        ensure
+            puts 'Hello'
+        end
+        
+        proc main(): Unit do
+            puts (add(1, 1).to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>
+        Hello
+        2
+    </ExpectedOutput>
+
+</ArgonTest>

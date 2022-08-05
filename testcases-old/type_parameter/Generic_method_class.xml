@@ -1,0 +1,28 @@
+<ArgonTest>
+
+    <Name>Generic method (class)</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+
+        class MyClass <: Object
+
+            public new()
+            end
+
+            public def _.identity (T: type) (value: T): T = value
+        end
+        
+        proc main(): Unit do
+            val inst = MyClass.new()
+            puts (inst.identity String 'Hello World')
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

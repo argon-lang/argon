@@ -819,6 +819,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
         case ModuleElementC.FunctionElement(arFunc) =>
           arFunc.signature.map(convertSig(functionSigHandler))
+
+        case ModuleElementC.ExportedElement(inner) =>
+          signatureOf(inner)
       }
 
     protected override def checkOverload(env: Env)(overload: ScopeElement): Comp[Option[Comp[ExprTypeResult]]] =
@@ -868,6 +871,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               returnType,
             )
           }
+
+        case ModuleElementC.ExportedElement(inner) =>
+          checkOverload(env)(inner)
 
       }
 

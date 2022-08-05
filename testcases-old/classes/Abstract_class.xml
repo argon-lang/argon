@@ -1,0 +1,38 @@
+<ArgonTest>
+
+    <Name>Abstract class</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+        
+        abstract open class A <: Object
+            public new()
+            end
+
+            public abstract proc self.say_hello(): Unit
+        end
+
+        class B <: A
+            public new()
+                initialize _ = A.new()
+            end
+
+            public override proc self.say_hello(): Unit do
+                puts 'Hello World'
+            end
+
+        end
+
+        
+        proc main(): Unit do
+            val a: A = B.new()
+            a.say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

@@ -1,0 +1,22 @@
+<ArgonTest>
+
+    <Name>Function constrained type parameter - puts</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+        
+        proc printStringLike (T: type <: String) (strLike: T): Unit =
+            puts strLike
+        
+        proc main(): Unit do
+            printStringLike String 'Hello Type Parameters'
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello Type Parameters</ExpectedOutput>
+
+</ArgonTest>

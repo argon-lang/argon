@@ -155,7 +155,7 @@ object JSValueCodec extends Derivation[JSValueCodec]:
                 case None =>
                   param.typeclass.defaultValue match
                     case Some(memberValue) => Right(memberValue)
-                    case None => Left(s"Missing key in object: ${param.label}, map: ${map}")
+                    case None => Left(s"Missing key ${param.label} in object of type ${ctx.typeInfo.short}: , map: ${map}")
 
               }
             }.left.map { _.mkString("\n") }

@@ -11,12 +11,12 @@ export type Trampoline<T> =
     Delay<T> |
     Result<T>;
 
-export async function jump<T>(trampPromise: Promise<Trampoline<T>>): Promise<Result<T>> {
+export async function resolve<T>(trampPromise: Promise<Trampoline<T>>): Promise<Result<T>> {
     let tramp = await trampPromise;
     while(tramp instanceof Delay) {
         tramp = await tramp.value();
     }
-
+1
     return tramp;
 }
 

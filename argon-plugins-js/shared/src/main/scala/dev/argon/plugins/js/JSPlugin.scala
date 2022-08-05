@@ -51,7 +51,7 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
   (options: JSOptions[R, E])
   (id: String)
   : ZIO[R, E, Option[estree.FunctionDeclaration]] =
-    ZStream.fromIterable(options.extern)
+    ZStream.fromIterable(options.extern.getOrElse(Seq.empty))
       .mapZIO { _.asModule }
       .flatMap { module => ZStream.fromIterable(module.body) }
       .collect {

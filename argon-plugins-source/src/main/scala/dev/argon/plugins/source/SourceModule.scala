@@ -35,20 +35,18 @@ object SourceModule {
 
       def currentModule: this.type = this
 
-      override def allExports(): Comp[Seq[ModuleElement[true]]] =
+      override def allExports(exportingModules: Set[ArModule]): Comp[Seq[ModuleElement[true]]] =
         exportEntriesCell.get(
           moduleFile.parsed
-            .mapAccumZIO[context.Env, context.Error, context.Comp[Imports[context.type]], Option[ModuleElement[true]]](ZIO.succeed(Map.empty))(loadElement)
-            .collect {
-              case Some(entry) => entry
-            }
+            .mapAccumZIO[context.Env, context.Error, context.Comp[Imports[context.type]], Seq[ModuleElement[true]]](ZIO.succeed(Map.empty))(loadElement(exportingModules))
+            .flattenIterables
             .runCollect
         )
 
 
-      private def exportsAsImports: Comp[Map[IdentifierExpr, Seq[ModuleElement[true]]]] =
+      private def exportsAsImports(exportingModules: Set[ArModule]): Comp[Map[IdentifierExpr, Seq[ModuleElement[true]]]] =
         exportMapCell.get(
-          allExports().map { exp =>
+          allExports(exportingModules).map { exp =>
             exp
               .map { entry => entry.name -> entry }
               .collect {
@@ -58,23 +56,24 @@ object SourceModule {
           }
         )
 
-      override def exports(name: IdentifierExpr): Comp[Seq[ModuleElement[true]]] =
-        exportsAsImports.map { exp =>
+      override def exports(exportingModules: Set[ArModule])(name: IdentifierExpr): Comp[Seq[ModuleElement[true]]] =
+        exportsAsImports(exportingModules).map { exp =>
           exp.get(name).toList.flatten
         }
 
 
 
       def loadElement
+      (exportingModules: Set[ArModule])
       (
         imports: context.Comp[Imports[context.type]],
         stmt: Stmt,
       )
-      : context.Comp[(context.Comp[Imports[context.type]], Option[ModuleElement[true]])] =
+      : context.Comp[(context.Comp[Imports[context.type]], Seq[ModuleElement[true]])] =
         def env: exprConverter.Env =
           exprConverter.Env(
             scope = exprConverter.Scope.fromImports(
-              exportsAsImports,
+              exportsAsImports(exportingModules),
               exprConverter.Scope.fromImports(
                 imports,
                 exprConverter.Scope.empty
@@ -84,27 +83,33 @@ object SourceModule {
           )
 
         stmt match {
-          case stmt: ImportStmt => imports.flatMap(loadImport(stmt)).memoize.map((_, None))
+          case stmt: ImportStmt => imports.flatMap(loadImport(Set.empty)(stmt)).memoize.map((_, Seq()))
+
+          case stmt: ExportStmt =>
+            loadImport(exportingModules)(stmt.fromImport)(Map.empty).map { exportedImports =>
+              (imports, exportedImports.values.flatten.map(ModuleElementC.ExportedElement.apply).toSeq)
+            }
+          
           case stmt: TraitDeclarationStmt =>
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
               owner = OwnedByModuleC[context.type](currentModule, stmt.name, modifier)
               arTrait <- SourceTrait.make(context)(exprConverter)(env)(owner)(stmt)
-            yield (imports, Some(ModuleElementC.TraitElement(arTrait)))
+            yield (imports, Seq(ModuleElementC.TraitElement(arTrait)))
 
           case stmt: ClassDeclarationStmt =>
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
               owner = OwnedByModuleC[context.type](currentModule, stmt.name.value, modifier)
               arClass <- SourceClass.make(context)(exprConverter)(env)(owner)(stmt)
-            yield (imports, Some(ModuleElementC.ClassElement(arClass)))
+            yield (imports, Seq(ModuleElementC.ClassElement(arClass)))
 
           case stmt: FunctionDeclarationStmt =>
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
               owner = OwnedByModuleC[context.type](currentModule, stmt.name, modifier)
               func <- SourceFunction.make(context)(exprConverter)(env)(owner)(stmt)
-            yield (imports, Some(ModuleElementC.FunctionElement(func)))
+            yield (imports, Seq(ModuleElementC.FunctionElement(func)))
 
           case _ => ZIO.fail(DiagnosticError.InvalidTopLevelStatement(stmt))
         }
@@ -122,6 +127,7 @@ object SourceModule {
 
       private type ImportsUngrouped = Seq[(IdentifierExpr, ModuleElement[?])]
       private def loadModuleImports
+      (exportingModules: Set[ArModule])
       (
         module: ArModuleC with HasContext[context.type],
         imports: List[ImportPathSegment.End],
@@ -134,26 +140,26 @@ object SourceModule {
             ???
 
           case ImportPathSegment.Imported(id) :: tail =>
-            module.exports(id).flatMap { newImports =>
-              loadModuleImports(module, tail, importedIds + id, acc ++ newImports.map((id, _)))
+            module.exports(Set.empty)(id).flatMap { newImports =>
+              loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((id, _)))
             }
 
           case ImportPathSegment.Renaming(id, _) :: tail if importedIds.contains(id) =>
             ???
 
           case ImportPathSegment.Renaming(id, None) :: tail =>
-            loadModuleImports(module, tail, importedIds + id, acc)
+            loadModuleImports(exportingModules)(module, tail, importedIds + id, acc)
 
           case ImportPathSegment.Renaming(id, Some(viewedName)) :: tail =>
-            module.exports(id).flatMap { newImports =>
-              loadModuleImports(module, tail, importedIds + id, acc ++ newImports.map((viewedName, _)))
+            module.exports(Set.empty)(id).flatMap { newImports =>
+              loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((viewedName, _)))
             }
 
           case ImportPathSegment.Wildcard :: _ :: _ =>
             ???
 
           case ImportPathSegment.Wildcard :: Nil =>
-            module.allExports().map { newImports =>
+            module.allExports(exportingModules).map { newImports =>
               newImports
                 .flatMap { element =>
                   element.name match {
@@ -169,7 +175,7 @@ object SourceModule {
         }
 
 
-      private def loadTubeImports(tube: ArTubeC with HasContext[context.type], pathSegment: ImportPathSegment)
+      private def loadTubeImports(exportingModules: Set[ArModule])(tube: ArTubeC with HasContext[context.type], pathSegment: ImportPathSegment)
       : Comp[ImportsUngrouped] =
         ZIO.foreach(
           flattenImportPaths(pathSegment, Seq.empty)
@@ -177,14 +183,14 @@ object SourceModule {
             .toSeq
         ) { case (modulePath, imports) =>
           tube.module(modulePath).flatMap { module =>
-            loadModuleImports(module, imports, Set.empty, Seq.empty)
+            loadModuleImports(exportingModules)(module, imports, Set.empty, Seq.empty)
           }
         }
           .map { _.flatten }
 
-      private def loadImport(stmt: ImportStmt)(imports: Imports[context.type]): context.Comp[Imports[context.type]] =
+      private def loadImport(exportingModules: Set[ArModule])(stmt: ImportStmt)(imports: Imports[context.type]): context.Comp[Imports[context.type]] =
         (stmt match {
-          case ImportStmt.Absolute(pathSegment) => loadTubeImports(currentTube, pathSegment)
+          case ImportStmt.Absolute(pathSegment) => loadTubeImports(exportingModules)(currentTube, pathSegment)
           case ImportStmt.Relative(upCount, path) =>
             def appendRelative(currentPath: Seq[String], path: ImportPathSegment): ImportPathSegment =
               currentPath match {
@@ -201,11 +207,11 @@ object SourceModule {
               else
                 appendRelative(currentPath, path)
 
-            loadTubeImports(currentTube, resolveRelative(moduleName.path.ids, upCount + (if moduleName.path.ids.nonEmpty then 1 else 0)))
+            loadTubeImports(exportingModules)(currentTube, resolveRelative(moduleName.path.ids, upCount + (if moduleName.path.ids.nonEmpty then 1 else 0)))
 
           case ImportStmt.Tube(tubeName, path) =>
             context.getTube(TubeName(tubeName)).flatMap { tube =>
-              loadTubeImports(tube, path)
+              loadTubeImports(exportingModules)(tube, path)
             }
 
           case ImportStmt.Member(_) => ???

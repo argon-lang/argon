@@ -18,6 +18,14 @@ private[emit] object JSExpr {
       source = literal(source)
     )
 
+  object import_* :
+    def as(name: String): ImportPartial = source =>
+      estree.ImportDeclaration(
+        specifiers = Seq(estree.ImportNamespaceSpecifier(local = id(name))),
+        source = literal(source)
+      )
+  end import_*
+
 
   def `return`(value: estree.Expression): estree.ReturnStatement =
     estree.ReturnStatement(argument = Nullable(value))
@@ -58,24 +66,36 @@ private[emit] object JSExpr {
     def ==> (body: estree.Statement*): estree.ArrowFunctionExpression
   }
 
-  def arrow(params: String*): ArrowPartial =
-    new ArrowPartial:
-      @targetName("body")
-      override def ==>(body: estree.Expression): estree.ArrowFunctionExpression =
-        estree.ArrowFunctionExpression(
-          params = params.map(name => estree.Identifier(name = name)),
-          body = body,
-        )
+  object arrow:
 
-      @targetName("body")
-      override def ==>(body: estree.Statement*): estree.ArrowFunctionExpression =
-        estree.ArrowFunctionExpression(
-          params = params.map(name => estree.Identifier(name = name)),
-          body = estree.BlockStatement(body = body),
-        )
+    private def impl(isAsync: Boolean)(params: String*): ArrowPartial =
+      new ArrowPartial:
+        @targetName("body")
+        override def ==>(body: estree.Expression): estree.ArrowFunctionExpression =
+          estree.ArrowFunctionExpression(
+            params = params.map(name => estree.Identifier(name = name)),
+            body = body,
+            async = isAsync,
+          )
+
+        @targetName("body")
+        override def ==>(body: estree.Statement*): estree.ArrowFunctionExpression =
+          estree.ArrowFunctionExpression(
+            params = params.map(name => estree.Identifier(name = name)),
+            body = estree.BlockStatement(body = body),
+            async = isAsync,
+          )
+      end new
+
+    def apply(params: String*): ArrowPartial = impl(isAsync = false)(params *)
+
+    def async(params: String*): ArrowPartial = impl(isAsync = true)(params *)
+
+  end arrow
+
+
 
   trait VariableDeclarationPartial {
-    @targetName("variableValue")
     def := (value: estree.Expression): estree.VariableDeclaration
   }
 
@@ -89,7 +109,6 @@ private[emit] object JSExpr {
     )
 
   trait ExportVariableDeclarationPartial {
-    @targetName("variableValue")
     def := (value: estree.Expression): estree.ExportNamedDeclaration
   }
 
@@ -112,7 +131,6 @@ private[emit] object JSExpr {
 
 
   trait PropertyPartial {
-    @targetName("propertyValue")
     def :=(value: estree.Expression | estree.Pattern): estree.Property
   }
 

@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>Extend non-open trait</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+        
+        class ClassA <: Object
+        end
+        
+        class ClassB <: Object & ClassA
+        end
+        
+        proc main(): Unit = ()
+        
+            
+    ]]></InputSource>
+
+    <ExpectedError>NonOpenClassExtendedError</ExpectedError>
+
+</ArgonTest>

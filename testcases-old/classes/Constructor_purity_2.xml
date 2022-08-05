@@ -1,0 +1,34 @@
+<ArgonTest>
+
+    <Name>Constructor purity 2</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+
+        proc zero(): Int = 0
+
+        open class A <: Object
+
+            public new(a: Int)
+            end
+
+        end
+
+        class B <: A
+
+            public new()
+                initialize _ = A.new(zero())
+            end
+
+        end
+        
+        proc main(): Unit do
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedError>ImpureFunctionCalledError</ExpectedError>
+
+</ArgonTest>

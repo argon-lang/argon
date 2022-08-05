@@ -52,6 +52,7 @@ private[js] final class ResourceFileSystem extends FileSystem {
     end if
 
     Files.newByteChannel(Path.of(uri))
+  end newByteChannel
 
   override def newDirectoryStream(dir: Path, filter: DirectoryStream.Filter[_ >: Path]): DirectoryStream[Path] =
     throw new UnsupportedOperationException()

@@ -22,7 +22,7 @@ trait GrammarTestHelpers {
     : Either[NonEmptyChunk[TSyntaxError], (Chunk[TToken], T)] =
     parseTokens(grammar)(
       Chunk.fromIterable(tokens.zipWithIndex.map { case (value, i) =>
-        WithSource(value, SourceLocation(FilePosition(1, i + 1), FilePosition(1, i + 2)))
+        WithSource(value, SourceLocation(None, FilePosition(1, i + 1), FilePosition(1, i + 2)))
       })
     )
       .toEither

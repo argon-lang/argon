@@ -1,0 +1,20 @@
+<ArgonTest>
+
+    <Name>Modify Local (Not Mutable)</Name>
+
+    <InputSource name="index.argon">
+
+        import Argon.Core/*
+
+        proc main(): Unit do
+            val x = 5
+            x := x + 1
+            puts (x.to_s())
+        end
+
+
+    </InputSource>
+
+    <ExpectedError>InvalidLValue</ExpectedError>
+
+</ArgonTest>

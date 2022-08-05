@@ -1,0 +1,32 @@
+<ArgonTest>
+
+    <Name>Print class parameter instance method base trait</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+        
+        trait MyTrait1(str: String) <: Object
+
+
+            public proc _.printMessage(): Unit =
+                puts str
+
+        end
+
+        class MyClass2(str: String) <: MyTrait1(str)
+            public new()
+            end
+        end
+
+        proc main(): Unit do
+            MyClass2('Hello World').new().printMessage()
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

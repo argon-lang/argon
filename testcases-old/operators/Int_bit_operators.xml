@@ -1,0 +1,43 @@
+<ArgonTest>
+
+    <Name>Int bit operators</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        proc main(): Unit do
+            puts ((0b1000 ||| 0b1).to_s())
+            puts ((0b1000 ||| 0b1000).to_s())
+            puts ((0b1000 &&& 0b1).to_s())
+            puts ((0b1000 &&& 0b1000).to_s())
+            puts ((0b1000 ^^^ 0b1).to_s())
+            puts ((0b1000 ^^^ 0b1000).to_s())
+            puts ((0b1000 <<< 0b3).to_s())
+            puts ((0b1000 <<< -0b3).to_s())
+            puts ((0b1000 >>> 0b3).to_s())
+            puts ((0b1000 >>> -0b3).to_s())
+            puts ((~~~0b1000).to_s())
+            puts ((~~~0b1).to_s())
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        9
+        8
+        0
+        8
+        9
+        0
+        64
+        1
+        1
+        64
+        -9
+        -2
+    </ExpectedOutput>
+
+</ArgonTest>

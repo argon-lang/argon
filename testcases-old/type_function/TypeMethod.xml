@@ -1,0 +1,28 @@
+<ArgonTest>
+
+    <Name>Type method</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+
+        class A <: Object
+
+            public def _.myMethod(): type >: String = String
+
+            public new()
+            end
+        end
+
+        proc main(): Unit do
+            val a = A.new()
+            val s: a.myMethod() = 'Hello World'
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput></ExpectedOutput>
+
+</ArgonTest>

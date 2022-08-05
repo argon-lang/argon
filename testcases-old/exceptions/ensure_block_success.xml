@@ -1,0 +1,30 @@
+<ArgonTest>
+
+    <Name>Ensure for block on Success</Name>
+
+
+    <InputSource name="index.argon">
+            
+        import Argon.Core/*
+        
+        proc add(a: Int, b: Int): Int do
+            begin
+                a + b
+            ensure
+                puts 'Hello'
+            end
+        end
+        
+        proc main(): Unit do
+            puts (add(1, 1).to_s())
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>
+        Hello
+        2
+    </ExpectedOutput>
+
+</ArgonTest>

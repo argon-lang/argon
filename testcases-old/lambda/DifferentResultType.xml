@@ -1,0 +1,21 @@
+<ArgonTest>
+
+    <Name>Different Result Type</Name>
+
+    <InputSource name="index.argon">
+
+        import Argon.Core/*
+
+        proc callFunc (f: Int -> String) (i: Int): String =
+            f i
+
+        proc main(): Unit do
+            puts (callFunc (x => (x + 4).to_s()) 10)
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>14</ExpectedOutput>
+
+</ArgonTest>
