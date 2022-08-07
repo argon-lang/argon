@@ -324,10 +324,10 @@ trait ExprUtilWithHoles extends ExprUtil {
         new Evaluator[context.Env, context.Error] {
           override val exprContext: ExprUtilWithHoles.this.exprContext.type = ExprUtilWithHoles.this.exprContext
 
-          override def getFunctionBody(function: ArFunc, args: Vector[WrapExpr], fuel: Int): Comp[Option[WrapExpr]] =
+          override def getFunctionBody(function: ArFunc, args: Seq[WrapExpr], fuel: Int): Comp[Option[WrapExpr]] =
             ???
 
-          override def getMethodBody(method: ArMethod, instance: WrapExpr, args: Vector[WrapExpr], fuel: Int)
+          override def getMethodBody(method: ArMethod, instance: WrapExpr, args: Seq[WrapExpr], fuel: Int)
           : Comp[Option[WrapExpr]] = ???
 
         }

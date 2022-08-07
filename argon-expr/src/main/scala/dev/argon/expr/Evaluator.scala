@@ -7,8 +7,8 @@ trait Evaluator[-R, +E] {
   val exprContext: ExprContext
   import exprContext.*
 
-  def getFunctionBody(function: TFunction, args: Vector[WrapExpr], fuel: Int): ZIO[R, E, Option[WrapExpr]]
-  def getMethodBody(method: TMethod, instance: WrapExpr, args: Vector[WrapExpr], fuel: Int): ZIO[R, E, Option[WrapExpr]]
+  def getFunctionBody(function: TFunction, args: Seq[WrapExpr], fuel: Int): ZIO[R, E, Option[WrapExpr]]
+  def getMethodBody(method: TMethod, instance: WrapExpr, args: Seq[WrapExpr], fuel: Int): ZIO[R, E, Option[WrapExpr]]
 
   def normalizeTopLevelWrap(expr: WrapExpr, fuel: Int): ZIO[R, E, WrapExpr] =
     expr match {
@@ -34,7 +34,7 @@ trait Evaluator[-R, +E] {
         }
 
       case ctor: (expr.constructor.type & ExprConstructor.MethodCall) =>
-        val (instance, args) = expr.getArgs(ctor)
+        val (instance, _, args) = expr.getArgs(ctor)
         getMethodBody(ctor.method, instance, args, fuel - 1).flatMap {
           case Some(body) => normalizeTopLevelWrap(body, fuel - 1)
           case None => ZIO.succeed(WrapExpr.OfExpr(expr))
@@ -63,7 +63,7 @@ trait Evaluator[-R, +E] {
           case WrapExpr.OfExpr(tupleExpr) =>
             tupleExpr.constructor match {
               case tupleCtor: (tupleExpr.constructor.type & ExprConstructor.LoadTuple.type) =>
-                val tupleArgs: Vector[WrapExpr] = tupleExpr.getArgs(tupleCtor)
+                val tupleArgs: Seq[WrapExpr] = tupleExpr.getArgs(tupleCtor)
                 tupleArgs
                   .slice(ctor.index, ctor.index + 1)
                   .headOption

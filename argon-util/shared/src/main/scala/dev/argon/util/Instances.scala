@@ -135,7 +135,7 @@ given Traverse[Option] with Monad[Option] with
       case _ => Applicative[F].pure(s)
     }
 
-  def foldLeft[S, A](ca: Option[A])(s: S)(f: (S, A) => S): S = ca.foldLeft(s)(f)
+  def foldLeft[S, A](ca: Option[A])(s: S)(f: (S, A) => S): S = ca.fold(s)(f(s, _))
 
   override def map[A, B](fa: Option[A])(f: A => B): Option[B] = fa.map(f)
 end given

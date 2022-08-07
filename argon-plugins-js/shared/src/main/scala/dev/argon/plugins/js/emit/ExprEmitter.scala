@@ -84,6 +84,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
       sigParamNames <- getSigParamVarNames(arClass)(sig)
 
+      // Constructors
+
       // Methods
       methods <- arClass.methods
       methodStmts <- createMethods("methods", methods)
@@ -99,10 +101,23 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         id("fields").index(literal(getEscapedName(fieldName))) ::= id("Symbol").call()
       }
 
+      // Prototype
+      baseClassExpr <- ZIO.foreach(sig.unsubstitutedResult._2) { baseClass =>
+        emitStandaloneScope { emitState =>
+          emitExpr(emitState)(baseClass)
+        }
+          .map(iefe)
+      }
+      vtableDiff <- vtableBuilder.diffFromClass(arClass)
+      prototypeSetup <- emitVTable(vtableDiff, arClass)
+
 
     yield `export` const exportName := (
       id(runtimeImportName).prop("createClass").call(
-        arrow(sigParamNames*) ==> (
+        arrow(sigParamNames*) ==> Seq(
+
+          const("constructors") := id("Object").prop("create").call(literal(null)),
+
           const("methods") := id("Object").prop("create").call(literal(null)),
           block(methodStmts*),
 
@@ -111,6 +126,12 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
           const("fields") := id("Object").prop("create").call(literal(null)),
           block(fieldStmts*),
+
+
+          const("prototype") := id("Object").prop("create").call(
+            baseClassExpr.getOrElse(literal(null))
+          ),
+          block(prototypeSetup *),
 
           `return`(obj(
             id("prototype") := id("prototype"),
@@ -143,7 +164,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
     yield `export` const exportName := (
       id(runtimeImportName).prop("createTrait").call(
-        arrow(sigParamNames*) ==> (
+        arrow(sigParamNames*) ==> Seq(
           const("methods") := id("Object").prop("create").call(literal(null)),
           block(methodStmts*),
 
@@ -171,7 +192,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           for
             sig <- func.signature
             params <- createSigParams(func, 0, sig)
-            body <- emitWrapExprAsStmt(true)(impl.body)
+            body <- emitTopScope(emitWrapExprAsStmt(_)(impl.body))
           yield estree.FunctionDeclaration(
             id = Nullable(id(funcName)),
             params = params,
@@ -209,7 +230,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         methodSig <- method.signatureUnsubstituted
         methodSigErased <- SignatureEraser(context).erasedWithResult(methodSig)
 
-      yield id(methodsVarName).index(literal(getOverloadExportName(methodName, methodSigErased))) ::= obj(
+      yield id(methodsVarName).prop(getOverloadExportName(methodName, methodSigErased)) ::= obj(
         id("symbol") := id("Symbol").call(),
         id("implementation") := methodExpr,
       )
@@ -223,7 +244,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         for
           sig <- method.signatureUnsubstituted
           params <- createSigParams(method, 0, sig)
-          body <- emitWrapExprAsStmt(true)(impl.body)
+          body <- emitTopScope(emitWrapExprAsStmt(_)(impl.body))
         yield estree.FunctionExpression(
           id = Nullable(null),
           params = params,
@@ -255,38 +276,107 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       case Signature.Result(_) => ZIO.succeed(Seq())
     }
 
-  private def emitWrapExprAsStmt(tailPosition: Boolean)(expr: WrapExpr): Comp[Seq[estree.Statement]] =
+
+  private def iefe(stmts: estree.Statement*): estree.Expression =
+    (arrow() ==> stmts).call()
+
+  final case class EmitState
+  (
+    tailPosition: Boolean,
+    discardValue: Boolean,
+    scopeVars: TRef[Seq[estree.VariableDeclaration]],
+  )
+
+  private def emitScope(createScope: TRef[Seq[estree.VariableDeclaration]] => EmitState)(f: EmitState => Comp[Seq[estree.Statement]]): Comp[Seq[estree.Statement]] =
+    for
+      scopeVars <- TRef.make[Seq[estree.VariableDeclaration]](Seq.empty).commit
+      result <- f(createScope(scopeVars))
+      varStmts <- scopeVars.get.commit
+    yield varStmts ++ result
+
+  private def emitTopScope(f: EmitState => Comp[Seq[estree.Statement]]): Comp[Seq[estree.Statement]] =
+    emitScope(scopeVars => EmitState(tailPosition = true, discardValue = false, scopeVars = scopeVars))(f)
+
+  private def emitStandaloneScope(f: EmitState => Comp[estree.Expression]): Comp[Seq[estree.Statement]] =
+    emitScope(scopeVars => EmitState(tailPosition = false, discardValue = false, scopeVars = scopeVars)) { emitState =>
+      f(emitState).map { expr => Seq(exprStmt(expr)) }
+    }
+
+  private def emitNestedScope(emitState: EmitState)(f: EmitState => Comp[Seq[estree.Statement]]): Comp[Seq[estree.Statement]] =
+    emitScope(scopeVars => emitState.copy(scopeVars = scopeVars))(f)
+
+  private def emitWrapExprAsStmt(emitState: EmitState)(expr: WrapExpr): Comp[Seq[estree.Statement]] =
     expr match
-      case WrapExpr.OfExpr(expr) => emitExprAsStmt(tailPosition)(expr)
+      case WrapExpr.OfExpr(expr) => emitExprAsStmt(emitState)(expr)
       case WrapExpr.OfHole(hole) => hole
     end match
 
-  private def emitExprAsStmt(tailPosition: Boolean)(expr: ArExpr[ExprConstructor]): Comp[Seq[estree.Statement]] =
+  private def emitExprAsStmt(emitState: EmitState)(expr: ArExpr[ExprConstructor]): Comp[Seq[estree.Statement]] =
     expr.constructor match
+      case ctor: (expr.constructor.type & ExprConstructor.BindVariable) =>
+        val value: WrapExpr = expr.getArgs(ctor)
+        for
+          valueExpr <- emitWrapExpr(emitState.copy(tailPosition = false, discardValue = false))(value)
+          varName <- getVariableName(ctor.variable)
+        yield Seq(estree.VariableDeclaration(
+          kind = if ctor.variable.isMutable then "let" else "const",
+          declarations = Seq(estree.VariableDeclarator(
+            id = id(varName),
+            init = Nullable(valueExpr),
+          )),
+        )) ++ (if emitState.discardValue then Seq() else Seq(`return`(array())))
+
+      case ctor: (expr.constructor.type & ExprConstructor.Sequence.type) =>
+        def emitSequence(emitState: EmitState, acc: Seq[estree.Statement], items: List[WrapExpr]): Comp[Seq[estree.Statement]] =
+          items match {
+            case head :: tail =>
+              emitWrapExprAsStmt(emitState.copy(
+                tailPosition = emitState.tailPosition && tail.isEmpty,
+                discardValue = emitState.discardValue || tail.nonEmpty
+              ))(head).flatMap { stmts =>
+                emitSequence(emitState, acc ++ stmts, tail)
+              }
+
+            case Nil =>
+              ZIO.succeed(acc)
+          }
+
+        emitNestedScope(emitState) { emitState =>
+          emitSequence(emitState, Seq.empty, expr.getArgs(ctor).toList)
+        }
+
+      case _ if emitState.discardValue =>
+        for
+          jsExpr <- emitExpr(emitState)(expr)
+        yield Seq(exprStmt(jsExpr))
+
       case _ =>
         for
-          jsExpr <- emitExpr(tailPosition)(expr)
-        yield Seq(estree.ReturnStatement(
-          argument = Nullable(jsExpr)
-        ))
+          jsExpr <- emitExpr(emitState)(expr)
+        yield Seq(`return`(jsExpr))
     end match
 
-  private def emitWrapExpr(tailPosition: Boolean)(expr: WrapExpr): Comp[estree.Expression] =
+  private def emitWrapExpr(emitState: EmitState)(expr: WrapExpr): Comp[estree.Expression] =
     expr match
-      case WrapExpr.OfExpr(expr) => emitExpr(tailPosition)(expr)
+      case WrapExpr.OfExpr(expr) => emitExpr(emitState)(expr)
       case WrapExpr.OfHole(hole) => hole
     end match
 
-  private def emitExpr(tailPosition: Boolean)(expr: ArExpr[ExprConstructor]): Comp[estree.Expression] =
-    if tailPosition then
+  private def emitExpr(emitState: EmitState)(expr: ArExpr[ExprConstructor]): Comp[estree.Expression] =
+    if emitState.tailPosition then
       expr.constructor match
         case ctor: (expr.constructor.type & ExprConstructor.FunctionCall) =>
-          emitFunctionCall(expr, ctor).map { expr =>
+          emitFunctionCall(emitState, expr, ctor).map { expr =>
+            id(runtimeImportName).prop("trampoline").prop("delay").call(arrow.async() ==> expr)
+          }
+
+        case ctor: (expr.constructor.type & ExprConstructor.MethodCall) =>
+          emitMethodCall(emitState, expr, ctor).map { expr =>
             id(runtimeImportName).prop("trampoline").prop("delay").call(arrow.async() ==> expr)
           }
 
         case _ =>
-          emitExpr(false)(expr).map { expr =>
+          emitExpr(emitState.copy(tailPosition = false))(expr).map { expr =>
             id(runtimeImportName).prop("trampoline").prop("result").call(expr)
           }
 
@@ -296,16 +386,37 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         case ctor: (expr.constructor.type & ExprConstructor.BindVariable) =>
           val value: WrapExpr = expr.getArgs(ctor)
           for
-            valueExpr <- emitWrapExpr(false)(value)
+            valueExpr <- emitWrapExpr(emitState.copy(tailPosition = false))(value)
             varName <- getVariableName(ctor.variable)
-          yield estree.AssignmentExpression(
-            operator = "=",
-            left = estree.Identifier(name = varName),
-            right = valueExpr,
-          )
+            decl = estree.VariableDeclaration(
+              kind = "let",
+              declarations = Seq(estree.VariableDeclarator(
+                id = id(varName),
+                init = Nullable(null),
+              )),
+            )
+            _ <- emitState.scopeVars.update(_ :+ decl).commit
+            expr = estree.AssignmentExpression(
+              operator = "=",
+              left = estree.Identifier(name = varName),
+              right = valueExpr,
+            )
+          yield
+            if emitState.discardValue then
+              expr
+            else
+              iefe(
+                exprStmt(expr),
+                `return`(array()),
+              )
 
         case ctor: (expr.constructor.type & ExprConstructor.FunctionCall) =>
-          emitFunctionCall(expr, ctor).map { expr =>
+          emitFunctionCall(emitState, expr, ctor).map { expr =>
+            id(runtimeImportName).prop("trampoline").prop("resolve").call(expr).await.prop("value")
+          }
+
+        case ctor: (expr.constructor.type & ExprConstructor.MethodCall) =>
+          emitMethodCall(emitState, expr, ctor).map { expr =>
             id(runtimeImportName).prop("trampoline").prop("resolve").call(expr).await.prop("value")
           }
 
@@ -324,9 +435,14 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
             _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("String"))), "createString")
           yield id("createString").call(literal(ctor.s))
 
+        case ctor: (expr.constructor.type & ExprConstructor.LoadTuple.type) =>
+          for
+            argExprs <- ZIO.foreach(expr.getArgs(ctor))(emitWrapExpr(emitState.copy(tailPosition = false, discardValue = false)))
+          yield array(argExprs*)
+
         case ctor: (expr.constructor.type & ExprConstructor.LoadTupleElement) =>
           for
-            tupleExpr <- emitWrapExpr(false)(expr.getArgs(ctor))
+            tupleExpr <- emitWrapExpr(emitState.copy(tailPosition = false))(expr.getArgs(ctor))
           yield tupleExpr.index(literal(ctor.index.toDouble))
 
         case ctor: (expr.constructor.type & ExprConstructor.LoadVariable) =>
@@ -337,11 +453,28 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
             case variable: MemberVariable => ???
           }
 
+
+        case ctor: (expr.constructor.type & ExprConstructor.ClassType) =>
+          for
+            sig <- ctor.arClass.signature
+            erasedSig <- SignatureEraser(context).erasedNoResult(sig)
+            classExpr <- emitOwnedByModule(ctor.arClass.owner, erasedSig)
+            args <- emitArgExprs(emitState, expr.getArgs(ctor), sig, Seq())
+          yield classExpr.call(args*)
+
+        case ctor: (expr.constructor.type & ExprConstructor.TraitType) =>
+          for
+            sig <- ctor.arTrait.signature
+            erasedSig <- SignatureEraser(context).erasedNoResult(sig)
+            traitExpr <- emitOwnedByModule(ctor.arTrait.owner, erasedSig)
+            args <- emitArgExprs(emitState, expr.getArgs(ctor), sig, Seq())
+          yield traitExpr.call(args*)
+
         case _ =>
           ZIO.logError(s"Unimplemented expression: $expr") *> ZIO.succeed(???)
       end match
 
-  private def emitFunctionCall(expr: ArExpr[ExprConstructor], ctor: expr.constructor.type & ExprConstructor.FunctionCall): Comp[estree.Expression] =
+  private def emitFunctionCall(emitState: EmitState, expr: ArExpr[ExprConstructor], ctor: expr.constructor.type & ExprConstructor.FunctionCall): Comp[estree.Expression] =
     for
       sig <- ctor.function.signature
       erasedSig <- SignatureEraser(context).erasedWithResult(sig)
@@ -349,19 +482,100 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       specifier = ImportSpecifier(owner.module.tube.tubeName, owner.module.moduleName.path, owner.ownedName, erasedSig)
       importName <- getImportName(specifier)
 
-      args <- emitArgExprs(expr.getArgs(ctor), sig, Seq())
+      args <- emitArgExprs(emitState, expr.getArgs(ctor), sig, Seq())
     yield id(importName).call(args*)
 
-  private def emitArgExprs(args: Seq[WrapExpr], sig: Signature[WrapExpr, ?], prev: Seq[estree.Expression]): Comp[Seq[estree.Expression]] =
+  private def emitMethodCall(emitState: EmitState, expr: ArExpr[ExprConstructor], ctor: expr.constructor.type & ExprConstructor.MethodCall): Comp[estree.Expression] =
+    for
+      sig <- ctor.method.signatureUnsubstituted
+
+      (instanceExpr, methodOwnerType, argExprs) = expr.getArgs(ctor)
+
+      instance <- emitWrapExpr(emitState.copy(tailPosition = false))(instanceExpr)
+      methodValue <- emitMethodValue(emitState, ctor.method, methodOwnerType)
+      args <- emitArgExprs(emitState, argExprs, sig, Seq())
+    yield instance.index(methodValue.prop("symbol")).call(args *)
+
+  private def emitArgExprs(emitState: EmitState, args: Seq[WrapExpr], sig: Signature[WrapExpr, ?], prev: Seq[estree.Expression]): Comp[Seq[estree.Expression]] =
     (args, sig) match {
-      case (_ +: restArgs, Signature.Parameter(_, true, _, _, nextSig)) => emitArgExprs(restArgs, nextSig, prev)
+      case (_ +: restArgs, Signature.Parameter(_, true, _, _, nextSig)) => emitArgExprs(emitState, restArgs, nextSig, prev)
       case (arg +: restArgs, Signature.Parameter(_, false, _, _, nextSig)) =>
-        emitWrapExpr(false)(arg).flatMap { argExpr =>
-          emitArgExprs(restArgs, nextSig, prev :+ argExpr)
+        emitWrapExpr(emitState.copy(tailPosition = false))(arg).flatMap { argExpr =>
+          emitArgExprs(emitState, restArgs, nextSig, prev :+ argExpr)
         }
 
       case _ => ZIO.succeed(prev)
     }
+
+  private def emitMethodValue(emitState: EmitState, method: ArMethod, methodOwnerType: ExprConstructor.MethodCallOwnerType): Comp[estree.Expression] =
+    for
+      ownerType <- methodOwnerType match {
+        case ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) =>
+          emitExpr(emitState.copy(tailPosition = false))(classType)
+
+        case ExprConstructor.MethodCallOwnerType.OwnedByTrait(traitType) =>
+          emitExpr(emitState.copy(tailPosition = false))(traitType)
+      }
+
+      methodPropName =
+        method.owner match
+          case _: OwnedByClass[?] | _: OwnedByTrait[?] => "methods"
+          case _: OwnedByClassStatic[?] | _: OwnedByTraitStatic[?] => "staticMethods"
+        end match
+
+      sig <- method.signatureUnsubstituted
+      erasedSig <- SignatureEraser(context).erasedWithResult(sig)
+      methodKeyName = getOverloadExportName(
+        method.owner match {
+          case owner: OwnedByClass[?] => owner.ownedName
+          case owner: OwnedByClassStatic[?] => owner.ownedName
+          case owner: OwnedByTrait[?] => owner.ownedName
+          case owner: OwnedByTraitStatic[?] => owner.ownedName
+        },
+        erasedSig
+      )
+
+    yield ownerType.prop(methodPropName).prop(methodKeyName)
+
+  private def emitOwnedByModule(ownership: OwnedByModule, sig: ErasedSignature): Comp[estree.Expression] =
+    getImportName(ImportSpecifier(ownership.module.tube.tubeName, ownership.module.moduleName.path, ownership.ownedName, sig))
+      .map(id)
+
+  private def emitVTable(vtable: vtableBuilder.VTable, ownerClass: ArClass): Comp[Seq[estree.Statement]] =
+    ZIO.foreach(vtable.methodMap.toSeq) {
+      case (_, vtableBuilder.VTableEntry(name, signature, slotInstanceType, entrySource, vtableBuilder.VTableEntryMethod(implMethod))) =>
+        for
+          slotSigErased <- SignatureEraser(context).erasedWithResult(signature)
+          implSig <- implMethod.signatureUnsubstituted
+          implSigErased <- SignatureEraser(context).erasedWithResult(implSig)
+
+          slotMethodsExpr <-
+            slotInstanceType match {
+              case ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) if classType.constructor.arClass == ownerClass =>
+                ZIO.succeed(id("methods"))
+
+              case ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) =>
+                emitStandaloneScope { emitState =>
+                  for
+                    slotInstanceExpr <- emitExpr(emitState)(classType)
+                  yield slotInstanceExpr.prop("methods")
+                }.map(iefe)
+
+              case ExprConstructor.MethodCallOwnerType.OwnedByTrait(traitType) =>
+                emitStandaloneScope { emitState =>
+                  for
+                    slotInstanceExpr <- emitExpr(emitState)(traitType)
+                  yield slotInstanceExpr.prop("methods")
+                }.map(iefe)
+            }
+
+          slotSymbol = slotMethodsExpr.prop(getOverloadExportName(name, slotSigErased)).prop("symbol")
+          implMethod = id("methods").prop(getOverloadExportName(name, implSigErased)).prop("implementation")
+        yield Seq(exprStmt(id("prototype").index(slotSymbol) ::= implMethod))
+
+      case _ => ZIO.succeed(Seq())
+    }.map { _.flatten }
+
 
 }
 

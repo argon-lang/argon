@@ -16,11 +16,12 @@ sealed abstract class VTableBuilder[TContext <: Context](override val context: T
   def diffFromClass(arClass: ArClass): Comp[VTable]
 
   override val exprContext: context.ExprContext.type = context.ExprContext
-  import context.ExprContext.WrapExpr
+  import context.ExprContext.{WrapExpr, ExprConstructor}
+  import ExprConstructor.MethodCallOwnerType
 
   type EntrySignature = Signature[WrapExpr, WrapExpr]
 
-  final case class VTableEntry(name: Option[IdentifierExpr], signature: EntrySignature, entrySource: EntrySource, impl: VTableEntryImpl)
+  final case class VTableEntry(name: Option[IdentifierExpr], signature: EntrySignature, slotInstanceType: MethodCallOwnerType, entrySource: EntrySource, impl: VTableEntryImpl)
 
   sealed trait VTableEntryImpl derives CanEqual
 
@@ -28,10 +29,12 @@ sealed abstract class VTableBuilder[TContext <: Context](override val context: T
   final case class VTableEntryAmbiguous(methods: Set[ArMethod]) extends VTableEntryImpl
   case object VTableEntryAbstract extends VTableEntryImpl
 
+
   sealed trait EntrySource
   final case class EntrySourceClass(arClass: ArClass, baseClasses: Vector[ArClass], baseTraits: Vector[ArTrait]) extends EntrySource
   final case class EntrySourceTrait(arTrait: ArTrait, baseTraits: Vector[ArTrait]) extends EntrySource
   final case class EntrySourceMulti(sourceA: EntrySource, sourceB: EntrySource) extends EntrySource
+
 
   object VTableEntry {
 
@@ -57,25 +60,25 @@ sealed abstract class VTableBuilder[TContext <: Context](override val context: T
 
     implicit def semigroupInstance: Semigroup[VTableEntry] = new Semigroup[VTableEntry] {
       override def combine(x: VTableEntry, y: VTableEntry): VTableEntry = (x, y) match {
-        case (VTableEntry(_, _, a, _), VTableEntry(_, _, b, _)) if sameSource(a, b) => x
-        case (VTableEntry(_, _, a, _), VTableEntry(_, _, b, _)) if moreSpecificSource(a, b) => x
-        case (VTableEntry(_, _, a, _), VTableEntry(_, _, b, _)) if moreSpecificSource(b, a) => y
-        case (VTableEntry(nameA, sigA, sourceA, VTableEntryAbstract), VTableEntry(_, _, sourceB, VTableEntryAbstract)) =>
-          VTableEntry(nameA, sigA, EntrySourceMulti(sourceA, sourceB), VTableEntryAbstract)
+        case (VTableEntry(_, _, _, a, _), VTableEntry(_, _, _, b, _)) if sameSource(a, b) => x
+        case (VTableEntry(_, _, _, a, _), VTableEntry(_, _, _, b, _)) if moreSpecificSource(a, b) => x
+        case (VTableEntry(_, _, _, a, _), VTableEntry(_, _, _, b, _)) if moreSpecificSource(b, a) => y
+        case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryAbstract), VTableEntry(_, _, _, sourceB, VTableEntryAbstract)) =>
+          VTableEntry(nameA, sigA, slotInstanceTypeA, EntrySourceMulti(sourceA, sourceB), VTableEntryAbstract)
 
-        case (VTableEntry(_, _, _, VTableEntryAbstract), right) => right
-        case (left, VTableEntry(_, _, _, VTableEntryAbstract)) => left
-        case (VTableEntry(nameA, sigA, sourceA, VTableEntryAmbiguous(a)), VTableEntry(_, _, sourceB, VTableEntryAmbiguous(b))) =>
-          VTableEntry(nameA, sigA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(a ++ b))
+        case (VTableEntry(_, _, _, _, VTableEntryAbstract), right) => right
+        case (left, VTableEntry(_, _, _, _, VTableEntryAbstract)) => left
+        case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryAmbiguous(a)), VTableEntry(_, _, _, sourceB, VTableEntryAmbiguous(b))) =>
+          VTableEntry(nameA, sigA, slotInstanceTypeA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(a ++ b))
 
-        case (VTableEntry(nameA, sigA, sourceA, VTableEntryAmbiguous(a)), VTableEntry(_, _, sourceB, VTableEntryMethod(b))) =>
-          VTableEntry(nameA, sigA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(a + b))
+        case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryAmbiguous(a)), VTableEntry(_, _, _, sourceB, VTableEntryMethod(b))) =>
+          VTableEntry(nameA, sigA, slotInstanceTypeA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(a + b))
 
-        case (VTableEntry(nameA, sigA, sourceA, VTableEntryMethod(a)), VTableEntry(_, _, sourceB, VTableEntryAmbiguous(b))) =>
-          VTableEntry(nameA, sigA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(b + a))
+        case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryMethod(a)), VTableEntry(_, _, _, sourceB, VTableEntryAmbiguous(b))) =>
+          VTableEntry(nameA, sigA, slotInstanceTypeA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(b + a))
 
-        case (VTableEntry(nameA, sigA, sourceA, VTableEntryMethod(a)), VTableEntry(_, _, sourceB, VTableEntryMethod(b))) =>
-          VTableEntry(nameA, sigA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(Set(a, b)))
+        case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryMethod(a)), VTableEntry(_, _, _, sourceB, VTableEntryMethod(b))) =>
+          VTableEntry(nameA, sigA, slotInstanceTypeA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(Set(a, b)))
       }
     }
 
@@ -113,6 +116,7 @@ object VTableBuilder {
       traitVtableCache0 <- MemoCacheStore.make[ctx.Env, ctx.Error, ArTraitC with HasContext[ctx.type], Any]
     } yield new VTableBuilder[context.type](context) {
       import this.context.ExprContext.{ArExpr, ExprConstructor, WrapExpr, Variable, ParameterVariable}
+      import ExprConstructor.MethodCallOwnerType
 
       private val classVtableCache = classVtableCache0.asInstanceOf[MemoCacheStore[ctx.Env, ctx.Error, ArClass, VTable]]
       private val traitVtableCache = traitVtableCache0.asInstanceOf[MemoCacheStore[ctx.Env, ctx.Error, ArTrait, VTable]]
@@ -158,7 +162,7 @@ object VTableBuilder {
         }
       end signatureMatches
 
-      private def overrideMethod(methodName: Option[IdentifierExpr], method: ArMethod)(source: EntrySource)(baseTypeVTable: VT): Comp[VT] = {
+      private def overrideMethod(methodName: Option[IdentifierExpr], method: ArMethod, ownerType: MethodCallOwnerType)(source: EntrySource)(baseTypeVTable: VT): Comp[VT] =
 
         val newEntryImpl =
           if(method.isAbstract)
@@ -166,8 +170,9 @@ object VTableBuilder {
           else
             VTableEntryMethod(method)
 
-        method.signatureUnsubstituted.flatMap { sig =>
-          (
+        for
+          sig <- method.signatureUnsubstituted
+          baseVTable <- (
             if(method.isImplicitOverride)
               ZIO.filter(
                 baseTypeVTable.methodMap
@@ -178,13 +183,13 @@ object VTableBuilder {
                       methodName.isDefined &&
                       slotEntry.name == methodName
                   }
-              ) { case (_, VTableEntry(_, slotSig, _, _)) => signatureMatches(method)(slotSig) }
+              ) { case (_, VTableEntry(_, slotSig, _, _, _)) => signatureMatches(method)(slotSig) }
                 .map { slotMethods =>
                   VTable(
                     methodMap = slotMethods
                       .map {
-                        case (slotMethod, VTableEntry(slotName, slotSig, _, _)) =>
-                          slotMethod -> VTableEntry(slotName, slotSig, source, newEntryImpl)
+                        case (slotMethod, VTableEntry(slotName, slotSig, slotOwnerType, _, _)) =>
+                          slotMethod -> VTableEntry(slotName, slotSig, slotOwnerType, source, newEntryImpl)
                       }
                       .toMap[ArMethod, VTableEntry]
                   )
@@ -193,18 +198,17 @@ object VTableBuilder {
               ZIO.succeed(VTable(
                 methodMap = Map.empty
               ))
-          ).map { case VTable(methodMap) =>
-            VTable(
-              methodMap = methodMap + (method -> VTableEntry(methodName, sig, source, newEntryImpl))
-            )
-          }
-        }
-      }
+          )
 
-      private def addNewMethods(methodGroups: Map[Option[IdentifierExpr], Seq[ArMethod]])(source: EntrySource)(baseTypeVTable: VT): Comp[VT] =
+        yield VTable(
+          methodMap = baseVTable.methodMap + (method -> VTableEntry(methodName, sig, ownerType, source, newEntryImpl))
+        )
+      end overrideMethod
+
+      private def addNewMethods(methodGroups: Map[Option[IdentifierExpr], Seq[ArMethod]], ownerType: MethodCallOwnerType)(source: EntrySource)(baseTypeVTable: VT): Comp[VT] =
         ZIO.foreach(methodGroups.toSeq) { case (methodName, methods) =>
           ZIO.foreach(methods) { method =>
-            overrideMethod(methodName, method)(source)(baseTypeVTable)
+            overrideMethod(methodName, method, ownerType)(source)(baseTypeVTable)
           }
         }
           .map { newEntries =>
@@ -254,11 +258,11 @@ object VTableBuilder {
 
       private def ensureNonAbstract(vtable: VT, source: DiagnosticSource): Comp[Unit] =
         ZIO.foreachDiscard(vtable.methodMap.values) {
-          case VTableEntry(_, _, _, VTableEntryMethod(_)) => ZIO.unit
-          case VTableEntry(_, _, _, VTableEntryAbstract) =>
+          case VTableEntry(_, _, _, _, VTableEntryMethod(_)) => ZIO.unit
+          case VTableEntry(_, _, _, _, VTableEntryAbstract) =>
             ZIO.fail(DiagnosticError.AbstractMethodNotImplemented())
 
-          case VTableEntry(_, _, _, VTableEntryAmbiguous(_)) => ???
+          case VTableEntry(_, _, _, _, VTableEntryAmbiguous(_)) => ???
         }
 
       private def getSigParameterVars(owner: exprContext.ParameterVariableOwner, sig: Signature[WrapExpr, ?], acc: Seq[Variable]): Seq[Variable] =
@@ -274,13 +278,14 @@ object VTableBuilder {
           btSig <- bt.constructor.arTrait.signature
           baseTraitVTable <- fromTrait(bt.constructor.arTrait)
           newMap = baseTraitVTable.methodMap.toSeq.map {
-            case (key, VTableEntry(entryName, signature, entrySource, impl)) =>
+            case (key, VTableEntry(entryName, signature, slotInstanceType, entrySource, impl)) =>
               val subst = getSigParameterVars(bt.constructor.arTrait, btSig, Seq())
                 .zip(bt.args)
                 .toMap
 
               val newSig = substituteSignatureMany(subst)(functionSigHandler)(signature)
-              key -> VTableEntry(entryName, newSig, entrySource, impl)
+              val newInstanceType = substituteMethodCallOwnerType(subst)(slotInstanceType)
+              key -> VTableEntry(entryName, newSig, newInstanceType, entrySource, impl)
           }
         } yield VTable(newMap.toMap)
 
@@ -294,15 +299,17 @@ object VTableBuilder {
                 bcSig <- bc.constructor.arClass.signature
                 baseClassVTable <- fromClass(bc.constructor.arClass)
                 newMap = baseClassVTable.methodMap.toSeq.map {
-                  case (key, VTableEntry(entryName, signature, entrySource, impl)) =>
+                  case (key, VTableEntry(entryName, signature, slotInstanceType, entrySource, impl)) =>
                     val subst = getSigParameterVars(bc.constructor.arClass, bcSig, Seq())
                       .zip(bc.args)
                       .toMap
 
                     val substSig = substituteSignatureMany(subst)(functionSigHandler)(signature)
+                    val newInstanceType = substituteMethodCallOwnerType(subst)(slotInstanceType)
                     key -> VTableEntry(
                       entryName,
                       substSig,
+                      newInstanceType,
                       entrySource,
                       impl
                     )
@@ -317,10 +324,19 @@ object VTableBuilder {
             )
 
             methods <- arClass.methods
+
+            instanceType = MethodCallOwnerType.OwnedByClass(ArExpr(
+              ExprConstructor.ClassType(arClass),
+              getSigParameterVars(arClass, sig, Seq()).map { variable =>
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(variable), EmptyTuple))
+              }
+            ))
+
             allBaseClasses <- findAllBaseClasses(baseClass)
             allBaseTraits <- findAllBaseTraits(allBaseClasses, baseTraits)
             source = EntrySourceClass(arClass, allBaseClasses, allBaseTraits)
-            newVTable <- addNewMethods(methods)(source)(baseTypeOnlyVTable)
+
+            newVTable <- addNewMethods(methods, instanceType)(source)(baseTypeOnlyVTable)
 
             _ <- ensureNonAbstract(newVTable, arClass.classMessageSource).unless(arClass.isAbstract)
 
@@ -337,17 +353,26 @@ object VTableBuilder {
             baseTraitOnlyVTable = summon[Semigroup[VT]].combineAll(baseTraitVTables)
 
             methods <- arTrait.methods
+
+            instanceType = MethodCallOwnerType.OwnedByTrait(ArExpr(
+              ExprConstructor.TraitType(arTrait),
+              getSigParameterVars(arTrait, sig, Seq()).map { variable =>
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(variable), EmptyTuple))
+              }
+            ))
+
             allBaseTraits <- findAllBaseTraits(Vector.empty, baseTraits)
             source = EntrySourceTrait(arTrait, allBaseTraits)
-            newVTable <- addNewMethods(methods)(source)(baseTraitOnlyVTable)
+
+            newVTable <- addNewMethods(methods, instanceType)(source)(baseTraitOnlyVTable)
 
           } yield newVTable
         }
 
       private def diffVTable(current: VT, base: VT): VT =
-        VTable(current.methodMap.filter {
+        VTable(current.methodMap.filterNot {
           case (slot, entry) =>
-            !base.methodMap.get(slot).forall { baseEntry => entry.impl == baseEntry.impl }
+            base.methodMap.get(slot).exists { baseEntry => entry.impl == baseEntry.impl }
         })
 
       override def diffFromClass(arClass: ArClass): Comp[VTable] =

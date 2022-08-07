@@ -9,9 +9,9 @@ abstract class ArgonEvaluator[R <: CompEnv, E >: CompError] extends UsingContext
   override val exprContext: ArgonExprContext with HasContext[context.type]
   import exprContext.WrapExpr
 
-  override def getFunctionBody(function: ArFunc, args: Vector[WrapExpr], fuel: Int): Comp[Option[WrapExpr]] = ZIO.none
+  override def getFunctionBody(function: ArFunc, args: Seq[WrapExpr], fuel: Int): Comp[Option[WrapExpr]] = ZIO.none
 
-  override def getMethodBody(method: ArMethod, instance: WrapExpr, args: Vector[WrapExpr], fuel: Int)
+  override def getMethodBody(method: ArMethod, instance: WrapExpr, args: Seq[WrapExpr], fuel: Int)
     : Comp[Option[WrapExpr]] = ZIO.none
 
 }

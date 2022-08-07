@@ -87,6 +87,17 @@ trait ExprUtil extends UsingContext {
   : Signature[WrapExpr, Res] =
     substituteSignatureMany(Map(variable -> replacement))(sigHandler)(sig)
 
+  def substituteMethodCallOwnerType
+  (subst: Map[Variable, WrapExpr])
+  (ownerType: ExprConstructor.MethodCallOwnerType)
+  : ExprConstructor.MethodCallOwnerType =
+    ownerType match {
+      case ExprConstructor.MethodCallOwnerType.OwnedByTrait(traitType) =>
+        ExprConstructor.MethodCallOwnerType.OwnedByTrait(substituteTraitTypeMany(subst)(traitType))
+
+      case ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) =>
+        ExprConstructor.MethodCallOwnerType.OwnedByClass(substituteClassTypeMany(subst)(classType))
+    }
 
 
   trait SignatureHandler[Res] {

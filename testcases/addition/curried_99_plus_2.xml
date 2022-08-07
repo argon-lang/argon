@@ -10,7 +10,7 @@
         def add(a: Int)(b: Int): Int =
             a + b
         
-        proc main(): Unit do
+        proc main(): () do
             val result = add 99 2
             puts (result.to_s())
         end

@@ -1,6 +1,6 @@
 
-export async function Nat_to_s(self) {
-	return argonRuntime.trampoline.result(createString(self[natValueSymbol].toString()));
+export async function Nat_to_s() {
+	return argonRuntime.trampoline.result(createString(this[natValueSymbol].toString()));
 }
 
 export async function addNat(a, b) {

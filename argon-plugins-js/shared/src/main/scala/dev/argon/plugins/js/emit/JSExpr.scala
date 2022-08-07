@@ -58,12 +58,18 @@ private[emit] object JSExpr {
   def block(statements: estree.Statement*): estree.BlockStatement =
     estree.BlockStatement(body = statements)
 
+  def array(values: (estree.Expression | estree.SpreadElement | Null)*): estree.ArrayExpression =
+    estree.ArrayExpression(elements = values.map(Nullable.apply))
+
+  def exprStmt(expr: estree.Expression): estree.ExpressionStatement =
+    estree.ExpressionStatement(expression = expr)
+
   trait ArrowPartial {
     @targetName("body")
     def ==> (body: estree.Expression): estree.ArrowFunctionExpression
 
     @targetName("body")
-    def ==> (body: estree.Statement*): estree.ArrowFunctionExpression
+    def ==> (body: Seq[estree.Statement]): estree.ArrowFunctionExpression
   }
 
   object arrow:

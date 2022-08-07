@@ -163,15 +163,15 @@ object ArgonExprContext {
       val (classType, ctorArgs) = args
       for {
         classType2 <- convertClassType(context)(ec1, ec2)(f)(classType)
-        ctorArgs2 <- Traverse[Vector].traverse(ctorArgs)(convertWrapExpr(context)(ec1, ec2)(f))
+        ctorArgs2 <- Traverse[Seq].traverse(ctorArgs)(convertWrapExpr(context)(ec1, ec2)(f))
       } yield ec2.ArExpr(ctor, (classType2, ctorArgs2))
     end convertClassConstructorCallArgs
 
-    def convertVectorArgs(ctor: ec2.ExprConstructor { type ConstructorArgs = Vector[ec2.WrapExpr] })
-      (args: Vector[ec1.WrapExpr])
+    def convertSeqArgs(ctor: ec2.ExprConstructor { type ConstructorArgs = Seq[ec2.WrapExpr] })
+      (args: Seq[ec1.WrapExpr])
       : F[ec2.ArExpr[ec2.ExprConstructor]] =
       for {
-        args2 <- Traverse[Vector].traverse(args)(convertWrapExpr(context)(ec1, ec2)(f))
+        args2 <- Traverse[Seq].traverse(args)(convertWrapExpr(context)(ec1, ec2)(f))
       } yield ec2.ArExpr(ctor, args2)
 
     def convertNonEmptyListArgs(ctor: ec2.ExprConstructor { type ConstructorArgs = NonEmptyList[ec2.WrapExpr] })
@@ -184,11 +184,20 @@ object ArgonExprContext {
     def convertMethodCallArgs(ctor: ec2.ExprConstructor { type ConstructorArgs = ec2.ExprConstructor.MethodCallArgs })
       (args: ec1.ExprConstructor.MethodCallArgs)
       : F[ec2.ArExpr[ec2.ExprConstructor]] =
-      val (instance, callArgs) = args
+      val (instance, ownerType, callArgs) = args
       for {
         instance2 <- convertWrapExpr(context)(ec1, ec2)(f)(instance)
-        callArgs2 <- Traverse[Vector].traverse(callArgs)(convertWrapExpr(context)(ec1, ec2)(f))
-      } yield ec2.ArExpr(ctor, (instance2, callArgs2))
+        ownerType2 <- ownerType match {
+          case ec1.ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) =>
+            convertClassType(context)(ec1, ec2)(f)(classType)
+              .map(ec2.ExprConstructor.MethodCallOwnerType.OwnedByClass.apply)
+
+          case ec1.ExprConstructor.MethodCallOwnerType.OwnedByTrait(traitType) =>
+            convertTraitType(context)(ec1, ec2)(f)(traitType)
+              .map(ec2.ExprConstructor.MethodCallOwnerType.OwnedByTrait.apply)
+        }
+        callArgs2 <- Traverse[Seq].traverse(callArgs)(convertWrapExpr(context)(ec1, ec2)(f))
+      } yield ec2.ArExpr(ctor, (instance2, ownerType2, callArgs2))
     end convertMethodCallArgs
 
     def convertPatternMatchArgs[N <: Nat]
@@ -243,7 +252,7 @@ object ArgonExprContext {
         convertPairArgs(ec2.ExprConstructor.EnsureExecuted)(e.getArgs(ctor))
 
       case ctor: (e.constructor.type & ec1.ExprConstructor.FunctionCall) =>
-        convertVectorArgs(ec2.ExprConstructor.FunctionCall(ctor.function))(e.getArgs(ctor))
+        convertSeqArgs(ec2.ExprConstructor.FunctionCall(ctor.function))(e.getArgs(ctor))
 
       case ctor: (e.constructor.type & ec1.ExprConstructor.FunctionObjectCall.type) =>
         convertPairArgs(ec2.ExprConstructor.FunctionObjectCall)(e.getArgs(ctor))
@@ -266,7 +275,7 @@ object ArgonExprContext {
         }
 
       case ctor: (e.constructor.type & ec1.ExprConstructor.LoadTuple.type) =>
-        convertVectorArgs(ec2.ExprConstructor.LoadTuple)(e.getArgs(ctor))
+        convertSeqArgs(ec2.ExprConstructor.LoadTuple)(e.getArgs(ctor))
 
       case ctor: (e.constructor.type & ec1.ExprConstructor.LoadTupleElement) =>
         convertExprArgs(ec2.ExprConstructor.LoadTupleElement(ctor.index))(e.getArgs(ctor))
@@ -305,10 +314,10 @@ object ArgonExprContext {
         Monad[F].pure(ec2.ArExpr(ec2.ExprConstructor.AnyType, EmptyTuple))
 
       case ctor: (e.constructor.type & ec1.ExprConstructor.TraitType) =>
-        convertVectorArgs(ec2.ExprConstructor.TraitType(ctor.arTrait))(e.getArgs(ctor))
+        convertSeqArgs(ec2.ExprConstructor.TraitType(ctor.arTrait))(e.getArgs(ctor))
 
       case ctor: (e.constructor.type & ec1.ExprConstructor.ClassType) =>
-        convertVectorArgs(ec2.ExprConstructor.ClassType(ctor.arClass))(e.getArgs(ctor))
+        convertSeqArgs(ec2.ExprConstructor.ClassType(ctor.arClass))(e.getArgs(ctor))
 
       case ctor: (e.constructor.type & ec1.ExprConstructor.FunctionType.type) =>
         convertPairArgs(ec2.ExprConstructor.FunctionType)(e.getArgs(ctor))
@@ -361,7 +370,7 @@ object ArgonExprContext {
     )
     : F[ec2.ArExpr[ec2.ExprConstructor.ClassType]] =
     for {
-      args2 <- Traverse[Vector].traverse(e.args)(convertWrapExpr(context)(ec1, ec2)(f))
+      args2 <- Traverse[Seq].traverse(e.args)(convertWrapExpr(context)(ec1, ec2)(f))
     } yield ec2.ArExpr(ec2.ExprConstructor.ClassType(e.constructor.arClass), args2)
 
   def convertTraitType[F[+_]: Monad]
@@ -380,7 +389,7 @@ object ArgonExprContext {
     )
     : F[ec2.ArExpr[ec2.ExprConstructor.TraitType]] =
     for {
-      args2 <- Traverse[Vector].traverse(e.args)(convertWrapExpr(context)(ec1, ec2)(f))
+      args2 <- Traverse[Seq].traverse(e.args)(convertWrapExpr(context)(ec1, ec2)(f))
     } yield ec2.ArExpr(ec2.ExprConstructor.TraitType(e.constructor.arTrait), args2)
 
   def convertVariable[F[+_]: Monad]

@@ -374,7 +374,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               case normalizedTypeWrap @ WrapExpr.OfExpr(normalizedType) =>
                 normalizedType.constructor match {
                   case tupleTypeCtor: (normalizedType.constructor.type & ExprConstructor.LoadTuple.type) =>
-                    val tupleType: Vector[WrapExpr] = normalizedType.getArgs(tupleTypeCtor)
+                    val tupleType: Seq[WrapExpr] = normalizedType.getArgs(tupleTypeCtor)
                     checkPart(env, values.toList, Vector.empty, tupleType.toList)
                     
                   case _: (ExprConstructor.AnyType.type | ExprConstructor.OmegaTypeN | ExprConstructor.TypeN.type) =>
@@ -931,7 +931,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
     protected val args: Seq[ArgumentInfo],
   ) extends OverloadExprFactoryBase {
 
-    protected override type TElement = ArMethod
+    import ExprConstructor.MethodCallOwnerType
+
+    protected override type TElement = (ArMethod, MethodCallOwnerType)
 
 
     override protected def lookupName: IdentifierExpr = memberName
@@ -943,7 +945,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       case ByTraitStatic(t: ArExpr[ExprConstructor.TraitType])
     }
 
-    protected def lookup: Env => LookupResult[ArMethod] =
+    protected def lookup: Env => LookupResult[(ArMethod, MethodCallOwnerType)] =
       _ =>
         LookupResult.Suspended(
           evaluator.normalizeTopLevelWrap(instance, fuel)
@@ -974,25 +976,27 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
             }
         )
 
-    protected override def signatureOf(element: ArMethod): Comp[Signature[WrapExpr, ?]] =
-      element.signatureUnsubstituted.map(convertSig(functionSigHandler))
+    protected override def signatureOf(element: (ArMethod, MethodCallOwnerType)): Comp[Signature[WrapExpr, ?]] =
+      element._1.signatureUnsubstituted.map(convertSig(functionSigHandler))
 
-    protected override def checkOverload(env: Env)(overload: ArMethod): Comp[Option[Comp[ExprTypeResult]]] =
-      overload.signatureUnsubstituted.flatMap { sig =>
-        val thisVar = InstanceVariable(overload, instanceType, None)
+    protected override def checkOverload(env: Env)(overload: (ArMethod, MethodCallOwnerType)): Comp[Option[Comp[ExprTypeResult]]] =
+      val (method, ownerType) = overload
+      method.signatureUnsubstituted.flatMap { sig =>
+        val thisVar = InstanceVariable(method, instanceType, None)
         val sig2 = convertSig(functionSigHandler)(sig)
 
         substituteArg(thisVar)(instance)(functionSigHandler)(sig2).flatMap { case (sig3, stableInstance) =>
-          createSigResult(overload, env, sig3, args.toList, Vector.empty)(functionSigHandler) {
+          createSigResult(method, env, sig3, args.toList, Vector.empty)(functionSigHandler) {
             (env, args, returnType) =>
               ExprTypeResult(
-                WrapExpr.OfExpr(ArExpr(ExprConstructor.MethodCall(overload), (stableInstance, args))),
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.MethodCall(method), (stableInstance, ownerType, args))),
                 env,
                 returnType,
               )
           }
         }
       }
+    end checkOverload
 
     private def getInstanceType(instanceType: WrapExpr): Comp[Seq[InstanceType]] =
       evaluator.normalizeTopLevelWrap(instanceType, fuel).flatMap {
@@ -1017,16 +1021,27 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         case _ => ZIO.succeed(Seq.empty)
       }
 
-    private def methodsOfType(t: InstanceType): Comp[Seq[ArMethod]] =
+    private def methodsOfType(t: InstanceType): Comp[Seq[(ArMethod, MethodCallOwnerType)]] =
       t match {
         case InstanceType.ByClass(classType) =>
-          classType.constructor.arClass.methods.map(_.getOrElse(Some(memberName), Seq.empty))
+          classType.constructor.arClass.methods
+            .map { _.getOrElse(Some(memberName), Seq.empty) }
+            .map { _.map { method => (method, MethodCallOwnerType.OwnedByClass(classType)) } }
+
         case InstanceType.ByClassStatic(classType) =>
-          classType.constructor.arClass.staticMethods.map(_.getOrElse(Some(memberName), Seq.empty))
+          classType.constructor.arClass.staticMethods
+            .map { _.getOrElse(Some(memberName), Seq.empty) }
+            .map { _.map { method => (method, MethodCallOwnerType.OwnedByClass(classType)) } }
+
         case InstanceType.ByTrait(traitType) =>
-          traitType.constructor.arTrait.methods.map(_.getOrElse(Some(memberName), Seq.empty))
+          traitType.constructor.arTrait.methods
+            .map { _.getOrElse(Some(memberName), Seq.empty) }
+            .map { _.map { method => (method, MethodCallOwnerType.OwnedByTrait(traitType)) } }
+
         case InstanceType.ByTraitStatic(traitType) =>
-          traitType.constructor.arTrait.staticMethods.map(_.getOrElse(Some(memberName), Seq.empty))
+          traitType.constructor.arTrait.staticMethods
+            .map { _.getOrElse(Some(memberName), Seq.empty) }
+            .map { _.map { method => (method, MethodCallOwnerType.OwnedByTrait(traitType)) } }
       }
 
     private def resolveTypeSignatureResult[Res](owner: exprContext.ParameterVariableOwner)
@@ -1080,16 +1095,16 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
     end isSeenType
 
     private def lookupMethods(types: Seq[InstanceType], seenTypes: Set[ArClass | ArTrait], seenMethods: Set[ArMethod])
-      : Comp[LookupResult[ArMethod]] =
+      : Comp[LookupResult[(ArMethod, MethodCallOwnerType)]] =
       ZIO.foreach(types)(methodsOfType).map { methods =>
-        val methods2 = methods.flatten.filterNot(seenMethods.contains).distinct
+        val methods2 = methods.flatten.filterNot { case (method, _) => seenMethods.contains(method) }.distinct
 
         val next =
           LookupResult.Suspended(
             ZIO.foreach(types)(getBaseTypes).flatMap { baseTypes =>
               val seenTypes2 = seenTypes ++ types.flatMap(toSeenTypes)
               val baseTypes2 = baseTypes.flatten.filter(isSeenType(seenTypes2))
-              val seenMethods2 = seenMethods ++ methods2
+              val seenMethods2 = seenMethods ++ methods2.map { case (method, _) => method }
               lookupMethods(baseTypes2, seenTypes2, seenMethods2)
             }
           )

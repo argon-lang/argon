@@ -108,13 +108,13 @@ trait ExprContext {
       override def toExprs(args: EmptyTuple): Seq[WrapExpr] = Seq.empty
     }
 
-  given ArgumentCodec[Vector[WrapExpr]] =
-    new ArgumentCodec[Vector[WrapExpr]] {
+  given ArgumentCodec[Seq[WrapExpr]] =
+    new ArgumentCodec[Seq[WrapExpr]] {
 
-      override def fromExprs(exprs: Seq[WrapExpr]): Option[(Vector[WrapExpr], Seq[WrapExpr])] =
-        Some((exprs.toVector, Seq.empty))
+      override def fromExprs(exprs: Seq[WrapExpr]): Option[(Seq[WrapExpr], Seq[WrapExpr])] =
+        Some((exprs, Seq.empty))
 
-      override def toExprs(args: Vector[WrapExpr]): Seq[WrapExpr] = args
+      override def toExprs(args: Seq[WrapExpr]): Seq[WrapExpr] = args
     }
 
   given [N <: Nat : NListFactory]: ArgumentCodec[NList[N, WrapExpr]] with
@@ -256,11 +256,11 @@ trait ExprContext {
     case object EqualTo extends ExprConstructorWithArgs[EqualToArgs] with ExprConstructor derives CanEqual
     case object AssumeErasedValue extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor derives CanEqual
 
-    type ClassConstructorCallArgs = (ArExpr[ClassType], Vector[WrapExpr])
+    type ClassConstructorCallArgs = (ArExpr[ClassType], Seq[WrapExpr])
     type EnsureExecutedArgs = (WrapExpr, WrapExpr)
     type FunctionObjectCallArgs = (WrapExpr, WrapExpr)
     type IfElseArgs = (WrapExpr, WrapExpr, WrapExpr)
-    type MethodCallArgs = (WrapExpr, Vector[WrapExpr])
+    type MethodCallArgs = (WrapExpr, MethodCallOwnerType, Seq[WrapExpr])
     type PatternMatchArgs[N <: Nat] = (WrapExpr, NList[N, WrapExpr])
     type FunctionTypeArgs = (WrapExpr, WrapExpr)
     type UnionTypeArgs = (WrapExpr, WrapExpr)
@@ -271,8 +271,41 @@ trait ExprContext {
     type SubtypeWitnessArgs = (WrapExpr, WrapExpr)
     type NotSubtypeWitnessArgs = (WrapExpr, WrapExpr)
     type EqualToArgs = (WrapExpr, WrapExpr)
-    type ArgList = Vector[WrapExpr]
+    type ArgList = Seq[WrapExpr]
     type NonEmptyArgList = NonEmptyList[WrapExpr]
+
+    enum MethodCallOwnerType {
+      case OwnedByClass(classType: ArExpr[ClassType])
+      case OwnedByTrait(traitType: ArExpr[TraitType])
+    }
+
+    object MethodCallOwnerType {
+
+      given ArgumentCodec[MethodCallOwnerType] with
+        override def fromExprs(exprs: Seq[WrapExpr]): Option[(MethodCallOwnerType, Seq[WrapExpr])] =
+          exprs match {
+            case WrapExpr.OfExpr(expr) +: tail =>
+              expr.constructor match
+                case ctor: (expr.constructor.type & ClassType) => Some((MethodCallOwnerType.OwnedByClass(ArExpr(ctor, expr.getArgs(ctor))), tail))
+                case ctor: (expr.constructor.type & TraitType) => Some((MethodCallOwnerType.OwnedByTrait(ArExpr(ctor, expr.getArgs(ctor))), tail))
+                case _ => None
+              end match
+
+            case _ => None
+          }
+
+
+        override def toExprs(args: MethodCallOwnerType): Seq[WrapExpr] =
+          Seq(WrapExpr.OfExpr(
+            args match {
+              case MethodCallOwnerType.OwnedByClass(classType) => classType
+              case MethodCallOwnerType.OwnedByTrait(traitType) => traitType
+            }
+          ))
+      end given
+
+
+    }
   }
 
   sealed trait PatternExpr derives CanEqual

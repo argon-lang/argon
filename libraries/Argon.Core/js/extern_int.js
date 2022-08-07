@@ -1,6 +1,6 @@
 
-export async function Int_to_s(self) {
-	return argonRuntime.trampoline.result(createString(self[intValueSymbol].toString()));
+export async function Int_to_s() {
+	return argonRuntime.trampoline.result(createString(this[intValueSymbol].toString()));
 }
 
 export async function addInt(a, b) {
