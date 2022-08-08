@@ -4,7 +4,7 @@ import NodePlatformImplicits._
 
 import scala.sys.process.Process
 
-val graalVersion = "22.1.0.1"
+val graalVersion = "22.2.0"
 val zioVersion = "2.0.0"
 
 ThisBuild / semanticdbEnabled := true
