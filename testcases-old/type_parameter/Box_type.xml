@@ -15,7 +15,7 @@
             public override def _.value: T = value
         end
         
-        proc main(): Unit do
+        proc main(): () do
             val box = ValueBoxInstance String 'Hello World'
             puts box.value
         end

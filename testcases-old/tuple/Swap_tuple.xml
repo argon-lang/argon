@@ -7,7 +7,7 @@
             
         import Argon.Core/*
         
-        proc printTuple(a: String, b: String): Unit do
+        proc printTuple(a: String, b: String): () do
             puts a
             puts b
         end
@@ -15,7 +15,7 @@
         def swapTuple(a: String, b: String): (String, String) =
             b, a
         
-        proc main(): Unit do
+        proc main(): () do
             val tupleValue: (String, String) = '1', '2'
             printTuple (swapTuple tupleValue)
         end

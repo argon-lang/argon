@@ -12,7 +12,7 @@
         def myFunc(a: MyTrait Int): MyTrait String =
             a
 
-        def main(): Unit do
+        def main(): () do
         end
 
     ]]></InputSource>

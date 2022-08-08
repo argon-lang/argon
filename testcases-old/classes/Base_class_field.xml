@@ -14,7 +14,7 @@
 
             field name: String
 
-            public proc self.say_hello(): Unit do
+            public proc self.say_hello(): () do
                 puts 'Hello'
                 puts name
             end
@@ -28,7 +28,7 @@
 
         end
         
-        proc main(): Unit do
+        proc main(): () do
             val obj: A = B.new('Tree')
             obj.say_hello()
         end

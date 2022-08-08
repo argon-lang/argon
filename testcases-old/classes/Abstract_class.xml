@@ -11,7 +11,7 @@
             public new()
             end
 
-            public abstract proc self.say_hello(): Unit
+            public abstract proc self.say_hello(): ()
         end
 
         class B <: A
@@ -19,14 +19,14 @@
                 initialize _ = A.new()
             end
 
-            public override proc self.say_hello(): Unit do
+            public override proc self.say_hello(): () do
                 puts 'Hello World'
             end
 
         end
 
         
-        proc main(): Unit do
+        proc main(): () do
             val a: A = B.new()
             a.say_hello()
         end

@@ -33,7 +33,7 @@
 
         end
 
-        proc main(): Unit do
+        proc main(): () do
             val a: A = B(String).new 'Checked type parameter'
             match a
             case val b: B Int =

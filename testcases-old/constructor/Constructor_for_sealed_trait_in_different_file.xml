@@ -7,7 +7,7 @@
         import Argon.Core/*
 
         sealed trait MyType <: Object
-            public abstract proc self.say_hello(): Unit
+            public abstract proc self.say_hello(): ()
         end
 
     ]]></InputSource>
@@ -17,11 +17,11 @@
         import Argon.Core/*
 
         constructor MyCtor(): MyType
-            public override proc self.say_hello(): Unit =
+            public override proc self.say_hello(): () =
                 puts 'Hello World'
         end
 
-        proc main(): Unit do
+        proc main(): () do
             MyCtor().say_hello()
         end
 

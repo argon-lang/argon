@@ -22,7 +22,7 @@
         constructor NewC(): C
         end
         
-        proc main(): Unit do
+        proc main(): () do
             val a: A = NewB String 'Checked type parameter'
             match a
             case val b: B Int =

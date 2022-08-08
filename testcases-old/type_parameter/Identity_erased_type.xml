@@ -9,7 +9,7 @@
 
         def identity (erased T: type[1]) (value: T): T = value
 
-        proc main(): Unit do
+        proc main(): () do
 
             val str = identity (String | Int) 'A'
 

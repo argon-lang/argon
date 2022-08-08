@@ -7,15 +7,15 @@
             
         import Argon.Core/*
         
-        proc printTuple(a: String, b: String): Unit do
+        proc printTuple(a: String, b: String): () do
             puts a
             puts b
         end
         
-        proc printTuple2(tupleValue: (String, String)): Unit =
+        proc printTuple2(tupleValue: (String, String)): () =
             printTuple tupleValue
         
-        proc main(): Unit do
+        proc main(): () do
             val tupleValue: (String, String) = '1', '2'
             printTuple2 tupleValue
         end

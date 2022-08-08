@@ -22,7 +22,7 @@
             public override def _.value: T = value
         end
         
-        proc main(): Unit do
+        proc main(): () do
             val box: BoxBase String = ValueBox(String).new 'Hello World'
             puts box.value
         end

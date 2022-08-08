@@ -7,7 +7,7 @@
 
         import Argon.Core/*
 
-        proc main(): Unit do
+        proc main(): () do
             puts ((!true).to_s())
             puts ((!false).to_s())
             puts ((true = true).to_s())

@@ -35,7 +35,7 @@
 
         end
 
-        proc main(): Unit do
+        proc main(): () do
             val valueBoxFunctor = ValueBoxFunctor.new
 
             val sBox = intToStringInFunctor ValueBox valueBoxFunctor (ValueBox(Int).new 88)

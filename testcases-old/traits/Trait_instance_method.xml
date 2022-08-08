@@ -8,7 +8,7 @@
         import Argon.Core/*
         
         trait MyTrait <: Object
-            public proc self.say_hello(): Unit do
+            public proc self.say_hello(): () do
                 puts 'Hello World'
             end
         end
@@ -16,7 +16,7 @@
         constructor MyCtor(): MyTrait
         end
         
-        proc main(): Unit do
+        proc main(): () do
             MyCtor().say_hello()
         end
             

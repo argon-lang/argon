@@ -9,7 +9,7 @@
 
         def identity (T: type[1]) (value: T): T = value
 
-        proc main(): Unit do
+        proc main(): () do
 
             val str: identity String.type String = '75'
 

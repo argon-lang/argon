@@ -6,7 +6,7 @@
 
         import Argon.Core/*
 
-        proc main(): Unit do
+        proc main(): () do
             puts (doMutation().to_s())
         end
 

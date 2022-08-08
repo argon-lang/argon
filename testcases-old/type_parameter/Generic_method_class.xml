@@ -15,7 +15,7 @@
             public def _.identity (T: type) (value: T): T = value
         end
         
-        proc main(): Unit do
+        proc main(): () do
             val inst = MyClass.new()
             puts (inst.identity String 'Hello World')
         end

@@ -12,7 +12,7 @@
         def myFunc(a: MyClass Int): MyClass String =
             a
 
-        def main(): Unit do
+        def main(): () do
         end
 
     ]]></InputSource>

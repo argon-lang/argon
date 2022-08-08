@@ -10,13 +10,13 @@
 
         static
 
-            public proc self.say_hello(): Unit do
+            public proc self.say_hello(): () do
                 puts 'Hello'
             end
 
         instance
 
-            public proc self.say_world(): Unit do
+            public proc self.say_world(): () do
                 puts 'World'
             end
 
@@ -25,7 +25,7 @@
         constructor MyCtor(): MyTrait
         end
 
-        proc main(): Unit do
+        proc main(): () do
             MyTrait.say_hello()
             MyCtor().say_world()
         end

@@ -15,12 +15,12 @@
             end
         end
 
-        proc printStringInt (s: String, i: Int): Unit do
+        proc printStringInt (s: String, i: Int): () do
             puts s
             puts (i.to_s())
         end
 
-        proc main(): Unit do
+        proc main(): () do
             val a = A.new()
             val pair: a.withInt String = 'Hello World', 5
             printStringInt pair

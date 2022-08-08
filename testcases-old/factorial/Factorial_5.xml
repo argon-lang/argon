@@ -14,7 +14,7 @@
                 n * factorial(n - 1)
             end
         
-        proc main(): Unit do
+        proc main(): () do
             puts (factorial(5).to_s())
         end
         

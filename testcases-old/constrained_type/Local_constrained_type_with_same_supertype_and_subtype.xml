@@ -7,7 +7,7 @@
             
         import Argon.Core/*
         
-        proc main(): Unit do
+        proc main(): () do
             val t: type <: String >: String = String
             val str: t = 'A'
             puts str

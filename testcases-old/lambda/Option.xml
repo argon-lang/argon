@@ -6,10 +6,10 @@
 
 import Argon.Core/*
 
-proc printOpt (opt: Option String): Unit =
+proc printOpt (opt: Option String): () =
 	puts (opt.getOrElse(_ => 'Empty!'))
 
-proc main(): Unit do
+proc main(): () do
 	printOpt (Some String 'Hello World!!!')
 	printOpt (None String)
 end
@@ -23,7 +23,7 @@ end
         public sealed trait Option(T: type) <: Object
 
             public abstract def _.map(U: type)(f1: T -> U): Option U
-            public abstract def _.getOrElse(f2: Unit -> T): T
+            public abstract def _.getOrElse(f2: () -> T): T
 
         end
 
@@ -32,7 +32,7 @@ end
             public override def _.map(U: type)(f3: T1 -> U): Option U =
                 Some U (f3 value)
 
-            public override def _.getOrElse(f4: Unit -> T1): T1 =
+            public override def _.getOrElse(f4: () -> T1): T1 =
                 value
 
         end
@@ -42,7 +42,7 @@ end
             public override def _.map(U: type)(f5: T2 -> U): Option U =
                 None U
 
-            public override def _.getOrElse(f6: Unit -> T2): T2 =
+            public override def _.getOrElse(f6: () -> T2): T2 =
                 f6()
 
         end

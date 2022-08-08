@@ -7,7 +7,7 @@
 
         import Argon.Core/*
 
-        proc main(): Unit do
+        proc main(): () do
             puts ('A' ++ 'B')
             puts (('A' = 'A').to_s())
             puts (('A' = 'B').to_s())

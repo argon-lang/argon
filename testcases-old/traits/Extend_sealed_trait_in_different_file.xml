@@ -9,7 +9,7 @@
         sealed trait TraitA <: Object
         end
 
-        proc main(): Unit = ()
+        proc main(): () = ()
 
     ]]></InputSource>
     

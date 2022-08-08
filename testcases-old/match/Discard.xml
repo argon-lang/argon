@@ -7,7 +7,7 @@
             
         import Argon.Core/*
         
-        proc main(): Unit do
+        proc main(): () do
             match 'Hello World'
             case _ =
                 puts 'Hey'

@@ -13,7 +13,7 @@
         def myFunc(a: MyTrait Int): MyTrait Int =
             a
         
-        def main(): Unit do
+        def main(): () do
         end
         
             

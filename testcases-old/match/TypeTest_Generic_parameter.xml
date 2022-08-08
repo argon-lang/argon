@@ -7,7 +7,7 @@
             
         import Argon.Core/*
 
-        proc checkForType(T: type)(value: Object): Unit =
+        proc checkForType(T: type)(value: Object): () =
             match value
             case val t: T =
                 puts 'Matched'
@@ -30,7 +30,7 @@
         constructor NewC(): C
         end
         
-        proc main(): Unit do
+        proc main(): () do
             checkForType A (NewB String 'Hey')
             checkForType (B String) (NewB String 'Hey')
             checkForType (B Int) (NewB String 'Hey')

@@ -6,7 +6,7 @@
 
         import Argon.Core/*
 
-        def main(): Unit do
+        def main(): () do
             puts 'Hello World'
         end
 

@@ -10,7 +10,7 @@
         trait MyTrait1(str: String) <: Object
 
 
-            public proc _.printMessage(): Unit =
+            public proc _.printMessage(): () =
                 puts str
 
         end
@@ -20,7 +20,7 @@
             end
         end
 
-        proc main(): Unit do
+        proc main(): () do
             MyClass2('Hello World').new().printMessage()
         end
         

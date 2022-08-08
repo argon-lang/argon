@@ -13,7 +13,7 @@
         class ClassB <: Object & ClassA
         end
         
-        proc main(): Unit = ()
+        proc main(): () = ()
         
             
     ]]></InputSource>

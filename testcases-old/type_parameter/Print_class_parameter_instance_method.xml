@@ -12,12 +12,12 @@
             public new()
             end
 
-            public proc _.printMessage(): Unit =
+            public proc _.printMessage(): () =
                 puts str
 
         end
         
-        proc main(): Unit do
+        proc main(): () do
             MyClass('Hello World').new().printMessage()
         end
         

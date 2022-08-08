@@ -13,7 +13,7 @@
         def add(a: Int, b: Int, c: Int): Int =
             a + b + c
         
-        proc main(): Unit do
+        proc main(): () do
             puts (add(add(90, 3), 3, 3).to_s())
         end
         

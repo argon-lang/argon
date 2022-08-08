@@ -15,7 +15,7 @@
             end
         end
         
-        proc main(): Unit do
+        proc main(): () do
             puts (add(1, 1).to_s())
         end
         

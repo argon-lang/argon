@@ -9,7 +9,7 @@
 
         def myFunc(): type >: String = String
 
-        proc main(): Unit do
+        proc main(): () do
             val s: myFunc() = 'Hello World'
         end
         

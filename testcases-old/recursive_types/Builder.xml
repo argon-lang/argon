@@ -30,7 +30,7 @@
 
         end
 
-        proc main(): Unit do
+        proc main(): () do
             val builder = IntStrBuilder.new 5 'Hello'
             val builder2 = builder.withValue 10
 

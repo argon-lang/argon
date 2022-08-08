@@ -8,15 +8,15 @@
         import Argon.Core/*
         
         trait MyType <: Object
-            public abstract proc self.say_hello(): Unit
+            public abstract proc self.say_hello(): ()
         end
         
         constructor MyCtor(): MyType
-            public override proc self.say_hello(): Unit =
+            public override proc self.say_hello(): () =
                 puts 'Hello World'
         end
         
-        proc main(): Unit do
+        proc main(): () do
             MyCtor().say_hello()
         end
             

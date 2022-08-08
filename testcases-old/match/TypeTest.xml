@@ -10,7 +10,7 @@
         trait A <: Object
         end
         trait B <: A
-            public proc _.printMessage(): Unit =
+            public proc _.printMessage(): () =
                 puts 'Found B'
         end
         trait C <: A
@@ -22,7 +22,7 @@
         constructor NewC(): C
         end
         
-        proc main(): Unit do
+        proc main(): () do
             val a: A = NewB()
             match a
             case val b: B =

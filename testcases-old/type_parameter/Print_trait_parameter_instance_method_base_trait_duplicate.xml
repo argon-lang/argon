@@ -10,7 +10,7 @@
         trait MyTrait1(str: String) <: Object
 
 
-            public proc _.printMessage(): Unit =
+            public proc _.printMessage(): () =
                 puts str
 
         end
@@ -27,7 +27,7 @@
         constructor MyCtor(str: String): MyTrait4(str)
         end
         
-        proc main(): Unit do
+        proc main(): () do
             MyCtor('Hello World').printMessage()
         end
         

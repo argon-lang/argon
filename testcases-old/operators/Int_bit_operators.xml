@@ -7,7 +7,7 @@
 
         import Argon.Core/*
 
-        proc main(): Unit do
+        proc main(): () do
             puts ((0b1000 ||| 0b1).to_s())
             puts ((0b1000 ||| 0b1000).to_s())
             puts ((0b1000 &&& 0b1).to_s())

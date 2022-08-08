@@ -8,16 +8,16 @@
         import Argon.Core/*
         
         trait MyType <: Object
-            public abstract proc self.say_message(): Unit
+            public abstract proc self.say_message(): ()
         end
         
         constructor MyCtor(msg: String): MyType
             val m = msg
-            public override proc self.say_message(): Unit =
+            public override proc self.say_message(): () =
                 puts m
         end
         
-        proc main(): Unit do
+        proc main(): () do
             MyCtor('Hello World').say_message()
         end
             

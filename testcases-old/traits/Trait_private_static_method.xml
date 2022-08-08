@@ -8,12 +8,12 @@
 
         trait MyTrait <: Object
         static
-            private proc self.say_hello(): Unit do
+            private proc self.say_hello(): () do
                 puts 'Hello World'
             end
         end
 
-        proc main(): Unit do
+        proc main(): () do
             MyTrait.say_hello()
         end
 

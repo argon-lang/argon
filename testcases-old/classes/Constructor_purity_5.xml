@@ -16,7 +16,7 @@
 
         end
         
-        proc main(): Unit do
+        proc main(): () do
             val _ = MyClass.new 'Good'
         end
             

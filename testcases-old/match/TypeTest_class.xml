@@ -19,7 +19,7 @@
                 initialize _ = A.new()
             end
 
-            public proc _.printMessage(): Unit =
+            public proc _.printMessage(): () =
                 puts 'Found B'
         end
         class C <: A
@@ -30,7 +30,7 @@
 
         end
         
-        proc main(): Unit do
+        proc main(): () do
             val a: A = B.new()
             match a
             case val b: B =

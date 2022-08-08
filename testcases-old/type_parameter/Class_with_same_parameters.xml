@@ -13,7 +13,7 @@
         def myFunc(a: MyClass Int): MyClass Int =
             a
         
-        def main(): Unit do
+        def main(): () do
         end
         
             

@@ -7,13 +7,13 @@
             
         import Argon.Core/*
         
-        proc printMe(a: Int): Unit =
+        proc printMe(a: Int): () =
             puts (a.to_s())
         
-        proc printMe(s: String): Unit =
+        proc printMe(s: String): () =
             puts s
         
-        proc main(): Unit do
+        proc main(): () do
             printMe 55
             printMe 'Fifty Five'
         end

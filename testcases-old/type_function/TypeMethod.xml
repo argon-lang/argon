@@ -15,7 +15,7 @@
             end
         end
 
-        proc main(): Unit do
+        proc main(): () do
             val a = A.new()
             val s: a.myMethod() = 'Hello World'
         end

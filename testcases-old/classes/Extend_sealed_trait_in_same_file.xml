@@ -13,7 +13,7 @@
         class ClassB <: TraitA
         end
         
-        proc main(): Unit = ()
+        proc main(): () = ()
         
             
     ]]></InputSource>

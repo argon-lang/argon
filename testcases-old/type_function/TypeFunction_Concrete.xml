@@ -9,12 +9,12 @@
 
         def withInt(T: type): (T, Int).type = T, Int
 
-        proc printStringInt (s: String, i: Int): Unit do
+        proc printStringInt (s: String, i: Int): () do
             puts s
             puts (i.to_s())
         end
 
-        proc main(): Unit do
+        proc main(): () do
             val pair: withInt String = 'Hello World', 5
             printStringInt pair
         end

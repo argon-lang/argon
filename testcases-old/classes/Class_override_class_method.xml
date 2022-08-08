@@ -12,7 +12,7 @@
             public new()
             end
 
-            public virtual proc self.say_hello(): Unit do
+            public virtual proc self.say_hello(): () do
                 puts 'Hello'
             end
 
@@ -24,12 +24,12 @@
                 initialize _ = A.new()
             end
 
-            public override proc self.say_hello(): Unit do
+            public override proc self.say_hello(): () do
                 puts 'Moo'
             end
         end
         
-        proc main(): Unit do
+        proc main(): () do
             val obj: A = B.new()
             obj.say_hello()
         end

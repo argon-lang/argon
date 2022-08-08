@@ -7,10 +7,10 @@
             
         import Argon.Core/*
         
-        proc printStringLike (T: type <: String) (strLike: T): Unit =
+        proc printStringLike (T: type <: String) (strLike: T): () =
             puts strLike
         
-        proc main(): Unit do
+        proc main(): () do
             printStringLike String 'Hello Type Parameters'
         end
         

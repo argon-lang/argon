@@ -9,12 +9,12 @@
         
         trait MyTrait(str: String) <: Object
         static
-            public proc _.printMessage(): Unit =
+            public proc _.printMessage(): () =
                 puts str
 
         end
         
-        proc main(): Unit do
+        proc main(): () do
             MyTrait('Hello World').printMessage()
         end
         

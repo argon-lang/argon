@@ -10,7 +10,7 @@
         def identity (T: type) (value: T): T =
             value
         
-        proc main(): Unit do
+        proc main(): () do
             puts (identity String 'Zero')
         end
         

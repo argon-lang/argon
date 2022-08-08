@@ -9,11 +9,11 @@
         
         trait Test <: Object
         static
-            public proc _.printStringLike (T: type <: String) (strLike: T): Unit =
+            public proc _.printStringLike (T: type <: String) (strLike: T): () =
                 puts strLike
         end
         
-        proc main(): Unit do
+        proc main(): () do
             Test.printStringLike String 'Hello Type Parameters'
         end
         

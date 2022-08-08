@@ -11,12 +11,12 @@
             public new()
             end
 
-            public proc self.say_hello(): Unit do
+            public proc self.say_hello(): () do
                 puts 'Hello World'
             end
         end
         
-        proc main(): Unit do
+        proc main(): () do
             MyClass.new().say_hello()
         end
             
