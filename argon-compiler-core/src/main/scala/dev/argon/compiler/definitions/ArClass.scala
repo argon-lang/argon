@@ -30,6 +30,9 @@ abstract class ArClassC extends Definition with UsingContext derives CanEqual {
     }
 
   final override def hashCode(): Int = id.hashCode
+
+  override def toString: String =
+    s"ArClass(${owner.module.moduleName}/${owner.ownedName})"
 }
 
 object ArClassC {

@@ -266,6 +266,9 @@ trait ExprUtil extends UsingContext {
     end matchesOverload
 
     for
+//      stack <- ZIO.stackTrace
+//      _ <- ZIO.logTrace(s"loadKnownExport: $specifier\n$stack")
+
       tube <- context.getTube(specifier.tube)
       module <- tube.module(specifier.module)
       elements <- specifier.name.fold(ZIO.succeed(Seq()))(module.exports(Set.empty))

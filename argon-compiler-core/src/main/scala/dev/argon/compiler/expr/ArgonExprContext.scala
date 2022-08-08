@@ -115,6 +115,9 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
       }
 
     override def hashCode(): Int = owner.hashCode() + 3 * parameterIndex.hashCode()
+
+    override def toString: String =
+      s"ParameterVariable($name)"
   }
 
 }

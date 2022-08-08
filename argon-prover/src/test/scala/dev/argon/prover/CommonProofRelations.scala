@@ -28,7 +28,7 @@ trait CommonProofRelations[R <: VariableProvider, E] extends PrologContext[R, E]
     ZIO.succeed(Seq.fill(arity)(()))
 
   protected override def checkRelation
-    (a: syntax.Expr, b: syntax.Expr, relation: TRelation, substitutions: Model, fuel: Int)
+    (a: syntax.Expr, b: syntax.Expr, relation: TRelation, substitutions: Model, solveState: SolveState)
     : ZStream[R, Error, PrologResult.Yes] = ZStream.empty
 
   protected override def otherForEquivalenceRelation(constraints: syntax.Expr): Option[syntax.Expr] = Some(constraints)

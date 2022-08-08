@@ -78,14 +78,29 @@ abstract class ImplicitResolver[-R, +E] {
     override type TRelation = ExprRelation
     override type TConstraints = ExprConstraints[Expr]
 
-    protected override def normalize(expr: Expr, fuel: Int): ZIO[R, E, Expr] =
+    protected override def normalize(expr: Expr, solveState: SolveState): ZIO[R, E, Expr] =
       exprToWrapExpr(expr).flatMap { expr =>
-        evaluator.normalizeTopLevelWrap(expr, fuel)
+        evaluator.normalizeTopLevelWrap(expr, solveState.consumeFuel.fuel)
           .map(wrapExprToExpr)
       }
 
     private def builtinAssertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] =
       ZIO.collectAll(List(
+        // ------
+        // A == A
+        (for {
+          a <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
+            ExprConstructor.EqualTo,
+            (
+              WrapExpr.OfHole(a),
+              WrapExpr.OfHole(a),
+            ),
+          )))) -> PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(a)))
+          )),
+
+        // ------
         // A <: A
         (for {
           a <- newVariable
@@ -220,7 +235,6 @@ abstract class ImplicitResolver[-R, +E] {
         // TypeN A <: TypeN B
         (for {
           lt <- natLessThanFunction
-          boolT <- boolType
           a <- newVariable
           b <- newVariable
         } yield (
@@ -232,7 +246,7 @@ abstract class ImplicitResolver[-R, +E] {
               ExprConstructor.EqualTo,
               Seq(
                 Value(ExprConstructor.FunctionCall(lt), Seq(Variable(b), Variable(a))),
-                Value(ExprConstructor.LoadConstantBool(true), Seq(wrapExprToExpr(boolT))),
+                Value(ExprConstructor.LoadConstantBool(true), Seq()),
               ),
             ),
             PredicateFunction(
@@ -243,20 +257,6 @@ abstract class ImplicitResolver[-R, +E] {
               ),
             ),
           )
-        )),
-
-        // ------
-        // A == A
-        (for {
-          a <- newVariable
-        } yield (
-          Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
-            ExprConstructor.EqualTo,
-            (
-              WrapExpr.OfHole(a),
-              WrapExpr.OfHole(a),
-            ),
-          )))) -> PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(a)))
         )),
       ))
 
@@ -271,7 +271,7 @@ abstract class ImplicitResolver[-R, +E] {
       createdHoles.get.map(_.contains(variable))
 
     protected override def intrinsicPredicate
-      (predicate: ExprConstructor, args: Seq[Expr], substitutions: Model, fuel: Int)
+      (predicate: ExprConstructor, args: Seq[Expr], substitutions: Model, solveState: SolveState)
       : ZStream[R, Error, PrologResult.Yes] =
       (predicate, args) match {
         case (
@@ -283,7 +283,7 @@ abstract class ImplicitResolver[-R, +E] {
               convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
               convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
             } yield resultIOToStream(
-              isSubClass(classA, convAArgs, classB, convBArgs, fuel - 1).map(subClassResultToPrologResult(substitutions))
+              isSubClass(classA, convAArgs, classB, convBArgs, solveState.consumeFuel.fuel).map(subClassResultToPrologResult(substitutions))
             )
           )
 
@@ -296,7 +296,7 @@ abstract class ImplicitResolver[-R, +E] {
               convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
               convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
             } yield resultIOToStream(
-              isSubTrait(traitA, convAArgs, traitB, convBArgs, fuel - 1).map(subClassResultToPrologResult(substitutions))
+              isSubTrait(traitA, convAArgs, traitB, convBArgs, solveState.consumeFuel.fuel).map(subClassResultToPrologResult(substitutions))
             )
           )
 
@@ -309,7 +309,7 @@ abstract class ImplicitResolver[-R, +E] {
               convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
               convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
             } yield resultIOToStream(
-              classImplementsTrait(classA, convAArgs, traitB, convBArgs, fuel - 1).map(
+              classImplementsTrait(classA, convAArgs, traitB, convBArgs, solveState.consumeFuel.fuel).map(
                 subClassResultToPrologResult(substitutions)
               )
             )
@@ -337,7 +337,7 @@ abstract class ImplicitResolver[-R, +E] {
             argsA.zip(argsB)
               .map { case (argA, argB) => PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(argA, argB)) }
               .reduceOption(And.apply)
-              .fold(ZStream.empty) { solve(_, substitutions, fuel) }
+              .fold(ZStream.empty) { solve(_, substitutions, solveState) }
           }
 
         case (
@@ -499,15 +499,15 @@ abstract class ImplicitResolver[-R, +E] {
       }
 
     protected override def checkRelation
-      (a: syntax.Expr, b: syntax.Expr, relation: ExprRelation, substitutions: Model, fuel: Int)
+      (a: syntax.Expr, b: syntax.Expr, relation: ExprRelation, substitutions: Model, solveState: SolveState)
       : ZStream[R, Error, PrologResult.Yes] =
       relation match {
         case ExprRelation.SyntacticEquality =>
-          solve(PredicateFunction(ExprConstructor.EqualTo, Seq(a, b)), substitutions, fuel)
+          solve(PredicateFunction(ExprConstructor.EqualTo, Seq(a, b)), substitutions, solveState)
         case ExprRelation.SubType =>
-          solve(PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(a, b)), substitutions, fuel)
+          solve(PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(a, b)), substitutions, solveState)
         case ExprRelation.SuperType =>
-          solve(PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(b, a)), substitutions, fuel)
+          solve(PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(b, a)), substitutions, solveState)
         case ExprRelation.TypeEquality =>
           solve(
             And(
@@ -515,7 +515,7 @@ abstract class ImplicitResolver[-R, +E] {
               PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(b, a)),
             ),
             substitutions,
-            fuel,
+            solveState,
           )
       }
 
@@ -554,7 +554,9 @@ abstract class ImplicitResolver[-R, +E] {
           ZIO.foreach(args)(exprToWrapExpr).flatMap { argExprs =>
             ctor.argsFromExprs(argExprs) match {
               case Some(ctorArgs) => ZIO.succeed(WrapExpr.OfExpr(ArExpr(ctor, ctorArgs)))
-              case None => invalidExpr
+              case None =>
+                ZIO.logError(s"Could not from prover expression back to argon: $ctor, $args") *>
+                invalidExpr
             }
           }
 

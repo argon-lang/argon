@@ -14,10 +14,10 @@ abstract class SimplePrologContext[R <: VariableProvider, E]
   protected override def variableIsFromRules(variable: String): UIO[Boolean] = ZIO.succeed(true)
 
   protected override def intrinsicPredicate
-    (predicate: TPredicateFunction, args: Seq[Expr], substitutions: Model, fuel: Int)
+    (predicate: TPredicateFunction, args: Seq[Expr], substitutions: Model, solveState: SolveState)
     : ZStream[R, Error, PrologResult.Yes] = ZStream.empty
 
-  protected override def normalize(expr: Expr, fuel: Int): ZIO[R, E, Expr] = ZIO.succeed(expr)
+  protected override def normalize(expr: Expr, solveState: SolveState): ZIO[R, E, Expr] = ZIO.succeed(expr)
 
   protected override def variableRelationProof(relation: Unit, a: String, b: String): ZIO[R, E, Proof[Unit]] =
     ZIO.succeed(Proof.Atomic(()))

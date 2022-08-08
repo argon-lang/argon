@@ -114,6 +114,22 @@ object TypeCheckTests extends ZIOSpecDefault {
           }
         ),
       ),
+      suite("Variables")(
+        test("exists X, Y :: Y <: X")(
+          for
+            holeX <- UniqueIdentifier.make
+            holeY <- UniqueIdentifier.make
+            res <- assertZIO(checkSubType(WrapExpr.OfHole(holeX), WrapExpr.OfHole(holeY)))(isRight(anything))
+          yield res
+        ),
+      ),
+      suite("Function Types")(
+        test("A -> A !<: A") {
+          val a = WrapExpr.OfExpr(ArExpr(ExprConstructor.TraitType(traitA), Seq()))
+          val func = WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionType, (a, a)))
+          assertZIO(checkSubType(func, a))(isLeft(anything))
+        },
+      )
     )
 
 }

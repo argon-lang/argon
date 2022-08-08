@@ -60,7 +60,7 @@ object TomlCodec extends Derivation[TomlCodec] {
                 case Some(Toml.String(typeName)) => Right(typeName)
                 case _ => Left(s"Could not get type specifier from $map")
               }
-              subtype <- ctx.subtypes.find(_.typeInfo.short == typeName).toRight { println(ctx.subtypes.toSeq); s"Could not find specified type: $typeName" }
+              subtype <- ctx.subtypes.find(_.typeInfo.short == typeName).toRight { s"Could not find specified type: $typeName" }
               value <- subtype.typeclass.decode(toml)
             } yield value
 

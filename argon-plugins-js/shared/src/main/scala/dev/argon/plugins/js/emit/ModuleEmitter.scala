@@ -139,6 +139,8 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
           override protected val vtableBuilder: VTableBuilder[context.type] = ModuleEmitter.this.vtableBuilder
         end new
 
+      _ <- ZIO.logTrace(s"elementExport ${element}")
+
       declaration <-
         element match
           case ModuleElementC.ClassElement(arClass) => exprEmitter.classExport(arClass).asSome

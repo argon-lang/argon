@@ -325,22 +325,24 @@ trait ExprUtilWithHoles extends ExprUtil {
           override val exprContext: ExprUtilWithHoles.this.exprContext.type = ExprUtilWithHoles.this.exprContext
 
           override def getFunctionBody(function: ArFunc, args: Seq[WrapExpr], fuel: Int): Comp[Option[WrapExpr]] =
-            ???
+            ZIO.none
 
           override def getMethodBody(method: ArMethod, instance: WrapExpr, args: Seq[WrapExpr], fuel: Int)
-          : Comp[Option[WrapExpr]] = ???
+          : Comp[Option[WrapExpr]] =
+            ZIO.none
 
         }
     }
 
 
-  val fuel: Int = 100
+  val fuel: Int = 6
 
   // Ensures that a <: b
-  def checkSubType(env: Env, a: WrapExpr, b: WrapExpr): Comp[Env] =
+  def checkSubType(env: Env, a: WrapExpr, b: WrapExpr, location: SourceLocation): Comp[Env] =
+    ZIO.logTrace(s"checkSubType a=$a, b=$b") *>
     isSubType(env, a, b).flatMap {
       case Some(env) => ZIO.succeed(env)
-      case None => ZIO.fail(DiagnosticError.TypeError())
+      case None => ZIO.fail(DiagnosticError.TypeError(DiagnosticSource.Location(location)))
     }
 
   def isSubType(env: Env, a: WrapExpr, b: WrapExpr): Comp[Option[Env]] =

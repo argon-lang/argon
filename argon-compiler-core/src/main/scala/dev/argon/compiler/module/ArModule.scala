@@ -17,4 +17,6 @@ abstract class ArModuleC extends UsingContext with DeclarationMode {
     }
 
   final override def hashCode(): Int = moduleName.hashCode()
+
+  override def toString: String = s"ArModule($moduleName)"
 }

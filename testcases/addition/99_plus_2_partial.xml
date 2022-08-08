@@ -13,7 +13,7 @@
         def callWithTwo(f: Int -> Int): Int =
             f 2
 
-        proc main(): Unit do
+        proc main(): () do
             val result = callWithTwo (add 99)
             puts (result.to_s())
         end

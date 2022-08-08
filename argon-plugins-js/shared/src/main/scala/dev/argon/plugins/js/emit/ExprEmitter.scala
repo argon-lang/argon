@@ -285,7 +285,10 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     tailPosition: Boolean,
     discardValue: Boolean,
     scopeVars: TRef[Seq[estree.VariableDeclaration]],
-  )
+  ) {
+    def subExpr: EmitState =
+      copy(tailPosition = false, discardValue = false)
+  }
 
   private def emitScope(createScope: TRef[Seq[estree.VariableDeclaration]] => EmitState)(f: EmitState => Comp[Seq[estree.Statement]]): Comp[Seq[estree.Statement]] =
     for
@@ -316,7 +319,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       case ctor: (expr.constructor.type & ExprConstructor.BindVariable) =>
         val value: WrapExpr = expr.getArgs(ctor)
         for
-          valueExpr <- emitWrapExpr(emitState.copy(tailPosition = false, discardValue = false))(value)
+          valueExpr <- emitWrapExpr(emitState.subExpr)(value)
           varName <- getVariableName(ctor.variable)
         yield Seq(estree.VariableDeclaration(
           kind = if ctor.variable.isMutable then "let" else "const",
@@ -376,7 +379,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           }
 
         case _ =>
-          emitExpr(emitState.copy(tailPosition = false))(expr).map { expr =>
+          emitExpr(emitState.subExpr)(expr).map { expr =>
             id(runtimeImportName).prop("trampoline").prop("result").call(expr)
           }
 
@@ -386,7 +389,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         case ctor: (expr.constructor.type & ExprConstructor.BindVariable) =>
           val value: WrapExpr = expr.getArgs(ctor)
           for
-            valueExpr <- emitWrapExpr(emitState.copy(tailPosition = false))(value)
+            valueExpr <- emitWrapExpr(emitState.subExpr)(value)
             varName <- getVariableName(ctor.variable)
             decl = estree.VariableDeclaration(
               kind = "let",
@@ -415,6 +418,13 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
             id(runtimeImportName).prop("trampoline").prop("resolve").call(expr).await.prop("value")
           }
 
+        case ctor: (expr.constructor.type & ExprConstructor.FunctionObjectCall.type) =>
+          val (func, arg) = expr.getArgs(ctor)
+          for
+            funcExpr <- emitWrapExpr(emitState.subExpr)(func)
+            argExpr <- emitWrapExpr(emitState.subExpr)(arg)
+          yield funcExpr.call(argExpr)
+
         case ctor: (expr.constructor.type & ExprConstructor.MethodCall) =>
           emitMethodCall(emitState, expr, ctor).map { expr =>
             id(runtimeImportName).prop("trampoline").prop("resolve").call(expr).await.prop("value")
@@ -437,12 +447,12 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
         case ctor: (expr.constructor.type & ExprConstructor.LoadTuple.type) =>
           for
-            argExprs <- ZIO.foreach(expr.getArgs(ctor))(emitWrapExpr(emitState.copy(tailPosition = false, discardValue = false)))
+            argExprs <- ZIO.foreach(expr.getArgs(ctor))(emitWrapExpr(emitState.subExpr))
           yield array(argExprs*)
 
         case ctor: (expr.constructor.type & ExprConstructor.LoadTupleElement) =>
           for
-            tupleExpr <- emitWrapExpr(emitState.copy(tailPosition = false))(expr.getArgs(ctor))
+            tupleExpr <- emitWrapExpr(emitState.subExpr)(expr.getArgs(ctor))
           yield tupleExpr.index(literal(ctor.index.toDouble))
 
         case ctor: (expr.constructor.type & ExprConstructor.LoadVariable) =>
@@ -491,7 +501,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
       (instanceExpr, methodOwnerType, argExprs) = expr.getArgs(ctor)
 
-      instance <- emitWrapExpr(emitState.copy(tailPosition = false))(instanceExpr)
+      instance <- emitWrapExpr(emitState.subExpr)(instanceExpr)
       methodValue <- emitMethodValue(emitState, ctor.method, methodOwnerType)
       args <- emitArgExprs(emitState, argExprs, sig, Seq())
     yield instance.index(methodValue.prop("symbol")).call(args *)
@@ -500,7 +510,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     (args, sig) match {
       case (_ +: restArgs, Signature.Parameter(_, true, _, _, nextSig)) => emitArgExprs(emitState, restArgs, nextSig, prev)
       case (arg +: restArgs, Signature.Parameter(_, false, _, _, nextSig)) =>
-        emitWrapExpr(emitState.copy(tailPosition = false))(arg).flatMap { argExpr =>
+        emitWrapExpr(emitState.subExpr)(arg).flatMap { argExpr =>
           emitArgExprs(emitState, restArgs, nextSig, prev :+ argExpr)
         }
 
@@ -511,10 +521,10 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     for
       ownerType <- methodOwnerType match {
         case ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) =>
-          emitExpr(emitState.copy(tailPosition = false))(classType)
+          emitExpr(emitState.subExpr)(classType)
 
         case ExprConstructor.MethodCallOwnerType.OwnedByTrait(traitType) =>
-          emitExpr(emitState.copy(tailPosition = false))(traitType)
+          emitExpr(emitState.subExpr)(traitType)
       }
 
       methodPropName =
