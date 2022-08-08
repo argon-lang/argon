@@ -373,6 +373,15 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
             id(runtimeImportName).prop("trampoline").prop("delay").call(arrow.async() ==> expr)
           }
 
+        case ctor: (expr.constructor.type & ExprConstructor.FunctionObjectCall.type) =>
+          val (func, arg) = expr.getArgs(ctor)
+          for
+            funcExpr <- emitWrapExpr(emitState.subExpr)(func)
+            argExpr <- emitWrapExpr(emitState.subExpr)(arg)
+
+            callExpr = funcExpr.call(argExpr)
+          yield id(runtimeImportName).prop("trampoline").prop("delay").call(arrow.async() ==> callExpr)
+
         case ctor: (expr.constructor.type & ExprConstructor.MethodCall) =>
           emitMethodCall(emitState, expr, ctor).map { expr =>
             id(runtimeImportName).prop("trampoline").prop("delay").call(arrow.async() ==> expr)
@@ -423,7 +432,9 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           for
             funcExpr <- emitWrapExpr(emitState.subExpr)(func)
             argExpr <- emitWrapExpr(emitState.subExpr)(arg)
-          yield funcExpr.call(argExpr)
+
+            callExpr = funcExpr.call(argExpr)
+          yield id(runtimeImportName).prop("trampoline").prop("resolve").call(callExpr).await.prop("value")
 
         case ctor: (expr.constructor.type & ExprConstructor.MethodCall) =>
           emitMethodCall(emitState, expr, ctor).map { expr =>
@@ -444,6 +455,14 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           for
             _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("String"))), "createString")
           yield id("createString").call(literal(ctor.s))
+
+        case ctor: (expr.constructor.type & ExprConstructor.LoadLambda) =>
+          for
+            varName <- getVariableName(ctor.argVariable)
+            bodyExpr <- emitNestedScope(emitState) { emitState =>
+              emitWrapExprAsStmt(emitState.copy(tailPosition = true, discardValue = false))(expr.getArgs(ctor))
+            }
+          yield arrow.async(varName) ==> bodyExpr
 
         case ctor: (expr.constructor.type & ExprConstructor.LoadTuple.type) =>
           for

@@ -709,7 +709,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         sigHandler: SignatureHandler[Res]
       )
       (
-        f: (Env, Vector[WrapExpr], Res) => ExprTypeResult
+        f: (Env, Seq[WrapExpr], Res) => ExprTypeResult
       )
       : Comp[Option[Comp[ExprTypeResult]]] =
 
@@ -751,8 +751,33 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         }
 
       (args, sig) match {
-        case (Nil, Signature.Parameter(_, _, _, paramType, next)) =>
-          ???
+        case (Nil, sig @ Signature.Parameter(_, _, _, _, _)) =>
+          def impl(args: Seq[WrapExpr], sig: Signature[WrapExpr, Res]): Comp[ExprTypeResult] =
+            sig match {
+              case Signature.Parameter(_, false, _, paramType, next) =>
+                val variable = ParameterVariable(owner, args.size, paramType, false, None)
+                for
+                  newVarId <- UniqueIdentifier.make
+                  newVar = LocalVariable(newVarId, paramType, None, false)
+                  newVarExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(newVar), EmptyTuple))
+
+                  substRes <- substituteArg(variable)(newVarExpr)(sigHandler)(next)
+                  (next, resultExpr) = substRes
+
+                  inner <- impl(args :+ resultExpr, next)
+                yield ExprTypeResult(
+                  WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadLambda(newVar), inner.expr)),
+                  inner.env,
+                  WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionType, (paramType, inner.exprType)))
+                )
+
+              case Signature.Parameter(_, true, _, _, _) => ???
+
+              case Signature.Result(result) =>
+                ZIO.succeed(f(env, args, result))
+            }
+
+          ZIO.some(impl(convArgs, sig))
 
         case (
               (arg @ ArgumentInfo(_, _, FunctionParameterListType.NormalList)) :: tailArgs,
@@ -937,7 +962,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         sigHandler: SignatureHandlerPlus[Res1, Res2]
       )
       (
-        f: (Env, Vector[WrapExpr], Res2) => ExprTypeResult
+        f: (Env, Seq[WrapExpr], Res2) => ExprTypeResult
       )
       : Comp[Option[Comp[ExprTypeResult]]] =
       sig.flatMap { sig =>
