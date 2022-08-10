@@ -115,54 +115,6 @@ lazy val compilerOptions = Seq(
 
 
 
-lazy val generateVerilization = taskKey[Seq[File]]("Run verilization compiler to generate source code.")
-
-
-
-
-
-
-lazy val verilization_runtimeJVM = ProjectRef(file("tools/verilization/scala"), "scalaRuntimeJVM")
-lazy val verilization_runtimeJS = ProjectRef(file("tools/verilization/scala"), "scalaRuntimeJS")
-
-lazy val verRuntime = Map("" -> "dev.argon.verilization.runtime.zio")
-lazy val verTube = Map("argon.tube" -> "dev.argon.tube")
-lazy val verPlugin = Map("argon.plugin" -> "dev.argon.plugin.rpc")
-
-def runVerilization(libraries: Map[String, String], packageMap: Map[String, String], inputFiles: Set[File]): Def.Initialize[Task[Seq[File]]] = Def.task {
-  val log = streams.value.log
-  val cached = FileFunction.cached(streams.value.cacheDirectory / "verilization") { (inputFiles: Set[File]) =>
-    val outputDir = sourceManaged.value / "verilization"
-    log.info(s"Generating verilization definitions to ${outputDir}")
-
-    val libraryFiles = (file("tools/verilization/verilization/runtime") ** "*.verilization").get()
-
-
-    val command =
-      Seq(
-        "cargo", "run", "--quiet", "--manifest-path", "tools/verilization/rust/compiler-cli/Cargo.toml", "--",
-        "generate", "scala",
-      ) ++
-        (libraryFiles ++ inputFiles.toSeq).flatMap { inputFile => Seq("-i", inputFile.toString) } ++
-        Seq("-o:out_dir", outputDir.toString) ++
-        libraries.toSeq.flatMap { case (verPkg, targetPkg) => Seq(s"-o:lib:$verPkg", targetPkg) } ++
-        packageMap.toSeq.flatMap { case (verPkg, targetPkg) => Seq(s"-o:pkg:$verPkg", targetPkg) }
-
-    IO.delete(outputDir)
-
-    val exitCode = Process(command) ! log
-
-    if(exitCode != 0) {
-      throw new Exception("Could not generate verilization definitions")
-    }
-
-    (outputDir ** "*.scala").get().toSet
-  }
-
-  cached(inputFiles).toSeq
-}
-
-
 
 lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-grammar"))
   .dependsOn(util)
@@ -366,17 +318,14 @@ lazy val argon_compiler_coreNode = argon_compiler_core.node
 lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-tube"))
   .dependsOn(util)
   .jvmConfigure(
-    _.dependsOn(verilization_runtimeJVM)
-      .settings(commonJVMSettings)
+    _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.dependsOn(verilization_runtimeJS)
-      .enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.dependsOn(verilization_runtimeJS)
-      .enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -384,13 +333,6 @@ lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossT
     compilerOptions,
 
     name := "argon-tube",
-
-    Compile / sourceGenerators += generateVerilization,
-    generateVerilization := runVerilization(
-      libraries = verRuntime,
-      packageMap = verTube,
-      inputFiles = Set(file("argon-tube/tube.verilization")),
-    ).value,
   )
 
 lazy val argon_tubeJVM = argon_tube.jvm
@@ -401,19 +343,16 @@ lazy val argon_tubeNode = argon_tube.node
 lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugin"))
   .dependsOn(util, argon_tube, argon_compiler_core)
   .jvmConfigure(
-    _.dependsOn(verilization_runtimeJVM)
-      .settings(
+    _.settings(
         commonJVMSettings,
       )
   )
   .jsConfigure(
-    _.dependsOn(verilization_runtimeJS)
-      .enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.dependsOn(verilization_runtimeJS)
-      .enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -431,19 +370,16 @@ lazy val argon_pluginNode = argon_plugin.node
 lazy val argon_plugin_test_util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-test-util"))
   .dependsOn(argon_plugin, argon_plugins_source)
   .jvmConfigure(
-    _.dependsOn(verilization_runtimeJVM)
-      .settings(
+    _.settings(
         commonJVMSettings,
       )
   )
   .jsConfigure(
-    _.dependsOn(verilization_runtimeJS)
-      .enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.dependsOn(verilization_runtimeJS)
-      .enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -488,8 +424,7 @@ lazy val argon_plugins_sourceNode = argon_plugins_source.node
 lazy val argon_plugins_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-js"))
   .dependsOn(util, argon_tube, argon_plugin, argon_plugin_test_util % "test->compile")
   .jvmConfigure(
-    _.dependsOn(verilization_runtimeJVM)
-      .settings(
+    _.settings(
         commonJVMSettings,
 
         libraryDependencies ++= Seq(
@@ -530,13 +465,11 @@ lazy val argon_plugins_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).
       )
   )
   .jsConfigure(
-    _.dependsOn(verilization_runtimeJS)
-      .enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.dependsOn(verilization_runtimeJS)
-      .enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
