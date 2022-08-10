@@ -435,7 +435,9 @@ object ArgonParser {
         case Rule.MultiplicativeExpr =>
           createLeftAssociativeOperatorRule(
             ruleBinaryOperator(OP_MUL),
+            ruleBinaryOperator(OP_STAR),
             ruleBinaryOperator(OP_DIV),
+            ruleBinaryOperator(OP_SLASH),
           )(rule(Rule.UnionExpr))
 
         case Rule.AdditiveExpr =>

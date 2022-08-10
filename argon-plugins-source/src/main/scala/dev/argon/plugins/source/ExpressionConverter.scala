@@ -3,11 +3,11 @@ package dev.argon.plugins.source
 import dev.argon.compiler.*
 import dev.argon.compiler.expr.*
 import dev.argon.compiler.module.ModuleElementC
-import dev.argon.compiler.signature.Signature
-import dev.argon.util.{WithSource, SourceLocation}
+import dev.argon.compiler.signature.{ErasedSignature, ErasedSignatureType, ErasedSignatureWithResult, ImportSpecifier, Signature}
+import dev.argon.util.{SourceLocation, WithSource}
 import dev.argon.parser
-import dev.argon.parser.{IdentifierExpr, FunctionParameterListType}
-import dev.argon.expr.{Evaluator, ImplicitResolver, ExprConstraints}
+import dev.argon.parser.{FunctionParameterListType, IdentifierExpr}
+import dev.argon.expr.{Evaluator, ExprConstraints, ImplicitResolver}
 import dev.argon.util.UniqueIdentifier
 import zio.*
 import zio.stream.*
@@ -15,6 +15,7 @@ import dev.argon.util.{*, given}
 import dev.argon.compiler.tube.TubeName
 import dev.argon.compiler.module.ModulePath
 import dev.argon.prover.Proof
+
 import scala.reflect.TypeTest
 
 sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWithHoles {
@@ -321,7 +322,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                     for {
                       id <- UniqueIdentifier.make
                       paramVar = LocalVariable(id, argType, varName, isMutable = false)
-                      bodyRes <- convertExpr(body).check(env, resType)
+                      bodyRes <- convertExpr(body).check(env.withScope(_.addVariable(paramVar)), resType)
                       e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadLambda(paramVar), bodyRes.expr))
                     } yield ExprResult(e, bodyRes.env)
 
@@ -351,7 +352,21 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
         }
 
-      case parser.StringValueExpr(parser.Token.StringToken(parser.Token.StringToken.StringPart(str) :: Nil)) =>
+      case parser.StringValueExpr(parser.Token.StringToken(NonEmptyList(headPart, tailParts))) =>
+        def convertPart(strType: WrapExpr, env: Env, part: parser.Token.StringToken.Part): Comp[ExprTypeResult] =
+          part match {
+            case parser.Token.StringToken.StringPart(str) =>
+              val e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantString(str.value), EmptyTuple))
+              ZIO.succeed(ExprTypeResult(e, env, strType))
+
+            case parser.Token.StringToken.ExprPart(None, expr) =>
+              for {
+                res <- convertExpr(expr).check(env, strType)
+              } yield ExprTypeResult(res.expr, res.env, strType)
+
+            case parser.Token.StringToken.ExprPart(Some(format), expr) => ???
+          }
+
         new ExprFactorySynth {
 
           override protected def location: SourceLocation = expr.location
@@ -359,12 +374,36 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           override def synth(env: Env): Comp[ExprTypeResult] =
             for {
               strType <- stringType
-              e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantString(str.value), EmptyTuple))
-            } yield ExprTypeResult(e, env, strType)
+              concat <- loadKnownExport[ModuleElementC.FunctionElement[context.type, ?]](
+                ImportSpecifier(
+                  argonCoreTubeName,
+                  ModulePath(Seq("String")),
+                  Some(IdentifierExpr.OperatorIdentifier(parser.BinaryOperator.Concat)),
+                  ErasedSignatureWithResult(
+                    Seq(
+                      ErasedSignatureType.Class(stringSpecifier, Seq()),
+                      ErasedSignatureType.Class(stringSpecifier, Seq()),
+                    ),
+                    ErasedSignatureType.Class(stringSpecifier, Seq()),
+                  )
+                ))
+
+              firstPartConv <- convertPart(strType, env, headPart)
+
+              convParts <- ZIO.foldLeft(tailParts)(firstPartConv) { (prevString, part) =>
+                for
+                  convPart <- convertPart(strType, prevString.env, part)
+                yield ExprTypeResult(
+                  WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionCall(concat.func), Seq(prevString.expr, convPart.expr))),
+                  convPart.env,
+                  strType
+                )
+              }
+
+            } yield convParts
 
         }
 
-      case parser.StringValueExpr(_) => ???
 
       case parser.TupleExpr(values) =>
         new ExprFactory {
@@ -405,7 +444,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                   case tupleTypeCtor: (normalizedType.constructor.type & ExprConstructor.LoadTuple.type) =>
                     val tupleType: Seq[WrapExpr] = normalizedType.getArgs(tupleTypeCtor)
                     checkPart(env, values.toList, Vector.empty, tupleType.toList)
-                    
+
                   case _: (ExprConstructor.AnyType.type | ExprConstructor.OmegaTypeN | ExprConstructor.TypeN.type) =>
                     val tupleType = List.fill(values.size)(normalizedTypeWrap)
                     checkPart(env, values.toList, Vector.empty, tupleType)
@@ -566,7 +605,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
             argumentDelta(tailArgs, sig, acc + 1)
 
           case (Nil, Signature.Parameter(_, _, _, _, nextSig)) =>
-            argumentDelta(args, sig, acc - 1)
+            argumentDelta(args, nextSig, acc - 1)
 
           case (Nil, Signature.Result(_)) => acc
         }

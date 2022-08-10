@@ -348,6 +348,19 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           emitSequence(emitState, Seq.empty, expr.getArgs(ctor).toList)
         }
 
+      case ctor: (expr.constructor.type & ExprConstructor.IfElse.type) =>
+        val (cond, trueBody, falseBody) = expr.getArgs(ctor)
+        for
+          _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("Bool"))), "boolValueSymbol")
+          condExpr <- emitWrapExpr(emitState.subExpr)(cond)
+          trueBodyStmts <- emitWrapExprAsStmt(emitState)(trueBody)
+          falseBodyStmts <- emitWrapExprAsStmt(emitState)(falseBody)
+        yield Seq(estree.IfStatement(
+          test = condExpr.index(id("boolValueSymbol")),
+          consequent = block(trueBodyStmts*),
+          alternate = Nullable(block(falseBodyStmts*)),
+        ))
+
       case _ if emitState.discardValue =>
         for
           jsExpr <- emitExpr(emitState)(expr)
@@ -435,6 +448,19 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
             callExpr = funcExpr.call(argExpr)
           yield id(runtimeImportName).prop("trampoline").prop("resolve").call(callExpr).await.prop("value")
+
+        case ctor: (expr.constructor.type & ExprConstructor.IfElse.type) =>
+          val (cond, trueBody, falseBody) = expr.getArgs(ctor)
+          for
+            _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("Bool"))), "boolValueSymbol")
+            condExpr <- emitWrapExpr(emitState.subExpr)(cond)
+            trueBodyExpr <- emitWrapExpr(emitState)(trueBody)
+            falseBodyExpr <- emitWrapExpr(emitState)(falseBody)
+          yield estree.ConditionalExpression(
+            test = condExpr.index(id("boolValueSymbol")),
+            consequent = trueBodyExpr,
+            alternate = falseBodyExpr,
+          )
 
         case ctor: (expr.constructor.type & ExprConstructor.MethodCall) =>
           emitMethodCall(emitState, expr, ctor).map { expr =>

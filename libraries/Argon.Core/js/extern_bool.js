@@ -1,6 +1,6 @@
 
-export async function Bool_to_s(self) {
- 	return argonRuntime.trampoline.result(createString(self[boolValueSymbol].toString()));
+export async function Bool_to_s() {
+ 	return argonRuntime.trampoline.result(createString(this[boolValueSymbol].toString()));
  }
 
 

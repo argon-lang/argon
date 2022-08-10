@@ -1,5 +1,7 @@
 
-const boolValueSymbol = Symbol();
+import { createString } from "./String.js";
+
+export const boolValueSymbol = Symbol();
 
 export function createBool(b) {
 	const obj = Object.create(Bool$v().prototype);
