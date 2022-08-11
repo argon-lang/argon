@@ -334,7 +334,11 @@ lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossT
     commonSettings,
     compilerOptions,
 
-    scalacOptions := scalacOptions.value.filter(s => s != "-source" && s != "future"),
+    scalacOptions := scalacOptions.value.filterNot(Seq(
+      "-source",
+      "future",
+      "-language:strictEquality",
+    ).contains),
 
     libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 
