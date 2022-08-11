@@ -25,7 +25,7 @@ trait Plugin[-R0, +E0] {
   (context: Context { type Env <: R0; type Error >: E0 })
   (adapter: PluginContextAdapter.Aux[context.type, this.type])
   (options: Options[context.Env, context.Error])
-  (tube: ArTubeC with HasContext[context.type] with HasDeclaration[true])
+  (tube: ArTubeC & HasContext[context.type] & HasDeclaration[true])
   : context.Comp[Output[context.Env, context.Error]]
 
 

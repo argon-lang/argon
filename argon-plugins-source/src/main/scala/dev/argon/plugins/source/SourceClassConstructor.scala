@@ -10,12 +10,12 @@ import zio.*
 
 object SourceClassConstructor {
 
-  def make(ctx: Context)(exprConverter: ExpressionConverter with HasContext[ctx.type])
+  def make(ctx: Context)(exprConverter: ExpressionConverter & HasContext[ctx.type])
     (outerEnv: ctx.Comp[exprConverter.Env])
     (
-      owningClass: ArClassC with HasContext[ctx.type],
+      owningClass: ArClassC & HasContext[ctx.type],
       accessModifier: AccessModifier,
     )(stmt: ClassConstructorDeclarationStmt)
-    : ctx.Comp[ClassConstructorC with HasContext[ctx.type]] = ???
+    : ctx.Comp[ClassConstructorC & HasContext[ctx.type]] = ???
 
 }

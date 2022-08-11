@@ -16,15 +16,15 @@ abstract class ArClassC extends Definition with UsingContext derives CanEqual {
   def classMessageSource: DiagnosticSource
 
   def signature: Comp[Signature[WrapExpr, ClassResult]]
-  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[IsDeclaration] with HasOwner[OwnedByClass[owner.type]]]]]
-  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[IsDeclaration] with HasOwner[OwnedByClassStatic[owner.type]]]]]
+  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByClass[owner.type]]]]]
+  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByClassStatic[owner.type]]]]]
   def constructors: Comp[Seq[ClassConstructor]]
   def fields: Comp[Seq[MemberVariable]]
 
   type ClassResult = (WrapExpr, Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])
 
   final override def equals(obj: Any): Boolean =
-    obj match {
+    obj.asInstanceOf[Matchable] match {
       case other: ArClassC => id == other.id
       case _ => false
     }
@@ -38,7 +38,7 @@ abstract class ArClassC extends Definition with UsingContext derives CanEqual {
 object ArClassC {
   type Ownership[TContext <: Context] = OwnedByModuleC[TContext]
 
-  def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC with HasContext[TContext] =
+  def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC & HasContext[TContext] =
     owner.module
 }
 

@@ -5,20 +5,15 @@ import scalapb.TypeMapper
 import zio.{Chunk, ChunkBuilder}
 
 given TypeMapper[ByteString, Chunk[Byte]] with
-  override def toCustom(base: ByteString): Chunk[Byte] = {
-    val cb = ChunkBuilder.Byte()
-    cb.sizeHint(base.size())
-    for i <- 0 until base.size() do
-      cb += base.byteAt(i)
-    end for
-    cb.result()
-  }
+  override def toCustom(base: ByteString): Chunk[Byte] =
+    Chunk.fromArray(base.toByteArray())
+    
   override def toBase(custom: Chunk[Byte]): ByteString = {
     val bso = ByteString.newOutput(custom.size)
     for i <- custom.indices do
       bso.write(custom.byte(i))
     end for
-    bso.toByteString
+    bso.toByteString()
   }
 end given
 

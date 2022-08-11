@@ -11,7 +11,7 @@ trait MethodCreationHelper extends Definition {
   val context: Context
   import context.Comp
 
-  protected val exprConverter: ExpressionConverter with HasContext[context.type]
+  protected val exprConverter: ExpressionConverter & HasContext[context.type]
   import exprConverter.Env
 
   protected def innerEnv: Comp[Env]
@@ -19,7 +19,7 @@ trait MethodCreationHelper extends Definition {
   protected final def buildMethods[TMethodOwner <: ArMethodC.Ownership[context.type]]
     (createMethodOwner: (this.type, Option[IdentifierExpr], AccessModifier) => TMethodOwner)
     (body: Vector[WithSource[parser.Stmt]])
-    : Comp[Map[Option[IdentifierExpr], Seq[ArMethodC with HasContext[context.type] with HasDeclaration[true] with HasOwner[TMethodOwner]]]] =
+    : Comp[Map[Option[IdentifierExpr], Seq[ArMethodC & HasContext[context.type] & HasDeclaration[true] & HasOwner[TMethodOwner]]]] =
     ZIO.foreach(body) {
       case WithSource(stmt: parser.MethodDeclarationStmt, _) =>
         buildMethod(createMethodOwner)(stmt)
@@ -33,7 +33,7 @@ trait MethodCreationHelper extends Definition {
   private def buildMethod[TMethodOwner <: ArMethodC.Ownership[context.type]]
     (createMethodOwner: (this.type, Option[IdentifierExpr], AccessModifier) => TMethodOwner)
     (methodDecl: parser.MethodDeclarationStmt)
-    : Comp[(Option[IdentifierExpr], ArMethodC with HasContext[context.type] with HasDeclaration[true] with HasOwner[TMethodOwner])] =
+    : Comp[(Option[IdentifierExpr], ArMethodC & HasContext[context.type] & HasDeclaration[true] & HasOwner[TMethodOwner])] =
     for {
       access <- AccessUtil.parse(methodDecl.modifiers)
       owner = createMethodOwner(this, methodDecl.name, access)

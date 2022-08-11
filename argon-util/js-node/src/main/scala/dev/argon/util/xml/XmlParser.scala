@@ -13,8 +13,14 @@ object XmlParser {
       val dom = new DOMParser()
       val doc = dom.parseFromString(xml, "text/xml")
       convertElem(doc.documentElement)
-    }.refineOrDie {
-      case JavaScriptException(ex: DOMException) => XMLException(ex)
+    }.catchAll {
+      case jsErr @ JavaScriptException(ex) =>
+        ex.asInstanceOf[Matchable] match {
+          case ex: DOMException => ZIO.fail(XMLException(ex))
+          case _ => ZIO.die(jsErr)
+        }
+
+      case ex => ZIO.die(ex)
     }
 
   def parse[R, E >: XMLException <: Throwable](stream: ZStream[R, E, Char]): ZIO[R, E, Element] =

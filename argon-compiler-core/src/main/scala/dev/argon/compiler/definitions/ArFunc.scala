@@ -21,7 +21,7 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
   def implementation: ImplementationType
 
   final override def equals(obj: Any): Boolean =
-    obj match {
+    obj.asInstanceOf[Matchable] match {
       case other: ArFuncC => id == other.id
       case _ => false
     }
@@ -32,6 +32,6 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
 object ArFuncC {
   type Ownership[TContext <: Context] = OwnedByModuleC[TContext]
 
-  def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC with HasContext[TContext] =
+  def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC & HasContext[TContext] =
     owner.module
 }

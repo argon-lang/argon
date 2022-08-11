@@ -13,13 +13,13 @@ abstract class ArTraitC extends Definition with UsingContext derives CanEqual {
 
   val id: UniqueIdentifier
   def signature: Comp[Signature[WrapExpr, TraitResult]]
-  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[IsDeclaration] with HasOwner[OwnedByTrait[owner.type]]]]]
-  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[IsDeclaration] with HasOwner[OwnedByTraitStatic[owner.type]]]]]
+  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByTrait[owner.type]]]]]
+  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByTraitStatic[owner.type]]]]]
 
   type TraitResult = (WrapExpr, Seq[ArExpr[ExprConstructor.TraitType]])
 
   final override def equals(obj: Any): Boolean =
-    obj match {
+    obj.asInstanceOf[Matchable] match {
       case other: ArTraitC => id == other.id
       case _ => false
     }
@@ -30,6 +30,6 @@ abstract class ArTraitC extends Definition with UsingContext derives CanEqual {
 object ArTraitC {
   type Ownership[TContext <: Context] = OwnedByModuleC[TContext]
 
-  def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC with HasContext[TContext] =
+  def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC & HasContext[TContext] =
     owner.module
 }

@@ -12,7 +12,7 @@ object SignatureUtil {
 
   def create[Res]
   (context: Context)
-  (exprConverter: ExpressionConverter with HasContext[context.type])
+  (exprConverter: ExpressionConverter & HasContext[context.type])
   (owner: exprConverter.exprContext.ParameterVariableOwner)
   (env: exprConverter.Env)
   (parameters: Seq[WithSource[parser.FunctionParameterList]])
@@ -90,7 +90,7 @@ object SignatureUtil {
     impl(env)(parameters)(0)
   end create
 
-  def createTraitResult(context: Context)(exprConverter: ExpressionConverter with HasContext[context.type])
+  def createTraitResult(context: Context)(exprConverter: ExpressionConverter & HasContext[context.type])
     (stmt: parser.TraitDeclarationStmt)(env: exprConverter.Env)
     : context.Comp[(
       context.ExprContext.WrapExpr,
@@ -155,7 +155,7 @@ object SignatureUtil {
 
   def createClassResult
   (context: Context)
-  (exprConverter: ExpressionConverter with HasContext[context.type])
+  (exprConverter: ExpressionConverter & HasContext[context.type])
   (stmt: parser.ClassDeclarationStmt)
   (env: exprConverter.Env)
   : context.Comp[(
@@ -243,7 +243,7 @@ object SignatureUtil {
 
   def createFunctionResult
   (context: Context)
-  (exprConverter: ExpressionConverter with HasContext[context.type])
+  (exprConverter: ExpressionConverter & HasContext[context.type])
   (returnTypeExpr: WithSource[parser.Expr])
   (env: exprConverter.Env)
   : context.Comp[context.ExprContext.WrapExpr] =
@@ -252,7 +252,7 @@ object SignatureUtil {
       .map { _._1 }
 
 
-  def resolveHolesSig[Res1, Res2](context: Context)(exprConverter: ExpressionConverter with HasContext[context.type])
+  def resolveHolesSig[Res1, Res2](context: Context)(exprConverter: ExpressionConverter & HasContext[context.type])
     (env: exprConverter.Env)(sigHandler: exprConverter.SignatureHandlerPlus[Res1, Res2])
     (sig: Signature[exprConverter.exprContext.WrapExpr, Res2])
     : context.Comp[(Signature[context.ExprContext.WrapExpr, Res1], exprConverter.Env)] =

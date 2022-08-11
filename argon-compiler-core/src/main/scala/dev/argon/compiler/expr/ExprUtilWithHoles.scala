@@ -46,6 +46,9 @@ trait ExprUtilWithHoles extends ExprUtil {
     yield (convExpr, env)
 
 
+  type ClassResultContext = (context.ExprContext.WrapExpr, Option[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.ClassType]], Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]])
+  type TraitResultContext = (context.ExprContext.WrapExpr, Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]])
+
 
   trait SignatureHandlerPlus[Res1, Res2] extends SignatureHandler[Res2] {
     def convertResult(res: Res1): Res2
@@ -63,9 +66,9 @@ trait ExprUtilWithHoles extends ExprUtil {
     end new
 
 
-  override val classSigHandler: SignatureHandlerPlus[ArClass#ClassResult, ClassResultConv] =
-    new SignatureHandlerPlus[ArClass#ClassResult, ClassResultConv] with ClassSigHandlerBase:
-      override def convertResult(res: ArClass#ClassResult): ClassResultConv =
+  override val classSigHandler: SignatureHandlerPlus[ClassResultContext, ClassResultConv] =
+    new SignatureHandlerPlus[ClassResultContext, ClassResultConv] with ClassSigHandlerBase:
+      override def convertResult(res: ClassResultContext): ClassResultConv =
         val (classType, baseClass, baseTraits) = res
 
         val classType2 =
@@ -78,7 +81,7 @@ trait ExprUtilWithHoles extends ExprUtil {
         (classType2, baseClass2, baseTraits2)
       end convertResult
 
-      override def resolveResultHoles(env: Env, res: ClassResultConv): Comp[(ArClass#ClassResult, Env)] =
+      override def resolveResultHoles(env: Env, res: ClassResultConv): Comp[(ClassResultContext, Env)] =
         val (classType, baseClass, baseTraits) = res
         resolveHoles(env, classType).flatMap { case (classType2, env) =>
           ZIO.foreach(baseClass)(resolveHolesClassType(env, _))
@@ -107,9 +110,9 @@ trait ExprUtilWithHoles extends ExprUtil {
     end new
 
 
-  override val traitSigHandler: SignatureHandlerPlus[ArTrait#TraitResult, TraitResultConv] =
-    new SignatureHandlerPlus[ArTrait#TraitResult, TraitResultConv] with TraitSigHandlerBase:
-      override def convertResult(res: ArTrait#TraitResult): TraitResultConv =
+  override val traitSigHandler: SignatureHandlerPlus[TraitResultContext, TraitResultConv] =
+    new SignatureHandlerPlus[TraitResultContext, TraitResultConv] with TraitSigHandlerBase:
+      override def convertResult(res: TraitResultContext): TraitResultConv =
         val (traitType, baseTraits) = res
 
         val traitType2 =
@@ -120,7 +123,7 @@ trait ExprUtilWithHoles extends ExprUtil {
         (traitType2, baseTraits2)
       end convertResult
 
-      override def resolveResultHoles(env: Env, res: TraitResultConv): Comp[(ArTrait#TraitResult, Env)] =
+      override def resolveResultHoles(env: Env, res: TraitResultConv): Comp[(TraitResultContext, Env)] =
         val (classType, baseTraits) = res
         resolveHoles(env, classType).flatMap { case (classType2, env) =>
           for {

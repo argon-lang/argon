@@ -385,7 +385,7 @@ object Grammar {
 
   }
 
-  def token[TToken, TSyntaxError, TLabel[_], TTokenCategory](category: TTokenCategory, tokenMatches: TToken => Boolean)
+  def token[TToken <: Matchable, TSyntaxError, TLabel[_], TTokenCategory](category: TTokenCategory, tokenMatches: TToken => Boolean)
     (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
     : Grammar[TToken, TSyntaxError, TLabel, TToken] = matcher(category, (t: TToken) => Some(t).filter(tokenMatches))
 
@@ -393,16 +393,16 @@ object Grammar {
     (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
     : Grammar[TToken, TSyntaxError, TLabel, TResult] = EndOfFileGrammar(result)
 
-  def matcher[TToken, TSyntaxError, TLabel[_], TTokenCategory, Result]
+  def matcher[TToken <: Matchable, TSyntaxError, TLabel[_], TTokenCategory, Result]
     (category: TTokenCategory, tokenMatcher: TToken => Option[Result])
     (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
     : Grammar[TToken, TSyntaxError, TLabel, Result] = matcher(category, TokenMatcher.Anything(tokenMatcher))
 
-  def partialMatcher[TToken, TSyntaxError, TLabel[_], TTokenCategory, Result](category: TTokenCategory)
+  def partialMatcher[TToken <: Matchable, TSyntaxError, TLabel[_], TTokenCategory, Result](category: TTokenCategory)
     (f: PartialFunction[TToken, Result])(implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
     : Grammar[TToken, TSyntaxError, TLabel, Result] = matcher(category, f.lift)
 
-  def matcher[TToken, TSyntaxError, TLabel[_], TTokenCategory, Result]
+  def matcher[TToken <: Matchable, TSyntaxError, TLabel[_], TTokenCategory, Result]
     (category: TTokenCategory, tokenMatcher: TokenMatcher[TToken, Result])
     (implicit errorFactory: ErrorFactory[TToken, TTokenCategory, TSyntaxError])
     : Grammar[TToken, TSyntaxError, TLabel, Result] = TokenGrammar(category, tokenMatcher)
@@ -542,7 +542,7 @@ object Grammar {
 
   }
 
-  private final case class TokenGrammar[TToken, TSyntaxError, TLabel[_], TTokenCategory, T]
+  private final case class TokenGrammar[TToken <: Matchable, TSyntaxError, TLabel[_], TTokenCategory, T]
     (
       category: TTokenCategory,
       tokenMatcher: TokenMatcher[TToken, T],

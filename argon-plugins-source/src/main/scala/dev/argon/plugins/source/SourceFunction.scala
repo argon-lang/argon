@@ -13,18 +13,18 @@ object SourceFunction {
 
   def make[TOwner]
   (ctx: Context)
-  (exprConverter: ExpressionConverter with HasContext[ctx.type])
+  (exprConverter: ExpressionConverter & HasContext[ctx.type])
   (outerEnv: exprConverter.Env)
   (functionOwner: TOwner & ArFuncC.Ownership[ctx.type])
   (stmt: FunctionDeclarationStmt)
-  : ctx.Comp[ArFuncC with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[TOwner]] =
+  : ctx.Comp[ArFuncC & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[TOwner]] =
     for
       funcId <- UniqueIdentifier.make
 
       innerEnvCell <- MemoCell.make[ctx.Env, ctx.Error, exprConverter.Env]
 
       sigCell <- MemoCell.make[ctx.Env, ctx.Error, (Signature[ctx.ExprContext.WrapExpr, ctx.ExprContext.WrapExpr], exprConverter.Env)]
-      implCell <- MemoCell.make[ctx.Env, ctx.Error, FunctionImplementationC with HasContext[ctx.type]]
+      implCell <- MemoCell.make[ctx.Env, ctx.Error, FunctionImplementationC & HasContext[ctx.type]]
 
     yield new ArFuncC {
       override val context: ctx.type = ctx

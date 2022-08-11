@@ -100,6 +100,7 @@ lazy val compilerOptions = Seq(
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
     "-release", "17",
+    "-source", "future",
     "-language:higherKinds",
     "-language:existentials",
     "-language:implicitConversions",
@@ -108,7 +109,7 @@ lazy val compilerOptions = Seq(
     "-Ycheck-all-patmat",
     "-Yretain-trees",
     "-Xmax-inlines", "128",
-    "-Wconf:id=E029:e,cat=unchecked:e",
+    "-Wconf:id=E029:e,id=E165:e,cat=unchecked:e,cat=deprecation:e",
   ),
 
 )
@@ -331,6 +332,8 @@ lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossT
   .settings(
     commonSettings,
     compilerOptions,
+
+    scalacOptions := scalacOptions.value.filter(s => s != "-source" && s != "future"),
 
     libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 

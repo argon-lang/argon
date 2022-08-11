@@ -1,18 +1,21 @@
 package dev.argon.util
 
 import zio.*
+import scala.compiletime.uninitialized
 
 private[util] final class JavaExecuteIO[R, E, EX <: Exception, A](using Runtime[R], ErrorWrapper[E, EX]) {
   private var isComplete: Boolean = false
   private var isError: Boolean = false
-  private var result: A = _
-  private var error: EX = _
+  private var result: A = uninitialized
+  private var error: EX = uninitialized
 
   def execute(task: ZIO[R, E, A]): A =
     Unsafe.unsafe {
       val fiber = summon[Runtime[R]].unsafe.fork(task.onExit(onComplete))
 
       //val cancel = summon[Runtime[R]].unsafeRunAsyncCancelable(task)(onComplete)
+
+      var exitResult: Option[A] = None
 
       try {
         this synchronized {
@@ -28,7 +31,7 @@ private[util] final class JavaExecuteIO[R, E, EX <: Exception, A](using Runtime[
             .flattenExit
 
           exit match {
-            case Exit.Success(a) => return a
+            case Exit.Success(a) => exitResult = Some(a)
             case Exit.Failure(cause) =>
               throw summon[ErrorWrapper[E, EX]].wrap(cause)
           }
@@ -37,7 +40,7 @@ private[util] final class JavaExecuteIO[R, E, EX <: Exception, A](using Runtime[
       if isError then
         throw error
       else
-        result
+        exitResult.getOrElse(result)
     }
 
   private def onComplete(exit: Exit[E, A]): UIO[Unit] =

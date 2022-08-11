@@ -14,11 +14,11 @@ object SourceClass {
 
   def make[TOwner]
   (ctx: Context)
-  (exprConverter2: ExpressionConverter with HasContext[ctx.type])
+  (exprConverter2: ExpressionConverter & HasContext[ctx.type])
   (outerEnv: exprConverter2.Env)
   (classOwner: TOwner & ArClassC.Ownership[ctx.type])
   (stmt: ClassDeclarationStmt)
-    : ctx.Comp[ArClassC with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[TOwner]] =
+    : ctx.Comp[ArClassC & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[TOwner]] =
     for {
       traitId <- UniqueIdentifier.make
 
@@ -39,11 +39,11 @@ object SourceClass {
         ]
       methodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
-          with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[OwnedByClassC[ctx.type, classOwner.type]]]]]
+          & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[OwnedByClassC[ctx.type, classOwner.type]]]]]
       staticMethodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
-          with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[OwnedByClassStaticC[ctx.type, classOwner.type]]]]]
-      ctorsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ClassConstructorC with HasContext[ctx.type]]]
+          & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[OwnedByClassStaticC[ctx.type, classOwner.type]]]]]
+      ctorsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ClassConstructorC & HasContext[ctx.type]]]
       fieldsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ctx.ExprContext.MemberVariable]]
 
     } yield new ArClassC with MethodCreationHelper {
@@ -93,14 +93,14 @@ object SourceClass {
           case WithSource(s, _) => !isValidClassStmt(s)
         }
 
-      override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[true] with HasOwner[OwnedByClass[owner.type]]]]] =
+      override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[true] & HasOwner[OwnedByClass[owner.type]]]]] =
         methodsCell.get {
           val body2 = filteredBody[parser.MethodDeclarationStmt](stmt.instanceBody)
           buildMethods[OwnedByClass[owner.type]](OwnedByClassC.apply)(body2)
         }
 
       override def staticMethods
-        : Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[true] with HasOwner[OwnedByClassStatic[owner.type]]]]] =
+        : Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[true] & HasOwner[OwnedByClassStatic[owner.type]]]]] =
         staticMethodsCell.get(buildMethods[OwnedByClassStatic[owner.type]](OwnedByClassStaticC.apply)(stmt.body))
 
       override def constructors: Comp[Seq[ClassConstructor]] =

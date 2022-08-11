@@ -27,7 +27,7 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
 
 
   final override def equals(obj: Any): Boolean =
-    obj match {
+    obj.asInstanceOf[Matchable] match {
       case other: ArMethodC => id == other.id
       case _ => false
     }
@@ -40,7 +40,7 @@ object ArMethodC {
     OwnedByClassC[TContext, ?] | OwnedByClassStaticC[TContext, ?] |
     OwnedByTraitC[TContext, ?] | OwnedByTraitStaticC[TContext, ?]
 
-  def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC with HasContext[TContext] =
+  def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC & HasContext[TContext] =
     owner match {
       case owner: OwnedByClassC[TContext, ?] => ArClassC.getOwningModule(owner.arClass.owner)
       case owner: OwnedByClassStaticC[TContext, ?] => ArClassC.getOwningModule(owner.arClass.owner)

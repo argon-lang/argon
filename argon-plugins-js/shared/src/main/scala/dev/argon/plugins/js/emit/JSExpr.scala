@@ -9,7 +9,7 @@ private[emit] object JSExpr {
 
 
   trait ImportPartial {
-    def from(source: String): estree.ImportDeclaration
+    infix def from(source: String): estree.ImportDeclaration
   }
 
   def `import`(specifiers: estree.ImportSpecifier*): ImportPartial = source =>
@@ -19,7 +19,7 @@ private[emit] object JSExpr {
     )
 
   object import_* :
-    def as(name: String): ImportPartial = source =>
+    infix def as(name: String): ImportPartial = source =>
       estree.ImportDeclaration(
         specifiers = Seq(estree.ImportNamespaceSpecifier(local = id(name))),
         source = literal(source)
@@ -119,7 +119,7 @@ private[emit] object JSExpr {
   }
 
   object `export` {
-    def const(name: String): ExportVariableDeclarationPartial = value =>
+    infix def const(name: String): ExportVariableDeclarationPartial = value =>
       estree.ExportNamedDeclaration(
         declaration = Nullable(JSExpr.const(name) := value),
         specifiers = Seq(),
@@ -154,7 +154,7 @@ private[emit] object JSExpr {
   final case class ImportOrExportSpecifier(original: estree.Identifier, renamed: estree.Identifier)
 
   extension (id: estree.Identifier)
-    def as(renamed: estree.Identifier): ImportOrExportSpecifier =
+    infix def as(renamed: estree.Identifier): ImportOrExportSpecifier =
       ImportOrExportSpecifier(id, renamed)
 
     @targetName("propertyValue")

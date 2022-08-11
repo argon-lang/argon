@@ -13,7 +13,7 @@ abstract class ClassConstructorC extends Definition with UsingContext derives Ca
   val owner: (ArClass, AccessModifier)
 
   final override def equals(obj: Any): Boolean =
-    obj match {
+    obj.asInstanceOf[Matchable] match {
       case other: ClassConstructorC => id == other.id
       case _ => false
     }

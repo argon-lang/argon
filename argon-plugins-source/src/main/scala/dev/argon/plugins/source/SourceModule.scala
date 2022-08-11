@@ -15,11 +15,11 @@ object SourceModule {
   def make
     (
       context: Context,
-      currentTube: ArTubeC with HasContext[context.type],
+      currentTube: ArTubeC & HasContext[context.type],
       moduleName: ModuleName,
       moduleFile: ArgonSourceCodeResource[context.Env, context.Error],
     )
-    : UIO[ArModuleC with HasContext[context.type] with HasDeclaration[true]] =
+    : UIO[ArModuleC & HasContext[context.type] & HasDeclaration[true]] =
     val context2: context.type = context
     val moduleName2 = moduleName
     for {
@@ -129,7 +129,7 @@ object SourceModule {
       private def loadModuleImports
       (exportingModules: Set[ArModule])
       (
-        module: ArModuleC with HasContext[context.type],
+        module: ArModuleC & HasContext[context.type],
         imports: List[ImportPathSegment.End],
         importedIds: Set[IdentifierExpr],
         acc: ImportsUngrouped,
@@ -175,7 +175,7 @@ object SourceModule {
         }
 
 
-      private def loadTubeImports(exportingModules: Set[ArModule])(tube: ArTubeC with HasContext[context.type], pathSegment: ImportPathSegment)
+      private def loadTubeImports(exportingModules: Set[ArModule])(tube: ArTubeC & HasContext[context.type], pathSegment: ImportPathSegment)
       : Comp[ImportsUngrouped] =
         ZIO.foreach(
           flattenImportPaths(pathSegment, Seq.empty)

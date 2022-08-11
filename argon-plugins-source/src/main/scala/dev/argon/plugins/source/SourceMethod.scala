@@ -13,15 +13,15 @@ object SourceMethod {
 
   def make[TOwner]
   (ctx: Context)
-  (exprConverter: ExpressionConverter with HasContext[ctx.type])
+  (exprConverter: ExpressionConverter & HasContext[ctx.type])
   (outerEnv: exprConverter.Env)
   (methodOwner: TOwner & ArMethodC.Ownership[ctx.type])
   (stmt: MethodDeclarationStmt)
-  : ctx.Comp[ArMethodC with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[TOwner]] =
+  : ctx.Comp[ArMethodC & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[TOwner]] =
     for
       methodId <- UniqueIdentifier.make
       sigCell <- MemoCell.make[ctx.Env, ctx.Error, (Signature[ctx.ExprContext.WrapExpr, ctx.ExprContext.WrapExpr], exprConverter.Env)]
-      implCell <- MemoCell.make[ctx.Env, ctx.Error, MethodImplementationC with HasContext[ctx.type]]
+      implCell <- MemoCell.make[ctx.Env, ctx.Error, MethodImplementationC & HasContext[ctx.type]]
 
     yield new ArMethodC {
       override val context: ctx.type = ctx

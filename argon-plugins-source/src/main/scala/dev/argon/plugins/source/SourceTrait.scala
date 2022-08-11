@@ -13,11 +13,11 @@ object SourceTrait {
 
   def make[TOwner]
   (ctx: Context)
-  (exprConverter2: ExpressionConverter with HasContext[ctx.type])
+  (exprConverter2: ExpressionConverter & HasContext[ctx.type])
   (outerEnv: exprConverter2.Env)
   (traitOwner: TOwner & ArTraitC.Ownership[ctx.type])
   (stmt: TraitDeclarationStmt)
-  : ctx.Comp[ArTraitC with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[TOwner]] =
+  : ctx.Comp[ArTraitC & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[TOwner]] =
     for {
       traitId <- UniqueIdentifier.make
 
@@ -34,10 +34,10 @@ object SourceTrait {
         ]
       methodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
-          with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[OwnedByTraitC[ctx.type, traitOwner.type]]]]]
+          & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[OwnedByTraitC[ctx.type, traitOwner.type]]]]]
       staticMethodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
-          with HasContext[ctx.type] with HasDeclaration[true] with HasOwner[OwnedByTraitStaticC[ctx.type, traitOwner.type]]]]]
+          & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[OwnedByTraitStaticC[ctx.type, traitOwner.type]]]]]
 
     } yield new ArTraitC with MethodCreationHelper {
       override val owner: traitOwner.type = traitOwner
@@ -64,11 +64,11 @@ object SourceTrait {
       override def innerEnv: Comp[exprConverter.Env] =
         sigEnv.map { _._2 }
 
-      override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[true] with HasOwner[OwnedByTrait[owner.type]]]]] =
+      override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[true] & HasOwner[OwnedByTrait[owner.type]]]]] =
         methodsCell.get(buildMethods[OwnedByTrait[owner.type]](OwnedByTraitC.apply)(stmt.instanceBody))
 
       override def staticMethods
-        : Comp[Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[true] with HasOwner[OwnedByTraitStatic[owner.type]]]]] =
+        : Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[true] & HasOwner[OwnedByTraitStatic[owner.type]]]]] =
         staticMethodsCell.get(buildMethods[OwnedByTraitStatic[owner.type]](OwnedByTraitStaticC.apply)(stmt.body))
 
     }

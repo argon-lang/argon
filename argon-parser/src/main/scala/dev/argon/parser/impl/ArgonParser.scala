@@ -154,7 +154,7 @@ object ArgonParser {
     private def matchTokenFactory[TToken <: Token](factory: TokenFactory[TToken])(using tt: TypeTest[Token, TToken])
       : TGrammar[TToken] = Grammar.matcher(factory.category, TokenMatcher.Subtype[Token, TToken](tt))
 
-    private def matchToken[TToken <: TokenWithCategory[? <: TokenCategory] with Token](token: TToken)
+    private def matchToken[TToken <: TokenWithCategory[? <: TokenCategory] & Token](token: TToken)
       (using tt: TypeTest[Token, TToken])
       : TGrammar[TToken] = Grammar.matcher(token.category, TokenMatcher.Subtype[Token, TToken](tt))
 
@@ -304,7 +304,7 @@ object ArgonParser {
         case Rule.DeconstructPattern =>
           rule(Rule.ConstructorExprPattern).observeSource ++ rule(
             Rule.PatternSeq
-          ) --> (DeconstructPattern.apply _).tupled
+          ) --> DeconstructPattern.apply.tupled
 
         case Rule.PatternSpec =>
           rule(Rule.ParenPattern) |
@@ -375,8 +375,8 @@ object ArgonParser {
 
         case Rule.MemberAccess =>
           rule(Rule.Identifier).observeSource --> { id => (baseExpr: WithSource[Expr]) => DotExpr(baseExpr, id) } |
-            matchToken(KW_NEW) --> const(ClassConstructorExpr.apply _) |
-            matchToken(KW_TYPE) --> const(TypeOfExpr.apply _)
+            matchToken(KW_NEW) --> const(ClassConstructorExpr.apply) |
+            matchToken(KW_TYPE) --> const(TypeOfExpr.apply)
 
         case Rule.CurryCallExpr =>
           createLeftRec(
@@ -393,7 +393,7 @@ object ArgonParser {
           )
 
         case Rule.UnaryExpr =>
-          def matchUnaryOp[TToken <: TokenWithCategory[? <: TokenCategory] with UnaryOperatorToken](token: TToken)
+          def matchUnaryOp[TToken <: TokenWithCategory[? <: TokenCategory] & UnaryOperatorToken](token: TToken)
             (using TypeTest[Token, TToken])
             : TGrammar[Expr] =
             matchToken(token).observeSource ++! rule(Rule.UnaryExpr).observeSource --> { case (opToken, inner) =>
@@ -572,7 +572,7 @@ object ArgonParser {
             }
 
         case Rule.Modifiers =>
-          def ruleModifier[TToken <: TokenWithCategory[? <: TokenCategory] with ModifierToken](token: TToken)
+          def ruleModifier[TToken <: TokenWithCategory[? <: TokenCategory] & ModifierToken](token: TToken)
             (using TypeTest[Token, TToken])
             : TGrammar[Modifier] = matchToken(token) --> const(token.modifier)
 
@@ -952,7 +952,7 @@ object ArgonParser {
       }
     }
 
-    private def ruleBinaryOperator[TToken <: TokenWithCategory[? <: TokenCategory] with BinaryOperatorToken]
+    private def ruleBinaryOperator[TToken <: TokenWithCategory[? <: TokenCategory] & BinaryOperatorToken]
       (token: TToken)(using TypeTest[Token, TToken])
       : TGrammar[BinaryOperator] = matchToken(token) --> const(token.operator)
 

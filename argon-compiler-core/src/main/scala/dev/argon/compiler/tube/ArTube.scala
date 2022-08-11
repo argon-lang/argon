@@ -8,8 +8,8 @@ trait ArTubeC extends UsingContext with DeclarationMode {
   val tubeName: TubeName
   val options: context.Options
 
-  def module(path: ModulePath): Comp[ArModule with HasDeclaration[IsDeclaration]]
+  def module(path: ModulePath): Comp[ArModule & HasDeclaration[IsDeclaration]]
   def modulePaths: Set[ModulePath]
 
-  def asDeclaration: Option[this.type with HasDeclaration[true]]
+  def asDeclaration: Option[this.type & HasDeclaration[true]]
 }

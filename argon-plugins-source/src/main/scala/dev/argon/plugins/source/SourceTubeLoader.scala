@@ -25,7 +25,7 @@ object SourceTubeLoader extends TubeLoader[Any, SourceError] {
   def load
   (context: Context { type Error >: SourceError })
   (libOptions: SourceLibOptions[context.Env, context.Error, context.Options])
-  : ZIO[context.Env & Scope, context.Error, ArTubeC with HasContext[context.type]] =
+  : ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]] =
     for
       mappings <- libOptions.spec.tubeSpec.runCollect
       _ <- ZIO.logTrace("Getting source code files")

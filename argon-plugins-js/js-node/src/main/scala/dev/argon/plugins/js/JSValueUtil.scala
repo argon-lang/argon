@@ -62,7 +62,7 @@ object JSValueUtil:
       null
 
     override def decode(value: JSValue): DecodedJSObject | DecodedJSArray | String | Boolean | Double | BigInt | JSRegExp | Null =
-      (value : Any | Null) match {
+      (value : Matchable | Null) match {
         case value: String => value
         case value: Boolean => value
         case value: Double => value

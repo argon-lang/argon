@@ -5,7 +5,7 @@ import scala.scalajs.js.JavaScriptException
 object JSErrorHandler {
 
   def handleJSError(error: Any): Throwable =
-    error match {
+    error.asInstanceOf[Matchable] match {
       case ex: Throwable => ex
       case ex => JavaScriptException(ex)
     }

@@ -11,7 +11,7 @@ import zio.stm.*
 trait EmitModuleCommon extends EmitTubeCommon {
   val imports: TMap[ImportSpecifier, String]
   val additionalImports: TMap[ModuleName, TSet[String]]
-  val module: ArModule with HasDeclaration[true]
+  val module: ArModule & HasDeclaration[true]
 
 
   protected def getEscapedName(name: IdentifierExpr): String =

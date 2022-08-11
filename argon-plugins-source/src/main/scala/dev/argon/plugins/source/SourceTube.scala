@@ -18,12 +18,12 @@ object SourceTube {
       opts: context.Options,
       modules: Map[ModulePath, ArgonSourceCodeResource[context.Env, context.Error]],
     )
-    : UIO[ArTubeC with HasContext[context.type]] =
+    : UIO[ArTubeC & HasContext[context.type]] =
     val context2: context.type = context
     val tubeName2 = tubeName
     for {
       loadModule <-
-        ZIO.memoize[CompEnv, CompError, (ArTubeC with HasContext[context.type], ModulePath), ArModuleC with HasContext[context.type] with HasDeclaration[true]] { args =>
+        ZIO.memoize[CompEnv, CompError, (ArTubeC & HasContext[context.type], ModulePath), ArModuleC & HasContext[context.type] & HasDeclaration[true]] { args =>
           val (tube, path) = args
           val moduleName = ModuleName(tubeName, path)
           modules.get(path) match {
@@ -39,10 +39,10 @@ object SourceTube {
 
       override val options: context.Options = opts
 
-      override def module(path: ModulePath): Comp[ArModule with HasDeclaration[true]] = loadModule((this, path))
+      override def module(path: ModulePath): Comp[ArModule & HasDeclaration[true]] = loadModule((this, path))
       override lazy val modulePaths: Set[ModulePath] = modules.keySet
 
-      override def asDeclaration: Option[this.type with HasDeclaration[true]] = Some(this)
+      override def asDeclaration: Option[this.type & HasDeclaration[true]] = Some(this)
     }
   end make
 

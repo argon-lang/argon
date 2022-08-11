@@ -54,7 +54,7 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
 
 
   final def createContext
-  : UIO[Context with LoadTube {
+  : UIO[Context & LoadTube {
     type Env = R
     type Error = E
     type Options = BuildContextFactory.this.Options
@@ -71,21 +71,21 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
 
           private val tubes =
             Unsafe.unsafe {
-              runtime.unsafe.run(TMap.empty[TubeName, ArTubeC with HasContext[this.type]].commit).getOrThrow()
+              runtime.unsafe.run(TMap.empty[TubeName, ArTubeC & HasContext[this.type]].commit).getOrThrow()
             }
 
 
           override type ExternMethodImplementation = BuildContextFactory.this.ExternMethodImplementation
           override type ExternFunctionImplementation = BuildContextFactory.this.ExternFunctionImplementation
 
-          override def getTube(tubeName: TubeName): Comp[ArTubeC with HasContext[this.type]] =
+          override def getTube(tubeName: TubeName): Comp[ArTubeC & HasContext[this.type]] =
             tubes.get(tubeName).commit
               .some
               .orElseFail(DiagnosticError.UnknownTube(tubeName))
 
           override def loadTube
           (tubeOptions: TubeOptions)
-          : ZIO[R & Scope, E, ArTubeC with HasContext[this.type]] =
+          : ZIO[R & Scope, E, ArTubeC & HasContext[this.type]] =
             for
               plugin <- ZIO.fromEither(getPlugin(tubeOptions.loader.plugin).toRight(UnknownPlugin(tubeOptions.loader.plugin)))
               loader <- ZIO.fromEither(plugin.tubeLoaders.get(tubeOptions.loader.name).toRight(UnknownTubeLoader(tubeOptions.loader)))

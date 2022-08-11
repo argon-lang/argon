@@ -76,7 +76,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   import context.ExprContext.{ArExpr, ExprConstructor, WrapExpr}
 
-  def classExport(arClass: ArClass with HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
+  def classExport(arClass: ArClass & HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
     for
       sig <- arClass.signature
       erasedSig <- SignatureEraser(context).erasedNoResult(sig)
@@ -145,7 +145,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     )
 
 
-  def traitExport(arTrait: ArTrait with HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
+  def traitExport(arTrait: ArTrait & HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
     for
       sig <- arTrait.signature
       erasedSig <- SignatureEraser(context).erasedNoResult(sig)
@@ -180,7 +180,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       )
       )
 
-  def functionExport(func: ArFunc with HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
+  def functionExport(func: ArFunc & HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
     for
       sig <- func.signature
       erasedSig <- SignatureEraser(context).erasedWithResult(sig)
@@ -218,7 +218,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     yield `export`(decl)
 
 
-  private def createMethods(methodsVarName: String, methods: Map[Option[IdentifierExpr], Seq[ArMethod with HasDeclaration[true]]]): Comp[Seq[estree.Statement]] =
+  private def createMethods(methodsVarName: String, methods: Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[true]]]): Comp[Seq[estree.Statement]] =
     ZIO.foreach(
       for
         (methodName, methodsOfName) <- methods.toSeq
@@ -236,7 +236,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       )
     }
 
-  private def createMethod(method: ArMethod with HasDeclaration[true]): Comp[estree.Expression] =
+  private def createMethod(method: ArMethod & HasDeclaration[true]): Comp[estree.Expression] =
     method.implementation.flatMap {
       case _: MethodImplementationC.Abstract =>
         ZIO.succeed(literal(null))

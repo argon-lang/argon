@@ -112,8 +112,8 @@ object VTableBuilder {
     val ctx: context.type = context
 
     for {
-      classVtableCache0 <- MemoCacheStore.make[ctx.Env, ctx.Error, ArClassC with HasContext[ctx.type], Any]
-      traitVtableCache0 <- MemoCacheStore.make[ctx.Env, ctx.Error, ArTraitC with HasContext[ctx.type], Any]
+      classVtableCache0 <- MemoCacheStore.make[ctx.Env, ctx.Error, ArClassC & HasContext[ctx.type], Any]
+      traitVtableCache0 <- MemoCacheStore.make[ctx.Env, ctx.Error, ArTraitC & HasContext[ctx.type], Any]
     } yield new VTableBuilder[context.type](context) {
       import this.context.ExprContext.{ArExpr, ExprConstructor, WrapExpr, Variable, ParameterVariable}
       import ExprConstructor.MethodCallOwnerType

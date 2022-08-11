@@ -32,14 +32,14 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
   (ctx: Context { type Error >: JSPluginError })
   (adapter2: PluginContextAdapter.Aux[ctx.type, this.type])
   (opt: JSOptions[ctx.Env, ctx.Error])
-  (t: ArTubeC with HasContext[ctx.type] with HasDeclaration[true])
+  (t: ArTubeC & HasContext[ctx.type] & HasDeclaration[true])
   : ctx.Comp[JSOutput[ctx.Env, ctx.Error]] =
     for
       vtb <- VTableBuilder(ctx)
       output <- new TubeEmitter {
         override val context: ctx.type = ctx
         override val options: JSOptions[ctx.Env, ctx.Error] = opt
-        override val tube: ArTube with HasDeclaration[true] = t
+        override val tube: ArTube & HasDeclaration[true] = t
         override protected val vtableBuilder: VTableBuilder[context.type] = vtb
         override val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type] = adapter2
       }.emitTube

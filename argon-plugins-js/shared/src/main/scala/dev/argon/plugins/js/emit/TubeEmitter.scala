@@ -16,7 +16,7 @@ import zio.stm.*
 import zio.stream.*
 
 private[js] trait TubeEmitter extends EmitTubeCommon {
-  val tube: ArTube with HasDeclaration[true]
+  val tube: ArTube & HasDeclaration[true]
 
   def emitTube: Comp[JSOutput[context.Env, context.Error]] =
     ZIO.succeed(JSOutput(
@@ -38,7 +38,7 @@ private[js] trait TubeEmitter extends EmitTubeCommon {
               override val tube: ArTube = TubeEmitter.this.tube
               override val imports: TMap[ImportSpecifier, String] = importMap
               override val additionalImports: TMap[ModuleName, TSet[String]] = additionalImportMap
-              override val module: ArModule with HasDeclaration[true] = arModule
+              override val module: ArModule & HasDeclaration[true] = arModule
               override protected val vtableBuilder: VTableBuilder[context.type] = TubeEmitter.this.vtableBuilder
             }.program
         yield program

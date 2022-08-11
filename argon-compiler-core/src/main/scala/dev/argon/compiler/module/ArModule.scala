@@ -11,7 +11,7 @@ abstract class ArModuleC extends UsingContext with DeclarationMode {
   def exports(exportingModules: Set[ArModule])(name: IdentifierExpr): Comp[Seq[ModuleElement[IsDeclaration]]]
 
   final override def equals(obj: Any): Boolean =
-    obj match {
+    obj.asInstanceOf[Matchable] match {
       case other: ArModuleC => other.moduleName == moduleName
       case _ => false
     }

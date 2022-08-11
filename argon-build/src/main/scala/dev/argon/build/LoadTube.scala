@@ -11,5 +11,5 @@ private[build] trait LoadTube:
 
   def loadTube
   (tubeOptions: TubeOptions)
-  : ZIO[Env & Scope, Error, ArTubeC with HasContext[this.type]]
+  : ZIO[Env & Scope, Error, ArTubeC & HasContext[this.type]]
 end LoadTube

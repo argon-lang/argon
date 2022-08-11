@@ -65,7 +65,7 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
       plugin.loadExternFunction(options)(id).some
 
 
-    private val tubes: Exit[Nothing, Fiber[Error, Map[TubeName, ArTubeC with HasContext[this.type]]]] =
+    private val tubes: Exit[Nothing, Fiber[Error, Map[TubeName, ArTubeC & HasContext[this.type]]]] =
       Unsafe.unsafe {
         runtime.unsafe.run(
           ZIO.foreach(tubeOptions) { (name, libOptions) =>
@@ -76,7 +76,7 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
         )
       }
 
-    override def getTube(tubeName: TubeName): Comp[ArTubeC with HasContext[this.type]] =
+    override def getTube(tubeName: TubeName): Comp[ArTubeC & HasContext[this.type]] =
       ZIO.done(tubes)
         .flatMap(_.join)
         .flatMap { tubes =>
@@ -183,9 +183,12 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
 
         override def contents: ZStream[Any, SourceError, DirectoryEntry[Any, SourceError, ArgonSourceCodeResource]] =
           ZStream.unwrapScoped(
-            sources.partitionEither {
-              case (NonEmptyList(head, head2 :: tail), contents) => ZIO.succeed(Left((head, head2, tail, contents)))
-              case (NonEmptyList(name, Nil), contents) => ZIO.succeed(Right((name, contents)))
+            sources.partitionEither { (nel, contents) =>
+              val head = nel.head
+              nel.tail match {
+                case head2 :: tail => ZIO.succeed(Left((head, head2, tail, contents)))
+                case Nil => ZIO.succeed(Right((head, contents)))
+              }
             }.map { (dirEntries, fileEntries) =>
               val subDirs =
                 dirEntries
@@ -231,7 +234,7 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
           |""".stripMargin)
     )
 
-  override protected[test] def createTest(testCase: TestCase): Spec[Environment with Scope, Any] =
+  override protected[test] def createTest(testCase: TestCase): Spec[Environment & Scope, Any] =
     test(testCase.name) {
       for
         libs <- libraries

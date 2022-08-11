@@ -20,7 +20,7 @@ import scala.reflect.TypeTest
 
 sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWithHoles {
 
-  val exprContext: HolesExprContext with HasContext[context.type] =
+  val exprContext: HolesExprContext & HasContext[context.type] =
     new HolesExprContext {
       override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
     }
@@ -352,7 +352,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
         }
 
-      case parser.StringValueExpr(parser.Token.StringToken(NonEmptyList(headPart, tailParts))) =>
+      case parser.StringValueExpr(parser.Token.StringToken(tokenParts)) =>
+        val headPart = tokenParts.head
+        val tailParts = tokenParts.tail
         def convertPart(strType: WrapExpr, env: Env, part: parser.Token.StringToken.Part): Comp[ExprTypeResult] =
           part match {
             case parser.Token.StringToken.StringPart(str) =>
@@ -1351,7 +1353,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
 object ExpressionConverter {
 
-  def make(ctx: Context): UIO[ExpressionConverter with HasContext[ctx.type]] =
+  def make(ctx: Context): UIO[ExpressionConverter & HasContext[ctx.type]] =
     ZIO.succeed(
       new ExpressionConverter {
         override val context: ctx.type = ctx

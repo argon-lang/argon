@@ -2,7 +2,7 @@ package dev.argon.util
 
 import scala.annotation.unused
 
-sealed trait Is[A, B]:
+infix sealed trait Is[A, B]:
   def convert(a: A): B
   def flip: B Is A
   def substitute[F[_]](fa: F[A]): F[B]

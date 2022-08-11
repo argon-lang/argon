@@ -7,8 +7,6 @@ object NonEmptyList:
 
   def cons[A](head: A, tail: NonEmptyList[A] | List[A]): NonEmptyList[A] = ::.apply(head, tail)
 
-  def unapply[A](l: NonEmptyList[A]): Some[(A, List[A])] = Some((l.head, l.tail))
-
   def fromList[A](l: List[A]): Option[NonEmptyList[A]] =
     l match {
       case l: ::[A] => Some(l)

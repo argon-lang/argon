@@ -7,10 +7,10 @@ abstract class CompilerTestsBase extends ZIOSpecDefault {
 
   def suiteName: String
 
-  protected[test] def createTest(testCase: TestCase): Spec[TestEnvironment with Scope, Any]
+  protected[test] def createTest(testCase: TestCase): Spec[TestEnvironment & Scope, Any]
 
 
-  private def createSpec(groupName: String)(testCases: TestCases): Spec[TestEnvironment with Scope, Any] =
+  private def createSpec(groupName: String)(testCases: TestCases): Spec[TestEnvironment & Scope, Any] =
     testCases match
       case TestCases.Group(tests) =>
         val suites = tests.toSeq.map { case (name, subCases) => createSpec(name)(subCases) }
@@ -20,8 +20,8 @@ abstract class CompilerTestsBase extends ZIOSpecDefault {
         createTest(test)
     end match
 
-  override def spec: Spec[TestEnvironment with Scope, Any] =
-    Spec.scoped[TestEnvironment with Scope](
+  override def spec: Spec[TestEnvironment & Scope, Any] =
+    Spec.scoped[TestEnvironment & Scope](
       TestCases.testCases
         .mapErrorCause { cause => Cause.fail(TestFailure.Runtime(cause)) }
         .map(createSpec(suiteName))

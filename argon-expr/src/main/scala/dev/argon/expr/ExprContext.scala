@@ -36,8 +36,8 @@ trait ExprContext {
       Objects.hash(constructor, args)
 
     override def equals(obj: Any): Boolean =
-      obj match
-        case other: ArExpr[_] => other.constructor.equals(constructor) && other.args.equals(args)
+      obj.asInstanceOf[Matchable] match
+        case other: ArExpr[?] => other.constructor.equals(constructor) && other.args.equals(args)
         case _ => false
       end match
   }

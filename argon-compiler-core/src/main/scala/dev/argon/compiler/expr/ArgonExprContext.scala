@@ -49,7 +49,7 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
     override def isErased: Boolean = false
 
     override def equals(obj: Any): Boolean =
-      obj match {
+      obj.asInstanceOf[Matchable] match {
         case other: LocalVariable => other.id == id
         case _ => false
       }
@@ -68,7 +68,7 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
     override def isErased: Boolean = false
 
     override def equals(obj: Any): Boolean =
-      obj match {
+      obj.asInstanceOf[Matchable] match {
         case other: InstanceVariable => other.method == method
         case _ => false
       }
@@ -87,7 +87,7 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
     override def isErased: Boolean = false
 
     override def equals(obj: Any): Boolean =
-      obj match {
+      obj.asInstanceOf[Matchable] match {
         case other: MemberVariable => other.ownerClass == ownerClass && other.name == name
         case _ => false
       }
@@ -109,7 +109,7 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
     override def isMutable: Boolean = false
 
     override def equals(obj: Any): Boolean =
-      obj match {
+      obj.asInstanceOf[Matchable] match {
         case other: ParameterVariable => parameterIndex == other.parameterIndex && other.owner.equals(owner)
         case _ => false
       }
@@ -129,8 +129,8 @@ object ArgonExprContext {
       context: Context
     )
     (
-      ec1: ArgonExprContext with HasContext[context.type],
-      ec2: ArgonExprContext with HasContext[context.type],
+      ec1: ArgonExprContext & HasContext[context.type],
+      ec2: ArgonExprContext & HasContext[context.type],
     )
     (
       f: ec1.THole => F[ec2.WrapExpr]
@@ -149,8 +149,8 @@ object ArgonExprContext {
       context: Context
     )
     (
-      ec1: ArgonExprContext with HasContext[context.type],
-      ec2: ArgonExprContext with HasContext[context.type],
+      ec1: ArgonExprContext & HasContext[context.type],
+      ec2: ArgonExprContext & HasContext[context.type],
     )
     (
       f: ec1.THole => F[ec2.WrapExpr]
@@ -362,8 +362,8 @@ object ArgonExprContext {
       context: Context
     )
     (
-      ec1: ArgonExprContext with HasContext[context.type],
-      ec2: ArgonExprContext with HasContext[context.type],
+      ec1: ArgonExprContext & HasContext[context.type],
+      ec2: ArgonExprContext & HasContext[context.type],
     )
     (
       f: ec1.THole => F[ec2.WrapExpr]
@@ -381,8 +381,8 @@ object ArgonExprContext {
       context: Context
     )
     (
-      ec1: ArgonExprContext with HasContext[context.type],
-      ec2: ArgonExprContext with HasContext[context.type],
+      ec1: ArgonExprContext & HasContext[context.type],
+      ec2: ArgonExprContext & HasContext[context.type],
     )
     (
       f: ec1.THole => F[ec2.WrapExpr]
@@ -400,8 +400,8 @@ object ArgonExprContext {
       context: Context
     )
     (
-      ec1: ArgonExprContext with HasContext[context.type],
-      ec2: ArgonExprContext with HasContext[context.type],
+      ec1: ArgonExprContext & HasContext[context.type],
+      ec2: ArgonExprContext & HasContext[context.type],
     )
     (
       f: ec1.THole => F[ec2.WrapExpr]
@@ -435,8 +435,8 @@ object ArgonExprContext {
       context: Context
     )
     (
-      ec1: ArgonExprContext with HasContext[context.type],
-      ec2: ArgonExprContext with HasContext[context.type],
+      ec1: ArgonExprContext & HasContext[context.type],
+      ec2: ArgonExprContext & HasContext[context.type],
     )
     (
       f: ec1.THole => F[ec2.WrapExpr]
@@ -454,8 +454,8 @@ object ArgonExprContext {
       context: Context
     )
     (
-      ec1: ArgonExprContext with HasContext[context.type],
-      ec2: ArgonExprContext with HasContext[context.type],
+      ec1: ArgonExprContext & HasContext[context.type],
+      ec2: ArgonExprContext & HasContext[context.type],
     )
     (
       f: ec1.THole => F[ec2.WrapExpr]
@@ -474,8 +474,8 @@ object ArgonExprContext {
 }
 
 type ParameterVariableOwnerC[TContext <: Context] =
-  ArMethodC with HasContext[TContext] |
-    ArFuncC with HasContext[TContext] |
-    ArClassC with HasContext[TContext] |
-    ArTraitC with HasContext[TContext] |
-    ClassConstructorC with HasContext[TContext]
+  ArMethodC & HasContext[TContext] |
+    ArFuncC & HasContext[TContext] |
+    ArClassC & HasContext[TContext] |
+    ArTraitC & HasContext[TContext] |
+    ClassConstructorC & HasContext[TContext]

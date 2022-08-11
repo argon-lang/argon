@@ -101,7 +101,7 @@ trait SignatureEraser extends UsingContext {
 }
 
 object SignatureEraser {
-  def apply(ctx: Context): SignatureEraser with HasContext[ctx.type] =
+  def apply(ctx: Context): SignatureEraser & HasContext[ctx.type] =
     new SignatureEraser:
       override val context: ctx.type = ctx
     end new

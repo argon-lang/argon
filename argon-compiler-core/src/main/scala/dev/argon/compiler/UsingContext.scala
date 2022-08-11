@@ -8,17 +8,17 @@ trait UsingContext {
   val context: Context
   protected type Comp[+A] = context.Comp[A]
 
-  protected type ArTube = ArTubeC with HasContext[context.type]
-  protected type ArModule = ArModuleC with HasContext[context.type]
+  protected type ArTube = ArTubeC & HasContext[context.type]
+  protected type ArModule = ArModuleC & HasContext[context.type]
   protected type ModuleElement[IsDeclaration <: Boolean] = ModuleElementC[context.type, IsDeclaration]
-  protected type ArClass = ArClassC with HasContext[context.type]
-  protected type ArTrait = ArTraitC with HasContext[context.type]
-  protected type ArFunc = ArFuncC with HasContext[context.type]
-  protected type ArMethod = ArMethodC with HasContext[context.type]
-  protected type ClassConstructor = ClassConstructorC with HasContext[context.type]
+  protected type ArClass = ArClassC & HasContext[context.type]
+  protected type ArTrait = ArTraitC & HasContext[context.type]
+  protected type ArFunc = ArFuncC & HasContext[context.type]
+  protected type ArMethod = ArMethodC & HasContext[context.type]
+  protected type ClassConstructor = ClassConstructorC & HasContext[context.type]
 
-  protected type MethodImplementation = MethodImplementationC with HasContext[context.type]
-  protected type FunctionImplementation = FunctionImplementationC with HasContext[context.type]
+  protected type MethodImplementation = MethodImplementationC & HasContext[context.type]
+  protected type FunctionImplementation = FunctionImplementationC & HasContext[context.type]
 
   protected type OwnedByModule = OwnedByModuleC[context.type]
   protected type OwnedByClass[+ClassOwner] = OwnedByClassC[context.type, ClassOwner]

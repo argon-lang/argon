@@ -18,7 +18,7 @@ abstract class PlatformApp extends ZIOApp {
 
   final override def environmentTag: EnvironmentTag[Environment] = summon[EnvironmentTag[Environment]]
 
-  final override def bootstrap: ZLayer[ZIOAppArgs with Scope, Any, Environment] =
+  final override def bootstrap: ZLayer[ZIOAppArgs & Scope, Any, Environment] =
     ZLayer.succeed(PlatformPathUtil())
 
   final override def run: ZIO[Environment & ZIOAppArgs, Any, Any] =

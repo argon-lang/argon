@@ -33,7 +33,7 @@ object SourcePlugin extends Plugin[Any, SourceError] {
   (context: Context { type Env; type Error >: SourceError })
   (adapter: PluginContextAdapter.Aux[context.type, this.type])
   (options: Options[context.Env, context.Error])
-  (tube: ArTubeC with HasContext[context.type] with HasDeclaration[true])
+  (tube: ArTubeC & HasContext[context.type] & HasDeclaration[true])
   : context.Comp[Output[context.Env, context.Error]] =
     ZIO.succeed(SourceOutput())
 

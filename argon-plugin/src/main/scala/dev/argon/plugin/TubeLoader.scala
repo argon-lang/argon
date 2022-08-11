@@ -16,5 +16,5 @@ trait TubeLoader[-R0, +E0] {
   def load
   (context: Context { type Env <: R0; type Error >: E0 })
   (libOptions: LibOptions[context.Env, context.Error, context.Options])
-  : ZIO[context.Env & Scope, context.Error, ArTubeC with HasContext[context.type]]
+  : ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]]
 }

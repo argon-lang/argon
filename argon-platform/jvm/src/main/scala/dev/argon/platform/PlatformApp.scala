@@ -19,7 +19,7 @@ abstract class PlatformApp extends ZIOApp {
 
   final override def environmentTag: EnvironmentTag[Environment] = summon[EnvironmentTag[Environment]]
 
-  final override def bootstrap: ZLayer[ZIOAppArgs with Scope, Any, Environment] =
+  final override def bootstrap: ZLayer[ZIOAppArgs & Scope, Any, Environment] =
     (Runtime.removeDefaultLoggers >>> console(format = LogFormat.colored, logLevel = LogLevel.Trace)) +!+
       ZLayer.succeed(PlatformPathUtil())
 
@@ -30,9 +30,11 @@ abstract class PlatformApp extends ZIOApp {
           ZIO.succeed { ex.printStackTrace() }
         }
       }
-      .tapError {
-        case ex: Throwable => ZIO.succeed { ex.printStackTrace() }
-        case error => Console.printLineError(error)
+      .tapError { err =>
+        err.asInstanceOf[Matchable] match
+          case ex: Throwable => ZIO.succeed { ex.printStackTrace() }
+          case error => Console.printLineError(error)
+        end match
       }
 
   def runApp: ZIO[Environment & ZIOAppArgs, Any, ExitCode]

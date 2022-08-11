@@ -102,22 +102,22 @@ object JSOutputExecutor {
     override def parsePath(uri: URI): Path = Path.of(uri)
     override def parsePath(path: String): Path = Path.of(path)
 
-    override def checkAccess(path: Path, modes: JSet[_ <: AccessMode], linkOptions: LinkOption*): Unit = ()
+    override def checkAccess(path: Path, modes: JSet[? <: AccessMode], linkOptions: LinkOption*): Unit = ()
 
-    override def createDirectory(dir: Path, attrs: FileAttribute[_]*): Unit =
+    override def createDirectory(dir: Path, attrs: FileAttribute[?]*): Unit =
       throw new UnsupportedOperationException()
 
     override def delete(path: Path): Unit =
       throw new UnsupportedOperationException()
 
-    override def newByteChannel(path: Path, options: JSet[_ <: OpenOption], attrs: FileAttribute[_]*): SeekableByteChannel =
+    override def newByteChannel(path: Path, options: JSet[? <: OpenOption], attrs: FileAttribute[?]*): SeekableByteChannel =
       val name = path.toString
       val content = fs(name).getBytes(StandardCharsets.UTF_8)
       new SeekableInMemoryByteChannel(content)
     end newByteChannel
 
 
-    override def newDirectoryStream(dir: Path, filter: DirectoryStream.Filter[_ >: Path]): DirectoryStream[Path] =
+    override def newDirectoryStream(dir: Path, filter: DirectoryStream.Filter[? >: Path]): DirectoryStream[Path] =
       throw new UnsupportedOperationException()
 
     override def toAbsolutePath(path: Path): Path =
