@@ -106,6 +106,7 @@ lazy val compilerOptions = Seq(
     "-language:implicitConversions",
     "-language:strictEquality",
     "-deprecation",
+    "-feature",
     "-Ycheck-all-patmat",
     "-Yretain-trees",
     "-Xmax-inlines", "128",
