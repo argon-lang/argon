@@ -332,6 +332,13 @@ lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossT
     commonSettings,
     compilerOptions,
 
+    libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
+
+    Compile / PB.targets := Seq(
+      scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
+    ),
+    Compile / PB.protoSources += (Compile / baseDirectory).value.getParentFile / "src/main/protobuf",
+
     name := "argon-tube",
   )
 

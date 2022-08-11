@@ -1,0 +1,270 @@
+syntax = "proto3";
+
+import "util.proto";
+import "google/protobuf/empty.proto";
+
+package argon.tube;
+
+
+// version
+message TubeFormatVersion {
+  BigInt major = 1;
+  BigInt minor = 2;
+}
+
+// metadata
+message Metadata {
+  TubeName name = 1;
+  TubeType type = 2;
+  Toml options = 3;
+  repeated TubeName references = 4;
+  repeated ExternalReference externalClasses = 5;
+  repeated ExternalReference externalTraits = 6;
+  repeated ExternalReference externalFunctions = 7;
+  repeated ExternalReference externalMethods = 8;
+  repeated ExternalReference externalClassConstructors = 9;
+}
+
+message ExternalReference {
+  BigInt id = 1;
+  repeated string tube = 2;
+  repeated string module = 3;
+  Identifier identifier = 4;
+  ErasedSignature signature = 5;
+}
+
+
+// Miscellaneous
+
+message Identifier {
+  oneof value {
+    string named = 1;
+    string operator = 2;
+    Identifier extension = 3;
+    Identifier inverse = 4;
+    Identifier update = 5;
+  }
+}
+
+enum AccessModifier {
+  ACCESS_MODIFIER_PRIVATE = 0;
+  ACCESS_MODIFIER_TUBE_PRIVATE = 1;
+  ACCESS_MODIFIER_MODULE_PRIVATE = 2;
+
+  ACCESS_MODIFIER_PUBLIC = 3;
+
+  ACCESS_MODIFIER_PROTECTED = 4;
+  ACCESS_MODIFIER_TUBE_OR_PROTECTED = 5;
+  ACCESS_MODIFIER_TUBE_AND_PROTECTED = 6;
+}
+
+message ErasedSignature {
+  repeated ErasedSignatureType parameterTypes = 1;
+  ErasedSignatureType resultType = 2;
+}
+
+message ErasedSignatureType {
+  ErasedSignatureTypeConstructor constructor = 1;
+  BigInt id = 2;
+  repeated ErasedSignatureType arguments = 3;
+}
+
+enum ErasedSignatureTypeConstructor {
+  ERASED_SIGNATURE_TYPE_CONSTRUCTOR_ERASED = 0;
+  ERASED_SIGNATURE_TYPE_CONSTRUCTOR_CLASS = 1;
+  ERASED_SIGNATURE_TYPE_CONSTRUCTOR_TRAIT = 2;
+  ERASED_SIGNATURE_TYPE_CONSTRUCTOR_TUPLE = 3;
+  ERASED_SIGNATURE_TYPE_CONSTRUCTOR_FUNCTION = 4;
+}
+
+// Tubes
+message TubeName {
+  repeated string name = 1;
+}
+
+enum TubeType {
+  TUBE_TYPE_INTERFACE = 0;
+  TUBE_TYPE_DEFINITION = 1;
+}
+
+// modules/definition/...
+// the path will urlencode the characters / and %
+// A root module will be written as modules/definition
+message ModuleDefinition {
+  repeated ModuleElementNameGroup elements = 1;
+}
+
+message ModuleElementNameGroup {
+  Identifier name = 1;
+  repeated ModuleElementDeclaration declaredElements = 2;
+  repeated ModuleElementExported exportedElements = 3;
+}
+
+message ModuleElementDeclaration {
+  BigInt id = 1;
+  ModuleElementType type = 2;
+  AccessModifier accessModifier = 3;
+  ErasedSignature signature = 4;
+}
+
+message ModuleElementExported {
+  ModuleName module = 1;
+  ErasedSignature signature = 2;
+}
+
+enum ModuleElementType {
+  MODULE_ELEMENT_TYPE_UNKNOWN = 0;
+  MODULE_ELEMENT_TYPE_CLASS = 1;
+  MODULE_ELEMENT_TYPE_TRAIT = 2;
+  MODULE_ELEMENT_TYPE_FUNCTION = 3;
+}
+
+message ModuleName {
+  repeated string tube = 1;
+  repeated string module = 2;
+}
+
+// Common declaration messages
+enum Mutability {
+  MUTABILITY_MUTABLE = 0;
+  MUTABILITY_NON_MUTABLE = 1;
+}
+
+message EffectInfo {
+  bool isPure = 1;
+}
+
+
+// classes/<id>
+enum ClassFlags {
+  CLASS_FLAGS_NONE = 0;
+  CLASS_FLAGS_SEALED = 1;
+  CLASS_FLAGS_OPEN = 2;
+  CLASS_FLAGS_ABSTRACT = 4;
+}
+
+message ClassDefinition {
+  uint32 flags = 1;
+  ClassSignature signature = 2;
+  repeated ClassField fields = 3;
+  repeated MethodMember methods = 4;
+  repeated MethodMember staticMethods = 5;
+  repeated ConstructorMember constructors = 6;
+}
+
+message ClassSignature {
+  repeated ExprWithVariables parameterTypes = 1;
+  ClassType baseClass = 2;
+  repeated TraitType baseTraits = 3;
+}
+
+message ClassField {
+  Identifier name = 1;
+  Mutability mutability = 2;
+  ExprWithVariables fieldType = 3;
+}
+
+message MethodMember {
+  BigInt id = 1;
+  Identifier name = 2;
+  AccessModifier accessModifier = 3;
+}
+
+message ConstructorMember {
+  BigInt id = 1;
+  AccessModifier accessModifier = 2;
+}
+
+
+
+// traits/<id>
+enum TraitFlags {
+  TRAIT_FLAGS_NONE = 0;
+  TRAIT_FLAGS_SEALED = 1;
+}
+
+message TraitDefinition {
+  uint32 flags = 1;
+  TraitSignature signature = 2;
+  repeated MethodMember methods = 3;
+  repeated MethodMember staticMethods = 4;
+}
+
+message TraitSignature {
+  repeated ExprWithVariables parameterTypes = 1;
+  repeated TraitType baseTraits = 2;
+}
+
+
+// functions/<id>
+enum FunctionFlags {
+  FUNCTION_FLAGS_NONE = 0;
+}
+
+message FunctionDefinition {
+  uint32 flags = 1;
+  FunctionSignature signature = 2;
+  repeated MethodMember methods = 3;
+  repeated MethodMember staticMethods = 4;
+}
+
+message FunctionSignature {
+  repeated ExprWithVariables parameterTypes = 1;
+  ExprWithVariables resultType = 2;
+}
+
+message FunctionBody {
+  oneof value {
+    ExprWithVariables expressionBody = 1;
+    string externalImplementation = 2;
+  }
+}
+
+
+// methods/<id>
+enum MethodFlags {
+  METHOD_FLAGS_NONE = 0;
+  METHOD_FLAGS_VIRTUAL = 1;
+  METHOD_FLAGS_ABSTRACT = 2;
+  METHOD_FLAGS_AUTO_OVERRIDE = 4;
+  METHOD_FLAGS_FINAL = 8;
+}
+
+message MethodDefinition {
+  uint32 flags = 1;
+  FunctionSignature signature = 2;
+  EffectInfo effects = 3;
+  FunctionBody body = 4;
+}
+
+
+
+// class-constructors/<id>
+enum ClassConstructorFlags {
+  CLASS_CONSTRUCTOR_FLAGS_NONE = 0;
+}
+
+message ClassConstructorDefinition {
+  uint32 flags = 1;
+  ClassConstructorSignature signature = 2;
+  EffectInfo effects = 3;
+  ClassConstructorBody body = 4;
+}
+
+message ClassConstructorSignature {
+  repeated ExprWithVariables parameterTypes = 1;
+}
+
+message ClassConstructorBody {}
+
+// Expressions
+message Expr {}
+
+message ExprWithVariables {}
+
+message ClassType {}
+
+message TraitType {}
+
+
+
