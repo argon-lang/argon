@@ -9,7 +9,11 @@ import java.nio.file.Path
 class PlatformPathUtil extends PathUtil {
   override def dirname(path: Path): UIO[Path] =
     ZIO.succeed {
-      Option(path.toAbsolutePath.getParent).getOrElse(path.getRoot)
+      // asInstanceOf needed
+      Option(path.toAbsolutePath.nn.getParent)
+        .orElse(Option(path.getRoot))
+        .get
+        .nn
     }
 
   override def binaryResource(path: Path): BinaryResource[Any, IOException] =

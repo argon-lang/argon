@@ -17,7 +17,7 @@ final class ModuleResolution(fileSystem: Map[String, String]) {
   private def dirname(path: String): String =
     val index = path.lastIndexOf('/')
     if index > 0 then // Use > instead of >= to ensure that /file.txt results in /.
-      path.substring(0, index)
+      path.substring(0, index).nn
     else
       "/"
   end dirname
@@ -26,13 +26,13 @@ final class ModuleResolution(fileSystem: Map[String, String]) {
     if otherPath.startsWith("/") then
       otherPath
     else if otherPath.startsWith("./") then
-      join(basePath, otherPath.substring(2))
+      join(basePath, otherPath.substring(2).nn)
     else if otherPath.startsWith("../") then
-      join(dirname(basePath), otherPath.substring(3))
+      join(dirname(basePath), otherPath.substring(3).nn)
     else
       val index = otherPath.indexOf('/')
       if index >= 0 then
-        join(basePath + "/" + otherPath.substring(0, index), otherPath.substring(index + 1))
+        join(basePath + "/" + otherPath.substring(0, index).nn, otherPath.substring(index + 1).nn)
       else
         s"$basePath/$otherPath"
     end if
@@ -65,7 +65,7 @@ final class ModuleResolution(fileSystem: Map[String, String]) {
       else if !packageSpecifier.startsWith("@") then
         val index = packageSpecifier.indexOf('/')
         if index >= 0 then
-          packageSpecifier.substring(0, index)
+          packageSpecifier.substring(0, index).nn
         else
           packageSpecifier
       else
@@ -73,7 +73,7 @@ final class ModuleResolution(fileSystem: Map[String, String]) {
         if index >= 0 then
           val index2 = packageSpecifier.indexOf('/', index + 1)
           if index2 >= 0 then
-            packageSpecifier.substring(0, index2)
+            packageSpecifier.substring(0, index2).nn
           else
             packageSpecifier
         else
@@ -222,11 +222,11 @@ final class ModuleResolution(fileSystem: Map[String, String]) {
         .sortWith { case ((k1, _), (k2, _)) => patternKeyLessThan(k1, k2) }
         .collectFirst(({ (expansionKey, target) =>
           val starIndex = expansionKey.indexOf('*')
-          val patternBase = expansionKey.substring(0, starIndex)
+          val patternBase = expansionKey.substring(0, starIndex).nn
           if matchKey.startsWith(patternBase) && matchKey != patternBase then
             val patternTrailer = expansionKey.substring(starIndex + 1)
             if matchKey.endsWith(patternTrailer) && matchKey.length >= expansionKey.length then
-              val subpath = matchKey.substring(starIndex, matchKey.length - expansionKey.length)
+              val subpath = matchKey.substring(starIndex, matchKey.length - expansionKey.length).nn
               packageTargetResolve(packageURL, target, subpath, true, isImports, conditions)
             else
               None
@@ -246,7 +246,7 @@ final class ModuleResolution(fileSystem: Map[String, String]) {
         val result =
           if target.startsWith("./") then
             def isInvalidSeg(seg: String): Boolean =
-              seg == "." || seg == ".." || seg.toLowerCase(Locale.US) == "node_modules"
+              seg == "." || seg == ".." || seg.toLowerCase(Locale.US).nn == "node_modules"
 
             if target.split(Array('/', '\\')).drop(1).exists(isInvalidSeg) then
               throw InvalidPackageTargetException(target0)
@@ -257,14 +257,14 @@ final class ModuleResolution(fileSystem: Map[String, String]) {
               throw InvalidModuleSpecifierException(subpath)
 
             if pattern then
-              resolvedTarget.replace("*", subpath)
+              resolvedTarget.replace("*", subpath).nn
             else
               join(subpath, resolvedTarget)
 
           else
             if internal && !target.startsWith("../") && !target.startsWith("/") then
               if pattern then
-                packageResolve(target.replace("*", subpath), packageURL + "/")
+                packageResolve(target.replace("*", subpath).nn, packageURL + "/")
               else
                 packageResolve(target + subpath, packageURL + "/")
             else

@@ -43,16 +43,17 @@ object ReadFileCompileTime {
     def impl(path: Path): Expr[CompileTimeFileSystem] =
       if Files.isDirectory(path) then
         val dirEntries = Expr.ofSeq(
-          Files.list(path)
-            .iterator()
+          Files.list(path).nn
+            .iterator().nn
             .asScala
+            .map(_.nn)
             .filter { subPath =>
               val isDir = Files.isDirectory(subPath)
               val name = subPath.getFileName.toString
               keepPath(isDir, name)
             }
             .map { subPath =>
-              val subPathName = Expr(path.relativize(subPath).getFileName.toString)
+              val subPathName = Expr(path.relativize(subPath).nn.getFileName.nn.toString)
               val subfs = impl(subPath)
               '{ $subPathName -> $subfs }
             }
@@ -61,11 +62,11 @@ object ReadFileCompileTime {
 
         '{ CompileTimeFileSystem.Directory($dirEntries.toMap) }
       else
-        val data = Expr(Files.readString(path))
+        val data = Expr(Files.readString(path).nn)
         '{ CompileTimeFileSystem.File($data) }
       end if
 
-    impl(Path.of(dirExpr.valueOrAbort))
+    impl(Path.of(dirExpr.valueOrAbort).nn)
   end readDirectoryImpl
 
 

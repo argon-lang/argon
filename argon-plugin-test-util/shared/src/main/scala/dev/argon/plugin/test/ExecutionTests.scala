@@ -108,7 +108,7 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
 
         val resourceFactory = new ResourceFactory {
           private def subPath(name: String): ZIO[Any, IOException, DirectoryEntry[Any, IOException, BinaryResource]] =
-            name.split("/").toSeq.foldLeftM(dir) {
+            name.split("/").nn.map(_.nn).toSeq.foldLeftM(dir) {
               case (DirectoryEntry.Subdirectory(_, subEntries), subPath) =>
                 subEntries.contents.find { _.name == subPath }.runHead.flatMap { result =>
                   ZIO.fromEither(result.toRight(new FileNotFoundException(name)))
@@ -172,7 +172,7 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
               .decode(buildToml)
               .provide(ZLayer.succeed(resourceFactory))
 
-          yield TubeName(NonEmptyList.fromList(name.split("\\.").toList).get) -> options
+          yield TubeName(NonEmptyList.fromList(name.split("\\.").nn.map(_.nn).toList).get) -> options
         ).mapError(TestError.ErrorLoadingBuildConfig.apply)
 
     }
@@ -222,7 +222,7 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
         override def fileName: Option[String] = Some(prevPath.mkString("/"))
       }
 
-    impl(Seq("test"))(ZStream.fromIterable(sources.map { (k, v) => (NonEmptyList.fromList(k.split("/").toList).get, v) }))
+    impl(Seq("test"))(ZStream.fromIterable(sources.map { (k, v) => (NonEmptyList.fromList(k.split("/").nn.map(_.nn).toList).get, v) }))
   end inputSourcesToDirectory
 
   private val defaultTubeSpec: ArgonTubeSpecResource[Environment, E] =
@@ -290,5 +290,5 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
     end match
 
   private def normalizeOutput(s: String): String =
-    s.split('\n').map(_.trim).filter(_.nonEmpty).mkString("\n")
+    s.split('\n').nn.map(_.nn.trim.nn).filter(_.nonEmpty).mkString("\n")
 }

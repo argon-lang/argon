@@ -9,7 +9,7 @@ import dev.argon.plugin.PluginContextAdapter
 import dev.argon.compiler.tube.TubeName
 import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.parser.IdentifierExpr
-import dev.argon.util.*
+import dev.argon.util.{*, given}
 import zio.*
 import zio.stm.*
 
@@ -78,7 +78,7 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
         else
           getTubeImportPath(moduleName.tubeName)
 
-      tubeImportPathParts = tubeImportPath.split("/").toList
+      tubeImportPathParts = tubeImportPath.split("/").nn.map(_.nn).toList
 
       fileName = getModuleFileName(importedTube)(moduleName.path)
 

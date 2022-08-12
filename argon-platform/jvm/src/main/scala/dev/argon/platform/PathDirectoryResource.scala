@@ -10,7 +10,7 @@ import java.nio.file.{Files, Path}
 private[platform] class PathDirectoryResource(path: Path) extends DirectoryResource[Any, IOException, BinaryResource] {
 
   override def contents: ZStream[Any, IOException, DirectoryEntry[Any, IOException, BinaryResource]] =
-    ZStream.fromJavaStream(Files.list(path))
+    ZStream.fromJavaStream(Files.list(path).nn)
       .refineToOrDie[IOException]
       .mapZIO { path =>
         ZIO.attempt { Files.isDirectory(path) }.refineToOrDie[IOException].map {

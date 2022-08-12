@@ -22,7 +22,7 @@ object ArgonSourceCodeResource:
             summon[BinaryResourceDecoder[TextResource, R, E]]
               .decode(resource)
               .asText
-              .mapChunks { strings => strings.flatMap(_.toCharArray) }
+              .mapChunks { strings => strings.flatMap(_.toCharArray.nn) }
               .toChannel
               >>> ArgonSourceParser.parse[E](fileName)
             ).toStream

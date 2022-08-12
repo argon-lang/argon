@@ -1,6 +1,6 @@
 package dev.argon.plugins.js.emit
 
-import dev.argon.util.*
+import dev.argon.util.{*, given}
 import dev.argon.plugins.js.*
 import dev.argon.compiler.*
 import dev.argon.compiler.definitions.{FunctionImplementationC, HasDeclaration, MethodImplementationC}

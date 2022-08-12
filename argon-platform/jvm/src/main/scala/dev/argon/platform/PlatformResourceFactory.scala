@@ -8,9 +8,9 @@ import java.nio.file.{Files, Path}
 
 private[platform] final class PlatformResourceFactory(baseDir: Path) extends ResourceFactory {
   override def directoryResource(name: String): DirectoryResource[Any, IOException, BinaryResource] =
-    PathDirectoryResource(baseDir.resolve(name))
+    PathDirectoryResource(baseDir.resolve(name).nn)
 
 
   override def binaryResource(name: String): BinaryResource[Any, IOException] =
-    PathBinaryResource(baseDir.resolve(name))
+    PathBinaryResource(baseDir.resolve(name).nn)
 }

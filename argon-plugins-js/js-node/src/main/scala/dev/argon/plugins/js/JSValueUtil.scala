@@ -77,7 +77,7 @@ object JSValueUtil:
 
     override protected def generateImpl(value: JSValue): IO[JSGenerateError, String] =
       ZIO.attempt {
-        Astring.generate(value)
+        Astring.generate(value.nn)
       }.refineOrDie {
         case NonFatal(ex) => JSGenerateError(ex)
       }

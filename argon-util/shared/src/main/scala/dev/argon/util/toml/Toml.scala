@@ -35,7 +35,7 @@ object Toml {
         case Json.Str(value) => Toml.String(value)
         case Json.Num(value) =>
           try {
-            Toml.Int(value.toBigIntegerExact)
+            Toml.Int(value.toBigIntegerExact.nn)
           }
           catch {
             case _: ArithmeticException => Toml.Float(value.doubleValue())

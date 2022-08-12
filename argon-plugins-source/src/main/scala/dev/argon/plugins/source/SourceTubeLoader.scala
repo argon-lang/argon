@@ -90,17 +90,18 @@ object SourceTubeLoader extends TubeLoader[Any, SourceError] {
     template match {
       case Nil if prefix.isEmpty => Right(Nil)
 
-      case Nil => Right(prefix.split("/", -1).map(FileNameTemplate.Literal.apply).toList)
+      case Nil => Right(prefix.split("/", -1).nn.map(part => FileNameTemplate.Literal(part.nn)).toList)
 
       case StringToken.StringPart(WithSource(s, _)) :: tail =>
-        (prefix + s).split("/", -1).toSeq match {
+        (prefix + s).split("/", -1).nn.toSeq match {
           case init :+ last =>
             val initItems = init
               .iterator
+              .map(_.nn)
               .filter(_.nonEmpty)
               .map(FileNameTemplate.Literal.apply)
               .toList
-            buildTemplate(last, tail).map { initItems ++ _ }
+            buildTemplate(last.nn, tail).map { initItems ++ _ }
 
           case _ => buildTemplate(prefix + s, tail)
         }
@@ -117,10 +118,10 @@ object SourceTubeLoader extends TubeLoader[Any, SourceError] {
       case (expr: StringToken.ExprPart) ::
             StringToken.StringPart(WithSource(suffix, suffixLocation)) ::
             tail =>
-        suffix.split("/", -1).toList match {
+        suffix.split("/", -1).nn.toList match {
           case suffixHead :: (suffixTail @ _ :: _) =>
             for
-              current <- buildTemplateExpr(prefix, expr, suffixHead)
+              current <- buildTemplateExpr(prefix, expr, suffixHead.nn)
               next <- buildTemplate(suffixTail.mkString("/"), tail)
             yield current :: next
 
@@ -189,7 +190,7 @@ object SourceTubeLoader extends TubeLoader[Any, SourceError] {
               end if
             else
               if pathHead.length > prefix.length + suffix.length && pathHead.startsWith(prefix) && pathHead.endsWith(suffix) then
-                val value = pathHead.substring(prefix.length, pathHead.length - suffix.length)
+                val value = pathHead.substring(prefix.length, pathHead.length - suffix.length).nn
                 matchFileName(pattern, vars + (varName -> Seq(value)))(pathTail)(templateTail)
               else
                 Right(None)

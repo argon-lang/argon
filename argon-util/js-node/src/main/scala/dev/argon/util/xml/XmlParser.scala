@@ -1,6 +1,6 @@
 package dev.argon.util.xml
 
-import dev.argon.util.*
+import dev.argon.util.{*, given}
 import zio.*
 import zio.stream.*
 
@@ -33,23 +33,23 @@ object XmlParser {
         case Some(node) =>
           node.nodeType match {
             // ELEMENT_NODE
-            case 1 => convertElem(node.asInstanceOf[DomElement]) :: convertSibs(node.nextSibling.toOption.flatMap(Option.apply))
+            case 1 => convertElem(node.asInstanceOf[DomElement]) :: convertSibs(node.nextSibling.toOption.flatMap(Option.apply).map(_.nn))
 
             // TEXT_NODE, CDATA_SECTION_NODE
-            case 3 | 4 => Characters(node.nodeValue.toOption.flatMap(Option.apply).get) :: convertSibs(node.nextSibling.toOption.flatMap(Option.apply))
+            case 3 | 4 => Characters(node.nodeValue.toOption.flatMap(Option.apply).get.nn) :: convertSibs(node.nextSibling.toOption.flatMap(Option.apply).map(_.nn))
 
             // COMMENT_NODE
-            case 8 => convertSibs(node.nextSibling.toOption.flatMap(Option.apply))
+            case 8 => convertSibs(node.nextSibling.toOption.flatMap(Option.apply).map(_.nn))
 
             case _ => throw new RuntimeException("Unexpected node type")
           }
       end match
 
-    convertSibs(node.firstChild.toOption.flatMap(Option.apply))
+    convertSibs(node.firstChild.toOption.flatMap(Option.apply).map(_.nn))
   }
 
   private def convertElem(elem: DomElement): Element =
-    val ns = elem.namespaceURI.toOption.flatMap(Option.apply).getOrElse("")
+    val ns = elem.namespaceURI.toOption.flatMap(Option.apply).map(_.nn).getOrElse("")
     val name = Name(Namespace(ns), elem.tagName)
     Element(
       name,
@@ -62,10 +62,10 @@ object XmlParser {
   private def convertAttr(attributes: NamedNodeMap[DomAttr])(index: Int): Attribute =
     val attr = attributes(index)
 
-    val ns = attr.namespaceURI.toOption.flatMap(Option.apply).getOrElse("")
+    val ns = attr.namespaceURI.toOption.flatMap(Option.apply).map[String](_.nn).getOrElse("")
     val name = Name(Namespace(ns), attr.name)
 
-    Attribute(name, attr.nodeValue.toOption.flatMap(Option.apply).get)
+    Attribute(name, attr.nodeValue.toOption.flatMap(Option.apply).get.nn)
   end convertAttr
 
   private def convertAttrMap(attributes: NamedNodeMap[DomAttr]): Seq[Attribute] =

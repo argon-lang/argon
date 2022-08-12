@@ -9,10 +9,10 @@ import java.nio.file.{Files, Path}
 
 private[platform] final class PlatformResourceWriter(baseDir: Path) extends ResourceWriter {
   override def write[R, E >: IOException](name: String, resource: BinaryResource[R, E]): ZIO[R, E, Unit] =
-    writeFile(baseDir.resolve(name), resource)
+    writeFile(baseDir.resolve(name).nn, resource)
 
   override def write[R, E >: IOException](name: String, resource: DirectoryResource[R, E, BinaryResource]): ZIO[R, E, Unit] =
-    writeDir(baseDir.resolve(name), resource)
+    writeDir(baseDir.resolve(name).nn, resource)
 
   private def writeFile[R, E >: IOException](path: Path, resource: BinaryResource[R, E]): ZIO[R, E, Unit] =
     ZIO.logTrace(s"Writing file: $path") *>
@@ -26,9 +26,9 @@ private[platform] final class PlatformResourceWriter(baseDir: Path) extends Reso
 
   private def writeDir[R, E >: IOException](path: Path, resource: DirectoryResource[R, E, BinaryResource]): ZIO[R, E, Unit] =
     ZIO.logTrace(s"Writing directory: $path") *>
-    ZIO.attempt { Files.createDirectories(path) }.refineToOrDie[IOException] *>
+    ZIO.attempt { Files.createDirectories(path).nn }.refineToOrDie[IOException] *>
       resource.contents.foreach {
-        case DirectoryEntry.Subdirectory(name, resource) => writeDir(path.resolve(name), resource)
-        case DirectoryEntry.File(name, resource) => writeFile(path.resolve(name), resource)
+        case DirectoryEntry.Subdirectory(name, resource) => writeDir(path.resolve(name).nn, resource)
+        case DirectoryEntry.File(name, resource) => writeFile(path.resolve(name).nn, resource)
       }
 }

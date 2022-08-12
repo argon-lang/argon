@@ -36,7 +36,7 @@ private[emit] trait EmitTubeCommon extends UsingContext {
       ModuleFile(Seq(), name, path)
     else
       def escapeSegment(seg: String): String =
-        seg.replace("%", "%25").replace("/", "%2F")
+        seg.replace("%", "%25").nn.replace("/", "%2F").nn
 
       val escaped = path.ids.map(escapeSegment)
       ModuleFile(escaped.init, escaped.last, path)

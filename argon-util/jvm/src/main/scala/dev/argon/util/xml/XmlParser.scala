@@ -30,8 +30,8 @@ object XmlParser {
 
   def parse(reader: Reader): Task[Element] =
     ZIO.attemptBlockingInterrupt {
-      val xmlif = XMLInputFactory.newFactory()
-      Using.resource(xmlif.createXMLStreamReader(reader))(parseImpl)
+      val xmlif = XMLInputFactory.newFactory().nn
+      Using.resource(xmlif.createXMLStreamReader(reader).nn)(parseImpl)
     }
 
   private def parseImpl(reader: XMLStreamReader): Element =
@@ -42,14 +42,14 @@ object XmlParser {
       reader.next() match {
         case START_ELEMENT =>
           def convertName(name: QName): Name =
-            Name(Namespace(name.getNamespaceURI), name.getLocalPart)
+            Name(Namespace(name.getNamespaceURI.nn), name.getLocalPart.nn)
 
 
-          val elemName = convertName(reader.getName)
+          val elemName = convertName(reader.getName.nn)
           val attributes = new mutable.ArrayBuffer[Attribute](reader.getAttributeCount)
           for i <- 0 until reader.getAttributeCount do
-            val attrName = convertName(reader.getAttributeName(i))
-            attributes.addOne(Attribute(attrName, reader.getAttributeValue(i)))
+            val attrName = convertName(reader.getAttributeName(i).nn)
+            attributes.addOne(Attribute(attrName, reader.getAttributeValue(i).nn))
           end for
 
           val element = Element(elemName, attributes.toSeq, Seq.empty)
@@ -64,7 +64,7 @@ object XmlParser {
             elements.top._2.addOne(element2)
 
         case CHARACTERS | SPACE =>
-          elements.top._2.addOne(Characters(reader.getText))
+          elements.top._2.addOne(Characters(reader.getText.nn))
 
         case _ => ()
       }

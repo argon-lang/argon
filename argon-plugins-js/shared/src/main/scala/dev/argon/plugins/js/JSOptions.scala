@@ -65,7 +65,7 @@ object JSTubeOptionsMap:
             .toSeq
             .traverse { case (key, value) =>
               for
-                name <- NonEmptyList.fromList(key.split("\\.").toList).toRight { s"Key was empty: $key" }
+                name <- NonEmptyList.fromList(key.split("\\.").nn.map(_.nn).toList).toRight { s"Key was empty: $key" }
                 options <- summon[TomlCodec[JSTubeOptions]].decode(value)
               yield (TubeName(name), options)
             }
@@ -97,7 +97,7 @@ object JSModuleOptionsMap:
             .traverse { case (key, value) =>
               for
                 options <- summon[OptionDecoder[E, JSModuleOptions[Any, E]]].decode(value)
-              yield (ModulePath(if key.isEmpty then Seq.empty else key.split("/").toSeq), options)
+              yield (ModulePath(if key.isEmpty then Seq.empty else key.split("/").nn.map(_.nn).toSeq), options)
             }
             .map { optMap =>
               JSModuleOptionsMap(optMap.toMap)

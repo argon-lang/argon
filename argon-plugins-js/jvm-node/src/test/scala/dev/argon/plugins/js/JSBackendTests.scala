@@ -54,7 +54,7 @@ object JSBackendTests extends ExecutionTests[JSPluginError] {
         fsEntries
           .filter { name => name.startsWith(libDir + "/") }
           .map { name =>
-            val subPath = name.substring(libDir.length + 1)
+            val subPath = name.substring(libDir.length + 1).nn
             if subPath == "index.js" then
               (".", Json.Str("./lib/" + subPath))
             else if subPath.endsWith("/index.js") then

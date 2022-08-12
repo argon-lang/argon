@@ -109,6 +109,7 @@ lazy val compilerOptions = Seq(
     "-feature",
     "-Ycheck-all-patmat",
     "-Yretain-trees",
+    "-Yexplicit-nulls",
     "-Xmax-inlines", "128",
     "-Wconf:id=E029:e,id=E165:e,cat=unchecked:e,cat=deprecation:e",
   ),
@@ -338,6 +339,7 @@ lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossT
       "-source",
       "future",
       "-language:strictEquality",
+      "-Yexplicit-nulls",
     ).contains),
 
     libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",

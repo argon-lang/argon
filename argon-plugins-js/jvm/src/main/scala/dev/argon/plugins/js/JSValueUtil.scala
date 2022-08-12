@@ -23,54 +23,54 @@ object JSValueUtil:
         .map(JSContextImpl(_))
 
     private def createContext(): Context =
-      Context.newBuilder("js")
-        .allowIO(true)
-        .fileSystem(new ResourceFileSystem)
-        .option("engine.WarnInterpreterOnly", false.toString)
-        .build()
+      Context.newBuilder("js").nn
+        .allowIO(true).nn
+        .fileSystem(new ResourceFileSystem).nn
+        .option("engine.WarnInterpreterOnly", false.toString).nn
+        .build().nn
   }
 
   final class JSContextImpl(ctx: Context) extends JSContext {
     override def fromMap(m: Map[String, JSValue]): JSValue =
-      Value.asValue(ProxyObject.fromMap(m.asJava))
+      Value.asValue(ProxyObject.fromMap(m.asJava)).nn
 
     override def fromSeq(s: Seq[JSValue]): JSValue =
-      Value.asValue(ProxyArray.fromList(s.asJava))
+      Value.asValue(ProxyArray.fromList(s.asJava)).nn
 
     override def fromString(s: String): JSValue =
-      Value.asValue(s)
+      Value.asValue(s).nn
 
     override def fromBoolean(b: Boolean): JSValue =
-      Value.asValue(b)
+      Value.asValue(b).nn
 
     override def fromDouble(d: Double): JSValue =
-      Value.asValue(d)
+      Value.asValue(d).nn
 
     override def fromBigInt(i: BigInt): JSValue =
-      ctx.eval("js", "BigInt").execute(i.bigInteger.toString)
+      ctx.eval("js", "BigInt").nn.execute(i.bigInteger.toString).nn
 
     override def fromRegExp(r: JSRegExp): JSValue =
-      ctx.eval("js", "RegExp").execute(r.source, r.flags)
+      ctx.eval("js", "RegExp").nn.execute(r.source, r.flags).nn
 
     override def fromNull: JSValue =
-      Value.asValue(null)
+      Value.asValue(null).nn
 
 
 
     private def getBigInt(value: Value): Option[BigInt] =
-      val result = ctx.eval("js", "x => (typeof(x) == 'bigint' ? x.toString() : null)").execute(value)
+      val result = ctx.eval("js", "x => (typeof(x) == 'bigint' ? x.toString() : null)").nn.execute(value).nn
       if result.isNull then
         None
       else
-        Some(BigInt(result.asString))
+        Some(BigInt(result.asString.nn))
     end getBigInt
 
     private def isRegExp(value: Value): Boolean =
-      ctx.eval("js", "x => x instanceof RegExp").execute(value).asBoolean()
+      ctx.eval("js", "x => x instanceof RegExp").nn.execute(value).nn.asBoolean()
 
-    override def decode(value: JSValue): DecodedJSObject | DecodedJSArray | String | Boolean | Double | BigInt | JSRegExp =
+    override def decode(value: JSValue): DecodedJSObject | DecodedJSArray | String | Boolean | Double | BigInt | JSRegExp | Null =
       if value.isString then
-        value.asString()
+        value.asString().nn
       else if value.isNumber then
         getBigInt(value).getOrElse(value.asDouble())
       else if value.isBoolean then
@@ -78,18 +78,18 @@ object JSValueUtil:
       else if value.isNull then
         null
       else if isRegExp(value) then
-        JSRegExp(value.getMember("source").asString(), value.getMember("flags").asString())
+        JSRegExp(value.getMember("source").nn.asString().nn, value.getMember("flags").nn.asString().nn)
       else if value.hasArrayElements then
         DecodedJSArray(
           (0L until value.getArraySize)
-            .map { i => value.getArrayElement(i) }
+            .map { i => value.getArrayElement(i).nn }
         )
       else if value.hasMembers then
         DecodedJSObject(
-          value.getMemberKeys
+          value.getMemberKeys.nn
             .asScala
             .iterator
-            .map { key => key -> value.getMember(key) }
+            .map { key => key -> value.getMember(key).nn }
             .toMap
         )
       else
@@ -100,13 +100,13 @@ object JSValueUtil:
     override protected def generateImpl(value: JSValue): IO[JSGenerateError, String] =
       ZIO.attempt {
         val source = Source
-          .newBuilder("js", astringGenerateScript, "astring_generate.mjs")
-          .mimeType("application/javascript+module")
-          .build()
+          .newBuilder("js", astringGenerateScript, "astring_generate.mjs").nn
+          .mimeType("application/javascript+module").nn
+          .build().nn
 
-        val generate = ctx.eval(source)
+        val generate = ctx.eval(source).nn
 
-        generate.execute(value).asString()
+        generate.execute(value).nn.asString().nn
       }.refineOrDie {
         case NonFatal(ex) => JSGenerateError(ex)
       }
@@ -114,11 +114,11 @@ object JSValueUtil:
     override protected def parseImpl(fileName: String, text: String): IO[JSParseError, JSValue] =
       ZIO.attempt {
         val source = Source
-          .newBuilder("js", acornParseScript, "acorn_parse.mjs")
-          .mimeType("application/javascript+module")
-          .build()
+          .newBuilder("js", acornParseScript, "acorn_parse.mjs").nn
+          .mimeType("application/javascript+module").nn
+          .build().nn
 
-        val parse = ctx.eval(source)
+        val parse = ctx.eval(source).nn
 
         val options = ProxyObject.fromMap(Map(
           "ecmaVersion" -> 2022,
@@ -127,7 +127,7 @@ object JSValueUtil:
           "sourceFile" -> fileName,
         ).asJava)
 
-        parse.execute(text, options)
+        parse.execute(text, options).nn
       }.refineOrDie {
         case NonFatal(ex) => JSParseError(ex)
       }

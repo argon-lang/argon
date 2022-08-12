@@ -55,9 +55,9 @@ abstract class ImplicitResolver[-R, +E] {
     override type TConstructor = ExprConstructor
     override type TPredicateFunction = ExprConstructor
 
-    override def variableCanEqual: CanEqual[THole, THole] = summon
-    override def constructorCanEqual: CanEqual[ExprConstructor, ExprConstructor] = summon
-    override def predicateFunctionCanEqual: CanEqual[ExprConstructor, ExprConstructor] = summon
+    override def variableCanEqual: CanEqual[THole, THole] = summon[CanEqual[THole, THole]]
+    override def constructorCanEqual: CanEqual[ExprConstructor, ExprConstructor] = summon[CanEqual[ExprConstructor, ExprConstructor]]
+    override def predicateFunctionCanEqual: CanEqual[ExprConstructor, ExprConstructor] = summon[CanEqual[ExprConstructor, ExprConstructor]]
   }
 
   enum TCAtomicProof {

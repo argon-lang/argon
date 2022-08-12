@@ -30,8 +30,8 @@ object JSOutputExecutor {
       }
       val sandboxConsole = new NodeConsole(stdout)
 
-      val sandbox = js.Object.create(null).asInstanceOf[js.Object & js.Dynamic]
-      sandbox.console = js.Object.create(null)
+      val sandbox = js.Object.create(null.asInstanceOf[js.Object]).asInstanceOf[js.Object & js.Dynamic]
+      sandbox.console = js.Object.create(null.asInstanceOf[js.Object])
 
       val _ = NodeVM.createContext(sandbox)
 

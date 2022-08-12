@@ -9,6 +9,7 @@ import java.nio.file.attribute.FileAttribute
 import java.nio.file.spi.FileSystemProvider
 import java.util.{HashMap as JHashMap, Map as JMap, Set as JSet}
 import scala.jdk.CollectionConverters.*
+import dev.argon.util.{*, given}
 
 
 private[js] final class ResourceFileSystem extends FileSystem {
@@ -21,9 +22,9 @@ private[js] final class ResourceFileSystem extends FileSystem {
       url
   }
 
-  override def parsePath(uri: URI): Path = Path.of(uri)
+  override def parsePath(uri: URI): Path = Path.of(uri).nn
 
-  override def parsePath(path: String): Path = Path.of(path)
+  override def parsePath(path: String): Path = Path.of(path).nn
 
   override def checkAccess(path: Path, modes: JSet[? <: AccessMode], linkOptions: LinkOption*): Unit = {
     val _ = getFileURL(path)
@@ -36,12 +37,12 @@ private[js] final class ResourceFileSystem extends FileSystem {
     throw new UnsupportedOperationException()
 
   override def newByteChannel(path: Path, options: JSet[? <: OpenOption], attrs: FileAttribute[?]*): SeekableByteChannel =
-    val uri = getFileURL(path).toURI
+    val uri = getFileURL(path).toURI.nn
 
     if uri.getScheme == "jar" then
-      FileSystemProvider.installedProviders()
+      FileSystemProvider.installedProviders().nn
         .asScala
-        .find { _.getScheme.equalsIgnoreCase("jar") }
+        .find { _.getScheme.nn.equalsIgnoreCase("jar") }
         .foreach { provider =>
           try provider.getFileSystem(uri)
           catch {
@@ -51,7 +52,7 @@ private[js] final class ResourceFileSystem extends FileSystem {
         }
     end if
 
-    Files.newByteChannel(Path.of(uri))
+    Files.newByteChannel(Path.of(uri)).nn
   end newByteChannel
 
   override def newDirectoryStream(dir: Path, filter: DirectoryStream.Filter[? >: Path]): DirectoryStream[Path] =

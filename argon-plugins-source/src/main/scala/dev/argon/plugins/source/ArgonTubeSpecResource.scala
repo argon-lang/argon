@@ -21,7 +21,7 @@ object ArgonTubeSpecResource:
             summon[BinaryResourceDecoder[TextResource, R, E]]
               .decode(resource)
               .asText
-              .mapChunks { strings => strings.flatMap(_.toCharArray) }
+              .mapChunks { strings => strings.flatMap(_.toCharArray.nn) }
               .toChannel
               >>> ArgonSourceParser.parseTubeSpec[E](fileName)
             ).toStream

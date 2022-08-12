@@ -3,6 +3,7 @@ package dev.argon.cli
 import dev.argon.io.{BinaryResourceDecoder, JsonResource}
 import dev.argon.platform.*
 import dev.argon.util.toml.Toml
+import dev.argon.util.{*, given}
 import dev.argon.build.Compile
 import zio.*
 

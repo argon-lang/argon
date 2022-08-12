@@ -27,14 +27,14 @@ object JSOutputExecutor {
       ZIO.attempt {
         val output = new ByteArrayOutputStream()
 
-        val context = Context.newBuilder("js")
-          .allowIO(true)
-          .out(output)
-          .err(output)
-          .in(new NullInputStream(0))
-          .fileSystem(new JSFileSystem(fileSystem))
-          .option("engine.WarnInterpreterOnly", false.toString)
-          .build()
+        val context = Context.newBuilder("js").nn
+          .allowIO(true).nn
+          .out(output).nn
+          .err(output).nn
+          .in(new NullInputStream(0)).nn
+          .fileSystem(new JSFileSystem(fileSystem)).nn
+          .option("engine.WarnInterpreterOnly", false.toString).nn
+          .build().nn
         try {
           val mainSource = Source.newBuilder("js",
             """
@@ -44,9 +44,9 @@ object JSOutputExecutor {
               |await argonRuntime.trampoline.resolve(main$p$z$r$z([]));
               |""".stripMargin,
             "/argon/main.mjs"
-          )
-            .mimeType("application/javascript+module")
-            .build()
+          ).nn
+            .mimeType("application/javascript+module").nn
+            .build().nn
 
           val _ = context.eval(mainSource)
 
@@ -99,8 +99,8 @@ object JSOutputExecutor {
     end if
 
   private final class JSFileSystem(fs: Map[String, String]) extends FileSystem {
-    override def parsePath(uri: URI): Path = Path.of(uri)
-    override def parsePath(path: String): Path = Path.of(path)
+    override def parsePath(uri: URI): Path = Path.of(uri).nn
+    override def parsePath(path: String): Path = Path.of(path).nn
 
     override def checkAccess(path: Path, modes: JSet[? <: AccessMode], linkOptions: LinkOption*): Unit = ()
 
@@ -122,7 +122,7 @@ object JSOutputExecutor {
 
     override def toAbsolutePath(path: Path): Path =
       if !path.isAbsolute then
-        Path.of("/" + path.toString)
+        Path.of("/" + path.toString).nn
       else
         path
 

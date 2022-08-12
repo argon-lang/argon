@@ -3,7 +3,7 @@ package dev.argon.plugins.js.emit
 import dev.argon.compiler.signature.*
 import dev.argon.compiler.definitions.HasDeclaration
 import dev.argon.compiler.module.ModuleName
-import dev.argon.util.*
+import dev.argon.util.{*, given}
 import dev.argon.parser.IdentifierExpr
 import zio.*
 import zio.stm.*
