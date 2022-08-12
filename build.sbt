@@ -30,7 +30,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
     "dev.zio" %%% "zio-json" % "0.3.0-RC10",
-    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.1.4",
+    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.1.5",
 
 
   ),
@@ -38,9 +38,9 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
 )
 
 lazy val npmDeps = Seq(
-  "jszip" -> "^3.10.0",
+  "jszip" -> "^3.10.1",
   "@xmldom/xmldom" -> "^0.8.2",
-  "acorn" -> "^8.7.1",
+  "acorn" -> "^8.8.0",
   "astring" -> "1.8.3",
 )
 
@@ -76,10 +76,6 @@ lazy val commonJVMSettings = Seq(
 lazy val commonBrowserSettings = sharedJSNodeSettings
 
 lazy val commonNodeSettings = sharedJSNodeSettings ++ Seq(
-
-  npmDependencies ++= Seq(
-    "node-stream-zip" -> "^1.15.0",
-  ),
 
   jsEnv := new NodeJSEnv(
     NodeJSEnv.Config()
