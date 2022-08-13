@@ -39,7 +39,7 @@ private[js] final class ResourceFileSystem extends FileSystem {
   override def newByteChannel(path: Path, options: JSet[? <: OpenOption], attrs: FileAttribute[?]*): SeekableByteChannel =
     val uri = getFileURL(path).toURI.nn
 
-    if uri.getScheme == "jar" then
+    if uri.getScheme.nn == "jar" then
       FileSystemProvider.installedProviders().nn
         .asScala
         .find { _.getScheme.nn.equalsIgnoreCase("jar") }

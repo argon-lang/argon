@@ -69,7 +69,7 @@ object SourceClassConstructor {
               type FieldInitializationStatement = ClassConstructorImplementationC.FieldInitializationStatement & HasContext[context.type]
               type BaseClassConstructorCallStatement = ClassConstructorImplementationC.BaseClassConstructorCallStatement & HasContext[context.type]
 
-              final case class UnresolvedFieldInit(field: exprConverter.exprContext.MemberVariable, value: exprConverter.exprContext.WrapExpr)
+              final case class UnresolvedFieldInit(field: context.ExprContext.MemberVariable, fieldConv: exprConverter.exprContext.MemberVariable, value: exprConverter.exprContext.WrapExpr)
 
               def stmtsWithLocation(stmts: Seq[WithSource[parser.Stmt]]): Option[WithSource[Seq[WithSource[parser.Stmt]]]] =
                 for
@@ -112,7 +112,16 @@ object SourceClassConstructor {
                     convertStmtBlock(env, stmts)
                       .map { case ExprResult(expr, env) => (acc :+ expr, env) }
 
-                  case ((acc, env), Right(fieldInit)) => ???
+                  case ((acc, env), Right(fieldInit)) =>
+                    for
+                      fields <- owner.arClass.fields
+                      field <- ZIO.fromEither(
+                        fields.find(_.name.get == fieldInit.value.name)
+                          .toRight { DiagnosticError.FieldNotFound(DiagnosticSource.Location(fieldInit.location), fieldInit.value.name) }
+                      )
+                      fieldConv = ArgonExprContext.convertMemberVariable[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(field)
+                      (ExprResult(value, env)) <- exprConverter.convertExpr(fieldInit.value.value).check(env, fieldConv.varType)
+                    yield (acc :+ UnresolvedFieldInit(field, fieldConv, value), env)
                 }
 
               def convertBaseCall(env: Env)(stmt: WithSource[parser.InitializeStmt]): Comp[(exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.ClassConstructorCall], Env)] =
@@ -125,7 +134,16 @@ object SourceClassConstructor {
                       .map { case (resolvedExpr, env)  => (acc :+ Left(resolvedExpr), env) }
 
                   case ((acc, env), fieldInit: UnresolvedFieldInit) =>
-                    ???
+                    for
+                      (resolvedValue, env) <- exprConverter.resolveHoles(env, fieldInit.value)
+
+                      fieldInitResolved = new ClassConstructorImplementationC.FieldInitializationStatement {
+                        override val context: ctx.type = ctx
+                        override val field: context.ExprContext.MemberVariable = fieldInit.field
+                        override val value: context.ExprContext.WrapExpr = resolvedValue
+                      }
+
+                    yield (acc :+ Right(fieldInitResolved), env)
                 }
 
               val (preInitStmts, initStmt, postInitStmts) = divideBody(stmt.body.value, Seq.empty, Seq.empty)

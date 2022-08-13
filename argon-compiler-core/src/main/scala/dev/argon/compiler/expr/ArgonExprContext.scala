@@ -420,9 +420,7 @@ object ArgonExprContext {
         } yield ec2.InstanceVariable(variable.method, varType2, variable.name)
 
       case variable: ec1.MemberVariable =>
-        for {
-          varType2 <- convertWrapExpr(context)(ec1, ec2)(f)(variable.varType)
-        } yield ec2.MemberVariable(variable.ownerClass, varType2, variable.name)
+        convertMemberVariable(context)(ec1, ec2)(f)(variable)
 
       case variable: ec1.ParameterVariable =>
         for {
@@ -448,6 +446,19 @@ object ArgonExprContext {
     for {
       varType2 <- convertWrapExpr(context)(ec1, ec2)(f)(variable.varType)
     } yield ec2.LocalVariable(variable.id, varType2, variable.name, variable.isMutable)
+
+  def convertMemberVariable[F[+_] : Monad]
+  (context: Context)
+  (
+    ec1: ArgonExprContext & HasContext[context.type],
+    ec2: ArgonExprContext & HasContext[context.type],
+  )
+  (f: ec1.THole => F[ec2.WrapExpr])
+  (variable: ec1.MemberVariable)
+  : F[ec2.MemberVariable] =
+    for {
+      varType2 <- convertWrapExpr(context)(ec1, ec2)(f)(variable.varType)
+    } yield ec2.MemberVariable(variable.ownerClass, varType2, variable.name)
 
   private def convertPatternExpr[F[+_]: Monad]
     (

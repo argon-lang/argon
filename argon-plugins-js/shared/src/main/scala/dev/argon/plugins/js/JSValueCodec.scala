@@ -91,6 +91,7 @@ object JSValueCodec extends Derivation[JSValueCodec]:
       a.fold(context.fromNull, summon[JSValueCodec[A]].toJSValue(context))
 
     override def fromJSValue(context: JSContext)(value: JSValue): Either[String, Nullable[A]] =
+//      given CanEqual[context.DecodedJSValueNotNull | Null, Null] = canEqualNullRight[context.DecodedJSValueNotNull, context.DecodedJSValueNotNull | Null, Null]
       if context.decode(value) == null then
         Right(Nullable(null))
       else

@@ -288,25 +288,31 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           sig <- ctor.signatureUnsubstituted
           params <- createSigParams(ctor, 0, sig)
 
-          preInit <- ZIO.foreach(impl.preInitialization) {
-            case Left(expr) =>
-              emitScope(createEmitState)(emitWrapExprAsStmt(_)(expr))
+          body <- emitScope(createEmitState) { emitState =>
+            for
+              preInit <- ZIO.foreach(impl.preInitialization) {
+                case Left(expr) =>
+                  emitWrapExprAsStmt(emitState)(expr)
 
-            case Right(fieldInit) =>
-              ???
+                case Right(fieldInit) =>
+                  for
+                    value <- emitWrapExpr(emitState.subExpr)(fieldInit.value)
+                    initExpr = estree.ThisExpression().index(id("fields").prop(getEscapedName(fieldInit.field.name.get))) ::= value
+                  yield Seq(exprStmt(initExpr))
+              }
+
+              baseCall <- ZIO.foreach(impl.baseConstructorCall) { baseCall =>
+                ??? : Comp[Seq[estree.Statement]]
+              }
+
+              postInit <- emitWrapExprAsStmt(emitState)(impl.postInitialization)
+            yield preInit.flatten ++ baseCall.toList.flatten ++ postInit
           }
 
-          baseCall <- ZIO.foreach(impl.baseConstructorCall) { baseCall =>
-            emitScope(createEmitState)(emitExprAsStmt(_)(baseCall.baseCall))
-          }
-
-          postInit <- emitScope(createEmitState)(emitWrapExprAsStmt(_)(impl.postInitialization))
         yield estree.FunctionExpression(
           id = Nullable(null),
           params = params,
-          body = block(
-            (preInit.flatten ++ baseCall.toList.flatten ++ postInit)*
-          ),
+          body = block(body*),
           generator = false,
           async = true,
         )
@@ -622,13 +628,42 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
   private def emitMethodCall(emitState: EmitState, expr: ArExpr[ExprConstructor], ctor: expr.constructor.type & ExprConstructor.MethodCall): Comp[estree.Expression] =
     for
       sig <- ctor.method.signatureUnsubstituted
+      erasedSig <- SignatureEraser(context).erasedWithResult(sig)
 
       (instanceExpr, methodOwnerType, argExprs) = expr.getArgs(ctor)
 
       instance <- emitWrapExpr(emitState.subExpr)(instanceExpr)
-      methodValue <- emitMethodValue(emitState, ctor.method, methodOwnerType)
+
+      ownerType <- methodOwnerType match {
+        case ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) =>
+          emitExpr(emitState.subExpr)(classType)
+
+        case ExprConstructor.MethodCallOwnerType.OwnedByTrait(traitType) =>
+          emitExpr(emitState.subExpr)(traitType)
+      }
+
+      isStatic =
+        ctor.method.owner match
+          case _: OwnedByClass[?] | _: OwnedByTrait[?] => false
+          case _: OwnedByClassStatic[?] | _: OwnedByTraitStatic[?] => true
+        end match
+
+      methodKeyName = getOverloadExportName(
+        ctor.method.owner match {
+          case owner: OwnedByClass[?] => owner.ownedName
+          case owner: OwnedByClassStatic[?] => owner.ownedName
+          case owner: OwnedByTrait[?] => owner.ownedName
+          case owner: OwnedByTraitStatic[?] => owner.ownedName
+        },
+        erasedSig
+      )
+
       args <- emitArgExprs(emitState, argExprs, sig, Seq())
-    yield instance.index(methodValue.prop("symbol")).call(args *)
+    yield
+      if isStatic then
+        ownerType.prop("staticMethods").prop(methodKeyName).prop("implementation").prop("call").call((instance +: args)*)
+      else
+        instance.index(ownerType.prop("methods").prop(methodKeyName).prop("symbol")).call(args*)
 
   private def emitArgExprs(emitState: EmitState, args: Seq[WrapExpr], sig: Signature[WrapExpr, ?], prev: Seq[estree.Expression]): Comp[Seq[estree.Expression]] =
     (args, sig) match {
@@ -640,36 +675,6 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
       case _ => ZIO.succeed(prev)
     }
-
-  private def emitMethodValue(emitState: EmitState, method: ArMethod, methodOwnerType: ExprConstructor.MethodCallOwnerType): Comp[estree.Expression] =
-    for
-      ownerType <- methodOwnerType match {
-        case ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) =>
-          emitExpr(emitState.subExpr)(classType)
-
-        case ExprConstructor.MethodCallOwnerType.OwnedByTrait(traitType) =>
-          emitExpr(emitState.subExpr)(traitType)
-      }
-
-      methodPropName =
-        method.owner match
-          case _: OwnedByClass[?] | _: OwnedByTrait[?] => "methods"
-          case _: OwnedByClassStatic[?] | _: OwnedByTraitStatic[?] => "staticMethods"
-        end match
-
-      sig <- method.signatureUnsubstituted
-      erasedSig <- SignatureEraser(context).erasedWithResult(sig)
-      methodKeyName = getOverloadExportName(
-        method.owner match {
-          case owner: OwnedByClass[?] => owner.ownedName
-          case owner: OwnedByClassStatic[?] => owner.ownedName
-          case owner: OwnedByTrait[?] => owner.ownedName
-          case owner: OwnedByTraitStatic[?] => owner.ownedName
-        },
-        erasedSig
-      )
-
-    yield ownerType.prop(methodPropName).prop(methodKeyName)
 
   private def emitOwnedByModule(ownership: OwnedByModule, sig: ErasedSignature): Comp[estree.Expression] =
     getImportName(ImportSpecifier(ownership.module.tube.tubeName, ownership.module.moduleName.path, ownership.ownedName, sig))

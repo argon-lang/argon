@@ -16,7 +16,9 @@ trait JSContext {
   def fromRegExp(r: JSRegExp): JSValue
   def fromNull: JSValue
 
-  def decode(value: JSValue): DecodedJSObject | DecodedJSArray | String | Boolean | Double | BigInt | JSRegExp | Null
+  type DecodedJSValueNotNull = DecodedJSObject | DecodedJSArray | String | Boolean | Double | BigInt | JSRegExp
+
+  def decode(value: JSValue): DecodedJSValueNotNull | Null
 
 
   final def generate[A: JSValueCodec](a: A): IO[JSGenerateError, String] =
