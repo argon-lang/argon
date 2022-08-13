@@ -18,7 +18,7 @@ abstract class ArClassC extends Definition with UsingContext derives CanEqual {
   def signature: Comp[Signature[WrapExpr, ClassResult]]
   def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByClass[owner.type]]]]]
   def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByClassStatic[owner.type]]]]]
-  def constructors: Comp[Seq[ClassConstructor]]
+  def constructors: Comp[Seq[ClassConstructor & HasDeclaration[IsDeclaration]]]
   def fields: Comp[Seq[MemberVariable]]
 
   type ClassResult = (WrapExpr, Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])

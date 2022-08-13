@@ -17,8 +17,9 @@ trait Plugin[-R0, +E0] {
   given optionDecoder[E >: E0]: OptionDecoder[E, Options[Any, E]]
   given outputHandler[R <: R0, E >: E0]: OutputHandler[R, E, Output[R, E]]
 
-  type ExternalMethodImplementation
-  type ExternalFunctionImplementation
+  type ExternMethodImplementation
+  type ExternFunctionImplementation
+  type ExternClassConstructorImplementation
 
 
   def emitTube
@@ -32,13 +33,19 @@ trait Plugin[-R0, +E0] {
   def loadExternMethod[R <: R0, E >: E0]
   (options: Options[R, E])
   (id: String)
-  : ZIO[R, E, Option[ExternalMethodImplementation]]
+  : ZIO[R, E, Option[ExternMethodImplementation]]
 
 
   def loadExternFunction[R <: R0, E >: E0]
   (options: Options[R, E])
   (id: String)
-  : ZIO[R, E, Option[ExternalFunctionImplementation]]
+  : ZIO[R, E, Option[ExternFunctionImplementation]]
+
+
+  def loadExternClassConstructor[R <: R0, E >: E0]
+  (options: Options[R, E])
+  (id: String)
+  : ZIO[R, E, Option[ExternClassConstructorImplementation]]
 
 
   def tubeLoaders: Map[String, TubeLoader[R0, E0]]

@@ -176,6 +176,15 @@ trait ExprUtil extends UsingContext {
 
   val traitSigHandler: SignatureHandler[TraitResultConv] = new TraitSigHandlerBase {}
 
+  protected trait ClassConstructorSigHandlerBase extends SignatureHandler[Unit] :
+    override def substituteResultMany(subst: Map[Variable, WrapExpr])(res: Unit): Unit =
+      ()
+
+    override def resultReferences(variable: Variable)(res: Unit): Boolean = false
+  end ClassConstructorSigHandlerBase
+
+  val classConstructorSigHandler: SignatureHandler[Unit] = new ClassConstructorSigHandlerBase {}
+
   trait Scope {
     def lookup(id: IdentifierExpr): LookupResult[ScopeElement]
 
@@ -184,6 +193,9 @@ trait ExprUtil extends UsingContext {
         case Some(id) => Scope.WithValue(id, variable, this)
         case None => this
       end match
+
+    final def addVariables(variables: Seq[Variable]): Scope =
+      variables.foldLeft(this)(_.addVariable(_))
 
     def addParameterVariableElements(map: Map[IdentifierExpr, ParameterVariableElement]): Scope =
       Scope.WithMap(map, this)
@@ -341,6 +353,7 @@ trait ExprUtil extends UsingContext {
   def anyType: WrapExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.AnyType, EmptyTuple))
   def neverType: WrapExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.NeverType, EmptyTuple))
 
-
+  def unitValue: WrapExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadTuple, Seq()))
+  def unitType: WrapExpr = unitValue
 
 }

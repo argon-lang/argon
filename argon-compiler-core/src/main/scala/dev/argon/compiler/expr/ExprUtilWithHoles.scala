@@ -26,6 +26,13 @@ trait ExprUtilWithHoles extends ExprUtil {
       env <- envRef.get
     yield (convExpr, env)
 
+  def resolveHolesArExpr(env: Env, expr: WrapExpr): Comp[(context.ExprContext.WrapExpr, Env)] =
+    for
+      envRef <- Ref.Synchronized.make(env)
+      convExpr <- ArgonExprContext.convertWrapExpr(context)(exprContext, context.ExprContext)(resolveHole(envRef))(expr)
+      env <- envRef.get
+    yield (convExpr, env)
+
   private def resolveHole(envRef: Ref.Synchronized[Env])(hole: UniqueIdentifier): Comp[context.ExprContext.WrapExpr] =
     ???
 
@@ -96,8 +103,7 @@ trait ExprUtilWithHoles extends ExprUtil {
                   ZIO.foreach(baseTraits) { baseTrait =>
                     for {
                       env <- envState.get
-                      baseTrait2Res <- resolveHolesTraitType(env, baseTrait)
-                      (baseTrait2, env) = baseTrait2Res
+                      (baseTrait2, env) <- resolveHolesTraitType(env, baseTrait)
                       _ <- envState.set(env)
                     } yield baseTrait2
                   }
@@ -132,8 +138,7 @@ trait ExprUtilWithHoles extends ExprUtil {
               ZIO.foreach(baseTraits) { baseTrait =>
                 for {
                   env <- envState.get
-                  baseTrait2Res <- resolveHolesTraitType(env, baseTrait)
-                  (baseTrait2, env) = baseTrait2Res
+                  (baseTrait2, env) <- resolveHolesTraitType(env, baseTrait)
                   _ <- envState.set(env)
                 } yield baseTrait2
               }
@@ -144,6 +149,14 @@ trait ExprUtilWithHoles extends ExprUtil {
     end new
 
 
+  override val classConstructorSigHandler: SignatureHandlerPlus[Unit, Unit] =
+    new SignatureHandlerPlus[Unit, Unit] with ClassConstructorSigHandlerBase:
+      override def convertResult(res: Unit): Unit =
+        ()
+
+      override def resolveResultHoles(env: Env, res: Unit): Comp[(Unit, Env)] =
+        ZIO.succeed(((), env))
+    end new
 
   final def convertSig[Res1, Res2](sigHandler: SignatureHandlerPlus[Res1, Res2])
                                   (sig: Signature[context.ExprContext.WrapExpr, Res1])
@@ -300,7 +313,7 @@ trait ExprUtilWithHoles extends ExprUtil {
         method.signatureUnsubstituted.map { sig => Seq.fill(sig.parameterCount)(ExprRelation.SyntacticEquality) }
 
       protected override def classConstructorRelations(classCtor: ClassConstructor): Comp[Seq[ExprRelation]] =
-        classCtor.signature.map { sig => Seq.fill(sig.parameterCount)(ExprRelation.SyntacticEquality) }
+        classCtor.signatureUnsubstituted.map { sig => Seq.fill(sig.parameterCount)(ExprRelation.SyntacticEquality) }
 
       override protected def natLessThanFunction: Comp[ArFunc] =
         loadKnownExport[ModuleElementC.FunctionElement[context.type, ?]](ImportSpecifier(

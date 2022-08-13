@@ -6,8 +6,9 @@ trait PluginContextAdapter {
   val context: Context
   val plugin: Plugin[context.Env, context.Error]
 
-  def extractExternMethodImplementation(impl: context.ExternMethodImplementation): plugin.ExternalMethodImplementation
-  def extractExternFunctionImplementation(impl: context.ExternFunctionImplementation): plugin.ExternalFunctionImplementation
+  def extractExternMethodImplementation(impl: context.ExternMethodImplementation): plugin.ExternMethodImplementation
+  def extractExternFunctionImplementation(impl: context.ExternFunctionImplementation): plugin.ExternFunctionImplementation
+  def extractExternClassConstructorImplementation(impl: context.ExternClassConstructorImplementation): plugin.ExternClassConstructorImplementation
 }
 
 object PluginContextAdapter {

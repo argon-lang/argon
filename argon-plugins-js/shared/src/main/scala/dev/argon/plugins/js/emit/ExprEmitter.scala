@@ -3,7 +3,7 @@ package dev.argon.plugins.js.emit
 import dev.argon.util.{*, given}
 import dev.argon.plugins.js.*
 import dev.argon.compiler.*
-import dev.argon.compiler.definitions.{FunctionImplementationC, HasDeclaration, MethodImplementationC}
+import dev.argon.compiler.definitions.{ClassConstructorImplementationC, FunctionImplementationC, HasDeclaration, MethodImplementationC}
 import dev.argon.compiler.module.{ModuleName, ModulePath}
 import dev.argon.compiler.signature.*
 import dev.argon.compiler.tube.TubeName
@@ -49,13 +49,10 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     }.commit
 
 
-  private def getVariableName(variable: LocalVariable | InstanceVariable | ParameterVariable): UIO[String] =
+  private def getVariableName(variable: LocalVariable | ParameterVariable): UIO[String] =
     variable match
       case variable: context.ExprContext.LocalVariable =>
         getOrInsertVariable(localNameMap)(variable.id)
-
-      case variable: context.ExprContext.InstanceVariable =>
-        getOrInsertVariable(instanceNameMap)(variable.method.id)
 
       case variable: context.ExprContext.ParameterVariable =>
         getOrInsertVariable(parameterNameMap)((variable.owner.id, variable.parameterIndex))
@@ -85,6 +82,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       sigParamNames <- getSigParamVarNames(arClass)(sig)
 
       // Constructors
+      ctors <- arClass.constructors
+      ctorStmts <- createClassCtors(ctors)
 
       // Methods
       methods <- arClass.methods
@@ -117,6 +116,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         arrow(sigParamNames*) ==> Seq(
 
           const("constructors") := id("Object").prop("create").call(literal(null)),
+          block(ctorStmts*),
 
           const("methods") := id("Object").prop("create").call(literal(null)),
           block(methodStmts*),
@@ -263,7 +263,67 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         ))
     }
 
-  private def createSigParams(owner: ParameterVariableOwner, index: Int, sig: Signature[WrapExpr, WrapExpr]): Comp[Seq[estree.Pattern]] =
+
+  private def createClassCtors(ctors: Seq[ClassConstructor & HasDeclaration[true]]): Comp[Seq[estree.Statement]] =
+    ZIO.foreach(ctors) { ctor =>
+        for
+          ctorExpr <- createClassCtor(ctor)
+          ctorSig <- ctor.signatureUnsubstituted
+          ctorSigErased <- SignatureEraser(context).erasedNoResult(ctorSig)
+
+        yield id("constructors").prop(getOverloadExportName(None, ctorSigErased)) ::= ctorExpr
+    }
+
+  private def createClassCtor(ctor: ClassConstructor & HasDeclaration[true]): Comp[estree.Expression] =
+    ctor.implementation.flatMap {
+      case impl: ClassConstructorImplementationC.ExpressionBody =>
+        def createEmitState(scopeVars: TRef[Seq[estree.VariableDeclaration]]): EmitState =
+          EmitState(
+            tailPosition = false,
+            discardValue = true,
+            scopeVars = scopeVars
+          )
+
+        for
+          sig <- ctor.signatureUnsubstituted
+          params <- createSigParams(ctor, 0, sig)
+
+          preInit <- ZIO.foreach(impl.preInitialization) {
+            case Left(expr) =>
+              emitScope(createEmitState)(emitWrapExprAsStmt(_)(expr))
+
+            case Right(fieldInit) =>
+              ???
+          }
+
+          baseCall <- ZIO.foreach(impl.baseConstructorCall) { baseCall =>
+            emitScope(createEmitState)(emitExprAsStmt(_)(baseCall.baseCall))
+          }
+
+          postInit <- emitScope(createEmitState)(emitWrapExprAsStmt(_)(impl.postInitialization))
+        yield estree.FunctionExpression(
+          id = Nullable(null),
+          params = params,
+          body = block(
+            (preInit.flatten ++ baseCall.toList.flatten ++ postInit)*
+          ),
+          generator = false,
+          async = true,
+        )
+
+      case impl: ClassConstructorImplementationC.External =>
+        val funcDecl = adapter.extractExternClassConstructorImplementation(impl.impl)
+        ZIO.succeed(estree.FunctionExpression(
+          id = funcDecl.id,
+          params = funcDecl.params,
+          body = funcDecl.body,
+          generator = funcDecl.generator,
+          async = funcDecl.async,
+        ))
+    }
+
+
+  private def createSigParams(owner: ParameterVariableOwner, index: Int, sig: Signature[WrapExpr, ?]): Comp[Seq[estree.Pattern]] =
     sig match {
       case Signature.Parameter(_, true, _, _, next) => createSigParams(owner, index + 1, next)
       case Signature.Parameter(_, false, paramName, paramType, next) =>
@@ -361,6 +421,9 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           alternate = Nullable(block(falseBodyStmts*)),
         ))
 
+      case ctor: (expr.constructor.type & ExprConstructor.LoadTuple.type) if emitState.discardValue && expr.getArgs(ctor).isEmpty =>
+        ZIO.succeed(Seq())
+
       case _ if emitState.discardValue =>
         for
           jsExpr <- emitExpr(emitState)(expr)
@@ -435,6 +498,22 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
                 `return`(array()),
               )
 
+        case ctor: (expr.constructor.type & ExprConstructor.ClassConstructorCall) =>
+          val (instanceType, args) = expr.getArgs(ctor)
+          for
+            sig <- ctor.classCtor.signatureUnsubstituted
+            erasedSig <- SignatureEraser(context).erasedNoResult(sig)
+            keyName = getOverloadExportName(None, erasedSig)
+
+            instanceTypeExpr <- emitExpr(emitState.subExpr)(instanceType)
+            argExprs <- emitArgExprs(emitState, args, sig, Seq())
+          yield id(runtimeImportName).prop("createObject").call((
+            Seq(
+              instanceTypeExpr.prop("prototype"),
+              instanceTypeExpr.prop("constructors").prop(keyName),
+            ) ++ argExprs
+          )*)
+
         case ctor: (expr.constructor.type & ExprConstructor.FunctionCall) =>
           emitFunctionCall(emitState, expr, ctor).map { expr =>
             id(runtimeImportName).prop("trampoline").prop("resolve").call(expr).await.prop("value")
@@ -504,8 +583,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           ctor.variable match {
             case variable: LocalVariable => getVariableName(variable).map(id)
             case variable: ParameterVariable => getVariableName(variable).map(id)
-            case variable: InstanceVariable => getVariableName(variable).map(id)
-            case variable: MemberVariable => ???
+            case variable: InstanceVariable => ZIO.succeed(estree.ThisExpression())
+            case variable: MemberVariable => ZIO.succeed(estree.ThisExpression().index(id("fields").prop(getEscapedName(variable.name.get))))
           }
 
 

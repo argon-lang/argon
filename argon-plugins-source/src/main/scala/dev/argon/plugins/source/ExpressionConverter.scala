@@ -74,13 +74,13 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       case _ => ???
     }
 
-  def convertStmtList(stmts: WithSource[Vector[WithSource[parser.Stmt]]]): ExprFactory =
+  def convertStmtList(stmts: WithSource[Seq[WithSource[parser.Stmt]]]): ExprFactory =
     stmts.value match {
-      case Vector(WithSource(expr: parser.Expr, location)) =>
+      case Seq(WithSource(expr: parser.Expr, location)) =>
         EndOverloadExprFactory(convertExpr(WithSource(expr, location)))
 
       case head +: tail =>
-        val tailStmts: WithSource[Vector[WithSource[parser.Stmt]]] =
+        val tailStmts: WithSource[Seq[WithSource[parser.Stmt]]] =
           WithSource(
             tail,
             SourceLocation(
@@ -234,7 +234,29 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
         }
 
-      case parser.ClassConstructorExpr(classExpr) => ???
+      case parser.ClassConstructorExpr(classExpr) =>
+        class WrappedFactory(inner: Env => Comp[(Env, ExprFactory)]) extends ExprFactory {
+          override def synth(env: Env): Comp[ExprTypeResult] =
+            inner(env).flatMap { case (env, factory) => factory.synth(env) }
+
+          override def check(env: Env, t: WrapExpr): Comp[ExprResult] =
+            inner(env).flatMap { case (env, factory) => factory.check(env, t) }
+
+          override def mutate(value: MutatorValue): ExprFactory =
+            WrappedFactory(env => inner(env).map { case (env, factory) => (env, factory.mutate(value)) })
+
+          override def invoke(arg: ArgumentInfo): ExprFactory =
+            WrappedFactory(env => inner(env).map { case (env, factory) => (env, factory.invoke(arg)) })
+        }
+
+        WrappedFactory { env =>
+          for
+            classExprConv <- convertExpr(classExpr).check(env, anyType)
+            classExprNorm <- evaluator.normalizeTopLevelWrap(classExprConv.expr, fuel)
+          yield (classExprConv.env, OverloadExprFactoryClassConstructor(classExprNorm, classExpr.location, Seq()))
+        }
+
+
       case parser.DotExpr(left, WithSource(id, idLocation)) =>
         OverloadExprFactoryMethod.fromInstanceFactory(convertExpr(left), id, idLocation)
 
@@ -531,7 +553,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
     protected val args: Seq[ArgumentInfo]
     protected def lookup: Env => LookupResult[TElement]
     protected def overloadLocation: SourceLocation
-    protected def lookupName: IdentifierExpr
+    protected def lookupName: IdentifierExpr | parser.ClassConstructorExpr.type
 
     override protected def location: SourceLocation = overloadLocation
 
@@ -802,8 +824,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                   newVar = LocalVariable(newVarId, paramType, None, false)
                   newVarExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(newVar), EmptyTuple))
 
-                  substRes <- substituteArg(variable)(newVarExpr)(sigHandler)(next)
-                  (next, resultExpr) = substRes
+                  (next, resultExpr) <- substituteArg(variable)(newVarExpr)(sigHandler)(next)
 
                   inner <- impl(args :+ resultExpr, next)
                 yield ExprTypeResult(
@@ -1336,6 +1357,67 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
   }
 
+  private final class OverloadExprFactoryClassConstructor
+  (
+    instance: WrapExpr,
+    protected val overloadLocation: SourceLocation,
+    protected val args: Seq[ArgumentInfo],
+  ) extends OverloadExprFactoryBase:
+
+    import ExprConstructor.MethodCallOwnerType
+
+    protected override type TElement = (ClassConstructor, ArExpr[ExprConstructor.ClassType])
+
+
+    override protected def lookupName: parser.ClassConstructorExpr.type = parser.ClassConstructorExpr
+
+    protected def lookup: Env => LookupResult[TElement] =
+      env =>
+        LookupResult.Suspended(
+          evaluator.normalizeTopLevelWrap(instance, fuel)
+            .flatMap {
+              case WrapExpr.OfExpr(normalizedInstance) =>
+                normalizedInstance.constructor match {
+                  case ctor: (normalizedInstance.constructor.type & ExprConstructor.ClassType) =>
+                    ctor.arClass.constructors.map { classCtors =>
+                      LookupResult.Success(
+                        classCtors.map { classCtor => (classCtor, ArExpr(ctor, normalizedInstance.getArgs(ctor))) },
+                        LookupResult.NotFound(),
+                      )
+                    }
+
+                  case _ => ???
+                }
+
+              case _ => ???
+            }
+        )
+
+    protected override def signatureOf(element: TElement): Comp[Signature[WrapExpr, ?]] =
+      element._1.signatureUnsubstituted.map(convertSig(classConstructorSigHandler))
+
+    protected override def checkOverload(env: Env)(overload: TElement): Comp[Option[Comp[ExprTypeResult]]] =
+      ZIO.logTrace(s"checkOverload method ${overload}") *> {
+        val (classCtor, classType) = overload
+        classCtor.signatureUnsubstituted.flatMap { sig =>
+          val sig2 = convertSig(classConstructorSigHandler)(sig)
+
+          createSigResult(classCtor, env, sig2, args.toList, Vector.empty)(classConstructorSigHandler) {
+            (env, args, _) =>
+              ExprTypeResult(
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassConstructorCall(classCtor), (classType, args))),
+                env,
+                WrapExpr.OfExpr(classType),
+              )
+          }
+        } : Comp[Option[Comp[ExprTypeResult]]]
+      }
+
+    override def invoke(arg: ArgumentInfo): ExprFactory =
+      OverloadExprFactoryClassConstructor(instance, overloadLocation, args :+ arg)
+
+  end OverloadExprFactoryClassConstructor
+
   private final class EndOverloadExprFactory(inner: ExprFactory) extends ExprFactory {
     override def synth(env: Env): Comp[ExprTypeResult] = inner.synth(env)
     override def check(env: Env, t: WrapExpr): Comp[ExprResult] = inner.check(env, t)
@@ -1344,9 +1426,6 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
   private final class ConstExprFactory(protected val location: SourceLocation, result: ExprTypeResult) extends ExprFactorySynth {
     def synth(env: Env): Comp[ExprTypeResult] = ZIO.succeed(result)
   }
-
-
-  def unitType: WrapExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadTuple, Vector()))
 
 
 }

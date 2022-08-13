@@ -41,8 +41,9 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
     type Env = Environment
     type Error = E
     type Options = plugin.Options[Environment, E]
-    type ExternMethodImplementation = plugin.ExternalMethodImplementation
-    type ExternFunctionImplementation = plugin.ExternalFunctionImplementation
+    type ExternMethodImplementation = plugin.ExternMethodImplementation
+    type ExternFunctionImplementation = plugin.ExternFunctionImplementation
+    type ExternClassConstructorImplementation = plugin.ExternClassConstructorImplementation
   }
 
   override def suiteName: String = s"Execution Tests ($pluginName)"
@@ -55,14 +56,18 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
     override type Error = E
 
     override type Options = plugin.Options[Environment, E]
-    override type ExternMethodImplementation = plugin.ExternalMethodImplementation
-    override type ExternFunctionImplementation = plugin.ExternalFunctionImplementation
+    override type ExternMethodImplementation = plugin.ExternMethodImplementation
+    override type ExternFunctionImplementation = plugin.ExternFunctionImplementation
+    override type ExternClassConstructorImplementation = plugin.ExternClassConstructorImplementation
 
     override def getExternMethodImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternMethodImplementation] =
       plugin.loadExternMethod(options)(id).some
 
     override def getExternFunctionImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternFunctionImplementation] =
       plugin.loadExternFunction(options)(id).some
+
+    override def getExternClassConstructorImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternClassConstructorImplementation] =
+      plugin.loadExternClassConstructor(options)(id).some
 
 
     private val tubes: Exit[Nothing, Fiber[Error, Map[TubeName, ArTubeC & HasContext[this.type]]]] =
@@ -269,10 +274,13 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
       override val context: ctx.type = ctx
       override val plugin: ExecutionTests.this.plugin.type = ExecutionTests.this.plugin
 
-      override def extractExternMethodImplementation(impl: plugin.ExternalMethodImplementation): plugin.ExternalMethodImplementation =
+      override def extractExternMethodImplementation(impl: plugin.ExternMethodImplementation): plugin.ExternMethodImplementation =
         impl
 
-      override def extractExternFunctionImplementation(impl: plugin.ExternalFunctionImplementation): plugin.ExternalFunctionImplementation =
+      override def extractExternFunctionImplementation(impl: plugin.ExternFunctionImplementation): plugin.ExternFunctionImplementation =
+        impl
+
+      override def extractExternClassConstructorImplementation(impl: plugin.ExternClassConstructorImplementation): plugin.ExternClassConstructorImplementation =
         impl
     }
 

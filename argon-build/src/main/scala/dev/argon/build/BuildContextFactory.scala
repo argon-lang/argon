@@ -13,6 +13,7 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
   type Options <: Tuple
   type ExternMethodImplementation <: Tuple
   type ExternFunctionImplementation <: Tuple
+  type ExternClassConstructorImplementation <: Tuple
 
   given optionsHandler: OptionDecoder[E, Options]
 
@@ -23,8 +24,9 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
   trait PluginHelper {
     val plugin: Plugin[R, E]
     def getOptions(options: Options): plugin.Options[R, E]
-    def getExternalMethodImplementation(impl: ExternMethodImplementation): plugin.ExternalMethodImplementation
-    def getExternalFunctionImplementation(impl: ExternFunctionImplementation): plugin.ExternalFunctionImplementation
+    def getExternMethodImplementation(impl: ExternMethodImplementation): plugin.ExternMethodImplementation
+    def getExternFunctionImplementation(impl: ExternFunctionImplementation): plugin.ExternFunctionImplementation
+    def getExternClassConstructorImplementation(impl: ExternClassConstructorImplementation): plugin.ExternClassConstructorImplementation
 
     def adapter
     (ctx: Context {
@@ -33,16 +35,20 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
       type Options = BuildContextFactory.this.Options
       type ExternMethodImplementation = BuildContextFactory.this.ExternMethodImplementation
       type ExternFunctionImplementation = BuildContextFactory.this.ExternFunctionImplementation
+      type ExternClassConstructorImplementation = BuildContextFactory.this.ExternClassConstructorImplementation
     }): PluginContextAdapter.Aux[ctx.type, plugin.type] =
       new PluginContextAdapter {
         override val context: ctx.type = ctx
         override val plugin: PluginHelper.this.plugin.type = PluginHelper.this.plugin
 
-        override def extractExternMethodImplementation(impl: ExternMethodImplementation): plugin.ExternalMethodImplementation =
-          PluginHelper.this.getExternalMethodImplementation(impl)
+        override def extractExternMethodImplementation(impl: ExternMethodImplementation): plugin.ExternMethodImplementation =
+          PluginHelper.this.getExternMethodImplementation(impl)
 
-        override def extractExternFunctionImplementation(impl: ExternFunctionImplementation): plugin.ExternalFunctionImplementation =
-          PluginHelper.this.getExternalFunctionImplementation(impl)
+        override def extractExternFunctionImplementation(impl: ExternFunctionImplementation): plugin.ExternFunctionImplementation =
+          PluginHelper.this.getExternFunctionImplementation(impl)
+
+        override def extractExternClassConstructorImplementation(impl: ExternClassConstructorImplementation): plugin.ExternClassConstructorImplementation =
+          PluginHelper.this.getExternClassConstructorImplementation(impl)
       }
   }
 
@@ -51,6 +57,7 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
 
   def getExternMethodImplementation(options: Options, id: String): ZIO[R, Option[E], ExternMethodImplementation]
   def getExternFunctionImplementation(options: Options, id: String): ZIO[R, Option[E], ExternFunctionImplementation]
+  def getExternClassConstructorImplementation(options: Options, id: String): ZIO[R, Option[E], ExternClassConstructorImplementation]
 
 
   final def createContext
@@ -60,6 +67,7 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
     type Options = BuildContextFactory.this.Options
     type ExternMethodImplementation = BuildContextFactory.this.ExternMethodImplementation
     type ExternFunctionImplementation = BuildContextFactory.this.ExternFunctionImplementation
+    type ExternClassConstructorImplementation = BuildContextFactory.this.ExternClassConstructorImplementation
   }] =
     ZIO.runtime[Any].flatMap { runtime =>
       ZIO.succeed {
@@ -77,6 +85,7 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
 
           override type ExternMethodImplementation = BuildContextFactory.this.ExternMethodImplementation
           override type ExternFunctionImplementation = BuildContextFactory.this.ExternFunctionImplementation
+          override type ExternClassConstructorImplementation = BuildContextFactory.this.ExternClassConstructorImplementation
 
           override def getTube(tubeName: TubeName): Comp[ArTubeC & HasContext[this.type]] =
             tubes.get(tubeName).commit
@@ -106,6 +115,9 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
 
           override def getExternFunctionImplementation(options: Options, id: String): ZIO[R, Option[E], ExternFunctionImplementation] =
             BuildContextFactory.this.getExternFunctionImplementation(options, id)
+
+          override def getExternClassConstructorImplementation(options: Options, id: String): ZIO[R, Option[E], ExternClassConstructorImplementation] =
+            BuildContextFactory.this.getExternClassConstructorImplementation(options, id)
         }
       }
     }
@@ -132,6 +144,7 @@ private[build] final class BuildContextFactoryNil[R <: ResourceFactory & CompEnv
   override type Options = EmptyTuple
   override type ExternMethodImplementation = EmptyTuple
   override type ExternFunctionImplementation = EmptyTuple
+  override type ExternClassConstructorImplementation = EmptyTuple
 
   override given optionsHandler: OptionDecoder[E, Options] with
     override def decode(value: Toml): ZIO[ResourceFactory, String, Options] =
@@ -146,13 +159,18 @@ private[build] final class BuildContextFactoryNil[R <: ResourceFactory & CompEnv
 
   override def getExternFunctionImplementation(options: Options, id: String): ZIO[R, Option[E], ExternFunctionImplementation] =
     ZIO.succeed(EmptyTuple)
+
+  override def getExternClassConstructorImplementation(options: Options, id: String): ZIO[R, Option[E], ExternClassConstructorImplementation] =
+    ZIO.succeed(EmptyTuple)
+
 }
 
 private[build] final class BuildContextFactoryCons[R <: ResourceFactory & CompEnv, E >: BuildError | CompError]
 (pluginName: String, val plugin: Plugin[R, E], val rest: BuildContextFactory[R, E]) extends BuildContextFactory[R, E] {
   override type Options = plugin.Options[R, E] *: rest.Options
-  override type ExternMethodImplementation = plugin.ExternalMethodImplementation *: rest.ExternMethodImplementation
-  override type ExternFunctionImplementation = plugin.ExternalFunctionImplementation *: rest.ExternFunctionImplementation
+  override type ExternMethodImplementation = plugin.ExternMethodImplementation *: rest.ExternMethodImplementation
+  override type ExternFunctionImplementation = plugin.ExternFunctionImplementation *: rest.ExternFunctionImplementation
+  override type ExternClassConstructorImplementation = plugin.ExternClassConstructorImplementation *: rest.ExternClassConstructorImplementation
 
   override given optionsHandler: OptionDecoder[E, Options] with
     override def decode(value: Toml): ZIO[ResourceFactory, String, Options] =
@@ -176,15 +194,20 @@ private[build] final class BuildContextFactoryCons[R <: ResourceFactory & CompEn
           pluginOpts
         end getOptions
 
-        override def getExternalMethodImplementation(impl: ExternMethodImplementation): plugin.ExternalMethodImplementation =
+        override def getExternMethodImplementation(impl: ExternMethodImplementation): plugin.ExternMethodImplementation =
           val (headImpl *: _) = impl
           headImpl
-        end getExternalMethodImplementation
+        end getExternMethodImplementation
 
-        override def getExternalFunctionImplementation(impl: ExternFunctionImplementation): plugin.ExternalFunctionImplementation =
+        override def getExternFunctionImplementation(impl: ExternFunctionImplementation): plugin.ExternFunctionImplementation =
           val (headImpl *: _) = impl
           headImpl
-        end getExternalFunctionImplementation
+        end getExternFunctionImplementation
+
+        override def getExternClassConstructorImplementation(impl: ExternClassConstructorImplementation): plugin.ExternClassConstructorImplementation =
+          val (headImpl *: _) = impl
+          headImpl
+        end getExternClassConstructorImplementation
       })
     else
       rest.getPluginHelper(name).map { restPluginHelper =>
@@ -195,15 +218,20 @@ private[build] final class BuildContextFactoryCons[R <: ResourceFactory & CompEn
             restPluginHelper.getOptions(restPluginOpts)
           end getOptions
 
-          override def getExternalMethodImplementation(impl: ExternMethodImplementation): plugin.ExternalMethodImplementation =
+          override def getExternMethodImplementation(impl: ExternMethodImplementation): plugin.ExternMethodImplementation =
             val (_ *: tailImpl) = impl
-            restPluginHelper.getExternalMethodImplementation(tailImpl)
-          end getExternalMethodImplementation
+            restPluginHelper.getExternMethodImplementation(tailImpl)
+          end getExternMethodImplementation
 
-          override def getExternalFunctionImplementation(impl: ExternFunctionImplementation): plugin.ExternalFunctionImplementation =
+          override def getExternFunctionImplementation(impl: ExternFunctionImplementation): plugin.ExternFunctionImplementation =
             val (_ *: tailImpl) = impl
-            restPluginHelper.getExternalFunctionImplementation(tailImpl)
-          end getExternalFunctionImplementation
+            restPluginHelper.getExternFunctionImplementation(tailImpl)
+          end getExternFunctionImplementation
+
+          override def getExternClassConstructorImplementation(impl: ExternClassConstructorImplementation): plugin.ExternClassConstructorImplementation =
+            val (_ *: tailImpl) = impl
+            restPluginHelper.getExternClassConstructorImplementation(tailImpl)
+          end getExternClassConstructorImplementation
         }
       }
 
@@ -226,6 +254,14 @@ private[build] final class BuildContextFactoryCons[R <: ResourceFactory & CompEn
       tail <- rest.getExternFunctionImplementation(configTail, id)
     yield head *: tail
   end getExternFunctionImplementation
+
+  override def getExternClassConstructorImplementation(options: Options, id: String): ZIO[R, Option[E], ExternClassConstructorImplementation] =
+    val (configHead *: configTail) = options
+    for
+      head <- plugin.loadExternClassConstructor(configHead)(id).some
+      tail <- rest.getExternClassConstructorImplementation(configTail, id)
+    yield head *: tail
+  end getExternClassConstructorImplementation
 
 }
 

@@ -25,8 +25,9 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
     summon[OutputHandler[R, E, Output[R, E]]]
 
 
-  override type ExternalMethodImplementation = estree.FunctionDeclaration
-  override type ExternalFunctionImplementation = estree.FunctionDeclaration
+  override type ExternMethodImplementation = estree.FunctionDeclaration
+  override type ExternFunctionImplementation = estree.FunctionDeclaration
+  override type ExternClassConstructorImplementation = estree.FunctionDeclaration
 
   override def emitTube
   (ctx: Context { type Error >: JSPluginError })
@@ -68,6 +69,13 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
 
 
   override def loadExternFunction[R <: Any, E >: JSPluginError]
+  (options: JSOptions[R, E])
+  (id: String)
+  : ZIO[R, E, Option[FunctionDeclaration]] =
+    loadExternMethod(options)(id)
+
+
+  override def loadExternClassConstructor[R <: Any, E >: JSPluginError]
   (options: JSOptions[R, E])
   (id: String)
   : ZIO[R, E, Option[FunctionDeclaration]] =

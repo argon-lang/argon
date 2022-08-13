@@ -81,3 +81,11 @@ function createTypeFactory<TType>(keys: readonly (keyof TType)[]): (f: (...args:
 
 export const createTrait = createTypeFactory<TraitType>(traitTypeKeys);
 export const createClass = createTypeFactory<ClassType>(classTypeKeys);
+
+
+export function createObject(proto: object, ctor: (this: any, ...args: any[]) => void, ...args: any[]): any {
+	const obj = Object.create(proto);
+    ctor.call(obj, ...args);
+    return obj;
+}
+

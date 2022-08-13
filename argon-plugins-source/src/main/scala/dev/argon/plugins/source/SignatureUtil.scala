@@ -52,8 +52,7 @@ object SignatureUtil {
                 paramType2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(paramType)
                 paramVar = exprConverter.exprContext.ParameterVariable(owner, index, paramType2, param.isErased, Some(paramElem.name))
 
-                nextPair <- impl(env.withScope(_.addVariable(paramVar)))(tail)(index + 1)
-                (next, env) = nextPair
+                (next, env) <- impl(env.withScope(_.addVariable(paramVar)))(tail)(index + 1)
               yield (Signature.Parameter(param.listType, param.isErased, Some(paramElem.name), paramType, next), env)
 
             case _ =>
@@ -77,8 +76,7 @@ object SignatureUtil {
                   }
                   .toMap
 
-                nextPair <- impl(env.withScope(_.addVariable(paramVar).addParameterVariableElements(paramVarElements)))(tail)(index + 1)
-                (next, env) = nextPair
+                (next, env) <- impl(env.withScope(_.addVariable(paramVar).addParameterVariableElements(paramVarElements)))(tail)(index + 1)
               yield (Signature.Parameter(param.listType, param.isErased, None, paramType, next), env)
           }
 
@@ -134,19 +132,16 @@ object SignatureUtil {
       }
 
     for
-      bt <- baseTypes
-      (baseTraits, env) = bt
+      (baseTraits, env) <- baseTypes
 
-      traitType2Pair <- exprConverter.resolveHoles(env, traitType)
-      (traitType2, env) = traitType2Pair
+      (traitType2, env) <- exprConverter.resolveHoles(env, traitType)
 
       envCell <- Ref.make(env)
 
       baseTraits2 <- ZIO.foreach(baseTraits) { baseTrait =>
         for
           env <- envCell.get
-          resolvedPair <- exprConverter.resolveHolesTraitType(env, baseTrait)
-          (res, env) = resolvedPair
+          (res, env) <- exprConverter.resolveHolesTraitType(env, baseTrait)
           _ <- envCell.set(env)
         yield res
       }
@@ -204,8 +199,7 @@ object SignatureUtil {
         case Some(baseType) =>
           for {
             baseTypeResult <- exprConverter.convertExpr(baseType).check(env, classType)
-            baseTypes <- impl(baseTypeResult.expr, None, Seq.empty)
-            (baseClass, baseTraits) = baseTypes
+            (baseClass, baseTraits) <- impl(baseTypeResult.expr, None, Seq.empty)
           } yield (baseClass, baseTraits, baseTypeResult.env)
 
         case None =>
@@ -213,19 +207,16 @@ object SignatureUtil {
       }
 
     for
-      bt <- baseTypes
-      (baseClass, baseTraits, env) = bt
+      (baseClass, baseTraits, env) <- baseTypes
 
-      classType2Pair <- exprConverter.resolveHoles(env, classType)
-      (classType2, env) = classType2Pair
+      (classType2, env) <- exprConverter.resolveHoles(env, classType)
 
       envCell <- Ref.make(env)
 
       baseClass2 <- ZIO.foreach(baseClass) { baseClass =>
         for
           env <- envCell.get
-          resolvedPair <- exprConverter.resolveHolesClassType(env, baseClass)
-          (res, env) = resolvedPair
+          (res, env) <- exprConverter.resolveHolesClassType(env, baseClass)
           _ <- envCell.set(env)
         yield res
       }
@@ -233,8 +224,7 @@ object SignatureUtil {
       baseTraits2 <- ZIO.foreach(baseTraits) { baseTrait =>
         for
           env <- envCell.get
-          resolvedPair <- exprConverter.resolveHolesTraitType(env, baseTrait)
-          (res, env) = resolvedPair
+          (res, env) <- exprConverter.resolveHolesTraitType(env, baseTrait)
           _ <- envCell.set(env)
         yield res
       }
@@ -259,10 +249,8 @@ object SignatureUtil {
     sig match {
       case Signature.Parameter(listType, paramErased, paramName, paramType, next) =>
         for {
-          convParamTypeRes <- exprConverter.resolveHoles(env, paramType)
-          (convParamType, env) = convParamTypeRes
-          convNextRes <- resolveHolesSig(context)(exprConverter)(env)(sigHandler)(next)
-          (convNext, env) = convNextRes
+          (convParamType, env) <- exprConverter.resolveHoles(env, paramType)
+          (convNext, env) <- resolveHolesSig(context)(exprConverter)(env)(sigHandler)(next)
         } yield (Signature.Parameter(listType, paramErased, paramName, convParamType, convNext), env)
 
       case Signature.Result(res) =>

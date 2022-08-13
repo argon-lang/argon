@@ -3,7 +3,7 @@ package dev.argon.plugins.source
 import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
 import dev.argon.compiler.expr.*
-import dev.argon.util.*
+import dev.argon.util.{*, given}
 import dev.argon.compiler.signature.Signature
 import dev.argon.parser
 import dev.argon.parser.{ClassDeclarationStmt, IdentifierExpr}
@@ -43,7 +43,7 @@ object SourceClass {
       staticMethodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
           & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[OwnedByClassStaticC[ctx.type, classOwner.type]]]]]
-      ctorsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ClassConstructorC & HasContext[ctx.type]]]
+      ctorsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ClassConstructorC & HasContext[ctx.type] & HasDeclaration[true]]]
       fieldsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ctx.ExprContext.MemberVariable]]
 
     } yield new ArClassC with MethodCreationHelper {
@@ -74,8 +74,14 @@ object SourceClass {
       override def signature: Comp[Signature[WrapExpr, ClassResult]] =
         sigEnv.map { _._1 }
 
-      override def innerEnv: Comp[exprConverter.Env] =
+      private def innerEnvNoFields: Comp[exprConverter.Env] =
         sigEnv.map { _._2 }
+
+      override def innerEnv: Comp[exprConverter.Env] =
+        for
+          env <- innerEnvNoFields
+          fields <- this.fields
+        yield env.withScope(_.addVariables(fields.map(ArgonExprContext.convertVariable[Id](context)(context.ExprContext, exprConverter.exprContext)(identity))))
 
       private def isValidClassStmt(s: parser.Stmt): Boolean =
         s match {
@@ -103,14 +109,15 @@ object SourceClass {
         : Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[true] & HasOwner[OwnedByClassStatic[owner.type]]]]] =
         staticMethodsCell.get(buildMethods[OwnedByClassStatic[owner.type]](OwnedByClassStaticC.apply)(stmt.body))
 
-      override def constructors: Comp[Seq[ClassConstructor]] =
+      override def constructors: Comp[Seq[ClassConstructor & HasDeclaration[true]]] =
         ctorsCell.get {
           ZIO.collect(stmt.instanceBody) {
             case WithSource(ctorDecl: parser.ClassConstructorDeclarationStmt, _) =>
               (
                 for {
                   access <- AccessUtil.parse(ctorDecl.modifiers)
-                  ctor <- SourceClassConstructor.make(context)(exprConverter)(innerEnv)(this, access)(ctorDecl)
+                  env <- innerEnvNoFields
+                  ctor <- SourceClassConstructor.make(context)(exprConverter)(env)(OwnedByClassC(this, None, access))(ctorDecl)
                 } yield ctor
               ).asSomeError
 
@@ -124,7 +131,7 @@ object SourceClass {
             case WithSource(field: parser.FieldDeclarationStmt, _) =>
               (
                 for
-                  env <- innerEnv
+                  env <- innerEnvNoFields
                   varType <- exprConverter.convertExpr(field.fieldType).check(env, exprConverter.anyType)
                   resolvedVarType <- exprConverter.resolveHoles(varType.env, varType.expr)
                 yield context.ExprContext.MemberVariable(this, resolvedVarType._1, Some(field.name))

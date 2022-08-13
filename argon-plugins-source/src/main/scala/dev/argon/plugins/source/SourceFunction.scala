@@ -72,10 +72,10 @@ object SourceFunction {
                 returnType = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(sig.unsubstitutedResult)
                 env <- innerEnv
                 bodyResult <- exprConverter.convertExpr(expr).check(env, returnType)
-                resolvedBody <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)
+                (resolvedBody, _) <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)
               yield new FunctionImplementationC.ExpressionBody {
                 override val context: ctx.type = ctx
-                override val body: WrapExpr = resolvedBody._1
+                override val body: WrapExpr = resolvedBody
               }
           }
         )
