@@ -105,7 +105,6 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         emitStandaloneScope { emitState =>
           emitExpr(emitState)(baseClass)
         }
-          .map(iefe)
       }
       vtableDiff <- vtableBuilder.diffFromClass(arClass)
       prototypeSetup <- emitVTable(vtableDiff, arClass)
@@ -129,7 +128,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
 
           const("prototype") := id("Object").prop("create").call(
-            baseClassExpr.getOrElse(literal(null))
+            baseClassExpr.fold(literal(null))(baseClassObj => baseClassObj.prop("prototype"))
           ),
           block(prototypeSetup *),
 
@@ -302,11 +301,26 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
               }
 
               baseCall <- ZIO.foreach(impl.baseConstructorCall) { baseCall =>
-                ??? : Comp[Seq[estree.Statement]]
+                val classCtor = baseCall.baseCall.constructor.classCtor
+                val (instanceType, args) = baseCall.baseCall.args
+
+                for
+                  constructorsExpr <-
+                    if classCtor.owner.arClass == ctor.owner.arClass then
+                      ZIO.succeed(id("constructors"))
+                    else
+                      emitExpr(emitState.subExpr)(instanceType).map { _.prop("constructors") }
+
+                  baseCtorSig <- classCtor.signatureUnsubstituted
+                  baseCtorSigErased <- SignatureEraser(context).erasedNoResult(baseCtorSig)
+
+                  argExprs <- emitArgExprs(emitState, args, sig, Seq())
+
+                yield exprStmt(constructorsExpr.prop(getOverloadExportName(None, baseCtorSigErased)).prop("call").call((estree.ThisExpression() +: argExprs)*))
               }
 
               postInit <- emitWrapExprAsStmt(emitState)(impl.postInitialization)
-            yield preInit.flatten ++ baseCall.toList.flatten ++ postInit
+            yield preInit.flatten ++ baseCall.toList ++ postInit
           }
 
         yield estree.FunctionExpression(
@@ -366,10 +380,18 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
   private def emitTopScope(f: EmitState => Comp[Seq[estree.Statement]]): Comp[Seq[estree.Statement]] =
     emitScope(scopeVars => EmitState(tailPosition = true, discardValue = false, scopeVars = scopeVars))(f)
 
-  private def emitStandaloneScope(f: EmitState => Comp[estree.Expression]): Comp[Seq[estree.Statement]] =
+  private def emitStandaloneScope(f: EmitState => Comp[estree.Expression]): Comp[estree.Expression] =
     emitScope(scopeVars => EmitState(tailPosition = false, discardValue = false, scopeVars = scopeVars)) { emitState =>
-      f(emitState).map { expr => Seq(exprStmt(expr)) }
+      f(emitState).map { expr => Seq(`return`(expr)) }
     }
+      .map {
+        case Seq(stmt: estree.ReturnStatement) =>
+          stmt.argument.toOption.getOrElse {
+            iefe(Seq(stmt)*)
+          }
+
+        case stmts => iefe(stmts*)
+      }
 
   private def emitNestedScope(emitState: EmitState)(f: EmitState => Comp[Seq[estree.Statement]]): Comp[Seq[estree.Statement]] =
     emitScope(scopeVars => emitState.copy(scopeVars = scopeVars))(f)
@@ -682,40 +704,41 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   private def emitVTable(vtable: vtableBuilder.VTable, ownerClass: ArClass): Comp[Seq[estree.Statement]] =
     ZIO.foreach(vtable.methodMap.toSeq) {
-      case (_, vtableBuilder.VTableEntry(name, signature, slotInstanceType, entrySource, vtableBuilder.VTableEntryMethod(implMethod))) =>
+      case (_, vtableBuilder.VTableEntry(name, signature, slotInstanceType, entrySource, vtableBuilder.VTableEntryMethod(implMethod, implInstanceType))) =>
         for
           slotSigErased <- SignatureEraser(context).erasedWithResult(signature)
           implSig <- implMethod.signatureUnsubstituted
           implSigErased <- SignatureEraser(context).erasedWithResult(implSig)
 
-          slotMethodsExpr <-
-            slotInstanceType match {
-              case ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) if classType.constructor.arClass == ownerClass =>
-                ZIO.succeed(id("methods"))
-
-              case ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) =>
-                emitStandaloneScope { emitState =>
-                  for
-                    slotInstanceExpr <- emitExpr(emitState)(classType)
-                  yield slotInstanceExpr.prop("methods")
-                }.map(iefe)
-
-              case ExprConstructor.MethodCallOwnerType.OwnedByTrait(traitType) =>
-                emitStandaloneScope { emitState =>
-                  for
-                    slotInstanceExpr <- emitExpr(emitState)(traitType)
-                  yield slotInstanceExpr.prop("methods")
-                }.map(iefe)
-            }
+          slotMethodsExpr <- getMethodsExprForInstanceType(ownerClass, slotInstanceType)
+          implMethodsExpr <- getMethodsExprForInstanceType(ownerClass, implInstanceType)
 
           slotSymbol = slotMethodsExpr.prop(getOverloadExportName(name, slotSigErased)).prop("symbol")
-          implMethod = id("methods").prop(getOverloadExportName(name, implSigErased)).prop("implementation")
+          implMethod = implMethodsExpr.prop(getOverloadExportName(name, implSigErased)).prop("implementation")
         yield Seq(exprStmt(id("prototype").index(slotSymbol) ::= implMethod))
 
       case _ => ZIO.succeed(Seq())
     }.map { _.flatten }
 
+  private def getMethodsExprForInstanceType(ownerClass: ArClass, instanceType: ExprConstructor.MethodCallOwnerType): Comp[estree.Expression] =
+    instanceType match {
+      case ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) if classType.constructor.arClass == ownerClass =>
+        ZIO.succeed(id("methods"))
 
+      case ExprConstructor.MethodCallOwnerType.OwnedByClass(classType) =>
+        emitStandaloneScope { emitState =>
+          for
+            slotInstanceExpr <- emitExpr(emitState)(classType)
+          yield slotInstanceExpr.prop("methods")
+        }
+
+      case ExprConstructor.MethodCallOwnerType.OwnedByTrait(traitType) =>
+        emitStandaloneScope { emitState =>
+          for
+            slotInstanceExpr <- emitExpr(emitState)(traitType)
+          yield slotInstanceExpr.prop("methods")
+        }
+    }
 }
 
 

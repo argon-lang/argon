@@ -21,10 +21,8 @@ object EnvHelper {
       sig match {
         case Signature.Parameter(_, isErased, paramName, paramType, next) =>
           import exprConverter.context
-          val paramType2 =
-            ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(
-              paramType
-            )
+          val paramType2 = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(paramType)
+
           val variable = exprConverter.exprContext.ParameterVariable(owner, index, paramType2, isErased, paramName)
           impl(index + 1)(next)(env.withScope(_.addVariable(variable)))
 

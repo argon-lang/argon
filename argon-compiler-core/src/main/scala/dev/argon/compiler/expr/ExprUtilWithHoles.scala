@@ -18,29 +18,26 @@ trait ExprUtilWithHoles extends ExprUtil {
   }
   import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr}
 
+  protected class HoleResolver(envRef: Ref.Synchronized[Env]) extends ExprProcessor[Comp] {
+    override val context: ExprUtilWithHoles.this.context.type = ExprUtilWithHoles.this.context
+    override val ec1: exprContext.type = exprContext
+    override val ec2: context.ExprContext.type = context.ExprContext
+
+    override def processHole(hole: UniqueIdentifier): Comp[ec2.WrapExpr] = ???
+  }
 
   def resolveHoles(env: Env, expr: WrapExpr): Comp[(context.ExprContext.WrapExpr, Env)] =
     for
       envRef <- Ref.Synchronized.make(env)
-      convExpr <- ArgonExprContext.convertWrapExpr(context)(exprContext, context.ExprContext)(resolveHole(envRef))(expr)
+      convExpr <- HoleResolver(envRef).processWrapExpr(expr)
       env <- envRef.get
     yield (convExpr, env)
-
-  def resolveHolesArExpr(env: Env, expr: WrapExpr): Comp[(context.ExprContext.WrapExpr, Env)] =
-    for
-      envRef <- Ref.Synchronized.make(env)
-      convExpr <- ArgonExprContext.convertWrapExpr(context)(exprContext, context.ExprContext)(resolveHole(envRef))(expr)
-      env <- envRef.get
-    yield (convExpr, env)
-
-  private def resolveHole(envRef: Ref.Synchronized[Env])(hole: UniqueIdentifier): Comp[context.ExprContext.WrapExpr] =
-    ???
 
   def resolveHolesClassType(env: Env, expr: ArExpr[ExprConstructor.ClassType])
   : Comp[(context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.ClassType], Env)] =
     for
       envRef <- Ref.Synchronized.make(env)
-      convExpr <- ArgonExprContext.convertClassType(context)(exprContext, context.ExprContext)(resolveHole(envRef))(expr)
+      convExpr <- HoleResolver(envRef).processClassType(expr)
       env <- envRef.get
     yield (convExpr, env)
 
@@ -48,7 +45,16 @@ trait ExprUtilWithHoles extends ExprUtil {
   : Comp[(context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType], Env)] =
     for
       envRef <- Ref.Synchronized.make(env)
-      convExpr <- ArgonExprContext.convertTraitType(context)(exprContext, context.ExprContext)(resolveHole(envRef))(expr)
+      convExpr <- HoleResolver(envRef).processTraitType(expr)
+      env <- envRef.get
+    yield (convExpr, env)
+
+
+  def resolveHolesClassConstructorCall(env: Env, expr: ArExpr[ExprConstructor.ClassConstructorCall])
+  : Comp[(context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.ClassConstructorCall], Env)] =
+    for
+      envRef <- Ref.Synchronized.make(env)
+      convExpr <- HoleResolver(envRef).processClassConstructorCall(expr)
       env <- envRef.get
     yield (convExpr, env)
 
@@ -66,7 +72,7 @@ trait ExprUtilWithHoles extends ExprUtil {
   override val functionSigHandler: SignatureHandlerPlus[context.ExprContext.WrapExpr, WrapExpr] =
     new SignatureHandlerPlus[context.ExprContext.WrapExpr, WrapExpr] with FunctionSigHandlerBase:
       override def convertResult(res: context.ExprContext.WrapExpr): WrapExpr =
-        ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(res)
+        ExprToHolesConverter(context)(exprContext).processWrapExpr(res)
 
       override def resolveResultHoles(env: Env, res: WrapExpr): Comp[(context.ExprContext.WrapExpr, Env)] =
         resolveHoles(env, res)
@@ -79,11 +85,11 @@ trait ExprUtilWithHoles extends ExprUtil {
         val (classType, baseClass, baseTraits) = res
 
         val classType2 =
-          ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(classType)
+          ExprToHolesConverter(context)(exprContext).processWrapExpr(classType)
         val baseClass2 =
-          baseClass.map(ArgonExprContext.convertClassType[Id](context)(context.ExprContext, exprContext)(identity))
+          baseClass.map(ExprToHolesConverter(context)(exprContext).processClassType)
         val baseTraits2 =
-          baseTraits.map(ArgonExprContext.convertTraitType[Id](context)(context.ExprContext, exprContext)(identity))
+          baseTraits.map(ExprToHolesConverter(context)(exprContext).processTraitType)
 
         (classType2, baseClass2, baseTraits2)
       end convertResult
@@ -122,9 +128,9 @@ trait ExprUtilWithHoles extends ExprUtil {
         val (traitType, baseTraits) = res
 
         val traitType2 =
-          ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(traitType)
+          ExprToHolesConverter(context)(exprContext).processWrapExpr(traitType)
         val baseTraits2 =
-          baseTraits.map(ArgonExprContext.convertTraitType[Id](context)(context.ExprContext, exprContext)(identity))
+          baseTraits.map(ExprToHolesConverter(context)(exprContext).processTraitType)
 
         (traitType2, baseTraits2)
       end convertResult
@@ -167,7 +173,7 @@ trait ExprUtilWithHoles extends ExprUtil {
           paramListType,
           isErased,
           paramName,
-          ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprContext)(identity)(paramType),
+          ExprToHolesConverter(context)(exprContext).processWrapExpr(paramType),
           convertSig(sigHandler)(next),
         )
 
@@ -300,6 +306,16 @@ trait ExprUtilWithHoles extends ExprUtil {
               .map(getOrNotSubClass)
           }
 
+
+      override protected def typeOfClass(classObj: ArClass, args: Seq[WrapExpr]): Comp[WrapExpr] =
+        for
+          sig <- classObj.signature
+          sigConv = convertSig(classSigHandler)(sig)
+          (classT, _, _) <- substituedSigResult(classObj)(classSigHandler)(sigConv, args.toList)
+        yield classT
+
+      override protected def typeOfTrait(traitObj: ArTrait, args: Seq[WrapExpr]): Comp[WrapExpr] = ???
+
       protected override def traitRelations(arTrait: ArTrait): Comp[Seq[ExprRelation]] =
         arTrait.signature.map { sig => Seq.fill(sig.parameterCount)(ExprRelation.SyntacticEquality) }
 
@@ -355,10 +371,11 @@ trait ExprUtilWithHoles extends ExprUtil {
 
   // Ensures that a <: b
   def checkSubType(env: Env, a: WrapExpr, b: WrapExpr, location: SourceLocation): Comp[Env] =
-    ZIO.logTrace(s"checkSubType a=$a, b=$b") *>
     isSubType(env, a, b).flatMap {
       case Some(env) => ZIO.succeed(env)
-      case None => ZIO.fail(DiagnosticError.TypeError(DiagnosticSource.Location(location)))
+      case None =>
+        ZIO.logTrace(s"checkSubType failed a=$a, b=$b") *>
+          ZIO.fail(DiagnosticError.TypeError(DiagnosticSource.Location(location)))
     }
 
   def isSubType(env: Env, a: WrapExpr, b: WrapExpr): Comp[Option[Env]] =

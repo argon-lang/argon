@@ -19,6 +19,12 @@ enum Signature[Type, Res] {
       case Result(_) => Seq.empty
     }
 
+  def parameters: Seq[Signature.Parameter[Type, Res]] =
+    this match {
+      case p @ Parameter(_, _, _, _, next) => p +: next.parameters
+      case Result(_) => Seq.empty
+    }
+
   def unsubstitutedResult: Res =
     this match {
       case Parameter(_, _, _, _, next) => next.unsubstitutedResult

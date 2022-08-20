@@ -141,7 +141,7 @@ trait ExprContext {
     type ConstructorArgs
 
     def argsFromExprs(exprs: Seq[WrapExpr]): Option[ConstructorArgs]
-    def argsToExprs(args: ConstructorArgs): Seq[WrapExpr]
+    def argsToExprs(args: ConstructorArgs): Seq[WrapExpr]    
   }
 
   sealed abstract class ExprConstructorWithArgsBase[Args] extends ExprConstructor {

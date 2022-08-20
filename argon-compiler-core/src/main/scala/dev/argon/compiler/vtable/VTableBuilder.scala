@@ -25,7 +25,7 @@ sealed abstract class VTableBuilder[TContext <: Context](override val context: T
 
   sealed trait VTableEntryImpl derives CanEqual
 
-  final case class VTableEntryMethod(method: ArMethod) extends VTableEntryImpl
+  final case class VTableEntryMethod(method: ArMethod, methodInstanceType: MethodCallOwnerType) extends VTableEntryImpl
   final case class VTableEntryAmbiguous(methods: Set[ArMethod]) extends VTableEntryImpl
   case object VTableEntryAbstract extends VTableEntryImpl
 
@@ -71,13 +71,13 @@ sealed abstract class VTableBuilder[TContext <: Context](override val context: T
         case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryAmbiguous(a)), VTableEntry(_, _, _, sourceB, VTableEntryAmbiguous(b))) =>
           VTableEntry(nameA, sigA, slotInstanceTypeA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(a ++ b))
 
-        case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryAmbiguous(a)), VTableEntry(_, _, _, sourceB, VTableEntryMethod(b))) =>
+        case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryAmbiguous(a)), VTableEntry(_, _, _, sourceB, VTableEntryMethod(b, _))) =>
           VTableEntry(nameA, sigA, slotInstanceTypeA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(a + b))
 
-        case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryMethod(a)), VTableEntry(_, _, _, sourceB, VTableEntryAmbiguous(b))) =>
+        case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryMethod(a, _)), VTableEntry(_, _, _, sourceB, VTableEntryAmbiguous(b))) =>
           VTableEntry(nameA, sigA, slotInstanceTypeA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(b + a))
 
-        case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryMethod(a)), VTableEntry(_, _, _, sourceB, VTableEntryMethod(b))) =>
+        case (VTableEntry(nameA, sigA, slotInstanceTypeA, sourceA, VTableEntryMethod(a, _)), VTableEntry(_, _, _, sourceB, VTableEntryMethod(b, _))) =>
           VTableEntry(nameA, sigA, slotInstanceTypeA, EntrySourceMulti(sourceA, sourceB), VTableEntryAmbiguous(Set(a, b)))
       }
     }
@@ -168,7 +168,7 @@ object VTableBuilder {
           if(method.isAbstract)
             VTableEntryAbstract
           else
-            VTableEntryMethod(method)
+            VTableEntryMethod(method, ownerType)
 
         for
           sig <- method.signatureUnsubstituted
@@ -258,7 +258,7 @@ object VTableBuilder {
 
       private def ensureNonAbstract(vtable: VT, source: DiagnosticSource): Comp[Unit] =
         ZIO.foreachDiscard(vtable.methodMap.values) {
-          case VTableEntry(_, _, _, _, VTableEntryMethod(_)) => ZIO.unit
+          case VTableEntry(_, _, _, _, VTableEntryMethod(_, _)) => ZIO.unit
           case VTableEntry(_, _, _, _, VTableEntryAbstract) =>
             ZIO.fail(DiagnosticError.AbstractMethodNotImplemented())
 

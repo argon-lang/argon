@@ -22,12 +22,14 @@
 
         end
 
-        constructor MyCtor(): MyTrait
+        class MyClass <: MyTrait
+            public new()
+            end
         end
 
         proc main(): () do
             MyTrait.say_hello()
-            MyCtor().say_world()
+            MyClass.new().say_world()
         end
 
 

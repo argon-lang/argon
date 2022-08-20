@@ -1,7 +1,7 @@
 package dev.argon.plugins.source
 
 import dev.argon.compiler.*
-import dev.argon.compiler.expr.ArgonExprContext
+import dev.argon.compiler.expr.{ArgonExprContext, ExprToHolesConverter}
 import dev.argon.util.{*, given}
 import dev.argon.parser
 import dev.argon.parser.IdentifierExpr
@@ -49,7 +49,7 @@ object SignatureUtil {
             case parser.FunctionParameterList(_, _, Vector(WithSource(paramElem, _)), false) =>
               for
                 paramType <- convertParamElementType(paramElem, env)
-                paramType2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(paramType)
+                paramType2 = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(paramType)
                 paramVar = exprConverter.exprContext.ParameterVariable(owner, index, paramType2, param.isErased, Some(paramElem.name))
 
                 (next, env) <- impl(env.withScope(_.addVariable(paramVar)))(tail)(index + 1)
@@ -65,13 +65,13 @@ object SignatureUtil {
                     paramElementTypes.map { _._2 }.toVector
                   )
                 )
-                paramType2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(paramType)
+                paramType2 = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(paramType)
                 paramVar = exprConverter.exprContext.ParameterVariable(owner, index, paramType2, param.isErased, None)
                 paramVarElements = paramElementTypes
                   .zipWithIndex
                   .map {
                     case ((name, t), i) =>
-                      val t2 = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(t)
+                      val t2 = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(t)
                       name -> exprConverter.ParameterVariableElement(paramVar, i, t2)
                   }
                   .toMap

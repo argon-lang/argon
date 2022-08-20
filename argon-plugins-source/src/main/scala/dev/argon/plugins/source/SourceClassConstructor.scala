@@ -2,7 +2,7 @@ package dev.argon.plugins.source
 
 import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
-import dev.argon.compiler.expr.ArgonExprContext
+import dev.argon.compiler.expr.{ArgonExprContext, ExprToHolesConverter}
 import dev.argon.util.{*, given}
 import dev.argon.compiler.signature.Signature
 import dev.argon.parser
@@ -119,13 +119,75 @@ object SourceClassConstructor {
                         fields.find(_.name.get == fieldInit.value.name)
                           .toRight { DiagnosticError.FieldNotFound(DiagnosticSource.Location(fieldInit.location), fieldInit.value.name) }
                       )
-                      fieldConv = ArgonExprContext.convertMemberVariable[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(field)
+                      fieldConv = ExprToHolesConverter(context)(exprConverter.exprContext).processMemberVariable(field)
                       (ExprResult(value, env)) <- exprConverter.convertExpr(fieldInit.value.value).check(env, fieldConv.varType)
                     yield (acc :+ UnresolvedFieldInit(field, fieldConv, value), env)
                 }
 
-              def convertBaseCall(env: Env)(stmt: WithSource[parser.InitializeStmt]): Comp[(exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.ClassConstructorCall], Env)] =
-                ???
+              def convertBaseCall(env: Env)(stmt: Option[WithSource[parser.InitializeStmt]]): Comp[(Option[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.ClassConstructorCall]], Env)] =
+                owner.arClass.signature.flatMap { sig =>
+                  ZIO.foreach(stmt) { stmt =>
+                    ZIO.foreach(stmt.value.value) { valueExpr =>
+                      exprConverter.convertExpr(valueExpr).check(env, exprConverter.anyType)
+                        .flatMap {
+                          case ExprResult(exprConverter.exprContext.WrapExpr.OfExpr(baseCall), env) =>
+                            baseCall.constructor match {
+                              case ctor: (baseCall.constructor.type & exprConverter.exprContext.ExprConstructor.ClassConstructorCall) =>
+
+                                def typeMatches(env: Env)(t: exprConverter.exprContext.WrapExpr): Comp[Option[Env]] =
+                                  val (instanceType, _) = baseCall.getArgs(ctor)
+                                  exprConverter.isSameType(env, exprConverter.exprContext.WrapExpr.OfExpr(instanceType), t)
+                                end typeMatches
+
+
+                                val classType = exprConverter.exprContext.WrapExpr.OfExpr(
+                                  exprConverter.exprContext.ArExpr(
+                                    exprConverter.exprContext.ExprConstructor.ClassType(owner.arClass),
+                                    sig.parameters.zipWithIndex.map { case (param, i) =>
+                                      val paramType = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(param.paramType)
+
+                                      val paramVar = exprConverter.exprContext.ParameterVariable(owner.arClass, i, paramType, param.isErased, param.name)
+
+                                      exprConverter.exprContext.WrapExpr.OfExpr(
+                                        exprConverter.exprContext.ArExpr(
+                                          exprConverter.exprContext.ExprConstructor.LoadVariable(paramVar),
+                                          EmptyTuple
+                                        )
+                                      )
+                                    }
+                                  )
+                                )
+
+                                typeMatches(env)(classType)
+                                  .flatMap {
+                                    case Some(env) => ZIO.succeed(Some(env))
+                                    case None =>
+                                      ZIO.foreach(sig.unsubstitutedResult._2) { baseClass =>
+                                        val baseClassConv = ExprToHolesConverter(context)(exprConverter.exprContext).processClassType(baseClass)
+                                        typeMatches(env)(exprConverter.exprContext.WrapExpr.OfExpr(baseClassConv))
+                                      }.map(_.flatten)
+                                  }
+                                  .flatMap {
+                                    case Some(env) => ZIO.succeed((exprConverter.exprContext.ArExpr(ctor, baseCall.getArgs(ctor)), env))
+                                    case None => ???
+                                  }
+
+                              case _ =>
+                                ???
+                            }
+
+                          case _ => ???
+                        }
+                    }
+                  }
+                    .map(_.flatten)
+                    .flatMap {
+                      case Some((baseCall, env)) => ZIO.succeed((Some(baseCall), env))
+                      case None if sig.unsubstitutedResult._2.isEmpty =>
+                        ZIO.succeed((None, env))
+                      case None => ???
+                    }
+                }
 
               def resolvePreBaseCallBlocks(env: Env, stmts: Seq[exprConverter.exprContext.WrapExpr | UnresolvedFieldInit]): Comp[(Seq[Either[WrapExpr, FieldInitializationStatement]], Env)] =
                 ZIO.foldLeft(stmts)((Seq.empty[Either[WrapExpr, FieldInitializationStatement]], env)) {
@@ -152,15 +214,12 @@ object SourceClassConstructor {
                 env <- innerEnv
 
                 (preInitExpr, env) <- convertPreBaseCallBlocks(env, preInitStmts)
-                (baseCallOpt, env) <- ZIO.foreach(initStmt)(convertBaseCall(env)).map {
-                  case Some((baseCall, env)) => (Some(baseCall), env)
-                  case None => (None, env)
-                }
+                (baseCallOpt, env) <- convertBaseCall(env)(initStmt)
                 (ExprResult(postInitExpr, env)) <- convertStmtBlock(env, postInitStmts)
 
                 (preInitResolved, env) <- resolvePreBaseCallBlocks(env, preInitExpr)
                 (baseCallResolvedOpt, env) <- ZIO.foreach(baseCallOpt) { baseCall =>
-                  ??? : Comp[(BaseClassConstructorCallStatement, Env)]
+                  exprConverter.resolveHolesClassConstructorCall(env, baseCall)
                 }.map {
                   case Some((baseCall, env)) => (Some(baseCall), env)
                   case None => (None, env)
@@ -169,7 +228,12 @@ object SourceClassConstructor {
               yield new ClassConstructorImplementationC.ExpressionBody {
                 override val context: ctx.type = ctx
                 override val preInitialization: Seq[Either[WrapExpr, FieldInitializationStatement]] = preInitResolved
-                override val baseConstructorCall: Option[BaseClassConstructorCallStatement] = baseCallResolvedOpt
+                override val baseConstructorCall: Option[BaseClassConstructorCallStatement] = baseCallResolvedOpt.map { baseCallResolved =>
+                  new ClassConstructorImplementationC.BaseClassConstructorCallStatement {
+                    override val context: ctx.type = ctx
+                    override val baseCall: ArExpr[ExprConstructor.ClassConstructorCall] = baseCallResolved
+                  }
+                }
                 override val postInitialization: WrapExpr = postInitResolved
               }
           }

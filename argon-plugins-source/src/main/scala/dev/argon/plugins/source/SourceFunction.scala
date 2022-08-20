@@ -69,7 +69,7 @@ object SourceFunction {
             case expr =>
               for
                 sig <- signature
-                returnType = ArgonExprContext.convertWrapExpr[Id](context)(context.ExprContext, exprConverter.exprContext)(identity)(sig.unsubstitutedResult)
+                returnType = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(sig.unsubstitutedResult)
                 env <- innerEnv
                 bodyResult <- exprConverter.convertExpr(expr).check(env, returnType)
                 (resolvedBody, _) <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)

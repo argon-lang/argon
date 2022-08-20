@@ -35,6 +35,9 @@ abstract class ImplicitResolver[-R, +E] {
     (classA: TClass, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr], fuel: Int)
     : ZIO[R, E, SubClassResult]
 
+  protected def typeOfClass(classObj: TClass, args: Seq[WrapExpr]): ZIO[R, E, WrapExpr]
+  protected def typeOfTrait(traitObj: TTrait, args: Seq[WrapExpr]): ZIO[R, E, WrapExpr]
+
   // These relation methods must match the arguments for the expression constructors
   protected def traitRelations(arTrait: TTrait): ZIO[R, E, Seq[ExprRelation]]
   protected def classRelations(arClass: TClass): ZIO[R, E, Seq[ExprRelation]]
@@ -312,6 +315,21 @@ abstract class ImplicitResolver[-R, +E] {
               classImplementsTrait(classA, convAArgs, traitB, convBArgs, solveState.consumeFuel.fuel).map(
                 subClassResultToPrologResult(substitutions)
               )
+            )
+          )
+
+        case (
+              ExprConstructor.SubtypeWitnessType,
+              Seq(Value(ExprConstructor.ClassType(classA), aArgs), t @ Value(ExprConstructor.TypeN | ExprConstructor.OmegaTypeN(_) | ExprConstructor.AnyType, _)),
+            ) =>
+          ZStream.unwrap(
+            for {
+              convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
+              classT <- typeOfClass(classA, convAArgs).mapError(Left.apply)
+            } yield solve(
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(wrapExprToExpr(classT), t)),
+              substitutions,
+              solveState.consumeFuel
             )
           )
 

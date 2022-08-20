@@ -16,7 +16,7 @@ given given_List_Nil[A]: CanEqual[List[A], List[Nothing]] = CanEqual.canEqualAny
 given canEqualNullableNull[A]: CanEqual[A | Null, Null] = CanEqual.derived
 given canEqualNullNullable[A]: CanEqual[Null, A | Null] = CanEqual.derived
 
-given canEqualNullabeeNullable[A, B](using CanEqual[A, B]): CanEqual[A | Null, B | Null] = CanEqual.derived
+given canEqualNullableNullable[A, B](using CanEqual[A, B]): CanEqual[A | Null, B | Null] = CanEqual.derived
 
 @unused
 private def dummy(): Unit =

@@ -81,7 +81,7 @@ object SourceClass {
         for
           env <- innerEnvNoFields
           fields <- this.fields
-        yield env.withScope(_.addVariables(fields.map(ArgonExprContext.convertVariable[Id](context)(context.ExprContext, exprConverter.exprContext)(identity))))
+        yield env.withScope(_.addVariables(fields.map(ExprToHolesConverter(context)(exprConverter.exprContext).processVariable)))
 
       private def isValidClassStmt(s: parser.Stmt): Boolean =
         s match {

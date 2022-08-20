@@ -180,6 +180,8 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
         }
 
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.Intersection, _), left, right) => ???
+
       case parser.BinaryOperatorExpr(op, left, right) =>
         EndOverloadExprFactory(
           OverloadExprFactory(
@@ -886,19 +888,6 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       }
 
     end createSigResult
-
-    // Returns substituted signature and (possibly) modified replacement expression
-    protected def substituteArg[Res](variable: Variable)(replacement: WrapExpr)(sigHandler: SignatureHandler[Res])
-      (sig: Signature[WrapExpr, Res])
-      : Comp[(Signature[WrapExpr, Res], WrapExpr)] =
-      if referencesVariableSig(variable)(sigHandler)(sig) then
-        asStableExpression(replacement).map { case (replacement2, replacementStable) =>
-          val sig2 = substituteSignature(variable)(replacement)(sigHandler)(sig)
-          (sig2, replacement)
-        }
-      else
-        ZIO.succeed((sig, replacement))
-
   }
 
   private final class OverloadExprFactory
@@ -1238,29 +1227,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
             .map { _.map { method => (method, MethodCallOwnerType.OwnedByTrait(traitType)) } }
       }
 
-    private def resolveTypeSignatureResult[Res](owner: exprContext.ParameterVariableOwner)
-      (sigHandler: SignatureHandler[Res])(paramIndex: Int, args: List[WrapExpr])(sig: Signature[WrapExpr, Res])
-      : Comp[Res] =
-      (args, sig) match {
-        case (arg :: tailArgs, Signature.Parameter(_, paramErased, paramName, paramType, next)) =>
-          val variable = ParameterVariable(owner, paramIndex, paramType, paramErased, paramName)
-          substituteArg(variable)(arg)(sigHandler)(next).flatMap { case (next, _) =>
-            resolveTypeSignatureResult(owner)(sigHandler)(paramIndex + 1, tailArgs)(next)
-          }
-
-        case (Nil, Signature.Parameter(_, _, _, _, _)) => ???
-
-        case (Nil, Signature.Result(res)) => ZIO.succeed(res)
-
-        case (_ :: _, Signature.Result(_)) => ???
-      }
-
     private def getBaseTypes(t: InstanceType): Comp[Seq[InstanceType]] =
       t match {
         case InstanceType.ByClass(classType) =>
           classType.constructor.arClass.signature
             .map(convertSig(classSigHandler))
-            .flatMap(resolveTypeSignatureResult(classType.constructor.arClass)(classSigHandler)(0, classType.args.toList))
+            .flatMap(substituedSigResult(classType.constructor.arClass)(classSigHandler)(_, classType.args.toList))
             .map { case (_, baseClass, baseTraits) =>
               baseClass.map(InstanceType.ByClass.apply).toSeq ++ baseTraits.map(InstanceType.ByTrait.apply)
             }
@@ -1268,7 +1240,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         case InstanceType.ByTrait(traitType) =>
           traitType.constructor.arTrait.signature
             .map(convertSig(traitSigHandler))
-            .flatMap(resolveTypeSignatureResult(traitType.constructor.arTrait)(traitSigHandler)(0, traitType.args.toList))
+            .flatMap(substituedSigResult(traitType.constructor.arTrait)(traitSigHandler)(_, traitType.args.toList))
             .map { case (_, baseTraits) =>
               baseTraits.map(InstanceType.ByTrait.apply)
             }
@@ -1290,26 +1262,29 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
     private def lookupMethods(types: Seq[InstanceType], seenTypes: Set[ArClass | ArTrait], seenMethods: Set[ArMethod])
       : Comp[LookupResult[MethodElement]] =
-      ZIO.foreach(types)(methodsOfType).map { methods =>
-        val methods2 = methods.flatten
-          .filterNot { case (method, _) => seenMethods.contains(method) }
-          .distinct
+      if types.isEmpty then
+        ZIO.succeed(LookupResult.NotFound())
+      else
+        ZIO.foreach(types)(methodsOfType).map { methods =>
+          val methods2 = methods.flatten
+            .filterNot { case (method, _) => seenMethods.contains(method) }
+            .distinct
 
-        val next =
-          LookupResult.Suspended(
-            ZIO.foreach(types)(getBaseTypes).flatMap { baseTypes =>
-              val seenTypes2 = seenTypes ++ types.flatMap(toSeenTypes)
-              val baseTypes2 = baseTypes.flatten.filter(isSeenType(seenTypes2))
-              val seenMethods2 = seenMethods ++ methods2.map { case (method, _) => method }
-              lookupMethods(baseTypes2, seenTypes2, seenMethods2)
-            }
+          val next =
+            LookupResult.Suspended(
+              ZIO.foreach(types)(getBaseTypes).flatMap { baseTypes =>
+                val seenTypes2 = seenTypes ++ types.flatMap(toSeenTypes)
+                val baseTypes2 = baseTypes.flatten.filterNot(isSeenType(seenTypes2))
+                val seenMethods2 = seenMethods ++ methods2.map { case (method, _) => method }
+                lookupMethods(baseTypes2, seenTypes2, seenMethods2)
+              }
+            )
+
+          LookupResult.Success(
+            methods2.map { MethodElement.Method(_, _) },
+            next,
           )
-
-        LookupResult.Success(
-          methods2.map { MethodElement.Method(_, _) },
-          next,
-        )
-      }
+        }
 
   }
 

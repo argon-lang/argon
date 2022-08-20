@@ -1,6 +1,7 @@
 package dev.argon.compiler.expr
 
-import dev.argon.compiler.{Context, DiagnosticError, UsingContext}
+import dev.argon.compiler.*
+import dev.argon.compiler.definitions.*
 import dev.argon.compiler.expr.ArgonExprContext
 import dev.argon.compiler.module.{ModuleElementC, ModulePath}
 import dev.argon.compiler.signature.*
@@ -51,19 +52,23 @@ trait ExprUtil extends UsingContext {
   // Declares a variable if needed
   def asStableExpression(expr: WrapExpr): exprContext.context.Comp[(WrapExpr, WrapExpr)] = ???
 
-  def substituteWrapExprMany(subst: Map[Variable, WrapExpr])(expr: WrapExpr): WrapExpr = ???
+  def substituteWrapExprMany(subst: Map[Variable, WrapExpr])(expr: WrapExpr): WrapExpr =
+    if subst.isEmpty then
+      expr
+    else
+      SubstitutionProcessor(subst).processWrapExpr(expr)
 
-  def substituteWrapExpr(variable: Variable)(replacement: WrapExpr)(expr: WrapExpr): WrapExpr = ???
+  def substituteClassTypeMany(subst: Map[Variable, WrapExpr])(expr: ArExpr[ExprConstructor.ClassType]): ArExpr[ExprConstructor.ClassType] =
+    if subst.isEmpty then
+      expr
+    else
+      SubstitutionProcessor(subst).processClassType(expr)
 
-  def substituteClassTypeMany(subst: Map[Variable, WrapExpr])(expr: ArExpr[ExprConstructor.ClassType]): ArExpr[ExprConstructor.ClassType] = ???
-
-  def substituteClassType(variable: Variable)(replacement: WrapExpr)(expr: ArExpr[ExprConstructor.ClassType])
-    : ArExpr[ExprConstructor.ClassType] = ???
-
-  def substituteTraitTypeMany(subst: Map[Variable, WrapExpr])(expr: ArExpr[ExprConstructor.TraitType]): ArExpr[ExprConstructor.TraitType] = ???
-
-  def substituteTraitType(variable: Variable)(replacement: WrapExpr)(expr: ArExpr[ExprConstructor.TraitType])
-    : ArExpr[ExprConstructor.TraitType] = ???
+  def substituteTraitTypeMany(subst: Map[Variable, WrapExpr])(expr: ArExpr[ExprConstructor.TraitType]): ArExpr[ExprConstructor.TraitType] =
+    if subst.isEmpty then
+      expr
+    else
+      SubstitutionProcessor(subst).processTraitType(expr)
 
   def substituteSignatureMany[Res](subst: Map[Variable, WrapExpr])(sigHandler: SignatureHandler[Res])
                               (sig: Signature[WrapExpr, Res])
@@ -99,6 +104,66 @@ trait ExprUtil extends UsingContext {
         ExprConstructor.MethodCallOwnerType.OwnedByClass(substituteClassTypeMany(subst)(classType))
     }
 
+  private class SubstitutionProcessor(subst: Map[exprContext.Variable, exprContext.WrapExpr]) extends ExprProcessor[Id]:
+    override val context: exprContext.context.type = exprContext.context
+    override val ec1: exprContext.type = exprContext
+    override val ec2: exprContext.type = exprContext
+
+    override def processHole(hole: exprContext.THole): WrapExpr =
+      WrapExpr.OfHole(hole)
+
+    override def processArExpr(e: ArExpr[ExprConstructor]): WrapExpr =
+      e.constructor match {
+        case ctor: (e.constructor.type & ExprConstructor.LoadVariable) =>
+          subst.get(ctor.variable) match {
+            case Some(replacement) => replacement
+            case None => super.processArExpr(e)
+          }
+
+        case _ => super.processArExpr(e)
+      }
+  end SubstitutionProcessor
+
+
+  def substituedSigResult[Res]
+  (owner: exprContext.ParameterVariableOwner)
+  (sigHandler: SignatureHandler[Res])
+  (sig: Signature[WrapExpr, Res], args: List[WrapExpr]) =
+    import exprContext.ParameterVariable
+
+    def impl(paramIndex: Int, sig: Signature[WrapExpr, Res], args: List[WrapExpr]): Comp[Res] =
+      (args, sig) match {
+        case (arg :: tailArgs, Signature.Parameter(_, paramErased, paramName, paramType, next)) =>
+          val variable = ParameterVariable(owner, paramIndex, paramType, paramErased, paramName)
+          substituteArg(variable)(arg)(sigHandler)(next).flatMap { case (next, _) =>
+            impl(paramIndex + 1, next, tailArgs)
+          }
+
+        case (Nil, Signature.Parameter(_, _, _, _, _)) => ???
+
+        case (Nil, Signature.Result(res)) => ZIO.succeed(res)
+
+        case (_ :: _, Signature.Result(_)) => ???
+      }
+
+    impl(0, sig, args)
+  end substituedSigResult
+
+
+  // Returns substituted signature and (possibly) modified replacement expression
+  def substituteArg[Res]
+  (variable: Variable)
+  (replacement: WrapExpr)
+  (sigHandler: SignatureHandler[Res])
+  (sig: Signature[WrapExpr, Res])
+  : Comp[(Signature[WrapExpr, Res], WrapExpr)] =
+    if referencesVariableSig(variable)(sigHandler)(sig) then
+      asStableExpression(replacement).map { case (replacement2, replacementStable) =>
+        val sig2 = substituteSignature(variable)(replacement)(sigHandler)(sig)
+        (sig2, replacement)
+      }
+    else
+      ZIO.succeed((sig, replacement))
 
   trait SignatureHandler[Res] {
     def substituteResultMany(subst: Map[Variable, WrapExpr])(res: Res): Res
