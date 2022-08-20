@@ -129,10 +129,14 @@ object SourceClass {
         fieldsCell.get(
           ZIO.collect(stmt.instanceBody) {
             case WithSource(field: parser.FieldDeclarationStmt, _) =>
+              val opt = exprConverter.ExprOptions(
+                purity = true,
+              )
+
               (
                 for
                   env <- innerEnvNoFields
-                  varType <- exprConverter.convertExpr(field.fieldType).check(env, exprConverter.anyType)
+                  varType <- exprConverter.convertExpr(field.fieldType).check(env, opt, exprConverter.anyType)
                   resolvedVarType <- exprConverter.resolveHoles(varType.env, varType.expr)
                 yield context.ExprContext.MemberVariable(this, resolvedVarType._1, Some(field.name))
               ).asSomeError

@@ -18,6 +18,8 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
   def isVirtual: Boolean
   def isFinal: Boolean
 
+  def purity: Boolean
+
   type ImplementationType = IsDeclaration match {
     case true => Comp[MethodImplementation]
     case false => Unit

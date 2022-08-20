@@ -48,6 +48,8 @@ object SourceFunction {
 
       override def signature: Comp[Signature[WrapExpr, WrapExpr]] =
         sigEnv.map { _._1 }
+      
+      override def purity: Boolean = stmt.purity
 
       override def implementation: Comp[FunctionImplementation] =
         implCell.get(
@@ -71,7 +73,10 @@ object SourceFunction {
                 sig <- signature
                 returnType = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(sig.unsubstitutedResult)
                 env <- innerEnv
-                bodyResult <- exprConverter.convertExpr(expr).check(env, returnType)
+                opt = exprConverter.ExprOptions(
+                  purity = stmt.purity,
+                )
+                bodyResult <- exprConverter.convertExpr(expr).check(env, opt, returnType)
                 (resolvedBody, _) <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)
               yield new FunctionImplementationC.ExpressionBody {
                 override val context: ctx.type = ctx

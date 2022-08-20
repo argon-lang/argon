@@ -12,6 +12,8 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
 
   val id: UniqueIdentifier
   def signature: Comp[Signature[WrapExpr, WrapExpr]]
+  
+  def purity: Boolean
 
   type ImplementationType = IsDeclaration match {
     case true => Comp[FunctionImplementation]

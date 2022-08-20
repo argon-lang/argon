@@ -35,6 +35,8 @@ object SourceMethod {
       override def isVirtual: Boolean = stmt.modifiers.exists(mod => mod.value == parser.VirtualModifier || mod.value == parser.AbstractModifier)
       override def isFinal: Boolean = stmt.modifiers.exists(_.value == parser.FinalModifier)
 
+      override def purity: Boolean = stmt.purity
+
       private def sigEnv: Comp[(Signature[WrapExpr, WrapExpr], exprConverter.Env)] =
         sigCell.get(
           SignatureUtil.create(context)(exprConverter)(this)(outerEnv)(stmt.parameters)(
@@ -76,7 +78,10 @@ object SourceMethod {
                 sig <- signatureUnsubstituted
                 returnType = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(sig.unsubstitutedResult)
                 env <- innerEnv
-                bodyResult <- exprConverter.convertExpr(expr).check(env, returnType)
+                opt = exprConverter.ExprOptions(
+                  purity = stmt.purity,
+                )
+                bodyResult <- exprConverter.convertExpr(expr).check(env, opt, returnType)
                 resolvedBody <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)
               yield new MethodImplementationC.ExpressionBody {
                 override val context: ctx.type = ctx

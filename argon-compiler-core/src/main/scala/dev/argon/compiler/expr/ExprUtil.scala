@@ -185,6 +185,22 @@ trait ExprUtil extends UsingContext {
     def allowErased(allow: Boolean): Env = this
   }
 
+  final case class ExprOptions(purity: Boolean) {
+    def forTypeExpr: ExprOptions =
+      requirePure
+
+    def requirePure: ExprOptions =
+      requirePurity(true)
+
+    def requirePurity(purity: Boolean): ExprOptions =
+      copy(purity = this.purity && purity)
+      
+    def checkPurity(callablePurity: Boolean): Boolean =
+      callablePurity || !purity
+  }
+  
+  
+
   type ClassResultConv = (WrapExpr, Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])
   type TraitResultConv = (WrapExpr, Seq[ArExpr[ExprConstructor.TraitType]])
 

@@ -259,13 +259,15 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
           getTubeOutput(context)(libName).map { libName -> _ }
         }.map { _.toMap }
 
-        result <- getTubeOutput(context)(testTubeName)
+        testTube <- getTubeOutput(context)(testTubeName)
+
+        result <- executeTest(testTube, libTubes)
           .foldZIO(
             failure = {
               case error: DiagnosticError => checkExpectedError(testCase.expectedResult)(error)
               case error => ZIO.fail(error)
             },
-            success = testTube => executeTest(testTube, libTubes).map(checkExpectedOutput(testCase.expectedResult)),
+            success = output => ZIO.succeed(checkExpectedOutput(testCase.expectedResult)(output)),
           )
           .tapDefect { defect =>
             ZIO.succeed {
@@ -308,9 +310,9 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
   private def checkExpectedError(expectedResult: TestCase.ExpectedResult)(error: DiagnosticError): IO[DiagnosticError, TestResult] =
     expectedResult match
       case ExpectedResult.Output(_) => ZIO.fail(error)
-      case ExpectedResult.Error(name) if summon[TypeNameTag[DiagnosticError]].typeName(error) == name =>
-        ZIO.succeed(assertTrue(true))
-      case ExpectedResult.Error(_) => ZIO.fail(error)
+
+      case ExpectedResult.Error(name) =>
+        ZIO.succeed(assertTrue(name == summon[TypeNameTag[DiagnosticError]].typeName(error)))
     end match
 
   private def normalizeOutput(s: String): String =

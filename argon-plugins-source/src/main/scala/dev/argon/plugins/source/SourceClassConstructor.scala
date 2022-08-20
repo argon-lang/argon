@@ -35,7 +35,7 @@ object SourceClassConstructor {
       private def sigEnv: Comp[(Signature[WrapExpr, Unit], exprConverter.Env)] =
         sigCell.get(
           SignatureUtil.create(context)(exprConverter)(this)(outerEnv)(stmt.parameters)(
-            _ => ZIO.unit
+            (_, _) => ZIO.unit
           )
         )
 
@@ -71,6 +71,10 @@ object SourceClassConstructor {
 
               final case class UnresolvedFieldInit(field: context.ExprContext.MemberVariable, fieldConv: exprConverter.exprContext.MemberVariable, value: exprConverter.exprContext.WrapExpr)
 
+              val opt = exprConverter.ExprOptions(
+                purity = true,
+              )
+
               def stmtsWithLocation(stmts: Seq[WithSource[parser.Stmt]]): Option[WithSource[Seq[WithSource[parser.Stmt]]]] =
                 for
                   head <- stmts.headOption
@@ -103,7 +107,7 @@ object SourceClassConstructor {
 
               def convertStmtBlock(env: Env, stmts: Seq[WithSource[parser.Stmt]]): Comp[ExprResult] =
                 stmtsWithLocation(stmts).fold(ZIO.succeed(ExprResult(exprConverter.unitValue, env))) { stmts =>
-                  exprConverter.convertStmtList(stmts).check(env, exprConverter.unitType)
+                  exprConverter.convertStmtList(stmts).check(env, opt, exprConverter.unitType)
                 }
 
               def convertPreBaseCallBlocks(env: Env, stmts: Seq[Either[Seq[WithSource[parser.Stmt]], WithSource[parser.FieldInitializationStmt]]]): Comp[(Seq[exprConverter.exprContext.WrapExpr | UnresolvedFieldInit], Env)] =
@@ -120,7 +124,7 @@ object SourceClassConstructor {
                           .toRight { DiagnosticError.FieldNotFound(DiagnosticSource.Location(fieldInit.location), fieldInit.value.name) }
                       )
                       fieldConv = ExprToHolesConverter(context)(exprConverter.exprContext).processMemberVariable(field)
-                      (ExprResult(value, env)) <- exprConverter.convertExpr(fieldInit.value.value).check(env, fieldConv.varType)
+                      (ExprResult(value, env)) <- exprConverter.convertExpr(fieldInit.value.value).check(env, opt, fieldConv.varType)
                     yield (acc :+ UnresolvedFieldInit(field, fieldConv, value), env)
                 }
 
@@ -128,7 +132,7 @@ object SourceClassConstructor {
                 owner.arClass.signature.flatMap { sig =>
                   ZIO.foreach(stmt) { stmt =>
                     ZIO.foreach(stmt.value.value) { valueExpr =>
-                      exprConverter.convertExpr(valueExpr).check(env, exprConverter.anyType)
+                      exprConverter.convertExpr(valueExpr).check(env, opt, exprConverter.anyType)
                         .flatMap {
                           case ExprResult(exprConverter.exprContext.WrapExpr.OfExpr(baseCall), env) =>
                             baseCall.constructor match {

@@ -13,6 +13,6 @@
 
     </InputSource>
 
-    <ExpectedError>ImpureFunctionCalledError</ExpectedError>
+    <ExpectedError>Purity</ExpectedError>
 
 </ArgonTest>

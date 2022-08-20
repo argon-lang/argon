@@ -16,9 +16,13 @@ object SignatureUtil {
   (owner: exprConverter.exprContext.ParameterVariableOwner)
   (env: exprConverter.Env)
   (parameters: Seq[WithSource[parser.FunctionParameterList]])
-  (createResult: exprConverter.Env => context.Comp[Res])
+  (createResult: (exprConverter.Env, exprConverter.ExprOptions) => context.Comp[Res])
   : context.Comp[(Signature[context.ExprContext.WrapExpr, Res], exprConverter.Env)] =
     import exprConverter.Env
+
+    val opt = exprConverter.ExprOptions(
+      purity = true,
+    )
 
     def impl
     (env: exprConverter.Env)
@@ -29,7 +33,7 @@ object SignatureUtil {
         case WithSource(param, location) +: tail =>
           def convertParamElementType(param: parser.FunctionParameter, env: exprConverter.Env): context.Comp[context.ExprContext.WrapExpr] =
             for
-              exprResult <- exprConverter.convertExpr(param.paramType).check(env, exprConverter.anyType)
+              exprResult <- exprConverter.convertExpr(param.paramType).check(env, opt.forTypeExpr, exprConverter.anyType)
               resExprPair <- exprConverter.resolveHoles(exprResult.env, exprResult.expr)
             yield resExprPair._1
 
@@ -81,19 +85,22 @@ object SignatureUtil {
           }
 
         case _ =>
-          createResult(env).map { res =>
+          createResult(env, opt).map { res =>
               (Signature.Result(res), env)
           }
 
     impl(env)(parameters)(0)
   end create
 
-  def createTraitResult(context: Context)(exprConverter: ExpressionConverter & HasContext[context.type])
-    (stmt: parser.TraitDeclarationStmt)(env: exprConverter.Env)
-    : context.Comp[(
-      context.ExprContext.WrapExpr,
-      Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]],
-    )] =
+  def createTraitResult
+  (context: Context)
+  (exprConverter: ExpressionConverter & HasContext[context.type])
+  (stmt: parser.TraitDeclarationStmt)
+  (env: exprConverter.Env, opt: exprConverter.ExprOptions)
+  : context.Comp[(
+    context.ExprContext.WrapExpr,
+    Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]],
+  )] =
     import context.Comp
     import exprConverter.Env
     import exprConverter.exprContext.{WrapExpr, ArExpr, ExprConstructor}
@@ -123,7 +130,7 @@ object SignatureUtil {
       stmt.baseType match {
         case Some(baseType) =>
           for {
-            baseTypeResult <- exprConverter.convertExpr(baseType).check(env, traitType)
+            baseTypeResult <- exprConverter.convertExpr(baseType).check(env, opt.forTypeExpr, traitType)
             baseTraits <- impl(baseTypeResult.expr, Seq.empty)
           } yield (baseTraits, baseTypeResult.env)
 
@@ -152,7 +159,7 @@ object SignatureUtil {
   (context: Context)
   (exprConverter: ExpressionConverter & HasContext[context.type])
   (stmt: parser.ClassDeclarationStmt)
-  (env: exprConverter.Env)
+  (env: exprConverter.Env, opt: exprConverter.ExprOptions)
   : context.Comp[(
     context.ExprContext.WrapExpr,
     Option[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.ClassType]],
@@ -198,7 +205,7 @@ object SignatureUtil {
       stmt.baseType match {
         case Some(baseType) =>
           for {
-            baseTypeResult <- exprConverter.convertExpr(baseType).check(env, classType)
+            baseTypeResult <- exprConverter.convertExpr(baseType).check(env, opt.forTypeExpr, classType)
             (baseClass, baseTraits) <- impl(baseTypeResult.expr, None, Seq.empty)
           } yield (baseClass, baseTraits, baseTypeResult.env)
 
@@ -235,9 +242,9 @@ object SignatureUtil {
   (context: Context)
   (exprConverter: ExpressionConverter & HasContext[context.type])
   (returnTypeExpr: WithSource[parser.Expr])
-  (env: exprConverter.Env)
+  (env: exprConverter.Env, opt: exprConverter.ExprOptions)
   : context.Comp[context.ExprContext.WrapExpr] =
-    exprConverter.convertExpr(returnTypeExpr).check(env, exprConverter.anyType)
+    exprConverter.convertExpr(returnTypeExpr).check(env, opt, exprConverter.anyType)
       .flatMap { exprResult => exprConverter.resolveHoles(exprResult.env, exprResult.expr) }
       .map { _._1 }
 
