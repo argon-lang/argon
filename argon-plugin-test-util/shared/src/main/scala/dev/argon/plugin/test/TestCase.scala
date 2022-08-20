@@ -10,6 +10,7 @@ case class TestCase
 object TestCase:
   enum ExpectedResult {
     case Output(text: String)
+    case Error(name: String)
   }
 end TestCase
 

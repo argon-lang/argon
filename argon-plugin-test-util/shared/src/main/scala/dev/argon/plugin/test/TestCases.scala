@@ -1,5 +1,6 @@
 package dev.argon.plugin.test
 
+import dev.argon.util.{*, given}
 import dev.argon.util.xml.*
 import zio.*
 
@@ -33,7 +34,12 @@ private[test] object TestCases {
             (inputSourceNode.attribute(Name("name")).get.value, inputSourceNode.textContent)
           }
           .toMap,
-        expectedResult = TestCase.ExpectedResult.Output(xml.child(Name("ExpectedOutput")).get.textContent),
+        expectedResult =
+          xml.child(Name("ExpectedOutput")) match {
+            case Some(node) => TestCase.ExpectedResult.Output(node.textContent)
+            case None =>
+              TestCase.ExpectedResult.Error(xml.child(Name("ExpectedError")).get.textContent)
+          },
       )
     }
 

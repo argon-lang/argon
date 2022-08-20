@@ -21,7 +21,7 @@ import java.io.{FileNotFoundException, IOException}
 import java.nio.charset.CharacterCodingException
 import java.nio.file.NotDirectoryException
 
-abstract class ExecutionTests[E0] extends CompilerTestsBase {
+abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
   type E = E0 | SourceError | TestError
 
   val pluginName: String
@@ -259,13 +259,20 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
           getTubeOutput(context)(libName).map { libName -> _ }
         }.map { _.toMap }
 
-        testTube <- getTubeOutput(context)(testTubeName)
-        output <- executeTest(testTube, libTubes).tapDefect { defect =>
-          ZIO.succeed {
-            defect.defects.foreach(_.printStackTrace())
+        result <- getTubeOutput(context)(testTubeName)
+          .foldZIO(
+            failure = {
+              case error: DiagnosticError => checkExpectedError(testCase.expectedResult)(error)
+              case error => ZIO.fail(error)
+            },
+            success = testTube => executeTest(testTube, libTubes).map(checkExpectedOutput(testCase.expectedResult)),
+          )
+          .tapDefect { defect =>
+            ZIO.succeed {
+              defect.defects.foreach(_.printStackTrace())
+            }
           }
-        }
-      yield checkExpectedOutput(testCase.expectedResult, output)
+      yield result
     }
 
 
@@ -292,9 +299,18 @@ abstract class ExecutionTests[E0] extends CompilerTestsBase {
 
 
 
-  private def checkExpectedOutput(expectedResult: TestCase.ExpectedResult, output: String): TestResult =
+  private def checkExpectedOutput(expectedResult: TestCase.ExpectedResult)(output: String): TestResult =
     expectedResult match
       case ExpectedResult.Output(text) => assertTrue(normalizeOutput(output) == normalizeOutput(text))
+      case ExpectedResult.Error(name) => assertNever(s"Found output, but an error ($name) was expected")
+    end match
+
+  private def checkExpectedError(expectedResult: TestCase.ExpectedResult)(error: DiagnosticError): IO[DiagnosticError, TestResult] =
+    expectedResult match
+      case ExpectedResult.Output(_) => ZIO.fail(error)
+      case ExpectedResult.Error(name) if summon[TypeNameTag[DiagnosticError]].typeName(error) == name =>
+        ZIO.succeed(assertTrue(true))
+      case ExpectedResult.Error(_) => ZIO.fail(error)
     end match
 
   private def normalizeOutput(s: String): String =

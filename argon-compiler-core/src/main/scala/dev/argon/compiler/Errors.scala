@@ -5,10 +5,10 @@ import dev.argon.compiler.tube.TubeName
 import dev.argon.compiler.definitions.*
 import dev.argon.parser
 import dev.argon.parser.IdentifierExpr
-import dev.argon.util.SourceLocation
+import dev.argon.util.{SourceLocation, TypeNameTag}
 
 trait DiagnosticMessage
-trait DiagnosticError
+sealed trait DiagnosticError derives TypeNameTag
 
 object DiagnosticError {
   final case class UnknownTube(tubeName: TubeName) extends DiagnosticError
