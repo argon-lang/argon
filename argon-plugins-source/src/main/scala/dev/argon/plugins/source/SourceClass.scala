@@ -133,6 +133,7 @@ object SourceClass {
               val opt = exprConverter.ExprOptions(
                 purity = true,
                 accessToken = SignatureUtil.createAccessToken(exprConverter)(this),
+                allowAbstractConstructorCall = false,
               )
 
               (

@@ -75,6 +75,7 @@ object SourceClassConstructor {
               val opt = exprConverter.ExprOptions(
                 purity = stmt.purity,
                 accessToken = SignatureUtil.createAccessToken(exprConverter)(this),
+                allowAbstractConstructorCall = false,
               )
 
               def stmtsWithLocation(stmts: Seq[WithSource[parser.Stmt]]): Option[WithSource[Seq[WithSource[parser.Stmt]]]] =
@@ -134,7 +135,7 @@ object SourceClassConstructor {
                 owner.arClass.signature.flatMap { sig =>
                   ZIO.foreach(stmt) { stmt =>
                     ZIO.foreach(stmt.value.value) { valueExpr =>
-                      exprConverter.convertExpr(valueExpr).check(env, opt, exprConverter.anyType)
+                      exprConverter.convertExpr(valueExpr).check(env, opt.copy(allowAbstractConstructorCall = true), exprConverter.anyType)
                         .flatMap {
                           case ExprResult(exprConverter.exprContext.WrapExpr.OfExpr(baseCall), env) =>
                             baseCall.constructor match {

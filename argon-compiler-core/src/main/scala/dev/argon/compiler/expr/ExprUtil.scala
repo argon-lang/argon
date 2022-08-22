@@ -190,6 +190,7 @@ trait ExprUtil extends UsingContext {
   (
     purity: Boolean,
     accessToken: AccessToken,
+    allowAbstractConstructorCall: Boolean,
   ) {
     def forTypeExpr: ExprOptions =
       requirePure

@@ -24,6 +24,7 @@ object SignatureUtil {
     val opt = exprConverter.ExprOptions(
       purity = true,
       accessToken = createAccessToken(exprConverter)(owner),
+      allowAbstractConstructorCall = false,
     )
 
     def impl

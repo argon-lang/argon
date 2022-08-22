@@ -1417,6 +1417,8 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                   ctor.arClass.constructors.map { classCtors =>
                     LookupResult.Suspended(
                       for
+                        _ <- ZIO.fail(DiagnosticError.AbstractClassConstructorCalled(DiagnosticSource.Location(overloadLocation))).when(!opt.allowAbstractConstructorCall && ctor.arClass.isAbstract)
+
                         classCtors <- ZIO.filter(classCtors) { classCtor =>
                           opt.accessToken.canAccessMember(
                             classCtor.owner.accessModifier,

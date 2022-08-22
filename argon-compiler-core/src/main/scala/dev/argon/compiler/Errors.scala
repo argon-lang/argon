@@ -33,6 +33,7 @@ object DiagnosticError {
   final case class NonOpenClassExtended(source: DiagnosticSource) extends DiagnosticError
   final case class SealedClassExtended(source: DiagnosticSource) extends DiagnosticError
   final case class SealedTraitExtended(source: DiagnosticSource) extends DiagnosticError
+  final case class AbstractClassConstructorCalled(source: DiagnosticSource) extends DiagnosticError
 
   final case class SpecMultiPartGlobUsedWithPrefixSuffix() extends DiagnosticError
   final case class SpecFileNameTemplateMustBeIdentifier() extends DiagnosticError

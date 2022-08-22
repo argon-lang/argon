@@ -81,6 +81,7 @@ object SourceMethod {
                 opt = exprConverter.ExprOptions(
                   purity = stmt.purity,
                   accessToken = SignatureUtil.createAccessToken(exprConverter)(this),
+                  allowAbstractConstructorCall = false,
                 )
                 bodyResult <- exprConverter.convertExpr(expr).check(env, opt, returnType)
                 resolvedBody <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)
