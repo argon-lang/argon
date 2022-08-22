@@ -283,6 +283,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         def createEmitState(scopeVars: TRef[Seq[estree.VariableDeclaration]]): EmitState =
           EmitState(
             tailPosition = false,
+            functionResult = false,
             discardValue = true,
             scopeVars = scopeVars
           )
@@ -367,11 +368,12 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
   final case class EmitState
   (
     tailPosition: Boolean,
+    functionResult: Boolean,
     discardValue: Boolean,
     scopeVars: TRef[Seq[estree.VariableDeclaration]],
   ) {
     def subExpr: EmitState =
-      copy(tailPosition = false, discardValue = false)
+      copy(tailPosition = false, functionResult = false, discardValue = false)
   }
 
   private def emitScope(createScope: TRef[Seq[estree.VariableDeclaration]] => EmitState)(f: EmitState => Comp[Seq[estree.Statement]]): Comp[Seq[estree.Statement]] =
@@ -382,10 +384,10 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     yield varStmts ++ result
 
   private def emitTopScope(f: EmitState => Comp[Seq[estree.Statement]]): Comp[Seq[estree.Statement]] =
-    emitScope(scopeVars => EmitState(tailPosition = true, discardValue = false, scopeVars = scopeVars))(f)
+    emitScope(scopeVars => EmitState(tailPosition = true, functionResult = true, discardValue = false, scopeVars = scopeVars))(f)
 
   private def emitStandaloneScope(f: EmitState => Comp[estree.Expression]): Comp[estree.Expression] =
-    emitScope(scopeVars => EmitState(tailPosition = false, discardValue = false, scopeVars = scopeVars)) { emitState =>
+    emitScope(scopeVars => EmitState(tailPosition = false, functionResult = false, discardValue = false, scopeVars = scopeVars)) { emitState =>
       f(emitState).map { expr => Seq(`return`(expr)) }
     }
       .map {
@@ -427,6 +429,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
             case head :: tail =>
               emitWrapExprAsStmt(emitState.copy(
                 tailPosition = emitState.tailPosition && tail.isEmpty,
+                functionResult = emitState.functionResult && tail.isEmpty,
                 discardValue = emitState.discardValue || tail.nonEmpty
               ))(head).flatMap { stmts =>
                 emitSequence(emitState, acc ++ stmts, tail)
@@ -455,6 +458,17 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
       case ctor: (expr.constructor.type & ExprConstructor.LoadTuple.type) if emitState.discardValue && expr.getArgs(ctor).isEmpty =>
         ZIO.succeed(Seq())
+
+      case ctor: (expr.constructor.type & ExprConstructor.EnsureExecuted.type) =>
+        val (body, ensureBody) = expr.getArgs(ctor)
+        for
+          bodyStmts <- emitWrapExprAsStmt(emitState.copy(tailPosition = false))(body)
+          ensureBodyStmts <- emitWrapExprAsStmt(emitState.copy(tailPosition = false, functionResult = false, discardValue = true))(ensureBody)
+        yield Seq(estree.TryStatement(
+          block = block(bodyStmts*),
+          handler = Nullable(null),
+          finalizer = Nullable(block(ensureBodyStmts*)),
+        ))
 
       case _ if emitState.discardValue =>
         for
@@ -501,6 +515,10 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           }
 
       end match
+    else if emitState.functionResult then
+      emitExpr(emitState.subExpr)(expr).map { expr =>
+        id(runtimeImportName).prop("trampoline").prop("result").call(expr)
+      }
     else
       expr.constructor match
         case ctor: (expr.constructor.type & ExprConstructor.BindVariable) =>
@@ -545,6 +563,9 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
               instanceTypeExpr.prop("constructors").prop(keyName),
             ) ++ argExprs
           )*)
+
+        case ctor: (expr.constructor.type & ExprConstructor.EnsureExecuted.type) =>
+          emitExprAsStmt(emitState)(expr).map(iefe)
 
         case ctor: (expr.constructor.type & ExprConstructor.FunctionCall) =>
           emitFunctionCall(emitState, expr, ctor).map { expr =>
