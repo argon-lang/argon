@@ -12,11 +12,15 @@ abstract class ArTraitC extends Definition with UsingContext derives CanEqual {
   override val owner: ArTraitC.Ownership[context.type]
 
   val id: UniqueIdentifier
+  def isSealed: Boolean
   def signature: Comp[Signature[WrapExpr, TraitResult]]
   def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByTrait[owner.type]]]]]
   def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByTraitStatic[owner.type]]]]]
 
   type TraitResult = (WrapExpr, Seq[ArExpr[ExprConstructor.TraitType]])
+
+  // Validate inheritance rules, does not check vtables
+  def validate: Comp[Unit]
 
   final override def equals(obj: Any): Boolean =
     obj.asInstanceOf[Matchable] match {

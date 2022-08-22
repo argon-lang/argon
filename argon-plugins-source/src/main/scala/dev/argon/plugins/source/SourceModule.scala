@@ -93,7 +93,7 @@ object SourceModule {
           case stmt: TraitDeclarationStmt =>
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
-              owner = OwnedByModuleC[context.type](currentModule, stmt.name, modifier)
+              owner = OwnedByModuleC[context.type](currentModule, stmt.name.value, modifier)
               arTrait <- SourceTrait.make(context)(exprConverter)(env)(owner)(stmt)
             yield (imports, Seq(ModuleElementC.TraitElement(arTrait)))
 

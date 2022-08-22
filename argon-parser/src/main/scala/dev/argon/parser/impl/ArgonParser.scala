@@ -742,7 +742,7 @@ object ArgonParser {
         case Rule.TraitDeclarationStmt =>
           rule(Rule.Modifiers) ++
             matchToken(KW_TRAIT) ++! (
-              rule(Rule.IdentifierOptional) ++
+              rule(Rule.IdentifierOptional).observeSource ++
                 rule(Rule.NewLines) ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_SUBTYPE) ++

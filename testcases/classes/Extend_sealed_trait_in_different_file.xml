@@ -1,12 +1,12 @@
 <ArgonTest>
 
-    <Name>Extend sealed class in different file</Name>
+    <Name>Extend sealed trait in different file</Name>
 
     <InputSource name="a.argon"><![CDATA[
 
         import Argon.Core/*
 
-        sealed open class ClassA <: Object
+        public sealed trait TraitA <: Object
         end
 
         proc main(): () = ()
@@ -16,12 +16,13 @@
     <InputSource name="b.argon"><![CDATA[
         
         import Argon.Core/*
+        import ./a/TraitA
 
-        class ClassB <: Object & ClassA
+        public class ClassB <: TraitA
         end
 
     ]]></InputSource>
 
-    <ExpectedError>SealedClassExtendedError</ExpectedError>
+    <ExpectedError>SealedTraitExtended</ExpectedError>
 
 </ArgonTest>

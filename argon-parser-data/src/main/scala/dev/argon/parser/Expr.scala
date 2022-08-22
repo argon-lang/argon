@@ -13,7 +13,7 @@ sealed trait Stmt {
 final case class TraitDeclarationStmt
   (
     baseType: Option[WithSource[Expr]],
-    name: Option[IdentifierExpr],
+    name: WithSource[Option[IdentifierExpr]],
     parameters: Vector[WithSource[FunctionParameterList]],
     body: Vector[WithSource[Stmt]],
     instanceBody: Vector[WithSource[Stmt]],

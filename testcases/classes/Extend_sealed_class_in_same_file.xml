@@ -1,16 +1,16 @@
 <ArgonTest>
 
-    <Name>Extend sealed trait in same file</Name>
+    <Name>Extend sealed class in same file</Name>
 
 
     <InputSource name="index.argon"><![CDATA[
             
         import Argon.Core/*
         
-        sealed trait TraitA <: Object
+        sealed open class ClassA <: Object
         end
         
-        trait TraitB <: Object & TraitA
+        class ClassB <: ClassA
         end
         
         proc main(): () = ()

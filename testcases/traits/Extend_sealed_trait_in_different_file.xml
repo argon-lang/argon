@@ -6,7 +6,7 @@
 
         import Argon.Core/*
 
-        sealed trait TraitA <: Object
+        public sealed trait TraitA <: Object
         end
 
         proc main(): () = ()
@@ -16,12 +16,13 @@
     <InputSource name="b.argon"><![CDATA[
         
         import Argon.Core/*
+        import ./a/TraitA
 
-        class ClassB <: TraitA
+        public trait TraitB <: TraitA
         end
 
     ]]></InputSource>
 
-    <ExpectedError>SealedTraitExtendedError</ExpectedError>
+    <ExpectedError>SealedTraitExtended</ExpectedError>
 
 </ArgonTest>

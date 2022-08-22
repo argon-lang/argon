@@ -1,16 +1,16 @@
 <ArgonTest>
 
-    <Name>Extend sealed class in same file</Name>
+    <Name>Extend non-open trait</Name>
 
 
     <InputSource name="index.argon"><![CDATA[
             
         import Argon.Core/*
         
-        sealed open class ClassA <: Object
+        class ClassA <: Object
         end
         
-        class ClassB <: Object & ClassA
+        class ClassB <: ClassA
         end
         
         proc main(): () = ()
@@ -18,6 +18,6 @@
             
     ]]></InputSource>
 
-    <ExpectedOutput></ExpectedOutput>
+    <ExpectedError>NonOpenClassExtended</ExpectedError>
 
 </ArgonTest>

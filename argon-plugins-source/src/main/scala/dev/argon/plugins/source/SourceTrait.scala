@@ -44,6 +44,8 @@ object SourceTrait {
       override val context: ctx.type = ctx
       override val id: UniqueIdentifier = traitId
 
+      override def isSealed: Boolean = stmt.modifiers.exists { _.value == parser.SealedModifier }
+
       override type IsDeclaration = true
 
       protected override val exprConverter: exprConverter2.type = exprConverter2
@@ -71,6 +73,16 @@ object SourceTrait {
         : Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[true] & HasOwner[OwnedByTraitStatic[owner.type]]]]] =
         staticMethodsCell.get(buildMethods[OwnedByTraitStatic[owner.type]](OwnedByTraitStaticC.apply)(stmt.body))
 
+
+      override def validate: Comp[Unit] =
+        signature.flatMap { sig =>
+          val (_, baseTraits) = sig.unsubstitutedResult
+
+          ZIO.foreachDiscard(baseTraits) { baseTraitType =>
+            val baseTrait = baseTraitType.constructor.arTrait
+            ZIO.fail(DiagnosticError.SealedTraitExtended(DiagnosticSource.Location(stmt.name.location))).when(baseTrait.isSealed && owner.module.moduleName != baseTrait.owner.module.moduleName)
+          }
+        }
     }
   end make
 

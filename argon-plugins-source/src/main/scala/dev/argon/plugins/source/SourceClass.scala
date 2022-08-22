@@ -59,7 +59,8 @@ object SourceClass {
 
 
       override def isAbstract: Boolean = stmt.modifiers.exists { _.value == parser.AbstractModifier }
-
+      override def isSealed: Boolean = stmt.modifiers.exists { _.value == parser.SealedModifier }
+      override def isOpen: Boolean = stmt.modifiers.exists { _.value == parser.OpenModifier }
       override def classMessageSource: DiagnosticSource = DiagnosticSource.Location(stmt.name.location)
 
 
@@ -145,6 +146,25 @@ object SourceClass {
             case _ => ZIO.fail(None)
           }
         )
+
+      override def validate: Comp[Unit] =
+        signature.flatMap { sig =>
+          val (_, baseClassOpt, baseTraits) = sig.unsubstitutedResult
+
+          val validateBaseClass = ZIO.foreachDiscard(baseClassOpt) { baseClassType =>
+            val baseClass = baseClassType.constructor.arClass
+
+            ZIO.fail(DiagnosticError.NonOpenClassExtended(DiagnosticSource.Location(stmt.name.location))).when(!baseClass.isOpen) *>
+              ZIO.fail(DiagnosticError.SealedClassExtended(DiagnosticSource.Location(stmt.name.location))).when(baseClass.isSealed && owner.module.moduleName != baseClass.owner.module.moduleName)
+          }
+
+          val validateBaseTraits = ZIO.foreachDiscard(baseTraits) { baseTraitType =>
+            val baseTrait = baseTraitType.constructor.arTrait
+            ZIO.fail(DiagnosticError.SealedTraitExtended(DiagnosticSource.Location(stmt.name.location))).when(baseTrait.isSealed && owner.module.moduleName != baseTrait.owner.module.moduleName)
+          }
+
+          validateBaseClass *> validateBaseTraits
+        }
     }
 
 }

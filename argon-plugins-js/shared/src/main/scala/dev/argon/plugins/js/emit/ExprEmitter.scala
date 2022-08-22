@@ -75,6 +75,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   def classExport(arClass: ArClass & HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
     for
+      _ <- arClass.validate
+
       sig <- arClass.signature
       erasedSig <- SignatureEraser(context).erasedNoResult(sig)
       exportName = getOverloadExportName(arClass.owner.ownedName, erasedSig)
@@ -146,6 +148,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   def traitExport(arTrait: ArTrait & HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
     for
+      _ <- arTrait.validate
+
       sig <- arTrait.signature
       erasedSig <- SignatureEraser(context).erasedNoResult(sig)
       exportName = getOverloadExportName(arTrait.owner.ownedName, erasedSig)

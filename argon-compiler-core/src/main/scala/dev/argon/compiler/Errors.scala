@@ -30,6 +30,9 @@ object DiagnosticError {
   final case class ExternFunctionNotFound(source: DiagnosticSource, specifier: String) extends DiagnosticError
   final case class FieldNotFound(source: DiagnosticSource, name: IdentifierExpr) extends DiagnosticError
   final case class Purity(source: DiagnosticSource) extends DiagnosticError
+  final case class NonOpenClassExtended(source: DiagnosticSource) extends DiagnosticError
+  final case class SealedClassExtended(source: DiagnosticSource) extends DiagnosticError
+  final case class SealedTraitExtended(source: DiagnosticSource) extends DiagnosticError
 
   final case class SpecMultiPartGlobUsedWithPrefixSuffix() extends DiagnosticError
   final case class SpecFileNameTemplateMustBeIdentifier() extends DiagnosticError
