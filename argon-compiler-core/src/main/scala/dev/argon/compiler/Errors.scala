@@ -25,7 +25,6 @@ object DiagnosticError {
   final case class TypeError(source: DiagnosticSource) extends DiagnosticError
   final case class InvalidAccessModifierCombination() extends DiagnosticError
   final case class InvalidGlobalAccessModifier(accessModifier: AccessModifier) extends DiagnosticError
-  final case class AbstractMethodNotImplemented() extends DiagnosticError
   final case class ExternMethodNotFound(source: DiagnosticSource, specifier: String) extends DiagnosticError
   final case class ExternFunctionNotFound(source: DiagnosticSource, specifier: String) extends DiagnosticError
   final case class FieldNotFound(source: DiagnosticSource, name: IdentifierExpr) extends DiagnosticError
@@ -34,6 +33,7 @@ object DiagnosticError {
   final case class SealedClassExtended(source: DiagnosticSource) extends DiagnosticError
   final case class SealedTraitExtended(source: DiagnosticSource) extends DiagnosticError
   final case class AbstractClassConstructorCalled(source: DiagnosticSource) extends DiagnosticError
+  final case class AbstractMethodNotImplemented(source: DiagnosticSource) extends DiagnosticError
 
   final case class SpecMultiPartGlobUsedWithPrefixSuffix() extends DiagnosticError
   final case class SpecFileNameTemplateMustBeIdentifier() extends DiagnosticError

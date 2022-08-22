@@ -260,7 +260,7 @@ object VTableBuilder {
         ZIO.foreachDiscard(vtable.methodMap.values) {
           case VTableEntry(_, _, _, _, VTableEntryMethod(_, _)) => ZIO.unit
           case VTableEntry(_, _, _, _, VTableEntryAbstract) =>
-            ZIO.fail(DiagnosticError.AbstractMethodNotImplemented())
+            ZIO.fail(DiagnosticError.AbstractMethodNotImplemented(source))
 
           case VTableEntry(_, _, _, _, VTableEntryAmbiguous(_)) => ???
         }

@@ -35,6 +35,6 @@
             
     ]]></InputSource>
 
-    <ExpectedError>AbstractMethodNotImplementedError</ExpectedError>
+    <ExpectedError>AbstractMethodNotImplemented</ExpectedError>
 
 </ArgonTest>
