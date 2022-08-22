@@ -10,6 +10,8 @@ abstract class ClassConstructorC extends Definition with UsingContext derives Ca
 
   val id: UniqueIdentifier
   def signatureUnsubstituted: Comp[Signature[WrapExpr, Unit]]
+  
+  val purity: Boolean
 
   val owner: ClassConstructorC.Ownership[context.type]
 

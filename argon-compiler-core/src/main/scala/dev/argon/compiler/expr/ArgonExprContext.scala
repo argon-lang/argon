@@ -31,7 +31,7 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
   override def localVariableCanEqual: CanEqual[TLocalVariable, TLocalVariable] =
     summon[CanEqual[TLocalVariable, TLocalVariable]]
 
-  sealed trait Variable derives CanEqual {
+  sealed abstract class Variable derives CanEqual {
     val varType: WrapExpr
     def name: Option[IdentifierExpr]
     def isMutable: Boolean

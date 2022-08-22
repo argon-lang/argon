@@ -1,6 +1,7 @@
 package dev.argon.plugins.source
 
 import dev.argon.compiler.*
+import dev.argon.compiler.definitions.*
 import dev.argon.compiler.expr.*
 import dev.argon.compiler.module.ModuleElementC
 import dev.argon.compiler.signature.{ErasedSignature, ErasedSignatureType, ErasedSignatureWithResult, ImportSpecifier, Signature}
@@ -186,7 +187,6 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         EndOverloadExprFactory(
           OverloadExprFactory(
             op.location,
-            _.scope.lookup(IdentifierExpr.OperatorIdentifier(op.value)),
             Seq(
               ArgumentInfo(convertExpr(left), left.location, FunctionParameterListType.NormalList),
               ArgumentInfo(convertExpr(right), right.location, FunctionParameterListType.NormalList),
@@ -269,7 +269,6 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       case id: IdentifierExpr =>
         OverloadExprFactory(
           expr.location,
-          _.scope.lookup(id),
           Seq.empty,
           id,
         )
@@ -541,7 +540,6 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         EndOverloadExprFactory(
           OverloadExprFactory(
             op.location,
-            _.scope.lookup(IdentifierExpr.OperatorIdentifier(op.value)),
             Seq(
               ArgumentInfo(convertExpr(inner), inner.location, FunctionParameterListType.NormalList)
             ),
@@ -552,12 +550,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
   private abstract class OverloadExprFactoryBase extends ExprFactorySynth {
 
-    override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = resolveOverload(env, opt)(lookup(env))
+    override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = resolveOverload(env, opt)(lookup(env, opt))
 
     protected type TElement
 
     protected val args: Seq[ArgumentInfo]
-    protected def lookup: Env => LookupResult[TElement]
+    protected def lookup(env: Env, opt: ExprOptions): LookupResult[TElement]
     protected def overloadLocation: SourceLocation
     protected def lookupName: IdentifierExpr | parser.ClassConstructorExpr.type
 
@@ -899,27 +897,47 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
   private final class OverloadExprFactory
   (
     protected val overloadLocation: SourceLocation,
-    protected val lookup: Env => LookupResult[ScopeElement],
     protected val args: Seq[ArgumentInfo],
     protected val lookupName: IdentifierExpr,
   )
       extends OverloadExprFactoryBase {
 
 
+    override protected def lookup(env: Env, opt: ExprOptions): LookupResult[ScopeElement] =
+      checkLookupAccess(opt)(env.scope.lookup(lookupName))
+
+    private def checkLookupAccess(opt: ExprOptions)(res: LookupResult[ScopeElement]): LookupResult[ScopeElement] =
+      res match
+        case LookupResult.Success(overloads, nextPriority) =>
+          LookupResult.Success(
+            overloads.filter {
+              case elem: ModuleElement[?] => opt.accessToken.canAccessGlobal(elem.accessModifier, elem.module)
+              case _: Variable => true
+              case _: ParameterVariableElement => true
+            },
+            checkLookupAccess(opt)(nextPriority)
+          )
+
+        case LookupResult.Suspended(suspendedResult) =>
+          LookupResult.Suspended(suspendedResult.map(checkLookupAccess(opt)))
+
+        case LookupResult.NotFound() => LookupResult.NotFound()
+      end match
 
     override def mutate(value: MutatorValue): ExprFactory =
       if args.isEmpty then
         new ExprFactory {
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = mutateImpl(value, lookup(env)).flatMap(_.synth(env, opt))
+          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+            mutateImpl(value, lookup(env, opt)).flatMap(_.synth(env, opt))
 
           override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
-            mutateImpl(value, lookup(env)).flatMap(_.check(env, opt, t))
+            mutateImpl(value, lookup(env, opt)).flatMap(_.check(env, opt, t))
 
         }
       else
         super.mutate(value)
 
-    override def invoke(arg: ArgumentInfo): ExprFactory = OverloadExprFactory(overloadLocation, lookup, args :+ arg, lookupName)
+    override def invoke(arg: ArgumentInfo): ExprFactory = OverloadExprFactory(overloadLocation, args :+ arg, lookupName)
 
     protected override type TElement = ScopeElement
 
@@ -1085,57 +1103,69 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       case ByTrait(t: ArExpr[ExprConstructor.TraitType])
       case ByClassStatic(c: ArExpr[ExprConstructor.ClassType])
       case ByTraitStatic(t: ArExpr[ExprConstructor.TraitType])
+
+      def toAccessType: AccessToken.AccessType =
+        this match {
+          case ByClass(c) => c.constructor.arClass
+          case ByTrait(t) => t.constructor.arTrait
+          case ByClassStatic(c) => c.constructor.arClass
+          case ByTraitStatic(t) => t.constructor.arTrait
+        }
     }
 
-    protected def lookup: Env => LookupResult[MethodElement] =
-      _ =>
-        LookupResult.Suspended(
-          evaluator.normalizeTopLevelWrap(instance, fuel)
-            .flatMap {
-              case WrapExpr.OfExpr(normalizedInstance) =>
-                normalizedInstance.constructor match {
-                  case ctor: (normalizedInstance.constructor.type & ExprConstructor.ClassType) =>
-                    lookupMethods(
-                      Seq(InstanceType.ByClassStatic(ArExpr(ctor, normalizedInstance.getArgs(ctor)))),
-                      Set.empty,
-                      Set.empty,
-                    )
+    protected override def lookup(env: Env, opt: ExprOptions): LookupResult[MethodElement] =
+      LookupResult.Suspended(
+        evaluator.normalizeTopLevelWrap(instance, fuel)
+          .flatMap {
+            case WrapExpr.OfExpr(normalizedInstance) =>
+              normalizedInstance.constructor match {
+                case ctor: (normalizedInstance.constructor.type & ExprConstructor.ClassType) =>
+                  lookupMethods(
+                    opt.accessToken,
+                    Seq(ctor.arClass),
+                    Seq(InstanceType.ByClassStatic(ArExpr(ctor, normalizedInstance.getArgs(ctor)))),
+                    Set.empty,
+                    Set.empty,
+                  )
 
-                  case ctor: (normalizedInstance.constructor.type & ExprConstructor.TraitType) =>
-                    lookupMethods(
-                      Seq(InstanceType.ByTraitStatic(ArExpr(ctor, normalizedInstance.getArgs(ctor)))),
-                      Set.empty,
-                      Set.empty,
-                    )
+                case ctor: (normalizedInstance.constructor.type & ExprConstructor.TraitType) =>
+                  lookupMethods(
+                    opt.accessToken,
+                    Seq(ctor.arTrait),
+                    Seq(InstanceType.ByTraitStatic(ArExpr(ctor, normalizedInstance.getArgs(ctor)))),
+                    Set.empty,
+                    Set.empty,
+                  )
 
-                  case _ =>
-                    evaluator.normalizeTopLevelWrap(instanceType, fuel)
-                      .map {
-                        case WrapExpr.OfExpr(normalizedInstanceType) =>
-                          normalizedInstanceType.constructor match {
-                            case ctor: (normalizedInstanceType.constructor.type & ExprConstructor.FunctionType.type) =>
-                              if memberName == IdentifierExpr.Named("apply") then
-                                val (argType, resType) = normalizedInstanceType.getArgs(ctor)
-                                Some(LookupResult.Success(Seq(MethodElement.FunctionObjectApply(argType, resType)), LookupResult.NotFound()))
-                              else
-                                None
+                case _ =>
+                  evaluator.normalizeTopLevelWrap(instanceType, fuel)
+                    .map {
+                      case WrapExpr.OfExpr(normalizedInstanceType) =>
+                        normalizedInstanceType.constructor match {
+                          case ctor: (normalizedInstanceType.constructor.type & ExprConstructor.FunctionType.type) =>
+                            if memberName == IdentifierExpr.Named("apply") then
+                              val (argType, resType) = normalizedInstanceType.getArgs(ctor)
+                              Some(LookupResult.Success(Seq(MethodElement.FunctionObjectApply(argType, resType)), LookupResult.NotFound()))
+                            else
+                              None
 
-                            case _ => None
-                          }
-                        case WrapExpr.OfHole(_) => None
-                      }
-                      .flatMap {
-                        case Some(res) => ZIO.succeed(res)
-                        case None =>
-                          getInstanceType(instanceType).flatMap { types =>
-                            lookupMethods(types, Set.empty, Set.empty)
-                          }
-                      }
-                }
+                          case _ => None
+                        }
+                      case WrapExpr.OfHole(_) => None
+                    }
+                    .flatMap {
+                      case Some(res) => ZIO.succeed(res)
+                      case None =>
+                        getInstanceType(instanceType).flatMap { types =>
+                          val instanceTypes = types.map { _.toAccessType }
+                          lookupMethods(opt.accessToken, instanceTypes, types, Set.empty, Set.empty)
+                        }
+                    }
+              }
 
-              case WrapExpr.OfHole(_) => ZIO.succeed(LookupResult.NotFound())
-            }
-        )
+            case WrapExpr.OfHole(_) => ZIO.succeed(LookupResult.NotFound())
+          }
+      )
 
     protected override def signatureOf(element: MethodElement): Comp[Signature[WrapExpr, ?]] =
       element match {
@@ -1273,31 +1303,48 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       asSeen.nonEmpty && asSeen.subsetOf(seenTypes)
     end isSeenType
 
-    private def lookupMethods(types: Seq[InstanceType], seenTypes: Set[ArClass | ArTrait], seenMethods: Set[ArMethod])
-      : Comp[LookupResult[MethodElement]] =
+    private def lookupMethods
+    (
+      callerAccess: AccessToken,
+      instanceTypes: Seq[AccessToken.AccessType],
+      types: Seq[InstanceType],
+      seenTypes: Set[ArClass | ArTrait],
+      seenMethods: Set[ArMethod]
+    )
+    : Comp[LookupResult[MethodElement]] =
       if types.isEmpty then
         ZIO.succeed(LookupResult.NotFound())
       else
-        ZIO.foreach(types)(methodsOfType).map { methods =>
-          val methods2 = methods.flatten
-            .filterNot { case (method, _) => seenMethods.contains(method) }
-            .distinct
+        ZIO.foreach(types)(methodsOfType)
+          .flatMap { methods =>
+            val methods2 = methods.flatten
+              .filterNot { case (method, _) => seenMethods.contains(method) }
+              .distinct
 
-          val next =
-            LookupResult.Suspended(
-              ZIO.foreach(types)(getBaseTypes).flatMap { baseTypes =>
-                val seenTypes2 = seenTypes ++ types.flatMap(toSeenTypes)
-                val baseTypes2 = baseTypes.flatten.filterNot(isSeenType(seenTypes2))
-                val seenMethods2 = seenMethods ++ methods2.map { case (method, _) => method }
-                lookupMethods(baseTypes2, seenTypes2, seenMethods2)
-              }
+            ZIO.filter(methods2) { case (method, methodOwner) =>
+              callerAccess.canAccessMember(
+                ArMethodC.getAccessModifier(method.owner),
+                instanceTypes,
+                methodOwner.toAccessType
+              )
+            }
+          }
+          .map { methods =>
+            val next =
+              LookupResult.Suspended(
+                ZIO.foreach(types)(getBaseTypes).flatMap { baseTypes =>
+                  val seenTypes2 = seenTypes ++ types.flatMap(toSeenTypes)
+                  val baseTypes2 = baseTypes.flatten.filterNot(isSeenType(seenTypes2))
+                  val seenMethods2 = seenMethods ++ methods.map { case (method, _) => method }
+                  lookupMethods(callerAccess, instanceTypes, baseTypes2, seenTypes2, seenMethods2)
+                }
+              )
+
+            LookupResult.Success(
+              methods.map { MethodElement.Method(_, _) },
+              next,
             )
-
-          LookupResult.Success(
-            methods2.map { MethodElement.Method(_, _) },
-            next,
-          )
-        }
+          }
 
   }
 
@@ -1360,27 +1407,36 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
     override protected def lookupName: parser.ClassConstructorExpr.type = parser.ClassConstructorExpr
 
-    protected def lookup: Env => LookupResult[TElement] =
-      env =>
-        LookupResult.Suspended(
-          evaluator.normalizeTopLevelWrap(instance, fuel)
-            .flatMap {
-              case WrapExpr.OfExpr(normalizedInstance) =>
-                normalizedInstance.constructor match {
-                  case ctor: (normalizedInstance.constructor.type & ExprConstructor.ClassType) =>
-                    ctor.arClass.constructors.map { classCtors =>
-                      LookupResult.Success(
+    protected override def lookup(env: Env, opt: ExprOptions): LookupResult[TElement] =
+      LookupResult.Suspended(
+        evaluator.normalizeTopLevelWrap(instance, fuel)
+          .flatMap {
+            case WrapExpr.OfExpr(normalizedInstance) =>
+              normalizedInstance.constructor match {
+                case ctor: (normalizedInstance.constructor.type & ExprConstructor.ClassType) =>
+                  ctor.arClass.constructors.map { classCtors =>
+                    LookupResult.Suspended(
+                      for
+                        classCtors <- ZIO.filter(classCtors) { classCtor =>
+                          opt.accessToken.canAccessMember(
+                            classCtor.owner.accessModifier,
+                            Seq(ctor.arClass),
+                            ctor.arClass,
+                          )
+                        }
+                      yield LookupResult.Success(
                         classCtors.map { classCtor => (classCtor, ArExpr(ctor, normalizedInstance.getArgs(ctor))) },
                         LookupResult.NotFound(),
                       )
-                    }
+                    )
+                  }
 
-                  case _ => ???
-                }
+                case _ => ???
+              }
 
-              case _ => ???
-            }
-        )
+            case _ => ???
+          }
+      )
 
     protected override def signatureOf(element: TElement): Comp[Signature[WrapExpr, ?]] =
       element._1.signatureUnsubstituted.map(convertSig(classConstructorSigHandler))
@@ -1393,11 +1449,14 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
           createSigResult(classCtor, env, opt, sig2, args.toList, Vector.empty)(classConstructorSigHandler) {
             (env, opt, args, _) =>
-              ZIO.succeed(ExprTypeResult(
-                WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassConstructorCall(classCtor), (classType, args))),
-                env,
-                WrapExpr.OfExpr(classType),
-              ))
+              if opt.checkPurity(classCtor.purity) then
+                ZIO.succeed(ExprTypeResult(
+                  WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassConstructorCall(classCtor), (classType, args))),
+                  env,
+                  WrapExpr.OfExpr(classType),
+                ))
+              else
+                ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
           }
         } : Comp[Option[Comp[ExprTypeResult]]]
       }

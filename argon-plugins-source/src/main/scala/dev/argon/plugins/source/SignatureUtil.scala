@@ -20,8 +20,10 @@ object SignatureUtil {
   : context.Comp[(Signature[context.ExprContext.WrapExpr, Res], exprConverter.Env)] =
     import exprConverter.Env
 
+
     val opt = exprConverter.ExprOptions(
       purity = true,
+      accessToken = createAccessToken(exprConverter)(owner),
     )
 
     def impl
@@ -263,5 +265,40 @@ object SignatureUtil {
       case Signature.Result(res) =>
         sigHandler.resolveResultHoles(env, res).map { case (res, env) => (Signature.Result(res), env) }
     }
+
+  def createAccessToken(exprConverter: ExpressionConverter)(owner: exprConverter.exprContext.ParameterVariableOwner): exprConverter.AccessToken =
+    import exprConverter.*
+    import exprContext.*
+    import dev.argon.compiler.definitions.*
+
+    owner match {
+      case owner: (ArMethodC & HasContext[context.type]) =>
+        owner.owner match {
+          case OwnedByClassC(arClass, _, _) => createAccessToken(exprConverter)(arClass)
+          case OwnedByClassStaticC(arClass, _, _) => createAccessToken(exprConverter)(arClass)
+          case OwnedByTraitC(arTrait, _, _) => createAccessToken(exprConverter)(arTrait)
+          case OwnedByTraitStaticC(arTrait, _, _) => createAccessToken(exprConverter)(arTrait)
+        }
+
+      case owner: (ClassConstructorC & HasContext[context.type]) =>
+        createAccessToken(exprConverter)(owner.owner.arClass)
+
+      case owner: (ArFuncC & HasContext[context.type]) =>
+        AccessToken.ModuleToken(owner.owner.module)
+
+      case owner: (ArClassC & HasContext[context.type]) =>
+        AccessToken.Multi(Set(
+          AccessToken.ModuleToken(owner.owner.module),
+          AccessToken.ClassToken(owner),
+        ))
+
+      case owner: (ArTraitC & HasContext[context.type]) =>
+        AccessToken.Multi(Set(
+          AccessToken.ModuleToken(owner.owner.module),
+          AccessToken.TraitToken(owner),
+        ))
+    }
+  end createAccessToken
+
 
 }

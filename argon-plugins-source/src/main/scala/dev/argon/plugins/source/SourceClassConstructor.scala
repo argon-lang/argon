@@ -31,6 +31,7 @@ object SourceClassConstructor {
       override val owner: ctorOwnership.type = ctorOwnership
       override val id: UniqueIdentifier = methodId
 
+      override val purity: Boolean = stmt.purity
 
       private def sigEnv: Comp[(Signature[WrapExpr, Unit], exprConverter.Env)] =
         sigCell.get(
@@ -72,7 +73,8 @@ object SourceClassConstructor {
               final case class UnresolvedFieldInit(field: context.ExprContext.MemberVariable, fieldConv: exprConverter.exprContext.MemberVariable, value: exprConverter.exprContext.WrapExpr)
 
               val opt = exprConverter.ExprOptions(
-                purity = true,
+                purity = stmt.purity,
+                accessToken = SignatureUtil.createAccessToken(exprConverter)(this),
               )
 
               def stmtsWithLocation(stmts: Seq[WithSource[parser.Stmt]]): Option[WithSource[Seq[WithSource[parser.Stmt]]]] =

@@ -80,6 +80,7 @@ object SourceMethod {
                 env <- innerEnv
                 opt = exprConverter.ExprOptions(
                   purity = stmt.purity,
+                  accessToken = SignatureUtil.createAccessToken(exprConverter)(this),
                 )
                 bodyResult <- exprConverter.convertExpr(expr).check(env, opt, returnType)
                 resolvedBody <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)

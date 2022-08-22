@@ -277,6 +277,13 @@ trait ExprContext {
     enum MethodCallOwnerType {
       case OwnedByClass(classType: ArExpr[ClassType])
       case OwnedByTrait(traitType: ArExpr[TraitType])
+
+
+      def toAccessType: TClass | TTrait =
+        this match {
+          case OwnedByClass(c) => c.constructor.arClass
+          case OwnedByTrait(t) => t.constructor.arTrait
+        }
     }
 
     object MethodCallOwnerType {

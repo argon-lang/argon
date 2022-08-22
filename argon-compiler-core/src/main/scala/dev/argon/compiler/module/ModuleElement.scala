@@ -20,4 +20,6 @@ enum ModuleElementC[TContext <: Context, IsDeclaration <: Boolean] {
     }
 
   def name: Option[IdentifierExpr] = asHasOwner.owner.ownedName
+  def module: ArModuleC & HasContext[TContext] = asHasOwner.owner.module
+  def accessModifier: AccessModifierGlobal = asHasOwner.owner.accessModifier
 }

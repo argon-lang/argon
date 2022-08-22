@@ -14,7 +14,7 @@ object AccessUtil {
       case (None, WithSource(parser.PrivateModifier, _)) => ZIO.some(AccessModifier.Private)
       case (None, WithSource(parser.InternalModifier, _)) => ZIO.some(AccessModifier.TubePrivate)
 
-      case (Some(AccessModifier.TubePrivate), WithSource(parser.PrivateModifier, _)) | (Some(AccessModifier.Private), WithSource(parser.InternalModifier, _)) => ZIO.some(AccessModifier.FilePrivate)
+      case (Some(AccessModifier.TubePrivate), WithSource(parser.PrivateModifier, _)) | (Some(AccessModifier.Private), WithSource(parser.InternalModifier, _)) => ZIO.some(AccessModifier.ModulePrivate)
       case (Some(AccessModifier.Private), WithSource(parser.ProtectedModifier, _)) | (Some(AccessModifier.Protected), WithSource(parser.PrivateModifier, _)) => ZIO.some(AccessModifier.TubeAndProtected)
       case (Some(AccessModifier.TubePrivate), WithSource(parser.ProtectedModifier, _)) | (Some(AccessModifier.Protected), WithSource(parser.InternalModifier, _)) => ZIO.some(AccessModifier.TubeOrProtected)
 
@@ -25,7 +25,7 @@ object AccessUtil {
   def parseGlobal(modifiers: Seq[WithSource[parser.Modifier]]): IO[CompError, AccessModifierGlobal] =
     parse(modifiers).flatMap {
       case global: AccessModifierGlobal => ZIO.succeed(global)
-      case AccessModifier.Private => ZIO.succeed(AccessModifier.FilePrivate)
+      case AccessModifier.Private => ZIO.succeed(AccessModifier.ModulePrivate)
       case modifier => ZIO.fail(DiagnosticError.InvalidGlobalAccessModifier(modifier))
     }
 }

@@ -19,6 +19,6 @@
 
     ]]></InputSource>
 
-    <ExpectedError>LookupFailedError</ExpectedError>
+    <ExpectedError>LookupFailed</ExpectedError>
 
 </ArgonTest>

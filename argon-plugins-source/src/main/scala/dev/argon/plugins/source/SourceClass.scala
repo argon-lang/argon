@@ -131,6 +131,7 @@ object SourceClass {
             case WithSource(field: parser.FieldDeclarationStmt, _) =>
               val opt = exprConverter.ExprOptions(
                 purity = true,
+                accessToken = SignatureUtil.createAccessToken(exprConverter)(this),
               )
 
               (

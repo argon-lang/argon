@@ -49,4 +49,12 @@ object ArMethodC {
       case owner: OwnedByTraitC[TContext, ?] => ArTraitC.getOwningModule(owner.arTrait .owner)
       case owner: OwnedByTraitStaticC[TContext, ?] => ArTraitC.getOwningModule(owner.arTrait .owner)
     }
+
+  def getAccessModifier[TContext <: Context](owner: Ownership[TContext]): AccessModifier =
+    owner match {
+      case owner: OwnedByClassC[TContext, ?] => owner.accessModifier
+      case owner: OwnedByClassStaticC[TContext, ?] => owner.accessModifier
+      case owner: OwnedByTraitC[TContext, ?] => owner.accessModifier
+      case owner: OwnedByTraitStaticC[TContext, ?] => owner.accessModifier
+    }
 }

@@ -11,6 +11,7 @@ import dev.argon.parser
 import dev.argon.parser.IdentifierExpr
 import dev.argon.util.{*, given}
 import zio.*
+import zio.stm.*
 import zio.stream.*
 
 import scala.reflect.TypeTest
@@ -185,7 +186,11 @@ trait ExprUtil extends UsingContext {
     def allowErased(allow: Boolean): Env = this
   }
 
-  final case class ExprOptions(purity: Boolean) {
+  final case class ExprOptions
+  (
+    purity: Boolean,
+    accessToken: AccessToken,
+  ) {
     def forTypeExpr: ExprOptions =
       requirePure
 
@@ -194,12 +199,221 @@ trait ExprUtil extends UsingContext {
 
     def requirePurity(purity: Boolean): ExprOptions =
       copy(purity = this.purity && purity)
-      
+
     def checkPurity(callablePurity: Boolean): Boolean =
       callablePurity || !purity
   }
-  
-  
+
+
+  sealed trait AccessToken {
+    import AccessToken.AccessType
+
+    def canAccessGlobal(modifier: AccessModifierGlobal, module: ArModule): Boolean
+    final def canAccessMember
+    (
+      modifier: AccessModifier,
+      instanceTypes: Seq[AccessType],
+      declaringType: AccessType,
+    ): Comp[Boolean] =
+      modifier match
+        case modifier: AccessModifierSimple =>
+          ZIO.exists(instanceTypes) { instanceType =>
+            canAccessMemberImpl(modifier, instanceType, declaringType)
+          }
+
+        case AccessModifier.TubeOrProtected =>
+          canAccessMember(AccessModifier.TubePrivate, instanceTypes, declaringType) ||
+            canAccessMember(AccessModifier.Protected, instanceTypes, declaringType)
+
+        case AccessModifier.TubeAndProtected =>
+          canAccessMember(AccessModifier.TubePrivate, instanceTypes, declaringType) &&
+            canAccessMember(AccessModifier.Protected, instanceTypes, declaringType)
+      end match
+
+    protected def canAccessMemberImpl
+    (
+      modifier: AccessModifierSimple,
+      instanceType: AccessType,
+      declaringType: AccessType,
+    ): Comp[Boolean]
+
+    def add(token: AccessToken): AccessToken =
+      AccessToken.Multi(Set(this, token))
+  }
+
+  object AccessToken {
+    type AccessType = ArClass | ArTrait
+    
+    final case class Multi(tokens: Set[AccessToken]) extends AccessToken {
+      override def canAccessGlobal(modifier: AccessModifierGlobal, module: ArModule): Boolean =
+        tokens.exists(_.canAccessGlobal(modifier, module))
+
+      override def canAccessMemberImpl
+      (
+        modifier: AccessModifierSimple,
+        instanceType: AccessType,
+        declaringType: AccessType,
+      ): Comp[Boolean] =
+        ZIO.exists(tokens)(_.canAccessMemberImpl(modifier, instanceType, declaringType))
+
+      override def add(token: AccessToken): AccessToken =
+        token match {
+          case other: Multi => AccessToken.Multi(tokens ++ other.tokens)
+          case _ => AccessToken.Multi(tokens + token)
+        }
+    }
+
+    final case class ModuleToken(module: ArModule) extends AccessToken {
+      override def canAccessGlobal(modifier: AccessModifierGlobal, module: ArModule): Boolean =
+        modifier match
+          case AccessModifier.Public => true
+          case AccessModifier.TubePrivate => module.tube.tubeName == this.module.tube.tubeName
+          case AccessModifier.ModulePrivate => module.moduleName == this.module.moduleName
+        end match
+
+      override def canAccessMemberImpl
+      (
+        modifier: AccessModifierSimple,
+        instanceType: AccessType,
+        declaringType: AccessType,
+      ): Comp[Boolean] =
+        modifier match
+          case modifier: AccessModifierGlobal =>
+            ZIO.succeed(canAccessGlobal(modifier, getTypeOwningModule(declaringType)))
+          case _ => ZIO.succeed(false)
+        end match
+
+
+      protected def getTypeOwningModule(t: AccessType): ArModule =
+        t match
+          case t: ArClass =>
+            ArClassC.getOwningModule(t.owner)
+
+          case t: ArTrait =>
+            ArTraitC.getOwningModule(t.owner)
+        end match
+    }
+
+    sealed trait TypeWithMethodsTokenCommon {
+      self: AccessToken =>
+
+
+      protected def checkSubTypes[T](superType: T, subType: T, getBaseTypes: T => Comp[Iterable[T]], seenTypes: TSet[? >: T])(using CanEqual[T, T]): Comp[Boolean] =
+        seenTypes.contains(subType).commit.flatMap {
+          case true => ZIO.succeed(false)
+          case false =>
+            seenTypes.put(subType).commit *>
+              (
+                if subType == superType then
+                  ZIO.succeed(true)
+                else
+                  getBaseTypes(subType).flatMap { baseTypes =>
+                    ZIO.exists(baseTypes) { baseType =>
+                      checkSubTypes(superType, baseType, getBaseTypes, seenTypes)
+                    }
+                  }
+              )
+        }
+
+      protected def getBaseTraits(t: ArTrait): Comp[Seq[ArTrait]] =
+        t.signature.map { sig =>
+          sig.unsubstitutedResult._2.map { traitType =>
+            traitType.constructor.arTrait
+          }
+        }
+    }
+
+    final case class ClassToken(arClass: ArClass) extends AccessToken with TypeWithMethodsTokenCommon {
+      override def canAccessGlobal(modifier: AccessModifierGlobal, module: ArModule): Boolean = false
+
+      override def canAccessMemberImpl
+      (
+        modifier: AccessModifierSimple,
+        instanceType: AccessType,
+        declaringType: AccessType,
+      ): Comp[Boolean] =
+        modifier match
+          case AccessModifier.Public => ZIO.succeed(true)
+          case _: AccessModifierGlobal => ZIO.succeed(false)
+          case AccessModifier.Protected =>
+            instanceType match
+              case instanceType: ArClass =>
+                TSet.empty[ArClass].commit.flatMap { seenClasses =>
+                  checkSubTypes(instanceType, arClass, getBaseClass, seenClasses)
+                }
+
+              case instanceType: ArTrait =>
+                TSet.empty[AccessType].commit.flatMap { seenTypes =>
+                  checkImplementsTrait(instanceType, arClass, seenTypes)
+                }
+            end match
+
+          case AccessModifier.Private =>
+            declaringType match
+              case declaringType: ArClass => ZIO.succeed(declaringType == arClass)
+              case _ => ZIO.succeed(false)
+            end match
+
+        end match
+
+      private def getBaseClass(c: ArClass): Comp[Seq[ArClass]] =
+        c.signature.map { sig =>
+          sig.unsubstitutedResult._2.toList.map { _.constructor.arClass }
+        }
+
+      protected def checkImplementsTrait(superTrait: ArTrait, subClass: ArClass, seenTypes: TSet[AccessType]): Comp[Boolean] =
+        seenTypes.contains(subClass).commit.flatMap {
+          case true => ZIO.succeed(false)
+          case false =>
+            seenTypes.put(subClass).commit *>
+              (subClass.signature.flatMap { sig =>
+                val (_, baseClassOpt, baseTraits) = sig.unsubstitutedResult
+                ZIO.exists(baseTraits) { baseTrait =>
+                  checkSubTypes[ArTrait](superTrait, baseTrait.constructor.arTrait, getBaseTraits, seenTypes)
+                } ||
+                  ZIO.exists(baseClassOpt) { baseClass =>
+                    checkImplementsTrait(superTrait, baseClass.constructor.arClass, seenTypes)
+                  }
+              })
+        }
+
+
+    }
+
+    final case class TraitToken(arTrait: ArTrait) extends AccessToken with TypeWithMethodsTokenCommon {
+      override def canAccessGlobal(modifier: AccessModifierGlobal, module: ArModule): Boolean = false
+
+      override def canAccessMemberImpl
+      (
+        modifier: AccessModifierSimple,
+        instanceType: AccessType,
+        declaringType: AccessType,
+      ): Comp[Boolean] =
+        modifier match
+          case AccessModifier.Public => ZIO.succeed(true)
+          case _: AccessModifierGlobal => ZIO.succeed(false)
+          case AccessModifier.Protected =>
+            instanceType match
+              case instanceType: ArTrait =>
+                TSet.empty[ArTrait].commit.flatMap { seenTypes =>
+                  checkSubTypes(instanceType, arTrait, getBaseTraits, seenTypes)
+                }
+              case _ => ZIO.succeed(false)
+            end match
+
+          case AccessModifier.Private =>
+            declaringType match
+              case declaringType: ArTrait => ZIO.succeed(declaringType == arTrait)
+              case _ => ZIO.succeed(false)
+            end match
+
+        end match
+
+    }
+
+
+  }
+
 
   type ClassResultConv = (WrapExpr, Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])
   type TraitResultConv = (WrapExpr, Seq[ArExpr[ExprConstructor.TraitType]])

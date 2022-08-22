@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Constructor purity 1</Name>
+    <Name>Constructor purity 3</Name>
 
 
     <InputSource name="index.argon"><![CDATA[
@@ -10,8 +10,8 @@
         class MyClass <: Object
 
             public new(name: String)
-                puts name
                 initialize _
+                puts name
             end
 
         end
@@ -21,6 +21,6 @@
             
     ]]></InputSource>
 
-    <ExpectedError>ImpureFunctionCalledError</ExpectedError>
+    <ExpectedError>Purity</ExpectedError>
 
 </ArgonTest>
