@@ -2,13 +2,16 @@ package dev.argon.compiler.vtable
 
 import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
-import dev.argon.compiler.expr.{ArgonExprContext, ExprUtil, ExprUtilWithHoles, HolesExprContext}
+import dev.argon.compiler.expr.*
 import dev.argon.compiler.signature.*
 import dev.argon.parser.IdentifierExpr
 import dev.argon.util.{*, given}
 import zio.*
 
-sealed abstract class VTableBuilder[TContext <: Context](override val context: TContext) extends UsingContext with ExprUtil {
+sealed abstract class VTableBuilder[TContext <: Context](override val context: TContext)
+  extends ExprUtilBase
+    with ExprUtilSubstitution
+{
   def fromClass(arClass: ArClass): Comp[VTable]
   def fromTrait(arTrait: ArTrait): Comp[VTable]
 
