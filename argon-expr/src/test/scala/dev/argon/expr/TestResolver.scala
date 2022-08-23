@@ -25,6 +25,23 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
   private def impliesFalse(p: WrapExpr): WrapExpr =
     wrapExpr(ExprConstructor.FunctionType, (p, wrapExpr(ExprConstructor.NeverType, EmptyTuple)))
 
+
+  private val type0: WrapExpr =
+    WrapExpr.OfExpr(ArExpr(
+      ExprConstructor.TypeN,
+      WrapExpr.OfExpr(ArExpr(
+        ExprConstructor.LoadConstantInt(0),
+        EmptyTuple
+      ))
+    ))
+
+
+  override protected def typeOfClass(classObj: String, args: Seq[WrapExpr]): ZIO[R, String, WrapExpr] =
+    ZIO.succeed(type0)
+
+  override protected def typeOfTrait(traitObj: String, args: Seq[WrapExpr]): ZIO[R, String, WrapExpr] =
+    ZIO.succeed(type0)
+
   protected override def isSubClass(classA: TClass, aArgs: Seq[WrapExpr], classB: TClass, bArgs: Seq[WrapExpr], fuel: Int)
     : ZIO[R, String, SubClassResult] =
     ZIO.succeed(SubClassResult.NotSubClassProof(wrapExpr(
