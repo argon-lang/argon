@@ -1,10 +1,12 @@
 package dev.argon.compiler
 
 import zio.*
+
 import java.io.IOException
 import dev.argon.parser.SyntaxError
 import dev.argon.compiler.expr.CompleteExprContext
-import dev.argon.compiler.tube.{TubeName, ArTubeC}
+import dev.argon.compiler.tube.{ArTubeC, TubeName}
+import dev.argon.compiler.vtable.VTableContext
 
 trait Context {
   type Env <: CompEnv
@@ -12,6 +14,10 @@ trait Context {
   type Comp[+A] = ZIO[Env, Error, A]
 
   object ExprContext extends CompleteExprContext {
+    override val context: Context.this.type = Context.this
+  }
+
+  object VT extends VTableContext {
     override val context: Context.this.type = Context.this
   }
 

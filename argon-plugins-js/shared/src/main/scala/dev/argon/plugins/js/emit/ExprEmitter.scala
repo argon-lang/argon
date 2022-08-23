@@ -31,6 +31,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     MemberVariable,
   }
 
+  import context.VT
+
   private def newLocalVar: USTM[String] =
     for
       num <- nextLocalId.getAndUpdate(_ + 1)
@@ -727,9 +729,9 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     getImportName(ImportSpecifier(ownership.module.tube.tubeName, ownership.module.moduleName.path, ownership.ownedName, sig))
       .map(id)
 
-  private def emitVTable(vtable: vtableBuilder.VTable, ownerClass: ArClass): Comp[Seq[estree.Statement]] =
+  private def emitVTable(vtable: VT.VTable, ownerClass: ArClass): Comp[Seq[estree.Statement]] =
     ZIO.foreach(vtable.methodMap.toSeq) {
-      case (_, vtableBuilder.VTableEntry(name, signature, slotInstanceType, entrySource, vtableBuilder.VTableEntryMethod(implMethod, implInstanceType))) =>
+      case (_, VT.VTableEntry(name, signature, slotInstanceType, entrySource, VT.VTableEntryMethod(implMethod, implInstanceType))) =>
         for
           slotSigErased <- SignatureEraser(context).erasedWithResult(signature)
           implSig <- implMethod.signatureUnsubstituted
