@@ -110,7 +110,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           emitExpr(emitState)(baseClass)
         }
       }
-      vtableDiff <- vtableBuilder.diffFromClass(arClass)
+      vtableDiff <- arClass.vtableDiff
       prototypeSetup <- emitVTable(vtableDiff, arClass)
 
 

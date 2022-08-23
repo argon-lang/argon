@@ -16,8 +16,6 @@ private[emit] trait EmitTubeCommon extends UsingContext {
   val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type]
 
 
-  protected val vtableBuilder: VTableBuilder[context.type]
-
   protected def getModuleFileName(tube: ArTube)(path: ModulePath): ModuleFile =
     if path.ids.isEmpty then
       def attemptIndex(i: Int): String =

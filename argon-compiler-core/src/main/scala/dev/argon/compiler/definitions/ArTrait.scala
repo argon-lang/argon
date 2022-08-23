@@ -19,6 +19,8 @@ abstract class ArTraitC extends Definition with UsingContext derives CanEqual {
 
   type TraitResult = (WrapExpr, Seq[ArExpr[ExprConstructor.TraitType]])
 
+  def vtable: Comp[context.VT.VTable]
+
   // Validate inheritance rules, does not check vtables
   def validate: Comp[Unit]
 

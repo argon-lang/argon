@@ -13,8 +13,6 @@ sealed abstract class VTableBuilder[TContext <: Context](override val context: T
     with ExprUtilSubstitution
 {
   override val exprContext: context.ExprContext.type = context.ExprContext
-  import context.ExprContext.{WrapExpr, ExprConstructor}
-  import ExprConstructor.MethodCallOwnerType
 
   import context.VT.{context as _, *}
 

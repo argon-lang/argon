@@ -39,7 +39,6 @@ private[js] trait TubeEmitter extends EmitTubeCommon {
               override val imports: TMap[ImportSpecifier, String] = importMap
               override val additionalImports: TMap[ModuleName, TSet[String]] = additionalImportMap
               override val module: ArModule & HasDeclaration[true] = arModule
-              override protected val vtableBuilder: VTableBuilder[context.type] = TubeEmitter.this.vtableBuilder
             }.program
         yield program
     end new

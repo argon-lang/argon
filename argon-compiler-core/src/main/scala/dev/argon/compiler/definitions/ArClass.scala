@@ -24,6 +24,9 @@ abstract class ArClassC extends Definition with UsingContext derives CanEqual {
   def fields: Comp[Seq[MemberVariable]]
 
   type ClassResult = (WrapExpr, Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])
+
+  def vtable: Comp[context.VT.VTable]
+  def vtableDiff: Comp[context.VT.VTable]
   
   // Validate inheritance rules, does not check vtables
   def validate: Comp[Unit]

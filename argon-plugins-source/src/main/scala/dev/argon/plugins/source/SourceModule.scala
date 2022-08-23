@@ -5,6 +5,7 @@ import dev.argon.compiler.definitions.*
 import dev.argon.compiler.tube.*
 import dev.argon.compiler.module.*
 import dev.argon.compiler.expr.*
+import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.plugin.ImporterC
 import zio.*
 import dev.argon.parser.*
@@ -26,6 +27,7 @@ object SourceModule {
       exportEntriesCell <- MemoCell.make[context.Env, context.Error, Seq[ModuleElementC[context.type, true]]]
       exportMapCell <- MemoCell.make[context.Env, context.Error, Map[IdentifierExpr, Seq[ModuleElementC[context.type, true]]]]
       exprConverter <- ExpressionConverter.make(context)
+      vtableBuilder <- VTableBuilder(context)
     } yield new ArModuleC {
       override type IsDeclaration = true
 
@@ -94,14 +96,14 @@ object SourceModule {
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
               owner = OwnedByModuleC[context.type](currentModule, stmt.name.value, modifier)
-              arTrait <- SourceTrait.make(context)(exprConverter)(env)(owner)(stmt)
+              arTrait <- SourceTrait.make(context)(exprConverter)(vtableBuilder)(env)(owner)(stmt)
             yield (imports, Seq(ModuleElementC.TraitElement(arTrait)))
 
           case stmt: ClassDeclarationStmt =>
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
               owner = OwnedByModuleC[context.type](currentModule, stmt.name.value, modifier)
-              arClass <- SourceClass.make(context)(exprConverter)(env)(owner)(stmt)
+              arClass <- SourceClass.make(context)(exprConverter)(vtableBuilder)(env)(owner)(stmt)
             yield (imports, Seq(ModuleElementC.ClassElement(arClass)))
 
           case stmt: FunctionDeclarationStmt =>

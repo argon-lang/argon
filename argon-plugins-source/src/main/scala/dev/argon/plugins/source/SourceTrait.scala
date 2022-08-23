@@ -5,8 +5,9 @@ import dev.argon.compiler.definitions.*
 import dev.argon.compiler.expr.*
 import dev.argon.util.*
 import dev.argon.compiler.signature.Signature
+import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.parser
-import dev.argon.parser.{TraitDeclarationStmt, IdentifierExpr}
+import dev.argon.parser.{IdentifierExpr, TraitDeclarationStmt}
 import zio.*
 
 object SourceTrait {
@@ -14,6 +15,7 @@ object SourceTrait {
   def make[TOwner]
   (ctx: Context)
   (exprConverter2: ExpressionConverter & HasContext[ctx.type])
+  (vtableBuilder: VTableBuilder[ctx.type])
   (outerEnv: exprConverter2.Env)
   (traitOwner: TOwner & ArTraitC.Ownership[ctx.type])
   (stmt: TraitDeclarationStmt)
@@ -73,6 +75,8 @@ object SourceTrait {
         : Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[true] & HasOwner[OwnedByTraitStatic[owner.type]]]]] =
         staticMethodsCell.get(buildMethods[OwnedByTraitStatic[owner.type]](OwnedByTraitStaticC.apply)(stmt.body))
 
+      override def vtable: Comp[context.VT.VTable] =
+        vtableBuilder.fromTrait(this)
 
       override def validate: Comp[Unit] =
         signature.flatMap { sig =>

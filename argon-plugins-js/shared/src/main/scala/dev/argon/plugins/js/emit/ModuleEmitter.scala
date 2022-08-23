@@ -136,7 +136,6 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
           override val localNameMap: TMap[UniqueIdentifier, String] = localNameMapRef
           override val instanceNameMap: TMap[UniqueIdentifier, String] = instanceNameMapRef
           override val parameterNameMap: TMap[(UniqueIdentifier, RuntimeFlags), String] = parameterNameMapRef
-          override protected val vtableBuilder: VTableBuilder[context.type] = ModuleEmitter.this.vtableBuilder
         end new
 
       _ <- ZIO.logTrace(s"elementExport ${element}")

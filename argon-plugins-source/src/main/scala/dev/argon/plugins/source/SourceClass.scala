@@ -5,9 +5,11 @@ import dev.argon.compiler.definitions.*
 import dev.argon.compiler.expr.*
 import dev.argon.util.{*, given}
 import dev.argon.compiler.signature.Signature
+import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.parser
 import dev.argon.parser.{ClassDeclarationStmt, IdentifierExpr}
 import zio.*
+
 import scala.reflect.TypeTest
 
 object SourceClass {
@@ -15,6 +17,7 @@ object SourceClass {
   def make[TOwner]
   (ctx: Context)
   (exprConverter2: ExpressionConverter & HasContext[ctx.type])
+  (vtableBuilder: VTableBuilder[ctx.type])
   (outerEnv: exprConverter2.Env)
   (classOwner: TOwner & ArClassC.Ownership[ctx.type])
   (stmt: ClassDeclarationStmt)
@@ -147,6 +150,12 @@ object SourceClass {
             case _ => ZIO.fail(None)
           }
         )
+
+      override def vtable: Comp[context.VT.VTable] =
+        vtableBuilder.fromClass(this)
+
+      override def vtableDiff: Comp[context.VT.VTable] =
+        vtableBuilder.diffFromClass(this)
 
       override def validate: Comp[Unit] =
         signature.flatMap { sig =>
