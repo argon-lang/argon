@@ -4,6 +4,7 @@ import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
 import dev.argon.compiler.expr.*
 import dev.argon.compiler.signature.*
+import dev.argon.compiler.tube.TubeImporter
 import dev.argon.parser.IdentifierExpr
 import dev.argon.util.{*, given}
 import zio.*
@@ -27,7 +28,7 @@ sealed abstract class VTableBuilder[TContext <: Context](override val context: T
 
 object VTableBuilder {
 
-  def apply(context: Context): UIO[VTableBuilder[context.type]] = {
+  def apply(context: Context, tubeImporter2: TubeImporter & HasContext[context.type]): UIO[VTableBuilder[context.type]] = {
     val ctx: context.type = context
     import context.VT.{context as _, *}
 
@@ -51,6 +52,7 @@ object VTableBuilder {
         val exprUtil = new ExprUtilWithHoles {
           override val context: ctx.type = ctx
           override val exprContext: holesExprContext.type = holesExprContext
+          override val tubeImporter: TubeImporter & HasContext[context.type] = tubeImporter2
         }
 
         val emptyEnv = exprUtil.Env(exprUtil.Scope.empty, model = Map.empty)

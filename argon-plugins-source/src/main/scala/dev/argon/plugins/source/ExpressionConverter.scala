@@ -13,7 +13,7 @@ import dev.argon.util.UniqueIdentifier
 import zio.*
 import zio.stream.*
 import dev.argon.util.{*, given}
-import dev.argon.compiler.tube.TubeName
+import dev.argon.compiler.tube.{TubeImporter, TubeName}
 import dev.argon.compiler.module.ModulePath
 import dev.argon.prover.Proof
 
@@ -1482,10 +1482,11 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
 object ExpressionConverter {
 
-  def make(ctx: Context): UIO[ExpressionConverter & HasContext[ctx.type]] =
+  def make(ctx: Context, importer: TubeImporter & HasContext[ctx.type]): UIO[ExpressionConverter & HasContext[ctx.type]] =
     ZIO.succeed(
       new ExpressionConverter {
         override val context: ctx.type = ctx
+        override val tubeImporter: TubeImporter & HasContext[ctx.type] = importer
       }
     )
 

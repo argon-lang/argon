@@ -1,7 +1,7 @@
 package dev.argon.plugin
 
 import dev.argon.compiler.*
-import dev.argon.compiler.tube.ArTubeC
+import dev.argon.compiler.tube.{ArTubeC, TubeImporter}
 import dev.argon.util.*
 import dev.argon.io.*
 import dev.argon.options.OptionDecoder
@@ -15,6 +15,7 @@ trait TubeLoader[-R0, +E0] {
 
   def load
   (context: Context { type Env <: R0; type Error >: E0 })
+  (tubeImporter: TubeImporter & HasContext[context.type])
   (libOptions: LibOptions[context.Env, context.Error, context.Options])
   : ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]]
 }

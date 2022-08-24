@@ -16,29 +16,21 @@ private[emit] trait EmitTubeCommon extends UsingContext {
   val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type]
 
 
-  protected def getModuleFileName(tube: ArTube)(path: ModulePath): ModuleFile =
-    if path.ids.isEmpty then
-      def attemptIndex(i: Int): String =
-        val indexPath = s"index.${i}"
-        if tube.modulePaths.contains(ModulePath(Seq(indexPath))) then
-          attemptIndex(i + 1)
-        else
-          indexPath
+  private def escapeSegment(seg: String): String =
+    seg.replace("%", "%25").nn.replace("/", "%2F").nn
 
-      val name =
-        if tube.modulePaths.contains(ModulePath(Seq("index"))) then
-          attemptIndex(0)
-        else
-          "index"
+  protected def getModuleFileName(path: ModulePath): ModuleFile =
+    path.ids match {
+      case Seq() => ModuleFile(Seq(), "index", path)
+      case Seq(segment) if segment.startsWith("_") =>
+        ModuleFile(Seq(), "_" + escapeSegment(segment), path)
 
-      ModuleFile(Seq(), name, path)
-    else
-      def escapeSegment(seg: String): String =
-        seg.replace("%", "%25").nn.replace("/", "%2F").nn
+      case Seq("index") =>
+        ModuleFile(Seq(), "index", path)
 
-      val escaped = path.ids.map(escapeSegment)
-      ModuleFile(escaped.init, escaped.last, path)
-    end if
-  end getModuleFileName
+      case _ =>
+        val escaped = path.ids.map(escapeSegment)
+        ModuleFile(escaped.init, escaped.last, path)
+    }
 
 }

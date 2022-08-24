@@ -16,6 +16,7 @@ object SourceModule {
   def make
     (
       context: Context,
+      tubeImporter: TubeImporter & HasContext[context.type],
       currentTube: ArTubeC & HasContext[context.type],
       moduleName: ModuleName,
       moduleFile: ArgonSourceCodeResource[context.Env, context.Error],
@@ -26,8 +27,8 @@ object SourceModule {
     for {
       exportEntriesCell <- MemoCell.make[context.Env, context.Error, Seq[ModuleElementC[context.type, true]]]
       exportMapCell <- MemoCell.make[context.Env, context.Error, Map[IdentifierExpr, Seq[ModuleElementC[context.type, true]]]]
-      exprConverter <- ExpressionConverter.make(context)
-      vtableBuilder <- VTableBuilder(context)
+      exprConverter <- ExpressionConverter.make(context, tubeImporter)
+      vtableBuilder <- VTableBuilder(context, tubeImporter)
     } yield new ArModuleC {
       override type IsDeclaration = true
 
@@ -212,7 +213,7 @@ object SourceModule {
             loadTubeImports(exportingModules)(currentTube, resolveRelative(moduleName.path.ids, upCount + (if moduleName.path.ids.nonEmpty then 1 else 0)))
 
           case ImportStmt.Tube(tubeName, path) =>
-            context.getTube(TubeName(tubeName)).flatMap { tube =>
+            tubeImporter.getTube(TubeName(tubeName)).flatMap { tube =>
               loadTubeImports(exportingModules)(tube, path)
             }
 

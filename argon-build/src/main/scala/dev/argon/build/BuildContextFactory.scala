@@ -1,7 +1,7 @@
 package dev.argon.build
 
 import dev.argon.compiler.*
-import dev.argon.compiler.tube.{ArTubeC, TubeName}
+import dev.argon.compiler.tube.{ArTubeC, TubeImporter, TubeName}
 import dev.argon.io.ResourceFactory
 import dev.argon.options.OptionDecoder
 import dev.argon.plugin.*
@@ -20,6 +20,14 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
   def getPlugin(name: String): Option[Plugin[R, E]] =
     getPluginHelper(name).map { _.plugin }
 
+  type ContextRefined = Context {
+    type Env = R
+    type Error = E
+    type Options = BuildContextFactory.this.Options
+    type ExternMethodImplementation = BuildContextFactory.this.ExternMethodImplementation
+    type ExternFunctionImplementation = BuildContextFactory.this.ExternFunctionImplementation
+    type ExternClassConstructorImplementation = BuildContextFactory.this.ExternClassConstructorImplementation
+  }
 
   trait PluginHelper {
     val plugin: Plugin[R, E]
@@ -28,15 +36,7 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
     def getExternFunctionImplementation(impl: ExternFunctionImplementation): plugin.ExternFunctionImplementation
     def getExternClassConstructorImplementation(impl: ExternClassConstructorImplementation): plugin.ExternClassConstructorImplementation
 
-    def adapter
-    (ctx: Context {
-      type Env = R
-      type Error = E
-      type Options = BuildContextFactory.this.Options
-      type ExternMethodImplementation = BuildContextFactory.this.ExternMethodImplementation
-      type ExternFunctionImplementation = BuildContextFactory.this.ExternFunctionImplementation
-      type ExternClassConstructorImplementation = BuildContextFactory.this.ExternClassConstructorImplementation
-    }): PluginContextAdapter.Aux[ctx.type, plugin.type] =
+    def adapter(ctx: ContextRefined): PluginContextAdapter.Aux[ctx.type, plugin.type] =
       new PluginContextAdapter {
         override val context: ctx.type = ctx
         override val plugin: PluginHelper.this.plugin.type = PluginHelper.this.plugin
@@ -60,67 +60,54 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
   def getExternClassConstructorImplementation(options: Options, id: String): ZIO[R, Option[E], ExternClassConstructorImplementation]
 
 
-  final def createContext
-  : UIO[Context & LoadTube {
-    type Env = R
-    type Error = E
-    type Options = BuildContextFactory.this.Options
-    type ExternMethodImplementation = BuildContextFactory.this.ExternMethodImplementation
-    type ExternFunctionImplementation = BuildContextFactory.this.ExternFunctionImplementation
-    type ExternClassConstructorImplementation = BuildContextFactory.this.ExternClassConstructorImplementation
-  }] =
-    ZIO.runtime[Any].flatMap { runtime =>
-      ZIO.succeed {
-        new Context with LoadTube {
-          override type Env = R
-          override type Error = E
+  final def createContext: ContextRefined =
+    new Context {
+      override type Env = R
+      override type Error = E
 
-          override type Options = BuildContextFactory.this.Options
+      override type Options = BuildContextFactory.this.Options
 
-          private val tubes =
-            Unsafe.unsafe {
-              runtime.unsafe.run(TMap.empty[TubeName, ArTubeC & HasContext[this.type]].commit).getOrThrow()
-            }
+      override type ExternMethodImplementation = BuildContextFactory.this.ExternMethodImplementation
+      override type ExternFunctionImplementation = BuildContextFactory.this.ExternFunctionImplementation
+      override type ExternClassConstructorImplementation = BuildContextFactory.this.ExternClassConstructorImplementation
 
+      override def getExternMethodImplementation(options: Options, id: String): ZIO[R, Option[E], ExternMethodImplementation] =
+        BuildContextFactory.this.getExternMethodImplementation(options, id)
 
-          override type ExternMethodImplementation = BuildContextFactory.this.ExternMethodImplementation
-          override type ExternFunctionImplementation = BuildContextFactory.this.ExternFunctionImplementation
-          override type ExternClassConstructorImplementation = BuildContextFactory.this.ExternClassConstructorImplementation
+      override def getExternFunctionImplementation(options: Options, id: String): ZIO[R, Option[E], ExternFunctionImplementation] =
+        BuildContextFactory.this.getExternFunctionImplementation(options, id)
 
-          override def getTube(tubeName: TubeName): Comp[ArTubeC & HasContext[this.type]] =
-            tubes.get(tubeName).commit
-              .some
-              .orElseFail(DiagnosticError.UnknownTube(tubeName))
-
-          override def loadTube
-          (tubeOptions: TubeOptions)
-          : ZIO[R & Scope, E, ArTubeC & HasContext[this.type]] =
-            for
-              plugin <- ZIO.fromEither(getPlugin(tubeOptions.loader.plugin).toRight(UnknownPlugin(tubeOptions.loader.plugin)))
-              loader <- ZIO.fromEither(plugin.tubeLoaders.get(tubeOptions.loader.name).toRight(UnknownTubeLoader(tubeOptions.loader)))
-
-              libOptions <- loader.libOptionDecoder[E, Options]
-                .decode(tubeOptions.options)
-                .mapError(BuildConfigParseError.apply)
-
-              tube <- loader.load(this)(libOptions)
-              _ <- ZSTM.ifSTM(tubes.contains(tube.tubeName))(
-                onTrue = ZSTM.fail(DuplicateTube(tube.tubeName)),
-                onFalse = tubes.put(tube.tubeName, tube),
-              ).commit
-            yield tube
-
-          override def getExternMethodImplementation(options: Options, id: String): ZIO[R, Option[E], ExternMethodImplementation] =
-            BuildContextFactory.this.getExternMethodImplementation(options, id)
-
-          override def getExternFunctionImplementation(options: Options, id: String): ZIO[R, Option[E], ExternFunctionImplementation] =
-            BuildContextFactory.this.getExternFunctionImplementation(options, id)
-
-          override def getExternClassConstructorImplementation(options: Options, id: String): ZIO[R, Option[E], ExternClassConstructorImplementation] =
-            BuildContextFactory.this.getExternClassConstructorImplementation(options, id)
-        }
-      }
+      override def getExternClassConstructorImplementation(options: Options, id: String): ZIO[R, Option[E], ExternClassConstructorImplementation] =
+        BuildContextFactory.this.getExternClassConstructorImplementation(options, id)
     }
+
+  final def createTubeImporter(ctx: ContextRefined): UIO[TubeImporter & LoadTube & HasContext[ctx.type]] =
+    for
+      tubes <- TMap.empty[TubeName, ArTubeC & HasContext[ctx.type]].commit
+    yield new TubeImporter with LoadTube {
+      override val context: ctx.type = ctx
+      override def getTube(tubeName: TubeName): Comp[ArTube] =
+        tubes.get(tubeName).commit
+          .some
+          .orElseFail(DiagnosticError.UnknownTube(tubeName))
+
+      override def loadTube(tubeOptions: TubeOptions): ZIO[R & Scope, E, ArTube] =
+        for
+          plugin <- ZIO.fromEither(getPlugin(tubeOptions.loader.plugin).toRight(UnknownPlugin(tubeOptions.loader.plugin)))
+          loader <- ZIO.fromEither(plugin.tubeLoaders.get(tubeOptions.loader.name).toRight(UnknownTubeLoader(tubeOptions.loader)))
+
+          libOptions <- loader.libOptionDecoder[E, Options]
+            .decode(tubeOptions.options)
+            .mapError(BuildConfigParseError.apply)
+
+          tube <- loader.load(ctx)(this)(libOptions)
+          _ <- ZSTM.ifSTM(tubes.contains(tube.tubeName))(
+            onTrue = ZSTM.fail(DuplicateTube(tube.tubeName)),
+            onFalse = tubes.put(tube.tubeName, tube),
+          ).commit
+        yield tube
+    }
+
 
 }
 

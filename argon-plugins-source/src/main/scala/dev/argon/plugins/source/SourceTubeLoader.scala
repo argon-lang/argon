@@ -2,7 +2,7 @@ package dev.argon.plugins.source
 
 import dev.argon.compiler.*
 import dev.argon.compiler.module.*
-import dev.argon.compiler.tube.{ArTubeC, TubeName}
+import dev.argon.compiler.tube.{ArTubeC, TubeImporter, TubeName}
 import dev.argon.io.{BinaryResource, DirectoryEntry, DirectoryResource, ResourceFactory}
 import dev.argon.parser.IdentifierExpr
 import dev.argon.parser.Token.StringToken
@@ -24,6 +24,7 @@ object SourceTubeLoader extends TubeLoader[Any, SourceError] {
 
   def load
   (context: Context { type Error >: SourceError })
+  (tubeImporter: TubeImporter & HasContext[context.type])
   (libOptions: SourceLibOptions[context.Env, context.Error, context.Options])
   : ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]] =
     for
@@ -34,7 +35,7 @@ object SourceTubeLoader extends TubeLoader[Any, SourceError] {
 
       tubeName = TubeName(libOptions.name)
 
-      tube <- SourceTube.make(context, tubeName, libOptions.plugin, sourceCode.toMap)
+      tube <- SourceTube.make(context, tubeImporter, tubeName, libOptions.plugin, sourceCode.toMap)
     yield tube
 
 

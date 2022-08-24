@@ -4,10 +4,9 @@ import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
 import dev.argon.compiler.signature.*
 import dev.argon.compiler.module.{ModuleElementC, ModulePath}
-import dev.argon.compiler.tube.TubeName
+import dev.argon.compiler.tube.{TubeImporter, TubeName}
 import dev.argon.parser.IdentifierExpr
 import dev.argon.util.{*, given}
-
 import zio.*
 
 import scala.reflect.TypeTest
@@ -15,6 +14,7 @@ import scala.reflect.TypeTest
 trait ExprUtilImports extends ExprUtilBase {
   import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr}
 
+  val tubeImporter: TubeImporter & HasContext[context.type]
 
   def loadKnownExport[TElement <: ModuleElement[?]]
   (specifier: ImportSpecifier)
@@ -46,7 +46,7 @@ trait ExprUtilImports extends ExprUtilBase {
       }
 
     for
-      tube <- context.getTube(specifier.tube)
+      tube <- tubeImporter.getTube(specifier.tube)
       module <- tube.module(specifier.module)
       elements <- specifier.name.fold(ZIO.succeed(Seq()))(module.exports(Set.empty))
       elements <- ZIO.filter(elements.collect { case element: TElement => element })(matchesOverload)

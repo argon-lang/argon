@@ -63,7 +63,7 @@ private[js] trait TubeEmitter extends EmitTubeCommon {
           tmp
       }
 
-    directory(ZStream.fromIterable(tube.modulePaths.iterator.map(getModuleFileName(tube)).toSeq))
+    directory(ZStream.fromIterable(tube.modulePaths.iterator.map(getModuleFileName).toSeq))
   end toDirectoryStructure
 
 }

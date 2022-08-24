@@ -23,12 +23,16 @@ object Compile {
           .mapError(BuildConfigParseError.apply)
 
         contextFactory <- BuildContextFactory.make(plugins, config)
-        context <- contextFactory.createContext
 
-        tube <- context.loadTube(config.tube)
+        _ <- ZIO.unit // Used to allow below type annotation
+        context: contextFactory.ContextRefined = contextFactory.createContext
+
+        tubeImporter <- contextFactory.createTubeImporter(context)
+
+        tube <- tubeImporter.loadTube(config.tube)
         declTube <- ZIO.fromEither(tube.asDeclaration.toRight { CouldNotLoadDeclarationTube(tube.tubeName) })
 
-        _ <- ZIO.foreachDiscard(config.libraries)(context.loadTube)
+        _ <- ZIO.foreachDiscard(config.libraries)(tubeImporter.loadTube)
 
         _ <- ZIO.logTrace(s"Writing output")
         _ <- ZIO.foreachDiscard(config.output) { case (pluginName, outputOptions) =>

@@ -27,8 +27,6 @@ trait Context {
   type ExternFunctionImplementation
   type ExternClassConstructorImplementation
 
-  def getTube(tubeName: TubeName): Comp[ArTubeC & HasContext[this.type]]
-
 
   def getExternMethodImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternMethodImplementation]
   def getExternFunctionImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternFunctionImplementation]

@@ -67,11 +67,8 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
     }
 
   private def createJSImport(moduleName: ModuleName, identifiers: Seq[(String, String)]): Comp[estree.ImportDeclaration] =
+    val isLocal = moduleName.tubeName == tube.tubeName
     for
-      importedTube <- context.getTube(moduleName.tubeName)
-
-      isLocal = moduleName.tubeName == tube.tubeName
-
       tubeImportPath <-
         if isLocal then
           ZIO.succeed(".")
@@ -80,9 +77,9 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
 
       tubeImportPathParts = tubeImportPath.split("/").nn.map(_.nn).toList
 
-      fileName = getModuleFileName(importedTube)(moduleName.path)
+      fileName = getModuleFileName(moduleName.path)
 
-      packageRoot = Seq.fill(getModuleFileName(tube)(module.moduleName.path).dir.size)("..")
+      packageRoot = Seq.fill(getModuleFileName(module.moduleName.path).dir.size)("..")
 
       dir =
         tubeImportPathParts match {
@@ -102,6 +99,7 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
           id(exportedName) as id(identifier)
       }*
     ) from (dir.mkString("/") + "/" + fileName.file + (if isLocal then ".js" else ""))
+  end createJSImport
 
 
   private def normalizeDir(dir: List[String]): List[String] =

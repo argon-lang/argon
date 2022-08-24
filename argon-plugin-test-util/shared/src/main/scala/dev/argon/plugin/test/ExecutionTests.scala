@@ -2,7 +2,7 @@ package dev.argon.plugin.test
 
 import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
-import dev.argon.compiler.tube.{ArTubeC, TubeName}
+import dev.argon.compiler.tube.{ArTubeC, TubeImporter, TubeName}
 import dev.argon.io.*
 import dev.argon.options.OptionDecoder
 import dev.argon.plugin.test.TestCase.ExpectedResult
@@ -51,7 +51,7 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
 
   val testTubeName = TubeName(NonEmptyList("Test"))
 
-  private final class PluginContextImpl(runtime: Runtime[Environment & Scope], tubeOptions: Map[TubeName, SourceLibOptions[Environment, E, plugin.Options[Environment, E]]]) extends Context {
+  private final class PluginContextImpl() extends Context {
     override type Env = Environment
     override type Error = E
 
@@ -68,26 +68,39 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
 
     override def getExternClassConstructorImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternClassConstructorImplementation] =
       plugin.loadExternClassConstructor(options)(id).some
+  }
 
+  private trait PluginTubeImporter extends TubeImporter {
+    override val context: PluginContextImpl
+    def loadTubes: ZIO[Environment & Scope, E, Unit]
+  }
 
-    private val tubes: Exit[Nothing, Fiber[Error, Map[TubeName, ArTubeC & HasContext[this.type]]]] =
-      Unsafe.unsafe {
-        runtime.unsafe.run(
-          ZIO.foreach(tubeOptions) { (name, libOptions) =>
-            for
-              tube <- SourceTubeLoader.load(this)(libOptions)
-            yield name -> tube
-          }.fork
-        )
+  private def createTubeImporter(ctx: PluginContextImpl)(tubeOptions: Map[TubeName, SourceLibOptions[Environment, E, plugin.Options[Environment, E]]]): ZIO[Environment & Scope, E, TubeImporter & HasContext[ctx.type]] =
+    for
+      tubes <- Ref.make(Map.empty[TubeName, ArTubeC & HasContext[ctx.type]])
+
+      importer = new PluginTubeImporter {
+        override val context: ctx.type = ctx
+
+        override def getTube(tubeName: TubeName): Comp[ArTube] =
+          tubes.get.flatMap { tubes =>
+            ZIO.fromEither(tubes.get(tubeName).toRight(DiagnosticError.UnknownTube(tubeName)))
+          }
+
+        override def loadTubes: ZIO[Environment & Scope, E, Unit] =
+          for
+            loadedTubes <- ZIO.foreach(tubeOptions) { (name, libOptions) =>
+              for
+                tube <- SourceTubeLoader.load(context)(this)(libOptions)
+              yield name -> tube
+            }
+            _ <- tubes.set(loadedTubes)
+          yield ()
       }
 
-    override def getTube(tubeName: TubeName): Comp[ArTubeC & HasContext[this.type]] =
-      ZIO.done(tubes)
-        .flatMap(_.join)
-        .flatMap { tubes =>
-          ZIO.fromEither(tubes.get(tubeName).toRight(DiagnosticError.UnknownTube(tubeName)))
-        }
-  }
+      _ <- importer.loadTubes
+
+    yield importer
 
   private val librariesDir: CompileTimeFileSystem =
     ReadFileCompileTime.readDirectory("libraries", (isDir, name) => name != "node_modules" && name != "bin")
@@ -246,20 +259,21 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
 
         runtime <- ZIO.runtime[Environment & Scope]
 
-        context <- ZIO.succeed {
-          new PluginContextImpl(runtime, libs + (testTubeName -> SourceLibOptions(
+        context = new PluginContextImpl()
+        importer <- createTubeImporter(context)(
+          libs + (testTubeName -> SourceLibOptions(
             name = NonEmptyList("Test"),
             spec = defaultTubeSpec,
             sources = inputSourcesToDirectory(testCase.inputSources),
             plugin = testOptions,
-          )))
-        }
+          ))
+        )
 
         libTubes <- ZIO.foreach(libs.keySet.toSeq) { libName =>
-          getTubeOutput(context)(libName).map { libName -> _ }
+          getTubeOutput(context)(importer)(libName).map { libName -> _ }
         }.map { _.toMap }
 
-        testTube <- getTubeOutput(context)(testTubeName)
+        testTube <- getTubeOutput(context)(importer)(testTubeName)
 
         result <- executeTest(testTube, libTubes)
           .foldZIO(
@@ -278,7 +292,7 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
     }
 
 
-  private def getTubeOutput(ctx: PluginContext)(tubeName: TubeName): ctx.Comp[plugin.Output[Environment, E]] =
+  private def getTubeOutput(ctx: PluginContext)(importer: TubeImporter & HasContext[ctx.type])(tubeName: TubeName): ctx.Comp[plugin.Output[Environment, E]] =
     val adapter: PluginContextAdapter.Aux[ctx.type, plugin.type] = new PluginContextAdapter {
       override val context: ctx.type = ctx
       override val plugin: ExecutionTests.this.plugin.type = ExecutionTests.this.plugin
@@ -294,7 +308,7 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
     }
 
     for
-      tube <- ctx.getTube(tubeName)
+      tube <- importer.getTube(tubeName)
       output <- plugin.emitTube(ctx)(adapter)(tube.options)(tube.asDeclaration.get)
     yield output
   end getTubeOutput

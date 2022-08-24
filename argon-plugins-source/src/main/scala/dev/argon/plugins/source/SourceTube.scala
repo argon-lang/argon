@@ -14,6 +14,7 @@ object SourceTube {
   def make
     (
       context: Context,
+      tubeImporter: TubeImporter & HasContext[context.type],
       tubeName: TubeName,
       opts: context.Options,
       modules: Map[ModulePath, ArgonSourceCodeResource[context.Env, context.Error]],
@@ -27,7 +28,7 @@ object SourceTube {
           val (tube, path) = args
           val moduleName = ModuleName(tubeName, path)
           modules.get(path) match {
-            case Some(module) => SourceModule.make(context, tube, moduleName, module)
+            case Some(module) => SourceModule.make(context, tubeImporter, tube, moduleName, module)
             case None => ZIO.fail(DiagnosticError.UnknownModuleException(moduleName))
           }
         }
