@@ -550,7 +550,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
   private abstract class OverloadExprFactoryBase extends ExprFactorySynth {
 
-    override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = resolveOverload(env, opt)(lookup(env, opt))
+    override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = resolveOverload(env, opt)(Seq.empty)(lookup(env, opt))
 
     protected type TElement
 
@@ -564,33 +564,40 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
     protected def signatureOf(element: TElement): Comp[Signature[WrapExpr, ?]]
 
     // Checks if the current overload is applicable
-    protected def checkOverload(env: Env, opt: ExprOptions)(overload: TElement): Comp[Option[Comp[ExprTypeResult]]]
+    protected def checkOverload(env: Env, opt: ExprOptions)(overload: TElement): Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]]
 
-    protected def resolveOverload(env: Env, opt: ExprOptions)(lookup: LookupResult[TElement]): Comp[ExprTypeResult] =
+    private def resolveOverload(env: Env, opt: ExprOptions)(rejected: Seq[Cause[context.Error]])(lookup: LookupResult[TElement]): Comp[ExprTypeResult] =
       lookup match {
         case LookupResult.Success(overloads, next) =>
-          def checkEachRank(overloads: Seq[Seq[TElement]]): Comp[ExprTypeResult] =
+          def checkEachRank(rejected: Seq[Cause[context.Error]])(overloads: Seq[Seq[TElement]]): Comp[ExprTypeResult] =
             overloads match {
               case rank +: tail =>
-                ZIO.foreach(rank)(checkOverload(env, opt)).map(_.flatten).flatMap {
-                  case Seq(single) => single
-                  case Seq() => checkEachRank(tail)
-                  case _ => ZIO.fail(DiagnosticError.AmbiguousOverload())
+                ZIO.foreach(rank)(checkOverload(env, opt)).flatMap { attemptedOverloads =>
+                  val (invalidOverloads, validOverloads) = attemptedOverloads.partitionMap(identity)
+                  validOverloads match {
+                    case Seq(single) => single
+                    case Seq() => checkEachRank(rejected ++ invalidOverloads.flatten)(tail)
+                    case _ => ZIO.fail(DiagnosticError.AmbiguousOverload())
+                  }
                 }
 
-              case _ => resolveOverload(env, opt)(next)
+              case _ => resolveOverload(env, opt)(rejected)(next)
             }
 
-          rankOverloads(env, overloads).flatMap(checkEachRank)
+          rankOverloads(env, overloads).flatMap(checkEachRank(rejected))
 
-        case LookupResult.Suspended(suspended) => suspended.flatMap(resolveOverload(env, opt))
+        case LookupResult.Suspended(suspended) => suspended.flatMap(resolveOverload(env, opt)(rejected))
 
         case LookupResult.NotFound() =>
-          ZIO.fail(DiagnosticError.LookupFailed(DiagnosticSource.Location(overloadLocation), lookupName))
+          rejected match {
+            case Seq() => ZIO.fail(DiagnosticError.LookupFailed(DiagnosticSource.Location(overloadLocation), lookupName))
+            case Seq(error) => ZIO.failCause(error)
+            case _ => ZIO.fail(DiagnosticError.OverloadsFailed(DiagnosticSource.Location(overloadLocation), lookupName))
+          }
       }
 
     // Ranks overloads based on parameter count relative to argument count, subtyping relation of parameters, etc.
-    protected def rankOverloads(env: Env, overloads: Seq[TElement]): Comp[Seq[Seq[TElement]]] =
+    private def rankOverloads(env: Env, overloads: Seq[TElement]): Comp[Seq[Seq[TElement]]] =
       def isMoreSpecificType(a: WrapExpr, b: WrapExpr): Comp[Boolean] = isSubType(env, a, b).map { _.isDefined }
 
       def argumentDelta(args: List[ArgumentInfo], sig: Signature[WrapExpr, ?], acc: Int): Int =
@@ -779,14 +786,14 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       (
         f: (Env, ExprOptions, Seq[WrapExpr], Res) => Comp[ExprTypeResult]
       )
-      : Comp[Option[Comp[ExprTypeResult]]] =
+      : Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]] =
 
       def handleArg
         (arg: ArgumentInfo, paramErased: Boolean, paramType: WrapExpr, tailArgs: List[ArgumentInfo], next: Signature[WrapExpr, Res])
-        : Comp[Option[Comp[ExprTypeResult]]] =
+        : Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]] =
         arg.arg.check(env, opt, paramType)
-          .foldZIO(
-            failure = _ => ZIO.none,
+          .foldCauseZIO(
+            failure = ZIO.some(_).asLeft,
             success =
               result => {
                 val variable = ParameterVariable(owner, convArgs.size, paramType, paramErased, None)
@@ -796,7 +803,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               },
           )
 
-      def inferArg(paramErased: Boolean, paramType: WrapExpr, next: Signature[WrapExpr, Res]): Comp[Option[Comp[ExprTypeResult]]] =
+      def inferArg(paramErased: Boolean, paramType: WrapExpr, next: Signature[WrapExpr, Res]): Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]] =
         UniqueIdentifier.make.flatMap { hole =>
           val variable = ParameterVariable(owner, convArgs.size, paramType, paramErased, None)
           substituteArg(variable)(WrapExpr.OfHole(hole))(sigHandler)(next).flatMap { case (next, resultExpr) =>
@@ -804,7 +811,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           }
         }
 
-      def resolveReqArg(paramErased: Boolean, paramType: WrapExpr, next: Signature[WrapExpr, Res]): Comp[Option[Comp[ExprTypeResult]]] =
+      def resolveReqArg(paramErased: Boolean, paramType: WrapExpr, next: Signature[WrapExpr, Res]): Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]] =
         implicitResolver.tryResolve(paramType, env.model, fuel).flatMap {
           case Some(implicitResolver.ResolvedImplicit(proof, model)) =>
             val env2 = env.copy(model = model)
@@ -815,7 +822,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               }
             }
 
-          case None => ZIO.none
+          case None => ???
         }
 
       (args, sig) match {
@@ -844,7 +851,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                 f(env, opt, args, result)
             }
 
-          ZIO.some(impl(convArgs, sig))
+          ZIO.right(impl(convArgs, sig))
 
         case (
               (arg @ ArgumentInfo(_, _, FunctionParameterListType.NormalList)) :: tailArgs,
@@ -883,12 +890,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           resolveReqArg(paramErased, paramType, next)
 
         case (_, Signature.Result(res)) =>
-          ZIO.succeed(Some(
+          ZIO.right(
             f(env, opt, convArgs, res).flatMap { overloadExpr =>
               args.foldLeft(ConstExprFactory(overloadLocation, overloadExpr): ExprFactory)(_.invoke(_))
                 .synth(env, opt)
             }
-          ))
+          )
       }
 
     end createSigResult
@@ -962,7 +969,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           signatureOf(inner)
       }
 
-    protected override def checkOverload(env: Env, opt: ExprOptions)(overload: ScopeElement): Comp[Option[Comp[ExprTypeResult]]] =
+    protected override def checkOverload(env: Env, opt: ExprOptions)(overload: ScopeElement): Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]] =
       ZIO.logTrace(s"checkOverload $overload") *>
         (overload match {
           case variable: Variable =>
@@ -977,20 +984,20 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                 ))
             }
 
-            ZIO.some(
+            ZIO.right(
               args.foldLeft(varFactory) { (varFactory, arg) => varFactory.invoke(arg) }
                 .synth(env, opt)
             )
 
           case parameterVariableElement: ParameterVariableElement =>
-            ZIO.succeed(Some(ZIO.succeed(ExprTypeResult(
+            ZIO.right(ZIO.succeed(ExprTypeResult(
               WrapExpr.OfExpr(ArExpr(
                 ExprConstructor.LoadTupleElement(parameterVariableElement.index),
                 WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(parameterVariableElement.paramVar), EmptyTuple))
               )),
               env,
               parameterVariableElement.elementType
-            ))))
+            )))
 
           case ModuleElementC.ClassElement(arClass) =>
             createSigResultConv(arClass, env, opt, arClass.signature, args)(classSigHandler) {
@@ -1043,7 +1050,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       (
         f: (Env, ExprOptions, Seq[WrapExpr], Res2) => Comp[ExprTypeResult]
       )
-      : Comp[Option[Comp[ExprTypeResult]]] =
+      : Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]] =
       sig.flatMap { sig =>
         createSigResult(owner, env, opt, convertSig(sigHandler)(sig), args.toList, Vector.empty)(sigHandler)(f)
       }
@@ -1182,7 +1189,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           ))
       }
 
-    protected override def checkOverload(env: Env, opt: ExprOptions)(overload: MethodElement): Comp[Option[Comp[ExprTypeResult]]] =
+    protected override def checkOverload(env: Env, opt: ExprOptions)(overload: MethodElement): Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]] =
       ZIO.logTrace(s"checkOverload method ${overload}") *> {
         overload match {
           case MethodElement.Method(method, callOwnerType) =>
@@ -1208,7 +1215,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           case MethodElement.FunctionObjectApply(argType, resultType) =>
             args match {
               case Seq(arg) =>
-                ZIO.some(
+                ZIO.right(
                   for
                     argExprRes <- arg.arg.check(env, opt, argType)
                   yield ExprTypeResult(
@@ -1218,7 +1225,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                   )
                 )
 
-              case _ => ZIO.none
+              case _ => ZIO.left(None)
             }
 
         }
@@ -1443,7 +1450,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
     protected override def signatureOf(element: TElement): Comp[Signature[WrapExpr, ?]] =
       element._1.signatureUnsubstituted.map(convertSig(classConstructorSigHandler))
 
-    protected override def checkOverload(env: Env, opt: ExprOptions)(overload: TElement): Comp[Option[Comp[ExprTypeResult]]] =
+    protected override def checkOverload(env: Env, opt: ExprOptions)(overload: TElement): Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]] =
       ZIO.logTrace(s"checkOverload method ${overload}") *> {
         val (classCtor, classType) = overload
         classCtor.signatureUnsubstituted.flatMap { sig =>
@@ -1460,7 +1467,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               else
                 ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
           }
-        } : Comp[Option[Comp[ExprTypeResult]]]
+        } : Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]]
       }
 
     override def invoke(arg: ArgumentInfo): ExprFactory =

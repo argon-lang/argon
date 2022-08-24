@@ -20,6 +20,7 @@ object DiagnosticError {
   final case class TupleSizeMismatch() extends DiagnosticError
   final case class InvalidStatementInFunction() extends DiagnosticError
   final case class LookupFailed(source: DiagnosticSource, lookupName: IdentifierExpr | parser.ClassConstructorExpr.type) extends DiagnosticError
+  final case class OverloadsFailed(source: DiagnosticSource, lookupName: IdentifierExpr | parser.ClassConstructorExpr.type) extends DiagnosticError
   final case class AmbiguousOverload() extends DiagnosticError
   final case class CanNotMutate() extends DiagnosticError
   final case class TypeError(source: DiagnosticSource) extends DiagnosticError
