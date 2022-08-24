@@ -8,6 +8,7 @@ import dev.argon.compiler.signature.Signature
 import dev.argon.parser
 import dev.argon.parser.{ClassConstructorDeclarationStmt, IdentifierExpr}
 import zio.*
+import zio.stm.*
 
 object SourceClassConstructor {
 
@@ -114,22 +115,35 @@ object SourceClassConstructor {
                 }
 
               def convertPreBaseCallBlocks(env: Env, stmts: Seq[Either[Seq[WithSource[parser.Stmt]], WithSource[parser.FieldInitializationStmt]]]): Comp[(Seq[exprConverter.exprContext.WrapExpr | UnresolvedFieldInit], Env)] =
-                ZIO.foldLeft(stmts)((Seq.empty[exprConverter.exprContext.WrapExpr | UnresolvedFieldInit], env)) {
-                  case ((acc, env), Left(stmts)) =>
-                    convertStmtBlock(env, stmts)
-                      .map { case ExprResult(expr, env) => (acc :+ expr, env) }
+                for
+                  fields <- owner.arClass.fields
+                  initializedFields <- TSet.empty[context.ExprContext.MemberVariable].commit
+                  result <- ZIO.foldLeft(stmts)((Seq.empty[exprConverter.exprContext.WrapExpr | UnresolvedFieldInit], env)) {
+                    case ((acc, env), Left(stmts)) =>
+                      convertStmtBlock(env, stmts)
+                        .map { case ExprResult(expr, env) => (acc :+ expr, env) }
 
-                  case ((acc, env), Right(fieldInit)) =>
-                    for
-                      fields <- owner.arClass.fields
-                      field <- ZIO.fromEither(
-                        fields.find(_.name.get == fieldInit.value.name)
-                          .toRight { DiagnosticError.FieldNotFound(DiagnosticSource.Location(fieldInit.location), fieldInit.value.name) }
-                      )
-                      fieldConv = ExprToHolesConverter(context)(exprConverter.exprContext).processMemberVariable(field)
-                      (ExprResult(value, env)) <- exprConverter.convertExpr(fieldInit.value.value).check(env, opt, fieldConv.varType)
-                    yield (acc :+ UnresolvedFieldInit(field, fieldConv, value), env)
-                }
+                    case ((acc, env), Right(fieldInit)) =>
+                      for
+                        field <- ZIO.fromEither(
+                          fields.find(_.name.get == fieldInit.value.name)
+                            .toRight { DiagnosticError.FieldNotFound(DiagnosticSource.Location(fieldInit.location), fieldInit.value.name) }
+                        )
+                        _ <- (
+                          ZSTM.fail(DiagnosticError.FieldReinitialized(DiagnosticSource.Location(fieldInit.location))).whenSTM(initializedFields.contains(field)) *>
+                            initializedFields.put(field)
+                        ).commit
+
+                        fieldConv = ExprToHolesConverter(context)(exprConverter.exprContext).processMemberVariable(field)
+                        (ExprResult(value, env)) <- exprConverter.convertExpr(fieldInit.value.value).check(env, opt, fieldConv.varType)
+                      yield (acc :+ UnresolvedFieldInit(field, fieldConv, value), env)
+                  }
+                  _ <- ZIO.foreachDiscard(fields) { field =>
+                    ZIO.fail(DiagnosticError.FieldNotInitialized(DiagnosticSource.Location(stmt.newLocation)))
+                      .unlessZIO(initializedFields.contains(field).commit)
+                  }
+                yield result
+
 
               def convertBaseCall(env: Env)(stmt: Option[WithSource[parser.InitializeStmt]]): Comp[(Option[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.ClassConstructorCall]], Env)] =
                 owner.arClass.signature.flatMap { sig =>

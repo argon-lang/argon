@@ -34,6 +34,8 @@ object DiagnosticError {
   final case class SealedTraitExtended(source: DiagnosticSource) extends DiagnosticError
   final case class AbstractClassConstructorCalled(source: DiagnosticSource) extends DiagnosticError
   final case class AbstractMethodNotImplemented(source: DiagnosticSource) extends DiagnosticError
+  final case class FieldNotInitialized(source: DiagnosticSource) extends DiagnosticError
+  final case class FieldReinitialized(source: DiagnosticSource) extends DiagnosticError
 
   final case class SpecMultiPartGlobUsedWithPrefixSuffix() extends DiagnosticError
   final case class SpecFileNameTemplateMustBeIdentifier() extends DiagnosticError

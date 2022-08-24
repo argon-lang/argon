@@ -26,6 +26,6 @@
             
     ]]></InputSource>
 
-    <ExpectedError>FieldNotInitializedError</ExpectedError>
+    <ExpectedError>FieldNotInitialized</ExpectedError>
 
 </ArgonTest>

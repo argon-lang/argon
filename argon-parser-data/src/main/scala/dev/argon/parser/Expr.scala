@@ -62,6 +62,7 @@ final case class MethodDeclarationStmt
 
 final case class ClassConstructorDeclarationStmt
   (
+    newLocation: SourceLocation,
     parameters: Vector[WithSource[FunctionParameterList]],
     body: WithSource[Vector[WithSource[Stmt]]],
     modifiers: Vector[WithSource[Modifier]],

@@ -1,0 +1,33 @@
+<ArgonTest>
+
+    <Name>Reinitialized field</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+        
+        class MyClass <: Object
+
+            field name: String
+
+            public new()
+                field name = "A"
+                field name = "B"
+            end
+
+            public proc self.say_hello(): () do
+                puts 'Hello'
+                puts name
+            end
+        end
+        
+        proc main(): () do
+            MyClass.new().say_hello()
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedError>FieldReinitialized</ExpectedError>
+
+</ArgonTest>
