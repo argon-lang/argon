@@ -10,7 +10,52 @@ trait ExprUtilSubstitution extends ExprUtilBase {
 
   // Returns the possibly modified expression and the stable version of it
   // Declares a variable if needed
-  def asStableExpression(expr: WrapExpr): exprContext.context.Comp[(WrapExpr, WrapExpr)] = ???
+  def asStableExpression(expr: WrapExpr): exprContext.context.Comp[(WrapExpr, WrapExpr)] =
+    def isStableConstructor(ctor: ExprConstructor): (Boolean, Boolean) =
+      ctor match {
+        case ExprConstructor.BindVariable(_) => (true, false)
+        case ExprConstructor.ClassConstructorCall(classCtor) => (classCtor.purity, true)
+        case ExprConstructor.FunctionCall(func) => (func.purity, true)
+        case ExprConstructor.FunctionObjectCall => (true, true)
+        case ExprConstructor.LoadConstantBool(_) => (true, false)
+        case ExprConstructor.LoadConstantInt(_) => (true, false)
+        case ExprConstructor.LoadConstantString(_) => (true, false)
+        case ExprConstructor.LoadLambda(_) => (true, false)
+        case ExprConstructor.LoadTuple => (true, true)
+        case ExprConstructor.LoadTupleElement(_) => (true, true)
+        case ExprConstructor.LoadVariable(_) => (true, false)
+        case ExprConstructor.MethodCall(method) => (method.purity, true)
+        case ExprConstructor.TypeN => (true, true)
+        case ExprConstructor.OmegaTypeN(_) => (true, false)
+        case ExprConstructor.TraitType(_) => (true, true)
+        case ExprConstructor.ClassType(_) => (true, true)
+        case ExprConstructor.FunctionType => (true, true)
+        case ExprConstructor.UnionType => (true, true)
+        case ExprConstructor.IntersectionType => (true, true)
+        case ExprConstructor.ExistentialType(_) => (true, true)
+        case ExprConstructor.ConjunctionType => (true, true)
+        case ExprConstructor.DisjunctionType => (true, true)
+        case ExprConstructor.NeverType => (true, true)
+        case ExprConstructor.SubtypeWitnessType => (true, true)
+        case ExprConstructor.EqualTo => (true, true)
+        case ExprConstructor.AssumeErasedValue => (true, true)
+        case _ => (false, false)
+      }
+
+    def isStableExpression(expr: WrapExpr): Boolean =
+      expr match {
+        case WrapExpr.OfExpr(expr) =>
+          val (isStable, checkArgs) = isStableConstructor(expr.constructor)
+          isStable && (!checkArgs || expr.constructor.argsToExprs(expr.args).forall(isStableExpression))
+
+        case WrapExpr.OfHole(_) => true
+      }
+
+    if isStableExpression(expr) then
+      ZIO.succeed((expr, expr))
+    else
+      ???
+  end asStableExpression
 
   def referencesVariable(variable: Variable)(expr: WrapExpr): Boolean =
     expr match {

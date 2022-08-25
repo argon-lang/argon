@@ -44,7 +44,7 @@ object VTableBuilder {
       type VT = VTable
       type Entry = VTableEntry
 
-      private def signatureMatches[PS[_, _], PSSlot[_, _]](method: ArMethod)(slotSig: EntrySignature): Comp[Boolean] =
+      private def signatureMatches[PS[_, _], PSSlot[_, _]](method: ArMethod, slotMethod: ArMethod, slotSig: EntrySignature): Comp[Boolean] =
         val holesExprContext = new HolesExprContext {
           override val context: ctx.type = ctx
         }
@@ -57,7 +57,7 @@ object VTableBuilder {
 
         val emptyEnv = exprUtil.Env(exprUtil.Scope.empty, model = Map.empty)
 
-        def impl(sig: Signature[holesExprContext.WrapExpr, holesExprContext.WrapExpr], slotSig: Signature[holesExprContext.WrapExpr, holesExprContext.WrapExpr]): Comp[Boolean] =
+        def impl(sig: Signature[holesExprContext.WrapExpr, holesExprContext.WrapExpr], slotSig: Signature[holesExprContext.WrapExpr, holesExprContext.WrapExpr], index: Int): Comp[Boolean] =
           (sig, slotSig) match {
             case (aParam @ Signature.Parameter(_, _, _, _, _), bParam @ Signature.Parameter(_, _, _, _, _)) =>
               exprUtil.isSubType(emptyEnv, aParam.paramType, bParam.paramType).map { _.isDefined }
@@ -66,7 +66,13 @@ object VTableBuilder {
                   case false => ZIO.succeed(false)
                 }
                 .flatMap {
-                  case true => impl(aParam.next, bParam.next)
+                  case true =>
+                    val aVar = holesExprContext.ParameterVariable(method, index, aParam.paramType, aParam.isErased, aParam.name)
+                    val bVar = holesExprContext.ParameterVariable(slotMethod, index, bParam.paramType, bParam.isErased, bParam.name)
+                    val loadAVar = holesExprContext.WrapExpr.OfExpr(holesExprContext.ArExpr(holesExprContext.ExprConstructor.LoadVariable(aVar), EmptyTuple))
+
+                    val bNextSubst = exprUtil.substituteSignature(bVar)(loadAVar)(exprUtil.functionSigHandler)(bParam.next)
+                    impl(aParam.next, bNextSubst, index = index + 1)
                   case false => ZIO.succeed(false)
                 }
 
@@ -77,7 +83,11 @@ object VTableBuilder {
           }
 
         method.signatureUnsubstituted.flatMap { sig =>
-          impl(exprUtil.convertSig(exprUtil.functionSigHandler)(sig), exprUtil.convertSig(exprUtil.functionSigHandler)(slotSig))
+          impl(
+            exprUtil.convertSig(exprUtil.functionSigHandler)(sig),
+            exprUtil.convertSig(exprUtil.functionSigHandler)(slotSig),
+            index = 0,
+          )
         }
       end signatureMatches
 
@@ -102,7 +112,7 @@ object VTableBuilder {
                       methodName.isDefined &&
                       slotEntry.name == methodName
                   }
-              ) { case (_, VTableEntry(_, slotSig, _, _, _)) => signatureMatches(method)(slotSig) }
+              ) { case (slotMethod, VTableEntry(_, slotSig, _, _, _)) => signatureMatches(method, slotMethod, slotSig) }
                 .map { slotMethods =>
                   VTable(
                     methodMap = slotMethods
@@ -178,8 +188,8 @@ object VTableBuilder {
       private def ensureNonAbstract(vtable: VT, source: DiagnosticSource): Comp[Unit] =
         ZIO.foreachDiscard(vtable.methodMap.values) {
           case VTableEntry(_, _, _, _, VTableEntryMethod(_, _)) => ZIO.unit
-          case VTableEntry(_, _, _, _, VTableEntryAbstract) =>
-            ZIO.fail(DiagnosticError.AbstractMethodNotImplemented(source))
+          case VTableEntry(name, _, _, _, VTableEntryAbstract) =>
+            ZIO.fail(DiagnosticError.AbstractMethodNotImplemented(source, name))
 
           case VTableEntry(_, _, _, _, VTableEntryAmbiguous(_)) => ???
         }

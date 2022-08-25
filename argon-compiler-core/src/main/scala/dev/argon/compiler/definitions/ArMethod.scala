@@ -35,6 +35,9 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
     }
 
   final override def hashCode(): Int = id.hashCode
+
+  override def toString: String =
+    s"ArMethod ${owner}"
 }
 
 object ArMethodC {

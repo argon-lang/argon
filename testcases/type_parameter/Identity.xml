@@ -1,17 +1,17 @@
 <ArgonTest>
 
-    <Name>Identity function</Name>
+    <Name>Identity</Name>
 
 
     <InputSource name="index.argon"><![CDATA[
             
         import Argon.Core/*
 
-        def identity (T: type[1]) (value: T): T = value
+        def identity (T: type) (value: T): T = value
 
         proc main(): () do
 
-            val str: identity String.type String = '75'
+            val str = identity String 'A'
 
             puts str
 
@@ -21,7 +21,7 @@
     ]]></InputSource>
 
     <ExpectedOutput>
-        75
+        A
     </ExpectedOutput>
 
 </ArgonTest>

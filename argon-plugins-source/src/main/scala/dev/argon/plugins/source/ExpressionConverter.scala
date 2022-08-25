@@ -26,7 +26,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
     }
 
-  import exprContext.{WrapExpr, ArExpr, ExprConstructor, Variable, LocalVariable, InstanceVariable, ParameterVariable}
+  import exprContext.{WrapExpr, ArExpr, ExprConstructor, Variable, LocalVariable, InstanceVariable, ParameterVariable, ParameterVariableOwner}
 
   val evaluator: ArgonEvaluator.Aux[context.Env, context.Error, context.type, exprContext.type] = ArgonEvaluator(context)(exprContext)
 
@@ -519,6 +519,16 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
         }
 
+      case parser.TypeExpr(None) =>
+        new ExprFactorySynth {
+          override protected def location: SourceLocation = expr.location
+
+          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+            val e = WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(0), EmptyTuple))))
+            val t = WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(1), EmptyTuple))))
+            ZIO.succeed(ExprTypeResult(e, env, t))
+        }
+
       case parser.TypeExpr(level) => ???
 
       case parser.MetaTypeExpr(level) =>
@@ -549,6 +559,8 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
     }
 
   private abstract class OverloadExprFactoryBase extends ExprFactorySynth {
+
+    import ExprConstructor.MethodCallOwnerType
 
     override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = resolveOverload(env, opt)(Seq.empty)(lookup(env, opt))
 
@@ -899,6 +911,36 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       }
 
     end createSigResult
+
+
+    protected def substituteInstanceTypeArgs[Res](sigHandler: SignatureHandlerPlus[?, Res])(callOwnerType: MethodCallOwnerType, sig: Signature[WrapExpr, Res]): Comp[Signature[WrapExpr, Res]] =
+      val (owner: ParameterVariableOwner, ownerSigComp, args) = callOwnerType match {
+        case MethodCallOwnerType.OwnedByClass(classType) =>
+          (
+            classType.constructor.arClass: ParameterVariableOwner,
+            classType.constructor.arClass.signature.map(convertSig(classSigHandler)): Comp[Signature[WrapExpr, ?]],
+            classType.args
+          )
+        case MethodCallOwnerType.OwnedByTrait(traitType) =>
+          (
+            traitType.constructor.arTrait: ParameterVariableOwner,
+            traitType.constructor.arTrait.signature.map(convertSig(traitSigHandler)): Comp[Signature[WrapExpr, ?]],
+            traitType.args
+          )
+      }
+
+      def getInstanceTypeVars(ownerSig: Signature[WrapExpr, ?], prevVars: Seq[ParameterVariable]): Seq[ParameterVariable] =
+        ownerSig match {
+          case Signature.Parameter(_, isErased, name, paramType, next) =>
+            getInstanceTypeVars(next, prevVars :+ ParameterVariable(owner, prevVars.size, paramType, isErased, name))
+          case Signature.Result(resultType) => prevVars
+        }
+
+      ownerSigComp.map { ownerSig =>
+        val params = getInstanceTypeVars(ownerSig, Seq.empty)
+        substituteSignatureMany(params.zip(args).toMap)(sigHandler)(sig)
+      }
+    end substituteInstanceTypeArgs
   }
 
   private final class OverloadExprFactory
@@ -1193,24 +1235,24 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       ZIO.logTrace(s"checkOverload method ${overload}") *> {
         overload match {
           case MethodElement.Method(method, callOwnerType) =>
-            method.signatureUnsubstituted.flatMap { sig =>
-              val thisVar = InstanceVariable(method, instanceType, None)
-              val sig2 = convertSig(functionSigHandler)(sig)
-
-              substituteArg(thisVar)(instance)(functionSigHandler)(sig2).flatMap { case (sig3, stableInstance) =>
-                createSigResult(method, env, opt, sig3, args.toList, Vector.empty)(functionSigHandler) {
-                  (env, opt, args, returnType) =>
-                    if opt.checkPurity(method.purity) then
-                      ZIO.succeed(ExprTypeResult(
-                        WrapExpr.OfExpr(ArExpr(ExprConstructor.MethodCall(method), (stableInstance, callOwnerType, args))),
-                        env,
-                        returnType,
-                      ))
-                    else
-                      ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
-                }
+            for
+              sig <- method.signatureUnsubstituted
+              thisVar = InstanceVariable(method, instanceType, None)
+              sig <- ZIO.succeed(convertSig(functionSigHandler)(sig))
+              sig <- substituteInstanceTypeArgs(functionSigHandler)(callOwnerType, sig)
+              (sig, stableInstance) <- substituteArg(thisVar)(instance)(functionSigHandler)(sig)
+              result <- createSigResult(method, env, opt, sig, args.toList, Vector.empty)(functionSigHandler) {
+                (env, opt, args, returnType) =>
+                  if opt.checkPurity(method.purity) then
+                    ZIO.succeed(ExprTypeResult(
+                      WrapExpr.OfExpr(ArExpr(ExprConstructor.MethodCall(method), (stableInstance, callOwnerType, args))),
+                      env,
+                      returnType,
+                    ))
+                  else
+                    ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
               }
-            }
+            yield result
 
           case MethodElement.FunctionObjectApply(argType, resultType) =>
             args match {
@@ -1230,6 +1272,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
         }
       }
+
 
     private def getInstanceType(instanceType: WrapExpr): Comp[Seq[InstanceType]] =
       evaluator.normalizeTopLevelWrap(instanceType, fuel).flatMap {
@@ -1453,21 +1496,25 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
     protected override def checkOverload(env: Env, opt: ExprOptions)(overload: TElement): Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]] =
       ZIO.logTrace(s"checkOverload method ${overload}") *> {
         val (classCtor, classType) = overload
-        classCtor.signatureUnsubstituted.flatMap { sig =>
-          val sig2 = convertSig(classConstructorSigHandler)(sig)
+        (
+          for
+            sig <- classCtor.signatureUnsubstituted
+            sig <- ZIO.succeed(convertSig(classConstructorSigHandler)(sig))
+            sig <- substituteInstanceTypeArgs(classConstructorSigHandler)(MethodCallOwnerType.OwnedByClass(classType), sig)
 
-          createSigResult(classCtor, env, opt, sig2, args.toList, Vector.empty)(classConstructorSigHandler) {
-            (env, opt, args, _) =>
-              if opt.checkPurity(classCtor.purity) then
-                ZIO.succeed(ExprTypeResult(
-                  WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassConstructorCall(classCtor), (classType, args))),
-                  env,
-                  WrapExpr.OfExpr(classType),
-                ))
-              else
-                ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
-          }
-        } : Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]]
+            result <- createSigResult(classCtor, env, opt, sig, args.toList, Vector.empty)(classConstructorSigHandler) {
+              (env, opt, args, _) =>
+                if opt.checkPurity(classCtor.purity) then
+                  ZIO.succeed(ExprTypeResult(
+                    WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassConstructorCall(classCtor), (classType, args))),
+                    env,
+                    WrapExpr.OfExpr(classType),
+                  ))
+                else
+                  ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
+            }
+          yield result
+        ) : Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]]
       }
 
     override def invoke(arg: ArgumentInfo): ExprFactory =

@@ -1,6 +1,7 @@
 package dev.argon.compiler.expr
 
 import dev.argon.compiler.signature.*
+import dev.argon.expr.{ExprConstraints, ExprTypeBounds, ExprEqualConstraint}
 import dev.argon.util.{*, given}
 import zio.*
 
@@ -18,7 +19,33 @@ trait ExprUtilHoleResolver
     override val ec1: exprContext.type = exprContext
     override val ec2: context.ExprContext.type = context.ExprContext
 
-    override def processHole(hole: UniqueIdentifier): Comp[ec2.WrapExpr] = ???
+    override def processHole(hole: UniqueIdentifier): Comp[ec2.WrapExpr] =
+      for
+        env <- envRef.get
+
+        resolvedConstraint = env.model.get(hole) match {
+
+          case Some(ExprEqualConstraint(other)) => other
+
+          case Some(ExprTypeBounds(_, init :+ last)) =>
+            init.foldRight(last) { (a, b) =>
+              ec1.WrapExpr.OfExpr(ec1.ArExpr(ec1.ExprConstructor.IntersectionType, (a, b)))
+            }
+
+          case Some(ExprTypeBounds(init :+ last, _)) =>
+            init.foldRight(last) { (a, b) =>
+              ec1.WrapExpr.OfExpr(ec1.ArExpr(ec1.ExprConstructor.UnionType, (a, b)))
+            }
+
+          case Some(ExprTypeBounds(_, _)) | None =>
+            ec1.WrapExpr.OfExpr(ec1.ArExpr(ec1.ExprConstructor.NeverType, EmptyTuple))
+        }
+
+        _ <- envRef.set(env.copy(model = env.model.updated(hole, ExprEqualConstraint(resolvedConstraint))))
+
+        convResult <- processWrapExpr(resolvedConstraint)
+      yield convResult
+
   }
 
   def resolveHoles(env: Env, expr: WrapExpr): Comp[(context.ExprContext.WrapExpr, Env)] =

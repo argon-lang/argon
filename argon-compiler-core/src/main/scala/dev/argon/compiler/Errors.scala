@@ -34,7 +34,7 @@ object DiagnosticError {
   final case class SealedClassExtended(source: DiagnosticSource) extends DiagnosticError
   final case class SealedTraitExtended(source: DiagnosticSource) extends DiagnosticError
   final case class AbstractClassConstructorCalled(source: DiagnosticSource) extends DiagnosticError
-  final case class AbstractMethodNotImplemented(source: DiagnosticSource) extends DiagnosticError
+  final case class AbstractMethodNotImplemented(source: DiagnosticSource, name: Option[IdentifierExpr]) extends DiagnosticError
   final case class FieldNotInitialized(source: DiagnosticSource) extends DiagnosticError
   final case class FieldReinitialized(source: DiagnosticSource) extends DiagnosticError
 

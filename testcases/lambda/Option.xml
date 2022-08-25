@@ -4,21 +4,23 @@
 
     <InputSource name="index.argon"><![CDATA[
 
-import Argon.Core/*
+        import Argon.Core/*
+        import ./Option/*
 
-proc printOpt (opt: Option String): () =
-	puts (opt.getOrElse(_ => 'Empty!'))
+        proc printOpt (opt: Option String): () =
+            puts (opt.getOrElse(_ => 'Empty!'))
 
-proc main(): () do
-	printOpt (Some String 'Hello World!!!')
-	printOpt (None String)
-end
+        proc main(): () do
+            printOpt (Some(String).new 'Hello World!!!')
+            printOpt (None(String).new())
+        end
 
 
     ]]></InputSource>
 
     <InputSource name="Option.argon"><![CDATA[
-        namespace Ar
+
+        import Argon.Core/*
 
         public sealed trait Option(T: type) <: Object
 
@@ -27,20 +29,29 @@ end
 
         end
 
-        public constructor Some(T1: type)(value: T1): Option T1
+        public class Some(T1: type) <: Option T1
+
+            field value: T1
+
+            public new(value: T1)
+                field value = value
+            end
 
             public override def _.map(U: type)(f3: T1 -> U): Option U =
-                Some U (f3 value)
+                Some(U).new(f3 value)
 
             public override def _.getOrElse(f4: () -> T1): T1 =
                 value
 
         end
 
-        public constructor None(T2: type): Option T2
+        public class None(T2: type) <: Option T2
+
+            public new()
+            end
 
             public override def _.map(U: type)(f5: T2 -> U): Option U =
-                None U
+                None(U).new()
 
             public override def _.getOrElse(f6: () -> T2): T2 =
                 f6()
