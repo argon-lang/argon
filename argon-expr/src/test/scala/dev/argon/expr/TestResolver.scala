@@ -1,6 +1,7 @@
 package dev.argon.expr
 
 import dev.argon.util.UniqueIdentifier
+import dev.argon.prover.Proof
 import zio.stream.*
 import zio.*
 import zio.test.{Gen, Sample}
@@ -42,11 +43,24 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
   override protected def typeOfTrait(traitObj: String, args: Seq[WrapExpr]): ZIO[R, String, WrapExpr] =
     ZIO.succeed(type0)
 
-  protected override def isSubClass(classA: TClass, aArgs: Seq[WrapExpr], classB: TClass, bArgs: Seq[WrapExpr], fuel: Int)
-    : ZIO[R, String, SubClassResult] =
-    ZIO.succeed(SubClassResult.NotSubClassProof(wrapExpr(
-      ExprConstructor.AssumeErasedValue,
-      EmptyTuple,
+
+  protected override def isSubClass
+  (
+    prologContext: TCPrologContext,
+    classA: TClass,
+    aArgs: Seq[ExprPrologSyntax.Expr],
+    classB: TClass,
+    bArgs: Seq[ExprPrologSyntax.Expr],
+    model: prologContext.Model,
+    solveState: prologContext.SolveState,
+  )
+  : ZStream[R, Either[String, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
+    ZStream.fail(Right(prologContext.PrologResult.No(
+      Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+        ExprConstructor.AssumeErasedValue,
+        EmptyTuple,
+      ))),
+      model,
     )))
 
   private val subTraits: Seq[(String, String)] =
@@ -63,27 +77,52 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
       t1 == st1 && (t2 == st2 || checkSubTraits(st2, t2))
     }
 
-  protected override def isSubTrait(traitA: TTrait, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr], fuel: Int)
-    : ZIO[R, String, SubClassResult] =
-    if checkSubTraits(traitA, traitB) then {
-      ZIO.succeed(SubClassResult.SubClassProof(wrapExpr(
-        ExprConstructor.AssumeErasedValue,
-        EmptyTuple,
+  protected def isSubTrait
+  (
+    prologContext: TCPrologContext,
+    traitA: TTrait,
+    aArgs: Seq[ExprPrologSyntax.Expr],
+    traitB: TTrait,
+    bArgs: Seq[ExprPrologSyntax.Expr],
+    model: prologContext.Model,
+    solveState: prologContext.SolveState,
+  )
+  : ZStream[R, Either[String, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
+    if checkSubTraits(traitA, traitB) then
+      ZStream.succeed(prologContext.PrologResult.Yes(
+        Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+          ExprConstructor.AssumeErasedValue,
+          EmptyTuple,
+        ))),
+        model,
+      ))
+    else
+      ZStream.fail(Right(prologContext.PrologResult.No(
+        Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+          ExprConstructor.AssumeErasedValue,
+          EmptyTuple,
+        ))),
+        model,
       )))
-    }
-    else {
-      ZIO.succeed(SubClassResult.NotSubClassProof(wrapExpr(
-        ExprConstructor.AssumeErasedValue,
-        EmptyTuple,
-      )))
-    }
 
-  protected override def classImplementsTrait
-    (classA: TClass, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr], fuel: Int)
-    : ZIO[R, String, SubClassResult] =
-    ZIO.succeed(SubClassResult.NotSubClassProof(wrapExpr(
-      ExprConstructor.AssumeErasedValue,
-      EmptyTuple,
+
+  protected def classImplementsTrait
+  (
+    prologContext: TCPrologContext,
+    classA: TClass,
+    aArgs: Seq[ExprPrologSyntax.Expr],
+    traitB: TTrait,
+    bArgs: Seq[ExprPrologSyntax.Expr],
+    model: prologContext.Model,
+    solveState: prologContext.SolveState,
+  )
+  : ZStream[R, Either[String, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
+    ZStream.fail(Right(prologContext.PrologResult.No(
+      Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
+        ExprConstructor.AssumeErasedValue,
+        EmptyTuple,
+      ))),
+      model,
     )))
 
   protected override def traitRelations(arTrait: String): ZIO[R, String, Seq[ExprRelation]] = ZIO.succeed(Seq.empty)
@@ -100,6 +139,9 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
 
   protected override def classConstructorRelations(classCtor: String): ZIO[R, String, Seq[ExprRelation]] =
     ZIO.succeed(Seq.empty)
+
+  override protected def substituteVariables(vars: Map[String, exprContext.WrapExpr])(expr: exprContext.WrapExpr): exprContext.WrapExpr =
+    expr
 
   protected override val natLessThanFunction: ZIO[R, String, String] = ZIO.succeed("natLessThan")
   protected override val boolType: ZIO[R, String, WrapExpr] =

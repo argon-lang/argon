@@ -15,7 +15,7 @@ abstract class ProofPrologContext[R <: VariableProvider, E]
 
   protected override def intrinsicPredicate
     (predicate: TPredicateFunction, args: Seq[Expr], substitutions: Model, solveState: SolveState)
-    : ZStream[R, Error, PrologResult.Yes] = ZStream.empty
+    : ZStream[R, Either[E, PrologResult.No], PrologResult.Yes] = ZStream.empty
 
   protected override def normalize(expr: Expr, solveState: SolveState): ZIO[R, E, Expr] = ZIO.succeed(expr)
 

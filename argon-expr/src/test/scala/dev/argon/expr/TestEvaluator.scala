@@ -12,4 +12,6 @@ class TestEvaluator[R, E] extends Evaluator[R, E] {
   override def getMethodBody(method: TMethod, instance: WrapExpr, args: Seq[WrapExpr], fuel: Int)
     : ZIO[R, E, Option[WrapExpr]] = ZIO.none
 
+  override def substituteVariables(varMap: Map[String, WrapExpr])(expr: WrapExpr): WrapExpr =
+    expr
 }

@@ -49,7 +49,7 @@ abstract class PrologContext[-R, +E] {
   protected def constructorArgRelations(constructor: syntax.TConstructor, arity: Int): ZIO[R, E, Seq[TRelation]]
 
   // Checks whether the relation holds between two expressions.
-  protected def checkRelation(a: syntax.Expr, b: syntax.Expr, relation: TRelation, substitutions: Model, solveState: SolveState)
+  protected def checkRelation(a: Expr, b: Expr, relation: TRelation, substitutions: Model, solveState: SolveState)
     : ZStream[R, Error, PrologResult.Yes]
 
   protected def otherForEquivalenceRelation(constraints: TConstraints): Option[syntax.Expr]
