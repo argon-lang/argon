@@ -100,7 +100,6 @@ private[emit] object JSExpr {
   end arrow
 
 
-
   trait VariableDeclarationPartial {
     def := (value: estree.Expression): estree.VariableDeclaration
   }
@@ -108,6 +107,15 @@ private[emit] object JSExpr {
   def const(name: String): VariableDeclarationPartial = value =>
     estree.VariableDeclaration(
       kind = "const",
+      declarations = Seq(estree.VariableDeclarator(
+        id = id(name),
+        init = Nullable(value)
+      )),
+    )
+
+  def let(name: String): VariableDeclarationPartial = value =>
+    estree.VariableDeclaration(
+      kind = "let",
       declarations = Seq(estree.VariableDeclarator(
         id = id(name),
         init = Nullable(value)
@@ -168,6 +176,22 @@ private[emit] object JSExpr {
         computed = false,
       )
   end extension
+
+  def get(name: String)(body: estree.Statement*): estree.Property =
+    estree.Property(
+      kind = "get",
+      key = id(name),
+      value = estree.FunctionExpression(
+        id = Nullable(null),
+        params = Seq(),
+        body = block(body*),
+        generator = false,
+        async = false,
+      ),
+      method = false,
+      shorthand = false,
+      computed = false,
+    )
 
   given Conversion[estree.Identifier, estree.ImportSpecifier] with
     override def apply(x: estree.Identifier): estree.ImportSpecifier =

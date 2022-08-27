@@ -121,11 +121,10 @@ trait ExprUtilAccess extends ExprUtilBase {
         }
 
       protected def getBaseTraits(t: ArTrait): Comp[Seq[ArTrait]] =
-        t.signature.map { sig =>
-          sig.unsubstitutedResult._2.map { traitType =>
-            traitType.constructor.arTrait
-          }
-        }
+        for
+          sig <- t.signature
+          baseTraits <- sig.unsubstitutedResult.baseTraits
+        yield baseTraits.map { traitType => traitType.constructor.arTrait }
     }
 
     final case class ClassToken(arClass: ArClass) extends AccessToken with TypeWithMethodsTokenCommon {
@@ -162,26 +161,31 @@ trait ExprUtilAccess extends ExprUtilBase {
         end match
 
       private def getBaseClass(c: ArClass): Comp[Seq[ArClass]] =
-        c.signature.map { sig =>
-          sig.unsubstitutedResult._2.toList.map {
-            _.constructor.arClass
-          }
-        }
+        for
+          sig <- c.signature
+          res = sig.unsubstitutedResult
+          baseClass <- res.baseClass
+        yield baseClass.toList.map { _.constructor.arClass }
 
       protected def checkImplementsTrait(superTrait: ArTrait, subClass: ArClass, seenTypes: TSet[AccessType]): Comp[Boolean] =
         seenTypes.contains(subClass).commit.flatMap {
           case true => ZIO.succeed(false)
           case false =>
-            seenTypes.put(subClass).commit *>
-              (subClass.signature.flatMap { sig =>
-                val (_, baseClassOpt, baseTraits) = sig.unsubstitutedResult
+            for
+              _ <- seenTypes.put(subClass).commit
+              sig <- subClass.signature
+              res = sig.unsubstitutedResult
+              baseTraits <- res.baseTraits
+              baseClassOpt <- res.baseClass
+
+              implementsRes <-
                 ZIO.exists(baseTraits) { baseTrait =>
                   checkSubTypes[ArTrait](superTrait, baseTrait.constructor.arTrait, getBaseTraits, seenTypes)
                 } ||
                   ZIO.exists(baseClassOpt) { baseClass =>
                     checkImplementsTrait(superTrait, baseClass.constructor.arClass, seenTypes)
                   }
-              })
+            yield implementsRes
         }
 
 

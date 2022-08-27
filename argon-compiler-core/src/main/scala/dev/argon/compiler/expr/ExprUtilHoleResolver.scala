@@ -12,7 +12,7 @@ trait ExprUtilHoleResolver
     with ExprUtilOptions
     with ExprUtilSubstitution
 {
-  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr}
+  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr, ClassResult, TraitResult}
 
   private class HoleResolver(envRef: Ref.Synchronized[Env]) extends ExprProcessor[Comp] {
     override val context: ExprUtilHoleResolver.this.context.type = ExprUtilHoleResolver.this.context
@@ -21,27 +21,29 @@ trait ExprUtilHoleResolver
 
     override def processHole(hole: UniqueIdentifier): Comp[ec2.WrapExpr] =
       for
-        env <- envRef.get
+        resolvedConstraint <- envRef.modify { env =>
+          val resolvedConstraint = env.model.get(hole) match {
 
-        resolvedConstraint = env.model.get(hole) match {
+            case Some(ExprEqualConstraint(other)) => other
 
-          case Some(ExprEqualConstraint(other)) => other
+            case Some(ExprTypeBounds(_, init :+ last)) =>
+              init.foldRight(last) { (a, b) =>
+                ec1.WrapExpr.OfExpr(ec1.ArExpr(ec1.ExprConstructor.IntersectionType, (a, b)))
+              }
 
-          case Some(ExprTypeBounds(_, init :+ last)) =>
-            init.foldRight(last) { (a, b) =>
-              ec1.WrapExpr.OfExpr(ec1.ArExpr(ec1.ExprConstructor.IntersectionType, (a, b)))
-            }
+            case Some(ExprTypeBounds(init :+ last, _)) =>
+              init.foldRight(last) { (a, b) =>
+                ec1.WrapExpr.OfExpr(ec1.ArExpr(ec1.ExprConstructor.UnionType, (a, b)))
+              }
 
-          case Some(ExprTypeBounds(init :+ last, _)) =>
-            init.foldRight(last) { (a, b) =>
-              ec1.WrapExpr.OfExpr(ec1.ArExpr(ec1.ExprConstructor.UnionType, (a, b)))
-            }
+            case Some(ExprTypeBounds(_, _)) | None =>
+              ec1.WrapExpr.OfExpr(ec1.ArExpr(ec1.ExprConstructor.NeverType, EmptyTuple))
+          }
 
-          case Some(ExprTypeBounds(_, _)) | None =>
-            ec1.WrapExpr.OfExpr(ec1.ArExpr(ec1.ExprConstructor.NeverType, EmptyTuple))
+          val env2 = env.copy(model = env.model.updated(hole, ExprEqualConstraint(resolvedConstraint)))
+
+          (resolvedConstraint, env2)
         }
-
-        _ <- envRef.set(env.copy(model = env.model.updated(hole, ExprEqualConstraint(resolvedConstraint))))
 
         convResult <- processWrapExpr(resolvedConstraint)
       yield convResult
@@ -80,100 +82,47 @@ trait ExprUtilHoleResolver
       env <- envRef.get
     yield (convExpr, env)
 
-  type ClassResultContext = (context.ExprContext.WrapExpr, Option[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.ClassType]], Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]])
-  type TraitResultContext = (context.ExprContext.WrapExpr, Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]])
-
-
   trait SignatureHandlerPlus[Res1, Res2] extends SignatureHandler[Res2] {
     def convertResult(res: Res1): Res2
-
-    def resolveResultHoles(env: Env, res: Res2): Comp[(Res1, Env)]
   }
 
 
   override val functionSigHandler: SignatureHandlerPlus[context.ExprContext.WrapExpr, WrapExpr] =
-    new SignatureHandlerPlus[context.ExprContext.WrapExpr, WrapExpr] with FunctionSigHandlerBase :
+    new SignatureHandlerPlus[context.ExprContext.WrapExpr, WrapExpr] with FunctionSigHandlerBase:
       override def convertResult(res: context.ExprContext.WrapExpr): WrapExpr =
         ExprToHolesConverter(context)(exprContext).processWrapExpr(res)
-
-      override def resolveResultHoles(env: Env, res: WrapExpr): Comp[(context.ExprContext.WrapExpr, Env)] =
-        resolveHoles(env, res)
     end new
 
 
-  override val classSigHandler: SignatureHandlerPlus[ClassResultContext, ClassResultConv] =
-    new SignatureHandlerPlus[ClassResultContext, ClassResultConv] with ClassSigHandlerBase :
-      override def convertResult(res: ClassResultContext): ClassResultConv =
-        val (classType, baseClass, baseTraits) = res
+  override val classSigHandler: SignatureHandlerPlus[context.ExprContext.ClassResult, ClassResult] =
+    new SignatureHandlerPlus[context.ExprContext.ClassResult, ClassResult] with ClassSigHandlerBase:
+      override def convertResult(res: context.ExprContext.ClassResult): ClassResult =
+        val context.ExprContext.ClassResult(classType, baseClass, baseTraits) = res
 
         val classType2 =
           ExprToHolesConverter(context)(exprContext).processWrapExpr(classType)
         val baseClass2 =
-          baseClass.map(ExprToHolesConverter(context)(exprContext).processClassType)
+          baseClass.map { _.map(ExprToHolesConverter(context)(exprContext).processClassType) }
         val baseTraits2 =
-          baseTraits.map(ExprToHolesConverter(context)(exprContext).processTraitType)
+          baseTraits.map { _.map(ExprToHolesConverter(context)(exprContext).processTraitType) }
 
-        (classType2, baseClass2, baseTraits2)
+        ClassResult(classType2, baseClass2, baseTraits2)
       end convertResult
-
-      override def resolveResultHoles(env: Env, res: ClassResultConv): Comp[(ClassResultContext, Env)] =
-        val (classType, baseClass, baseTraits) = res
-        resolveHoles(env, classType).flatMap { case (classType2, env) =>
-          ZIO.foreach(baseClass)(resolveHolesClassType(env, _))
-            .map {
-              case Some((baseClass2, env)) => (Some(baseClass2), env)
-              case None => (None, env)
-            }
-            .flatMap { case (baseClass2, env) =>
-              for {
-                envState <- Ref.make(env)
-                baseTraits2 <-
-                  ZIO.foreach(baseTraits) { baseTrait =>
-                    for {
-                      env <- envState.get
-                      (baseTrait2, env) <- resolveHolesTraitType(env, baseTrait)
-                      _ <- envState.set(env)
-                    } yield baseTrait2
-                  }
-                env <- envState.get
-              } yield ((classType2, baseClass2, baseTraits2), env)
-
-            }
-        }
-      end resolveResultHoles
     end new
 
 
-  override val traitSigHandler: SignatureHandlerPlus[TraitResultContext, TraitResultConv] =
-    new SignatureHandlerPlus[TraitResultContext, TraitResultConv] with TraitSigHandlerBase :
-      override def convertResult(res: TraitResultContext): TraitResultConv =
-        val (traitType, baseTraits) = res
+  override val traitSigHandler: SignatureHandlerPlus[context.ExprContext.TraitResult, TraitResult] =
+    new SignatureHandlerPlus[context.ExprContext.TraitResult, TraitResult] with TraitSigHandlerBase :
+      override def convertResult(res: context.ExprContext.TraitResult): TraitResult =
+        val context.ExprContext.TraitResult(traitType, baseTraits) = res
 
         val traitType2 =
           ExprToHolesConverter(context)(exprContext).processWrapExpr(traitType)
         val baseTraits2 =
-          baseTraits.map(ExprToHolesConverter(context)(exprContext).processTraitType)
+          baseTraits.map { _.map(ExprToHolesConverter(context)(exprContext).processTraitType) }
 
-        (traitType2, baseTraits2)
+        TraitResult(traitType2, baseTraits2)
       end convertResult
-
-      override def resolveResultHoles(env: Env, res: TraitResultConv): Comp[(TraitResultContext, Env)] =
-        val (classType, baseTraits) = res
-        resolveHoles(env, classType).flatMap { case (classType2, env) =>
-          for {
-            envState <- Ref.make(env)
-            baseTraits2 <-
-              ZIO.foreach(baseTraits) { baseTrait =>
-                for {
-                  env <- envState.get
-                  (baseTrait2, env) <- resolveHolesTraitType(env, baseTrait)
-                  _ <- envState.set(env)
-                } yield baseTrait2
-              }
-            env <- envState.get
-          } yield ((classType2, baseTraits2), env)
-        }
-      end resolveResultHoles
     end new
 
 
@@ -181,9 +130,6 @@ trait ExprUtilHoleResolver
     new SignatureHandlerPlus[Unit, Unit] with ClassConstructorSigHandlerBase :
       override def convertResult(res: Unit): Unit =
         ()
-
-      override def resolveResultHoles(env: Env, res: Unit): Comp[(Unit, Env)] =
-        ZIO.succeed(((), env))
     end new
 
   final def convertSig[Res1, Res2](sigHandler: SignatureHandlerPlus[Res1, Res2])

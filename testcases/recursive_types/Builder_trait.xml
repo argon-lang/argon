@@ -1,0 +1,49 @@
+<ArgonTest>
+
+    <Name>Builder (trait)</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+
+        trait IntBuilder(self: type) <: Object
+            public abstract def _.withValue(i: Int): self
+        end
+
+        class IntStrBuilder <: IntBuilder IntStrBuilder
+
+            field i: Int
+            field s: String
+
+            public new(intValue: Int)(strValue: String)
+                field i = intValue
+                field s = strValue
+                initialize _
+            end
+
+            public override def _.withValue(j: Int): IntStrBuilder =
+                IntStrBuilder.new j s
+
+            public def _.intValue: Int = i
+            public def _.strValue: String = s
+
+        end
+
+        proc main(): () do
+            val builder = IntStrBuilder.new 5 'Hello'
+            val builder2 = builder.withValue 10
+
+            puts (builder2.intValue.to_s())
+            puts builder2.strValue
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        10
+        Hello
+    </ExpectedOutput>
+
+</ArgonTest>

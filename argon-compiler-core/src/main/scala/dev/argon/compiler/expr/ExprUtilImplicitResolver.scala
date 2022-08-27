@@ -18,7 +18,7 @@ trait ExprUtilImplicitResolver
     with ExprUtilHoleResolver
     with ExprUtilImports
 {
-  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr}
+  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr, ClassResult, TraitResult}
 
   val fuel: Int = 6
 
@@ -93,13 +93,14 @@ trait ExprUtilImplicitResolver
               .flatMap { sig =>
                 getResult(prologContext)(classSigHandler)(classA, 0, sig, aArgs)
               }
+              .flatMap { classRes => classRes.baseClass }
               .mapError(Left.apply)
               .map {
-                case (_, Some(baseClass), _) =>
+                case Some(baseClass) =>
                   val baseClassArgs = baseClass.args.map(prologContext.wrapExprToExpr)
                   isSubClass(prologContext, baseClass.constructor.arClass, baseClassArgs, classB, bArgs, model, solveState)
 
-                case (_, None, _) =>
+                case None =>
                   val notProofExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple))
                   val notProof = Proof.Atomic(TCAtomicProof.ExprProof(notProofExpr))
                   val result = prologContext.PrologResult.No(notProof, model)
@@ -136,8 +137,9 @@ trait ExprUtilImplicitResolver
               .flatMap { sig =>
                 getResult(prologContext)(traitSigHandler)(traitA, 0, sig, aArgs)
               }
+              .flatMap { traitRes => traitRes.baseTraits }
               .mapError(Left.apply)
-              .map { case (_, baseTraits) =>
+              .map { baseTraits =>
                 ZStream.fromIterable(baseTraits)
                   .flatMap { baseTrait =>
                     val baseTraitArgs = baseTrait.args.map(prologContext.wrapExprToExpr)
@@ -165,16 +167,16 @@ trait ExprUtilImplicitResolver
               getResult(prologContext)(classSigHandler)(classA, 0, sig, aArgs)
             }
             .mapError(Left.apply)
-            .map { case (_, baseClass, baseTraits) =>
+            .map { classResult =>
               val baseTraitResults =
-                ZStream.fromIterable(baseTraits)
+                ZStream.fromIterableZIO(classResult.baseTraits.mapError(Left.apply))
                   .flatMap { baseTrait =>
                     val baseTraitArgs = baseTrait.args.map(prologContext.wrapExprToExpr)
                     isSubTrait(prologContext, baseTrait.constructor.arTrait, baseTraitArgs, traitB, bArgs, model, solveState)
                   }
 
               val baseClassResult =
-                ZStream.fromIterable(baseClass.toList)
+                ZStream.fromIterableZIO(classResult.baseClass.mapBoth(Left.apply, _.toList))
                   .flatMap { baseClass =>
                     val baseClassArgs = baseClass.args.map(prologContext.wrapExprToExpr)
                     classImplementsTrait(prologContext, baseClass.constructor.arClass, baseClassArgs, traitB, bArgs, model, solveState)
@@ -189,7 +191,7 @@ trait ExprUtilImplicitResolver
         for
           sig <- classObj.signature
           sigConv = convertSig(classSigHandler)(sig)
-          (classT, _, _) <- substituedSigResult(classObj)(classSigHandler)(sigConv, args.toList)
+          ClassResult(classT, _, _) <- substituedSigResult(classObj)(classSigHandler)(sigConv, args.toList)
         yield classT
 
       override protected def typeOfTrait(traitObj: ArTrait, args: Seq[WrapExpr]): Comp[WrapExpr] = ???

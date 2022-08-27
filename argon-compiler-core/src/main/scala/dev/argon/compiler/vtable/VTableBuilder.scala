@@ -156,7 +156,7 @@ object VTableBuilder {
           else
             for {
               sig <- baseClass.constructor.arClass.signature
-              baseBaseClass = sig.unsubstitutedResult._2
+              baseBaseClass <- sig.unsubstitutedResult.baseClass
               classes <- ZIO.foldLeft(baseBaseClass)(acc :+ baseClass.constructor.arClass)(addClass)
             } yield classes
 
@@ -171,14 +171,14 @@ object VTableBuilder {
           else
             for {
               sig <- baseTrait.constructor.arTrait.signature
-              baseBaseTraits = sig.unsubstitutedResult._2
+              baseBaseTraits <- sig.unsubstitutedResult.baseTraits
               traits <- ZIO.foldLeft(baseBaseTraits)(acc :+ baseTrait.constructor.arTrait)(addTrait)
             } yield traits
 
         def addTraitsFromClass(acc: Vector[ArTrait], baseClass: ArClass): Comp[Vector[ArTrait]] =
           for {
             sig <- baseClass.signature
-            baseTraits = sig.unsubstitutedResult._3
+            baseTraits <- sig.unsubstitutedResult.baseTraits
             traits <- ZIO.foldLeft(baseTraits)(acc)(addTrait)
           } yield traits
 
@@ -226,7 +226,9 @@ object VTableBuilder {
         classVtableCache.usingCreate(arClass) { arClass =>
           for {
             sig <- arClass.signature
-            (_, baseClass, baseTraits) = sig.unsubstitutedResult
+            sigRes = sig.unsubstitutedResult
+
+            baseClass <- sigRes.baseClass
             baseClassVTable <- baseClass.traverse[Comp, VT] { bc =>
               for {
                 bcSig <- bc.constructor.arClass.signature
@@ -249,6 +251,8 @@ object VTableBuilder {
                 }
               } yield VTable(newMap.toMap)
             }
+
+            baseTraits <- sigRes.baseTraits
             baseTraitVTables <- baseTraits.traverse(getBaseTraitVTable)
 
             baseTypeOnlyVTable = summon[Semigroup[VT]].combine(
@@ -280,7 +284,7 @@ object VTableBuilder {
         traitVtableCache.usingCreate(arTrait) { arTrait =>
           for {
             sig <- arTrait.signature
-            (_, baseTraits) = sig.unsubstitutedResult
+            baseTraits <- sig.unsubstitutedResult.baseTraits
             baseTraitVTables <- baseTraits.traverse(getBaseTraitVTable)
 
             baseTraitOnlyVTable = summon[Semigroup[VT]].combineAll(baseTraitVTables)
@@ -312,7 +316,7 @@ object VTableBuilder {
         for
           vt <- fromClass(arClass)
           sig <- arClass.signature
-          (_, baseClass, _) = sig.unsubstitutedResult
+          baseClass <- sig.unsubstitutedResult.baseClass
           baseVT <- ZIO.foreach(baseClass) { baseClass => fromClass(baseClass.constructor.arClass) }
         yield baseVT.fold(vt)(diffVTable(vt, _))
 

@@ -120,6 +120,20 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
       s"ParameterVariable($name)"
   }
 
+
+  final case class ClassResult
+  (
+    classTypeSuperType: WrapExpr,
+    baseClass: Comp[Option[ArExpr[ExprConstructor.ClassType]]],
+    baseTraits: Comp[Seq[ArExpr[ExprConstructor.TraitType]]],
+  )
+
+  final case class TraitResult
+  (
+    traitTypeSuperType: WrapExpr,
+    baseTraits: Comp[Seq[ArExpr[ExprConstructor.TraitType]]],
+  )
+
 }
 
 object ArgonExprContext {

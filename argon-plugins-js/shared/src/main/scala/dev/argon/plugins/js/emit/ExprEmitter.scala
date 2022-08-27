@@ -106,7 +106,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       }
 
       // Prototype
-      baseClassExpr <- ZIO.foreach(sig.unsubstitutedResult._2) { baseClass =>
+      baseClass <- sig.unsubstitutedResult.baseClass
+      baseClassExpr <- ZIO.foreach(baseClass) { baseClass =>
         emitStandaloneScope { emitState =>
           emitExpr(emitState)(baseClass)
         }
@@ -131,14 +132,29 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           const("fields") := id("Object").prop("create").call(literal(null)),
           block(fieldStmts*),
 
-
-          const("prototype") := id("Object").prop("create").call(
-            baseClassExpr.fold(literal(null))(baseClassObj => baseClassObj.prop("prototype"))
-          ),
-          block(prototypeSetup *),
+          let("prototype") := literal(null),
 
           `return`(obj(
-            id("prototype") := id("prototype"),
+            get("prototype")(
+              estree.IfStatement(
+                test = estree.BinaryExpression(
+                  operator = "===",
+                  left = id("prototype"),
+                  right = literal(null),
+                ),
+                consequent = block((
+                  Seq[estree.Statement](
+                    exprStmt(
+                      id("prototype") ::= id("Object").prop("create").call(
+                        baseClassExpr.fold(literal(null))(baseClassObj => baseClassObj.prop("prototype"))
+                      )
+                    ),
+                  ) ++ prototypeSetup,
+                )*),
+                alternate = Nullable(null),
+              ),
+              `return`(id("prototype"))
+            ),
             id("constructors") := id("constructors"),
             id("methods") := id("methods"),
             id("staticMethods") := id("staticMethods"),
@@ -733,9 +749,11 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   private def emitVTable(vtable: VT.VTable, ownerClass: ArClass): Comp[Seq[estree.Statement]] =
     ZIO.foreach(vtable.methodMap.toSeq) {
-      case (_, VT.VTableEntry(name, signature, slotInstanceType, entrySource, VT.VTableEntryMethod(implMethod, implInstanceType))) =>
+      case (slotMethod, VT.VTableEntry(name, _, slotInstanceType, _, VT.VTableEntryMethod(implMethod, implInstanceType))) =>
         for
-          slotSigErased <- SignatureEraser(context).erasedWithResult(signature)
+          origSlogSig <- slotMethod.signatureUnsubstituted : Comp[Signature[WrapExpr, WrapExpr]]
+          slotSigErased <- SignatureEraser(context).erasedWithResult(origSlogSig)
+
           implSig <- implMethod.signatureUnsubstituted
           implSigErased <- SignatureEraser(context).erasedWithResult(implSig)
 

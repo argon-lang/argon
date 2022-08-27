@@ -31,11 +31,7 @@ object SourceClass {
           (
             Signature[
               ctx.ExprContext.WrapExpr,
-              (
-                ctx.ExprContext.WrapExpr,
-                Option[ctx.ExprContext.ArExpr[ctx.ExprContext.ExprConstructor.ClassType]],
-                Seq[ctx.ExprContext.ArExpr[ctx.ExprContext.ExprConstructor.TraitType]],
-              ),
+              ctx.ExprContext.ClassResult,
             ],
             exprConverter2.Env
           )
@@ -58,12 +54,17 @@ object SourceClass {
 
       protected override val exprConverter: exprConverter2.type = exprConverter2
 
-      import context.ExprContext.{WrapExpr, ArExpr, ExprConstructor}
+      import context.ExprContext.{WrapExpr, ArExpr, ExprConstructor, ClassResult}
 
 
       override def isAbstract: Boolean = stmt.modifiers.exists { _.value == parser.AbstractModifier }
       override def isSealed: Boolean = stmt.modifiers.exists { _.value == parser.SealedModifier }
-      override def isOpen: Boolean = stmt.modifiers.exists { _.value == parser.OpenModifier }
+      override def isOpen: Boolean = stmt.modifiers.exists { modifier =>
+        modifier.value == parser.OpenModifier ||
+          modifier.value == parser.SealedModifier ||
+          modifier.value == parser.AbstractModifier
+      }
+
       override def classMessageSource: DiagnosticSource = DiagnosticSource.Location(stmt.name.location)
 
 
@@ -160,21 +161,25 @@ object SourceClass {
 
       override def validate: Comp[Unit] =
         signature.flatMap { sig =>
-          val (_, baseClassOpt, baseTraits) = sig.unsubstitutedResult
+          val sigResult = sig.unsubstitutedResult
 
-          val validateBaseClass = ZIO.foreachDiscard(baseClassOpt) { baseClassType =>
-            val baseClass = baseClassType.constructor.arClass
+          for
+            baseClassOpt <- sigResult.baseClass
+            baseTraits <- sigResult.baseTraits
 
-            ZIO.fail(DiagnosticError.NonOpenClassExtended(DiagnosticSource.Location(stmt.name.location))).when(!baseClass.isOpen) *>
-              ZIO.fail(DiagnosticError.SealedClassExtended(DiagnosticSource.Location(stmt.name.location))).when(baseClass.isSealed && owner.module.moduleName != baseClass.owner.module.moduleName)
-          }
+            _ <- ZIO.foreachDiscard(baseClassOpt) { baseClassType =>
+              val baseClass = baseClassType.constructor.arClass
 
-          val validateBaseTraits = ZIO.foreachDiscard(baseTraits) { baseTraitType =>
-            val baseTrait = baseTraitType.constructor.arTrait
-            ZIO.fail(DiagnosticError.SealedTraitExtended(DiagnosticSource.Location(stmt.name.location))).when(baseTrait.isSealed && owner.module.moduleName != baseTrait.owner.module.moduleName)
-          }
+              ZIO.fail(DiagnosticError.NonOpenClassExtended(DiagnosticSource.Location(stmt.name.location))).when(!baseClass.isOpen) *>
+                ZIO.fail(DiagnosticError.SealedClassExtended(DiagnosticSource.Location(stmt.name.location))).when(baseClass.isSealed && owner.module.moduleName != baseClass.owner.module.moduleName)
+            }
 
-          validateBaseClass *> validateBaseTraits
+            _ <- ZIO.foreachDiscard(baseTraits) { baseTraitType =>
+              val baseTrait = baseTraitType.constructor.arTrait
+              ZIO.fail(DiagnosticError.SealedTraitExtended(DiagnosticSource.Location(stmt.name.location))).when(baseTrait.isSealed && owner.module.moduleName != baseTrait.owner.module.moduleName)
+            }
+
+          yield ()
         }
     }
 

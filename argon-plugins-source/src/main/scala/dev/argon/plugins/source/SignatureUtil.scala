@@ -113,10 +113,7 @@ object SignatureUtil {
   (exprConverter: ExpressionConverter & HasContext[context.type])
   (stmt: parser.TraitDeclarationStmt)
   (env: exprConverter.Env, opt: exprConverter.ExprOptions)
-  : context.Comp[(
-    context.ExprContext.WrapExpr,
-    Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]],
-  )] =
+  : context.Comp[context.ExprContext.TraitResult] =
     import context.Comp
     import exprConverter.Env
     import exprConverter.exprContext.{WrapExpr, ArExpr, ExprConstructor}
@@ -142,33 +139,35 @@ object SignatureUtil {
         case WrapExpr.OfHole(_) => ???
       }
 
-    val baseTypes: Comp[(Seq[ArExpr[ExprConstructor.TraitType]], Env)] =
-      stmt.baseType match {
-        case Some(baseType) =>
-          for {
-            baseTypeResult <- exprConverter.convertExpr(baseType).check(env, opt.forTypeExpr, traitType)
-            baseTraits <- impl(baseTypeResult.expr, Seq.empty)
-          } yield (baseTraits, baseTypeResult.env)
+    def baseTypes(env: Env): Comp[Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]]] =
+      for
+        (baseTraits, env) <- stmt.baseType match {
+          case Some(baseType) =>
+            for {
+              baseTypeResult <- exprConverter.convertExpr(baseType).check(env, opt.forTypeExpr, traitType)
+              baseTraits <- impl(baseTypeResult.expr, Seq.empty)
+            } yield (baseTraits, baseTypeResult.env)
 
-        case None =>
-          ZIO.succeed((Seq.empty, env))
-      }
+          case None =>
+            ZIO.succeed((Seq.empty, env))
+        }
+
+        envCell <- Ref.make(env)
+
+        baseTraits2 <- ZIO.foreach(baseTraits) { baseTrait =>
+          for
+            env <- envCell.get
+            (res, env) <- exprConverter.resolveHolesTraitType(env, baseTrait)
+            _ <- envCell.set(env)
+          yield res
+        }
+
+      yield baseTraits2
 
     for
-      (baseTraits, env) <- baseTypes
-
       (traitType2, env) <- exprConverter.resolveHoles(env, traitType)
-
-      envCell <- Ref.make(env)
-
-      baseTraits2 <- ZIO.foreach(baseTraits) { baseTrait =>
-        for
-          env <- envCell.get
-          (res, env) <- exprConverter.resolveHolesTraitType(env, baseTrait)
-          _ <- envCell.set(env)
-        yield res
-      }
-    yield (traitType2, baseTraits2)
+      baseTraits <- baseTypes(env).memoize
+    yield context.ExprContext.TraitResult(traitType2, baseTraits)
   end createTraitResult
 
   def createClassResult
@@ -176,11 +175,7 @@ object SignatureUtil {
   (exprConverter: ExpressionConverter & HasContext[context.type])
   (stmt: parser.ClassDeclarationStmt)
   (env: exprConverter.Env, opt: exprConverter.ExprOptions)
-  : context.Comp[(
-    context.ExprContext.WrapExpr,
-    Option[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.ClassType]],
-    Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]],
-  )] =
+  : context.Comp[context.ExprContext.ClassResult] =
     import context.Comp
     import exprConverter.Env
     import exprConverter.exprContext.{WrapExpr, ArExpr, ExprConstructor}
@@ -217,41 +212,46 @@ object SignatureUtil {
         case WrapExpr.OfHole(_) => ???
       }
 
-    val baseTypes: Comp[(Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]], Env)] =
-      stmt.baseType match {
-        case Some(baseType) =>
-          for {
-            baseTypeResult <- exprConverter.convertExpr(baseType).check(env, opt.forTypeExpr, classType)
-            (baseClass, baseTraits) <- impl(baseTypeResult.expr, None, Seq.empty)
-          } yield (baseClass, baseTraits, baseTypeResult.env)
+    def baseTypes(env: Env): Comp[(Option[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.ClassType]], Seq[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.TraitType]])] =
+      for
+        (baseClass, baseTraits, env) <-
+          stmt.baseType match {
+            case Some(baseType) =>
+              for {
+                exprConverter.ExprResult(baseTypeExpr, env) <- exprConverter.convertExpr(baseType).check(env, opt.forTypeExpr, classType)
+                (baseClass, baseTraits) <- impl(baseTypeExpr, None, Seq.empty)
+              } yield (baseClass, baseTraits, env)
 
-        case None =>
-          ZIO.succeed((None, Seq.empty, env))
-      }
+            case None =>
+              ZIO.succeed((None, Seq.empty, env))
+          }
+
+        envCell <- Ref.make(env)
+
+        baseClass2 <- ZIO.foreach(baseClass) { baseClass =>
+          for
+            env <- envCell.get
+            (res, env) <- exprConverter.resolveHolesClassType(env, baseClass)
+            _ <- envCell.set(env)
+          yield res
+        }
+
+        baseTraits2 <- ZIO.foreach(baseTraits) { baseTrait =>
+          for
+            env <- envCell.get
+            (res, env) <- exprConverter.resolveHolesTraitType(env, baseTrait)
+            _ <- envCell.set(env)
+          yield res
+        }
+
+      yield (baseClass2, baseTraits2)
 
     for
-      (baseClass, baseTraits, env) <- baseTypes
-
       (classType2, env) <- exprConverter.resolveHoles(env, classType)
 
-      envCell <- Ref.make(env)
+      baseTypesPair <- baseTypes(env).memoize
 
-      baseClass2 <- ZIO.foreach(baseClass) { baseClass =>
-        for
-          env <- envCell.get
-          (res, env) <- exprConverter.resolveHolesClassType(env, baseClass)
-          _ <- envCell.set(env)
-        yield res
-      }
-
-      baseTraits2 <- ZIO.foreach(baseTraits) { baseTrait =>
-        for
-          env <- envCell.get
-          (res, env) <- exprConverter.resolveHolesTraitType(env, baseTrait)
-          _ <- envCell.set(env)
-        yield res
-      }
-    yield (classType2, baseClass2, baseTraits2)
+    yield context.ExprContext.ClassResult(classType2, baseTypesPair.map { _._1 }, baseTypesPair.map { _._2 })
   end createClassResult
 
   def createFunctionResult
@@ -260,25 +260,11 @@ object SignatureUtil {
   (returnTypeExpr: WithSource[parser.Expr])
   (env: exprConverter.Env, opt: exprConverter.ExprOptions)
   : context.Comp[context.ExprContext.WrapExpr] =
-    exprConverter.convertExpr(returnTypeExpr).check(env, opt.forTypeExpr, exprConverter.anyType)
+    exprConverter.convertExpr(returnTypeExpr)
+      .check(env, opt.forTypeExpr, exprConverter.anyType)
       .flatMap { exprResult => exprConverter.resolveHoles(exprResult.env, exprResult.expr) }
       .map { _._1 }
 
-
-  def resolveHolesSig[Res1, Res2](context: Context)(exprConverter: ExpressionConverter & HasContext[context.type])
-    (env: exprConverter.Env)(sigHandler: exprConverter.SignatureHandlerPlus[Res1, Res2])
-    (sig: Signature[exprConverter.exprContext.WrapExpr, Res2])
-    : context.Comp[(Signature[context.ExprContext.WrapExpr, Res1], exprConverter.Env)] =
-    sig match {
-      case Signature.Parameter(listType, paramErased, paramName, paramType, next) =>
-        for {
-          (convParamType, env) <- exprConverter.resolveHoles(env, paramType)
-          (convNext, env) <- resolveHolesSig(context)(exprConverter)(env)(sigHandler)(next)
-        } yield (Signature.Parameter(listType, paramErased, paramName, convParamType, convNext), env)
-
-      case Signature.Result(res) =>
-        sigHandler.resolveResultHoles(env, res).map { case (res, env) => (Signature.Result(res), env) }
-    }
 
   def createAccessToken(exprConverter: ExpressionConverter)(owner: exprConverter.exprContext.ParameterVariableOwner): exprConverter.AccessToken =
     import exprConverter.*

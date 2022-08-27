@@ -29,7 +29,7 @@ object SourceTrait {
           (
             Signature[
               ctx.ExprContext.WrapExpr,
-              (ctx.ExprContext.WrapExpr, Seq[ctx.ExprContext.ArExpr[ctx.ExprContext.ExprConstructor.TraitType]]),
+              ctx.ExprContext.TraitResult,
             ],
             exprConverter2.Env
           )
@@ -52,7 +52,7 @@ object SourceTrait {
 
       protected override val exprConverter: exprConverter2.type = exprConverter2
 
-      import context.ExprContext.{WrapExpr, ArExpr, ExprConstructor}
+      import context.ExprContext.{WrapExpr, ArExpr, ExprConstructor, TraitResult}
 
 
       private def sigEnv: Comp[(Signature[WrapExpr, TraitResult], exprConverter.Env)] =
@@ -79,14 +79,14 @@ object SourceTrait {
         vtableBuilder.fromTrait(this)
 
       override def validate: Comp[Unit] =
-        signature.flatMap { sig =>
-          val (_, baseTraits) = sig.unsubstitutedResult
-
-          ZIO.foreachDiscard(baseTraits) { baseTraitType =>
+        for
+          sig <- signature
+          baseTraits <- sig.unsubstitutedResult.baseTraits
+          _ <- ZIO.foreachDiscard(baseTraits) { baseTraitType =>
             val baseTrait = baseTraitType.constructor.arTrait
             ZIO.fail(DiagnosticError.SealedTraitExtended(DiagnosticSource.Location(stmt.name.location))).when(baseTrait.isSealed && owner.module.moduleName != baseTrait.owner.module.moduleName)
           }
-        }
+        yield ()
     }
   end make
 

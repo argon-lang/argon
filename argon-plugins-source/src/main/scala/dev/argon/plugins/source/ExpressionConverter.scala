@@ -26,7 +26,20 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       override val context: ExpressionConverter.this.context.type = ExpressionConverter.this.context
     }
 
-  import exprContext.{WrapExpr, ArExpr, ExprConstructor, Variable, LocalVariable, InstanceVariable, ParameterVariable, ParameterVariableOwner}
+  import exprContext.{
+    WrapExpr,
+    ArExpr,
+    ExprConstructor,
+
+    ClassResult,
+    TraitResult,
+
+    Variable,
+    LocalVariable,
+    InstanceVariable,
+    ParameterVariable,
+    ParameterVariableOwner,
+  }
 
   val evaluator: ArgonEvaluator.Aux[context.Env, context.Error, context.type, exprContext.type] = ArgonEvaluator(context)(exprContext)
 
@@ -1073,7 +1086,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
           case ModuleElementC.ClassElement(arClass) =>
             createSigResultConv(arClass, env, opt, arClass.signature, args)(classSigHandler) {
-              case (env, opt, args, (typeOfClassType, _, _)) =>
+              case (env, opt, args, ClassResult(typeOfClassType, _, _)) =>
                 ZIO.succeed(ExprTypeResult(
                   WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassType(arClass), args)),
                   env,
@@ -1083,7 +1096,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
           case ModuleElementC.TraitElement(arTrait) =>
             createSigResultConv(arTrait, env, opt, arTrait.signature, args)(traitSigHandler) {
-              case (env, opt, args, (typeOfTraitType, _)) =>
+              case (env, opt, args, TraitResult(typeOfTraitType, _)) =>
                 ZIO.succeed(ExprTypeResult(
                   WrapExpr.OfExpr(ArExpr(ExprConstructor.TraitType(arTrait), args)),
                   env,
@@ -1357,16 +1370,19 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           classType.constructor.arClass.signature
             .map(convertSig(classSigHandler))
             .flatMap(substituedSigResult(classType.constructor.arClass)(classSigHandler)(_, classType.args.toList))
-            .map { case (_, baseClass, baseTraits) =>
-              baseClass.map(InstanceType.ByClass.apply).toSeq ++ baseTraits.map(InstanceType.ByTrait.apply)
+            .flatMap { case ClassResult(_, baseClass, baseTraits) =>
+              for
+                baseClass <- baseClass
+                baseTraits <- baseTraits
+              yield baseClass.map(InstanceType.ByClass.apply).toSeq ++ baseTraits.map(InstanceType.ByTrait.apply)
             }
 
         case InstanceType.ByTrait(traitType) =>
           traitType.constructor.arTrait.signature
             .map(convertSig(traitSigHandler))
             .flatMap(substituedSigResult(traitType.constructor.arTrait)(traitSigHandler)(_, traitType.args.toList))
-            .map { case (_, baseTraits) =>
-              baseTraits.map(InstanceType.ByTrait.apply)
+            .flatMap { case TraitResult(_, baseTraits) =>
+              baseTraits.map { _.map(InstanceType.ByTrait.apply) }
             }
 
         case _ => ZIO.succeed(Seq.empty)

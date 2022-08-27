@@ -23,8 +23,6 @@ abstract class ArClassC extends Definition with UsingContext derives CanEqual {
   def constructors: Comp[Seq[ClassConstructor & HasDeclaration[IsDeclaration]]]
   def fields: Comp[Seq[MemberVariable]]
 
-  type ClassResult = (WrapExpr, Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])
-
   def vtable: Comp[context.VT.VTable]
   def vtableDiff: Comp[context.VT.VTable]
   

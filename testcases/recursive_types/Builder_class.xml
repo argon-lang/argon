@@ -1,13 +1,16 @@
 <ArgonTest>
 
-    <Name>Builder</Name>
+    <Name>Builder (class)</Name>
 
 
     <InputSource name="index.argon"><![CDATA[
             
         import Argon.Core/*
 
-        trait IntBuilder(self: type) <: Object
+        abstract class IntBuilder(self: type) <: Object
+            public new()
+            end
+
             public abstract def _.withValue(i: Int): self
         end
 
@@ -19,7 +22,7 @@
             public new(intValue: Int)(strValue: String)
                 field i = intValue
                 field s = strValue
-                initialize _
+                initialize _ = IntBuilder(IntStrBuilder).new()
             end
 
             public override def _.withValue(j: Int): IntStrBuilder =

@@ -184,10 +184,12 @@ object SourceClassConstructor {
                                   .flatMap {
                                     case Some(env) => ZIO.succeed(Some(env))
                                     case None =>
-                                      ZIO.foreach(sig.unsubstitutedResult._2) { baseClass =>
-                                        val baseClassConv = ExprToHolesConverter(context)(exprConverter.exprContext).processClassType(baseClass)
-                                        typeMatches(env)(exprConverter.exprContext.WrapExpr.OfExpr(baseClassConv))
-                                      }.map(_.flatten)
+                                      sig.unsubstitutedResult.baseClass.flatMap { baseClass =>
+                                        ZIO.foreach(baseClass) { baseClass =>
+                                          val baseClassConv = ExprToHolesConverter(context)(exprConverter.exprContext).processClassType(baseClass)
+                                          typeMatches(env)(exprConverter.exprContext.WrapExpr.OfExpr(baseClassConv))
+                                        }.map(_.flatten)
+                                      }
                                   }
                                   .flatMap {
                                     case Some(env) => ZIO.succeed((exprConverter.exprContext.ArExpr(ctor, baseCall.getArgs(ctor)), env))
@@ -205,9 +207,13 @@ object SourceClassConstructor {
                     .map(_.flatten)
                     .flatMap {
                       case Some((baseCall, env)) => ZIO.succeed((Some(baseCall), env))
-                      case None if sig.unsubstitutedResult._2.isEmpty =>
-                        ZIO.succeed((None, env))
-                      case None => ???
+                      case None =>
+                        sig.unsubstitutedResult.baseClass.map { baseClass =>
+                          if baseClass.isEmpty then
+                            (None, env)
+                          else
+                            ???
+                        }
                     }
                 }
 

@@ -5,7 +5,7 @@ import dev.argon.util.{*, given}
 import zio.*
 
 trait ExprUtilSubstitution extends ExprUtilBase {
-  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr}
+  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr, ClassResult, TraitResult}
 
 
   // Returns the possibly modified expression and the stable version of it
@@ -77,10 +77,10 @@ trait ExprUtilSubstitution extends ExprUtilBase {
     }
 
   def referencesVariableSig[Res](variable: Variable)(sigHandler: SignatureHandler[Res])(sig: Signature[WrapExpr, Res])
-  : Boolean =
+  : Comp[Boolean] =
     sig match {
       case Signature.Parameter(_, _, _, paramType, next) =>
-        referencesVariable(variable)(paramType) || referencesVariableSig(variable)(sigHandler)(next)
+        ZIO.succeed(referencesVariable(variable)(paramType)) || referencesVariableSig(variable)(sigHandler)(next)
 
       case Signature.Result(res) =>
         sigHandler.resultReferences(variable)(res)
@@ -192,13 +192,13 @@ trait ExprUtilSubstitution extends ExprUtilBase {
   (sigHandler: SignatureHandler[Res])
   (sig: Signature[WrapExpr, Res])
   : Comp[(Signature[WrapExpr, Res], WrapExpr)] =
-    if referencesVariableSig(variable)(sigHandler)(sig) then
-      asStableExpression(replacement).map { case (replacement2, replacementStable) =>
+    ZIO.ifZIO(referencesVariableSig(variable)(sigHandler)(sig))(
+      onTrue = asStableExpression(replacement).map { case (replacement2, replacementStable) =>
         val sig2 = substituteSignature(variable)(replacement)(sigHandler)(sig)
         (sig2, replacement)
-      }
-    else
-      ZIO.succeed((sig, replacement))
+      },
+      onFalse = ZIO.succeed((sig, replacement)),
+    )
 
   trait SignatureHandler[Res] {
     def substituteResultMany(subst: Map[Variable, WrapExpr])(res: Res): Res
@@ -206,70 +206,68 @@ trait ExprUtilSubstitution extends ExprUtilBase {
     def substituteResult(variable: Variable)(replacement: WrapExpr)(res: Res): Res =
       substituteResultMany(Map(variable -> replacement))(res)
 
-    def resultReferences(variable: Variable)(res: Res): Boolean
+    def resultReferences(variable: Variable)(res: Res): Comp[Boolean]
   }
-
-  type ClassResultConv = (WrapExpr, Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])
-  type TraitResultConv = (WrapExpr, Seq[ArExpr[ExprConstructor.TraitType]])
 
   protected trait FunctionSigHandlerBase extends SignatureHandler[WrapExpr] :
     override def substituteResultMany(subst: Map[Variable, WrapExpr])(res: WrapExpr): WrapExpr =
       substituteWrapExprMany(subst)(res)
 
-    override def resultReferences(variable: Variable)(res: WrapExpr): Boolean = referencesVariable(variable)(res)
+    override def resultReferences(variable: Variable)(res: WrapExpr): Comp[Boolean] =
+      ZIO.succeed(referencesVariable(variable)(res))
   end FunctionSigHandlerBase
 
   val functionSigHandler: SignatureHandler[WrapExpr] = new FunctionSigHandlerBase {}
 
-  protected trait ClassSigHandlerBase extends SignatureHandler[ClassResultConv] :
-    override def substituteResultMany(subst: Map[Variable, WrapExpr])(res: ClassResultConv): ClassResultConv =
-      val (classType, baseClass, baseTraits) = res
+  protected trait ClassSigHandlerBase extends SignatureHandler[ClassResult] :
+    override def substituteResultMany(subst: Map[Variable, WrapExpr])(res: ClassResult): ClassResult =
+      val ClassResult(classType, baseClass, baseTraits) = res
 
       val classType2 = substituteWrapExprMany(subst)(classType)
-      val baseClass2 = baseClass.map(substituteClassTypeMany(subst))
-      val baseTraits2 = baseTraits.map(substituteTraitTypeMany(subst))
+      val baseClass2 = baseClass.map { _.map(substituteClassTypeMany(subst)) }
+      val baseTraits2 = baseTraits.map { _.map(substituteTraitTypeMany(subst)) }
 
-      (classType2, baseClass2, baseTraits2)
+      ClassResult(classType2, baseClass2, baseTraits2)
     end substituteResultMany
 
-    override def resultReferences(variable: Variable)(res: ClassResultConv): Boolean =
-      val (classType, baseClass, baseTraits) = res
+    override def resultReferences(variable: Variable)(res: ClassResult): Comp[Boolean] =
+      val ClassResult(classType, baseClass, baseTraits) = res
 
-      referencesVariable(variable)(classType) ||
-        baseClass.exists { e => referencesVariable(variable)(WrapExpr.OfExpr(e)) } ||
-        baseTraits.exists { e => referencesVariable(variable)(WrapExpr.OfExpr(e)) }
+      ZIO.succeed(referencesVariable(variable)(classType)) ||
+        baseClass.map { _.exists { e => referencesVariable(variable)(WrapExpr.OfExpr(e)) } } ||
+        baseTraits.map { _.exists { e => referencesVariable(variable)(WrapExpr.OfExpr(e)) } }
     end resultReferences
   end ClassSigHandlerBase
 
-  val classSigHandler: SignatureHandler[ClassResultConv] = new ClassSigHandlerBase {}
+  val classSigHandler: SignatureHandler[ClassResult] = new ClassSigHandlerBase {}
 
-  trait TraitSigHandlerBase extends SignatureHandler[TraitResultConv] :
+  trait TraitSigHandlerBase extends SignatureHandler[TraitResult]:
 
-    override def substituteResultMany(subst: Map[Variable, WrapExpr])(res: TraitResultConv): TraitResultConv =
-      val (traitType, baseTraits) = res
+    override def substituteResultMany(subst: Map[Variable, WrapExpr])(res: TraitResult): TraitResult =
+      val TraitResult(traitType, baseTraits) = res
 
       val traitType2 = substituteWrapExprMany(subst)(traitType)
-      val baseTraits2 = baseTraits.map(substituteTraitTypeMany(subst))
+      val baseTraits2 = baseTraits.map { _.map(substituteTraitTypeMany(subst)) }
 
-      (traitType2, baseTraits2)
+      TraitResult(traitType2, baseTraits2)
     end substituteResultMany
 
-    override def resultReferences(variable: Variable)(res: TraitResultConv): Boolean =
-      val (traitType, baseTraits) = res
+    override def resultReferences(variable: Variable)(res: TraitResult): Comp[Boolean] =
+      val TraitResult(traitType, baseTraits) = res
 
-      referencesVariable(variable)(traitType) ||
-        baseTraits.exists { e => referencesVariable(variable)(WrapExpr.OfExpr(e)) }
+      ZIO.succeed(referencesVariable(variable)(traitType)) ||
+        baseTraits.map { _.exists { e => referencesVariable(variable)(WrapExpr.OfExpr(e)) } }
     end resultReferences
 
   end TraitSigHandlerBase
 
-  val traitSigHandler: SignatureHandler[TraitResultConv] = new TraitSigHandlerBase {}
+  val traitSigHandler: SignatureHandler[TraitResult] = new TraitSigHandlerBase {}
 
   protected trait ClassConstructorSigHandlerBase extends SignatureHandler[Unit] :
     override def substituteResultMany(subst: Map[Variable, WrapExpr])(res: Unit): Unit =
       ()
 
-    override def resultReferences(variable: Variable)(res: Unit): Boolean = false
+    override def resultReferences(variable: Variable)(res: Unit): Comp[Boolean] = ZIO.succeed(false)
   end ClassConstructorSigHandlerBase
 
   val classConstructorSigHandler: SignatureHandler[Unit] = new ClassConstructorSigHandlerBase {}

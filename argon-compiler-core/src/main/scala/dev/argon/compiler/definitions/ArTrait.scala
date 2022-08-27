@@ -17,8 +17,6 @@ abstract class ArTraitC extends Definition with UsingContext derives CanEqual {
   def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByTrait[owner.type]]]]]
   def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByTraitStatic[owner.type]]]]]
 
-  type TraitResult = (WrapExpr, Seq[ArExpr[ExprConstructor.TraitType]])
-
   def vtable: Comp[context.VT.VTable]
 
   // Validate inheritance rules, does not check vtables
