@@ -77,6 +77,7 @@ object SourceFunction {
                   purity = stmt.purity,
                   accessToken = SignatureUtil.createAccessToken(exprConverter)(this),
                   allowAbstractConstructorCall = false,
+                  allowErased = false,
                 )
                 bodyResult <- exprConverter.convertExpr(expr).check(env, opt, returnType)
                 (resolvedBody, _) <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)

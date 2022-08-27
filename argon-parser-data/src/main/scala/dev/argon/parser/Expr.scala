@@ -263,6 +263,9 @@ object BinaryOperator {
     override def symbol: String = "++"
   }
 
+  case object SubType extends BinaryOperator {
+    override def symbol: String = "<:"
+  }
 }
 
 sealed trait UnaryOperator extends Operator derives CanEqual {

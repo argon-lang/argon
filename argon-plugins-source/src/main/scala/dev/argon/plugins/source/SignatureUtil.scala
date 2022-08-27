@@ -4,7 +4,7 @@ import dev.argon.compiler.*
 import dev.argon.compiler.expr.{ArgonExprContext, ExprToHolesConverter}
 import dev.argon.util.{*, given}
 import dev.argon.parser
-import dev.argon.parser.IdentifierExpr
+import dev.argon.parser.{FunctionParameterListType, IdentifierExpr}
 import dev.argon.compiler.signature.Signature
 import zio.*
 
@@ -25,6 +25,7 @@ object SignatureUtil {
       purity = true,
       accessToken = createAccessToken(exprConverter)(owner),
       allowAbstractConstructorCall = false,
+      allowErased = false,
     )
 
     def impl
@@ -52,14 +53,26 @@ object SignatureUtil {
 
             end match
 
+          def addVariableToEnv(env: exprConverter.Env, listType: FunctionParameterListType, paramVar: exprConverter.exprContext.ParameterVariable): exprConverter.Env =
+            val env2 = env.withScope(_.addVariable(paramVar))
+            val env3 =
+              if listType == FunctionParameterListType.RequiresList then
+                env2.withImplicitSource(_.addVariable(paramVar))
+              else
+                env2
+
+            env3
+          end addVariableToEnv
+
+
           param match {
-            case parser.FunctionParameterList(_, _, Vector(WithSource(paramElem, _)), false) =>
+            case parser.FunctionParameterList(listType, _, Vector(WithSource(paramElem, _)), false) =>
               for
                 paramType <- convertParamElementType(paramElem, env)
                 paramType2 = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(paramType)
                 paramVar = exprConverter.exprContext.ParameterVariable(owner, index, paramType2, param.isErased, Some(paramElem.name))
 
-                (next, env) <- impl(env.withScope(_.addVariable(paramVar)))(tail)(index + 1)
+                (next, env) <- impl(addVariableToEnv(env, listType, paramVar))(tail)(index + 1)
               yield (Signature.Parameter(param.listType, param.isErased, Some(paramElem.name), paramType, next), env)
 
             case _ =>
@@ -247,7 +260,7 @@ object SignatureUtil {
   (returnTypeExpr: WithSource[parser.Expr])
   (env: exprConverter.Env, opt: exprConverter.ExprOptions)
   : context.Comp[context.ExprContext.WrapExpr] =
-    exprConverter.convertExpr(returnTypeExpr).check(env, opt, exprConverter.anyType)
+    exprConverter.convertExpr(returnTypeExpr).check(env, opt.forTypeExpr, exprConverter.anyType)
       .flatMap { exprResult => exprConverter.resolveHoles(exprResult.env, exprResult.expr) }
       .map { _._1 }
 

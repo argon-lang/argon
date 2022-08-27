@@ -9,7 +9,7 @@
         
         trait Test <: Object
         static
-            public proc _.printStringLike (T: type <: String) (strLike: T): () =
+            public proc _.printStringLike (T: type) (strLike: T) (requires erased ev: (T <: String)): () =
                 puts strLike
         end
         

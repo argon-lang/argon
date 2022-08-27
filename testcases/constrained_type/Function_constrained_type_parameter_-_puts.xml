@@ -7,7 +7,7 @@
             
         import Argon.Core/*
         
-        proc printStringLike (T: type <: String) (strLike: T): () =
+        proc printStringLike (T: type) (strLike: T) (requires erased ev: (T <: String)): () =
             puts strLike
         
         proc main(): () do

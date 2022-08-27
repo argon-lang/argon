@@ -25,10 +25,7 @@ trait ExprUtilTypeCheck
       ZIO.succeed(Some(env))
     else
       val prop = WrapExpr.OfExpr(ArExpr(ExprConstructor.SubtypeWitnessType, (a, b)))
-      implicitResolver.tryResolve(prop, env.model, fuel).map(_.map {
-        case implicitResolver.ResolvedImplicit(_, model) =>
-          env.copy(model = model)
-      })
+      tryResolveImplicit(env, prop).map { _.map { case (env, _) => env } }
     end if
 
 

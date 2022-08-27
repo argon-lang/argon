@@ -82,7 +82,8 @@ object SourceModule {
                 exprConverter.Scope.empty
               )
             ),
-            model = Map.empty
+            model = Map.empty,
+            implicitSource = exprConverter.ImplicitSource.empty,
           )
 
         stmt match {

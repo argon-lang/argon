@@ -137,6 +137,7 @@ object SourceClass {
                 purity = true,
                 accessToken = SignatureUtil.createAccessToken(exprConverter)(this),
                 allowAbstractConstructorCall = false,
+                allowErased = true,
               )
 
               (

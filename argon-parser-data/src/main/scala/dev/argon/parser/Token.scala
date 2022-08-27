@@ -250,7 +250,9 @@ object Token {
   }
 
   case object OP_COLON extends TokenWithCategory(TokenCategory.OP_COLON) with Token
-  case object OP_SUBTYPE extends TokenWithCategory(TokenCategory.OP_SUBTYPE) with Token
+  case object OP_SUBTYPE extends TokenWithCategory(TokenCategory.OP_SUBTYPE) with BinaryOperatorToken {
+    override def operator: BinaryOperator = BinaryOperator.SubType
+  }
   case object OP_SUPERTYPE extends TokenWithCategory(TokenCategory.OP_SUPERTYPE) with Token
   case object OP_LAMBDA_TYPE extends TokenWithCategory(TokenCategory.OP_LAMBDA_TYPE) with Token
   case object OP_LAMBDA extends TokenWithCategory(TokenCategory.OP_LAMBDA) with Token

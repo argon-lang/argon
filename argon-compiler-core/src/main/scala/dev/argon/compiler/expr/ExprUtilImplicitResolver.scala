@@ -7,6 +7,7 @@ import dev.argon.parser
 import dev.argon.parser.IdentifierExpr
 import dev.argon.util.UniqueIdentifier
 import dev.argon.util.{*, given}
+import dev.argon.prover.Proof
 
 import zio.*
 import zio.stream.*
@@ -30,120 +31,158 @@ trait ExprUtilImplicitResolver
 
       override def createHole: Comp[UniqueIdentifier] = UniqueIdentifier.make
 
-      private def getResult[Res](sigHandler: SignatureHandler[Res])
-                                (owner: exprContext.ParameterVariableOwner, index: Int, sig: Signature[WrapExpr, Res], args: Seq[WrapExpr])
+      private def getResult[Res]
+      (prologContext: TCPrologContext)
+      (sigHandler: SignatureHandler[Res])
+      (owner: exprContext.ParameterVariableOwner, index: Int, sig: Signature[WrapExpr, Res], args: Seq[ExprPrologSyntax.Expr])
       : Comp[Res] =
         (sig, args) match {
           case (Signature.Parameter(_, isErased, paramName, paramType, nextSig), arg +: tailArgs) =>
             val variable = ParameterVariable(owner, index, paramType, isErased, paramName)
-            val nextSigSubst = substituteSignature(variable)(arg)(sigHandler)(nextSig)
-            getResult(sigHandler)(owner, index, nextSigSubst, tailArgs)
+
+            prologContext.exprToWrapExpr(arg).flatMap { arg =>
+              val nextSigSubst = substituteSignature(variable)(arg)(sigHandler)(nextSig)
+              getResult(prologContext)(sigHandler)(owner, index, nextSigSubst, tailArgs)
+            }
 
           case (Signature.Result(res), Seq()) => ZIO.succeed(res)
           case _ => ???
         }
 
-      protected override def isSubClass
-      (classA: ArClass, aArgs: Seq[WrapExpr], classB: ArClass, bArgs: Seq[WrapExpr], fuel: Int)
-      : Comp[SubClassResult] =
+      private def solveAll[E, T, U]
+      (prologContext: TCPrologContext)
+      (model: prologContext.Model)
+      (values: Seq[(T, T)])
+      (f: (T, T, prologContext.Model) => ZStream[context.Env, E, prologContext.PrologResult.Yes])
+      : ZStream[context.Env, E, (Seq[Proof[TCAtomicProof]], prologContext.Model)] =
+        values match {
+          case (headA, headB) +: tail =>
+            for
+              headRes <- f(headA, headB, model)
+              (tailResProofs, tailResModel) <- solveAll(prologContext)(headRes.model)(tail)(f)
+            yield (headRes.proof +: tailResProofs, tailResModel)
+
+          case _ => ZStream.succeed((Seq.empty, model))
+        }
+
+      override protected def isSubClass
+      (
+        prologContext: TCPrologContext,
+        classA: ArClass,
+        aArgs: Seq[ExprPrologSyntax.Expr],
+        classB: ArClass,
+        bArgs: Seq[ExprPrologSyntax.Expr],
+        model: prologContext.Model,
+        solveState: prologContext.SolveState,
+      )
+      : ZStream[context.Env, Either[context.Error, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
+        import ExprPrologSyntax.*
         if classA.id == classB.id then
-          ZIO.forall(aArgs.zip(bArgs)) { case (aArg, bArg) =>
-            tryResolve(WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (aArg, bArg))), Map.empty, fuel).map {
-              _.isDefined
-            }
+          solveAll(prologContext)(model)(aArgs.zip(bArgs)) { (aArg, bArg, model) =>
+            prologContext.solve(PredicateFunction(ExprConstructor.EqualTo, Seq(aArg, bArg)), model, solveState)
           }
-            .map {
-              case true =>
-                SubClassResult.SubClassProof(WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple)))
-              case false => SubClassResult.Unknown
+            .map { case (_, model) =>
+              val proofExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple))
+              val proof = Proof.Atomic(TCAtomicProof.ExprProof(proofExpr))
+              prologContext.PrologResult.Yes(proof, model)
             }
         else
+          ZStream.unwrap(
+            classA.signature
+              .map(convertSig(classSigHandler))
+              .flatMap { sig =>
+                getResult(prologContext)(classSigHandler)(classA, 0, sig, aArgs)
+              }
+              .mapError(Left.apply)
+              .map {
+                case (_, Some(baseClass), _) =>
+                  val baseClassArgs = baseClass.args.map(prologContext.wrapExprToExpr)
+                  isSubClass(prologContext, baseClass.constructor.arClass, baseClassArgs, classB, bArgs, model, solveState)
+
+                case (_, None, _) =>
+                  val notProofExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple))
+                  val notProof = Proof.Atomic(TCAtomicProof.ExprProof(notProofExpr))
+                  val result = prologContext.PrologResult.No(notProof, model)
+                  ZStream.fail(Right(result))
+              }
+          )
+      end isSubClass
+
+      override protected def isSubTrait
+      (
+        prologContext: TCPrologContext,
+        traitA: ArTrait,
+        aArgs: Seq[ExprPrologSyntax.Expr],
+        traitB: ArTrait,
+        bArgs: Seq[ExprPrologSyntax.Expr],
+        model: prologContext.Model,
+        solveState: prologContext.SolveState,
+      )
+      : ZStream[context.Env, Either[context.Error, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
+        import ExprPrologSyntax.*
+        if traitA.id == traitB.id then
+          solveAll(prologContext)(model)(aArgs.zip(bArgs)) { (aArg, bArg, model) =>
+            prologContext.solve(PredicateFunction(ExprConstructor.EqualTo, Seq(aArg, bArg)), model, solveState)
+          }
+            .map { case (_, model) =>
+              val proofExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple))
+              val proof = Proof.Atomic(TCAtomicProof.ExprProof(proofExpr))
+              prologContext.PrologResult.Yes(proof, model)
+            }
+        else
+          ZStream.unwrap(
+            traitA.signature
+              .map(convertSig(traitSigHandler))
+              .flatMap { sig =>
+                getResult(prologContext)(traitSigHandler)(traitA, 0, sig, aArgs)
+              }
+              .mapError(Left.apply)
+              .map { case (_, baseTraits) =>
+                ZStream.fromIterable(baseTraits)
+                  .flatMap { baseTrait =>
+                    val baseTraitArgs = baseTrait.args.map(prologContext.wrapExprToExpr)
+                    isSubTrait(prologContext, baseTrait.constructor.arTrait, baseTraitArgs, traitB, bArgs, model, solveState)
+                  }
+              }
+          )
+      end isSubTrait
+
+      protected override def classImplementsTrait
+      (
+        prologContext: TCPrologContext,
+        classA: ArClass,
+        aArgs: Seq[ExprPrologSyntax.Expr],
+        traitB: ArTrait,
+        bArgs: Seq[ExprPrologSyntax.Expr],
+        model: prologContext.Model,
+        solveState: prologContext.SolveState,
+      )
+      : ZStream[context.Env, Either[context.Error, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
+        ZStream.unwrap(
           classA.signature
             .map(convertSig(classSigHandler))
             .flatMap { sig =>
-              getResult(classSigHandler)(classA, 0, sig, aArgs)
+              getResult(prologContext)(classSigHandler)(classA, 0, sig, aArgs)
             }
-            .flatMap {
-              case (_, Some(baseClass), _) =>
-                isSubClass(baseClass.constructor.arClass, baseClass.args, classB, bArgs, fuel)
-              case (_, None, _) => ZIO.succeed(SubClassResult.NotSubClassProof(WrapExpr.OfExpr(ArExpr(
-                ExprConstructor.AssumeErasedValue,
-                EmptyTuple,
-              ))))
+            .mapError(Left.apply)
+            .map { case (_, baseClass, baseTraits) =>
+              val baseTraitResults =
+                ZStream.fromIterable(baseTraits)
+                  .flatMap { baseTrait =>
+                    val baseTraitArgs = baseTrait.args.map(prologContext.wrapExprToExpr)
+                    isSubTrait(prologContext, baseTrait.constructor.arTrait, baseTraitArgs, traitB, bArgs, model, solveState)
+                  }
+
+              val baseClassResult =
+                ZStream.fromIterable(baseClass.toList)
+                  .flatMap { baseClass =>
+                    val baseClassArgs = baseClass.args.map(prologContext.wrapExprToExpr)
+                    classImplementsTrait(prologContext, baseClass.constructor.arClass, baseClassArgs, traitB, bArgs, model, solveState)
+                  }
+
+              baseTraitResults ++ baseClassResult
             }
-
-      private def getSubClassResultSink[E]: Sink[E, SubClassResult, SubClassResult, Option[SubClassResult]] =
-        ZSink.fold(Option.empty[SubClassResult]) {
-          case Some(SubClassResult.SubClassProof(_)) => false
-          case _ => true
-        } {
-          case (state, SubClassResult.NotSubClassProof(_)) =>
-            state
-
-          case (_, result) => Some(result)
-        }
-
-      private def getOrNotSubClass(result: Option[SubClassResult]): SubClassResult =
-        result match {
-          case Some(result) => result
-          case None =>
-            SubClassResult.NotSubClassProof(WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple)))
-        }
-
-      protected override def isSubTrait
-      (traitA: ArTrait, aArgs: Seq[WrapExpr], traitB: ArTrait, bArgs: Seq[WrapExpr], fuel: Int)
-      : Comp[SubClassResult] =
-        if traitA.id == traitB.id then
-          ZIO.forall(aArgs.zip(bArgs)) { case (aArg, bArg) =>
-            tryResolve(WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (aArg, bArg))), Map.empty, fuel).map {
-              _.isDefined
-            }
-          }
-            .map {
-              case true =>
-                SubClassResult.SubClassProof(WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple)))
-              case false => SubClassResult.Unknown
-            }
-        else
-          traitA.signature
-            .map(convertSig(traitSigHandler))
-            .flatMap { sig =>
-              getResult(traitSigHandler)(traitA, 0, sig, aArgs)
-            }
-            .flatMap { case (_, baseTraits) =>
-              ZStream.fromIterable(baseTraits)
-                .mapZIO { baseTrait =>
-                  isSubTrait(baseTrait.constructor.arTrait, baseTrait.args, traitB, bArgs, fuel)
-                }
-                .run(getSubClassResultSink)
-                .map(getOrNotSubClass)
-            }
-
-      protected override def classImplementsTrait
-      (classA: ArClass, aArgs: Seq[WrapExpr], traitB: ArTrait, bArgs: Seq[WrapExpr], fuel: Int)
-      : Comp[SubClassResult] =
-        classA.signature
-          .map(convertSig(classSigHandler))
-          .flatMap { sig =>
-            getResult(classSigHandler)(classA, 0, sig, aArgs)
-          }
-          .flatMap { case (_, baseClass, baseTraits) =>
-            val baseTraitResults =
-              ZStream.fromIterable(baseTraits)
-                .mapZIO { baseTrait =>
-                  isSubTrait(baseTrait.constructor.arTrait, baseTrait.args, traitB, bArgs, fuel)
-                }
-
-            val baseClassResult =
-              ZStream.fromIterable(baseClass.toList)
-                .mapZIO { baseClass =>
-                  classImplementsTrait(baseClass.constructor.arClass, baseClass.args, traitB, bArgs, fuel)
-                }
-
-            (baseTraitResults ++ baseClassResult)
-              .run(getSubClassResultSink)
-              .map(getOrNotSubClass)
-          }
+        )
 
 
       override protected def typeOfClass(classObj: ArClass, args: Seq[WrapExpr]): Comp[WrapExpr] =
@@ -207,4 +246,34 @@ trait ExprUtilImplicitResolver
 
         }
     }
+
+  def tryResolveImplicit(env: Env, t: WrapExpr): Comp[Option[(Env, WrapExpr)]] =
+    def buildImplicits(value: ImplicitValue): Comp[implicitResolver.Assertion] =
+      value match {
+        case ImplicitValue.OfVariable(variable) =>
+          val loadVar = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(variable), EmptyTuple))
+          val assertion = implicitResolver.Assertion(loadVar, variable.varType)
+          ZIO.succeed(assertion)
+      }
+
+    for
+      assertions <- ZIO.foreach(env.implicitSource.implicits)(buildImplicits)
+      resolved <- implicitResolver.tryResolve(t, env.model, assertions, fuel)
+      res <- ZIO.foreach(resolved) {
+        case implicitResolver.ResolvedImplicit(proof, model) =>
+          def extractProof(proof: Proof[WrapExpr]): Comp[WrapExpr] =
+            proof match {
+              case Proof.Atomic(expr) => ZIO.succeed(expr)
+              case _ =>
+                // TODO: Implement actual types for these proofs
+                ZIO.succeed(WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple)))
+            }
+
+          for
+            proof <- extractProof(proof)
+          yield (env.copy(model = model), proof)
+      }
+    yield res
+  end tryResolveImplicit
+
 }

@@ -18,6 +18,6 @@
             
     ]]></InputSource>
 
-    <ExpectedError>NonErasedExpressionExpected</ExpectedError>
+    <ExpectedError>ErasedExpressionNotAllowed</ExpectedError>
 
 </ArgonTest>

@@ -5,7 +5,7 @@ import zio.*
 import zio.stream.{Stream, ZStream}
 import dev.argon.util.UniqueIdentifier
 
-abstract class PrologContext[R, E] {
+abstract class PrologContext[-R, +E] {
   val syntax: PrologSyntax
   import syntax.*
 
@@ -60,18 +60,7 @@ abstract class PrologContext[R, E] {
     (relation: TRelation, a: syntax.Value, b: syntax.Value, argProofs: Seq[Proof[ProofAtom]])
     : ZIO[R, E, Proof[ProofAtom]]
 
-  protected type Error = Either[E, PrologResult.No]
-
-  protected def resultIOToStream(io: ZIO[R, E, PrologResult]): ZStream[R, Error, PrologResult.Yes] =
-    ZStream.unwrap(
-      io
-        .mapError(Left.apply)
-        .flatMap {
-          case _: PrologResult.Unknown.type => ZIO.succeed(ZStream.empty)
-          case result: PrologResult.No => ZIO.fail(Right(result))
-          case result: PrologResult.Yes => ZIO.succeed(ZStream(result))
-        }
-    )
+  private type Error = Either[E, PrologResult.No]
 
   final def check(goal: Predicate, fuel: Int): ZIO[R, E, PrologResult] = check(goal, Map.empty, fuel)
 
@@ -113,7 +102,7 @@ abstract class PrologContext[R, E] {
   }
 
 
-  protected def solve(goal: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, PrologResult.Yes] =
+  def solve(goal: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, PrologResult.Yes] =
     if solveState.fuelEmpty || solveState.hasSeenPredicate(goal) then
       ZStream.empty
     else

@@ -55,7 +55,11 @@ object VTableBuilder {
           override val tubeImporter: TubeImporter & HasContext[context.type] = tubeImporter2
         }
 
-        val emptyEnv = exprUtil.Env(exprUtil.Scope.empty, model = Map.empty)
+        val emptyEnv = exprUtil.Env(
+          scope = exprUtil.Scope.empty,
+          model = Map.empty,
+          implicitSource = exprUtil.ImplicitSource.empty,
+        )
 
         def impl(sig: Signature[holesExprContext.WrapExpr, holesExprContext.WrapExpr], slotSig: Signature[holesExprContext.WrapExpr, holesExprContext.WrapExpr], index: Int): Comp[Boolean] =
           (sig, slotSig) match {

@@ -15,25 +15,41 @@ abstract class ImplicitResolver[-R, +E] {
 
   sealed trait SubClassResult
 
-  object SubClassResult {
-    final case class SubClassProof(proof: WrapExpr) extends SubClassResult
-    final case class NotSubClassProof(proof: WrapExpr) extends SubClassResult
-    case object Unknown extends SubClassResult
+  protected def isSubClass
+  (
+    prologContext: TCPrologContext,
+    classA: TClass,
+    aArgs: Seq[ExprPrologSyntax.Expr],
+    classB: TClass,
+    bArgs: Seq[ExprPrologSyntax.Expr],
+    model: prologContext.Model,
+    solveState: prologContext.SolveState,
+  )
+    : ZStream[R, Either[E, prologContext.PrologResult.No], prologContext.PrologResult.Yes]
 
-    given CanEqual[Unknown.type, Unknown.type] = CanEqual.canEqualAny
-    given CanEqual[Unknown.type, SubClassResult] = CanEqual.canEqualAny
-    given CanEqual[SubClassResult, Unknown.type] = CanEqual.canEqualAny
-  }
-
-  protected def isSubClass(classA: TClass, aArgs: Seq[WrapExpr], classB: TClass, bArgs: Seq[WrapExpr], fuel: Int)
-    : ZIO[R, E, SubClassResult]
-
-  protected def isSubTrait(traitA: TTrait, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr], fuel: Int)
-    : ZIO[R, E, SubClassResult]
+  protected def isSubTrait
+  (
+    prologContext: TCPrologContext,
+    traitA: TTrait,
+    aArgs: Seq[ExprPrologSyntax.Expr],
+    traitB: TTrait,
+    bArgs: Seq[ExprPrologSyntax.Expr],
+    model: prologContext.Model,
+    solveState: prologContext.SolveState,
+  )
+  : ZStream[R, Either[E, prologContext.PrologResult.No], prologContext.PrologResult.Yes]
 
   protected def classImplementsTrait
-    (classA: TClass, aArgs: Seq[WrapExpr], traitB: TTrait, bArgs: Seq[WrapExpr], fuel: Int)
-    : ZIO[R, E, SubClassResult]
+  (
+    prologContext: TCPrologContext,
+    classA: TClass,
+    aArgs: Seq[ExprPrologSyntax.Expr],
+    traitB: TTrait,
+    bArgs: Seq[ExprPrologSyntax.Expr],
+    model: prologContext.Model,
+    solveState: prologContext.SolveState,
+  )
+  : ZStream[R, Either[E, prologContext.PrologResult.No], prologContext.PrologResult.Yes]
 
   protected def typeOfClass(classObj: TClass, args: Seq[WrapExpr]): ZIO[R, E, WrapExpr]
   protected def typeOfTrait(traitObj: TTrait, args: Seq[WrapExpr]): ZIO[R, E, WrapExpr]
@@ -73,13 +89,17 @@ abstract class ImplicitResolver[-R, +E] {
     case SyntacticEquality
   }
 
-  private final class TCPrologContext(createdHoles: Ref[Set[THole]]) extends PrologContext[R, E] {
+  final case class Assertion(witness: WrapExpr, assertionType: WrapExpr)
+
+  protected sealed class TCPrologContext(createdHoles: Ref[Set[THole]]) extends PrologContext[R, E] {
     override val syntax: ExprPrologSyntax.type = ExprPrologSyntax
     import syntax.*
     override type ProofAtom = TCAtomicProof
 
     override type TRelation = ExprRelation
     override type TConstraints = ExprConstraints[Expr]
+
+    private type Error = Either[E, PrologResult.No]
 
     protected override def normalize(expr: Expr, solveState: SolveState): ZIO[R, E, Expr] =
       exprToWrapExpr(expr).flatMap { expr =>
@@ -235,7 +255,7 @@ abstract class ImplicitResolver[-R, +E] {
 
         // (B < A) == true
         // ------------------
-        // TypeN A <: TypeN B
+        // TypeN B <: TypeN A
         (for {
           lt <- natLessThanFunction
           a <- newVariable
@@ -255,8 +275,8 @@ abstract class ImplicitResolver[-R, +E] {
             PredicateFunction(
               ExprConstructor.SubtypeWitnessType,
               Seq(
-                Value(ExprConstructor.TypeN, Seq(Variable(a))),
                 Value(ExprConstructor.TypeN, Seq(Variable(b))),
+                Value(ExprConstructor.TypeN, Seq(Variable(a))),
               ),
             ),
           )
@@ -281,42 +301,19 @@ abstract class ImplicitResolver[-R, +E] {
               ExprConstructor.SubtypeWitnessType,
               Seq(Value(ExprConstructor.ClassType(classA), aArgs), Value(ExprConstructor.ClassType(classB), bArgs)),
             ) =>
-          ZStream.unwrap(
-            for {
-              convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
-              convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
-            } yield resultIOToStream(
-              isSubClass(classA, convAArgs, classB, convBArgs, solveState.consumeFuel.fuel).map(subClassResultToPrologResult(substitutions))
-            )
-          )
+          isSubClass(this, classA, aArgs, classB, bArgs, substitutions, solveState.consumeFuel)
 
         case (
               ExprConstructor.SubtypeWitnessType,
               Seq(Value(ExprConstructor.TraitType(traitA), aArgs), Value(ExprConstructor.TraitType(traitB), bArgs)),
             ) =>
-          ZStream.unwrap(
-            for {
-              convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
-              convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
-            } yield resultIOToStream(
-              isSubTrait(traitA, convAArgs, traitB, convBArgs, solveState.consumeFuel.fuel).map(subClassResultToPrologResult(substitutions))
-            )
-          )
+          isSubTrait(this, traitA, aArgs, traitB, bArgs, substitutions, solveState.consumeFuel)
 
         case (
               ExprConstructor.SubtypeWitnessType,
               Seq(Value(ExprConstructor.ClassType(classA), aArgs), Value(ExprConstructor.TraitType(traitB), bArgs)),
             ) =>
-          ZStream.unwrap(
-            for {
-              convAArgs <- ZIO.foreach(aArgs)(exprToWrapExprError)
-              convBArgs <- ZIO.foreach(bArgs)(exprToWrapExprError)
-            } yield resultIOToStream(
-              classImplementsTrait(classA, convAArgs, traitB, convBArgs, solveState.consumeFuel.fuel).map(
-                subClassResultToPrologResult(substitutions)
-              )
-            )
-          )
+          classImplementsTrait(this, classA, aArgs, traitB, bArgs, substitutions, solveState.consumeFuel)
 
         case (
               ExprConstructor.SubtypeWitnessType,
@@ -625,38 +622,124 @@ abstract class ImplicitResolver[-R, +E] {
         case WrapExpr.OfHole(_) => invalidPredicateExpr
       }
 
-    private def subClassResultToPrologResult(substitutions: Model)(result: SubClassResult): PrologResult =
-      result match {
-        case SubClassResult.SubClassProof(proof) =>
-          PrologResult.Yes(Proof.Atomic(TCAtomicProof.ExprProof(proof)), substitutions)
-        case SubClassResult.NotSubClassProof(proof) =>
-          PrologResult.No(Proof.Atomic(TCAtomicProof.ExprProof(proof)), substitutions)
+    def proofAtomicAsWrapExpr(proof: Proof[TCAtomicProof]): ZIO[R, E, Proof[WrapExpr]] =
+      proof match
+        case Proof.Atomic(TCAtomicProof.ExprProof(expr)) =>
+          ZIO.succeed(Proof.Atomic(expr))
 
-        case SubClassResult.Unknown =>
-          PrologResult.Unknown
-      }
+        case Proof.Identifier(id) => ZIO.succeed(Proof.Identifier(id))
+        case Proof.ImplicaitonAbstraction(id, body) =>
+          for
+            body <- proofAtomicAsWrapExpr(body)
+          yield Proof.ImplicaitonAbstraction(id, body)
 
+        case Proof.ModusPonens(implication, premise) =>
+          for
+            implication <- proofAtomicAsWrapExpr(implication)
+            premise <- proofAtomicAsWrapExpr(premise)
+          yield Proof.ModusPonens(implication, premise)
+
+        case Proof.ConjunctIntro(a, b) =>
+          for
+            a <- proofAtomicAsWrapExpr(a)
+            b <- proofAtomicAsWrapExpr(b)
+          yield Proof.ConjunctIntro(a, b)
+
+        case Proof.DisjunctIntroLeft(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DisjunctIntroLeft(p)
+
+        case Proof.DisjunctIntroRight(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DisjunctIntroLeft(p)
+
+        case Proof.DisjunctCommute(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DisjunctCommute(p)
+
+        case Proof.ConjunctCommute(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.ConjunctCommute(p)
+
+        case Proof.DeMorganAndPullNotOut(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DeMorganAndPullNotOut(p)
+
+        case Proof.DeMorganOrPullNotOut(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DeMorganOrPullNotOut(p)
+
+        case Proof.DeMorganAndPushNotIn(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DeMorganAndPushNotIn(p)
+
+        case Proof.DeMorganOrPushNotIn(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DeMorganOrPushNotIn(p)
+
+        case Proof.DoubleNegIntro(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DoubleNegIntro(p)
+
+        case Proof.Contradiction(p, notP) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+            notP <- proofAtomicAsWrapExpr(notP)
+          yield Proof.Contradiction(p, notP)
+
+        case Proof.HypotheticalSyllogism(pImpliesQ, qImpliesR) =>
+          for
+            pImpliesQ <- proofAtomicAsWrapExpr(pImpliesQ)
+            qImpliesR <- proofAtomicAsWrapExpr(qImpliesR)
+          yield Proof.HypotheticalSyllogism(pImpliesQ, qImpliesR)
+
+      end match
   }
 
-  final case class ResolvedImplicit(proof: Proof[TCAtomicProof], model: Map[THole, ExprConstraints[WrapExpr]])
+  final case class ResolvedImplicit(proof: Proof[WrapExpr], model: Map[THole, ExprConstraints[WrapExpr]])
 
-  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], fuel: Int)
+  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: List[Assertion], fuel: Int)
     : ZIO[R, E, Option[ResolvedImplicit]] =
-    Ref.make(Set.empty[THole]).flatMap { createdHoles =>
-      val context = new TCPrologContext(createdHoles)
-      context.arExprToGoal(implicitType, fuel).flatMap { goal =>
-        val proverModel = model.view.mapValues { _.map(context.wrapExprToExpr) }.toMap
-
-        context.check(goal, proverModel, fuel).flatMap {
-          case context.PrologResult.Yes(proof, model) =>
-            ZIO.foreach(model) { case (hole, expr) =>
-              expr.traverse(context.exprToWrapExpr).map { expr => (hole, expr) }
-            }.map { model =>
-              Some(ResolvedImplicit(proof, model))
+    for
+      createdHoles <- Ref.make(Set.empty[THole])
+      context = new TCPrologContext(createdHoles) {
+        protected override def assertions: ZIO[R, E, List[(Proof[TCAtomicProof], syntax.Predicate)]] =
+          for
+            baseAssertions <- super.assertions
+            givenAssertions2 <- ZIO.foreach(givenAssertions) { assertion =>
+              arExprToGoal(assertion.assertionType, fuel).map { assertionType =>
+                (Proof.Atomic(TCAtomicProof.ExprProof(assertion.witness)), assertionType)
+              }
             }
-          case context.PrologResult.No(_, _) | _: context.PrologResult.Unknown.type => ZIO.none
-        }
+          yield baseAssertions ++ givenAssertions2
       }
-    }
+
+      goal <- context.arExprToGoal(implicitType, fuel)
+      proverModel = model.view.mapValues { _.map(context.wrapExprToExpr) }.toMap
+
+      result <- context.check(goal, proverModel, fuel).flatMap {
+        case context.PrologResult.Yes(proof, model) =>
+          for
+            model <- ZIO.foreach(model) { case (hole, expr) =>
+              expr.traverse(context.exprToWrapExpr).map { expr => (hole, expr) }
+            }
+
+            proof <- context.proofAtomicAsWrapExpr(proof)
+
+          yield Some(ResolvedImplicit(proof, model))
+
+        case context.PrologResult.No(_, _) | _: context.PrologResult.Unknown.type => ZIO.none
+      }
+
+    yield result
 
 }

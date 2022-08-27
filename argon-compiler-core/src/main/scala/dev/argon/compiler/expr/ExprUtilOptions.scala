@@ -6,6 +6,7 @@ trait ExprUtilOptions
   extends ExprUtilBase
     with ExprUtilAccess
     with ExprUtilScope
+    with ExprUtilImplicitSource
  {
   import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr}
 
@@ -13,12 +14,12 @@ trait ExprUtilOptions
   (
     scope: Scope,
     model: Map[exprContext.THole, ExprConstraints[WrapExpr]],
+    implicitSource: ImplicitSource,
   ) {
     def withScope(f: Scope => Scope): Env = copy(scope = f(scope))
+    def withImplicitSource(f: ImplicitSource => ImplicitSource): Env = copy(implicitSource = f(implicitSource))
 
     def mergeBranches(first: Env, second: Env): Env = this
-
-    def allowErased(allow: Boolean): Env = this
   }
 
   final case class ExprOptions
@@ -26,9 +27,10 @@ trait ExprUtilOptions
     purity: Boolean,
     accessToken: AccessToken,
     allowAbstractConstructorCall: Boolean,
+    allowErased: Boolean,
   ) {
     def forTypeExpr: ExprOptions =
-      requirePure
+      requirePure.allowErased(true)
 
     def requirePure: ExprOptions =
       requirePurity(true)
@@ -38,6 +40,12 @@ trait ExprUtilOptions
 
     def checkPurity(callablePurity: Boolean): Boolean =
       callablePurity || !purity
+
+    def allowErased(allow: Boolean): ExprOptions =
+      copy(allowErased = allowErased || allow)
+
+    def checkErasure(erased: Boolean): Boolean =
+      allowErased || !erased
   }
 
 }

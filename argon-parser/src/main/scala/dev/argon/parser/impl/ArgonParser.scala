@@ -81,6 +81,7 @@ object ArgonParser {
     case object PatternType extends ArgonRuleName[Expr]
     case object Type extends ArgonRuleName[Expr]
     case object TupleExpr extends ArgonRuleName[Expr]
+    case object SubTypeExpr extends ArgonRuleName[Expr]
     case object AssignExpr extends ArgonRuleName[Expr]
     case object Expression extends ArgonRuleName[Expr]
     case object ExpressionStmt extends ArgonRuleName[Expr]
@@ -517,8 +518,13 @@ object ArgonParser {
             case (head, tail) => TupleExpr((head +: tail).toVector)
           }
 
+        case Rule.SubTypeExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_SUBTYPE)
+          )(rule(Rule.TupleExpr))
+
         case Rule.AssignExpr =>
-          val nextRule = rule(Rule.TupleExpr)
+          val nextRule = rule(Rule.SubTypeExpr)
           nextRule.observeSource ++ ((matchToken(OP_ASSIGN).observeSource ++! nextRule.observeSource) ?) --> {
             case (WithSource(left, _), None) => left
             case (left, Some((WithSource(_, opLocation), right))) =>
@@ -590,12 +596,13 @@ object ArgonParser {
           (anyModifier.observeSource *) --> { _.toVector }
 
         case Rule.MethodParameter =>
-          rule(Rule.Identifier) ++!
+          rule(Rule.Identifier) ++! (
             rule(Rule.NewLines) ++
             matchToken(OP_COLON) ++
             rule(Rule.NewLines) ++
-            rule(Rule.Type).observeSource --> {
-              case (name, _, _, _, paramType) =>
+            rule(Rule.Type).observeSource
+          ) --> {
+              case (name, (_, _, _, paramType)) =>
                 FunctionParameter(paramType, name)
             }
 
@@ -615,11 +622,16 @@ object ArgonParser {
         case Rule.MethodParameters =>
           ((
             (
-              matchToken(OP_OPENPAREN) ++! (rule(Rule.NewLines) ++ matchToken(KW_REQUIRES).? ++ rule(
-                Rule.NewLines
-              ) ++ matchToken(KW_ERASED).? ++ rule(Rule.NewLines) ++ rule(Rule.MethodParameterList) ++ rule(
-                Rule.NewLines
-              ) ++ matchToken(OP_CLOSEPAREN)) --> {
+              matchToken(OP_OPENPAREN) ++! (
+                rule(Rule.NewLines) ++
+                  matchToken(KW_REQUIRES).? ++
+                  rule(Rule.NewLines) ++
+                  matchToken(KW_ERASED).? ++
+                  rule(Rule.NewLines) ++
+                  rule(Rule.MethodParameterList) ++
+                  rule(Rule.NewLines) ++
+                  matchToken(OP_CLOSEPAREN)
+                ) --> {
                 case (_, (_, requiresToken, _, erasedToken, _, (params, hasTrailingComma), _, _)) =>
                   val listType =
                     if requiresToken.isDefined then FunctionParameterListType.RequiresList
@@ -633,9 +645,14 @@ object ArgonParser {
               }
             ) |
               (
-                matchToken(OP_OPENBRACKET) ++! (rule(Rule.NewLines) ++ matchToken(KW_ERASED).? ++ rule(
-                  Rule.NewLines
-                ) ++ rule(Rule.MethodParameterList) ++ rule(Rule.NewLines) ++ matchToken(OP_CLOSEBRACKET)) --> {
+                matchToken(OP_OPENBRACKET) ++! (
+                  rule(Rule.NewLines) ++
+                    matchToken(KW_ERASED).? ++
+                    rule(Rule.NewLines) ++
+                    rule(Rule.MethodParameterList) ++
+                    rule(Rule.NewLines) ++
+                    matchToken(OP_CLOSEBRACKET)
+                  ) --> {
                   case (_, (_, erasedToken, _, (params, hasTrailingComma), _, _)) =>
                     FunctionParameterList(
                       FunctionParameterListType.InferrableList,
