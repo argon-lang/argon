@@ -145,7 +145,7 @@ object SourceClass {
                   env <- innerEnvNoFields
                   varType <- exprConverter.convertExpr(field.fieldType).check(env, opt, exprConverter.anyType)
                   resolvedVarType <- exprConverter.resolveHoles(varType.env, varType.expr)
-                yield context.ExprContext.MemberVariable(this, resolvedVarType._1, Some(field.name))
+                yield context.ExprContext.MemberVariable(this, resolvedVarType._1, Some(field.name), isMutable = field.isMutable)
               ).asSomeError
 
             case _ => ZIO.fail(None)

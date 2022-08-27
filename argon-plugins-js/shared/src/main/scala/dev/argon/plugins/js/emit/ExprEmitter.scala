@@ -24,6 +24,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   import context.ExprContext.{
     WrapExpr,
+    Variable,
     LocalVariable,
     ParameterVariable,
     ParameterVariableOwner,
@@ -635,12 +636,13 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           yield tupleExpr.index(literal(ctor.index.toDouble))
 
         case ctor: (expr.constructor.type & ExprConstructor.LoadVariable) =>
-          ctor.variable match {
-            case variable: LocalVariable => getVariableName(variable).map(id)
-            case variable: ParameterVariable => getVariableName(variable).map(id)
-            case variable: InstanceVariable => ZIO.succeed(estree.ThisExpression())
-            case variable: MemberVariable => ZIO.succeed(estree.ThisExpression().index(id("fields").prop(getEscapedName(variable.name.get))))
-          }
+          getVariableExpr(ctor.variable)
+
+        case ctor: (expr.constructor.type & ExprConstructor.StoreVariable) =>
+          for
+            varExpr <- getVariableExpr(ctor.variable)
+            valueExpr <- emitWrapExpr(emitState.subExpr)(expr.getArgs(ctor))
+          yield varExpr ::= valueExpr
 
 
         case ctor: (expr.constructor.type & ExprConstructor.ClassType) =>
@@ -765,6 +767,14 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
             slotInstanceExpr <- emitExpr(emitState)(traitType)
           yield slotInstanceExpr.prop("methods")
         }
+    }
+
+  private def getVariableExpr(variable: Variable) =
+    variable match {
+      case variable: LocalVariable => getVariableName(variable).map(id)
+      case variable: ParameterVariable => getVariableName(variable).map(id)
+      case variable: InstanceVariable => ZIO.succeed(estree.ThisExpression())
+      case variable: MemberVariable => ZIO.succeed(estree.ThisExpression().index(id("fields").prop(getEscapedName(variable.name.get))))
     }
 }
 

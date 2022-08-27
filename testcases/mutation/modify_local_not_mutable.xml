@@ -15,6 +15,6 @@
 
     </InputSource>
 
-    <ExpectedError>InvalidLValue</ExpectedError>
+    <ExpectedError>CanNotMutate</ExpectedError>
 
 </ArgonTest>

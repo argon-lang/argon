@@ -253,7 +253,12 @@ abstract class ExprProcessor[F[+_]: Monad] extends UsingContext {
   def processMemberVariable(variable: ec1.MemberVariable): F[ec2.MemberVariable] =
     for {
       varType2 <- processWrapExpr(variable.varType)
-    } yield ec2.MemberVariable(variable.ownerClass, varType2, variable.name)
+    } yield ec2.MemberVariable(
+      variable.ownerClass,
+      varType2,
+      variable.name,
+      isMutable = variable.isMutable
+    )
 
   private def processPatternExpr(e: ec1.PatternExpr): F[ec2.PatternExpr] =
     e match {

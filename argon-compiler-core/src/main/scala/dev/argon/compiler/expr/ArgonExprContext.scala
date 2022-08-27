@@ -81,9 +81,9 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
     val ownerClass: ArClass,
     override val varType: WrapExpr,
     override val name: Some[IdentifierExpr],
+    override val isMutable: Boolean,
   ) extends Variable {
 
-    override def isMutable: Boolean = false
     override def isErased: Boolean = false
 
     override def equals(obj: Any): Boolean =

@@ -40,7 +40,8 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
     def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult]
     def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult]
 
-    def mutate(value: MutatorValue): ExprFactory = ExprFactoryError(DiagnosticError.CanNotMutate())
+    def mutate(value: MutatorValue): ExprFactory =
+      ExprFactoryError(DiagnosticError.CanNotMutate(DiagnosticSource.Location(value.location)))
 
     def invoke(arg: ArgumentInfo): ExprFactory =
       OverloadExprFactoryMethod.fromInstanceFactory(this, IdentifierExpr.Named("apply"), arg.location)
@@ -206,6 +207,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.SubType, _), left, right) =>
         createTypeOperatorFactory(expr.location)(ExprConstructor.SubtypeWitnessType)(left, right)
+
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.Assign, assignLoc), left, right) =>
+        convertExpr(left).mutate(MutatorValue(convertExpr(right), assignLoc))
 
       case parser.BinaryOperatorExpr(op, left, right) =>
         EndOverloadExprFactory(
@@ -1128,7 +1132,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         case LookupResult.Success(Seq(variable: Variable), _) if variable.isMutable =>
           ZIO.succeed(MutateVariableExprFactory(variable, value))
 
-        case LookupResult.Success(Seq(_), _) => ZIO.fail(DiagnosticError.CanNotMutate())
+        case LookupResult.Success(Seq(_), _) => ZIO.fail(DiagnosticError.CanNotMutate(DiagnosticSource.Location(value.location)))
 
         case LookupResult.Success(Seq(), next) => mutateImpl(value, next)
 
@@ -1145,6 +1149,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
         for {
+          _ <- ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation))).unless(opt.checkPurity(false))
           valueExpr <- value.arg.check(env, opt, variable.varType)
           e = WrapExpr.OfExpr(ArExpr(ExprConstructor.StoreVariable(variable), valueExpr.expr))
         } yield ExprTypeResult(e, valueExpr.env, unitType)

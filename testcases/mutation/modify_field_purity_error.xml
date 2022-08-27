@@ -1,13 +1,13 @@
 <ArgonTest>
 
-    <Name>Modify Field</Name>
+    <Name>Modify Field (Purity Error)</Name>
 
     <InputSource name="index.argon"><![CDATA[
 
         import Argon.Core/*
 
         class MyClass <: Object
-            public proc new()
+            public new()
                 field msg = 'Hello World'
             end
 
@@ -26,6 +26,6 @@
 
     ]]></InputSource>
 
-    <ExpectedOutput>Goodbye World</ExpectedOutput>
+    <ExpectedError>Purity</ExpectedError>
 
 </ArgonTest>

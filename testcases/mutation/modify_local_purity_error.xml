@@ -19,6 +19,6 @@
 
     </InputSource>
 
-    <ExpectedError>MutableVariableNotPureError</ExpectedError>
+    <ExpectedError>Purity</ExpectedError>
 
 </ArgonTest>
