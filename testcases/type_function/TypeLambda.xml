@@ -7,11 +7,11 @@
             
         import Argon.Core/*
 
-        trait Functor(F: type -> type) <: Object
+        trait Functor(erased F: type -> type) <: Object
             public abstract def _.map (A: type) (B: type) (f: A -> B) (input: F A): F B
         end
 
-        def intToStringInFunctor (F: type -> type) (f: Functor F) (fInt: F Int): F String =
+        def intToStringInFunctor (erased F: type -> type) (f: Functor F) (fInt: F Int): F String =
             f.map Int String (i => i.to_s()) fInt
 
         class ValueBox(T: type) <: Object

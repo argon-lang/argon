@@ -1,5 +1,6 @@
 package dev.argon.compiler.expr
 
+import dev.argon.compiler.Context
 import dev.argon.compiler.module.{ModuleElementC, ModulePath}
 import dev.argon.compiler.signature.*
 import dev.argon.expr.*
@@ -8,7 +9,6 @@ import dev.argon.parser.IdentifierExpr
 import dev.argon.util.UniqueIdentifier
 import dev.argon.util.{*, given}
 import dev.argon.prover.Proof
-
 import zio.*
 import zio.stream.*
 
@@ -209,6 +209,11 @@ trait ExprUtilImplicitResolver
       protected override def classConstructorRelations(classCtor: ClassConstructor): Comp[Seq[ExprRelation]] =
         classCtor.signatureUnsubstituted.map { sig => Seq.fill(sig.parameterCount)(ExprRelation.SyntacticEquality) }
 
+
+      override protected def substituteVariables(vars: Map[Variable, WrapExpr])(expr: WrapExpr): WrapExpr =
+        substituteWrapExprMany(vars)(expr)
+
+
       override protected def natLessThanFunction: Comp[ArFunc] =
         loadKnownExport[ModuleElementC.FunctionElement[context.type, ?]](ImportSpecifier(
           argonCoreTubeName,
@@ -234,16 +239,9 @@ trait ExprUtilImplicitResolver
 
       protected override lazy val evaluator
       : Evaluator[context.Env, context.Error] {val exprContext: ExprUtilImplicitResolver.this.exprContext.type} =
-        new Evaluator[context.Env, context.Error] {
+        new ArgonEvaluator[context.Env, context.Error] {
+          override val context: ExprUtilImplicitResolver.this.context.type = ExprUtilImplicitResolver.this.context
           override val exprContext: ExprUtilImplicitResolver.this.exprContext.type = ExprUtilImplicitResolver.this.exprContext
-
-          override def getFunctionBody(function: ArFunc, args: Seq[WrapExpr], fuel: Int): Comp[Option[WrapExpr]] =
-            ZIO.none
-
-          override def getMethodBody(method: ArMethod, instance: WrapExpr, args: Seq[WrapExpr], fuel: Int)
-          : Comp[Option[WrapExpr]] =
-            ZIO.none
-
         }
     }
 

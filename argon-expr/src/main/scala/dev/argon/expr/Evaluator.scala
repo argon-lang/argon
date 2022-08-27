@@ -45,9 +45,9 @@ trait Evaluator[-R, +E] {
         normalizeTopLevelWrap(func, fuel - 1).flatMap {
           case WrapExpr.OfExpr(body) =>
             body.constructor match {
-              case ExprConstructor.LoadLambda(argVariable) =>
+              case ctor: (body.constructor.type & ExprConstructor.LoadLambda) =>
                 normalizeTopLevelWrap(
-                  substituteVariables(Map(argVariable -> arg))(expr.args.asInstanceOf[WrapExpr]),
+                  substituteVariables(Map(ctor.argVariable -> arg))(body.getArgs(ctor)),
                   fuel - 1,
                 )
 
@@ -90,5 +90,5 @@ trait Evaluator[-R, +E] {
         ZIO.succeed(WrapExpr.OfExpr(expr))
     }
 
-  def substituteVariables(varMap: Map[TVariable, WrapExpr])(expr: WrapExpr): WrapExpr = ???
+  def substituteVariables(varMap: Map[TVariable, WrapExpr])(expr: WrapExpr): WrapExpr
 }

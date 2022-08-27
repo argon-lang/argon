@@ -2,18 +2,20 @@ package dev.argon.compiler.expr
 
 import dev.argon.compiler.*
 import dev.argon.expr.Evaluator
+import dev.argon.util.{*, given}
 import zio.*
 
-abstract class ArgonEvaluator[R <: CompEnv, E >: CompError] extends UsingContext with Evaluator[R, E] {
+abstract class ArgonEvaluator[R <: CompEnv, E >: CompError] extends Evaluator[R, E] with ExprUtilSubstitution {
   override val context: Context { type Env = R; type Error = E }
-  override val exprContext: ArgonExprContext & HasContext[context.type]
-  import exprContext.WrapExpr
+  import exprContext.{WrapExpr, ArExpr, ExprConstructor, Variable}
 
-  override def getFunctionBody(function: ArFunc, args: Seq[WrapExpr], fuel: Int): Comp[Option[WrapExpr]] = ZIO.none
+  final override def getFunctionBody(function: exprContext.TFunction, args: Seq[WrapExpr], fuel: Int): Comp[Option[WrapExpr]] = ZIO.none
 
-  override def getMethodBody(method: ArMethod, instance: WrapExpr, args: Seq[WrapExpr], fuel: Int)
+  final override def getMethodBody(method: ArMethod, instance: WrapExpr, args: Seq[WrapExpr], fuel: Int)
     : Comp[Option[WrapExpr]] = ZIO.none
 
+  final override def substituteVariables(varMap: Map[Variable, WrapExpr])(expr: WrapExpr): WrapExpr =
+    substituteWrapExprMany(varMap)(expr)
 }
 
 object ArgonEvaluator {

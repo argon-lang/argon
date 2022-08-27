@@ -61,6 +61,8 @@ abstract class ImplicitResolver[-R, +E] {
   protected def methodRelations(method: TMethod): ZIO[R, E, Seq[ExprRelation]]
   protected def classConstructorRelations(classCtor: TClassConstructor): ZIO[R, E, Seq[ExprRelation]]
 
+  protected def substituteVariables(vars: Map[TVariable, WrapExpr])(expr: WrapExpr): WrapExpr
+
   protected def natLessThanFunction: ZIO[R, E, TFunction]
   protected def boolType: ZIO[R, E, WrapExpr]
 
@@ -105,6 +107,23 @@ abstract class ImplicitResolver[-R, +E] {
       exprToWrapExpr(expr).flatMap { expr =>
         evaluator.normalizeTopLevelWrap(expr, solveState.consumeFuel.fuel)
           .map(wrapExprToExpr)
+      }
+
+    override def compareValues[R2 <: R, E2 >: Error, T](a: Value, b: Value)(f: (ExprConstructor, Seq[Expr], Seq[Expr]) => ZStream[R2, E2, PrologResult.Yes]): ZStream[R2, E2, PrologResult.Yes] =
+      (a.constructor, b.constructor) match {
+        case (ExprConstructor.LoadLambda(argVariableA), ExprConstructor.LoadLambda(argVariableB)) =>
+          val loadArgA = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(argVariableA), EmptyTuple))
+
+          ZStream.unwrap(
+            ZIO.foreach(b.args)(exprToWrapExprError)
+              .map { bArgs2 =>
+                val bArgs3 = bArgs2.map(substituteVariables(Map(argVariableB -> loadArgA)) andThen wrapExprToExpr)
+
+                f(a.constructor, a.args, bArgs3)
+              }
+          )
+
+        case _ => super.compareValues(a, b)(f)
       }
 
     private def builtinAssertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] =

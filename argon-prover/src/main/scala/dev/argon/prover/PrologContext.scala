@@ -318,6 +318,13 @@ abstract class PrologContext[-R, +E] {
     impl(e)
   end normalizeExpr
 
+  def compareValues[R2 <: R, E2 >: Error, T](a: Value, b: Value)(f: (TConstructor, Seq[Expr], Seq[Expr]) => ZStream[R2, E2, PrologResult.Yes]): ZStream[R2, E2, PrologResult.Yes] =
+    if a.constructor == b.constructor then
+      f(a.constructor, a.args, b.args)
+    else
+      ZStream.empty
+
+
   private def unifyExpr
     (goal: Expr, rule: Expr, relation: TRelation, substitutions: Model, solveState: SolveState, useCustomRelations: Boolean)
     : ZStream[R, Error, PrologResult.Yes] =
@@ -349,27 +356,29 @@ abstract class PrologContext[-R, +E] {
         normalizeExpr(goal, substitutions, solveState).mapError(Left.apply).flatMap { goal =>
           normalizeExpr(rule, substitutions, solveState).mapError(Left.apply).map { rule =>
             (goal, rule) match {
-              case (v1 @ Value(ctor1, args1), v2 @ Value(ctor2, args2)) if ctor1 == ctor2 =>
-                ZStream.unwrap(
-                  constructorArgRelations(ctor1, args1.size)
-                    .mapError(Left.apply)
-                    .map { relations =>
-                      args1.zip(args2).zip(relations).toList.foldLeftM((substitutions, Seq.empty[Proof[ProofAtom]])) {
-                        case ((substitutions, argProofs), ((arg1, arg2), argRelation)) =>
-                          val mergedRel = mergeRelations(relation, argRelation)
+              case (v1: Value, v2: Value) =>
+                compareValues(v1, v2) { (ctor, args1, args2) =>
+                  ZStream.unwrap(
+                    constructorArgRelations(ctor, args1.size)
+                      .mapError(Left.apply)
+                      .map { relations =>
+                        args1.zip(args2).zip(relations).toList.foldLeftM((substitutions, Seq.empty[Proof[ProofAtom]])) {
+                          case ((substitutions, argProofs), ((arg1, arg2), argRelation)) =>
+                            val mergedRel = mergeRelations(relation, argRelation)
 
-                          unifyExpr(arg1, arg2, mergedRel, substitutions, solveState.consumeFuel, useCustomRelations = true)
-                            .map { case PrologResult.Yes(argProof, substitutions) =>
-                              (substitutions, argProofs :+ argProof)
-                            }
-                      }
-                        .mapZIO { case (substitutions, argProofs) =>
-                          valueRelationProof(relation, v1, v2, argProofs)
-                            .mapError(Left.apply)
-                            .map { proof => PrologResult.Yes(proof, substitutions) }
+                            unifyExpr(arg1, arg2, mergedRel, substitutions, solveState.consumeFuel, useCustomRelations = true)
+                              .map { case PrologResult.Yes(argProof, substitutions) =>
+                                (substitutions, argProofs :+ argProof)
+                              }
                         }
-                    }
-                ) ++ (if useCustomRelations then customRelations else ZStream.empty)
+                          .mapZIO { case (substitutions, argProofs) =>
+                            valueRelationProof(relation, v1, v2, argProofs)
+                              .mapError(Left.apply)
+                              .map { proof => PrologResult.Yes(proof, substitutions) }
+                          }
+                      }
+                  ) ++ (if useCustomRelations then customRelations else ZStream.empty)
+                }
 
               case (Variable(var1), Variable(var2)) if var1 == var2 =>
                 ZStream.fromZIO(
