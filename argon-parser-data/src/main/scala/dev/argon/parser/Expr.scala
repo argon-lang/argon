@@ -125,6 +125,7 @@ enum IdentifierExpr extends Expr derives CanEqual {
   case Extension(inner: IdentifierExpr)
   case Inverse(inner: IdentifierExpr)
   case Update(inner: IdentifierExpr)
+  case FunctionResultValue
 }
 
 final case class IfElseExpr

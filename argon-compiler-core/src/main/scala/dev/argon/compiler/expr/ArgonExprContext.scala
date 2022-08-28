@@ -54,6 +54,8 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
       }
 
     override def hashCode(): Int = id.hashCode()
+
+    override def toString: String = s"LocalVariable(id=$id, name=$name, type=$varType)"
   }
 
   final class InstanceVariable
@@ -114,6 +116,29 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
       }
 
     override def hashCode(): Int = owner.hashCode() + 3 * parameterIndex.hashCode()
+
+    override def toString: String =
+      s"ParameterVariable($name)"
+  }
+
+  final class FunctionResultVariable
+  (
+    val owner: ParameterVariableOwner,
+    override val varType: WrapExpr,
+  ) extends Variable {
+
+    override def name: Option[IdentifierExpr] = Some(IdentifierExpr.FunctionResultValue)
+    override def isMutable: Boolean = false
+    override def isErased: Boolean = true
+
+
+    override def equals(obj: Any): Boolean =
+      obj.asInstanceOf[Matchable] match {
+        case other: FunctionResultVariable => other.owner.equals(owner)
+        case _ => false
+      }
+
+    override def hashCode(): Int = owner.hashCode()
 
     override def toString: String =
       s"ParameterVariable($name)"

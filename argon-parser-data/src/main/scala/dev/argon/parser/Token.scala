@@ -273,4 +273,5 @@ object Token {
     override def operator: BinaryOperator = BinaryOperator.Concat
   }
 
+  case object OP_FUNCTION_RESULT_VALUE extends TokenWithCategory(TokenCategory.OP_FUNCTION_RESULT_VALUE) with Token
 }

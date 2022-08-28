@@ -38,7 +38,7 @@ trait EmitModuleCommon extends EmitTubeCommon {
           else if Character.charCount(ch) == 1 then
             sb.append(String.format("$u%04X", ch))
           else
-            sb.append(String.format("$U%04X", ch))
+            sb.append(String.format("$U%08X", ch))
           end if
 
           i += Character.charCount(ch)
@@ -51,6 +51,7 @@ trait EmitModuleCommon extends EmitTubeCommon {
       case IdentifierExpr.Extension(inner) => "$e" + getEscapedName(inner)
       case IdentifierExpr.Inverse(inner) => "$i" + getEscapedName(inner)
       case IdentifierExpr.Update(inner) => "$m" + getEscapedName(inner)
+      case IdentifierExpr.FunctionResultValue => ???
     end match
 
   // Escape Sequences
@@ -72,6 +73,7 @@ trait EmitModuleCommon extends EmitTubeCommon {
   // $v - indicates a signature without a result type
   // $z - indicates a tuple type will follow
   // $_ - indicates an erased type
+  // $$ - escaped $
   protected def getOverloadExportName(name: Option[IdentifierExpr], signature: ErasedSignature): String =
     def sigTypePart(t: ErasedSignatureType): String =
       t match

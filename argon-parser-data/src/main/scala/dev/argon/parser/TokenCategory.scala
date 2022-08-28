@@ -115,4 +115,5 @@ object TokenCategory {
   case object OP_INTERSECTION extends TokenCategory
   case object OP_CONCAT extends TokenCategory
   case object OP_STARSTAR extends TokenCategory
+  case object OP_FUNCTION_RESULT_VALUE extends TokenCategory
 }

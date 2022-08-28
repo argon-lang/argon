@@ -33,12 +33,14 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
     ClassResult,
     TraitResult,
+    FunctionResult,
 
     Variable,
     LocalVariable,
     InstanceVariable,
     ParameterVariable,
     ParameterVariableOwner,
+    FunctionResultVariable,
   }
 
   val evaluator: ArgonEvaluator.Aux[context.Env, context.Error, context.type, exprContext.type] = ArgonEvaluator(context)(exprContext)
@@ -50,37 +52,53 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
   final case class ExprTypeResult(expr: WrapExpr, env: Env, exprType: WrapExpr)
 
   trait ExprFactory {
-    def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult]
-    def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult]
+    def exprLocation: SourceLocation
+
+    protected def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult]
+    protected def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult]
+
+    final def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+      synthImpl(env, modifyOptions(opt)).tap { res => checkPostconditions(env, opt, res.expr) }
+
+    final def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+      checkImpl(env, modifyOptions(opt), t).tap { res => checkPostconditions(env, opt, res.expr) }
 
     def mutate(value: MutatorValue): ExprFactory =
-      ExprFactoryError(DiagnosticError.CanNotMutate(DiagnosticSource.Location(value.location)))
+      ExprFactoryError(DiagnosticError.CanNotMutate(DiagnosticSource.Location(value.location)), exprLocation)
 
     def invoke(arg: ArgumentInfo): ExprFactory =
       OverloadExprFactoryMethod.fromInstanceFactory(this, IdentifierExpr.Named("apply"), arg.location)
         .invoke(arg)
 
+    protected def modifyOptions(opt: ExprOptions): ExprOptions =
+      opt.copy(postconditions = None)
+
+    protected def checkPostconditions(env: Env, opt: ExprOptions, value: WrapExpr): Comp[Unit] =
+      ZIO.foreachDiscard(opt.postconditions) { postconditions =>
+        ZIO.foreachDiscard(postconditions.conditions) { postcond =>
+          resolveImplicit(env, substituteWrapExprMany(Map(postconditions.resultVar -> value))(postcond), exprLocation)
+        }
+      }
+
   }
 
   private trait ExprFactorySynth extends ExprFactory {
 
-    protected def location: SourceLocation
-
-    override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+    override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
       for {
         res <- synth(env, opt)
-        env <- checkSubType(res.env, res.exprType, t, location)
+        env <- checkSubType(res.env, res.exprType, t, exprLocation)
       } yield ExprResult(res.expr, env)
 
   }
 
   private trait ExprFactoryCheck extends ExprFactory {
-    override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = ZIO.fail(DiagnosticError.UnknownTypeForExpression())
+    override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = ZIO.fail(DiagnosticError.UnknownTypeForExpression())
   }
 
-  private final class ExprFactoryError(error: context.Error) extends ExprFactory {
-    override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = ZIO.fail(error)
-    override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] = ZIO.fail(error)
+  private final class ExprFactoryError(error: context.Error, override val exprLocation: SourceLocation) extends ExprFactory {
+    override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = ZIO.fail(error)
+    override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] = ZIO.fail(error)
   }
 
   def convertStmtList(stmts: WithSource[Seq[WithSource[parser.Stmt]]]): ExprFactory =
@@ -107,22 +125,32 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               convertExpr(WithSource(expr, head.location)).check(env, opt, unitType)
 
             case varDecl: parser.VariableDeclarationStmt =>
+              def addKnownStableValue(env: Env, value: WrapExpr, localVar: Variable): Comp[Env] =
+                if isStableExpression(value) then
+                  ZIO.succeed(env.copy(knownVarValues = env.knownVarValues + (localVar -> value)))
+                else
+                  ZIO.succeed(env)
+
               val localVarComp: Comp[(LocalVariable, WrapExpr, Env)] =
                 varDecl.varType match {
                   case Some(varType) =>
                     for {
                       id <- UniqueIdentifier.make
-                      tRes <- convertExpr(varType).check(env, opt.forTypeExpr, anyType)
-                      value <- convertExpr(varDecl.value).check(tRes.env, opt, tRes.expr)
-                      localVar = LocalVariable(id, tRes.expr, varDecl.name, varDecl.isMutable, isErased = false)
-                    } yield (localVar, value.expr, value.env)
+                      ExprResult(varTypeExpr, env) <- convertExpr(varType).check(env, opt.forTypeExpr, anyType)
+                      ExprResult(value, env) <- convertExpr(varDecl.value).check(env, opt, varTypeExpr)
+                      localVar = LocalVariable(id, varTypeExpr, varDecl.name, varDecl.isMutable, isErased = false)
+
+                      env <- addKnownStableValue(env, value, localVar)
+                    } yield (localVar, value, env)
 
                   case None =>
                     for {
                       id <- UniqueIdentifier.make
-                      value <- convertExpr(varDecl.value).synth(env, opt)
-                      localVar = LocalVariable(id, value.exprType, varDecl.name, varDecl.isMutable, isErased = false)
-                    } yield (localVar, value.expr, value.env)
+                      ExprTypeResult(value, env, valueType) <- convertExpr(varDecl.value).synth(env, opt)
+                      localVar = LocalVariable(id, valueType, varDecl.name, varDecl.isMutable, isErased = false)
+
+                      env <- addKnownStableValue(env, value, localVar)
+                    } yield (localVar, value, env)
                 }
 
               localVarComp.map { case (variable, value, env) =>
@@ -143,35 +171,27 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           }
 
         new ExprFactory {
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def exprLocation: SourceLocation = stmts.location
+
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             for {
-              exprRes <- headResult(env, opt)
+              exprRes <- headResult(env, opt.copy(postconditions = None))
               tailRes <- convertStmtList(tailStmts).synth(exprRes.env, opt)
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.Sequence, NonEmptyList(exprRes.expr, tailRes.expr)))
             } yield ExprTypeResult(e, tailRes.env, tailRes.exprType)
 
-          override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+          override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
             for {
-              exprRes <- headResult(env, opt)
+              exprRes <- headResult(env, opt.copy(postconditions = None))
               tailRes <- convertStmtList(tailStmts).check(exprRes.env, opt, t)
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.Sequence, NonEmptyList(exprRes.expr, tailRes.expr)))
             } yield ExprResult(e, tailRes.env)
 
-          private def prependExpr(headExpr: WrapExpr, tailExpr: WrapExpr): WrapExpr =
-            tailExpr match {
-              case WrapExpr.OfExpr(e) =>
-                (e.constructor: e.constructor.type & ExprConstructor) match {
-                  case ctor: (e.constructor.type & ExprConstructor.Sequence.type) =>
-                    WrapExpr.OfExpr(ArExpr(ExprConstructor.Sequence, NonEmptyList.cons(headExpr, e.getArgs(ctor))))
+          override protected def modifyOptions(opt: ExprOptions): ExprOptions =
+            opt
 
-                  case _ =>
-                    WrapExpr.OfExpr(ArExpr(ExprConstructor.Sequence, NonEmptyList(headExpr, tailExpr)))
-                }
-
-              case _ =>
-                WrapExpr.OfExpr(ArExpr(ExprConstructor.Sequence, NonEmptyList(headExpr, tailExpr)))
-            }
-
+          override protected def checkPostconditions(env: Env, opt: ExprOptions, value: WrapExpr): Comp[Unit] =
+            ZIO.unit
         }
 
       case _ => convertExpr(WithSource(parser.TupleExpr(Vector.empty), stmts.location))
@@ -183,7 +203,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
   (left: WithSource[parser.Expr], right: WithSource[parser.Expr])
   : ExprFactory =
     new ExprFactory {
-      override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+      override def exprLocation: SourceLocation = location
+
+      override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
         for
           _ <- ZIO.fail(DiagnosticError.ErasedExpressionNotAllowed(DiagnosticSource.Location(location))).unless(opt.checkErasure(true))
           ExprTypeResult(l, env, t1) <- convertExpr(left).synth(env, opt)
@@ -191,7 +213,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         yield ???
 
 
-      override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+      override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
         for
           _ <- ZIO.fail(DiagnosticError.ErasedExpressionNotAllowed(DiagnosticSource.Location(location))).unless(opt.checkErasure(true))
           _ <- checkSubType(env, t, anyType, location)
@@ -205,9 +227,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       case parser.AsExpr(value, valueType) =>
         new ExprFactorySynth {
 
-          override protected def location: SourceLocation = expr.location
+          override def exprLocation: SourceLocation = expr.location
 
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             convertExpr(valueType).check(env, opt.forTypeExpr, anyType)
               .flatMap { case ExprResult(t, env) =>
                 convertExpr(value).check(env, opt, t)
@@ -244,24 +266,25 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.BlockExpr(body, rescueCases, elseBody, Some(ensureBody)) =>
         new ExprFactory {
+          override def exprLocation: SourceLocation = expr.location
 
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             val inner = WithSource(parser.BlockExpr(body, rescueCases, elseBody, None), expr.location)
             for {
               innerRes <- convertExpr(inner).synth(env, opt)
               ensuring <- convertStmtList(ensureBody).check(innerRes.env, opt, unitType)
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.EnsureExecuted, (innerRes.expr, ensuring.expr)))
             } yield ExprTypeResult(e, ensuring.env, innerRes.exprType)
-          end synth
+          end synthImpl
 
-          override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+          override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
             val inner = WithSource(parser.BlockExpr(body, rescueCases, elseBody, None), expr.location)
             for {
               innerRes <- convertExpr(inner).check(env, opt, t)
               ensuring <- convertStmtList(ensureBody).check(innerRes.env, opt, unitType)
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.EnsureExecuted, (innerRes.expr, ensuring.expr)))
             } yield ExprResult(e, ensuring.env)
-          end check
+          end checkImpl
 
         }
 
@@ -272,9 +295,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.BoolValueExpr(b) =>
         new ExprFactorySynth {
-          override protected def location: SourceLocation = expr.location
+          override def exprLocation: SourceLocation = expr.location
 
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             for
               t <- boolType
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(b), EmptyTuple))
@@ -283,10 +306,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.ClassConstructorExpr(classExpr) =>
         class WrappedFactory(inner: (Env, ExprOptions) => Comp[(Env, ExprFactory)]) extends ExprFactory {
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def exprLocation: SourceLocation = expr.location
+
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             inner(env, opt).flatMap { case (env, factory) => factory.synth(env, opt) }
 
-          override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+          override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
             inner(env, opt).flatMap { case (env, factory) => factory.check(env, opt, t) }
 
           override def mutate(value: MutatorValue): ExprFactory =
@@ -322,8 +347,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.IfElseExpr(condition, ifBody, elseBody) =>
         new ExprFactory {
+          override def exprLocation: SourceLocation = expr.location
 
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             for {
               bType <- boolType
               condRes <- convertExpr(condition).check(env, opt, bType)
@@ -334,7 +360,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               t = WrapExpr.OfExpr(ArExpr(ExprConstructor.UnionType, (trueRes.exprType, falseRes.exprType)))
             } yield ExprTypeResult(e, resEnv, t)
 
-          override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+          override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
             for {
               bType <- boolType
               condRes <- convertExpr(condition).check(env, opt, bType)
@@ -348,10 +374,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case i: parser.IntValueExpr =>
         new ExprFactorySynth {
+          override def exprLocation: SourceLocation = expr.location
 
-          override protected def location: SourceLocation = expr.location
-
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             for {
               t <- intType
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(i.value), EmptyTuple))
@@ -361,10 +386,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.LambdaTypeExpr(argType, resultType) =>
         new ExprFactorySynth {
+          override def exprLocation: SourceLocation = expr.location
 
-          override protected def location: SourceLocation = expr.location
-
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             for
               argExpr <- convertExpr(argType).check(env, opt.forTypeExpr, anyType)
               resultExpr <- convertExpr(resultType).check(argExpr.env, opt.forTypeExpr, anyType)
@@ -380,8 +404,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.LambdaExpr(varName, body) =>
         new ExprFactoryCheck {
+          override def exprLocation: SourceLocation = expr.location
 
-          override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+          override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
             evaluator.normalizeTopLevelWrap(t, fuel).flatMap {
               case WrapExpr.OfExpr(normalizedType) =>
                 normalizedType.constructor match {
@@ -408,10 +433,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.RaiseExpr(exception) =>
         new ExprFactorySynth {
+          override def exprLocation: SourceLocation = expr.location
 
-          override protected def location: SourceLocation = expr.location
-
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             if opt.purity then
               ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(expr.location)))
             else
@@ -442,9 +466,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
         new ExprFactorySynth {
 
-          override protected def location: SourceLocation = expr.location
+          override def exprLocation: SourceLocation = expr.location
 
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             for {
               strType <- stringType
               concat <- loadKnownExport[ModuleElementC.FunctionElement[context.type, ?]](
@@ -480,7 +504,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.TupleExpr(values) =>
         new ExprFactory {
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = synthPart(env, opt, values.toList, Vector.empty, Vector.empty)
+          override def exprLocation: SourceLocation = expr.location
+
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = synthPart(env, opt, values.toList, Vector.empty, Vector.empty)
 
           private def synthPart
             (env: Env, opt: ExprOptions, values: List[WithSource[parser.Expr]], valuesAcc: Vector[WrapExpr], typeAcc: Vector[WrapExpr])
@@ -511,7 +537,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                 ZIO.succeed(ExprTypeResult(valuesExpr, env, typesExpr))
             }
 
-          override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+          override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
             evaluator.normalizeTopLevelWrap(t, fuel).flatMap {
               case normalizedTypeWrap @ WrapExpr.OfExpr(normalizedType) =>
                 normalizedType.constructor match {
@@ -568,9 +594,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.TypeExpr(None) =>
         new ExprFactorySynth {
-          override protected def location: SourceLocation = expr.location
+          override def exprLocation: SourceLocation = expr.location
 
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             val e = WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(0), EmptyTuple))))
             val t = WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(1), EmptyTuple))))
             ZIO.succeed(ExprTypeResult(e, env, t))
@@ -581,13 +607,13 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       case parser.MetaTypeExpr(level) =>
         new ExprFactorySynth {
 
-          override protected def location: SourceLocation = expr.location
+          override def exprLocation: SourceLocation = expr.location
 
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             val e = WrapExpr.OfExpr(ArExpr(ExprConstructor.OmegaTypeN(level), EmptyTuple))
             val t = WrapExpr.OfExpr(ArExpr(ExprConstructor.OmegaTypeN(level + 1), EmptyTuple))
             ZIO.succeed(ExprTypeResult(e, env, t))
-          end synth
+          end synthImpl
 
         }
 
@@ -606,12 +632,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.AssertExpr(assertionType) =>
         new ExprFactorySynth:
-          override protected def location: SourceLocation = expr.location
+          override def exprLocation: SourceLocation = expr.location
 
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             for
               ExprResult(t, env) <- convertExpr(assertionType).check(env, opt.forTypeExpr, anyType)
-              (env, value) <- resolveImplicit(env, t, location)
+              (env, value) <- resolveImplicit(env, t, exprLocation)
               localId <- UniqueIdentifier.make
               variable = LocalVariable(
                 localId,
@@ -629,12 +655,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
       case parser.SummonExpr(summonedType) =>
         new ExprFactorySynth:
-          override protected def location: SourceLocation = expr.location
+          override def exprLocation: SourceLocation = expr.location
 
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             for
               ExprResult(t, env) <- convertExpr(summonedType).check(env, opt.forTypeExpr, anyType)
-              (env, value) <- resolveImplicit(env, t, location)
+              (env, value) <- resolveImplicit(env, t, exprLocation)
             yield ExprTypeResult(value, env, t)
         end new
     }
@@ -643,7 +669,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
     import ExprConstructor.MethodCallOwnerType
 
-    override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = resolveOverload(env, opt)(Seq.empty)(lookup(env, opt))
+    override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = resolveOverload(env, opt)(Seq.empty)(lookup(env, opt))
 
     protected type TElement
 
@@ -652,7 +678,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
     protected def overloadLocation: SourceLocation
     protected def lookupName: IdentifierExpr | parser.ClassConstructorExpr.type
 
-    override protected def location: SourceLocation = overloadLocation
+    override def exprLocation: SourceLocation = overloadLocation
 
     protected def signatureOf(element: TElement): Comp[Signature[WrapExpr, ?]]
 
@@ -1050,10 +1076,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
     override def mutate(value: MutatorValue): ExprFactory =
       if args.isEmpty then
         new ExprFactory {
-          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+          override def exprLocation: SourceLocation = value.location
+
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             mutateImpl(value, lookup(env, opt)).flatMap(_.synth(env, opt))
 
-          override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+          override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
             mutateImpl(value, lookup(env, opt)).flatMap(_.check(env, opt, t))
 
         }
@@ -1090,9 +1118,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         (overload match {
           case variable: Variable =>
             val varFactory: ExprFactory = new ExprFactorySynth {
-              override protected def location: SourceLocation = overloadLocation
+              override def exprLocation: SourceLocation = overloadLocation
 
-              override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+              override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
                 if !opt.checkErasure(variable.isErased) then
                   ZIO.fail(DiagnosticError.ErasedExpressionNotAllowed(DiagnosticSource.Location(overloadLocation)))
                 else if !opt.checkPurity(!variable.isMutable) then
@@ -1143,17 +1171,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           case ModuleElementC.FunctionElement(func) =>
             createSigResultConv(func, env, opt, func.signature, args)(functionSigHandler) { (env, opt, args, res) =>
               if opt.checkPurity(func.purity) then
-                for
-                  env <- ZIO.foldLeft(res.ensuresClauses)(env) { (env, ensuresType) =>
-                    for
-                      varId <- UniqueIdentifier.make
-                      local = LocalVariable(varId, ensuresType, name = None, isMutable = false, isErased = false)
-                    yield env.withImplicitSource(_.addVariable(local))
-                  }
-                yield ExprTypeResult(
-                  WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionCall(func), args)),
+                handleFunctionResult(
                   env,
-                  res.returnType,
+                  opt,
+                  func,
+                  WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionCall(func), args)),
+                  res
                 )
               else
                 ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
@@ -1201,9 +1224,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
     private final class MutateVariableExprFactory(variable: Variable, value: MutatorValue) extends ExprFactorySynth {
 
-      override protected def location: SourceLocation = overloadLocation
+      override def exprLocation: SourceLocation = overloadLocation
 
-      override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+      override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
         for {
           _ <- ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation))).unless(opt.checkPurity(false))
           valueExpr <- value.arg.check(env, opt, variable.varType)
@@ -1331,17 +1354,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               result <- createSigResult(method, env, opt, sig, args.toList, Vector.empty)(functionSigHandler) {
                 (env, opt, args, res) =>
                   if opt.checkPurity(method.purity) then
-                    for
-                      env <- ZIO.foldLeft(res.ensuresClauses)(env) { (env, ensuresType) =>
-                        for
-                          varId <- UniqueIdentifier.make
-                          local = LocalVariable(varId, ensuresType, name = None, isMutable = false, isErased = false)
-                        yield env.withImplicitSource(_.addVariable(local))
-                      }
-                    yield ExprTypeResult(
-                      WrapExpr.OfExpr(ArExpr(ExprConstructor.MethodCall(method), (stableInstance, callOwnerType, args))),
+                    handleFunctionResult(
                       env,
-                      res.returnType,
+                      opt,
+                      method,
+                      WrapExpr.OfExpr(ArExpr(ExprConstructor.MethodCall(method), (stableInstance, callOwnerType, args))),
+                      res
                     )
                   else
                     ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
@@ -1505,13 +1523,14 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       args: Seq[ArgumentInfo]
     )
         extends ExprFactory {
+      override def exprLocation: SourceLocation = memberNameLocation
 
-      override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+      override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
         instance.synth(env, opt).flatMap { instanceExpr =>
           OverloadExprFactoryMethod(instanceExpr.expr, instanceExpr.exprType, memberName, memberNameLocation, args).synth(instanceExpr.env, opt)
         }
 
-      override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+      override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
         instance.synth(env, opt).flatMap { instanceExpr =>
           OverloadExprFactoryMethod(instanceExpr.expr, instanceExpr.exprType, memberName, memberNameLocation, args).check(
             instanceExpr.env,
@@ -1620,14 +1639,48 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
   end OverloadExprFactoryClassConstructor
 
   private final class EndOverloadExprFactory(inner: ExprFactory) extends ExprFactory {
-    override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = inner.synth(env, opt)
-    override def check(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] = inner.check(env, opt, t)
+    override def exprLocation: SourceLocation = inner.exprLocation
+
+    override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = inner.synth(env, opt)
+    override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] = inner.check(env, opt, t)
+
+    override protected def modifyOptions(opt: ExprOptions): ExprOptions =
+      opt
+
+    override protected def checkPostconditions(env: Env, opt: ExprOptions, value: WrapExpr): Comp[Unit] =
+      ZIO.unit
   }
 
-  private final class ConstExprFactory(protected val location: SourceLocation, result: ExprTypeResult) extends ExprFactorySynth {
-    override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = ZIO.succeed(result)
+  private final class ConstExprFactory(val exprLocation: SourceLocation, result: ExprTypeResult) extends ExprFactorySynth {
+    override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] = ZIO.succeed(result)
   }
 
+
+  private def handleFunctionResult(env: Env, opt: ExprOptions, function: ParameterVariableOwner, expr: WrapExpr, res: FunctionResult): Comp[ExprTypeResult] =
+    val resultVar = FunctionResultVariable(
+      function,
+      res.returnType,
+    )
+    for
+      (expr2, stableExpr) <-
+        if res.ensuresClauses.exists(referencesVariable(resultVar)) then
+          asStableExpression(expr)
+        else
+          ZIO.succeed((expr, expr))
+
+      env <- ZIO.foldLeft(res.ensuresClauses)(env) { (env, ensuresType) =>
+        val ensuresType2 = substituteWrapExprMany(Map(resultVar -> stableExpr))(ensuresType)
+        for
+          varId <- UniqueIdentifier.make
+          local = LocalVariable(varId, ensuresType2, name = None, isMutable = false, isErased = false)
+        yield env.withImplicitSource(_.addVariable(local))
+      }
+    yield ExprTypeResult(
+      expr2,
+      env,
+      res.returnType,
+    )
+  end handleFunctionResult
 
 }
 

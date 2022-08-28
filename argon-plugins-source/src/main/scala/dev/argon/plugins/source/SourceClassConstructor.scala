@@ -78,6 +78,7 @@ object SourceClassConstructor {
                 accessToken = SignatureUtil.createAccessToken(exprConverter)(this),
                 allowAbstractConstructorCall = false,
                 allowErased = false,
+                postconditions = None,
               )
 
               def stmtsWithLocation(stmts: Seq[WithSource[parser.Stmt]]): Option[WithSource[Seq[WithSource[parser.Stmt]]]] =

@@ -38,7 +38,7 @@ object SourceFunction {
       private def sigEnv: Comp[(Signature[WrapExpr, FunctionResult], exprConverter.Env)] =
         sigCell.get(
           SignatureUtil.create(context)(exprConverter)(this)(outerEnv)(stmt.parameters)(
-            SignatureUtil.createFunctionResult(context)(exprConverter)(stmt.returnType)
+            SignatureUtil.createFunctionResult(context)(exprConverter)(this)(stmt.returnType)
           )
         )
 
@@ -79,14 +79,13 @@ object SourceFunction {
                   accessToken = SignatureUtil.createAccessToken(exprConverter)(this),
                   allowAbstractConstructorCall = false,
                   allowErased = false,
+                  postconditions = Some(exprConverter.Postconditions(
+                    resultVar = exprConverter.exprContext.FunctionResultVariable(this, returnType),
+                    conditions = sig.unsubstitutedResult.ensuresClauses.map(ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr)
+                  )),
                 )
                 bodyResult <- exprConverter.convertExpr(expr).check(env, opt, returnType)
                 (resolvedBody, env) <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)
-
-                _ <- ZIO.foldLeft(sig.unsubstitutedResult.ensuresClauses)(env) { (env, ensuresType) =>
-                  val convT = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(ensuresType)
-                  exprConverter.resolveImplicit(env, convT, stmt.name.location).map { _._1 }
-                }
 
               yield new FunctionImplementationC.ExpressionBody {
                 override val context: ctx.type = ctx

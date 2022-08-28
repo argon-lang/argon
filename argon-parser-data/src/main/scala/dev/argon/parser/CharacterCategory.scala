@@ -52,5 +52,6 @@ object CharacterCategory {
 
   case object Caret extends CharacterCategory
   case object Tilde extends CharacterCategory
+  case object AtSign extends CharacterCategory
 
 }

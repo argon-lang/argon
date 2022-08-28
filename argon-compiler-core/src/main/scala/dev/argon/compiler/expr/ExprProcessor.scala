@@ -243,6 +243,11 @@ abstract class ExprProcessor[F[+_]: Monad] extends UsingContext {
         for {
           varType2 <- processWrapExpr(variable.varType)
         } yield ec2.ParameterVariable(variable.owner, variable.parameterIndex, varType2, variable.isErased, variable.name)
+
+      case variable: ec1.FunctionResultVariable =>
+        for {
+          varType2 <- processWrapExpr(variable.varType)
+        } yield ec2.FunctionResultVariable(variable.owner, varType2)
     }
 
   def processLocalVariable(variable: ec1.LocalVariable): F[ec2.LocalVariable] =

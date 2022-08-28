@@ -11,6 +11,12 @@ trait ExprUtilSubstitution extends ExprUtilBase {
   // Returns the possibly modified expression and the stable version of it
   // Declares a variable if needed
   def asStableExpression(expr: WrapExpr): exprContext.context.Comp[(WrapExpr, WrapExpr)] =
+    if isStableExpression(expr) then
+      ZIO.succeed((expr, expr))
+    else
+      ???
+
+  def isStableExpression(expr: WrapExpr): Boolean =
     def isStableConstructor(ctor: ExprConstructor): (Boolean, Boolean) =
       ctor match {
         case ExprConstructor.BindVariable(_) => (true, false)
@@ -42,20 +48,15 @@ trait ExprUtilSubstitution extends ExprUtilBase {
         case _ => (false, false)
       }
 
-    def isStableExpression(expr: WrapExpr): Boolean =
-      expr match {
-        case WrapExpr.OfExpr(expr) =>
-          val (isStable, checkArgs) = isStableConstructor(expr.constructor)
-          isStable && (!checkArgs || expr.constructor.argsToExprs(expr.args).forall(isStableExpression))
+    expr match {
+      case WrapExpr.OfExpr(expr) =>
+        val (isStable, checkArgs) = isStableConstructor(expr.constructor)
+        isStable && (!checkArgs || expr.constructor.argsToExprs(expr.args).forall(isStableExpression))
 
-        case WrapExpr.OfHole(_) => true
-      }
+      case WrapExpr.OfHole(_) => true
+    }
+  end isStableExpression
 
-    if isStableExpression(expr) then
-      ZIO.succeed((expr, expr))
-    else
-      ???
-  end asStableExpression
 
   def referencesVariable(variable: Variable)(expr: WrapExpr): Boolean =
     expr match {
@@ -85,7 +86,6 @@ trait ExprUtilSubstitution extends ExprUtilBase {
       case Signature.Result(res) =>
         sigHandler.resultReferences(variable)(res)
     }
-
 
   def substituteWrapExprMany(subst: Map[Variable, WrapExpr])(expr: WrapExpr): WrapExpr =
     if subst.isEmpty then

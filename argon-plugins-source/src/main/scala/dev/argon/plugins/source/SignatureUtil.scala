@@ -26,6 +26,7 @@ object SignatureUtil {
       accessToken = createAccessToken(exprConverter)(owner),
       allowAbstractConstructorCall = false,
       allowErased = false,
+      postconditions = None,
     )
 
     def impl
@@ -257,6 +258,7 @@ object SignatureUtil {
   def createFunctionResult
   (context: Context)
   (exprConverter: ExpressionConverter & HasContext[context.type])
+  (owner: exprConverter.exprContext.ParameterVariableOwner)
   (returnTypeExpr: WithSource[parser.ReturnTypeSpecifier])
   (env: exprConverter.Env, opt: exprConverter.ExprOptions)
   : context.Comp[context.ExprContext.FunctionResult] =
@@ -271,6 +273,11 @@ object SignatureUtil {
 
       for
         returnType <- convertExprResolved(returnTypeExpr.value.returnType)
+        _ <- envRef.update { env =>
+          val returnType2 = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(returnType)
+          val resultVar = exprConverter.exprContext.FunctionResultVariable(owner, returnType2)
+          env.withScope(_.addVariable(resultVar))
+        }
         ensuresClauses <- ZIO.foreach(returnTypeExpr.value.ensuresClauses)(convertExprResolved)
       yield context.ExprContext.FunctionResult(returnType, ensuresClauses)
     }

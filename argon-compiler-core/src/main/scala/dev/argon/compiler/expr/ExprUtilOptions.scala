@@ -8,12 +8,13 @@ trait ExprUtilOptions
     with ExprUtilScope
     with ExprUtilImplicitSource
  {
-  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr}
+  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr, FunctionResultVariable}
 
   final case class Env
   (
     scope: Scope,
     model: Map[exprContext.THole, ExprConstraints[WrapExpr]],
+    knownVarValues: Map[Variable, WrapExpr],
     implicitSource: ImplicitSource,
   ) {
     def withScope(f: Scope => Scope): Env = copy(scope = f(scope))
@@ -28,6 +29,7 @@ trait ExprUtilOptions
     accessToken: AccessToken,
     allowAbstractConstructorCall: Boolean,
     allowErased: Boolean,
+    postconditions: Option[Postconditions],
   ) {
     def forTypeExpr: ExprOptions =
       requirePure.allowErased(true)
@@ -47,5 +49,11 @@ trait ExprUtilOptions
     def checkErasure(erased: Boolean): Boolean =
       allowErased || !erased
   }
+
+  final case class Postconditions
+  (
+    resultVar: FunctionResultVariable,
+    conditions: Seq[WrapExpr],
+  )
 
 }

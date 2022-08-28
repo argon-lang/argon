@@ -35,7 +35,7 @@ abstract class PrologContext[-R, +E] {
   protected def intrinsicPredicate(predicate: TPredicateFunction, args: Seq[Expr], substitutions: Model, solveState: SolveState)
     : ZStream[R, Error, PrologResult.Yes]
 
-  protected def normalize(expr: Expr, solveState: SolveState): ZIO[R, E, Expr]
+  protected def normalize(expr: Value, substitutions: Model, solveState: SolveState): ZIO[R, E, Expr]
 
   // Combine relations when checking a sub expression
   protected def mergeRelations(parentExprRelation: TRelation, subExprRelation: TRelation): TRelation
@@ -103,7 +103,7 @@ abstract class PrologContext[-R, +E] {
 
 
   def solve(goal: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, PrologResult.Yes] =
-    if solveState.fuelEmpty then
+    if solveState.fuelEmpty || solveState.hasSeenPredicate(goal) then
       ZStream.empty
     else
       val solveState2 = solveState.addPredicate(goal)
@@ -304,10 +304,10 @@ abstract class PrologContext[-R, +E] {
         case _ => ZStream.empty
       }
 
-  private def normalizeExpr(e: Expr, substitutions: Model, solveState: SolveState): ZIO[R, E, Expr] =
+  protected def normalizeExpr(e: Expr, substitutions: Model, solveState: SolveState): ZIO[R, E, Expr] =
     def impl(e: Expr): ZIO[R, E, Expr] =
       e match {
-        case value: Value => normalize(value, solveState)
+        case value: Value => normalize(value, substitutions, solveState)
         case Variable(variable) =>
           substitutions.get(variable).flatMap(otherForEquivalenceRelation) match {
             case Some(value) => normalizeExpr(value, substitutions, solveState.consumeFuel)

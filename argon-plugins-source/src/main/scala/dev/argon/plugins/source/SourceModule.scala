@@ -82,6 +82,7 @@ object SourceModule {
               )
             ),
             model = Map.empty,
+            knownVarValues = Map.empty,
             implicitSource = exprConverter.ImplicitSource.fromImports(
               selfImports,
               exprConverter.ImplicitSource.fromImports(

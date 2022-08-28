@@ -343,7 +343,8 @@ object ArgonParser {
             } |
             (matchToken(KW_BEGIN) ++! (rule(Rule.BlockBody) ++ matchToken(KW_END))) --> {
               case (_, (block, _)) => block
-            }
+            } |
+            matchToken(OP_FUNCTION_RESULT_VALUE) --> const(IdentifierExpr.FunctionResultValue)
 
         case Rule.PrimaryExpr(Rule.ParenAllowed) =>
           matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(TupleExpr(Vector.empty)) |

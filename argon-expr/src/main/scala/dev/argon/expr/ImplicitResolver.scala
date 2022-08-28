@@ -103,7 +103,7 @@ abstract class ImplicitResolver[R, E] {
 
     private type Error = Either[E, PrologResult.No]
 
-    protected override def normalize(expr: Expr, solveState: SolveState): ZIO[R, E, Expr] =
+    protected override def normalize(expr: Value, substitutions: Model, solveState: SolveState): ZIO[R, E, Expr] =
       exprToWrapExpr(expr).flatMap { expr =>
         evaluator.normalizeTopLevelWrap(expr, solveState.consumeFuel.fuel)
           .map(wrapExprToExpr)
@@ -726,7 +726,7 @@ abstract class ImplicitResolver[R, E] {
 
   final case class ResolvedImplicit(proof: Proof[WrapExpr], model: Map[THole, ExprConstraints[WrapExpr]])
 
-  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: ZIO[R, E, List[Assertion]], fuel: Int)
+  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: ZIO[R, E, List[Assertion]], knownVarValues: Map[TVariable, WrapExpr], fuel: Int)
     : ZIO[R, E, Option[ResolvedImplicit]] =
     for
       createdHoles <- Ref.make(Set.empty[THole])
@@ -741,6 +741,17 @@ abstract class ImplicitResolver[R, E] {
               }
             }
           yield baseAssertions ++ givenAssertions3
+
+        protected override def normalize(expr: syntax.Value, substitutions: Model, solveState: SolveState): ZIO[R, E, syntax.Expr] =
+          expr match {
+            case syntax.Value(ExprConstructor.LoadVariable(variable), _) =>
+              knownVarValues.get(variable) match {
+                case Some(value) => normalizeExpr(wrapExprToExpr(value), substitutions, solveState)
+                case None => super.normalize(expr, substitutions, solveState)
+              }
+
+            case _ => super.normalize(expr, substitutions, solveState)
+          }
       }
 
       goal <- context.arExprToGoal(implicitType, fuel)

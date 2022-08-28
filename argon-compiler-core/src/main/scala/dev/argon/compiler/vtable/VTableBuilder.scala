@@ -58,6 +58,7 @@ object VTableBuilder {
         val emptyEnv = exprUtil.Env(
           scope = exprUtil.Scope.empty,
           model = Map.empty,
+          knownVarValues = Map.empty,
           implicitSource = exprUtil.ImplicitSource.empty,
         )
 

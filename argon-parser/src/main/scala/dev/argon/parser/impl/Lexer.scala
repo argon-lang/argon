@@ -364,6 +364,7 @@ object Lexer {
           val slash = token(CharacterCategory.Slash, "/")
           val caret = token(CharacterCategory.Caret, "^")
           val tilde = token(CharacterCategory.Tilde, "~")
+          val atSign = token(CharacterCategory.AtSign, "@")
 
           op(and ++ and ++ and, Token.OP_BITAND) |
             op(or ++ or ++ or, Token.OP_BITOR) |
@@ -408,7 +409,8 @@ object Lexer {
             op(or, Token.OP_UNION) |
             op(lessThan, Token.OP_LESSTHAN) |
             op(greaterThan, Token.OP_GREATERTHAN) |
-            op(colon, Token.OP_COLON)
+            op(colon, Token.OP_COLON) |
+            op(atSign, Token.OP_FUNCTION_RESULT_VALUE)
 
         case Rule.ResultToken =>
           (rule(Rule.NonEmptyToken).observeSource --> Some.apply) |

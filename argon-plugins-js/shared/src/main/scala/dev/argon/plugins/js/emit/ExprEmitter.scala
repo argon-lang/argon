@@ -30,6 +30,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     ParameterVariableOwner,
     InstanceVariable,
     MemberVariable,
+    FunctionResultVariable,
     FunctionResult,
   }
 
@@ -794,6 +795,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       case variable: ParameterVariable => getVariableName(variable).map(id)
       case variable: InstanceVariable => ZIO.succeed(estree.ThisExpression())
       case variable: MemberVariable => ZIO.succeed(estree.ThisExpression().index(id("fields").prop(getEscapedName(variable.name.get))))
+      case variable: FunctionResultVariable => ???
     }
 }
 

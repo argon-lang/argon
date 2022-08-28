@@ -310,7 +310,7 @@ trait ExprUtilImplicitResolver
       }
 
     for
-      resolved <- implicitResolver.tryResolve(t, env.model, assertions, fuel)
+      resolved <- implicitResolver.tryResolve(t, env.model, assertions, env.knownVarValues, fuel)
       res <- ZIO.foreach(resolved) {
         case implicitResolver.ResolvedImplicit(proof, model) =>
           def extractProof(proof: Proof[WrapExpr]): Comp[WrapExpr] =

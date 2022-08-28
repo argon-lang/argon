@@ -17,7 +17,7 @@ abstract class SimplePrologContext[R <: VariableProvider, E]
     (predicate: TPredicateFunction, args: Seq[Expr], substitutions: Model, solveState: SolveState)
     : ZStream[R, Either[E, PrologResult.No], PrologResult.Yes] = ZStream.empty
 
-  protected override def normalize(expr: Expr, solveState: SolveState): ZIO[R, E, Expr] = ZIO.succeed(expr)
+  protected override def normalize(expr: Value, substitutions: Model, solveState: SolveState): ZIO[R, E, Expr] = ZIO.succeed(expr)
 
   protected override def variableRelationProof(relation: Unit, a: String, b: String): ZIO[R, E, Proof[Unit]] =
     ZIO.succeed(Proof.Atomic(()))
