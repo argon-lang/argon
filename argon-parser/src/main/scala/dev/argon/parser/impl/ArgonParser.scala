@@ -603,7 +603,8 @@ object ArgonParser {
               ruleModifier(KW_ABSTRACT) |
               ruleModifier(KW_OVERRIDE) |
               ruleModifier(KW_SEALED) |
-              ruleModifier(KW_OPEN)
+              ruleModifier(KW_OPEN) |
+              ruleModifier(KW_GIVEN)
 
           (anyModifier.observeSource *) --> { _.toVector }
 

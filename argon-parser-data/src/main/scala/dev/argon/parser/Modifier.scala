@@ -14,3 +14,4 @@ case object OverrideModifier extends OverridabilityModifier
 case object FinalModifier extends OverridabilityModifier
 case object SealedModifier extends ExtendabilityModifier
 case object OpenModifier extends ExtendabilityModifier
+case object GivenModifier extends Modifier

@@ -1,0 +1,39 @@
+<ArgonTest>
+
+    <Name>Different module given</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+        import ./even/*
+
+        proc printEven(n: Int) (requires even: IsEven n): () =
+            puts (n.to_s())
+
+        proc main(): () do
+            printEven 0
+        end
+
+
+    ]]></InputSource>
+
+    <InputSource name="even.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        public sealed trait IsEven (n: Int) <: Object
+        end
+
+        public class ZeroIsEven <: IsEven 0
+            public def new()
+            end
+        end
+
+        public given def zeroIsEven: IsEven 0 = ZeroIsEven.new()
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>0</ExpectedOutput>
+
+</ArgonTest>

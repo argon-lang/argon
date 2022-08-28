@@ -29,6 +29,9 @@ abstract class ArTraitC extends Definition with UsingContext derives CanEqual {
     }
 
   final override def hashCode(): Int = id.hashCode
+
+  override def toString: String =
+    s"ArTrait(${owner.module.moduleName}/${owner.ownedName})"
 }
 
 object ArTraitC {

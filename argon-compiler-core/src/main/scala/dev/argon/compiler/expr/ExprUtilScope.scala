@@ -31,8 +31,6 @@ trait ExprUtilScope extends ExprUtilBase {
 
     def addParameterVariableElements(map: Map[IdentifierExpr, ParameterVariableElement]): Scope =
       Scope.WithMap(map, this)
-
-
   }
 
   object Scope {
@@ -65,7 +63,7 @@ trait ExprUtilScope extends ExprUtilBase {
         override def lookup(id: IdentifierExpr): LookupResult[ScopeElement] =
           LookupResult.Suspended(
             importsComp.map { imports =>
-              imports.get(id) match {
+              imports.get(Some(id)) match {
                 case None | Some(Seq()) => next.lookup(id)
                 case Some(elements) => LookupResult.Success(elements, LookupResult.NotFound())
               }

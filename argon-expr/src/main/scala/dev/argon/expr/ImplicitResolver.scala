@@ -6,7 +6,7 @@ import dev.argon.util.UniqueIdentifier
 import zio.*
 import zio.stream.{Stream, ZStream}
 
-abstract class ImplicitResolver[-R, +E] {
+abstract class ImplicitResolver[R, E] {
 
   val exprContext: ExprContext
   import exprContext.*
@@ -726,7 +726,7 @@ abstract class ImplicitResolver[-R, +E] {
 
   final case class ResolvedImplicit(proof: Proof[WrapExpr], model: Map[THole, ExprConstraints[WrapExpr]])
 
-  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: List[Assertion], fuel: Int)
+  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: ZIO[R, E, List[Assertion]], fuel: Int)
     : ZIO[R, E, Option[ResolvedImplicit]] =
     for
       createdHoles <- Ref.make(Set.empty[THole])
@@ -734,12 +734,13 @@ abstract class ImplicitResolver[-R, +E] {
         protected override def assertions: ZIO[R, E, List[(Proof[TCAtomicProof], syntax.Predicate)]] =
           for
             baseAssertions <- super.assertions
-            givenAssertions2 <- ZIO.foreach(givenAssertions) { assertion =>
+            givenAssertions2 <- givenAssertions
+            givenAssertions3 <- ZIO.foreach(givenAssertions2) { assertion =>
               arExprToGoal(assertion.assertionType, fuel).map { assertionType =>
                 (Proof.Atomic(TCAtomicProof.ExprProof(assertion.witness)), assertionType)
               }
             }
-          yield baseAssertions ++ givenAssertions2
+          yield baseAssertions ++ givenAssertions3
       }
 
       goal <- context.arExprToGoal(implicitType, fuel)

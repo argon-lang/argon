@@ -103,7 +103,7 @@ abstract class PrologContext[-R, +E] {
 
 
   def solve(goal: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, PrologResult.Yes] =
-    if solveState.fuelEmpty || solveState.hasSeenPredicate(goal) then
+    if solveState.fuelEmpty then
       ZStream.empty
     else
       val solveState2 = solveState.addPredicate(goal)

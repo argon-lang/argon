@@ -26,7 +26,7 @@ object SourceModule {
     val moduleName2 = moduleName
     for {
       exportEntriesCell <- MemoCell.make[context.Env, context.Error, Seq[ModuleElementC[context.type, true]]]
-      exportMapCell <- MemoCell.make[context.Env, context.Error, Map[IdentifierExpr, Seq[ModuleElementC[context.type, true]]]]
+      exportMapCell <- MemoCell.make[context.Env, context.Error, Map[Option[IdentifierExpr], Seq[ModuleElementC[context.type, true]]]]
       exprConverter <- ExpressionConverter.make(context, tubeImporter)
       vtableBuilder <- VTableBuilder(context, tubeImporter)
     } yield new ArModuleC {
@@ -47,21 +47,18 @@ object SourceModule {
         )
 
 
-      private def exportsAsImports(exportingModules: Set[ArModule]): Comp[Map[IdentifierExpr, Seq[ModuleElement[true]]]] =
+      private def exportsAsImports(exportingModules: Set[ArModule]): Comp[Map[Option[IdentifierExpr], Seq[ModuleElement[true]]]] =
         exportMapCell.get(
           allExports(exportingModules).map { exp =>
             exp
               .map { entry => entry.name -> entry }
-              .collect {
-                case (Some(name), entry) => name -> entry
-              }
               .groupMap(_._1)(_._2)
           }
         )
 
       override def exports(exportingModules: Set[ArModule])(name: IdentifierExpr): Comp[Seq[ModuleElement[true]]] =
         exportsAsImports(exportingModules).map { exp =>
-          exp.get(name).toList.flatten
+          exp.get(Some(name)).toList.flatten
         }
 
 
@@ -73,17 +70,25 @@ object SourceModule {
         stmt: Stmt,
       )
       : context.Comp[(context.Comp[Imports[context.type]], Seq[ModuleElement[true]])] =
+        val selfImports = exportsAsImports(exportingModules)
+
         def env: exprConverter.Env =
           exprConverter.Env(
             scope = exprConverter.Scope.fromImports(
-              exportsAsImports(exportingModules),
+              selfImports,
               exprConverter.Scope.fromImports(
                 imports,
                 exprConverter.Scope.empty
               )
             ),
             model = Map.empty,
-            implicitSource = exprConverter.ImplicitSource.empty,
+            implicitSource = exprConverter.ImplicitSource.fromImports(
+              selfImports,
+              exprConverter.ImplicitSource.fromImports(
+                imports,
+                exprConverter.ImplicitSource.empty
+              )
+            ),
           )
 
         stmt match {
@@ -129,7 +134,7 @@ object SourceModule {
           case pathSegment: ImportPathSegment.End => List((ModulePath(modulePath), pathSegment))
         }
 
-      private type ImportsUngrouped = Seq[(IdentifierExpr, ModuleElement[?])]
+      private type ImportsUngrouped = Seq[(Option[IdentifierExpr], ModuleElement[?])]
       private def loadModuleImports
       (exportingModules: Set[ArModule])
       (
@@ -145,7 +150,7 @@ object SourceModule {
 
           case ImportPathSegment.Imported(id) :: tail =>
             module.exports(Set.empty)(id).flatMap { newImports =>
-              loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((id, _)))
+              loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((Some(id), _)))
             }
 
           case ImportPathSegment.Renaming(id, _) :: tail if importedIds.contains(id) =>
@@ -156,7 +161,7 @@ object SourceModule {
 
           case ImportPathSegment.Renaming(id, Some(viewedName)) :: tail =>
             module.exports(Set.empty)(id).flatMap { newImports =>
-              loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((viewedName, _)))
+              loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((Some(viewedName), _)))
             }
 
           case ImportPathSegment.Wildcard :: _ :: _ =>
@@ -168,8 +173,7 @@ object SourceModule {
                 .flatMap { element =>
                   element.name match {
                     case Some(name) if importedIds.contains(name) => Seq.empty
-                    case Some(name) => Seq((name, element))
-                    case None => Seq.empty
+                    case name => Seq((name, element))
                   }
                 }
 

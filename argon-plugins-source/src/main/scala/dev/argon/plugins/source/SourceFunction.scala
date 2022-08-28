@@ -50,6 +50,7 @@ object SourceFunction {
         sigEnv.map { _._1 }
       
       override def purity: Boolean = stmt.purity
+      override def isGiven: Boolean = stmt.modifiers.exists { _.value == parser.GivenModifier }
 
       override def implementation: Comp[FunctionImplementation] =
         implCell.get(

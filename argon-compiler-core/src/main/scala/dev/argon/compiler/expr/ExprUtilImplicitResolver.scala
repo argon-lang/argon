@@ -5,7 +5,7 @@ import dev.argon.compiler.module.{ModuleElementC, ModulePath}
 import dev.argon.compiler.signature.*
 import dev.argon.expr.*
 import dev.argon.parser
-import dev.argon.parser.IdentifierExpr
+import dev.argon.parser.{FunctionParameterListType, IdentifierExpr}
 import dev.argon.util.UniqueIdentifier
 import dev.argon.util.{*, given}
 import dev.argon.prover.Proof
@@ -18,16 +18,24 @@ trait ExprUtilImplicitResolver
     with ExprUtilHoleResolver
     with ExprUtilImports
 {
-  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr, ClassResult, TraitResult}
+  import exprContext.{
+    ArExpr,
+    ExprConstructor,
+    WrapExpr,
+    ClassResult,
+    TraitResult,
+    Variable,
+    ParameterVariable,
+    LocalVariable,
+    InstanceVariable,
+  }
 
-  val fuel: Int = 6
+  val fuel: Int = 100
 
 
   final lazy val implicitResolver: ImplicitResolver[context.Env, context.Error] { val exprContext: ExprUtilImplicitResolver.this.exprContext.type } =
     new ImplicitResolver[context.Env, context.Error] {
       override val exprContext: ExprUtilImplicitResolver.this.exprContext.type = ExprUtilImplicitResolver.this.exprContext
-
-      import exprContext.{WrapExpr, ArExpr, ExprConstructor, Variable, LocalVariable, ParameterVariable, InstanceVariable}
 
       override def createHole: Comp[UniqueIdentifier] = UniqueIdentifier.make
 
@@ -254,16 +262,66 @@ trait ExprUtilImplicitResolver
           val loadVar = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(variable), EmptyTuple))
           val assertion = implicitResolver.Assertion(loadVar, variable.varType)
           ZIO.succeed(assertion)
+
+        case ImplicitValue.OfFunction(function) =>
+          def buildCall(sig: Signature[WrapExpr, WrapExpr], args: Seq[WrapExpr]): Comp[implicitResolver.Assertion] =
+            sig match
+              case Signature.Parameter(FunctionParameterListType.InferrableList | FunctionParameterListType.InferrableList2, isErased, paramName, paramType, next) =>
+                val variable = ParameterVariable(function, args.size, paramType, isErased, paramName)
+                for
+                  hole <- UniqueIdentifier.make
+                  holeExpr = WrapExpr.OfHole(hole)
+                  nextSubst = substituteSignature(variable)(holeExpr)(functionSigHandler)(next)
+
+                  assertion <- buildCall(nextSubst, args :+ holeExpr)
+                yield assertion
+
+              case Signature.Parameter(FunctionParameterListType.RequiresList, _, paramName, paramType, next) =>
+                for
+                  varId <- UniqueIdentifier.make
+                  local = LocalVariable(varId, paramType, paramName, isMutable = false)
+                  loadLocal = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(local), EmptyTuple))
+                  implicitResolver.Assertion(witness, assertionType) <- buildCall(next, args :+ loadLocal)
+                yield implicitResolver.Assertion(
+                  witness = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadLambda(local), witness)),
+                  assertionType = WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionType, (paramType, assertionType)))
+                )
+
+              case Signature.Parameter(FunctionParameterListType.NormalList, _, _, paramType, next) => ???
+
+              case Signature.Result(resultType) =>
+                ZIO.succeed(implicitResolver.Assertion(
+                  witness = WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionCall(function), args)),
+                  assertionType = resultType
+                ))
+            end match
+
+          function.signature.flatMap { sig =>
+            val sig2 = convertSig(functionSigHandler)(sig)
+            buildCall(sig2, Seq())
+          }
+
+      }
+
+    val assertions =
+      env.implicitSource.givenAssertions.flatMap { assertions =>
+        ZIO.foreach(assertions)(buildImplicits)
       }
 
     for
-      assertions <- ZIO.foreach(env.implicitSource.implicits)(buildImplicits)
       resolved <- implicitResolver.tryResolve(t, env.model, assertions, fuel)
       res <- ZIO.foreach(resolved) {
         case implicitResolver.ResolvedImplicit(proof, model) =>
           def extractProof(proof: Proof[WrapExpr]): Comp[WrapExpr] =
             proof match {
               case Proof.Atomic(expr) => ZIO.succeed(expr)
+
+              case Proof.ModusPonens(implication, premise) =>
+                for
+                  implication <- extractProof(implication)
+                  premise <- extractProof(premise)
+                yield WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionObjectCall, (implication, premise)))
+
               case _ =>
                 // TODO: Implement actual types for these proofs
                 ZIO.succeed(WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple)))

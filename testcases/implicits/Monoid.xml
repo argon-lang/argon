@@ -1,0 +1,38 @@
+<ArgonTest>
+
+    <Name>Monoid</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        sealed trait List (T: type) <: Object
+        end
+
+        sealed trait Monoid (T: type) <: Object
+        end
+
+        class IntMonoid <: Monoid Int
+            public def new()
+            end
+        end
+
+        class ListMonoid (T: type) <: Monoid (List T)
+            public def new()
+            end
+        end
+
+        given def intMonoid: Monoid Int = IntMonoid.new()
+        given def listMonoid [T: type] (requires tMonoid: Monoid T): Monoid (List T) = ListMonoid(T).new()
+
+        proc main(): () do
+            assert Monoid (List Int)
+            assert Monoid (List (List Int))
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput></ExpectedOutput>
+
+</ArgonTest>

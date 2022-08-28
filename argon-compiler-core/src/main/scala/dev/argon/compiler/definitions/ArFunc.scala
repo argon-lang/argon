@@ -14,6 +14,7 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
   def signature: Comp[Signature[WrapExpr, WrapExpr]]
   
   def purity: Boolean
+  def isGiven: Boolean
 
   type ImplementationType = IsDeclaration match {
     case true => Comp[FunctionImplementation]

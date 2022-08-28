@@ -116,6 +116,10 @@ object Token {
     override def modifier: Modifier = OverrideModifier
   }
 
+  case object KW_GIVEN extends TokenWithCategory(TokenCategory.KW_GIVEN) with ModifierToken {
+    override def modifier: Modifier = GivenModifier
+  }
+
   case object KW_FINAL extends TokenWithCategory(TokenCategory.KW_FINAL) with Token
   case object KW_TYPE extends TokenWithCategory(TokenCategory.KW_TYPE) with Token
   case object KW_METATYPE extends TokenWithCategory(TokenCategory.KW_METATYPE) with Token
@@ -142,7 +146,6 @@ object Token {
   case object KW_MAINTAINS extends TokenWithCategory(TokenCategory.KW_MAINTAINS) with Token
   case object KW_ASSERT extends TokenWithCategory(TokenCategory.KW_ASSERT) with Token
   case object KW_SUMMON extends TokenWithCategory(TokenCategory.KW_SUMMON) with Token
-  case object KW_GIVEN extends TokenWithCategory(TokenCategory.KW_GIVEN) with Token
   case object KW_EXTENSION extends TokenWithCategory(TokenCategory.KW_EXTENSION) with Token
   case object KW_INVERSE extends TokenWithCategory(TokenCategory.KW_INVERSE) with Token
   case object KW_UPDATE extends TokenWithCategory(TokenCategory.KW_UPDATE) with Token
