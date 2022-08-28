@@ -116,7 +116,7 @@ object Token {
     override def modifier: Modifier = OverrideModifier
   }
 
-  case object KW_GIVEN extends TokenWithCategory(TokenCategory.KW_GIVEN) with ModifierToken {
+  case object KW_PROOF extends TokenWithCategory(TokenCategory.KW_PROOF) with ModifierToken {
     override def modifier: Modifier = GivenModifier
   }
 

@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Local given summon</Name>
+    <Name>Local proof assert</Name>
 
     <InputSource name="index.argon"><![CDATA[
 
@@ -14,17 +14,14 @@
             end
         end
 
-        proc printEven(n: Int) (even: IsEven n): () =
-            puts (n.to_s())
-
         proc main(): () do
-            given val zeroIsEven: IsEven 0 = ZeroIsEven.new()
-            printEven 0 (summon IsEven 0)
+            proof val zeroIsEven: IsEven 0 = ZeroIsEven.new()
+            assert IsEven 0
         end
 
 
     ]]></InputSource>
 
-    <ExpectedOutput>0</ExpectedOutput>
+    <ExpectedOutput></ExpectedOutput>
 
 </ArgonTest>

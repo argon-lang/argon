@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Different module given</Name>
+    <Name>Different module proof</Name>
 
     <InputSource name="index.argon"><![CDATA[
 
@@ -29,7 +29,7 @@
             end
         end
 
-        public given def zeroIsEven: IsEven 0 = ZeroIsEven.new()
+        public proof def zeroIsEven: IsEven 0 = ZeroIsEven.new()
 
 
     ]]></InputSource>

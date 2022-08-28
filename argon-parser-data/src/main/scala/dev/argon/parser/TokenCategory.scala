@@ -72,7 +72,7 @@ object TokenCategory {
   case object KW_MAINTAINS extends TokenCategory
   case object KW_ASSERT extends TokenCategory
   case object KW_SUMMON extends TokenCategory
-  case object KW_GIVEN extends TokenCategory
+  case object KW_PROOF extends TokenCategory
   case object KW_EXTENSION extends TokenCategory
   case object KW_INVERSE extends TokenCategory
   case object KW_UPDATE extends TokenCategory

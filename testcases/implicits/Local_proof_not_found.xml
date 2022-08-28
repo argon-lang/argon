@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Local given not found</Name>
+    <Name>Local proof not found</Name>
 
     <InputSource name="index.argon"><![CDATA[
 
@@ -18,7 +18,7 @@
             puts (n.to_s())
 
         proc main(): () do
-            given val zeroIsEven: IsEven 0 = ZeroIsEven.new()
+            proof val zeroIsEven: IsEven 0 = ZeroIsEven.new()
             printEven 1
         end
 

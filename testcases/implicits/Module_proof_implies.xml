@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Module given</Name>
+    <Name>Module proof implies</Name>
 
     <InputSource name="index.argon"><![CDATA[
 
@@ -19,9 +19,9 @@
             end
         end
 
-        given def zeroIsEven: IsEven 0 = ZeroIsEven.new()
+        proof def zeroIsEven: IsEven 0 = ZeroIsEven.new()
 
-        given def twoIsEven (requires z: IsEven 0): IsEven 2 = TwoIsEven.new()
+        proof def twoIsEven (requires z: IsEven 0): IsEven 2 = TwoIsEven.new()
 
         proc printEven(n: Int) (requires even: IsEven n): () =
             puts (n.to_s())

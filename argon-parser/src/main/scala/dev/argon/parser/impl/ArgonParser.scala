@@ -553,7 +553,7 @@ object ArgonParser {
             matchToken(KW_VAR) --> const(true)
 
         case Rule.VariableDeclaration =>
-          matchToken(KW_GIVEN).? ++
+          matchToken(KW_PROOF).? ++
             rule(Rule.VariableMutSpec) ++! (
               rule(Rule.IdentifierOptional) ++
                 ((matchToken(OP_COLON) ++ rule(Rule.Type).observeSource --> second) ?) ++
@@ -604,7 +604,7 @@ object ArgonParser {
               ruleModifier(KW_OVERRIDE) |
               ruleModifier(KW_SEALED) |
               ruleModifier(KW_OPEN) |
-              ruleModifier(KW_GIVEN)
+              ruleModifier(KW_PROOF)
 
           (anyModifier.observeSource *) --> { _.toVector }
 
