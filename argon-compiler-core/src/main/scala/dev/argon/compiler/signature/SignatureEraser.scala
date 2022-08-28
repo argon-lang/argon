@@ -5,7 +5,7 @@ import dev.argon.compiler.expr.CompleteExprContext
 import zio.*
 
 trait SignatureEraser extends UsingContext {
-  import context.ExprContext.{WrapExpr, ExprConstructor, ArExpr}
+  import context.ExprContext.{WrapExpr, ExprConstructor, ArExpr, FunctionResult}
 
   private def getErasedSigType(t: WrapExpr): Comp[ErasedSignatureType] =
     t match
@@ -80,10 +80,10 @@ trait SignatureEraser extends UsingContext {
       ZIO.succeed(ErasedSignatureNoResult(params))
     }
 
-  def erasedWithResult(sig: Signature[WrapExpr, WrapExpr]): Comp[ErasedSignature] =
+  def erasedWithResult(sig: Signature[WrapExpr, FunctionResult]): Comp[ErasedSignature] =
     erasedImpl(Seq.empty, sig) { (params, res) =>
       for
-        erased <- getErasedSigType(res)
+        erased <- getErasedSigType(res.returnType)
       yield ErasedSignatureWithResult(params, erased)
     }
 

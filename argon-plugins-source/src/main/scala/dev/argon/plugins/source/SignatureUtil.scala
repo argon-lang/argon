@@ -257,13 +257,24 @@ object SignatureUtil {
   def createFunctionResult
   (context: Context)
   (exprConverter: ExpressionConverter & HasContext[context.type])
-  (returnTypeExpr: WithSource[parser.Expr])
+  (returnTypeExpr: WithSource[parser.ReturnTypeSpecifier])
   (env: exprConverter.Env, opt: exprConverter.ExprOptions)
-  : context.Comp[context.ExprContext.WrapExpr] =
-    exprConverter.convertExpr(returnTypeExpr)
-      .check(env, opt.forTypeExpr, exprConverter.anyType)
-      .flatMap { exprResult => exprConverter.resolveHoles(exprResult.env, exprResult.expr) }
-      .map { _._1 }
+  : context.Comp[context.ExprContext.FunctionResult] =
+    Ref.make(env).flatMap { envRef =>
+      def convertExprResolved(expr: WithSource[parser.Expr]): context.Comp[context.ExprContext.WrapExpr] =
+        for
+          env <- envRef.get
+          exprConverter.ExprResult(convExpr, env) <- exprConverter.convertExpr(expr).check(env, opt.forTypeExpr, exprConverter.anyType)
+          (resolvedExpr, env) <- exprConverter.resolveHoles(env, convExpr)
+          _ <- envRef.set(env)
+        yield resolvedExpr
+
+      for
+        returnType <- convertExprResolved(returnTypeExpr.value.returnType)
+        ensuresClauses <- ZIO.foreach(returnTypeExpr.value.ensuresClauses)(convertExprResolved)
+      yield context.ExprContext.FunctionResult(returnType, ensuresClauses)
+    }
+
 
 
   def createAccessToken(exprConverter: ExpressionConverter)(owner: exprConverter.exprContext.ParameterVariableOwner): exprConverter.AccessToken =

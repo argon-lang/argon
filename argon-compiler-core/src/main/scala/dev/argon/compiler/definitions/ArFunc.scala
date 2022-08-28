@@ -11,7 +11,7 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
   override val owner: ArFuncC.Ownership[context.type]
 
   val id: UniqueIdentifier
-  def signature: Comp[Signature[WrapExpr, WrapExpr]]
+  def signature: Comp[Signature[WrapExpr, FunctionResult]]
   
   def purity: Boolean
   def isGiven: Boolean

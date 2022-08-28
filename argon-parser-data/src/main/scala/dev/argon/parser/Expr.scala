@@ -41,9 +41,9 @@ final case class ClassDeclarationStmt
 
 final case class FunctionDeclarationStmt
   (
-    name: Option[IdentifierExpr],
+    name: WithSource[Option[IdentifierExpr]],
     parameters: Vector[WithSource[FunctionParameterList]],
-    returnType: WithSource[Expr],
+    returnType: WithSource[ReturnTypeSpecifier],
     body: WithSource[Expr],
     modifiers: Vector[WithSource[Modifier]],
     purity: Boolean,
@@ -52,9 +52,9 @@ final case class FunctionDeclarationStmt
 final case class MethodDeclarationStmt
   (
     instanceName: Option[IdentifierExpr],
-    name: Option[IdentifierExpr],
+    name: WithSource[Option[IdentifierExpr]],
     parameters: Vector[WithSource[FunctionParameterList]],
-    returnType: WithSource[Expr],
+    returnType: WithSource[ReturnTypeSpecifier],
     body: Option[WithSource[Expr]],
     modifiers: Vector[WithSource[Modifier]],
     purity: Boolean,
@@ -164,6 +164,12 @@ final case class TypeTestPattern(name: Option[IdentifierExpr], patternType: With
 
 final case class FunctionParameter
   (paramType: WithSource[Expr], name: IdentifierExpr)
+
+final case class ReturnTypeSpecifier
+(
+  returnType: WithSource[Expr],
+  ensuresClauses: Seq[WithSource[Expr]],
+)
 
 final case class FunctionParameterList
 (

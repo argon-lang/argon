@@ -5,7 +5,7 @@ import dev.argon.util.{*, given}
 import zio.*
 
 trait ExprUtilSubstitution extends ExprUtilBase {
-  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr, ClassResult, TraitResult}
+  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr, ClassResult, TraitResult, FunctionResult}
 
 
   // Returns the possibly modified expression and the stable version of it
@@ -209,15 +209,22 @@ trait ExprUtilSubstitution extends ExprUtilBase {
     def resultReferences(variable: Variable)(res: Res): Comp[Boolean]
   }
 
-  protected trait FunctionSigHandlerBase extends SignatureHandler[WrapExpr] :
-    override def substituteResultMany(subst: Map[Variable, WrapExpr])(res: WrapExpr): WrapExpr =
-      substituteWrapExprMany(subst)(res)
+  protected trait FunctionSigHandlerBase extends SignatureHandler[FunctionResult]:
+    override def substituteResultMany(subst: Map[Variable, WrapExpr])(res: FunctionResult): FunctionResult =
+      FunctionResult(
+        returnType = substituteWrapExprMany(subst)(res.returnType),
+        ensuresClauses = res.ensuresClauses.map(substituteWrapExprMany(subst))
+      )
 
-    override def resultReferences(variable: Variable)(res: WrapExpr): Comp[Boolean] =
-      ZIO.succeed(referencesVariable(variable)(res))
+
+    override def resultReferences(variable: Variable)(res: FunctionResult): Comp[Boolean] =
+      ZIO.succeed(
+        referencesVariable(variable)(res.returnType) ||
+          res.ensuresClauses.exists(referencesVariable(variable))
+      )
   end FunctionSigHandlerBase
 
-  val functionSigHandler: SignatureHandler[WrapExpr] = new FunctionSigHandlerBase {}
+  val functionSigHandler: SignatureHandler[FunctionResult] = new FunctionSigHandlerBase {}
 
   protected trait ClassSigHandlerBase extends SignatureHandler[ClassResult] :
     override def substituteResultMany(subst: Map[Variable, WrapExpr])(res: ClassResult): ClassResult =

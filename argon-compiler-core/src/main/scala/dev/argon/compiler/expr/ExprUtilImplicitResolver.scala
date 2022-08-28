@@ -24,6 +24,7 @@ trait ExprUtilImplicitResolver
     WrapExpr,
     ClassResult,
     TraitResult,
+    FunctionResult,
     Variable,
     ParameterVariable,
     LocalVariable,
@@ -264,7 +265,7 @@ trait ExprUtilImplicitResolver
           ZIO.succeed(assertion)
 
         case ImplicitValue.OfFunction(function) =>
-          def buildCall(sig: Signature[WrapExpr, WrapExpr], args: Seq[WrapExpr]): Comp[implicitResolver.Assertion] =
+          def buildCall(sig: Signature[WrapExpr, FunctionResult], args: Seq[WrapExpr]): Comp[implicitResolver.Assertion] =
             sig match
               case Signature.Parameter(FunctionParameterListType.InferrableList | FunctionParameterListType.InferrableList2, isErased, paramName, paramType, next) =>
                 val variable = ParameterVariable(function, args.size, paramType, isErased, paramName)
@@ -276,10 +277,10 @@ trait ExprUtilImplicitResolver
                   assertion <- buildCall(nextSubst, args :+ holeExpr)
                 yield assertion
 
-              case Signature.Parameter(FunctionParameterListType.RequiresList, _, paramName, paramType, next) =>
+              case Signature.Parameter(FunctionParameterListType.RequiresList, isErased, paramName, paramType, next) =>
                 for
                   varId <- UniqueIdentifier.make
-                  local = LocalVariable(varId, paramType, paramName, isMutable = false)
+                  local = LocalVariable(varId, paramType, paramName, isMutable = false, isErased = isErased)
                   loadLocal = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(local), EmptyTuple))
                   implicitResolver.Assertion(witness, assertionType) <- buildCall(next, args :+ loadLocal)
                 yield implicitResolver.Assertion(
@@ -292,7 +293,7 @@ trait ExprUtilImplicitResolver
               case Signature.Result(resultType) =>
                 ZIO.succeed(implicitResolver.Assertion(
                   witness = WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionCall(function), args)),
-                  assertionType = resultType
+                  assertionType = resultType.returnType,
                 ))
             end match
 

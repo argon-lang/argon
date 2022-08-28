@@ -139,7 +139,7 @@ object Token {
   case object KW_RAISE extends TokenWithCategory(TokenCategory.KW_RAISE) with Token
   case object KW_BEGIN extends TokenWithCategory(TokenCategory.KW_BEGIN) with Token
   case object KW_RESCUE extends TokenWithCategory(TokenCategory.KW_RESCUE) with Token
-  case object KW_ENSURE extends TokenWithCategory(TokenCategory.KW_ENSURE) with Token
+  case object KW_FINALLY extends TokenWithCategory(TokenCategory.KW_FINALLY) with Token
   case object KW_ERASED extends TokenWithCategory(TokenCategory.KW_ERASED) with Token
   case object KW_REQUIRES extends TokenWithCategory(TokenCategory.KW_REQUIRES) with Token
   case object KW_ENSURES extends TokenWithCategory(TokenCategory.KW_ENSURES) with Token

@@ -11,7 +11,7 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
   override val owner: ArMethodC.Ownership[context.type]
 
   val id: UniqueIdentifier
-  def signatureUnsubstituted: Comp[Signature[WrapExpr, WrapExpr]]
+  def signatureUnsubstituted: Comp[Signature[WrapExpr, FunctionResult]]
 
   def isAbstract: Boolean
   def isImplicitOverride: Boolean

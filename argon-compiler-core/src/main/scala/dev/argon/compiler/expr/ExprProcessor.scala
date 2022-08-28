@@ -248,7 +248,13 @@ abstract class ExprProcessor[F[+_]: Monad] extends UsingContext {
   def processLocalVariable(variable: ec1.LocalVariable): F[ec2.LocalVariable] =
     for {
       varType2 <- processWrapExpr(variable.varType)
-    } yield ec2.LocalVariable(variable.id, varType2, variable.name, variable.isMutable)
+    } yield ec2.LocalVariable(
+      variable.id,
+      varType2,
+      variable.name,
+      isMutable = variable.isMutable,
+      isErased = variable.isErased,
+    )
 
   def processMemberVariable(variable: ec1.MemberVariable): F[ec2.MemberVariable] =
     for {

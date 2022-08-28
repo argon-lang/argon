@@ -30,6 +30,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     ParameterVariableOwner,
     InstanceVariable,
     MemberVariable,
+    FunctionResult,
   }
 
   import context.VT
@@ -751,7 +752,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     ZIO.foreach(vtable.methodMap.toSeq) {
       case (slotMethod, VT.VTableEntry(name, _, slotInstanceType, _, VT.VTableEntryMethod(implMethod, implInstanceType))) =>
         for
-          origSlogSig <- slotMethod.signatureUnsubstituted : Comp[Signature[WrapExpr, WrapExpr]]
+          origSlogSig <- slotMethod.signatureUnsubstituted : Comp[Signature[WrapExpr, FunctionResult]]
           slotSigErased <- SignatureEraser(context).erasedWithResult(origSlogSig)
 
           implSig <- implMethod.signatureUnsubstituted

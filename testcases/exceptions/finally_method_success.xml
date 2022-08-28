@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Ensure for Method on Success</Name>
+    <Name>Finally for Method on Success</Name>
 
 
     <InputSource name="index.argon">
@@ -9,7 +9,7 @@
         
         proc add(a: Int, b: Int): Int do
             a + b
-        ensure
+        finally
             puts 'Hello'
         end
         

@@ -1,0 +1,47 @@
+<ArgonTest>
+
+    <Name>Ensures function</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        sealed trait IsEven (n: Int) <: Object
+        end
+
+        class ZeroIsEven <: IsEven 0
+            public def new()
+            end
+        end
+
+        class TwoIsEven <: IsEven 2
+            public def new()
+            end
+        end
+
+        def proveZeroTwoEven: ()
+            ensures IsEven 0
+            ensures IsEven 2
+        do
+            proof val zeroIsEven: IsEven 0 = ZeroIsEven.new()
+            proof val twoIsEven: IsEven 2 = TwoIsEven.new()
+        end
+
+        proc printEven(n: Int) (requires erased even: IsEven n): () =
+            puts (n.to_s())
+
+        proc main(): () do
+            proveZeroTwoEven
+            printEven 0
+            printEven 2
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        0
+        2
+    </ExpectedOutput>
+
+</ArgonTest>

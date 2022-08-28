@@ -12,7 +12,7 @@ trait ExprUtilHoleResolver
     with ExprUtilOptions
     with ExprUtilSubstitution
 {
-  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr, ClassResult, TraitResult}
+  import exprContext.{ArExpr, ExprConstructor, Variable, WrapExpr, ClassResult, TraitResult, FunctionResult}
 
   private class HoleResolver(envRef: Ref.Synchronized[Env]) extends ExprProcessor[Comp] {
     override val context: ExprUtilHoleResolver.this.context.type = ExprUtilHoleResolver.this.context
@@ -87,10 +87,14 @@ trait ExprUtilHoleResolver
   }
 
 
-  override val functionSigHandler: SignatureHandlerPlus[context.ExprContext.WrapExpr, WrapExpr] =
-    new SignatureHandlerPlus[context.ExprContext.WrapExpr, WrapExpr] with FunctionSigHandlerBase:
-      override def convertResult(res: context.ExprContext.WrapExpr): WrapExpr =
-        ExprToHolesConverter(context)(exprContext).processWrapExpr(res)
+  override val functionSigHandler: SignatureHandlerPlus[context.ExprContext.FunctionResult, FunctionResult] =
+    new SignatureHandlerPlus[context.ExprContext.FunctionResult, FunctionResult] with FunctionSigHandlerBase:
+      override def convertResult(res: context.ExprContext.FunctionResult): FunctionResult =
+        FunctionResult(
+          returnType = ExprToHolesConverter(context)(exprContext).processWrapExpr(res.returnType),
+          ensuresClauses = res.ensuresClauses.map(ExprToHolesConverter(context)(exprContext).processWrapExpr),
+        )
+
     end new
 
 

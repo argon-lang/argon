@@ -102,6 +102,7 @@ object ArgonParser {
     case object MethodParameter extends ArgonRuleName[FunctionParameter]
     case object MethodParameterList extends ArgonRuleName[(Vector[WithSource[FunctionParameter]], Boolean)]
     case object MethodParameters extends ArgonRuleName[Vector[WithSource[FunctionParameterList]]]
+    case object MethodReturnType extends ArgonRuleName[ReturnTypeSpecifier]
     case object MethodBody extends ArgonRuleName[Expr]
     case object BlockBody extends ArgonRuleName[BlockExpr]
     case object MethodPurity extends ArgonRuleName[Boolean]
@@ -677,6 +678,19 @@ object ArgonParser {
               )
           ).observeSource *) --> { _.toVector }
 
+        case Rule.MethodReturnType =>
+          rule(Rule.Type).observeSource ++
+            (
+              rule(Rule.NewLines) ++
+                matchToken(KW_ENSURES) ++! (
+                rule(Rule.NewLines) ++
+                  rule(Rule.Type).observeSource
+              ) --> { case (_, _, (_, t)) => t }
+            ).* --> {
+            case (returnType, ensuresClauses) =>
+              ReturnTypeSpecifier(returnType, ensuresClauses)
+          }
+
         case Rule.MethodBody =>
           matchToken(KW_DO) ++! (rule(Rule.BlockBody) ++ matchToken(KW_END)) --> { case (_, (body, _)) => body: T } |
             matchToken(OP_EQUALS) ++! (rule(Rule.NewLines) ++ rule(Rule.Expression)) --> { case (_, (_, expr)) => expr }
@@ -687,7 +701,7 @@ object ArgonParser {
               Rule.StatementList
             ).observeSource)).* ++
             (matchToken(KW_ELSE) ++! rule(Rule.StatementList).observeSource).? ++
-            (matchToken(KW_ENSURE) ++! rule(Rule.StatementList).observeSource).? --> {
+            (matchToken(KW_FINALLY) ++! rule(Rule.StatementList).observeSource).? --> {
               case (body, rescueCases, elseBody, ensureBody) =>
                 BlockExpr(
                   body,
@@ -707,12 +721,12 @@ object ArgonParser {
         case Rule.FunctionDefinitionStmt =>
           rule(Rule.Modifiers) ++
             rule(Rule.MethodPurity) ++
-            rule(Rule.IdentifierOptional) ++
+            rule(Rule.IdentifierOptional).observeSource ++
             rule(Rule.NewLines) ++
             rule(Rule.MethodParameters) ++! (
               matchToken(OP_COLON) ++
                 rule(Rule.NewLines) ++
-                rule(Rule.Type).observeSource ++
+                rule(Rule.MethodReturnType).observeSource ++
                 rule(Rule.NewLines) ++
                 rule(Rule.MethodBody).observeSource
             ) --> {
@@ -727,12 +741,12 @@ object ArgonParser {
             rule(Rule.NewLines) ++
             matchToken(OP_DOT) ++
             rule(Rule.NewLines) ++
-            rule(Rule.MethodName) ++! (
+            rule(Rule.MethodName).observeSource ++! (
               rule(Rule.NewLines) ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_COLON) ++
                 rule(Rule.NewLines) ++
-                rule(Rule.Type).observeSource ++
+                rule(Rule.MethodReturnType).observeSource ++
                 rule(Rule.NewLines) ++
                 (rule(Rule.MethodBody).observeSource ?)
             ) --> {

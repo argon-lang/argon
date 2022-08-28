@@ -7,10 +7,10 @@ import dev.argon.util.{*, given}
 
 trait VTableContext extends UsingContext {
 
-  import context.ExprContext.{WrapExpr, ExprConstructor}
+  import context.ExprContext.{WrapExpr, ExprConstructor, FunctionResult}
   import ExprConstructor.MethodCallOwnerType
 
-  type EntrySignature = Signature[WrapExpr, WrapExpr]
+  type EntrySignature = Signature[WrapExpr, FunctionResult]
 
   final case class VTableEntry(name: Option[IdentifierExpr], signature: EntrySignature, slotInstanceType: MethodCallOwnerType, entrySource: EntrySource, impl: VTableEntryImpl)
 

@@ -65,7 +65,7 @@ object TokenCategory {
   case object KW_RAISE extends TokenCategory
   case object KW_BEGIN extends TokenCategory
   case object KW_RESCUE extends TokenCategory
-  case object KW_ENSURE extends TokenCategory
+  case object KW_FINALLY extends TokenCategory
   case object KW_ERASED extends TokenCategory
   case object KW_REQUIRES extends TokenCategory
   case object KW_ENSURES extends TokenCategory

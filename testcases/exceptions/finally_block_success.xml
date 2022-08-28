@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Ensure for block on Success</Name>
+    <Name>Finally for block on Success</Name>
 
 
     <InputSource name="index.argon">
@@ -10,7 +10,7 @@
         proc add(a: Int, b: Int): Int do
             begin
                 a + b
-            ensure
+            finally
                 puts 'Hello'
             end
         end

@@ -116,7 +116,7 @@ object SourceModule {
           case stmt: FunctionDeclarationStmt =>
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
-              owner = OwnedByModuleC[context.type](currentModule, stmt.name, modifier)
+              owner = OwnedByModuleC[context.type](currentModule, stmt.name.value, modifier)
               func <- SourceFunction.make(context)(exprConverter)(env)(owner)(stmt)
             yield (imports, Seq(ModuleElementC.FunctionElement(func)))
 

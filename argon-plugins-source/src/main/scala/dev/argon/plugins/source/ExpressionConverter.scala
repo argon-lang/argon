@@ -114,14 +114,14 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                       id <- UniqueIdentifier.make
                       tRes <- convertExpr(varType).check(env, opt.forTypeExpr, anyType)
                       value <- convertExpr(varDecl.value).check(tRes.env, opt, tRes.expr)
-                      localVar = LocalVariable(id, tRes.expr, varDecl.name, varDecl.isMutable)
+                      localVar = LocalVariable(id, tRes.expr, varDecl.name, varDecl.isMutable, isErased = false)
                     } yield (localVar, value.expr, value.env)
 
                   case None =>
                     for {
                       id <- UniqueIdentifier.make
                       value <- convertExpr(varDecl.value).synth(env, opt)
-                      localVar = LocalVariable(id, value.exprType, varDecl.name, varDecl.isMutable)
+                      localVar = LocalVariable(id, value.exprType, varDecl.name, varDecl.isMutable, isErased = false)
                     } yield (localVar, value.expr, value.env)
                 }
 
@@ -389,7 +389,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                     val (argType, resType) = normalizedType.getArgs(funcTypeCtor)
                     for {
                       id <- UniqueIdentifier.make
-                      paramVar = LocalVariable(id, argType, varName, isMutable = false)
+                      paramVar = LocalVariable(id, argType, varName, isMutable = false, isErased = false)
                       bodyRes <- convertExpr(body).check(env.withScope(_.addVariable(paramVar)), opt.requirePure, resType)
                       e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadLambda(paramVar), bodyRes.expr))
                     } yield ExprResult(e, bodyRes.env)
@@ -618,6 +618,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                 t,
                 name = None,
                 isMutable = false,
+                isErased = true,
               )
             yield ExprTypeResult(
               WrapExpr.OfExpr(ArExpr(ExprConstructor.BindVariable(variable), value)),
@@ -925,11 +926,11 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         case (Nil, sig @ Signature.Parameter(_, _, _, _, _)) =>
           def impl(args: Seq[WrapExpr], sig: Signature[WrapExpr, Res]): Comp[ExprTypeResult] =
             sig match {
-              case Signature.Parameter(_, false, _, paramType, next) =>
+              case Signature.Parameter(_, isErased, _, paramType, next) =>
                 val variable = ParameterVariable(owner, args.size, paramType, false, None)
                 for
                   newVarId <- UniqueIdentifier.make
-                  newVar = LocalVariable(newVarId, paramType, None, false)
+                  newVar = LocalVariable(newVarId, paramType, None, isMutable = false, isErased = isErased)
                   newVarExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(newVar), EmptyTuple))
 
                   (next, resultExpr) <- substituteArg(variable)(newVarExpr)(sigHandler)(next)
@@ -940,8 +941,6 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                   inner.env,
                   WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionType, (paramType, inner.exprType)))
                 )
-
-              case Signature.Parameter(_, true, _, _, _) => ???
 
               case Signature.Result(result) =>
                 f(env, opt, args, result)
@@ -1142,13 +1141,20 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
             }
 
           case ModuleElementC.FunctionElement(func) =>
-            createSigResultConv(func, env, opt, func.signature, args)(functionSigHandler) { (env, opt, args, returnType) =>
+            createSigResultConv(func, env, opt, func.signature, args)(functionSigHandler) { (env, opt, args, res) =>
               if opt.checkPurity(func.purity) then
-                ZIO.succeed(ExprTypeResult(
+                for
+                  env <- ZIO.foldLeft(res.ensuresClauses)(env) { (env, ensuresType) =>
+                    for
+                      varId <- UniqueIdentifier.make
+                      local = LocalVariable(varId, ensuresType, name = None, isMutable = false, isErased = false)
+                    yield env.withImplicitSource(_.addVariable(local))
+                  }
+                yield ExprTypeResult(
                   WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionCall(func), args)),
                   env,
-                  returnType,
-                ))
+                  res.returnType,
+                )
               else
                 ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
             }
@@ -1323,13 +1329,20 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               sig <- substituteInstanceTypeArgs(functionSigHandler)(callOwnerType, sig)
               (sig, stableInstance) <- substituteArg(thisVar)(instance)(functionSigHandler)(sig)
               result <- createSigResult(method, env, opt, sig, args.toList, Vector.empty)(functionSigHandler) {
-                (env, opt, args, returnType) =>
+                (env, opt, args, res) =>
                   if opt.checkPurity(method.purity) then
-                    ZIO.succeed(ExprTypeResult(
+                    for
+                      env <- ZIO.foldLeft(res.ensuresClauses)(env) { (env, ensuresType) =>
+                        for
+                          varId <- UniqueIdentifier.make
+                          local = LocalVariable(varId, ensuresType, name = None, isMutable = false, isErased = false)
+                        yield env.withImplicitSource(_.addVariable(local))
+                      }
+                    yield ExprTypeResult(
                       WrapExpr.OfExpr(ArExpr(ExprConstructor.MethodCall(method), (stableInstance, callOwnerType, args))),
                       env,
-                      returnType,
-                    ))
+                      res.returnType,
+                    )
                   else
                     ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
               }

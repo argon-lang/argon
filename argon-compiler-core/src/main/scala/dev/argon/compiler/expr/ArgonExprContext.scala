@@ -44,9 +44,8 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
       override val varType: WrapExpr,
       override val name: Option[IdentifierExpr],
       override val isMutable: Boolean,
+      override val isErased: Boolean,
     ) extends Variable {
-
-    override def isErased: Boolean = false
 
     override def equals(obj: Any): Boolean =
       obj.asInstanceOf[Matchable] match {
@@ -132,6 +131,12 @@ abstract class ArgonExprContext extends ExprContext with UsingContext {
   (
     traitTypeSuperType: WrapExpr,
     baseTraits: Comp[Seq[ArExpr[ExprConstructor.TraitType]]],
+  )
+
+  final case class FunctionResult
+  (
+    returnType: WrapExpr,
+    ensuresClauses: Seq[WrapExpr],
   )
 
 }

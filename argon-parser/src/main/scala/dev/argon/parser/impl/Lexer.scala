@@ -318,7 +318,7 @@ object Lexer {
               case "raise" => Token.KW_RAISE
               case "begin" => Token.KW_BEGIN
               case "rescue" => Token.KW_RESCUE
-              case "ensure" => Token.KW_ENSURE
+              case "finally" => Token.KW_FINALLY
               case "erased" => Token.KW_ERASED
               case "requires" => Token.KW_REQUIRES
               case "ensures" => Token.KW_ENSURES

@@ -61,7 +61,7 @@ object VTableBuilder {
           implicitSource = exprUtil.ImplicitSource.empty,
         )
 
-        def impl(sig: Signature[holesExprContext.WrapExpr, holesExprContext.WrapExpr], slotSig: Signature[holesExprContext.WrapExpr, holesExprContext.WrapExpr], index: Int): Comp[Boolean] =
+        def impl(sig: Signature[holesExprContext.WrapExpr, holesExprContext.FunctionResult], slotSig: Signature[holesExprContext.WrapExpr, holesExprContext.FunctionResult], index: Int): Comp[Boolean] =
           (sig, slotSig) match {
             case (aParam @ Signature.Parameter(_, _, _, _, _), bParam @ Signature.Parameter(_, _, _, _, _)) =>
               exprUtil.isSubType(emptyEnv, aParam.paramType, bParam.paramType).map { _.isDefined }
@@ -81,7 +81,12 @@ object VTableBuilder {
                 }
 
             case (Signature.Result(aResult), Signature.Result(bResult)) =>
-              exprUtil.isSubType(emptyEnv, aResult, bResult).map { _.isDefined }
+              exprUtil.isSubType(emptyEnv, aResult.returnType, bResult.returnType).map { _.isDefined } &&
+                ZIO.forall(bResult.ensuresClauses) { expectedClause =>
+                  ZIO.exists(aResult.ensuresClauses) { overridingClause =>
+                    exprUtil.isSubType(emptyEnv, overridingClause, expectedClause).map { _.isDefined }
+                  }
+                }
 
             case _ => ZIO.succeed(false)
           }

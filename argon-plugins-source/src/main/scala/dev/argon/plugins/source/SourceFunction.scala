@@ -23,19 +23,19 @@ object SourceFunction {
 
       innerEnvCell <- MemoCell.make[ctx.Env, ctx.Error, exprConverter.Env]
 
-      sigCell <- MemoCell.make[ctx.Env, ctx.Error, (Signature[ctx.ExprContext.WrapExpr, ctx.ExprContext.WrapExpr], exprConverter.Env)]
+      sigCell <- MemoCell.make[ctx.Env, ctx.Error, (Signature[ctx.ExprContext.WrapExpr, ctx.ExprContext.FunctionResult], exprConverter.Env)]
       implCell <- MemoCell.make[ctx.Env, ctx.Error, FunctionImplementationC & HasContext[ctx.type]]
 
     yield new ArFuncC {
       override val context: ctx.type = ctx
-      import context.ExprContext.{WrapExpr, ArExpr, ExprConstructor}
+      import context.ExprContext.{WrapExpr, ArExpr, ExprConstructor, FunctionResult}
 
       override val id: UniqueIdentifier = funcId
       override val owner: functionOwner.type = functionOwner
 
       override type IsDeclaration = true
 
-      private def sigEnv: Comp[(Signature[WrapExpr, WrapExpr], exprConverter.Env)] =
+      private def sigEnv: Comp[(Signature[WrapExpr, FunctionResult], exprConverter.Env)] =
         sigCell.get(
           SignatureUtil.create(context)(exprConverter)(this)(outerEnv)(stmt.parameters)(
             SignatureUtil.createFunctionResult(context)(exprConverter)(stmt.returnType)
@@ -46,7 +46,7 @@ object SourceFunction {
       private def innerEnv: Comp[exprConverter.Env] =
         sigEnv.map { _._2 }
 
-      override def signature: Comp[Signature[WrapExpr, WrapExpr]] =
+      override def signature: Comp[Signature[WrapExpr, FunctionResult]] =
         sigEnv.map { _._1 }
       
       override def purity: Boolean = stmt.purity
@@ -72,7 +72,7 @@ object SourceFunction {
             case expr =>
               for
                 sig <- signature
-                returnType = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(sig.unsubstitutedResult)
+                returnType = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(sig.unsubstitutedResult.returnType)
                 env <- innerEnv
                 opt = exprConverter.ExprOptions(
                   purity = stmt.purity,
@@ -81,7 +81,13 @@ object SourceFunction {
                   allowErased = false,
                 )
                 bodyResult <- exprConverter.convertExpr(expr).check(env, opt, returnType)
-                (resolvedBody, _) <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)
+                (resolvedBody, env) <- exprConverter.resolveHoles(bodyResult.env, bodyResult.expr)
+
+                _ <- ZIO.foldLeft(sig.unsubstitutedResult.ensuresClauses)(env) { (env, ensuresType) =>
+                  val convT = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(ensuresType)
+                  exprConverter.resolveImplicit(env, convT, stmt.name.location).map { _._1 }
+                }
+
               yield new FunctionImplementationC.ExpressionBody {
                 override val context: ctx.type = ctx
                 override val body: WrapExpr = resolvedBody

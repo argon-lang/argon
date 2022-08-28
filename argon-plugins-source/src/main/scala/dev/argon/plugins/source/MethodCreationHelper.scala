@@ -36,10 +36,10 @@ trait MethodCreationHelper extends Definition {
     : Comp[(Option[IdentifierExpr], ArMethodC & HasContext[context.type] & HasDeclaration[true] & HasOwner[TMethodOwner])] =
     for {
       access <- AccessUtil.parse(methodDecl.modifiers)
-      owner = createMethodOwner(this, methodDecl.name, access)
+      owner = createMethodOwner(this, methodDecl.name.value, access)
       innerEnv2 <- innerEnv
       method <- SourceMethod.make(context)(exprConverter)(innerEnv2)(owner)(methodDecl)
-    } yield (methodDecl.name, method)
+    } yield (methodDecl.name.value, method)
 
   end buildMethod
 
