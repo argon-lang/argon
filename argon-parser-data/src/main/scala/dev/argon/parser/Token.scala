@@ -141,6 +141,7 @@ object Token {
   case object KW_ENSURES extends TokenWithCategory(TokenCategory.KW_ENSURES) with Token
   case object KW_MAINTAINS extends TokenWithCategory(TokenCategory.KW_MAINTAINS) with Token
   case object KW_ASSERT extends TokenWithCategory(TokenCategory.KW_ASSERT) with Token
+  case object KW_SUMMON extends TokenWithCategory(TokenCategory.KW_SUMMON) with Token
   case object KW_GIVEN extends TokenWithCategory(TokenCategory.KW_GIVEN) with Token
   case object KW_EXTENSION extends TokenWithCategory(TokenCategory.KW_EXTENSION) with Token
   case object KW_INVERSE extends TokenWithCategory(TokenCategory.KW_INVERSE) with Token

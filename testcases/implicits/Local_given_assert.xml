@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Local given assert</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        sealed trait IsEven (n: Int) <: Object
+        end
+
+        class ZeroIsEven <: IsEven 0
+            public def new()
+            end
+        end
+
+        proc main(): () do
+            given val zeroIsEven: IsEven 0 = ZeroIsEven.new()
+            assert IsEven 0
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput></ExpectedOutput>
+
+</ArgonTest>

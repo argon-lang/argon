@@ -1,0 +1,30 @@
+<ArgonTest>
+
+    <Name>Local given not found</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        sealed trait IsEven (n: Int) <: Object
+        end
+
+        class ZeroIsEven <: IsEven 0
+            public def new()
+            end
+        end
+
+        proc printEven(n: Int) (requires even: IsEven n): () =
+            puts (n.to_s())
+
+        proc main(): () do
+            given val zeroIsEven: IsEven 0 = ZeroIsEven.new()
+            printEven 1
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedError>ImplicitNotFound</ExpectedError>
+
+</ArgonTest>

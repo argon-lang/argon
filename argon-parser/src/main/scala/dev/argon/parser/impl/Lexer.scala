@@ -324,6 +324,7 @@ object Lexer {
               case "ensures" => Token.KW_ENSURES
               case "maintains" => Token.KW_MAINTAINS
               case "assert" => Token.KW_ASSERT
+              case "summon" => Token.KW_SUMMON
               case "given" => Token.KW_GIVEN
               case "extension" => Token.KW_EXTENSION
               case "inverse" => Token.KW_INVERSE

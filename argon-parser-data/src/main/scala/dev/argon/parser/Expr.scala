@@ -71,6 +71,7 @@ final case class ClassConstructorDeclarationStmt
 
 final case class VariableDeclarationStmt
   (
+    isGiven: Boolean,
     isMutable: Boolean,
     varType: Option[WithSource[Expr]],
     name: Option[IdentifierExpr],
@@ -151,6 +152,9 @@ final case class TypeExpr(level: Option[WithSource[Expr]]) extends Expr
 final case class MetaTypeExpr(level: BigInt) extends Expr
 final case class TypeOfExpr(ofExpr: WithSource[Expr]) extends Expr
 final case class UnaryOperatorExpr(op: WithSource[UnaryOperator], inner: WithSource[Expr]) extends Expr
+
+final case class AssertExpr(assertionType: WithSource[Expr]) extends Expr
+final case class SummonExpr(summonedType: WithSource[Expr]) extends Expr
 
 sealed trait Pattern
 final case class DeconstructPattern(constructor: WithSource[Expr], args: Vector[WithSource[Pattern]]) extends Pattern

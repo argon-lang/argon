@@ -127,9 +127,15 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
               localVarComp.map { case (variable, value, env) =>
                 val env2 = env.withScope(_.addVariable(variable))
+                val env3 =
+                  if varDecl.isGiven then
+                    env2.withImplicitSource(_.addVariable(variable))
+                  else
+                    env2
+
                 ExprResult(
                   WrapExpr.OfExpr(ArExpr(ExprConstructor.BindVariable(variable), value)),
-                  env2,
+                  env3,
                 )
               }
 
@@ -597,6 +603,39 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
             IdentifierExpr.OperatorIdentifier(op.value),
           )
         )
+
+      case parser.AssertExpr(assertionType) =>
+        new ExprFactorySynth:
+          override protected def location: SourceLocation = expr.location
+
+          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+            for
+              ExprResult(t, env) <- convertExpr(assertionType).check(env, opt.forTypeExpr, anyType)
+              (env, value) <- resolveImplicit(env, t, location)
+              localId <- UniqueIdentifier.make
+              variable = LocalVariable(
+                localId,
+                t,
+                name = None,
+                isMutable = false,
+              )
+            yield ExprTypeResult(
+              WrapExpr.OfExpr(ArExpr(ExprConstructor.BindVariable(variable), value)),
+              env,
+              unitType
+            )
+        end new
+
+      case parser.SummonExpr(summonedType) =>
+        new ExprFactorySynth:
+          override protected def location: SourceLocation = expr.location
+
+          override def synth(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+            for
+              ExprResult(t, env) <- convertExpr(summonedType).check(env, opt.forTypeExpr, anyType)
+              (env, value) <- resolveImplicit(env, t, location)
+            yield ExprTypeResult(value, env, t)
+        end new
     }
 
   private abstract class OverloadExprFactoryBase extends ExprFactorySynth {
@@ -865,14 +904,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         }
 
       def resolveReqArg(paramErased: Boolean, paramType: WrapExpr, next: Signature[WrapExpr, Res]): Comp[Either[Option[Cause[context.Error]], Comp[ExprTypeResult]]] =
-        tryResolveImplicit(env, paramType).flatMap {
-          case Some((env, proof)) =>
+        resolveImplicit(env, paramType, overloadLocation).flatMap {
+          case (env, proof) =>
             val variable = ParameterVariable(owner, convArgs.size, paramType, paramErased, None)
             substituteArg(variable)(proof)(sigHandler)(next).flatMap { case (next, resultExpr) =>
               createSigResult(owner, env, opt, next, args, convArgs :+ resultExpr)(sigHandler)(f)
             }
-
-          case None => ???
         }
 
       (args, sig) match {

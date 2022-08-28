@@ -1,6 +1,6 @@
 package dev.argon.compiler.expr
 
-import dev.argon.compiler.Context
+import dev.argon.compiler.*
 import dev.argon.compiler.module.{ModuleElementC, ModulePath}
 import dev.argon.compiler.signature.*
 import dev.argon.expr.*
@@ -275,5 +275,11 @@ trait ExprUtilImplicitResolver
       }
     yield res
   end tryResolveImplicit
+
+  def resolveImplicit(env: Env, t: WrapExpr, location: SourceLocation): Comp[(Env, WrapExpr)] =
+    tryResolveImplicit(env, t).flatMap {
+      case Some(res) => ZIO.succeed(res)
+      case None => ZIO.fail(DiagnosticError.ImplicitNotFound(DiagnosticSource.Location(location)))
+    }
 
 }

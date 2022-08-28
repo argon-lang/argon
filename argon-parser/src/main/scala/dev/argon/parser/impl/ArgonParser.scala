@@ -83,6 +83,7 @@ object ArgonParser {
     case object TupleExpr extends ArgonRuleName[Expr]
     case object SubTypeExpr extends ArgonRuleName[Expr]
     case object AssignExpr extends ArgonRuleName[Expr]
+    case object AssertExpr extends ArgonRuleName[Expr]
     case object Expression extends ArgonRuleName[Expr]
     case object ExpressionStmt extends ArgonRuleName[Expr]
 
@@ -503,6 +504,10 @@ object ArgonParser {
           rule(Rule.IdentifierOptional) ++ matchToken(OP_LAMBDA) ++! rule(Rule.LambdaExpr).observeSource --> {
             case (id, _, body) => LambdaExpr(id, body)
           } |
+            matchToken(KW_SUMMON) ++! rule(Rule.AsExpr).observeSource --> {
+              case (_, summonedType) =>
+                SummonExpr(summonedType)
+            } |
             rule(Rule.AsExpr)
 
         case Rule.PatternType =>
@@ -531,8 +536,14 @@ object ArgonParser {
               BinaryOperatorExpr(WithSource(BinaryOperator.Assign, opLocation), left, right)
           }
 
+        case Rule.AssertExpr =>
+          matchToken(KW_ASSERT) ++! rule(Rule.SubTypeExpr).observeSource --> {
+            case (_, assertType) =>
+              AssertExpr(assertType)
+          }
+
         case Rule.Expression =>
-          rule(Rule.AssignExpr)
+          rule(Rule.AssertExpr) | rule(Rule.AssignExpr)
 
         case Rule.ExpressionStmt =>
           rule(Rule.Expression)
@@ -542,13 +553,14 @@ object ArgonParser {
             matchToken(KW_VAR) --> const(true)
 
         case Rule.VariableDeclaration =>
-          rule(Rule.VariableMutSpec) ++! (
-            rule(Rule.IdentifierOptional) ++
-              ((matchToken(OP_COLON) ++ rule(Rule.Type).observeSource --> second) ?) ++
-              matchToken(OP_EQUALS) ++
-              rule(Rule.Expression).observeSource
-          ) --> { case (isMutable, (id, typeAnnotation, _, value)) =>
-            VariableDeclarationStmt(isMutable, typeAnnotation, id, value)
+          matchToken(KW_GIVEN).? ++
+            rule(Rule.VariableMutSpec) ++! (
+              rule(Rule.IdentifierOptional) ++
+                ((matchToken(OP_COLON) ++ rule(Rule.Type).observeSource --> second) ?) ++
+                matchToken(OP_EQUALS) ++
+                rule(Rule.Expression).observeSource
+            ) --> { case (isGiven, isMutable, (id, typeAnnotation, _, value)) =>
+            VariableDeclarationStmt(isGiven.isDefined, isMutable, typeAnnotation, id, value)
           }
 
         case Rule.FieldDeclarationStmt =>
