@@ -126,7 +126,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
             case varDecl: parser.VariableDeclarationStmt =>
               def addKnownStableValue(env: Env, value: WrapExpr, localVar: Variable): Comp[Env] =
-                if isStableExpression(value) then
+                if !localVar.isMutable && isStableExpression(value) then
                   ZIO.succeed(env.copy(knownVarValues = env.knownVarValues + (localVar -> value)))
                 else
                   ZIO.succeed(env)
@@ -156,7 +156,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               localVarComp.map { case (variable, value, env) =>
                 val env2 = env.withScope(_.addVariable(variable))
                 val env3 =
-                  if varDecl.isGiven then
+                  if varDecl.modifiers.exists { _.value == parser.ProofModifier } then
                     env2.withImplicitSource(_.addVariable(variable))
                   else
                     env2

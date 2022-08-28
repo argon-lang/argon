@@ -302,10 +302,10 @@ object Grammar {
       def -+>[U](f: WithSource[T] => WithSource[U]): Grammar[TToken, TSyntaxError, TLabel, U] =
         new MapGrammar[TToken, TSyntaxError, TLabel, T, U](grammar1, _.map { (state, value) => (state, f(value)) })
 
-      def |[U >: T](grammar2: => Grammar[TToken, TSyntaxError, TLabel, U])
+      def |[U](grammar2: => Grammar[TToken, TSyntaxError, TLabel, U])
         (implicit errorFactory: ErrorFactory[TToken, ?, TSyntaxError])
-        : Grammar[TToken, TSyntaxError, TLabel, U] =
-        new UnionGrammar[TToken, TSyntaxError, TLabel, U](grammar1, grammar2)
+        : Grammar[TToken, TSyntaxError, TLabel, T | U] =
+        new UnionGrammar[TToken, TSyntaxError, TLabel, T | U](grammar1, grammar2)
 
       def ++[U, V](grammar2: => Grammar[TToken, TSyntaxError, TLabel, U])
         (implicit combiner: GrammarConcatCombiner[T, U, V])

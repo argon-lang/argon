@@ -96,7 +96,12 @@ object ArgonParser {
     case object FieldInitializationStmt extends ArgonRuleName[Stmt]
     case object InitializeStmt extends ArgonRuleName[Stmt]
 
-    case object Modifiers extends ArgonRuleName[Vector[WithSource[Modifier]]]
+    case object ClassModifiers extends ArgonRuleName[Vector[WithSource[ClassModifier]]]
+    case object TraitModifiers extends ArgonRuleName[Vector[WithSource[TraitModifier]]]
+    case object FunctionModifiers extends ArgonRuleName[Vector[WithSource[FunctionModifier]]]
+    case object MethodModifiers extends ArgonRuleName[Vector[WithSource[MethodModifier]]]
+    case object ClassConstructorModifiers extends ArgonRuleName[Vector[WithSource[ClassConstructorModifier]]]
+    case object LocalVariableModifiers extends ArgonRuleName[Vector[WithSource[LocalVariableModifier]]]
 
     // Functions and Methods
     case object MethodParameter extends ArgonRuleName[FunctionParameter]
@@ -114,7 +119,6 @@ object ArgonParser {
     case object StaticInstanceBody extends ArgonRuleName[(Vector[WithSource[Stmt]], Vector[WithSource[Stmt]])]
     case object BaseTypeSpecifier extends ArgonRuleName[Option[WithSource[Expr]]]
     case object TraitDeclarationStmt extends ArgonRuleName[Stmt]
-    case object DataConstructorDeclarationStmt extends ArgonRuleName[Stmt]
     case object ClassDeclarationStmt extends ArgonRuleName[Stmt]
 
     case object Statement extends ArgonRuleName[Stmt]
@@ -164,6 +168,13 @@ object ArgonParser {
     private val tokenUnderscore: TGrammar[Unit] = matchToken(KW_UNDERSCORE).discard
 
     private val tokenIdentifier: TGrammar[String] = matchTokenFactory(Identifier) --> { _.name }
+
+
+    def ruleModifier[TModifier <: Modifier, TToken <: TokenWithCategory[? <: TokenCategory] & ModifierToken[TModifier]]
+    (token: TToken)
+    (using TypeTest[Token, TToken])
+    : TGrammar[TModifier] =
+      matchToken(token) --> const(token.modifier)
 
     private def createLeftRec[A](left: TGrammar[A])(rightRepeat: TGrammar[WithSource[A] => A]): TGrammar[A] =
       left.observeSource ++ (rightRepeat.observeSource*) --> { case (a, fs) =>
@@ -555,14 +566,14 @@ object ArgonParser {
             matchToken(KW_VAR) --> const(true)
 
         case Rule.VariableDeclaration =>
-          matchToken(KW_PROOF).? ++
+          rule(Rule.LocalVariableModifiers) ++
             rule(Rule.VariableMutSpec) ++! (
               rule(Rule.IdentifierOptional) ++
                 ((matchToken(OP_COLON) ++ rule(Rule.Type).observeSource --> second) ?) ++
                 matchToken(OP_EQUALS) ++
                 rule(Rule.Expression).observeSource
-            ) --> { case (isGiven, isMutable, (id, typeAnnotation, _, value)) =>
-            VariableDeclarationStmt(isGiven.isDefined, isMutable, typeAnnotation, id, value)
+            ) --> { case (modifiers, isMutable, (id, typeAnnotation, _, value)) =>
+            VariableDeclarationStmt(modifiers, isMutable, typeAnnotation, id, value)
           }
 
         case Rule.FieldDeclarationStmt =>
@@ -591,10 +602,43 @@ object ArgonParser {
               InitializeStmt(id, value)
             }
 
-        case Rule.Modifiers =>
-          def ruleModifier[TToken <: TokenWithCategory[? <: TokenCategory] & ModifierToken](token: TToken)
-            (using TypeTest[Token, TToken])
-            : TGrammar[Modifier] = matchToken(token) --> const(token.modifier)
+        case Rule.ClassModifiers =>
+
+          val anyModifier =
+            ruleModifier(KW_PUBLIC) |
+              ruleModifier(KW_PRIVATE) |
+              ruleModifier(KW_INTERNAL) |
+              ruleModifier(KW_ABSTRACT) |
+              ruleModifier(KW_SEALED) |
+              ruleModifier(KW_OPEN)
+
+          (anyModifier.observeSource.*) --> { _.toVector }
+
+        case Rule.TraitModifiers =>
+
+          val anyModifier =
+            ruleModifier(KW_PUBLIC) |
+              ruleModifier(KW_PRIVATE) |
+              ruleModifier(KW_INTERNAL) |
+              ruleModifier(KW_SEALED)
+
+          anyModifier.observeSource.* --> {
+            _.toVector
+          }
+
+        case Rule.FunctionModifiers =>
+
+          val anyModifier =
+            ruleModifier(KW_PUBLIC) |
+              ruleModifier(KW_PRIVATE) |
+              ruleModifier(KW_INTERNAL) |
+              ruleModifier(KW_PROOF)
+
+          anyModifier.observeSource.* --> {
+            _.toVector
+          }
+
+        case Rule.MethodModifiers =>
 
           val anyModifier =
             ruleModifier(KW_PUBLIC) |
@@ -604,11 +648,33 @@ object ArgonParser {
               ruleModifier(KW_VIRTUAL) |
               ruleModifier(KW_ABSTRACT) |
               ruleModifier(KW_OVERRIDE) |
-              ruleModifier(KW_SEALED) |
-              ruleModifier(KW_OPEN) |
+              ruleModifier(KW_FINAL) |
               ruleModifier(KW_PROOF)
 
-          (anyModifier.observeSource *) --> { _.toVector }
+          anyModifier.observeSource.* --> {
+            _.toVector
+          }
+
+        case Rule.ClassConstructorModifiers =>
+
+          val anyModifier =
+            ruleModifier(KW_PUBLIC) |
+              ruleModifier(KW_PROTECTED) |
+              ruleModifier(KW_PRIVATE) |
+              ruleModifier(KW_INTERNAL)
+
+          anyModifier.observeSource.* --> {
+            _.toVector
+          }
+
+        case Rule.LocalVariableModifiers =>
+
+          val anyModifier =
+            ruleModifier(KW_PROOF)
+
+          anyModifier.observeSource.* --> {
+            _.toVector
+          }
 
         case Rule.MethodParameter =>
           rule(Rule.Identifier) ++! (
@@ -720,7 +786,7 @@ object ArgonParser {
             matchToken(KW_PROC) --> const(false)
 
         case Rule.FunctionDefinitionStmt =>
-          rule(Rule.Modifiers) ++
+          rule(Rule.FunctionModifiers) ++
             rule(Rule.MethodPurity) ++
             rule(Rule.IdentifierOptional).observeSource ++
             rule(Rule.NewLines) ++
@@ -736,7 +802,7 @@ object ArgonParser {
             }
 
         case Rule.MethodDefinitionStmt =>
-          rule(Rule.Modifiers) ++
+          rule(Rule.MethodModifiers) ++
             rule(Rule.MethodPurity) ++
             rule(Rule.IdentifierOptional) ++
             rule(Rule.NewLines) ++
@@ -756,7 +822,7 @@ object ArgonParser {
             }
 
         case Rule.ClassConstructorDefinitionStmt =>
-          rule(Rule.Modifiers) ++
+          rule(Rule.ClassConstructorModifiers) ++
             rule(Rule.MethodPurity).? ++
             matchToken(KW_NEW).observeSource ++! (
               rule(Rule.MethodParameters) ++
@@ -785,7 +851,7 @@ object ArgonParser {
             rule(Rule.Type).observeSource --> Some.apply
 
         case Rule.TraitDeclarationStmt =>
-          rule(Rule.Modifiers) ++
+          rule(Rule.TraitModifiers) ++
             matchToken(KW_TRAIT) ++! (
               rule(Rule.IdentifierOptional).observeSource ++
                 rule(Rule.NewLines) ++
@@ -800,26 +866,8 @@ object ArgonParser {
                 TraitDeclarationStmt(baseType, name, parameters, staticBody, instanceBody, modifiers)
             }
 
-        case Rule.DataConstructorDeclarationStmt =>
-          rule(Rule.Modifiers) ++
-            matchToken(KW_CONSTRUCTOR) ++! (
-              rule(Rule.IdentifierOptional).observeSource ++
-                rule(Rule.NewLines) ++
-                rule(Rule.MethodParameters) ++
-                rule(Rule.NewLines) ++
-                matchToken(OP_COLON) ++
-                rule(Rule.NewLines) ++
-                rule(Rule.Type).observeSource ++
-                rule(Rule.StatementSeparator) ++
-                rule(Rule.StatementList).observeSource ++
-                matchToken(KW_END)
-            ) --> {
-              case (modifiers, _, (name, _, params, _, _, _, returnType, _, body, _)) =>
-                DataConstructorDeclarationStmt(name, params, returnType, body, modifiers)
-            }
-
         case Rule.ClassDeclarationStmt =>
-          rule(Rule.Modifiers) ++
+          rule(Rule.ClassModifiers) ++
             matchToken(KW_CLASS) ++! (
               rule(Rule.IdentifierOptional).observeSource ++
                 rule(Rule.MethodParameters) ++
@@ -842,7 +890,6 @@ object ArgonParser {
             rule(Rule.FunctionDefinitionStmt) |
             rule(Rule.ClassConstructorDefinitionStmt) |
             rule(Rule.TraitDeclarationStmt) |
-            rule(Rule.DataConstructorDeclarationStmt) |
             rule(Rule.ClassDeclarationStmt) |
             rule(Rule.ExpressionStmt) |
             rule(Rule.ImportStatement) |

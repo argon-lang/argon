@@ -17,16 +17,7 @@ final case class TraitDeclarationStmt
     parameters: Vector[WithSource[FunctionParameterList]],
     body: Vector[WithSource[Stmt]],
     instanceBody: Vector[WithSource[Stmt]],
-    modifiers: Vector[WithSource[Modifier]],
-  ) extends Stmt
-
-final case class DataConstructorDeclarationStmt
-  (
-    name: WithSource[Option[IdentifierExpr]],
-    parameters: Vector[WithSource[FunctionParameterList]],
-    returnType: WithSource[Expr],
-    body: WithSource[Vector[WithSource[Stmt]]],
-    modifiers: Vector[WithSource[Modifier]],
+    modifiers: Vector[WithSource[TraitModifier]],
   ) extends Stmt
 
 final case class ClassDeclarationStmt
@@ -36,7 +27,7 @@ final case class ClassDeclarationStmt
     parameters: Vector[WithSource[FunctionParameterList]],
     body: Vector[WithSource[Stmt]],
     instanceBody: Vector[WithSource[Stmt]],
-    modifiers: Vector[WithSource[Modifier]],
+    modifiers: Vector[WithSource[ClassModifier]],
   ) extends Stmt
 
 final case class FunctionDeclarationStmt
@@ -45,7 +36,7 @@ final case class FunctionDeclarationStmt
     parameters: Vector[WithSource[FunctionParameterList]],
     returnType: WithSource[ReturnTypeSpecifier],
     body: WithSource[Expr],
-    modifiers: Vector[WithSource[Modifier]],
+    modifiers: Vector[WithSource[FunctionModifier]],
     purity: Boolean,
   ) extends Stmt
 
@@ -56,7 +47,7 @@ final case class MethodDeclarationStmt
     parameters: Vector[WithSource[FunctionParameterList]],
     returnType: WithSource[ReturnTypeSpecifier],
     body: Option[WithSource[Expr]],
-    modifiers: Vector[WithSource[Modifier]],
+    modifiers: Vector[WithSource[MethodModifier]],
     purity: Boolean,
   ) extends Stmt
 
@@ -65,13 +56,13 @@ final case class ClassConstructorDeclarationStmt
     newLocation: SourceLocation,
     parameters: Vector[WithSource[FunctionParameterList]],
     body: WithSource[Vector[WithSource[Stmt]]],
-    modifiers: Vector[WithSource[Modifier]],
+    modifiers: Vector[WithSource[ClassConstructorModifier]],
     purity: Boolean,
   ) extends Stmt
 
 final case class VariableDeclarationStmt
   (
-    isGiven: Boolean,
+    modifiers: Seq[WithSource[LocalVariableModifier]],
     isMutable: Boolean,
     varType: Option[WithSource[Expr]],
     name: Option[IdentifierExpr],
