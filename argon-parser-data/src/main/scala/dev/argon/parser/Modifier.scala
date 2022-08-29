@@ -6,7 +6,8 @@ sealed trait AccessModifier extends Modifier
 sealed trait GlobalAccessModifier extends AccessModifier
 sealed trait OverridabilityModifier extends Modifier
 sealed trait ExtendabilityModifier extends Modifier
-
+sealed trait ImplicitlyAbstractExtendabilityModifier extends ExtendabilityModifier
+sealed trait ValueModifier extends Modifier
 
 case object PublicModifier extends GlobalAccessModifier
 case object ProtectedModifier extends AccessModifier
@@ -16,15 +17,16 @@ case object VirtualModifier extends OverridabilityModifier
 case object AbstractModifier extends OverridabilityModifier with ExtendabilityModifier
 case object OverrideModifier extends OverridabilityModifier
 case object FinalModifier extends OverridabilityModifier
-case object SealedModifier extends ExtendabilityModifier
+case object SealedModifier extends ImplicitlyAbstractExtendabilityModifier
 case object OpenModifier extends ExtendabilityModifier
-case object ProofModifier extends Modifier
+case object ProofModifier extends ValueModifier
+case object ErasedModifier extends ValueModifier
 
 
 type ClassModifier = GlobalAccessModifier | ExtendabilityModifier
-type TraitModifier = GlobalAccessModifier | SealedModifier.type
-type FunctionModifier = GlobalAccessModifier | ProofModifier.type
-type MethodModifier = AccessModifier | OverridabilityModifier | ProofModifier.type
+type TraitModifier = GlobalAccessModifier | ImplicitlyAbstractExtendabilityModifier
+type FunctionModifier = GlobalAccessModifier | ValueModifier
+type MethodModifier = AccessModifier | OverridabilityModifier | ValueModifier
 type ClassConstructorModifier = AccessModifier
-type LocalVariableModifier = ProofModifier.type
+type LocalVariableModifier = ValueModifier
 

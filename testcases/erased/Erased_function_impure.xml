@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>Erased function impure</Name>
+
+    <InputSource name="index.argon">
+
+        import Argon.Core/*
+
+        proc printMessage(erased n: Int): () =
+            puts 'Hello World'
+
+        erased proc erasedFunc(a: Int)(b: Int): Int = a + b
+
+        proc main(): () do
+            printMessage(erasedFunc 1 2)
+        end
+
+
+    </InputSource>
+
+    <ExpectedError>ErasedMustBePure</ExpectedError>
+
+</ArgonTest>

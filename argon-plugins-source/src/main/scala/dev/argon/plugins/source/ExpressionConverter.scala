@@ -131,41 +131,44 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                 else
                   ZIO.succeed(env)
 
-              val localVarComp: Comp[(LocalVariable, WrapExpr, Env)] =
-                varDecl.varType match {
-                  case Some(varType) =>
+              val isErased = varDecl.modifiers.exists { _.value == parser.ErasedModifier }
+
+              for
+                (variable, value, env) <- varDecl.varType match {
+                  case Some (varType) =>
                     for {
                       id <- UniqueIdentifier.make
                       ExprResult(varTypeExpr, env) <- convertExpr(varType).check(env, opt.forTypeExpr, anyType)
                       ExprResult(value, env) <- convertExpr(varDecl.value).check(env, opt, varTypeExpr)
-                      localVar = LocalVariable(id, varTypeExpr, varDecl.name, varDecl.isMutable, isErased = false)
-
-                      env <- addKnownStableValue(env, value, localVar)
+                      localVar = LocalVariable(id, varTypeExpr, varDecl.name, varDecl.isMutable, isErased = isErased)
                     } yield (localVar, value, env)
 
                   case None =>
                     for {
                       id <- UniqueIdentifier.make
                       ExprTypeResult(value, env, valueType) <- convertExpr(varDecl.value).synth(env, opt)
-                      localVar = LocalVariable(id, valueType, varDecl.name, varDecl.isMutable, isErased = false)
-
-                      env <- addKnownStableValue(env, value, localVar)
+                      localVar = LocalVariable(id, valueType, varDecl.name, varDecl.isMutable, isErased = isErased)
                     } yield (localVar, value, env)
                 }
 
-              localVarComp.map { case (variable, value, env) =>
-                val env2 = env.withScope(_.addVariable(variable))
-                val env3 =
-                  if varDecl.modifiers.exists { _.value == parser.ProofModifier } then
+                env <- addKnownStableValue(env, value, variable)
+
+                isProof = varDecl.modifiers.exists { _.value == parser.ProofModifier }
+
+                _ <- ZIO.fail(DiagnosticError.ProofMustBePure(DiagnosticSource.Location(head.location))).when(isProof && variable.isMutable)
+                _ <- ZIO.fail(DiagnosticError.ErasedMustBePure(DiagnosticSource.Location(head.location))).when(variable.isErased && variable.isMutable)
+
+                env2 = env.withScope(_.addVariable(variable))
+                env3 =
+                  if isProof then
                     env2.withImplicitSource(_.addVariable(variable))
                   else
                     env2
 
-                ExprResult(
-                  WrapExpr.OfExpr(ArExpr(ExprConstructor.BindVariable(variable), value)),
-                  env3,
-                )
-              }
+              yield ExprResult(
+                WrapExpr.OfExpr(ArExpr(ExprConstructor.BindVariable(variable), value)),
+                env3,
+              )
 
             case _ => ZIO.fail(DiagnosticError.InvalidStatementInFunction())
           }
@@ -1170,7 +1173,11 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
           case ModuleElementC.FunctionElement(func) =>
             createSigResultConv(func, env, opt, func.signature, args)(functionSigHandler) { (env, opt, args, res) =>
-              if opt.checkPurity(func.purity) then
+              if !opt.checkPurity(func.purity) then
+                ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
+              else if !opt.checkErasure(func.isErased) then
+                ZIO.fail(DiagnosticError.ErasedExpressionNotAllowed(DiagnosticSource.Location(overloadLocation)))
+              else
                 handleFunctionResult(
                   env,
                   opt,
@@ -1178,8 +1185,6 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                   WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionCall(func), args)),
                   res
                 )
-              else
-                ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
             }
 
           case ModuleElementC.ExportedElement(inner) =>
@@ -1353,7 +1358,11 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               (sig, stableInstance) <- substituteArg(thisVar)(instance)(functionSigHandler)(sig)
               result <- createSigResult(method, env, opt, sig, args.toList, Vector.empty)(functionSigHandler) {
                 (env, opt, args, res) =>
-                  if opt.checkPurity(method.purity) then
+                  if !opt.checkPurity(method.purity) then
+                    ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
+                  else if !opt.checkErasure(method.isErased) then
+                    ZIO.fail(DiagnosticError.ErasedExpressionNotAllowed(DiagnosticSource.Location(overloadLocation)))
+                  else
                     handleFunctionResult(
                       env,
                       opt,
@@ -1361,8 +1370,6 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                       WrapExpr.OfExpr(ArExpr(ExprConstructor.MethodCall(method), (stableInstance, callOwnerType, args))),
                       res
                     )
-                  else
-                    ZIO.fail(DiagnosticError.Purity(DiagnosticSource.Location(overloadLocation)))
               }
             yield result
 

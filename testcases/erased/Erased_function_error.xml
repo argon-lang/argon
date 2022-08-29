@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>Erased function error</Name>
+
+    <InputSource name="index.argon">
+
+        import Argon.Core/*
+
+        proc printMessage(n: Int): () =
+            puts 'Hello World'
+
+        erased def erasedFunc(a: Int)(b: Int): Int = a + b
+
+        proc main(): () do
+            printMessage(erasedFunc 1 2)
+        end
+
+
+    </InputSource>
+
+    <ExpectedError>ErasedExpressionNotAllowed</ExpectedError>
+
+</ArgonTest>

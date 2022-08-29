@@ -39,6 +39,8 @@ object DiagnosticError {
   final case class FieldReinitialized(source: DiagnosticSource) extends DiagnosticError
   final case class ErasedExpressionNotAllowed(source: DiagnosticSource) extends DiagnosticError
   final case class ImplicitNotFound(source: DiagnosticSource) extends DiagnosticError
+  final case class ProofMustBePure(source: DiagnosticSource) extends DiagnosticError
+  final case class ErasedMustBePure(source: DiagnosticSource) extends DiagnosticError
 
 
   final case class SpecMultiPartGlobUsedWithPrefixSuffix() extends DiagnosticError

@@ -1,0 +1,22 @@
+<ArgonTest>
+
+    <Name>Erased local error</Name>
+
+    <InputSource name="index.argon">
+
+        import Argon.Core/*
+
+        proc printMessage(n: Int): () =
+            puts 'Hello World'
+
+        proc main(): () do
+            erased val erasedValue: Int = 3
+            printMessage(erasedValue)
+        end
+
+
+    </InputSource>
+
+    <ExpectedError>ErasedExpressionNotAllowed</ExpectedError>
+
+</ArgonTest>

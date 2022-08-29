@@ -34,6 +34,8 @@ object SourceMethod {
       override def isImplicitOverride: Boolean = stmt.modifiers.exists(_.value == parser.OverrideModifier)
       override def isVirtual: Boolean = stmt.modifiers.exists(mod => mod.value == parser.VirtualModifier || mod.value == parser.AbstractModifier)
       override def isFinal: Boolean = stmt.modifiers.exists(_.value == parser.FinalModifier)
+      override def isProof: Boolean = stmt.modifiers.exists { _.value == parser.ProofModifier }
+      override def isErased: Boolean = stmt.modifiers.exists { _.value == parser.ErasedModifier }
 
       override def purity: Boolean = stmt.purity
 
@@ -97,6 +99,13 @@ object SourceMethod {
               }
           }
         )
+
+
+      override def validate: Comp[Unit] =
+        for
+          _ <- ZIO.fail(DiagnosticError.ProofMustBePure(DiagnosticSource.Location(stmt.name.location))).when(isProof && !purity)
+          _ <- ZIO.fail(DiagnosticError.ErasedMustBePure(DiagnosticSource.Location(stmt.name.location))).when(isErased && !purity)
+        yield ()
 
 
     }

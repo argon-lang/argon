@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Erased method</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        proc printMessage(erased n: Int): () =
+            puts 'Hello World'
+
+        trait EraseUtil <: _
+        static
+            public erased def _.erasedMethod(a: Int)(b: Int): Int = a + b
+        end
+
+        proc main(): () do
+            printMessage(EraseUtil.erasedMethod 1 2)
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello World</ExpectedOutput>
+
+</ArgonTest>

@@ -50,7 +50,8 @@ object SourceFunction {
         sigEnv.map { _._1 }
       
       override def purity: Boolean = stmt.purity
-      override def isGiven: Boolean = stmt.modifiers.exists { _.value == parser.ProofModifier }
+      override def isProof: Boolean = stmt.modifiers.exists { _.value == parser.ProofModifier }
+      override def isErased: Boolean = stmt.modifiers.exists { _.value == parser.ErasedModifier }
 
       override def implementation: Comp[FunctionImplementation] =
         implCell.get(
@@ -93,6 +94,12 @@ object SourceFunction {
               }
           }
         )
+
+      override def validate: Comp[Unit] =
+        for
+          _ <- ZIO.fail(DiagnosticError.ProofMustBePure(DiagnosticSource.Location(stmt.name.location))).when(isProof && !purity)
+          _ <- ZIO.fail(DiagnosticError.ErasedMustBePure(DiagnosticSource.Location(stmt.name.location))).when(isErased && !purity)
+        yield ()
     }
 
 }

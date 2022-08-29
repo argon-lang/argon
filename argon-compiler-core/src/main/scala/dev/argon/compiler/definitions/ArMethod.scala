@@ -17,6 +17,8 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
   def isImplicitOverride: Boolean
   def isVirtual: Boolean
   def isFinal: Boolean
+  def isProof: Boolean
+  def isErased: Boolean
 
   def purity: Boolean
 
@@ -27,6 +29,7 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
 
   def implementation: ImplementationType
 
+  def validate: Comp[Unit]
 
   final override def equals(obj: Any): Boolean =
     obj.asInstanceOf[Matchable] match {

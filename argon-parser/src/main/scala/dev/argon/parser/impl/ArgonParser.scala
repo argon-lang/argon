@@ -632,7 +632,8 @@ object ArgonParser {
             ruleModifier(KW_PUBLIC) |
               ruleModifier(KW_PRIVATE) |
               ruleModifier(KW_INTERNAL) |
-              ruleModifier(KW_PROOF)
+              ruleModifier(KW_PROOF) |
+              ruleModifier(KW_ERASED)
 
           anyModifier.observeSource.* --> {
             _.toVector
@@ -649,7 +650,8 @@ object ArgonParser {
               ruleModifier(KW_ABSTRACT) |
               ruleModifier(KW_OVERRIDE) |
               ruleModifier(KW_FINAL) |
-              ruleModifier(KW_PROOF)
+              ruleModifier(KW_PROOF) |
+              ruleModifier(KW_ERASED)
 
           anyModifier.observeSource.* --> {
             _.toVector
@@ -670,7 +672,8 @@ object ArgonParser {
         case Rule.LocalVariableModifiers =>
 
           val anyModifier =
-            ruleModifier(KW_PROOF)
+            ruleModifier(KW_PROOF) |
+              ruleModifier(KW_ERASED)
 
           anyModifier.observeSource.* --> {
             _.toVector

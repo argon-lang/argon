@@ -92,6 +92,7 @@ object Token {
   case object KW_OVERRIDE extends TokenWithCategory(TokenCategory.KW_OVERRIDE) with ModifierToken[OverrideModifier.type]
   case object KW_FINAL extends TokenWithCategory(TokenCategory.KW_FINAL) with ModifierToken[FinalModifier.type]
   case object KW_PROOF extends TokenWithCategory(TokenCategory.KW_PROOF) with ModifierToken[ProofModifier.type]
+  case object KW_ERASED extends TokenWithCategory(TokenCategory.KW_ERASED) with ModifierToken[ErasedModifier.type]
 
   case object KW_TYPE extends TokenWithCategory(TokenCategory.KW_TYPE) with Token
   case object KW_METATYPE extends TokenWithCategory(TokenCategory.KW_METATYPE) with Token
@@ -112,7 +113,6 @@ object Token {
   case object KW_BEGIN extends TokenWithCategory(TokenCategory.KW_BEGIN) with Token
   case object KW_RESCUE extends TokenWithCategory(TokenCategory.KW_RESCUE) with Token
   case object KW_FINALLY extends TokenWithCategory(TokenCategory.KW_FINALLY) with Token
-  case object KW_ERASED extends TokenWithCategory(TokenCategory.KW_ERASED) with Token
   case object KW_REQUIRES extends TokenWithCategory(TokenCategory.KW_REQUIRES) with Token
   case object KW_ENSURES extends TokenWithCategory(TokenCategory.KW_ENSURES) with Token
   case object KW_MAINTAINS extends TokenWithCategory(TokenCategory.KW_MAINTAINS) with Token

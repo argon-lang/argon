@@ -14,7 +14,8 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
   def signature: Comp[Signature[WrapExpr, FunctionResult]]
   
   def purity: Boolean
-  def isGiven: Boolean
+  def isProof: Boolean
+  def isErased: Boolean
 
   type ImplementationType = IsDeclaration match {
     case true => Comp[FunctionImplementation]
@@ -23,6 +24,8 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
 
   def implementation: ImplementationType
 
+  def validate: Comp[Unit]
+
   final override def equals(obj: Any): Boolean =
     obj.asInstanceOf[Matchable] match {
       case other: ArFuncC => id == other.id
@@ -30,6 +33,9 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
     }
 
   final override def hashCode(): Int = id.hashCode
+
+  override def toString: String =
+    s"ArFunc ${owner}"
 }
 
 object ArFuncC {

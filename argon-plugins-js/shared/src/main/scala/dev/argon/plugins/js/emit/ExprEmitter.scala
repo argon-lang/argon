@@ -206,6 +206,8 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   def functionExport(func: ArFunc & HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
     for
+      _ <- func.validate
+
       sig <- func.signature
       erasedSig <- SignatureEraser(context).erasedWithResult(sig)
       funcName = getOverloadExportName(func.owner.ownedName, erasedSig)
@@ -250,6 +252,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       yield (methodName, method)
     ) { case (methodName, method) =>
       for
+        _ <- method.validate
         methodExpr <- createMethod(method)
         methodSig <- method.signatureUnsubstituted
         methodSigErased <- SignatureEraser(context).erasedWithResult(methodSig)
