@@ -49,5 +49,4 @@ trait Plugin[-R0, +E0] {
 
 
   def tubeLoaders: Map[String, TubeLoader[R0, E0]]
-  def buildOutputExecutor: Option[BuildOutputExecutor[Output]]
 }

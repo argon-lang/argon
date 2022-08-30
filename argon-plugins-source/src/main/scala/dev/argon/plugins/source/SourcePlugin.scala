@@ -48,6 +48,4 @@ object SourcePlugin extends Plugin[Any, SourceError] {
     ZIO.unit.asSome
 
   override def tubeLoaders: Map[String, TubeLoader[Any, SourceError]] = Map("buildspec" -> SourceTubeLoader)
-
-  override def buildOutputExecutor: Option[BuildOutputExecutor[SourceOutput]] = None
 }

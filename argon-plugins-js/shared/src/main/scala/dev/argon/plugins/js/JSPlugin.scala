@@ -78,5 +78,4 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
     loadExternMethod(options)(id)
 
   override def tubeLoaders: Map[String, TubeLoader[Any, JSPluginError]] = Map.empty
-  override def buildOutputExecutor: Option[BuildOutputExecutor[JSOutput]] = ???
 }
