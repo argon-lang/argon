@@ -147,76 +147,104 @@ object SourceClassConstructor {
                 yield result
 
 
-              def convertBaseCall(env: Env)(stmt: Option[WithSource[parser.InitializeStmt]]): Comp[(Option[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.ClassConstructorCall]], Env)] =
-                owner.arClass.signature.flatMap { sig =>
-                  ZIO.foreach(stmt) { stmt =>
-                    ZIO.foreach(stmt.value.value) { valueExpr =>
-                      exprConverter.convertExpr(valueExpr).check(env, opt.copy(allowAbstractConstructorCall = true), exprConverter.anyType)
-                        .flatMap {
-                          case ExprResult(exprConverter.exprContext.WrapExpr.OfExpr(baseCall), env) =>
-                            baseCall.constructor match {
-                              case ctor: (baseCall.constructor.type & exprConverter.exprContext.ExprConstructor.ClassConstructorCall) =>
+              def convertBaseCall(env: Env)(stmt: Option[WithSource[parser.InitializeStmt]]): Comp[(Option[exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.ClassConstructorCall]], exprConverter.exprContext.LocalVariable, Env)] =
+                def extractEnv[T](env: Env)(opt: Option[(T, Env)]): (Option[T], Env) =
+                  opt match
+                    case Some((t, env)) => (Some(t), env)
+                    case None => (None, env)
+                  end match
 
-                                def typeMatches(env: Env)(t: exprConverter.exprContext.WrapExpr): Comp[Option[Env]] =
-                                  val (instanceType, _) = baseCall.getArgs(ctor)
-                                  exprConverter.isSameType(env, exprConverter.exprContext.WrapExpr.OfExpr(instanceType), t)
-                                end typeMatches
+                def createClassType(sig: Signature[WrapExpr, context.ExprContext.ClassResult]): exprConverter.exprContext.WrapExpr =
+                  exprConverter.exprContext.WrapExpr.OfExpr(
+                    exprConverter.exprContext.ArExpr(
+                      exprConverter.exprContext.ExprConstructor.ClassType(owner.arClass),
+                      sig.parameters.zipWithIndex.map { case (param, i) =>
+                        val paramType = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(param.paramType)
 
+                        val paramVar = exprConverter.exprContext.ParameterVariable(owner.arClass, i, paramType, param.isErased, param.name)
 
-                                val classType = exprConverter.exprContext.WrapExpr.OfExpr(
-                                  exprConverter.exprContext.ArExpr(
-                                    exprConverter.exprContext.ExprConstructor.ClassType(owner.arClass),
-                                    sig.parameters.zipWithIndex.map { case (param, i) =>
-                                      val paramType = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(param.paramType)
+                        exprConverter.exprContext.WrapExpr.OfExpr(
+                          exprConverter.exprContext.ArExpr(
+                            exprConverter.exprContext.ExprConstructor.LoadVariable(paramVar),
+                            EmptyTuple
+                          )
+                        )
+                      }
+                    )
+                  )
 
-                                      val paramVar = exprConverter.exprContext.ParameterVariable(owner.arClass, i, paramType, param.isErased, param.name)
-
-                                      exprConverter.exprContext.WrapExpr.OfExpr(
-                                        exprConverter.exprContext.ArExpr(
-                                          exprConverter.exprContext.ExprConstructor.LoadVariable(paramVar),
-                                          EmptyTuple
-                                        )
-                                      )
-                                    }
-                                  )
-                                )
-
-                                typeMatches(env)(classType)
-                                  .flatMap {
-                                    case Some(env) => ZIO.succeed(Some(env))
-                                    case None =>
-                                      sig.unsubstitutedResult.baseClass.flatMap { baseClass =>
-                                        ZIO.foreach(baseClass) { baseClass =>
-                                          val baseClassConv = ExprToHolesConverter(context)(exprConverter.exprContext).processClassType(baseClass)
-                                          typeMatches(env)(exprConverter.exprContext.WrapExpr.OfExpr(baseClassConv))
-                                        }.map(_.flatten)
-                                      }
-                                  }
-                                  .flatMap {
-                                    case Some(env) => ZIO.succeed((exprConverter.exprContext.ArExpr(ctor, baseCall.getArgs(ctor)), env))
-                                    case None => ???
-                                  }
-
-                              case _ =>
-                                ???
-                            }
-
-                          case _ => ???
-                        }
-                    }
-                  }
-                    .map(_.flatten)
+                def createBaseCall(env: Env)(sig: Signature[WrapExpr, context.ExprContext.ClassResult])(valueExpr: WithSource[parser.Expr]): Comp[(exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.ClassConstructorCall], Env)] =
+                  exprConverter.convertExpr(valueExpr).check(env, opt.copy(allowAbstractConstructorCall = true), exprConverter.anyType)
                     .flatMap {
-                      case Some((baseCall, env)) => ZIO.succeed((Some(baseCall), env))
-                      case None =>
-                        sig.unsubstitutedResult.baseClass.map { baseClass =>
-                          if baseClass.isEmpty then
-                            (None, env)
-                          else
+                      case ExprResult(exprConverter.exprContext.WrapExpr.OfExpr(baseCall), env) =>
+                        baseCall.constructor match {
+                          case ctor: (baseCall.constructor.type & exprConverter.exprContext.ExprConstructor.ClassConstructorCall) =>
+
+                            def typeMatches(env: Env)(t: exprConverter.exprContext.WrapExpr): Comp[Option[Env]] =
+                              val (instanceType, _) = baseCall.getArgs(ctor)
+                              exprConverter.isSameType(env, exprConverter.exprContext.WrapExpr.OfExpr(instanceType), t)
+                            end typeMatches
+
+                            val classType = createClassType(sig)
+
+                            typeMatches(env)(classType)
+                              .flatMap {
+                                case Some(env) => ZIO.succeed(Some(env))
+                                case None =>
+                                  sig.unsubstitutedResult.baseClass.flatMap { baseClass =>
+                                    ZIO.foreach(baseClass) { baseClass =>
+                                      val baseClassConv = ExprToHolesConverter(context)(exprConverter.exprContext).processClassType(baseClass)
+                                      typeMatches(env)(exprConverter.exprContext.WrapExpr.OfExpr(baseClassConv))
+                                    }.map(_.flatten)
+                                  }
+                              }
+                              .flatMap {
+                                case Some(env) => ZIO.succeed((exprConverter.exprContext.ArExpr(ctor, baseCall.getArgs(ctor)), env))
+                                case None => ???
+                              }
+
+                          case _ =>
                             ???
                         }
+
+                      case _ => ???
                     }
-                }
+
+                def createInstanceVar(env: Env)(sig: Signature[WrapExpr, context.ExprContext.ClassResult]): Comp[exprConverter.exprContext.LocalVariable] =
+                  for
+                    id <- UniqueIdentifier.make
+                  yield exprConverter.exprContext.LocalVariable(
+                    id,
+                    createClassType(sig),
+                    name = stmt.flatMap { _.value.name },
+                    isMutable = false,
+                    isErased = false,
+                  )
+
+                for
+                  sig <- owner.arClass.signature
+
+                  (baseClassOpt, env) <-
+                    ZIO.foreach(stmt) { stmt =>
+                      ZIO.foreach(stmt.value.value)(createBaseCall(env)(sig))
+                    }
+                      .map(_.flatten)
+                      .map(extractEnv(env))
+
+                  instanceVariable <- createInstanceVar(env)(sig)
+
+                  _ <- baseClassOpt match {
+                    case Some(_) => ZIO.unit
+                    case None =>
+                      sig.unsubstitutedResult.baseClass.map { baseClass =>
+                        if baseClass.isEmpty then
+                          (None, env)
+                        else
+                          ???
+                      }
+                  }
+                yield (baseClassOpt, instanceVariable, env)
+              end convertBaseCall
 
               def resolvePreBaseCallBlocks(env: Env, stmts: Seq[exprConverter.exprContext.WrapExpr | UnresolvedFieldInit]): Comp[(Seq[Either[WrapExpr, FieldInitializationStatement]], Env)] =
                 ZIO.foldLeft(stmts)((Seq.empty[Either[WrapExpr, FieldInitializationStatement]], env)) {
@@ -243,7 +271,7 @@ object SourceClassConstructor {
                 env <- innerEnv
 
                 (preInitExpr, env) <- convertPreBaseCallBlocks(env, preInitStmts)
-                (baseCallOpt, env) <- convertBaseCall(env)(initStmt)
+                (baseCallOpt, instanceVariable, env) <- convertBaseCall(env)(initStmt)
                 (ExprResult(postInitExpr, env)) <- convertStmtBlock(env, postInitStmts)
 
                 (preInitResolved, env) <- resolvePreBaseCallBlocks(env, preInitExpr)
@@ -253,16 +281,20 @@ object SourceClassConstructor {
                   case Some((baseCall, env)) => (Some(baseCall), env)
                   case None => (None, env)
                 }
+                (instanceVariableResolved, env) <- exprConverter.resolveHolesLocalVariable(env, instanceVariable)
                 (postInitResolved, _) <- exprConverter.resolveHoles(env, postInitExpr)
               yield new ClassConstructorImplementationC.ExpressionBody {
                 override val context: ctx.type = ctx
+
                 override val preInitialization: Seq[Either[WrapExpr, FieldInitializationStatement]] = preInitResolved
-                override val baseConstructorCall: Option[BaseClassConstructorCallStatement] = baseCallResolvedOpt.map { baseCallResolved =>
+
+                override val baseConstructorCall: BaseClassConstructorCallStatement =
                   new ClassConstructorImplementationC.BaseClassConstructorCallStatement {
                     override val context: ctx.type = ctx
-                    override val baseCall: ArExpr[ExprConstructor.ClassConstructorCall] = baseCallResolved
+                    override val baseCall: Option[ArExpr[ExprConstructor.ClassConstructorCall]] = baseCallResolvedOpt
+                    override val instanceVariable: context.ExprContext.LocalVariable = instanceVariableResolved
                   }
-                }
+
                 override val postInitialization: WrapExpr = postInitResolved
               }
           }

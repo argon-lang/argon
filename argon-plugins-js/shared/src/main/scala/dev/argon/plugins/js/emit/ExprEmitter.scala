@@ -329,9 +329,9 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
                   yield Seq(exprStmt(initExpr))
               }
 
-              baseCall <- ZIO.foreach(impl.baseConstructorCall) { baseCall =>
-                val classCtor = baseCall.baseCall.constructor.classCtor
-                val (instanceType, args) = baseCall.baseCall.args
+              baseCall <- ZIO.foreach(impl.baseConstructorCall.baseCall) { baseCall =>
+                val classCtor = baseCall.constructor.classCtor
+                val (instanceType, args) = baseCall.args
 
                 for
                   constructorsExpr <-
@@ -348,8 +348,13 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
                 yield exprStmt(constructorsExpr.prop(getOverloadExportName(None, baseCtorSigErased)).prop("call").call((estree.ThisExpression() +: argExprs)*))
               }
 
+              instanceVarName <- getVariableName(impl.baseConstructorCall.instanceVariable)
+              instanceVarInit = Seq(
+                const(instanceVarName) := estree.ThisExpression()
+              )
+
               postInit <- emitWrapExprAsStmt(emitState)(impl.postInitialization)
-            yield preInit.flatten ++ baseCall.toList ++ postInit
+            yield preInit.flatten ++ baseCall.toList ++ instanceVarInit ++ postInit
           }
 
         yield estree.FunctionExpression(

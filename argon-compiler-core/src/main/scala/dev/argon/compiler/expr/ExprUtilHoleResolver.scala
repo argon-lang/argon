@@ -82,6 +82,13 @@ trait ExprUtilHoleResolver
       env <- envRef.get
     yield (convExpr, env)
 
+  def resolveHolesLocalVariable(env: Env, variable: exprContext.LocalVariable): Comp[(context.ExprContext.LocalVariable, Env)] =
+    for
+      envRef <- Ref.Synchronized.make(env)
+      convVar <- HoleResolver(envRef).processLocalVariable(variable)
+      env <- envRef.get
+    yield (convVar, env)
+
   trait SignatureHandlerPlus[Res1, Res2] extends SignatureHandler[Res2] {
     def convertResult(res: Res1): Res2
   }

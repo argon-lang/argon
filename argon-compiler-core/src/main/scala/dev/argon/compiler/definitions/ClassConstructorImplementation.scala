@@ -9,7 +9,7 @@ object ClassConstructorImplementationC {
   }
   trait ExpressionBody extends ClassConstructorImplementationC {
     val preInitialization: Seq[Either[context.ExprContext.WrapExpr, FieldInitializationStatement & HasContext[context.type]]]
-    val baseConstructorCall: Option[BaseClassConstructorCallStatement & HasContext[context.type]]
+    val baseConstructorCall: BaseClassConstructorCallStatement & HasContext[context.type]
     val postInitialization: context.ExprContext.WrapExpr
   }
 
@@ -19,6 +19,7 @@ object ClassConstructorImplementationC {
   }
 
   trait BaseClassConstructorCallStatement extends UsingContext {
-    val baseCall: context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.ClassConstructorCall]
+    val baseCall: Option[context.ExprContext.ArExpr[context.ExprContext.ExprConstructor.ClassConstructorCall]]
+    val instanceVariable: context.ExprContext.LocalVariable
   }
 }
