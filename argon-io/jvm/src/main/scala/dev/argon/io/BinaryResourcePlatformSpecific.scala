@@ -5,6 +5,6 @@ import java.io.InputStream
 import java.nio.channels.SeekableByteChannel
 
 trait BinaryResourcePlatformSpecific[-R, +E] {
-  def asInputStream: ZIO[R & Scope, E, Option[InputStream]] = ZIO.none
-  def asSeekableByteChannel: ZIO[R & Scope, E, Option[SeekableByteChannel]] = ZIO.none
+  def asInputStream: Option[ZIO[R & Scope, E, InputStream]] = None
+  def asSeekableByteChannel: Option[ZIO[R & Scope, E, SeekableByteChannel]] = None
 }

@@ -11,7 +11,8 @@ import scala.scalajs.js.typedarray.Uint8Array
 private[io] class JSZip() extends js.Object {
 
   def file(@unused path: String, @unused data: Uint8Array): this.type = js.native
-  def file(@unused path: String): JSZip.JSZipObject = js.native
+  def file(@unused path: String): JSZip.JSZipObject | Null = js.native
+  def forEach(callback: (String, JSZip.JSZipObject) => Unit): Unit = js.native
 
   def loadAsync(@unused data: Uint8Array): Promise[JSZip] = js.native
   def generateAsync(@unused options: JSZip.JSZipGeneratorOptions): Promise[Uint8Array] = js.native
@@ -31,7 +32,6 @@ private[io] object JSZip {
     def async(t: "uint8array"): Promise[Uint8Array]
   }
 
-  @js.native
   trait JSZipGeneratorOptions extends js.Object {
     val `type`: "uint8array"
   }

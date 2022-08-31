@@ -13,13 +13,11 @@ private[platform] final class PathBinaryResource(path: Path) extends BinaryResou
   override def asBytes: ZStream[Any, IOException, Byte] =
     ZStream.fromPath(path).refineToOrDie[IOException]
 
-  override def asInputStream: ZIO[Scope, IOException, Option[InputStream]] =
-    ZIO.fromAutoCloseable(ZIO.attempt { Files.newInputStream(path).nn }.refineToOrDie[IOException])
-      .asSome
+  override def asInputStream: Option[ZIO[Scope, IOException, InputStream]] =
+    Some(ZIO.fromAutoCloseable(ZIO.attempt { Files.newInputStream(path).nn }.refineToOrDie[IOException]))
 
-  override def asSeekableByteChannel: ZIO[Scope, IOException, Option[SeekableByteChannel]] =
-    ZIO.fromAutoCloseable(ZIO.attempt { Files.newByteChannel(path).nn }.refineToOrDie[IOException])
-      .asSome
+  override def asSeekableByteChannel: Option[ZIO[Scope, IOException, SeekableByteChannel]] =
+    Some(ZIO.fromAutoCloseable(ZIO.attempt { Files.newByteChannel(path).nn }.refineToOrDie[IOException]))
 
   override def fileName: Option[String] = Some(path.toString)
 }
