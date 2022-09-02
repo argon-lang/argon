@@ -24,7 +24,7 @@ object SourceTube {
     val tubeName2 = tubeName
     for {
       loadModule <-
-        ZIO.memoize[CompEnv, CompError, (ArTubeC & HasContext[context.type], ModulePath), ArModuleC & HasContext[context.type] & HasDeclaration[true]] { args =>
+        ZIO.memoize[CompEnv, CompError, (ArTubeC & HasContext[context.type], ModulePath), ArModuleC & HasContext[context.type] & HasImplementation[true]] { args =>
           val (tube, path) = args
           val moduleName = ModuleName(tubeName, path)
           modules.get(path) match {
@@ -33,17 +33,17 @@ object SourceTube {
           }
         }
     } yield new ArTubeC {
-      override type IsDeclaration = true
+      override type IsImplementation = true
 
       override val context: context2.type = context2
       override val tubeName: TubeName = tubeName2
 
       override val options: context.Options = opts
 
-      override def module(path: ModulePath): Comp[ArModule & HasDeclaration[true]] = loadModule((this, path))
+      override def module(path: ModulePath): Comp[ArModule & HasImplementation[true]] = loadModule((this, path))
       override lazy val modulePaths: Set[ModulePath] = modules.keySet
 
-      override def asDeclaration: Option[this.type & HasDeclaration[true]] = Some(this)
+      override def asDeclaration: Option[this.type & HasImplementation[true]] = Some(this)
     }
   end make
 

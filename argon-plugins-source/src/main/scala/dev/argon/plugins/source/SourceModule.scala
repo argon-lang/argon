@@ -21,7 +21,7 @@ object SourceModule {
       moduleName: ModuleName,
       moduleFile: ArgonSourceCodeResource[context.Env, context.Error],
     )
-    : UIO[ArModuleC & HasContext[context.type] & HasDeclaration[true]] =
+    : UIO[ArModuleC & HasContext[context.type] & HasImplementation[true]] =
     val context2: context.type = context
     val moduleName2 = moduleName
     for {
@@ -30,7 +30,7 @@ object SourceModule {
       exprConverter <- ExpressionConverter.make(context, tubeImporter)
       vtableBuilder <- VTableBuilder(context, tubeImporter)
     } yield new ArModuleC {
-      override type IsDeclaration = true
+      override type IsImplementation = true
 
       override val context: context2.type = context2
       override val tube: ArTube = currentTube

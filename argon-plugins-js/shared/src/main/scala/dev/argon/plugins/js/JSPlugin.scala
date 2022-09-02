@@ -1,7 +1,7 @@
 package dev.argon.plugins.js
 
 import dev.argon.compiler.*
-import dev.argon.compiler.definitions.HasDeclaration
+import dev.argon.compiler.definitions.HasImplementation
 import dev.argon.compiler.tube.ArTubeC
 import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.options.*
@@ -33,12 +33,12 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
   (ctx: Context { type Error >: JSPluginError })
   (adapter2: PluginContextAdapter.Aux[ctx.type, this.type])
   (opt: JSOptions[ctx.Env, ctx.Error])
-  (t: ArTubeC & HasContext[ctx.type] & HasDeclaration[true])
+  (t: ArTubeC & HasContext[ctx.type] & HasImplementation[true])
   : ctx.Comp[JSOutput[ctx.Env, ctx.Error]] =
     new TubeEmitter {
       override val context: ctx.type = ctx
       override val options: JSOptions[ctx.Env, ctx.Error] = opt
-      override val tube: ArTube & HasDeclaration[true] = t
+      override val tube: ArTube & HasImplementation[true] = t
       override val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type] = adapter2
     }.emitTube
 

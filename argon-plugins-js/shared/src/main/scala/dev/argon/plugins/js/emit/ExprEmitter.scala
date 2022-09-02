@@ -3,7 +3,7 @@ package dev.argon.plugins.js.emit
 import dev.argon.util.{*, given}
 import dev.argon.plugins.js.*
 import dev.argon.compiler.*
-import dev.argon.compiler.definitions.{ClassConstructorImplementationC, FunctionImplementationC, HasDeclaration, MethodImplementationC}
+import dev.argon.compiler.definitions.{ClassConstructorImplementationC, FunctionImplementationC, HasImplementation, MethodImplementationC}
 import dev.argon.compiler.module.{ModuleName, ModulePath}
 import dev.argon.compiler.signature.*
 import dev.argon.compiler.tube.TubeName
@@ -78,7 +78,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   import context.ExprContext.{ArExpr, ExprConstructor, WrapExpr}
 
-  def classExport(arClass: ArClass & HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
+  def classExport(arClass: ArClass & HasImplementation[true]): Comp[estree.ExportNamedDeclaration] =
     for
       _ <- arClass.validate
 
@@ -167,7 +167,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     )
 
 
-  def traitExport(arTrait: ArTrait & HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
+  def traitExport(arTrait: ArTrait & HasImplementation[true]): Comp[estree.ExportNamedDeclaration] =
     for
       _ <- arTrait.validate
 
@@ -204,7 +204,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       )
       )
 
-  def functionExport(func: ArFunc & HasDeclaration[true]): Comp[estree.ExportNamedDeclaration] =
+  def functionExport(func: ArFunc & HasImplementation[true]): Comp[estree.ExportNamedDeclaration] =
     for
       _ <- func.validate
 
@@ -244,7 +244,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     yield `export`(decl)
 
 
-  private def createMethods(methodsVarName: String, methods: Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[true]]]): Comp[Seq[estree.Statement]] =
+  private def createMethods(methodsVarName: String, methods: Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true]]]): Comp[Seq[estree.Statement]] =
     ZIO.foreach(
       for
         (methodName, methodsOfName) <- methods.toSeq
@@ -263,7 +263,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       )
     }
 
-  private def createMethod(method: ArMethod & HasDeclaration[true]): Comp[estree.Expression] =
+  private def createMethod(method: ArMethod & HasImplementation[true]): Comp[estree.Expression] =
     method.implementation.flatMap {
       case _: MethodImplementationC.Abstract =>
         ZIO.succeed(literal(null))
@@ -291,7 +291,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
     }
 
 
-  private def createClassCtors(ctors: Seq[ClassConstructor & HasDeclaration[true]]): Comp[Seq[estree.Statement]] =
+  private def createClassCtors(ctors: Seq[ClassConstructor & HasImplementation[true]]): Comp[Seq[estree.Statement]] =
     ZIO.foreach(ctors) { ctor =>
         for
           ctorExpr <- createClassCtor(ctor)
@@ -301,7 +301,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         yield id("constructors").prop(getOverloadExportName(None, ctorSigErased)) ::= ctorExpr
     }
 
-  private def createClassCtor(ctor: ClassConstructor & HasDeclaration[true]): Comp[estree.Expression] =
+  private def createClassCtor(ctor: ClassConstructor & HasImplementation[true]): Comp[estree.Expression] =
     ctor.implementation.flatMap {
       case impl: ClassConstructorImplementationC.ExpressionBody =>
         def createEmitState(scopeVars: TRef[Seq[estree.VariableDeclaration]]): EmitState =

@@ -19,7 +19,7 @@ object SourceTrait {
   (outerEnv: exprConverter2.Env)
   (traitOwner: TOwner & ArTraitC.Ownership[ctx.type])
   (stmt: TraitDeclarationStmt)
-  : ctx.Comp[ArTraitC & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[TOwner]] =
+  : ctx.Comp[ArTraitC & HasContext[ctx.type] & HasImplementation[true] & HasOwner[TOwner]] =
     for {
       traitId <- UniqueIdentifier.make
 
@@ -36,10 +36,10 @@ object SourceTrait {
         ]
       methodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
-          & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[OwnedByTraitC[ctx.type, traitOwner.type]]]]]
+          & HasContext[ctx.type] & HasImplementation[true] & HasOwner[OwnedByTraitC[ctx.type, traitOwner.type]]]]]
       staticMethodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
-          & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[OwnedByTraitStaticC[ctx.type, traitOwner.type]]]]]
+          & HasContext[ctx.type] & HasImplementation[true] & HasOwner[OwnedByTraitStaticC[ctx.type, traitOwner.type]]]]]
 
     } yield new ArTraitC with MethodCreationHelper {
       override val owner: traitOwner.type = traitOwner
@@ -48,7 +48,7 @@ object SourceTrait {
 
       override def isSealed: Boolean = stmt.modifiers.exists { _.value == parser.SealedModifier }
 
-      override type IsDeclaration = true
+      override type IsImplementation = true
 
       protected override val exprConverter: exprConverter2.type = exprConverter2
 
@@ -68,11 +68,11 @@ object SourceTrait {
       override def innerEnv: Comp[exprConverter.Env] =
         sigEnv.map { _._2 }
 
-      override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[true] & HasOwner[OwnedByTrait[owner.type]]]]] =
+      override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true] & HasOwner[OwnedByTrait[owner.type]]]]] =
         methodsCell.get(buildMethods[OwnedByTrait[owner.type]](OwnedByTraitC.apply)(stmt.instanceBody))
 
       override def staticMethods
-        : Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[true] & HasOwner[OwnedByTraitStatic[owner.type]]]]] =
+        : Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true] & HasOwner[OwnedByTraitStatic[owner.type]]]]] =
         staticMethodsCell.get(buildMethods[OwnedByTraitStatic[owner.type]](OwnedByTraitStaticC.apply)(stmt.body))
 
       override def vtable: Comp[context.VT.VTable] =

@@ -5,6 +5,7 @@ import dev.argon.compiler.*
 sealed trait ClassConstructorImplementationC extends UsingContext
 object ClassConstructorImplementationC {
   trait External extends ClassConstructorImplementationC {
+    val name: String
     val impl: context.ExternClassConstructorImplementation
   }
   trait ExpressionBody extends ClassConstructorImplementationC {

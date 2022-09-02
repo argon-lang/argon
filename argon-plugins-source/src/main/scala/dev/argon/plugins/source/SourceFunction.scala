@@ -17,7 +17,7 @@ object SourceFunction {
   (outerEnv: exprConverter.Env)
   (functionOwner: TOwner & ArFuncC.Ownership[ctx.type])
   (stmt: FunctionDeclarationStmt)
-  : ctx.Comp[ArFuncC & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[TOwner]] =
+  : ctx.Comp[ArFuncC & HasContext[ctx.type] & HasImplementation[true] & HasOwner[TOwner]] =
     for
       funcId <- UniqueIdentifier.make
 
@@ -33,7 +33,7 @@ object SourceFunction {
       override val id: UniqueIdentifier = funcId
       override val owner: functionOwner.type = functionOwner
 
-      override type IsDeclaration = true
+      override type IsImplementation = true
 
       private def sigEnv: Comp[(Signature[WrapExpr, FunctionResult], exprConverter.Env)] =
         sigCell.get(
@@ -66,6 +66,7 @@ object SourceFunction {
                   },
                   extern => new FunctionImplementationC.External {
                     override val context: ctx.type = ctx
+                    override val name: String = specifier
                     override val impl: context.ExternFunctionImplementation = extern
                   }
                 )

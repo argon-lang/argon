@@ -5,10 +5,10 @@ import dev.argon.compiler.definitions.*
 import dev.argon.compiler.module.ModuleElementC.ExportedElement
 import dev.argon.parser.IdentifierExpr
 
-enum ModuleElementC[TContext <: Context, IsDeclaration <: Boolean] {
-  case ClassElement(arClass: ArClassC & HasContext[TContext] & HasDeclaration[IsDeclaration] & HasOwner[OwnedByModuleC[TContext]])
-  case TraitElement(arTrait: ArTraitC & HasContext[TContext] & HasDeclaration[IsDeclaration] & HasOwner[OwnedByModuleC[TContext]])
-  case FunctionElement(func: ArFuncC & HasContext[TContext] & HasDeclaration[IsDeclaration] & HasOwner[OwnedByModuleC[TContext]])
+enum ModuleElementC[TContext <: Context, IsImplementation <: Boolean] {
+  case ClassElement(arClass: ArClassC & HasContext[TContext] & HasImplementation[IsImplementation] & HasOwner[OwnedByModuleC[TContext]])
+  case TraitElement(arTrait: ArTraitC & HasContext[TContext] & HasImplementation[IsImplementation] & HasOwner[OwnedByModuleC[TContext]])
+  case FunctionElement(func: ArFuncC & HasContext[TContext] & HasImplementation[IsImplementation] & HasOwner[OwnedByModuleC[TContext]])
   case ExportedElement(inner: ModuleElementC[TContext, ?])
 
   private def asHasOwner: HasOwner[OwnedByModuleC[TContext]] =

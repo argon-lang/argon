@@ -20,7 +20,7 @@ object JavaExecuteIOTests extends ZIOSpecDefault {
         JavaExecuteIO.runInterruptable(task)
       }
         .catchAll {
-          case ex: WrappedStringCause => ZIO.failCause(ex.cause)
+          case ex: WrappedStringCause => ZIO.refailCause(ex.cause)
           case ex => ZIO.die(ex)
         }
     }

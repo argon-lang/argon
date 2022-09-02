@@ -22,7 +22,7 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
 
   def purity: Boolean
 
-  type ImplementationType = IsDeclaration match {
+  type ImplementationType = IsImplementation match {
     case true => Comp[MethodImplementation]
     case false => Unit
   }

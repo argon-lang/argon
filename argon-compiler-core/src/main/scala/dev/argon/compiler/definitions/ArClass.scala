@@ -2,6 +2,7 @@ package dev.argon.compiler.definitions
 
 import dev.argon.compiler.*
 import dev.argon.compiler.module.ArModuleC
+import dev.argon.compiler.tube.ArTubeC
 import dev.argon.util.UniqueIdentifier
 import dev.argon.compiler.signature.Signature
 import dev.argon.parser.IdentifierExpr
@@ -18,9 +19,9 @@ abstract class ArClassC extends Definition with UsingContext derives CanEqual {
   def classMessageSource: DiagnosticSource
 
   def signature: Comp[Signature[WrapExpr, ClassResult]]
-  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByClass[owner.type]]]]]
-  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByClassStatic[owner.type]]]]]
-  def constructors: Comp[Seq[ClassConstructor & HasDeclaration[IsDeclaration]]]
+  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[IsImplementation] & HasOwner[OwnedByClass[owner.type]]]]]
+  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[IsImplementation] & HasOwner[OwnedByClassStatic[owner.type]]]]]
+  def constructors: Comp[Seq[ClassConstructor & HasImplementation[IsImplementation]]]
   def fields: Comp[Seq[MemberVariable]]
 
   def vtable: Comp[context.VT.VTable]
@@ -46,5 +47,8 @@ object ArClassC {
 
   def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC & HasContext[TContext] =
     owner.module
+
+  def getOwningTube[TContext <: Context](owner: Ownership[TContext]): ArTubeC & HasContext[TContext] =
+    getOwningModule(owner).tube
 }
 

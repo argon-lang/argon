@@ -2,7 +2,7 @@ package dev.argon.plugins.js.emit
 
 import dev.argon.compiler.*
 import dev.argon.compiler.module.{ModuleName, ModulePath}
-import dev.argon.compiler.definitions.HasDeclaration
+import dev.argon.compiler.definitions.HasImplementation
 import dev.argon.compiler.signature.ImportSpecifier
 import dev.argon.compiler.tube.ArTubeC
 import dev.argon.compiler.vtable.VTableBuilder
@@ -16,7 +16,7 @@ import zio.stm.*
 import zio.stream.*
 
 private[js] trait TubeEmitter extends EmitTubeCommon {
-  val tube: ArTube & HasDeclaration[true]
+  val tube: ArTube & HasImplementation[true]
 
   def emitTube: Comp[JSOutput[context.Env, context.Error]] =
     ZIO.succeed(JSOutput(
@@ -38,7 +38,7 @@ private[js] trait TubeEmitter extends EmitTubeCommon {
               override val tube: ArTube = TubeEmitter.this.tube
               override val imports: TMap[ImportSpecifier, String] = importMap
               override val additionalImports: TMap[ModuleName, TSet[String]] = additionalImportMap
-              override val module: ArModule & HasDeclaration[true] = arModule
+              override val module: ArModule & HasImplementation[true] = arModule
             }.program
         yield program
     end new

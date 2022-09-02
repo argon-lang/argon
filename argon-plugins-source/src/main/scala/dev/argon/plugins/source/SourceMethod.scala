@@ -17,7 +17,7 @@ object SourceMethod {
   (outerEnv: exprConverter.Env)
   (methodOwner: TOwner & ArMethodC.Ownership[ctx.type])
   (stmt: MethodDeclarationStmt)
-  : ctx.Comp[ArMethodC & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[TOwner]] =
+  : ctx.Comp[ArMethodC & HasContext[ctx.type] & HasImplementation[true] & HasOwner[TOwner]] =
     for
       methodId <- UniqueIdentifier.make
       sigCell <- MemoCell.make[ctx.Env, ctx.Error, (Signature[ctx.ExprContext.WrapExpr, ctx.ExprContext.FunctionResult], exprConverter.Env)]
@@ -52,7 +52,7 @@ object SourceMethod {
       override def signatureUnsubstituted: Comp[Signature[WrapExpr, FunctionResult]] =
         sigEnv.map { _._1 }
 
-      override type IsDeclaration = true
+      override type IsImplementation = true
       override def implementation: Comp[MethodImplementation] =
         implCell.get(
           stmt.body match {
@@ -71,6 +71,7 @@ object SourceMethod {
                   },
                   extern => new MethodImplementationC.External {
                     override val context: ctx.type = ctx
+                    override val name: String = specifier
                     override val impl: context.ExternMethodImplementation = extern
                   }
                 )

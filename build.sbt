@@ -5,7 +5,7 @@ import NodePlatformImplicits._
 import scala.sys.process.Process
 
 val graalVersion = "22.2.0"
-val zioVersion = "2.0.1"
+val zioVersion = "2.0.2"
 
 ThisBuild / semanticdbEnabled := true
 ThisBuild / scalafixDependencies += "com.github.vovapolu" %% "scaluzzi" % "0.1.20"
@@ -32,7 +32,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-json" % "0.3.0-RC11",
     "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.1.5",
 
-
+    "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
+    "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
   ),
 
 )
@@ -65,7 +66,7 @@ lazy val commonJVMSettings = Seq(
   libraryDependencies ++= Seq(
     "org.apache.commons" % "commons-compress" % "1.21",
     "commons-io" % "commons-io" % "2.11.0",
-    "dev.zio" %% "zio-logging" % "2.0.1",
+    "dev.zio" %% "zio-logging" % "2.1.0",
   ),
 
   Test / fork := true,
@@ -338,7 +339,7 @@ lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossT
       "-Yexplicit-nulls",
     ).contains),
 
-    libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
+//    libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 
     Compile / PB.targets := Seq(
       scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
@@ -432,6 +433,31 @@ lazy val argon_plugins_source = crossProject(JVMPlatform, JSPlatform, NodePlatfo
 lazy val argon_plugins_sourceJVM = argon_plugins_source.jvm
 lazy val argon_plugins_sourceJS = argon_plugins_source.js
 lazy val argon_plugins_sourceNode = argon_plugins_source.node
+
+
+lazy val argon_plugins_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugins-tube"))
+  .dependsOn(argon_compiler_core, argon_tube, argon_plugin)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-plugins-tube",
+  )
+
+lazy val argon_plugins_tubeJVM = argon_plugins_tube.jvm
+lazy val argon_plugins_tubeJS = argon_plugins_tube.js
+lazy val argon_plugins_tubeNode = argon_plugins_tube.node
 
 
 lazy val argon_plugins_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-js"))

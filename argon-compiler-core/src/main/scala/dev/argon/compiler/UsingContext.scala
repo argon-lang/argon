@@ -10,7 +10,7 @@ trait UsingContext {
 
   protected type ArTube = ArTubeC & HasContext[context.type]
   protected type ArModule = ArModuleC & HasContext[context.type]
-  protected type ModuleElement[IsDeclaration <: Boolean] = ModuleElementC[context.type, IsDeclaration]
+  protected type ModuleElement[IsImplementation <: Boolean] = ModuleElementC[context.type, IsImplementation]
   protected type ArClass = ArClassC & HasContext[context.type]
   protected type ArTrait = ArTraitC & HasContext[context.type]
   protected type ArFunc = ArFuncC & HasContext[context.type]

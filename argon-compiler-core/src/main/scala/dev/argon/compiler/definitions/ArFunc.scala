@@ -17,7 +17,7 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
   def isProof: Boolean
   def isErased: Boolean
 
-  type ImplementationType = IsDeclaration match {
+  type ImplementationType = IsImplementation match {
     case true => Comp[FunctionImplementation]
     case false => Unit
   }

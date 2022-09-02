@@ -6,6 +6,7 @@ sealed trait MethodImplementationC extends UsingContext
 object MethodImplementationC {
   trait Abstract extends MethodImplementationC
   trait External extends MethodImplementationC {
+    val name: String
     val impl: context.ExternMethodImplementation
   }
   trait ExpressionBody extends MethodImplementationC {

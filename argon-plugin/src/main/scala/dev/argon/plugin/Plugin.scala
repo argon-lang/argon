@@ -1,7 +1,7 @@
 package dev.argon.plugin
 
 import dev.argon.compiler.*
-import dev.argon.compiler.definitions.HasDeclaration
+import dev.argon.compiler.definitions.HasImplementation
 import dev.argon.compiler.tube.ArTubeC
 import dev.argon.options.*
 import dev.argon.io.*
@@ -26,7 +26,7 @@ trait Plugin[-R0, +E0] {
   (context: Context { type Env <: R0; type Error >: E0 })
   (adapter: PluginContextAdapter.Aux[context.type, this.type])
   (options: Options[context.Env, context.Error])
-  (tube: ArTubeC & HasContext[context.type] & HasDeclaration[true])
+  (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
   : context.Comp[Output[context.Env, context.Error]]
 
 

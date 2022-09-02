@@ -1,7 +1,7 @@
 package dev.argon.compiler.definitions
 
 trait DeclarationMode {
-  type IsDeclaration <: Boolean
+  type IsImplementation <: Boolean
 }
 
-type HasDeclaration[IsDecl <: Boolean] = DeclarationMode { type IsDeclaration = IsDecl }
+type HasImplementation[IsDecl <: Boolean] = DeclarationMode { type IsImplementation = IsDecl }

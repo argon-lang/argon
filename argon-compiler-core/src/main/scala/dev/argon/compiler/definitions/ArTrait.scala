@@ -14,8 +14,8 @@ abstract class ArTraitC extends Definition with UsingContext derives CanEqual {
   val id: UniqueIdentifier
   def isSealed: Boolean
   def signature: Comp[Signature[WrapExpr, TraitResult]]
-  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByTrait[owner.type]]]]]
-  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasDeclaration[IsDeclaration] & HasOwner[OwnedByTraitStatic[owner.type]]]]]
+  def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[IsImplementation] & HasOwner[OwnedByTrait[owner.type]]]]]
+  def staticMethods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[IsImplementation] & HasOwner[OwnedByTraitStatic[owner.type]]]]]
 
   def vtable: Comp[context.VT.VTable]
 

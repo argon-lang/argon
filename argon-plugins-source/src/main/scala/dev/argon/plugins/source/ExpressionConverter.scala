@@ -713,7 +713,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         case LookupResult.NotFound() =>
           rejected match {
             case Seq() => ZIO.fail(DiagnosticError.LookupFailed(DiagnosticSource.Location(overloadLocation), lookupName))
-            case Seq(error) => ZIO.failCause(error)
+            case Seq(error) => ZIO.refailCause(error)
             case _ => ZIO.fail(DiagnosticError.OverloadsFailed(DiagnosticSource.Location(overloadLocation), lookupName))
           }
       }

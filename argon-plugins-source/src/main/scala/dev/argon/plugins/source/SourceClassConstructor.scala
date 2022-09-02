@@ -18,7 +18,7 @@ object SourceClassConstructor {
   (outerEnv: exprConverter.Env)
   (ctorOwnership: TOwner & ClassConstructorC.Ownership[ctx.type])
   (stmt: ClassConstructorDeclarationStmt)
-  : ctx.Comp[ClassConstructorC & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[TOwner]] =
+  : ctx.Comp[ClassConstructorC & HasContext[ctx.type] & HasImplementation[true] & HasOwner[TOwner]] =
     for
       methodId <- UniqueIdentifier.make
       sigCell <- MemoCell.make[ctx.Env, ctx.Error, (Signature[ctx.ExprContext.WrapExpr, Unit], exprConverter.Env)]
@@ -47,7 +47,7 @@ object SourceClassConstructor {
       override def signatureUnsubstituted: Comp[Signature[WrapExpr, Unit]] =
         sigEnv.map { _._1 }
 
-      override type IsDeclaration = true
+      override type IsImplementation = true
 
       override def implementation: Comp[ClassConstructorImplementation] =
         implCell.get(
@@ -62,6 +62,7 @@ object SourceClassConstructor {
                   },
                   extern => new ClassConstructorImplementationC.External {
                     override val context: ctx.type = ctx
+                    override val name: String = specifier
                     override val impl: context.ExternClassConstructorImplementation = extern
                   }
                 )
@@ -301,6 +302,6 @@ object SourceClassConstructor {
         )
 
 
-    } : ClassConstructorC & HasContext[ctx.type] & HasDeclaration[true] & HasOwner[TOwner])
+    } : ClassConstructorC & HasContext[ctx.type] & HasImplementation[true] & HasOwner[TOwner])
 
 }
