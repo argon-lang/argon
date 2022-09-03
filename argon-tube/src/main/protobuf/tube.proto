@@ -428,15 +428,13 @@ message FunctionResultVariableReference {
 
 
 message ClassType {
-  repeated LocalVariableDefinition variables = 1;
-  required BigInt classId = 2;
-  repeated Expr arguments = 3;
+  required BigInt classId = 1;
+  repeated Expr arguments = 2;
 }
 
 message TraitType {
-  repeated LocalVariableDefinition variables = 1;
-  required BigInt traitId = 2;
-  repeated Expr arguments = 3;
+  required BigInt traitId = 1;
+  repeated Expr arguments = 2;
 }
 
 

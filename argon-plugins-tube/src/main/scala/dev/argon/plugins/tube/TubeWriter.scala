@@ -39,7 +39,7 @@ trait TubeWriter extends UsingContext {
           .tap(ids.put(a, _))
     }.commit
 
-  def pushEntry(entry: ZipFileResource.Entry[context.Env, context.Error]): Comp[Unit] = ???
+  def pushEntry(entry: ZipFileResource.Entry[context.Env, context.Error]): Comp[Unit]
 
   def pushEntryMessage(path: String)(message: GeneratedMessage): Comp[Unit] = ???
 
@@ -63,12 +63,6 @@ trait TubeWriter extends UsingContext {
       }
 
     impl(sig)(Seq.empty)
-
-  private def emitClassType(classType: ArExpr[ExprConstructor.ClassType]): Comp[t.ClassType] =
-    ???
-
-  private def emitTraitType(traitType: ArExpr[ExprConstructor.TraitType]): Comp[t.TraitType] =
-    ???
 
 
   val classIds: TMap[ArClass, BigInt]
@@ -121,7 +115,7 @@ trait TubeWriter extends UsingContext {
       constructors <- arClass.constructors
       constructors <- ZIO.foreach(constructors) { ctor =>
         for
-          id <- getClassConstructorId(ctor)
+          id <- emitClassConstructor(ctor)
         yield t.ClassConstructorMember(
           id,
           getAccessModifier(ctor.owner.accessModifier),
@@ -600,5 +594,28 @@ trait TubeWriter extends UsingContext {
       case WrapExpr.OfHole(hole) => hole
     }
   end getExpr
+
+  private def emitClassType(classType: ArExpr[ExprConstructor.ClassType]): Comp[t.ClassType] =
+    withVariables { getVarId =>
+      for
+        id <- getClassId(classType.constructor.arClass)
+        args <- ZIO.foreach(classType.args)(getExpr(getVarId))
+      yield t.ClassType(
+        classId = id,
+        arguments = args,
+      )
+    }
+
+  private def emitTraitType(traitType: ArExpr[ExprConstructor.TraitType]): Comp[t.TraitType] =
+    withVariables { getVarId =>
+      for
+        id <- getTraitId(traitType.constructor.arTrait)
+        args <- ZIO.foreach(traitType.args)(getExpr(getVarId))
+      yield t.TraitType(
+        traitId = id,
+        arguments = args,
+      )
+    }
+
 
 }
