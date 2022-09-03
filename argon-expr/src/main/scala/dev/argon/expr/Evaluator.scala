@@ -65,7 +65,7 @@ trait Evaluator[-R, +E] {
               case tupleCtor: (tupleExpr.constructor.type & ExprConstructor.LoadTuple.type) =>
                 val tupleArgs: Seq[WrapExpr] = tupleExpr.getArgs(tupleCtor)
                 tupleArgs
-                  .slice(ctor.index, ctor.index + 1)
+                  .slice(ctor.index.toInt, ctor.index.toInt + 1)
                   .headOption
                   .getOrElse { WrapExpr.OfExpr(expr) }
 

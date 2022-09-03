@@ -174,7 +174,7 @@ message ClassDefinition {
   }
 
   message Signature {
-    repeated ExprWithVariables parameterTypes = 1;
+    repeated Expr parameterTypes = 1;
     optional ClassType baseClass = 2;
     repeated TraitType baseTraits = 3;
   }
@@ -183,7 +183,7 @@ message ClassDefinition {
 message ClassField {
   required Identifier name = 1;
   required Mutability mutability = 2;
-  required ExprWithVariables fieldType = 3;
+  required Expr fieldType = 3;
 }
 
 message MethodMember {
@@ -214,7 +214,7 @@ message TraitDefinition {
   }
 
   message Signature {
-    repeated ExprWithVariables parameterTypes = 1;
+    repeated Expr parameterTypes = 1;
     repeated TraitType baseTraits = 2;
   }
 }
@@ -237,14 +237,14 @@ message FunctionDefinition {
 }
 
 message FunctionSignature {
-  repeated ExprWithVariables parameterTypes = 1;
-  required ExprWithVariables resultType = 2;
-  repeated ExprWithVariables ensuresClauses = 3;
+  repeated Expr parameterTypes = 1;
+  required Expr resultType = 2;
+  repeated Expr ensuresClauses = 3;
 }
 
 message FunctionBody {
   oneof value {
-    ExprWithVariables expressionBody = 1;
+    Expr expressionBody = 1;
     string externalImplementation = 2;
   }
 }
@@ -286,7 +286,7 @@ message ClassConstructorDefinition {
   }
 
   message Signature {
-    repeated ExprWithVariables parameterTypes = 1;
+    repeated Expr parameterTypes = 1;
   }
 
   message Body {
@@ -297,11 +297,10 @@ message ClassConstructorDefinition {
   }
 
   message ExpressionBody {
-    repeated LocalVariableDefinition variables = 1;
-    repeated PreInitializationStatement preInitialization = 2;
-    optional Expr baseConstructorCall = 3;
-    optional BigInt instanceVariable = 4;
-    required Expr postInitialization = 5;
+    repeated PreInitializationStatement preInitialization = 1;
+    optional Expr baseConstructorCall = 2;
+    required BigInt instanceVariable = 3;
+    required Expr postInitialization = 4;
   }
 
   message PreInitializationStatement {
@@ -312,7 +311,7 @@ message ClassConstructorDefinition {
   }
 
   message FieldInitializationStatement {
-    required string field = 1;
+    required Identifier field = 1;
     required Expr value = 2;
   }
 }
@@ -320,24 +319,26 @@ message ClassConstructorDefinition {
 
 // Expressions
 message Expr {
-  oneof value {
-    LoadId bindVariable = 1;
+  oneof constructor {
+    LocalVariableDefinition bindVariable = 2;
     LoadId classConstructorCall = 16;
     google.protobuf.Empty ensureExecuted = 17;
-    LoadId functionCall = 2;
-    google.protobuf.Empty functionObjectCall = 3;
-    google.protobuf.Empty ifElse = 4;
-    bool loadConstantBool = 5;
-    BigInt loadConstantInt = 6;
-    string loadConstantString = 7;
-    LoadLambda loadLambda = 8;
-    google.protobuf.Empty loadTuple = 9;
-    int32 loadTupleElement = 10;
-    LoadId methodCall = 11;
+    LoadId functionCall = 3;
+    google.protobuf.Empty functionObjectCall = 4;
+    google.protobuf.Empty ifElse = 5;
+    bool loadConstantBool = 6;
+    BigInt loadConstantInt = 7;
+    string loadConstantString = 8;
+    LoadLambda loadLambda = 9;
+    google.protobuf.Empty loadTuple = 10;
+    BigInt loadTupleElement = 11;
+    VariableReference loadVariable = 12;
+    LoadId methodCall = 13;
     google.protobuf.Empty raiseException = 18;
-    LoadId storeVariable = 19;
+    google.protobuf.Empty sequence = 14;
+    VariableReference storeVariable = 19;
     google.protobuf.Empty typeN = 20;
-    LoadId omegaTypeN = 21;
+    BigInt omegaTypeN = 21;
     google.protobuf.Empty anyType = 22;
     LoadId traitType = 23;
     LoadId classType = 24;
@@ -347,40 +348,84 @@ message Expr {
     ExistentialType existentialType = 28;
     google.protobuf.Empty conjunctionType = 29;
     google.protobuf.Empty disjunctionType = 30;
-    google.protobuf.Empty subtypeWitnessType = 31;
-    google.protobuf.Empty equalToType = 32;
-    google.protobuf.Empty assumeErasedValue = 33;
+    google.protobuf.Empty neverType = 31;
+    google.protobuf.Empty subtypeWitnessType = 32;
+    google.protobuf.Empty equalToType = 33;
+    google.protobuf.Empty assumeErasedValue = 34;
   }
+  repeated Expr arguments = 1;
 
   message LoadId {
     required BigInt id = 1;
   }
 
+  message BindVariable {
+    required LocalVariableDefinition variable = 1;
+  }
+
   message LoadLambda {
-    required BigInt argVariable = 1;
+    required LocalVariableDefinition argVariable = 1;
   }
 
   message ExistentialType {
-    required BigInt variable = 1;
+    required LocalVariableDefinition variable = 1;
   }
 }
 
-message ExprWithVariables {
-  repeated LocalVariableDefinition variables = 1;
-  required Expr expr = 2;
-}
-
-enum LocalVariableFlags {
-  LOCAL_VARIABLE_FLAGS_NONE = 0;
-  LOCAL_VARIABLE_FLAGS_IS_ERASED = 1;
-}
-
 message LocalVariableDefinition {
-  required LocalVariableFlags flags = 1;
+  required uint32 flags = 1;
   required Expr varType = 2;
-  required string name = 3;
+  optional Identifier name = 3;
   required bool isMutable = 4;
+
+  enum Flags {
+    FLAGS_NONE = 0;
+    FLAGS_IS_ERASED = 1;
+  }
 }
+
+message VariableReference {
+  oneof sealed_value {
+    LocalVariableReference localVariable = 1;
+    InstanceVariableReference instanceVariable = 2;
+    MemberVariableReference memberVariable = 3;
+    ParameterVariableReference parameterVariable = 4;
+    FunctionResultVariableReference functionResultVariable = 5;
+  }
+}
+
+message LocalVariableReference {
+  required BigInt id = 1;
+}
+
+message InstanceVariableReference {
+  required BigInt methodId = 1;
+}
+
+message MemberVariableReference {
+  required BigInt classId = 1;
+  required Identifier name = 2;
+}
+
+message ParameterVariableOwner {
+  oneof owner {
+    BigInt methodId = 2;
+    BigInt functionId = 3;
+    BigInt classId = 4;
+    BigInt traitId = 5;
+    BigInt classConstructorId = 6;
+  }
+}
+
+message ParameterVariableReference {
+  required ParameterVariableOwner owner = 1;
+  required uint32 parameterIndex = 2;
+}
+
+message FunctionResultVariableReference {
+  required ParameterVariableOwner owner = 1;
+}
+
 
 message ClassType {
   repeated LocalVariableDefinition variables = 1;
@@ -393,6 +438,5 @@ message TraitType {
   required BigInt traitId = 2;
   repeated Expr arguments = 3;
 }
-
 
 

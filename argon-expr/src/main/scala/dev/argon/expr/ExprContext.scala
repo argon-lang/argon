@@ -194,7 +194,7 @@ trait ExprContext {
 
     case object LoadTuple extends ExprConstructorWithArgs[ArgList] with ExprConstructor derives CanEqual
 
-    final case class LoadTupleElement(index: Int) extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor
+    final case class LoadTupleElement(index: BigInt) extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor
         derives CanEqual
 
     final case class LoadVariable(variable: TVariable) extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor

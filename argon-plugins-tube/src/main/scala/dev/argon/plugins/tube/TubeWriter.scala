@@ -9,6 +9,7 @@ import dev.argon.tube as t
 import zio.*
 import zio.stm.*
 import scalapb.{GeneratedEnum, GeneratedMessage}
+import com.google.protobuf.empty.Empty
 
 trait TubeWriter extends UsingContext {
 
@@ -22,12 +23,15 @@ trait TubeWriter extends UsingContext {
     WrapExpr,
     ArExpr,
     ExprConstructor,
+    Variable,
+    LocalVariable,
+    ParameterVariableOwner,
     ClassResult,
     TraitResult,
     FunctionResult,
   }
 
-  private def getIdOf[A](ids: TMap[A, BigInt])(a: A): Comp[BigInt] =
+  private def getIdOf[A](ids: TMap[A, BigInt])(a: A): UIO[BigInt] =
     ids.get(a).flatMap {
       case Some(value) => ZSTM.succeed(value)
       case None =>
@@ -46,8 +50,8 @@ trait TubeWriter extends UsingContext {
     }
 
 
-  private def emitSignature[Res, A](sig: Signature[WrapExpr, Res])(f: (Seq[t.ExprWithVariables], Res) => Comp[A]): Comp[A] =
-    def impl(sig: Signature[WrapExpr, Res])(paramTypes: Seq[t.ExprWithVariables]): Comp[A] =
+  private def emitSignature[Res, A](sig: Signature[WrapExpr, Res])(f: (Seq[t.Expr], Res) => Comp[A]): Comp[A] =
+    def impl(sig: Signature[WrapExpr, Res])(paramTypes: Seq[t.Expr]): Comp[A] =
       sig match {
         case Signature.Parameter(_, _, _, paramType, next) =>
           getExprWithVariables(paramType).flatMap { t =>
@@ -218,7 +222,7 @@ trait TubeWriter extends UsingContext {
       ))
     yield id
 
-  def emitFunctionSignature(paramTypes: Seq[t.ExprWithVariables], functionResult: FunctionResult): Comp[t.FunctionSignature] =
+  def emitFunctionSignature(paramTypes: Seq[t.Expr], functionResult: FunctionResult): Comp[t.FunctionSignature] =
     for
       returnType <- getExprWithVariables(functionResult.returnType)
       ensuresClauses <- ZIO.foreach(functionResult.ensuresClauses)(getExprWithVariables)
@@ -305,7 +309,46 @@ trait TubeWriter extends UsingContext {
       impl <- classCtor.implementation
       body <- impl match {
         case impl: ClassConstructorImplementationC.ExpressionBody =>
-          ???
+          withVariables { getVarId =>
+            def getPreInit(stmt: Either[WrapExpr, ClassConstructorImplementationC.FieldInitializationStatement & HasContext[context.type]]): Comp[t.ClassConstructorDefinition.PreInitializationStatement] =
+              stmt match {
+                case Left(expr) =>
+                  for
+                    expr <- getExpr(getVarId)(expr)
+                  yield t.ClassConstructorDefinition.PreInitializationStatement(
+                    t.ClassConstructorDefinition.PreInitializationStatement.Value.Expr(expr)
+                  )
+                case Right(fieldInit) =>
+                  for
+                    value <- getExpr(getVarId)(fieldInit.value)
+                  yield t.ClassConstructorDefinition.PreInitializationStatement(
+                    t.ClassConstructorDefinition.PreInitializationStatement.Value.FieldInit(
+                      t.ClassConstructorDefinition.FieldInitializationStatement(
+                        field = getIdentifier(fieldInit.field.name.get),
+                        value = value,
+                      )
+                    )
+                  )
+              }
+
+            for
+              preInit <- ZIO.foreach(impl.preInitialization)(getPreInit)
+              baseCall <- ZIO.foreach(impl.baseConstructorCall.baseCall) { call =>
+                getExpr(getVarId)(WrapExpr.OfExpr(call))
+              }
+              instanceVar <- getVarId(impl.baseConstructorCall.instanceVariable)
+              postInit <- getExpr(getVarId)(impl.postInitialization)
+            yield t.ClassConstructorDefinition.ExpressionBody(
+              preInitialization = preInit,
+              baseConstructorCall = baseCall,
+              instanceVariable = instanceVar,
+              postInitialization = postInit,
+            )
+          }.map { body =>
+            t.ClassConstructorDefinition.Body(
+              t.ClassConstructorDefinition.Body.Value.ExpressionBody(body)
+            )
+          }
 
         case impl: ClassConstructorImplementationC.External =>
           ZIO.succeed(t.ClassConstructorDefinition.Body(t.ClassConstructorDefinition.Body.Value.ExternalImplementation(impl.name)))
@@ -351,6 +394,211 @@ trait TubeWriter extends UsingContext {
       case AccessModifier.Private => t.AccessModifier.Private
     }
 
-  def getExprWithVariables(expr: WrapExpr): Comp[t.ExprWithVariables] = ???
+  def getExprWithVariables(expr: WrapExpr): Comp[t.Expr] =
+    withVariables { getVarId =>
+      getExpr(getVarId)(expr)
+    }
+
+  def withVariables[A](f: (LocalVariable => UIO[BigInt]) => Comp[A]): Comp[A] =
+    TMap.empty[LocalVariable, BigInt].commit.flatMap { varMap =>
+      f(getIdOf(varMap))
+    }
+
+  def getExpr(getVarId: LocalVariable => UIO[BigInt])(expr: WrapExpr): Comp[t.Expr] =
+    def getVariableDeclaration(variable: LocalVariable): Comp[t.LocalVariableDefinition] =
+      for
+        id <- getVarId(variable)
+        varType <- getExpr(getVarId)(variable.varType)
+      yield t.LocalVariableDefinition(
+        flags = getFlags(
+          t.LocalVariableDefinition.Flags.IsErased -> variable.isErased,
+        ),
+        varType = varType,
+        name = variable.name.map(getIdentifier),
+        isMutable = variable.isMutable,
+      )
+
+    def getParameterVariableOwner(owner: ParameterVariableOwner): Comp[t.ParameterVariableOwner] =
+      (
+        owner match {
+          case owner: ArClass => getClassId(owner).map(t.ParameterVariableOwner.Owner.ClassId.apply)
+          case owner: ArTrait => getTraitId(owner).map(t.ParameterVariableOwner.Owner.TraitId.apply)
+          case owner: ArMethod => getMethodId(owner).map(t.ParameterVariableOwner.Owner.MethodId.apply)
+          case owner: ArFunc => getFunctionId(owner).map(t.ParameterVariableOwner.Owner.FunctionId.apply)
+          case owner: ClassConstructor => getClassConstructorId(owner).map(t.ParameterVariableOwner.Owner.ClassConstructorId.apply)
+        }
+      ).map(t.ParameterVariableOwner.apply)
+
+    def getVariableReference(variable: Variable): Comp[t.VariableReference] =
+      variable match {
+        case variable: context.ExprContext.LocalVariable =>
+          for
+            id <- getVarId(variable)
+          yield t.LocalVariableReference(id)
+
+        case variable: context.ExprContext.InstanceVariable =>
+          for
+            id <- getMethodId(variable.method)
+          yield t.InstanceVariableReference(
+            methodId = id,
+          )
+
+        case variable: context.ExprContext.MemberVariable =>
+          for
+            id <- getClassId(variable.ownerClass)
+          yield t.MemberVariableReference(
+            classId = id,
+            name = getIdentifier(variable.name.get),
+          )
+
+        case variable: context.ExprContext.ParameterVariable =>
+          for
+            owner <- getParameterVariableOwner(variable.owner)
+          yield t.ParameterVariableReference(
+            owner = owner,
+            parameterIndex = variable.parameterIndex,
+          )
+
+        case variable: context.ExprContext.FunctionResultVariable =>
+          for
+            owner <- getParameterVariableOwner(variable.owner)
+          yield t.FunctionResultVariableReference(
+            owner = owner,
+          )
+      }
+
+    def getExprCtor(ctor: ExprConstructor): Comp[t.Expr.Constructor] =
+      ctor match
+        case ExprConstructor.BindVariable(variable) =>
+          for
+            decl <- getVariableDeclaration(variable)
+          yield t.Expr.Constructor.BindVariable(decl)
+
+        case ExprConstructor.ClassConstructorCall(classCtor) =>
+          for
+            id <- getClassConstructorId(classCtor)
+          yield t.Expr.Constructor.ClassConstructorCall(t.Expr.LoadId(id))
+
+        case ExprConstructor.EnsureExecuted =>
+          ZIO.succeed(t.Expr.Constructor.EnsureExecuted(Empty()))
+
+        case ExprConstructor.FunctionCall(function) =>
+          for
+            id <- getFunctionId(function)
+          yield t.Expr.Constructor.FunctionCall(t.Expr.LoadId(id))
+
+        case ExprConstructor.FunctionObjectCall =>
+          ZIO.succeed(t.Expr.Constructor.FunctionObjectCall(Empty()))
+
+        case ExprConstructor.IfElse =>
+          ZIO.succeed(t.Expr.Constructor.IfElse(Empty()))
+
+        case ExprConstructor.LoadConstantBool(b) =>
+          ZIO.succeed(t.Expr.Constructor.LoadConstantBool(b))
+
+        case ExprConstructor.LoadConstantInt(i) =>
+          ZIO.succeed(t.Expr.Constructor.LoadConstantInt(i))
+
+        case ExprConstructor.LoadConstantString(s) =>
+          ZIO.succeed(t.Expr.Constructor.LoadConstantString(s))
+
+        case ExprConstructor.LoadLambda(argVariable) =>
+          for
+            decl <- getVariableDeclaration(argVariable)
+          yield t.Expr.Constructor.LoadLambda(t.Expr.LoadLambda(decl))
+
+        case ExprConstructor.LoadTuple =>
+          ZIO.succeed(t.Expr.Constructor.LoadTuple(Empty()))
+
+        case ExprConstructor.LoadTupleElement(index) =>
+          ZIO.succeed(t.Expr.Constructor.LoadTupleElement(index))
+
+        case ExprConstructor.LoadVariable(variable) =>
+          for
+            ref <- getVariableReference(variable)
+          yield t.Expr.Constructor.LoadVariable(ref)
+
+        case ExprConstructor.MethodCall(method) =>
+          for
+            id <- getMethodId(method)
+          yield t.Expr.Constructor.MethodCall(t.Expr.LoadId(id))
+
+        case ExprConstructor.PatternMatch(patterns) => ???
+        case ExprConstructor.RaiseException =>
+          ZIO.succeed(t.Expr.Constructor.RaiseException(Empty()))
+
+        case ExprConstructor.Sequence =>
+          ZIO.succeed(t.Expr.Constructor.Sequence(Empty()))
+
+        case ExprConstructor.StoreVariable(variable) =>
+          for
+            ref <- getVariableReference(variable)
+          yield t.Expr.Constructor.StoreVariable(ref)
+
+        case ExprConstructor.TypeN =>
+          ZIO.succeed(t.Expr.Constructor.TypeN(Empty()))
+
+        case ExprConstructor.OmegaTypeN(level) =>
+          ZIO.succeed(t.Expr.Constructor.OmegaTypeN(level))
+
+        case ExprConstructor.AnyType =>
+          ZIO.succeed(t.Expr.Constructor.AnyType(Empty()))
+
+        case ExprConstructor.TraitType(arTrait) =>
+          for
+            id <- getTraitId(arTrait)
+          yield t.Expr.Constructor.TraitType(t.Expr.LoadId(id))
+
+        case ExprConstructor.ClassType(arClass) =>
+          for
+            id <- getClassId(arClass)
+          yield t.Expr.Constructor.ClassType(t.Expr.LoadId(id))
+
+        case ExprConstructor.FunctionType =>
+          ZIO.succeed(t.Expr.Constructor.FunctionType(Empty()))
+
+        case ExprConstructor.UnionType =>
+          ZIO.succeed(t.Expr.Constructor.UnionType(Empty()))
+
+        case ExprConstructor.IntersectionType =>
+          ZIO.succeed(t.Expr.Constructor.IntersectionType(Empty()))
+
+        case ExprConstructor.ExistentialType(variable) =>
+          for
+            decl <- getVariableDeclaration(variable)
+          yield t.Expr.Constructor.ExistentialType(t.Expr.ExistentialType(decl))
+
+        case ExprConstructor.ConjunctionType =>
+          ZIO.succeed(t.Expr.Constructor.ConjunctionType(Empty()))
+
+        case ExprConstructor.DisjunctionType =>
+          ZIO.succeed(t.Expr.Constructor.DisjunctionType(Empty()))
+
+        case ExprConstructor.NeverType =>
+          ZIO.succeed(t.Expr.Constructor.NeverType(Empty()))
+
+        case ExprConstructor.SubtypeWitnessType =>
+          ZIO.succeed(t.Expr.Constructor.SubtypeWitnessType(Empty()))
+
+        case ExprConstructor.EqualTo =>
+          ZIO.succeed(t.Expr.Constructor.EqualToType(Empty()))
+
+        case ExprConstructor.AssumeErasedValue =>
+          ZIO.succeed(t.Expr.Constructor.AssumeErasedValue(Empty()))
+      end match
+
+    expr match {
+      case WrapExpr.OfExpr(expr) =>
+        for
+          ctor <- getExprCtor(expr.constructor)
+          args <- ZIO.foreach(expr.constructor.argsToExprs(expr.args))(getExpr(getVarId))
+        yield t.Expr(
+          constructor = ctor,
+          arguments = args,
+        )
+
+      case WrapExpr.OfHole(hole) => hole
+    }
+  end getExpr
 
 }
