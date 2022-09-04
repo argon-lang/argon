@@ -15,7 +15,12 @@ abstract class ClassConstructorC extends Definition with UsingContext derives Ca
 
   val owner: ClassConstructorC.Ownership[context.type]
 
-  def implementation: Comp[ClassConstructorImplementation]
+  type ImplementationType = IsImplementation match {
+    case true => Comp[ClassConstructorImplementation]
+    case false => Unit
+  }
+
+  def implementation: ImplementationType
 
   final override def equals(obj: Any): Boolean =
     obj.asInstanceOf[Matchable] match {

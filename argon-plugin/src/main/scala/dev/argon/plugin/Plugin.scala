@@ -16,6 +16,8 @@ trait Plugin[-R0, +E0] {
 
   given optionDecoder[E >: E0]: OptionDecoder[E, Options[Any, E]]
   given outputHandler[R <: R0, E >: E0]: OutputHandler[R, E, Output[R, E]]
+  
+  
 
   type ExternMethodImplementation
   type ExternFunctionImplementation

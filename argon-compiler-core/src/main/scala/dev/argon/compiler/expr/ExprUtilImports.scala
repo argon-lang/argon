@@ -30,7 +30,7 @@ trait ExprUtilImports extends ExprUtilBase {
           case ModuleElementC.ClassElement(c) => c.signature.flatMap(sigEraser.erasedNoResult)
           case ModuleElementC.TraitElement(t) => t.signature.flatMap(sigEraser.erasedNoResult)
           case ModuleElementC.FunctionElement(f) => f.signature.flatMap(sigEraser.erasedWithResult)
-          case ModuleElementC.ExportedElement(e) => getElementSig(e)
+          case ModuleElementC.ExportedElement(_, _, e) => getElementSig(e)
         }
 
       getElementSig(moduleElement)

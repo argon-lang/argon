@@ -2,21 +2,32 @@ package dev.argon.plugins.tube
 
 import dev.argon.compiler.{definitions, *}
 import dev.argon.compiler.definitions.*
+import dev.argon.compiler.module.ModuleName
 import dev.argon.compiler.signature.Signature
-import dev.argon.io.ZipFileResource
+import dev.argon.io.{BinaryResource, ProtobufResource, ZipFileResource}
 import dev.argon.parser.IdentifierExpr
 import dev.argon.tube as t
+import dev.argon.util.{*, given}
 import zio.*
 import zio.stm.*
 import scalapb.{GeneratedEnum, GeneratedMessage}
 import com.google.protobuf.empty.Empty
+import dev.argon.compiler.module.ModuleElementC
 
-trait TubeWriter extends UsingContext {
+trait TubeWriterBase extends UsingContext {
 
 
   val context: Context { type Error >: TubeError }
+  type IsImplementation <: Boolean
 
-  val emitTube: ArTube
+  protected def processImplementation[Impl, T](impl: IsImplementation match {
+    case true => Comp[Impl]
+    case false => Unit
+  })(f: Impl => Comp[T]): Comp[Option[T]]
+  
+  protected def tubeType: t.TubeType 
+
+  val currentTube: ArTube & HasImplementation[IsImplementation]
 
 
   import context.ExprContext.{
@@ -39,11 +50,117 @@ trait TubeWriter extends UsingContext {
           .tap(ids.put(a, _))
     }.commit
 
-  def pushEntry(entry: ZipFileResource.Entry[context.Env, context.Error]): Comp[Unit]
+  protected def pushEntry(entry: ZipFileResource.Entry[context.Env, context.Error]): Comp[Unit]
 
-  def pushEntryMessage(path: String)(message: GeneratedMessage): Comp[Unit] = ???
+  private def pushEntryMessage(zipPath: String)(message: GeneratedMessage): Comp[Unit] =
+    pushEntry(new ZipFileResource.Entry[context.Env, context.Error] {
+      override val path: String = zipPath
+
+      override def value: BinaryResource[context.Env, context.Error] =
+        new ProtobufResource[context.Env, context.Error, GeneratedMessage] with ProtobufResource.Impl[context.Env, context.Error, GeneratedMessage] {
+          override def fileName: Option[String] = None
+
+          override def asMessage: ZIO[context.Env, context.Error, GeneratedMessage] =
+            ZIO.succeed(message)
+        }
+    })
 
 
+  def emitTube(options: ): Comp[Unit] =
+    for
+      _ <- pushEntryMessage(Paths.get[t.TubeFormatVersion])(
+        t.TubeProto.defaultTubeFormatVersion.get(t.TubeFormatVersion.scalaDescriptor.getOptions).get
+      )
+
+      _ <- ZIO.foreachDiscard(currentTube.modulePaths) { path =>
+        currentTube.module(path).flatMap { module =>
+          emitModule(module)
+        }
+      }
+
+      metadata <- buildMetadata(t.Metadata(
+        name = t.TubeName(currentTube.tubeName.name.toList),
+        `type` = tubeType,
+        
+      ))
+      _ <- pushEntryMessage(Paths.get[t.Metadata])(
+        ???
+      )
+
+    yield ()
+
+  private def emitModule(module: ArModule & HasImplementation[IsImplementation]): Comp[Unit] =
+    for
+      exports <- module.allExports(Set.empty)
+      elements <- ZIO.foreach(exports.groupBy(_.name).toSeq) { (name, exports) =>
+        val (exported, decl) = exports.partitionMap {
+          case ModuleElementC.ClassElement(arClass) =>
+            Right(
+              for
+                id <- emitClass(arClass)
+              yield t.ModuleDefinition.ElementDeclaration(
+                id = id,
+                `type` = t.ModuleDefinition.ElementDeclaration.Type.Class,
+                accessModifier = getAccessModifier(arClass.owner.accessModifier),
+              )
+            )
+
+          case ModuleElementC.TraitElement(arTrait) =>
+            Right(
+              for
+                id <- emitTrait(arTrait)
+              yield t.ModuleDefinition.ElementDeclaration(
+                id = id,
+                `type` = t.ModuleDefinition.ElementDeclaration.Type.Trait,
+                accessModifier = getAccessModifier(arTrait.owner.accessModifier),
+              )
+            )
+
+          case ModuleElementC.FunctionElement(func) =>
+            Right(
+              for
+                id <- emitFunction(func)
+              yield t.ModuleDefinition.ElementDeclaration(
+                id = id,
+                `type` = t.ModuleDefinition.ElementDeclaration.Type.Function,
+                accessModifier = getAccessModifier(func.owner.accessModifier),
+              )
+            )
+
+          case ModuleElementC.ExportedElement(module, name, _) =>
+            Left(
+              t.ModuleDefinition.ElementExported(
+                module = getModuleName(module.moduleName),
+                name = name.map(getIdentifier),
+              )
+            )
+        }
+
+        ZIO.foreach(decl)(identity).map { decl =>
+          t.ModuleDefinition.NameGroup(
+            name = name.map(getIdentifier),
+            declaredElements = decl,
+            exportedElements = exported,
+          )
+        }
+      }
+
+      modulePath = Paths.get[t.ModuleDefinition] + (
+        module.moduleName.path.ids.map { part => "/" + part.replace("%", "%25").nn.replace("/", "%2F") }
+      ).mkString
+
+      _ <- pushEntryMessage(modulePath)(t.ModuleDefinition(
+        elements = elements,
+      ))
+
+    yield ()
+
+  
+  private def buildMetadata(metadata: t.Metadata): Comp[t.Metadata] =
+    ???
+  
+  
+  
   private def getFlags[T, Enum <: GeneratedEnum](flags: (Enum, Boolean)*): Int =
     flags.foldLeft(0) { case (acc, (enumValue, flagValue)) =>
       acc | (if flagValue then enumValue.value else 0)
@@ -64,13 +181,19 @@ trait TubeWriter extends UsingContext {
 
     impl(sig)(Seq.empty)
 
+  private def getModuleName(moduleName: ModuleName): t.ModuleName =
+    t.ModuleName(
+      tube = moduleName.tubeName.name.toList,
+      module = moduleName.path.ids,
+    )
+
 
   val classIds: TMap[ArClass, BigInt]
 
   def getClassId(arClass: ArClass): Comp[BigInt] =
     getIdOf(classIds)(arClass)
 
-  private def emitClass(arClass: ArClass & HasImplementation[true]): Comp[BigInt] =
+  private def emitClass(arClass: ArClass & HasImplementation[IsImplementation]): Comp[BigInt] =
     for
       _ <- arClass.validate
 
@@ -140,7 +263,7 @@ trait TubeWriter extends UsingContext {
   def getTraitId(arTrait: ArTrait): Comp[BigInt] =
     getIdOf(traitIds)(arTrait)
 
-  private def emitTrait(arTrait: ArTrait & HasImplementation[true]): Comp[BigInt] =
+  private def emitTrait(arTrait: ArTrait & HasImplementation[IsImplementation]): Comp[BigInt] =
     for
       _ <- arTrait.validate
 
@@ -181,7 +304,7 @@ trait TubeWriter extends UsingContext {
   def getFunctionId(func: ArFunc): Comp[BigInt] =
     getIdOf(functionIds)(func)
 
-  def emitFunction(func: ArFunc & HasImplementation[true]): Comp[BigInt] =
+  def emitFunction(func: ArFunc & HasImplementation[IsImplementation]): Comp[BigInt] =
     for
       _ <- func.validate
 
@@ -193,8 +316,7 @@ trait TubeWriter extends UsingContext {
       sig <- func.signature
       signature <- emitSignature(sig)(emitFunctionSignature)
 
-      impl <- func.implementation
-      body <- impl match {
+      body <- processImplementation(func.implementation) {
         case impl: FunctionImplementationC.ExpressionBody =>
           for
             body <- getExprWithVariables(impl.body)
@@ -203,7 +325,6 @@ trait TubeWriter extends UsingContext {
         case impl: FunctionImplementationC.External =>
           ZIO.succeed(t.FunctionBody(t.FunctionBody.Value.ExternalImplementation(impl.name)))
       }
-
 
       id <- getFunctionId(func)
       _ <- pushEntryMessage(Paths.get[t.FunctionDefinition].format(id))(t.FunctionDefinition(
@@ -227,10 +348,10 @@ trait TubeWriter extends UsingContext {
     )
 
 
-  def createMethodMemberGroup(name: Option[IdentifierExpr], methods: Seq[ArMethod & HasImplementation[true]]): Comp[Seq[t.MethodMember]] =
+  def createMethodMemberGroup(name: Option[IdentifierExpr], methods: Seq[ArMethod & HasImplementation[IsImplementation]]): Comp[Seq[t.MethodMember]] =
     ZIO.foreach(methods)(createMethodMember(name))
 
-  def createMethodMember(name: Option[IdentifierExpr])(method: ArMethod & HasImplementation[true]): Comp[t.MethodMember] =
+  def createMethodMember(name: Option[IdentifierExpr])(method: ArMethod & HasImplementation[IsImplementation]): Comp[t.MethodMember] =
     for
       id <- emitMethod(method)
     yield t.MethodMember(
@@ -245,7 +366,7 @@ trait TubeWriter extends UsingContext {
   def getMethodId(method: ArMethod): Comp[BigInt] =
     getIdOf(methodIds)(method)
 
-  def emitMethod(method: ArMethod & HasImplementation[true]): Comp[BigInt] =
+  def emitMethod(method: ArMethod & HasImplementation[IsImplementation]): Comp[BigInt] =
     for
       _ <- method.validate
 
@@ -261,8 +382,7 @@ trait TubeWriter extends UsingContext {
       sig <- method.signatureUnsubstituted
       signature <- emitSignature(sig)(emitFunctionSignature)
 
-      impl <- method.implementation
-      body <- impl match {
+      body <- processImplementation(method.implementation) {
         case impl: MethodImplementationC.ExpressionBody =>
           for
             body <- getExprWithVariables(impl.body)
@@ -282,7 +402,7 @@ trait TubeWriter extends UsingContext {
         effects = t.EffectInfo(
           isPure = method.purity,
         ),
-        body = body,
+        body = body.flatten,
       ))
     yield id
 
@@ -293,15 +413,14 @@ trait TubeWriter extends UsingContext {
   def getClassConstructorId(classCtor: ClassConstructor): Comp[BigInt] =
     getIdOf(classCtorIds)(classCtor)
 
-  def emitClassConstructor(classCtor: ClassConstructor & HasImplementation[true]): Comp[BigInt] =
+  def emitClassConstructor(classCtor: ClassConstructor & HasImplementation[IsImplementation]): Comp[BigInt] =
     for
       sig <- classCtor.signatureUnsubstituted
       signature <- emitSignature(sig) { (paramTypes, _) =>
         ZIO.succeed(t.ClassConstructorDefinition.Signature(paramTypes))
       }
 
-      impl <- classCtor.implementation
-      body <- impl match {
+      body <- processImplementation(classCtor.implementation) {
         case impl: ClassConstructorImplementationC.ExpressionBody =>
           withVariables { getVarId =>
             def getPreInit(stmt: Either[WrapExpr, ClassConstructorImplementationC.FieldInitializationStatement & HasContext[context.type]]): Comp[t.ClassConstructorDefinition.PreInitializationStatement] =

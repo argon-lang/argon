@@ -5,7 +5,7 @@ import zio.*
 import zio.stream.*
 
 
-trait ProtobufResourceImplPlatformSpecific[-R, +E, A <: GeneratedMessage] extends ProtobufResource[R, E, A] {
+trait ProtobufResourceImplPlatformSpecific[-R, +E, +A <: GeneratedMessage] extends ProtobufResource[R, E, A] {
   override def asBytes: ZStream[R, E, Byte] =
     ZStream.unwrapScoped(
       for

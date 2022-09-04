@@ -42,7 +42,7 @@ trait ExprUtilImplicitSource extends ExprUtilBase {
         private def moduleElementGivens(element: ModuleElement[?]): Seq[ImplicitValue] =
           element match
             case ModuleElementC.FunctionElement(func) if func.isProof => Seq(ImplicitValue.OfFunction(func))
-            case ModuleElementC.ExportedElement(inner) => moduleElementGivens(inner)
+            case ModuleElementC.ExportedElement(_, _, inner) => moduleElementGivens(inner)
             case _ => Seq()
           end match
 

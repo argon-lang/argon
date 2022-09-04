@@ -9,14 +9,14 @@ enum ModuleElementC[TContext <: Context, IsImplementation <: Boolean] {
   case ClassElement(arClass: ArClassC & HasContext[TContext] & HasImplementation[IsImplementation] & HasOwner[OwnedByModuleC[TContext]])
   case TraitElement(arTrait: ArTraitC & HasContext[TContext] & HasImplementation[IsImplementation] & HasOwner[OwnedByModuleC[TContext]])
   case FunctionElement(func: ArFuncC & HasContext[TContext] & HasImplementation[IsImplementation] & HasOwner[OwnedByModuleC[TContext]])
-  case ExportedElement(inner: ModuleElementC[TContext, ?])
+  case ExportedElement(importedFromModule: ArModuleC & HasContext[TContext], importedName: Option[IdentifierExpr], inner: ModuleElementC[TContext, ?])
 
   private def asHasOwner: HasOwner[OwnedByModuleC[TContext]] =
     this match {
       case ClassElement(e) => e
       case TraitElement(e) => e
       case FunctionElement(e) => e
-      case ExportedElement(inner) => inner.asHasOwner
+      case ExportedElement(_, _, inner) => inner.asHasOwner
     }
 
   def name: Option[IdentifierExpr] = asHasOwner.owner.ownedName

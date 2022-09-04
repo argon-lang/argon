@@ -13,10 +13,15 @@ message TubeZipEntry {
 
 extend google.protobuf.MessageOptions {
   optional TubeZipEntry zipentry = 5000;
+  optional TubeFormatVersion defaultTubeFormatVersion = 5001;
 }
 
 message TubeFormatVersion {
   option (zipentry) = { path: "version" };
+  option (defaultTubeFormatVersion) = {
+    major: { uintValue: 0 };
+    minor: { uintValue: 0 };
+  };
 
   optional BigInt major = 1;
   optional BigInt minor = 2;
@@ -27,7 +32,9 @@ message Metadata {
 
   required TubeName name = 1;
   required TubeType type = 2;
-  required Toml options = 3;
+  required Toml options = 16;
+  repeated ModulePath modules = 3;
+  
   repeated TubeName references = 4;
   repeated ExternalReference externalClasses = 5;
   repeated ExternalReference externalTraits = 6;
@@ -72,7 +79,7 @@ enum AccessModifier {
 
 message ErasedSignature {
   repeated ErasedSignatureType parameterTypes = 1;
-  required ErasedSignatureType resultType = 2;
+  optional ErasedSignatureType resultType = 2;
 }
 
 message ErasedSignatureType {
@@ -102,7 +109,7 @@ enum TubeType {
 
 message ModuleDefinition {
   // modules/definition/...
-  // the path will urlencode the characters / and %
+  // the path will urlencode (uppercase) the characters / and %
   // A root module will be written as modules/definition
   option (zipentry) = { path: "modules/definition" };
   
@@ -118,7 +125,6 @@ message ModuleDefinition {
     required BigInt id = 1;
     required Type type = 2;
     required AccessModifier accessModifier = 3;
-    required ErasedSignature signature = 4;
 
     enum Type {
       TYPE_UNKNOWN = 0;
@@ -130,10 +136,13 @@ message ModuleDefinition {
 
   message ElementExported {
     required ModuleName module = 1;
-    required ErasedSignature signature = 2;
+    optional Identifier name = 2;
   }
 }
 
+message ModulePath {
+  repeated string name = 1;
+}
 
 
 
@@ -227,7 +236,7 @@ message FunctionDefinition {
   required uint32 flags = 1;
   required FunctionSignature signature = 2;
   required EffectInfo effects = 3;
-  required FunctionBody body = 4;
+  optional FunctionBody body = 4;
 
   enum Flags {
     FLAGS_NONE = 0;
@@ -279,7 +288,7 @@ message ClassConstructorDefinition {
   required uint32 flags = 1;
   required Signature signature = 2;
   required EffectInfo effects = 3;
-  required Body body = 4;
+  optional Body body = 4;
 
   enum Flags {
     FLAGS_NONE = 0;
