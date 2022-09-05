@@ -18,8 +18,8 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
   override type Options[-R, +E] = JSOptions[R, E]
   override type Output[-R, +E] = JSOutput[R, E]
 
-  override def optionDecoder[E >: JSPluginError]: OptionDecoder[E, Options[Any, E]] =
-    summon[OptionDecoder[E, Options[Any, E]]]
+  override def optionCodec[R, E >: JSPluginError]: OptionCodec[R, E, Options[R, E]] =
+    summon[OptionCodec[R, E, Options[R, E]]]
 
   override def outputHandler[R, E >: JSPluginError]: OutputHandler[R, E, Output[R, E]] =
     summon[OutputHandler[R, E, Output[R, E]]]

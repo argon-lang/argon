@@ -32,9 +32,9 @@ message Metadata {
 
   required TubeName name = 1;
   required TubeType type = 2;
-  required Toml options = 16;
+  optional Toml options = 16;
   repeated ModulePath modules = 3;
-  
+
   repeated TubeName references = 4;
   repeated ExternalReference externalClasses = 5;
   repeated ExternalReference externalTraits = 6;
@@ -103,7 +103,7 @@ message TubeName {
 
 enum TubeType {
   TUBE_TYPE_INTERFACE = 0;
-  TUBE_TYPE_DEFINITION = 1;
+  TUBE_TYPE_IMPLEMENTATION = 1;
 }
 
 

@@ -2,8 +2,8 @@ package dev.argon.build
 
 import dev.argon.compiler.*
 import dev.argon.compiler.tube.{ArTubeC, TubeImporter, TubeName}
-import dev.argon.io.ResourceFactory
-import dev.argon.options.OptionDecoder
+import dev.argon.io.{ResourceFactory, ResourceRecorder}
+import dev.argon.options.OptionCodec
 import dev.argon.plugin.*
 import dev.argon.util.toml.Toml
 import zio.*
@@ -15,7 +15,7 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
   type ExternFunctionImplementation <: Tuple
   type ExternClassConstructorImplementation <: Tuple
 
-  given optionsHandler: OptionDecoder[E, Options]
+  given optionsHandler: OptionCodecTable[R, E, Options]
 
   def getPlugin(name: String): Option[Plugin[R, E]] =
     getPluginHelper(name).map { _.plugin }
@@ -96,7 +96,7 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
           plugin <- ZIO.fromEither(getPlugin(tubeOptions.loader.plugin).toRight(UnknownPlugin(tubeOptions.loader.plugin)))
           loader <- ZIO.fromEither(plugin.tubeLoaders.get(tubeOptions.loader.name).toRight(UnknownTubeLoader(tubeOptions.loader)))
 
-          libOptions <- loader.libOptionDecoder[E, Options]
+          libOptions <- loader.libOptionDecoder[R, E, Options]
             .decode(tubeOptions.options)
             .mapError(BuildConfigParseError.apply)
 
@@ -109,6 +109,10 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
     }
 
 
+}
+
+private[build] trait OptionCodecTable[R, E, A] extends OptionCodec[R, E, A] {
+  override def encode(value: A): ZIO[ResourceRecorder & R, E, Toml.Table]
 }
 
 private[build] object BuildContextFactory {
@@ -133,9 +137,12 @@ private[build] final class BuildContextFactoryNil[R <: ResourceFactory & CompEnv
   override type ExternFunctionImplementation = EmptyTuple
   override type ExternClassConstructorImplementation = EmptyTuple
 
-  override given optionsHandler: OptionDecoder[E, Options] with
+  override given optionsHandler: OptionCodecTable[R, E, Options] with
     override def decode(value: Toml): ZIO[ResourceFactory, String, Options] =
       ZIO.succeed(EmptyTuple)
+
+    override def encode(value: Options): ZIO[ResourceRecorder & R, E, Toml.Table] =
+      ZIO.succeed(Toml.Table.empty)
   end optionsHandler
 
 
@@ -159,16 +166,25 @@ private[build] final class BuildContextFactoryCons[R <: ResourceFactory & CompEn
   override type ExternFunctionImplementation = plugin.ExternFunctionImplementation *: rest.ExternFunctionImplementation
   override type ExternClassConstructorImplementation = plugin.ExternClassConstructorImplementation *: rest.ExternClassConstructorImplementation
 
-  override given optionsHandler: OptionDecoder[E, Options] with
+  override given optionsHandler: OptionCodecTable[R, E, Options] with
     override def decode(value: Toml): ZIO[ResourceFactory, String, Options] =
       val pluginOptToml = value match {
         case Toml.Table(map) => map.get(pluginName).getOrElse(Toml.Table.empty)
         case _ => Toml.Table.empty
       }
       for
-        pluginOpt <- plugin.optionDecoder[E].decode(pluginOptToml)
+        pluginOpt <- plugin.optionCodec[R, E].decode(pluginOptToml)
         tailOpt <- rest.optionsHandler.decode(value)
       yield pluginOpt *: tailOpt
+    end decode
+
+    override def encode(value: plugin.Options[R, E] *: rest.Options): ZIO[ResourceRecorder & R, E, Toml.Table] =
+      val (head *: tail) = value
+      for
+        headToml <- plugin.optionCodec[R, E].encode(head)
+        tailToml <- rest.optionsHandler.encode(tail)
+      yield tailToml
+    end encode
   end optionsHandler
 
 

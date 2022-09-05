@@ -14,10 +14,10 @@ trait Plugin[-R0, +E0] {
   type Options[-_, +_]
   type Output[-_, +_]
 
-  given optionDecoder[E >: E0]: OptionDecoder[E, Options[Any, E]]
+  given optionCodec[R <: R0, E >: E0]: OptionCodec[R, E, Options[R, E]]
   given outputHandler[R <: R0, E >: E0]: OutputHandler[R, E, Output[R, E]]
-  
-  
+
+
 
   type ExternMethodImplementation
   type ExternFunctionImplementation

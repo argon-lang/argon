@@ -19,8 +19,8 @@ import zio.stream.*
 object SourceTubeLoader extends TubeLoader[Any, SourceError] {
   override type LibOptions[-R, +E, ContextOptions] = SourceLibOptions[R, E, ContextOptions]
 
-  override def libOptionDecoder[E >: SourceError, ContextOptions](using OptionDecoder[E, ContextOptions]): OptionDecoder[E, LibOptions[Any, E, ContextOptions]] =
-    summon[OptionDecoder[E, LibOptions[Any, E, ContextOptions]]]
+  override def libOptionDecoder[R, E >: SourceError, ContextOptions](using OptionDecoder[E, ContextOptions]): OptionDecoder[E, LibOptions[R, E, ContextOptions]] =
+    summon[OptionDecoder[E, LibOptions[R, E, ContextOptions]]]
 
   def load
   (context: Context { type Error >: SourceError })
@@ -57,7 +57,7 @@ object SourceTubeLoader extends TubeLoader[Any, SourceError] {
             .asSomeError
             .flatMap {
               case Some(modulePath) =>
-                ZIO.logTrace(s"Found input file ${(path :+ name).mkString("/")}. Mapped to module ${modulePath.ids.mkString(".")}") *>
+                ZIO.logTrace(s"Found input file ${(path :+ name).mkString("/")}. Mapped to module ${modulePath}") *>
                 ZIO.succeed(modulePath -> resource)
               case None =>
                 ZIO.logDebug(s"Skipping input file ${(path :+ name).mkString("/")} as it was not mapped to a module") *>

@@ -20,8 +20,8 @@ final case class JSOptions[-R, +E]
 
 object JSOptions:
 
-  given optionDecoder[E >: JSPluginError]: OptionDecoder[E, JSOptions[Any, E]] =
-    OptionDecoder.derive
+  given optionDecoder[R, E >: JSPluginError]: OptionCodec[R, E, JSOptions[R, E]] =
+    OptionCodec.derive
 
 end JSOptions
 
@@ -33,8 +33,8 @@ final case class JSModuleOptions[-R, +E]
 
 object JSModuleOptions:
 
-  given optionDecoder[E >: JSPluginError]: OptionDecoder[E, JSModuleOptions[Any, E]] =
-    OptionDecoder.derive
+  given optionDecoder[R, E >: JSPluginError]: OptionCodec[R, E, JSModuleOptions[R, E]] =
+    OptionCodec.derive
 
 end JSModuleOptions
 
@@ -54,7 +54,7 @@ object JSTubeOptionsMap:
       Toml.Table(
         a.map.map {
           case (tubeName, options) =>
-            (tubeName.name.toList.mkString("."), summon[TomlCodec[JSTubeOptions]].encode(options))
+            (tubeName.urlEncode, summon[TomlCodec[JSTubeOptions]].encode(options))
         }
       )
 
@@ -65,9 +65,9 @@ object JSTubeOptionsMap:
             .toSeq
             .traverse { case (key, value) =>
               for
-                name <- NonEmptyList.fromList(key.split("\\.").nn.map(_.nn).toList).toRight { s"Key was empty: $key" }
+                name <- TubeName.urlDecode(key).toRight { s"Key was empty: $key" }
                 options <- summon[TomlCodec[JSTubeOptions]].decode(value)
-              yield (TubeName(name), options)
+              yield (name, options)
             }
             .map { optMap =>
               JSTubeOptionsMap(optMap.toMap)
@@ -88,16 +88,16 @@ final case class JSModuleOptionsMap[-R, +E]
 )
 
 object JSModuleOptionsMap:
-  given [E >: JSPluginError]: OptionDecoder[E, JSModuleOptionsMap[Any, E]] with
-    override def decode(value: Toml): ZIO[ResourceFactory, String, JSModuleOptionsMap[Any, E]] =
+  given [R, E >: JSPluginError]: OptionCodec[R, E, JSModuleOptionsMap[R, E]] with
+    override def decode(value: Toml): ZIO[ResourceFactory, String, JSModuleOptionsMap[R, E]] =
       value match {
         case Toml.Table(map) =>
           map
             .toSeq
             .traverse { case (key, value) =>
               for
-                options <- summon[OptionDecoder[E, JSModuleOptions[Any, E]]].decode(value)
-              yield (ModulePath(if key.isEmpty then Seq.empty else key.split("/").nn.map(_.nn).toSeq), options)
+                options <- summon[OptionCodec[R, E, JSModuleOptions[R, E]]].decode(value)
+              yield (ModulePath.urlDecode(key), options)
             }
             .map { optMap =>
               JSModuleOptionsMap(optMap.toMap)
@@ -106,6 +106,14 @@ object JSModuleOptionsMap:
         case _ =>
           ZIO.fail("Expected table")
       }
+
+    override def encode(value: JSModuleOptionsMap[R, E]): ZIO[ResourceRecorder & R, E, Toml] =
+      ZIO.foreach(value.map.toSeq) { (path, options) =>
+        summon[OptionCodec[R, E, JSModuleOptions[R, E]]].encode(options)
+          .map { convOpts =>
+            path.urlEncode -> convOpts
+          }
+      }.map { conv => Toml.Table(conv.toMap) }
 
     override def defaultValue: Option[JSModuleOptionsMap[Any, E]] = Some(JSModuleOptionsMap(Map.empty))
   end given

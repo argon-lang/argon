@@ -18,8 +18,8 @@ object TubePlugin extends Plugin[Any, TubeError] {
   override type Output[-R, +E] = TubeOutput[R, E]
 
 
-  override def optionDecoder[E >: TubeError]: OptionDecoder[E, Options[Any, E]] =
-    summon[OptionDecoder[E, Options[Any, E]]]
+  override def optionCodec[R, E >: TubeError]: OptionCodec[R, E, Options[R, E]] =
+    summon[OptionCodec[R, E, Options[R, E]]]
 
   override def outputHandler[R, E >: TubeError]: OutputHandler[R, E, Output[R, E]] =
     summon[OutputHandler[R, E, Output[R, E]]]

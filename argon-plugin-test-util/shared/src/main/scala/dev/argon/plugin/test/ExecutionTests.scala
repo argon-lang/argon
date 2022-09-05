@@ -113,7 +113,7 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
           case _ => Toml.Table.empty
         }
 
-        plugin.optionDecoder[E].decode(pluginValue)
+        plugin.optionCodec[Environment, E].decode(pluginValue)
       end decode
     end given
 
@@ -186,11 +186,11 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
               }.decodeJson(buildJson)
             )
 
-            options <- SourceTubeLoader.libOptionDecoder[E, plugin.Options[Environment, E]]
+            options <- SourceTubeLoader.libOptionDecoder[Environment, E, plugin.Options[Environment, E]]
               .decode(buildToml)
               .provide(ZLayer.succeed(resourceFactory))
 
-          yield TubeName(NonEmptyList.fromList(name.split("\\.").nn.map(_.nn).toList).get) -> options
+          yield TubeName.urlDecode(name).get -> options
         ).mapError(TestError.ErrorLoadingBuildConfig.apply)
 
     }

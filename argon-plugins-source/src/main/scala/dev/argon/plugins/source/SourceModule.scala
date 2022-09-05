@@ -62,6 +62,8 @@ object SourceModule {
         }
 
 
+      private def importsDropModule(imports: ImportsWithModule[context.type]): Imports[context.type] =
+        imports.view.mapValues(_.map(_._2)).toMap
 
       def loadElement
       (exportingModules: Set[ArModule])
@@ -93,11 +95,25 @@ object SourceModule {
           )
 
         stmt match {
-          case stmt: ImportStmt => imports.flatMap(loadImport(Set.empty)(stmt)).memoize.map((_, Seq()))
+          case stmt: ImportStmt =>
+            (
+              for
+                imports <- imports
+                newImports <- loadImport(Set.empty)(stmt)
+              yield mergeImports(imports, importsDropModule(newImports))
+            )
+              .memoize
+              .map((_, Seq()))
 
           case stmt: ExportStmt =>
-            loadImport(exportingModules)(stmt.fromImport)(Map.empty).map { exportedImports =>
-              (imports, exportedImports.values.flatten.map(ModuleElementC.ExportedElement.apply).toSeq)
+            loadImport(exportingModules)(stmt.fromImport).map { exportedImports =>
+              def exported: Iterator[ModuleElementC.ExportedElement[context.type, true]] =
+                for
+                  (name, elements) <- exportedImports.iterator
+                  (module, element) <- elements
+                yield ModuleElementC.ExportedElement(module, name, element)
+
+              (imports, exported.toSeq)
             }
           
           case stmt: TraitDeclarationStmt =>
@@ -135,7 +151,7 @@ object SourceModule {
           case pathSegment: ImportPathSegment.End => List((ModulePath(modulePath), pathSegment))
         }
 
-      private type ImportsUngrouped = Seq[(Option[IdentifierExpr], ModuleElement[?])]
+      private type ImportsUngrouped = Seq[(Option[IdentifierExpr], ArModule, ModuleElement[?])]
       private def loadModuleImports
       (exportingModules: Set[ArModule])
       (
@@ -151,7 +167,7 @@ object SourceModule {
 
           case ImportPathSegment.Imported(id) :: tail =>
             module.exports(Set.empty)(id).flatMap { newImports =>
-              loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((Some(id), _)))
+              loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((Some(id), module, _)))
             }
 
           case ImportPathSegment.Renaming(id, _) :: tail if importedIds.contains(id) =>
@@ -162,7 +178,7 @@ object SourceModule {
 
           case ImportPathSegment.Renaming(id, Some(viewedName)) :: tail =>
             module.exports(Set.empty)(id).flatMap { newImports =>
-              loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((Some(viewedName), _)))
+              loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((Some(viewedName), module, _)))
             }
 
           case ImportPathSegment.Wildcard :: _ :: _ =>
@@ -174,7 +190,7 @@ object SourceModule {
                 .flatMap { element =>
                   element.name match {
                     case Some(name) if importedIds.contains(name) => Seq.empty
-                    case name => Seq((name, element))
+                    case name => Seq((name, module, element))
                   }
                 }
 
@@ -197,7 +213,7 @@ object SourceModule {
         }
           .map { _.flatten }
 
-      private def loadImport(exportingModules: Set[ArModule])(stmt: ImportStmt)(imports: Imports[context.type]): context.Comp[Imports[context.type]] =
+      private def loadImport(exportingModules: Set[ArModule])(stmt: ImportStmt): context.Comp[ImportsWithModule[context.type]] =
         (stmt match {
           case ImportStmt.Absolute(pathSegment) => loadTubeImports(exportingModules)(currentTube, pathSegment)
           case ImportStmt.Relative(upCount, path) =>
@@ -226,9 +242,16 @@ object SourceModule {
           case ImportStmt.Member(_) => ???
 
         }).map { newImports =>
-          (imports.toSeq.flatMap { case (id, elements) => elements.map { (id, _) } } ++ newImports)
-            .groupMap(_._1)(_._2)
+          newImports.groupMap(_._1) { (_, module, element) => (module, element) }
         }
+
+      private def mergeImports(a: Imports[context.type], b: Imports[context.type]): Imports[context.type] =
+        def flattenImports(a: Imports[context.type]): Seq[(Option[IdentifierExpr], ModuleElement[?])] =
+          a.toSeq.flatMap { case (id, elements) => elements.map { (id, _) } }
+
+        (flattenImports(a) ++ flattenImports(b))
+          .groupMap(_._1)(_._2)
+      end mergeImports
 
 
     }

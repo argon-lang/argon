@@ -1112,7 +1112,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         case ModuleElementC.FunctionElement(arFunc) =>
           arFunc.signature.map(convertSig(functionSigHandler))
 
-        case ModuleElementC.ExportedElement(inner) =>
+        case ModuleElementC.ExportedElement(_, _, inner) =>
           signatureOf(inner)
       }
 
@@ -1187,7 +1187,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                 )
             }
 
-          case ModuleElementC.ExportedElement(inner) =>
+          case ModuleElementC.ExportedElement(_, _, inner) =>
             checkOverload(env, opt)(inner)
 
         })

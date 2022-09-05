@@ -20,12 +20,24 @@ trait TubeWriterBase extends UsingContext {
   val context: Context { type Error >: TubeError }
   type IsImplementation <: Boolean
 
-  protected def processImplementation[Impl, T](impl: IsImplementation match {
+  protected def ifImplementation[A, B, C](value: IsImplementation match {
+    case true => A
+    case false => B
+  })(whenImplementation: A => C, whenInterface: B => C): C
+
+  protected def dummyImplementationValue: IsImplementation match {
+    case true => Unit
+    case false => Unit
+  }
+
+  private def processImplementation[Impl, T](impl: IsImplementation match {
     case true => Comp[Impl]
     case false => Unit
-  })(f: Impl => Comp[T]): Comp[Option[T]]
-  
-  protected def tubeType: t.TubeType 
+  })(f: Impl => Comp[T]): Comp[Option[T]] =
+    ifImplementation(impl)(
+      whenImplementation = _.flatMap(f).asSome,
+      whenInterface = _ => ZIO.none,
+    )
 
   val currentTube: ArTube & HasImplementation[IsImplementation]
 
@@ -66,7 +78,10 @@ trait TubeWriterBase extends UsingContext {
     })
 
 
-  def emitTube(options: ): Comp[Unit] =
+  def emitTube(options: IsImplementation match {
+    case true => context.Options
+    case false => Unit
+  }): Comp[Unit] =
     for
       _ <- pushEntryMessage(Paths.get[t.TubeFormatVersion])(
         t.TubeProto.defaultTubeFormatVersion.get(t.TubeFormatVersion.scalaDescriptor.getOptions).get
@@ -80,8 +95,22 @@ trait TubeWriterBase extends UsingContext {
 
       metadata <- buildMetadata(t.Metadata(
         name = t.TubeName(currentTube.tubeName.name.toList),
-        `type` = tubeType,
-        
+        `type` = ifImplementation[Unit, Unit, t.TubeType](dummyImplementationValue)(
+          whenImplementation = _ => t.TubeType.Implementation,
+          whenInterface = _ => t.TubeType.Interface
+        ),
+        options = ???,
+        modules = currentTube.modulePaths
+          .iterator
+          .map { modulePath => t.ModulePath(modulePath.ids) }
+          .toSeq,
+
+        references = Seq.empty,
+        externalClasses = Seq.empty,
+        externalTraits = Seq.empty,
+        externalFunctions = Seq.empty,
+        externalMethods = Seq.empty,
+        externalClassConstructors = Seq.empty,
       ))
       _ <- pushEntryMessage(Paths.get[t.Metadata])(
         ???
@@ -146,8 +175,12 @@ trait TubeWriterBase extends UsingContext {
       }
 
       modulePath = Paths.get[t.ModuleDefinition] + (
-        module.moduleName.path.ids.map { part => "/" + part.replace("%", "%25").nn.replace("/", "%2F") }
-      ).mkString
+        if module.moduleName.path.ids.isEmpty then
+          ""
+        else
+          "/" + module.moduleName.path.urlEncode
+      )
+
 
       _ <- pushEntryMessage(modulePath)(t.ModuleDefinition(
         elements = elements,
@@ -155,12 +188,12 @@ trait TubeWriterBase extends UsingContext {
 
     yield ()
 
-  
+
   private def buildMetadata(metadata: t.Metadata): Comp[t.Metadata] =
     ???
-  
-  
-  
+
+
+
   private def getFlags[T, Enum <: GeneratedEnum](flags: (Enum, Boolean)*): Int =
     flags.foldLeft(0) { case (acc, (enumValue, flagValue)) =>
       acc | (if flagValue then enumValue.value else 0)

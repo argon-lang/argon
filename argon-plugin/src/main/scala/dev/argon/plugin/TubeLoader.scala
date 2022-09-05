@@ -11,7 +11,7 @@ import java.io.IOException
 
 trait TubeLoader[-R0, +E0] {
   type LibOptions[-_, +_, _]
-  given libOptionDecoder[E >: E0, ContextOptions](using OptionDecoder[E, ContextOptions]): OptionDecoder[E, LibOptions[Any, E, ContextOptions]]
+  given libOptionDecoder[R <: R0, E >: E0, ContextOptions] (using OptionDecoder[E, ContextOptions]): OptionDecoder[E, LibOptions[R, E, ContextOptions]]
 
   def load
   (context: Context { type Env <: R0; type Error >: E0 })

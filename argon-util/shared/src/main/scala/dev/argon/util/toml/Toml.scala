@@ -23,7 +23,7 @@ object Toml {
   end given
 
   object Table {
-    val empty = Toml.Table(Map.empty)
+    val empty: Toml.Table = Toml.Table(Map.empty)
   }
 
   given JsonDecoder[Toml] =

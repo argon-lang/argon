@@ -4,7 +4,7 @@ import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
 import dev.argon.compiler.tube.ArTubeC
 import dev.argon.io.ResourceFactory
-import dev.argon.options.{OptionDecoder, OutputHandler}
+import dev.argon.options.{OptionCodec, OutputHandler}
 import dev.argon.parser.SyntaxError
 import dev.argon.plugin.*
 import java.io.IOException
@@ -18,8 +18,8 @@ object SourcePlugin extends Plugin[Any, SourceError] {
   override type Options[-R, +E] = SourceOptions[R, E]
   override type Output[-R, +E] = SourceOutput[R, E]
 
-  override def optionDecoder[E >: SourceError]: OptionDecoder[E, Options[Any, E]] =
-    summon[OptionDecoder[E, Options[Any, E]]]
+  override def optionCodec[R, E >: SourceError]: OptionCodec[R, E, Options[R, E]] =
+    summon[OptionCodec[R, E, Options[R, E]]]
 
   override def outputHandler[R, E >: SourceError]: OutputHandler[R, E, Output[R, E]] =
     summon[OutputHandler[R, E, Output[R, E]]]
