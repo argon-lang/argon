@@ -112,7 +112,7 @@ private[build] sealed abstract class BuildContextFactory[R <: ResourceFactory & 
 }
 
 private[build] trait OptionCodecTable[R, E, A] extends OptionCodec[R, E, A] {
-  override def encode(value: A): ZIO[ResourceRecorder & R, E, Toml.Table]
+  override def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, Toml.Table]
 }
 
 private[build] object BuildContextFactory {
@@ -141,7 +141,7 @@ private[build] final class BuildContextFactoryNil[R <: ResourceFactory & CompEnv
     override def decode(value: Toml): ZIO[ResourceFactory, String, Options] =
       ZIO.succeed(EmptyTuple)
 
-    override def encode(value: Options): ZIO[ResourceRecorder & R, E, Toml.Table] =
+    override def encode(recorder: ResourceRecorder[R, E])(value: Options): ZIO[R, E, Toml.Table] =
       ZIO.succeed(Toml.Table.empty)
   end optionsHandler
 
@@ -178,11 +178,11 @@ private[build] final class BuildContextFactoryCons[R <: ResourceFactory & CompEn
       yield pluginOpt *: tailOpt
     end decode
 
-    override def encode(value: plugin.Options[R, E] *: rest.Options): ZIO[ResourceRecorder & R, E, Toml.Table] =
+    override def encode(recorder: ResourceRecorder[R, E])(value: plugin.Options[R, E] *: rest.Options): ZIO[R, E, Toml.Table] =
       val (head *: tail) = value
       for
-        headToml <- plugin.optionCodec[R, E].encode(head)
-        tailToml <- rest.optionsHandler.encode(tail)
+        headToml <- plugin.optionCodec[R, E].encode(recorder)(head)
+        tailToml <- rest.optionsHandler.encode(recorder)(tail)
       yield tailToml
     end encode
   end optionsHandler

@@ -25,13 +25,24 @@ message LocalDate {
 }
 
 message LocalDateTime {
-  required LocalDate date = 1;
-  required LocalTime time = 2;
+  required int32 year = 1;
+  required int32 month = 2;
+  required int32 dayOfMonth = 3;
+  required int32 hour = 4;
+  required int32 minute = 5;
+  required int32 second = 6;
+  required int32 nanoOfSecond = 7;
 }
 
 message OffsetDateTime {
-  required LocalDateTime local = 1;
-  required int32 offset = 2;
+  required int32 year = 1;
+  required int32 month = 2;
+  required int32 dayOfMonth = 3;
+  required int32 hour = 4;
+  required int32 minute = 5;
+  required int32 second = 6;
+  required int32 nanoOfSecond = 7;
+  required int32 offset = 8;
 }
 
 message TomlArray {
@@ -49,7 +60,7 @@ message TomlTable {
 
 message Toml {
   oneof Value {
-    int64 intValue = 1;
+    BigInt intValue = 1;
     string stringValue = 2;
     double floatValue = 3;
     bool boolValue = 4;

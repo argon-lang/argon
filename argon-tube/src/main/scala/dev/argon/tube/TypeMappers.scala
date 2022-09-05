@@ -39,4 +39,90 @@ given TypeMapper[dev.argon.tube.BigInt, scala.math.BigInt] with
     )
 end given
 
+given TypeMapper[dev.argon.tube.OffsetDateTime, java.time.OffsetDateTime] with
+  override def toCustom(base: dev.argon.tube.OffsetDateTime): java.time.OffsetDateTime =
+    java.time.OffsetDateTime.of(
+      base.year,
+      base.month,
+      base.dayOfMonth,
+      base.hour,
+      base.minute,
+      base.second,
+      base.nanoOfSecond,
+      java.time.ZoneOffset.ofTotalSeconds(base.offset)
+    )
+
+  override def toBase(custom: java.time.OffsetDateTime): dev.argon.tube.OffsetDateTime =
+    dev.argon.tube.OffsetDateTime(
+      year = custom.getYear,
+      month = custom.getMonthValue,
+      dayOfMonth = custom.getDayOfMonth,
+      hour = custom.getHour,
+      minute = custom.getMinute,
+      second = custom.getSecond,
+      nanoOfSecond = custom.getNano,
+      offset = custom.getOffset.getTotalSeconds,
+    )
+end given
+
+given TypeMapper[dev.argon.tube.LocalDateTime, java.time.LocalDateTime] with
+  override def toCustom(base: dev.argon.tube.LocalDateTime): java.time.LocalDateTime =
+    java.time.LocalDateTime.of(
+      base.year,
+      base.month,
+      base.dayOfMonth,
+      base.hour,
+      base.minute,
+      base.second,
+      base.nanoOfSecond,
+    )
+
+  override def toBase(custom: java.time.LocalDateTime): dev.argon.tube.LocalDateTime =
+    dev.argon.tube.LocalDateTime(
+      year = custom.getYear,
+      month = custom.getMonthValue,
+      dayOfMonth = custom.getDayOfMonth,
+      hour = custom.getHour,
+      minute = custom.getMinute,
+      second = custom.getSecond,
+      nanoOfSecond = custom.getNano,
+    )
+end given
+
+given TypeMapper[dev.argon.tube.LocalDate, java.time.LocalDate] with
+  override def toCustom(base: dev.argon.tube.LocalDate): java.time.LocalDate =
+    java.time.LocalDate.of(
+      base.year,
+      base.month,
+      base.dayOfMonth,
+    )
+
+  override def toBase(custom: java.time.LocalDate): dev.argon.tube.LocalDate =
+    dev.argon.tube.LocalDate(
+      year = custom.getYear,
+      month = custom.getMonthValue,
+      dayOfMonth = custom.getDayOfMonth,
+    )
+end given
+
+given TypeMapper[dev.argon.tube.LocalTime, java.time.LocalTime] with
+  override def toCustom(base: dev.argon.tube.LocalTime): java.time.LocalTime =
+    java.time.LocalTime.of(
+      base.hour,
+      base.minute,
+      base.second,
+      base.nanoOfSecond,
+    )
+
+  override def toBase(custom: java.time.LocalTime): dev.argon.tube.LocalTime =
+    dev.argon.tube.LocalTime(
+      hour = custom.getHour,
+      minute = custom.getMinute,
+      second = custom.getSecond,
+      nanoOfSecond = custom.getNano,
+    )
+end given
+
+
+
 

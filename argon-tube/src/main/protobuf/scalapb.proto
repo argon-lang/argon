@@ -22,6 +22,30 @@ option (scalapb.options) = {
       options: {
         type: "scala.math.BigInt"
       }
+    },
+    {
+      target: "argon.tube.OffsetDateTime",
+      options: {
+        type: "java.time.OffsetDateTime"
+      }
+    },
+    {
+      target: "argon.tube.LocalDateTime",
+      options: {
+        type: "java.time.LocalDateTime"
+      }
+    },
+    {
+      target: "argon.tube.LocalDate",
+      options: {
+        type: "java.time.LocalDate"
+      }
+    },
+    {
+      target: "argon.tube.LocalTime",
+      options: {
+        type: "java.time.LocalTime"
+      }
     }
   ]
 };

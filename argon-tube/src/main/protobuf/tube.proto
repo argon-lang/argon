@@ -51,6 +51,10 @@ message ExternalReference {
   required ErasedSignature signature = 5;
 }
 
+message Resource {
+  option (zipentry) = { path: "resource/%d" };
+}
+
 
 // Miscellaneous
 

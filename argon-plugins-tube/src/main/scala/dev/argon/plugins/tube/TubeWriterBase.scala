@@ -4,7 +4,7 @@ import dev.argon.compiler.{definitions, *}
 import dev.argon.compiler.definitions.*
 import dev.argon.compiler.module.ModuleName
 import dev.argon.compiler.signature.Signature
-import dev.argon.io.{BinaryResource, ProtobufResource, ZipFileResource}
+import dev.argon.io.{BinaryResource, DirectoryEntry, DirectoryResource, ProtobufResource, ResourceRecorder, ZipFileResource}
 import dev.argon.parser.IdentifierExpr
 import dev.argon.tube as t
 import dev.argon.util.{*, given}
@@ -13,6 +13,10 @@ import zio.stm.*
 import scalapb.{GeneratedEnum, GeneratedMessage}
 import com.google.protobuf.empty.Empty
 import dev.argon.compiler.module.ModuleElementC
+import dev.argon.options.OptionCodec
+import dev.argon.util.toml.Toml
+
+import java.io.IOException
 
 trait TubeWriterBase extends UsingContext {
 
@@ -62,9 +66,9 @@ trait TubeWriterBase extends UsingContext {
           .tap(ids.put(a, _))
     }.commit
 
-  protected def pushEntry(entry: ZipFileResource.Entry[context.Env, context.Error]): Comp[Unit]
+  protected def pushEntry(entry: ZipFileResource.Entry[context.Env, context.Error]): UIO[Unit]
 
-  private def pushEntryMessage(zipPath: String)(message: GeneratedMessage): Comp[Unit] =
+  private def pushEntryMessage(zipPath: String)(message: GeneratedMessage): UIO[Unit] =
     pushEntry(new ZipFileResource.Entry[context.Env, context.Error] {
       override val path: String = zipPath
 
@@ -81,7 +85,7 @@ trait TubeWriterBase extends UsingContext {
   def emitTube(options: IsImplementation match {
     case true => context.Options
     case false => Unit
-  }): Comp[Unit] =
+  })(using optionsCodec: OptionCodec[context.Env, context.Error, context.Options]): Comp[Unit] =
     for
       _ <- pushEntryMessage(Paths.get[t.TubeFormatVersion])(
         t.TubeProto.defaultTubeFormatVersion.get(t.TubeFormatVersion.scalaDescriptor.getOptions).get
@@ -93,13 +97,20 @@ trait TubeWriterBase extends UsingContext {
         }
       }
 
+      resourceRecorder <- zipResourceRecorder
+
+      options <- ifImplementation(options)(
+        whenImplementation = options => optionsCodec.encode(resourceRecorder)(options).map(encodeToml).asSome,
+        whenInterface = _ => ZIO.none,
+      )
+
       metadata <- buildMetadata(t.Metadata(
         name = t.TubeName(currentTube.tubeName.name.toList),
-        `type` = ifImplementation[Unit, Unit, t.TubeType](dummyImplementationValue)(
+        `type` = ifImplementation(dummyImplementationValue)(
           whenImplementation = _ => t.TubeType.Implementation,
           whenInterface = _ => t.TubeType.Interface
         ),
-        options = ???,
+        options = options,
         modules = currentTube.modulePaths
           .iterator
           .map { modulePath => t.ModulePath(modulePath.ids) }
@@ -117,6 +128,84 @@ trait TubeWriterBase extends UsingContext {
       )
 
     yield ()
+
+  private def zipResourceRecorder: UIO[ResourceRecorder[context.Env, context.Error]] =
+    for
+      nextId <- Ref.make[BigInt](1)
+    yield new ResourceRecorder[context.Env, context.Error] {
+      private def getNextPath: UIO[String] =
+        nextId.getAndUpdate(_ + 1).map { id =>
+          Paths.get[t.Resource].format(id)
+        }
+
+      override def recordBinaryResource(resource: BinaryResource[context.Env, context.Error]): ZIO[context.Env, context.Error, String] =
+        for
+          newPath <- getNextPath
+          _ <- pushEntry(new ZipFileResource.Entry[context.Env, context.Error] {
+            override val path: String = newPath
+            override def value: BinaryResource[context.Env, context.Error] = resource
+          })
+        yield newPath
+
+
+      private def recordDirWithPrefix(prefix: String)(resource: DirectoryResource[context.Env, context.Error, BinaryResource]): Comp[Unit] =
+        resource.contents.foreach {
+          case DirectoryEntry.Subdirectory(name, resource) => recordDirWithPrefix(prefix + "/" + name)(resource)
+          case DirectoryEntry.File(name, resource) =>
+            pushEntry(new ZipFileResource.Entry[context.Env, context.Error] {
+              override val path: String = prefix + "/" + name
+              override def value: BinaryResource[context.Env, context.Error] = resource
+            })
+        }
+
+      override def recordDirectoryResource(resource: DirectoryResource[context.Env, context.Error, BinaryResource]): ZIO[context.Env, context.Error, String] =
+        for
+          newPath <- getNextPath
+          _ <- recordDirWithPrefix(newPath)(resource)
+        yield newPath
+
+
+
+
+    }
+
+  private def encodeToml(toml: Toml): t.Toml =
+    toml match {
+      case Toml.Table(map) =>
+        val values = map
+          .iterator
+          .map { (k, v) => t.TomlKeyValue(k, encodeToml(v)) }
+          .toSeq
+
+        t.Toml(t.Toml.Value.Table(t.TomlTable(values)))
+
+      case Toml.Array(value) =>
+        t.Toml(t.Toml.Value.Array(t.TomlArray(value.map(encodeToml))))
+
+      case Toml.String(value) =>
+        t.Toml(t.Toml.Value.StringValue(value))
+
+      case Toml.Int(value) =>
+        t.Toml(t.Toml.Value.IntValue(value))
+
+      case Toml.Float(value) =>
+        t.Toml(t.Toml.Value.FloatValue(value))
+
+      case Toml.Boolean(value) =>
+        t.Toml(t.Toml.Value.BoolValue(value))
+
+      case Toml.OffsetDateTime(value) =>
+        t.Toml(t.Toml.Value.OffsetDateTime(value))
+
+      case Toml.LocalDateTime(value) =>
+        t.Toml(t.Toml.Value.LocalDateTime(value))
+
+      case Toml.LocalDate(value) =>
+        t.Toml(t.Toml.Value.LocalDate(value))
+
+      case Toml.LocalTime(value) =>
+        t.Toml(t.Toml.Value.LocalTime(value))
+    }
 
   private def emitModule(module: ArModule & HasImplementation[IsImplementation]): Comp[Unit] =
     for

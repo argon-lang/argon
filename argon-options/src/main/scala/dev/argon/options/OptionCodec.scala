@@ -12,7 +12,7 @@ import zio.*
 
 
 trait OptionCodec[R, E, A] extends OptionDecoder[E, A] {
-  def encode(value: A): ZIO[ResourceRecorder & R, E, Toml]
+  def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, Toml]
   def skipForField(value: A): Boolean = false
 }
 
@@ -22,14 +22,14 @@ object OptionCodec {
 
   // Derivation
   private class DerivationImplCodec[R, E >: IOException, T](ctx: CaseClass[[A] =>> OptionCodec[R, E, A], T]) extends OptionDecoder.DerivationImplDecoder[E, T, [A] =>> OptionCodec[R, E, A]](ctx) with OptionCodec[R, E, T] {
-    override def encode(value: T): ZIO[ResourceRecorder & R, E, Toml] =
+    override def encode(recorder: ResourceRecorder[R, E])(value: T): ZIO[R, E, Toml] =
       ZIO.foreach(
         ctx.params
           .iterator
           .filterNot { param => param.typeclass.skipForField(param.deref(value)) }
           .toSeq
       ) { param =>
-        param.typeclass.encode(param.deref(value)).map {
+        param.typeclass.encode(recorder)(param.deref(value)).map {
           param.label -> _
         }
       }
@@ -50,7 +50,7 @@ object OptionCodec {
     override def decode(value: Toml): ZIO[ResourceFactory, String, A] =
       ZIO.fromEither(summon[TomlCodec[A]].decode(value))
 
-    override def encode(value: A): ZIO[ResourceRecorder, E, Toml] =
+    override def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, Toml] =
       ZIO.succeed(summon[TomlCodec[A]].encode(value))
 
     override def defaultValue: Option[A] =
@@ -63,8 +63,8 @@ object OptionCodec {
   // Option
   given [R, E >: IOException, A](using OptionCodec[R, E, A], NotGiven[TomlCodec[A]]): OptionCodec[R, E, Option[A]] =
     new OptionDecoder.OptionOptionDecoderBase[E, A] with OptionCodec[R, E, Option[A]] {
-      override def encode(value: Option[A]): ZIO[ResourceRecorder & R, E, Toml] =
-        value.fold(ZIO.succeed(Toml.Table.empty))(summon[OptionCodec[R, E, A]].encode)
+      override def encode(recorder: ResourceRecorder[R, E])(value: Option[A]): ZIO[R, E, Toml] =
+        value.fold(ZIO.succeed(Toml.Table.empty))(summon[OptionCodec[R, E, A]].encode(recorder))
 
       override def skipForField(value: Option[A]): Boolean =
         value.isEmpty
@@ -73,27 +73,25 @@ object OptionCodec {
   // Seq
   given[R, E >: IOException, A](using OptionCodec[R, E, A], NotGiven[TomlCodec[A]]): OptionCodec[R, E, Seq[A]] =
     new OptionDecoder.SeqOptionDecoderBase[E, A] with OptionCodec[R, E, Seq[A]] {
-      override def encode(value: Seq[A]): ZIO[ResourceRecorder & R, E, Toml] =
-        ZIO.foreach(value)(summon[OptionCodec[R, E, A]].encode).map(Toml.Array.apply)
+      override def encode(recorder: ResourceRecorder[R, E])(value: Seq[A]): ZIO[R, E, Toml] =
+        ZIO.foreach(value)(summon[OptionCodec[R, E, A]].encode(recorder)).map(Toml.Array.apply)
     }
 
   // DirectoryResource
   given directoryResourceCodec[Res[-R2, +E2] <: BinaryResource[R2, E2], R, E >: IOException](using BinaryResourceDecoder[Res, R, E]): OptionCodec[R, E, DirectoryResource[R, E, Res]] =
     new OptionDecoder.DirectoryResourceOptionDecoderBase[Res, R, E] with OptionCodec[R, E, DirectoryResource[R, E, Res]] {
-      override def encode(value: DirectoryResource[R, E, Res]): ZIO[ResourceRecorder & R, E, Toml] =
-        ZIO.serviceWithZIO[ResourceRecorder] { rr =>
-          rr.recordDirectoryResource(value)
-        }.map(Toml.String.apply)
+      override def encode(recorder: ResourceRecorder[R, E])(value: DirectoryResource[R, E, Res]): ZIO[R, E, Toml] =
+        recorder.recordDirectoryResource(value)
+          .map(Toml.String.apply)
     }
 
 
   // BinaryResource
   given [Res[R2, E2] <: BinaryResource[R2, E2], R, E >: IOException](using BinaryResourceDecoder[Res, R, E]): OptionCodec[R, E, Res[R, E]] =
     new OptionDecoder.BinaryResourceOptionDecoderBase[Res, R, E] with OptionCodec[R, E, Res[R, E]] {
-      override def encode(value: Res[R, E]): ZIO[ResourceRecorder & R, E, Toml] =
-        ZIO.serviceWithZIO[ResourceRecorder] { rr =>
-          rr.recordBinaryResource(value)
-        }.map(Toml.String.apply)
+      override def encode(recorder: ResourceRecorder[R, E])(value: Res[R, E]): ZIO[R, E, Toml] =
+        recorder.recordBinaryResource(value)
+          .map(Toml.String.apply)
     }
 
 }

@@ -107,9 +107,9 @@ object JSModuleOptionsMap:
           ZIO.fail("Expected table")
       }
 
-    override def encode(value: JSModuleOptionsMap[R, E]): ZIO[ResourceRecorder & R, E, Toml] =
+    override def encode(recorder: ResourceRecorder[R, E])(value: JSModuleOptionsMap[R, E]): ZIO[R, E, Toml] =
       ZIO.foreach(value.map.toSeq) { (path, options) =>
-        summon[OptionCodec[R, E, JSModuleOptions[R, E]]].encode(options)
+        summon[OptionCodec[R, E, JSModuleOptions[R, E]]].encode(recorder)(options)
           .map { convOpts =>
             path.urlEncode -> convOpts
           }
