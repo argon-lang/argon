@@ -3,9 +3,9 @@ package dev.argon.plugins.tube
 import dev.argon.compiler.{definitions, *}
 import dev.argon.compiler.definitions.*
 import dev.argon.compiler.module.ModuleName
-import dev.argon.compiler.signature.Signature
+import dev.argon.compiler.signature.{ErasedSignature, ErasedSignatureNoResult, ErasedSignatureType, ErasedSignatureWithResult, ImportSpecifier, Signature, SignatureEraser}
 import dev.argon.io.{BinaryResource, DirectoryEntry, DirectoryResource, ProtobufResource, ResourceRecorder, ZipFileResource}
-import dev.argon.parser.IdentifierExpr
+import dev.argon.parser.{FunctionParameterListType, IdentifierExpr}
 import dev.argon.tube as t
 import dev.argon.util.{*, given}
 import zio.*
@@ -18,7 +18,7 @@ import dev.argon.util.toml.Toml
 
 import java.io.IOException
 
-trait TubeWriterBase extends UsingContext {
+private[tube] abstract class TubeWriterBase extends UsingContext {
 
 
   val context: Context { type Error >: TubeError }
@@ -27,7 +27,7 @@ trait TubeWriterBase extends UsingContext {
   protected def ifImplementation[A, B, C](value: IsImplementation match {
     case true => A
     case false => B
-  })(whenImplementation: A => C, whenInterface: B => C): C
+  })(whenImplementation: A => C, whenInterface: => C): C
 
   protected def dummyImplementationValue: IsImplementation match {
     case true => Unit
@@ -40,7 +40,7 @@ trait TubeWriterBase extends UsingContext {
   })(f: Impl => Comp[T]): Comp[Option[T]] =
     ifImplementation(impl)(
       whenImplementation = _.flatMap(f).asSome,
-      whenInterface = _ => ZIO.none,
+      whenInterface = ZIO.none,
     )
 
   val currentTube: ArTube & HasImplementation[IsImplementation]
@@ -87,7 +87,7 @@ trait TubeWriterBase extends UsingContext {
     case false => Unit
   })(using optionsCodec: OptionCodec[context.Env, context.Error, context.Options]): Comp[Unit] =
     for
-      _ <- pushEntryMessage(Paths.get[t.TubeFormatVersion])(
+      _ <- pushEntryMessage(Paths.get[t.TubeFormatVersion]())(
         t.TubeProto.defaultTubeFormatVersion.get(t.TubeFormatVersion.scalaDescriptor.getOptions).get
       )
 
@@ -97,35 +97,7 @@ trait TubeWriterBase extends UsingContext {
         }
       }
 
-      resourceRecorder <- zipResourceRecorder
-
-      options <- ifImplementation(options)(
-        whenImplementation = options => optionsCodec.encode(resourceRecorder)(options).map(encodeToml).asSome,
-        whenInterface = _ => ZIO.none,
-      )
-
-      metadata <- buildMetadata(t.Metadata(
-        name = t.TubeName(currentTube.tubeName.name.toList),
-        `type` = ifImplementation(dummyImplementationValue)(
-          whenImplementation = _ => t.TubeType.Implementation,
-          whenInterface = _ => t.TubeType.Interface
-        ),
-        options = options,
-        modules = currentTube.modulePaths
-          .iterator
-          .map { modulePath => t.ModulePath(modulePath.ids) }
-          .toSeq,
-
-        references = Seq.empty,
-        externalClasses = Seq.empty,
-        externalTraits = Seq.empty,
-        externalFunctions = Seq.empty,
-        externalMethods = Seq.empty,
-        externalClassConstructors = Seq.empty,
-      ))
-      _ <- pushEntryMessage(Paths.get[t.Metadata])(
-        ???
-      )
+      _ <- emitMetadata(options)
 
     yield ()
 
@@ -135,7 +107,7 @@ trait TubeWriterBase extends UsingContext {
     yield new ResourceRecorder[context.Env, context.Error] {
       private def getNextPath: UIO[String] =
         nextId.getAndUpdate(_ + 1).map { id =>
-          Paths.get[t.Resource].format(id)
+          Paths.get[t.Resource](id)
         }
 
       override def recordBinaryResource(resource: BinaryResource[context.Env, context.Error]): ZIO[context.Env, context.Error, String] =
@@ -263,7 +235,7 @@ trait TubeWriterBase extends UsingContext {
         }
       }
 
-      modulePath = Paths.get[t.ModuleDefinition] + (
+      modulePath = Paths.get[t.ModuleDefinition](
         if module.moduleName.path.ids.isEmpty then
           ""
         else
@@ -278,9 +250,237 @@ trait TubeWriterBase extends UsingContext {
     yield ()
 
 
-  private def buildMetadata(metadata: t.Metadata): Comp[t.Metadata] =
-    ???
+  private lazy val sigEraser = SignatureEraser(context)
 
+  private def emitMetadata(options: IsImplementation match {
+    case true => context.Options
+    case false => Unit
+  })(using optionsCodec: OptionCodec[context.Env, context.Error, context.Options]): Comp[Unit] =
+    def buildRefsComp[T, Msg]
+    (
+      idMap: TMap[T, BigInt],
+      getModule: T => ArModule,
+      getSig: T => Comp[ErasedSignature],
+      build: (T, BigInt, ArModule, t.ErasedSignature) => Comp[Msg]
+    ): Comp[Seq[Msg]] =
+      for
+        mapEntries <- idMap.toChunk.commit
+        refEntries = mapEntries.filter { (t, _) => getModule(t).tube.tubeName != currentTube.tubeName }
+        messages <- ZIO.foreach(refEntries) { (t, id) =>
+          for
+            sig <- getSig(t)
+            msg <- build(t, id, getModule(t), getErasedSignature(sig))
+          yield msg
+        }
+      yield messages
+
+    def buildRefs[T, Msg]
+    (
+      idMap: TMap[T, BigInt],
+      getModule: T => ArModule,
+      getSig: T => Comp[ErasedSignature],
+      build: (T, BigInt, ArModule, t.ErasedSignature) => Msg
+    ): Comp[Seq[Msg]] =
+      buildRefsComp(idMap, getModule, getSig, (t, id, module, sig) => ZIO.succeed(build(t, id, module, sig)))
+
+
+    for
+      resourceRecorder <- zipResourceRecorder
+
+      options <- ifImplementation(options)(
+        whenImplementation = options => optionsCodec.encode(resourceRecorder)(options).map(encodeToml).asSome,
+        whenInterface = ZIO.none,
+      )
+
+      methodRefs <- buildRefsComp(
+        idMap = methodIds,
+        getModule = arMethod => ArMethodC.getOwningModule(arMethod.owner),
+        getSig = _.signatureUnsubstituted.flatMap(sigEraser.erasedWithResult),
+        build = (arMethod, id, _, sig) =>
+          (
+            arMethod.owner match {
+              case OwnedByClassC(arClass, name, _) =>
+                for
+                  classId <- getClassId(arClass)
+                yield (t.ExternalReferenceMethod.OwnerType.Class, classId, name)
+
+              case OwnedByClassStaticC(arClass, name, _) =>
+                for
+                  classId <- getClassId(arClass)
+                yield (t.ExternalReferenceMethod.OwnerType.ClassStatic, classId, name)
+
+              case OwnedByTraitC(arTrait, name, _) =>
+                for
+                  traitId <- getTraitId(arTrait)
+                yield (t.ExternalReferenceMethod.OwnerType.Trait, traitId, name)
+
+              case OwnedByTraitStaticC(arTrait, name, _) =>
+                for
+                  traitId <- getTraitId(arTrait)
+                yield (t.ExternalReferenceMethod.OwnerType.TraitStatic, traitId, name)
+            }
+          ).map { case (ownerType, ownerId, name) =>
+            t.ExternalReferenceMethod(
+              id = id,
+              ownerType = ownerType,
+              ownerId = ownerId,
+              identifier = name.map(getIdentifier),
+              signature = sig,
+            )
+          }
+      )
+
+      classCtorRefs <- buildRefsComp(
+        idMap = classCtorIds,
+        getModule = ctor => ClassConstructorC.getOwningModule(ctor.owner),
+        getSig = _.signatureUnsubstituted.flatMap(sigEraser.erasedNoResult),
+        build = (ctor, id, _, sig) =>
+          for
+            classId <- getClassId(ctor.owner.arClass)
+          yield t.ExternalReferenceClassConstructor(
+            id = id,
+            ownerId = classId,
+            signature = sig,
+          )
+      )
+
+      classRefs <- buildRefs(
+        idMap = classIds,
+        getModule = arClass => ArClassC.getOwningModule(arClass.owner),
+        getSig = _.signature.flatMap(sigEraser.erasedNoResult),
+        build = (arClass, id, module, sig) => t.ExternalReference(
+          id = id,
+          specifier = t.ImportSpecifier(
+            tube = module.tube.tubeName.name.toList,
+            module = module.moduleName.path.ids,
+            name = arClass.owner.ownedName.map(getIdentifier),
+            signature = sig,
+          )
+        ),
+      )
+
+      traitRefs <- buildRefs(
+        idMap = traitIds,
+        getModule = arTrait => ArTraitC.getOwningModule(arTrait.owner),
+        getSig = _.signature.flatMap(sigEraser.erasedNoResult),
+        build = (arTrait, id, module, sig) => t.ExternalReference(
+          id = id,
+          specifier = t.ImportSpecifier(
+            tube = module.tube.tubeName.name.toList,
+            module = module.moduleName.path.ids,
+            name = arTrait.owner.ownedName.map(getIdentifier),
+            signature = sig,
+          )
+        ),
+      )
+
+      functionRefs <- buildRefs(
+        idMap = functionIds,
+        getModule = func => ArFuncC.getOwningModule(func.owner),
+        getSig = _.signature.flatMap(sigEraser.erasedWithResult),
+        build = (func, id, module, sig) => t.ExternalReference(
+          id = id,
+          specifier = t.ImportSpecifier(
+            tube = module.tube.tubeName.name.toList,
+            module = module.moduleName.path.ids,
+            name = func.owner.ownedName.map(getIdentifier),
+            signature = sig,
+          )
+        ),
+      )
+
+      referencedTubes =
+        (
+          classRefs.iterator ++
+            traitRefs.iterator ++
+            functionRefs.iterator
+        )
+          .map { refs => refs.specifier.tube }
+          .distinct
+          .map(t.TubeName.apply)
+          .toSeq
+
+
+
+      metadata = t.Metadata(
+        name = t.TubeName(currentTube.tubeName.name.toList),
+        `type` = ifImplementation(dummyImplementationValue)(
+          whenImplementation = _ => t.TubeType.Implementation,
+          whenInterface = t.TubeType.Interface
+        ),
+        options = options,
+        modules = currentTube.modulePaths
+          .iterator
+          .map { modulePath => t.ModulePath(modulePath.ids) }
+          .toSeq,
+
+        references = referencedTubes,
+        externalClasses = classRefs,
+        externalTraits = traitRefs,
+        externalFunctions = functionRefs,
+        externalMethods = methodRefs,
+        externalClassConstructors = classCtorRefs,
+      )
+
+      _ <- pushEntryMessage(Paths.get[t.Metadata]())(metadata)
+
+    yield ()
+
+  private def getErasedSignature(sig: ErasedSignature): t.ErasedSignature =
+    sig match {
+      case ErasedSignatureWithResult(params, result) =>
+        t.ErasedSignature(
+          params.map(getErasedSignatureType),
+          Some(getErasedSignatureType(result)),
+        )
+
+      case ErasedSignatureNoResult(params) =>
+        t.ErasedSignature(params.map(getErasedSignatureType), None)
+    }
+
+  private def getErasedSignatureType(sigType: ErasedSignatureType): t.ErasedSignatureType =
+    sigType match {
+      case ErasedSignatureType.Class(classImport, args) =>
+        t.ErasedSignatureType(
+          t.ErasedSignatureType.Constructor._Class(getImportSpecifier(classImport)),
+          args.map(getErasedSignatureType),
+        )
+
+      case ErasedSignatureType.Trait(traitImport, args) =>
+        t.ErasedSignatureType(
+          t.ErasedSignatureType.Constructor.Trait(getImportSpecifier(traitImport)),
+          args.map(getErasedSignatureType),
+        )
+
+      case ErasedSignatureType.Function(input, output) =>
+        t.ErasedSignatureType(
+          t.ErasedSignatureType.Constructor.Function(Empty()),
+          Seq(
+            getErasedSignatureType(input),
+            getErasedSignatureType(output),
+          ),
+        )
+
+      case ErasedSignatureType.Tuple(elements) =>
+        t.ErasedSignatureType(
+          t.ErasedSignatureType.Constructor.Tuple(Empty()),
+          elements.map(getErasedSignatureType),
+        )
+
+      case ErasedSignatureType.Erased =>
+        t.ErasedSignatureType(
+          t.ErasedSignatureType.Constructor.Erased(Empty()),
+          Seq.empty,
+        )
+    }
+
+  private def getImportSpecifier(specifier: ImportSpecifier): t.ImportSpecifier =
+    t.ImportSpecifier(
+      tube = specifier.tube.name.toList,
+      module = specifier.module.ids,
+      name = specifier.name.map(getIdentifier),
+      signature = getErasedSignature(specifier.signature)
+    )
 
 
   private def getFlags[T, Enum <: GeneratedEnum](flags: (Enum, Boolean)*): Int =
@@ -289,16 +489,27 @@ trait TubeWriterBase extends UsingContext {
     }
 
 
-  private def emitSignature[Res, A](sig: Signature[WrapExpr, Res])(f: (Seq[t.Expr], Res) => Comp[A]): Comp[A] =
-    def impl(sig: Signature[WrapExpr, Res])(paramTypes: Seq[t.Expr]): Comp[A] =
+  private def emitSignature[Res, A](sig: Signature[WrapExpr, Res])(f: (Seq[t.Parameter], Res) => Comp[A]): Comp[A] =
+    def impl(sig: Signature[WrapExpr, Res])(params: Seq[t.Parameter]): Comp[A] =
       sig match {
-        case Signature.Parameter(_, _, _, paramType, next) =>
-          getExprWithVariables(paramType).flatMap { t =>
-            impl(next)(paramTypes :+ t)
+        case Signature.Parameter(listType, isErased, name, paramType, next) =>
+          getExprWithVariables(paramType).flatMap { paramType =>
+            val param = t.Parameter(
+              listType = listType match {
+                case FunctionParameterListType.NormalList => t.Parameter.ListType.NormalList
+                case FunctionParameterListType.InferrableList => t.Parameter.ListType.InferrableList
+                case FunctionParameterListType.InferrableList2 => t.Parameter.ListType.InferrableList2
+                case FunctionParameterListType.RequiresList => t.Parameter.ListType.RequiresList
+              },
+              flags = (if isErased then t.Parameter.Flags.Erased.value else 0),
+              name = name.map(getIdentifier),
+              paramType = paramType
+            )
+            impl(next)(params :+ param)
           }
 
         case Signature.Result(resultType) =>
-          f(paramTypes, resultType)
+          f(params, resultType)
       }
 
     impl(sig)(Seq.empty)
@@ -326,15 +537,17 @@ trait TubeWriterBase extends UsingContext {
       )
 
       sig <- arClass.signature
-      signature <- emitSignature(sig) { case (paramTypes, ClassResult(_, baseClass, baseTraits)) =>
+      signature <- emitSignature(sig) { case (params, ClassResult(classTypeSuperType, baseClass, baseTraits)) =>
         for
+          classSuperType <- getExprWithVariables(classTypeSuperType)
           baseClass <- baseClass
           baseClass <- ZIO.foreach(baseClass)(emitClassType)
 
           baseTraits <- baseTraits
           baseTraits <- ZIO.foreach(baseTraits)(emitTraitType)
         yield t.ClassDefinition.Signature(
-          parameterTypes = paramTypes,
+          parameters = params,
+          classTypeSuperType = classSuperType,
           baseClass = baseClass,
           baseTraits = baseTraits,
         )
@@ -368,12 +581,12 @@ trait TubeWriterBase extends UsingContext {
       }
 
       id <- getClassId(arClass)
-      _ <- pushEntryMessage(Paths.get[t.ClassDefinition].format(id))(t.ClassDefinition(
+      _ <- pushEntryMessage(Paths.get[t.ClassDefinition](id))(t.ClassDefinition(
         flags = flags,
         signature = signature,
         fields = fields,
-        methods = methods.flatten,
-        staticMethods = staticMethods.flatten,
+        methods = methods,
+        staticMethods = staticMethods,
         constructors = constructors,
       ))
 
@@ -394,12 +607,14 @@ trait TubeWriterBase extends UsingContext {
       )
 
       sig <- arTrait.signature
-      signature <- emitSignature(sig) { case (paramTypes, TraitResult(_, baseTraits)) =>
+      signature <- emitSignature(sig) { case (params, TraitResult(traitTypeSuperType, baseTraits)) =>
         for
+          traitSuperType <- getExprWithVariables(traitTypeSuperType)
           baseTraits <- baseTraits
           baseTraits <- ZIO.foreach(baseTraits)(emitTraitType)
         yield t.TraitDefinition.Signature(
-          parameterTypes = paramTypes,
+          parameters = params,
+          traitTypeSuperType = traitSuperType,
           baseTraits = baseTraits,
         )
       }
@@ -411,11 +626,11 @@ trait TubeWriterBase extends UsingContext {
       staticMethods <- ZIO.foreach(staticMethods.toSeq)(createMethodMemberGroup)
 
       id <- getTraitId(arTrait)
-      _ <- pushEntryMessage(Paths.get[t.TraitDefinition].format(id))(t.TraitDefinition(
+      _ <- pushEntryMessage(Paths.get[t.TraitDefinition](id))(t.TraitDefinition(
         flags = flags,
         signature = signature,
-        methods = methods.flatten,
-        staticMethods = staticMethods.flatten,
+        methods = methods,
+        staticMethods = staticMethods,
       ))
 
     yield id
@@ -449,7 +664,7 @@ trait TubeWriterBase extends UsingContext {
       }
 
       id <- getFunctionId(func)
-      _ <- pushEntryMessage(Paths.get[t.FunctionDefinition].format(id))(t.FunctionDefinition(
+      _ <- pushEntryMessage(Paths.get[t.FunctionDefinition](id))(t.FunctionDefinition(
         flags = flags,
         signature = signature,
         effects = t.EffectInfo(
@@ -459,26 +674,27 @@ trait TubeWriterBase extends UsingContext {
       ))
     yield id
 
-  def emitFunctionSignature(paramTypes: Seq[t.Expr], functionResult: FunctionResult): Comp[t.FunctionSignature] =
+  def emitFunctionSignature(params: Seq[t.Parameter], functionResult: FunctionResult): Comp[t.FunctionSignature] =
     for
       returnType <- getExprWithVariables(functionResult.returnType)
       ensuresClauses <- ZIO.foreach(functionResult.ensuresClauses)(getExprWithVariables)
     yield t.FunctionSignature(
-      parameterTypes = paramTypes,
-      resultType = returnType,
+      parameters = params,
+      returnType = returnType,
       ensuresClauses = ensuresClauses,
     )
 
 
-  def createMethodMemberGroup(name: Option[IdentifierExpr], methods: Seq[ArMethod & HasImplementation[IsImplementation]]): Comp[Seq[t.MethodMember]] =
-    ZIO.foreach(methods)(createMethodMember(name))
+  def createMethodMemberGroup(name: Option[IdentifierExpr], methods: Seq[ArMethod & HasImplementation[IsImplementation]]): Comp[t.MethodMemberGroup] =
+    ZIO.foreach(methods)(createMethodMember(name)).map { methods =>
+      t.MethodMemberGroup(name.map(getIdentifier), methods)
+    }
 
   def createMethodMember(name: Option[IdentifierExpr])(method: ArMethod & HasImplementation[IsImplementation]): Comp[t.MethodMember] =
     for
       id <- emitMethod(method)
     yield t.MethodMember(
       id = id,
-      name = name.map(getIdentifier),
       accessModifier = getAccessModifier(ArMethodC.getAccessModifier(method.owner))
     )
 
@@ -518,13 +734,14 @@ trait TubeWriterBase extends UsingContext {
       }
 
       id <- getMethodId(method)
-      _ <- pushEntryMessage(Paths.get[t.MethodDefinition].format(id))(t.MethodDefinition(
+      _ <- pushEntryMessage(Paths.get[t.MethodDefinition](id))(t.MethodDefinition(
         flags = flags,
         signature = signature,
         effects = t.EffectInfo(
           isPure = method.purity,
         ),
         body = body.flatten,
+        instanceVariableName = method.instanceVariableName.map(getIdentifier),
       ))
     yield id
 
@@ -544,18 +761,18 @@ trait TubeWriterBase extends UsingContext {
 
       body <- processImplementation(classCtor.implementation) {
         case impl: ClassConstructorImplementationC.ExpressionBody =>
-          withVariables { getVarId =>
+          withVariables {
             def getPreInit(stmt: Either[WrapExpr, ClassConstructorImplementationC.FieldInitializationStatement & HasContext[context.type]]): Comp[t.ClassConstructorDefinition.PreInitializationStatement] =
               stmt match {
                 case Left(expr) =>
                   for
-                    expr <- getExpr(getVarId)(expr)
+                    expr <- getExpr(expr)
                   yield t.ClassConstructorDefinition.PreInitializationStatement(
                     t.ClassConstructorDefinition.PreInitializationStatement.Value.Expr(expr)
                   )
                 case Right(fieldInit) =>
                   for
-                    value <- getExpr(getVarId)(fieldInit.value)
+                    value <- getExpr(fieldInit.value)
                   yield t.ClassConstructorDefinition.PreInitializationStatement(
                     t.ClassConstructorDefinition.PreInitializationStatement.Value.FieldInit(
                       t.ClassConstructorDefinition.FieldInitializationStatement(
@@ -569,10 +786,10 @@ trait TubeWriterBase extends UsingContext {
             for
               preInit <- ZIO.foreach(impl.preInitialization)(getPreInit)
               baseCall <- ZIO.foreach(impl.baseConstructorCall.baseCall) { call =>
-                getExpr(getVarId)(WrapExpr.OfExpr(call))
+                getExpr(WrapExpr.OfExpr(call))
               }
-              instanceVar <- getVarId(impl.baseConstructorCall.instanceVariable)
-              postInit <- getExpr(getVarId)(impl.postInitialization)
+              instanceVar <- getVariableDeclaration(impl.baseConstructorCall.instanceVariable)
+              postInit <- getExpr(impl.postInitialization)
             yield t.ClassConstructorDefinition.ExpressionBody(
               preInitialization = preInit,
               baseConstructorCall = baseCall,
@@ -590,7 +807,7 @@ trait TubeWriterBase extends UsingContext {
       }
 
       id <- getClassConstructorId(classCtor)
-      _ <- pushEntryMessage(Paths.get[t.ClassConstructorDefinition].format(id))(t.ClassConstructorDefinition(
+      _ <- pushEntryMessage(Paths.get[t.ClassConstructorDefinition](id))(t.ClassConstructorDefinition(
         flags = 0,
         signature = signature,
         effects = t.EffectInfo(
@@ -629,29 +846,43 @@ trait TubeWriterBase extends UsingContext {
       case AccessModifier.Private => t.AccessModifier.Private
     }
 
+  trait LocalVariableContext {
+    def getVarId(local: LocalVariable): UIO[BigInt]
+  }
+
   def getExprWithVariables(expr: WrapExpr): Comp[t.Expr] =
-    withVariables { getVarId =>
-      getExpr(getVarId)(expr)
+    withVariables {
+      getExpr(expr)
     }
 
-  def withVariables[A](f: (LocalVariable => UIO[BigInt]) => Comp[A]): Comp[A] =
+  def withVariables[A](f: LocalVariableContext ?=> Comp[A]): Comp[A] =
     TMap.empty[LocalVariable, BigInt].commit.flatMap { varMap =>
-      f(getIdOf(varMap))
+      given LocalVariableContext with
+        override def getVarId(local: context.ExprContext.LocalVariable): UIO[BigInt] =
+          getIdOf(varMap)(local)
+      end given
+
+      f
     }
 
-  def getExpr(getVarId: LocalVariable => UIO[BigInt])(expr: WrapExpr): Comp[t.Expr] =
-    def getVariableDeclaration(variable: LocalVariable): Comp[t.LocalVariableDefinition] =
-      for
-        id <- getVarId(variable)
-        varType <- getExpr(getVarId)(variable.varType)
-      yield t.LocalVariableDefinition(
-        flags = getFlags(
-          t.LocalVariableDefinition.Flags.IsErased -> variable.isErased,
-        ),
-        varType = varType,
-        name = variable.name.map(getIdentifier),
-        isMutable = variable.isMutable,
-      )
+  def getVarId(local: LocalVariable)(using varContext: LocalVariableContext): UIO[BigInt] =
+    varContext.getVarId(local)
+
+  def getVariableDeclaration(variable: LocalVariable)(using LocalVariableContext): Comp[t.LocalVariableDefinition] =
+    for
+      id <- getVarId(variable)
+      varType <- getExpr(variable.varType)
+    yield t.LocalVariableDefinition(
+      id = id,
+      flags = getFlags(
+        t.LocalVariableDefinition.Flags.IsErased -> variable.isErased,
+      ),
+      varType = varType,
+      name = variable.name.map(getIdentifier),
+      isMutable = variable.isMutable,
+    )
+
+  def getExpr(expr: WrapExpr)(using LocalVariableContext): Comp[t.Expr] =
 
     def getParameterVariableOwner(owner: ParameterVariableOwner): Comp[t.ParameterVariableOwner] =
       (
@@ -759,6 +990,12 @@ trait TubeWriterBase extends UsingContext {
           yield t.Expr.Constructor.MethodCall(t.Expr.LoadId(id))
 
         case ExprConstructor.PatternMatch(patterns) => ???
+
+        case ExprConstructor.Proving(witnesses) =>
+          for
+            witnesses <- ZIO.foreach(witnesses)(getVariableDeclaration)
+          yield t.Expr.Constructor.Proving(t.Expr.WitnessList(witnesses))
+
         case ExprConstructor.RaiseException =>
           ZIO.succeed(t.Expr.Constructor.RaiseException(Empty()))
 
@@ -826,7 +1063,7 @@ trait TubeWriterBase extends UsingContext {
       case WrapExpr.OfExpr(expr) =>
         for
           ctor <- getExprCtor(expr.constructor)
-          args <- ZIO.foreach(expr.constructor.argsToExprs(expr.args))(getExpr(getVarId))
+          args <- ZIO.foreach(expr.constructor.argsToExprs(expr.args))(getExpr)
         yield t.Expr(
           constructor = ctor,
           arguments = args,
@@ -837,10 +1074,10 @@ trait TubeWriterBase extends UsingContext {
   end getExpr
 
   private def emitClassType(classType: ArExpr[ExprConstructor.ClassType]): Comp[t.ClassType] =
-    withVariables { getVarId =>
+    withVariables {
       for
         id <- getClassId(classType.constructor.arClass)
-        args <- ZIO.foreach(classType.args)(getExpr(getVarId))
+        args <- ZIO.foreach(classType.args)(getExpr)
       yield t.ClassType(
         classId = id,
         arguments = args,
@@ -848,10 +1085,10 @@ trait TubeWriterBase extends UsingContext {
     }
 
   private def emitTraitType(traitType: ArExpr[ExprConstructor.TraitType]): Comp[t.TraitType] =
-    withVariables { getVarId =>
+    withVariables {
       for
         id <- getTraitId(traitType.constructor.arTrait)
-        args <- ZIO.foreach(traitType.args)(getExpr(getVarId))
+        args <- ZIO.foreach(traitType.args)(getExpr)
       yield t.TraitType(
         traitId = id,
         arguments = args,

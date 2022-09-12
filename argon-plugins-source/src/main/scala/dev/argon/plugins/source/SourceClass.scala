@@ -19,7 +19,7 @@ object SourceClass {
   (exprConverter2: ExpressionConverter & HasContext[ctx.type])
   (vtableBuilder: VTableBuilder[ctx.type])
   (outerEnv: exprConverter2.Env)
-  (classOwner: TOwner & ArClassC.Ownership[ctx.type])
+  (classOwner: TOwner & ArClassC.Ownership[ctx.type, true])
   (stmt: ClassDeclarationStmt)
     : ctx.Comp[ArClassC & HasContext[ctx.type] & HasImplementation[true] & HasOwner[TOwner]] =
     for {
@@ -38,10 +38,10 @@ object SourceClass {
         ]
       methodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
-          & HasContext[ctx.type] & HasImplementation[true] & HasOwner[OwnedByClassC[ctx.type, classOwner.type]]]]]
+          & HasContext[ctx.type] & HasImplementation[true] & HasOwner[OwnedByClassC[ctx.type, classOwner.type, true]]]]]
       staticMethodsCell <-
         MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ArMethodC
-          & HasContext[ctx.type] & HasImplementation[true] & HasOwner[OwnedByClassStaticC[ctx.type, classOwner.type]]]]]
+          & HasContext[ctx.type] & HasImplementation[true] & HasOwner[OwnedByClassStaticC[ctx.type, classOwner.type, true]]]]]
       ctorsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ClassConstructorC & HasContext[ctx.type] & HasImplementation[true]]]
       fieldsCell <- MemoCell.make[ctx.Env, ctx.Error, Seq[ctx.ExprContext.MemberVariable]]
 
@@ -104,15 +104,15 @@ object SourceClass {
           case WithSource(s, _) => !isValidClassStmt(s)
         }
 
-      override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true] & HasOwner[OwnedByClass[owner.type]]]]] =
+      override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true] & HasOwner[OwnedByClass[owner.type, true]]]]] =
         methodsCell.get {
           val body2 = filteredBody[parser.MethodDeclarationStmt](stmt.instanceBody)
-          buildMethods[OwnedByClass[owner.type]](OwnedByClassC.apply)(body2)
+          buildMethods[OwnedByClass[owner.type, true]](OwnedByClassC.apply)(body2)
         }
 
       override def staticMethods
-        : Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true] & HasOwner[OwnedByClassStatic[owner.type]]]]] =
-        staticMethodsCell.get(buildMethods[OwnedByClassStatic[owner.type]](OwnedByClassStaticC.apply)(stmt.body))
+        : Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true] & HasOwner[OwnedByClassStatic[owner.type, true]]]]] =
+        staticMethodsCell.get(buildMethods[OwnedByClassStatic[owner.type, true]](OwnedByClassStaticC.apply)(stmt.body))
 
       override def constructors: Comp[Seq[ClassConstructor & HasImplementation[true]]] =
         ctorsCell.get {

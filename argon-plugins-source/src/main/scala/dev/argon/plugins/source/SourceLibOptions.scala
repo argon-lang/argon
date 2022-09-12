@@ -20,7 +20,7 @@ final case class SourceLibOptions[-R, +E, ContextOptions]
 
 object SourceLibOptions:
 
-  given optionDecoder[R, E >: SourceError, ContextOptions](using OptionDecoder[E, ContextOptions]): OptionDecoder[E, SourceLibOptions[R, E, ContextOptions]] =
+  given optionDecoder[R, E >: SourceError, ContextOptions](using OptionDecoder[R, E, ContextOptions]): OptionDecoder[R, E, SourceLibOptions[R, E, ContextOptions]] =
     OptionDecoder.derive
 
 end SourceLibOptions

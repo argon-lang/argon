@@ -32,7 +32,6 @@ object SourcePlugin extends Plugin[Any, SourceError] {
   override def emitTube
   (context: Context { type Env; type Error >: SourceError })
   (adapter: PluginContextAdapter.Aux[context.type, this.type])
-  (options: Options[context.Env, context.Error])
   (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
   : context.Comp[Output[context.Env, context.Error]] =
     ZIO.succeed(SourceOutput())

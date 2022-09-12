@@ -52,4 +52,5 @@ object DiagnosticError {
 
 enum DiagnosticSource {
   case Location(location: SourceLocation)
+  case SerializedTube(tubeName: TubeName)
 }

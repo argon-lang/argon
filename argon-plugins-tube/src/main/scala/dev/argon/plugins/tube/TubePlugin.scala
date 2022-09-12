@@ -6,12 +6,13 @@ import dev.argon.compiler.definitions.HasImplementation
 import dev.argon.parser.SyntaxError
 import dev.argon.plugin.*
 import dev.argon.options.*
+import dev.argon.plugins.tube.reader.InvalidTube
 import zio.ZIO
 
 import java.io.IOException
 import java.nio.charset.CharacterCodingException
 
-type TubeError = CharacterCodingException | SyntaxError | CompError | IOException
+type TubeError = CharacterCodingException | SyntaxError | CompError | IOException | InvalidTube
 
 object TubePlugin extends Plugin[Any, TubeError] {
   override type Options[-R, +E] = TubeOptions[R, E]
@@ -31,9 +32,14 @@ object TubePlugin extends Plugin[Any, TubeError] {
   override def emitTube
   (context: Context { type Env; type Error >: TubeError })
   (adapter: PluginContextAdapter.Aux[context.type, TubePlugin.this.type])
-  (options: Options[context.Env, context.Error])
   (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
-  : context.Comp[TubeOutput[context.Env, context.Error]] = ???
+  : context.Comp[TubeOutput[context.Env, context.Error]] =
+    ZIO.succeed(
+      TubeOutput(
+        implementationModule = TubeWriterResource[true](context)(tube.options)(TubeWriterImplementation(context)(tube)),
+        interfaceModule = TubeWriterResource[true](context)(tube.options)(TubeWriterInterface(context)(tube)),
+      )
+    )
 
   override def loadExternMethod[R <: Any, E >: TubeError](options: TubeOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
     ZIO.unit.asSome
@@ -44,5 +50,6 @@ object TubePlugin extends Plugin[Any, TubeError] {
   override def loadExternClassConstructor[R <: Any, E >: TubeError](options: TubeOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
     ZIO.unit.asSome
 
-  override def tubeLoaders: Map[String, TubeLoader[Any, TubeError]] = ???
+  override def tubeLoaders: Map[String, TubeLoader[Any, TubeError]] =
+    Map("tube" -> TubeZipTubeLoader)
 }

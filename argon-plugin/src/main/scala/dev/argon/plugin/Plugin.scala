@@ -27,7 +27,6 @@ trait Plugin[-R0, +E0] {
   def emitTube
   (context: Context { type Env <: R0; type Error >: E0 })
   (adapter: PluginContextAdapter.Aux[context.type, this.type])
-  (options: Options[context.Env, context.Error])
   (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
   : context.Comp[Output[context.Env, context.Error]]
 

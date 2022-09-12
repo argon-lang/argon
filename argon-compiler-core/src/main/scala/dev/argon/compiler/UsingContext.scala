@@ -21,10 +21,10 @@ trait UsingContext {
   protected type FunctionImplementation = FunctionImplementationC & HasContext[context.type]
   protected type ClassConstructorImplementation = ClassConstructorImplementationC & HasContext[context.type]
 
-  protected type OwnedByModule = OwnedByModuleC[context.type]
-  protected type OwnedByClass[+ClassOwner] = OwnedByClassC[context.type, ClassOwner]
-  protected type OwnedByClassStatic[+ClassOwner] = OwnedByClassStaticC[context.type, ClassOwner]
-  protected type OwnedByTrait[+TraitOwner] = OwnedByTraitC[context.type, TraitOwner]
-  protected type OwnedByTraitStatic[+TraitOwner] = OwnedByTraitStaticC[context.type, TraitOwner]
+  protected type OwnedByModule[IsImplementation <: Boolean] = OwnedByModuleC[context.type, IsImplementation]
+  protected type OwnedByClass[+ClassOwner, IsImplementation <: Boolean] = OwnedByClassC[context.type, ClassOwner, IsImplementation]
+  protected type OwnedByClassStatic[+ClassOwner, IsImplementation <: Boolean] = OwnedByClassStaticC[context.type, ClassOwner, IsImplementation]
+  protected type OwnedByTrait[+TraitOwner, IsImplementation <: Boolean] = OwnedByTraitC[context.type, TraitOwner, IsImplementation]
+  protected type OwnedByTraitStatic[+TraitOwner, IsImplementation <: Boolean] = OwnedByTraitStaticC[context.type, TraitOwner, IsImplementation]
 
 }

@@ -721,16 +721,16 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
       isStatic =
         ctor.method.owner match
-          case _: OwnedByClass[?] | _: OwnedByTrait[?] => false
-          case _: OwnedByClassStatic[?] | _: OwnedByTraitStatic[?] => true
+          case _: OwnedByClass[?, ?] | _: OwnedByTrait[?, ?] => false
+          case _: OwnedByClassStatic[?, ?] | _: OwnedByTraitStatic[?, ?] => true
         end match
 
       methodKeyName = getOverloadExportName(
         ctor.method.owner match {
-          case owner: OwnedByClass[?] => owner.ownedName
-          case owner: OwnedByClassStatic[?] => owner.ownedName
-          case owner: OwnedByTrait[?] => owner.ownedName
-          case owner: OwnedByTraitStatic[?] => owner.ownedName
+          case owner: OwnedByClass[?, ?] => owner.ownedName
+          case owner: OwnedByClassStatic[?, ?] => owner.ownedName
+          case owner: OwnedByTrait[?, ?] => owner.ownedName
+          case owner: OwnedByTraitStatic[?, ?] => owner.ownedName
         },
         erasedSig
       )
@@ -753,7 +753,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       case _ => ZIO.succeed(prev)
     }
 
-  private def emitOwnedByModule(ownership: OwnedByModule, sig: ErasedSignature): Comp[estree.Expression] =
+  private def emitOwnedByModule(ownership: OwnedByModule[?], sig: ErasedSignature): Comp[estree.Expression] =
     getImportName(ImportSpecifier(ownership.module.tube.tubeName, ownership.module.moduleName.path, ownership.ownedName, sig))
       .map(id)
 

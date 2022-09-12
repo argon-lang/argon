@@ -15,6 +15,6 @@ class PlatformPathUtil extends PathUtil {
   override def binaryResource(path: String): BinaryResource[Any, IOException] =
     NodeBinaryResource(path)
 
-  override def resourceLayer(path: String): ULayer[ResourceFactory & ResourceWriter] =
-    ZLayer.succeed(PlatformResourceFactory(path)) +!+ ZLayer.succeed(PlatformResourceWriter(path))
+  override def resourceLayer(path: String): ULayer[ResourceReader & ResourceWriter] =
+    ZLayer.succeed(PlatformResourceReader(path)) +!+ ZLayer.succeed(PlatformResourceWriter(path))
 }

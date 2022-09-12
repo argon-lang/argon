@@ -1675,15 +1675,22 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         else
           ZIO.succeed((expr, expr))
 
-      env <- ZIO.foldLeft(res.ensuresClauses)(env) { (env, ensuresType) =>
+      (env, ensuresVars) <- ZIO.foldLeft(res.ensuresClauses)((env, Seq.empty[LocalVariable])) { case ((env, ensuresVars), ensuresType) =>
         val ensuresType2 = substituteWrapExprMany(Map(resultVar -> stableExpr))(ensuresType)
         for
           varId <- UniqueIdentifier.make
           local = LocalVariable(varId, ensuresType2, name = None, isMutable = false, isErased = false)
-        yield env.withImplicitSource(_.addVariable(local))
+        yield (env.withImplicitSource(_.addVariable(local)), ensuresVars :+ local)
       }
+
+      expr3 =
+        if ensuresVars.isEmpty then
+          expr2
+        else
+          WrapExpr.OfExpr(ArExpr(ExprConstructor.Proving(ensuresVars), expr2))
+
     yield ExprTypeResult(
-      expr2,
+      expr3,
       env,
       res.returnType,
     )

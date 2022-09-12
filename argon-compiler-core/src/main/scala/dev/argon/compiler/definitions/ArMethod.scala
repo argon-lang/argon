@@ -2,13 +2,15 @@ package dev.argon.compiler.definitions
 
 import dev.argon.compiler.*
 import dev.argon.compiler.module.ArModuleC
+import dev.argon.compiler.tube.ArTubeC
 import dev.argon.util.UniqueIdentifier
 import dev.argon.compiler.signature.Signature
+import dev.argon.parser.IdentifierExpr
 
 abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
   import context.ExprContext.*
 
-  override val owner: ArMethodC.Ownership[context.type]
+  override val owner: ArMethodC.Ownership[context.type, IsImplementation]
 
   val id: UniqueIdentifier
   def signatureUnsubstituted: Comp[Signature[WrapExpr, FunctionResult]]
@@ -21,6 +23,8 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
   def isErased: Boolean
 
   def purity: Boolean
+
+  def instanceVariableName: Option[IdentifierExpr]
 
   type ImplementationType = IsImplementation match {
     case true => Comp[MethodImplementation]
@@ -44,23 +48,26 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
 }
 
 object ArMethodC {
-  type Ownership[TContext <: Context] =
-    OwnedByClassC[TContext, ?] | OwnedByClassStaticC[TContext, ?] |
-    OwnedByTraitC[TContext, ?] | OwnedByTraitStaticC[TContext, ?]
+  type Ownership[TContext <: Context, IsImplementation <: Boolean] =
+    OwnedByClassC[TContext, ?, IsImplementation] | OwnedByClassStaticC[TContext, ?, IsImplementation] |
+    OwnedByTraitC[TContext, ?, IsImplementation] | OwnedByTraitStaticC[TContext, ?, IsImplementation]
 
-  def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC & HasContext[TContext] =
+  def getOwningModule[TContext <: Context, IsImplementation <: Boolean](owner: Ownership[TContext, IsImplementation]): ArModuleC & HasContext[TContext] & HasImplementation[IsImplementation] =
     owner match {
-      case owner: OwnedByClassC[TContext, ?] => ArClassC.getOwningModule(owner.arClass.owner)
-      case owner: OwnedByClassStaticC[TContext, ?] => ArClassC.getOwningModule(owner.arClass.owner)
-      case owner: OwnedByTraitC[TContext, ?] => ArTraitC.getOwningModule(owner.arTrait .owner)
-      case owner: OwnedByTraitStaticC[TContext, ?] => ArTraitC.getOwningModule(owner.arTrait .owner)
+      case owner: OwnedByClassC[TContext, ?, IsImplementation] => ArClassC.getOwningModule(owner.arClass.owner)
+      case owner: OwnedByClassStaticC[TContext, ?, IsImplementation] => ArClassC.getOwningModule(owner.arClass.owner)
+      case owner: OwnedByTraitC[TContext, ?, IsImplementation] => ArTraitC.getOwningModule(owner.arTrait.owner)
+      case owner: OwnedByTraitStaticC[TContext, ?, IsImplementation] => ArTraitC.getOwningModule(owner.arTrait .owner)
     }
 
-  def getAccessModifier[TContext <: Context](owner: Ownership[TContext]): AccessModifier =
+  def getOwningTube[TContext <: Context, IsImplementation <: Boolean](owner: Ownership[TContext, IsImplementation]): ArTubeC & HasContext[TContext] & HasImplementation[IsImplementation] =
+    getOwningModule(owner).tube
+
+  def getAccessModifier[TContext <: Context, IsImplementation <: Boolean](owner: Ownership[TContext, IsImplementation]): AccessModifier =
     owner match {
-      case owner: OwnedByClassC[TContext, ?] => owner.accessModifier
-      case owner: OwnedByClassStaticC[TContext, ?] => owner.accessModifier
-      case owner: OwnedByTraitC[TContext, ?] => owner.accessModifier
-      case owner: OwnedByTraitStaticC[TContext, ?] => owner.accessModifier
+      case owner: OwnedByClassC[TContext, ?, IsImplementation] => owner.accessModifier
+      case owner: OwnedByClassStaticC[TContext, ?, IsImplementation] => owner.accessModifier
+      case owner: OwnedByTraitC[TContext, ?, IsImplementation] => owner.accessModifier
+      case owner: OwnedByTraitStaticC[TContext, ?, IsImplementation] => owner.accessModifier
     }
 }

@@ -2,7 +2,7 @@ package dev.argon.io
 
 import java.io.IOException
 
-trait ResourceFactory {
-  def directoryResource(name: String): DirectoryResource[Any, IOException, BinaryResource]
-  def binaryResource(name: String): BinaryResource[Any, IOException]
+trait ResourceFactory[-R, +E] {
+  def directoryResource(name: String): DirectoryResource[R, E, BinaryResource]
+  def binaryResource(name: String): BinaryResource[R, E]
 }

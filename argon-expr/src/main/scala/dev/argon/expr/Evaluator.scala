@@ -75,6 +75,9 @@ trait Evaluator[-R, +E] {
           case WrapExpr.OfHole(_) => WrapExpr.OfExpr(expr)
         }
 
+      case ctor: (expr.constructor.type & ExprConstructor.Proving) =>
+        normalizeTopLevelWrap(expr.getArgs(ctor), fuel - 1)
+
       case ExprConstructor.ClassConstructorCall(_) |
           ExprConstructor.LoadConstantBool(_) | ExprConstructor.LoadConstantInt(_) | ExprConstructor.LoadConstantString(_) |
           ExprConstructor.LoadLambda(

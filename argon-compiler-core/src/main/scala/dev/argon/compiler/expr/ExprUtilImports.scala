@@ -48,7 +48,7 @@ trait ExprUtilImports extends ExprUtilBase {
     for
       tube <- tubeImporter.getTube(specifier.tube)
       module <- tube.module(specifier.module)
-      elements <- specifier.name.fold(ZIO.succeed(Seq()))(module.exports(Set.empty))
+      elements <- module.exports(Set.empty)(specifier.name)
       elements <- ZIO.filter(elements.collect { case element: TElement => element })(matchesOverload)
       result <- getElementResult(elements)
     yield result

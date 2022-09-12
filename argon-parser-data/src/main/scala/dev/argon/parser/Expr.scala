@@ -171,7 +171,7 @@ final case class FunctionParameterList
   hasTrailingComma: Boolean,
 )
 
-sealed trait Operator derives CanEqual {
+sealed trait Operator derives CanEqual, TypeNameLookup {
   def symbol: String
 }
 

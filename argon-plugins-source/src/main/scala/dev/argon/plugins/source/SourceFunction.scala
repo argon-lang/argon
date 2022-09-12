@@ -15,7 +15,7 @@ object SourceFunction {
   (ctx: Context)
   (exprConverter: ExpressionConverter & HasContext[ctx.type])
   (outerEnv: exprConverter.Env)
-  (functionOwner: TOwner & ArFuncC.Ownership[ctx.type])
+  (functionOwner: TOwner & ArFuncC.Ownership[ctx.type, true])
   (stmt: FunctionDeclarationStmt)
   : ctx.Comp[ArFuncC & HasContext[ctx.type] & HasImplementation[true] & HasOwner[TOwner]] =
     for

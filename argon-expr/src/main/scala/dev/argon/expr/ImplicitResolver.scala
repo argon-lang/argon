@@ -513,6 +513,7 @@ abstract class ImplicitResolver[R, E] {
         case ExprConstructor.LoadVariable(_) => ZIO.succeed(Seq.empty)
         case ExprConstructor.MethodCall(method) => methodRelations(method)
         case ExprConstructor.PatternMatch(_) => ZIO.succeed(Seq.fill(arity)(ExprRelation.SyntacticEquality))
+        case ExprConstructor.Proving(_) => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
         case ExprConstructor.RaiseException => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
         case ExprConstructor.Sequence => ZIO.succeed(Seq.fill(arity)(ExprRelation.SyntacticEquality))
         case ExprConstructor.StoreVariable(_) => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))

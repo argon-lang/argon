@@ -1,6 +1,6 @@
 package dev.argon.build
 
-import dev.argon.io.{BinaryResource, DirectoryResource, ResourceFactory, ResourceWriter}
+import dev.argon.io.*
 import dev.argon.compiler.*
 import dev.argon.compiler.tube.{ArTubeC, TubeName}
 import dev.argon.options.{OptionCodec, OutputHandler, OutputInfo}
@@ -12,7 +12,7 @@ import zio.stm.*
 import java.io.IOException
 
 object Compile {
-  def compile[R <: ResourceFactory & ResourceWriter, E >: BuildError | CompError | IOException](
+  def compile[R <: ResourceReader & ResourceWriter, E >: BuildError | CompError | IOException](
     buildConfig: Toml,
     plugins: Map[String, Plugin[R, E]],
   ): ZIO[R, E, Unit] =
@@ -29,16 +29,18 @@ object Compile {
 
         tubeImporter <- contextFactory.createTubeImporter(context)
 
-        tube <- tubeImporter.loadTube(config.tube)
+        resReader <- ZIO.service[ResourceReader]
+
+        tube <- tubeImporter.loadTube(resReader)(config.tube)
         declTube <- ZIO.fromEither(tube.asDeclaration.toRight { CouldNotLoadDeclarationTube(tube.tubeName) })
 
-        _ <- ZIO.foreachDiscard(config.libraries)(tubeImporter.loadTube)
+        _ <- ZIO.foreachDiscard(config.libraries)(tubeImporter.loadTube(resReader))
 
         _ <- ZIO.logTrace(s"Writing output")
         _ <- ZIO.foreachDiscard(config.output) { case (pluginName, outputOptions) =>
           for
             pluginHelper <- ZIO.fromEither(contextFactory.getPluginHelper(pluginName).toRight(UnknownPlugin(pluginName)))
-            tubeOutput <- pluginHelper.plugin.emitTube(context)(pluginHelper.adapter(context))(pluginHelper.getOptions(tube.options))(declTube)
+            tubeOutput <- pluginHelper.plugin.emitTube(context)(pluginHelper.adapter(context))(declTube)
             _ <- handlePluginOutput(pluginName, Seq(), outputOptions, tubeOutput, pluginHelper.plugin.outputHandler)
           yield ()
         }

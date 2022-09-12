@@ -39,16 +39,34 @@ message Metadata {
   repeated ExternalReference externalClasses = 5;
   repeated ExternalReference externalTraits = 6;
   repeated ExternalReference externalFunctions = 7;
-  repeated ExternalReference externalMethods = 8;
-  repeated ExternalReference externalClassConstructors = 9;
+  repeated ExternalReferenceMethod externalMethods = 8;
+  repeated ExternalReferenceClassConstructor externalClassConstructors = 9;
 }
 
 message ExternalReference {
   required BigInt id = 1;
-  repeated string tube = 2;
-  repeated string module = 3;
-  required Identifier identifier = 4;
+  required ImportSpecifier specifier = 2;
+}
+
+message ExternalReferenceMethod {
+  required BigInt id = 1;
+  required OwnerType ownerType = 2;
+  required BigInt ownerId = 3;
+  optional Identifier identifier = 4;
   required ErasedSignature signature = 5;
+
+  enum OwnerType {
+    OWNER_TYPE_CLASS = 0;
+    OWNER_TYPE_CLASS_STATIC = 1;
+    OWNER_TYPE_TRAIT = 2;
+    OWNER_TYPE_TRAIT_STATIC = 3;
+  }
+}
+
+message ExternalReferenceClassConstructor {
+  required BigInt id = 1;
+  required BigInt ownerId = 2;
+  required ErasedSignature signature = 3;
 }
 
 message Resource {
@@ -70,15 +88,15 @@ message Identifier {
 }
 
 enum AccessModifier {
-  ACCESS_MODIFIER_PRIVATE = 0;
-  ACCESS_MODIFIER_TUBE_PRIVATE = 1;
-  ACCESS_MODIFIER_MODULE_PRIVATE = 2;
+  ACCESS_MODIFIER_PRIVATE = 1;
+  ACCESS_MODIFIER_TUBE_PRIVATE = 2;
+  ACCESS_MODIFIER_MODULE_PRIVATE = 3;
 
-  ACCESS_MODIFIER_PUBLIC = 3;
+  ACCESS_MODIFIER_PUBLIC = 4;
 
-  ACCESS_MODIFIER_PROTECTED = 4;
-  ACCESS_MODIFIER_TUBE_OR_PROTECTED = 5;
-  ACCESS_MODIFIER_TUBE_AND_PROTECTED = 6;
+  ACCESS_MODIFIER_PROTECTED = 5;
+  ACCESS_MODIFIER_TUBE_OR_PROTECTED = 6;
+  ACCESS_MODIFIER_TUBE_AND_PROTECTED = 7;
 }
 
 message ErasedSignature {
@@ -87,17 +105,21 @@ message ErasedSignature {
 }
 
 message ErasedSignatureType {
-  required ErasedSignatureTypeConstructor constructor = 1;
-  required BigInt id = 2;
-  repeated ErasedSignatureType arguments = 3;
+  oneof constructor {
+    google.protobuf.Empty erased = 2;
+    ImportSpecifier class = 3;
+    ImportSpecifier trait = 4;
+    google.protobuf.Empty tuple = 5;
+    google.protobuf.Empty function = 6;
+  }
+  repeated ErasedSignatureType arguments = 1;
 }
 
-enum ErasedSignatureTypeConstructor {
-  ERASED_SIGNATURE_TYPE_CONSTRUCTOR_ERASED = 0;
-  ERASED_SIGNATURE_TYPE_CONSTRUCTOR_CLASS = 1;
-  ERASED_SIGNATURE_TYPE_CONSTRUCTOR_TRAIT = 2;
-  ERASED_SIGNATURE_TYPE_CONSTRUCTOR_TUPLE = 3;
-  ERASED_SIGNATURE_TYPE_CONSTRUCTOR_FUNCTION = 4;
+message ImportSpecifier {
+  repeated string tube = 1;
+  repeated string module = 2;
+  optional Identifier name = 3;
+  required ErasedSignature signature = 4;
 }
 
 // Tubes
@@ -115,7 +137,7 @@ message ModuleDefinition {
   // modules/definition/...
   // the path will urlencode (uppercase) the characters / and %
   // A root module will be written as modules/definition
-  option (zipentry) = { path: "modules/definition" };
+  option (zipentry) = { path: "modules/definition%s" };
   
   repeated NameGroup elements = 1;
 
@@ -168,6 +190,24 @@ message EffectInfo {
   required bool isPure = 1;
 }
 
+message Parameter {
+  required ListType listType = 1;
+  required uint32 flags = 2;
+  optional Identifier name = 3;
+  required Expr paramType = 4;
+
+  enum ListType {
+    LIST_TYPE_NORMAL_LIST = 1;
+    LIST_TYPE_INFERRABLE_LIST = 2;
+    LIST_TYPE_INFERRABLE_LIST2 = 3;
+    LIST_TYPE_REQUIRES_LIST = 4;
+  }
+
+  enum Flags {
+    FLAGS_ERASED = 1;
+  }
+}
+
 
 message ClassDefinition {
   option (zipentry) = { path: "classes/%d" };
@@ -175,8 +215,8 @@ message ClassDefinition {
   required uint32 flags = 1;
   required Signature signature = 2;
   repeated ClassField fields = 3;
-  repeated MethodMember methods = 4;
-  repeated MethodMember staticMethods = 5;
+  repeated MethodMemberGroup methods = 4;
+  repeated MethodMemberGroup staticMethods = 5;
   repeated ClassConstructorMember constructors = 6;
 
   enum Flags {
@@ -187,9 +227,10 @@ message ClassDefinition {
   }
 
   message Signature {
-    repeated Expr parameterTypes = 1;
-    optional ClassType baseClass = 2;
-    repeated TraitType baseTraits = 3;
+    repeated Parameter parameters = 1;
+    required Expr classTypeSuperType = 2;
+    optional ClassType baseClass = 3;
+    repeated TraitType baseTraits = 4;
   }
 }
 
@@ -199,9 +240,13 @@ message ClassField {
   required Expr fieldType = 3;
 }
 
+message MethodMemberGroup {
+  optional Identifier name = 1;
+  repeated MethodMember methods = 2;
+}
+
 message MethodMember {
   required BigInt id = 1;
-  optional Identifier name = 2;
   required AccessModifier accessModifier = 3;
 }
 
@@ -218,8 +263,8 @@ message TraitDefinition {
 
   required uint32 flags = 1;
   required Signature signature = 2;
-  repeated MethodMember methods = 3;
-  repeated MethodMember staticMethods = 4;
+  repeated MethodMemberGroup methods = 3;
+  repeated MethodMemberGroup staticMethods = 4;
 
   enum Flags {
     FLAGS_NONE = 0;
@@ -227,8 +272,9 @@ message TraitDefinition {
   }
 
   message Signature {
-    repeated Expr parameterTypes = 1;
-    repeated TraitType baseTraits = 2;
+    repeated Parameter parameters = 1;
+    required Expr traitTypeSuperType = 2;
+    repeated TraitType baseTraits = 3;
   }
 }
 
@@ -250,8 +296,8 @@ message FunctionDefinition {
 }
 
 message FunctionSignature {
-  repeated Expr parameterTypes = 1;
-  required Expr resultType = 2;
+  repeated Parameter parameters = 1;
+  required Expr returnType = 2;
   repeated Expr ensuresClauses = 3;
 }
 
@@ -271,6 +317,7 @@ message MethodDefinition {
   required FunctionSignature signature = 2;
   required EffectInfo effects = 3;
   optional FunctionBody body = 4;
+  optional Identifier instanceVariableName = 5;
 
   enum Flags {
     FLAGS_NONE = 0;
@@ -299,7 +346,7 @@ message ClassConstructorDefinition {
   }
 
   message Signature {
-    repeated Expr parameterTypes = 1;
+    repeated Parameter parameters = 1;
   }
 
   message Body {
@@ -312,7 +359,7 @@ message ClassConstructorDefinition {
   message ExpressionBody {
     repeated PreInitializationStatement preInitialization = 1;
     optional Expr baseConstructorCall = 2;
-    required BigInt instanceVariable = 3;
+    required LocalVariableDefinition instanceVariable = 3;
     required Expr postInitialization = 4;
   }
 
@@ -347,6 +394,7 @@ message Expr {
     BigInt loadTupleElement = 11;
     VariableReference loadVariable = 12;
     LoadId methodCall = 13;
+    WitnessList proving = 35;
     google.protobuf.Empty raiseException = 18;
     google.protobuf.Empty sequence = 14;
     VariableReference storeVariable = 19;
@@ -383,13 +431,18 @@ message Expr {
   message ExistentialType {
     required LocalVariableDefinition variable = 1;
   }
+
+  message WitnessList {
+    repeated LocalVariableDefinition witnesses = 2;
+  }
 }
 
 message LocalVariableDefinition {
-  required uint32 flags = 1;
-  required Expr varType = 2;
-  optional Identifier name = 3;
-  required bool isMutable = 4;
+  required BigInt id = 1;
+  required uint32 flags = 2;
+  required Expr varType = 3;
+  optional Identifier name = 4;
+  required bool isMutable = 5;
 
   enum Flags {
     FLAGS_NONE = 0;

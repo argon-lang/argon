@@ -2,13 +2,14 @@ package dev.argon.compiler.definitions
 
 import dev.argon.compiler.*
 import dev.argon.compiler.module.ArModuleC
+import dev.argon.compiler.tube.ArTubeC
 import dev.argon.util.UniqueIdentifier
 import dev.argon.compiler.signature.Signature
 
 abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
   import context.ExprContext.*
 
-  override val owner: ArFuncC.Ownership[context.type]
+  override val owner: ArFuncC.Ownership[context.type, IsImplementation]
 
   val id: UniqueIdentifier
   def signature: Comp[Signature[WrapExpr, FunctionResult]]
@@ -39,8 +40,11 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
 }
 
 object ArFuncC {
-  type Ownership[TContext <: Context] = OwnedByModuleC[TContext]
+  type Ownership[TContext <: Context, IsImplementation <: Boolean] = OwnedByModuleC[TContext, IsImplementation]
 
-  def getOwningModule[TContext <: Context](owner: Ownership[TContext]): ArModuleC & HasContext[TContext] =
+  def getOwningModule[TContext <: Context, IsImplementation <: Boolean](owner: Ownership[TContext, IsImplementation]): ArModuleC & HasContext[TContext] & HasImplementation[IsImplementation] =
     owner.module
+
+  def getOwningTube[TContext <: Context, IsImplementation <: Boolean](owner: Ownership[TContext, IsImplementation]): ArTubeC & HasContext[TContext] & HasImplementation[IsImplementation] =
+    getOwningModule(owner).tube
 }

@@ -6,7 +6,7 @@ import dev.argon.util.{*, given}
 import dev.argon.io.*
 import dev.argon.options.*
 import dev.argon.util.toml.{Toml, TomlCodec}
-import zio.ZIO
+import zio.*
 
 import java.io.IOException
 import java.nio.charset.CharacterCodingException
@@ -89,14 +89,14 @@ final case class JSModuleOptionsMap[-R, +E]
 
 object JSModuleOptionsMap:
   given [R, E >: JSPluginError]: OptionCodec[R, E, JSModuleOptionsMap[R, E]] with
-    override def decode(value: Toml): ZIO[ResourceFactory, String, JSModuleOptionsMap[R, E]] =
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, JSModuleOptionsMap[R, E]] =
       value match {
         case Toml.Table(map) =>
           map
             .toSeq
             .traverse { case (key, value) =>
               for
-                options <- summon[OptionCodec[R, E, JSModuleOptions[R, E]]].decode(value)
+                options <- summon[OptionCodec[R, E, JSModuleOptions[R, E]]].decode(resFactory)(value)
               yield (ModulePath.urlDecode(key), options)
             }
             .map { optMap =>

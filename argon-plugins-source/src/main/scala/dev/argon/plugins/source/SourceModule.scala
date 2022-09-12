@@ -17,7 +17,7 @@ object SourceModule {
     (
       context: Context,
       tubeImporter: TubeImporter & HasContext[context.type],
-      currentTube: ArTubeC & HasContext[context.type],
+      currentTube: ArTubeC & HasContext[context.type] & HasImplementation[true],
       moduleName: ModuleName,
       moduleFile: ArgonSourceCodeResource[context.Env, context.Error],
     )
@@ -33,7 +33,7 @@ object SourceModule {
       override type IsImplementation = true
 
       override val context: context2.type = context2
-      override val tube: ArTube = currentTube
+      override val tube: ArTube & HasImplementation[true] = currentTube
       override val moduleName: ModuleName = moduleName2
 
       def currentModule: this.type = this
@@ -56,9 +56,9 @@ object SourceModule {
           }
         )
 
-      override def exports(exportingModules: Set[ArModule])(name: IdentifierExpr): Comp[Seq[ModuleElement[true]]] =
+      override def exports(exportingModules: Set[ArModule])(name: Option[IdentifierExpr]): Comp[Seq[ModuleElement[true]]] =
         exportsAsImports(exportingModules).map { exp =>
-          exp.get(Some(name)).toList.flatten
+          exp.get(name).toList.flatten
         }
 
 
@@ -119,21 +119,21 @@ object SourceModule {
           case stmt: TraitDeclarationStmt =>
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
-              owner = OwnedByModuleC[context.type](currentModule, stmt.name.value, modifier)
+              owner = OwnedByModuleC[context.type, true](currentModule, stmt.name.value, modifier)
               arTrait <- SourceTrait.make(context)(exprConverter)(vtableBuilder)(env)(owner)(stmt)
             yield (imports, Seq(ModuleElementC.TraitElement(arTrait)))
 
           case stmt: ClassDeclarationStmt =>
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
-              owner = OwnedByModuleC[context.type](currentModule, stmt.name.value, modifier)
+              owner = OwnedByModuleC[context.type, true](currentModule, stmt.name.value, modifier)
               arClass <- SourceClass.make(context)(exprConverter)(vtableBuilder)(env)(owner)(stmt)
             yield (imports, Seq(ModuleElementC.ClassElement(arClass)))
 
           case stmt: FunctionDeclarationStmt =>
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
-              owner = OwnedByModuleC[context.type](currentModule, stmt.name.value, modifier)
+              owner = OwnedByModuleC[context.type, true](currentModule, stmt.name.value, modifier)
               func <- SourceFunction.make(context)(exprConverter)(env)(owner)(stmt)
             yield (imports, Seq(ModuleElementC.FunctionElement(func)))
 
@@ -166,7 +166,7 @@ object SourceModule {
             ???
 
           case ImportPathSegment.Imported(id) :: tail =>
-            module.exports(Set.empty)(id).flatMap { newImports =>
+            module.namedExports(Set.empty)(id).flatMap { newImports =>
               loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((Some(id), module, _)))
             }
 
@@ -177,7 +177,7 @@ object SourceModule {
             loadModuleImports(exportingModules)(module, tail, importedIds + id, acc)
 
           case ImportPathSegment.Renaming(id, Some(viewedName)) :: tail =>
-            module.exports(Set.empty)(id).flatMap { newImports =>
+            module.namedExports(Set.empty)(id).flatMap { newImports =>
               loadModuleImports(exportingModules)(module, tail, importedIds + id, acc ++ newImports.map((Some(viewedName), module, _)))
             }
 

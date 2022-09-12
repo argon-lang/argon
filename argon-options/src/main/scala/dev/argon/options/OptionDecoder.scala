@@ -7,23 +7,22 @@ import dev.argon.util.toml.{Toml, TomlCodec}
 
 import scala.deriving.Mirror
 import scala.util.NotGiven
-import java.io.IOException
 import zio.*
 
-trait OptionDecoder[E, A] {
-  def decode(value: Toml): ZIO[ResourceFactory, String, A]
+trait OptionDecoder[R, E, A] {
+  def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, A]
   def defaultValue: Option[A] = None
 }
 
 object OptionDecoder {
   // Derivation
-  private[options] open class DerivationImplDecoder[E >: IOException, T, TDec[A] <: OptionDecoder[E, A]](ctx: CaseClass[TDec, T]) extends OptionDecoder[E, T] {
-    override def decode(value: Toml): ZIO[ResourceFactory, String, T] =
+  private[options] open class DerivationImplDecoder[R, E, T, TDec[A] <: OptionDecoder[R, E, A]](ctx: CaseClass[TDec, T]) extends OptionDecoder[R, E, T] {
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, T] =
       value match {
         case Toml.Table(map) =>
           ctx.constructMonadic { param =>
             map.get(param.label) match {
-              case Some(memberValue) => param.typeclass.decode(memberValue)
+              case Some(memberValue) => param.typeclass.decode(resFactory)(memberValue)
               case None =>
                 param.typeclass.defaultValue match {
                   case Some(memberValue) => ZIO.succeed(memberValue)
@@ -39,80 +38,76 @@ object OptionDecoder {
   }
 
 
-  final class OptionDecoderDerivation[E >: IOException] extends ProductDerivation[[A] =>> OptionDecoder[E, A]] {
-    override def join[T](ctx: CaseClass[Typeclass, T]): OptionDecoder[E, T] =
+  final class OptionDecoderDerivation[R, E] extends ProductDerivation[[A] =>> OptionDecoder[R, E, A]] {
+    override def join[T](ctx: CaseClass[Typeclass, T]): OptionDecoder[R, E, T] =
       DerivationImplDecoder(ctx)
   }
 
 
-  inline def derive[E >: IOException, A](using Mirror.Of[A]): OptionDecoder[E, A] =
-    new OptionDecoderDerivation[E].derivedMirror[A]
+  inline def derive[R, E, A](using Mirror.Of[A]): OptionDecoder[R, E, A] =
+    new OptionDecoderDerivation[R, E].derivedMirror[A]
 
   // Toml
-  given [E >: IOException, A](using TomlCodec[A]): OptionDecoder[E, A] =
-    summon[OptionCodec[Any, E, A]]
+  given [R, E, A](using TomlCodec[A]): OptionDecoder[R, E, A] =
+    summon[OptionCodec[R, E, A]]
 
   // Option
-  private[options] open class OptionOptionDecoderBase[E >: IOException, A](using OptionDecoder[E, A]) extends OptionDecoder[E, Option[A]] {
-    override def decode(value: Toml): ZIO[ResourceFactory, String, Option[A]] =
-      summon[OptionDecoder[E, A]].decode(value).map(Some.apply)
+  private[options] open class OptionOptionDecoderBase[R, E, A](using OptionDecoder[R, E, A]) extends OptionDecoder[R, E, Option[A]] {
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, Option[A]] =
+      summon[OptionDecoder[R, E, A]].decode(resFactory)(value).map(Some.apply)
 
     override def defaultValue: Option[Option[A]] =
       Some(None)
   }
 
 
-  given[E >: IOException, A](using OptionDecoder[E, A], NotGiven[TomlCodec[A]]): OptionDecoder[E, Option[A]] =
+  given[R, E, A](using OptionDecoder[R, E, A], NotGiven[TomlCodec[A]]): OptionDecoder[R, E, Option[A]] =
     OptionOptionDecoderBase()
 
 
   // Seq
-  private[options] open class SeqOptionDecoderBase[E >: IOException, A](using OptionDecoder[E, A]) extends OptionDecoder[E, Seq[A]] {
-    override def decode(value: Toml): ZIO[ResourceFactory, String, Seq[A]] =
+  private[options] open class SeqOptionDecoderBase[R, E, A](using OptionDecoder[R, E, A]) extends OptionDecoder[R, E, Seq[A]] {
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, Seq[A]] =
       value match {
         case Toml.Array(value) =>
-          value.traverse(summon[OptionDecoder[E, A]].decode)
+          value.traverse(summon[OptionDecoder[R, E, A]].decode(resFactory))
 
         case _ => ZIO.fail("Expected array")
       }
   }
 
 
-  given[E >: IOException, A](using OptionDecoder[E, A], NotGiven[TomlCodec[A]]): OptionDecoder[E, Seq[A]] =
+  given[R, E, A](using OptionDecoder[R, E, A], NotGiven[TomlCodec[A]]): OptionDecoder[R, E, Seq[A]] =
     SeqOptionDecoderBase()
 
 
   // DirectoryResource
-  private[options] open class DirectoryResourceOptionDecoderBase[Res[-R2, +E2] <: Resource[R2, E2], R, E >: IOException](using BinaryResourceDecoder[Res, R, E]) extends OptionDecoder[E, DirectoryResource[R, E, Res]] {
-    override def decode(value: Toml): ZIO[ResourceFactory, String, DirectoryResource[R, E, Res]] =
+  private[options] open class DirectoryResourceOptionDecoderBase[Res[-R2, +E2] <: Resource[R2, E2], R, E](using BinaryResourceDecoder[Res, R, E]) extends OptionDecoder[R, E, DirectoryResource[R, E, Res]] {
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, DirectoryResource[R, E, Res]] =
       value match {
         case Toml.String(str) =>
-          ZIO.serviceWith[ResourceFactory] { rf =>
-            (rf.directoryResource(str): DirectoryResource[R, E, BinaryResource]).decode[Res]
-          }
+          ZIO.succeed((resFactory.directoryResource(str): DirectoryResource[R, E, BinaryResource]).decode[Res])
 
         case _ => ZIO.fail("Expected string")
       }
   }
 
-  given directoryResourceDecoder[Res[-R2, +E2] <: Resource[R2, E2], R, E >: IOException](using BinaryResourceDecoder[Res, R, E]): OptionDecoder[E, DirectoryResource[R, E, Res]] =
+  given directoryResourceDecoder[Res[-R2, +E2] <: Resource[R2, E2], R, E](using BinaryResourceDecoder[Res, R, E]): OptionDecoder[R, E, DirectoryResource[R, E, Res]] =
     DirectoryResourceOptionDecoderBase()
 
 
   // BinaryResource
-  private[options] open class BinaryResourceOptionDecoderBase[Res[_, _], R, E >: IOException](using BinaryResourceDecoder[Res, R, E]) extends OptionDecoder[E, Res[R, E]] {
-    override def decode(value: Toml): ZIO[ResourceFactory, String, Res[R, E]] =
+  private[options] open class BinaryResourceOptionDecoderBase[Res[_, _], R, E](using BinaryResourceDecoder[Res, R, E]) extends OptionDecoder[R, E, Res[R, E]] {
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, Res[R, E]] =
       value match {
         case Toml.String(str) =>
-          ZIO.serviceWith[ResourceFactory] { rf =>
-            summon[BinaryResourceDecoder[Res, R, E]].decode(rf.binaryResource(str))
-          }
+          ZIO.succeed(summon[BinaryResourceDecoder[Res, R, E]].decode(resFactory.binaryResource(str)))
 
         case _ => ZIO.fail("Expected string")
       }
   }
 
-  given [Res[R2, E2], R, E >: IOException](using BinaryResourceDecoder[Res, R, E]): OptionDecoder[E, Res[R, E]] =
+  given [Res[R2, E2], R, E](using BinaryResourceDecoder[Res, R, E]): OptionDecoder[R, E, Res[R, E]] =
     BinaryResourceOptionDecoderBase()
 
 }

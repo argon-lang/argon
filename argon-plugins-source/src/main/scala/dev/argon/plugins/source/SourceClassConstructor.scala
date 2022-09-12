@@ -16,7 +16,7 @@ object SourceClassConstructor {
   (ctx: Context)
   (exprConverter: ExpressionConverter & HasContext[ctx.type])
   (outerEnv: exprConverter.Env)
-  (ctorOwnership: TOwner & ClassConstructorC.Ownership[ctx.type])
+  (ctorOwnership: TOwner & ClassConstructorC.Ownership[ctx.type, true])
   (stmt: ClassConstructorDeclarationStmt)
   : ctx.Comp[ClassConstructorC & HasContext[ctx.type] & HasImplementation[true] & HasOwner[TOwner]] =
     for

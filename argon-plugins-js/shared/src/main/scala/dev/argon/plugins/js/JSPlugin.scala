@@ -32,12 +32,11 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
   override def emitTube
   (ctx: Context { type Error >: JSPluginError })
   (adapter2: PluginContextAdapter.Aux[ctx.type, this.type])
-  (opt: JSOptions[ctx.Env, ctx.Error])
   (t: ArTubeC & HasContext[ctx.type] & HasImplementation[true])
   : ctx.Comp[JSOutput[ctx.Env, ctx.Error]] =
     new TubeEmitter {
       override val context: ctx.type = ctx
-      override val options: JSOptions[ctx.Env, ctx.Error] = opt
+      override val options: JSOptions[ctx.Env, ctx.Error] = adapter2.extractOptions(t.options)
       override val tube: ArTube & HasImplementation[true] = t
       override val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type] = adapter2
     }.emitTube

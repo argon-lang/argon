@@ -145,6 +145,12 @@ abstract class ExprProcessor[F[+_]: Monad] extends UsingContext {
             processPatternMatchArgs[n](ec2.ExprConstructor.PatternMatch(patterns2))(e.getArgs(ctor))
           }
 
+        case ctor: (e.constructor.type & ec1.ExprConstructor.Proving) =>
+          ctor.witnesses.traverse(processLocalVariable)
+            .flatMap { witnesses2 =>
+              processExprArgs(ec2.ExprConstructor.Proving(witnesses2))(e.getArgs(ctor))
+            }
+
         case ctor: (e.constructor.type & ec1.ExprConstructor.RaiseException.type) =>
           processExprArgs(ec2.ExprConstructor.RaiseException)(e.getArgs(ctor))
 

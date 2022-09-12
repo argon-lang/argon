@@ -4,7 +4,7 @@ import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
 import dev.argon.compiler.tube.{ArTubeC, TubeImporter, TubeName}
 import dev.argon.io.*
-import dev.argon.options.OptionDecoder
+import dev.argon.options.{OptionCodec, OptionDecoder}
 import dev.argon.plugin.test.TestCase.ExpectedResult
 import dev.argon.plugin.{Plugin, PluginContextAdapter}
 import dev.argon.plugins.source.*
@@ -56,6 +56,8 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
     override type Error = E
 
     override type Options = plugin.Options[Environment, E]
+    override def optionsCodec: OptionCodec[Env, Error, Options] = plugin.optionCodec
+
     override type ExternMethodImplementation = plugin.ExternMethodImplementation
     override type ExternFunctionImplementation = plugin.ExternFunctionImplementation
     override type ExternClassConstructorImplementation = plugin.ExternClassConstructorImplementation
@@ -106,14 +108,14 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
     ReadFileCompileTime.readDirectory("libraries", (isDir, name) => name != "node_modules" && name != "bin")
 
   private val libraries: IO[E, Map[TubeName, SourceLibOptions[Environment, E, plugin.Options[Environment, E]]]] =
-    given OptionDecoder[E, plugin.Options[Environment, E]] with
-      override def decode(value: Toml): ZIO[ResourceFactory, String, plugin.Options[Environment, E]] =
+    given OptionDecoder[Environment, E, plugin.Options[Environment, E]] with
+      override def decode(resFactory: ResourceFactory[Environment, E])(value: Toml): IO[String, plugin.Options[Environment, E]] =
         val pluginValue = value match {
           case Toml.Table(table) => table.get(pluginName).getOrElse(Toml.Table.empty)
           case _ => Toml.Table.empty
         }
 
-        plugin.optionCodec[Environment, E].decode(pluginValue)
+        plugin.optionCodec[Environment, E].decode(resFactory)(pluginValue)
       end decode
     end given
 
@@ -124,7 +126,7 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
       case (name, entry) =>
         val dir = entry.toDirectoryEntry("libraries/" + name, name)
 
-        val resourceFactory = new ResourceFactory {
+        val resourceFactory = new ResourceFactory[Any, IOException] {
           private def subPath(name: String): ZIO[Any, IOException, DirectoryEntry[Any, IOException, BinaryResource]] =
             name.split("/").nn.map(_.nn).toSeq.foldLeftM(dir) {
               case (DirectoryEntry.Subdirectory(_, subEntries), subPath) =>
@@ -187,8 +189,7 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
             )
 
             options <- SourceTubeLoader.libOptionDecoder[Environment, E, plugin.Options[Environment, E]]
-              .decode(buildToml)
-              .provide(ZLayer.succeed(resourceFactory))
+              .decode(resourceFactory)(buildToml)
 
           yield TubeName.urlDecode(name).get -> options
         ).mapError(TestError.ErrorLoadingBuildConfig.apply)
@@ -297,6 +298,9 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
       override val context: ctx.type = ctx
       override val plugin: ExecutionTests.this.plugin.type = ExecutionTests.this.plugin
 
+      override def extractOptions(options: plugin.Options[TestEnvironment, E]): plugin.Options[TestEnvironment, E] =
+        options
+
       override def extractExternMethodImplementation(impl: plugin.ExternMethodImplementation): plugin.ExternMethodImplementation =
         impl
 
@@ -309,7 +313,7 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
 
     for
       tube <- importer.getTube(tubeName)
-      output <- plugin.emitTube(ctx)(adapter)(tube.options)(tube.asDeclaration.get)
+      output <- plugin.emitTube(ctx)(adapter)(tube.asDeclaration.get)
     yield output
   end getTubeOutput
 

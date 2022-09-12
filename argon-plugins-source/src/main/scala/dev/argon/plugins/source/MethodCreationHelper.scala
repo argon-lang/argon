@@ -16,7 +16,7 @@ trait MethodCreationHelper extends Definition {
 
   protected def innerEnv: Comp[Env]
 
-  protected final def buildMethods[TMethodOwner <: ArMethodC.Ownership[context.type]]
+  protected final def buildMethods[TMethodOwner <: ArMethodC.Ownership[context.type, true]]
     (createMethodOwner: (this.type, Option[IdentifierExpr], AccessModifier) => TMethodOwner)
     (body: Vector[WithSource[parser.Stmt]])
     : Comp[Map[Option[IdentifierExpr], Seq[ArMethodC & HasContext[context.type] & HasImplementation[true] & HasOwner[TMethodOwner]]]] =
@@ -30,7 +30,7 @@ trait MethodCreationHelper extends Definition {
         methods.groupMap(_._1)(_._2)
       }
 
-  private def buildMethod[TMethodOwner <: ArMethodC.Ownership[context.type]]
+  private def buildMethod[TMethodOwner <: ArMethodC.Ownership[context.type, true]]
     (createMethodOwner: (this.type, Option[IdentifierExpr], AccessModifier) => TMethodOwner)
     (methodDecl: parser.MethodDeclarationStmt)
     : Comp[(Option[IdentifierExpr], ArMethodC & HasContext[context.type] & HasImplementation[true] & HasOwner[TMethodOwner])] =

@@ -15,7 +15,7 @@ object SourceMethod {
   (ctx: Context)
   (exprConverter: ExpressionConverter & HasContext[ctx.type])
   (outerEnv: exprConverter.Env)
-  (methodOwner: TOwner & ArMethodC.Ownership[ctx.type])
+  (methodOwner: TOwner & ArMethodC.Ownership[ctx.type, true])
   (stmt: MethodDeclarationStmt)
   : ctx.Comp[ArMethodC & HasContext[ctx.type] & HasImplementation[true] & HasOwner[TOwner]] =
     for
@@ -32,12 +32,19 @@ object SourceMethod {
 
       override def isAbstract: Boolean = stmt.modifiers.exists(_.value == parser.AbstractModifier)
       override def isImplicitOverride: Boolean = stmt.modifiers.exists(_.value == parser.OverrideModifier)
-      override def isVirtual: Boolean = stmt.modifiers.exists(mod => mod.value == parser.VirtualModifier || mod.value == parser.AbstractModifier)
+      override def isVirtual: Boolean = stmt.modifiers.exists(mod =>
+        mod.value == parser.VirtualModifier ||
+          mod.value == parser.AbstractModifier ||
+          mod.value == parser.OverrideModifier
+      )
       override def isFinal: Boolean = stmt.modifiers.exists(_.value == parser.FinalModifier)
       override def isProof: Boolean = stmt.modifiers.exists { _.value == parser.ProofModifier }
       override def isErased: Boolean = stmt.modifiers.exists { _.value == parser.ErasedModifier }
 
       override def purity: Boolean = stmt.purity
+
+      override def instanceVariableName: Option[IdentifierExpr] =
+        stmt.instanceName
 
       private def sigEnv: Comp[(Signature[WrapExpr, FunctionResult], exprConverter.Env)] =
         sigCell.get(

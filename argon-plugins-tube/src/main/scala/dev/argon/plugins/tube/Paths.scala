@@ -4,9 +4,9 @@ import dev.argon.tube as t
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 
 private[tube] object Paths {
-  def get[A <: GeneratedMessage: GeneratedMessageCompanion]: String =
+  def get[A <: GeneratedMessage: GeneratedMessageCompanion](args: Any*): String =
     val path = t.TubeProto.zipentry.get(summon[GeneratedMessageCompanion[A]].scalaDescriptor.getOptions).get.path
     assert(path.nonEmpty)
-    path
+    path.format(args*)
   end get
 }

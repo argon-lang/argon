@@ -24,7 +24,7 @@ object SourceTube {
     val tubeName2 = tubeName
     for {
       loadModule <-
-        ZIO.memoize[CompEnv, CompError, (ArTubeC & HasContext[context.type], ModulePath), ArModuleC & HasContext[context.type] & HasImplementation[true]] { args =>
+        ZIO.memoize[CompEnv, CompError, (ArTubeC & HasContext[context.type] & HasImplementation[true], ModulePath), ArModuleC & HasContext[context.type] & HasImplementation[true]] { args =>
           val (tube, path) = args
           val moduleName = ModuleName(tubeName, path)
           modules.get(path) match {

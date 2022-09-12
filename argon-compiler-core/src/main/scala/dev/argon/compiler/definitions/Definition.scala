@@ -10,33 +10,37 @@ trait Definition extends DeclarationMode {
   val id: UniqueIdentifier
 }
 
-final case class OwnedByModuleC[TContext <: Context]
-  (module: ArModuleC & HasContext[TContext], ownedName: Option[IdentifierExpr], accessModifier: AccessModifierGlobal)
+final case class OwnedByModuleC[TContext <: Context, IsImplementation <: Boolean]
+(
+  module: ArModuleC & HasContext[TContext] & HasImplementation[IsImplementation],
+  ownedName: Option[IdentifierExpr],
+  accessModifier: AccessModifierGlobal
+)
 
-final case class OwnedByClassC[TContext <: Context, +ClassOwner]
-  (
-    arClass: ArClassC & HasContext[TContext] & HasOwner[ClassOwner],
-    ownedName: Option[IdentifierExpr],
-    accessModifier: AccessModifier,
-  )
+final case class OwnedByClassC[TContext <: Context, +ClassOwner, IsImplementation <: Boolean]
+(
+  arClass: ArClassC & HasContext[TContext] & HasOwner[ClassOwner] & HasImplementation[IsImplementation],
+  ownedName: Option[IdentifierExpr],
+  accessModifier: AccessModifier,
+)
 
-final case class OwnedByClassStaticC[TContext <: Context, +ClassOwner]
-  (
-    arClass: ArClassC & HasContext[TContext] & HasOwner[ClassOwner],
-    ownedName: Option[IdentifierExpr],
-    accessModifier: AccessModifier,
-  )
+final case class OwnedByClassStaticC[TContext <: Context, +ClassOwner, IsImplementation <: Boolean]
+(
+  arClass: ArClassC & HasContext[TContext] & HasOwner[ClassOwner] & HasImplementation[IsImplementation],
+  ownedName: Option[IdentifierExpr],
+  accessModifier: AccessModifier,
+)
 
-final case class OwnedByTraitC[TContext <: Context, +TraitOwner]
-  (
-    arTrait: ArTraitC & HasContext[TContext] & HasOwner[TraitOwner],
-    ownedName: Option[IdentifierExpr],
-    accessModifier: AccessModifier,
-  )
+final case class OwnedByTraitC[TContext <: Context, +TraitOwner, IsImplementation <: Boolean]
+(
+  arTrait: ArTraitC & HasContext[TContext] & HasOwner[TraitOwner] & HasImplementation[IsImplementation],
+  ownedName: Option[IdentifierExpr],
+  accessModifier: AccessModifier,
+)
 
-final case class OwnedByTraitStaticC[TContext <: Context, +TraitOwner]
+final case class OwnedByTraitStaticC[TContext <: Context, +TraitOwner, IsImplementation <: Boolean]
   (
-    arTrait: ArTraitC & HasContext[TContext] & HasOwner[TraitOwner],
+    arTrait: ArTraitC & HasContext[TContext] & HasOwner[TraitOwner] & HasImplementation[IsImplementation],
     ownedName: Option[IdentifierExpr],
     accessModifier: AccessModifier,
   )

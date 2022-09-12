@@ -213,6 +213,8 @@ trait ExprContext {
 
     }
 
+    final case class Proving(witnesses: Seq[TLocalVariable]) extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor derives CanEqual
+
     case object RaiseException extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor derives CanEqual
 
     case object Sequence extends ExprConstructorWithArgs[NonEmptyArgList] with ExprConstructor derives CanEqual
