@@ -27,20 +27,33 @@ private[tube] abstract class TubeWriterBase extends UsingContext {
   protected def ifImplementation[A, B, C](value: IsImplementation match {
     case true => A
     case false => B
-  })(whenImplementation: A => C, whenInterface: => C): C
+  })(whenImplementation: A => C, whenInterface: Either[A, B] => C): C
 
   protected def dummyImplementationValue: IsImplementation match {
     case true => Unit
     case false => Unit
   }
 
-  private def processImplementation[Impl, T](impl: IsImplementation match {
+  private def processImplementation[Impl, T](isInline: Boolean, impl: IsImplementation match {
     case true => Comp[Impl]
-    case false => Unit
+    case false => Comp[Option[Impl]]
   })(f: Impl => Comp[T]): Comp[Option[T]] =
     ifImplementation(impl)(
       whenImplementation = _.flatMap(f).asSome,
-      whenInterface = ZIO.none,
+      whenInterface = { implEither =>
+        val impl = implEither match {
+          case Left(l) => l.asSome
+          case Right(r) => r
+        }
+
+        if isInline then
+          impl.flatMap {
+            case Some(impl) => f(impl).asSome
+            case None => ZIO.none
+          }
+        else
+          ZIO.none
+      },
     )
 
   val currentTube: ArTube & HasImplementation[IsImplementation]
@@ -289,7 +302,7 @@ private[tube] abstract class TubeWriterBase extends UsingContext {
 
       options <- ifImplementation(options)(
         whenImplementation = options => optionsCodec.encode(resourceRecorder)(options).map(encodeToml).asSome,
-        whenInterface = ZIO.none,
+        whenInterface = _ => ZIO.none,
       )
 
       methodRefs <- buildRefsComp(
@@ -406,7 +419,7 @@ private[tube] abstract class TubeWriterBase extends UsingContext {
         name = t.TubeName(currentTube.tubeName.name.toList),
         `type` = ifImplementation(dummyImplementationValue)(
           whenImplementation = _ => t.TubeType.Implementation,
-          whenInterface = t.TubeType.Interface
+          whenInterface = _ => t.TubeType.Interface
         ),
         options = options,
         modules = currentTube.modulePaths
@@ -653,7 +666,7 @@ private[tube] abstract class TubeWriterBase extends UsingContext {
       sig <- func.signature
       signature <- emitSignature(sig)(emitFunctionSignature)
 
-      body <- processImplementation(func.implementation) {
+      body <- processImplementation(func.isInline, func.implementation) {
         case impl: FunctionImplementationC.ExpressionBody =>
           for
             body <- getExprWithVariables(impl.body)
@@ -720,7 +733,7 @@ private[tube] abstract class TubeWriterBase extends UsingContext {
       sig <- method.signatureUnsubstituted
       signature <- emitSignature(sig)(emitFunctionSignature)
 
-      body <- processImplementation(method.implementation) {
+      body <- processImplementation(method.isInline, method.implementation) {
         case impl: MethodImplementationC.ExpressionBody =>
           for
             body <- getExprWithVariables(impl.body)
@@ -759,7 +772,7 @@ private[tube] abstract class TubeWriterBase extends UsingContext {
         ZIO.succeed(t.ClassConstructorDefinition.Signature(paramTypes))
       }
 
-      body <- processImplementation(classCtor.implementation) {
+      body <- processImplementation(false, classCtor.implementation) {
         case impl: ClassConstructorImplementationC.ExpressionBody =>
           withVariables {
             def getPreInit(stmt: Either[WrapExpr, ClassConstructorImplementationC.FieldInitializationStatement & HasContext[context.type]]): Comp[t.ClassConstructorDefinition.PreInitializationStatement] =

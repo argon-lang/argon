@@ -93,6 +93,7 @@ object Token {
   case object KW_FINAL extends TokenWithCategory(TokenCategory.KW_FINAL) with ModifierToken[FinalModifier.type]
   case object KW_PROOF extends TokenWithCategory(TokenCategory.KW_PROOF) with ModifierToken[ProofModifier.type]
   case object KW_ERASED extends TokenWithCategory(TokenCategory.KW_ERASED) with ModifierToken[ErasedModifier.type]
+  case object KW_INLINE extends TokenWithCategory(TokenCategory.KW_INLINE) with ModifierToken[InlineModifier.type]
 
   case object KW_TYPE extends TokenWithCategory(TokenCategory.KW_TYPE) with Token
   case object KW_METATYPE extends TokenWithCategory(TokenCategory.KW_METATYPE) with Token

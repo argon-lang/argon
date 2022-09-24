@@ -24,7 +24,7 @@ private[tube] object TubeWriterImplementation {
         override val context: ctx.type = ctx
         override type IsImplementation = true
 
-        override protected def ifImplementation[A, B, C](value: A)(whenImplementation: A => C, whenInterface: => C): C =
+        override protected def ifImplementation[A, B, C](value: A)(whenImplementation: A => C, whenInterface: Either[A, B] => C): C =
           whenImplementation(value)
 
         override protected def dummyImplementationValue: Unit = ()

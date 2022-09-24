@@ -17,13 +17,15 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
   def purity: Boolean
   def isProof: Boolean
   def isErased: Boolean
+  def isInline: Boolean
 
   type ImplementationType = IsImplementation match {
     case true => Comp[FunctionImplementation]
-    case false => Unit
+    case false => Comp[Option[FunctionImplementation]]
   }
 
   def implementation: ImplementationType
+  def maybeImplementation: Comp[Option[FunctionImplementation]]
 
   def validate: Comp[Unit]
 

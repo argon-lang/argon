@@ -5,3 +5,4 @@ trait ExprUtilWithHoles extends ExprUtil
   with ExprUtilHoleResolver
   with ExprUtilImplicitResolver
   with ExprUtilTypeCheck
+  with ExprUtilCreateTypes

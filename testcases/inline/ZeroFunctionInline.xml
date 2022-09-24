@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>Zero function inline</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        inline def zero: Int = 0
+
+        proc main(): () do
+            assert zero == 0
+            puts "Zero is 0"
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Zero is 0
+    </ExpectedOutput>
+
+</ArgonTest>

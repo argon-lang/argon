@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Zero static method not inline</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        class Zero <: Object
+        static
+            public def self.zero: Int = 0
+        end
+
+        proc main(): () do
+            assert Zero.zero == 0
+            puts "Zero is 0"
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedError>ImplicitNotFound</ExpectedError>
+
+</ArgonTest>

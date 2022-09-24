@@ -76,6 +76,7 @@ object TokenCategory {
   case object KW_EXTENSION extends TokenCategory
   case object KW_INVERSE extends TokenCategory
   case object KW_UPDATE extends TokenCategory
+  case object KW_INLINE extends TokenCategory
 
   case object OP_BOOLAND extends TokenCategory
   case object OP_BOOLOR extends TokenCategory
@@ -117,4 +118,5 @@ object TokenCategory {
   case object OP_STARSTAR extends TokenCategory
   case object OP_FUNCTION_RESULT_VALUE extends TokenCategory
   case object OP_PROP_EQUAL extends TokenCategory
+  
 }

@@ -292,6 +292,7 @@ message FunctionDefinition {
     FLAGS_NONE = 0;
     FLAGS_ERASED = 1;
     FLAGS_PROOF = 2;
+    FLAGS_INLINE = 4;
   }
 }
 
@@ -327,6 +328,7 @@ message MethodDefinition {
     FLAGS_FINAL = 8;
     FLAGS_ERASED = 16;
     FLAGS_PROOF = 32;
+    FLAGS_INLINE = 64;
   }
 }
 

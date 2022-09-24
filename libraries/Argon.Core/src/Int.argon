@@ -23,7 +23,7 @@ public def (<<<) (a: Int) (b: Int): Int = extern shiftLeftInt
 public def (>>>) (a: Int) (b: Int): Int = extern shiftRightInt
 
 public def (=) (a: Int) (b: Int): Bool = extern intEqual
-public def (!=) (a: Int) (b: Int): Bool = !(a = b)
+public inline def (!=) (a: Int) (b: Int): Bool = !(a = b)
 public def (<) (a: Int) (b: Int): Bool = extern intLessThan
 public def (<=) (a: Int) (b: Int): Bool = extern intLessThanEq
 public def (>) (a: Int) (b: Int): Bool = extern intGreaterThan

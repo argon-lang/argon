@@ -155,25 +155,6 @@ object SourceClassConstructor {
                     case None => (None, env)
                   end match
 
-                def createClassType(sig: Signature[WrapExpr, context.ExprContext.ClassResult]): exprConverter.exprContext.WrapExpr =
-                  exprConverter.exprContext.WrapExpr.OfExpr(
-                    exprConverter.exprContext.ArExpr(
-                      exprConverter.exprContext.ExprConstructor.ClassType(owner.arClass),
-                      sig.parameters.zipWithIndex.map { case (param, i) =>
-                        val paramType = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(param.paramType)
-
-                        val paramVar = exprConverter.exprContext.ParameterVariable(owner.arClass, i, paramType, param.isErased, param.name)
-
-                        exprConverter.exprContext.WrapExpr.OfExpr(
-                          exprConverter.exprContext.ArExpr(
-                            exprConverter.exprContext.ExprConstructor.LoadVariable(paramVar),
-                            EmptyTuple
-                          )
-                        )
-                      }
-                    )
-                  )
-
                 def createBaseCall(env: Env)(sig: Signature[WrapExpr, context.ExprContext.ClassResult])(valueExpr: WithSource[parser.Expr]): Comp[(exprConverter.exprContext.ArExpr[exprConverter.exprContext.ExprConstructor.ClassConstructorCall], Env)] =
                   exprConverter.convertExpr(valueExpr).check(env, opt.copy(allowAbstractConstructorCall = true), exprConverter.anyType)
                     .flatMap {
@@ -186,23 +167,24 @@ object SourceClassConstructor {
                               exprConverter.isSameType(env, exprConverter.exprContext.WrapExpr.OfExpr(instanceType), t)
                             end typeMatches
 
-                            val classType = createClassType(sig)
 
-                            typeMatches(env)(classType)
-                              .flatMap {
-                                case Some(env) => ZIO.succeed(Some(env))
-                                case None =>
-                                  sig.unsubstitutedResult.baseClass.flatMap { baseClass =>
-                                    ZIO.foreach(baseClass) { baseClass =>
-                                      val baseClassConv = ExprToHolesConverter(context)(exprConverter.exprContext).processClassType(baseClass)
-                                      typeMatches(env)(exprConverter.exprContext.WrapExpr.OfExpr(baseClassConv))
-                                    }.map(_.flatten)
-                                  }
-                              }
-                              .flatMap {
-                                case Some(env) => ZIO.succeed((exprConverter.exprContext.ArExpr(ctor, baseCall.getArgs(ctor)), env))
-                                case None => ???
-                              }
+                            exprConverter.createClassType(owner.arClass).flatMap { classType =>
+                              typeMatches(env)(classType)
+                                .flatMap {
+                                  case Some(env) => ZIO.succeed(Some(env))
+                                  case None =>
+                                    sig.unsubstitutedResult.baseClass.flatMap { baseClass =>
+                                      ZIO.foreach(baseClass) { baseClass =>
+                                        val baseClassConv = ExprToHolesConverter(context)(exprConverter.exprContext).processClassType(baseClass)
+                                        typeMatches(env)(exprConverter.exprContext.WrapExpr.OfExpr(baseClassConv))
+                                      }.map(_.flatten)
+                                    }
+                                }
+                                .flatMap {
+                                  case Some(env) => ZIO.succeed((exprConverter.exprContext.ArExpr(ctor, baseCall.getArgs(ctor)), env))
+                                  case None => ???
+                                }
+                            }
 
                           case _ =>
                             ???
@@ -214,9 +196,10 @@ object SourceClassConstructor {
                 def createInstanceVar(env: Env)(sig: Signature[WrapExpr, context.ExprContext.ClassResult]): Comp[exprConverter.exprContext.LocalVariable] =
                   for
                     id <- UniqueIdentifier.make
+                    classType <- exprConverter.createClassType(owner.arClass)
                   yield exprConverter.exprContext.LocalVariable(
                     id,
-                    createClassType(sig),
+                    classType,
                     name = stmt.flatMap { _.value.name },
                     isMutable = false,
                     isErased = false,

@@ -40,6 +40,7 @@ object SourceMethod {
       override def isFinal: Boolean = stmt.modifiers.exists(_.value == parser.FinalModifier)
       override def isProof: Boolean = stmt.modifiers.exists { _.value == parser.ProofModifier }
       override def isErased: Boolean = stmt.modifiers.exists { _.value == parser.ErasedModifier }
+      override def isInline: Boolean = stmt.modifiers.exists { _.value == parser.InlineModifier }
 
       override def purity: Boolean = stmt.purity
 
@@ -108,6 +109,8 @@ object SourceMethod {
           }
         )
 
+      override def maybeImplementation: Comp[Option[MethodImplementation]] =
+        implementation.asSome
 
       override def validate: Comp[Unit] =
         for

@@ -9,4 +9,4 @@ end
 public def (!) (a: Bool): Bool = extern boolNot
 
 public def (=) (a: Bool) (b: Bool): Bool = extern boolEqual
-public def (!=) (a: Bool) (b: Bool): Bool = !(a = b)
+public inline def (!=) (a: Bool) (b: Bool): Bool = !(a = b)

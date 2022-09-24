@@ -1,0 +1,21 @@
+<ArgonTest>
+
+    <Name>Zero function not inline</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        def zero: Int = 0
+
+        proc main(): () do
+            assert zero == 0
+            puts "Zero is 0"
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedError>ImplicitNotFound</ExpectedError>
+
+</ArgonTest>

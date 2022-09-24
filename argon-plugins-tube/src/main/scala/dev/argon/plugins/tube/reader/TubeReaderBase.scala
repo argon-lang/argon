@@ -52,10 +52,14 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
     case true => context.Options
     case false => Unit
   }]
-  protected def createImplementation[TImpl](currentTube: ArTube & HasImplementation[IsImplementation])(f: context.Options => Comp[TImpl]): IsImplementation match {
+  protected def createImplementation[TImpl](currentTube: ArTube & HasImplementation[IsImplementation])(f: Option[context.Options] => Comp[Option[TImpl]]): IsImplementation match {
     case true => Comp[TImpl]
-    case false => Unit
+    case false => Comp[Option[TImpl]]
   }
+  protected def getMaybeImplementation[TImpl]: (IsImplementation match {
+    case true => Comp[TImpl]
+    case false => Comp[Option[TImpl]]
+  }) => Comp[Option[TImpl]]
 
 
   private object ZipResourceFactory extends ResourceFactory[context.Env, context.Error] {
@@ -588,7 +592,7 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
       id2 <- UniqueIdentifier.make
 
       sigCell <- MemoCell.make[context.Env, context.Error, Signature[WrapExpr, FunctionResult]]
-      implCell <- MemoCell.make[context.Env, context.Error, FunctionImplementation]
+      implCell <- MemoCell.make[context.Env, context.Error, Option[FunctionImplementation]]
 
       func = new ArFuncC {
         override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
@@ -600,6 +604,7 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
         override def purity: Boolean = funcDef.effects.isPure
         override def isProof: Boolean = (funcDef.flags & t.FunctionDefinition.Flags.Proof.value) == t.FunctionDefinition.Flags.Proof.value
         override def isErased: Boolean = (funcDef.flags & t.FunctionDefinition.Flags.Erased.value) == t.FunctionDefinition.Flags.Erased.value
+        override def isInline: Boolean = (funcDef.flags & t.FunctionDefinition.Flags.Inline.value) == t.FunctionDefinition.Flags.Inline.value
 
         override def signature: Comp[Signature[WrapExpr, FunctionResult]] =
           sigCell.get(
@@ -627,34 +632,40 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
                     case t.FunctionBody.Value.ExpressionBody(body) =>
                       for
                         bodyExpr <- loadExprWithVariables(body)
-                      yield new FunctionImplementationC.ExpressionBody {
+                      yield Some(new FunctionImplementationC.ExpressionBody {
                         override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
                         override val body: WrapExpr = bodyExpr
-                      }
+                      })
 
                     case t.FunctionBody.Value.ExternalImplementation(specifier) =>
-                      context.getExternFunctionImplementation(options, specifier)
-                        .mapBoth(
-                          {
-                            case Some(e) => e
-                            case None => DiagnosticError.ExternFunctionNotFound(DiagnosticSource.SerializedTube(ArFuncC.getOwningTube(owner).tubeName), specifier)
-                          },
-                          extern => new FunctionImplementationC.External {
-                            override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
-                            override val name: String = specifier
-                            override val impl: context.ExternFunctionImplementation = extern
-                          }
-                        )
+                      ZIO.foreach(options) { options =>
+                        context.getExternFunctionImplementation(options, specifier)
+                          .mapBoth(
+                            {
+                              case Some(e) => e
+                              case None => DiagnosticError.ExternFunctionNotFound(DiagnosticSource.SerializedTube(ArFuncC.getOwningTube(owner).tubeName), specifier)
+                            },
+                            extern => new FunctionImplementationC.External {
+                              override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
+                              override val name: String = specifier
+                              override val impl: context.ExternFunctionImplementation = extern
+                            }
+                          )
+                      }
 
                     case _: t.FunctionBody.Value.Empty.type =>
                       ZIO.fail(InvalidTube("Unknown function body"))
                   }
                 )
               case None =>
-                ZIO.fail(InvalidTube("Missing function body"))
+                ZIO.none
             }
 
           }
+
+        override def maybeImplementation: Comp[Option[FunctionImplementation]] =
+          getMaybeImplementation(implementation)
+
 
         override def validate: Comp[Unit] = ZIO.unit
       }
@@ -688,7 +699,7 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
       id2 <- UniqueIdentifier.make
 
       sigCell <- MemoCell.make[context.Env, context.Error, Signature[WrapExpr, FunctionResult]]
-      implCell <- MemoCell.make[context.Env, context.Error, MethodImplementation]
+      implCell <- MemoCell.make[context.Env, context.Error, Option[MethodImplementation]]
 
       instanceVarName <- ZIO.foreach(methodDef.instanceVariableName)(getIdentifier)
 
@@ -708,6 +719,7 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
         override def isFinal: Boolean = (methodDef.flags & t.MethodDefinition.Flags.Final.value) == t.MethodDefinition.Flags.Final.value
         override def isErased: Boolean = (methodDef.flags & t.MethodDefinition.Flags.Erased.value) == t.MethodDefinition.Flags.Erased.value
         override def isProof: Boolean = (methodDef.flags & t.MethodDefinition.Flags.Proof.value) == t.MethodDefinition.Flags.Proof.value
+        override def isInline: Boolean = (methodDef.flags & t.MethodDefinition.Flags.Inline.value) == t.MethodDefinition.Flags.Inline.value
 
         override def instanceVariableName: Option[IdentifierExpr] = instanceVarName
 
@@ -737,39 +749,44 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
                     case t.FunctionBody.Value.ExpressionBody(body) =>
                       for
                         bodyExpr <- loadExprWithVariables(body)
-                      yield new MethodImplementationC.ExpressionBody {
+                      yield Some(new MethodImplementationC.ExpressionBody {
                         override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
                         override val body: WrapExpr = bodyExpr
-                      }
+                      })
 
                     case t.FunctionBody.Value.ExternalImplementation(specifier) =>
-                      context.getExternMethodImplementation(options, specifier)
-                        .mapBoth(
-                          {
-                            case Some(e) => e
-                            case None => DiagnosticError.ExternMethodNotFound(DiagnosticSource.SerializedTube(ArMethodC.getOwningTube(owner).tubeName), specifier)
-                          },
-                          extern => new MethodImplementationC.External {
-                            override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
-                            override val name: String = specifier
-                            override val impl: context.ExternMethodImplementation = extern
-                          }
-                        )
+                      ZIO.foreach(options) { options =>
+                        context.getExternMethodImplementation(options, specifier)
+                          .mapBoth(
+                            {
+                              case Some(e) => e
+                              case None => DiagnosticError.ExternMethodNotFound(DiagnosticSource.SerializedTube(ArMethodC.getOwningTube(owner).tubeName), specifier)
+                            },
+                            extern => new MethodImplementationC.External {
+                              override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
+                              override val name: String = specifier
+                              override val impl: context.ExternMethodImplementation = extern
+                            }
+                          )
+                      }
 
                     case _: t.FunctionBody.Value.Empty.type =>
                       ZIO.fail(InvalidTube("Unknown function body"))
                   }
 
-                case None if isAbstract =>
-                  ZIO.succeed(new MethodImplementationC.Abstract {
+                case None if isAbstract && options.isDefined =>
+                  ZIO.some(new MethodImplementationC.Abstract {
                     override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
                   })
 
                 case None =>
-                  ZIO.fail(InvalidTube("Missing method body"))
+                  ZIO.none
               }
             )
           }
+
+        override def maybeImplementation: Comp[Option[MethodImplementation]] =
+          getMaybeImplementation(implementation)
 
         override def validate: Comp[Unit] = ZIO.unit
       }
@@ -784,7 +801,7 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
       id2 <- UniqueIdentifier.make
 
       sigCell <- MemoCell.make[context.Env, context.Error, Signature[WrapExpr, Unit]]
-      implCell <- MemoCell.make[context.Env, context.Error, ClassConstructorImplementation]
+      implCell <- MemoCell.make[context.Env, context.Error, Option[ClassConstructorImplementation]]
 
       ctor = new ClassConstructorC {
         override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
@@ -861,7 +878,7 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
                           }
 
                           postInit <- loadExpr(body.postInitialization)
-                        yield new ClassConstructorImplementationC.ExpressionBody {
+                        yield Some(new ClassConstructorImplementationC.ExpressionBody {
                           override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
                           override val preInitialization: Seq[Either[WrapExpr, ClassConstructorImplementationC.FieldInitializationStatement & HasContext[context.type]]] =
                             preInit
@@ -878,21 +895,23 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
 
                           override val postInitialization: WrapExpr =
                             postInit
-                        }
+                        })
 
                       case t.ClassConstructorDefinition.Body.Value.ExternalImplementation(specifier) =>
-                        context.getExternClassConstructorImplementation(options, specifier)
-                          .mapBoth(
-                            {
-                              case Some(e) => e
-                              case None => DiagnosticError.ExternMethodNotFound(DiagnosticSource.SerializedTube(ClassConstructorC.getOwningTube(owner).tubeName), specifier)
-                            },
-                            extern => new ClassConstructorImplementationC.External {
-                              override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
-                              override val name: String = specifier
-                              override val impl: context.ExternClassConstructorImplementation = extern
-                            }
-                          )
+                        ZIO.foreach(options) { options =>
+                          context.getExternClassConstructorImplementation(options, specifier)
+                            .mapBoth(
+                              {
+                                case Some(e) => e
+                                case None => DiagnosticError.ExternMethodNotFound(DiagnosticSource.SerializedTube(ClassConstructorC.getOwningTube(owner).tubeName), specifier)
+                              },
+                              extern => new ClassConstructorImplementationC.External {
+                                override val context: TubeReaderBase.this.context.type = TubeReaderBase.this.context
+                                override val name: String = specifier
+                                override val impl: context.ExternClassConstructorImplementation = extern
+                              }
+                            )
+                        }
 
                       case _: t.ClassConstructorDefinition.Body.Value.Empty.type =>
                         ZIO.fail(InvalidTube("Unknown class constructor body"))
@@ -900,7 +919,7 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
                   }
 
                 case None =>
-                  ZIO.fail(InvalidTube("Missing class constructor body"))
+                  ZIO.none
               }
             )
           }

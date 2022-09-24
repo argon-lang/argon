@@ -639,7 +639,8 @@ object ArgonParser {
               ruleModifier(KW_PRIVATE) |
               ruleModifier(KW_INTERNAL) |
               ruleModifier(KW_PROOF) |
-              ruleModifier(KW_ERASED)
+              ruleModifier(KW_ERASED) |
+              ruleModifier(KW_INLINE)
 
           anyModifier.observeSource.* --> {
             _.toVector
@@ -657,7 +658,8 @@ object ArgonParser {
               ruleModifier(KW_OVERRIDE) |
               ruleModifier(KW_FINAL) |
               ruleModifier(KW_PROOF) |
-              ruleModifier(KW_ERASED)
+              ruleModifier(KW_ERASED) |
+              ruleModifier(KW_INLINE)
 
           anyModifier.observeSource.* --> {
             _.toVector

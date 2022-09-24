@@ -7,4 +7,4 @@ end
 public def (++) (a: String) (b: String): String = extern stringConcat
 
 public def (=) (a: String) (b: String): Bool = extern stringEqual
-public def (!=) (a: String) (b: String): Bool = !(a = b)
+public inline def (!=) (a: String) (b: String): Bool = !(a = b)

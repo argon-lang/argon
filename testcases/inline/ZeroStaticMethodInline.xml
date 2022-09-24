@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Zero static method inline</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        class Zero <: Object
+        static
+            public inline def self.zero: Int = 0
+        end
+
+        proc main(): () do
+            assert Zero.zero == 0
+            puts "Zero is 0"
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Zero is 0
+    </ExpectedOutput>
+
+</ArgonTest>

@@ -8,6 +8,7 @@ import dev.argon.io.ZipFileResource
 import dev.argon.plugins.tube.Paths
 import dev.argon.tube as t
 import dev.argon.tube.given
+import dev.argon.util.{*, given}
 import zio.*
 
 abstract class TubeReaderFactory extends TubeZipReaderUtil {
@@ -31,8 +32,14 @@ abstract class TubeReaderFactory extends TubeZipReaderUtil {
               ZIO.fromEither(opt.toRight { InvalidTube("Missing options for implementation tube") })
 
 
-            override protected def createImplementation[TImpl](currentTube: ArTube & HasImplementation[IsImplementation])(f: context.Options => Comp[TImpl]): Comp[TImpl] =
-              f(currentTube.options)
+            override protected def createImplementation[TImpl](currentTube: ArTube & HasImplementation[IsImplementation])(f: Option[context.Options] => Comp[Option[TImpl]]): Comp[TImpl] =
+              f(Some(currentTube.options)).flatMap {
+                case Some(impl) => ZIO.succeed(impl)
+                case None => ZIO.fail(InvalidTube("Missing implementation in implementation tube"))
+              }
+
+            override protected def getMaybeImplementation[TImpl]: Comp[TImpl] => Comp[Option[TImpl]] =
+              _.asSome
           })
 
         case t.TubeType.Implementation =>
@@ -45,7 +52,12 @@ abstract class TubeReaderFactory extends TubeZipReaderUtil {
             override protected def ensureOptions(opt: Option[context.Options]): Comp[Unit] =
               ZIO.unit
 
-            override protected def createImplementation[TImpl](currentTube: ArTube & HasImplementation[IsImplementation])(f: context.Options => Comp[TImpl]): Unit = ()
+            override protected def createImplementation[TImpl](currentTube: ArTube & HasImplementation[IsImplementation])(f: Option[context.Options] => Comp[Option[TImpl]]): Comp[Option[TImpl]] =
+              f(None)
+
+            override protected def getMaybeImplementation[TImpl]: Comp[Option[TImpl]] => Comp[Option[TImpl]] =
+              identity
+
           })
 
         case t.TubeType.Unrecognized(_) =>

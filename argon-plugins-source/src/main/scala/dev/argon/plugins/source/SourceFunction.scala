@@ -52,6 +52,7 @@ object SourceFunction {
       override def purity: Boolean = stmt.purity
       override def isProof: Boolean = stmt.modifiers.exists { _.value == parser.ProofModifier }
       override def isErased: Boolean = stmt.modifiers.exists { _.value == parser.ErasedModifier }
+      override def isInline: Boolean = stmt.modifiers.exists { _.value == parser.InlineModifier }
 
       override def implementation: Comp[FunctionImplementation] =
         implCell.get(
@@ -95,6 +96,10 @@ object SourceFunction {
               }
           }
         )
+
+
+      override def maybeImplementation: Comp[Option[FunctionImplementation]] =
+        implementation.asSome
 
       override def validate: Comp[Unit] =
         for

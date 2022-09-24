@@ -329,6 +329,7 @@ object Lexer {
               case "extension" => Token.KW_EXTENSION
               case "inverse" => Token.KW_INVERSE
               case "update" => Token.KW_UPDATE
+              case "inline" => Token.KW_INLINE
               case "_" => Token.KW_UNDERSCORE
 
               case _ => Token.Identifier(id)

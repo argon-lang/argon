@@ -21,6 +21,7 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
   def isFinal: Boolean
   def isProof: Boolean
   def isErased: Boolean
+  def isInline: Boolean
 
   def purity: Boolean
 
@@ -28,10 +29,11 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
 
   type ImplementationType = IsImplementation match {
     case true => Comp[MethodImplementation]
-    case false => Unit
+    case false => Comp[Option[MethodImplementation]]
   }
 
   def implementation: ImplementationType
+  def maybeImplementation: Comp[Option[MethodImplementation]]
 
   def validate: Comp[Unit]
 

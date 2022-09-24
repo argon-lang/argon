@@ -43,7 +43,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
     FunctionResultVariable,
   }
 
-  val evaluator: ArgonEvaluator.Aux[context.Env, context.Error, context.type, exprContext.type] = ArgonEvaluator(context)(exprContext)
+  final lazy val evaluator: ArgonEvaluator.Aux[context.Env, context.Error, context.type, exprContext.type] = ArgonEvaluator(context)(exprContext)
 
   final case class ArgumentInfo(arg: ExprFactory, location: SourceLocation, listType: FunctionParameterListType)
   final case class MutatorValue(arg: ExprFactory, location: SourceLocation)

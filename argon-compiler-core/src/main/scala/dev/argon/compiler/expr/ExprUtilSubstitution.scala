@@ -164,7 +164,8 @@ trait ExprUtilSubstitution extends ExprUtilBase {
   def substituedSigResult[Res]
   (owner: exprContext.ParameterVariableOwner)
   (sigHandler: SignatureHandler[Res])
-  (sig: Signature[WrapExpr, Res], args: List[WrapExpr]) =
+  (sig: Signature[WrapExpr, Res], args: List[WrapExpr])
+  : Comp[Res] =
     import exprContext.ParameterVariable
 
     def impl(paramIndex: Int, sig: Signature[WrapExpr, Res], args: List[WrapExpr]): Comp[Res] =
@@ -184,6 +185,31 @@ trait ExprUtilSubstitution extends ExprUtilBase {
 
     impl(0, sig, args)
   end substituedSigResult
+
+  def substituteBody
+  (owner: exprContext.ParameterVariableOwner)
+  (sig: Signature[WrapExpr, FunctionResult], args: List[WrapExpr])
+  (body: WrapExpr)
+  : WrapExpr =
+    import exprContext.ParameterVariable
+
+    def impl(paramIndex: Int, sig: Signature[WrapExpr, FunctionResult], args: List[WrapExpr], body: WrapExpr): WrapExpr =
+      (args, sig) match {
+        case (arg :: tailArgs, Signature.Parameter(_, paramErased, paramName, paramType, next)) =>
+          val variable = ParameterVariable(owner, paramIndex, paramType, paramErased, paramName)
+          val body2 = substituteWrapExprMany(Map(variable -> arg))(body)
+          impl(paramIndex + 1, next, tailArgs, body2)
+
+        case (Nil, Signature.Parameter(_, _, _, _, _)) => ???
+
+        case (Nil, Signature.Result(_)) => body
+
+        case (_ :: _, Signature.Result(_)) => ???
+      }
+
+    impl(0, sig, args, body)
+  end substituteBody
+
 
 
   // Returns substituted signature and (possibly) modified replacement expression

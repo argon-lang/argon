@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Int not equal inline</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        def a: Int = 7
+        def b: Int = 7
+
+        proc main(): () do
+            assert (a != b) == !(a = b)
+            puts "!= == ="
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        != == =
+    </ExpectedOutput>
+
+</ArgonTest>

@@ -18,7 +18,7 @@ abstract class ClassConstructorC extends Definition with UsingContext derives Ca
 
   type ImplementationType = IsImplementation match {
     case true => Comp[ClassConstructorImplementation]
-    case false => Unit
+    case false => Comp[Option[ClassConstructorImplementation]]
   }
 
   def implementation: ImplementationType

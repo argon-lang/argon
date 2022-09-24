@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Bool not equal inline</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        def a: Bool = true
+        def b: Bool = true
+
+        proc main(): () do
+            assert (a != b) == !(a = b)
+            puts "!= == ="
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        != == =
+    </ExpectedOutput>
+
+</ArgonTest>
