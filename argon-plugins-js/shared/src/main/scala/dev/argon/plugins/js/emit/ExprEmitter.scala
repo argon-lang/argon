@@ -499,6 +499,9 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           finalizer = Nullable(block(ensureBodyStmts*)),
         ))
 
+      case ctor: (expr.constructor.type & ExprConstructor.Proving) =>
+        emitWrapExprAsStmt(emitState)(expr.getArgs(ctor))
+
       case _ if emitState.discardValue =>
         for
           jsExpr <- emitExpr(emitState)(expr)
@@ -686,6 +689,9 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
             traitExpr <- emitOwnedByModule(ctor.arTrait.owner, erasedSig)
             args <- emitArgExprs(emitState, expr.getArgs(ctor), sig, Seq())
           yield traitExpr.call(args*)
+
+        case ctor: (expr.constructor.type & ExprConstructor.Proving) =>
+          emitWrapExpr(emitState)(expr.getArgs(ctor))
 
         case _ =>
           ZIO.logError(s"Unimplemented expression: $expr") *> ZIO.succeed(???)

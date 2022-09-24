@@ -21,7 +21,7 @@ object TubeName {
         nameStr
           .split("\\.").nn
           .iterator
-          .map { seg => URLDecoder.decode(seg, "UTF-8").nn }
+          .map { seg => URLDecoder.decode(seg, StandardCharsets.UTF_8).nn }
           .toList
       ).map(TubeName.apply)
 }

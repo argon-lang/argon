@@ -1,0 +1,99 @@
+syntax = "proto2";
+
+option java_package = "dev.argon.argonvm.format";
+
+package argon.argonvm;
+
+import "google/protobuf/empty.proto";
+
+message Program {
+  repeated Class classes = 1;
+  repeated Function functions = 3;
+
+  required Chunk entrypoint = 4;
+}
+
+
+message ValueType {
+  oneof type {
+    ValueTypeSimple simple = 1;
+    ValueTypeTuple tuple = 2;
+  }
+}
+
+enum ValueTypeSimple {
+  VALUE_TYPE_SIMPLE_INT8 = 1;
+  VALUE_TYPE_SIMPLE_INT16 = 2;
+  VALUE_TYPE_SIMPLE_INT32 = 3;
+  VALUE_TYPE_SIMPLE_INT64 = 4;
+  VALUE_TYPE_SIMPLE_FLOAT32 = 5;
+  VALUE_TYPE_SIMPLE_FLOAT64 = 6;
+  VALUE_TYPE_SIMPLE_OBJECT_REFERENCE = 7;
+}
+
+message ValueTypeTuple {
+  repeated ValueType elements = 1;
+}
+
+message Chunk {
+  repeated ConstantValue constants = 1;
+  repeated ValueType variableTypes = 2;
+  required bytes bytecode = 3;
+}
+
+message ConstantValue {
+  oneof value {
+    sint32 int8 = 1;
+    sint32 int16 = 2;
+    sint32 int32 = 3;
+    sint64 int64 = 4;
+    float float32 = 5;
+    double float64 = 6;
+    string string_literal = 7;
+    TupleValue tuple = 8;
+  }
+}
+
+message TupleValue {
+  repeated ConstantValue elements = 1;
+}
+
+message Class {
+  optional uint64 baseClassId = 1;
+  repeated Field fields = 3;
+  repeated MethodSlot slots = 4;
+  repeated MethodImplementation implementations = 5;
+}
+
+message Field {
+  required ValueType type = 1;
+}
+
+message MethodSlot {
+  repeated ValueType parameterTypes = 1;
+  required ValueType returnType = 2;
+}
+
+message MethodImplementation {
+  oneof declaringType {
+    uint64 declaringClassId = 3;
+  }
+  required uint64 slotIndex = 1;
+  required uint64 functionIndex = 2;
+}
+
+
+message Function {
+  oneof func {
+    BytecodeFunction bytecode = 2;
+    string native = 3;
+  }
+}
+
+message BytecodeFunction {
+  repeated ValueType parameterTypes = 1;
+  required ValueType returnType = 2;
+  required Chunk body = 3;
+}
+
+

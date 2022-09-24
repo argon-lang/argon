@@ -45,6 +45,7 @@ trait ExprUtilSubstitution extends ExprUtilBase {
         case ExprConstructor.SubtypeWitnessType => (true, true)
         case ExprConstructor.EqualTo => (true, true)
         case ExprConstructor.AssumeErasedValue => (true, true)
+        case ExprConstructor.Proving(_) => (true, true)
         case _ => (false, false)
       }
 

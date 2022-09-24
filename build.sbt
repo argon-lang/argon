@@ -2,13 +2,8 @@ import sbtcrossproject.CrossPlugin.autoImport.{CrossType, crossProject}
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
-import scala.sys.process.Process
-
 val graalVersion = "22.2.0"
 val zioVersion = "2.0.2"
-
-ThisBuild / semanticdbEnabled := true
-ThisBuild / scalafixDependencies += "com.github.vovapolu" %% "scaluzzi" % "0.1.20"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -29,8 +24,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.zio" %%% "zio-json" % "0.3.0-RC11",
-    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.1.5",
+    "dev.zio" %%% "zio-json" % "0.3.0",
+    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.2.0",
 
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
     "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
@@ -66,7 +61,7 @@ lazy val commonJVMSettings = Seq(
   libraryDependencies ++= Seq(
     "org.apache.commons" % "commons-compress" % "1.21",
     "commons-io" % "commons-io" % "2.11.0",
-    "dev.zio" %% "zio-logging" % "2.1.0",
+    "dev.zio" %% "zio-logging" % "2.1.1",
   ),
 
   Test / fork := true,
@@ -85,14 +80,17 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ Seq(
   ),
 )
 
-lazy val compilerOptions = Seq(
-
+lazy val javaCompilerOptions = Seq(
   javacOptions ++= Seq(
     "-encoding", "UTF-8",
     "--release", "17",
-    "-Werror",
+//    "-Werror",
     "-Xlint:all,-serial,-try",
   ),
+)
+
+lazy val compilerOptions = javaCompilerOptions ++ Seq(
+
 
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
@@ -626,6 +624,60 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Pure)
 lazy val cliJVM = cli.jvm
 lazy val cliNode = cli.node
 
+
+
+
+lazy val argon_vm_format = project.in(file("vm/format/java"))
+  .settings(
+    commonSettingsNoLibs,
+    compilerOptions,
+
+    crossPaths := false,
+    autoScalaLibrary := false,
+
+    Compile / PB.protoSources += baseDirectory.value / "../protobuf",
+    Compile / PB.targets := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value / "protobuf"
+    ),
+
+    libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
+
+    Compile / sourceGenerators += Def.task {
+      val inFile = baseDirectory.value / "../bytecode.json"
+      val outDir = (Compile / sourceManaged).value / "bytecode"
+
+      FileFunction.cached(streams.value.cacheDirectory)(_ => {
+        println("Generating java from bytecode.json")
+        IO.createDirectory(outDir)
+        val outFile = outDir / "Instruction.java"
+        ArgonVMBytecodeFormatJavaGenerator.generateFromJSONFile(
+          inFile,
+          outFile
+        )
+        Set(outFile)
+      })(Set(inFile)).toList
+    }.taskValue,
+
+    name := "argon-vm-format",
+  )
+
+lazy val argon_vm_engine = project.in(file("vm/engine/java"))
+  .dependsOn(argon_vm_format)
+  .settings(
+    commonSettingsNoLibs,
+    compilerOptions,
+
+    crossPaths := false,
+    autoScalaLibrary := false,
+
+    libraryDependencies ++= Seq(
+      "net.aichler" % "jupiter-interface" % JupiterKeys.jupiterVersion.value % Test,
+    ),
+
+    fork := true,
+
+    name := "argon-vm-engine",
+  )
 
 
 

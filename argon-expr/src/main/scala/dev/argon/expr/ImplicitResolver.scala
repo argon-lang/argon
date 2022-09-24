@@ -746,6 +746,7 @@ abstract class ImplicitResolver[R, E] {
         protected override def normalize(expr: syntax.Value, substitutions: Model, solveState: SolveState): ZIO[R, E, syntax.Expr] =
           expr match {
             case syntax.Value(ExprConstructor.LoadVariable(variable), _) =>
+
               knownVarValues.get(variable) match {
                 case Some(value) => normalizeExpr(wrapExprToExpr(value), substitutions, solveState)
                 case None => super.normalize(expr, substitutions, solveState)
