@@ -178,7 +178,8 @@ trait ExprContext {
     case object FunctionObjectCall extends ExprConstructorWithArgs[FunctionObjectCallArgs] with ExprConstructor
         derives CanEqual
 
-    case object IfElse extends ExprConstructorWithArgs[IfElseArgs] with ExprConstructor derives CanEqual
+    final case class IfElse(whenTrue: Option[TLocalVariable], whenFalse: Option[TLocalVariable])
+      extends ExprConstructorWithArgs[IfElseArgs] with ExprConstructor derives CanEqual
 
     final case class LoadConstantBool(b: Boolean) extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor
         derives CanEqual

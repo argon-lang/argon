@@ -500,7 +500,7 @@ abstract class ImplicitResolver[R, E] {
         case ExprConstructor.FunctionCall(func) => functionRelations(func)
         case ExprConstructor.FunctionObjectCall =>
           ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
-        case ExprConstructor.IfElse =>
+        case ExprConstructor.IfElse(_, _) =>
           ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.BindVariable(_) =>
           ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))

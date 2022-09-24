@@ -1053,8 +1053,11 @@ abstract class TubeReaderBase extends TubeZipReaderUtil {
         case t.Expr.Constructor.FunctionObjectCall(_) =>
           ZIO.succeed(ExprConstructor.FunctionObjectCall)
 
-        case t.Expr.Constructor.IfElse(_) =>
-          ZIO.succeed(ExprConstructor.IfElse)
+        case t.Expr.Constructor.IfElse(ifElse) =>
+          for
+            whenTrue <- ZIO.foreach(ifElse.whenTrueProof)(loadLocalVariableDefinition)
+            whenFalse <- ZIO.foreach(ifElse.whenFalseProof)(loadLocalVariableDefinition)
+          yield ExprConstructor.IfElse(whenTrue, whenFalse)
 
         case t.Expr.Constructor.LoadConstantBool(value) =>
           ZIO.succeed(ExprConstructor.LoadConstantBool(value))

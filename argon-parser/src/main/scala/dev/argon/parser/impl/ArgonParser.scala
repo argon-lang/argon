@@ -76,6 +76,7 @@ object ArgonParser {
     case object LambdaTypeExpr extends ArgonRuleName[Expr]
     case object RelationalExpr extends ArgonRuleName[Expr]
     case object EqualityExpr extends ArgonRuleName[Expr]
+    case object PropEqualityExpr extends ArgonRuleName[Expr]
     case object AsExpr extends ArgonRuleName[Expr]
     case object LambdaExpr extends ArgonRuleName[Expr]
     case object PatternType extends ArgonRuleName[Expr]
@@ -505,8 +506,13 @@ object ArgonParser {
             ruleBinaryOperator(OP_NOTEQUALS),
           )(rule(Rule.RelationalExpr))
 
+        case Rule.PropEqualityExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_PROP_EQUAL),
+          )(rule(Rule.EqualityExpr))
+
         case Rule.AsExpr =>
-          val nextRule = rule(Rule.EqualityExpr)
+          val nextRule = rule(Rule.PropEqualityExpr)
 
           nextRule.observeSource ++ ((matchToken(KW_AS) ++! nextRule.observeSource) ?) --> {
             case (WithSource(left, _), None) => left

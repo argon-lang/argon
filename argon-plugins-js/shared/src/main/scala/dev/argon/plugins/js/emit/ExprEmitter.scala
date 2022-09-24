@@ -439,6 +439,14 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
   private def emitExprAsStmt(emitState: EmitState)(expr: ArExpr[ExprConstructor]): Comp[Seq[estree.Statement]] =
     expr.constructor match
+      case ctor: (expr.constructor.type & ExprConstructor.BindVariable) if ctor.variable.isErased =>
+        ZIO.succeed(
+          if emitState.discardValue then
+            Seq()
+          else
+            Seq(`return`(array()))
+        )
+
       case ctor: (expr.constructor.type & ExprConstructor.BindVariable) =>
         val value: WrapExpr = expr.getArgs(ctor)
         for
@@ -472,7 +480,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
           emitSequence(emitState, Seq.empty, expr.getArgs(ctor).toList)
         }
 
-      case ctor: (expr.constructor.type & ExprConstructor.IfElse.type) =>
+      case ctor: (expr.constructor.type & ExprConstructor.IfElse) =>
         val (cond, trueBody, falseBody) = expr.getArgs(ctor)
         for
           _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("Bool"))), "boolValueSymbol")
@@ -553,6 +561,9 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       }
     else
       expr.constructor match
+        case ctor: (expr.constructor.type & ExprConstructor.BindVariable) if ctor.variable.isErased =>
+          ZIO.succeed(array())
+
         case ctor: (expr.constructor.type & ExprConstructor.BindVariable) =>
           val value: WrapExpr = expr.getArgs(ctor)
           for
@@ -613,7 +624,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
             callExpr = funcExpr.call(argExpr)
           yield id(runtimeImportName).prop("trampoline").prop("resolve").call(callExpr).await.prop("value")
 
-        case ctor: (expr.constructor.type & ExprConstructor.IfElse.type) =>
+        case ctor: (expr.constructor.type & ExprConstructor.IfElse) =>
           val (cond, trueBody, falseBody) = expr.getArgs(ctor)
           for
             _ <- ensureRawImportName(ModuleName(TubeName(NonEmptyList("Argon", "Core")), ModulePath(Seq("Bool"))), "boolValueSymbol")

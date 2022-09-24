@@ -385,7 +385,7 @@ message Expr {
     google.protobuf.Empty ensureExecuted = 17;
     LoadId functionCall = 3;
     google.protobuf.Empty functionObjectCall = 4;
-    google.protobuf.Empty ifElse = 5;
+    IfElse ifElse = 5;
     bool loadConstantBool = 6;
     BigInt loadConstantInt = 7;
     string loadConstantString = 8;
@@ -422,6 +422,11 @@ message Expr {
 
   message BindVariable {
     required LocalVariableDefinition variable = 1;
+  }
+
+  message IfElse {
+    optional LocalVariableDefinition whenTrueProof = 1;
+    optional LocalVariableDefinition whenFalseProof = 2;
   }
 
   message LoadLambda {

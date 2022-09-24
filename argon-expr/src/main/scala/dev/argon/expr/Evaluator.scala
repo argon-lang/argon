@@ -20,7 +20,7 @@ trait Evaluator[-R, +E] {
   def normalizeTopLevel(expr: ArExpr[ExprConstructor], fuel: Int): ZIO[R, E, WrapExpr] =
     (expr.constructor: expr.constructor.type & ExprConstructor) match {
       case ExprConstructor.EnsureExecuted => ???
-      case ExprConstructor.IfElse => ???
+      case ExprConstructor.IfElse(_, _) => ???
       case ExprConstructor.PatternMatch(_) => ???
       case ExprConstructor.BindVariable(_) => ???
       case ExprConstructor.Sequence => ???

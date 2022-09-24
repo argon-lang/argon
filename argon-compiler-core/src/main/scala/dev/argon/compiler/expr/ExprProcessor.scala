@@ -109,8 +109,12 @@ abstract class ExprProcessor[F[+_]: Monad] extends UsingContext {
         case ctor: (e.constructor.type & ec1.ExprConstructor.FunctionObjectCall.type) =>
           processPairArgs(ec2.ExprConstructor.FunctionObjectCall)(e.getArgs(ctor))
 
-        case ctor: (e.constructor.type & ec1.ExprConstructor.IfElse.type) =>
-          processTuple3Args(ec2.ExprConstructor.IfElse)(e.getArgs(ctor))
+        case ctor: (e.constructor.type & ec1.ExprConstructor.IfElse) =>
+          for
+            whenTrue <- ctor.whenTrue.traverse(processLocalVariable)
+            whenFalse <- ctor.whenFalse.traverse(processLocalVariable)
+            result <- processTuple3Args(ec2.ExprConstructor.IfElse(whenTrue, whenFalse))(e.getArgs(ctor))
+          yield result
 
         case ctor: (e.constructor.type & ec1.ExprConstructor.LoadConstantBool) =>
           Monad[F].pure(ec2.ArExpr(ec2.ExprConstructor.LoadConstantBool(ctor.b), EmptyTuple))

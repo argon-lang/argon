@@ -268,6 +268,10 @@ object BinaryOperator {
   case object SubType extends BinaryOperator {
     override def symbol: String = "<:"
   }
+
+  case object PropEqual extends BinaryOperator {
+    override def symbol: String = "=="
+  }
 }
 
 sealed trait UnaryOperator extends Operator derives CanEqual {

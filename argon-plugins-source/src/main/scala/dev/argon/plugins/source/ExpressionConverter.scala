@@ -252,6 +252,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.SubType, _), left, right) =>
         createTypeOperatorFactory(expr.location)(ExprConstructor.SubtypeWitnessType)(left, right)
 
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.PropEqual, _), left, right) =>
+        createTypeOperatorFactory(expr.location)(ExprConstructor.EqualTo)(left, right)
+
       case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.Assign, assignLoc), left, right) =>
         convertExpr(left).mutate(MutatorValue(convertExpr(right), assignLoc))
 
@@ -355,22 +358,42 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             for {
               bType <- boolType
-              condRes <- convertExpr(condition).check(env, opt, bType)
-              trueRes <- convertStmtList(ifBody).synth(condRes.env, opt)
-              falseRes <- convertStmtList(elseBody).synth(condRes.env, opt)
-              resEnv = condRes.env.mergeBranches(trueRes.env, falseRes.env)
-              e = WrapExpr.OfExpr(ArExpr(ExprConstructor.IfElse, (condRes.expr, trueRes.expr, falseRes.expr)))
+              ExprResult(condExpr, env) <- convertExpr(condition).check(env, opt, bType)
+              (condExpr, condExprStable) <- asStableExpression(condExpr)
+
+              whenTrueId <- UniqueIdentifier.make
+              whenTrueType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(true), EmptyTuple)))))
+              whenTrue = LocalVariable(whenTrueId, whenTrueType, None, isMutable = false, isErased = true)
+
+              whenFalseId <- UniqueIdentifier.make
+              whenFalseType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(false), EmptyTuple)))))
+              whenFalse = LocalVariable(whenFalseId, whenFalseType, None, isMutable = false, isErased = true)
+
+              trueRes <- convertStmtList(ifBody).synth(env.withImplicitSource(_.addVariable(whenTrue)), opt)
+              falseRes <- convertStmtList(elseBody).synth(env.withImplicitSource(_.addVariable(whenFalse)), opt)
+              resEnv = env.mergeBranches(trueRes.env, falseRes.env)
+              e = WrapExpr.OfExpr(ArExpr(ExprConstructor.IfElse(Some(whenTrue), Some(whenFalse)), (condExpr, trueRes.expr, falseRes.expr)))
               t = WrapExpr.OfExpr(ArExpr(ExprConstructor.UnionType, (trueRes.exprType, falseRes.exprType)))
             } yield ExprTypeResult(e, resEnv, t)
 
           override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
             for {
               bType <- boolType
-              condRes <- convertExpr(condition).check(env, opt, bType)
-              trueRes <- convertStmtList(ifBody).check(condRes.env, opt, t)
-              falseRes <- convertStmtList(elseBody).check(condRes.env, opt, t)
-              resEnv = condRes.env.mergeBranches(trueRes.env, falseRes.env)
-              e = WrapExpr.OfExpr(ArExpr(ExprConstructor.IfElse, (condRes.expr, trueRes.expr, falseRes.expr)))
+              ExprResult(condExpr, env) <- convertExpr(condition).check(env, opt, bType)
+              (condExpr, condExprStable) <- asStableExpression(condExpr)
+
+              whenTrueId <- UniqueIdentifier.make
+              whenTrueType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(true), EmptyTuple)))))
+              whenTrue = LocalVariable(whenTrueId, whenTrueType, None, isMutable = false, isErased = true)
+
+              whenFalseId <- UniqueIdentifier.make
+              whenFalseType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(false), EmptyTuple)))))
+              whenFalse = LocalVariable(whenFalseId, whenFalseType, None, isMutable = false, isErased = true)
+
+              trueRes <- convertStmtList(ifBody).check(env.withImplicitSource(_.addVariable(whenTrue)), opt, t)
+              falseRes <- convertStmtList(elseBody).check(env.withImplicitSource(_.addVariable(whenFalse)), opt, t)
+              resEnv = env.mergeBranches(trueRes.env, falseRes.env)
+              e = WrapExpr.OfExpr(ArExpr(ExprConstructor.IfElse(Some(whenTrue), Some(whenFalse)), (condExpr, trueRes.expr, falseRes.expr)))
             } yield ExprResult(e, resEnv)
 
         }

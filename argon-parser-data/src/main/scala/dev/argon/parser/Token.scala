@@ -246,4 +246,8 @@ object Token {
   }
 
   case object OP_FUNCTION_RESULT_VALUE extends TokenWithCategory(TokenCategory.OP_FUNCTION_RESULT_VALUE) with Token
+
+  case object OP_PROP_EQUAL extends TokenWithCategory(TokenCategory.OP_PROP_EQUAL) with BinaryOperatorToken {
+    override def operator: BinaryOperator = BinaryOperator.PropEqual
+  }
 }

@@ -956,8 +956,11 @@ private[tube] abstract class TubeWriterBase extends UsingContext {
         case ExprConstructor.FunctionObjectCall =>
           ZIO.succeed(t.Expr.Constructor.FunctionObjectCall(Empty()))
 
-        case ExprConstructor.IfElse =>
-          ZIO.succeed(t.Expr.Constructor.IfElse(Empty()))
+        case ExprConstructor.IfElse(whenTrue, whenFalse) =>
+          for
+            whenTrueVar <- ZIO.foreach(whenTrue)(getVariableDeclaration)
+            whenFalseVar <- ZIO.foreach(whenFalse)(getVariableDeclaration)
+          yield t.Expr.Constructor.IfElse(t.Expr.IfElse(whenTrueVar, whenFalseVar))
 
         case ExprConstructor.LoadConstantBool(b) =>
           ZIO.succeed(t.Expr.Constructor.LoadConstantBool(b))

@@ -116,4 +116,5 @@ object TokenCategory {
   case object OP_CONCAT extends TokenCategory
   case object OP_STARSTAR extends TokenCategory
   case object OP_FUNCTION_RESULT_VALUE extends TokenCategory
+  case object OP_PROP_EQUAL extends TokenCategory
 }

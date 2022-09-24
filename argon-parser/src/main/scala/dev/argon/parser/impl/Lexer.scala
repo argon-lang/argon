@@ -385,6 +385,7 @@ object Lexer {
             op(plus ++ plus, Token.OP_CONCAT) |
             op(dot ++ dot, Token.OP_DOTDOT) |
             op(star ++ star, Token.OP_STARSTAR) |
+            op(equal ++ equal, Token.OP_PROP_EQUAL) |
             op(equal, Token.OP_EQUALS) |
             op(token(CharacterCategory.NotEquals, "≠"), Token.OP_NOTEQUALS) |
             op(token(CharacterCategory.LessThanEq, "≤"), Token.OP_LESSTHANEQ) |
