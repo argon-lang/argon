@@ -275,6 +275,7 @@ object Lexer {
 
           def createToken(id: String): Token =
             id match {
+              case "__argon_builtin" => Token.KW_ARGON_BUILTIN
               case "def" => Token.KW_DEF
               case "proc" => Token.KW_PROC
               case "instance" => Token.KW_INSTANCE
@@ -363,6 +364,7 @@ object Lexer {
           val closeCurly = token(CharacterCategory.CloseCurly, "}")
           val star = token(CharacterCategory.Star, "*")
           val slash = token(CharacterCategory.Slash, "/")
+          val backslash = token(CharacterCategory.Backslash, "\\")
           val caret = token(CharacterCategory.Caret, "^")
           val tilde = token(CharacterCategory.Tilde, "~")
           val atSign = token(CharacterCategory.AtSign, "@")
@@ -387,6 +389,8 @@ object Lexer {
             op(dot ++ dot, Token.OP_DOTDOT) |
             op(star ++ star, Token.OP_STARSTAR) |
             op(equal ++ equal, Token.OP_PROP_EQUAL) |
+            op(backslash ++ slash, Token.OP_PROP_DISJUNCTION) |
+            op(slash ++ backslash, Token.OP_PROP_CONJUNCTION) |
             op(equal, Token.OP_EQUALS) |
             op(token(CharacterCategory.NotEquals, "≠"), Token.OP_NOTEQUALS) |
             op(token(CharacterCategory.LessThanEq, "≤"), Token.OP_LESSTHANEQ) |

@@ -56,6 +56,8 @@ object Token {
   case object NewLine extends TokenWithCategory(TokenCategory.NewLine) with Token
   case object Semicolon extends TokenWithCategory(TokenCategory.Semicolon) with Token
 
+  case object KW_ARGON_BUILTIN extends TokenWithCategory(TokenCategory.KW_ARGON_BUILTIN) with Token
+
   case object KW_DEF extends TokenWithCategory(TokenCategory.KW_DEF) with Token
   case object KW_PROC extends TokenWithCategory(TokenCategory.KW_PROC) with Token
   case object KW_INSTANCE extends TokenWithCategory(TokenCategory.KW_INSTANCE) with Token
@@ -250,5 +252,13 @@ object Token {
 
   case object OP_PROP_EQUAL extends TokenWithCategory(TokenCategory.OP_PROP_EQUAL) with BinaryOperatorToken {
     override def operator: BinaryOperator = BinaryOperator.PropEqual
+  }
+
+  case object OP_PROP_DISJUNCTION extends TokenWithCategory(TokenCategory.OP_PROP_DISJUNCTION) with BinaryOperatorToken {
+    override def operator: BinaryOperator = BinaryOperator.PropDisjunction
+  }
+
+  case object OP_PROP_CONJUNCTION extends TokenWithCategory(TokenCategory.OP_PROP_CONJUNCTION) with BinaryOperatorToken {
+    override def operator: BinaryOperator = BinaryOperator.PropConjunction
   }
 }

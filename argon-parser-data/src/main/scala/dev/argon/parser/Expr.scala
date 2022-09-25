@@ -89,6 +89,9 @@ final case class FieldInitializationStmt
   ) extends Stmt
 
 sealed trait Expr extends Stmt
+
+final case class BuiltinExpr(id: String) extends Expr
+
 final case class AsExpr(value: WithSource[Expr], valueType: WithSource[Expr]) extends Expr
 
 final case class BinaryOperatorExpr(op: WithSource[BinaryOperator], left: WithSource[Expr], right: WithSource[Expr])
@@ -271,6 +274,14 @@ object BinaryOperator {
 
   case object PropEqual extends BinaryOperator {
     override def symbol: String = "=="
+  }
+
+  case object PropDisjunction extends BinaryOperator {
+    override def symbol: String = "\\/"
+  }
+
+  case object PropConjunction extends BinaryOperator {
+    override def symbol: String = "/\\"
   }
 }
 

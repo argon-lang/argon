@@ -27,6 +27,7 @@
             }
           },
           "extern": [
+            "js/extern.js",
             "js/extern_bool.js",
             "js/extern_int.js",
             "js/extern_nat.js",

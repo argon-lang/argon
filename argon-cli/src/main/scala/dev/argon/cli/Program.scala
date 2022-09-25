@@ -54,7 +54,7 @@ object Program extends PlatformApp {
               runCommand(config)
 //              for
 //                fiber <- runCommand(config).fork
-//                _ <- Clock.sleep(Duration.fromSeconds(10))
+//                _ <- Clock.sleep(Duration.fromSeconds(15))
 //                trace <- fiber.trace
 //                _ <- Console.printLineError(trace)
 //                res <- fiber.join

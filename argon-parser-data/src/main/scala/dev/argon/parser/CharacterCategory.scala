@@ -54,4 +54,6 @@ object CharacterCategory {
   case object Tilde extends CharacterCategory
   case object AtSign extends CharacterCategory
 
+  case object Backslash extends CharacterCategory
+
 }

@@ -204,7 +204,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
       )
       )
 
-  def functionExport(func: ArFunc & HasImplementation[true]): Comp[estree.ExportNamedDeclaration] =
+  def functionExport(func: ArFunc & HasImplementation[true]): Comp[Option[estree.ExportNamedDeclaration]] =
     for
       _ <- func.validate
 
@@ -214,12 +214,14 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
 
       impl <- func.implementation
       decl <- impl match {
+        case _ if func.isErased => ZIO.none
+
         case impl: FunctionImplementationC.ExpressionBody =>
           for
             sig <- func.signature
             params <- createSigParams(func, 0, sig)
             body <- emitTopScope(emitWrapExprAsStmt(_)(impl.body))
-          yield estree.FunctionDeclaration(
+          yield Some(estree.FunctionDeclaration(
             id = Nullable(id(funcName)),
             params = params,
             body = block(body*),
@@ -227,11 +229,11 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
             async = true,
             expression = false,
             directive = None,
-          )
+          ))
 
         case impl: FunctionImplementationC.External =>
           val funcDecl = adapter.extractExternFunctionImplementation(impl.impl)
-          ZIO.succeed(estree.FunctionDeclaration(
+          ZIO.some(estree.FunctionDeclaration(
             id = Nullable(id(funcName)),
             params = funcDecl.params,
             body = funcDecl.body,
@@ -241,7 +243,7 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
             directive = funcDecl.directive,
           ))
       }
-    yield `export`(decl)
+    yield decl.map(`export`(_))
 
 
   private def createMethods(methodsVarName: String, methods: Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true]]]): Comp[Seq[estree.Statement]] =
@@ -251,37 +253,44 @@ private[emit] trait ExprEmitter extends EmitModuleCommon {
         method <- methodsOfName
       yield (methodName, method)
     ) { case (methodName, method) =>
-      for
-        _ <- method.validate
-        methodExpr <- createMethod(method)
-        methodSig <- method.signatureUnsubstituted
-        methodSigErased <- SignatureEraser(context).erasedWithResult(methodSig)
+      (
+        for
+          _ <- method.validate
+          methodExpr <- createMethod(method)
+          methodSig <- method.signatureUnsubstituted
+          methodSigErased <- SignatureEraser(context).erasedWithResult(methodSig)
 
-      yield id(methodsVarName).prop(getOverloadExportName(methodName, methodSigErased)) ::= obj(
-        id("symbol") := id("Symbol").call(),
-        id("implementation") := methodExpr,
-      )
-    }
+        yield methodExpr.map { implExpr =>
+          id(methodsVarName).prop(getOverloadExportName(methodName, methodSigErased)) ::= obj(
+            id("symbol") := id("Symbol").call(),
+            id("implementation") := implExpr,
+          ) : estree.Statement
+        }
+      ) : Comp[Option[estree.Statement]]
+    }.map { _.flatten }
 
-  private def createMethod(method: ArMethod & HasImplementation[true]): Comp[estree.Expression] =
+  private def createMethod(method: ArMethod & HasImplementation[true]): Comp[Option[estree.Expression]] =
     method.implementation.flatMap {
+      case _ if method.isErased =>
+        ZIO.none
+
       case _: MethodImplementationC.Abstract =>
-        ZIO.succeed(literal(null))
+        ZIO.some(literal(null))
       case impl: MethodImplementationC.ExpressionBody =>
         for
           sig <- method.signatureUnsubstituted
           params <- createSigParams(method, 0, sig)
           body <- emitTopScope(emitWrapExprAsStmt(_)(impl.body))
-        yield estree.FunctionExpression(
+        yield Some(estree.FunctionExpression(
           id = Nullable(null),
           params = params,
           body = block(body*),
           generator = false,
           async = true,
-        )
+        ))
       case impl: MethodImplementationC.External =>
         val funcDecl = adapter.extractExternMethodImplementation(impl.impl)
-        ZIO.succeed(estree.FunctionExpression(
+        ZIO.some(estree.FunctionExpression(
           id = funcDecl.id,
           params = funcDecl.params,
           body = funcDecl.body,

@@ -2,6 +2,7 @@ package dev.argon.plugins.source
 
 import dev.argon.compiler.*
 import dev.argon.compiler.expr.{ArgonExprContext, ExprToHolesConverter}
+import dev.argon.compiler.expr.ParameterVariableOwnerC.*
 import dev.argon.util.{*, given}
 import dev.argon.parser
 import dev.argon.parser.{FunctionParameterListType, IdentifierExpr}
@@ -20,6 +21,7 @@ object SignatureUtil {
   : context.Comp[(Signature[context.ExprContext.WrapExpr, Res], exprConverter.Env)] =
     import exprConverter.Env
 
+    val owningTubeName = owner.module.tube.tubeName
 
     val opt = exprConverter.ExprOptions(
       purity = true,
@@ -38,7 +40,7 @@ object SignatureUtil {
         case WithSource(param, location) +: tail =>
           def convertParamElementType(param: parser.FunctionParameter, env: exprConverter.Env): context.Comp[context.ExprContext.WrapExpr] =
             for
-              exprResult <- exprConverter.convertExpr(param.paramType).check(env, opt.forTypeExpr, exprConverter.anyType)
+              exprResult <- exprConverter.convertExpr(param.paramType).check(env.withImplicitSource(_.excludeTube(owningTubeName)), opt.forTypeExpr, exprConverter.anyType)
               resExprPair <- exprConverter.resolveHoles(exprResult.env, exprResult.expr)
             yield resExprPair._1
 
@@ -263,12 +265,13 @@ object SignatureUtil {
   (env: exprConverter.Env, opt: exprConverter.ExprOptions)
   : context.Comp[context.ExprContext.FunctionResult] =
     Ref.make(env).flatMap { envRef =>
+      val owningTubeName = owner.module.tube.tubeName
+
       def convertExprResolved(expr: WithSource[parser.Expr]): context.Comp[context.ExprContext.WrapExpr] =
         for
           env <- envRef.get
-          exprConverter.ExprResult(convExpr, env) <- exprConverter.convertExpr(expr).check(env, opt.forTypeExpr, exprConverter.anyType)
+          exprConverter.ExprResult(convExpr, env) <- exprConverter.convertExpr(expr).check(env.withImplicitSource(_.excludeTube(owningTubeName)), opt.forTypeExpr, exprConverter.anyType)
           (resolvedExpr, env) <- exprConverter.resolveHoles(env, convExpr)
-          _ <- envRef.set(env)
         yield resolvedExpr
 
       for

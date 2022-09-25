@@ -2,6 +2,7 @@ package dev.argon.compiler.expr
 
 import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
+import dev.argon.compiler.module.ArModuleC
 import dev.argon.expr.*
 import dev.argon.util.{*, given}
 import dev.argon.parser.IdentifierExpr
@@ -177,3 +178,17 @@ type ParameterVariableOwnerC[TContext <: Context] =
     ArClassC & HasContext[TContext] |
     ArTraitC & HasContext[TContext] |
     ClassConstructorC & HasContext[TContext]
+
+object ParameterVariableOwnerC {
+  extension [TContext <: Context](varOwner: ParameterVariableOwnerC[TContext])
+    def module: ArModuleC & HasContext[TContext] =
+      varOwner match {
+        case varOwner: (ArMethodC & HasContext[TContext]) => ArMethodC.getOwningModule(varOwner.owner)
+        case varOwner: (ArFuncC & HasContext[TContext]) => ArFuncC.getOwningModule(varOwner.owner)
+        case varOwner: (ArClassC & HasContext[TContext]) => ArClassC.getOwningModule(varOwner.owner)
+        case varOwner: (ArTraitC & HasContext[TContext]) => ArTraitC.getOwningModule(varOwner.owner)
+        case varOwner: (ClassConstructorC & HasContext[TContext]) => ClassConstructorC.getOwningModule(varOwner.owner)
+      }
+  end extension
+  
+}

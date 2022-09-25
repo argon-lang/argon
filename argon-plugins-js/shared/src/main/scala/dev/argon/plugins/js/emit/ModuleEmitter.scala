@@ -142,7 +142,7 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
         element match
           case ModuleElementC.ClassElement(arClass) => exprEmitter.classExport(arClass).asSome
           case ModuleElementC.TraitElement(arTrait) => exprEmitter.traitExport(arTrait).asSome
-          case ModuleElementC.FunctionElement(func) => exprEmitter.functionExport(func).asSome
+          case ModuleElementC.FunctionElement(func) => exprEmitter.functionExport(func)
           case ModuleElementC.ExportedElement(_, _, _) => ZIO.none
         end match
     yield declaration

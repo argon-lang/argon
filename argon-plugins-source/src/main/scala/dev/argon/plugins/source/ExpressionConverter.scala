@@ -255,6 +255,12 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
       case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.PropEqual, _), left, right) =>
         createTypeOperatorFactory(expr.location)(ExprConstructor.EqualTo)(left, right)
 
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.PropDisjunction, _), left, right) =>
+        createTypeOperatorFactory(expr.location)(ExprConstructor.DisjunctionType)(left, right)
+
+      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.PropConjunction, _), left, right) =>
+        createTypeOperatorFactory(expr.location)(ExprConstructor.ConjunctionType)(left, right)
+
       case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.Assign, assignLoc), left, right) =>
         convertExpr(left).mutate(MutatorValue(convertExpr(right), assignLoc))
 
@@ -309,6 +315,22 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(b), EmptyTuple))
             yield ExprTypeResult(e, env, t)
         }
+
+      case parser.BuiltinExpr("never") =>
+        new ExprFactorySynth {
+          override def exprLocation: SourceLocation = expr.location
+
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+            val zero = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(0), EmptyTuple))
+            val type0 = WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, zero))
+            val neverType = WrapExpr.OfExpr(ArExpr(ExprConstructor.NeverType, EmptyTuple))
+            ZIO.succeed(ExprTypeResult(neverType, env, type0))
+          end synthImpl
+        }
+
+      case parser.BuiltinExpr(_) =>
+        ???
+
 
       case parser.ClassConstructorExpr(classExpr) =>
         class WrappedFactory(inner: (Env, ExprOptions) => Comp[(Env, ExprFactory)]) extends ExprFactory {

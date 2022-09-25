@@ -7,3 +7,5 @@ export ./Object/*
 export ./Puts/*
 export ./String/*
 
+public erased inline def Never: type = __argon_builtin never
+

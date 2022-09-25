@@ -76,6 +76,8 @@ object ArgonParser {
     case object LambdaTypeExpr extends ArgonRuleName[Expr]
     case object RelationalExpr extends ArgonRuleName[Expr]
     case object EqualityExpr extends ArgonRuleName[Expr]
+    case object PropConjunctionExpr extends ArgonRuleName[Expr]
+    case object PropDisjunctionExpr extends ArgonRuleName[Expr]
     case object PropEqualityExpr extends ArgonRuleName[Expr]
     case object AsExpr extends ArgonRuleName[Expr]
     case object LambdaExpr extends ArgonRuleName[Expr]
@@ -356,7 +358,10 @@ object ArgonParser {
             (matchToken(KW_BEGIN) ++! (rule(Rule.BlockBody) ++ matchToken(KW_END))) --> {
               case (_, (block, _)) => block
             } |
-            matchToken(OP_FUNCTION_RESULT_VALUE) --> const(IdentifierExpr.FunctionResultValue)
+            matchToken(OP_FUNCTION_RESULT_VALUE) --> const(IdentifierExpr.FunctionResultValue) |
+            (matchToken(KW_ARGON_BUILTIN) ++! matchTokenFactory(Identifier)) --> {
+              case (_, Identifier(id)) => BuiltinExpr(id)
+            }
 
         case Rule.PrimaryExpr(Rule.ParenAllowed) =>
           matchToken(OP_OPENPAREN) ++ matchToken(OP_CLOSEPAREN) --> const(TupleExpr(Vector.empty)) |
@@ -506,10 +511,20 @@ object ArgonParser {
             ruleBinaryOperator(OP_NOTEQUALS),
           )(rule(Rule.RelationalExpr))
 
+        case Rule.PropConjunctionExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_PROP_CONJUNCTION),
+          )(rule(Rule.EqualityExpr))
+
+        case Rule.PropDisjunctionExpr =>
+          createLeftAssociativeOperatorRule(
+            ruleBinaryOperator(OP_PROP_DISJUNCTION),
+          )(rule(Rule.PropConjunctionExpr))
+
         case Rule.PropEqualityExpr =>
           createLeftAssociativeOperatorRule(
             ruleBinaryOperator(OP_PROP_EQUAL),
-          )(rule(Rule.EqualityExpr))
+          )(rule(Rule.PropDisjunctionExpr))
 
         case Rule.AsExpr =>
           val nextRule = rule(Rule.PropEqualityExpr)

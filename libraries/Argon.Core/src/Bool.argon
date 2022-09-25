@@ -10,3 +10,14 @@ public def (!) (a: Bool): Bool = extern boolNot
 
 public def (=) (a: Bool) (b: Bool): Bool = extern boolEqual
 public inline def (!=) (a: Bool) (b: Bool): Bool = !(a = b)
+
+
+public erased proof def boolIsTrueOrFalse[a: Bool]: ((a == true) \/ (a == false)) =
+	extern assumeTrue
+
+public erased proof def boolNotTrueIsFalse: (!true == false) =
+	extern assumeTrue
+
+public erased proof def boolNotFalseIsTrue: (!false == true) =
+	extern assumeTrue
+

@@ -14,6 +14,8 @@ object TokenCategory {
 
   case object NewLine extends TokenCategory
   case object Semicolon extends TokenCategory
+  
+  case object KW_ARGON_BUILTIN extends TokenCategory
 
   case object KW_DEF extends TokenCategory
   case object KW_PROC extends TokenCategory
@@ -118,5 +120,7 @@ object TokenCategory {
   case object OP_STARSTAR extends TokenCategory
   case object OP_FUNCTION_RESULT_VALUE extends TokenCategory
   case object OP_PROP_EQUAL extends TokenCategory
+  case object OP_PROP_DISJUNCTION extends TokenCategory
+  case object OP_PROP_CONJUNCTION extends TokenCategory
   
 }
