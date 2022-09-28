@@ -16,7 +16,7 @@ object PrologFuelTests extends ZIOSpecDefault {
   val prologSyntax = new SimplePrologSyntax[TestPredicate, TestCtor]
   import prologSyntax.*
 
-  val fuel = 100
+  val fuel = 10
 
   private object TestContext extends SimplePrologContext[VariableProvider, Nothing] {
     override val syntax: prologSyntax.type = prologSyntax

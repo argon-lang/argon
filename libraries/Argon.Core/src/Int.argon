@@ -32,46 +32,51 @@ public def (>=) (a: Int) (b: Int): Bool = extern intGreaterThanEq
 
 
 
-public erased proof def intEqualImpliesEqualTo[a: Int, b: Int](requires p: ((a = b) == true)): (a == b) =
+public erased proof def intEqualImpliesEqualTo[a: Int][b: Int](requires p: ((a = b) == true)): (a == b) =
 	extern assumeTrue
 
-public erased proof def intNotEqualImpliesNotEqualTo[a: Int, b: Int](requires p: ((a = b) == false)): ((a == b) -> Never) =
+public erased proof def intNotEqualImpliesNotEqualTo[a: Int][b: Int](requires p: ((a = b) == false)): ((a == b) -> Never) =
 	extern assumeTrue
 
-public erased proof def intEqualToImpliesEqual[a: Int, b: Int](requires p: (a == b)): ((a = b) == true) =
+public erased proof def intEqualToImpliesEqual[a: Int][b: Int](requires p: (a == b)): ((a = b) == true) =
 	extern assumeTrue
 
-public erased proof def intNotEqualToImpliesNotEqual[a: Int, b: Int](requires p: ((a == b) -> Never)): ((a = b) == false) =
-	extern assumeTrue
-
-
-
-public erased proof def intLEQReflexive[a: Int, b: Int](requires p: (a == b)): ((a <= b) == true) =
-	extern assumeTrue
-
-public erased proof def intLEQTransitive[a: Int, b: Int, c: Int](requires p: ((a <= b) == true), q: ((b <= c) == true)): ((a <= c) == true) =
-	extern assumeTrue
-
-public erased proof def intLEQAntisymmetric[a: Int, b: Int](requires p: ((a <= b) == true), q: ((b <= a) == true)): (a == b) =
-	extern assumeTrue
-
-public erased proof def intLEQStronglyConnected[a: Int, b: Int, c: Int](requires p: ((a <= b) == true), q: ((b <= c) == true)): ((a <= c) == true) =
+public erased proof def intNotEqualToImpliesNotEqual[a: Int][b: Int](requires p: ((a == b) -> Never)): ((a = b) == false) =
 	extern assumeTrue
 
 
-public erased proof def intLEQAndNotEqualImpliesEqualsOrLT[a: Int, b: Int](requires p: ((a <= b) == true), q: ((a == b) -> Never)): ((a < b) == true) =
+
+public erased proof def intLEQReflexive[a: Int][b: Int](requires p: (a == b)): ((a <= b) == true) =
 	extern assumeTrue
 
-public erased proof def intLTImpliesLEQ[a: Int, b: Int](requires p: ((a < b) == true)): ((a <= b) == true) =
+public erased proof def intLEQTransitive[a: Int, b: Int, c: Int](requires p: ((a <= b) == true))(requires q: ((b <= c) == true)): ((a <= c) == true) =
 	extern assumeTrue
 
-public erased proof def intLTImpliesNotEqual[a: Int, b: Int](requires p: ((a < b) == true)): ((a == b) -> Never) =
+public erased proof def intLEQAntisymmetric[a: Int][b: Int](requires p: ((a <= b) == true))(requires q: ((b <= a) == true)): (a == b) =
+	extern assumeTrue
+
+public erased proof def intLEQStronglyConnected[a: Int][b: Int][c: Int](requires p: ((a <= b) == true))(requires q: ((b <= c) == true)): ((a <= c) == true) =
 	extern assumeTrue
 
 
-public erased proof def intGEQIsConverseLEQ[a: Int, b: Int](requires p: ((a <= b) == true)): ((b >= a) == true) =
+public erased proof def intLEQAndNotEqualImpliesEqualsOrLT[a: Int][b: Int](requires p: ((a <= b) == true))(requires q: ((a == b) -> Never)): ((a < b) == true) =
+	extern assumeTrue
+
+public erased proof def intLTImpliesLEQ[a: Int][b: Int](requires p: ((a < b) == true)): ((a <= b) == true) =
+	extern assumeTrue
+
+public erased proof def intLTImpliesNotEqual[a: Int][b: Int](requires p: ((a < b) == true)): ((a == b) -> Never) =
 	extern assumeTrue
 
 
-public erased proof def intGTIsConverseLT[a: Int, b: Int](requires p: ((a < b) == true)): ((b > a) == true) =
+public erased proof def intGEQIsConverseLEQ1[a: Int][b: Int][c: Bool](requires p: ((a <= b) == c)): ((b >= a) == c) =
+	extern assumeTrue
+public erased proof def intGEQIsConverseLEQ2[a: Int][b: Int][c: Bool](requires p: ((a >= b) == c)): ((b <= a) == c) =
+	extern assumeTrue
+
+
+public erased proof def intGTIsConverseLT1[a: Int][b: Int][c: Bool](requires p: ((a < b) == c)): ((b > a) == c) =
+	extern assumeTrue
+
+public erased proof def intGTIsConverseLT2[a: Int][b: Int][c: Bool](requires p: ((a > b) == c)): ((b < a) == c) =
 	extern assumeTrue

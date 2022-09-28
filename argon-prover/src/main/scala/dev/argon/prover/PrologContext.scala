@@ -65,7 +65,7 @@ abstract class PrologContext[-R, +E] {
   final def check(goal: Predicate, fuel: Int): ZIO[R, E, PrologResult] = check(goal, Map.empty, fuel)
 
   final def check(goal: Predicate, model: Model, fuel: Int): ZIO[R, E, PrologResult] =
-    solve(goal, model, SolveState(seenPredicates = Set.empty, fuel = fuel))
+    solve(goal, model, SolveState(seenPredicates = Set.empty, fuel = fuel, additionalGivens = Seq.empty))
       .runHead
       .foldZIO(
         failure = {
@@ -78,15 +78,37 @@ abstract class PrologContext[-R, +E] {
         },
       )
 
-  private def emptyIfNo(stream: ZStream[R, Error, PrologResult.Yes]): ZStream[R, Error, PrologResult.Yes] =
-    stream.catchSome {
+  private def emptyIfNo[A](stream: ZStream[R, Error, A]): ZStream[R, Either[E, Nothing], A] =
+    stream.catchAll {
+      case Left(e) => ZStream.fail(Left(e))
       case Right(PrologResult.No(_, _)) => ZStream.empty
     }
+
+  // Converts:
+  //   A disproof of P into a proof of not P
+  //   A proof of P into a disproof of not P
+  private def invertProof(stream: ZStream[R, Error, PrologResult.Yes]): ZStream[R, Error, PrologResult.Yes] =
+    ZStream.unwrap(
+      stream
+        .runHead
+        .fold(
+          failure = {
+            case Left(e) => ZStream.fail(Left(e))
+            case Right(PrologResult.No(notProof, model)) => ZStream.succeed(PrologResult.Yes(notProof, model))
+          },
+          success = {
+            case Some(PrologResult.Yes(proof, model)) => ZStream.fail(Right(PrologResult.No(Proof.DoubleNegIntro(proof), model)))
+            case None => ZStream.empty
+          }
+        )
+    )
+
 
   final case class SolveState
   (
     seenPredicates: Set[Predicate],
     fuel: Int,
+    additionalGivens: Seq[(Proof[ProofAtom], Predicate)],
   ) {
     def consumeFuel: SolveState =
       copy(fuel = fuel - 1)
@@ -99,6 +121,9 @@ abstract class PrologContext[-R, +E] {
 
     def hasSeenPredicate(pred: Predicate): Boolean =
       seenPredicates.contains(pred)
+
+    def addGiven(proof: Proof[ProofAtom], pred: Predicate): SolveState =
+      copy(additionalGivens = additionalGivens :+ (proof, pred))
   }
 
 
@@ -182,6 +207,19 @@ abstract class PrologContext[-R, +E] {
             case PrologResult.Yes(proof, substitutions) => PrologResult.Yes(Proof.DoubleNegIntro(proof), substitutions)
           }
 
+        case Implies(a, PropFalse) => ZStream.empty
+//          invertProof(solve(a, substitutions, solveState2.consumeFuel))
+
+        case Implies(a, b) =>
+          ZStream.unwrap(
+            for
+              aId <- UniqueIdentifier.make
+            yield solve(b, substitutions, solveState.addGiven(Proof.Identifier(aId), a))
+              .map { case PrologResult.Yes(proof, substitutions) =>
+                PrologResult.Yes(Proof.ImplicaitonAbstraction(aId, proof), substitutions)
+              }
+          )
+
         case PropFalse =>
           ZStream.unwrap(
             for {
@@ -199,9 +237,11 @@ abstract class PrologContext[-R, +E] {
         case PredicateFunction(function, args) =>
           intrinsicPredicate(function, args, substitutions, solveState2.consumeFuel)
 
-        case _ => ZStream.empty
+//        case _ => ZStream.empty
       })
     end if
+
+
 
   private def inferAll(goal: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, PrologResult.Yes] =
     if solveState.fuelEmpty then
@@ -213,53 +253,86 @@ abstract class PrologContext[-R, +E] {
         } yield infer(goal, substitutions, solveState, kbUnsorted)
       )
 
-  private def infer(goal: Predicate, substitutions: Model, solveState: SolveState, kb: List[(Proof[ProofAtom], Predicate)])
+  private def infer(goal: Predicate, substitutions: Model, solveState: SolveState, kb: Seq[(Proof[ProofAtom], Predicate)])
     : ZStream[R, Error, PrologResult.Yes] =
-    ZStream.fromIterable(kb).flatMap { (proof, assertion) =>
+    ZStream.fromIterable(kb ++ solveState.additionalGivens).flatMap { (proof, assertion) =>
       inferOne(goal, assertion, substitutions, solveState, proof)
     }
 
   private def inferOne(goal: Predicate, assertion: Predicate, substitutions: Model, solveState: SolveState, proof: Proof[ProofAtom])
     : ZStream[R, Error, PrologResult.Yes] = {
-    val unifyAssertion =
-      unify(goal, assertion, substitutions, solveState)
-        .map { model => PrologResult.Yes(proof, model) }
+    type ErrorF = Either[E, (Proof[ProofAtom] => Proof[ProofAtom], Model)]
 
-    val assertionSpecific =
-      assertion match {
-        case Implies(premise, conclusion) =>
-          val implicationCheck =
-            premise match {
-              case PropFalse => ZStream.empty
-              case _ =>
-                emptyIfNo(
-                  unify(goal, conclusion, substitutions, solveState)
-                    .flatMap { substitutions =>
-                      solve(premise, substitutions, solveState.consumeFuel)
-                        .map { case PrologResult.Yes(premiseProof, substitutions) =>
-                          PrologResult.Yes(Proof.ModusPonens(proof, premiseProof), substitutions)
-                        }
+    def impl(assertion: Predicate): ZStream[R, ErrorF, (Proof[ProofAtom] => Proof[ProofAtom], Model)] =
+      val unifyAssertion: ZStream[R, ErrorF, (Proof[ProofAtom] => Proof[ProofAtom], Model)] =
+        emptyIfNo(unify(goal, assertion, substitutions, solveState))
+          .map { model =>
+            (
+              (proof: Proof[ProofAtom]) => proof,
+              model
+            )
+          }
+
+      val assertionSpecific: ZStream[R, ErrorF, (Proof[ProofAtom] => Proof[ProofAtom], Model)] =
+        assertion match {
+          // First one is because it is useless.
+          // Second one is because not short circuiting causes the prover to be too slow.
+          case Implies(PropFalse, _) => ZStream.empty
+
+          case Implies(premise, PropFalse) =>
+//            ZStream.empty
+            emptyIfNo(unify(goal, premise, substitutions, solveState.consumeFuel))
+              .flatMap { substitutions =>
+                ZStream.fail(Right((
+                  (proof: Proof[ProofAtom]) => proof,
+                  substitutions
+                )))
+              }
+
+          case Implies(premise, conclusion) =>
+            impl(conclusion)
+              .catchSome({
+                case Right((buildNotResult, substitutions)) =>
+                  emptyIfNo(solve(premise, substitutions, solveState.consumeFuel))
+                    .flatMap { case PrologResult.Yes(premiseProof, substitutions) =>
+                      ZStream.fail(Right((
+                        (proof: Proof[ProofAtom]) => Proof.ModusPonens(buildNotResult(proof), premiseProof),
+                        substitutions
+                      )))
                     }
-                )
-            }
+              })
+              .flatMap { (buildResult, substitutions) =>
+                emptyIfNo(solve(premise, substitutions, solveState.consumeFuel))
+                .map { case PrologResult.Yes(premiseProof, substitutions) =>
+                  (
+                    (proof: Proof[ProofAtom]) => Proof.ModusPonens(buildResult(proof), premiseProof),
+                    substitutions
+                  )
+                }
+              }
 
-          val notCheck =
-            conclusion match {
-              case PropFalse =>
-                unify(goal, premise, substitutions, solveState)
-                  .flatMap { model =>
-                    ZStream.fail(Right(PrologResult.No(proof, model)))
-                  }
+          case _ => ZStream.empty
+        }
 
-              case _ => ZStream.empty
-            }
+      unifyAssertion ++ assertionSpecific
+    end impl
 
-          implicationCheck ++ notCheck
+    goal match {
+      case Implies(_, _) =>
+        ZStream.empty
 
-        case _ => ZStream.empty
-      }
-
-    assertionSpecific ++ unifyAssertion
+      case _ =>
+        emptyIfNo(impl(assertion)
+          .mapBoth(
+            {
+              case Left(e) => Left(e)
+              case Right((buildResult, substitutions)) =>
+                Right(PrologResult.No(buildResult(proof), substitutions))
+            },
+            { (buildResult, substitutions) => PrologResult.Yes(buildResult(proof), substitutions) }
+          )
+        )
+    }
   }
 
   private def unify(goal: Predicate, rule: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, Model] =

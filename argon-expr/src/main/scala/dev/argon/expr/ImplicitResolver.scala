@@ -134,13 +134,25 @@ abstract class ImplicitResolver[R, E] {
           a <- newVariable
         } yield (
           Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
-            ExprConstructor.EqualTo,
-            (
-              WrapExpr.OfHole(a),
-              WrapExpr.OfHole(a),
-            ),
+            ExprConstructor.AssumeErasedValue,
+            EmptyTuple,
           )))) -> PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(a)))
           )),
+
+//        // B == A
+//        // ------
+//        // A == B
+//        (for {
+//          a <- newVariable
+//          b <- newVariable
+//        } yield (
+//          Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
+//            ExprConstructor.AssumeErasedValue,
+//            EmptyTuple,
+//          )))) -> Implies(
+//            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(b), Variable(a))),
+//            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(a))),
+//          ))),
 
         // ------
         // A <: A
@@ -658,6 +670,13 @@ abstract class ImplicitResolver[R, E] {
             implication <- proofAtomicAsWrapExpr(implication)
             premise <- proofAtomicAsWrapExpr(premise)
           yield Proof.ModusPonens(implication, premise)
+
+        case Proof.ModusTollens(implication, consequentFalse) =>
+          for
+            implication <- proofAtomicAsWrapExpr(implication)
+            consequentFalse <- proofAtomicAsWrapExpr(consequentFalse)
+          yield Proof.ModusTollens(implication, consequentFalse)
+
 
         case Proof.ConjunctIntro(a, b) =>
           for

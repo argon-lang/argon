@@ -16,6 +16,9 @@ object Proof {
   // given A -> B, A proves B
   final case class ModusPonens[A](implication: Proof[A], premise: Proof[A]) extends Proof[A]
 
+  // given A -> B, not B proves not A
+  final case class ModusTollens[A](implication: Proof[A], consequentFalse: Proof[A]) extends Proof[A]
+
   // given A, B proves A & B
   final case class ConjunctIntro[A](a: Proof[A], b: Proof[A]) extends Proof[A]
 

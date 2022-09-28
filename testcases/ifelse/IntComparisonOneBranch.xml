@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Int comparison (one branch)</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        def zero: Int = 0
+
+        proc main(): () do
+            val a = zero
+            if a = 0 then
+                assert a == 0
+                puts "Zero is 0"
+            end
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Zero is 0
+    </ExpectedOutput>
+
+</ArgonTest>
