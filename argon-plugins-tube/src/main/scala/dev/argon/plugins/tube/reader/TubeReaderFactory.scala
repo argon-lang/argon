@@ -7,8 +7,8 @@ import dev.argon.compiler.vtable.VTableBuilder
 import dev.argon.io.ZipFileResource
 import dev.argon.plugins.tube.Paths
 import dev.argon.tube as t
-import dev.argon.tube.given
 import dev.argon.util.{*, given}
+import dev.argon.util.protobuf.given
 import zio.*
 
 abstract class TubeReaderFactory extends TubeZipReaderUtil {

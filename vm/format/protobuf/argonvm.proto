@@ -4,8 +4,6 @@ option java_package = "dev.argon.argonvm.format";
 
 package argon.argonvm;
 
-import "google/protobuf/empty.proto";
-
 message Program {
   repeated Class classes = 1;
   repeated Function functions = 3;
@@ -38,6 +36,7 @@ message ValueTypeTuple {
 message Chunk {
   repeated ConstantValue constants = 1;
   repeated ValueType variableTypes = 2;
+  repeated uint64 labelTargets = 4;
   required bytes bytecode = 3;
 }
 

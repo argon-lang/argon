@@ -32,30 +32,30 @@
   "GT_UN": 21,
   "GE": 30,
   "GE_UN": 31,
-  "JMP16": {
+  "JMP": {
     "opcode": 22,
     "parameters": [
       {
-        "name": "target",
-        "type": "int16"
+        "name": "label",
+        "type": "index"
       }
     ]
   },
-  "JZ16": {
+  "JZ": {
     "opcode": 23,
     "parameters": [
       {
-        "name": "target",
-        "type": "int16"
+        "name": "label",
+        "type": "index"
       }
     ]
   },
-  "JNZ16": {
+  "JNZ": {
     "opcode": 24,
     "parameters": [
       {
-        "name": "target",
-        "type": "int16"
+        "name": "label",
+        "type": "index"
       }
     ]
   },

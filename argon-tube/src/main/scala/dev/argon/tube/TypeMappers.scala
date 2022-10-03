@@ -1,21 +1,7 @@
 package dev.argon.tube
 
-import com.google.protobuf.ByteString
 import scalapb.TypeMapper
-import zio.{Chunk, ChunkBuilder}
-
-given TypeMapper[ByteString, Chunk[Byte]] with
-  override def toCustom(base: ByteString): Chunk[Byte] =
-    Chunk.fromArray(base.toByteArray())
-    
-  override def toBase(custom: Chunk[Byte]): ByteString = {
-    val bso = ByteString.newOutput(custom.size)
-    for i <- custom.indices do
-      bso.write(custom.byte(i))
-    end for
-    bso.toByteString()
-  }
-end given
+import zio.Chunk
 
 given TypeMapper[dev.argon.tube.BigInt, scala.math.BigInt] with
   override def toCustom(base: dev.argon.tube.BigInt): scala.math.BigInt =

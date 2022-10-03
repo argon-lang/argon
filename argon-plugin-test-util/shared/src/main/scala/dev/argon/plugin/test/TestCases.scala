@@ -1,5 +1,6 @@
 package dev.argon.plugin.test
 
+import dev.argon.util.test.{CompileTimeFileSystem, ReadFileCompileTime}
 import dev.argon.util.{*, given}
 import dev.argon.util.xml.*
 import zio.*

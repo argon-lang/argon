@@ -111,6 +111,18 @@ lazy val compilerOptions = javaCompilerOptions ++ Seq(
 
 )
 
+lazy val scalapbOptions = Seq(
+  scalacOptions := scalacOptions.value.filterNot(Seq(
+    "-source",
+    "future",
+    "-language:strictEquality",
+    "-Yexplicit-nulls",
+  ).contains),
+
+  Compile / PB.targets := Seq(
+    scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
+  ),
+)
 
 
 
@@ -313,7 +325,7 @@ lazy val argon_compiler_coreJS = argon_compiler_core.js
 lazy val argon_compiler_coreNode = argon_compiler_core.node
 
 
-lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-tube"))
+lazy val argon_util_protobuf = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-util-protobuf"))
   .dependsOn(util)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -330,18 +342,34 @@ lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossT
     commonSettings,
     compilerOptions,
 
-    scalacOptions := scalacOptions.value.filterNot(Seq(
-      "-source",
-      "future",
-      "-language:strictEquality",
-      "-Yexplicit-nulls",
-    ).contains),
+    libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
 
-//    libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
+    name := "argon-util-protobuf",
+  )
 
-    Compile / PB.targets := Seq(
-      scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
-    ),
+lazy val argon_util_protobufJVM = argon_util_protobuf.jvm
+lazy val argon_util_protobufJS = argon_util_protobuf.js
+lazy val argon_util_protobufNode = argon_util_protobuf.node
+
+
+lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-tube"))
+  .dependsOn(util, argon_util_protobuf)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    scalapbOptions,
     Compile / PB.protoSources += (Compile / baseDirectory).value.getParentFile / "src/main/protobuf",
 
     name := "argon-tube",
@@ -379,8 +407,8 @@ lazy val argon_pluginJS = argon_plugin.js
 lazy val argon_pluginNode = argon_plugin.node
 
 
-lazy val argon_plugin_test_util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-test-util"))
-  .dependsOn(argon_plugin, argon_plugins_source)
+lazy val argon_test_util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-test-util"))
+  .dependsOn(util, argon_io)
   .jvmConfigure(
     _.settings(
         commonJVMSettings,
@@ -398,6 +426,35 @@ lazy val argon_plugin_test_util = crossProject(JVMPlatform, JSPlatform, NodePlat
     commonSettings,
     compilerOptions,
     
+    libraryDependencies += "dev.zio" %%% "zio-test" % zioVersion,
+
+    name := "argon-test-util",
+  )
+
+lazy val argon_test_utilJVM = argon_test_util.jvm
+lazy val argon_test_utilJS = argon_test_util.js
+lazy val argon_test_utilNode = argon_test_util.node
+
+
+lazy val argon_plugin_test_util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-test-util"))
+  .dependsOn(argon_test_util, argon_plugin, argon_plugins_source)
+  .jvmConfigure(
+    _.settings(
+      commonJVMSettings,
+    )
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
     libraryDependencies += "dev.zio" %%% "zio-test" % zioVersion,
 
     name := "argon-plugin-test-util",
@@ -625,32 +682,43 @@ lazy val cliJVM = cli.jvm
 lazy val cliNode = cli.node
 
 
-
-
-lazy val argon_vm_format = project.in(file("vm/format/java"))
+lazy val argon_vm_format = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-vm-format"))
+  .dependsOn(util, argon_util_protobuf)
+  .jvmConfigure(
+    _.dependsOn(argon_vm_format_java)
+      .settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+      .settings(
+        Compile / PB.protoSources += (Compile / baseDirectory).value / "../js-node/src/main/protobuf",
+      )
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+      .settings(
+        Compile / PB.protoSources += (Compile / baseDirectory).value / "../js-node/src/main/protobuf",
+      )
+  )
   .settings(
-    commonSettingsNoLibs,
+    commonSettings,
     compilerOptions,
 
-    crossPaths := false,
-    autoScalaLibrary := false,
+    scalapbOptions,
+    Compile / PB.protoSources += (Compile / baseDirectory).value / "../../vm/format/protobuf",
 
-    Compile / PB.protoSources += baseDirectory.value / "../protobuf",
-    Compile / PB.targets := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value / "protobuf"
-    ),
-
-    libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
 
     Compile / sourceGenerators += Def.task {
-      val inFile = baseDirectory.value / "../bytecode.json"
+      val inFile = baseDirectory.value / "../../vm/format/bytecode.json"
       val outDir = (Compile / sourceManaged).value / "bytecode"
 
       FileFunction.cached(streams.value.cacheDirectory)(_ => {
-        println("Generating java from bytecode.json")
+        println("Generating scala from bytecode.json")
         IO.createDirectory(outDir)
-        val outFile = outDir / "Instruction.java"
-        ArgonVMBytecodeFormatJavaGenerator.generateFromJSONFile(
+        val outFile = outDir / "Instruction.scala"
+        ArgonVMBytecodeFormatSourceGenerator.generateScalaFromJSONFile(
           inFile,
           outFile
         )
@@ -661,13 +729,103 @@ lazy val argon_vm_format = project.in(file("vm/format/java"))
     name := "argon-vm-format",
   )
 
-lazy val argon_vm_engine = project.in(file("vm/engine/java"))
-  .dependsOn(argon_vm_format)
+lazy val argon_vm_formatJVM = argon_vm_format.jvm
+lazy val argon_vm_formatJS = argon_vm_format.js
+lazy val argon_vm_formatNode = argon_vm_format.node
+
+lazy val argon_vm_assembler = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-vm-assembler"))
+  .dependsOn(util, argon_vm_format)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-vm-assembler",
+  )
+
+lazy val argon_vm_assemblerJVM = argon_vm_assembler.jvm
+lazy val argon_vm_assemblerJS = argon_vm_assembler.js
+lazy val argon_vm_assemblerNode = argon_vm_assembler.node
+
+lazy val argon_vm_engine = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-vm-engine"))
+  .dependsOn(util, argon_vm_format, argon_vm_assembler % "test->compile", argon_test_util % "test->compile")
+  .jvmConfigure(
+    _.dependsOn(argon_vm_engine_java)
+      .settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-vm-engine",
+  )
+
+lazy val argon_vm_engineJVM = argon_vm_engine.jvm
+lazy val argon_vm_engineJS = argon_vm_engine.js
+lazy val argon_vm_engineNode = argon_vm_engine.node
+
+
+
+lazy val argon_vm_format_java = project.in(file("vm/format/java"))
   .settings(
     commonSettingsNoLibs,
     compilerOptions,
 
-    crossPaths := false,
+    autoScalaLibrary := false,
+
+    Compile / PB.protoSources += baseDirectory.value / "../protobuf",
+    Compile / PB.targets := Seq(
+      PB.gens.java -> (Compile / sourceManaged).value / "protobuf"
+    ),
+
+    libraryDependencies ++= Seq(
+      "org.jetbrains" % "annotations" % "23.0.0",
+      "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
+    ),
+
+    Compile / sourceGenerators += Def.task {
+      val inFile = baseDirectory.value / "../bytecode.json"
+      val outDir = (Compile / sourceManaged).value / "bytecode"
+
+      FileFunction.cached(streams.value.cacheDirectory)(_ => {
+        println("Generating java from bytecode.json")
+        IO.createDirectory(outDir)
+        val outFile = outDir / "Instruction.java"
+        ArgonVMBytecodeFormatSourceGenerator.generateJavaFromJSONFile(
+          inFile,
+          outFile
+        )
+        Set(outFile)
+      })(Set(inFile)).toList
+    }.taskValue,
+
+    name := "argon-vm-format",
+  )
+
+lazy val argon_vm_engine_java = project.in(file("vm/engine/java"))
+  .dependsOn(argon_vm_format_java)
+  .settings(
+    commonSettingsNoLibs,
+    compilerOptions,
+
     autoScalaLibrary := false,
 
     libraryDependencies ++= Seq(

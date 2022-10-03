@@ -8,6 +8,7 @@ import dev.argon.options.{OptionCodec, OptionDecoder}
 import dev.argon.plugin.test.TestCase.ExpectedResult
 import dev.argon.plugin.{Plugin, PluginContextAdapter}
 import dev.argon.plugins.source.*
+import dev.argon.util.test.{CompileTimeFileSystem, ReadFileCompileTime}
 import dev.argon.util.{*, given}
 import dev.argon.util.toml.Toml
 import zio.*

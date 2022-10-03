@@ -1,0 +1,7 @@
+
+NATIVE print
+
+CONSTANT OBJECT_REFERENCE STRING "Hello World
+"
+CALL print
+RETURN

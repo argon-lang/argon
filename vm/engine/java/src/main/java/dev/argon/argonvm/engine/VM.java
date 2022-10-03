@@ -1,7 +1,7 @@
 package dev.argon.argonvm.engine;
 
 import dev.argon.argonvm.*;
-import dev.argon.argonvm.Instruction;
+import dev.argon.argonvm.format.Instruction;
 
 import java.util.Stack;
 
@@ -672,19 +672,19 @@ public final class VM {
 					}
 				}.execute(frame);
 			}
-			else if(instruction instanceof Instruction.JMP16 insn) {
-				frame.reader.jump(Short.toUnsignedInt(insn.target()));
+			else if(instruction instanceof Instruction.JMP insn) {
+				frame.reader.jump(frame.chunk.getLabelTarget((int)insn.label()));
 			}
-			else if(instruction instanceof Instruction.JZ16 insn) {
+			else if(instruction instanceof Instruction.JZ insn) {
 				var a = frame.stack.pop();
 				if(valueIsZero(a)) {
-					frame.reader.jump(Short.toUnsignedInt(insn.target()));
+					frame.reader.jump(frame.chunk.getLabelTarget((int)insn.label()));
 				}
 			}
-			else if(instruction instanceof Instruction.JNZ16 insn) {
+			else if(instruction instanceof Instruction.JNZ insn) {
 				var a = frame.stack.pop();
 				if(!valueIsZero(a)) {
-					frame.reader.jump(Short.toUnsignedInt(insn.target()));
+					frame.reader.jump(frame.chunk.getLabelTarget((int)insn.label()));
 				}
 			}
 			else if(instruction instanceof Instruction.CALL insn) {

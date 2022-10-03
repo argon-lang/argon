@@ -12,9 +12,9 @@ import dev.argon.parser.{FunctionParameterListType, IdentifierExpr}
 import dev.argon.parser
 import dev.argon.plugins.tube.*
 import dev.argon.tube as t
-import dev.argon.tube.enumCanEqual
 import dev.argon.util.toml.*
 import dev.argon.util.{*, given}
+import dev.argon.util.protobuf.given
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 import zio.*
 import zio.stm.*

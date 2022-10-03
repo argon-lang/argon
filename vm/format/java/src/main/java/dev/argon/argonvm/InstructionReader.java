@@ -19,7 +19,7 @@ public final class InstructionReader extends InputStream {
 	@Override
 	public int read() throws IOException {
 		if(ip < data.length) {
-			return data[ip++];
+			return data[ip++] & 0xFF;
 		}
 		else {
 			return -1;

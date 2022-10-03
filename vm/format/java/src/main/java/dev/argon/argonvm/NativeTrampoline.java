@@ -1,10 +1,13 @@
 package dev.argon.argonvm;
 
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
 import java.util.List;
 
 public sealed interface NativeTrampoline {
-	public static record Result(Object value) implements NativeTrampoline {}
-	public static record DelayFunction(VMFunction next, Object[] args, Continuation1 continuation) implements NativeTrampoline {}
+	public static record Result(@Nullable Object value) implements NativeTrampoline {}
+	public static record DelayFunction(@NotNull VMFunction next, @Nullable Object[] args, @NotNull Continuation1 continuation) implements NativeTrampoline {}
 
 	@FunctionalInterface
 	public static non-sealed interface Delay extends NativeTrampoline {
@@ -13,6 +16,6 @@ public sealed interface NativeTrampoline {
 
 	@FunctionalInterface
 	public static interface Continuation1 {
-		NativeTrampoline invoke(Object arg) throws Throwable;
+		@NotNull NativeTrampoline invoke(@Nullable Object arg) throws Throwable;
 	}
 }

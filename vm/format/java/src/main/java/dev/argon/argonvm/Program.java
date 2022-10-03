@@ -1,22 +1,21 @@
 package dev.argon.argonvm;
 
 import dev.argon.argonvm.format.Argonvm;
+import dev.argon.argonvm.format.VMFormatException;
+import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
 public abstract class Program {
-	public abstract RTT rtt();
-	public abstract VMFunction getFunction(long index) throws VMFormatException;
+	public abstract @NotNull VMFunction getFunction(long index) throws VMFormatException;
 
-	public abstract VMClass getClass(long index) throws VMFormatException;
+	public abstract @NotNull VMClass getClass(long index) throws VMFormatException;
 
-	public abstract long getClassIndex(VMClass classInstance);
+	public abstract long getClassIndex(@NotNull VMClass classInstance);
 
-	public static ProgramWithEntrypoint load(Argonvm.Program program, NativeFunctions nativeFunctions) throws VMFormatException {
-		var rtt = new RTT() {};
-
-
+	public static @NotNull ProgramWithEntrypoint load(@NotNull Argonvm.Program program, @NotNull NativeFunctions nativeFunctions) throws VMFormatException {
 		var entrypoint = loadChunk(program.getEntrypoint());
 
 		var loadedProgram = new ProgramImpl(program, nativeFunctions);
@@ -25,27 +24,20 @@ public abstract class Program {
 	}
 
 	private static class ProgramImpl extends Program {
-		public ProgramImpl(Argonvm.Program program, NativeFunctions nativeFunctions) {
+		public ProgramImpl(@NotNull Argonvm.Program program, @NotNull NativeFunctions nativeFunctions) {
 			this.program = program;
 			functions = new VMFunction[program.getFunctionsCount()];
 			classes = new VMClass[program.getClassesCount()];
 			this.nativeFunctions = nativeFunctions;
 		}
 
-		private final Argonvm.Program program;
-		private final NativeFunctions nativeFunctions;
-
-		private final RTT rtt = new RTT() {};
-		private final VMFunction[] functions;
-		private final VMClass[] classes;
+		private final @NotNull Argonvm.Program program;
+		private final @NotNull NativeFunctions nativeFunctions;
+		private final @Nullable VMFunction @NotNull[] functions;
+		private final @Nullable VMClass @NotNull[] classes;
 
 		@Override
-		public RTT rtt() {
-			return rtt;
-		}
-
-		@Override
-		public VMFunction getFunction(long index) throws VMFormatException {
+		public @NotNull VMFunction getFunction(long index) throws VMFormatException {
 			int index2 = (int)index;
 			VMFunction function = functions[index2];
 			if(function == null) {
@@ -57,7 +49,7 @@ public abstract class Program {
 			return function;
 		}
 
-		public VMClass getClass(long index) throws VMFormatException {
+		public @NotNull VMClass getClass(long index) throws VMFormatException {
 			int index2 = (int)index;
 			VMClass cls = classes[index2];
 			if(cls == null) {
@@ -70,7 +62,7 @@ public abstract class Program {
 		}
 
 		@Override
-		public long getClassIndex(VMClass classInstance) {
+		public long getClassIndex(@NotNull VMClass classInstance) {
 			for(int i = 0; i < classes.length; ++i) {
 				if(classes[i] != null && classes[i].equals(classInstance)) {
 					return i;
@@ -79,7 +71,7 @@ public abstract class Program {
 			throw new NoSuchElementException();
 		}
 
-		private VMClass loadClass(Argonvm.Class cls) throws VMFormatException {
+		private @NotNull VMClass loadClass(@NotNull Argonvm.Class cls) throws VMFormatException {
 			VMClass baseClass;
 			if(cls.hasBaseClassId()) {
 				baseClass = getClass(cls.getBaseClassId());
@@ -146,7 +138,7 @@ public abstract class Program {
 		}
 	}
 
-	private static VMFunction loadFunction(Argonvm.Function function, NativeFunctions nativeFunctions) throws VMFormatException {
+	private static @NotNull VMFunction loadFunction(@NotNull Argonvm.Function function, @NotNull NativeFunctions nativeFunctions) throws VMFormatException {
 		if(function.hasBytecode()) {
 			var bytecode = function.getBytecode();
 			var parameterTypes =
@@ -169,7 +161,7 @@ public abstract class Program {
 		}
 	}
 
-	private static Chunk loadChunk(Argonvm.Chunk chunk) throws VMFormatException {
+	private static @NotNull Chunk loadChunk(@NotNull Argonvm.Chunk chunk) throws VMFormatException {
 		var constants = new Object[chunk.getConstantsCount()];
 		for(int i = 0; i < chunk.getConstantsCount(); ++i) {
 			constants[i] = loadConstant(chunk.getConstants(i));
@@ -180,10 +172,16 @@ public abstract class Program {
 			variables[i] = loadVMType(chunk.getVariableTypes(i));
 		}
 
-		return new Chunk(constants, variables, chunk.getBytecode());
+		var labelTargets = new int[chunk.getLabelTargetsCount()];
+		for(int i = 0; i < chunk.getLabelTargetsCount(); ++i) {
+			labelTargets[i] = (int)chunk.getLabelTargets(i);
+		}
+
+
+		return new Chunk(constants, variables, labelTargets, chunk.getBytecode());
 	}
 
-	private static Object loadConstant(Argonvm.ConstantValue constantValue) {
+	private static @Nullable Object loadConstant(@NotNull Argonvm.ConstantValue constantValue) {
 		if(constantValue.hasInt8()) {
 			return Byte.valueOf((byte)constantValue.getInt8());
 		}
@@ -218,7 +216,7 @@ public abstract class Program {
 		}
 	}
 
-	public static VMType loadVMType(Argonvm.ValueType t) {
+	public static @NotNull VMType loadVMType(@NotNull Argonvm.ValueType t) {
 		if(t.hasSimple()) {
 			return switch(t.getSimple()) {
 				case VALUE_TYPE_SIMPLE_INT8 -> new VMType.Int8();

@@ -6,6 +6,7 @@ import dev.argon.io.{DirectoryEntry, DirectoryResource, TextResource}
 import dev.argon.plugin.Plugin
 import dev.argon.plugin.test.*
 import dev.argon.util.*
+import dev.argon.util.test.ReadFileCompileTime
 import zio.*
 import zio.json.ast.Json
 import zio.stm.*
