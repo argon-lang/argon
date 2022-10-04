@@ -549,8 +549,8 @@ abstract class ImplicitResolver[R, E] {
       (a: syntax.Expr, b: syntax.Expr, relation: ExprRelation, substitutions: Model, solveState: SolveState)
       : ZStream[R, Error, PrologResult.Yes] =
       relation match {
-        case ExprRelation.SyntacticEquality =>
-          solve(PredicateFunction(ExprConstructor.EqualTo, Seq(a, b)), substitutions, solveState)
+        case ExprRelation.SyntacticEquality => ZStream.empty
+
         case ExprRelation.SubType =>
           solve(PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(a, b)), substitutions, solveState)
         case ExprRelation.SuperType =>
