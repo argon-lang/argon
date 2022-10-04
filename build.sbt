@@ -40,6 +40,10 @@ lazy val npmDeps = Seq(
   "astring" -> "1.8.3",
 )
 
+lazy val npmDevDeps = Seq(
+  "typescript" -> "^4.8.4",
+)
+
 lazy val sharedJSNodeSettings = Seq(
 
   libraryDependencies ++= Seq(
@@ -47,12 +51,21 @@ lazy val sharedJSNodeSettings = Seq(
   ),
 
   npmDependencies ++= npmDeps,
+  npmDevDependencies ++= npmDevDeps,
   
   scalaJSLinkerConfig ~= {
     _
-      .withModuleKind(ModuleKind.CommonJSModule)
+      .withModuleKind(ModuleKind.ESModule)
       .withBatchMode(true)
   },
+
+  externalNpm := {
+    (Compile / npmInstall).value
+    crossTarget.value
+  },
+
+  stIncludeDev := true,
+  stUseScalaJsDom := false,
 
 )
 
@@ -78,6 +91,10 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ Seq(
       .withEnv(envValues)
       .withArgs(List("--no-warnings", "--experimental-vm-modules"))
   ),
+
+  npmDevDependencies ++= Seq(
+    "@types/node" -> "18.8.1",
+  )
 )
 
 lazy val javaCompilerOptions = Seq(
@@ -132,11 +149,11 @@ lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -157,11 +174,11 @@ lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -182,11 +199,11 @@ lazy val parser_data = crossProject(JVMPlatform, JSPlatform, NodePlatform).cross
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -206,11 +223,11 @@ lazy val util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("arg
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -231,11 +248,11 @@ lazy val options = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -256,11 +273,11 @@ lazy val argon_prover = crossProject(JVMPlatform, JSPlatform, NodePlatform).cros
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -281,11 +298,11 @@ lazy val argon_expr = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossT
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -306,11 +323,11 @@ lazy val argon_compiler_core = crossProject(JVMPlatform, JSPlatform, NodePlatfor
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -331,11 +348,11 @@ lazy val argon_util_protobuf = crossProject(JVMPlatform, JSPlatform, NodePlatfor
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -358,11 +375,11 @@ lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossT
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -388,11 +405,11 @@ lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).cros
       )
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -415,11 +432,11 @@ lazy val argon_test_util = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
       )
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -444,11 +461,11 @@ lazy val argon_plugin_test_util = crossProject(JVMPlatform, JSPlatform, NodePlat
     )
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -471,11 +488,11 @@ lazy val argon_plugins_source = crossProject(JVMPlatform, JSPlatform, NodePlatfo
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -496,11 +513,11 @@ lazy val argon_plugins_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -559,11 +576,11 @@ lazy val argon_plugins_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).
       )
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -584,11 +601,11 @@ lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file(
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -609,11 +626,11 @@ lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).cross
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -634,11 +651,11 @@ lazy val argon_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -663,7 +680,7 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Pure)
       )
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
       .settings(
         scalaJSUseMainModuleInitializer := true,
@@ -689,14 +706,14 @@ lazy val argon_vm_format = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
       .settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
       .settings(
         Compile / PB.protoSources += (Compile / baseDirectory).value / "../js-node/src/main/protobuf",
       )
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
       .settings(
         Compile / PB.protoSources += (Compile / baseDirectory).value / "../js-node/src/main/protobuf",
@@ -739,11 +756,11 @@ lazy val argon_vm_assembler = crossProject(JVMPlatform, JSPlatform, NodePlatform
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -764,12 +781,26 @@ lazy val argon_vm_engine = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
       .settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonBrowserSettings)
+      .settings(
+        npmDependencies ++= Seq(
+          "@argon-lang/vm-engine" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/engine/js",
+          "@argon-lang/vm-format" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/format/js",
+          "@protobuf-ts/runtime" -> "2.8.1",
+        ),
+      )
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil)
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
       .settings(commonNodeSettings)
+      .settings(
+        npmDependencies ++= Seq(
+          "@argon-lang/vm-engine" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/engine/js",
+          "@argon-lang/vm-format" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/format/js",
+          "@protobuf-ts/runtime" -> "2.8.1",
+        ),
+      )
   )
   .settings(
     commonSettings,

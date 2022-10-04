@@ -8,16 +8,13 @@ import scala.sys.process.Process
 import scala.util.control.NonFatal
 import org.scalajs.sbtplugin.ScalaJSPlugin.autoImport.{fastLinkJS, fullLinkJS, scalaJSLinkerConfig, scalaJSLinkerOutputDirectory}
 
+import scalajsbundler.sbtplugin.ScalaJSBundlerPlugin.autoImport.{npmDependencies, npmDevDependencies}
+
 object NpmUtil extends AutoPlugin {
 
   object autoImport {
-    val fastLinkNpmInstall = taskKey[Unit]("Runs npm install for fastLinkJS")
-    val fullLinkNpmInstall = taskKey[Unit]("Runs npm install for fullLinkJS")
-
-
+    val npmInstall = taskKey[Unit]("Runs npm install")
     val npmPackageLockJsonFile = settingKey[File]("The package-lock.json file")
-    val npmDependencies = settingKey[Seq[(String, String)]]("NPM packages")
-    val npmDevDependencies = settingKey[Seq[(String, String)]]("NPM dev packages")
   }
   import autoImport._
 
@@ -78,25 +75,20 @@ object NpmUtil extends AutoPlugin {
       npmInstallCommon(
         name = name.value,
         packageLock = npmPackageLockJsonFile.value,
-        dir = (configuration / linkTask / scalaJSLinkerOutputDirectory).value,
+        dir = crossTarget.value,
         linkerConfig = scalaJSLinkerConfig.value,
         npmDependencies = npmDependencies.value,
         npmDevDependencies = npmDevDependencies.value,
       )
-    }.dependsOn(configuration / linkTask).value
+    }.value
 
   override def projectSettings: Seq[Def.Setting[_]] = Seq(
     npmPackageLockJsonFile := baseDirectory.value / "package-lock.json",
     npmDependencies := Seq(),
     npmDevDependencies := Seq(),
 
-    npmInstallTaskSetting(Compile, fastLinkNpmInstall, fastLinkJS),
-    npmInstallTaskSetting(Compile, fullLinkNpmInstall, fullLinkJS),
-    Compile / run := (Compile / run).dependsOn(Compile / fastLinkNpmInstall).evaluated,
-
-    npmInstallTaskSetting(Test, fastLinkNpmInstall, fastLinkJS),
-    npmInstallTaskSetting(Test, fullLinkNpmInstall, fullLinkJS),
-    Test / test := (Test / test).dependsOn(Test / fastLinkNpmInstall).value,
+    npmInstallTaskSetting(Compile, npmInstall, fastLinkJS),
+    Compile / compile := (Compile / compile).dependsOn(Compile / npmInstall).value,
   )
 }
 

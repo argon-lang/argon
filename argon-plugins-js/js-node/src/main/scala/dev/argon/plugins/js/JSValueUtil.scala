@@ -6,7 +6,8 @@ import zio.*
 
 import java.util.Objects
 import scala.util.control.NonFatal
-
+import typings.astring.mod as Astring
+import typings.acorn.{mod as Acorn, acornStrings}
 
 object JSValueUtil:
   opaque type JSValue = js.Any | Null
@@ -77,19 +78,19 @@ object JSValueUtil:
 
     override protected def generateImpl(value: JSValue): IO[JSGenerateError, String] =
       ZIO.attempt {
-        Astring.generate(value.nn)
+        Astring.generate(value.asInstanceOf[Astring.Node]).asInstanceOf[String]
       }.refineOrDie {
         case NonFatal(ex) => JSGenerateError(ex)
       }
 
     override protected def parseImpl(fileName: String, text: String): IO[JSParseError, JSValue] =
       ZIO.attempt {
-        val options = new Acorn.Options {
-          override val ecmaVersion = 2022
-          override val sourceType = "module"
-          override val locations = true
-          override val sourceFile = fileName
-        }
+        val options = Acorn.Options(
+          ecmaVersion = Acorn.ecmaVersion.`2022`
+        )
+        options.sourceType = acornStrings.module
+        options.locations = true
+        options.sourceFile = fileName
 
         Acorn.parse(text, options)
       }.refineOrDie {

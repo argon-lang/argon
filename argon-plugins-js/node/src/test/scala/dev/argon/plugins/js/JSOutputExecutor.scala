@@ -7,7 +7,6 @@ import scala.collection.mutable
 import scala.collection.mutable.StringBuilder
 import zio.*
 
-
 object JSOutputExecutor {
   def run(fileSystem: Map[String, String]): Task[String] =
     ZIO.suspend {

@@ -6,6 +6,8 @@ import zio.stream.*
 
 import java.io.IOException
 import scala.scalajs.js.typedarray.{Int8Array, Uint8Array}
+import typings.jszip.mod.{JSZip, Class as JSZipClass, JSZipObject}
+import typings.jszip.jszipStrings
 
 final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFileResource, Any, IOException] {
   override def decode[R <: Any, E >: IOException](resource: BinaryResource[R, E]): ZipFileResource[R, E] =
@@ -20,7 +22,7 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
         dataStreamToUint8Array(resource.asBytes)
           .flatMap { data =>
             ZIO.fromPromiseJS {
-              JSZip().loadAsync(data)
+              new JSZipClass().loadAsync(data)
             }.orDie
           }
           .map(ZipImpl(_))
@@ -29,7 +31,7 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
       private final class ZipImpl(zip: JSZip) extends ZipFileResource.Zip[R, E]:
         override def getEntry(path: String): ZIO[R & Scope, E, Option[ZipFileResource.Entry[R, E]]] =
           ZIO.succeed {
-            Nullable(zip.file(path)).toOption.map(createEntry(path, _))
+            Nullable(zip.file(path).asInstanceOf[JSZipObject | Null]).toOption.map(createEntry(path, _))
           }
 
         override def entries: ZStream[R, E, ZipFileResource.Entry[R, E]] =
@@ -51,7 +53,7 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
           )
       end ZipImpl
 
-      private def createEntry(path2: String, entry: JSZip.JSZipObject): ZipFileResource.Entry[R, E] =
+      private def createEntry(path2: String, entry: JSZipObject): ZipFileResource.Entry[R, E] =
         new ZipFileResource.Entry[R, E] {
           override val path: String = path2
 
@@ -61,7 +63,7 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
 
               override def asBytes: ZStream[R, E, Byte] =
                 ZStream.unwrap(
-                  ZIO.fromPromiseJS(entry.async("uint8array"))
+                  ZIO.fromPromiseJS(entry.async_uint8array(jszipStrings.uint8array))
                     .orDie
                     .flatMap(uint8ArrayToChunk)
                     .map(ZStream.fromChunk(_))

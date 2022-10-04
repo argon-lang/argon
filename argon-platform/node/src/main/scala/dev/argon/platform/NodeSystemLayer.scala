@@ -1,22 +1,28 @@
 package dev.argon.platform
 
 import zio.*
+import typings.node.processMod.global.process as NodeProcess
+import typings.node.osMod as NodeOS
+import scala.scalajs.js
 
 private[platform] object NodeSystemLayer {
+
+  private def nodeEnv: js.Dictionary[String] =
+    NodeProcess.env.asInstanceOf[js.Dictionary[String]]
 
   def live: ZLayer[Any, Nothing, System] =
     ZLayer.succeed(new System {
       override def env(variable: => String)(implicit trace: Trace): IO[SecurityException, Option[String]] =
-        ZIO.succeed { NodeProcess.env.get(variable) }
+        ZIO.succeed { nodeEnv.get(variable) }
 
       override def envOrElse(variable: => String, alt: => String)(implicit trace: Trace): IO[SecurityException, String] =
-        ZIO.succeed { NodeProcess.env.get(variable).getOrElse(alt) }
+        ZIO.succeed { nodeEnv.get(variable).getOrElse(alt) }
 
       override def envOrOption(variable: => String, alt: => Option[String])(implicit trace: Trace): IO[SecurityException, Option[String]] =
-        ZIO.succeed { NodeProcess.env.get(variable).orElse(alt) }
+        ZIO.succeed { nodeEnv.get(variable).orElse(alt) }
 
       override def envs(implicit trace: Trace): IO[SecurityException, Map[String, String]] =
-        ZIO.succeed { NodeProcess.env.toMap }
+        ZIO.succeed { nodeEnv.toMap }
 
       override def lineSeparator(implicit trace: Trace): UIO[String] =
         ZIO.succeed { NodeOS.EOL }

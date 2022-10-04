@@ -17,7 +17,7 @@ abstract class CompilerTestsBase extends ZIOSpecDefault {
         suite(groupName)(suites*)
 
       case TestCases.Test(test) =>
-        createTest(test)
+        createTest(test) @@ TestAspect.timeoutWarning(1.minute)
     end match
 
   override def spec: Spec[TestEnvironment & Scope, Any] =

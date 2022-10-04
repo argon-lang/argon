@@ -1,3 +1,5 @@
 package dev.argon.util.xml
 
-final case class XMLException(cause: DOMException) extends Exception(cause.message)
+import scala.scalajs.js
+
+final case class XMLException(cause: js.Error) extends Exception(cause.message)

@@ -126,13 +126,17 @@ public abstract class Program {
 
 				@Override
 				public long getImplementationFunctionId(SlotKey slotKey) {
-					for(VMClass cls = this; cls != null; cls = cls.baseClass()) {
-						Long result = implMap.get(slotKey);
-						if(result != null) {
-							return result;
-						}
+					Long result = implMap.get(slotKey);
+					if(result != null) {
+						return result;
 					}
-					throw new NoSuchElementException();
+
+					if(baseClass != null) {
+						return baseClass.getImplementationFunctionId(slotKey);
+					}
+					else {
+						throw new NoSuchElementException();
+					}
 				}
 			};
 		}

@@ -11,6 +11,7 @@ import zio.*
 
 import java.io.IOException
 import java.nio.charset.CharacterCodingException
+import typings.node.processMod.global.process as NodeProcess
 
 abstract class PlatformApp extends ZIOApp {
   final override type Environment = PathUtil

@@ -722,6 +722,13 @@ public final class VM {
 				var functionId = thisValue.vmClass().getImplementationFunctionId(new SlotKey(insn.class_index(), insn.slot_index()));
 				frame = callImpl(frame, functionId, false);
 			}
+			else if(instruction instanceof Instruction.RETURN_CALL_CLASS insn) {
+				VMClass cls = program.getClass(insn.class_index());
+				var sig = cls.slots().get((int)insn.slot_index());
+				var thisValue = (VMObject)frame.stack.elementAt(frame.stack.size() - sig.parameterTypes().size());
+				var functionId = thisValue.vmClass().getImplementationFunctionId(new SlotKey(insn.class_index(), insn.slot_index()));
+				frame = callImpl(frame, functionId, true);
+			}
 			else {
 				throw new UnsupportedOperationException("Unknown instruction: " + instruction);
 			}

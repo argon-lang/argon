@@ -1,0 +1,19 @@
+{
+  "name": "@argon-lang/vm-engine",
+  "version": "0.0.1",
+  "description": "Argon VM Engine",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.json"
+  },
+  "author": "argon-dev",
+  "license": "GPL-3.0-only",
+  "devDependencies": {
+    "typescript": "^4.8.4"
+  },
+  "dependencies": {
+    "@argon-lang/vm-format": "file:../../format/js"
+  }
+}

@@ -5,6 +5,7 @@ import zio.*
 
 import java.io.IOException
 import java.nio.file.Path
+import typings.node.nodePathMod as NodePath
 
 class PlatformPathUtil extends PathUtil {
   override def dirname(path: String): UIO[String] =

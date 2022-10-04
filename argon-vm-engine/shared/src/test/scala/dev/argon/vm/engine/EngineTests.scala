@@ -45,7 +45,7 @@ object EngineTests extends ZIOSpecDefault {
     for
       program <- Assembler.parse(asm)
       lib <- TestStandardLibrary.make
-      engine <- Engine.make(program, lib)
+      engine <- Engine.make(program, lib.toNativeFunctions)
       _ <- engine.execute()
       output <- lib.getOutput
     yield output

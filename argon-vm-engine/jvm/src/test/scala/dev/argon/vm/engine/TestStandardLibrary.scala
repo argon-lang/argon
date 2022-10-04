@@ -9,6 +9,8 @@ class TestStandardLibrary(output: StringBuffer) extends StandardLibrary {
   override def print(value: String): Unit = {
     output.append(value)
   }
+  
+  def toNativeFunctions: NativeFunctions = this
 }
 
 object TestStandardLibrary {
