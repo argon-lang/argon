@@ -88,7 +88,7 @@ trait ExprUtilImplicitResolver
         import ExprPrologSyntax.*
         if classA.id == classB.id then
           solveAll(prologContext)(model)(aArgs.zip(bArgs)) { (aArg, bArg, model) =>
-            prologContext.solve(PredicateFunction(ExprConstructor.EqualTo, Seq(aArg, bArg)), model, solveState)
+            prologContext.solve(PredicateFunction(ExprConstructor.EqualTo, Seq(prologContext.wrapExprToExpr(anyType), aArg, bArg)), model, solveState)
           }
             .map { case (_, model) =>
               val proofExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple))
@@ -132,7 +132,7 @@ trait ExprUtilImplicitResolver
         import ExprPrologSyntax.*
         if traitA.id == traitB.id then
           solveAll(prologContext)(model)(aArgs.zip(bArgs)) { (aArg, bArg, model) =>
-            prologContext.solve(PredicateFunction(ExprConstructor.EqualTo, Seq(aArg, bArg)), model, solveState)
+            prologContext.solve(PredicateFunction(ExprConstructor.EqualTo, Seq(prologContext.wrapExprToExpr(anyType), aArg, bArg)), model, solveState)
           }
             .map { case (_, model) =>
               val proofExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple))

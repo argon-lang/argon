@@ -340,7 +340,7 @@ abstract class PrologContext[-R, +E] {
       ZStream.empty
     else
       (goal, rule) match {
-        case (pf1 @ PredicateFunction(f1, args1), pf2 @ PredicateFunction(f2, args2))
+        case (PredicateFunction(f1, args1), PredicateFunction(f2, args2))
             if f1 == f2 && args1.size == args2.size =>
           ZStream.unwrap(
             predicateArgRelations(f1, args1.size)

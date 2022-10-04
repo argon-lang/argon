@@ -17,7 +17,7 @@ trait ExprUtilTypeCheck
       case Some(env) => ZIO.succeed(env)
       case None =>
         ZIO.logTrace(s"checkSubType failed a=$a, b=$b") *>
-          ZIO.fail(DiagnosticError.TypeError(DiagnosticSource.Location(location)))
+          ZIO.fail(DiagnosticError.TypeError(a.toString, b.toString, DiagnosticSource.Location(location)))
     }
 
   def isSubType(env: Env, a: WrapExpr, b: WrapExpr): Comp[Option[Env]] =

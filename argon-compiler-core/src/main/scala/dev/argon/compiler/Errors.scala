@@ -23,7 +23,7 @@ object DiagnosticError {
   final case class OverloadsFailed(source: DiagnosticSource, lookupName: IdentifierExpr | parser.ClassConstructorExpr.type) extends DiagnosticError
   final case class AmbiguousOverload() extends DiagnosticError
   final case class CanNotMutate(source: DiagnosticSource) extends DiagnosticError
-  final case class TypeError(source: DiagnosticSource) extends DiagnosticError
+  final case class TypeError(a: String, b: String, source: DiagnosticSource) extends DiagnosticError
   final case class InvalidAccessModifierCombination() extends DiagnosticError
   final case class InvalidGlobalAccessModifier(accessModifier: AccessModifier) extends DiagnosticError
   final case class ExternMethodNotFound(source: DiagnosticSource, specifier: String) extends DiagnosticError

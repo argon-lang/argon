@@ -208,7 +208,7 @@ abstract class ExprProcessor[F[+_]: Monad] extends UsingContext {
           processPairArgs(ec2.ExprConstructor.SubtypeWitnessType)(e.getArgs(ctor))
 
         case ctor: (e.constructor.type & ec1.ExprConstructor.EqualTo.type) =>
-          processPairArgs(ec2.ExprConstructor.EqualTo)(e.getArgs(ctor))
+          processTuple3Args(ec2.ExprConstructor.EqualTo)(e.getArgs(ctor))
 
         case ctor: (e.constructor.type & ec1.ExprConstructor.AssumeErasedValue.type) =>
           Monad[F].pure(ec2.ArExpr(ec2.ExprConstructor.AssumeErasedValue, EmptyTuple))

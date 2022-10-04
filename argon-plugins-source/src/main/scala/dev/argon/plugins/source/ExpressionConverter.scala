@@ -253,7 +253,23 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         createTypeOperatorFactory(expr.location)(ExprConstructor.SubtypeWitnessType)(left, right)
 
       case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.PropEqual, _), left, right) =>
-        createTypeOperatorFactory(expr.location)(ExprConstructor.EqualTo)(left, right)
+        new ExprFactory {
+          override def exprLocation: SourceLocation = expr.location
+
+          override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
+            ???
+
+          override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
+            for
+              _ <- ZIO.fail(DiagnosticError.ErasedExpressionNotAllowed(DiagnosticSource.Location(expr.location))).unless(opt.checkErasure(true))
+              _ <- checkSubType(env, t, anyType, expr.location)
+              ExprTypeResult(l, env, leftType) <- convertExpr(left).synth(env, opt)
+              ExprTypeResult(r, env, rightType) <- convertExpr(right).synth(env, opt)
+              _ <- checkSubType(env, leftType, t, expr.location)
+              _ <- checkSubType(env, rightType, t, expr.location)
+              equalityType = WrapExpr.OfExpr(ArExpr(ExprConstructor.UnionType, (leftType, rightType)))
+            yield ExprResult(WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (equalityType, l, r))), env)
+        }
 
       case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.PropDisjunction, _), left, right) =>
         createTypeOperatorFactory(expr.location)(ExprConstructor.DisjunctionType)(left, right)
@@ -384,11 +400,11 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               (condExpr, condExprStable) <- asStableExpression(condExpr)
 
               whenTrueId <- UniqueIdentifier.make
-              whenTrueType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(true), EmptyTuple)))))
+              whenTrueType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (bType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(true), EmptyTuple)))))
               whenTrue = LocalVariable(whenTrueId, whenTrueType, None, isMutable = false, isErased = true)
 
               whenFalseId <- UniqueIdentifier.make
-              whenFalseType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(false), EmptyTuple)))))
+              whenFalseType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (bType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(false), EmptyTuple)))))
               whenFalse = LocalVariable(whenFalseId, whenFalseType, None, isMutable = false, isErased = true)
 
               trueRes <- convertStmtList(ifBody).synth(env.withImplicitSource(_.addVariable(whenTrue)), opt)
@@ -405,11 +421,11 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
               (condExpr, condExprStable) <- asStableExpression(condExpr)
 
               whenTrueId <- UniqueIdentifier.make
-              whenTrueType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(true), EmptyTuple)))))
+              whenTrueType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (bType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(true), EmptyTuple)))))
               whenTrue = LocalVariable(whenTrueId, whenTrueType, None, isMutable = false, isErased = true)
 
               whenFalseId <- UniqueIdentifier.make
-              whenFalseType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(false), EmptyTuple)))))
+              whenFalseType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (bType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(false), EmptyTuple)))))
               whenFalse = LocalVariable(whenFalseId, whenFalseType, None, isMutable = false, isErased = true)
 
               trueRes <- convertStmtList(ifBody).check(env.withImplicitSource(_.addVariable(whenTrue)), opt, t)

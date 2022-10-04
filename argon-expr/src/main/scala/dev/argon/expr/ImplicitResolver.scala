@@ -131,12 +131,13 @@ abstract class ImplicitResolver[R, E] {
         // ------
         // A == A
         (for {
+          t <- newVariable
           a <- newVariable
         } yield (
           Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
             ExprConstructor.AssumeErasedValue,
             EmptyTuple,
-          )))) -> PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(a)))
+          )))) -> PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(t), Variable(a), Variable(a)))
           )),
 
 //        // B == A
@@ -151,8 +152,29 @@ abstract class ImplicitResolver[R, E] {
 //            EmptyTuple,
 //          )))) -> Implies(
 //            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(b), Variable(a))),
-//            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(a))),
+//            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(b))),
 //          ))),
+
+        // B ==[U] A and U <: T
+        // --------------------
+        // A ==[T] B
+        (for {
+          a <- newVariable
+          b <- newVariable
+          t <- newVariable
+          u <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
+            ExprConstructor.AssumeErasedValue,
+            EmptyTuple,
+          )))) -> Implies(
+            And(
+              PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(u), Variable(a), Variable(b))),
+              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(u), Variable(t)))
+            ),
+            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(t), Variable(a), Variable(b))),
+          ))),
+
 
         // ------
         // A <: A
@@ -288,6 +310,7 @@ abstract class ImplicitResolver[R, E] {
         // ------------------
         // TypeN B <: TypeN A
         (for {
+          bType <- boolType
           lt <- natLessThanFunction
           a <- newVariable
           b <- newVariable
@@ -299,6 +322,7 @@ abstract class ImplicitResolver[R, E] {
             PredicateFunction(
               ExprConstructor.EqualTo,
               Seq(
+                wrapExprToExpr(bType),
                 Value(ExprConstructor.FunctionCall(lt), Seq(Variable(b), Variable(a))),
                 Value(ExprConstructor.LoadConstantBool(true), Seq()),
               ),
@@ -541,7 +565,7 @@ abstract class ImplicitResolver[R, E] {
         case ExprConstructor.DisjunctionType => ZIO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
         case ExprConstructor.NeverType => ZIO.succeed(Seq.empty)
         case ExprConstructor.SubtypeWitnessType => ZIO.succeed(Seq(ExprRelation.SuperType, ExprRelation.SubType))
-        case ExprConstructor.EqualTo => ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
+        case ExprConstructor.EqualTo => ZIO.succeed(Seq(ExprRelation.SubType, ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.AssumeErasedValue => ZIO.succeed(Seq(ExprRelation.TypeEquality))
       }
 
@@ -550,7 +574,6 @@ abstract class ImplicitResolver[R, E] {
       : ZStream[R, Error, PrologResult.Yes] =
       relation match {
         case ExprRelation.SyntacticEquality => ZStream.empty
-
         case ExprRelation.SubType =>
           solve(PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(a, b)), substitutions, solveState)
         case ExprRelation.SuperType =>

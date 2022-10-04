@@ -273,7 +273,7 @@ trait ExprContext {
     type SubtypeWitnessTypeArgs = (WrapExpr, WrapExpr)
     type SubtypeWitnessArgs = (WrapExpr, WrapExpr)
     type NotSubtypeWitnessArgs = (WrapExpr, WrapExpr)
-    type EqualToArgs = (WrapExpr, WrapExpr)
+    type EqualToArgs = (WrapExpr, WrapExpr, WrapExpr)
     type ArgList = Seq[WrapExpr]
     type NonEmptyArgList = NonEmptyList[WrapExpr]
 
