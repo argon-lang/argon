@@ -451,7 +451,7 @@ abstract class PrologContext[-R, +E] {
                           }
                       }
                   ) ++ (if useCustomRelations then customRelations else ZStream.empty)
-                }
+                }.take(1)
 
               case (Variable(var1), Variable(var2)) if var1 == var2 =>
                 ZStream.fromZIO(
