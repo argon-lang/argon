@@ -24,7 +24,7 @@ abstract class CompilerTestsBase extends ZIOSpecDefault {
     Spec.scoped[TestEnvironment & Scope](
       TestCases.testCases
         .mapErrorCause { cause => Cause.fail(TestFailure.Runtime(cause)) }
-        .map(createSpec(suiteName))
+        .map(createSpec(suiteName)(_) @@ TestAspect.js(TestAspect.sequential))
     )
 
 

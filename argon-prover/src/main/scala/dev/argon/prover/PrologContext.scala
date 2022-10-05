@@ -119,8 +119,8 @@ abstract class PrologContext[-R, +E] {
     def addPredicate(pred: Predicate): SolveState =
       copy(seenPredicates = seenPredicates + pred)
 
-    def hasSeenPredicate(pred: Predicate): Boolean =
-      seenPredicates.contains(pred)
+    def hasSeenPredicate(pred: Predicate, model: Model): Boolean =
+      seenPredicates.exists(seenPred => quickEqualPredicate(model)(seenPred, pred))
 
     def addGiven(proof: Proof[ProofAtom], pred: Predicate): SolveState =
       copy(additionalGivens = additionalGivens :+ (proof, pred))
@@ -128,7 +128,7 @@ abstract class PrologContext[-R, +E] {
 
 
   def solve(goal: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, PrologResult.Yes] =
-    if solveState.fuelEmpty || solveState.hasSeenPredicate(goal) then
+    if solveState.fuelEmpty || solveState.hasSeenPredicate(goal, substitutions) then
       ZStream.empty
     else
       val solveState2 = solveState.addPredicate(goal)
@@ -207,8 +207,8 @@ abstract class PrologContext[-R, +E] {
             case PrologResult.Yes(proof, substitutions) => PrologResult.Yes(Proof.DoubleNegIntro(proof), substitutions)
           }
 
-        case Implies(a, PropFalse) => ZStream.empty
-//          invertProof(solve(a, substitutions, solveState2.consumeFuel))
+        case Implies(a, PropFalse) =>
+          invertProof(solve(a, substitutions, solveState2.consumeFuel))
 
         case Implies(a, b) =>
           ZStream.unwrap(
@@ -220,24 +220,10 @@ abstract class PrologContext[-R, +E] {
               }
           )
 
-        case PropFalse =>
-          ZStream.unwrap(
-            for {
-              kbUnsorted <- assertions.mapError(Left.apply)
-            } yield ZStream.fromIterable(kbUnsorted)
-          ).flatMap { case (proof, predicate) =>
-            emptyIfNo(
-              solve(Implies(predicate, PropFalse), substitutions, solveState2.consumeFuel)
-                .map { case PrologResult.Yes(notProof, substitutions) =>
-                  PrologResult.Yes(Proof.Contradiction(proof, notProof), substitutions)
-                }
-            )
-          }
+        case PropFalse => ZStream.empty
 
         case PredicateFunction(function, args) =>
           intrinsicPredicate(function, args, substitutions, solveState2.consumeFuel)
-
-//        case _ => ZStream.empty
       })
     end if
 
@@ -275,12 +261,9 @@ abstract class PrologContext[-R, +E] {
 
       val assertionSpecific: ZStream[R, ErrorF, (Proof[ProofAtom] => Proof[ProofAtom], Model)] =
         assertion match {
-          // First one is because it is useless.
-          // Second one is because not short circuiting causes the prover to be too slow.
           case Implies(PropFalse, _) => ZStream.empty
 
           case Implies(premise, PropFalse) =>
-//            ZStream.empty
             emptyIfNo(unify(goal, premise, substitutions, solveState.consumeFuel))
               .flatMap { substitutions =>
                 ZStream.fail(Right((
@@ -317,12 +300,13 @@ abstract class PrologContext[-R, +E] {
       unifyAssertion ++ assertionSpecific
     end impl
 
+
     goal match {
       case Implies(_, _) =>
         ZStream.empty
 
       case _ =>
-        emptyIfNo(impl(assertion)
+        impl(assertion)
           .mapBoth(
             {
               case Left(e) => Left(e)
@@ -331,51 +315,111 @@ abstract class PrologContext[-R, +E] {
             },
             { (buildResult, substitutions) => PrologResult.Yes(buildResult(proof), substitutions) }
           )
-        )
     }
   }
 
-  private def unify(goal: Predicate, rule: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, Model] =
+  private def quickEqualExpr(model: Model)(a: Expr, b: Expr): Boolean =
+    (a, b) match {
+      case (Value(ca, argsA), Value(cb, argsB)) if ca == cb && argsA == argsB =>
+        argsA.zip(argsB).forall(quickEqualExpr(model))
+
+      case (Value(_, _), _) | (_, Value(_, _)) => false
+
+      case (Variable(va), Variable(vb)) =>
+        (model.get(va), model.get(vb)) match {
+          case (None, None) => true
+          case (Some(consA), None) =>
+            otherForEquivalenceRelation(consA) match {
+              case Some(otherA) => quickEqualExpr(model)(otherA, b)
+              case None => a == b
+            }
+
+          case (None, Some(consB)) =>
+            otherForEquivalenceRelation(consB) match {
+              case Some(otherB) => quickEqualExpr(model)(a, otherB)
+              case None => a == b
+            }
+
+          case (Some(consA), Some(consB)) =>
+            (otherForEquivalenceRelation(consA), otherForEquivalenceRelation(consB)) match {
+              case (Some(otherA), Some(otherB)) => quickEqualExpr(model)(otherA, otherB)
+              case (Some(otherA), None) => quickEqualExpr(model)(otherA, b)
+              case (None, Some(otherB)) => quickEqualExpr(model)(a, otherB)
+              case (None, None) => false
+            }
+        }
+    }
+
+  private def quickEqualPredicate(model: Model)(a: Predicate, b: Predicate): Boolean =
+    (a, b) match {
+      case (PredicateFunction(fa, argsA), PredicateFunction(fb, argsB)) if fa == fb && argsA.size == argsB.size =>
+        argsA.zip(argsB).forall(quickEqualExpr(model))
+
+      case (PredicateFunction(_, _), _) | (_, PredicateFunction(_, _)) => false
+
+      case (And(a1, a2), And(b1, b2)) =>
+        quickEqualPredicate(model)(a1, b1) && quickEqualPredicate(model)(a2, b2)
+
+      case (And(_, _), _) | (_, And(_, _)) => false
+
+      case (Or(a1, a2), Or(b1, b2)) =>
+        quickEqualPredicate(model)(a1, b1) && quickEqualPredicate(model)(a2, b2)
+
+      case (Or(_, _), _) | (_, Or(_, _)) => false
+
+      case (Implies(a1, a2), Implies(b1, b2)) =>
+        quickEqualPredicate(model)(a1, b1) && quickEqualPredicate(model)(a2, b2)
+
+      case (Implies(_, _), _) | (_, Implies(_, _)) => false
+
+      case (PropFalse, PropFalse) =>
+        true
+    }
+
+  protected final def unify(goal: Predicate, rule: Predicate, model: Model, solveState: SolveState): ZStream[R, Error, Model] =
     if solveState.fuelEmpty then
       ZStream.empty
     else
-      (goal, rule) match {
-        case (PredicateFunction(f1, args1), PredicateFunction(f2, args2))
-            if f1 == f2 && args1.size == args2.size =>
-          ZStream.unwrap(
-            predicateArgRelations(f1, args1.size)
-              .mapError(Left.apply)
-              .map { relations =>
-                if relations.size != args1.size then
-                  ZStream.empty
-                else
-                  args1.zip(args2).zip(relations).toList.foldLeftM(substitutions) {
-                    case (substitutions, ((arg1, arg2), argRelation)) =>
-                      unifyExpr(arg1, arg2, argRelation, substitutions, solveState, useCustomRelations = false)
-                        .map { case PrologResult.Yes(_, substitutions) => substitutions }
-                  }
-              }
-          )
+      unifyCustom(goal, rule, model, solveState)
 
-        case (And(left1, right1), And(left2, right2)) =>
-          unify(left1, left2, substitutions, solveState).flatMap { substitutions =>
-            unify(right1, right2, substitutions, solveState)
-          }
+  protected def unifyCustom(goal: Predicate, rule: Predicate, model: Model, solveState: SolveState): ZStream[R, Error, Model] =
+    (goal, rule) match {
+      case (PredicateFunction(f1, args1), PredicateFunction(f2, args2))
+        if f1 == f2 && args1.size == args2.size =>
+        ZStream.unwrap(
+          predicateArgRelations(f1, args1.size)
+            .mapError(Left.apply)
+            .map { relations =>
+              if relations.size != args1.size then
+                ZStream.empty
+              else
+                args1.zip(args2).zip(relations).toList.foldLeftM(model) {
+                  case (model, ((arg1, arg2), argRelation)) =>
+                    unifyExpr(arg1, arg2, argRelation, model, solveState, useCustomRelations = false)
+                      .map { case PrologResult.Yes(_, model) => model }
+                }
+            }
+        )
 
-        case (Or(left1, right1), Or(left2, right2)) =>
-          unify(left1, left2, substitutions, solveState).flatMap { substitutions =>
-            unify(right1, right2, substitutions, solveState)
-          }
+      case (And(left1, right1), And(left2, right2)) =>
+        unify(left1, left2, model, solveState).flatMap { model =>
+          unify(right1, right2, model, solveState)
+        }
 
-        case (Implies(left1, right1), Implies(left2, right2)) =>
-          unify(left1, left2, substitutions, solveState).flatMap { substitutions =>
-            unify(right1, right2, substitutions, solveState)
-          }
+      case (Or(left1, right1), Or(left2, right2)) =>
+        unify(left1, left2, model, solveState).flatMap { model =>
+          unify(right1, right2, model, solveState)
+        }
 
-        case (PropFalse, PropFalse) => ZStream.succeed(substitutions)
+      case (Implies(left1, right1), Implies(left2, right2)) =>
+        unify(left1, left2, model, solveState).flatMap { model =>
+          unify(right1, right2, model, solveState)
+        }
 
-        case _ => ZStream.empty
-      }
+      case (PropFalse, PropFalse) => ZStream.succeed(model)
+
+      case _ => ZStream.empty
+    }
 
   protected def normalizeExpr(e: Expr, substitutions: Model, solveState: SolveState): ZIO[R, E, Expr] =
     def impl(e: Expr): ZIO[R, E, Expr] =
@@ -398,7 +442,7 @@ abstract class PrologContext[-R, +E] {
       ZStream.empty
 
 
-  private def unifyExpr
+  protected final def unifyExpr
     (goal: Expr, rule: Expr, relation: TRelation, substitutions: Model, solveState: SolveState, useCustomRelations: Boolean)
     : ZStream[R, Error, PrologResult.Yes] =
     if solveState.fuelEmpty then

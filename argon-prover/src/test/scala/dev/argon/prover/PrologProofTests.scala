@@ -113,13 +113,13 @@ object PrologProofTests extends ZIOSpecDefault {
         ))
       },
       test("not (true | false)") {
-        assertZIO(prologContext.check(not(Or(pred(KnownTrue), pred(KnownFalse))), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(prologContext.check(not(Or(pred(KnownTrue), pred(KnownFalse))), fuel))(notProven)
       },
       test("not (false | true)") {
-        assertZIO(prologContext.check(not(Or(pred(KnownFalse), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(prologContext.check(not(Or(pred(KnownFalse), pred(KnownTrue))), fuel))(notProven)
       },
       test("not (true | true)") {
-        assertZIO(prologContext.check(not(Or(pred(KnownTrue), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(prologContext.check(not(Or(pred(KnownTrue), pred(KnownTrue))), fuel))(notProven)
       },
       test("not (false & false)") {
         assertZIO(prologContext.check(not(And(pred(KnownFalse), pred(KnownFalse))), fuel))(

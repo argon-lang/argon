@@ -3,29 +3,20 @@ package dev.argon.util.xml
 import dev.argon.util.{*, given}
 import zio.*
 import zio.stream.*
-import typings.xmldomXmldom.mod.DOMParser
-import typings.std.{NamedNodeMap, Element as DomElement, Node as DomNode}
 
-import scala.scalajs.js
 import scala.scalajs.js.JavaScriptException
 
 object XmlParser {
 
-  private def removeUndefined[A](value: A | Unit): Option[A] =
-    value.toOption
-
-  private def optional[A](value: A | Null): Option[A] =
-    removeUndefined[A | Null](value)
-      .flatMap { value => Nullable(value).toOption }
-
   def parse(xml: String): IO[XMLException, Element] =
     ZIO.attempt {
-      val doc = DOMParser.newInstance0().parseFromString(xml, "text/xml")
+      val dom = new DOMParser()
+      val doc = dom.parseFromString(xml, "text/xml")
       convertElem(doc.documentElement)
     }.catchAll {
       case jsErr @ JavaScriptException(ex) =>
         ex.asInstanceOf[Matchable] match {
-          case ex: js.Error => ZIO.fail(XMLException(ex))
+          case ex: DOMException => ZIO.fail(XMLException(ex))
           case _ => ZIO.die(jsErr)
         }
 
@@ -42,23 +33,23 @@ object XmlParser {
         case Some(node) =>
           node.nodeType match {
             // ELEMENT_NODE
-            case 1 => convertElem(node.asInstanceOf[DomElement]) :: convertSibs(optional(node.nextSibling))
+            case 1 => convertElem(node.asInstanceOf[DomElement]) :: convertSibs(node.nextSibling.toOption.flatMap(Option.apply).map(_.nn))
 
             // TEXT_NODE, CDATA_SECTION_NODE
-            case 3 | 4 => Characters(optional(node.nodeValue).get) :: convertSibs(optional(node.nextSibling))
+            case 3 | 4 => Characters(node.nodeValue.toOption.flatMap(Option.apply).get.nn) :: convertSibs(node.nextSibling.toOption.flatMap(Option.apply).map(_.nn))
 
             // COMMENT_NODE
-            case 8 => convertSibs(optional(node.nextSibling))
+            case 8 => convertSibs(node.nextSibling.toOption.flatMap(Option.apply).map(_.nn))
 
             case _ => throw new RuntimeException("Unexpected node type")
           }
       end match
 
-    convertSibs(optional(node.firstChild))
+    convertSibs(node.firstChild.toOption.flatMap(Option.apply).map(_.nn))
   }
 
   private def convertElem(elem: DomElement): Element =
-    val ns = optional(elem.namespaceURI).getOrElse("")
+    val ns = elem.namespaceURI.toOption.flatMap(Option.apply).map(_.nn).getOrElse("")
     val name = Name(Namespace(ns), elem.tagName)
     Element(
       name,
@@ -68,17 +59,17 @@ object XmlParser {
   end convertElem
 
 
-  private def convertAttr(attributes: NamedNodeMap)(index: Int): Attribute =
-    val attr = attributes(index).get
+  private def convertAttr(attributes: NamedNodeMap[DomAttr])(index: Int): Attribute =
+    val attr = attributes(index)
 
-    val ns = optional(attr.namespaceURI).getOrElse("")
+    val ns = attr.namespaceURI.toOption.flatMap(Option.apply).map[String](_.nn).getOrElse("")
     val name = Name(Namespace(ns), attr.name)
 
-    Attribute(name, optional(attr.nodeValue).get)
+    Attribute(name, attr.nodeValue.toOption.flatMap(Option.apply).get.nn)
   end convertAttr
 
-  private def convertAttrMap(attributes: NamedNodeMap): Seq[Attribute] =
-    (0 until attributes.length.toInt).map(convertAttr(attributes))
+  private def convertAttrMap(attributes: NamedNodeMap[DomAttr]): Seq[Attribute] =
+    (0 until attributes.length).map(convertAttr(attributes))
 
 
 }

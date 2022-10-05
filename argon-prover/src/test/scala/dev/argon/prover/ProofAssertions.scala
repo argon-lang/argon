@@ -18,4 +18,10 @@ trait ProofAssertions[R <: VariableProvider, E] extends ProofPrologContext[R, E]
       case PrologResult.Unknown | PrologResult.Yes(_, _) => None
     }
 
+  def notProven: Assertion[PrologResult] =
+    Assertion.assertion[PrologResult]("notProven") {
+      case PrologResult.No(_, _) | PrologResult.Unknown => true
+      case PrologResult.Yes(_, _) => false
+    }
+
 }

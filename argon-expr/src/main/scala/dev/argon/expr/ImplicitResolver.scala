@@ -155,27 +155,6 @@ abstract class ImplicitResolver[R, E] {
 //            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(b))),
 //          ))),
 
-        // B ==[U] A and U <: T
-        // --------------------
-        // A ==[T] B
-        (for {
-          a <- newVariable
-          b <- newVariable
-          t <- newVariable
-          u <- newVariable
-        } yield (
-          Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
-            ExprConstructor.AssumeErasedValue,
-            EmptyTuple,
-          )))) -> Implies(
-            And(
-              PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(u), Variable(a), Variable(b))),
-              PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(u), Variable(t)))
-            ),
-            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(t), Variable(a), Variable(b))),
-          ))),
-
-
         // ------
         // A <: A
         (for {
@@ -617,6 +596,20 @@ abstract class ImplicitResolver[R, E] {
         a2 <- exprToWrapExpr(a)
         b2 <- exprToWrapExpr(b)
       } yield buildRelationProof(relation, a2, b2)
+
+
+    override protected def unifyCustom(goal: syntax.Predicate, rule: syntax.Predicate, model: Model, solveState: SolveState): ZStream[R, Error, Model] =
+      (goal, rule) match {
+        case (syntax.PredicateFunction(ExprConstructor.EqualTo, Seq(t, a1, a2)), syntax.PredicateFunction(ExprConstructor.EqualTo, Seq(u, b1, b2))) =>
+          for
+            PrologResult.Yes(_, model) <- unifyExpr(a1, b1, ExprRelation.SyntacticEquality, model, solveState.consumeFuel, useCustomRelations = false)
+            PrologResult.Yes(_, model) <- unifyExpr(a2, b2, ExprRelation.SyntacticEquality, model, solveState.consumeFuel, useCustomRelations = false)
+            PrologResult.Yes(_, model) <- solve(syntax.PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(u, t)), model, solveState.consumeFuel).take(1)
+          yield model
+
+        case _ =>
+          super.unifyCustom(goal, rule, model, solveState)
+      }
 
     def exprToWrapExpr(expr: Expr): ZIO[R, E, WrapExpr] =
       expr match {
