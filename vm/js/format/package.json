@@ -12,7 +12,7 @@
   "scripts": {
     "codegen": "npm run protoc && npm run generate_instructions",
     "generate_instructions": "node generate_instructions.js",
-    "protoc": "rimraf src/proto && mkdirp src/proto && protoc --ts_out src/proto --ts_opt ts_nocheck --proto_path ../protobuf ../protobuf/argonvm.proto",
+    "protoc": "rimraf src/proto && mkdirp src/proto && protoc --ts_out src/proto --ts_opt ts_nocheck --proto_path ../../protobuf ../../protobuf/argonvm.proto",
     "build": "npm run codegen && tsc --project tsconfig.json"
   },
   "author": "argon-dev",

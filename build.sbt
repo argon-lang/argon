@@ -724,11 +724,11 @@ lazy val argon_vm_format = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
     compilerOptions,
 
     scalapbOptions,
-    Compile / PB.protoSources += (Compile / baseDirectory).value / "../../vm/format/protobuf",
+    Compile / PB.protoSources += (Compile / baseDirectory).value / "../../vm/protobuf",
 
 
     Compile / sourceGenerators += Def.task {
-      val inFile = baseDirectory.value / "../../vm/format/bytecode.json"
+      val inFile = baseDirectory.value / "../../vm/bytecode.json"
       val outDir = (Compile / sourceManaged).value / "bytecode"
 
       FileFunction.cached(streams.value.cacheDirectory)(_ => {
@@ -785,8 +785,8 @@ lazy val argon_vm_engine = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
       .settings(commonBrowserSettings)
       .settings(
         npmDependencies ++= Seq(
-          "@argon-lang/vm-engine" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/engine/js",
-          "@argon-lang/vm-format" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/format/js",
+          "@argon-lang/vm-engine" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/js/engine",
+          "@argon-lang/vm-format" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/js/format",
           "@protobuf-ts/runtime" -> "2.8.1",
         ),
       )
@@ -796,8 +796,8 @@ lazy val argon_vm_engine = crossProject(JVMPlatform, JSPlatform, NodePlatform).i
       .settings(commonNodeSettings)
       .settings(
         npmDependencies ++= Seq(
-          "@argon-lang/vm-engine" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/engine/js",
-          "@argon-lang/vm-format" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/format/js",
+          "@argon-lang/vm-engine" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/js/engine",
+          "@argon-lang/vm-format" -> s"file:${baseDirectory.value.getAbsolutePath}/../../vm/js/format",
           "@protobuf-ts/runtime" -> "2.8.1",
         ),
       )
@@ -815,14 +815,14 @@ lazy val argon_vm_engineNode = argon_vm_engine.node
 
 
 
-lazy val argon_vm_format_java = project.in(file("vm/format/java"))
+lazy val argon_vm_format_java = project.in(file("vm/java/format"))
   .settings(
     commonSettingsNoLibs,
     compilerOptions,
 
     autoScalaLibrary := false,
 
-    Compile / PB.protoSources += baseDirectory.value / "../protobuf",
+    Compile / PB.protoSources += baseDirectory.value / "../../protobuf",
     Compile / PB.targets := Seq(
       PB.gens.java -> (Compile / sourceManaged).value / "protobuf"
     ),
@@ -833,7 +833,7 @@ lazy val argon_vm_format_java = project.in(file("vm/format/java"))
     ),
 
     Compile / sourceGenerators += Def.task {
-      val inFile = baseDirectory.value / "../bytecode.json"
+      val inFile = baseDirectory.value / "../../bytecode.json"
       val outDir = (Compile / sourceManaged).value / "bytecode"
 
       FileFunction.cached(streams.value.cacheDirectory)(_ => {
@@ -851,7 +851,7 @@ lazy val argon_vm_format_java = project.in(file("vm/format/java"))
     name := "argon-vm-format",
   )
 
-lazy val argon_vm_engine_java = project.in(file("vm/engine/java"))
+lazy val argon_vm_engine_java = project.in(file("vm/java/engine"))
   .dependsOn(argon_vm_format_java)
   .settings(
     commonSettingsNoLibs,

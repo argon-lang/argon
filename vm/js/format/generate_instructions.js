@@ -84,7 +84,7 @@ function normalizeInstruction(instruction) {
 }
 
 
-const instructionsJson = JSON.parse(await readFile("../bytecode.json", { encoding: "utf-8" }));
+const instructionsJson = JSON.parse(await readFile("../../bytecode.json", { encoding: "utf-8" }));
 
 const outFile = await open("src/instructions.ts", "w");
 try {
