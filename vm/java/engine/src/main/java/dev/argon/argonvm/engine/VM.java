@@ -3,14 +3,22 @@ package dev.argon.argonvm.engine;
 import dev.argon.argonvm.*;
 import dev.argon.argonvm.format.Instruction;
 
+import java.util.ArrayList;
 import java.util.Stack;
+import java.util.stream.Collectors;
+import java.util.List;
 
 public final class VM {
 	public VM(Program program) {
 		this.program = program;
+		globalVariables = program.globalVariableTypes()
+			.stream()
+			.map(t -> new GlobalVariable(t.defaultValue()))
+			.collect(Collectors.toList());
 	}
 
 	private final Program program;
+	private final List<GlobalVariable> globalVariables;
 	private final Stack<CallStackFrame> callStack = new Stack<>();
 
 	public void execute(Chunk chunk) throws Throwable {
@@ -51,6 +59,9 @@ public final class VM {
 			}
 			else if(instruction instanceof Instruction.CONSTANT_NULL) {
 				frame.stack.push(null);
+			}
+			else if(instruction instanceof Instruction.CONSTANT_INT8 insn) {
+				frame.stack.push(insn.value());
 			}
 			else if(instruction instanceof Instruction.NEGATE) {
 				new UnaryOpResOperand() {
@@ -694,10 +705,16 @@ public final class VM {
 				frame = callImpl(frame, insn.index(), true);
 			}
 			else if(instruction instanceof Instruction.LD_LOCAL insn) {
-				frame.stack.push(frame.variables[(int) insn.index()]);
+				frame.stack.push(frame.variables[(int)insn.index()]);
 			}
 			else if(instruction instanceof Instruction.ST_LOCAL insn) {
-				frame.variables[(int) insn.index()] = frame.stack.pop();
+				frame.variables[(int)insn.index()] = frame.stack.pop();
+			}
+			else if(instruction instanceof Instruction.LD_GLOBAL insn) {
+				frame.stack.push(globalVariables.get((int)insn.index()).value);
+			}
+			else if(instruction instanceof Instruction.ST_GLOBAL insn) {
+				globalVariables.get((int)insn.index()).value = frame.stack.pop();
 			}
 			else if(instruction instanceof Instruction.NEW insn) {
 				VMClass cls = program.getClass(insn.class_index());
@@ -728,6 +745,22 @@ public final class VM {
 				var thisValue = (VMObject)frame.stack.elementAt(frame.stack.size() - sig.parameterTypes().size());
 				var functionId = thisValue.vmClass().getImplementationFunctionId(new SlotKey(insn.class_index(), insn.slot_index()));
 				frame = callImpl(frame, functionId, true);
+			}
+			else if(instruction instanceof Instruction.CONSTRUCT_TUPLE insn) {
+				var args = new Object[(int)insn.size()];
+				for(int i = args.length - 1; i >= 0; --i) {
+					args[i] = frame.stack.pop();
+				}
+				frame.stack.push(new VMTuple(args));
+			}
+			else if(instruction instanceof Instruction.DECONSTRUCT_TUPLE insn) {
+				var tuple = (VMTuple)frame.stack.pop();
+				if(tuple.size() != insn.size()) {
+					throw new Exception("Tuple size mismatch");
+				}
+				for(int i = 0; i < tuple.size(); ++i) {
+					frame.stack.push(tuple.get(i));
+				}
 			}
 			else {
 				throw new UnsupportedOperationException("Unknown instruction: " + instruction);

@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+	"format",
+	"wasm2argonvm",
+]

@@ -6,6 +6,7 @@ package argon.argonvm;
 
 message Program {
   repeated Class classes = 1;
+  repeated ValueType globalTypes = 2;
   repeated Function functions = 3;
 
   required Chunk entrypoint = 4;
@@ -50,6 +51,7 @@ message ConstantValue {
     double float64 = 6;
     string string_literal = 7;
     TupleValue tuple = 8;
+    bytes bytes_literal = 9;
   }
 }
 

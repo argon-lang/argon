@@ -8,7 +8,7 @@ import { Writable } from "node:stream";
  * @param {WritableStreamDefaultWriter<string>} stream 
  */
 async function generateOutput(instructions, stream) {
-    await stream.write("import { readIndex, InstructionContext } from \"./instruction-util.js\";\n");
+    await stream.write("import { readIndex, readInt8, InstructionContext } from \"./instruction-util.js\";\n");
     await stream.write("export type Instruction = " + Object.keys(instructions).map(opcode => "Instruction." + opcode).join(" | ") + ";\n");
     await stream.write("export namespace Instruction {\n");
 
@@ -44,6 +44,11 @@ async function generateOutput(instructions, stream) {
             switch(param.type) {
                 case "index":
                     stream.write("readIndex(ctx)");
+                    break;
+
+                case "int8":
+                    stream.write("readInt8(ctx)");
+                    break;
             }
 
             await stream.write(";\n");
@@ -65,6 +70,9 @@ function getType(t) {
     switch(t) {
         case "index":
             return "bigint";
+
+        case "int8":
+            return "number";
 
         default:
             throw new Error("Unsupported prameter type: " + t);

@@ -1,7 +1,8 @@
 package dev.argon.argonvm;
 
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public interface NativeFunctions {
-	@NotNull VMFunction get(@NotNull  String name);
+	@Nullable VMFunction get(@NotNull  String name);
 }

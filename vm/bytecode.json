@@ -14,6 +14,15 @@
   "CONSTANT_0_INT32": 4,
   "CONSTANT_1_INT32": 5,
   "CONSTANT_NULL": 6,
+  "CONSTANT_INT8": {
+    "opcode": 39,
+    "parameters": [
+      {
+        "name": "value",
+        "type": "int8"
+      }
+    ]
+  },
   "NEGATE": 7,
   "ADD": 8,
   "SUBTRACT": 9,
@@ -95,6 +104,24 @@
       }
     ]
   },
+  "LD_GLOBAL": {
+    "opcode": 37,
+    "parameters": [
+      {
+        "name": "index",
+        "type": "index"
+      }
+    ]
+  },
+  "ST_GLOBAL": {
+    "opcode": 38,
+    "parameters": [
+      {
+        "name": "index",
+        "type": "index"
+      }
+    ]
+  },
   "NEW": {
     "opcode": 32,
     "parameters": [
@@ -152,6 +179,24 @@
       },
       {
         "name": "slot_index",
+        "type": "index"
+      }
+    ]
+  },
+  "CONSTRUCT_TUPLE": {
+    "opcode": 40,
+    "parameters": [
+      {
+        "name": "size",
+        "type": "index"
+      }
+    ]
+  },
+  "DECONSTRUCT_TUPLE": {
+    "opcode": 41,
+    "parameters": [
+      {
+        "name": "size",
         "type": "index"
       }
     ]

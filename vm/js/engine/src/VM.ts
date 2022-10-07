@@ -19,10 +19,12 @@ type TrampolineFrame = { native: false; frame: StackFrame } | { native: true; re
 export class VM {
     constructor(program: Program) {
         this.#program = program;
+        this.#globals = program.globalTypes.map(t => getDefaultValue(t).value);
     }
 
     #program: Program;
     #callStack: CallStackFrame[] = [];
+    #globals: unknown[];
 
     async execute(chunk: Chunk): Promise<void> {
         const frame = StackFrame.create(chunk);
@@ -78,6 +80,10 @@ export class VM {
 
                 case "CONSTANT_NULL":
                     frame.push({ type: VMType.ObjectReference, value: null });
+                    break;
+
+                case "CONSTANT_INT8":
+                    frame.push({ type: VMType.Int8, value: instruction.value });
                     break;
                     
                 case "NEGATE":
@@ -330,6 +336,33 @@ export class VM {
                     frame.variables[Number(instruction.index)] = frame.pop();
                     break;
 
+
+
+                case "LD_GLOBAL":
+                {
+                    const index = Number(instruction.index);
+                    const value = this.#globals[index];
+                    const t = this.#program.globalTypes[index];
+                    if(t === undefined) {
+                        throw new Error("Invalid variable");
+                    }
+
+                    frame.push({
+                        type: t,
+                        value,
+                    });
+                }
+                    break;
+
+
+                case "ST_GLOBAL":
+                {
+                    const index = Number(instruction.index);
+                    const value = frame.pop();
+                    this.#globals[index] = value.value;
+                }
+                    break;
+
                 case "NEW":
                 {
                     const classObj = this.#program.getClass(instruction.class_index);
@@ -415,6 +448,46 @@ export class VM {
                     frame = await this.#callImpl(frame, func, true);
                     break;
                 }
+
+                case "CONSTRUCT_TUPLE":
+                {
+                    const size = Number(instruction.size);
+                    if(size > frame.stack.length) {
+                        throw new Error("Stack underflow");
+                    }
+                    const taggedValues = frame.stack.splice(frame.stack.length - size);
+                    
+                    frame.push({
+                        type: VMType.tuple(...taggedValues.map(tv => tv.type)),
+                        value: taggedValues.map(tv => tv.value),
+                    });
+
+                    break;
+                }
+
+                case "DECONSTRUCT_TUPLE":
+                {
+                    const tuple = frame.pop();
+                    const tupleValue = tuple.value;
+                    if(tuple.type.type != "tuple" || !(tupleValue instanceof Array)) {
+                        throw new Error("Expected tuple on stack");
+                    }
+
+                    const size = Number(instruction.size);
+
+                    if(tupleValue.length != size || tuple.type.elements.length != size) {
+                        throw new Error("Tuple size mismatch");
+                    }
+
+                    for(let i = 0; i < size; ++i) {
+                        frame.push({
+                            type: tuple.type.elements[i]!,
+                            value: tupleValue[i]!,
+                        });
+                    }
+                    break;
+                }
+
 
                 default: unreachable(instruction);
             }

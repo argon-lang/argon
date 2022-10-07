@@ -1,6 +1,6 @@
 package dev.argon.vm.engine
 
-import dev.argon.argonvm.StandardLibrary
+import dev.argon.argonvm.engine.StandardLibrary
 import zio.*
 
 class TestStandardLibrary(output: StringBuffer) extends StandardLibrary {

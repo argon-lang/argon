@@ -24,6 +24,10 @@ final class FormatUtil {
 		os.write(value >>> 8);
 	}
 
+	public static void writeInt8(OutputStream os, byte value) throws IOException {
+		os.write(value);
+	}
+
 	public static byte readByte(InputStream is) throws IOException {
 		int b = is.read();
 		if(b == -1) {
@@ -49,5 +53,9 @@ final class FormatUtil {
 		byte lo = readByte(is);
 		byte hi = readByte(is);
 		return (short)((lo & 0xFF) | ((hi & 0xFF) << 8));
+	}
+
+	public static byte readInt8(InputStream is) throws IOException {
+		return readByte(is);
 	}
 }

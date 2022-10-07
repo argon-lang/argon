@@ -9,6 +9,8 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 public abstract class Program {
+	public abstract List<VMType> globalVariableTypes();
+
 	public abstract @NotNull VMFunction getFunction(long index) throws VMFormatException;
 
 	public abstract @NotNull VMClass getClass(long index) throws VMFormatException;
@@ -35,6 +37,14 @@ public abstract class Program {
 		private final @NotNull NativeFunctions nativeFunctions;
 		private final @Nullable VMFunction @NotNull[] functions;
 		private final @Nullable VMClass @NotNull[] classes;
+
+		@Override
+		public List<VMType> globalVariableTypes() {
+			return program.getGlobalTypesList()
+				.stream()
+				.map(Program::loadVMType)
+				.collect(Collectors.toList());
+		}
 
 		@Override
 		public @NotNull VMFunction getFunction(long index) throws VMFormatException {
@@ -158,7 +168,11 @@ public abstract class Program {
 			return new BytecodeVMFunction(parameterTypes, returnType, chunk);
 		}
 		else if(function.hasNative()) {
-			return nativeFunctions.get(function.getNative());
+			var nativeFunc = nativeFunctions.get(function.getNative());
+			if(nativeFunc == null) {
+				throw new NoSuchElementException("Unknown native function: " + function.getNative());
+			}
+			return nativeFunc;
 		}
 		else {
 			throw new IllegalArgumentException();
@@ -214,6 +228,9 @@ public abstract class Program {
 		}
 		else if(constantValue.hasStringLiteral()) {
 			return constantValue.getStringLiteral();
+		}
+		else if(constantValue.hasBytesLiteral()) {
+			return constantValue.getBytesLiteral().toByteArray();
 		}
 		else {
 			throw new IllegalArgumentException();

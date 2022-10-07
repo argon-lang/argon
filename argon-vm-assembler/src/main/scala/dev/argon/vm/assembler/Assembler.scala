@@ -42,6 +42,7 @@ sealed abstract class Assembler private(val asmText: String) {
         classes.get(name).commit.some.orElseFail(new ParseException("Unknown class: " + name))
       }
     yield format.Program(
+      globalTypes = Seq.empty,
       functions = orderedFunctions,
       classes = orderedClasses,
       entrypoint = entrypoint,

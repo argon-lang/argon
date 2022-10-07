@@ -33,6 +33,7 @@ object ArgonVMBytecodeFormatSourceGenerator {
   sealed trait OperandType
   object OperandType {
     case object Index extends OperandType
+    case object Int8 extends OperandType
     case object Int16 extends OperandType
   }
 
@@ -66,6 +67,7 @@ object ArgonVMBytecodeFormatSourceGenerator {
                       name = paramObj("name").get.asString.get,
                       paramType = paramObj("type").get.asString.get match {
                         case "index" => OperandType.Index
+                        case "int8" => OperandType.Int8
                         case "int16" => OperandType.Int16
                         case t => throw new Exception(s"Invalid operand type: $t")
                       },
@@ -80,6 +82,7 @@ object ArgonVMBytecodeFormatSourceGenerator {
       def outputParam(param: InstructionParameter): Unit = {
         val typeName = param.paramType match {
           case OperandType.Index => "long"
+          case OperandType.Int8 => "byte"
           case OperandType.Int16 => "short"
         }
         writer.print(s"$typeName ${param.name}")
@@ -100,6 +103,7 @@ object ArgonVMBytecodeFormatSourceGenerator {
       insn.parameters.foreach { param =>
         param.paramType match {
           case OperandType.Index => writer.println(s"\t\t\twriteIndex(os, ${param.name});")
+          case OperandType.Int8 => writer.println(s"\t\t\twriteInt8(os, ${param.name});")
           case OperandType.Int16 => writer.println(s"\t\t\twriteInt16(os, ${param.name});")
         }
       }
@@ -117,6 +121,9 @@ object ArgonVMBytecodeFormatSourceGenerator {
         param.paramType match {
           case OperandType.Index =>
             writer.println(s"\t\t\t\tlong ${param.name} = readIndex(is);")
+
+          case OperandType.Int8 =>
+            writer.println(s"\t\t\t\tbyte ${param.name} = readInt8(is);")
 
           case OperandType.Int16 =>
             writer.println(s"\t\t\t\tshort ${param.name} = readInt16(is);")
@@ -165,6 +172,7 @@ object ArgonVMBytecodeFormatSourceGenerator {
                       name = paramObj("name").get.asString.get,
                       paramType = paramObj("type").get.asString.get match {
                         case "index" => OperandType.Index
+                        case "int8" => OperandType.Int8
                         case "int16" => OperandType.Int16
                         case t => throw new Exception(s"Invalid operand type: $t")
                       },
@@ -180,6 +188,7 @@ object ArgonVMBytecodeFormatSourceGenerator {
       def outputParam(param: InstructionParameter): Unit = {
         val typeName = param.paramType match {
           case OperandType.Index => "Long"
+          case OperandType.Int8 => "Byte"
           case OperandType.Int16 => "Short"
         }
         writer.print(s"${param.name}: $typeName")
@@ -197,6 +206,7 @@ object ArgonVMBytecodeFormatSourceGenerator {
       insn.parameters.foreach { param =>
         param.paramType match {
           case OperandType.Index => writer.println(s"\t\t\twriteIndex(os, ${param.name})")
+          case OperandType.Int8 => writer.println(s"\t\t\twriteInt8(os, ${param.name})")
           case OperandType.Int16 => writer.println(s"\t\t\twriteInt16(os, ${param.name})")
         }
       }

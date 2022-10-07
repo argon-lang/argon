@@ -865,6 +865,8 @@ lazy val argon_vm_engine_java = project.in(file("vm/java/engine"))
 
     fork := true,
 
+    Compile / mainClass := Some("dev.argon.argonvm.engine.Main"),
+
     name := "argon-vm-engine",
   )
 

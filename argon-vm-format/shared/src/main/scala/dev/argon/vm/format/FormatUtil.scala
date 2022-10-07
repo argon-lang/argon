@@ -18,6 +18,10 @@ object FormatUtil {
       index2 != 0
     do ()
 
+  def writeInt8(os: OutputStream, value: Byte): Unit = {
+    os.write(value)
+  }
+
   def writeInt16(os: OutputStream, value: Short): Unit = {
     os.write(value.toByte)
     os.write(value >>> 8)

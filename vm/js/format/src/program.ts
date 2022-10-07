@@ -5,6 +5,7 @@ import { Chunk } from "./chunk.js";
 import { TaggedValue, VMType } from "./vmtype.js";
 
 export interface Program {
+    readonly globalTypes: readonly VMType[];
     getFunction(index: bigint): VMFunction;
     getClass(index: bigint): VMClass;
     getClassIndex(classInstance: VMClass): bigint;
@@ -78,6 +79,12 @@ function loadConstant(value: proto.ConstantValue): TaggedValue {
             };
         }
 
+        case "bytesLiteral":
+            return {
+                type: VMType.ObjectReference,
+                value: value.value.bytesLiteral,
+            };
+
         case undefined:
             throw new Error("Unknown constant value type");
     }
@@ -111,12 +118,14 @@ class LoadedProgram implements Program {
     constructor(program: proto.Program, nativeFunctions: NativeFunctions) {
         this.#program = program;
         this.#nativeFunctions = nativeFunctions;
+        this.globalTypes = program.globalTypes.map(loadVMType);
     }
 
     readonly #program: proto.Program;
     readonly #nativeFunctions: NativeFunctions;
     readonly #functions: VMFunction[] = [];
     readonly #classes: VMClass[] = [];
+    readonly globalTypes: readonly VMType[];
 
 
     getFunction(index: bigint): VMFunction {

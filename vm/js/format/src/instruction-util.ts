@@ -25,3 +25,13 @@ export function readIndex(ctx: InstructionContext): bigint {
 
     return result;
 }
+
+export function readInt8(ctx: InstructionContext): number {
+    const b = ctx.chunk.bytecode[ctx.ip];
+    if(b === undefined) {
+        throw new Error("Unexpected end of data");
+    }
+    ++ctx.ip;
+
+    return b << 24 >> 24;
+}
