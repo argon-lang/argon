@@ -1,6 +1,6 @@
 package dev.argon.prover
 
-trait PrologSyntax {
+trait ProverSyntax {
   type TVariable
   type TConstructor
   type TPredicateFunction

@@ -1,12 +1,13 @@
-package dev.argon.prover
+package dev.argon.prover.prolog
 
-import dev.argon.prover.SimplePrologContext.VariableProvider
+import dev.argon.prover.prolog.SimplePrologContext.VariableProvider
+import dev.argon.prover.*
 import zio.*
 import zio.stream.{Stream, ZStream}
 
 abstract class ProofPrologContext[R <: VariableProvider, E]
     extends PrologContext[R, E] with CommonProofRelations[R, E] {
-  override val syntax: SimplePrologSyntaxBase
+  override val syntax: SimpleProverSyntaxBase
   import syntax.*
 
   override type ProofAtom = String
@@ -15,9 +16,9 @@ abstract class ProofPrologContext[R <: VariableProvider, E]
 
   protected override def intrinsicPredicate
     (predicate: TPredicateFunction, args: Seq[Expr], substitutions: Model, solveState: SolveState)
-    : ZStream[R, Either[E, PrologResult.No], PrologResult.Yes] = ZStream.empty
+    : ZStream[R, Either[E, ProofResult.No], ProofResult.Yes] = ZStream.empty
 
-  protected override def normalize(expr: Value, substitutions: Model, solveState: SolveState): ZIO[R, E, Expr] = ZIO.succeed(expr)
+  protected override def normalize(expr: Value, substitutions: Model, fuel: Int): ZIO[R, E, Expr] = ZIO.succeed(expr)
 
   protected override def variableRelationProof(relation: Unit, a: String, b: String): ZIO[R, E, Proof[String]] =
     ZIO.succeed(Proof.Atomic("built-in-equal"))

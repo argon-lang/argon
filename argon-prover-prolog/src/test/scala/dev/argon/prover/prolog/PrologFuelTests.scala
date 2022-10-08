@@ -1,6 +1,7 @@
-package dev.argon.prover
+package dev.argon.prover.prolog
 
-import dev.argon.prover.SimplePrologContext.VariableProvider
+import dev.argon.prover.*
+import dev.argon.prover.prolog.SimplePrologContext.VariableProvider
 import zio.*
 import zio.test.Assertion.*
 import zio.test.*
@@ -13,7 +14,7 @@ object PrologFuelTests extends ZIOSpecDefault {
   sealed trait TestCtor derives CanEqual
   case object A extends TestCtor derives CanEqual
 
-  val prologSyntax = new SimplePrologSyntax[TestPredicate, TestCtor]
+  val prologSyntax = new SimpleProverSyntax[TestPredicate, TestCtor]
   import prologSyntax.*
 
   val fuel = 10
@@ -30,12 +31,12 @@ object PrologFuelTests extends ZIOSpecDefault {
 
   }
 
-  import TestContext.PrologResult
+  import TestContext.ProofResult
 
   override def spec: Spec[Environment & Scope, Any] =
     suite("Fuel tests")(
       test("recursive predicate") {
-        assertZIO(TestContext.check(pred(Infinite, expr(A)), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(TestContext.check(pred(Infinite, expr(A)), fuel))(equalTo(ProofResult.Unknown))
       }
     ).provideSome[Environment](VariableProvider.live)
 

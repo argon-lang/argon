@@ -1,6 +1,7 @@
-package dev.argon.prover
+package dev.argon.prover.prolog
 
-import dev.argon.prover.SimplePrologContext.VariableProvider
+import dev.argon.prover.prolog.SimplePrologContext.VariableProvider
+import dev.argon.prover.*
 import zio.*
 import zio.test.Assertion.*
 import zio.test.*
@@ -18,7 +19,7 @@ object PrologProofTests extends ZIOSpecDefault {
   case object Succ extends TestCtor derives CanEqual
   case object Zero extends TestCtor derives CanEqual
 
-  val prologSyntax = new SimplePrologSyntax[TestPredicate, TestCtor]
+  val prologSyntax = new SimpleProverSyntax[TestPredicate, TestCtor]
   import prologSyntax.*
 
   val fuel = 100
@@ -71,16 +72,16 @@ object PrologProofTests extends ZIOSpecDefault {
         ))(hasProof(Proof.ModusPonens(succIsGreaterThanSucc, succIsGreaterThanZero)))
       },
       test("not 0 > 0") {
-        assertZIO(prologContext.check(pred(Gt, expr(Zero), expr(Zero)), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(prologContext.check(pred(Gt, expr(Zero), expr(Zero)), fuel))(equalTo(ProofResult.Unknown))
       },
       test("not 1 > 1") {
         assertZIO(prologContext.check(pred(Gt, expr(Succ, expr(Zero)), expr(Succ, expr(Zero))), fuel))(equalTo(
-          PrologResult.Unknown
+          ProofResult.Unknown
         ))
       },
       test("not 1 > 2") {
         assertZIO(prologContext.check(pred(Gt, expr(Succ, expr(Zero)), expr(Succ, expr(Succ, expr(Zero)))), fuel))(equalTo(
-          PrologResult.Unknown
+          ProofResult.Unknown
         ))
       },
       test("true") {
@@ -138,7 +139,7 @@ object PrologProofTests extends ZIOSpecDefault {
         )
       },
       test("not (true & true)") {
-        assertZIO(prologContext.check(not(And(pred(KnownTrue), pred(KnownTrue))), fuel))(equalTo(PrologResult.Unknown))
+        assertZIO(prologContext.check(not(And(pred(KnownTrue), pred(KnownTrue))), fuel))(equalTo(ProofResult.Unknown))
       },
       test("not not true") {
         assertZIO(prologContext.check(not(not(pred(KnownTrue))), fuel))(

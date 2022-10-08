@@ -43,7 +43,7 @@ trait ExprUtilImplicitResolver
       private def getResult[Res]
       (prologContext: TCPrologContext)
       (sigHandler: SignatureHandler[Res])
-      (owner: exprContext.ParameterVariableOwner, index: Int, sig: Signature[WrapExpr, Res], args: Seq[ExprPrologSyntax.Expr])
+      (owner: exprContext.ParameterVariableOwner, index: Int, sig: Signature[WrapExpr, Res], args: Seq[ExprProverSyntax.Expr])
       : Comp[Res] =
         (sig, args) match {
           case (Signature.Parameter(_, isErased, paramName, paramType, nextSig), arg +: tailArgs) =>
@@ -62,7 +62,7 @@ trait ExprUtilImplicitResolver
       (prologContext: TCPrologContext)
       (model: prologContext.Model)
       (values: Seq[(T, T)])
-      (f: (T, T, prologContext.Model) => ZStream[context.Env, E, prologContext.PrologResult.Yes])
+      (f: (T, T, prologContext.Model) => ZStream[context.Env, E, prologContext.ProofResult.Yes])
       : ZStream[context.Env, E, (Seq[Proof[TCAtomicProof]], prologContext.Model)] =
         values match {
           case (headA, headB) +: tail =>
@@ -78,14 +78,14 @@ trait ExprUtilImplicitResolver
       (
         prologContext: TCPrologContext,
         classA: ArClass,
-        aArgs: Seq[ExprPrologSyntax.Expr],
+        aArgs: Seq[ExprProverSyntax.Expr],
         classB: ArClass,
-        bArgs: Seq[ExprPrologSyntax.Expr],
+        bArgs: Seq[ExprProverSyntax.Expr],
         model: prologContext.Model,
         solveState: prologContext.SolveState,
       )
-      : ZStream[context.Env, Either[context.Error, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
-        import ExprPrologSyntax.*
+      : ZStream[context.Env, Either[context.Error, prologContext.ProofResult.No], prologContext.ProofResult.Yes] =
+        import ExprProverSyntax.*
         if classA.id == classB.id then
           solveAll(prologContext)(model)(aArgs.zip(bArgs)) { (aArg, bArg, model) =>
             prologContext.solve(PredicateFunction(ExprConstructor.EqualTo, Seq(prologContext.wrapExprToExpr(anyType), aArg, bArg)), model, solveState)
@@ -93,7 +93,7 @@ trait ExprUtilImplicitResolver
             .map { case (_, model) =>
               val proofExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple))
               val proof = Proof.Atomic(TCAtomicProof.ExprProof(proofExpr))
-              prologContext.PrologResult.Yes(proof, model)
+              prologContext.ProofResult.Yes(proof, model)
             }
         else
           ZStream.unwrap(
@@ -112,7 +112,7 @@ trait ExprUtilImplicitResolver
                 case None =>
                   val notProofExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple))
                   val notProof = Proof.Atomic(TCAtomicProof.ExprProof(notProofExpr))
-                  val result = prologContext.PrologResult.No(notProof, model)
+                  val result = prologContext.ProofResult.No(notProof, model)
                   ZStream.fail(Right(result))
               }
           )
@@ -122,14 +122,14 @@ trait ExprUtilImplicitResolver
       (
         prologContext: TCPrologContext,
         traitA: ArTrait,
-        aArgs: Seq[ExprPrologSyntax.Expr],
+        aArgs: Seq[ExprProverSyntax.Expr],
         traitB: ArTrait,
-        bArgs: Seq[ExprPrologSyntax.Expr],
+        bArgs: Seq[ExprProverSyntax.Expr],
         model: prologContext.Model,
         solveState: prologContext.SolveState,
       )
-      : ZStream[context.Env, Either[context.Error, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
-        import ExprPrologSyntax.*
+      : ZStream[context.Env, Either[context.Error, prologContext.ProofResult.No], prologContext.ProofResult.Yes] =
+        import ExprProverSyntax.*
         if traitA.id == traitB.id then
           solveAll(prologContext)(model)(aArgs.zip(bArgs)) { (aArg, bArg, model) =>
             prologContext.solve(PredicateFunction(ExprConstructor.EqualTo, Seq(prologContext.wrapExprToExpr(anyType), aArg, bArg)), model, solveState)
@@ -137,7 +137,7 @@ trait ExprUtilImplicitResolver
             .map { case (_, model) =>
               val proofExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.AssumeErasedValue, EmptyTuple))
               val proof = Proof.Atomic(TCAtomicProof.ExprProof(proofExpr))
-              prologContext.PrologResult.Yes(proof, model)
+              prologContext.ProofResult.Yes(proof, model)
             }
         else
           ZStream.unwrap(
@@ -162,13 +162,13 @@ trait ExprUtilImplicitResolver
       (
         prologContext: TCPrologContext,
         classA: ArClass,
-        aArgs: Seq[ExprPrologSyntax.Expr],
+        aArgs: Seq[ExprProverSyntax.Expr],
         traitB: ArTrait,
-        bArgs: Seq[ExprPrologSyntax.Expr],
+        bArgs: Seq[ExprProverSyntax.Expr],
         model: prologContext.Model,
         solveState: prologContext.SolveState,
       )
-      : ZStream[context.Env, Either[context.Error, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
+      : ZStream[context.Env, Either[context.Error, prologContext.ProofResult.No], prologContext.ProofResult.Yes] =
         ZStream.unwrap(
           classA.signature
             .map(convertSig(classSigHandler))

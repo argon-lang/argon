@@ -1,41 +1,17 @@
-package dev.argon.prover
+package dev.argon.prover.prolog
 
+import dev.argon.prover.*
 import dev.argon.util.{*, given}
 import zio.*
-import zio.stream.{Stream, ZStream}
-import dev.argon.util.UniqueIdentifier
+import zio.stream.*
 
-abstract class PrologContext[-R, +E] {
-  val syntax: PrologSyntax
+abstract class PrologContext[R, E] extends ProverContext[R, E] {
   import syntax.*
-
-  type ProofAtom
-
-  // Relation is for comparing expressions as arguments to a constructor (ex: A <: B, A =:= B, A = B)
-  type TRelation
-  type TConstraints
-
-  type Model = Map[syntax.TVariable, TConstraints]
-
-  sealed trait PrologResult
-
-  object PrologResult {
-    final case class Yes(proof: Proof[ProofAtom], model: Model) extends PrologResult
-    final case class No(notProof: Proof[ProofAtom], model: Model) extends PrologResult
-    case object Unknown extends PrologResult
-
-    given CanEqual[Unknown.type, PrologResult] = CanEqual.canEqualAny
-    given CanEqual[PrologResult, Unknown.type] = CanEqual.canEqualAny
-  }
-
-  protected def assertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]]
 
   protected def variableIsFromRules(variable: TVariable): UIO[Boolean]
 
   protected def intrinsicPredicate(predicate: TPredicateFunction, args: Seq[Expr], substitutions: Model, solveState: SolveState)
-    : ZStream[R, Error, PrologResult.Yes]
-
-  protected def normalize(expr: Value, substitutions: Model, solveState: SolveState): ZIO[R, E, Expr]
+    : ZStream[R, Error, ProofResult.Yes]
 
   // Combine relations when checking a sub expression
   protected def mergeRelations(parentExprRelation: TRelation, subExprRelation: TRelation): TRelation
@@ -50,7 +26,7 @@ abstract class PrologContext[-R, +E] {
 
   // Checks whether the relation holds between two expressions.
   protected def checkRelation(a: Expr, b: Expr, relation: TRelation, substitutions: Model, solveState: SolveState)
-    : ZStream[R, Error, PrologResult.Yes]
+    : ZStream[R, Error, ProofResult.Yes]
 
   protected def otherForEquivalenceRelation(constraints: TConstraints): Option[syntax.Expr]
   protected def variableRelationProof(relation: TRelation, a: TVariable, b: TVariable): ZIO[R, E, Proof[ProofAtom]]
@@ -60,11 +36,7 @@ abstract class PrologContext[-R, +E] {
     (relation: TRelation, a: syntax.Value, b: syntax.Value, argProofs: Seq[Proof[ProofAtom]])
     : ZIO[R, E, Proof[ProofAtom]]
 
-  private type Error = Either[E, PrologResult.No]
-
-  final def check(goal: Predicate, fuel: Int): ZIO[R, E, PrologResult] = check(goal, Map.empty, fuel)
-
-  final def check(goal: Predicate, model: Model, fuel: Int): ZIO[R, E, PrologResult] =
+  final def check(goal: Predicate, model: Model, fuel: Int): ZIO[R, E, ProofResult] =
     solve(goal, model, SolveState(seenPredicates = Set.empty, fuel = fuel, additionalGivens = Seq.empty))
       .runHead
       .foldZIO(
@@ -74,30 +46,30 @@ abstract class PrologContext[-R, +E] {
         },
         success = {
           case Some(result) => ZIO.succeed(result)
-          case None => ZIO.succeed(PrologResult.Unknown)
+          case None => ZIO.succeed(ProofResult.Unknown)
         },
       )
 
   private def emptyIfNo[A](stream: ZStream[R, Error, A]): ZStream[R, Either[E, Nothing], A] =
     stream.catchAll {
       case Left(e) => ZStream.fail(Left(e))
-      case Right(PrologResult.No(_, _)) => ZStream.empty
+      case Right(ProofResult.No(_, _)) => ZStream.empty
     }
 
   // Converts:
   //   A disproof of P into a proof of not P
   //   A proof of P into a disproof of not P
-  private def invertProof(stream: ZStream[R, Error, PrologResult.Yes]): ZStream[R, Error, PrologResult.Yes] =
+  private def invertProof(stream: ZStream[R, Error, ProofResult.Yes]): ZStream[R, Error, ProofResult.Yes] =
     ZStream.unwrap(
       stream
         .runHead
         .fold(
           failure = {
             case Left(e) => ZStream.fail(Left(e))
-            case Right(PrologResult.No(notProof, model)) => ZStream.succeed(PrologResult.Yes(notProof, model))
+            case Right(ProofResult.No(notProof, model)) => ZStream.succeed(ProofResult.Yes(notProof, model))
           },
           success = {
-            case Some(PrologResult.Yes(proof, model)) => ZStream.fail(Right(PrologResult.No(Proof.DoubleNegIntro(proof), model)))
+            case Some(ProofResult.Yes(proof, model)) => ZStream.fail(Right(ProofResult.No(Proof.DoubleNegIntro(proof), model)))
             case None => ZStream.empty
           }
         )
@@ -127,7 +99,7 @@ abstract class PrologContext[-R, +E] {
   }
 
 
-  def solve(goal: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, PrologResult.Yes] =
+  def solve(goal: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, ProofResult.Yes] =
     if solveState.fuelEmpty || solveState.hasSeenPredicate(goal, substitutions) then
       ZStream.empty
     else
@@ -137,19 +109,19 @@ abstract class PrologContext[-R, +E] {
         case And(a, b) =>
           solve(a, substitutions, solveState2.consumeFuel)
             .mapError {
-              _.map { case PrologResult.No(proof, model) =>
-                PrologResult.No(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroLeft(proof)), model)
+              _.map { case ProofResult.No(proof, model) =>
+                ProofResult.No(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroLeft(proof)), model)
               }
             }
-            .flatMap { case PrologResult.Yes(proofA, substitutions) =>
+            .flatMap { case ProofResult.Yes(proofA, substitutions) =>
               solve(b, substitutions, solveState2.consumeFuel)
                 .mapError {
-                  _.map { case PrologResult.No(proof, model) =>
-                    PrologResult.No(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroRight(proof)), model)
+                  _.map { case ProofResult.No(proof, model) =>
+                    ProofResult.No(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroRight(proof)), model)
                   }
                 }
-                .map { case PrologResult.Yes(proofB, substitutions) =>
-                  PrologResult.Yes(Proof.ConjunctIntro(proofA, proofB), substitutions)
+                .map { case ProofResult.Yes(proofB, substitutions) =>
+                  ProofResult.Yes(Proof.ConjunctIntro(proofA, proofB), substitutions)
                 }
             }
 
@@ -158,32 +130,32 @@ abstract class PrologContext[-R, +E] {
             inferAll(Or(b, a), substitutions, solveState2.consumeFuel)
               .mapError {
                 _.map {
-                  case PrologResult.No(proof, model) =>
-                    PrologResult.No(
+                  case ProofResult.No(proof, model) =>
+                    ProofResult.No(
                       Proof.DeMorganAndPullNotOut(Proof.ConjunctCommute(Proof.DeMorganOrPushNotIn(proof))),
                       model,
                     )
                 }
               }
-              .map { case PrologResult.Yes(proof, substitutions) =>
-                PrologResult.Yes(Proof.DisjunctCommute(proof), substitutions)
+              .map { case ProofResult.Yes(proof, substitutions) =>
+                ProofResult.Yes(Proof.DisjunctCommute(proof), substitutions)
               }
 
           commuteOr
-            ++ emptyIfNo(solve(a, substitutions, solveState2.consumeFuel)).map { case PrologResult.Yes(proof, substitutions) =>
-              PrologResult.Yes(Proof.DisjunctIntroLeft(proof), substitutions)
+            ++ emptyIfNo(solve(a, substitutions, solveState2.consumeFuel)).map { case ProofResult.Yes(proof, substitutions) =>
+              ProofResult.Yes(Proof.DisjunctIntroLeft(proof), substitutions)
             }
-            ++ emptyIfNo(solve(b, substitutions, solveState2.consumeFuel)).map { case PrologResult.Yes(proof, substitutions) =>
-              PrologResult.Yes(Proof.DisjunctIntroRight(proof), substitutions)
+            ++ emptyIfNo(solve(b, substitutions, solveState2.consumeFuel)).map { case ProofResult.Yes(proof, substitutions) =>
+              ProofResult.Yes(Proof.DisjunctIntroRight(proof), substitutions)
             }
 
         case Implies(And(a, b), PropFalse) =>
           solve(Or(Implies(a, PropFalse), Implies(b, PropFalse)), substitutions, solveState2.consumeFuel)
             .catchSome {
-              case Right(PrologResult.No(proof, model)) =>
+              case Right(ProofResult.No(proof, model)) =>
                 ZStream.fromZIO(
                   UniqueIdentifier.make.flatMap { id =>
-                    ZIO.fail(Right(PrologResult.No(
+                    ZIO.fail(Right(ProofResult.No(
                       Proof.HypotheticalSyllogism(
                         Proof.ImplicaitonAbstraction(id, Proof.DeMorganAndPushNotIn(Proof.Identifier(id))),
                         proof,
@@ -193,18 +165,18 @@ abstract class PrologContext[-R, +E] {
                   }
                 )
             }
-            .map { case PrologResult.Yes(proof, substitutions) =>
-              PrologResult.Yes(Proof.DeMorganOrPullNotOut(proof), substitutions)
+            .map { case ProofResult.Yes(proof, substitutions) =>
+              ProofResult.Yes(Proof.DeMorganOrPullNotOut(proof), substitutions)
             }
 
         case Implies(Or(a, b), PropFalse) =>
           solve(And(Implies(a, PropFalse), Implies(b, PropFalse)), substitutions, solveState2.consumeFuel).map {
-            case PrologResult.Yes(proof, substitutions) =>
-              PrologResult.Yes(Proof.DeMorganAndPullNotOut(proof), substitutions)
+            case ProofResult.Yes(proof, substitutions) =>
+              ProofResult.Yes(Proof.DeMorganAndPullNotOut(proof), substitutions)
           }
 
         case Implies(Implies(a, PropFalse), PropFalse) => solve(a, substitutions, solveState2.consumeFuel).map {
-            case PrologResult.Yes(proof, substitutions) => PrologResult.Yes(Proof.DoubleNegIntro(proof), substitutions)
+            case ProofResult.Yes(proof, substitutions) => ProofResult.Yes(Proof.DoubleNegIntro(proof), substitutions)
           }
 
         case Implies(a, PropFalse) =>
@@ -215,8 +187,8 @@ abstract class PrologContext[-R, +E] {
             for
               aId <- UniqueIdentifier.make
             yield solve(b, substitutions, solveState.addGiven(Proof.Identifier(aId), a))
-              .map { case PrologResult.Yes(proof, substitutions) =>
-                PrologResult.Yes(Proof.ImplicaitonAbstraction(aId, proof), substitutions)
+              .map { case ProofResult.Yes(proof, substitutions) =>
+                ProofResult.Yes(Proof.ImplicaitonAbstraction(aId, proof), substitutions)
               }
           )
 
@@ -229,7 +201,7 @@ abstract class PrologContext[-R, +E] {
 
 
 
-  private def inferAll(goal: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, PrologResult.Yes] =
+  private def inferAll(goal: Predicate, substitutions: Model, solveState: SolveState): ZStream[R, Error, ProofResult.Yes] =
     if solveState.fuelEmpty then
       ZStream.empty
     else
@@ -240,13 +212,13 @@ abstract class PrologContext[-R, +E] {
       )
 
   private def infer(goal: Predicate, substitutions: Model, solveState: SolveState, kb: Seq[(Proof[ProofAtom], Predicate)])
-    : ZStream[R, Error, PrologResult.Yes] =
+    : ZStream[R, Error, ProofResult.Yes] =
     ZStream.fromIterable(kb ++ solveState.additionalGivens).flatMap { (proof, assertion) =>
       inferOne(goal, assertion, substitutions, solveState, proof)
     }
 
   private def inferOne(goal: Predicate, assertion: Predicate, substitutions: Model, solveState: SolveState, proof: Proof[ProofAtom])
-    : ZStream[R, Error, PrologResult.Yes] = {
+    : ZStream[R, Error, ProofResult.Yes] = {
     type ErrorF = Either[E, (Proof[ProofAtom] => Proof[ProofAtom], Model)]
 
     def impl(assertion: Predicate): ZStream[R, ErrorF, (Proof[ProofAtom] => Proof[ProofAtom], Model)] =
@@ -277,7 +249,7 @@ abstract class PrologContext[-R, +E] {
               .catchSome({
                 case Right((buildNotResult, substitutions)) =>
                   emptyIfNo(solve(premise, substitutions, solveState.consumeFuel))
-                    .flatMap { case PrologResult.Yes(premiseProof, substitutions) =>
+                    .flatMap { case ProofResult.Yes(premiseProof, substitutions) =>
                       ZStream.fail(Right((
                         (proof: Proof[ProofAtom]) => Proof.ModusPonens(buildNotResult(proof), premiseProof),
                         substitutions
@@ -286,7 +258,7 @@ abstract class PrologContext[-R, +E] {
               })
               .flatMap { (buildResult, substitutions) =>
                 emptyIfNo(solve(premise, substitutions, solveState.consumeFuel))
-                .map { case PrologResult.Yes(premiseProof, substitutions) =>
+                .map { case ProofResult.Yes(premiseProof, substitutions) =>
                   (
                     (proof: Proof[ProofAtom]) => Proof.ModusPonens(buildResult(proof), premiseProof),
                     substitutions
@@ -311,9 +283,9 @@ abstract class PrologContext[-R, +E] {
             {
               case Left(e) => Left(e)
               case Right((buildResult, substitutions)) =>
-                Right(PrologResult.No(buildResult(proof), substitutions))
+                Right(ProofResult.No(buildResult(proof), substitutions))
             },
-            { (buildResult, substitutions) => PrologResult.Yes(buildResult(proof), substitutions) }
+            { (buildResult, substitutions) => ProofResult.Yes(buildResult(proof), substitutions) }
           )
     }
   }
@@ -396,7 +368,7 @@ abstract class PrologContext[-R, +E] {
                 args1.zip(args2).zip(relations).toList.foldLeftM(model) {
                   case (model, ((arg1, arg2), argRelation)) =>
                     unifyExpr(arg1, arg2, argRelation, model, solveState, useCustomRelations = false)
-                      .map { case PrologResult.Yes(_, model) => model }
+                      .map { case ProofResult.Yes(_, model) => model }
                 }
             }
         )
@@ -421,21 +393,21 @@ abstract class PrologContext[-R, +E] {
       case _ => ZStream.empty
     }
 
-  protected def normalizeExpr(e: Expr, substitutions: Model, solveState: SolveState): ZIO[R, E, Expr] =
-    def impl(e: Expr): ZIO[R, E, Expr] =
+  protected def normalizeExpr(e: Expr, substitutions: Model, fuel: Int): ZIO[R, E, Expr] =
+    if fuel < 0 then
+      ZIO.succeed(e)
+    else
       e match {
-        case value: Value => normalize(value, substitutions, solveState)
+        case value: Value => normalize(value, substitutions, fuel)
         case Variable(variable) =>
           substitutions.get(variable).flatMap(otherForEquivalenceRelation) match {
-            case Some(value) => normalizeExpr(value, substitutions, solveState.consumeFuel)
+            case Some(value) => normalizeExpr(value, substitutions, fuel - 1)
             case None => ZIO.succeed(e)
           }
       }
 
-    impl(e)
-  end normalizeExpr
 
-  def compareValues[R2 <: R, E2 >: Error, T](a: Value, b: Value)(f: (TConstructor, Seq[Expr], Seq[Expr]) => ZStream[R2, E2, PrologResult.Yes]): ZStream[R2, E2, PrologResult.Yes] =
+  def compareValues[R2 <: R, E2 >: Error, T](a: Value, b: Value)(f: (TConstructor, Seq[Expr], Seq[Expr]) => ZStream[R2, E2, ProofResult.Yes]): ZStream[R2, E2, ProofResult.Yes] =
     if a.constructor == b.constructor then
       f(a.constructor, a.args, b.args)
     else
@@ -444,14 +416,14 @@ abstract class PrologContext[-R, +E] {
 
   protected final def unifyExpr
     (goal: Expr, rule: Expr, relation: TRelation, substitutions: Model, solveState: SolveState, useCustomRelations: Boolean)
-    : ZStream[R, Error, PrologResult.Yes] =
+    : ZStream[R, Error, ProofResult.Yes] =
     if solveState.fuelEmpty then
       ZStream.empty
     else
       def customRelations = checkRelation(goal, rule, relation, substitutions, solveState.consumeFuel)
 
       def unifyVariable(variable: TVariable, other: syntax.Expr, relation: TRelation)
-        : ZStream[R, Error, PrologResult.Yes] =
+        : ZStream[R, Error, ProofResult.Yes] =
         ZStream.unwrap(
           variableIsFromRules(variable).map { fromRules =>
             val constraints =
@@ -463,15 +435,15 @@ abstract class PrologContext[-R, +E] {
                 variableExprRelationProof(relation, variable, other)
                   .mapError(Left.apply)
                   .map { proof =>
-                    PrologResult.Yes(proof, substitutions)
+                    ProofResult.Yes(proof, substitutions)
                   }
               }
           }
         )
 
       ZStream.unwrap(
-        normalizeExpr(goal, substitutions, solveState).mapError(Left.apply).flatMap { goal =>
-          normalizeExpr(rule, substitutions, solveState).mapError(Left.apply).map { rule =>
+        normalizeExpr(goal, substitutions, solveState.fuel).mapError(Left.apply).flatMap { goal =>
+          normalizeExpr(rule, substitutions, solveState.fuel).mapError(Left.apply).map { rule =>
             (goal, rule) match {
               case (v1: Value, v2: Value) =>
                 compareValues(v1, v2) { (ctor, args1, args2) =>
@@ -484,14 +456,14 @@ abstract class PrologContext[-R, +E] {
                             val mergedRel = mergeRelations(relation, argRelation)
 
                             unifyExpr(arg1, arg2, mergedRel, substitutions, solveState.consumeFuel, useCustomRelations = true)
-                              .map { case PrologResult.Yes(argProof, substitutions) =>
+                              .map { case ProofResult.Yes(argProof, substitutions) =>
                                 (substitutions, argProofs :+ argProof)
                               }
                         }
                           .mapZIO { case (substitutions, argProofs) =>
                             valueRelationProof(relation, v1, v2, argProofs)
                               .mapError(Left.apply)
-                              .map { proof => PrologResult.Yes(proof, substitutions) }
+                              .map { proof => ProofResult.Yes(proof, substitutions) }
                           }
                       }
                   ) ++ (if useCustomRelations then customRelations else ZStream.empty)
@@ -502,7 +474,7 @@ abstract class PrologContext[-R, +E] {
                   variableRelationProof(relation, var1, var2)
                     .mapError(Left.apply)
                     .map { proof =>
-                      PrologResult.Yes(proof, substitutions)
+                      ProofResult.Yes(proof, substitutions)
                     }
                 )
 
@@ -534,5 +506,5 @@ abstract class PrologContext[-R, +E] {
 }
 
 object PrologContext {
-  type Aux[R, E, TSyntax <: PrologSyntax] = PrologContext[R, E] { val syntax: TSyntax }
+  type Aux[R, E, TSyntax <: ProverSyntax] = PrologContext[R, E] { val syntax: TSyntax }
 }

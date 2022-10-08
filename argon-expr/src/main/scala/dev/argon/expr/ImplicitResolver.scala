@@ -1,10 +1,11 @@
 package dev.argon.expr
 
 import dev.argon.util.{*, given}
-import dev.argon.prover.{PrologContext, PrologSyntax, Proof}
+import dev.argon.prover.{Proof, ProverSyntax}
+import dev.argon.prover.prolog.PrologContext
 import dev.argon.util.UniqueIdentifier
 import zio.*
-import zio.stream.{Stream, ZStream}
+import zio.stream.*
 
 abstract class ImplicitResolver[R, E] {
 
@@ -19,37 +20,37 @@ abstract class ImplicitResolver[R, E] {
   (
     prologContext: TCPrologContext,
     classA: TClass,
-    aArgs: Seq[ExprPrologSyntax.Expr],
+    aArgs: Seq[ExprProverSyntax.Expr],
     classB: TClass,
-    bArgs: Seq[ExprPrologSyntax.Expr],
+    bArgs: Seq[ExprProverSyntax.Expr],
     model: prologContext.Model,
     solveState: prologContext.SolveState,
   )
-    : ZStream[R, Either[E, prologContext.PrologResult.No], prologContext.PrologResult.Yes]
+    : ZStream[R, Either[E, prologContext.ProofResult.No], prologContext.ProofResult.Yes]
 
   protected def isSubTrait
   (
     prologContext: TCPrologContext,
     traitA: TTrait,
-    aArgs: Seq[ExprPrologSyntax.Expr],
+    aArgs: Seq[ExprProverSyntax.Expr],
     traitB: TTrait,
-    bArgs: Seq[ExprPrologSyntax.Expr],
+    bArgs: Seq[ExprProverSyntax.Expr],
     model: prologContext.Model,
     solveState: prologContext.SolveState,
   )
-  : ZStream[R, Either[E, prologContext.PrologResult.No], prologContext.PrologResult.Yes]
+  : ZStream[R, Either[E, prologContext.ProofResult.No], prologContext.ProofResult.Yes]
 
   protected def classImplementsTrait
   (
     prologContext: TCPrologContext,
     classA: TClass,
-    aArgs: Seq[ExprPrologSyntax.Expr],
+    aArgs: Seq[ExprProverSyntax.Expr],
     traitB: TTrait,
-    bArgs: Seq[ExprPrologSyntax.Expr],
+    bArgs: Seq[ExprProverSyntax.Expr],
     model: prologContext.Model,
     solveState: prologContext.SolveState,
   )
-  : ZStream[R, Either[E, prologContext.PrologResult.No], prologContext.PrologResult.Yes]
+  : ZStream[R, Either[E, prologContext.ProofResult.No], prologContext.ProofResult.Yes]
 
   protected def typeOfClass(classObj: TClass, args: Seq[WrapExpr]): ZIO[R, E, WrapExpr]
   protected def typeOfTrait(traitObj: TTrait, args: Seq[WrapExpr]): ZIO[R, E, WrapExpr]
@@ -71,7 +72,7 @@ abstract class ImplicitResolver[R, E] {
 
   protected lazy val evaluator: Evaluator[R, E] { val exprContext: ImplicitResolver.this.exprContext.type }
 
-  object ExprPrologSyntax extends PrologSyntax {
+  object ExprProverSyntax extends ProverSyntax {
     override type TVariable = THole
     override type TConstructor = ExprConstructor
     override type TPredicateFunction = ExprConstructor
@@ -94,22 +95,22 @@ abstract class ImplicitResolver[R, E] {
   final case class Assertion(witness: WrapExpr, assertionType: WrapExpr)
 
   protected sealed class TCPrologContext(createdHoles: Ref[Set[THole]]) extends PrologContext[R, E] {
-    override val syntax: ExprPrologSyntax.type = ExprPrologSyntax
+    override val syntax: ExprProverSyntax.type = ExprProverSyntax
     import syntax.*
     override type ProofAtom = TCAtomicProof
 
     override type TRelation = ExprRelation
     override type TConstraints = ExprConstraints[Expr]
 
-    private type Error = Either[E, PrologResult.No]
+    private type Error = Either[E, ProofResult.No]
 
-    protected override def normalize(expr: Value, substitutions: Model, solveState: SolveState): ZIO[R, E, Expr] =
+    protected override def normalize(expr: Value, substitutions: Model, fuel: Int): ZIO[R, E, Expr] =
       exprToWrapExpr(expr).flatMap { expr =>
-        evaluator.normalizeTopLevelWrap(expr, solveState.consumeFuel.fuel)
+        evaluator.normalizeTopLevelWrap(expr, fuel - 1)
           .map(wrapExprToExpr)
       }
 
-    override def compareValues[R2 <: R, E2 >: Error, T](a: Value, b: Value)(f: (ExprConstructor, Seq[Expr], Seq[Expr]) => ZStream[R2, E2, PrologResult.Yes]): ZStream[R2, E2, PrologResult.Yes] =
+    override def compareValues[R2 <: R, E2 >: Error, T](a: Value, b: Value)(f: (ExprConstructor, Seq[Expr], Seq[Expr]) => ZStream[R2, E2, ProofResult.Yes]): ZStream[R2, E2, ProofResult.Yes] =
       (a.constructor, b.constructor) match {
         case (ExprConstructor.LoadLambda(argVariableA), ExprConstructor.LoadLambda(argVariableB)) =>
           val loadArgA = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(argVariableA), EmptyTuple))
@@ -319,7 +320,7 @@ abstract class ImplicitResolver[R, E] {
 
     protected override def assertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] = builtinAssertions
 
-    private def newVariable: ZIO[R, E, ExprPrologSyntax.TVariable] =
+    private def newVariable: ZIO[R, E, ExprProverSyntax.TVariable] =
       createHole.tap { hole =>
         createdHoles.update(_ + hole)
       }
@@ -329,7 +330,7 @@ abstract class ImplicitResolver[R, E] {
 
     protected override def intrinsicPredicate
       (predicate: ExprConstructor, args: Seq[Expr], substitutions: Model, solveState: SolveState)
-      : ZStream[R, Error, PrologResult.Yes] =
+      : ZStream[R, Error, ProofResult.Yes] =
       (predicate, args) match {
         case (
               ExprConstructor.SubtypeWitnessType,
@@ -379,7 +380,7 @@ abstract class ImplicitResolver[R, E] {
                     EmptyTuple,
                   )))
 
-              } yield ZStream.fail(Right(PrologResult.No(proof, substitutions)))
+              } yield ZStream.fail(Right(ProofResult.No(proof, substitutions)))
             )
           }
           else {
@@ -406,7 +407,7 @@ abstract class ImplicitResolver[R, E] {
                   EmptyTuple,
                 )))
 
-            } yield ZStream(PrologResult.Yes(proof, substitutions))
+            } yield ZStream(ProofResult.Yes(proof, substitutions))
           )
 
         case (
@@ -424,7 +425,7 @@ abstract class ImplicitResolver[R, E] {
                     EmptyTuple,
                   )))
 
-              } yield ZStream(PrologResult.Yes(proof, substitutions))
+              } yield ZStream(ProofResult.Yes(proof, substitutions))
             )
           }
           else {
@@ -438,7 +439,7 @@ abstract class ImplicitResolver[R, E] {
                     EmptyTuple,
                   )))
 
-              } yield ZStream.fail(Right(PrologResult.No(proof, substitutions)))
+              } yield ZStream.fail(Right(ProofResult.No(proof, substitutions)))
             )
           }
 
@@ -456,7 +457,7 @@ abstract class ImplicitResolver[R, E] {
                   EmptyTuple,
                 )))
 
-            } yield ZStream(PrologResult.Yes(proof, substitutions))
+            } yield ZStream(ProofResult.Yes(proof, substitutions))
           )
 
         case _ => ZStream.empty
@@ -550,7 +551,7 @@ abstract class ImplicitResolver[R, E] {
 
     protected override def checkRelation
       (a: syntax.Expr, b: syntax.Expr, relation: ExprRelation, substitutions: Model, solveState: SolveState)
-      : ZStream[R, Error, PrologResult.Yes] =
+      : ZStream[R, Error, ProofResult.Yes] =
       relation match {
         case ExprRelation.SyntacticEquality => ZStream.empty
         case ExprRelation.SubType =>
@@ -602,9 +603,9 @@ abstract class ImplicitResolver[R, E] {
       (goal, rule) match {
         case (syntax.PredicateFunction(ExprConstructor.EqualTo, Seq(t, a1, a2)), syntax.PredicateFunction(ExprConstructor.EqualTo, Seq(u, b1, b2))) =>
           for
-            PrologResult.Yes(_, model) <- unifyExpr(a1, b1, ExprRelation.SyntacticEquality, model, solveState.consumeFuel, useCustomRelations = false)
-            PrologResult.Yes(_, model) <- unifyExpr(a2, b2, ExprRelation.SyntacticEquality, model, solveState.consumeFuel, useCustomRelations = false)
-            PrologResult.Yes(_, model) <- solve(syntax.PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(u, t)), model, solveState.consumeFuel).take(1)
+            ProofResult.Yes(_, model) <- unifyExpr(a1, b1, ExprRelation.SyntacticEquality, model, solveState.consumeFuel, useCustomRelations = false)
+            ProofResult.Yes(_, model) <- unifyExpr(a2, b2, ExprRelation.SyntacticEquality, model, solveState.consumeFuel, useCustomRelations = false)
+            ProofResult.Yes(_, model) <- solve(syntax.PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(u, t)), model, solveState.consumeFuel).take(1)
           yield model
 
         case _ =>
@@ -778,16 +779,15 @@ abstract class ImplicitResolver[R, E] {
             }
           yield baseAssertions ++ givenAssertions3
 
-        protected override def normalize(expr: syntax.Value, substitutions: Model, solveState: SolveState): ZIO[R, E, syntax.Expr] =
+        protected override def normalize(expr: syntax.Value, substitutions: Model, fuel: Int): ZIO[R, E, syntax.Expr] =
           expr match {
             case syntax.Value(ExprConstructor.LoadVariable(variable), _) =>
-
               knownVarValues.get(variable) match {
-                case Some(value) => normalizeExpr(wrapExprToExpr(value), substitutions, solveState)
-                case None => super.normalize(expr, substitutions, solveState)
+                case Some(value) => normalizeExpr(wrapExprToExpr(value), substitutions, fuel - 1)
+                case None => super.normalize(expr, substitutions, fuel)
               }
 
-            case _ => super.normalize(expr, substitutions, solveState)
+            case _ => super.normalize(expr, substitutions, fuel)
           }
       }
 
@@ -795,7 +795,7 @@ abstract class ImplicitResolver[R, E] {
       proverModel = model.view.mapValues { _.map(context.wrapExprToExpr) }.toMap
 
       result <- context.check(goal, proverModel, fuel).flatMap {
-        case context.PrologResult.Yes(proof, model) =>
+        case context.ProofResult.Yes(proof, model) =>
           for
             model <- ZIO.foreach(model) { case (hole, expr) =>
               expr.traverse(context.exprToWrapExpr).map { expr => (hole, expr) }
@@ -805,7 +805,7 @@ abstract class ImplicitResolver[R, E] {
 
           yield Some(ResolvedImplicit(proof, model))
 
-        case context.PrologResult.No(_, _) | _: context.PrologResult.Unknown.type => ZIO.none
+        case context.ProofResult.No(_, _) | _: context.ProofResult.Unknown.type => ZIO.none
       }
 
     yield result

@@ -1,11 +1,12 @@
-package dev.argon.prover
+package dev.argon.prover.prolog
 
-import dev.argon.prover.SimplePrologContext.VariableProvider
+import dev.argon.prover.*
+import dev.argon.prover.prolog.SimplePrologContext.VariableProvider
 import zio.*
 import zio.stream.*
 
 trait CommonProofRelations[R <: VariableProvider, E] extends PrologContext[R, E] {
-  override val syntax: SimplePrologSyntaxBase
+  override val syntax: SimpleProverSyntaxBase
   import syntax.*
 
   override type TRelation = Unit
@@ -29,7 +30,7 @@ trait CommonProofRelations[R <: VariableProvider, E] extends PrologContext[R, E]
 
   protected override def checkRelation
     (a: Expr, b: Expr, relation: TRelation, substitutions: Model, solveState: SolveState)
-    : ZStream[R, Either[E, PrologResult.No], PrologResult.Yes] = ZStream.empty
+    : ZStream[R, Either[E, ProofResult.No], ProofResult.Yes] = ZStream.empty
 
   protected override def otherForEquivalenceRelation(constraints: syntax.Expr): Option[syntax.Expr] = Some(constraints)
 }

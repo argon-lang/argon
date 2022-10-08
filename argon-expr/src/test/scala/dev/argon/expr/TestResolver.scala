@@ -48,14 +48,14 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
   (
     prologContext: TCPrologContext,
     classA: TClass,
-    aArgs: Seq[ExprPrologSyntax.Expr],
+    aArgs: Seq[ExprProverSyntax.Expr],
     classB: TClass,
-    bArgs: Seq[ExprPrologSyntax.Expr],
+    bArgs: Seq[ExprProverSyntax.Expr],
     model: prologContext.Model,
     solveState: prologContext.SolveState,
   )
-  : ZStream[R, Either[String, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
-    ZStream.fail(Right(prologContext.PrologResult.No(
+  : ZStream[R, Either[String, prologContext.ProofResult.No], prologContext.ProofResult.Yes] =
+    ZStream.fail(Right(prologContext.ProofResult.No(
       Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
         ExprConstructor.AssumeErasedValue,
         EmptyTuple,
@@ -81,15 +81,15 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
   (
     prologContext: TCPrologContext,
     traitA: TTrait,
-    aArgs: Seq[ExprPrologSyntax.Expr],
+    aArgs: Seq[ExprProverSyntax.Expr],
     traitB: TTrait,
-    bArgs: Seq[ExprPrologSyntax.Expr],
+    bArgs: Seq[ExprProverSyntax.Expr],
     model: prologContext.Model,
     solveState: prologContext.SolveState,
   )
-  : ZStream[R, Either[String, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
+  : ZStream[R, Either[String, prologContext.ProofResult.No], prologContext.ProofResult.Yes] =
     if checkSubTraits(traitA, traitB) then
-      ZStream.succeed(prologContext.PrologResult.Yes(
+      ZStream.succeed(prologContext.ProofResult.Yes(
         Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
           ExprConstructor.AssumeErasedValue,
           EmptyTuple,
@@ -97,7 +97,7 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
         model,
       ))
     else
-      ZStream.fail(Right(prologContext.PrologResult.No(
+      ZStream.fail(Right(prologContext.ProofResult.No(
         Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
           ExprConstructor.AssumeErasedValue,
           EmptyTuple,
@@ -110,14 +110,14 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
   (
     prologContext: TCPrologContext,
     classA: TClass,
-    aArgs: Seq[ExprPrologSyntax.Expr],
+    aArgs: Seq[ExprProverSyntax.Expr],
     traitB: TTrait,
-    bArgs: Seq[ExprPrologSyntax.Expr],
+    bArgs: Seq[ExprProverSyntax.Expr],
     model: prologContext.Model,
     solveState: prologContext.SolveState,
   )
-  : ZStream[R, Either[String, prologContext.PrologResult.No], prologContext.PrologResult.Yes] =
-    ZStream.fail(Right(prologContext.PrologResult.No(
+  : ZStream[R, Either[String, prologContext.ProofResult.No], prologContext.ProofResult.Yes] =
+    ZStream.fail(Right(prologContext.ProofResult.No(
       Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
         ExprConstructor.AssumeErasedValue,
         EmptyTuple,

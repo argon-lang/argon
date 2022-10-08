@@ -1,5 +1,6 @@
-package dev.argon.prover
+package dev.argon.prover.prolog
 
+import dev.argon.prover.*
 import zio.*
 import zio.test.*
 import zio.test.Assertion.*
@@ -16,7 +17,7 @@ object PrologListTests extends ZIOSpecDefault {
   case object A extends TestCtor derives CanEqual
   case object B extends TestCtor derives CanEqual
 
-  val prologSyntax = new SimplePrologSyntax[TestPredicate, TestCtor]
+  val prologSyntax = new SimpleProverSyntax[TestPredicate, TestCtor]
   import prologSyntax.*
 
   val fuel = 100
@@ -40,39 +41,39 @@ object PrologListTests extends ZIOSpecDefault {
   }
 
   private val prologContext = FuelContext
-  import prologContext.PrologResult
+  import prologContext.ProofResult
 
   override def spec: Spec[Environment & Scope, Any] =
     suite("Lists")(
       test("member with head value (size=1)") {
         assertZIO(prologContext.check(pred(Member, expr(A), expr(Cons, expr(A), expr(Nil))), fuel))(
-          isSubtype[PrologResult.Yes](anything)
+          isSubtype[ProofResult.Yes](anything)
         )
       },
       test("member with head value (size=2)") {
         assertZIO(prologContext.check(pred(Member, expr(A), expr(Cons, expr(A), expr(Cons, expr(B), expr(Nil)))), fuel))(
-          isSubtype[PrologResult.Yes](anything)
+          isSubtype[ProofResult.Yes](anything)
         )
       },
       test("member with non-head value (size=2)") {
         assertZIO(prologContext.check(pred(Member, expr(A), expr(Cons, expr(B), expr(Cons, expr(A), expr(Nil)))), fuel))(
-          isSubtype[PrologResult.Yes](anything)
+          isSubtype[ProofResult.Yes](anything)
         )
       },
       test("member with non-head value (size=3)") {
         assertZIO(prologContext.check(
           pred(Member, expr(A), expr(Cons, expr(B), expr(Cons, expr(B), expr(Cons, expr(A), expr(Nil))))),
           fuel,
-        ))(isSubtype[PrologResult.Yes](anything))
+        ))(isSubtype[ProofResult.Yes](anything))
       },
       test("member with missing value (size=1)") {
         assertZIO(prologContext.check(pred(Member, expr(A), expr(Cons, expr(B), expr(Nil))), fuel))(equalTo(
-          PrologResult.Unknown
+          ProofResult.Unknown
         ))
       },
       test("member with missing value (size=2)") {
         assertZIO(prologContext.check(pred(Member, expr(A), expr(Cons, expr(B), expr(Cons, expr(B), expr(Nil)))), fuel))(
-          equalTo(PrologResult.Unknown)
+          equalTo(ProofResult.Unknown)
         )
       },
     ).provideSome[Environment](VariableProvider.live)

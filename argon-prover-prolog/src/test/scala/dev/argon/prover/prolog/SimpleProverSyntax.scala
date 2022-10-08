@@ -1,16 +1,18 @@
-package dev.argon.prover
+package dev.argon.prover.prolog
 
-sealed trait SimplePrologSyntaxBase extends PrologSyntax {
+import dev.argon.prover.*
+
+sealed trait SimpleProverSyntaxBase extends ProverSyntax {
   override type TVariable = String
   override type TConstructor
   override type TPredicateFunction
 }
 
-class SimplePrologSyntax[PredFunc, Constructor]
+class SimpleProverSyntax[PredFunc, Constructor]
   (using
     override val constructorCanEqual: CanEqual[Constructor, Constructor],
     override val predicateFunctionCanEqual: CanEqual[PredFunc, PredFunc],
-  ) extends SimplePrologSyntaxBase {
+  ) extends SimpleProverSyntaxBase {
   override type TConstructor = Constructor
   override type TPredicateFunction = PredFunc
 
