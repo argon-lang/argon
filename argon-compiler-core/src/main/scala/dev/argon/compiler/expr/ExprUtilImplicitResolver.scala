@@ -257,7 +257,7 @@ trait ExprUtilImplicitResolver
     }
 
   def tryResolveImplicit(env: Env, t: WrapExpr): Comp[Option[(Env, WrapExpr)]] =
-    def buildImplicits(value: ImplicitValue): Comp[implicitResolver.Assertion] =
+    def buildImplicits(value: ImplicitValue)(newVariable: Comp[UniqueIdentifier]): Comp[implicitResolver.Assertion] =
       value match {
         case ImplicitValue.OfVariable(variable) =>
           val loadVar = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(variable), EmptyTuple))
@@ -270,7 +270,7 @@ trait ExprUtilImplicitResolver
               case Signature.Parameter(FunctionParameterListType.InferrableList | FunctionParameterListType.InferrableList2, isErased, paramName, paramType, next) =>
                 val variable = ParameterVariable(function, args.size, paramType, isErased, paramName)
                 for
-                  hole <- UniqueIdentifier.make
+                  hole <- newVariable
                   holeExpr = WrapExpr.OfHole(hole)
                   nextSubst = substituteSignature(variable)(holeExpr)(functionSigHandler)(next)
 
@@ -279,7 +279,7 @@ trait ExprUtilImplicitResolver
 
               case Signature.Parameter(FunctionParameterListType.RequiresList, isErased, paramName, paramType, next) =>
                 for
-                  varId <- UniqueIdentifier.make
+                  varId <- newVariable
                   local = LocalVariable(varId, paramType, paramName, isMutable = false, isErased = isErased)
                   loadLocal = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(local), EmptyTuple))
                   implicitResolver.Assertion(witness, assertionType) <- buildCall(next, args :+ loadLocal)
@@ -304,12 +304,9 @@ trait ExprUtilImplicitResolver
 
       }
 
-    val assertions =
-      env.implicitSource.givenAssertions.flatMap { assertions =>
-        ZIO.foreach(assertions)(buildImplicits)
-      }
-
     for
+      givenAssertions <- env.implicitSource.givenAssertions
+      assertions = givenAssertions.map(buildImplicits)
       resolved <- implicitResolver.tryResolve(t, env.model, assertions, env.knownVarValues, fuel)
       res <- ZIO.foreach(resolved) {
         case implicitResolver.ResolvedImplicit(proof, model) =>

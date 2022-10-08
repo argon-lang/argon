@@ -35,6 +35,8 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
     (relation: TRelation, a: syntax.Value, b: syntax.Value, argProofs: Seq[Proof[ProofAtom]])
     : ZIO[R, E, Proof[ProofAtom]]
 
+  protected def newVariable: ZIO[R, E, TVariable]
+
   final def check(goal: Predicate, model: Model, fuel: Int): ZIO[R, E, ProofResult] =
     solve(goal, model, SolveState(seenPredicates = Set.empty, fuel = fuel, additionalGivens = Seq.empty))
       .runHead
@@ -206,7 +208,7 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
     else
       ZStream.unwrap(
         for {
-          kbUnsorted <- assertions.mapError(Left.apply)
+          kbUnsorted <- ZIO.foreach(assertions)(makeAssert => makeAssert(newVariable)).mapError(Left.apply)
         } yield infer(goal, substitutions, solveState, kbUnsorted)
       )
 

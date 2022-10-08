@@ -12,6 +12,10 @@ abstract class ProofPrologContext[R <: VariableProvider, E]
 
   override type ProofAtom = String
 
+
+  protected final override def newVariable: ZIO[R, E, String] =
+    VariableProvider.next
+
   protected override def variableIsFromRules(variable: String): UIO[Boolean] = ZIO.succeed(true)
 
   protected override def intrinsicPredicate

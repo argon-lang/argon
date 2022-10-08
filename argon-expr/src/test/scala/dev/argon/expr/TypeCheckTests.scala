@@ -25,7 +25,7 @@ object TypeCheckTests extends ZIOSpecDefault {
     WrapExpr.OfExpr(ArExpr(ExprConstructor.SubtypeWitnessType, (a, b)))
 
   private def resolve(t: WrapExpr): IO[String, resolver.ResolvedImplicit] =
-    resolver.tryResolve(t, Map.empty, ZIO.succeed(Nil), Map.empty, fuel)
+    resolver.tryResolve(t, Map.empty, Nil, Map.empty, fuel)
       .flatMap {
         case Some(res) => ZIO.succeed(res)
         case None => ZIO.fail("Could not resolve implicit")

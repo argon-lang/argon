@@ -34,20 +34,21 @@ object PrologProofTests extends ZIOSpecDefault {
     val knownDisjunct = Proof.Atomic("knownDisjunct")
     val knownTrue = Proof.Atomic("knownTrue")
     val knownFalse = Proof.Atomic("knownFalse")
+    
 
-    protected override def assertions: URIO[VariableProvider, List[(Proof[String], Predicate)]] =
-      ZIO.foreach(List(
-        succIsGreaterThanZero -> (for {
-          x <- VariableProvider.next
+    protected override def assertions: Seq[URIO[VariableProvider, TVariable] => URIO[VariableProvider, (Proof[String], Predicate)]] =
+      Seq[(Proof[String], URIO[VariableProvider, TVariable] => URIO[VariableProvider, Predicate])](
+        succIsGreaterThanZero -> (newVariable => for {
+          x <- newVariable
         } yield pred(Gt, expr(Succ, v"$x"), expr(Zero))),
-        succIsGreaterThanSucc -> (for {
-          x <- VariableProvider.next
-          y <- VariableProvider.next
+        succIsGreaterThanSucc -> (newVariable => for {
+          x <- newVariable
+          y <- newVariable
         } yield pred(Gt, v"$x", v"$y") ==> pred(Gt, expr(Succ, v"$x"), expr(Succ, v"$y"))),
-        knownDisjunct -> ZIO.succeed(Or(pred(KnownDisjunctLeft), pred(KnownDisjunctRight))),
-        knownTrue -> ZIO.succeed(pred(KnownTrue)),
-        knownFalse -> ZIO.succeed(not(pred(KnownFalse))),
-      )) { case (proof, predicateIO) => predicateIO.map { proof -> _ } }
+        knownDisjunct -> (_ => ZIO.succeed(Or(pred(KnownDisjunctLeft), pred(KnownDisjunctRight)))),
+        knownTrue -> (_ => ZIO.succeed(pred(KnownTrue))),
+        knownFalse -> (_ => ZIO.succeed(not(pred(KnownFalse)))),
+      ).map { case (proof, predicateIO) => newVariable => predicateIO(newVariable).map { proof -> _ } }
 
   }
 

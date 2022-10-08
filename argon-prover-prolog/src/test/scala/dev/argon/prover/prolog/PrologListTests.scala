@@ -22,23 +22,24 @@ object PrologListTests extends ZIOSpecDefault {
 
   val fuel = 100
 
-  private object FuelContext extends SimplePrologContext[VariableProvider, Nothing] {
+  private trait TestAssertions[R] extends SimpleProverContext[R, Nothing] {
     override val syntax: prologSyntax.type = prologSyntax
 
-    protected override val assertions: URIO[VariableProvider, List[(Proof[Unit], Predicate)]] =
-      ZIO.foreach(List(
-        (for {
-          x <- VariableProvider.next
-          t <- VariableProvider.next
-        } yield pred(Member, v"$x", expr(Cons, v"$x", v"$t"))),
-        (for {
-          x <- VariableProvider.next
-          y <- VariableProvider.next
-          t <- VariableProvider.next
-        } yield pred(Member, v"$x", v"$t") ==> pred(Member, v"$x", expr(Cons, v"$y", v"$t"))),
-      )) { predicateIO => predicateIO.map { Proof.Atomic(()) -> _ } }
-
+    protected override val assertions: Seq[URIO[R, TVariable] => URIO[R, (Proof[Unit], Predicate)]] =
+      Seq(
+        newVariable => (for {
+          x <- newVariable
+          t <- newVariable
+        } yield Proof.Atomic(()) -> (pred(Member, v"$x", expr(Cons, v"$x", v"$t")))),
+        newVariable => (for {
+          x <- newVariable
+          y <- newVariable
+          t <- newVariable
+        } yield Proof.Atomic(()) -> (pred(Member, v"$x", v"$t") ==> pred(Member, v"$x", expr(Cons, v"$y", v"$t")))),
+      )
   }
+
+  private object FuelContext extends SimplePrologContext[VariableProvider, Nothing] with TestAssertions[VariableProvider]
 
   private val prologContext = FuelContext
   import prologContext.ProofResult

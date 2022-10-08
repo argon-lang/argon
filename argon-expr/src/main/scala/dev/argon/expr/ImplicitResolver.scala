@@ -99,15 +99,10 @@ abstract class ImplicitResolver[R, E] {
     override val syntax: ExprProverSyntax.type = ExprProverSyntax
     import syntax.*
 
-    protected def createdHoles: Ref[Set[THole]]
-
     override type ProofAtom = TCAtomicProof
 
     override type TRelation = ExprRelation
     override type TConstraints = ExprConstraints[Expr]
-
-
-    protected override def assertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] = builtinAssertions
 
     protected override def normalize(expr: Value, substitutions: Model, fuel: Int): ZIO[R, E, Expr] =
       exprToWrapExpr(expr).flatMap { expr =>
@@ -116,16 +111,14 @@ abstract class ImplicitResolver[R, E] {
       }
 
 
-    private def newVariable: ZIO[R, E, ExprProverSyntax.TVariable] =
-      createHole.tap { hole =>
-        createdHoles.update(_ + hole)
-      }
+    override protected def assertions: Seq[ZIO[R, E, TVariable] => ZIO[R, E, (Proof[TCAtomicProof], Predicate)]] =
+      builtinAssertions
 
-    private def builtinAssertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] =
-      ZIO.collectAll(List(
+    protected def builtinAssertions: Seq[ZIO[R, E, TVariable] => ZIO[R, E, (Proof[ProofAtom], Predicate)]] =
+      Seq(
         // ------
         // A == A
-        (for {
+        newVariable => (for {
           t <- newVariable
           a <- newVariable
         } yield (
@@ -135,24 +128,9 @@ abstract class ImplicitResolver[R, E] {
           )))) -> PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(t), Variable(a), Variable(a)))
           )),
 
-        //        // B == A
-        //        // ------
-        //        // A == B
-        //        (for {
-        //          a <- newVariable
-        //          b <- newVariable
-        //        } yield (
-        //          Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
-        //            ExprConstructor.AssumeErasedValue,
-        //            EmptyTuple,
-        //          )))) -> Implies(
-        //            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(b), Variable(a))),
-        //            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(b))),
-        //          ))),
-
         // ------
         // A <: A
-        (for {
+        newVariable => (for {
           a <- newVariable
         } yield (
           Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
@@ -164,7 +142,7 @@ abstract class ImplicitResolver[R, E] {
         // A <: B1 and A <: B2
         // -------------------
         // A <: (B1 & B2)
-        (for {
+        newVariable => (for {
           a <- newVariable
           b1 <- newVariable
           b2 <- newVariable
@@ -187,7 +165,7 @@ abstract class ImplicitResolver[R, E] {
         // A <: B1 or A <: B2
         // ------------------
         // A <: (B1 | B2)
-        (for {
+        newVariable => (for {
           a <- newVariable
           b1 <- newVariable
           b2 <- newVariable
@@ -210,7 +188,7 @@ abstract class ImplicitResolver[R, E] {
         // A1 <: B or A2 <: B
         // ------------------
         // A1 & A2 <: B
-        (for {
+        newVariable => (for {
           a1 <- newVariable
           a2 <- newVariable
           b <- newVariable
@@ -233,7 +211,7 @@ abstract class ImplicitResolver[R, E] {
         // A1 <: B and A2 <: B
         // -------------------
         // (A1 | A2) <: B
-        (for {
+        newVariable => (for {
           a1 <- newVariable
           a2 <- newVariable
           b <- newVariable
@@ -256,7 +234,7 @@ abstract class ImplicitResolver[R, E] {
         // A <: B and C <: D
         // --------------------
         // (B -> C) <: (A -> D)
-        (for {
+        newVariable => (for {
           a <- newVariable
           b <- newVariable
           c <- newVariable
@@ -283,7 +261,7 @@ abstract class ImplicitResolver[R, E] {
         // (B < A) == true
         // ------------------
         // TypeN B <: TypeN A
-        (for {
+        newVariable => (for {
           bType <- boolType
           lt <- natLessThanFunction
           a <- newVariable
@@ -310,7 +288,7 @@ abstract class ImplicitResolver[R, E] {
             ),
           )
           )),
-      ))
+      )
 
 
 
@@ -464,8 +442,14 @@ abstract class ImplicitResolver[R, E] {
   }
 
 
-  protected sealed class TCPrologContext(override protected val createdHoles: Ref[Set[THole]]) extends PrologContext[R, E] with IRProverContext {
+  protected sealed class TCPrologContext(createdHoles: Ref[Set[THole]]) extends PrologContext[R, E] with IRProverContext {
     import syntax.*
+
+
+    protected override def newVariable: ZIO[R, E, ExprProverSyntax.TVariable] =
+      createHole.tap { hole =>
+        createdHoles.update(_ + hole)
+      }
 
     override def compareValues[R2 <: R, E2 >: Error, T](a: Value, b: Value)(f: (ExprConstructor, Seq[Expr], Seq[Expr]) => ZStream[R2, E2, ProofResult.Yes]): ZStream[R2, E2, ProofResult.Yes] =
       (a.constructor, b.constructor) match {
@@ -775,21 +759,18 @@ abstract class ImplicitResolver[R, E] {
 
   final case class ResolvedImplicit(proof: Proof[WrapExpr], model: Map[THole, ExprConstraints[WrapExpr]])
 
-  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: ZIO[R, E, List[Assertion]], knownVarValues: Map[TVariable, WrapExpr], fuel: Int)
+  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: Seq[ZIO[R, E, THole] => ZIO[R, E, Assertion]], knownVarValues: Map[TVariable, WrapExpr], fuel: Int)
     : ZIO[R, E, Option[ResolvedImplicit]] =
     for
       createdHoles <- Ref.make(Set.empty[THole])
       context = new TCPrologContext(createdHoles) {
-        protected override def assertions: ZIO[R, E, List[(Proof[TCAtomicProof], syntax.Predicate)]] =
-          for
-            baseAssertions <- super.assertions
-            givenAssertions2 <- givenAssertions
-            givenAssertions3 <- ZIO.foreach(givenAssertions2) { assertion =>
-              arExprToGoal(assertion.assertionType, fuel).map { assertionType =>
-                (Proof.Atomic(TCAtomicProof.ExprProof(assertion.witness)), assertionType)
-              }
-            }
-          yield baseAssertions ++ givenAssertions3
+        protected override def assertions: Seq[ZIO[R, E, THole] => ZIO[R, E, (Proof[ProofAtom], syntax.Predicate)]] =
+          super.assertions ++ givenAssertions.map { createAssertion => (newVariable: ZIO[R, E, THole]) =>
+            for
+              assertion <- createAssertion(newVariable)
+              assertionType <- arExprToGoal(assertion.assertionType, fuel)
+            yield (Proof.Atomic(TCAtomicProof.ExprProof(assertion.witness)), assertionType)
+          }
 
         protected override def normalize(expr: syntax.Value, substitutions: Model, fuel: Int): ZIO[R, E, syntax.Expr] =
           expr match {

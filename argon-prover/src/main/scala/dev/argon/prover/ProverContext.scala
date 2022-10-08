@@ -30,7 +30,7 @@ trait ProverContext[R, E] {
   }
 
 
-  protected def assertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]]
+  protected def assertions: Seq[ZIO[R, E, TVariable] => ZIO[R, E, (Proof[ProofAtom], Predicate)]]
   protected def normalize(expr: Value, substitutions: Model, fuel: Int): ZIO[R, E, Expr]
   protected def otherForEquivalenceRelation(constraints: TConstraints): Option[syntax.Expr]
 

@@ -6,19 +6,18 @@ import zio.*
 import zio.stream.{Stream, ZStream}
 
 abstract class SimplePrologContext[R <: VariableProvider, E]
-    extends PrologContext[R, E] with CommonProofRelations[R, E] {
-  override val syntax: SimpleProverSyntaxBase
+    extends PrologContext[R, E] with SimpleProverContext[R, E] with CommonProofRelations[R, E] {
   import syntax.*
 
-  override type ProofAtom = Unit
+
+  protected final override def newVariable: ZIO[R, E, String] =
+    VariableProvider.next
 
   protected override def variableIsFromRules(variable: String): UIO[Boolean] = ZIO.succeed(true)
 
   protected override def intrinsicPredicate
     (predicate: TPredicateFunction, args: Seq[Expr], substitutions: Model, solveState: SolveState)
     : ZStream[R, Either[E, ProofResult.No], ProofResult.Yes] = ZStream.empty
-
-  protected override def normalize(expr: Value, substitutions: Model, fuel: Int): ZIO[R, E, Expr] = ZIO.succeed(expr)
 
   protected override def variableRelationProof(relation: Unit, a: String, b: String): ZIO[R, E, Proof[Unit]] =
     ZIO.succeed(Proof.Atomic(()))

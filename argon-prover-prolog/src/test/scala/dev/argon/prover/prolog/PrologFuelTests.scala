@@ -19,17 +19,18 @@ object PrologFuelTests extends ZIOSpecDefault {
 
   val fuel = 10
 
-  private object TestContext extends SimplePrologContext[VariableProvider, Nothing] {
+  private trait TestAssertions[R] extends SimpleProverContext[R, Nothing] {
     override val syntax: prologSyntax.type = prologSyntax
 
-    protected override val assertions: URIO[VariableProvider, List[(Proof[Unit], Predicate)]] =
-      ZIO.foreach(List(
-        (for {
-          x <- VariableProvider.next
-        } yield pred(Infinite, v"$x") ==> pred(Infinite, v"$x"))
-      )) { predicateIO => predicateIO.map { Proof.Atomic(()) -> _ } }
-
+    protected override val assertions: Seq[URIO[R, TVariable] => URIO[R, (Proof[Unit], Predicate)]] =
+      Seq(
+        newVariable => (for {
+          x <- newVariable
+        } yield Proof.Atomic(()) -> (pred(Infinite, v"$x") ==> pred(Infinite, v"$x")))
+      )
   }
+
+  private object TestContext extends SimplePrologContext[VariableProvider, Nothing] with TestAssertions[VariableProvider]
 
   import TestContext.ProofResult
 
