@@ -1,7 +1,7 @@
 package dev.argon.expr
 
 import dev.argon.util.{*, given}
-import dev.argon.prover.{Proof, ProverSyntax}
+import dev.argon.prover.{Proof, ProverSyntax, ProverContext}
 import dev.argon.prover.prolog.PrologContext
 import dev.argon.util.UniqueIdentifier
 import zio.*
@@ -94,15 +94,20 @@ abstract class ImplicitResolver[R, E] {
 
   final case class Assertion(witness: WrapExpr, assertionType: WrapExpr)
 
-  protected sealed class TCPrologContext(createdHoles: Ref[Set[THole]]) extends PrologContext[R, E] {
+
+  trait IRProverContext extends ProverContext[R, E] {
     override val syntax: ExprProverSyntax.type = ExprProverSyntax
     import syntax.*
+
+    protected def createdHoles: Ref[Set[THole]]
+
     override type ProofAtom = TCAtomicProof
 
     override type TRelation = ExprRelation
     override type TConstraints = ExprConstraints[Expr]
 
-    private type Error = Either[E, ProofResult.No]
+
+    protected override def assertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] = builtinAssertions
 
     protected override def normalize(expr: Value, substitutions: Model, fuel: Int): ZIO[R, E, Expr] =
       exprToWrapExpr(expr).flatMap { expr =>
@@ -110,21 +115,10 @@ abstract class ImplicitResolver[R, E] {
           .map(wrapExprToExpr)
       }
 
-    override def compareValues[R2 <: R, E2 >: Error, T](a: Value, b: Value)(f: (ExprConstructor, Seq[Expr], Seq[Expr]) => ZStream[R2, E2, ProofResult.Yes]): ZStream[R2, E2, ProofResult.Yes] =
-      (a.constructor, b.constructor) match {
-        case (ExprConstructor.LoadLambda(argVariableA), ExprConstructor.LoadLambda(argVariableB)) =>
-          val loadArgA = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(argVariableA), EmptyTuple))
 
-          ZStream.unwrap(
-            ZIO.foreach(b.args)(exprToWrapExprError)
-              .map { bArgs2 =>
-                val bArgs3 = bArgs2.map(substituteVariables(Map(argVariableB -> loadArgA)) andThen wrapExprToExpr)
-
-                f(a.constructor, a.args, bArgs3)
-              }
-          )
-
-        case _ => super.compareValues(a, b)(f)
+    private def newVariable: ZIO[R, E, ExprProverSyntax.TVariable] =
+      createHole.tap { hole =>
+        createdHoles.update(_ + hole)
       }
 
     private def builtinAssertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] =
@@ -141,20 +135,20 @@ abstract class ImplicitResolver[R, E] {
           )))) -> PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(t), Variable(a), Variable(a)))
           )),
 
-//        // B == A
-//        // ------
-//        // A == B
-//        (for {
-//          a <- newVariable
-//          b <- newVariable
-//        } yield (
-//          Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
-//            ExprConstructor.AssumeErasedValue,
-//            EmptyTuple,
-//          )))) -> Implies(
-//            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(b), Variable(a))),
-//            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(b))),
-//          ))),
+        //        // B == A
+        //        // ------
+        //        // A == B
+        //        (for {
+        //          a <- newVariable
+        //          b <- newVariable
+        //        } yield (
+        //          Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
+        //            ExprConstructor.AssumeErasedValue,
+        //            EmptyTuple,
+        //          )))) -> Implies(
+        //            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(b), Variable(a))),
+        //            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(a), Variable(b))),
+        //          ))),
 
         // ------
         // A <: A
@@ -165,7 +159,7 @@ abstract class ImplicitResolver[R, E] {
             ExprConstructor.AssumeErasedValue,
             EmptyTuple,
           ))) -> PredicateFunction(ExprConstructor.SubtypeWitnessType, Seq(Variable(a), Variable(a)))
-        )),
+          )),
 
         // A <: B1 and A <: B2
         // -------------------
@@ -188,7 +182,7 @@ abstract class ImplicitResolver[R, E] {
               Seq(Variable(a), Value(ExprConstructor.IntersectionType, Seq(Variable(b1), Variable(b2)))),
             ),
           )
-        )),
+          )),
 
         // A <: B1 or A <: B2
         // ------------------
@@ -211,7 +205,7 @@ abstract class ImplicitResolver[R, E] {
               Seq(Variable(a), Value(ExprConstructor.UnionType, Seq(Variable(b1), Variable(b2)))),
             ),
           )
-        )),
+          )),
 
         // A1 <: B or A2 <: B
         // ------------------
@@ -234,7 +228,7 @@ abstract class ImplicitResolver[R, E] {
               Seq(Value(ExprConstructor.IntersectionType, Seq(Variable(a1), Variable(a2))), Variable(b)),
             ),
           )
-        )),
+          )),
 
         // A1 <: B and A2 <: B
         // -------------------
@@ -257,7 +251,7 @@ abstract class ImplicitResolver[R, E] {
               Seq(Value(ExprConstructor.UnionType, Seq(Variable(a1), Variable(a2))), Variable(b)),
             ),
           )
-        )),
+          )),
 
         // A <: B and C <: D
         // --------------------
@@ -284,7 +278,7 @@ abstract class ImplicitResolver[R, E] {
               ),
             ),
           )
-        )),
+          )),
 
         // (B < A) == true
         // ------------------
@@ -315,14 +309,179 @@ abstract class ImplicitResolver[R, E] {
               ),
             ),
           )
-        )),
+          )),
       ))
 
-    protected override def assertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]] = builtinAssertions
 
-    private def newVariable: ZIO[R, E, ExprProverSyntax.TVariable] =
-      createHole.tap { hole =>
-        createdHoles.update(_ + hole)
+
+    def exprToWrapExpr(expr: Expr): ZIO[R, E, WrapExpr] =
+      expr match {
+        case Value(ctor, args) =>
+          ZIO.foreach(args)(exprToWrapExpr).flatMap { argExprs =>
+            ctor.argsFromExprs(argExprs) match {
+              case Some(ctorArgs) => ZIO.succeed(WrapExpr.OfExpr(ArExpr(ctor, ctorArgs)))
+              case None =>
+                ZIO.logError(s"Could not from prover expression back to argon: $ctor, $args") *>
+                  invalidExpr
+            }
+          }
+
+        case Variable(variable) => ZIO.succeed(WrapExpr.OfHole(variable))
+      }
+
+    def exprToWrapExprError(expr: Expr): ZIO[R, Error, WrapExpr] = exprToWrapExpr(expr).mapError(Left.apply)
+
+    def wrapExprToExpr(e: WrapExpr): Expr =
+      e match {
+        case WrapExpr.OfExpr(expr) =>
+          Value(expr.constructor, expr.constructor.argsToExprs(expr.args).map(wrapExprToExpr))
+        case WrapExpr.OfHole(variable) => Variable(variable)
+      }
+
+    def arExprToGoal(expr: WrapExpr, fuel: Int): ZIO[R, E, Predicate] =
+      evaluator.normalizeTopLevelWrap(expr, fuel).flatMap {
+        case WrapExpr.OfExpr(expr) =>
+          expr.constructor match {
+            case ExprConstructor.ConjunctionType =>
+              val (a, b) = expr.args.asInstanceOf[ExprConstructor.ConjunctionTypeArgs]
+              for {
+                a2 <- arExprToGoal(a, fuel - 1)
+                b2 <- arExprToGoal(b, fuel - 1)
+              } yield And(a2, b2)
+
+            case ExprConstructor.DisjunctionType =>
+              val (a, b) = expr.args.asInstanceOf[ExprConstructor.DisjunctionTypeArgs]
+              for {
+                a2 <- arExprToGoal(a, fuel - 1)
+                b2 <- arExprToGoal(b, fuel - 1)
+              } yield Or(a2, b2)
+
+            case ExprConstructor.FunctionType =>
+              val (a, b) = expr.args.asInstanceOf[ExprConstructor.ConjunctionTypeArgs]
+              for {
+                a2 <- arExprToGoal(a, fuel - 1)
+                b2 <- arExprToGoal(b, fuel - 1)
+              } yield Implies(a2, b2)
+
+            case ExprConstructor.NeverType => ZIO.succeed(PropFalse)
+
+            case _ =>
+              val args = expr.constructor.argsToExprs(expr.args).map(wrapExprToExpr)
+              ZIO.succeed(PredicateFunction(expr.constructor, args))
+          }
+
+        case WrapExpr.OfHole(_) => invalidPredicateExpr
+      }
+
+    def proofAtomicAsWrapExpr(proof: Proof[TCAtomicProof]): ZIO[R, E, Proof[WrapExpr]] =
+      proof match
+        case Proof.Atomic(TCAtomicProof.ExprProof(expr)) =>
+          ZIO.succeed(Proof.Atomic(expr))
+
+        case Proof.Identifier(id) => ZIO.succeed(Proof.Identifier(id))
+        case Proof.ImplicaitonAbstraction(id, body) =>
+          for
+            body <- proofAtomicAsWrapExpr(body)
+          yield Proof.ImplicaitonAbstraction(id, body)
+
+        case Proof.ModusPonens(implication, premise) =>
+          for
+            implication <- proofAtomicAsWrapExpr(implication)
+            premise <- proofAtomicAsWrapExpr(premise)
+          yield Proof.ModusPonens(implication, premise)
+
+        case Proof.ModusTollens(implication, consequentFalse) =>
+          for
+            implication <- proofAtomicAsWrapExpr(implication)
+            consequentFalse <- proofAtomicAsWrapExpr(consequentFalse)
+          yield Proof.ModusTollens(implication, consequentFalse)
+
+
+        case Proof.ConjunctIntro(a, b) =>
+          for
+            a <- proofAtomicAsWrapExpr(a)
+            b <- proofAtomicAsWrapExpr(b)
+          yield Proof.ConjunctIntro(a, b)
+
+        case Proof.DisjunctIntroLeft(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DisjunctIntroLeft(p)
+
+        case Proof.DisjunctIntroRight(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DisjunctIntroLeft(p)
+
+        case Proof.DisjunctCommute(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DisjunctCommute(p)
+
+        case Proof.ConjunctCommute(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.ConjunctCommute(p)
+
+        case Proof.DeMorganAndPullNotOut(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DeMorganAndPullNotOut(p)
+
+        case Proof.DeMorganOrPullNotOut(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DeMorganOrPullNotOut(p)
+
+        case Proof.DeMorganAndPushNotIn(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DeMorganAndPushNotIn(p)
+
+        case Proof.DeMorganOrPushNotIn(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DeMorganOrPushNotIn(p)
+
+        case Proof.DoubleNegIntro(p) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+          yield Proof.DoubleNegIntro(p)
+
+        case Proof.Contradiction(p, notP) =>
+          for
+            p <- proofAtomicAsWrapExpr(p)
+            notP <- proofAtomicAsWrapExpr(notP)
+          yield Proof.Contradiction(p, notP)
+
+        case Proof.HypotheticalSyllogism(pImpliesQ, qImpliesR) =>
+          for
+            pImpliesQ <- proofAtomicAsWrapExpr(pImpliesQ)
+            qImpliesR <- proofAtomicAsWrapExpr(qImpliesR)
+          yield Proof.HypotheticalSyllogism(pImpliesQ, qImpliesR)
+
+      end match
+  }
+
+
+  protected sealed class TCPrologContext(override protected val createdHoles: Ref[Set[THole]]) extends PrologContext[R, E] with IRProverContext {
+    import syntax.*
+
+    override def compareValues[R2 <: R, E2 >: Error, T](a: Value, b: Value)(f: (ExprConstructor, Seq[Expr], Seq[Expr]) => ZStream[R2, E2, ProofResult.Yes]): ZStream[R2, E2, ProofResult.Yes] =
+      (a.constructor, b.constructor) match {
+        case (ExprConstructor.LoadLambda(argVariableA), ExprConstructor.LoadLambda(argVariableB)) =>
+          val loadArgA = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadVariable(argVariableA), EmptyTuple))
+
+          ZStream.unwrap(
+            ZIO.foreach(b.args)(exprToWrapExprError)
+              .map { bArgs2 =>
+                val bArgs3 = bArgs2.map(substituteVariables(Map(argVariableB -> loadArgA)) andThen wrapExprToExpr)
+
+                f(a.constructor, a.args, bArgs3)
+              }
+          )
+
+        case _ => super.compareValues(a, b)(f)
       }
 
     protected override def variableIsFromRules(variable: exprContext.THole): UIO[Boolean] =
@@ -612,153 +771,6 @@ abstract class ImplicitResolver[R, E] {
           super.unifyCustom(goal, rule, model, solveState)
       }
 
-    def exprToWrapExpr(expr: Expr): ZIO[R, E, WrapExpr] =
-      expr match {
-        case Value(ctor, args) =>
-          ZIO.foreach(args)(exprToWrapExpr).flatMap { argExprs =>
-            ctor.argsFromExprs(argExprs) match {
-              case Some(ctorArgs) => ZIO.succeed(WrapExpr.OfExpr(ArExpr(ctor, ctorArgs)))
-              case None =>
-                ZIO.logError(s"Could not from prover expression back to argon: $ctor, $args") *>
-                invalidExpr
-            }
-          }
-
-        case Variable(variable) => ZIO.succeed(WrapExpr.OfHole(variable))
-      }
-
-    def exprToWrapExprError(expr: Expr): ZIO[R, Error, WrapExpr] = exprToWrapExpr(expr).mapError(Left.apply)
-
-    def wrapExprToExpr(e: WrapExpr): Expr =
-      e match {
-        case WrapExpr.OfExpr(expr) =>
-          Value(expr.constructor, expr.constructor.argsToExprs(expr.args).map(wrapExprToExpr))
-        case WrapExpr.OfHole(variable) => Variable(variable)
-      }
-
-    def arExprToGoal(expr: WrapExpr, fuel: Int): ZIO[R, E, Predicate] =
-      evaluator.normalizeTopLevelWrap(expr, fuel).flatMap {
-        case WrapExpr.OfExpr(expr) =>
-          expr.constructor match {
-            case ExprConstructor.ConjunctionType =>
-              val (a, b) = expr.args.asInstanceOf[ExprConstructor.ConjunctionTypeArgs]
-              for {
-                a2 <- arExprToGoal(a, fuel - 1)
-                b2 <- arExprToGoal(b, fuel - 1)
-              } yield And(a2, b2)
-
-            case ExprConstructor.DisjunctionType =>
-              val (a, b) = expr.args.asInstanceOf[ExprConstructor.DisjunctionTypeArgs]
-              for {
-                a2 <- arExprToGoal(a, fuel - 1)
-                b2 <- arExprToGoal(b, fuel - 1)
-              } yield Or(a2, b2)
-
-            case ExprConstructor.FunctionType =>
-              val (a, b) = expr.args.asInstanceOf[ExprConstructor.ConjunctionTypeArgs]
-              for {
-                a2 <- arExprToGoal(a, fuel - 1)
-                b2 <- arExprToGoal(b, fuel - 1)
-              } yield Implies(a2, b2)
-
-            case ExprConstructor.NeverType => ZIO.succeed(PropFalse)
-
-            case _ =>
-              val args = expr.constructor.argsToExprs(expr.args).map(wrapExprToExpr)
-              ZIO.succeed(PredicateFunction(expr.constructor, args))
-          }
-
-        case WrapExpr.OfHole(_) => invalidPredicateExpr
-      }
-
-    def proofAtomicAsWrapExpr(proof: Proof[TCAtomicProof]): ZIO[R, E, Proof[WrapExpr]] =
-      proof match
-        case Proof.Atomic(TCAtomicProof.ExprProof(expr)) =>
-          ZIO.succeed(Proof.Atomic(expr))
-
-        case Proof.Identifier(id) => ZIO.succeed(Proof.Identifier(id))
-        case Proof.ImplicaitonAbstraction(id, body) =>
-          for
-            body <- proofAtomicAsWrapExpr(body)
-          yield Proof.ImplicaitonAbstraction(id, body)
-
-        case Proof.ModusPonens(implication, premise) =>
-          for
-            implication <- proofAtomicAsWrapExpr(implication)
-            premise <- proofAtomicAsWrapExpr(premise)
-          yield Proof.ModusPonens(implication, premise)
-
-        case Proof.ModusTollens(implication, consequentFalse) =>
-          for
-            implication <- proofAtomicAsWrapExpr(implication)
-            consequentFalse <- proofAtomicAsWrapExpr(consequentFalse)
-          yield Proof.ModusTollens(implication, consequentFalse)
-
-
-        case Proof.ConjunctIntro(a, b) =>
-          for
-            a <- proofAtomicAsWrapExpr(a)
-            b <- proofAtomicAsWrapExpr(b)
-          yield Proof.ConjunctIntro(a, b)
-
-        case Proof.DisjunctIntroLeft(p) =>
-          for
-            p <- proofAtomicAsWrapExpr(p)
-          yield Proof.DisjunctIntroLeft(p)
-
-        case Proof.DisjunctIntroRight(p) =>
-          for
-            p <- proofAtomicAsWrapExpr(p)
-          yield Proof.DisjunctIntroLeft(p)
-
-        case Proof.DisjunctCommute(p) =>
-          for
-            p <- proofAtomicAsWrapExpr(p)
-          yield Proof.DisjunctCommute(p)
-
-        case Proof.ConjunctCommute(p) =>
-          for
-            p <- proofAtomicAsWrapExpr(p)
-          yield Proof.ConjunctCommute(p)
-
-        case Proof.DeMorganAndPullNotOut(p) =>
-          for
-            p <- proofAtomicAsWrapExpr(p)
-          yield Proof.DeMorganAndPullNotOut(p)
-
-        case Proof.DeMorganOrPullNotOut(p) =>
-          for
-            p <- proofAtomicAsWrapExpr(p)
-          yield Proof.DeMorganOrPullNotOut(p)
-
-        case Proof.DeMorganAndPushNotIn(p) =>
-          for
-            p <- proofAtomicAsWrapExpr(p)
-          yield Proof.DeMorganAndPushNotIn(p)
-
-        case Proof.DeMorganOrPushNotIn(p) =>
-          for
-            p <- proofAtomicAsWrapExpr(p)
-          yield Proof.DeMorganOrPushNotIn(p)
-
-        case Proof.DoubleNegIntro(p) =>
-          for
-            p <- proofAtomicAsWrapExpr(p)
-          yield Proof.DoubleNegIntro(p)
-
-        case Proof.Contradiction(p, notP) =>
-          for
-            p <- proofAtomicAsWrapExpr(p)
-            notP <- proofAtomicAsWrapExpr(notP)
-          yield Proof.Contradiction(p, notP)
-
-        case Proof.HypotheticalSyllogism(pImpliesQ, qImpliesR) =>
-          for
-            pImpliesQ <- proofAtomicAsWrapExpr(pImpliesQ)
-            qImpliesR <- proofAtomicAsWrapExpr(qImpliesR)
-          yield Proof.HypotheticalSyllogism(pImpliesQ, qImpliesR)
-
-      end match
   }
 
   final case class ResolvedImplicit(proof: Proof[WrapExpr], model: Map[THole, ExprConstraints[WrapExpr]])

@@ -28,7 +28,6 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
   protected def checkRelation(a: Expr, b: Expr, relation: TRelation, substitutions: Model, solveState: SolveState)
     : ZStream[R, Error, ProofResult.Yes]
 
-  protected def otherForEquivalenceRelation(constraints: TConstraints): Option[syntax.Expr]
   protected def variableRelationProof(relation: TRelation, a: TVariable, b: TVariable): ZIO[R, E, Proof[ProofAtom]]
   protected def variableExprRelationProof(relation: TRelation, a: TVariable, b: syntax.Expr): ZIO[R, E, Proof[ProofAtom]]
 
@@ -392,19 +391,6 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
 
       case _ => ZStream.empty
     }
-
-  protected def normalizeExpr(e: Expr, substitutions: Model, fuel: Int): ZIO[R, E, Expr] =
-    if fuel < 0 then
-      ZIO.succeed(e)
-    else
-      e match {
-        case value: Value => normalize(value, substitutions, fuel)
-        case Variable(variable) =>
-          substitutions.get(variable).flatMap(otherForEquivalenceRelation) match {
-            case Some(value) => normalizeExpr(value, substitutions, fuel - 1)
-            case None => ZIO.succeed(e)
-          }
-      }
 
 
   def compareValues[R2 <: R, E2 >: Error, T](a: Value, b: Value)(f: (TConstructor, Seq[Expr], Seq[Expr]) => ZStream[R2, E2, ProofResult.Yes]): ZStream[R2, E2, ProofResult.Yes] =

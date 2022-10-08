@@ -32,8 +32,24 @@ trait ProverContext[R, E] {
 
   protected def assertions: ZIO[R, E, List[(Proof[ProofAtom], Predicate)]]
   protected def normalize(expr: Value, substitutions: Model, fuel: Int): ZIO[R, E, Expr]
+  protected def otherForEquivalenceRelation(constraints: TConstraints): Option[syntax.Expr]
 
   final def check(goal: Predicate, fuel: Int): ZIO[R, E, ProofResult] = check(goal, Map.empty, fuel)
 
   def check(goal: Predicate, model: Model, fuel: Int): ZIO[R, E, ProofResult]
+
+
+  protected def normalizeExpr(e: Expr, substitutions: Model, fuel: Int): ZIO[R, E, Expr] =
+    if fuel < 0 then
+      ZIO.succeed(e)
+    else
+      e match {
+        case value: Value => normalize(value, substitutions, fuel)
+        case Variable(variable) =>
+          substitutions.get(variable).flatMap(otherForEquivalenceRelation) match {
+            case Some(value) => normalizeExpr(value, substitutions, fuel - 1)
+            case None => ZIO.succeed(e)
+          }
+      }
+  
 }
