@@ -2,9 +2,15 @@ package dev.argon.prover.smt
 
 import dev.argon.prover.*
 import dev.argon.util.{*, given}
+import zio.*
+import zio.stm.*
 
 abstract class SmtContext[R, E] extends ProverContext[R, E] {
   import syntax.*
+
+  protected def newVariable: ZIO[R, E, TVariable]
+  protected def assumeResultProof: Proof[ProofAtom]
+
 
   private enum Literal derives CanEqual {
     def pf: PredicateFunction
@@ -15,11 +21,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
 
   private type CNF = List[List[Literal]]
 
-  private enum LiteralPlus derives CanEqual {
-    case True, False
-    case Atom(pf: PredicateFunction)
-    case NotAtom(pf: PredicateFunction)
-  }
+  private type LiteralPlus = Literal | Boolean
 
   private type CNFPlus = List[List[LiteralPlus]]
 
@@ -37,8 +39,8 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       case Implies(a, b) =>
         NNF.Or(List(elimNot(a), negationNormalForm(b)))
 
-      case PropFalse => NNF.Lit(LiteralPlus.False)
-      case pf @ PredicateFunction(_, _) => NNF.Lit(LiteralPlus.Atom(pf))
+      case PropFalse => NNF.Lit(false)
+      case pf @ PredicateFunction(_, _) => NNF.Lit(Literal.Atom(pf))
     }
 
   private def elimNot(p: Predicate): NNF =
@@ -47,8 +49,8 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       case Or(a, b) => NNF.And(List(elimNot(a), elimNot(b)))
       case Implies(a, PropFalse) => negationNormalForm(a)
       case Implies(a, b) => NNF.And(List(negationNormalForm(a), elimNot(b)))
-      case PropFalse => NNF.Lit(LiteralPlus.True)
-      case pf @ PredicateFunction(_, _) => NNF.Lit(LiteralPlus.NotAtom(pf))
+      case PropFalse => NNF.Lit(true)
+      case pf @ PredicateFunction(_, _) => NNF.Lit(Literal.NotAtom(pf))
     }
 
   private def conjunctiveNormalForm(p: NNF): CNFPlus =
@@ -87,10 +89,9 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
   private def simplifyDisjunct(p: List[LiteralPlus]): Option[List[Literal]] =
     p match {
       case Nil => Some(Nil)
-      case LiteralPlus.True :: _ => None
-      case LiteralPlus.False :: tail => simplifyDisjunct(tail)
-      case LiteralPlus.Atom(pf) :: tail => simplifyDisjunct(tail).map { Literal.Atom(pf) :: _ }
-      case LiteralPlus.NotAtom(pf) :: tail => simplifyDisjunct(tail).map { Literal.NotAtom(pf) :: _ }
+      case (_: true) :: _ => None
+      case (_: false) :: tail => simplifyDisjunct(tail)
+      case (literal: Literal) :: tail => simplifyDisjunct(tail).map { literal :: _ }
     }
 
   enum AtomPolarity derives CanEqual {
@@ -140,7 +141,108 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       case _ => Nil
     }
 
-  private def unitPropagation(p: CNF): CNF =
-    
 
+  private def unitPropagation(p: CNF): CNF =
+    unitClauses(p).foldLeft(p) { case (p, (pf, value)) => assumePredicate(p, pf, value) }
+
+
+
+  private def assumePredicate(p: CNF, pf: PredicateFunction, value: Boolean): CNF =
+    def impl(p: CNF): CNFPlus =
+      p.map { _.map {
+        case Literal.Atom(pf2) if pf == pf2 => value
+        case Literal.NotAtom(pf2) if pf == pf2 => !value
+        case lit => lit
+      } }
+
+    simplify(impl(p))
+  end assumePredicate
+
+  private def preprocess(p: CNF): CNF =
+    val p2 = unitPropagation(p)
+    val p3 = elimLiterals(p2)
+    p3
+  end preprocess
+
+
+  private final case class PredicateStats(numTrue: Int, numFalse: Int)
+
+  private enum PredicateChoice {
+    case KnownResult(result: Boolean)
+    case SelectedPredicate(pf: PredicateFunction, bestValue: Boolean)
+  }
+
+  private def choosePredicate(p: CNF): PredicateChoice =
+    def impl(p: CNF, stats: Map[PredicateFunction, PredicateStats]): PredicateChoice =
+      p match {
+        case Nil =>
+          val bestPred = stats.maxByOption { (pf, stat) => Math.max(stat.numTrue, stat.numFalse) }
+          bestPred match {
+            case Some((pf, stats)) =>
+              val bestValue = stats.numTrue >= stats.numFalse
+              PredicateChoice.SelectedPredicate(pf, bestValue)
+
+            case None =>
+              PredicateChoice.KnownResult(true)
+          }
+
+        case Nil :: _ => PredicateChoice.KnownResult(false)
+        case (Literal.Atom(pf) :: ht) :: t =>
+          impl(ht :: t, stats.updatedWith(pf) {
+            case None => Some(PredicateStats(numTrue = 1, numFalse = 0))
+            case Some(stats) => Some(stats.copy(numTrue = stats.numTrue + 1))
+          })
+
+        case (Literal.NotAtom(pf) :: ht) :: t =>
+          impl(ht :: t, stats.updatedWith(pf) {
+            case None => Some(PredicateStats(numTrue = 0, numFalse = 1))
+            case Some(stats) => Some(stats.copy(numFalse = stats.numFalse + 1))
+          })
+      }
+
+    impl(p, Map.empty)
+  end choosePredicate
+
+
+
+  private def satisfiable(p: CNF): Boolean =
+    val p2 = preprocess(p)
+    choosePredicate(p2) match {
+      case PredicateChoice.KnownResult(result) => result
+      case PredicateChoice.SelectedPredicate(pf, value) =>
+        satisfiable(assumePredicate(p2, pf, value)) || satisfiable(assumePredicate(p2, pf, !value))
+    }
+  end satisfiable
+
+  final case class QuantifiedPredicate(vars: Set[TVariable], expr: Predicate)
+
+  private def assertionAsQuantifier(assertion: ZIO[R, E, TVariable] => ZIO[R, E, (Proof[ProofAtom], Predicate)]): ZIO[R, E, QuantifiedPredicate] =
+    for
+      vars <- TSet.empty[TVariable].commit
+      (_, pred) <- assertion(newVariable.tap(vars.put(_).commit))
+      vars <- vars.toSet.commit
+    yield QuantifiedPredicate(vars, pred)
+
+
+  override def check(goal: Predicate, model: Model, fuel: Int): ZIO[R, E, ProofResult] =
+    ZIO.foreach(assertions) { assertion =>
+      assertionAsQuantifier(assertion)
+    }
+      .map { quantAsserts =>
+        val unquantAsserts = quantAsserts.collect {
+          case QuantifiedPredicate(vars, expr) if vars.isEmpty => expr
+        }
+
+        val p = unquantAsserts.foldLeft(Implies(goal, PropFalse))(And.apply)
+
+
+        val nnf = negationNormalForm(p)
+        val cnfPlus = conjunctiveNormalForm(nnf)
+        val cnf = simplify(cnfPlus)
+        if satisfiable(cnf) then
+          ProofResult.Unknown
+        else
+          ProofResult.Yes(assumeResultProof, model)
+      }
+  end check
 }
