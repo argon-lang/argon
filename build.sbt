@@ -317,6 +317,31 @@ lazy val argon_prover_prologJS = argon_prover_prolog.js
 lazy val argon_prover_prologNode = argon_prover_prolog.node
 
 
+lazy val argon_prover_smt = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-prover-smt"))
+  .dependsOn(util, argon_prover)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-prover-smt",
+  )
+
+lazy val argon_prover_smtJVM = argon_prover_smt.jvm
+lazy val argon_prover_smtJS = argon_prover_smt.js
+lazy val argon_prover_smtNode = argon_prover_smt.node
+
+
 lazy val argon_expr = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-expr"))
   .dependsOn(argon_prover, argon_prover_prolog, util)
   .jvmConfigure(
