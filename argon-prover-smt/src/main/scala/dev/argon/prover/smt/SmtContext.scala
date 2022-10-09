@@ -197,14 +197,15 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
   private def unitPropagation(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
     ZIO.foldLeft(unitClauses(p))((p, state)) {
       case ((p, state), (pf, value)) =>
-        assumePredicate(p, state, pf, value)
+        getEqClassIndex(pf, state).flatMap { (state, eqClass) =>
+          assumePredicate(p, state, eqClass, value)
+        }
     }
 
 
 
-  protected def assumePredicate(p: CNF, state: ProverState, pf: PredicateFunction, value: Boolean): ZIO[R, E, (CNF, ProverState)] =
+  protected def assumePredicate(p: CNF, state: ProverState, eqClass: Int, value: Boolean): ZIO[R, E, (CNF, ProverState)] =
     for
-      (state, eqClassIndex) <- getEqClassIndex(pf, state)
       stateRef <- Ref.make(state)
 
       updated <- {
@@ -216,7 +217,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
                 (state, litEqClass) <- getEqClassIndex(lit.pf, state)
                 _ <- stateRef.set(state)
               yield
-                if eqClassIndex == litEqClass then
+                if eqClass == litEqClass then
                   lit match {
                     case Literal.Atom(_) => value
                     case Literal.NotAtom(_) => !value
@@ -242,47 +243,53 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
 
   private enum PredicateChoice {
     case KnownResult(result: Boolean)
-    case SelectedPredicate(pf: PredicateFunction, bestValue: Boolean)
+    case SelectedPredicate(eqClass: Int, bestValue: Boolean)
   }
 
-  private def choosePredicate(p: CNF): PredicateChoice =
-    def impl(p: CNF, stats: Map[PredicateFunction, PredicateStats]): PredicateChoice =
+  private def choosePredicate(p: CNF, state: ProverState): ZIO[R, E, (ProverState, PredicateChoice)] =
+    def impl(p: CNF, state: ProverState, stats: Map[Int, PredicateStats]): ZIO[R, E, (ProverState, PredicateChoice)] =
       p match {
         case Nil =>
-          val bestPred = stats.maxByOption { (pf, stat) => Math.max(stat.numTrue, stat.numFalse) }
-          bestPred match {
-            case Some((pf, stats)) =>
+          val bestPred = stats.maxByOption { (_, stat) => Math.max(stat.numTrue, stat.numFalse) }
+          val result = bestPred match {
+            case Some((eqClass, stats)) =>
               val bestValue = stats.numTrue >= stats.numFalse
-              PredicateChoice.SelectedPredicate(pf, bestValue)
+              PredicateChoice.SelectedPredicate(eqClass, bestValue)
 
             case None =>
               PredicateChoice.KnownResult(true)
           }
+          ZIO.succeed((state, result))
 
-        case Nil :: _ => PredicateChoice.KnownResult(false)
+        case Nil :: _ => ZIO.succeed((state, PredicateChoice.KnownResult(false)))
+
         case (Literal.Atom(pf) :: ht) :: t =>
-          impl(ht :: t, stats.updatedWith(pf) {
-            case None => Some(PredicateStats(numTrue = 1, numFalse = 0))
-            case Some(stats) => Some(stats.copy(numTrue = stats.numTrue + 1))
-          })
+          getEqClassIndex(pf, state).flatMap { (state, eqClass) =>
+            impl(ht :: t, state, stats.updatedWith(eqClass) {
+              case None => Some(PredicateStats(numTrue = 1, numFalse = 0))
+              case Some(stats) => Some(stats.copy(numTrue = stats.numTrue + 1))
+            })
+          }
 
         case (Literal.NotAtom(pf) :: ht) :: t =>
-          impl(ht :: t, stats.updatedWith(pf) {
-            case None => Some(PredicateStats(numTrue = 0, numFalse = 1))
-            case Some(stats) => Some(stats.copy(numFalse = stats.numFalse + 1))
-          })
+          getEqClassIndex(pf, state).flatMap { (state, eqClass) =>
+            impl(ht :: t, state, stats.updatedWith(eqClass) {
+              case None => Some(PredicateStats(numTrue = 0, numFalse = 1))
+              case Some(stats) => Some(stats.copy(numFalse = stats.numFalse + 1))
+            })
+          }
       }
 
-    impl(p, Map.empty)
+    impl(p, state, Map.empty)
   end choosePredicate
 
 
 
   private def satisfiable(p: CNF, state: ProverState): ZIO[R, E, Boolean] =
     preprocess(p, state).flatMap { (p, state) =>
-      choosePredicate(p) match {
-        case PredicateChoice.KnownResult(result) => ZIO.succeed(result)
-        case PredicateChoice.SelectedPredicate(pf, value) =>
+      choosePredicate(p, state).flatMap {
+        case (_, PredicateChoice.KnownResult(result)) => ZIO.succeed(result)
+        case (state, PredicateChoice.SelectedPredicate(pf, value)) =>
           assumePredicate(p, state, pf, value).flatMap(satisfiable) ||
             assumePredicate(p, state, pf, !value).flatMap(satisfiable)
       }
