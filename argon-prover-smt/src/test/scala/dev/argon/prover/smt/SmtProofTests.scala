@@ -95,7 +95,7 @@ object SmtProofTests extends ZIOSpecDefault {
           pred(Constant("a")) | pred(Constant("b")) | pred(Constant("c")),
           !(pred(Constant("b")) & pred(Constant("c"))),
           pred(Constant("c")),
-        ).assertProves(pred(Constant("a")))
+        ).assertNotProves(pred(Constant("a")))
       },
     ).provideSome[Environment](VariableProvider.live)
 

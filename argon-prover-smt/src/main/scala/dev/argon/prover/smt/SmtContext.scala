@@ -133,41 +133,58 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     case Both, True, False
   }
 
-  private def determinePolarity(p: CNF): Map[PredicateFunction, AtomPolarity] =
-    p.iterator.flatten.foldLeft(Map.empty[PredicateFunction, AtomPolarity]) { (acc, literal) =>
-      val currentPolarity = acc.get(literal.pf)
-      (literal, currentPolarity) match {
-        case (_, Some(AtomPolarity.Both)) => acc
+  private def determinePolarity(p: CNF, state: ProverState): ZIO[R, E, (ProverState, Map[Int, AtomPolarity])] =
+    ZIO.foldLeft(p.flatten)((state, Map.empty[Int, AtomPolarity])) { case ((state, acc), literal) =>
+      getEqClassIndex(literal.pf, state).map { (state, eqClass) =>
+        val currentPolarity = acc.get(eqClass)
+        val updated = (literal, currentPolarity) match {
+          case (_, Some(AtomPolarity.Both)) => acc
 
-        case (Literal.Atom(_), Some(AtomPolarity.True)) => acc
-        case (Literal.Atom(pf), Some(AtomPolarity.False)) => acc.updated(pf, AtomPolarity.Both)
-        case (Literal.Atom(pf), None) => acc.updated(pf, AtomPolarity.True)
+          case (Literal.Atom(_), Some(AtomPolarity.True)) => acc
+          case (Literal.Atom(_), Some(AtomPolarity.False)) => acc.updated(eqClass, AtomPolarity.Both)
+          case (Literal.Atom(_), None) => acc.updated(eqClass, AtomPolarity.True)
 
-        case (Literal.NotAtom(_), Some(AtomPolarity.False)) => acc
-        case (Literal.NotAtom(pf), Some(AtomPolarity.True)) => acc.updated(pf, AtomPolarity.Both)
-        case (Literal.NotAtom(pf), None) => acc.updated(pf, AtomPolarity.False)
+          case (Literal.NotAtom(_), Some(AtomPolarity.False)) => acc
+          case (Literal.NotAtom(_), Some(AtomPolarity.True)) => acc.updated(eqClass, AtomPolarity.Both)
+          case (Literal.NotAtom(_), None) => acc.updated(eqClass, AtomPolarity.False)
+        }
+
+        (state, updated)
       }
     }
 
 
   end determinePolarity
 
-  private def elimLiterals(p: CNF): CNF =
-    val polarity = determinePolarity(p)
+  private def elimLiterals(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
+    for
+      (state, polarity) <- determinePolarity(p, state)
+      stateRef <- Ref.make(state)
+      updated <- {
+        def elimDisjuncts(p: List[Literal]): ZIO[R, E, Option[List[Literal]]] =
+          p match {
+            case Nil => ZIO.some(Nil)
+            case head :: tail =>
+              for
+                state <- stateRef.get
+                (state, eqClass) <- getEqClassIndex(head.pf, state)
+                _ <- stateRef.set(state)
+                result <- (polarity.get(eqClass), head) match {
+                  case (Some(AtomPolarity.True), Literal.Atom(_)) | (Some(AtomPolarity.False), Literal.NotAtom(_)) =>
+                    ZIO.none // Remove this conjunct because it is true
 
-    def elimDisjuncts(p: List[Literal]): Option[List[Literal]] =
-      p match {
-        case Nil => Some(Nil)
-        case head :: tail =>
-          polarity.get(head.pf) match {
-            case Some(AtomPolarity.True) => None
-            case Some(AtomPolarity.False) => elimDisjuncts(tail)
-            case None | Some(AtomPolarity.Both) => elimDisjuncts(tail).map { head :: _ }
+                  case (Some(AtomPolarity.False), Literal.Atom(_)) | (Some(AtomPolarity.True), Literal.NotAtom(_)) =>
+                    elimDisjuncts(tail) // Remove this disjunct because it is false
+
+                  case (None | Some(AtomPolarity.Both), _) => elimDisjuncts(tail).map { _.map { head :: _ } }
+                }
+              yield result
           }
-      }
 
-    p.flatMap(elimDisjuncts)
-  end elimLiterals
+        ZIO.foreach(p)(elimDisjuncts)
+      }
+      state <- stateRef.get
+    yield (updated.flatten, state)
 
   private def unitClauses(p: CNF): List[(PredicateFunction, Boolean)] =
     p.flatMap {
@@ -218,9 +235,8 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
   private def preprocess(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
     for
       (p, state) <- unitPropagation(p, state)
-      p2 = elimLiterals(p)
-    yield (p2, state)
-
+      (p, state) <- elimLiterals(p, state)
+    yield (p, state)
 
   private final case class PredicateStats(numTrue: Int, numFalse: Int)
 
