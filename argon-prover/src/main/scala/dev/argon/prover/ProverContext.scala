@@ -51,5 +51,10 @@ trait ProverContext[R, E] {
             case None => ZIO.succeed(e)
           }
       }
+
+  protected def normalizePredicateFunction(pf: PredicateFunction, model: Model, fuel: Int): ZIO[R, E, PredicateFunction] =
+    for
+      args2 <- ZIO.foreach(pf.args)(normalizeExpr(_, model, fuel))
+    yield PredicateFunction(pf.function, args2)
   
 }

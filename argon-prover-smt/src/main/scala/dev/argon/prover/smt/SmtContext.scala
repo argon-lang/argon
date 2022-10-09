@@ -12,24 +12,59 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
   protected def assumeResultProof: Proof[ProofAtom]
 
 
-  private enum Literal derives CanEqual {
+  enum Literal derives CanEqual {
     def pf: PredicateFunction
 
     case Atom(pf: PredicateFunction)
     case NotAtom(pf: PredicateFunction)
   }
 
-  private type CNF = List[List[Literal]]
+  type CNF = List[List[Literal]]
 
-  private type LiteralPlus = Literal | Boolean
+  type LiteralPlus = Literal | Boolean
 
-  private type CNFPlus = List[List[LiteralPlus]]
+  type CNFPlus = List[List[LiteralPlus]]
 
   private enum NNF {
     case Lit(literal: LiteralPlus)
     case And(conjuncts: List[NNF])
     case Or(disjuncts: List[NNF])
   }
+
+  final case class PredEquivalenceClass(predicates: Seq[PredicateFunction])
+  final case class ExprEquivalenceClass(exprs: Seq[Expr])
+  final case class ProverState
+  (
+    model: Model,
+    fuel: Int,
+    predEqClasses: Seq[PredEquivalenceClass],
+    exprEqClasses: Seq[ExprEquivalenceClass],
+  )
+
+
+  private def getEqClassIndex(pred: PredicateFunction, state: ProverState): ZIO[R, E, (ProverState, Int)] =
+    val index = state.predEqClasses.indexWhere { _.predicates.contains(pred) }
+    if index >= 0 then
+      ZIO.succeed((state, index))
+    else
+      normalizePredicateFunction(pred, state.model, state.fuel).map { predNorm =>
+        val index = state.predEqClasses.indexWhere { _.predicates.contains(predNorm) }
+        if index >= 0 then
+          val eqClass = state.predEqClasses(index)
+          val newState = state.copy(
+            predEqClasses = state.predEqClasses.updated(index, PredEquivalenceClass(eqClass.predicates :+ pred))
+          )
+          (newState, index)
+        else
+          val newState = state.copy(
+            predEqClasses = state.predEqClasses :+ PredEquivalenceClass(Seq(pred, predNorm))
+          )
+          (newState, state.predEqClasses.size)
+        end if
+      }
+  end getEqClassIndex
+
+
 
   private def negationNormalForm(p: Predicate): NNF =
     p match {
@@ -142,27 +177,49 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     }
 
 
-  private def unitPropagation(p: CNF): CNF =
-    unitClauses(p).foldLeft(p) { case (p, (pf, value)) => assumePredicate(p, pf, value) }
+  private def unitPropagation(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
+    ZIO.foldLeft(unitClauses(p))((p, state)) {
+      case ((p, state), (pf, value)) =>
+        assumePredicate(p, state, pf, value)
+    }
 
 
 
-  private def assumePredicate(p: CNF, pf: PredicateFunction, value: Boolean): CNF =
-    def impl(p: CNF): CNFPlus =
-      p.map { _.map {
-        case Literal.Atom(pf2) if pf == pf2 => value
-        case Literal.NotAtom(pf2) if pf == pf2 => !value
-        case lit => lit
-      } }
+  protected def assumePredicate(p: CNF, state: ProverState, pf: PredicateFunction, value: Boolean): ZIO[R, E, (CNF, ProverState)] =
+    for
+      (state, eqClassIndex) <- getEqClassIndex(pf, state)
+      stateRef <- Ref.make(state)
 
-    simplify(impl(p))
-  end assumePredicate
+      updated <- {
+        def impl(p: CNF): ZIO[R, E, CNFPlus] =
+          ZIO.foreach(p) { disjuncts =>
+            ZIO.foreach(disjuncts) { lit =>
+              for
+                state <- stateRef.get
+                (state, litEqClass) <- getEqClassIndex(lit.pf, state)
+                _ <- stateRef.set(state)
+              yield
+                if eqClassIndex == litEqClass then
+                  lit match {
+                    case Literal.Atom(_) => value
+                    case Literal.NotAtom(_) => !value
+                  }
+                else
+                  lit
+            }
+          }
 
-  private def preprocess(p: CNF): CNF =
-    val p2 = unitPropagation(p)
-    val p3 = elimLiterals(p2)
-    p3
-  end preprocess
+        impl(p)
+      }
+
+      state <- stateRef.get
+    yield (simplify(updated), state)
+
+  private def preprocess(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
+    for
+      (p, state) <- unitPropagation(p, state)
+      p2 = elimLiterals(p)
+    yield (p2, state)
 
 
   private final case class PredicateStats(numTrue: Int, numFalse: Int)
@@ -205,14 +262,15 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
 
 
 
-  private def satisfiable(p: CNF): Boolean =
-    val p2 = preprocess(p)
-    choosePredicate(p2) match {
-      case PredicateChoice.KnownResult(result) => result
-      case PredicateChoice.SelectedPredicate(pf, value) =>
-        satisfiable(assumePredicate(p2, pf, value)) || satisfiable(assumePredicate(p2, pf, !value))
+  private def satisfiable(p: CNF, state: ProverState): ZIO[R, E, Boolean] =
+    preprocess(p, state).flatMap { (p, state) =>
+      choosePredicate(p) match {
+        case PredicateChoice.KnownResult(result) => ZIO.succeed(result)
+        case PredicateChoice.SelectedPredicate(pf, value) =>
+          assumePredicate(p, state, pf, value).flatMap(satisfiable) ||
+            assumePredicate(p, state, pf, !value).flatMap(satisfiable)
+      }
     }
-  end satisfiable
 
   final case class QuantifiedPredicate(vars: Set[TVariable], expr: Predicate)
 
@@ -228,7 +286,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     ZIO.foreach(assertions) { assertion =>
       assertionAsQuantifier(assertion)
     }
-      .map { quantAsserts =>
+      .flatMap { quantAsserts =>
         val unquantAsserts = quantAsserts.collect {
           case QuantifiedPredicate(vars, expr) if vars.isEmpty => expr
         }
@@ -239,10 +297,18 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
         val nnf = negationNormalForm(p)
         val cnfPlus = conjunctiveNormalForm(nnf)
         val cnf = simplify(cnfPlus)
-        if satisfiable(cnf) then
-          ProofResult.Unknown
-        else
-          ProofResult.Yes(assumeResultProof, model)
+
+        val initialState = ProverState(
+          model = model,
+          fuel = fuel,
+          predEqClasses = Seq.empty,
+          exprEqClasses = Seq.empty,
+        )
+
+        satisfiable(cnf, initialState).map {
+          case true => ProofResult.Unknown
+          case false => ProofResult.Yes(assumeResultProof, model)
+        }
       }
   end check
 }
