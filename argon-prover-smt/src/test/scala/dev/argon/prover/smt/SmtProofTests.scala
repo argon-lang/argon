@@ -97,6 +97,12 @@ object SmtProofTests extends ZIOSpecDefault {
           pred(Constant("c")),
         ).assertNotProves(pred(Constant("a")))
       },
+      test("prove x > 0 given not x = 0, not 0 > x") {
+        smtContext(
+          !pred(Gt, expr(Zero), Variable("x")),
+          !pred(EqualTo, Variable("x"), expr(Zero)),
+        ).assertProves(pred(Gt, Variable("x"), expr(Zero)))
+      },
     ).provideSome[Environment](VariableProvider.live)
 
 }
