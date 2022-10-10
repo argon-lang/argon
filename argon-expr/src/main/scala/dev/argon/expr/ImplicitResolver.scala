@@ -3,6 +3,7 @@ package dev.argon.expr
 import dev.argon.util.{*, given}
 import dev.argon.prover.{Proof, ProverSyntax, ProverContext}
 import dev.argon.prover.prolog.PrologContext
+import dev.argon.prover.smt.SmtContext
 import dev.argon.util.UniqueIdentifier
 import zio.*
 import zio.stream.*
@@ -18,7 +19,7 @@ abstract class ImplicitResolver[R, E] {
 
   protected def isSubClass
   (
-    prologContext: TCPrologContext,
+    prologContext: IRPrologContext,
     classA: TClass,
     aArgs: Seq[ExprProverSyntax.Expr],
     classB: TClass,
@@ -30,7 +31,7 @@ abstract class ImplicitResolver[R, E] {
 
   protected def isSubTrait
   (
-    prologContext: TCPrologContext,
+    prologContext: IRPrologContext,
     traitA: TTrait,
     aArgs: Seq[ExprProverSyntax.Expr],
     traitB: TTrait,
@@ -42,7 +43,7 @@ abstract class ImplicitResolver[R, E] {
 
   protected def classImplementsTrait
   (
-    prologContext: TCPrologContext,
+    prologContext: IRPrologContext,
     classA: TClass,
     aArgs: Seq[ExprProverSyntax.Expr],
     traitB: TTrait,
@@ -95,7 +96,12 @@ abstract class ImplicitResolver[R, E] {
   final case class Assertion(witness: WrapExpr, assertionType: WrapExpr)
 
 
-  trait IRProverContext extends ProverContext[R, E] {
+  trait IRProverContext
+  (
+    givenAssertions: Seq[ZIO[R, E, THole] => ZIO[R, E, Assertion]],
+    knownVarValues: Map[TVariable, WrapExpr],
+    initialFuel: Int,
+  ) extends ProverContext[R, E] {
     override val syntax: ExprProverSyntax.type = ExprProverSyntax
     import syntax.*
 
@@ -104,15 +110,38 @@ abstract class ImplicitResolver[R, E] {
     override type TRelation = ExprRelation
     override type TConstraints = ExprConstraints[Expr]
 
-    protected override def normalize(expr: Value, substitutions: Model, fuel: Int): ZIO[R, E, Expr] =
-      exprToWrapExpr(expr).flatMap { expr =>
-        evaluator.normalizeTopLevelWrap(expr, fuel - 1)
-          .map(wrapExprToExpr)
+    protected override def assertions: Seq[ZIO[R, E, THole] => ZIO[R, E, (Proof[ProofAtom], syntax.Predicate)]] =
+      builtinAssertions ++ givenAssertions.map { createAssertion =>
+        (newVariable: ZIO[R, E, THole]) =>
+          for
+            assertion <- createAssertion(newVariable)
+            assertionType <- arExprToGoal(assertion.assertionType, initialFuel)
+          yield (Proof.Atomic(TCAtomicProof.ExprProof(assertion.witness)), assertionType)
       }
 
+    protected override def normalize(expr: syntax.Value, substitutions: Model, fuel: Int): ZIO[R, E, syntax.Expr] =
+      def normalizeNonLocal =
+        exprToWrapExpr(expr).flatMap { expr =>
+          evaluator.normalizeTopLevelWrap(expr, fuel - 1)
+            .map(wrapExprToExpr)
+        }
 
-    override protected def assertions: Seq[ZIO[R, E, TVariable] => ZIO[R, E, (Proof[TCAtomicProof], Predicate)]] =
-      builtinAssertions
+      expr match {
+        case syntax.Value(ExprConstructor.LoadVariable(variable), _) =>
+          knownVarValues.get(variable) match {
+            case Some(value) => normalizeExpr(wrapExprToExpr(value), substitutions, fuel - 1)
+            case None => normalizeNonLocal
+          }
+
+        case _ => normalizeNonLocal
+      }
+    end normalize
+
+    protected override def otherForEquivalenceRelation(constraints: ExprConstraints[syntax.Expr]): Option[syntax.Expr] =
+      constraints match {
+        case ExprEqualConstraint(other) => Some(other)
+        case ExprTypeBounds(_, _) => None
+      }
 
     protected def builtinAssertions: Seq[ZIO[R, E, TVariable] => ZIO[R, E, (Proof[ProofAtom], Predicate)]] =
       Seq(
@@ -442,7 +471,13 @@ abstract class ImplicitResolver[R, E] {
   }
 
 
-  protected sealed class TCPrologContext(createdHoles: Ref[Set[THole]]) extends PrologContext[R, E] with IRProverContext {
+  protected sealed class IRPrologContext
+  (
+    createdHoles: Ref[Set[THole]],
+    givenAssertions: Seq[ZIO[R, E, THole] => ZIO[R, E, Assertion]],
+    knownVarValues: Map[TVariable, WrapExpr],
+    initialFuel: Int,
+  ) extends PrologContext[R, E] with IRProverContext(givenAssertions, knownVarValues, initialFuel) {
     import syntax.*
 
 
@@ -712,12 +747,6 @@ abstract class ImplicitResolver[R, E] {
           )
       }
 
-    protected override def otherForEquivalenceRelation(constraints: ExprConstraints[syntax.Expr]): Option[syntax.Expr] =
-      constraints match {
-        case ExprEqualConstraint(other) => Some(other)
-        case ExprTypeBounds(_, _) => None
-      }
-
     private def buildRelationProof(relation: ExprRelation, a: WrapExpr, b: WrapExpr): Proof[TCAtomicProof] =
       Proof.Atomic(TCAtomicProof.ExprProof(
         wrapExpr(ExprConstructor.AssumeErasedValue, EmptyTuple)
@@ -757,50 +786,51 @@ abstract class ImplicitResolver[R, E] {
 
   }
 
+  protected sealed class IRSmtContext
+  (
+    givenAssertions: Seq[ZIO[R, E, THole] => ZIO[R, E, Assertion]],
+    knownVarValues: Map[TVariable, WrapExpr],
+    initialFuel: Int,
+  ) extends SmtContext[R, E] with IRProverContext(givenAssertions, knownVarValues, initialFuel) {
+    override protected def newVariable: ZIO[R, E, exprContext.THole] = createHole
+
+    override protected def assumeResultProof: Proof[TCAtomicProof] =
+      Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
+        ExprConstructor.AssumeErasedValue,
+        EmptyTuple,
+      ))))
+  }
+
   final case class ResolvedImplicit(proof: Proof[WrapExpr], model: Map[THole, ExprConstraints[WrapExpr]])
 
-  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: Seq[ZIO[R, E, THole] => ZIO[R, E, Assertion]], knownVarValues: Map[TVariable, WrapExpr], fuel: Int)
-    : ZIO[R, E, Option[ResolvedImplicit]] =
+  private def tryResolveWithProver(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], proverContext: IRProverContext, fuel: Int): ZIO[R, E, Option[ResolvedImplicit]] =
     for
-      createdHoles <- Ref.make(Set.empty[THole])
-      context = new TCPrologContext(createdHoles) {
-        protected override def assertions: Seq[ZIO[R, E, THole] => ZIO[R, E, (Proof[ProofAtom], syntax.Predicate)]] =
-          super.assertions ++ givenAssertions.map { createAssertion => (newVariable: ZIO[R, E, THole]) =>
-            for
-              assertion <- createAssertion(newVariable)
-              assertionType <- arExprToGoal(assertion.assertionType, fuel)
-            yield (Proof.Atomic(TCAtomicProof.ExprProof(assertion.witness)), assertionType)
-          }
+      goal <- proverContext.arExprToGoal(implicitType, fuel)
+      proverModel = model.view.mapValues {
+        _.map(proverContext.wrapExprToExpr)
+      }.toMap
 
-        protected override def normalize(expr: syntax.Value, substitutions: Model, fuel: Int): ZIO[R, E, syntax.Expr] =
-          expr match {
-            case syntax.Value(ExprConstructor.LoadVariable(variable), _) =>
-              knownVarValues.get(variable) match {
-                case Some(value) => normalizeExpr(wrapExprToExpr(value), substitutions, fuel - 1)
-                case None => super.normalize(expr, substitutions, fuel)
-              }
-
-            case _ => super.normalize(expr, substitutions, fuel)
-          }
-      }
-
-      goal <- context.arExprToGoal(implicitType, fuel)
-      proverModel = model.view.mapValues { _.map(context.wrapExprToExpr) }.toMap
-
-      result <- context.check(goal, proverModel, fuel).flatMap {
-        case context.ProofResult.Yes(proof, model) =>
+      result <- proverContext.check(goal, proverModel, fuel).flatMap {
+        case proverContext.ProofResult.Yes(proof, model) =>
           for
             model <- ZIO.foreach(model) { case (hole, expr) =>
-              expr.traverse(context.exprToWrapExpr).map { expr => (hole, expr) }
+              expr.traverse(proverContext.exprToWrapExpr).map { expr => (hole, expr) }
             }
 
-            proof <- context.proofAtomicAsWrapExpr(proof)
+            proof <- proverContext.proofAtomicAsWrapExpr(proof)
 
           yield Some(ResolvedImplicit(proof, model))
 
-        case context.ProofResult.No(_, _) | _: context.ProofResult.Unknown.type => ZIO.none
+        case proverContext.ProofResult.No(_, _) | _: proverContext.ProofResult.Unknown.type => ZIO.none
       }
 
     yield result
+
+  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: Seq[ZIO[R, E, THole] => ZIO[R, E, Assertion]], knownVarValues: Map[TVariable, WrapExpr], fuel: Int)
+    : ZIO[R, E, Option[ResolvedImplicit]] =
+    Ref.make(Set.empty[THole]).flatMap { createdHoles =>
+      val proverContext = new IRPrologContext(createdHoles, givenAssertions, knownVarValues, fuel)
+      tryResolveWithProver(implicitType, model, proverContext, fuel)
+    }
 
 }

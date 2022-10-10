@@ -46,7 +46,7 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
 
   protected override def isSubClass
   (
-    prologContext: TCPrologContext,
+    prologContext: IRPrologContext,
     classA: TClass,
     aArgs: Seq[ExprProverSyntax.Expr],
     classB: TClass,
@@ -79,7 +79,7 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
 
   protected def isSubTrait
   (
-    prologContext: TCPrologContext,
+    prologContext: IRPrologContext,
     traitA: TTrait,
     aArgs: Seq[ExprProverSyntax.Expr],
     traitB: TTrait,
@@ -108,7 +108,7 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
 
   protected def classImplementsTrait
   (
-    prologContext: TCPrologContext,
+    prologContext: IRPrologContext,
     classA: TClass,
     aArgs: Seq[ExprProverSyntax.Expr],
     traitB: TTrait,

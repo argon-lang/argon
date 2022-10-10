@@ -41,7 +41,7 @@ trait ExprUtilImplicitResolver
       override def createHole: Comp[UniqueIdentifier] = UniqueIdentifier.make
 
       private def getResult[Res]
-      (prologContext: TCPrologContext)
+      (prologContext: IRPrologContext)
       (sigHandler: SignatureHandler[Res])
       (owner: exprContext.ParameterVariableOwner, index: Int, sig: Signature[WrapExpr, Res], args: Seq[ExprProverSyntax.Expr])
       : Comp[Res] =
@@ -59,7 +59,7 @@ trait ExprUtilImplicitResolver
         }
 
       private def solveAll[E, T, U]
-      (prologContext: TCPrologContext)
+      (prologContext: IRPrologContext)
       (model: prologContext.Model)
       (values: Seq[(T, T)])
       (f: (T, T, prologContext.Model) => ZStream[context.Env, E, prologContext.ProofResult.Yes])
@@ -76,7 +76,7 @@ trait ExprUtilImplicitResolver
 
       override protected def isSubClass
       (
-        prologContext: TCPrologContext,
+        prologContext: IRPrologContext,
         classA: ArClass,
         aArgs: Seq[ExprProverSyntax.Expr],
         classB: ArClass,
@@ -120,7 +120,7 @@ trait ExprUtilImplicitResolver
 
       override protected def isSubTrait
       (
-        prologContext: TCPrologContext,
+        prologContext: IRPrologContext,
         traitA: ArTrait,
         aArgs: Seq[ExprProverSyntax.Expr],
         traitB: ArTrait,
@@ -160,7 +160,7 @@ trait ExprUtilImplicitResolver
 
       protected override def classImplementsTrait
       (
-        prologContext: TCPrologContext,
+        prologContext: IRPrologContext,
         classA: ArClass,
         aArgs: Seq[ExprProverSyntax.Expr],
         traitB: ArTrait,

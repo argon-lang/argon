@@ -343,7 +343,7 @@ lazy val argon_prover_smtNode = argon_prover_smt.node
 
 
 lazy val argon_expr = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-expr"))
-  .dependsOn(argon_prover, argon_prover_prolog, util)
+  .dependsOn(argon_prover, argon_prover_prolog, argon_prover_smt, util)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
