@@ -710,9 +710,10 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                 isMutable = false,
                 isErased = true,
               )
+
             yield ExprTypeResult(
               WrapExpr.OfExpr(ArExpr(ExprConstructor.BindVariable(variable), value)),
-              env,
+              env.withImplicitSource(_.addVariable(variable)),
               unitType
             )
         end new

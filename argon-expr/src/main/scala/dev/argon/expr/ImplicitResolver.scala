@@ -822,7 +822,7 @@ abstract class ImplicitResolver[R, E] {
             ExprConstructor.AssumeErasedValue,
             EmptyTuple,
           )))) -> Implies(
-            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(t), Variable(a), Variable(a))),
+            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(t), Variable(a), Variable(b))),
             PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(t), Variable(b), Variable(a)))
           ))
         ),
@@ -899,13 +899,42 @@ abstract class ImplicitResolver[R, E] {
   final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: Seq[ZIO[R, E, THole] => ZIO[R, E, Assertion]], knownVarValues: Map[TVariable, WrapExpr], fuel: Int)
   : ZIO[R, E, Option[ResolvedImplicit]] =
     def prologAttempt =
-      Ref.make(Set.empty[THole]).flatMap { createdHoles =>
-        val proverContext = new IRPrologContext(createdHoles, givenAssertions, knownVarValues, fuel)
-        tryResolveWithProver(implicitType, model, proverContext, fuel)
+      val isEqualTo = implicitType match {
+        case WrapExpr.OfExpr(expr) =>
+          expr.constructor match {
+            case ExprConstructor.EqualTo => true
+            case _ => false
+          }
+
+        case _ => false
       }
 
+      if isEqualTo then
+        ZIO.none
+      else
+        Ref.make(Set.empty[THole]).flatMap { createdHoles =>
+          val proverContext = new IRPrologContext(createdHoles, givenAssertions, knownVarValues, fuel)
+          tryResolveWithProver(implicitType, model, proverContext, fuel)
+        }
+    end prologAttempt
+
+
     def smtAttempt =
-      tryResolveWithProver(implicitType, model, new IRSmtContext(givenAssertions, knownVarValues, fuel), fuel)
+      val isSubType = implicitType match {
+        case WrapExpr.OfExpr(expr) =>
+          expr.constructor match {
+            case ExprConstructor.SubtypeWitnessType => true
+            case _ => false
+          }
+
+        case _ => false
+      }
+
+      if isSubType then
+        ZIO.none
+      else
+        tryResolveWithProver(implicitType, model, new IRSmtContext(givenAssertions, knownVarValues, fuel), fuel)
+    end smtAttempt
 
     prologAttempt.flatMap {
       case Some(res) => ZIO.some(res)

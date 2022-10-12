@@ -28,3 +28,14 @@ public erased proof def boolNotEqualToImpliesNotEqual[a: Bool][b: Bool](requires
 public erased proof def boolIsTrueOrFalse[a: Bool]: ((a == true) \/ (a == false)) =
 	extern assumeTrue
 
+public erased proof def boolNotTrueImpliesFalse[a: Bool](requires p: (a == true) -> Never): (a == false) =
+	extern assumeTrue
+
+public erased proof def boolTrueImpliesNotFalse[a: Bool](requires p: (a == true)): (a == false) -> Never =
+	extern assumeTrue
+
+public erased proof def boolNotFalseImpliesTrue[a: Bool](requires p: (a == false) -> Never): (a == true) =
+	extern assumeTrue
+
+public erased proof def boolFalseImpliesNotTrue[a: Bool](requires p: (a == false)): (a == true) -> Never =
+	extern assumeTrue

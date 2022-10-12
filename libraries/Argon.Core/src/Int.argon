@@ -64,6 +64,12 @@ public erased proof def intLEQAndNotEqualImpliesEqualsOrLT[a: Int][b: Int](requi
 public erased proof def intLTImpliesLEQ[a: Int][b: Int](requires p: ((a < b) == true)): ((a <= b) == true) =
 	extern assumeTrue
 
+public erased proof def intEQImpliesLEQ[a: Int][b: Int](requires p: (a == b)): ((a <= b) == true) =
+	extern assumeTrue
+
+public erased proof def intLEQImpliesLTOrEQ[a: Int][b: Int](requires p: ((a <= b) == true)): ((a == b) \/ ((a < b) == true)) =
+	extern assumeTrue
+
 public erased proof def intLTImpliesNotEqual[a: Int][b: Int](requires p: ((a < b) == true)): ((a == b) -> Never) =
 	extern assumeTrue
 

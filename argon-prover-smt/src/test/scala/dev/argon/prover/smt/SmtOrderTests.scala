@@ -48,6 +48,46 @@ object SmtOrderTests extends ZIOSpecDefault {
               n <- newVariable
             } yield dummyProof -> pred(EqualTo, Variable(t), Variable(n), Variable(n))
           ),
+          (newVariable: URIO[VariableProvider, TVariable]) => (
+            for {
+              t <- newVariable
+              a <- newVariable
+              b <- newVariable
+            } yield dummyProof -> Implies(
+              pred(EqualTo, Variable(t), Variable(a), Variable(b)),
+              pred(EqualTo, Variable(t), Variable(b), Variable(a))
+            )
+          ),
+
+          // (not a == true) -> a == false, etc
+          (newVariable: URIO[VariableProvider, TVariable]) => (
+            for {
+              a <- newVariable
+            } yield dummyProof -> Implies(
+              !pred(EqualTo, expr(BoolType), Variable(a), expr(TrueValue)),
+              pred(EqualTo, expr(BoolType), Variable(a), expr(FalseValue))
+              )),
+          (newVariable: URIO[VariableProvider, TVariable]) => (
+            for {
+              a <- newVariable
+            } yield dummyProof -> Implies(
+              pred(EqualTo, expr(BoolType), Variable(a), expr(TrueValue)),
+              !pred(EqualTo, expr(BoolType), Variable(a), expr(FalseValue))
+            )),
+          (newVariable: URIO[VariableProvider, TVariable]) => (
+            for {
+              a <- newVariable
+            } yield dummyProof -> Implies(
+              !pred(EqualTo, expr(BoolType), Variable(a), expr(FalseValue)),
+              pred(EqualTo, expr(BoolType), Variable(a), expr(TrueValue))
+            )),
+          (newVariable: URIO[VariableProvider, TVariable]) => (
+            for {
+              a <- newVariable
+            } yield dummyProof -> Implies(
+              pred(EqualTo, expr(BoolType), Variable(a), expr(FalseValue)),
+              !pred(EqualTo, expr(BoolType), Variable(a), expr(TrueValue))
+            )),
 
           // Bool == <-> =
           (newVariable: URIO[VariableProvider, TVariable]) => (
@@ -135,7 +175,7 @@ object SmtOrderTests extends ZIOSpecDefault {
             )
           ),
 
-          // n == m -> ()
+          // n == m -> (n <= m) == true
           (newVariable: URIO[VariableProvider, TVariable]) => (
             for {
               n <- newVariable
@@ -143,6 +183,29 @@ object SmtOrderTests extends ZIOSpecDefault {
             } yield dummyProof -> Implies(
               pred(EqualTo, expr(IntType), Variable(n), Variable(m)),
               pred(EqualTo, expr(BoolType), expr(Le, Variable(n), Variable(m)), expr(TrueValue))
+            )
+          ),
+
+          // (a <= b) == true -> (a == b) \/ ((a < b) == true)
+          (newVariable: URIO[VariableProvider, TVariable]) => (
+            for {
+              n <- newVariable
+              m <- newVariable
+            } yield dummyProof -> Implies(
+              pred(EqualTo, expr(BoolType), expr(Le, Variable(n), Variable(m)), expr(TrueValue)),
+              pred(EqualTo, expr(IntType), Variable(n), Variable(m)) |
+                pred(EqualTo, expr(BoolType), expr(Lt, Variable(n), Variable(m)), expr(TrueValue))
+            )
+          ),
+
+          // a <= b or b <= a
+          (newVariable: URIO[VariableProvider, TVariable]) => (
+            for {
+              a <- newVariable
+              b <- newVariable
+            } yield dummyProof -> (
+              pred(EqualTo, expr(BoolType), expr(Le, Variable(a), Variable(b)), expr(TrueValue)) |
+                pred(EqualTo, expr(BoolType), expr(Le, Variable(b), Variable(a)), expr(TrueValue))
             )
           ),
         )
@@ -168,12 +231,21 @@ object SmtOrderTests extends ZIOSpecDefault {
           pred(EqualTo, expr(BoolType), expr(Eq, Variable("x"), Variable("y")), expr(FalseValue))
         ).assertProves(!pred(EqualTo, expr(IntType), Variable("x"), Variable("y")))
       },
-      test("prove not x == y given (x = y) == false with extras") {
+      test("prove not x == y given not y == x") {
         smtContext(
-          pred(EqualTo, expr(BoolType), expr(Eq, Variable("x"), Variable("y")), expr(FalseValue)),
-          pred(EqualTo, expr(BoolType), expr(Not, expr(TrueValue)), expr(FalseValue)),
-          pred(EqualTo, expr(BoolType), expr(Not, expr(FalseValue)), expr(TrueValue)),
+          !pred(EqualTo, expr(IntType), Variable("y"), Variable("x")),
         ).assertProves(!pred(EqualTo, expr(IntType), Variable("x"), Variable("y")))
+      },
+      test("prove not (x <= y) == true given not x == y, (x < y) == false") {
+        smtContext(
+          !pred(EqualTo, expr(IntType), Variable("x"), Variable("y")),
+          pred(EqualTo, expr(BoolType), expr(Lt, Variable("x"), Variable("y")), expr(FalseValue)),
+        ).assertProves(!pred(EqualTo, expr(BoolType), expr(Le, Variable("x"), Variable("y")), expr(TrueValue)))
+      },
+      test("prove (y <= x) == true given not (x <= y) == true") {
+        smtContext(
+          !pred(EqualTo, expr(BoolType), expr(Le, Variable("x"), Variable("y")), expr(TrueValue)),
+        ).assertProves(pred(EqualTo, expr(BoolType), expr(Le, Variable("y"), Variable("x")), expr(TrueValue)))
       },
     ).provideSome[Environment](VariableProvider.live)
 

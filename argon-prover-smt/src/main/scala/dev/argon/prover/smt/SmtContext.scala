@@ -429,7 +429,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
 
   private def getAssertionTrigger(p: Predicate): Predicate =
     p match {
-      case Implies(a, PropFalse) => Implies(getAssertionTrigger(a), PropFalse)
+      case Implies(_, PropFalse) => p
       case Implies(_, b) => getAssertionTrigger(b)
       case _ => p
     }
