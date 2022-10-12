@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Int comparison (three branches)</Name>
+    <Name>Int comparison (four branches)</Name>
 
     <InputSource name="index.argon"><![CDATA[
 
@@ -16,11 +16,15 @@
             elsif a < 0 then
                 assert (a < 0) == true
                 puts "Zero is negative"
+            elsif a > 0 then
+                assert ((a > 0) == true)
+                puts "Zero is positive"
             else
                 assert (a == 0) -> Never
+                assert (0 == a) -> Never
+                assert ((a <= 0) == true) -> Never
                 assert ((a > 0) == true)
-
-                puts "Zero is positive"
+                assert Never
             end
         end
 

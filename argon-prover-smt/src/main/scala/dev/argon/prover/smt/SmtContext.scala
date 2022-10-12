@@ -182,38 +182,6 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     case False(example: PredicateFunction)
   }
 
-  private def determinePolarity(p: CNF, state: ProverState): ZIO[R, E, (ProverState, Map[Int, AtomPolarity])] =
-    ZIO.foldLeft(p.flatten)((state, Map.empty[Int, AtomPolarity])) { case ((state, acc), literal) =>
-      getEqClassIndex(literal.pf, state).map { (state, eqClass) =>
-        val currentPolarity = acc.get(eqClass)
-        val updated = (literal, currentPolarity) match {
-          case (_, Some(AtomPolarity.Both)) => acc
-
-          case (Literal.Atom(_), Some(AtomPolarity.True(_))) => acc
-          case (Literal.Atom(_), Some(AtomPolarity.False(_))) => acc.updated(eqClass, AtomPolarity.Both)
-          case (Literal.Atom(pf), None) => acc.updated(eqClass, AtomPolarity.True(pf))
-
-          case (Literal.NotAtom(_), Some(AtomPolarity.False(_))) => acc
-          case (Literal.NotAtom(_), Some(AtomPolarity.True(_))) => acc.updated(eqClass, AtomPolarity.Both)
-          case (Literal.NotAtom(pf), None) => acc.updated(eqClass, AtomPolarity.False(pf))
-        }
-
-        (state, updated)
-      }
-    }
-
-
-  end determinePolarity
-
-  private def elimLiterals(p: CNF, state: ProverState): ZIO[R, E, ProverState] =
-    determinePolarity(p, state).flatMap { case (state, polarity) =>
-      ZIO.foldLeft(polarity)(state) {
-        case (state, (_, AtomPolarity.Both)) => ZIO.succeed(state)
-        case (state, (_, AtomPolarity.True(pf))) => recordKnownPredicate(state, pf, true)
-        case (state, (_, AtomPolarity.False(pf))) => recordKnownPredicate(state, pf, false)
-      }
-    }
-
   private def unitClauses(p: CNF): List[(PredicateFunction, Boolean)] =
     p.flatMap {
       case Literal.Atom(pf) :: Nil => List((pf, true))
@@ -278,8 +246,6 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       state <- checkModel(p, state)
       (p, state) <- assumeKnownPredicates(p, state)
       state <- unitPropagation(p, state)
-      (p, state) <- assumeKnownPredicates(p, state)
-      state <- elimLiterals(p, state)
       (p, state) <- assumeKnownPredicates(p, state)
     yield (p, state)
 
