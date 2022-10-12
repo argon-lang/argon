@@ -1,6 +1,7 @@
 
 import ./Object/*
 import ./String/*
+import /Never
 
 public class Bool <: Object
 	public def this.to_s(): String = extern Bool_to_s
@@ -12,12 +13,18 @@ public def (=) (a: Bool) (b: Bool): Bool = extern boolEqual
 public inline def (!=) (a: Bool) (b: Bool): Bool = !(a = b)
 
 
+public erased proof def boolEqualImpliesEqualTo[a: Bool][b: Bool](requires p: ((a = b) == true)): (a == b) =
+	extern assumeTrue
+
+public erased proof def boolNotEqualImpliesNotEqualTo[a: Bool][b: Bool](requires p: ((a = b) == false)): ((a == b) -> Never) =
+	extern assumeTrue
+
+public erased proof def boolEqualToImpliesEqual[a: Bool][b: Bool](requires p: (a == b)): ((a = b) == true) =
+	extern assumeTrue
+
+public erased proof def boolNotEqualToImpliesNotEqual[a: Bool][b: Bool](requires p: ((a == b) -> Never)): ((a = b) == false) =
+	extern assumeTrue
+
 public erased proof def boolIsTrueOrFalse[a: Bool]: ((a == true) \/ (a == false)) =
-	extern assumeTrue
-
-public erased proof def boolNotTrueIsFalse: (!true == false) =
-	extern assumeTrue
-
-public erased proof def boolNotFalseIsTrue: (!false == true) =
 	extern assumeTrue
 

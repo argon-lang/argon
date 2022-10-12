@@ -33,7 +33,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
 
   final case class PredEquivalenceClass(predicates: Seq[PredicateFunction])
   final case class ExprEquivalenceClass(exprs: Seq[Expr])
-  final case class QuantifiedPredicate(vars: Set[TVariable], expr: CNF)
+  final case class QuantifiedPredicate(vars: Set[TVariable], trigger: CNF, expr: CNF)
   final case class ProverState
   (
     model: Model,
@@ -42,31 +42,48 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     exprEqClasses: Seq[ExprEquivalenceClass],
     quantAsserts: Seq[QuantifiedPredicate],
     instantiatedEqClasses: Set[Int],
+    knownPredicates: Seq[(PredicateFunction, Boolean)],
   )
 
+  protected def predicatesEquivalent(p1: PredicateFunction, p2: PredicateFunction, state: ProverState): ZIO[R, E, Boolean] =
+    ZIO.succeed { p1 == p2 }
+
+  private def findMatchingIndex[A](c: Iterable[A])(f: A => ZIO[R, E, Boolean]): ZIO[R, E, Int] =
+    ZIO.collectFirst(c.zipWithIndex) { case (a, i) =>
+      f(a).map {
+        case true => Some(i)
+        case false => None
+      }
+    }.map { _.getOrElse(-1) }
 
   private def getEqClassIndex(pred: PredicateFunction, state: ProverState): ZIO[R, E, (ProverState, Int)] =
-    val index = state.predEqClasses.indexWhere { _.predicates.contains(pred) }
-    if index >= 0 then
-      ZIO.succeed((state, index))
-    else
-      normalizePredicateFunction(pred, state.model, state.fuel).map { predNorm =>
-        val index = state.predEqClasses.indexWhere { _.predicates.contains(predNorm) }
+    findMatchingIndex(state.predEqClasses) { predEqClass => ZIO.exists(predEqClass.predicates)(predicatesEquivalent(pred, _, state)) }
+      .flatMap { index =>
         if index >= 0 then
-          val eqClass = state.predEqClasses(index)
-          val newState = state.copy(
-            predEqClasses = state.predEqClasses.updated(index, PredEquivalenceClass(eqClass.predicates :+ pred))
-          )
-          (newState, index)
+          ZIO.succeed((state, index))
         else
-          val newState = state.copy(
-            predEqClasses = state.predEqClasses :+ PredEquivalenceClass(Seq(pred, predNorm))
-          )
-          (newState, state.predEqClasses.size)
-        end if
+          normalizePredicateFunction(pred, state.model, state.fuel).map { predNorm =>
+            val index = state.predEqClasses.indexWhere {
+              _.predicates.contains(predNorm)
+            }
+            if index >= 0 then
+              val eqClass = state.predEqClasses(index)
+              val newState = state.copy(
+                predEqClasses = state.predEqClasses.updated(index, PredEquivalenceClass(eqClass.predicates :+ pred))
+              )
+              (newState, index)
+            else
+              val newState = state.copy(
+                predEqClasses = state.predEqClasses :+ PredEquivalenceClass(Seq(pred, predNorm))
+              )
+              (newState, state.predEqClasses.size)
+            end if
+          }
       }
-  end getEqClassIndex
 
+
+  protected def recordKnownPredicate(state: ProverState, pf: PredicateFunction, value: Boolean): ZIO[R, E, ProverState] =
+    ZIO.succeed { state.copy(knownPredicates = state.knownPredicates :+ (pf, value)) }
 
 
   private def negationNormalForm(p: Predicate): NNF =
@@ -158,7 +175,9 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     } }
 
   enum AtomPolarity derives CanEqual {
-    case Both, True, False
+    case Both
+    case True(example: PredicateFunction)
+    case False(example: PredicateFunction)
   }
 
   private def determinePolarity(p: CNF, state: ProverState): ZIO[R, E, (ProverState, Map[Int, AtomPolarity])] =
@@ -168,13 +187,13 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
         val updated = (literal, currentPolarity) match {
           case (_, Some(AtomPolarity.Both)) => acc
 
-          case (Literal.Atom(_), Some(AtomPolarity.True)) => acc
-          case (Literal.Atom(_), Some(AtomPolarity.False)) => acc.updated(eqClass, AtomPolarity.Both)
-          case (Literal.Atom(_), None) => acc.updated(eqClass, AtomPolarity.True)
+          case (Literal.Atom(_), Some(AtomPolarity.True(_))) => acc
+          case (Literal.Atom(_), Some(AtomPolarity.False(_))) => acc.updated(eqClass, AtomPolarity.Both)
+          case (Literal.Atom(pf), None) => acc.updated(eqClass, AtomPolarity.True(pf))
 
-          case (Literal.NotAtom(_), Some(AtomPolarity.False)) => acc
-          case (Literal.NotAtom(_), Some(AtomPolarity.True)) => acc.updated(eqClass, AtomPolarity.Both)
-          case (Literal.NotAtom(_), None) => acc.updated(eqClass, AtomPolarity.False)
+          case (Literal.NotAtom(_), Some(AtomPolarity.False(_))) => acc
+          case (Literal.NotAtom(_), Some(AtomPolarity.True(_))) => acc.updated(eqClass, AtomPolarity.Both)
+          case (Literal.NotAtom(pf), None) => acc.updated(eqClass, AtomPolarity.False(pf))
         }
 
         (state, updated)
@@ -184,35 +203,14 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
 
   end determinePolarity
 
-  private def elimLiterals(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
-    for
-      (state, polarity) <- determinePolarity(p, state)
-      stateRef <- Ref.make(state)
-      updated <- {
-        def elimDisjuncts(p: List[Literal]): ZIO[R, E, Option[List[Literal]]] =
-          p match {
-            case Nil => ZIO.some(Nil)
-            case head :: tail =>
-              for
-                state <- stateRef.get
-                (state, eqClass) <- getEqClassIndex(head.pf, state)
-                _ <- stateRef.set(state)
-                result <- (polarity.get(eqClass), head) match {
-                  case (Some(AtomPolarity.True), Literal.Atom(_)) | (Some(AtomPolarity.False), Literal.NotAtom(_)) =>
-                    ZIO.none // Remove this conjunct because it is true
-
-                  case (Some(AtomPolarity.False), Literal.Atom(_)) | (Some(AtomPolarity.True), Literal.NotAtom(_)) =>
-                    elimDisjuncts(tail) // Remove this disjunct because it is false
-
-                  case (None | Some(AtomPolarity.Both), _) => elimDisjuncts(tail).map { _.map { head :: _ } }
-                }
-              yield result
-          }
-
-        ZIO.foreach(p)(elimDisjuncts)
+  private def elimLiterals(p: CNF, state: ProverState): ZIO[R, E, ProverState] =
+    determinePolarity(p, state).flatMap { case (state, polarity) =>
+      ZIO.foldLeft(polarity)(state) {
+        case (state, (_, AtomPolarity.Both)) => ZIO.succeed(state)
+        case (state, (_, AtomPolarity.True(pf))) => recordKnownPredicate(state, pf, true)
+        case (state, (_, AtomPolarity.False(pf))) => recordKnownPredicate(state, pf, false)
       }
-      state <- stateRef.get
-    yield (updated.flatten, state)
+    }
 
   private def unitClauses(p: CNF): List[(PredicateFunction, Boolean)] =
     p.flatMap {
@@ -222,15 +220,11 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     }
 
 
-  private def unitPropagation(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
-    ZIO.foldLeft(unitClauses(p))((p, state)) {
-      case ((p, state), (pf, value)) =>
-        getEqClassIndex(pf, state).flatMap { (state, eqClass) =>
-          assumePredicate(p, state, eqClass, value)
-        }
+  private def unitPropagation(p: CNF, state: ProverState): ZIO[R, E, ProverState] =
+    ZIO.foldLeft(unitClauses(p))(state) {
+      case (state, (pf, value)) =>
+        recordKnownPredicate(state, pf, value)
     }
-
-
 
   protected def assumePredicate(p: CNF, state: ProverState, eqClass: Int, value: Boolean): ZIO[R, E, (CNF, ProverState)] =
     for
@@ -261,10 +255,20 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       state <- stateRef.get
     yield (simplify(updated), state)
 
+  protected def assumeKnownPredicates(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
+    ZIO.foldLeft(state.knownPredicates)((p, state)) { case ((p, state), (pf, value)) =>
+      getEqClassIndex(pf, state).flatMap { case (state, eqClass) =>
+        assumePredicate(p, state, eqClass, value)
+      }
+    }
+
   private def preprocess(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
     for
-      (p, state) <- unitPropagation(p, state)
-      (p, state) <- elimLiterals(p, state)
+      (p, state) <- assumeKnownPredicates(p, state)
+      state <- unitPropagation(p, state)
+      (p, state) <- assumeKnownPredicates(p, state)
+      state <- elimLiterals(p, state)
+      (p, state) <- assumeKnownPredicates(p, state)
     yield (p, state)
 
   private final case class PredicateStats(pf: PredicateFunction, numTrue: Int, numFalse: Int)
@@ -314,63 +318,61 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     impl(p, state, Map.empty)
   end choosePredicate
 
+  protected def matchExpr(state: ProverState, expr: Expr, quantExpr: Expr, quantVars: Set[TVariable], acc: Map[TVariable, Expr]): ZIO[R, Option[E], Map[TVariable, Expr]] =
+    (expr, quantExpr) match {
+      case (_, Variable(v)) if quantVars.contains(v) =>
+        acc.get(v) match {
+          case Some(mappedExpr) =>
+            if expr == mappedExpr then
+              ZIO.succeed(acc)
+            else
+              ZIO.fail(None)
 
-  private def quantLitMatch(lit: Literal)(quantVars: Set[TVariable])(quantLit: Literal): Option[Map[TVariable, Expr]] =
-    def matchExpr(expr: Expr, quantExpr: Expr, acc: Map[TVariable, Expr]): Option[Map[TVariable, Expr]] =
-      (expr, quantExpr) match {
-        case (_, Variable(v)) if quantVars.contains(v) =>
-          acc.get(v) match {
-            case Some(mappedExpr) =>
-              if expr == mappedExpr then
-                Some(acc)
-              else
-                None
+          case None =>
+            ZIO.succeed(acc.updated(v, expr))
+        }
 
-            case None =>
-              Some(acc.updated(v, expr))
-          }
+      case (Variable(v1), Variable(v2)) if v1 == v2 =>
+        ZIO.succeed(acc)
 
-        case (Variable(v1), Variable(v2)) if v1 == v2 =>
-          Some(acc)
+      case (Value(ctor1, args1), Value(ctor2, args2)) if ctor1 == ctor2 && args1.size == args2.size =>
+        ZIO.foldLeft(args1.zip(args2))(acc) { case (acc, (e1, e2)) => matchExpr(state, e1, e2, quantVars, acc) }
 
-        case (Value(ctor1, args1), Value(ctor2, args2)) if ctor1 == ctor2 && args1.size == args2.size =>
-          args1.zip(args2).foldLeftM(acc) { case (acc, (e1, e2)) => matchExpr(e1, e2, acc) }
-
-        case _ => None
-      }
-
-    def matchPF(pf: PredicateFunction, quantPF: PredicateFunction, acc: Map[TVariable, Expr]): Option[Map[TVariable, Expr]] =
-      if pf.function == quantPF.function && pf.args.size == quantPF.args.size then
-        pf.args.zip(quantPF.args).foldLeftM(acc) { case (acc, (expr, quantExpr)) => matchExpr(expr, quantExpr, acc) }
-      else
-        None
-
-    (lit, quantLit) match {
-      case (Literal.Atom(pf), Literal.NotAtom(quantPF)) => matchPF(pf, quantPF, Map.empty)
-      case (Literal.NotAtom(pf), Literal.Atom(quantPF)) => matchPF(pf, quantPF, Map.empty)
-      case _ => None
+      case _ => ZIO.fail(None)
     }
-  end quantLitMatch
+
+  protected def matchPredicateFunction(state: ProverState, pf: PredicateFunction, quantPF: PredicateFunction, quantVars: Set[TVariable], acc: Map[TVariable, Expr]): ZIO[R, Option[E], Map[TVariable, Expr]] =
+    if pf.function == quantPF.function && pf.args.size == quantPF.args.size then
+      ZIO.foldLeft(pf.args.zip(quantPF.args))(acc) { case (acc, (expr, quantExpr)) => matchExpr(state, expr, quantExpr, quantVars, acc) }
+    else
+      ZIO.fail(None)
+
+  private def quantLitMatch(state: ProverState, lit: Literal, quantLit: Literal, quantVars: Set[TVariable]): ZIO[R, E, Option[Map[TVariable, Expr]]] =
+    (lit, quantLit) match {
+      case (Literal.Atom(pf), Literal.NotAtom(quantPF)) => matchPredicateFunction(state, pf, quantPF, quantVars, Map.empty).unsome
+      case (Literal.NotAtom(pf), Literal.Atom(quantPF)) => matchPredicateFunction(state, pf, quantPF, quantVars, Map.empty).unsome
+      case _ => ZIO.none
+    }
 
 
   private def instantiateQuantifier(lit: Literal, state: ProverState): ZIO[R, E, (ProverState, CNF)] =
     def quantMatch(lit: Literal)(quant: QuantifiedPredicate): ZIO[R, E, Option[CNF]] =
-      ZIO.foreach(
-        quant.expr
-          .iterator
-          .flatten
-          .flatMap(quantLitMatch(lit)(quant.vars))
-          .nextOption()
-      ) { varMap =>
-        for
-          varMap <- ZIO.foreach(quant.vars.toSeq) { quantVar =>
-            varMap.get(quantVar) match {
-              case Some(value) => ZIO.succeed(quantVar -> value)
-              case None => newVariable.map { newVar => quantVar -> Variable(newVar) }
-            }
-          }.map {_.toMap }
+      ZIO.collectFirst(quant.trigger.flatten) { quantLit =>
+        quantLitMatch(state, lit, quantLit, quant.vars).flatMap {
+          case Some(varMap) =>
+            for
+              varMap <- ZIO.foreach(quant.vars.toSeq) { quantVar =>
+                varMap.get(quantVar) match {
+                  case Some(value) => ZIO.succeed(quantVar -> value)
+                  case None => newVariable.map { newVar => quantVar -> Variable(newVar) }
+                }
+              }.map { _.toMap }
 
-        yield substituteVariablesCNF(varMap, quant.expr)
+            yield Some(substituteVariablesCNF(varMap, quant.expr))
+
+          case None =>
+            ZIO.none
+        }
       }
 
     getEqClassIndex(lit.pf, state).flatMap { case (state, eqClass) =>
@@ -410,17 +412,26 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     else
       ZIO.succeed((state, Nil))
 
-
   private def satisfiable(p: CNF, state: ProverState): ZIO[R, E, Boolean] =
     instantiateQuantifiers(p, state).flatMap { (state, clauses) =>
       preprocess(p ++ clauses, state).flatMap { (p, state) =>
         choosePredicate(p, state).flatMap {
           case (_, PredicateChoice.KnownResult(result)) => ZIO.succeed(result)
+          case (state, PredicateChoice.SelectedPredicate(_, _, _)) if clauses.nonEmpty =>
+            satisfiable(p, state)
+
           case (state, PredicateChoice.SelectedPredicate(lit, eqClass, value)) =>
-            assumePredicate(p, state, eqClass, value).flatMap(satisfiable) ||
-              assumePredicate(p, state, eqClass, !value).flatMap(satisfiable)
+            recordKnownPredicate(state, lit.pf, value).flatMap(assumePredicate(p, _, eqClass, value)).flatMap(satisfiable) ||
+              recordKnownPredicate(state, lit.pf, !value).flatMap(assumePredicate(p, _, eqClass, !value)).flatMap(satisfiable)
         }
       }
+    }
+
+  private def getAssertionTrigger(p: Predicate): Predicate =
+    p match {
+      case Implies(a, PropFalse) => Implies(getAssertionTrigger(a), PropFalse)
+      case Implies(_, b) => getAssertionTrigger(b)
+      case _ => p
     }
 
   private def assertionAsQuantifier(assertion: ZIO[R, E, TVariable] => ZIO[R, E, (Proof[ProofAtom], Predicate)]): ZIO[R, E, QuantifiedPredicate] =
@@ -428,7 +439,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       vars <- TSet.empty[TVariable].commit
       (_, pred) <- assertion(newVariable.tap(vars.put(_).commit))
       vars <- vars.toSet.commit
-    yield QuantifiedPredicate(vars, conjunctiveNormalForm(pred))
+    yield QuantifiedPredicate(vars, conjunctiveNormalForm(getAssertionTrigger(pred)), conjunctiveNormalForm(pred))
 
 
   override def check(goal: Predicate, model: Model, fuel: Int): ZIO[R, E, ProofResult] =
@@ -437,7 +448,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     }
       .flatMap { asserts =>
         val (unquantAsserts, quantAsserts) = asserts.partitionMap {
-          case QuantifiedPredicate(vars, expr) if vars.isEmpty => Left(expr)
+          case QuantifiedPredicate(vars, _, expr) if vars.isEmpty => Left(expr)
           case qp => Right(qp)
         }
 
@@ -449,7 +460,8 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
           predEqClasses = Seq.empty,
           exprEqClasses = Seq.empty,
           quantAsserts = quantAsserts,
-          instantiatedEqClasses = Set.empty
+          instantiatedEqClasses = Set.empty,
+          knownPredicates = Seq.empty,
         )
 
         satisfiable(p, initialState).map {

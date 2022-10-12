@@ -180,8 +180,7 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
             case ProofResult.Yes(proof, substitutions) => ProofResult.Yes(Proof.DoubleNegIntro(proof), substitutions)
           }
 
-        case Implies(a, PropFalse) =>
-          invertProof(solve(a, substitutions, solveState2.consumeFuel))
+        case Implies(_, PropFalse) => ZStream.empty
 
         case Implies(a, b) =>
           ZStream.unwrap(

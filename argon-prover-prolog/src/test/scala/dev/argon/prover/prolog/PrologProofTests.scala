@@ -106,14 +106,6 @@ object PrologProofTests extends ZIOSpecDefault {
           hasProof(Proof.DisjunctIntroRight(knownTrue))
         )
       },
-      test("not false") {
-        assertZIO(prologContext.check(not(pred(KnownFalse)), fuel))(hasProof(knownFalse))
-      },
-      test("not (false | false)") {
-        assertZIO(prologContext.check(not(Or(pred(KnownFalse), pred(KnownFalse))), fuel))(hasProof(
-          Proof.DeMorganAndPullNotOut(Proof.ConjunctIntro(knownFalse, knownFalse))
-        ))
-      },
       test("not (true | false)") {
         assertZIO(prologContext.check(not(Or(pred(KnownTrue), pred(KnownFalse))), fuel))(notProven)
       },
@@ -122,22 +114,6 @@ object PrologProofTests extends ZIOSpecDefault {
       },
       test("not (true | true)") {
         assertZIO(prologContext.check(not(Or(pred(KnownTrue), pred(KnownTrue))), fuel))(notProven)
-      },
-      test("not (false & false)") {
-        assertZIO(prologContext.check(not(And(pred(KnownFalse), pred(KnownFalse))), fuel))(
-          hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroLeft(knownFalse))) ||
-            hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroRight(knownFalse)))
-        )
-      },
-      test("not (false & true)") {
-        assertZIO(prologContext.check(not(And(pred(KnownFalse), pred(KnownTrue))), fuel))(
-          hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroLeft(knownFalse)))
-        )
-      },
-      test("not (true & false)") {
-        assertZIO(prologContext.check(not(And(pred(KnownTrue), pred(KnownFalse))), fuel))(
-          hasProof(Proof.DeMorganOrPullNotOut(Proof.DisjunctIntroRight(knownFalse)))
-        )
       },
       test("not (true & true)") {
         assertZIO(prologContext.check(not(And(pred(KnownTrue), pred(KnownTrue))), fuel))(equalTo(ProofResult.Unknown))

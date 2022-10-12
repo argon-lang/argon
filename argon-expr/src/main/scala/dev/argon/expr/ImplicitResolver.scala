@@ -468,6 +468,12 @@ abstract class ImplicitResolver[R, E] {
           yield Proof.HypotheticalSyllogism(pImpliesQ, qImpliesR)
 
       end match
+
+
+    def resolveModel(model: Model): ZIO[R, E, Map[THole, ExprConstraints[WrapExpr]]] =
+      ZIO.foreach(model) { case (hole, expr) =>
+        expr.traverse(exprToWrapExpr).map { expr => (hole, expr) }
+      }
   }
 
 
@@ -792,6 +798,8 @@ abstract class ImplicitResolver[R, E] {
     knownVarValues: Map[TVariable, WrapExpr],
     initialFuel: Int,
   ) extends SmtContext[R, E] with IRProverContext(givenAssertions, knownVarValues, initialFuel) {
+    import syntax.*
+
     override protected def newVariable: ZIO[R, E, exprContext.THole] = createHole
 
     override protected def assumeResultProof: Proof[TCAtomicProof] =
@@ -799,6 +807,72 @@ abstract class ImplicitResolver[R, E] {
         ExprConstructor.AssumeErasedValue,
         EmptyTuple,
       ))))
+
+    protected override def assertions: Seq[ZIO[R, E, exprContext.THole] => ZIO[R, E, (Proof[TCAtomicProof], Predicate)]] =
+      super.assertions ++ Seq(
+        // A == B
+        // ------
+        // B == A
+        newVariable => (for {
+          t <- newVariable
+          a <- newVariable
+          b <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(WrapExpr.OfExpr(ArExpr(
+            ExprConstructor.AssumeErasedValue,
+            EmptyTuple,
+          )))) -> Implies(
+            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(t), Variable(a), Variable(a))),
+            PredicateFunction(ExprConstructor.EqualTo, Seq(Variable(t), Variable(b), Variable(a)))
+          ))
+        ),
+      )
+
+    override protected def predicatesEquivalent(p1: PredicateFunction, p2: PredicateFunction, state: ProverState): ZIO[R, E, Boolean] =
+      super.predicatesEquivalent(p1, p2, state) || ((p1, p2) match {
+        case (PredicateFunction(ExprConstructor.EqualTo, Seq(ta, a1, a2)), PredicateFunction(ExprConstructor.EqualTo, Seq(tb, b1, b2))) if state.fuel > 1 && a1 == b1 && a2 == b2 =>
+          for
+            ta2 <- exprToWrapExpr(ta)
+            tb2 <- exprToWrapExpr(tb)
+
+            t1 = WrapExpr.OfExpr(ArExpr(ExprConstructor.SubtypeWitnessType, (tb2, ta2)))
+            t2 = WrapExpr.OfExpr(ArExpr(ExprConstructor.SubtypeWitnessType, (ta2, tb2)))
+            model <- resolveModel(state.model)
+            res <-
+              Ref.make(Set.empty[THole]).flatMap { createdHoles =>
+                val proverContext = new IRPrologContext(createdHoles, givenAssertions, knownVarValues, state.fuel - 1)
+                tryResolveWithProver(t1, model, proverContext, state.fuel - 1)
+              }.map { _.isDefined } &&
+                Ref.make(Set.empty[THole]).flatMap { createdHoles =>
+                  val proverContext = new IRPrologContext(createdHoles, givenAssertions, knownVarValues, state.fuel - 1)
+                  tryResolveWithProver(t2, model, proverContext, state.fuel - 1)
+                }.map { _.isDefined }
+          yield res
+
+        case (_, _) => ZIO.succeed(false)
+      })
+
+    override protected def matchPredicateFunction(state: ProverState, pf: PredicateFunction, quantPF: PredicateFunction, quantVars: Set[THole], acc: Map[THole, Expr]): ZIO[R, Option[E], Map[THole, Expr]] =
+      (pf, quantPF) match {
+        case (PredicateFunction(ExprConstructor.EqualTo, Seq(ta, a1, a2)), PredicateFunction(ExprConstructor.EqualTo, Seq(tb, b1, b2))) if state.fuel > 1 =>
+          for
+            acc <- matchExpr(state, a1, b1, quantVars, acc)
+            acc <- matchExpr(state, a2, b2, quantVars, acc)
+
+            ta2 <- exprToWrapExpr(ta).asSomeError
+            tb2 <- exprToWrapExpr(tb).asSomeError
+
+            t = WrapExpr.OfExpr(ArExpr(ExprConstructor.SubtypeWitnessType, (tb2, ta2)))
+            model <- resolveModel(state.model).asSomeError
+            _ <- Ref.make(Set.empty[THole]).flatMap { createdHoles =>
+              val proverContext = new IRPrologContext(createdHoles, givenAssertions, knownVarValues, state.fuel - 1)
+              tryResolveWithProver(t, model, proverContext, state.fuel - 1)
+            }.some
+          yield acc
+
+        case _ =>
+          super.matchPredicateFunction(state, pf, quantPF, quantVars, acc)
+      }
   }
 
   final case class ResolvedImplicit(proof: Proof[WrapExpr], model: Map[THole, ExprConstraints[WrapExpr]])
@@ -813,12 +887,8 @@ abstract class ImplicitResolver[R, E] {
       result <- proverContext.check(goal, proverModel, fuel).flatMap {
         case proverContext.ProofResult.Yes(proof, model) =>
           for
-            model <- ZIO.foreach(model) { case (hole, expr) =>
-              expr.traverse(proverContext.exprToWrapExpr).map { expr => (hole, expr) }
-            }
-
+            model <- proverContext.resolveModel(model)
             proof <- proverContext.proofAtomicAsWrapExpr(proof)
-
           yield Some(ResolvedImplicit(proof, model))
 
         case proverContext.ProofResult.No(_, _) | _: proverContext.ProofResult.Unknown.type => ZIO.none
@@ -827,10 +897,19 @@ abstract class ImplicitResolver[R, E] {
     yield result
 
   final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: Seq[ZIO[R, E, THole] => ZIO[R, E, Assertion]], knownVarValues: Map[TVariable, WrapExpr], fuel: Int)
-    : ZIO[R, E, Option[ResolvedImplicit]] =
-    Ref.make(Set.empty[THole]).flatMap { createdHoles =>
-      val proverContext = new IRPrologContext(createdHoles, givenAssertions, knownVarValues, fuel)
-      tryResolveWithProver(implicitType, model, proverContext, fuel)
-    }
+  : ZIO[R, E, Option[ResolvedImplicit]] =
+    def prologAttempt =
+      Ref.make(Set.empty[THole]).flatMap { createdHoles =>
+        val proverContext = new IRPrologContext(createdHoles, givenAssertions, knownVarValues, fuel)
+        tryResolveWithProver(implicitType, model, proverContext, fuel)
+      }
 
+    def smtAttempt =
+      tryResolveWithProver(implicitType, model, new IRSmtContext(givenAssertions, knownVarValues, fuel), fuel)
+
+    prologAttempt.flatMap {
+      case Some(res) => ZIO.some(res)
+      case None => smtAttempt
+    }
+  end tryResolve
 }

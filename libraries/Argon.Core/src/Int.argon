@@ -55,6 +55,8 @@ public erased proof def intLEQTransitive[a: Int, b: Int, c: Int](requires p: ((a
 public erased proof def intLEQAntisymmetric[a: Int][b: Int](requires p: ((a <= b) == true))(requires q: ((b <= a) == true)): (a == b) =
 	extern assumeTrue
 
+public erased proof def intLEQStronglyConnected[a: Int][b: Int]: (((a <= b) == true) \/ ((b <= a) == true)) =
+	extern assumeTrue
 
 public erased proof def intLEQAndNotEqualImpliesEqualsOrLT[a: Int][b: Int](requires p: ((a <= b) == true))(requires q: ((a == b) -> Never)): ((a < b) == true) =
 	extern assumeTrue
