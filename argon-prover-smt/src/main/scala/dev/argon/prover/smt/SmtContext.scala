@@ -45,6 +45,9 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     knownPredicates: Seq[(PredicateFunction, Boolean)],
   )
 
+  protected def predicateSatisfiableInModel(pf: PredicateFunction, state: ProverState): ZIO[R, E, Option[Boolean]] =
+    ZIO.none
+
   protected def predicatesEquivalent(p1: PredicateFunction, p2: PredicateFunction, state: ProverState): ZIO[R, E, Boolean] =
     ZIO.succeed { p1 == p2 }
 
@@ -81,8 +84,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
           }
       }
 
-
-  protected def recordKnownPredicate(state: ProverState, pf: PredicateFunction, value: Boolean): ZIO[R, E, ProverState] =
+  private def recordKnownPredicate(state: ProverState, pf: PredicateFunction, value: Boolean): ZIO[R, E, ProverState] =
     ZIO.succeed { state.copy(knownPredicates = state.knownPredicates :+ (pf, value)) }
 
 
@@ -262,8 +264,18 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       }
     }
 
+  private def checkModel(p: CNF, state: ProverState): ZIO[R, E, ProverState] =
+    ZIO.foldLeft(p.flatten)(state) { (state, lit) =>
+      predicateSatisfiableInModel(lit.pf, state).flatMap {
+        case Some(value) => recordKnownPredicate(state, lit.pf, value)
+        case None => ZIO.succeed(state)
+      }
+    }
+
   private def preprocess(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
     for
+      (p, state) <- assumeKnownPredicates(p, state)
+      state <- checkModel(p, state)
       (p, state) <- assumeKnownPredicates(p, state)
       state <- unitPropagation(p, state)
       (p, state) <- assumeKnownPredicates(p, state)

@@ -828,6 +828,19 @@ abstract class ImplicitResolver[R, E] {
         ),
       )
 
+
+    override protected def predicateSatisfiableInModel(pf: PredicateFunction, state: ProverState): ZIO[R, E, Option[Boolean]] =
+      pf match {
+        case PredicateFunction(ExprConstructor.EqualTo, Seq(_, a, b)) =>
+          for
+            a <- normalizeExpr(a, state.model, state.fuel)
+            b <- normalizeExpr(b, state.model, state.fuel)
+          yield (if a == b then Some(true) else None)
+
+        case _ =>
+          super.predicateSatisfiableInModel(pf, state)
+      }
+
     override protected def predicatesEquivalent(p1: PredicateFunction, p2: PredicateFunction, state: ProverState): ZIO[R, E, Boolean] =
       super.predicatesEquivalent(p1, p2, state) || ((p1, p2) match {
         case (PredicateFunction(ExprConstructor.EqualTo, Seq(ta, a1, a2)), PredicateFunction(ExprConstructor.EqualTo, Seq(tb, b1, b2))) if state.fuel > 1 && a1 == b1 && a2 == b2 =>
