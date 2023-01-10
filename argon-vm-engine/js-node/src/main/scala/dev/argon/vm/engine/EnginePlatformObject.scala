@@ -9,7 +9,7 @@ import scala.scalajs.js.JavaScriptException
 import scala.scalajs.js.typedarray.*
 
 import typings.argonLangVmEngine.mod.VM
-import typings.argonLangVmFormat.{programMod, argonvmMod as protoMod}
+import typings.argonLangVmFormat.{libProgramMod, libProtoArgonvmMod}
 
 trait EnginePlatformObject {
   def make(program: Program, nativeFunctions: NativeFunctions): IO[VMFormatException, Engine] =
@@ -17,9 +17,9 @@ trait EnginePlatformObject {
       programWithEntrypoint <-
         ZIO.attempt {
           val protoProgram = new Uint8Array(program.toByteArray.toTypedArray.buffer)
-          val jsProtoProgram = protoMod.Program.^.fromBinary(protoProgram)
+          val jsProtoProgram = libProtoArgonvmMod.Program.^.fromBinary(protoProgram)
 
-          programMod.loadProgram(jsProtoProgram, nativeFunctions)
+          libProgramMod.loadProgram(jsProtoProgram, nativeFunctions)
         }.catchAll {
           case jsErr @ JavaScriptException(ex) =>
             ex.asInstanceOf[Matchable] match {

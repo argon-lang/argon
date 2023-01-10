@@ -2,8 +2,8 @@ import sbtcrossproject.CrossPlugin.autoImport.{CrossType, crossProject}
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
-val graalVersion = "22.2.0"
-val zioVersion = "2.0.2"
+val graalVersion = "22.3.0"
+val zioVersion = "2.0.5"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -24,8 +24,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.zio" %%% "zio-json" % "0.3.0",
-    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.2.0",
+    "dev.zio" %%% "zio-json" % "0.4.2",
+    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.2.6",
 
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
     "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
@@ -35,9 +35,9 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
 
 lazy val npmDeps = Seq(
   "jszip" -> "^3.10.1",
-  "@xmldom/xmldom" -> "^0.8.2",
-  "acorn" -> "^8.8.0",
-  "astring" -> "1.8.3",
+  "@xmldom/xmldom" -> "^0.8.6",
+  "acorn" -> "^8.8.1",
+  "astring" -> "1.8.4",
 )
 
 lazy val npmDevDeps = Seq(
@@ -47,7 +47,7 @@ lazy val npmDevDeps = Seq(
 lazy val sharedJSNodeSettings = Seq(
 
   libraryDependencies ++= Seq(
-    "io.github.cquiroz" %%% "scala-java-time" % "2.4.0",
+    "io.github.cquiroz" %%% "scala-java-time" % "2.5.0",
   ),
 
   npmDependencies ++= npmDeps,
@@ -72,9 +72,9 @@ lazy val sharedJSNodeSettings = Seq(
 lazy val commonJVMSettings = Seq(
 
   libraryDependencies ++= Seq(
-    "org.apache.commons" % "commons-compress" % "1.21",
+    "org.apache.commons" % "commons-compress" % "1.22",
     "commons-io" % "commons-io" % "2.11.0",
-    "dev.zio" %% "zio-logging" % "2.1.1",
+    "dev.zio" %% "zio-logging" % "2.1.7",
   ),
 
   Test / fork := true,
@@ -878,7 +878,7 @@ lazy val argon_vm_format_java = project.in(file("vm/java/format"))
     ),
 
     libraryDependencies ++= Seq(
-      "org.jetbrains" % "annotations" % "23.0.0",
+      "org.jetbrains" % "annotations" % "23.1.0",
       "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
     ),
 

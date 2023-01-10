@@ -5,7 +5,7 @@ import zio.*
 import zio.stream.*
 
 import java.io.IOException
-import typings.node.nodePathMod as NodePath
+import typings.node.pathMod as NodePath
 import scala.scalajs.js.JavaScriptException
 
 private[platform] class NodeDirectoryResource(path: String) extends DirectoryResource[Any, IOException, BinaryResource] {
