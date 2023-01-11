@@ -126,7 +126,7 @@ object SignatureUtil {
 
     def impl(baseType: WrapExpr, baseTraits: Seq[ArExpr[ExprConstructor.TraitType]])
       : Comp[Seq[ArExpr[ExprConstructor.TraitType]]] =
-      exprConverter.evaluator.normalizeTopLevelWrap(baseType, exprConverter.fuel).flatMap {
+      exprConverter.evaluator.normalizeTopLevelWrap(baseType, exprConverter.fuel.evaluatorFuel).flatMap {
         case WrapExpr.OfExpr(expr) =>
           expr.constructor match {
             case ctor: (expr.constructor.type & ExprConstructor.UnionType.type) =>
@@ -193,7 +193,7 @@ object SignatureUtil {
         baseTraits: Seq[ArExpr[ExprConstructor.TraitType]],
       )
       : Comp[(Option[ArExpr[ExprConstructor.ClassType]], Seq[ArExpr[ExprConstructor.TraitType]])] =
-      exprConverter.evaluator.normalizeTopLevelWrap(baseType, exprConverter.fuel).flatMap {
+      exprConverter.evaluator.normalizeTopLevelWrap(baseType, exprConverter.fuel.evaluatorFuel).flatMap {
         case WrapExpr.OfExpr(expr) =>
           expr.constructor match {
             case ctor: (expr.constructor.type & ExprConstructor.UnionType.type) =>

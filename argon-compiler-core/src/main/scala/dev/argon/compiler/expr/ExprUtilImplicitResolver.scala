@@ -31,7 +31,11 @@ trait ExprUtilImplicitResolver
     InstanceVariable,
   }
 
-  val fuel: Int = 10
+  def fuel: implicitResolver.FuelSpecifiers = implicitResolver.FuelSpecifiers(
+    evaluatorFuel = 10,
+    prologFuel = 10,
+    smtFuel = 5,
+  )
 
 
   final lazy val implicitResolver: ImplicitResolver[context.Env, context.Error] { val exprContext: ExprUtilImplicitResolver.this.exprContext.type } =

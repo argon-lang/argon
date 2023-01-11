@@ -368,7 +368,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         WrappedFactory { (env, opt) =>
           for
             classExprConv <- convertExpr(classExpr).check(env, opt, anyType)
-            classExprNorm <- evaluator.normalizeTopLevelWrap(classExprConv.expr, fuel)
+            classExprNorm <- evaluator.normalizeTopLevelWrap(classExprConv.expr, fuel.evaluatorFuel)
           yield (classExprConv.env, OverloadExprFactoryClassConstructor(classExprNorm, classExpr.location, Seq()))
         }
 
@@ -471,7 +471,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           override def exprLocation: SourceLocation = expr.location
 
           override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
-            evaluator.normalizeTopLevelWrap(t, fuel).flatMap {
+            evaluator.normalizeTopLevelWrap(t, fuel.evaluatorFuel).flatMap {
               case WrapExpr.OfExpr(normalizedType) =>
                 normalizedType.constructor match {
                   case funcTypeCtor: (normalizedType.constructor.type & ExprConstructor.FunctionType.type) =>
@@ -602,7 +602,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
             }
 
           override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
-            evaluator.normalizeTopLevelWrap(t, fuel).flatMap {
+            evaluator.normalizeTopLevelWrap(t, fuel.evaluatorFuel).flatMap {
               case normalizedTypeWrap @ WrapExpr.OfExpr(normalizedType) =>
                 normalizedType.constructor match {
                   case tupleTypeCtor: (normalizedType.constructor.type & ExprConstructor.LoadTuple.type) =>
@@ -1341,7 +1341,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
     protected override def lookup(env: Env, opt: ExprOptions): LookupResult[MethodElement] =
       LookupResult.Suspended(
-        evaluator.normalizeTopLevelWrap(instance, fuel)
+        evaluator.normalizeTopLevelWrap(instance, fuel.evaluatorFuel)
           .flatMap {
             case WrapExpr.OfExpr(normalizedInstance) =>
               normalizedInstance.constructor match {
@@ -1364,7 +1364,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
                   )
 
                 case _ =>
-                  evaluator.normalizeTopLevelWrap(instanceType, fuel)
+                  evaluator.normalizeTopLevelWrap(instanceType, fuel.evaluatorFuel)
                     .map {
                       case WrapExpr.OfExpr(normalizedInstanceType) =>
                         normalizedInstanceType.constructor match {
@@ -1456,7 +1456,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
 
     private def getInstanceType(instanceType: WrapExpr): Comp[Seq[InstanceType]] =
-      evaluator.normalizeTopLevelWrap(instanceType, fuel).flatMap {
+      evaluator.normalizeTopLevelWrap(instanceType, fuel.evaluatorFuel).flatMap {
         case WrapExpr.OfExpr(normalizedType) =>
           normalizedType.constructor match {
             case ctor: (normalizedType.constructor.type & ExprConstructor.IntersectionType.type) =>
@@ -1644,7 +1644,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
     protected override def lookup(env: Env, opt: ExprOptions): LookupResult[TElement] =
       LookupResult.Suspended(
-        evaluator.normalizeTopLevelWrap(instance, fuel)
+        evaluator.normalizeTopLevelWrap(instance, fuel.evaluatorFuel)
           .flatMap {
             case WrapExpr.OfExpr(normalizedInstance) =>
               normalizedInstance.constructor match {

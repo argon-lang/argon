@@ -9,9 +9,13 @@ import dev.argon.util.{*, given}
 
 object TypeCheckTests extends ZIOSpecDefault {
 
-  private val fuel = 100
-
   private val resolver: TestResolver[Any] = new TestResolver[Any]()
+
+  private val fuel = resolver.FuelSpecifiers(
+    evaluatorFuel = 10,
+    prologFuel = 10,
+    smtFuel = 5,
+  )
 
   import TestExprContext.*
   import resolver.{traitA, traitB, traitC, traitD, traitE, traitType, genTraitType}

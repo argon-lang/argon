@@ -43,7 +43,9 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     quantAsserts: Seq[QuantifiedPredicate],
     instantiatedEqClasses: Set[Int],
     knownPredicates: Seq[(PredicateFunction, Boolean)],
-  )
+  ) {
+    def consumeFuel: ProverState = copy(fuel = fuel - 1)
+  }
 
   protected def predicateSatisfiableInModel(pf: PredicateFunction, state: ProverState): ZIO[R, E, Option[Boolean]] =
     ZIO.none
@@ -384,7 +386,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
         state <- stateRef.get
         flatClauses = clauses.flatten
       yield (
-        if flatClauses.isEmpty then state else state.copy(fuel = state.fuel - 1),
+        if flatClauses.isEmpty then state else state.consumeFuel,
         flatClauses
       )
     else
@@ -398,9 +400,11 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
           case (state, PredicateChoice.SelectedPredicate(_, _, _)) if clauses.nonEmpty =>
             satisfiable(p, state)
 
-          case (state, PredicateChoice.SelectedPredicate(lit, eqClass, value)) =>
-            recordKnownPredicate(state, lit.pf, value).flatMap(assumePredicate(p, _, eqClass, value)).flatMap(satisfiable) ||
-              recordKnownPredicate(state, lit.pf, !value).flatMap(assumePredicate(p, _, eqClass, !value)).flatMap(satisfiable)
+          case (state, PredicateChoice.SelectedPredicate(lit, eqClass, value)) if state.fuel > 0 =>
+            recordKnownPredicate(state.consumeFuel, lit.pf, value).flatMap(assumePredicate(p, _, eqClass, value)).flatMap(satisfiable) ||
+              recordKnownPredicate(state.consumeFuel, lit.pf, !value).flatMap(assumePredicate(p, _, eqClass, !value)).flatMap(satisfiable)
+
+          case _ => ZIO.succeed(true)
         }
       }
     }

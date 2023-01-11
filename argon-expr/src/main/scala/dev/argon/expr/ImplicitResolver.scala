@@ -909,7 +909,14 @@ abstract class ImplicitResolver[R, E] {
 
     yield result
 
-  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: Seq[ZIO[R, E, THole] => ZIO[R, E, Assertion]], knownVarValues: Map[TVariable, WrapExpr], fuel: Int)
+  final case class FuelSpecifiers
+  (
+    evaluatorFuel: Int,
+    prologFuel: Int,
+    smtFuel: Int,
+  )
+
+  final def tryResolve(implicitType: WrapExpr, model: Map[THole, ExprConstraints[WrapExpr]], givenAssertions: Seq[ZIO[R, E, THole] => ZIO[R, E, Assertion]], knownVarValues: Map[TVariable, WrapExpr], fuel: FuelSpecifiers)
   : ZIO[R, E, Option[ResolvedImplicit]] =
     def prologAttempt =
       val isEqualTo = implicitType match {
@@ -926,8 +933,8 @@ abstract class ImplicitResolver[R, E] {
         ZIO.none
       else
         Ref.make(Set.empty[THole]).flatMap { createdHoles =>
-          val proverContext = new IRPrologContext(createdHoles, givenAssertions, knownVarValues, fuel)
-          tryResolveWithProver(implicitType, model, proverContext, fuel)
+          val proverContext = new IRPrologContext(createdHoles, givenAssertions, knownVarValues, fuel.prologFuel)
+          tryResolveWithProver(implicitType, model, proverContext, fuel.prologFuel)
         }
     end prologAttempt
 
@@ -946,7 +953,7 @@ abstract class ImplicitResolver[R, E] {
       if isSubType then
         ZIO.none
       else
-        tryResolveWithProver(implicitType, model, new IRSmtContext(givenAssertions, knownVarValues, fuel), fuel)
+        tryResolveWithProver(implicitType, model, new IRSmtContext(givenAssertions, knownVarValues, fuel.smtFuel), fuel.smtFuel)
     end smtAttempt
 
     prologAttempt.flatMap {
