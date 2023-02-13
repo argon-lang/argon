@@ -10,12 +10,12 @@ import zio.*
 
 import java.io.IOException
 
-trait Plugin[-R0, +E0] {
+trait Plugin[+E0] {
   type Options[-_, +_]
   type Output[-_, +_]
 
-  given optionCodec[R <: R0, E >: E0]: OptionCodec[R, E, Options[R, E]]
-  given outputHandler[R <: R0, E >: E0]: OutputHandler[R, E, Output[R, E]]
+  given optionCodec[R, E >: E0]: OptionCodec[R, E, Options[R, E]]
+  given outputHandler[R, E >: E0]: OutputHandler[R, E, Output[R, E]]
 
 
 
@@ -25,29 +25,29 @@ trait Plugin[-R0, +E0] {
 
 
   def emitTube
-  (context: Context { type Env <: R0; type Error >: E0 })
+  (context: Context { type Error >: E0 })
   (adapter: PluginContextAdapter.Aux[context.type, this.type])
   (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
   : context.Comp[Output[context.Env, context.Error]]
 
 
-  def loadExternMethod[R <: R0, E >: E0]
+  def loadExternMethod[R, E >: E0]
   (options: Options[R, E])
   (id: String)
   : ZIO[R, E, Option[ExternMethodImplementation]]
 
 
-  def loadExternFunction[R <: R0, E >: E0]
+  def loadExternFunction[R, E >: E0]
   (options: Options[R, E])
   (id: String)
   : ZIO[R, E, Option[ExternFunctionImplementation]]
 
 
-  def loadExternClassConstructor[R <: R0, E >: E0]
+  def loadExternClassConstructor[R, E >: E0]
   (options: Options[R, E])
   (id: String)
   : ZIO[R, E, Option[ExternClassConstructorImplementation]]
 
 
-  def tubeLoaders: Map[String, TubeLoader[R0, E0]]
+  def tubeLoaders: Map[String, TubeLoader[E0]]
 }

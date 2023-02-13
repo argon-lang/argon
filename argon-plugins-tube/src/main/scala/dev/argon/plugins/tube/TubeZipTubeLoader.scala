@@ -8,7 +8,7 @@ import dev.argon.plugin.TubeLoader
 import dev.argon.plugins.tube.reader.{TubeReaderBase, TubeReaderFactory}
 import zio.*
 
-object TubeZipTubeLoader extends TubeLoader[Any, TubeError] {
+object TubeZipTubeLoader extends TubeLoader[TubeError] {
   override type LibOptions[-R, +E, ContextOptions] = TubeLibOptions[R, E, ContextOptions]
 
 
@@ -16,7 +16,7 @@ object TubeZipTubeLoader extends TubeLoader[Any, TubeError] {
     summon[OptionDecoder[R, E, LibOptions[R, E, ContextOptions]]]
 
   override def load
-  (ctx: Context { type Env; type Error >: TubeError })
+  (ctx: Context { type Error >: TubeError })
   (tubeImporter2: TubeImporter & HasContext[ctx.type])
   (libOptions: LibOptions[ctx.Env, ctx.Error, ctx.Options])
   : ZIO[ctx.Env & Scope, ctx.Error, ArTubeC & HasContext[ctx.type]] =

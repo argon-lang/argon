@@ -17,7 +17,7 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
 
   given optionsHandler: OptionCodecTable[R, E, Options]
 
-  def getPlugin(name: String): Option[Plugin[R, E]] =
+  def getPlugin(name: String): Option[Plugin[E]] =
     getPluginHelper(name).map { _.plugin }
 
   type ContextRefined = Context {
@@ -30,7 +30,7 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
   }
 
   trait PluginHelper {
-    val plugin: Plugin[R, E]
+    val plugin: Plugin[E]
     def getOptions(options: Options): plugin.Options[R, E]
     def getExternMethodImplementation(impl: ExternMethodImplementation): plugin.ExternMethodImplementation
     def getExternFunctionImplementation(impl: ExternFunctionImplementation): plugin.ExternFunctionImplementation
@@ -121,7 +121,7 @@ private[build] trait OptionCodecTable[R, E, A] extends OptionCodec[R, E, A] {
 }
 
 private[build] object BuildContextFactory {
-  def make[R <: CompEnv, E >: BuildError | CompError](plugins: Map[String, Plugin[R, E]], buildConfig: BuildConfig): ZIO[R, E, BuildContextFactory[R, E]] =
+  def make[R <: CompEnv, E >: BuildError | CompError](plugins: Map[String, Plugin[E]], buildConfig: BuildConfig): ZIO[R, E, BuildContextFactory[R, E]] =
     def forPlugins(pluginNames: List[String]): ZIO[R, E, BuildContextFactory[R, E]] =
       pluginNames match {
         case Nil => ZIO.succeed(BuildContextFactoryNil())
@@ -166,7 +166,7 @@ private[build] final class BuildContextFactoryNil[R <: CompEnv, E >: BuildError 
 }
 
 private[build] final class BuildContextFactoryCons[R <: CompEnv, E >: BuildError | CompError]
-(pluginName: String, val plugin: Plugin[R, E], val rest: BuildContextFactory[R, E]) extends BuildContextFactory[R, E] {
+(pluginName: String, val plugin: Plugin[E], val rest: BuildContextFactory[R, E]) extends BuildContextFactory[R, E] {
   override type Options = plugin.Options[R, E] *: rest.Options
   override type ExternMethodImplementation = plugin.ExternMethodImplementation *: rest.ExternMethodImplementation
   override type ExternFunctionImplementation = plugin.ExternFunctionImplementation *: rest.ExternFunctionImplementation
@@ -244,7 +244,7 @@ private[build] final class BuildContextFactoryCons[R <: CompEnv, E >: BuildError
         }
       }
 
-  override def getPlugin(name: String): Option[Plugin[R, E]] =
+  override def getPlugin(name: String): Option[Plugin[E]] =
     if name == pluginName then Some(plugin)
     else rest.getPlugin(name)
 

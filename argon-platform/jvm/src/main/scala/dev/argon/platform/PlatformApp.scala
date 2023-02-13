@@ -39,7 +39,7 @@ abstract class PlatformApp extends ZIOApp {
 
   def runApp: ZIO[Environment & ZIOAppArgs, Any, ExitCode]
 
-  def plugins: Map[String, Plugin[Environment, Error]] =
+  def plugins: Map[String, Plugin[Error]] =
     Map(
       "source" -> SourcePlugin,
       "js" -> JSPlugin,

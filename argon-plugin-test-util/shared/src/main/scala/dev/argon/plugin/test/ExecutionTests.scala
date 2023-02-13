@@ -26,7 +26,7 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
   type E = E0 | SourceError | TestError
 
   val pluginName: String
-  val plugin: Plugin[Environment, E]
+  val plugin: Plugin[E]
   val testOptions: plugin.Options[Environment, E]
 
 

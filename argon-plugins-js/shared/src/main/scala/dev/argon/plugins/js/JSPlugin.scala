@@ -14,7 +14,7 @@ import zio.stream.*
 
 import java.nio.charset.CharacterCodingException
 
-object JSPlugin extends Plugin[Any, JSPluginError] {
+object JSPlugin extends Plugin[JSPluginError] {
   override type Options[-R, +E] = JSOptions[R, E]
   override type Output[-R, +E] = JSOutput[R, E]
 
@@ -43,7 +43,7 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
 
 
 
-  override def loadExternMethod[R <: Any, E >: JSPluginError]
+  override def loadExternMethod[R, E >: JSPluginError]
   (options: JSOptions[R, E])
   (id: String)
   : ZIO[R, E, Option[estree.FunctionDeclaration]] =
@@ -63,18 +63,18 @@ object JSPlugin extends Plugin[Any, JSPluginError] {
       .runHead
 
 
-  override def loadExternFunction[R <: Any, E >: JSPluginError]
+  override def loadExternFunction[R, E >: JSPluginError]
   (options: JSOptions[R, E])
   (id: String)
   : ZIO[R, E, Option[FunctionDeclaration]] =
     loadExternMethod(options)(id)
 
 
-  override def loadExternClassConstructor[R <: Any, E >: JSPluginError]
+  override def loadExternClassConstructor[R, E >: JSPluginError]
   (options: JSOptions[R, E])
   (id: String)
   : ZIO[R, E, Option[FunctionDeclaration]] =
     loadExternMethod(options)(id)
 
-  override def tubeLoaders: Map[String, TubeLoader[Any, JSPluginError]] = Map.empty
+  override def tubeLoaders: Map[String, TubeLoader[JSPluginError]] = Map.empty
 }

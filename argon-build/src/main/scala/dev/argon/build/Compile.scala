@@ -14,7 +14,7 @@ import java.io.IOException
 object Compile {
   def compile[R <: ResourceReader & ResourceWriter, E >: BuildError | CompError | IOException](
     buildConfig: Toml,
-    plugins: Map[String, Plugin[R, E]],
+    plugins: Map[String, Plugin[E]],
   ): ZIO[R, E, Unit] =
     ZIO.scoped(
       for

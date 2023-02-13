@@ -4,7 +4,7 @@ import dev.argon.compiler.*
 
 trait PluginContextAdapter {
   val context: Context
-  val plugin: Plugin[context.Env, context.Error]
+  val plugin: Plugin[context.Error]
   
   def extractOptions(options: context.Options): plugin.Options[context.Env, context.Error]
 
@@ -14,7 +14,7 @@ trait PluginContextAdapter {
 }
 
 object PluginContextAdapter {
-  type Aux[TContext <: Context, TPlugin <: Plugin[?, ?]] = PluginContextAdapter {
+  type Aux[TContext <: Context, TPlugin <: Plugin[?]] = PluginContextAdapter {
     val context: TContext
     val plugin: TPlugin
   }
