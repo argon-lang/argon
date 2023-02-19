@@ -1,6 +1,6 @@
 package dev.argon.plugin
 
-import dev.argon.util.xml
+import scala.xml
 
 final case class PluginSpec
 (

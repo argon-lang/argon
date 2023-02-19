@@ -29,6 +29,10 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-json" % "0.4.2",
     "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.2.6",
 
+    "org.scala-lang.modules" %%% "scala-xml" % "2.1.0",
+    "org.gnieh" %%% "fs2-data-xml-scala" % "1.6.1",
+    "dev.zio" %%% "zio-interop-cats" % "23.0.0.1",
+
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
     "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
   ),
@@ -37,7 +41,6 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
 
 lazy val npmDeps = Seq(
   "jszip" -> "^3.10.1",
-  "@xmldom/xmldom" -> "^0.8.6",
   "acorn" -> "^8.8.2",
   "astring" -> "1.8.4",
 )

@@ -1,22 +1,22 @@
 package dev.argon.plugin.loader.java
 
 import dev.argon.plugin.{Plugin, PluginLoader}
-import dev.argon.util.xml
 import zio.*
 
 import java.net.URLClassLoader
 import java.nio.file.Path
 import scala.util.chaining.*
+import scala.xml
 import dev.argon.plugin.api as japi
 import dev.argon.plugin.tube.InvalidTube
 
 final class JavaPluginLoader[R, E >: JavaPluginLoadException | InvalidTube] extends PluginLoader[R, E] {
   override type PluginConfig = JavaPluginConfig
   override val configTagName: String = "Java"
-  override def decodeConfig(path: Path, elem: xml.Element): Either[String, JavaPluginConfig] =
+  override def decodeConfig(path: Path, elem: xml.Elem): Either[String, JavaPluginConfig] =
     for
-      factoryClass <- elem.child(xml.Name("PluginFactoryClass")).map { _.textContent }.toRight("PluginFactoryClass not specified")
-      modules <- elem.childrenByTag(xml.Name("Module")).map(modElem => path.resolve(modElem.textContent).nn)
+      factoryClass <- (elem \ "PluginFactoryClass").collectFirst { case e: xml.Elem => e.text }.toRight("PluginFactoryClass not specified")
+      modules <- (elem \ "Module").collect { case modElem: xml.Elem => path.resolve(modElem.text).nn }
         .pipe(Some.apply)
         .filter(_.nonEmpty)
         .toRight("No module specified")

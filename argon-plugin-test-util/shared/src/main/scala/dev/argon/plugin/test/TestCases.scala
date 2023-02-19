@@ -2,7 +2,9 @@ package dev.argon.plugin.test
 
 import dev.argon.util.test.{CompileTimeFileSystem, ReadFileCompileTime}
 import dev.argon.util.{*, given}
-import dev.argon.util.xml.*
+import scala.xml
+import dev.argon.util.xml.XmlParser
+
 import zio.*
 
 private[test] enum TestCases {
@@ -27,20 +29,27 @@ private[test] object TestCases {
     end match
 
   private def parseTestCase(data: String): Task[TestCase] =
-    XmlParser.parse(data).map { xml =>
+    XmlParser.parse(data).map { doc =>
       TestCase(
-        name = xml.child(Name("Name")).get.textContent,
-        inputSources = xml.childrenByTag(Name("InputSource"))
-          .map { inputSourceNode =>
-            (inputSourceNode.attribute(Name("name")).get.value, inputSourceNode.textContent)
+        name = (doc \ "Name").collectFirst { case elem: xml.Elem => elem }.get.text,
+        inputSources = (doc \ "InputSource")
+          .collect {
+            case inputSourceNode: xml.Elem =>
+              ((inputSourceNode \ "@name").text, inputSourceNode.text)
           }
           .toMap,
         expectedResult =
-          xml.child(Name("ExpectedOutput")) match {
-            case Some(node) => TestCase.ExpectedResult.Output(node.textContent)
-            case None =>
-              TestCase.ExpectedResult.Error(xml.child(Name("ExpectedError")).get.textContent)
-          },
+          (doc \ "ExpectedOutput")
+            .collectFirst {
+              case node: xml.Elem => TestCase.ExpectedResult.Output(node.text)
+            }
+            .orElse {
+              (doc \ "ExpectedError")
+                .collectFirst {
+                  case node: xml.Elem => TestCase.ExpectedResult.Error(node.text)
+                }
+            }
+            .get,
       )
     }
 
