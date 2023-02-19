@@ -1,6 +1,6 @@
 package dev.argon.cli
 
-import dev.argon.io.{BinaryResourceDecoder, JsonResource}
+import dev.argon.io.{BinaryResourceDecoder, JsonResource, ResourceWriter, ResourceReader}
 import dev.argon.platform.*
 import dev.argon.util.toml.Toml
 import dev.argon.util.{*, given}

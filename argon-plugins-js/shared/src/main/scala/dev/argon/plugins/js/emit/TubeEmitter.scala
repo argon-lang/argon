@@ -34,7 +34,8 @@ private[js] trait TubeEmitter extends EmitTubeCommon {
             new ModuleEmitter {
               override val context: TubeEmitter.this.context.type = TubeEmitter.this.context
               override val options: JSOptions[context.Env, context.Error] = TubeEmitter.this.options
-              override val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type] = TubeEmitter.this.adapter
+              override val plugin: TubeEmitter.this.plugin.type = TubeEmitter.this.plugin
+              override val adapter: PluginContextAdapter.Aux[context.type, plugin.type] = TubeEmitter.this.adapter
               override val tube: ArTube = TubeEmitter.this.tube
               override val imports: TMap[ImportSpecifier, String] = importMap
               override val additionalImports: TMap[ModuleName, TSet[String]] = additionalImportMap

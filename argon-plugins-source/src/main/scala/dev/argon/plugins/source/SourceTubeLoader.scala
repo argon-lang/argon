@@ -16,14 +16,14 @@ import java.io.IOException
 import zio.*
 import zio.stream.*
 
-object SourceTubeLoader extends TubeLoader[SourceError] {
-  override type LibOptions[-R, +E, ContextOptions] = SourceLibOptions[R, E, ContextOptions]
+final class SourceTubeLoader[R, E >: SourceError, ContextOptions] extends TubeLoader[R, E, ContextOptions] {
+  override type LibOptions = SourceLibOptions[R, E, ContextOptions]
 
-  override def libOptionDecoder[R, E >: SourceError, ContextOptions](using OptionDecoder[R, E, ContextOptions]): OptionDecoder[R, E, LibOptions[R, E, ContextOptions]] =
-    summon[OptionDecoder[R, E, LibOptions[R, E, ContextOptions]]]
+  override def libOptionDecoder(using OptionDecoder[R, E, ContextOptions]): OptionDecoder[R, E, LibOptions] =
+    summon[OptionDecoder[R, E, LibOptions]]
 
   def load
-  (context: Context { type Error >: SourceError })
+  (context: Context { type Env = R; type Error = E; type Options = ContextOptions })
   (tubeImporter: TubeImporter & HasContext[context.type])
   (libOptions: SourceLibOptions[context.Env, context.Error, context.Options])
   : ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]] =

@@ -10,8 +10,7 @@ private[util] final class JavaExecuteIO[R, E, EX <: Exception, A](using Runtime[
   private var error: EX = uninitialized
 
   def execute(task: ZIO[R, E, A]): A =
-    Unsafe.unsafe { unsafe2 =>
-      given unsafe: Unsafe = unsafe2
+    Unsafe.unsafely {
       val fiber = summon[Runtime[R]].unsafe.fork(task.onExit(onComplete))
 
       var exitResult: Option[A] = None

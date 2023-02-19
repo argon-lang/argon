@@ -3,25 +3,25 @@ package dev.argon.tube
 import scalapb.TypeMapper
 import zio.Chunk
 
-given TypeMapper[dev.argon.tube.BigInt, scala.math.BigInt] with
-  override def toCustom(base: dev.argon.tube.BigInt): scala.math.BigInt =
+given TypeMapper[dev.argon.tube.BigIntWrapper, scala.math.BigInt] with
+  override def toCustom(base: dev.argon.tube.BigIntWrapper): scala.math.BigInt =
     base.value match {
-      case dev.argon.tube.BigInt.Value.UintValue(n) => n
-      case dev.argon.tube.BigInt.Value.SintValue(n) => n
-      case dev.argon.tube.BigInt.Value.BigIntValue(b) => scala.math.BigInt(b.toArray)
-      case _: dev.argon.tube.BigInt.Value.Empty.type => 0
+      case dev.argon.tube.BigIntWrapper.Value.UintValue(n) => n
+      case dev.argon.tube.BigIntWrapper.Value.SintValue(n) => n
+      case dev.argon.tube.BigIntWrapper.Value.BigIntValue(b) => scala.math.BigInt(b.toArray)
+      case _: dev.argon.tube.BigIntWrapper.Value.Empty.type => 0
     }
 
-  override def toBase(custom: scala.math.BigInt): dev.argon.tube.BigInt =
-    dev.argon.tube.BigInt(
+  override def toBase(custom: scala.math.BigInt): dev.argon.tube.BigIntWrapper =
+    dev.argon.tube.BigIntWrapper(
       if custom == 0 then
-        dev.argon.tube.BigInt.Value.Empty
+        dev.argon.tube.BigIntWrapper.Value.Empty
       else if custom > 0 && custom < (scala.math.BigInt(1) << 64) then
-        dev.argon.tube.BigInt.Value.UintValue(custom.toLong)
+        dev.argon.tube.BigIntWrapper.Value.UintValue(custom.toLong)
       else if custom < 0 && custom >= Long.MinValue then
-        dev.argon.tube.BigInt.Value.SintValue(custom.toLong)
+        dev.argon.tube.BigIntWrapper.Value.SintValue(custom.toLong)
       else
-        dev.argon.tube.BigInt.Value.BigIntValue(Chunk.fromArray(custom.toByteArray))
+        dev.argon.tube.BigIntWrapper.Value.BigIntValue(Chunk.fromArray(custom.toByteArray))
     )
 end given
 

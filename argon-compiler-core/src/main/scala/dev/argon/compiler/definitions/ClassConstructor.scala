@@ -6,7 +6,8 @@ import dev.argon.compiler.tube.ArTubeC
 import dev.argon.util.UniqueIdentifier
 import dev.argon.compiler.signature.Signature
 
-abstract class ClassConstructorC extends Definition with UsingContext derives CanEqual {
+abstract class 
+ClassConstructorC extends Definition with UsingContext derives CanEqual {
   import context.ExprContext.*
 
   val id: UniqueIdentifier

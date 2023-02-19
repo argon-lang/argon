@@ -44,6 +44,13 @@ object SourceTube {
       override lazy val modulePaths: Set[ModulePath] = modules.keySet
 
       override def asDeclaration: Option[this.type & HasImplementation[true]] = Some(this)
+      
+      override def withHasImplementation[A]
+      (
+        whenImplementation: this.type & HasImplementation[true] => A,
+        whenInterface: this.type & HasImplementation[false] => A,
+      ): A =
+        whenImplementation(this)
     }
   end make
 

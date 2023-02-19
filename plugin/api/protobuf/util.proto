@@ -1,0 +1,80 @@
+syntax = "proto2";
+
+option java_package = "dev.argon.plugin.api.tube";
+option java_multiple_files = true;
+
+package argon.tube;
+
+
+message BigIntWrapper {
+  oneof Value {
+    uint64 uintValue = 1;
+    sint64 sintValue = 2;
+    bytes bigIntValue = 3;
+  }
+}
+
+message LocalTime {
+  required int32 hour = 1;
+  required int32 minute = 2;
+  required int32 second = 3;
+  required int32 nanoOfSecond = 4;
+}
+
+message LocalDate {
+  required int32 year = 1;
+  required int32 month = 2;
+  required int32 dayOfMonth = 3;
+}
+
+message LocalDateTime {
+  required int32 year = 1;
+  required int32 month = 2;
+  required int32 dayOfMonth = 3;
+  required int32 hour = 4;
+  required int32 minute = 5;
+  required int32 second = 6;
+  required int32 nanoOfSecond = 7;
+}
+
+message OffsetDateTime {
+  required int32 year = 1;
+  required int32 month = 2;
+  required int32 dayOfMonth = 3;
+  required int32 hour = 4;
+  required int32 minute = 5;
+  required int32 second = 6;
+  required int32 nanoOfSecond = 7;
+  required int32 offset = 8;
+}
+
+message TomlArray {
+  repeated Toml elements = 1;
+}
+
+message TomlKeyValue {
+  required string key = 1;
+  required Toml value = 2;
+}
+
+message TomlTable {
+  repeated TomlKeyValue elements = 1;
+}
+
+message Toml {
+  oneof Value {
+    BigIntWrapper intValue = 1;
+    string stringValue = 2;
+    double floatValue = 3;
+    bool boolValue = 4;
+    OffsetDateTime offsetDateTime = 5;
+    LocalDateTime localDateTime = 6;
+    LocalDate localDate = 7;
+    LocalTime localTime = 8;
+    TomlArray array = 9;
+    TomlTable table = 10;
+  }
+}
+
+
+

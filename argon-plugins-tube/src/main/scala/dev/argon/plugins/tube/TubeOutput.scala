@@ -1,12 +1,12 @@
 package dev.argon.plugins.tube
 
-import dev.argon.io.ZipFileResource
+import dev.argon.io.ZipStreamResource
 import dev.argon.options.OutputHandler
 
 final case class TubeOutput[-R, +E]
 (
-  implementationModule: ZipFileResource[R, E],
-  interfaceModule: ZipFileResource[R, E],
+  implementationModule: ZipStreamResource[R, E],
+  interfaceModule: ZipStreamResource[R, E],
 )
 
 object TubeOutput:

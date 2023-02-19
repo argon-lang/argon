@@ -17,7 +17,7 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
 
   given optionsHandler: OptionCodecTable[R, E, Options]
 
-  def getPlugin(name: String): Option[Plugin[E]] =
+  def getPlugin(name: String): Option[Plugin[R, E]] =
     getPluginHelper(name).map { _.plugin }
 
   type ContextRefined = Context {
@@ -30,8 +30,8 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
   }
 
   trait PluginHelper {
-    val plugin: Plugin[E]
-    def getOptions(options: Options): plugin.Options[R, E]
+    val plugin: Plugin[R, E]
+    def getOptions(options: Options): plugin.Options
     def getExternMethodImplementation(impl: ExternMethodImplementation): plugin.ExternMethodImplementation
     def getExternFunctionImplementation(impl: ExternFunctionImplementation): plugin.ExternFunctionImplementation
     def getExternClassConstructorImplementation(impl: ExternClassConstructorImplementation): plugin.ExternClassConstructorImplementation
@@ -42,7 +42,7 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
         override val plugin: PluginHelper.this.plugin.type = PluginHelper.this.plugin
 
 
-        override def extractOptions(options: Options): plugin.Options[R, E] =
+        override def extractOptions(options: Options): plugin.Options =
           PluginHelper.this.getOptions(options)
 
         override def extractExternMethodImplementation(impl: ExternMethodImplementation): plugin.ExternMethodImplementation =
@@ -99,9 +99,9 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
       override def loadTube(resFactory: ResourceFactory[context.Env, context.Error])(tubeOptions: TubeOptions): ZIO[R & Scope, E, ArTube] =
         for
           plugin <- ZIO.fromEither(getPlugin(tubeOptions.loader.plugin).toRight(UnknownPlugin(tubeOptions.loader.plugin)))
-          loader <- ZIO.fromEither(plugin.tubeLoaders.get(tubeOptions.loader.name).toRight(UnknownTubeLoader(tubeOptions.loader)))
+          loader <- ZIO.fromEither(plugin.tubeLoaders[context.Options].get(tubeOptions.loader.name).toRight(UnknownTubeLoader(tubeOptions.loader)))
 
-          libOptions <- loader.libOptionDecoder[R, E, Options]
+          libOptions <- loader.libOptionDecoder
             .decode(resFactory)(tubeOptions.options)
             .mapError(BuildConfigParseError.apply)
 
@@ -121,7 +121,7 @@ private[build] trait OptionCodecTable[R, E, A] extends OptionCodec[R, E, A] {
 }
 
 private[build] object BuildContextFactory {
-  def make[R <: CompEnv, E >: BuildError | CompError](plugins: Map[String, Plugin[E]], buildConfig: BuildConfig): ZIO[R, E, BuildContextFactory[R, E]] =
+  def make[R <: CompEnv, E >: BuildError | CompError](plugins: Map[String, Plugin[R, E]], buildConfig: BuildConfig): ZIO[R, E, BuildContextFactory[R, E]] =
     def forPlugins(pluginNames: List[String]): ZIO[R, E, BuildContextFactory[R, E]] =
       pluginNames match {
         case Nil => ZIO.succeed(BuildContextFactoryNil())
@@ -166,8 +166,8 @@ private[build] final class BuildContextFactoryNil[R <: CompEnv, E >: BuildError 
 }
 
 private[build] final class BuildContextFactoryCons[R <: CompEnv, E >: BuildError | CompError]
-(pluginName: String, val plugin: Plugin[E], val rest: BuildContextFactory[R, E]) extends BuildContextFactory[R, E] {
-  override type Options = plugin.Options[R, E] *: rest.Options
+(pluginName: String, val plugin: Plugin[R, E], val rest: BuildContextFactory[R, E]) extends BuildContextFactory[R, E] {
+  override type Options = plugin.Options *: rest.Options
   override type ExternMethodImplementation = plugin.ExternMethodImplementation *: rest.ExternMethodImplementation
   override type ExternFunctionImplementation = plugin.ExternFunctionImplementation *: rest.ExternFunctionImplementation
   override type ExternClassConstructorImplementation = plugin.ExternClassConstructorImplementation *: rest.ExternClassConstructorImplementation
@@ -179,15 +179,15 @@ private[build] final class BuildContextFactoryCons[R <: CompEnv, E >: BuildError
         case _ => Toml.Table.empty
       }
       for
-        pluginOpt <- plugin.optionCodec[R, E].decode(resFactory)(pluginOptToml)
+        pluginOpt <- plugin.optionCodec.decode(resFactory)(pluginOptToml)
         tailOpt <- rest.optionsHandler.decode(resFactory)(value)
       yield pluginOpt *: tailOpt
     end decode
 
-    override def encode(recorder: ResourceRecorder[R, E])(value: plugin.Options[R, E] *: rest.Options): ZIO[R, E, Toml.Table] =
+    override def encode(recorder: ResourceRecorder[R, E])(value: plugin.Options *: rest.Options): ZIO[R, E, Toml.Table] =
       val (head *: tail) = value
       for
-        headToml <- plugin.optionCodec[R, E].encode(recorder)(head)
+        headToml <- plugin.optionCodec.encode(recorder)(head)
         tailToml <- rest.optionsHandler.encode(recorder)(tail)
       yield tailToml
     end encode
@@ -198,7 +198,7 @@ private[build] final class BuildContextFactoryCons[R <: CompEnv, E >: BuildError
     if name == pluginName then
       Some(new PluginHelper {
         override val plugin: BuildContextFactoryCons.this.plugin.type = BuildContextFactoryCons.this.plugin
-        override def getOptions(options: Options): plugin.Options[R, E] =
+        override def getOptions(options: Options): plugin.Options =
           val (pluginOpts *: _) = options
           pluginOpts
         end getOptions
@@ -222,7 +222,7 @@ private[build] final class BuildContextFactoryCons[R <: CompEnv, E >: BuildError
       rest.getPluginHelper(name).map { restPluginHelper =>
         new PluginHelper {
           override val plugin: restPluginHelper.plugin.type = restPluginHelper.plugin
-          override def getOptions(options: Options): plugin.Options[R, E] =
+          override def getOptions(options: Options): plugin.Options =
             val (_ *: restPluginOpts) = options
             restPluginHelper.getOptions(restPluginOpts)
           end getOptions
@@ -244,7 +244,7 @@ private[build] final class BuildContextFactoryCons[R <: CompEnv, E >: BuildError
         }
       }
 
-  override def getPlugin(name: String): Option[Plugin[E]] =
+  override def getPlugin(name: String): Option[Plugin[R, E]] =
     if name == pluginName then Some(plugin)
     else rest.getPlugin(name)
 

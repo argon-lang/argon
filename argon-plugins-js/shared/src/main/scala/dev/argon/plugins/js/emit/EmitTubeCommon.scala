@@ -13,7 +13,8 @@ private[emit] trait EmitTubeCommon extends UsingContext {
   override val context: Context { type Error >: JSPluginError }
   val tube: ArTube
   val options: JSOptions[context.Env, context.Error]
-  val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type]
+  val plugin: JSPlugin[context.Env, context.Error]
+  val adapter: PluginContextAdapter.Aux[context.type, plugin.type]
 
 
   private def escapeSegment(seg: String): String =

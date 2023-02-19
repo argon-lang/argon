@@ -19,7 +19,7 @@ option (scalapb.options) = {
 
   aux_message_options: [
     {
-      target: "argon.tube.BigInt"
+      target: "argon.tube.BigIntWrapper"
       options: {
         type: "scala.math.BigInt"
       }

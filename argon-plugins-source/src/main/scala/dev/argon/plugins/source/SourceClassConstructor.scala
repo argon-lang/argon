@@ -117,14 +117,14 @@ object SourceClassConstructor {
                   exprConverter.convertStmtList(stmts).check(env, opt, exprConverter.unitType)
                 }
 
-              def convertPreBaseCallBlocks(env: Env, stmts: Seq[Either[Seq[WithSource[parser.Stmt]], WithSource[parser.FieldInitializationStmt]]]): Comp[(Seq[exprConverter.exprContext.WrapExpr | UnresolvedFieldInit], Env)] =
+              def convertPreBaseCallBlocks(env: Env, stmts: Seq[Either[Seq[WithSource[parser.Stmt]], WithSource[parser.FieldInitializationStmt]]]): Comp[(Seq[Either[exprConverter.exprContext.WrapExpr, UnresolvedFieldInit]], Env)] =
                 for
                   fields <- owner.arClass.fields
                   initializedFields <- TSet.empty[context.ExprContext.MemberVariable].commit
-                  result <- ZIO.foldLeft(stmts)((Seq.empty[exprConverter.exprContext.WrapExpr | UnresolvedFieldInit], env)) {
+                  result <- ZIO.foldLeft(stmts)((Seq.empty[Either[exprConverter.exprContext.WrapExpr, UnresolvedFieldInit]], env)) {
                     case ((acc, env), Left(stmts)) =>
                       convertStmtBlock(env, stmts)
-                        .map { case ExprResult(expr, env) => (acc :+ expr, env) }
+                        .map { case ExprResult(expr, env) => (acc :+ Left(expr), env) }
 
                     case ((acc, env), Right(fieldInit)) =>
                       for
@@ -139,7 +139,7 @@ object SourceClassConstructor {
 
                         fieldConv = ExprToHolesConverter(context)(exprConverter.exprContext).processMemberVariable(field)
                         (ExprResult(value, env)) <- exprConverter.convertExpr(fieldInit.value.value).check(env, opt, fieldConv.varType)
-                      yield (acc :+ UnresolvedFieldInit(field, fieldConv, value), env)
+                      yield (acc :+ Right(UnresolvedFieldInit(field, fieldConv, value)), env)
                   }
                   _ <- ZIO.foreachDiscard(fields) { field =>
                     ZIO.fail(DiagnosticError.FieldNotInitialized(DiagnosticSource.Location(stmt.newLocation)))
@@ -230,13 +230,13 @@ object SourceClassConstructor {
                 yield (baseClassOpt, instanceVariable, env)
               end convertBaseCall
 
-              def resolvePreBaseCallBlocks(env: Env, stmts: Seq[exprConverter.exprContext.WrapExpr | UnresolvedFieldInit]): Comp[(Seq[Either[WrapExpr, FieldInitializationStatement]], Env)] =
+              def resolvePreBaseCallBlocks(env: Env, stmts: Seq[Either[exprConverter.exprContext.WrapExpr, UnresolvedFieldInit]]): Comp[(Seq[Either[WrapExpr, FieldInitializationStatement]], Env)] =
                 ZIO.foldLeft(stmts)((Seq.empty[Either[WrapExpr, FieldInitializationStatement]], env)) {
-                  case ((acc, env), expr: exprConverter.exprContext.WrapExpr) =>
+                  case ((acc, env), Left(expr)) =>
                     exprConverter.resolveHoles(env, expr)
                       .map { case (resolvedExpr, env)  => (acc :+ Left(resolvedExpr), env) }
 
-                  case ((acc, env), fieldInit: UnresolvedFieldInit) =>
+                  case ((acc, env), Right(fieldInit)) =>
                     for
                       (resolvedValue, env) <- exprConverter.resolveHoles(env, fieldInit.value)
 

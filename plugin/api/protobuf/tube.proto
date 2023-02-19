@@ -1,0 +1,513 @@
+syntax = "proto2";
+
+import "util.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/descriptor.proto";
+
+option java_package = "dev.argon.plugin.api.tube";
+option java_multiple_files = true;
+
+package argon.tube;
+
+message TubeZipEntry {
+  required string path = 1;
+}
+
+extend google.protobuf.MessageOptions {
+  optional TubeZipEntry zipentry = 5000;
+  optional TubeFormatVersion defaultTubeFormatVersion = 5001;
+}
+
+message TubeFormatVersion {
+  option (zipentry) = { path: "version" };
+  option (defaultTubeFormatVersion) = {
+    major: { uintValue: 0 };
+    minor: { uintValue: 0 };
+  };
+
+  optional BigIntWrapper major = 1;
+  optional BigIntWrapper minor = 2;
+}
+
+message Metadata {
+  option (zipentry) = { path: "metadata" };
+
+  required TubeName name = 1;
+  required TubeType type = 2;
+  optional Toml options = 16;
+  repeated string optionResources = 17;
+  repeated ModulePath modules = 3;
+
+  repeated TubeName references = 4;
+  repeated ExternalReference externalClasses = 5;
+  repeated ExternalReference externalTraits = 6;
+  repeated ExternalReference externalFunctions = 7;
+  repeated ExternalReferenceMethod externalMethods = 8;
+  repeated ExternalReferenceClassConstructor externalClassConstructors = 9;
+}
+
+message ExternalReference {
+  required ImportSpecifier specifier = 2;
+}
+
+message ExternalReferenceMethod {
+  required OwnerType ownerType = 2;
+  required BigIntWrapper ownerId = 3;
+  optional Identifier identifier = 4;
+  required ErasedSignature signature = 5;
+
+  enum OwnerType {
+    OWNER_TYPE_CLASS = 0;
+    OWNER_TYPE_CLASS_STATIC = 1;
+    OWNER_TYPE_TRAIT = 2;
+    OWNER_TYPE_TRAIT_STATIC = 3;
+  }
+}
+
+message ExternalReferenceClassConstructor {
+  required BigIntWrapper ownerId = 2;
+  required ErasedSignature signature = 3;
+}
+
+message Resource {
+  option (zipentry) = { path: "resource/%d" };
+}
+
+
+// Miscellaneous
+
+message Identifier {
+  oneof value {
+    string named = 1;
+    string operator = 2;
+    Identifier extension = 3;
+    Identifier inverse = 4;
+    Identifier update = 5;
+    google.protobuf.Empty functionResultValue = 6;
+  }
+}
+
+enum AccessModifier {
+  ACCESS_MODIFIER_PRIVATE = 1;
+  ACCESS_MODIFIER_TUBE_PRIVATE = 2;
+  ACCESS_MODIFIER_MODULE_PRIVATE = 3;
+
+  ACCESS_MODIFIER_PUBLIC = 4;
+
+  ACCESS_MODIFIER_PROTECTED = 5;
+  ACCESS_MODIFIER_TUBE_OR_PROTECTED = 6;
+  ACCESS_MODIFIER_TUBE_AND_PROTECTED = 7;
+}
+
+message ErasedSignature {
+  repeated ErasedSignatureType parameterTypes = 1;
+  optional ErasedSignatureType resultType = 2;
+}
+
+message ErasedSignatureType {
+  oneof constructor {
+    google.protobuf.Empty erased = 2;
+    ImportSpecifier class = 3;
+    ImportSpecifier trait = 4;
+    google.protobuf.Empty tuple = 5;
+    google.protobuf.Empty function = 6;
+  }
+  repeated ErasedSignatureType arguments = 1;
+}
+
+message ImportSpecifier {
+  repeated string tube = 1;
+  repeated string module = 2;
+  optional Identifier name = 3;
+  required ErasedSignature signature = 4;
+}
+
+// Tubes
+message TubeName {
+  repeated string name = 1;
+}
+
+enum TubeType {
+  TUBE_TYPE_INTERFACE = 0;
+  TUBE_TYPE_IMPLEMENTATION = 1;
+}
+
+
+message ModuleDefinition {
+  // modules/definition/...
+  // the path will urlencode (uppercase) the characters / and %
+  // A root module will be written as modules/definition
+  option (zipentry) = { path: "modules/definition%s" };
+  
+  repeated NameGroup elements = 1;
+
+  message NameGroup {
+    optional Identifier name = 1;
+    repeated ElementDeclaration declaredElements = 2;
+    repeated ElementExported exportedElements = 3;
+  }
+
+  message ElementDeclaration {
+    required BigIntWrapper id = 1;
+    required Type type = 2;
+    required AccessModifier accessModifier = 3;
+
+    enum Type {
+      TYPE_UNKNOWN = 0;
+      TYPE_CLASS = 1;
+      TYPE_TRAIT = 2;
+      TYPE_FUNCTION = 3;
+    }
+  }
+
+  message ElementExported {
+    required ModuleName module = 1;
+    optional Identifier name = 2;
+  }
+}
+
+message ModulePath {
+  repeated string name = 1;
+}
+
+
+
+
+
+
+message ModuleName {
+  repeated string tube = 1;
+  repeated string module = 2;
+}
+
+// Common declaration messages
+enum Mutability {
+  MUTABILITY_MUTABLE = 0;
+  MUTABILITY_NON_MUTABLE = 1;
+}
+
+message EffectInfo {
+  required bool isPure = 1;
+}
+
+message Parameter {
+  required ListType listType = 1;
+  required uint32 flags = 2;
+  optional Identifier name = 3;
+  required Expr paramType = 4;
+
+  enum ListType {
+    LIST_TYPE_NORMAL_LIST = 1;
+    LIST_TYPE_INFERRABLE_LIST = 2;
+    LIST_TYPE_INFERRABLE_LIST2 = 3;
+    LIST_TYPE_REQUIRES_LIST = 4;
+  }
+
+  enum Flags {
+    FLAGS_ERASED = 1;
+  }
+}
+
+
+message ClassDefinition {
+  option (zipentry) = { path: "classes/%d" };
+
+  required uint32 flags = 1;
+  required Signature signature = 2;
+  repeated ClassField fields = 3;
+  repeated MethodMemberGroup methods = 4;
+  repeated MethodMemberGroup staticMethods = 5;
+  repeated ClassConstructorMember constructors = 6;
+
+  enum Flags {
+    FLAGS_NONE = 0;
+    FLAGS_SEALED = 1;
+    FLAGS_OPEN = 2;
+    FLAGS_ABSTRACT = 4;
+  }
+
+  message Signature {
+    repeated Parameter parameters = 1;
+    required Expr classTypeSuperType = 2;
+    optional ClassType baseClass = 3;
+    repeated TraitType baseTraits = 4;
+  }
+}
+
+message ClassField {
+  required Identifier name = 1;
+  required Mutability mutability = 2;
+  required Expr fieldType = 3;
+}
+
+message MethodMemberGroup {
+  optional Identifier name = 1;
+  repeated MethodMember methods = 2;
+}
+
+message MethodMember {
+  required BigIntWrapper id = 1;
+  required AccessModifier accessModifier = 3;
+}
+
+message ClassConstructorMember {
+  required BigIntWrapper id = 1;
+  required AccessModifier accessModifier = 2;
+}
+
+
+
+
+message TraitDefinition {
+  option (zipentry) = { path: "traits/%d" };
+
+  required uint32 flags = 1;
+  required Signature signature = 2;
+  repeated MethodMemberGroup methods = 3;
+  repeated MethodMemberGroup staticMethods = 4;
+
+  enum Flags {
+    FLAGS_NONE = 0;
+    FLAGS_SEALED = 1;
+  }
+
+  message Signature {
+    repeated Parameter parameters = 1;
+    required Expr traitTypeSuperType = 2;
+    repeated TraitType baseTraits = 3;
+  }
+}
+
+
+
+message FunctionDefinition {
+  option (zipentry) = { path: "functions/%d" };
+
+  required uint32 flags = 1;
+  required FunctionSignature signature = 2;
+  required EffectInfo effects = 3;
+  optional FunctionBody body = 4;
+
+  enum Flags {
+    FLAGS_NONE = 0;
+    FLAGS_ERASED = 1;
+    FLAGS_PROOF = 2;
+    FLAGS_INLINE = 4;
+  }
+}
+
+message FunctionSignature {
+  repeated Parameter parameters = 1;
+  required Expr returnType = 2;
+  repeated Expr ensuresClauses = 3;
+}
+
+message FunctionBody {
+  oneof value {
+    Expr expressionBody = 1;
+    string externalImplementation = 2;
+  }
+}
+
+
+
+message MethodDefinition {
+  option (zipentry) = { path: "methods/%d" };
+
+  required uint32 flags = 1;
+  required FunctionSignature signature = 2;
+  required EffectInfo effects = 3;
+  optional FunctionBody body = 4;
+  optional Identifier instanceVariableName = 5;
+
+  enum Flags {
+    FLAGS_NONE = 0;
+    FLAGS_VIRTUAL = 1;
+    FLAGS_ABSTRACT = 2;
+    FLAGS_AUTO_OVERRIDE = 4;
+    FLAGS_FINAL = 8;
+    FLAGS_ERASED = 16;
+    FLAGS_PROOF = 32;
+    FLAGS_INLINE = 64;
+  }
+}
+
+
+
+
+message ClassConstructorDefinition {
+  option (zipentry) = { path: "class-constructors/%d" };
+
+  required uint32 flags = 1;
+  required Signature signature = 2;
+  required EffectInfo effects = 3;
+  optional Body body = 4;
+
+  enum Flags {
+    FLAGS_NONE = 0;
+  }
+
+  message Signature {
+    repeated Parameter parameters = 1;
+  }
+
+  message Body {
+    oneof value {
+      ExpressionBody expressionBody = 1;
+      string externalImplementation = 2;
+    }
+  }
+
+  message ExpressionBody {
+    repeated PreInitializationStatement preInitialization = 1;
+    optional Expr baseConstructorCall = 2;
+    required LocalVariableDefinition instanceVariable = 3;
+    required Expr postInitialization = 4;
+  }
+
+  message PreInitializationStatement {
+    oneof value {
+      Expr expr = 1;
+      FieldInitializationStatement fieldInit = 2;
+    }
+  }
+
+  message FieldInitializationStatement {
+    required Identifier field = 1;
+    required Expr value = 2;
+  }
+}
+
+
+// Expressions
+message Expr {
+  oneof constructor {
+    LocalVariableDefinition bindVariable = 2;
+    LoadId classConstructorCall = 16;
+    google.protobuf.Empty ensureExecuted = 17;
+    LoadId functionCall = 3;
+    google.protobuf.Empty functionObjectCall = 4;
+    IfElse ifElse = 5;
+    bool loadConstantBool = 6;
+    BigIntWrapper loadConstantInt = 7;
+    string loadConstantString = 8;
+    LoadLambda loadLambda = 9;
+    google.protobuf.Empty loadTuple = 10;
+    BigIntWrapper loadTupleElement = 11;
+    VariableReference loadVariable = 12;
+    LoadId methodCall = 13;
+    WitnessList proving = 35;
+    google.protobuf.Empty raiseException = 18;
+    google.protobuf.Empty sequence = 14;
+    VariableReference storeVariable = 19;
+    google.protobuf.Empty typeN = 20;
+    BigIntWrapper omegaTypeN = 21;
+    google.protobuf.Empty anyType = 22;
+    LoadId traitType = 23;
+    LoadId classType = 24;
+    google.protobuf.Empty functionType = 25;
+    google.protobuf.Empty unionType = 26;
+    google.protobuf.Empty intersectionType = 27;
+    ExistentialType existentialType = 28;
+    google.protobuf.Empty conjunctionType = 29;
+    google.protobuf.Empty disjunctionType = 30;
+    google.protobuf.Empty neverType = 31;
+    google.protobuf.Empty subtypeWitnessType = 32;
+    google.protobuf.Empty equalToType = 33;
+    google.protobuf.Empty assumeErasedValue = 34;
+  }
+  repeated Expr arguments = 1;
+
+  message LoadId {
+    required BigIntWrapper id = 1;
+  }
+
+  message BindVariable {
+    required LocalVariableDefinition variable = 1;
+  }
+
+  message IfElse {
+    optional LocalVariableDefinition whenTrueProof = 1;
+    optional LocalVariableDefinition whenFalseProof = 2;
+  }
+
+  message LoadLambda {
+    required LocalVariableDefinition argVariable = 1;
+  }
+
+  message ExistentialType {
+    required LocalVariableDefinition variable = 1;
+  }
+
+  message WitnessList {
+    repeated LocalVariableDefinition witnesses = 2;
+  }
+}
+
+message LocalVariableDefinition {
+  required BigIntWrapper id = 1;
+  required uint32 flags = 2;
+  required Expr varType = 3;
+  optional Identifier name = 4;
+  required bool isMutable = 5;
+
+  enum Flags {
+    FLAGS_NONE = 0;
+    FLAGS_IS_ERASED = 1;
+  }
+}
+
+message VariableReference {
+  oneof sealed_value {
+    LocalVariableReference localVariable = 1;
+    InstanceVariableReference instanceVariable = 2;
+    MemberVariableReference memberVariable = 3;
+    ParameterVariableReference parameterVariable = 4;
+    FunctionResultVariableReference functionResultVariable = 5;
+  }
+}
+
+message LocalVariableReference {
+  required BigIntWrapper id = 1;
+}
+
+message InstanceVariableReference {
+  required BigIntWrapper methodId = 1;
+}
+
+message MemberVariableReference {
+  required BigIntWrapper classId = 1;
+  required Identifier name = 2;
+}
+
+message ParameterVariableOwner {
+  oneof owner {
+    BigIntWrapper methodId = 2;
+    BigIntWrapper functionId = 3;
+    BigIntWrapper classId = 4;
+    BigIntWrapper traitId = 5;
+    BigIntWrapper classConstructorId = 6;
+  }
+}
+
+message ParameterVariableReference {
+  required ParameterVariableOwner owner = 1;
+  required uint32 parameterIndex = 2;
+}
+
+message FunctionResultVariableReference {
+  required ParameterVariableOwner owner = 1;
+}
+
+
+message ClassType {
+  required BigIntWrapper classId = 1;
+  repeated Expr arguments = 2;
+}
+
+message TraitType {
+  required BigIntWrapper traitId = 1;
+  repeated Expr arguments = 2;
+}
+
+

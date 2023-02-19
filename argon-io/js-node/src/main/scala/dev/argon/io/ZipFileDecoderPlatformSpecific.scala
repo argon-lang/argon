@@ -29,15 +29,15 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
 
 
       private final class ZipImpl(zip: JSZip) extends ZipFileResource.Zip[R, E]:
-        override def getEntry(path: String): ZIO[R & Scope, E, Option[ZipFileResource.Entry[R, E]]] =
+        override def getEntry(path: String): ZIO[R & Scope, E, Option[ZipStreamResource.Entry[R, E]]] =
           ZIO.succeed {
             Nullable(zip.file(path).asInstanceOf[JSZipObject | Null]).toOption.map(createEntry(path, _))
           }
 
-        override def entries: ZStream[R, E, ZipFileResource.Entry[R, E]] =
+        override def entries: ZStream[R, E, ZipStreamResource.Entry[R, E]] =
           ZStream.unwrap(
             for
-              queue <- Queue.unbounded[Exit[Option[E], ZipFileResource.Entry[R, E]]]
+              queue <- Queue.unbounded[Exit[Option[E], ZipStreamResource.Entry[R, E]]]
               runtime <- ZIO.runtime[R]
               _ <- (
                 ZIO.succeed {
@@ -53,8 +53,8 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
           )
       end ZipImpl
 
-      private def createEntry(path2: String, entry: JSZipObject): ZipFileResource.Entry[R, E] =
-        new ZipFileResource.Entry[R, E] {
+      private def createEntry(path2: String, entry: JSZipObject): ZipStreamResource.Entry[R, E] =
+        new ZipStreamResource.Entry[R, E] {
           override val path: String = path2
 
           override def value: BinaryResource[R, E] =

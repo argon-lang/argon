@@ -12,6 +12,12 @@ trait ArTubeC extends UsingContext with DeclarationMode {
   }
 
   def asDeclaration: Option[this.type & HasImplementation[true]]
+  
+  def withHasImplementation[A]
+  (
+    whenImplementation: this.type & HasImplementation[true] => A,
+    whenInterface: this.type & HasImplementation[false] => A,
+  ): A
 
   def module(path: ModulePath): Comp[ArModule & HasImplementation[IsImplementation]]
   def modulePaths: Set[ModulePath]

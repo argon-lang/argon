@@ -9,13 +9,13 @@ import zio.*
 
 import java.io.IOException
 
-trait TubeLoader[+E0] {
-  type LibOptions[-_, +_, _]
-  given libOptionDecoder[R, E >: E0, ContextOptions] (using OptionDecoder[R, E, ContextOptions]): OptionDecoder[R, E, LibOptions[R, E, ContextOptions]]
+trait TubeLoader[R, E, ContextOptions] {
+  type LibOptions
+  given libOptionDecoder(using OptionDecoder[R, E, ContextOptions]): OptionDecoder[R, E, LibOptions]
 
   def load
-  (context: Context { type Error >: E0 })
+  (context: Context { type Env = R; type Error = E; type Options = ContextOptions })
   (tubeImporter: TubeImporter & HasContext[context.type])
-  (libOptions: LibOptions[context.Env, context.Error, context.Options])
+  (libOptions: LibOptions)
   : ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]]
 }

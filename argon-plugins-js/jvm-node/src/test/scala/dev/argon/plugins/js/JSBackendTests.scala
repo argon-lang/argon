@@ -17,7 +17,7 @@ import java.io.FileNotFoundException
 
 object JSBackendTests extends ExecutionTests[JSPluginError] {
   override val pluginName: String = "js"
-  override val plugin: JSPlugin.type = JSPlugin
+  override val plugin: JSPlugin[Environment, E] = JSPlugin()
   override val testOptions: JSOptions[Environment, E] =
     JSOptions(
       extern = None,
@@ -31,8 +31,8 @@ object JSBackendTests extends ExecutionTests[JSPluginError] {
 
   override def executeTest
   (
-    tube: plugin.Output[Environment, E],
-    libraries: Map[TubeName, plugin.Output[Environment, E]],
+    tube: plugin.Output,
+    libraries: Map[TubeName, plugin.Output],
   )
   : ZIO[Environment, E, String] =
     for
@@ -44,7 +44,7 @@ object JSBackendTests extends ExecutionTests[JSPluginError] {
       output <- JSOutputExecutor.run(fileSystem2).mapError(TestError.ExecutionError.apply)
     yield output
 
-  private def addLibraryOutput(fileSystem: TMap[String, String])(tubeName: TubeName, output: plugin.Output[Environment, E]): ZIO[Environment, E, Unit] =
+  private def addLibraryOutput(fileSystem: TMap[String, String])(tubeName: TubeName, output: plugin.Output): ZIO[Environment, E, Unit] =
     val tubeNameStr = tubeName.name.toList.mkString(".")
     val packageDir = "/argon/node_modules/@tubes/" + tubeNameStr
     val libDir = packageDir + "/lib"

@@ -14,15 +14,15 @@ import zio.stream.*
 
 import java.nio.charset.CharacterCodingException
 
-object JSPlugin extends Plugin[JSPluginError] {
-  override type Options[-R, +E] = JSOptions[R, E]
-  override type Output[-R, +E] = JSOutput[R, E]
+final class JSPlugin[R, E >: JSPluginError] extends Plugin[R, E] {
+  override type Options = JSOptions[R, E]
+  override type Output = JSOutput[R, E]
 
-  override def optionCodec[R, E >: JSPluginError]: OptionCodec[R, E, Options[R, E]] =
-    summon[OptionCodec[R, E, Options[R, E]]]
+  override def optionCodec: OptionCodec[R, E, Options] =
+    summon[OptionCodec[R, E, Options]]
 
-  override def outputHandler[R, E >: JSPluginError]: OutputHandler[R, E, Output[R, E]] =
-    summon[OutputHandler[R, E, Output[R, E]]]
+  override def outputHandler: OutputHandler[R, E, Output] =
+    summon[OutputHandler[R, E, Output]]
 
 
   override type ExternMethodImplementation = estree.FunctionDeclaration
@@ -30,7 +30,7 @@ object JSPlugin extends Plugin[JSPluginError] {
   override type ExternClassConstructorImplementation = estree.FunctionDeclaration
 
   override def emitTube
-  (ctx: Context { type Error >: JSPluginError })
+  (ctx: Context { type Env = R; type Error = E })
   (adapter2: PluginContextAdapter.Aux[ctx.type, this.type])
   (t: ArTubeC & HasContext[ctx.type] & HasImplementation[true])
   : ctx.Comp[JSOutput[ctx.Env, ctx.Error]] =
@@ -38,12 +38,13 @@ object JSPlugin extends Plugin[JSPluginError] {
       override val context: ctx.type = ctx
       override val options: JSOptions[ctx.Env, ctx.Error] = adapter2.extractOptions(t.options)
       override val tube: ArTube & HasImplementation[true] = t
-      override val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type] = adapter2
+      override val plugin: JSPlugin.this.type = JSPlugin.this
+      override val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.this.type] = adapter2
     }.emitTube
 
 
 
-  override def loadExternMethod[R, E >: JSPluginError]
+  override def loadExternMethod
   (options: JSOptions[R, E])
   (id: String)
   : ZIO[R, E, Option[estree.FunctionDeclaration]] =
@@ -63,18 +64,18 @@ object JSPlugin extends Plugin[JSPluginError] {
       .runHead
 
 
-  override def loadExternFunction[R, E >: JSPluginError]
+  override def loadExternFunction
   (options: JSOptions[R, E])
   (id: String)
   : ZIO[R, E, Option[FunctionDeclaration]] =
     loadExternMethod(options)(id)
 
 
-  override def loadExternClassConstructor[R, E >: JSPluginError]
+  override def loadExternClassConstructor
   (options: JSOptions[R, E])
   (id: String)
   : ZIO[R, E, Option[FunctionDeclaration]] =
     loadExternMethod(options)(id)
 
-  override def tubeLoaders: Map[String, TubeLoader[JSPluginError]] = Map.empty
+  override def tubeLoaders[ContextOptions]: Map[String, TubeLoader[R, E, ContextOptions]] = Map.empty
 }

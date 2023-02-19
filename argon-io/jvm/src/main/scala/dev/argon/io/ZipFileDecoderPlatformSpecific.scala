@@ -51,14 +51,14 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
 
 
       private final class ZipImpl(zip: ZIO[R & Scope, E, ZipFile]) extends ZipFileResource.Zip[R, E] :
-        override def getEntry(path: String): ZIO[R & Scope, E, Option[ZipFileResource.Entry[R, E]]] =
+        override def getEntry(path: String): ZIO[R & Scope, E, Option[ZipStreamResource.Entry[R, E]]] =
           for
             zip <- zip
             lock <- Semaphore.make(1)
             entry <- ZIO.succeed(zip.getEntry(path))
           yield Nullable(entry).toOption.map(createEntry(zip)(lock))
 
-        override def entries: ZStream[R, E, ZipFileResource.Entry[R, E]] =
+        override def entries: ZStream[R, E, ZipStreamResource.Entry[R, E]] =
           ZStream.unwrapScoped(
             for
               zip <- zip
@@ -68,8 +68,8 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
           )
       end ZipImpl
 
-      private def createEntry(zip: ZipFile)(lock: Semaphore)(entry: ZipArchiveEntry): ZipFileResource.Entry[R, E] =
-        new ZipFileResource.Entry[R, E] {
+      private def createEntry(zip: ZipFile)(lock: Semaphore)(entry: ZipArchiveEntry): ZipStreamResource.Entry[R, E] =
+        new ZipStreamResource.Entry[R, E] {
           override val path: String = entry.getName.nn
 
           override def value: BinaryResource[R, E] =

@@ -6,50 +6,57 @@ import dev.argon.compiler.definitions.HasImplementation
 import dev.argon.parser.SyntaxError
 import dev.argon.plugin.*
 import dev.argon.options.*
-import dev.argon.plugins.tube.reader.InvalidTube
-import zio.ZIO
+import dev.argon.plugin.tube.{InvalidTube, SerializedTube, TubeSerializer}
+import dev.argon.io.Resource
+import zio.*
 
 import java.io.IOException
 import java.nio.charset.CharacterCodingException
 
 type TubeError = CharacterCodingException | SyntaxError | CompError | IOException | InvalidTube
 
-object TubePlugin extends Plugin[TubeError] {
-  override type Options[-R, +E] = TubeOptions[R, E]
-  override type Output[-R, +E] = TubeOutput[R, E]
+final class TubePlugin[R, E >: TubeError] extends Plugin[R, E] {
+  override type Options = TubeOptions[R, E]
+  override type Output = TubeOutput[R, E]
 
 
-  override def optionCodec[R, E >: TubeError]: OptionCodec[R, E, Options[R, E]] =
-    summon[OptionCodec[R, E, Options[R, E]]]
+  override def optionCodec: OptionCodec[R, E, Options] =
+    summon[OptionCodec[R, E, Options]]
 
-  override def outputHandler[R, E >: TubeError]: OutputHandler[R, E, Output[R, E]] =
-    summon[OutputHandler[R, E, Output[R, E]]]
+  override def outputHandler: OutputHandler[R, E, Output] =
+    summon[OutputHandler[R, E, Output]]
 
   override type ExternMethodImplementation = Unit
   override type ExternFunctionImplementation = Unit
   override type ExternClassConstructorImplementation = Unit
 
   override def emitTube
-  (context: Context { type Error >: TubeError })
+  (context: Context { type Env = R; type Error = E })
   (adapter: PluginContextAdapter.Aux[context.type, TubePlugin.this.type])
   (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
   : context.Comp[TubeOutput[context.Env, context.Error]] =
     ZIO.succeed(
       TubeOutput(
-        implementationModule = TubeWriterResource[true](context)(tube.options)(TubeWriterImplementation(context)(tube)),
-        interfaceModule = TubeWriterResource[true](context)(tube.options)(TubeWriterInterface(context)(tube)),
+        implementationModule = new SerializedTubeResource[R, E] with Resource.WithoutFileName {
+          override def asSerializedTube: ZIO[R & Scope, E, SerializedTube[R, E]] =
+            TubeSerializer.ofImplementation(context)(tube)
+        },
+        interfaceModule = new SerializedTubeResource[R, E] with Resource.WithoutFileName {
+          override def asSerializedTube: ZIO[R & Scope, E, SerializedTube[R, E]] =
+            TubeSerializer.ofInterface(context)(tube)
+        },
       )
     )
 
-  override def loadExternMethod[R, E >: TubeError](options: TubeOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
+  override def loadExternMethod(options: TubeOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
     ZIO.unit.asSome
 
-  override def loadExternFunction[R, E >: TubeError](options: TubeOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
+  override def loadExternFunction(options: TubeOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
     ZIO.unit.asSome
 
-  override def loadExternClassConstructor[R, E >: TubeError](options: TubeOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
+  override def loadExternClassConstructor(options: TubeOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
     ZIO.unit.asSome
 
-  override def tubeLoaders: Map[String, TubeLoader[TubeError]] =
-    Map("tube" -> TubeZipTubeLoader)
+  override def tubeLoaders[ContextOptions]: Map[String, TubeLoader[R, E, ContextOptions]] =
+    Map("tube" -> TubeZipTubeLoader())
 }

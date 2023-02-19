@@ -123,7 +123,8 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
           override val context: ModuleEmitter.this.context.type = ModuleEmitter.this.context
           override val tube: ModuleEmitter.this.tube.type = ModuleEmitter.this.tube
           override val options: JSOptions[context.Env, context.Error] = ModuleEmitter.this.options
-          override val adapter: PluginContextAdapter.Aux[context.type, JSPlugin.type] = ModuleEmitter.this.adapter
+          override val plugin: ModuleEmitter.this.plugin.type = ModuleEmitter.this.plugin
+          override val adapter: PluginContextAdapter.Aux[context.type, plugin.type] = ModuleEmitter.this.adapter
 
           override val imports: TMap[ImportSpecifier, String] = ModuleEmitter.this.imports
           override val additionalImports: TMap[ModuleName, TSet[String]] = ModuleEmitter.this.additionalImports
@@ -138,13 +139,14 @@ private[emit] trait ModuleEmitter extends EmitModuleCommon {
 
       _ <- ZIO.logTrace(s"elementExport ${element}")
 
-      declaration <-
-        element match
+      declaration <- (
+        element match {
           case ModuleElementC.ClassElement(arClass) => exprEmitter.classExport(arClass).asSome
           case ModuleElementC.TraitElement(arTrait) => exprEmitter.traitExport(arTrait).asSome
           case ModuleElementC.FunctionElement(func) => exprEmitter.functionExport(func)
           case ModuleElementC.ExportedElement(_, _, _) => ZIO.none
-        end match
+        }
+      ) : Comp[Option[estree.ExportNamedDeclaration]]
     yield declaration
 
 
