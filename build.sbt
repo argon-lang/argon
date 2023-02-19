@@ -2,8 +2,8 @@ import sbtcrossproject.CrossPlugin.autoImport.{CrossType, crossProject}
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
-val graalVersion = "22.3.0"
-val zioVersion = "2.0.5"
+val graalVersion = "22.3.1"
+val zioVersion = "2.0.9"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -21,7 +21,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
 
-    "dev.zio" %% "zio-direct" % "1.0.0-RC5", // Compile time only dependency
+    "dev.zio" %% "zio-direct" % "1.0.0-RC7", // Compile time only dependency
 
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
@@ -38,7 +38,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
 lazy val npmDeps = Seq(
   "jszip" -> "^3.10.1",
   "@xmldom/xmldom" -> "^0.8.6",
-  "acorn" -> "^8.8.1",
+  "acorn" -> "^8.8.2",
   "astring" -> "1.8.4",
 )
 
@@ -76,7 +76,7 @@ lazy val commonJVMSettings = Seq(
   libraryDependencies ++= Seq(
     "org.apache.commons" % "commons-compress" % "1.22",
     "commons-io" % "commons-io" % "2.11.0",
-    "dev.zio" %% "zio-logging" % "2.1.7",
+    "dev.zio" %% "zio-logging" % "2.1.9",
   ),
 
   Test / fork := true,
