@@ -6,7 +6,4 @@ import org.jetbrains.annotations.NotNull;
 
 public interface OptionCodec<E extends Throwable, A> extends OptionDecoder<E, A> {
     @NotNull Toml encode(@NotNull ResourceRecorder<E> recorder, @NotNull A value) throws E;
-    default boolean skipForField(@NotNull A value) {
-        return false;
-    }
 }

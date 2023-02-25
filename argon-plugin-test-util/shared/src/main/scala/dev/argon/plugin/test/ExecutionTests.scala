@@ -110,7 +110,7 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
 
   private val libraries: IO[E, Map[TubeName, SourceLibOptions[Environment, E, plugin.Options]]] =
     given OptionDecoder[Environment, E, plugin.Options] with
-      override def decode(resFactory: ResourceFactory[Environment, E])(value: Toml): IO[String, plugin.Options] =
+      override def decode(resFactory: ResourceFactory[Environment, E])(value: Toml): Either[String, plugin.Options] =
         val pluginValue = value match {
           case Toml.Table(table) => table.get(pluginName).getOrElse(Toml.Table.empty)
           case _ => Toml.Table.empty
@@ -189,8 +189,10 @@ abstract class ExecutionTests[E0 <: Matchable] extends CompilerTestsBase {
               }.decodeJson(buildJson)
             )
 
-            options <- SourceTubeLoader[Environment, E, plugin.Options].libOptionDecoder
-              .decode(resourceFactory)(buildToml)
+            options <- ZIO.fromEither(
+              SourceTubeLoader[Environment, E, plugin.Options].libOptionDecoder
+                .decode(resourceFactory)(buildToml)
+            )
 
           yield TubeName.urlDecode(name).get -> options
         ).mapError(TestError.ErrorLoadingBuildConfig.apply)

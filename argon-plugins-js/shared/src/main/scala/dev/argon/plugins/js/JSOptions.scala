@@ -20,8 +20,8 @@ final case class JSOptions[-R, +E]
 
 object JSOptions:
 
-  given optionDecoder[R, E >: JSPluginError]: OptionCodec[R, E, JSOptions[R, E]] =
-    OptionCodec.derive
+  given optionCodec[R, E >: JSPluginError]: OptionCodec[R, E, JSOptions[R, E]] =
+    OptionCodec.derive[R, E, JSOptions[R, E]]
 
 end JSOptions
 
@@ -33,7 +33,7 @@ final case class JSModuleOptions[-R, +E]
 
 object JSModuleOptions:
 
-  given optionDecoder[R, E >: JSPluginError]: OptionCodec[R, E, JSModuleOptions[R, E]] =
+  given optionCodec[R, E >: JSPluginError]: OptionCodec[R, E, JSModuleOptions[R, E]] =
     OptionCodec.derive
 
 end JSModuleOptions
@@ -89,7 +89,7 @@ final case class JSModuleOptionsMap[-R, +E]
 
 object JSModuleOptionsMap:
   given [R, E >: JSPluginError]: OptionCodec[R, E, JSModuleOptionsMap[R, E]] with
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, JSModuleOptionsMap[R, E]] =
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, JSModuleOptionsMap[R, E]] =
       value match {
         case Toml.Table(map) =>
           map
@@ -104,7 +104,7 @@ object JSModuleOptionsMap:
             }
 
         case _ =>
-          ZIO.fail("Expected table")
+          Left("Expected table")
       }
 
     override def encode(recorder: ResourceRecorder[R, E])(value: JSModuleOptionsMap[R, E]): ZIO[R, E, Toml] =

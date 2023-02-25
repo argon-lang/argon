@@ -10,7 +10,7 @@ final case class SourceOptions[-R, +E]()
 
 object SourceOptions:
 
-  given optionDecoder[R, E >: CharacterCodingException | SyntaxError | IOException]: OptionCodec[R, E, SourceOptions[R, E]] =
-    OptionCodec.derive
+  given optionCodec[R, E >: CharacterCodingException | SyntaxError | IOException]: OptionCodec[R, E, SourceOptions[R, E]] =
+    OptionCodec.derive[R, E, SourceOptions[R, E]]
 
 end SourceOptions

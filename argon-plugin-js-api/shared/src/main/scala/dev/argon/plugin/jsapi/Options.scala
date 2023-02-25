@@ -19,7 +19,6 @@ trait OptionDecoder[Options] extends js.Any {
 
 trait OptionCodec[Options] extends OptionDecoder[Options] {
   def encode(recorder: ResourceRecorder, value: Options): js.Promise[Toml]
-  def skipForField(output: Options): Boolean
 }
 
 trait OutputInfo[Output] extends js.Any {

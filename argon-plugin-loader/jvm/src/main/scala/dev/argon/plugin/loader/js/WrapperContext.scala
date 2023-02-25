@@ -287,11 +287,9 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R], jsCon
   private class UnwrapOptionDecoder[A: ValueDecoder](optDecoder: Value) extends OptionDecoder[R, E, A] {
 
 
-    override final def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, A] =
-      ZIO.fromEither(
-        invokeMember[ResourceFactory[R, E], t.Toml, OptionDecodeResult[A]](optDecoder, "decode")(resFactory, t.TomlConverter.encodeToml(value))
-          .toEither
-      )
+    override final def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A] =
+      invokeMember[ResourceFactory[R, E], t.Toml, OptionDecodeResult[A]](optDecoder, "decode")(resFactory, t.TomlConverter.encodeToml(value))
+        .toEither
 
     override final def defaultValue: Option[A] =
       Nullable(getProperty[A | Null](optDecoder, "defaultValue")(using valueDecoderNullable[A])).toOption
@@ -304,9 +302,6 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R], jsCon
         invokeMember[ResourceRecorder[R, E], A, JSPromise[t.Toml]](optCodec, "encode")(recorder, value)
       )
         .map(t.TomlConverter.decodeToml)
-
-    override def skipForField(value: A): Boolean =
-      invokeMember[A, Boolean](optCodec, "skipForField")(value)
   }
 
   final class UnwrapOutputHandler[A: ValueEncoder](outputHandler: Value) extends OutputHandler[R, E, A] {

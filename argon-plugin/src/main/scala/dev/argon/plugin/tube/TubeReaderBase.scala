@@ -196,7 +196,11 @@ abstract class TubeReaderBase extends UsingContext {
           .toRight { InvalidTube("Tube name must be non-empty") }
       )
 
-      decodedOptions <- ZIO.foreach(metadata.options)(t.TomlConverter.decodeToml.andThen(context.optionsCodec.decode(SerializedResourceFactory)))
+      decodedOptions <- ZIO.foreach(metadata.options)(
+        t.TomlConverter.decodeToml
+          .andThen(context.optionsCodec.decode(SerializedResourceFactory))
+          .andThen(ZIO.fromEither)
+      )
         .mapError { error => InvalidTube(s"Error parsing tube options: $error") }
       decodedOptions <- ensureOptions(decodedOptions)
 

@@ -171,17 +171,14 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
 
 
   class UnwrapOptionDecoder[A](jOptionDecoder: jsapi.OptionDecoder[A]) extends OptionDecoder[R, E, A] {
-    override final def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, A] =
+    override final def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A] =
       val value2 = convertProtoToJS(t.Toml, jsapi.proto.Toml)(t.TomlConverter.encodeToml(value))
-      ZIO.succeed {
-        jOptionDecoder.decode(WrapResourceFactory(resFactory), value2)
-      }
-        .flatMap { res =>
-          if res.asInstanceOf[js.Dictionary[?]].contains("value") then
-            ZIO.succeed(res.asInstanceOf[jsapi.OptionDecodeResultValue[A]].value)
-          else
-            ZIO.fail(res.asInstanceOf[jsapi.OptionDecodeResultError[A]].errorMessage)
-        }
+      val res = jOptionDecoder.decode(WrapResourceFactory(resFactory), value2)
+
+      if res.asInstanceOf[js.Dictionary[?]].contains("value") then
+        Right(res.asInstanceOf[jsapi.OptionDecodeResultValue[A]].value)
+      else
+        Left(res.asInstanceOf[jsapi.OptionDecodeResultError[A]].errorMessage)
     end decode
 
     override final def defaultValue: Option[A] = Nullable(jOptionDecoder.defaultValue).toOption
@@ -200,8 +197,6 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
         .map { toml =>
           t.TomlConverter.decodeToml(convertProtoFromJS(t.Toml, jsapi.proto.Toml)(toml))
         }
-
-    override def skipForField(value: A): Boolean = jOptionCodec.skipForField(value)
   }
 
   final class UnwrapOutputHandler[A](jOptionCodec: jsapi.OutputHandler[A]) extends OutputHandler[R, E, A] {

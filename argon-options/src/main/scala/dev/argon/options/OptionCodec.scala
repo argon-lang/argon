@@ -9,65 +9,58 @@ import scala.deriving.Mirror
 import scala.util.NotGiven
 import zio.*
 
+import scala.compiletime.ops.int.S
+import scala.compiletime.summonInline
+import scala.quoted.{Expr, Quotes, Type}
+
 
 trait OptionCodec[R, E, A] extends OptionDecoder[R, E, A] {
   def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, Toml]
-  def skipForField(value: A): Boolean = false
 }
 
 object OptionCodec {
 
 
+  inline def derive[R, E, A <: Product](using m: Mirror.ProductOf[A]): OptionCodec[R, E, A] =
+    val tupleCodec = summonInline[TupleOptionCodec[R, E, m.MirroredElemTypes, m.MirroredElemLabels]]
+    new OptionCodec[R, E, A] {
+      override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A] =
+        tupleCodec.decode(resFactory)(value).map(m.fromTuple)
 
-  // Derivation
-  private class DerivationImplCodec[R, E, T](ctx: CaseClass[[A] =>> OptionCodec[R, E, A], T]) extends OptionDecoder.DerivationImplDecoder[R, E, T, [A] =>> OptionCodec[R, E, A]](ctx) with OptionCodec[R, E, T] {
-    override def encode(recorder: ResourceRecorder[R, E])(value: T): ZIO[R, E, Toml] =
-      ZIO.foreach(
-        ctx.params
-          .iterator
-          .filterNot { param => param.typeclass.skipForField(param.deref(value)) }
-          .toSeq
-      ) { param =>
-        param.typeclass.encode(recorder)(param.deref(value)).map {
-          param.label -> _
-        }
-      }
-        .map { fields => Toml.Table(fields.toMap) }
+      override def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, Toml] =
+        tupleCodec.encode(recorder)(Tuple.fromProductTyped(value))
+    }
+  end derive
+
+  trait TupleOptionCodec[R, E, T <: Tuple, L <: Tuple] extends OptionCodec[R, E, T] with OptionDecoder.TupleOptionDecoder[R, E, T, L] {
+    override def encode(recorder: ResourceRecorder[R, E])(value: T): ZIO[R, E, Toml.Table]
   }
 
-  final class OptionCodecDerivation[R, E] extends ProductDerivation[[A] =>> OptionCodec[R, E, A]] {
-    override def join[T](ctx: CaseClass[Typeclass, T]): OptionCodec[R, E, T] =
-      DerivationImplCodec(ctx)
-  }
+  given [R, E]: TupleOptionCodec[R, E, EmptyTuple, EmptyTuple] =
+    new OptionDecoder.EmptyTupleOptionDecoderBase[R, E] with TupleOptionCodec[R, E, EmptyTuple, EmptyTuple] {
+      override def encode(recorder: ResourceRecorder[R, E])(value: EmptyTuple): ZIO[R, E, Toml.Table] =
+        ZIO.succeed(Toml.Table(Map.empty))
+    }
 
-  inline def derive[R, E, A](using Mirror.Of[A]): OptionCodec[R, E, A] =
-    new OptionCodecDerivation[R, E].derivedMirror[A]
-
+  given[R, E, H, T <: Tuple, Name <: String: ValueOf, TNames <: Tuple](using field: OptionFieldCodec[R, E, H], tail: TupleOptionCodec[R, E, T, TNames]): TupleOptionCodec[R, E, H *: T, Name *: TNames] =
+    new OptionDecoder.ConsTupleOptionDecoderBase[R, E, H, T, Name, TNames] with TupleOptionCodec[R, E, H *: T, Name *: TNames] {
+      override def encode(recorder: ResourceRecorder[R, E])(value: H *: T): ZIO[R, E, Toml.Table] =
+        val (h *: t) = value
+        for
+          table <- tail.encode(recorder)(t)
+          hValue <- field.encode(recorder)(h)
+        yield hValue.fold(table) { v => Toml.Table(table.map.updated(summon[ValueOf[Name]].value, v)) }
+      end encode
+    }
 
   // Toml
   given tomlOptionCodec[R, E, A: TomlCodec]: OptionCodec[R, E, A] with
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, A] =
-      ZIO.fromEither(summon[TomlCodec[A]].decode(value))
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A] =
+      summon[TomlCodec[A]].decode(value)
 
     override def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, Toml] =
       ZIO.succeed(summon[TomlCodec[A]].encode(value))
-
-    override def defaultValue: Option[A] =
-      summon[TomlCodec[A]].defaultValue
-
-    override def skipForField(value: A): Boolean =
-      summon[TomlCodec[A]].skipForField(value)
   end tomlOptionCodec
-
-  // Option
-  given [R, E, A](using OptionCodec[R, E, A], NotGiven[TomlCodec[A]]): OptionCodec[R, E, Option[A]] =
-    new OptionDecoder.OptionOptionDecoderBase[R, E, A] with OptionCodec[R, E, Option[A]] {
-      override def encode(recorder: ResourceRecorder[R, E])(value: Option[A]): ZIO[R, E, Toml] =
-        value.fold(ZIO.succeed(Toml.Table.empty))(summon[OptionCodec[R, E, A]].encode(recorder))
-
-      override def skipForField(value: Option[A]): Boolean =
-        value.isEmpty
-    }
 
   // Seq
   given[R, E, A](using OptionCodec[R, E, A], NotGiven[TomlCodec[A]]): OptionCodec[R, E, Seq[A]] =

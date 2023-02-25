@@ -101,9 +101,11 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
           plugin <- ZIO.fromEither(getPlugin(tubeOptions.loader.plugin).toRight(UnknownPlugin(tubeOptions.loader.plugin)))
           loader <- ZIO.fromEither(plugin.tubeLoaders[context.Options].get(tubeOptions.loader.name).toRight(UnknownTubeLoader(tubeOptions.loader)))
 
-          libOptions <- loader.libOptionDecoder
-            .decode(resFactory)(tubeOptions.options)
-            .mapError(BuildConfigParseError.apply)
+          libOptions <- ZIO.fromEither(
+            loader.libOptionDecoder
+              .decode(resFactory)(tubeOptions.options)
+              .left.map(BuildConfigParseError.apply)
+          )
 
           tube <- loader.load(ctx)(this)(libOptions)
           _ <- ZSTM.ifSTM(tubes.contains(tube.tubeName))(
@@ -143,8 +145,8 @@ private[build] final class BuildContextFactoryNil[R <: CompEnv, E >: BuildError 
   override type ExternClassConstructorImplementation = EmptyTuple
 
   override given optionsHandler: OptionCodecTable[R, E, Options] with
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, Options] =
-      ZIO.succeed(EmptyTuple)
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, Options] =
+      Right(EmptyTuple)
 
     override def encode(recorder: ResourceRecorder[R, E])(value: Options): ZIO[R, E, Toml.Table] =
       ZIO.succeed(Toml.Table.empty)
@@ -173,7 +175,7 @@ private[build] final class BuildContextFactoryCons[R <: CompEnv, E >: BuildError
   override type ExternClassConstructorImplementation = plugin.ExternClassConstructorImplementation *: rest.ExternClassConstructorImplementation
 
   override given optionsHandler: OptionCodecTable[R, E, Options] with
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, Options] =
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, Options] =
       val pluginOptToml = value match {
         case Toml.Table(map) => map.get(pluginName).getOrElse(Toml.Table.empty)
         case _ => Toml.Table.empty

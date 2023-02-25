@@ -9,70 +9,72 @@ import scala.deriving.Mirror
 import scala.util.NotGiven
 import zio.*
 
+import scala.compiletime.summonInline
+import scala.quoted.{Expr, Quotes, Type}
+
 trait OptionDecoder[R, E, A] {
-  def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, A]
+  def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A]
   def defaultValue: Option[A] = None
 }
 
 object OptionDecoder {
-  // Derivation
-  private[options] open class DerivationImplDecoder[R, E, T, TDec[A] <: OptionDecoder[R, E, A]](ctx: CaseClass[TDec, T]) extends OptionDecoder[R, E, T] {
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, T] =
+
+  inline def derive[R, E, A](using m: Mirror.ProductOf[A]): OptionDecoder[R, E, A] =
+    val tupleDecoder = summonInline[TupleOptionDecoder[R, E, m.MirroredElemTypes, m.MirroredElemLabels]]
+    new OptionDecoder[R, E, A] {
+      override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A] =
+        tupleDecoder.decode(resFactory)(value).map(m.fromTuple)
+    }
+  end derive
+
+
+  trait TupleOptionDecoder[R, E, T <: Tuple, L <: Tuple] extends OptionDecoder[R, E, T]
+
+
+  private[options] open class EmptyTupleOptionDecoderBase[R, E] extends TupleOptionDecoder[R, E, EmptyTuple, EmptyTuple] {
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, EmptyTuple] =
       value match {
-        case Toml.Table(map) =>
-          ctx.constructMonadic { param =>
-            map.get(param.label) match {
-              case Some(memberValue) => param.typeclass.decode(resFactory)(memberValue)
-              case None =>
-                param.typeclass.defaultValue match {
-                  case Some(memberValue) => ZIO.succeed(memberValue)
-                  case None => ZIO.fail(s"Missing key in table: ${param.label}, map: ${map}")
-                }
-
-            }
-          }
-
-        case _ =>
-          ZIO.fail("Expected table")
+        case Toml.Table(_) => Right(EmptyTuple)
+        case _ => Left("Expected object")
       }
   }
 
+  given [R, E]: TupleOptionDecoder[R, E, EmptyTuple, EmptyTuple] = EmptyTupleOptionDecoderBase[R, E]
 
-  final class OptionDecoderDerivation[R, E] extends ProductDerivation[[A] =>> OptionDecoder[R, E, A]] {
-    override def join[T](ctx: CaseClass[Typeclass, T]): OptionDecoder[R, E, T] =
-      DerivationImplDecoder(ctx)
+
+  private[options] open class ConsTupleOptionDecoderBase[R, E, H, T <: Tuple, Name <: String: ValueOf, TNames <: Tuple](using field: OptionFieldDecoder[R, E, H], tail: TupleOptionDecoder[R, E, T, TNames]) extends TupleOptionDecoder[R, E, H *: T, Name *: TNames] {
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, H *: T] =
+      value match {
+        case Toml.Table(table) =>
+          for
+            h <- table.get(summon[ValueOf[Name]].value)
+              .fold(field.defaultValue.toRight { "E" })(field.decode(resFactory))
+            t <- tail.decode(resFactory)(value)
+          yield h *: t
+
+        case _ => Left("Expected object")
+      }
   }
 
+  given[R, E, H, T <: Tuple, Name <: String: ValueOf, TNames <: Tuple](using field: OptionFieldDecoder[R, E, H], tail: TupleOptionDecoder[R, E, T, TNames]): TupleOptionDecoder[R, E, H *: T, Name *: TNames] =
+    ConsTupleOptionDecoderBase[R, E, H, T, Name, TNames]
 
-  inline def derive[R, E, A](using Mirror.Of[A]): OptionDecoder[R, E, A] =
-    new OptionDecoderDerivation[R, E].derivedMirror[A]
+
+
+
 
   // Toml
   given [R, E, A](using TomlCodec[A]): OptionDecoder[R, E, A] =
     summon[OptionCodec[R, E, A]]
 
-  // Option
-  private[options] open class OptionOptionDecoderBase[R, E, A](using OptionDecoder[R, E, A]) extends OptionDecoder[R, E, Option[A]] {
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, Option[A]] =
-      summon[OptionDecoder[R, E, A]].decode(resFactory)(value).map(Some.apply)
-
-    override def defaultValue: Option[Option[A]] =
-      Some(None)
-  }
-
-
-  given[R, E, A](using OptionDecoder[R, E, A], NotGiven[TomlCodec[A]]): OptionDecoder[R, E, Option[A]] =
-    OptionOptionDecoderBase()
-
-
   // Seq
   private[options] open class SeqOptionDecoderBase[R, E, A](using OptionDecoder[R, E, A]) extends OptionDecoder[R, E, Seq[A]] {
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, Seq[A]] =
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, Seq[A]] =
       value match {
         case Toml.Array(value) =>
           value.traverse(summon[OptionDecoder[R, E, A]].decode(resFactory))
 
-        case _ => ZIO.fail("Expected array")
+        case _ => Left("Expected array")
       }
   }
 
@@ -83,12 +85,12 @@ object OptionDecoder {
 
   // DirectoryResource
   private[options] open class DirectoryResourceOptionDecoderBase[Res[-R2, +E2] <: Resource[R2, E2], R, E](using BinaryResourceDecoder[Res, R, E]) extends OptionDecoder[R, E, DirectoryResource[R, E, Res]] {
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, DirectoryResource[R, E, Res]] =
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, DirectoryResource[R, E, Res]] =
       value match {
         case Toml.String(str) =>
-          ZIO.succeed((resFactory.directoryResource(str): DirectoryResource[R, E, BinaryResource]).decode[Res])
+          Right((resFactory.directoryResource(str): DirectoryResource[R, E, BinaryResource]).decode[Res])
 
-        case _ => ZIO.fail("Expected string")
+        case _ => Left("Expected string")
       }
   }
 
@@ -98,12 +100,12 @@ object OptionDecoder {
 
   // BinaryResource
   private[options] open class BinaryResourceOptionDecoderBase[Res[_, _], R, E](using BinaryResourceDecoder[Res, R, E]) extends OptionDecoder[R, E, Res[R, E]] {
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, Res[R, E]] =
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, Res[R, E]] =
       value match {
         case Toml.String(str) =>
-          ZIO.succeed(summon[BinaryResourceDecoder[Res, R, E]].decode(resFactory.binaryResource(str)))
+          Right(summon[BinaryResourceDecoder[Res, R, E]].decode(resFactory.binaryResource(str)))
 
-        case _ => ZIO.fail("Expected string")
+        case _ => Left("Expected string")
       }
   }
 

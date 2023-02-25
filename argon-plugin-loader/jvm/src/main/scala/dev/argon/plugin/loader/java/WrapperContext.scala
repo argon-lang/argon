@@ -232,13 +232,12 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
 
 
   class UnwrapOptionDecoder[A](jOptionDecoder: options.OptionDecoder[WrappedError, A]) extends OptionDecoder[R, E, A] {
-    override final def decode(resFactory: ResourceFactory[R, E])(value: Toml): IO[String, A] =
+    override final def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A] =
       val value2 = t.Toml.toJavaProto(t.TomlConverter.encodeToml(value))
-      ZIO.attempt {
-        jOptionDecoder.decode(WrapResourceFactory(resFactory), value2)
+      try Right(jOptionDecoder.decode(WrapResourceFactory(resFactory), value2))
+      catch {
+        case ex: OptionDecodeException => Left(ex.getMessage)
       }
-        .refineToOrDie[OptionDecodeException]
-        .mapError(_.getMessage)
     end decode
 
     override final def defaultValue: Option[A] = jOptionDecoder.defaultValue().toScala
@@ -257,8 +256,6 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
         .map { toml =>
           t.TomlConverter.decodeToml(t.Toml.fromJavaProto(toml))
         }
-
-    override def skipForField(value: A): Boolean = jOptionCodec.skipForField(value)
   }
 
   final class UnwrapOutputHandler[A](jOptionCodec: options.OutputHandler[WrappedError, A]) extends OutputHandler[R, E, A] {

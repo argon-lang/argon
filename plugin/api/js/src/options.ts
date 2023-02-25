@@ -10,7 +10,6 @@ export interface OptionDecoder<Options> {
 
 export interface OptionCodec<Options> extends OptionDecoder<Options> {
     encode(recorder: ResourceRecorder, value: Options): Promise<Toml>;
-    skipForField(value: Options): boolean;
 }
 
 export interface OutputInfo<Output> {
