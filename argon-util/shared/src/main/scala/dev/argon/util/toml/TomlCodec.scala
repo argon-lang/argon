@@ -4,71 +4,61 @@ import dev.argon.util
 import magnolia1.*
 import dev.argon.util.{*, given}
 import java.time.{OffsetDateTime, LocalDateTime, LocalDate, LocalTime}
+import scala.deriving.Mirror
+import scala.compiletime.summonInline
 
 trait TomlCodec[A] {
   def encode(a: A): Toml
   def decode(toml: Toml): Either[String, A]
-  def skipForField(a: A): Boolean = false
   def defaultValue: Option[A] = None
 }
 
-object TomlCodec extends Derivation[TomlCodec] {
+object TomlCodec {
 
-  override def join[T](ctx: CaseClass[TomlCodec, T]): TomlCodec[T] =
-    new TomlCodec[T] {
-      override def encode(a: T): Toml =
-        Toml.Table(
-          ctx.params
-            .iterator
-            .filterNot { param => param.typeclass.skipForField(param.deref(a)) }
-            .map { param =>
-              param.label -> param.typeclass.encode(param.deref(a))
-            }
-            .toMap
-        )
 
-      override def decode(toml: Toml): Either[String, T] =
-        toml match {
-          case Toml.Table(map) =>
-            ctx.constructEither { param =>
-              map.get(param.label) match {
-                case Some(memberValue) => param.typeclass.decode(memberValue)
-                case None =>
-                  param.typeclass.defaultValue match {
-                    case Some(memberValue) => Right(memberValue)
-                    case None => Left(s"Missing key in table: ${param.label}, map: ${map}")
-                  }
+  inline def derived[A <: Product](using m: Mirror.ProductOf[A]): TomlCodec[A] =
+    val tupleCodec = summonInline[TupleTomlCodec[m.MirroredElemTypes, m.MirroredElemLabels]]
+    new TomlCodec[A] {
+      override def decode(value: Toml): Either[String, A] =
+        value match {
+          case value @ Toml.Table(_) =>
+            tupleCodec.decode(value).map(m.fromTuple)
 
-              }
-            }.left.map { _.mkString("\n") }
-
-          case _ =>
-            Left("Expected table")
+          case _ => Left("Expected object")
         }
+
+      override def encode(value: A): Toml =
+        tupleCodec.encode(Tuple.fromProductTyped(value))
     }
+  end derived
 
-  override def split[T](ctx: SealedTrait[TomlCodec, T]): TomlCodec[T] =
-    new TomlCodec[T] {
-      override def encode(a: T): Toml =
-        ctx.choose(a) { sub => sub.typeclass.encode(sub.cast(a)) }
+  trait TupleTomlCodec[T <: Tuple, L <: Tuple] {
+    def encode(a: T): Toml.Table
+    def decode(toml: Toml.Table): Either[String, T]
+  }
 
-      override def decode(toml: Toml): Either[String, T] =
-        toml match {
-          case Toml.Table(map) =>
-            for {
-              typeName <- map.get("type") match {
-                case Some(Toml.String(typeName)) => Right(typeName)
-                case _ => Left(s"Could not get type specifier from $map")
-              }
-              subtype <- ctx.subtypes.find(_.typeInfo.short == typeName).toRight { s"Could not find specified type: $typeName" }
-              value <- subtype.typeclass.decode(toml)
-            } yield value
+  given TupleTomlCodec[EmptyTuple, EmptyTuple] with
+    override def encode(a: EmptyTuple): Toml.Table =
+      Toml.Table.empty
 
-          case _ =>
-            Left("Invalid table")
-        }
-    }
+    override def decode(toml: Toml.Table): Either[String, EmptyTuple] =
+      Right(EmptyTuple)
+  end given
 
+  given[H, T <: Tuple, Name <: String : ValueOf, TNames <: Tuple](using field: TomlFieldCodec[H], tail: TupleTomlCodec[T, TNames]): TupleTomlCodec[H *: T, Name *: TNames] with
+    override def encode(a: H *: T): Toml.Table =
+      val (h *: t) = a
+      val table = tail.encode(t)
+      field.encode(h).fold(table) { v => Toml.Table(table.map.updated(summon[ValueOf[Name]].value, v)) }
+    end encode
+
+    override def decode(toml: Toml.Table): Either[String, H *: T] =
+      for
+        h <- toml.map.get(summon[ValueOf[Name]].value)
+          .fold(field.defaultValue.toRight { "E" })(field.decode)
+        t <- tail.decode(toml)
+      yield h *: t
+  end given
 
 
   given [A: TomlCodec]: TomlCodec[Map[String, A]] with
@@ -113,19 +103,6 @@ object TomlCodec extends Derivation[TomlCodec] {
       }
   end given
 
-
-
-  given [A: TomlCodec]: TomlCodec[Option[A]] with
-    override def encode(a: Option[A]): Toml =
-      a.fold(Toml.Table.empty)(summon[TomlCodec[A]].encode)
-
-    override def decode(toml: Toml): Either[String, Option[A]] =
-      summon[TomlCodec[A]].decode(toml).map(Some.apply)
-
-    override def skipForField(a: Option[A]): Boolean = a.isEmpty
-
-    override def defaultValue: Option[Option[A]] = Some(None)
-  end given
 
   given TomlCodec[String] with
     override def encode(a: String): Toml =

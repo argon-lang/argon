@@ -9,9 +9,7 @@ import scala.deriving.Mirror
 import scala.util.NotGiven
 import zio.*
 
-import scala.compiletime.ops.int.S
 import scala.compiletime.summonInline
-import scala.quoted.{Expr, Quotes, Type}
 
 
 trait OptionCodec[R, E, A] extends OptionDecoder[R, E, A] {
@@ -25,21 +23,26 @@ object OptionCodec {
     val tupleCodec = summonInline[TupleOptionCodec[R, E, m.MirroredElemTypes, m.MirroredElemLabels]]
     new OptionCodec[R, E, A] {
       override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A] =
-        tupleCodec.decode(resFactory)(value).map(m.fromTuple)
+        value match {
+          case value@Toml.Table(_) =>
+            tupleCodec.decode(resFactory)(value).map(m.fromTuple)
+
+          case _ => Left("Expected object")
+        }
 
       override def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, Toml] =
         tupleCodec.encode(recorder)(Tuple.fromProductTyped(value))
     }
   end derive
 
-  trait TupleOptionCodec[R, E, T <: Tuple, L <: Tuple] extends OptionCodec[R, E, T] with OptionDecoder.TupleOptionDecoder[R, E, T, L] {
-    override def encode(recorder: ResourceRecorder[R, E])(value: T): ZIO[R, E, Toml.Table]
+  trait TupleOptionCodec[R, E, T <: Tuple, L <: Tuple] extends OptionDecoder.TupleOptionDecoder[R, E, T, L] {
+    def encode(recorder: ResourceRecorder[R, E])(value: T): ZIO[R, E, Toml.Table]
   }
 
   given [R, E]: TupleOptionCodec[R, E, EmptyTuple, EmptyTuple] =
     new OptionDecoder.EmptyTupleOptionDecoderBase[R, E] with TupleOptionCodec[R, E, EmptyTuple, EmptyTuple] {
       override def encode(recorder: ResourceRecorder[R, E])(value: EmptyTuple): ZIO[R, E, Toml.Table] =
-        ZIO.succeed(Toml.Table(Map.empty))
+        ZIO.succeed(Toml.Table.empty)
     }
 
   given[R, E, H, T <: Tuple, Name <: String: ValueOf, TNames <: Tuple](using field: OptionFieldCodec[R, E, H], tail: TupleOptionCodec[R, E, T, TNames]): TupleOptionCodec[R, E, H *: T, Name *: TNames] =
@@ -60,6 +63,9 @@ object OptionCodec {
 
     override def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, Toml] =
       ZIO.succeed(summon[TomlCodec[A]].encode(value))
+
+    override def defaultValue: Option[A] =
+      summon[TomlCodec[A]].defaultValue
   end tomlOptionCodec
 
   // Seq

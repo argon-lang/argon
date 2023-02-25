@@ -10,7 +10,6 @@ import scala.util.NotGiven
 import zio.*
 
 import scala.compiletime.summonInline
-import scala.quoted.{Expr, Quotes, Type}
 
 trait OptionDecoder[R, E, A] {
   def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A]
@@ -23,37 +22,36 @@ object OptionDecoder {
     val tupleDecoder = summonInline[TupleOptionDecoder[R, E, m.MirroredElemTypes, m.MirroredElemLabels]]
     new OptionDecoder[R, E, A] {
       override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A] =
-        tupleDecoder.decode(resFactory)(value).map(m.fromTuple)
+        value match {
+          case value @ Toml.Table(_) =>
+            tupleDecoder.decode(resFactory)(value).map(m.fromTuple)
+
+          case _ => Left("Expected object")
+        }
     }
   end derive
 
 
-  trait TupleOptionDecoder[R, E, T <: Tuple, L <: Tuple] extends OptionDecoder[R, E, T]
+  trait TupleOptionDecoder[R, E, T <: Tuple, L <: Tuple] {
+    def decode(resFactory: ResourceFactory[R, E])(value: Toml.Table): Either[String, T]
+  }
 
 
   private[options] open class EmptyTupleOptionDecoderBase[R, E] extends TupleOptionDecoder[R, E, EmptyTuple, EmptyTuple] {
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, EmptyTuple] =
-      value match {
-        case Toml.Table(_) => Right(EmptyTuple)
-        case _ => Left("Expected object")
-      }
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml.Table): Either[String, EmptyTuple] =
+      Right(EmptyTuple)
   }
 
   given [R, E]: TupleOptionDecoder[R, E, EmptyTuple, EmptyTuple] = EmptyTupleOptionDecoderBase[R, E]
 
 
   private[options] open class ConsTupleOptionDecoderBase[R, E, H, T <: Tuple, Name <: String: ValueOf, TNames <: Tuple](using field: OptionFieldDecoder[R, E, H], tail: TupleOptionDecoder[R, E, T, TNames]) extends TupleOptionDecoder[R, E, H *: T, Name *: TNames] {
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, H *: T] =
-      value match {
-        case Toml.Table(table) =>
-          for
-            h <- table.get(summon[ValueOf[Name]].value)
-              .fold(field.defaultValue.toRight { "E" })(field.decode(resFactory))
-            t <- tail.decode(resFactory)(value)
-          yield h *: t
-
-        case _ => Left("Expected object")
-      }
+    override def decode(resFactory: ResourceFactory[R, E])(value: Toml.Table): Either[String, H *: T] =
+      for
+        h <- value.map.get(summon[ValueOf[Name]].value)
+          .fold(field.defaultValue.toRight { s"Missing key \"${summon[ValueOf[Name]].value}\"" })(field.decode(resFactory))
+        t <- tail.decode(resFactory)(value)
+      yield h *: t
   }
 
   given[R, E, H, T <: Tuple, Name <: String: ValueOf, TNames <: Tuple](using field: OptionFieldDecoder[R, E, H], tail: TupleOptionDecoder[R, E, T, TNames]): TupleOptionDecoder[R, E, H *: T, Name *: TNames] =

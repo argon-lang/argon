@@ -13,7 +13,7 @@ object OptionFieldDecoder {
     override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A] =
       decoder.decode(resFactory)(value)
 
-    override def defaultValue: Option[A] = None
+    override def defaultValue: Option[A] = decoder.defaultValue
   end given
 
   given [R, E, A](using decoder: OptionDecoder[R, E, A]): OptionFieldDecoder[R, E, Option[A]] with
