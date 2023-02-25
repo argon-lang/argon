@@ -658,6 +658,15 @@ lazy val argon_plugin_loader = crossProject(JVMPlatform, JSPlatform, NodePlatfor
   .jvmConfigure(
     _.dependsOn(argon_plugin_java_api)
       .settings(commonJVMSettings)
+      .settings(
+        libraryDependencies ++= Seq(
+          "org.graalvm.sdk" % "graal-sdk" % graalVersion,
+          "org.graalvm.js" % "js" % graalVersion,
+          "org.graalvm.js" % "js-scriptengine" % graalVersion,
+          "org.graalvm.tools" % "profiler" % graalVersion,
+          "org.graalvm.tools" % "chromeinspector" % graalVersion,
+        ),
+      )
   )
   .jsConfigure(
     _.dependsOn(argon_plugin_js_apiJS)

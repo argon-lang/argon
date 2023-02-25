@@ -1,5 +1,7 @@
 package dev.argon.plugin.jsapi.proto
 
+import dev.argon.tube as t
+
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
 

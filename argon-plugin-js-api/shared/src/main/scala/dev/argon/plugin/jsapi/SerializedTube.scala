@@ -1,10 +1,8 @@
 package dev.argon.plugin.jsapi
 
-import dev.argon.plugin.jsapi.proto
+import scalajs.js
 
-import scala.scalajs.js
-
-trait SerializedTube {
+trait SerializedTube extends js.Any {
   def version(): js.Promise[proto.TubeFormatVersion]
   def metadata(): js.Promise[proto.Metadata]
 

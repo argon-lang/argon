@@ -1,8 +1,8 @@
 package dev.argon.plugin.jsapi
 
 import dev.argon.util.AsyncIterableTools.AsyncIterable
-import scalajs.js
 import scalajs.js.typedarray.Uint8Array
+import scalajs.js
 
 trait ResourceBase extends js.Any {
   val resourceType: "binary" | "directory"

@@ -43,25 +43,25 @@ object TomlConverter {
     }
 
 
-  def decodeToml(toml: Toml): Option[AToml] =
+  def decodeToml(toml: Toml): AToml =
     toml.value match {
-      case Toml.Value.IntValue(i) => Some(AToml.Int(i))
-      case Toml.Value.StringValue(s) => Some(AToml.String(s))
-      case Toml.Value.FloatValue(d) => Some(AToml.Float(d))
-      case Toml.Value.BoolValue(b) => Some(AToml.Boolean(b))
-      case Toml.Value.OffsetDateTime(odt) => Some(AToml.OffsetDateTime(odt))
-      case Toml.Value.LocalDateTime(dt) => Some(AToml.LocalDateTime(dt))
-      case Toml.Value.LocalDate(d) => Some(AToml.LocalDate(d))
-      case Toml.Value.LocalTime(t) => Some(AToml.LocalTime(t))
+      case Toml.Value.IntValue(i) => AToml.Int(i)
+      case Toml.Value.StringValue(s) => AToml.String(s)
+      case Toml.Value.FloatValue(d) => AToml.Float(d)
+      case Toml.Value.BoolValue(b) => AToml.Boolean(b)
+      case Toml.Value.OffsetDateTime(odt) => AToml.OffsetDateTime(odt)
+      case Toml.Value.LocalDateTime(dt) => AToml.LocalDateTime(dt)
+      case Toml.Value.LocalDate(d) => AToml.LocalDate(d)
+      case Toml.Value.LocalTime(t) => AToml.LocalTime(t)
       case Toml.Value.Array(arr) =>
-        arr.elements.traverse(decodeToml).map(AToml.Array.apply)
+        AToml.Array(arr.elements.map(decodeToml))
 
       case Toml.Value.Table(table) =>
-        table.elements.traverse { kvp =>
-          for
-            value <- decodeToml(kvp.value)
-          yield kvp.key -> value
-        }.map { pairs => AToml.Table(pairs.toMap) }
+        AToml.Table(
+          table.elements
+            .map { kvp => kvp.key -> decodeToml(kvp.value) }
+            .toMap
+        )
 
       case _: Toml.Value.Empty.type =>
         throw new IllegalArgumentException("Invalid toml value")

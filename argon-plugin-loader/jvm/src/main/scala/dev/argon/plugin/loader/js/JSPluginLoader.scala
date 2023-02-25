@@ -1,14 +1,12 @@
 package dev.argon.plugin.loader.js
 
 import dev.argon.io.PathLike
-import dev.argon.plugin.{Plugin, PluginLoader, jsapi}
-import zio.*
-import dev.argon.plugin.jsapi.{PluginConsumer, PluginFactory, PluginOperations}
 import dev.argon.plugin.tube.InvalidTube
+import dev.argon.plugin.{Plugin, PluginLoader}
+import org.graalvm.polyglot.{HostAccess, Value, Context as JSContext}
+import zio.*
 
 import scala.xml
-
-import scalajs.js
 
 class JSPluginLoader[R, E >: InvalidTube] extends PluginLoader[R, E] {
   override type PluginConfig = JSPluginConfig
@@ -21,18 +19,27 @@ class JSPluginLoader[R, E >: InvalidTube] extends PluginLoader[R, E] {
 
   override def load(config: JSPluginConfig): ZIO[R & Scope, E, Plugin[R, E]] =
     for
-      obj <- ZIO.fromPromiseJS(js.`import`[scalajs.js.Object](config.module.toString)).orDie
+      given JSContext <- ZIO.fromAutoCloseable(ZIO.succeed(
+        JSContext.newBuilder("js").nn
+          .allowHostAccess(HostAccess.ALL).nn
+          .allowIO(true).nn
+          .option("engine.WarnInterpreterOnly", false.toString).nn
+          .build().nn
+      ))
 
       given Runtime[R] <- ZIO.runtime[R]
 
       wrapperContext = WrapperContext[R, E]
 
-      factory = obj.asInstanceOf[js.Dynamic].selectDynamic(config.exportName).asInstanceOf[PluginFactory]
+      factory <- JSPromiseUtil.fromPromiseJS(
+        ValueDecoder[JSPromise[Value]].decode(
+          summon[JSContext].eval("js", "async (path, name) => (await import(path))[name]").nn
+            .execute(config.module.toString, config.exportName).nn
+          )
+      ).orDie
 
-    yield factory.create(wrapperContext.Operations(), new js.Object with PluginConsumer[Plugin[R, E]] {
-      override def consume[Options, Output, ExternMethodImplementation, ExternFunctionImplementation, ExternClassConstructorImplementation]
-      (plugin: jsapi.Plugin[Options, Output, ExternMethodImplementation, ExternFunctionImplementation, ExternClassConstructorImplementation])
-      : Plugin[R, E] =
-        wrapperContext.UnwrapPlugin(plugin)
-    })
+      operations = new wrapperContext.Operations()
+
+    yield wrapperContext.createPlugin(factory)(operations)
+
 }

@@ -1,5 +1,8 @@
 package dev.argon.plugin.jsapi.proto
 
+import dev.argon.util.TypedArrayUtil
+import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
+
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
 import scala.scalajs.js.typedarray.Uint8Array

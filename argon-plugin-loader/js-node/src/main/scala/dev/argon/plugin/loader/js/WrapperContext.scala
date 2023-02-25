@@ -22,6 +22,10 @@ import dev.argon.plugin.jsapi.LoaderConsumer
 import dev.argon.tube.ModulePath
 import scalapb.{GeneratedMessage, GeneratedMessageCompanion}
 
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+
+
 import scala.scalajs.js.typedarray.{Int8Array, Uint8Array, byteArray2Int8Array}
 
 
@@ -112,7 +116,7 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
   private def convertProtoFromJS[A <: GeneratedMessage, B <: js.Any](companion: GeneratedMessageCompanion[A], jsCodec: jsapi.proto.TSProtoCodec[B])(b: B): A =
     companion.parseFrom(TypedArrayUtil.toByteArray(jsCodec.encode(b).finish()))
 
-  final class WrapSerializedTube(val inner: SerializedTube[R, E]) extends jsapi.SerializedTube {
+  final class WrapSerializedTube(val inner: SerializedTube[R, E]) extends js.Object with jsapi.SerializedTube {
 
     private def wrapProtoPromise[A <: GeneratedMessage, B <: js.Any](companion: GeneratedMessageCompanion[A], jsCodec: jsapi.proto.TSProtoCodec[B])(a: ZIO[R, E, A]): js.Promise[B] =
       JSPromiseUtil.runEffectToPromise(a.map(convertProtoToJS(companion, jsCodec)))
@@ -193,9 +197,8 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
       JSPromiseUtil.promiseToEffect {
         jOptionCodec.encode(WrapResourceRecorder(recorder), value)
       }
-        .flatMap { toml =>
-          ZIO.fromOption(t.TomlConverter.decodeToml(convertProtoFromJS(t.Toml, jsapi.proto.Toml)(toml)))
-            .mapError { _ => InvalidTube("Invalid TOML") }
+        .map { toml =>
+          t.TomlConverter.decodeToml(convertProtoFromJS(t.Toml, jsapi.proto.Toml)(toml))
         }
 
     override def skipForField(value: A): Boolean = jOptionCodec.skipForField(value)
@@ -207,7 +210,15 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
         .view
         .map {
           case (optPath, outputInfo) =>
-            (optPath.toSeq, UnwrapOutputInfo(outputInfo))
+            val newKey = optPath
+              .split("\\.").nn
+              .iterator
+              .map { keyPart =>
+                URLDecoder.decode(keyPart, StandardCharsets.UTF_8).nn
+              }
+              .toSeq
+
+            newKey -> UnwrapOutputInfo(outputInfo)
         }
         .toMap
   }

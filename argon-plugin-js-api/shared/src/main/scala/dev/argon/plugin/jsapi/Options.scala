@@ -27,5 +27,5 @@ trait OutputInfo[Output] extends js.Any {
 }
 
 trait OutputHandler[Output] extends js.Any {
-  def options: js.Map[js.Array[String], OutputInfo[Output]]
+  def options: js.Map[String, OutputInfo[Output]]
 }

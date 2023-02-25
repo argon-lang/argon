@@ -19,3 +19,7 @@ trait TubeLoader[R, E, ContextOptions] {
   (libOptions: LibOptions)
   : ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]]
 }
+
+object TubeLoader {
+  type Aux[R, E, ContextOptions, LibOpts] = TubeLoader[R, E, ContextOptions] { type LibOptions = LibOpts }
+}

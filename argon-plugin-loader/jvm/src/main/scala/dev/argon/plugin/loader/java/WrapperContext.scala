@@ -254,9 +254,8 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
       unwrapEffect {
         jOptionCodec.encode(WrapResourceRecorder(recorder), value)
       }
-        .flatMap { toml =>
-          ZIO.fromOption(t.TomlConverter.decodeToml(t.Toml.fromJavaProto(toml)))
-            .mapError { _ => InvalidTube("Invalid TOML") }
+        .map { toml =>
+          t.TomlConverter.decodeToml(t.Toml.fromJavaProto(toml))
         }
 
     override def skipForField(value: A): Boolean = jOptionCodec.skipForField(value)

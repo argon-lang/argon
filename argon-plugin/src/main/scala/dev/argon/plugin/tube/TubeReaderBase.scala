@@ -50,10 +50,6 @@ abstract class TubeReaderBase extends UsingContext {
     case false => Comp[Option[TImpl]]
   }) => Comp[Option[TImpl]]
 
-  private def decodeToml(toml: t.Toml): Comp[Toml] =
-    ZIO.fromOption(t.TomlConverter.decodeToml(toml))
-      .mapError { _ => InvalidTube("Unknown TOML value") }
-
   trait ReferenceLoader {
     def getClass(id: BigInt): Comp[ArClass]
     def getTrait(id: BigInt): Comp[ArTrait]
@@ -200,8 +196,7 @@ abstract class TubeReaderBase extends UsingContext {
           .toRight { InvalidTube("Tube name must be non-empty") }
       )
 
-      decodedOptions <- ZIO.foreach(metadata.options)(decodeToml)
-      decodedOptions <- ZIO.foreach(decodedOptions)(context.optionsCodec.decode(SerializedResourceFactory))
+      decodedOptions <- ZIO.foreach(metadata.options)(t.TomlConverter.decodeToml.andThen(context.optionsCodec.decode(SerializedResourceFactory)))
         .mapError { error => InvalidTube(s"Error parsing tube options: $error") }
       decodedOptions <- ensureOptions(decodedOptions)
 

@@ -1,10 +1,9 @@
 package dev.argon.plugin.jsapi
 
-import dev.argon.plugin.jsapi
 import scalajs.js
 
 trait TubeImporter extends js.Any {
-  def getTube(tubeName: jsapi.proto.TubeName): js.Promise[SerializedTube]
+  def getTube(tubeName: proto.TubeName): js.Promise[SerializedTube]
 }
 
 trait TubeLoader[LibOptions] extends js.Any {
