@@ -20,7 +20,10 @@ abstract class PlatformApp extends ZIOApp {
   final override def environmentTag: EnvironmentTag[Environment] = summon[EnvironmentTag[Environment]]
 
   final override def bootstrap: ZLayer[ZIOAppArgs, Any, Environment] =
-    (Runtime.removeDefaultLoggers >>> console(format = LogFormat.colored, logLevel = LogLevel.Trace)) +!+
+    (Runtime.removeDefaultLoggers >>> consoleLogger(ConsoleLoggerConfig(
+      format = LogFormat.colored,
+      filter = LogFilter.logLevel(LogLevel.Trace),
+    ))) +!+
       ZLayer.succeed(PlatformPathUtil())
 
   final override def run: ZIO[Environment & ZIOAppArgs, Any, Any] =

@@ -1,7 +1,6 @@
 package dev.argon.util.toml
 
 import dev.argon.util
-import magnolia1.*
 import dev.argon.util.{*, given}
 import java.time.{OffsetDateTime, LocalDateTime, LocalDate, LocalTime}
 import scala.deriving.Mirror

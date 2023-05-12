@@ -21,7 +21,7 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
   def traitType(t: String): WrapExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.TraitType(t), Vector()))
 
   def genTraitType: Gen[Any, WrapExpr] =
-    Gen(ZStream(traitA, traitB, traitC, traitD, traitE).map { t => Some(Sample(traitType(t), ZStream.empty)) })
+    Gen(ZStream(traitA, traitB, traitC, traitD, traitE).map { t => Sample(traitType(t), ZStream.empty) })
 
   private def impliesFalse(p: WrapExpr): WrapExpr =
     wrapExpr(ExprConstructor.FunctionType, (p, wrapExpr(ExprConstructor.NeverType, EmptyTuple)))

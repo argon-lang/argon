@@ -2,8 +2,8 @@ import sbtcrossproject.CrossPlugin.autoImport.{CrossType, crossProject}
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
-val graalVersion = "22.3.1"
-val zioVersion = "2.0.9"
+val graalVersion = "22.3.2"
+val zioVersion = "2.0.13"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -26,12 +26,12 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.zio" %%% "zio-json" % "0.4.2",
-    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.2.6",
+    "dev.zio" %%% "zio-json" % "0.5.0",
+    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.0",
 
     "org.scala-lang.modules" %%% "scala-xml" % "2.1.0",
-    "org.gnieh" %%% "fs2-data-xml-scala" % "1.6.1",
-    "dev.zio" %%% "zio-interop-cats" % "23.0.0.1",
+    "org.gnieh" %%% "fs2-data-xml-scala" % "1.7.1",
+    "dev.zio" %%% "zio-interop-cats" % "23.0.0.5",
 
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
     "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
@@ -77,9 +77,9 @@ lazy val sharedJSNodeSettings = Seq(
 lazy val commonJVMSettings = Seq(
 
   libraryDependencies ++= Seq(
-    "org.apache.commons" % "commons-compress" % "1.22",
+    "org.apache.commons" % "commons-compress" % "1.23.0",
     "commons-io" % "commons-io" % "2.11.0",
-    "dev.zio" %% "zio-logging" % "2.1.9",
+    "dev.zio" %% "zio-logging" % "2.1.12",
   ),
 
   Test / fork := true,
@@ -602,9 +602,9 @@ lazy val argon_plugin_java_api = project.in(file("plugin/api/java"))
     compilerOptions,
 
     libraryDependencies ++= Seq(
-      "com.google.protobuf" % "protobuf-java" % "3.19.6",
-      "com.google.protobuf" % "protobuf-java" % "3.19.6" % "protobuf",
-      "org.jetbrains" % "annotations" % "24.0.0",
+      "com.google.protobuf" % "protobuf-java" % "3.23.0",
+      "com.google.protobuf" % "protobuf-java" % "3.23.0" % "protobuf",
+      "org.jetbrains" % "annotations" % "24.0.1",
     ),
 
     Compile / PB.targets := Seq(
