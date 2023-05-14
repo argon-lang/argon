@@ -881,6 +881,49 @@ private[tube] abstract class TubeWriterBase extends UsingContext {
       constructors = constructors,
     )
 
+  def getVTableDiff(id: BigInt): Comp[t.VTable] =
+    def convertInstanceType(inst: ExprConstructor.MethodCallOwnerType): Comp[t.Expr] =
+      inst match {
+        case ExprConstructor.MethodCallOwnerType.OwnedByClass(arClass) => getExprWithVariables(WrapExpr.OfExpr(arClass))
+        case ExprConstructor.MethodCallOwnerType.OwnedByTrait(arTrait) => getExprWithVariables(WrapExpr.OfExpr(arTrait))
+      }
+
+    def convertEntry(slot: ArMethod, entry: context.VT.VTableEntry): Comp[t.VTableEntry] =
+      for
+        slotId <- getIdOf(slot)
+        slotOwner <- convertInstanceType(entry.slotInstanceType)
+
+        impl <- entry.impl match {
+          case context.VT.VTableEntryMethod(method, methodInstanceType) =>
+            for
+              id <- getIdOf(method)
+              inst <- convertInstanceType(methodInstanceType)
+            yield t.VTableEntry.Impl.Method(t.VTableEntryMethod(id, inst))
+
+          case context.VT.VTableEntryAmbiguous(methods) =>
+            ZIO.foreach(methods.toSeq)(getIdOf)
+              .map(t.VTableEntryAmbiguous.apply andThen t.VTableEntry.Impl.Ambiguous.apply)
+
+          case context.VT.VTableEntryAbstract =>
+            ZIO.succeed(t.VTableEntry.Impl.Abstract(Empty()))
+
+        }
+
+      yield t.VTableEntry(
+        methodId = slotId,
+        name = entry.name.map(getIdentifier),
+        owner = slotOwner,
+        impl = impl,
+      )
+
+    lookupDefinition[ArClass](id)
+      .tap[context.Env, context.Error](_.validate)
+      .flatMap[context.Env, context.Error, context.VT.VTable](_.vtableDiff)
+      .flatMap { vt =>
+        ZIO.foreach(vt.methodMap.toSeq)(convertEntry)
+      }
+      .map(t.VTable.apply)
+  end getVTableDiff
 
 
   def emitTrait(id: BigInt): Comp[t.TraitDefinition] =
@@ -952,6 +995,20 @@ private[tube] abstract class TubeWriterBase extends UsingContext {
       body = body,
     )
 
+  def getExternFunctionImplementation(id: BigInt): Comp[context.ExternFunctionImplementation] =
+    for
+      func <- lookupDefinition[ArFunc](id)
+      impl <- processImplementation(func.isInline, func.implementation) {
+        case impl: FunctionImplementationC.External =>
+          ZIO.some(impl.impl: context.ExternFunctionImplementation)
+
+        case _ =>
+          ZIO.none
+      }
+
+      impl <- ZIO.fromEither(impl.flatten.toRight(DiagnosticError.InternalCompilerError("Expected extern function implementation")))
+    yield impl
+
   def emitFunctionSignature(params: Seq[t.Parameter], functionResult: FunctionResult): Comp[t.FunctionSignature] =
     for
       returnType <- getExprWithVariables(functionResult.returnType)
@@ -1018,6 +1075,20 @@ private[tube] abstract class TubeWriterBase extends UsingContext {
       instanceVariableName = method.instanceVariableName.map(getIdentifier),
     )
 
+  def getExternMethodImplementation(id: BigInt): Comp[context.ExternMethodImplementation] =
+    for
+      method <- lookupDefinition[ArMethod](id)
+      impl <- processImplementation(method.isInline, method.implementation) {
+        case impl: MethodImplementationC.External =>
+          ZIO.some(impl.impl : context.ExternMethodImplementation)
+
+        case _ =>
+          ZIO.none
+      }
+
+      impl <- ZIO.fromEither(impl.flatten.toRight(DiagnosticError.InternalCompilerError("Expected extern method implementation")))
+    yield impl
+
   def emitClassConstructor(id: BigInt): Comp[t.ClassConstructorDefinition] =
     for
       classCtor <- lookupDefinition[ClassConstructor](id)
@@ -1081,6 +1152,20 @@ private[tube] abstract class TubeWriterBase extends UsingContext {
       ),
       body = body,
     )
+
+  def getExternClassConstructorImplementation(id: BigInt): Comp[context.ExternClassConstructorImplementation] =
+    for
+      ctor <- lookupDefinition[ClassConstructor](id)
+      impl <- processImplementation(false, ctor.implementation) {
+        case impl: ClassConstructorImplementationC.External =>
+          ZIO.some(impl.impl: context.ExternClassConstructorImplementation)
+
+        case _ =>
+          ZIO.none
+      }
+
+      impl <- ZIO.fromEither(impl.flatten.toRight(DiagnosticError.InternalCompilerError("Expected extern class constructor implementation")))
+    yield impl
 
   def getIdentifier(id: IdentifierExpr): t.Identifier =
     t.Identifier(

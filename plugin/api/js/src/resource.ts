@@ -1,8 +1,12 @@
+import type { OptionDecodeResult } from "./options.js";
+import type { Toml } from "./proto/util.js";
 
 export interface BinaryResource {
     readonly resourceType: "binary";
     get fileName(): string | null;
     asAsyncIterable(): AsyncIterable<Uint8Array>;
+
+    get byteSize(): (() => Promise<bigint>) | null;
 }
 
 export namespace DirectoryEntry {
@@ -24,6 +28,7 @@ export interface DirectoryResource<FileResource extends BinaryResource> {
     resourceType: "directory";
     get fileName(): string | null;
     contents(): AsyncIterable<DirectoryEntry<FileResource>>;
+    get numEntries(): (() => Promise<bigint>) | null;
 }
 
 export type FileSystemResource = BinaryResource | DirectoryResource<BinaryResource>;
@@ -31,8 +36,8 @@ export type FileSystemResource = BinaryResource | DirectoryResource<BinaryResour
 
 
 export interface ResourceFactory {
-    directoryResource(name: string): DirectoryResource<BinaryResource>;
-    binaryResource(name: string): BinaryResource;
+    directoryResource(id: string): OptionDecodeResult<DirectoryResource<BinaryResource>>;
+    binaryResource(id: string): OptionDecodeResult<BinaryResource>;
 }
 
 export interface ResourceRecorder {

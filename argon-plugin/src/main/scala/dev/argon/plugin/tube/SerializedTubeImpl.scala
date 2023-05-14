@@ -10,7 +10,15 @@ import dev.argon.util.{*, given}
 import java.util.NoSuchElementException
 
 private[tube] object SerializedTubeImpl {
-  def apply[R, E](writer: TubeWriterBase { val context: Context { type Env = R; type Error = E } }): ZIO[R, E, SerializedTube[R, E]] =
+  def apply[R, E, ExternMethodImpl, ExternFunctionImpl, ExternClassConstructorImpl]
+  (writer: TubeWriterBase { val context: Context {
+    type Env = R
+    type Error = E
+    type ExternMethodImplementation = ExternMethodImpl
+    type ExternFunctionImplementation = ExternFunctionImpl
+    type ExternClassConstructorImplementation = ExternClassConstructorImpl
+  } })
+  : ZIO[R, E, SerializedTubePlus[R, E, ExternMethodImpl, ExternFunctionImpl, ExternClassConstructorImpl]] =
     for
       _ <- writer.scanTubeRefs
       _ <- writer.scanTubeDefs
@@ -18,7 +26,7 @@ private[tube] object SerializedTubeImpl {
       resources <- TMap.empty[String, FileSystemResource[R, E]].commit
 
       metadataMemo <- writer.emitMetadata().memoize
-    yield new SerializedTube[R, E] {
+    yield new SerializedTubePlus[R, E, ExternMethodImpl, ExternFunctionImpl, ExternClassConstructorImpl] {
       override def version: ZIO[R, E, TubeFormatVersion] =
         ZIO.succeed(TubeProto.defaultTubeFormatVersion.get(TubeFormatVersion.scalaDescriptor.getOptions).get)
 
@@ -48,6 +56,18 @@ private[tube] object SerializedTubeImpl {
 
       override def getClassConstructor(id: BigInt): ZIO[R, E, ClassConstructorDefinition] =
         writer.emitClassConstructor(id)
+
+      override def getExternMethodImplementation(id: BigInt): ZIO[R, E, ExternMethodImpl] =
+        writer.getExternMethodImplementation(id)
+
+      override def getExternFunctionImplementation(id: BigInt): ZIO[R, E, ExternFunctionImpl] =
+        writer.getExternFunctionImplementation(id)
+
+      override def getExternClassConstructorImplementation(id: BigInt): ZIO[R, E, ExternClassConstructorImpl] =
+        writer.getExternClassConstructorImplementation(id)
+
+      override def getVTableDiff(id: BigInt): ZIO[R, E, VTable] =
+        writer.getVTableDiff(id)
     }
 
 

@@ -12,7 +12,7 @@
     "./proto/google/protobuf/empty.js": "./lib/proto/google/protobuf/empty"
   },
   "scripts": {
-    "gen-protobuf": "rimraf src-gen && mkdirp src-gen/proto && protoc --ts_proto_out src-gen/proto --ts_proto_opt esModuleInterop=true --ts_proto_opt importSuffix=.js --ts_proto_opt=forceLong=bigint --ts_proto_opt=oneof=unions --ts_proto_opt=unrecognizedEnum=false --ts_proto_opt=lowerCaseServiceMethods=true --ts_proto_opt=useExactTypes=false --proto_path ../protobuf/ ../protobuf/tube.proto",
+    "gen-protobuf": "rimraf src-gen && mkdirp src-gen/proto && protoc --ts_proto_out src-gen/proto --ts_proto_opt esModuleInterop=true --ts_proto_opt importSuffix=.js --ts_proto_opt=forceLong=bigint --ts_proto_opt=oneof=unions --ts_proto_opt=unrecognizedEnum=false --ts_proto_opt=lowerCaseServiceMethods=true --ts_proto_opt=useExactTypes=false --proto_path ../protobuf/ ../protobuf/tube.proto ../protobuf/vtable.proto",
     "buildOnly": "rimraf out && tsc --project tsconfig.json && rimraf lib && mkdirp lib && cpy \"out/src/**/*\" lib && cpy \"out/src-gen/**/*\" lib && rimraf out",
     "build": "npm run gen-protobuf && npm run buildOnly"
   },

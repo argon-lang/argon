@@ -1,0 +1,36 @@
+syntax = "proto2";
+
+import "util.proto";
+import "tube.proto";
+import "google/protobuf/empty.proto";
+
+option java_package = "dev.argon.plugin.api.tube";
+option java_multiple_files = true;
+option java_outer_classname = "VTableProto";
+
+package argon.tube;
+
+message VTableEntryMethod {
+  required BigIntWrapper methodId = 1;
+  required Expr owner = 2;
+}
+
+message VTableEntryAmbiguous {
+  repeated BigIntWrapper methodId = 1;
+}
+
+message VTableEntry {
+  required BigIntWrapper methodId = 1;
+  optional Identifier name = 2;
+  required Expr owner = 3;
+  oneof impl {
+    VTableEntryMethod method = 4;
+    VTableEntryAmbiguous ambiguous = 5;
+    google.protobuf.Empty abstract = 6;
+  }
+}
+
+message VTable {
+  repeated VTableEntry entries = 1;
+}
+

@@ -6,7 +6,10 @@ import dev.argon.compiler.tube.*
 import zio.*
 
 object TubeSerializer {
-  def ofImplementation(context: Context)(tube: ArTubeC & HasContext[context.type] & HasImplementation[true]): ZIO[context.Env, context.Error, SerializedTube[context.Env, context.Error]] =
+  def ofImplementation
+  (context: Context)
+  (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
+  : ZIO[context.Env, context.Error, SerializedTubePlus[context.Env, context.Error, context.ExternMethodImplementation, context.ExternFunctionImplementation, context.ExternClassConstructorImplementation]] =
     TubeWriterImplementation(context)(tube).flatMap(SerializedTubeImpl(_))
 
   def ofInterface(context: Context)(tube: ArTubeC & HasContext[context.type]): ZIO[context.Env, context.Error, SerializedTube[context.Env, context.Error]] =

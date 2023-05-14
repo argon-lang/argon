@@ -9,9 +9,9 @@ import zio.*
 import zio.stream.*
 import dev.argon.plugin.*
 import dev.argon.plugin.api as japi
-import dev.argon.plugin.api.options
+import dev.argon.plugin.api.{SupplierWithError, options}
 import dev.argon.plugin.api.options.OptionDecodeException
-import dev.argon.plugin.tube.{InvalidTube, SerializedTube, TubeReaderBase, TubeReaderFactory, TubeSerializer}
+import dev.argon.plugin.tube.{InvalidTube, SerializedTube, SerializedTubePlus, TubeReaderBase, TubeReaderFactory, TubeSerializer}
 import dev.argon.tube as t
 import dev.argon.util.{ErrorWrapper, JavaExecuteIO, NonEmptyList}
 import dev.argon.util.toml.Toml
@@ -147,6 +147,9 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
       )).toJava
 
     override def fileName(): Optional[String] = res.fileName.toJava
+
+    override def byteSize(): Optional[SupplierWithError[WrappedError, BigInteger]] =
+      res.byteSize.map[japi.SupplierWithError[WrappedError, BigInteger]](byteSizeEffect => () => wrapEffect(byteSizeEffect.map(_.bigInteger))).toJava
   }
 
   final class WrapDirectoryResource(res: DirectoryResource[R, E, BinaryResource]) extends japi.DirectoryResource[WrappedError, japi.BinaryResource[WrappedError]] {
@@ -176,6 +179,9 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
       )
 
     override def fileName(): Optional[String] = res.fileName.toJava
+
+    override def numEntries(): Optional[SupplierWithError[WrappedError, BigInteger]] =
+      res.numEntries.map[japi.SupplierWithError[WrappedError, BigInteger]](numEntriesEffect => () => wrapEffect(numEntriesEffect.map(_.bigInteger))).toJava
   }
 
   def wrapFileSystemResource(res: FileSystemResource[R, E]): japi.FileSystemResource[WrappedError] =
@@ -184,7 +190,7 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
       case res: DirectoryResource[R, E, BinaryResource] => WrapDirectoryResource(res)
     }
 
-  final class WrapSerializedTube(val inner: SerializedTube[R, E]) extends japi.tube.SerializedTube[WrappedError] {
+  class WrapSerializedTube(val inner: SerializedTube[R, E]) extends japi.tube.SerializedTube[WrappedError] {
     override def version(): japi.tube.TubeFormatVersion =
       wrapEffect(inner.version.map(t.TubeFormatVersion.toJavaProto))
 
@@ -214,6 +220,29 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
 
     override def close(): Unit = ()
   }
+
+  def wrapSerializedTubePlus
+  (adapter: PluginContextAdapter {
+    val context: Context {
+      type Env = R
+      type Error = E
+    }
+  })
+  (innerPlus: SerializedTubePlus[R, E, adapter.context.ExternMethodImplementation, adapter.context.ExternFunctionImplementation, adapter.context.ExternClassConstructorImplementation])
+  : WrapSerializedTube & japi.tube.SerializedTubePlus[WrappedError, adapter.plugin.ExternMethodImplementation, adapter.plugin.ExternFunctionImplementation, adapter.plugin.ExternClassConstructorImplementation] =
+    new WrapSerializedTube(innerPlus) with japi.tube.SerializedTubePlus[WrappedError, adapter.plugin.ExternMethodImplementation, adapter.plugin.ExternFunctionImplementation, adapter.plugin.ExternClassConstructorImplementation] {
+      override def getExternMethodImplementation(id: BigInteger): adapter.plugin.ExternMethodImplementation =
+        wrapEffect(innerPlus.getExternMethodImplementation(id).map(adapter.extractExternMethodImplementation))
+
+      override def getExternFunctionImplementation(id: BigInteger): adapter.plugin.ExternFunctionImplementation =
+        wrapEffect(innerPlus.getExternFunctionImplementation(id).map(adapter.extractExternFunctionImplementation))
+
+      override def getExternClassConstructorImplementation(id: BigInteger): adapter.plugin.ExternClassConstructorImplementation =
+        wrapEffect(innerPlus.getExternClassConstructorImplementation(id).map(adapter.extractExternClassConstructorImplementation))
+
+      override def getVTableDiff(id: BigInteger): japi.tube.VTable =
+        wrapEffect(innerPlus.getVTableDiff(id).map(t.VTable.toJavaProto))
+    }
 
   private final class WrapTubeImporter(context: Context { type Env = R; type Error = E })(inner: TubeImporter & HasContext[context.type]) extends japi.TubeImporter[WrappedError] {
     override def getTube(tubeName: japi.tube.TubeName): japi.tube.SerializedTube[WrappedError] =
@@ -433,7 +462,7 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
     (tube: ArTubeC & HasContext[context.type] & HasImplementation[true]): context.Comp[JOutput] =
       TubeSerializer.ofImplementation(context)(tube).flatMap { serializedTube =>
         unwrapEffect {
-          jPlugin.emitTube(WrapSerializedTube(serializedTube))
+          jPlugin.emitTube(wrapSerializedTubePlus(adapter)(serializedTube))
         }
       }
 

@@ -1,5 +1,5 @@
 import type { OptionDecoder, OptionCodec, OutputHandler } from "./options.js";
-import type { SerializedTube } from "./tube.js";
+import type { SerializedTube, SerializedTubePlus } from "./tube.js";
 import type { TubeName } from "./proto/tube.js";
 
 
@@ -29,7 +29,7 @@ export interface Plugin<Options, Output, ExternMethodImplementation, ExternFunct
     get optionCodec(): OptionCodec<Options>;
     get outputHandler(): OutputHandler<Output>;
 
-    emitTube(tube: SerializedTube): Promise<Output>;
+    emitTube(options: Options, tube: SerializedTubePlus<ExternMethodImplementation, ExternFunctionImplementation, ExternClassConstructorImplementation>): Promise<Output>;
 
     loadExternMethod(options: Options, id: string): Promise<ExternMethodImplementation | null>;
     loadExternFunction(options: Options, id: string): Promise<ExternFunctionImplementation | null>;

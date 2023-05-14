@@ -1,9 +1,12 @@
 package dev.argon.io
 
-import zio.stream.ZStream
+import zio.*
+import zio.stream.*
 
 abstract class BinaryResource[-R, +E] extends Resource[R, E] with BinaryResourcePlatformSpecific[R, E] {
   def asBytes: ZStream[R, E, Byte]
+  
+  def byteSize: Option[ZIO[R, E, BigInt]] = None
 }
 
 object BinaryResource:

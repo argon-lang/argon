@@ -1,10 +1,13 @@
 package dev.argon.io
 
+import zio.*
 import zio.stream.*
 
 
 abstract class DirectoryResource[-R, +E, +FileResource[-R2, +E2] <: Resource[R2, E2]] extends Resource[R, E] {
   def contents: ZStream[R, E, DirectoryEntry[R, E, FileResource]]
+  
+  def numEntries: Option[ZIO[R, E, BigInt]] = None
 }
 
 object DirectoryResource {

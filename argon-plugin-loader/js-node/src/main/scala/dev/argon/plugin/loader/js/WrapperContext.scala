@@ -70,6 +70,10 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
           .chunks
           .map { chunk => new Uint8Array(byteArray2Int8Array(chunk.toArray).buffer) }
       )
+
+    override def byteSize: (js.Function0[js.Promise[js.BigInt]]) | Null =
+      res.byteSize.map(byteSizeEffect => (() => JSPromiseUtil.runEffectToPromise(byteSizeEffect.map(n => js.BigInt(n.toString)))) : js.Function0[js.Promise[js.BigInt]])
+        .orNull
   }
 
   final class WrapDirectoryResource(res: DirectoryResource[R, E, BinaryResource]) extends js.Object with jsapi.DirectoryResource[jsapi.BinaryResource] {
@@ -101,6 +105,10 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
               }
           }
       )
+
+    override def numEntries: (js.Function0[js.Promise[js.BigInt]]) | Null =
+      res.numEntries.map(numEntriesEffect => (() => JSPromiseUtil.runEffectToPromise(numEntriesEffect.map(n => js.BigInt(n.toString)))): js.Function0[js.Promise[js.BigInt]])
+        .orNull
 
   }
 

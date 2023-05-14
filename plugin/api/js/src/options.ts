@@ -1,11 +1,20 @@
 import type {ResourceFactory, ResourceRecorder, FileSystemResource} from "./resource.js";
 import type {Toml} from "./proto/util.js";
 
-export type OptionDecodeResult<A> = { readonly value: A } | { readonly errorMessage: string };
+export type OptionDecodeResult<A> = OptionDecodeSuccess<A> | OptionDecodeFailure;
+
+export interface OptionDecodeSuccess<A> {
+    readonly ok: true;
+    readonly value: A;
+}
+
+export interface OptionDecodeFailure {
+    readonly ok: false;
+    readonly errorMessage: string;
+}
 
 export interface OptionDecoder<Options> {
     decode(resourceFactory: ResourceFactory, value: Toml): OptionDecodeResult<Options>;
-    get defaultValue(): Options | null;
 }
 
 export interface OptionCodec<Options> extends OptionDecoder<Options> {
@@ -17,7 +26,7 @@ export interface OutputInfo<Output> {
 }
 
 export interface OutputHandler<Output> {
-    get options(): Map<readonly string[], OutputInfo<Output>>;
+    get options(): Map<string, OutputInfo<Output>>;
 }
 
 

@@ -12,7 +12,7 @@ public interface SerializedTube<E extends Throwable> extends AutoCloseable {
 
     @NotNull FileSystemResource<E> getResource(@NotNull String id) throws E;
     
-    @NotNull ModuleDefinition getModule(@NotNull ModulePath modulePath) throws E;
+    @NotNull ModuleDefinition getModule(@NotNull ModulePath id) throws E;
     @NotNull ClassDefinition getClass(BigInteger id) throws E;
     @NotNull TraitDefinition getTrait(BigInteger id) throws E;
     @NotNull FunctionDefinition getFunction(BigInteger id) throws E;

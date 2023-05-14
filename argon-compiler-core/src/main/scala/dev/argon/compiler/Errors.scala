@@ -42,6 +42,8 @@ object DiagnosticError {
   final case class ProofMustBePure(source: DiagnosticSource) extends DiagnosticError
   final case class ErasedMustBePure(source: DiagnosticSource) extends DiagnosticError
 
+  
+  final case class InternalCompilerError(message: String) extends DiagnosticError
 
   final case class SpecMultiPartGlobUsedWithPrefixSuffix() extends DiagnosticError
   final case class SpecFileNameTemplateMustBeIdentifier() extends DiagnosticError
