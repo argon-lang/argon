@@ -9,7 +9,7 @@ import zio.*
 import zio.stream.*
 import dev.argon.plugin.*
 import dev.argon.plugin.api as japi
-import dev.argon.plugin.api.{SupplierWithError, options}
+import dev.argon.plugin.api.{PluginOperations, SupplierWithError, options}
 import dev.argon.plugin.api.options.OptionDecodeException
 import dev.argon.plugin.tube.{InvalidTube, SerializedTube, SerializedTubePlus, TubeReaderBase, TubeReaderFactory, TubeSerializer}
 import dev.argon.tube as t
@@ -20,14 +20,15 @@ import java.io.{FilterInputStream, IOException, InputStream}
 import java.math.BigInteger
 import java.nio.ByteBuffer
 import java.nio.channels.SeekableByteChannel
+import java.util.concurrent.CancellationException
 import java.util.{Optional, Spliterator, Spliterators}
 import java.util.stream.{StreamSupport, Stream as JStream}
 import scala.reflect.TypeTest
 import scala.jdk.OptionConverters.*
 import scala.jdk.CollectionConverters.*
 
-final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
-  final class WrappedError(private[WrapperContext] val value: Cause[E]) extends IOException
+final class WrapperContext[R, E >: InvalidTube | IOException](using runtime: Runtime[R]) {
+  final class WrappedError(private[WrapperContext] val value: Cause[E]) extends RuntimeException
   final class WrappedOptionDecodeException(message: String, private[WrapperContext] val value: Cause[String]) extends OptionDecodeException(message)
 
   private given ErrorWrapper[E, WrappedError] with
@@ -53,6 +54,8 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
   private def refineError[EX2 >: WrappedError <: Throwable](ex: EX2): IO[E, Nothing] =
     ex match {
       case ex: WrappedError => ZIO.failCause(ex.value)
+      case ex: IOException => ZIO.fail(ex)
+      case ex: (InterruptedException | CancellationException) => ZIO.descriptorWith { desc => ZIO.failCause(Cause.interrupt(desc.id, StackTrace.fromJava(desc.id, ex.getStackTrace.nn.map(_.nn)))) }
       case _ => ZIO.die(ex)
     }
 
@@ -65,7 +68,32 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
   private def unwrapError(ex: WrappedError): Cause[E] =
     ex.value
 
-  final class Operations extends japi.PluginOperations[WrappedError]
+  final class Operations extends japi.PluginOperations[WrappedError] {
+    override def wrapAsRuntimeException(ex: WrappedError): RuntimeException = ex
+
+    override def wrapAsRuntimeException(ex: IOException): RuntimeException =
+      WrappedError(Cause.fail(ex))
+
+    override def wrapAsRuntimeException(ex: InterruptedException): RuntimeException =
+      WrappedError(
+        wrapEffect(ZIO.descriptorWith { desc => ZIO.succeed(Cause.interrupt(desc.id, StackTrace.fromJava(desc.id, ex.getStackTrace.nn.map(_.nn)))) })
+      )
+
+
+    override def asDomainException(ex: Throwable): WrappedError | Null =
+      ex match {
+        case ex: WrappedError => ex
+        case _ => null
+      }
+
+
+    override def catchAsIOException[A](handler: PluginOperations.TryBodyHandler[WrappedError, A]): A =
+      try handler.run()
+      catch {
+        case ex: InterruptedException => throw wrapAsRuntimeException(ex)
+      }
+
+  }
 
 
   def wrapEffect[A](a: ZIO[R, E, A]): A =
@@ -461,8 +489,9 @@ final class WrapperContext[R, E >: InvalidTube](using runtime: Runtime[R]) {
     (adapter: PluginContextAdapter.Aux[context.type, UnwrapPlugin.this.type])
     (tube: ArTubeC & HasContext[context.type] & HasImplementation[true]): context.Comp[JOutput] =
       TubeSerializer.ofImplementation(context)(tube).flatMap { serializedTube =>
+        val options = adapter.extractOptions(tube.options)
         unwrapEffect {
-          jPlugin.emitTube(wrapSerializedTubePlus(adapter)(serializedTube))
+          jPlugin.emitTube(options, wrapSerializedTubePlus(adapter)(serializedTube))
         }
       }
 

@@ -210,7 +210,7 @@ public class OptionsProcessor extends AbstractProcessor {
                 handler.println("\t@Override");
                 handler.print("\tpublic @NotNull dev.argon.plugin.api.tube.Toml encode(@NotNull dev.argon.plugin.api.ResourceRecorder<E> recorder, @NotNull ");
                 handler.print(optClassName);
-                handler.println("<E> value) throws E {");
+                handler.println("<E> value) throws E, java.io.IOException, InterruptedException {");
                 handler.println("\t\treturn dev.argon.plugin.api.tube.Toml.newBuilder()");
                 handler.println("\t\t\t.setTable(");
                 handler.println("\t\t\t\tdev.argon.plugin.api.tube.TomlTable.newBuilder()");

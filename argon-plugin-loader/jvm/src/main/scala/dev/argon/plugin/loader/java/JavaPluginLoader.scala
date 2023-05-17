@@ -10,7 +10,9 @@ import scala.xml
 import dev.argon.plugin.api as japi
 import dev.argon.plugin.tube.InvalidTube
 
-final class JavaPluginLoader[R, E >: JavaPluginLoadException | InvalidTube] extends PluginLoader[R, E] {
+import java.io.IOException
+
+final class JavaPluginLoader[R, E >: JavaPluginLoadException | InvalidTube | IOException] extends PluginLoader[R, E] {
   override type PluginConfig = JavaPluginConfig
   override val configTagName: String = "Java"
   override def decodeConfig(path: Path, elem: xml.Elem): Either[String, JavaPluginConfig] =

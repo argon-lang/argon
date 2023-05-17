@@ -74,6 +74,23 @@ lazy val sharedJSNodeSettings = Seq(
 
 )
 
+lazy val graalDependencies = Seq(
+  "org.graalvm.sdk" % "graal-sdk" % graalVersion,
+  "org.graalvm.js" % "js" % graalVersion,
+  "org.graalvm.js" % "js-scriptengine" % graalVersion,
+  "org.graalvm.tools" % "profiler" % graalVersion,
+  "org.graalvm.tools" % "chromeinspector" % graalVersion,
+)
+
+lazy val protobufJavaDependencies = Seq(
+  "com.google.protobuf" % "protobuf-java" % "3.23.0",
+  "com.google.protobuf" % "protobuf-java" % "3.23.0" % "protobuf",
+)
+
+lazy val annotationDependencies = Seq(
+  "org.jetbrains" % "annotations" % "24.0.1",
+)
+
 lazy val commonJVMSettings = Seq(
 
   libraryDependencies ++= Seq(
@@ -601,11 +618,7 @@ lazy val argon_plugin_java_api = project.in(file("plugin/api/java"))
     commonSettingsNoLibs,
     compilerOptions,
 
-    libraryDependencies ++= Seq(
-      "com.google.protobuf" % "protobuf-java" % "3.23.0",
-      "com.google.protobuf" % "protobuf-java" % "3.23.0" % "protobuf",
-      "org.jetbrains" % "annotations" % "24.0.1",
-    ),
+    libraryDependencies ++= protobufJavaDependencies ++ annotationDependencies,
 
     Compile / PB.targets := Seq(
       PB.gens.java -> (Compile / sourceManaged).value / "protobuf",
@@ -653,19 +666,31 @@ lazy val argon_plugin_js_api = crossProject(JSPlatform, NodePlatform).in(file("a
 lazy val argon_plugin_js_apiJS = argon_plugin_js_api.js
 lazy val argon_plugin_js_apiNode = argon_plugin_js_api.node
 
+
+
+lazy val argon_plugin_java_run_js = project.in(file("plugin/adapter/java-run-js"))
+  .dependsOn(argon_plugin_java_api)
+  .settings(
+    commonSettingsNoLibs,
+    compilerOptions,
+
+    libraryDependencies ++= graalDependencies ++ protobufJavaDependencies ++ annotationDependencies,
+
+    autoScalaLibrary := false,
+    fork := true,
+
+    name := "argon-plugin-java-api",
+  )
+
+
+
 lazy val argon_plugin_loader = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-loader"))
   .dependsOn(argon_plugin)
   .jvmConfigure(
     _.dependsOn(argon_plugin_java_api)
       .settings(commonJVMSettings)
       .settings(
-        libraryDependencies ++= Seq(
-          "org.graalvm.sdk" % "graal-sdk" % graalVersion,
-          "org.graalvm.js" % "js" % graalVersion,
-          "org.graalvm.js" % "js-scriptengine" % graalVersion,
-          "org.graalvm.tools" % "profiler" % graalVersion,
-          "org.graalvm.tools" % "chromeinspector" % graalVersion,
-        ),
+        libraryDependencies ++= graalDependencies,
       )
   )
   .jsConfigure(
@@ -719,13 +744,7 @@ lazy val argon_plugins_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).
     _.settings(
         commonJVMSettings,
 
-        libraryDependencies ++= Seq(
-          "org.graalvm.sdk" % "graal-sdk" % graalVersion,
-          "org.graalvm.js" % "js" % graalVersion,
-          "org.graalvm.js" % "js-scriptengine" % graalVersion,
-          "org.graalvm.tools" % "profiler" % graalVersion,
-          "org.graalvm.tools" % "chromeinspector" % graalVersion,
-        ),
+        libraryDependencies ++= graalDependencies,
 
         Compile / resourceGenerators += Def.task {
           val resourceDir = (Compile / resourceManaged).value
