@@ -23,7 +23,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
     @Override
     public TubeFormatVersion version() throws E, IOException, InterruptedException {
         Value res;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             res = tube.invokeMember("version");
         }
@@ -33,7 +33,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
 
         res = JavaFutureToJSPromise.runJSPromise(env, res);
 
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             var builder = TubeFormatVersion.newBuilder();
             ProtoConverter.buildFromJSProto(env, builder, res);
@@ -48,7 +48,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
     @Override
     public Metadata metadata() throws E, IOException, InterruptedException {
         Value res;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             res = tube.invokeMember("metadata");
         }
@@ -58,7 +58,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
 
         res = JavaFutureToJSPromise.runJSPromise(env, res);
 
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             var builder = Metadata.newBuilder();
             ProtoConverter.buildFromJSProto(env, builder, res);
@@ -72,7 +72,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
     @Override
     public @NotNull FileSystemResource<E> getResource(@NotNull String id) throws E, IOException, InterruptedException {
         Value res;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             res = tube.invokeMember("getResource");
         }
@@ -89,7 +89,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
     @Override
     public ModuleDefinition getModule(@NotNull ModulePath id) throws E, IOException, InterruptedException {
         Value res;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             res = tube.invokeMember("getModule");
         }
@@ -99,7 +99,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
 
         res = JavaFutureToJSPromise.runJSPromise(env, res);
 
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             var builder = ModuleDefinition.newBuilder();
             ProtoConverter.buildFromJSProto(env, builder, res);
@@ -114,7 +114,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
     @Override
     public ClassDefinition getClass(BigInteger id) throws E, IOException, InterruptedException {
         Value res;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             res = tube.invokeMember("getClass");
         }
@@ -124,7 +124,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
 
         res = JavaFutureToJSPromise.runJSPromise(env, res);
 
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             var builder = ClassDefinition.newBuilder();
             ProtoConverter.buildFromJSProto(env, builder, res);
@@ -139,7 +139,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
     @Override
     public TraitDefinition getTrait(BigInteger id) throws E, IOException, InterruptedException {
         Value res;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             res = tube.invokeMember("getTrait");
         }
@@ -149,7 +149,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
 
         res = JavaFutureToJSPromise.runJSPromise(env, res);
 
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             var builder = TraitDefinition.newBuilder();
             ProtoConverter.buildFromJSProto(env, builder, res);
@@ -164,7 +164,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
     @Override
     public FunctionDefinition getFunction(BigInteger id) throws E, IOException, InterruptedException {
         Value res;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             res = tube.invokeMember("getFunction");
         }
@@ -174,7 +174,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
 
         res = JavaFutureToJSPromise.runJSPromise(env, res);
 
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             var builder = FunctionDefinition.newBuilder();
             ProtoConverter.buildFromJSProto(env, builder, res);
@@ -189,7 +189,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
     @Override
     public MethodDefinition getMethod(BigInteger id) throws E, IOException, InterruptedException {
         Value res;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             res = tube.invokeMember("getMethod");
         }
@@ -199,7 +199,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
 
         res = JavaFutureToJSPromise.runJSPromise(env, res);
 
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             var builder = MethodDefinition.newBuilder();
             ProtoConverter.buildFromJSProto(env, builder, res);
@@ -214,7 +214,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
     @Override
     public ClassConstructorDefinition getClassConstructor(BigInteger id) throws E, IOException, InterruptedException {
         Value res;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             res = tube.invokeMember("getClassConstructor");
         }
@@ -224,7 +224,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
 
         res = JavaFutureToJSPromise.runJSPromise(env, res);
 
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             var builder = ClassConstructorDefinition.newBuilder();
             ProtoConverter.buildFromJSProto(env, builder, res);
@@ -238,7 +238,7 @@ public class UnwrapSerializedTube<E extends Throwable> implements SerializedTube
     @Override
     public void close() throws Exception {
         Value res;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             res = tube.invokeMember("close");
         }

@@ -30,7 +30,7 @@ public class WrapDirectoryResource<E extends Throwable> {
     public final @Nullable String fileName;
 
     @HostAccess.Export
-    public Value contents() throws E {
+    public Value contents() throws InterruptedException {
         return StreamAsAsyncIterable.toAsyncIterable(env, () -> directoryResource.contents().map(this::wrapDirectoryEntry));
     }
 
@@ -43,7 +43,7 @@ public class WrapDirectoryResource<E extends Throwable> {
             return () -> {
                 var n = directoryResource.numEntries().get().get();
 
-                env.lock.lock();
+                env.lock.lockInterruptibly();
                 try {
                     return env.context.eval("js", "BigInt").execute(n.toString());
                 }
@@ -60,20 +60,25 @@ public class WrapDirectoryResource<E extends Throwable> {
     }
 
     private Value wrapDirectoryEntry(DirectoryEntry<E, ? extends BinaryResource<E>> entry) {
-        env.lock.lock();
         try {
-            if(entry instanceof DirectoryEntry.File<E, ? extends BinaryResource<E>> fileEntry) {
-                return env.context.asValue(new WrapDirectoryEntryFile<E>(env, fileEntry));
+            env.lock.lockInterruptibly();
+            try {
+                if(entry instanceof DirectoryEntry.File<E, ? extends BinaryResource<E>> fileEntry) {
+                    return env.context.asValue(new WrapDirectoryEntryFile<E>(env, fileEntry));
+                }
+                else if(entry instanceof DirectoryEntry.Subdirectory<E, ? extends BinaryResource<E>> dirEntry) {
+                    return env.context.asValue(new WrapDirectoryEntrySubdirectory<E>(env, dirEntry));
+                }
+                else {
+                    throw new RuntimeException("Unexpected entry");
+                }
             }
-            else if(entry instanceof DirectoryEntry.Subdirectory<E, ? extends BinaryResource<E>> dirEntry) {
-                return env.context.asValue(new WrapDirectoryEntrySubdirectory<E>(env, dirEntry));
-            }
-            else {
-                throw new RuntimeException("Unexpected entry");
+            finally {
+                env.lock.unlock();
             }
         }
-        finally {
-            env.lock.unlock();
+        catch(InterruptedException ex) {
+            throw env.pluginOperations.wrapAsRuntimeException(ex);
         }
     }
 

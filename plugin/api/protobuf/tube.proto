@@ -5,6 +5,7 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/descriptor.proto";
 
 option java_package = "dev.argon.plugin.api.tube";
+option java_outer_classname = "TubeProto";
 option java_multiple_files = true;
 
 package argon.tube;

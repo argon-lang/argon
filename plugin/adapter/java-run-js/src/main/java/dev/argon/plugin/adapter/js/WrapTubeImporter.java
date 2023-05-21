@@ -21,7 +21,7 @@ public class WrapTubeImporter<E extends Throwable> {
     @HostAccess.Export
     @NotNull Value getTube(Value tubeName) throws E, IOException, InterruptedException {
         var nameBuilder = TubeName.newBuilder();
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             ProtoConverter.buildFromJSProto(env, nameBuilder, tubeName);
         }
@@ -31,8 +31,8 @@ public class WrapTubeImporter<E extends Throwable> {
 
         var res = tubeImporter.getTube(nameBuilder.build());
         var tube = new WrapSerializedTube<>(env, res);
-        
-        env.lock.lock();
+
+        env.lock.lockInterruptibly();
         try {
             return env.context.asValue(tube);
         }

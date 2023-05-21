@@ -42,7 +42,7 @@ final class WrapBinaryResource<E extends Throwable> {
             return () -> {
                 var size = binaryResource.byteSize().get().get();
 
-                env.lock.lock();
+                env.lock.lockInterruptibly();
                 try {
                     return env.context.eval("js", "BigInt").execute(size.toString());
                 }

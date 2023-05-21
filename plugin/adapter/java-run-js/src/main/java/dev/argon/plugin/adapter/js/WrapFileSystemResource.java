@@ -8,8 +8,8 @@ import org.graalvm.polyglot.Value;
 final class WrapFileSystemResource {
     private WrapFileSystemResource() {}
     
-    public static <E extends Throwable> Value wrap(JSEnv<E> env, FileSystemResource<E> res) {
-        env.lock.lock();
+    public static <E extends Throwable> Value wrap(JSEnv<E> env, FileSystemResource<E> res) throws InterruptedException {
+        env.lock.lockInterruptibly();
         try {
             if(res instanceof BinaryResource<E> binRes) {
                 return env.context.asValue(new WrapBinaryResource<>(env, binRes));

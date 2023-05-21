@@ -21,15 +21,17 @@ sealed class UnwrapOptionDecoder<E extends Throwable> implements OptionDecoder<E
 
     @Override
     public @NotNull Value decode(@NotNull ResourceFactory<E> resourceFactory, @NotNull Toml value) throws OptionDecodeException {
-        return WrapOptionDecodeResult.wrap(env, () -> {
-            env.lock.lock();
+        try {
+            env.lock.lockInterruptibly();
             try {
                 var convValue = ProtoConverter.messageToJSProto(env, value);
                 return WrapOptionDecodeResult.unwrap(env, optionCodec.invokeMember("decode", new WrapResourceFactory<>(env, resourceFactory), convValue));
-            }
-            finally {
+            } finally {
                 env.lock.unlock();
             }
-        });
+        }
+        catch(InterruptedException ex) {
+            throw env.pluginOperations.wrapAsRuntimeException(ex);
+        }
     }
 }

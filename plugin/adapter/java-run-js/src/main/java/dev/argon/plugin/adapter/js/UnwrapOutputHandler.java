@@ -28,14 +28,19 @@ public class UnwrapOutputHandler<E extends Throwable> implements OutputHandler<E
     public @NotNull Map<@NotNull List<@NotNull String>, @NotNull OutputInfo<E, @NotNull Value>> options() {
         Map<List<String>, OutputInfo<E, Value>> res = new HashMap<>();
 
-        env.lock.lock();
         try {
-            outputHandler
-                .getMember("options")
-                .invokeMember("forEach", (MapForEachCallback)(key, outputInfo) -> res.put(decodeOptionKey(key), new UnwrapOutputInfo(outputInfo)));
+            env.lock.lockInterruptibly();
+            try {
+                outputHandler
+                    .getMember("options")
+                    .invokeMember("forEach", (MapForEachCallback)(key, outputInfo) -> res.put(decodeOptionKey(key), new UnwrapOutputInfo(outputInfo)));
+            }
+            finally {
+                env.lock.unlock();
+            }
         }
-        finally {
-            env.lock.unlock();
+        catch(InterruptedException ex) {
+            throw env.pluginOperations.wrapAsRuntimeException(ex);
         }
 
         return res;
@@ -57,15 +62,18 @@ public class UnwrapOutputHandler<E extends Throwable> implements OutputHandler<E
 
         @Override
         public @NotNull FileSystemResource<E> getValue(@NotNull Value output) {
-            env.lock.lock();
             try {
-                return UnwrapFileSystemResource.unwrap(env, outputInfo.invokeMember("getValue", output));
+                env.lock.lockInterruptibly();
+                try {
+                    return UnwrapFileSystemResource.unwrap(env, outputInfo.invokeMember("getValue", output));
+                }
+                finally {
+                    env.lock.unlock();
+                }
             }
-            finally {
-                env.lock.unlock();
+            catch(InterruptedException ex) {
+                throw env.pluginOperations.wrapAsRuntimeException(ex);
             }
-
-
         }
     }
 }

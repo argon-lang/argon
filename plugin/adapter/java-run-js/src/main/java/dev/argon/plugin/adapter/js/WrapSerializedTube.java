@@ -22,7 +22,7 @@ sealed class WrapSerializedTube<E extends Throwable> permits WrapSerializedTubeP
         return JavaFutureToJSPromise.executeAsPromise(env, () -> {
             var version = tube.version();
 
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return ProtoConverter.messageToJSProto(env, version);
             }
@@ -37,7 +37,7 @@ sealed class WrapSerializedTube<E extends Throwable> permits WrapSerializedTubeP
         return JavaFutureToJSPromise.executeAsPromise(env, () -> {
             var metadata = tube.metadata();
 
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return ProtoConverter.messageToJSProto(env, metadata);
             }
@@ -60,7 +60,7 @@ sealed class WrapSerializedTube<E extends Throwable> permits WrapSerializedTubeP
         return JavaFutureToJSPromise.executeAsPromise(env, () -> {
             var a = tube.getClass(id);
 
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return ProtoConverter.messageToJSProto(env, a);
             }
@@ -75,7 +75,7 @@ sealed class WrapSerializedTube<E extends Throwable> permits WrapSerializedTubeP
         return JavaFutureToJSPromise.executeAsPromise(env, () -> {
             var a = tube.getTrait(id);
 
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return ProtoConverter.messageToJSProto(env, a);
             }
@@ -90,7 +90,7 @@ sealed class WrapSerializedTube<E extends Throwable> permits WrapSerializedTubeP
         return JavaFutureToJSPromise.executeAsPromise(env, () -> {
             var a = tube.getFunction(id);
 
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return ProtoConverter.messageToJSProto(env, a);
             }
@@ -105,7 +105,7 @@ sealed class WrapSerializedTube<E extends Throwable> permits WrapSerializedTubeP
         return JavaFutureToJSPromise.executeAsPromise(env, () -> {
             var a = tube.getMethod(id);
 
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return ProtoConverter.messageToJSProto(env, a);
             }
@@ -120,7 +120,7 @@ sealed class WrapSerializedTube<E extends Throwable> permits WrapSerializedTubeP
         return JavaFutureToJSPromise.executeAsPromise(env, () -> {
             var a = tube.getClassConstructor(id);
 
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return ProtoConverter.messageToJSProto(env, a);
             }
@@ -135,7 +135,7 @@ sealed class WrapSerializedTube<E extends Throwable> permits WrapSerializedTubeP
         return JavaFutureToJSPromise.executeAsPromise(env, () -> {
             tube.close();
 
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return env.context.eval("js", "undefined");
             }

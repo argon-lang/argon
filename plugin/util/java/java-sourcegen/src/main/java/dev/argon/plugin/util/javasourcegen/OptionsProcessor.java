@@ -172,7 +172,7 @@ public class OptionsProcessor extends AbstractProcessor {
             handler.print("class ");
             handler.print(optClassShortName);
             if(isOutput) {
-                handler.print("Handler<E extends Exception> implements dev.argon.plugin.api.options.OutputHandler<E, ");
+                handler.print("Handler<E extends Throwable> implements dev.argon.plugin.api.options.OutputHandler<E, ");
                 handler.print(optClassName);
                 handler.println("<E>> {");
 
@@ -203,7 +203,7 @@ public class OptionsProcessor extends AbstractProcessor {
 
             }
             else {
-                handler.print("Codec<E extends Exception> implements dev.argon.plugin.api.options.OptionCodec<E, ");
+                handler.print("Codec<E extends Throwable> implements dev.argon.plugin.api.options.OptionCodec<E, ");
                 handler.print(optClassName);
                 handler.println("<E>> {");
 
@@ -319,7 +319,7 @@ public class OptionsProcessor extends AbstractProcessor {
             writer.print("\tpublic static class ");
             writer.print(methodName.substring(0, 1).toUpperCase(Locale.US));
             writer.print(methodName.substring(1));
-            writer.print("Info<E extends Exception> implements dev.argon.plugin.api.options.OutputInfo<E, ");
+            writer.print("Info<E extends Throwable> implements dev.argon.plugin.api.options.OutputInfo<E, ");
             writer.print(optClassName);
             writer.println("<E>> {");
 

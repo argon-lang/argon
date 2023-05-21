@@ -14,7 +14,7 @@ import java.util.stream.StreamSupport;
 final class InputStreamAsAsyncIterable {
     private InputStreamAsAsyncIterable() {}
 
-    public static <E extends Throwable> Value toAsyncIterable(JSEnv<E> env, CreateInputStream<E> createIS) {
+    public static <E extends Throwable> Value toAsyncIterable(JSEnv<E> env, CreateInputStream<E> createIS) throws InterruptedException {
         return StreamAsAsyncIterable.toAsyncIterable(env, () -> {
             var is = createIS.create();
 
@@ -53,21 +53,26 @@ final class InputStreamAsAsyncIterable {
 
                 @Override
                 public Value next() {
-                    ensureNextValue();
-                    if(done) {
-                        throw new NoSuchElementException();
-                    }
-
-                    Value arr;
-                    env.lock.lock();
                     try {
-                        arr = env.context.eval("js", "Uint8Array").execute(env.context.asValue(nextValue));
-                    }
-                    finally {
-                        env.lock.unlock();
-                    }
+                        ensureNextValue();
+                        if(done) {
+                            throw new NoSuchElementException();
+                        }
 
-                    return arr;
+                        Value arr;
+                        env.lock.lockInterruptibly();
+                        try {
+                            arr = env.context.eval("js", "Uint8Array").execute(env.context.asValue(nextValue));
+                        }
+                        finally {
+                            env.lock.unlock();
+                        }
+
+                        return arr;
+                    }
+                    catch(InterruptedException ex) {
+                        throw env.pluginOperations.wrapAsRuntimeException(ex);
+                    }
                 }
             };
 
@@ -84,7 +89,7 @@ final class InputStreamAsAsyncIterable {
         });
     }
 
-    public static <E extends Throwable> InputStream fromAsyncIterable(JSEnv<E> env, Value asyncIterable) {
+    public static <E extends Throwable> InputStream fromAsyncIterable(JSEnv<E> env, Value asyncIterable) throws InterruptedException {
         return new IterableStream<E>(env, StreamAsAsyncIterable.fromAsyncIterable(env, asyncIterable));
     }
 
@@ -133,35 +138,42 @@ final class InputStreamAsAsyncIterable {
                 return len;
             }
 
-            while(iter.hasNext()) {
-                var arr = iter.next();
-                
-                env.lock.lock();
-                try {
-                    if(arr.getArraySize() == 0) {
-                        continue;
-                    }
+            try {
+                while(iter.hasNext()) {
+                    var arr = iter.next();
 
-                    if(arr.getArraySize() > Integer.MAX_VALUE) {
-                        throw new RuntimeException("Array size is too large");
-                    }
-
-                    len = Math.min(len, (int)arr.getArraySize());
-                    for(int i = 0; i < len; ++i) {
-                        b[off + i] = (byte)arr.getArrayElement(i).asShort();
-                    }
-
-                    if(len < arr.getArraySize()) {
-                        remainingBuffer = new byte[(int)arr.getArraySize() - len];
-                        remainingBufferPos = 0;
-                        for(int i = 0; i < remainingBuffer.length; ++i) {
-                            remainingBuffer[i] = (byte)arr.getArrayElement(len + i).asShort();
+                    env.lock.lockInterruptibly();
+                    try {
+                        if(arr.getArraySize() == 0) {
+                            continue;
                         }
+
+                        if(arr.getArraySize() > Integer.MAX_VALUE) {
+                            throw new RuntimeException("Array size is too large");
+                        }
+
+                        len = Math.min(len, (int)arr.getArraySize());
+                        for(int i = 0; i < len; ++i) {
+                            b[off + i] = (byte)arr.getArrayElement(i).asShort();
+                        }
+
+                        if(len < arr.getArraySize()) {
+                            remainingBuffer = new byte[(int)arr.getArraySize() - len];
+                            remainingBufferPos = 0;
+                            for(int i = 0; i < remainingBuffer.length; ++i) {
+                                remainingBuffer[i] = (byte)arr.getArrayElement(len + i).asShort();
+                            }
+                        }
+
+                        return len;
+                    }
+                    finally {
+                        env.lock.unlock();
                     }
                 }
-                finally {
-                    env.lock.unlock();
-                }
+            }
+            catch(InterruptedException ex) {
+                throw env.pluginOperations.wrapAsRuntimeException(ex);
             }
 
             return 0;

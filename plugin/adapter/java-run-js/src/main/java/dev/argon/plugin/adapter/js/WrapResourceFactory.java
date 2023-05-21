@@ -17,10 +17,10 @@ final class WrapResourceFactory<E extends Throwable> {
     private final ResourceFactory<E> resourceFactory;
 
     @HostAccess.Export
-    public @NotNull Value directoryResource(@NotNull String id) {
+    public @NotNull Value directoryResource(@NotNull String id) throws InterruptedException {
         return WrapOptionDecodeResult.wrap(env, () -> {
             var res = new WrapDirectoryResource<E>(env, resourceFactory.directoryResource(id));
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return env.context.asValue(res);
             }
@@ -31,10 +31,10 @@ final class WrapResourceFactory<E extends Throwable> {
     }
 
     @HostAccess.Export
-    public @NotNull Value binaryResource(@NotNull String id) {
+    public @NotNull Value binaryResource(@NotNull String id) throws InterruptedException {
         return WrapOptionDecodeResult.wrap(env, () -> {
             var res = new WrapBinaryResource<E>(env, resourceFactory.binaryResource(id));
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return env.context.asValue(res);
             }

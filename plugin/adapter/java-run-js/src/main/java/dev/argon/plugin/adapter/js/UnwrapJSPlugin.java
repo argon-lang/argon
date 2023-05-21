@@ -26,31 +26,39 @@ class UnwrapJSPlugin<E extends Throwable> implements Plugin<E, Value, Value, Val
 
     @Override
     public @NotNull OptionCodec<E, Value> optionCodec() {
-        Value jsCodec;
-
-        env.lock.lock();
         try {
-            jsCodec = jsPlugin.getMember("optionCodec");
-        }
-        finally {
-            env.lock.unlock();
-        }
+            Value jsCodec;
 
-        return new UnwrapOptionCodec<>(env, jsCodec);
+            env.lock.lockInterruptibly();
+            try {
+                jsCodec = jsPlugin.getMember("optionCodec");
+            } finally {
+                env.lock.unlock();
+            }
+
+            return new UnwrapOptionCodec<>(env, jsCodec);
+        }
+        catch(InterruptedException ex) {
+            throw env.pluginOperations.wrapAsRuntimeException(ex);
+        }
     }
 
     @Override
     public @NotNull OutputHandler<E, Value> outputHandler() {
-        Value jsOutputHandler;
-
-        env.lock.lock();
         try {
-            jsOutputHandler = jsPlugin.getMember("outputHandler");
+            Value jsOutputHandler;
+
+            env.lock.lockInterruptibly();
+            try {
+                jsOutputHandler = jsPlugin.getMember("outputHandler");
+            } finally {
+                env.lock.unlock();
+            }
+            return new UnwrapOutputHandler<>(env, jsOutputHandler);
         }
-        finally {
-            env.lock.unlock();
+        catch(InterruptedException ex) {
+            throw env.pluginOperations.wrapAsRuntimeException(ex);
         }
-        return new UnwrapOutputHandler<>(env, jsOutputHandler);
     }
 
     @Override
@@ -58,7 +66,7 @@ class UnwrapJSPlugin<E extends Throwable> implements Plugin<E, Value, Value, Val
         var wrapTube = new WrapSerializedTubePlus<>(env, tube);
 
         Value output;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             output = jsPlugin.invokeMember("emitTube", options, wrapTube);
         }
@@ -72,7 +80,7 @@ class UnwrapJSPlugin<E extends Throwable> implements Plugin<E, Value, Value, Val
     @Override
     public @NotNull Optional<Value> loadExternMethod(@NotNull Value options, @NotNull String id) throws E, IOException, InterruptedException {
         Value extern;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             extern = jsPlugin.invokeMember("loadExternMethod", options, id);
         }
@@ -93,7 +101,7 @@ class UnwrapJSPlugin<E extends Throwable> implements Plugin<E, Value, Value, Val
     @Override
     public @NotNull Optional<Value> loadExternFunction(@NotNull Value options, @NotNull String id) throws E, IOException, InterruptedException {
         Value extern;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             extern = jsPlugin.invokeMember("loadExternFunction", options, id);
         }
@@ -114,7 +122,7 @@ class UnwrapJSPlugin<E extends Throwable> implements Plugin<E, Value, Value, Val
     @Override
     public @NotNull Optional<Value> loadExternClassConstructor(@NotNull Value options, @NotNull String id) throws E, IOException, InterruptedException {
         Value extern;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             extern = jsPlugin.invokeMember("loadExternClassConstructor", options, id);
         }
@@ -134,17 +142,21 @@ class UnwrapJSPlugin<E extends Throwable> implements Plugin<E, Value, Value, Val
 
     @Override
     public @NotNull Map<String, TubeLoader<E, ?>> tubeLoaders() {
-        env.lock.lock();
         try {
-            var loaders = jsPlugin.invokeMember("tubeLoaders");
+            env.lock.lockInterruptibly();
+            try {
+                var loaders = jsPlugin.invokeMember("tubeLoaders");
 
-            Map<String, TubeLoader<E, ?>> map = new HashMap<>();
-            loaders.invokeMember("forEach", (MapForEachCallback)(key, value) -> map.put(key, UnwrapTubeLoader.fromFactory(env, value)));
+                Map<String, TubeLoader<E, ?>> map = new HashMap<>();
+                loaders.invokeMember("forEach", (MapForEachCallback) (key, value) -> map.put(key, UnwrapTubeLoader.fromFactory(env, value)));
 
-            return map;
+                return map;
+            } finally {
+                env.lock.unlock();
+            }
         }
-        finally {
-            env.lock.unlock();
+        catch(InterruptedException ex) {
+            throw env.pluginOperations.wrapAsRuntimeException(ex);
         }
     }
 

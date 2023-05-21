@@ -17,7 +17,7 @@ import java.util.stream.StreamSupport;
 final class StreamAsAsyncIterable {
     private StreamAsAsyncIterable() {}
 
-    public static <E extends Throwable> Value toAsyncIterable(@NotNull JSEnv<E> env, @NotNull CreateStream<E> createStream) {
+    public static <E extends Throwable> Value toAsyncIterable(@NotNull JSEnv<E> env, @NotNull CreateStream<E> createStream) throws InterruptedException {
 
 
         SupplierWithError<E, ProxyObject> createFuncs = () -> {
@@ -54,7 +54,7 @@ final class StreamAsAsyncIterable {
         };
 
 
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             return env.context.eval("js",
                 "createFuncs => ({" +
@@ -80,9 +80,9 @@ final class StreamAsAsyncIterable {
         }
     }
 
-    public static <E extends Throwable> @NotNull Stream<@NotNull Value> fromAsyncIterable(JSEnv<E> env, Value asyncIterable) {
+    public static <E extends Throwable> @NotNull Stream<@NotNull Value> fromAsyncIterable(JSEnv<E> env, Value asyncIterable) throws InterruptedException {
         Value asyncIter;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             asyncIter = env.context.eval("js", "iterator => iterator[Symbol.asyncIterator]()").execute(asyncIterable);
         }
@@ -111,30 +111,35 @@ final class StreamAsAsyncIterable {
         private @Nullable Value nextValue = null;
 
         private void ensureNextValue() {
-            if(!done && nextValue == null) {
-                Value nextRes;
-                env.lock.lock();
-                try {
-                    nextRes = asyncIter.invokeMember("next");
-                }
-                finally {
-                    env.lock.unlock();
-                }
-
-                var res = env.pluginOperations.catchAsRuntimeException(() -> JavaFutureToJSPromise.runJSPromise(env, nextRes));
-
-                env.lock.lock();
-                try {
-                    if(res.getMember("done").asBoolean()) {
-                        done = true;
+            try {
+                if(!done && nextValue == null) {
+                    Value nextRes;
+                    env.lock.lockInterruptibly();
+                    try {
+                        nextRes = asyncIter.invokeMember("next");
                     }
-                    else {
-                        nextValue = res.getMember("value");
+                    finally {
+                        env.lock.unlock();
+                    }
+
+                    var res = env.pluginOperations.catchAsRuntimeException(() -> JavaFutureToJSPromise.runJSPromise(env, nextRes));
+
+                    env.lock.lockInterruptibly();
+                    try {
+                        if(res.getMember("done").asBoolean()) {
+                            done = true;
+                        }
+                        else {
+                            nextValue = res.getMember("value");
+                        }
+                    }
+                    finally {
+                        env.lock.unlock();
                     }
                 }
-                finally {
-                    env.lock.unlock();
-                }
+            }
+            catch(InterruptedException ex) {
+                throw env.pluginOperations.wrapAsRuntimeException(ex);
             }
         }
 

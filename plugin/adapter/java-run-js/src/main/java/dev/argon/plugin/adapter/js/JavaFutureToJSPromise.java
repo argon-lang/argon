@@ -70,16 +70,21 @@ final class JavaFutureToJSPromise {
         };
 
 
-        env.lock.lock();
         try {
-            return env.context.eval("js", "createPromise => new Promise(createPromise)").execute(createPromise);
+            env.lock.lockInterruptibly();
+            try {
+                return env.context.eval("js", "createPromise => new Promise(createPromise)").execute(createPromise);
+            }
+            finally {
+                env.lock.unlock();
+            }
         }
-        finally {
-            env.lock.unlock();
+        catch(InterruptedException ex) {
+            throw env.pluginOperations.wrapAsRuntimeException(ex);
         }
     }
 
-    public static @NotNull Future<Value> fromJSPromise(@NotNull JSEnv<?> env, @NotNull Value promise) {
+    public static @NotNull Future<Value> fromJSPromise(@NotNull JSEnv<?> env, @NotNull Value promise) throws InterruptedException {
         var future = new CompletableFuture<Value>();
 
         PromiseThenFunc onFulfilled = future::complete;
@@ -103,7 +108,7 @@ final class JavaFutureToJSPromise {
             }
         };
 
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             promise.invokeMember("then", onFulfilled, onRejected);
         }

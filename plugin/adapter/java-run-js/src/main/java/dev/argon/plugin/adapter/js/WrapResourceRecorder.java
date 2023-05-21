@@ -19,7 +19,7 @@ public class WrapResourceRecorder<E extends Throwable> {
         return JavaFutureToJSPromise.executeAsPromise(env, () -> {
             String res = recorder.recordBinaryResource(new UnwrapBinaryResource<>(env, resource));
 
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return env.context.asValue(res);
             }
@@ -34,7 +34,7 @@ public class WrapResourceRecorder<E extends Throwable> {
         return JavaFutureToJSPromise.executeAsPromise(env, () -> {
             String res = recorder.recordDirectoryResource(new UnwrapDirectoryResource<>(env, resource));
 
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return env.context.asValue(res);
             }

@@ -3,13 +3,13 @@ package dev.argon.plugin.loader.java
 import dev.argon.compiler.{Context, HasContext}
 import dev.argon.compiler.tube.{ArTubeC, TubeImporter, TubeName}
 import dev.argon.compiler.definitions.HasImplementation
+import dev.argon.compiler.module.ModulePath
 import dev.argon.io.*
 import dev.argon.options.{OptionCodec, OptionDecoder, OutputHandler, OutputInfo}
 import zio.*
 import zio.stream.*
 import dev.argon.plugin.*
 import dev.argon.plugin.api as japi
-import dev.argon.plugin.api.{PluginOperations, SupplierWithError, options}
 import dev.argon.plugin.api.options.OptionDecodeException
 import dev.argon.plugin.tube.{InvalidTube, SerializedTube, SerializedTubePlus, TubeReaderBase, TubeReaderFactory, TubeSerializer}
 import dev.argon.tube as t
@@ -87,12 +87,11 @@ final class WrapperContext[R, E >: InvalidTube | IOException](using runtime: Run
       }
 
 
-    override def catchAsIOException[A](handler: PluginOperations.TryBodyHandler[WrappedError, A]): A =
+    override def catchAsIOException[A](handler: japi.PluginOperations.TryBodyHandler[WrappedError, A]): A =
       try handler.run()
       catch {
         case ex: InterruptedException => throw wrapAsRuntimeException(ex)
       }
-
   }
 
 
@@ -176,7 +175,7 @@ final class WrapperContext[R, E >: InvalidTube | IOException](using runtime: Run
 
     override def fileName(): Optional[String] = res.fileName.toJava
 
-    override def byteSize(): Optional[SupplierWithError[WrappedError, BigInteger]] =
+    override def byteSize(): Optional[japi.SupplierWithError[WrappedError, BigInteger]] =
       res.byteSize.map[japi.SupplierWithError[WrappedError, BigInteger]](byteSizeEffect => () => wrapEffect(byteSizeEffect.map(_.bigInteger))).toJava
   }
 
@@ -208,7 +207,7 @@ final class WrapperContext[R, E >: InvalidTube | IOException](using runtime: Run
 
     override def fileName(): Optional[String] = res.fileName.toJava
 
-    override def numEntries(): Optional[SupplierWithError[WrappedError, BigInteger]] =
+    override def numEntries(): Optional[japi.SupplierWithError[WrappedError, BigInteger]] =
       res.numEntries.map[japi.SupplierWithError[WrappedError, BigInteger]](numEntriesEffect => () => wrapEffect(numEntriesEffect.map(_.bigInteger))).toJava
   }
 
@@ -288,7 +287,7 @@ final class WrapperContext[R, E >: InvalidTube | IOException](using runtime: Run
       .catchAll(refineError)
 
 
-  class UnwrapOptionDecoder[A](jOptionDecoder: options.OptionDecoder[WrappedError, A]) extends OptionDecoder[R, E, A] {
+  class UnwrapOptionDecoder[A](jOptionDecoder: japi.options.OptionDecoder[WrappedError, A]) extends OptionDecoder[R, E, A] {
     override final def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, A] =
       val value2 = t.Toml.toJavaProto(t.TomlConverter.encodeToml(value))
       try Right(jOptionDecoder.decode(WrapResourceFactory(resFactory), value2))
@@ -301,11 +300,11 @@ final class WrapperContext[R, E >: InvalidTube | IOException](using runtime: Run
   }
 
   object UnwrapOptionDecoder {
-    def apply[A](jOptionDecoder: options.OptionDecoder[WrappedError, A]): OptionDecoder[R, E, A] =
+    def apply[A](jOptionDecoder: japi.options.OptionDecoder[WrappedError, A]): OptionDecoder[R, E, A] =
       new UnwrapOptionDecoder[A](jOptionDecoder)
   }
 
-  final class UnwrapOptionCodec[A](jOptionCodec: options.OptionCodec[WrappedError, A]) extends UnwrapOptionDecoder[A](jOptionCodec) with OptionCodec[R, E, A] {
+  final class UnwrapOptionCodec[A](jOptionCodec: japi.options.OptionCodec[WrappedError, A]) extends UnwrapOptionDecoder[A](jOptionCodec) with OptionCodec[R, E, A] {
     override def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, Toml] =
       unwrapEffect {
         jOptionCodec.encode(WrapResourceRecorder(recorder), value)
@@ -315,7 +314,7 @@ final class WrapperContext[R, E >: InvalidTube | IOException](using runtime: Run
         }
   }
 
-  final class UnwrapOutputHandler[A](jOptionCodec: options.OutputHandler[WrappedError, A]) extends OutputHandler[R, E, A] {
+  final class UnwrapOutputHandler[A](jOptionCodec: japi.options.OutputHandler[WrappedError, A]) extends OutputHandler[R, E, A] {
     override lazy val options: Map[Seq[String], OutputInfo[R, E, A]] =
       jOptionCodec.options()
         .asScala
@@ -327,7 +326,7 @@ final class WrapperContext[R, E >: InvalidTube | IOException](using runtime: Run
         .toMap
   }
 
-  final class UnwrapOutputInfo[A](jOptionCodec: options.OutputInfo[WrappedError, A]) extends OutputInfo[R, E, A] {
+  final class UnwrapOutputInfo[A](jOptionCodec: japi.options.OutputInfo[WrappedError, A]) extends OutputInfo[R, E, A] {
     override def getValue(options: A): FileSystemResource[R, E] =
       unwrapFileSystemResource(jOptionCodec.getValue(options))
   }

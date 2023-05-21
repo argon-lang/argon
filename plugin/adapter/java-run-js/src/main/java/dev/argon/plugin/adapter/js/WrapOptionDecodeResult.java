@@ -9,13 +9,13 @@ final class WrapOptionDecodeResult {
     private WrapOptionDecodeResult() {}
 
 
-    public static @NotNull Value wrap(@NotNull JSEnv<?> env, @NotNull WrapOptionFunc func) {
+    public static @NotNull Value wrap(@NotNull JSEnv<?> env, @NotNull WrapOptionFunc func) throws InterruptedException {
         Value value;
         try {
             value = func.get();
         }
         catch(OptionDecodeException ex) {
-            env.lock.lock();
+            env.lock.lockInterruptibly();
             try {
                 return env.context.eval("js", "errorMessage => ({ ok: false, errorMessage })").execute(ex.getMessage());
             }
@@ -24,7 +24,7 @@ final class WrapOptionDecodeResult {
             }
         }
 
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             return env.context.eval("js", "value => ({ ok: true, value })").execute(value);
         }
@@ -33,8 +33,8 @@ final class WrapOptionDecodeResult {
         }
     }
 
-    public static @NotNull Value unwrap(@NotNull JSEnv<?> env, @NotNull Value value) throws OptionDecodeException {
-        env.lock.lock();
+    public static @NotNull Value unwrap(@NotNull JSEnv<?> env, @NotNull Value value) throws OptionDecodeException, InterruptedException {
+        env.lock.lockInterruptibly();
         try {
             if(value.getMember("ok").asBoolean()) {
                 return value.getMember("value");
@@ -50,6 +50,6 @@ final class WrapOptionDecodeResult {
 
     @FunctionalInterface
     public static interface WrapOptionFunc {
-        Value get() throws OptionDecodeException;
+        Value get() throws OptionDecodeException, InterruptedException;
     }
 }

@@ -91,10 +91,13 @@ lazy val annotationDependencies = Seq(
   "org.jetbrains" % "annotations" % "24.0.1",
 )
 
+lazy val commonsCompressDependencies = Seq(
+  "org.apache.commons" % "commons-compress" % "1.23.0",
+)
+
 lazy val commonJVMSettings = Seq(
 
-  libraryDependencies ++= Seq(
-    "org.apache.commons" % "commons-compress" % "1.23.0",
+  libraryDependencies ++= commonsCompressDependencies ++ Seq(
     "commons-io" % "commons-io" % "2.11.0",
     "dev.zio" %% "zio-logging" % "2.1.12",
   ),
@@ -719,24 +722,6 @@ lazy val argon_plugin_loader = crossProject(JVMPlatform, JSPlatform, NodePlatfor
 lazy val argon_plugin_loaderJVM = argon_plugin_loader.jvm
 lazy val argon_plugin_loaderJS = argon_plugin_loader.js
 lazy val argon_plugin_loaderNode = argon_plugin_loader.node
-
-
-lazy val argon_plugins_tube_java = project.in(file("plugin/tube/java"))
-  .dependsOn(argon_plugin_java_api % "provided", argon_plugin_java_sourcegen % "provided")
-  .settings(
-    commonSettingsNoLibs,
-    compilerOptions,
-
-    javacOptions ++= Seq(
-      "-processor", "dev.argon.plugin.util.javasourcegen.OptionsProcessor",
-    ),
-
-    autoScalaLibrary := false,
-    fork := true,
-
-    name := "argon-plugin-tube-java",
-  )
-
 
 lazy val argon_plugins_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-js"))
   .dependsOn(util, argon_tube, argon_plugin, argon_plugin_test_util % "test->compile")

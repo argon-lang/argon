@@ -14,7 +14,6 @@ import java.io.IOException;
 final class UnwrapTubeLoader<E extends Throwable> implements TubeLoader<E, Value> {
 
     public UnwrapTubeLoader(@NotNull JSEnv<E> env, @NotNull Value tubeLoader) {
-
         this.env = env;
         this.tubeLoader = tubeLoader;
     }
@@ -24,23 +23,28 @@ final class UnwrapTubeLoader<E extends Throwable> implements TubeLoader<E, Value
 
     @Override
     public @NotNull OptionDecoder<E, Value> libOptionsDecoder() {
-        Value decoder;
-
-        env.lock.lock();
         try {
-            decoder = tubeLoader.getMember("libOptionsDecoder");
-        }
-        finally {
-            env.lock.unlock();
-        }
+            Value decoder;
 
-        return new UnwrapOptionDecoder<>(env, decoder);
+            env.lock.lockInterruptibly();
+            try {
+                decoder = tubeLoader.getMember("libOptionsDecoder");
+            }
+            finally {
+                env.lock.unlock();
+            }
+
+            return new UnwrapOptionDecoder<>(env, decoder);
+        }
+        catch(InterruptedException ex) {
+            throw env.pluginOperations.wrapAsRuntimeException(ex);
+        }
     }
 
     @Override
     public @NotNull SerializedTube<E> load(@NotNull TubeImporter<E> tubeImporter, @NotNull Value libOptions) throws E, IOException, InterruptedException {
         Value tube;
-        env.lock.lock();
+        env.lock.lockInterruptibly();
         try {
             tube = tubeLoader.invokeMember("load", new WrapTubeImporter<>(env, tubeImporter), libOptions);
         }
@@ -54,12 +58,17 @@ final class UnwrapTubeLoader<E extends Throwable> implements TubeLoader<E, Value
     }
 
     public static <E extends Throwable> TubeLoader<E, ?> fromFactory(JSEnv<E> env, Value value) {
-        env.lock.lock();
         try {
-            return new UnwrapTubeLoader<>(env, value.invokeMember("withLoader", new LoaderConsumerImpl()));
+            env.lock.lockInterruptibly();
+            try {
+                return new UnwrapTubeLoader<>(env, value.invokeMember("withLoader", new LoaderConsumerImpl()));
+            }
+            finally {
+                env.lock.unlock();
+            }
         }
-        finally {
-            env.lock.unlock();
+        catch(InterruptedException ex) {
+            throw env.pluginOperations.wrapAsRuntimeException(ex);
         }
     }
 
