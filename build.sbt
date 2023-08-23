@@ -2,8 +2,8 @@ import sbtcrossproject.CrossPlugin.autoImport.{CrossType, crossProject}
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits._
 
-val graalVersion = "22.3.2"
-val zioVersion = "2.0.13"
+val graalVersion = "23.0.1"
+val zioVersion = "2.0.15"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -11,7 +11,7 @@ lazy val envValues = Map(
 )
 
 lazy val commonSettingsNoLibs = Seq(
-  scalaVersion := "3.2.2",
+  scalaVersion := "3.3.0",
 )
 
 lazy val commonSettings = commonSettingsNoLibs ++ Seq(
@@ -26,12 +26,12 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.zio" %%% "zio-json" % "0.5.0",
-    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.0",
+    "dev.zio" %%% "zio-json" % "0.6.0",
+    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.3",
 
-    "org.scala-lang.modules" %%% "scala-xml" % "2.1.0",
-    "org.gnieh" %%% "fs2-data-xml-scala" % "1.7.1",
-    "dev.zio" %%% "zio-interop-cats" % "23.0.0.5",
+    "org.scala-lang.modules" %%% "scala-xml" % "2.2.0",
+    "org.gnieh" %%% "fs2-data-xml-scala" % "1.8.0",
+    "dev.zio" %%% "zio-interop-cats" % "23.0.0.8",
 
     "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
     "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
@@ -72,6 +72,8 @@ lazy val sharedJSNodeSettings = Seq(
   stIncludeDev := true,
   stUseScalaJsDom := false,
 
+  fork := false,
+
 )
 
 lazy val graalDependencies = Seq(
@@ -83,8 +85,8 @@ lazy val graalDependencies = Seq(
 )
 
 lazy val protobufJavaDependencies = Seq(
-  "com.google.protobuf" % "protobuf-java" % "3.23.0",
-  "com.google.protobuf" % "protobuf-java" % "3.23.0" % "protobuf",
+  "com.google.protobuf" % "protobuf-java" % "3.24.1",
+  "com.google.protobuf" % "protobuf-java" % "3.24.1" % "protobuf",
 )
 
 lazy val annotationDependencies = Seq(
@@ -98,8 +100,10 @@ lazy val commonsCompressDependencies = Seq(
 lazy val commonJVMSettings = Seq(
 
   libraryDependencies ++= commonsCompressDependencies ++ Seq(
-    "commons-io" % "commons-io" % "2.11.0",
-    "dev.zio" %% "zio-logging" % "2.1.12",
+    "commons-io" % "commons-io" % "2.13.0",
+    "org.apache.commons" % "commons-lang3" % "3.13.0",
+    "org.apache.commons" % "commons-text" % "1.10.0",
+    "dev.zio" %% "zio-logging" % "2.1.14",
   ),
 
   Test / fork := true,
@@ -125,18 +129,21 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ Seq(
 lazy val javaCompilerOptions = Seq(
   javacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "--release", "17",
+    "--release", "20",
+    "--enable-preview",
 //    "-Werror",
     "-Xlint:all,-serial,-try,-processing",
   ),
 )
+
+lazy val javaOnlyOptions = javaCompilerOptions ++ commonSettingsNoLibs
 
 lazy val compilerOptions = javaCompilerOptions ++ Seq(
 
 
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "-release", "17",
+    "-release", "20",
     "-source", "future",
     "-language:higherKinds",
     "-language:existentials",
@@ -154,6 +161,73 @@ lazy val compilerOptions = javaCompilerOptions ++ Seq(
 )
 
 
+lazy val esexpr_java = project.in(file("esexpr/java"))
+  .settings(
+    javaOnlyOptions,
+
+    libraryDependencies ++= annotationDependencies,
+
+    autoScalaLibrary := false,
+    Test / fork := true,
+
+    name := "esexpr-java",
+  )
+
+lazy val esexpr_sjs = crossProject(JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("esexpr/scalajs"))
+  .dependsOn(util)
+  .jsConfigure(
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "esexpr-scalajs",
+  )
+
+lazy val esexpr_sjsJS = esexpr_sjs.js
+lazy val esexpr_sjsNode = esexpr_sjs.node
+
+lazy val esexpr_scala = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("esexpr/scala"))
+  .dependsOn(util)
+  .jvmConfigure(
+    _.dependsOn(esexpr_java).settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.dependsOn(esexpr_sjsJS)
+      .enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.dependsOn(esexpr_sjsNode)
+      .enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "esexpr-scala",
+  )
+
+lazy val esexpr_scalaJVM = esexpr_scala.jvm
+lazy val esexpr_scalaJS = esexpr_scala.js
+lazy val esexpr_scalaNode = esexpr_scala.node
+
+lazy val esexpr_generator = project.in(file("esexpr/generator"))
+  .dependsOn(esexpr_scalaJVM)
+  .settings(
+    commonJVMSettings,
+    commonSettings,
+    compilerOptions,
+
+    name := "esexpr-generator",
+  )
 
 lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-grammar"))
   .dependsOn(util)

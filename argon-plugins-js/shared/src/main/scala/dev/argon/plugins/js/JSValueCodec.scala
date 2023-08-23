@@ -1,8 +1,11 @@
 package dev.argon.plugins.js
 
-import magnolia1.*
 import dev.argon.util.{*, given}
-import scala.reflect.TypeTest
+
+import scala.reflect.{ClassTag, TypeTest}
+import scala.deriving.Mirror
+import scala.compiletime.{constValue, erasedValue, error, summonInline}
+import scala.quoted.*
 
 trait JSValueCodec[A] {
   def toJSValue(context: JSContext)(a: A): JSValue
@@ -11,20 +14,178 @@ trait JSValueCodec[A] {
   def defaultValue: Option[A] = None
 }
 
-object JSValueCodec extends Derivation[JSValueCodec]:
-  given [S <: String](using TypeTest[String, S]): JSValueCodec[S] with
+object JSValueCodec:
+
+  inline def derived[A](using m: Mirror.Of[A]): JSValueCodec[A] =
+    inline m match {
+      case m: Mirror.SumOf[A] => sumDerived[A](using m)
+      case m: Mirror.ProductOf[A] => productDerived[A](using m)
+    }
+
+  private trait SplitValueCodec[T] extends JSValueCodec[T] {
+    def supportsType(typeName: String): Boolean
+  }
+
+  inline def sumDerived[A](using m: Mirror.SumOf[A]): JSValueCodec[A] =
+    lazy val elemCodecs = sumTypeElemCodecs[m.MirroredElemTypes]
+    val elemNames = sumTypeElemLabels[m.MirroredElemLabels]
+    new SplitValueCodec[A] {
+      override def toJSValue(context: JSContext)(a: A): JSValue =
+        elemCodecs(m.ordinal(a)) match {
+          case codec: JSValueCodec[b] =>
+            codec.toJSValue(context)(a.asInstanceOf[b])
+        }
+
+      override def fromJSValue(context: JSContext)(value: JSValue): Either[String, A] =
+        context.decode(value) match {
+          case DecodedJSObject(map) =>
+            for {
+              typeName <- map.get("type").map(context.decode) match {
+                case Some(typeName: String) => Right(typeName)
+                case _ => Left(s"Could not get type specifier from $map")
+              }
+              subtype <- elemCodecs.zip(elemNames).find(matchingTypeInfo(typeName)).toRight {
+                s"Could not find specified type: $typeName, known sub types: ${elemNames}"
+              }
+              value <- subtype._1.fromJSValue(context)(value)
+            } yield value.asInstanceOf[A]
+
+          case obj =>
+            Left("Invalid object")
+        }
+
+      override def supportsType(typeName: String): Boolean =
+        elemCodecs.zip(elemNames).exists(matchingTypeInfo(typeName))
+
+      private def matchingTypeInfo(typeName: String)(subCodec: JSValueCodec[?], subTypeName: String): Boolean =
+        typeName == subTypeName || (subCodec match {
+          case split: SplitValueCodec[?] => split.supportsType(typeName)
+          case _ => false
+        })
+
+    }
+
+  inline def sumTypeElemCodecs[Types <: Tuple]: List[JSValueCodec[?]] =
+    inline erasedValue[Types] match
+      case _: (htype *: ttypes) =>
+        summonInline[JSValueCodec[htype]] :: sumTypeElemCodecs[ttypes]
+
+      case _: EmptyTuple =>
+        Nil
+    end match
+
+  inline def sumTypeElemLabels[Labels <: Tuple]: List[String] =
+    inline erasedValue[Labels] match
+      case _: (h *: t) =>
+        constValue[h & String] :: sumTypeElemLabels[t]
+
+      case _: EmptyTuple =>
+        Nil
+    end match
+
+  trait JSValueObjectCodec[A] {
+    def toJSObject(context: JSContext)(a: A): Map[String, JSValue]
+    def fromJSObject(context: JSContext)(obj: Map[String, JSValue]): Either[String, A]
+  }
+
+  inline def productDerived[A](using m: Mirror.ProductOf[A]): JSValueCodec[A] =
+    val derivedTuple = productDerivedTuple[m.MirroredLabel, m.MirroredElemLabels, m.MirroredElemTypes]
+    new JSValueCodec[A] {
+      override def toJSValue(context: JSContext)(value: A): JSValue =
+        context.fromMap(derivedTuple.toJSObject(context)(
+          Tuple.fromProductTyped[A & Product](
+            summonInline[A =:= (A & Product)](value)
+          )(using summonInline[Mirror.ProductOf[A] { type MirroredElemTypes = m.MirroredElemTypes } =:= Mirror.ProductOf[A & Product] { type MirroredElemTypes = m.MirroredElemTypes }](m))
+        ))
+
+      override def fromJSValue(context: JSContext)(value: JSValue): Either[String, A] =
+        context.decode(value) match {
+          case DecodedJSObject(map) =>
+            derivedTuple.fromJSObject(context)(map)
+              .map(m.fromTuple)
+
+          case obj =>
+            Left("Invalid object")
+        }
+
+      override def toString: String = s"JSValueCodec for ${constValue[m.MirroredLabel]}"
+    }
+
+  inline def productDerivedTuple[TypeLabel <: String, Labels <: Tuple, Types <: Tuple]: JSValueObjectCodec[Types] =
+    inline (erasedValue[Labels], erasedValue[Types]) match
+      case _: ((hlabel *: tlabels), (htype *: ttypes)) =>
+        lazy val hcodec = summonInline[JSValueCodec[htype]]
+        val tcodec = productDerivedTuple[TypeLabel, tlabels, ttypes]
+    
+        summonInline[JSValueObjectCodec[htype *: ttypes] =:= JSValueObjectCodec[Types]](new JSValueObjectCodec[htype *: ttypes] {
+          override def toJSObject(context: JSContext)(a: htype *: ttypes): Map[String, JSValue] = {
+            val (h *: t) = a
+            tcodec.toJSObject(context)(t) + (constValue[hlabel & String] -> hcodec.toJSValue(context)(h))
+          }
+    
+          override def fromJSObject(context: JSContext)(obj: Map[String, JSValue]): Either[String, htype *: ttypes] =
+            for
+              h <- obj.get(constValue[hlabel & String]) match {
+                case Some(memberValue) => hcodec.fromJSValue(context)(memberValue)
+                case None =>
+                  hcodec.defaultValue match
+                    case Some(memberValue) => Right(memberValue)
+                    case None => Left(s"Missing key ${constValue[hlabel & String]} in object of type ${constValue[TypeLabel]}, map: ${obj}")
+    
+              }
+              t <- tcodec.fromJSObject(context)(obj)
+            yield h *: t
+        })
+
+      case _: (EmptyTuple, EmptyTuple) =>
+        summonInline[JSValueObjectCodec[EmptyTuple] =:= JSValueObjectCodec[Types]](new JSValueObjectCodec[EmptyTuple] {
+          override def toJSObject(context: JSContext)(a: EmptyTuple): Map[String, JSValue] = Map.empty
+
+          override def fromJSObject(context: JSContext)(obj: Map[String, JSValue]): Either[String, EmptyTuple] = Right(EmptyTuple)
+        })
+    end match
+
+  given JSValueCodec[String] with
+    override def toJSValue(context: JSContext)(a: String): JSValue = context.fromString(a)
+    override def fromJSValue(context: JSContext)(value: JSValue): Either[String, String] =
+      (context.decode(value) match {
+        case s: String =>
+          Some(s)
+
+        case _ => None
+      }).toRight {
+        s"Could not convert value to string: $value"
+      }
+  end given
+
+  given [S <: String & Singleton](using strValue: ValueOf[S]): JSValueCodec[S] with
     override def toJSValue(context: JSContext)(a: S): JSValue = context.fromString(a)
     override def fromJSValue(context: JSContext)(value: JSValue): Either[String, S] =
       (context.decode(value) match {
-        case s: String =>
-          s match {
-            case s: S => Some(s)
-            case _ => None
-          }
+        case s: String if s == strValue.value =>
+          Some(strValue.value)
 
         case _ => None
       }).toRight { s"Could not convert value to string: $value" }
   end given
+
+  def stringLiterals[S <: String](using TypeTest[String, S]): JSValueCodec[S] =
+    new JSValueCodec[S] {
+      override def toJSValue(context: JSContext)(a: S): JSValue = context.fromString(a)
+
+      override def fromJSValue(context: JSContext)(value: JSValue): Either[String, S] =
+        (context.decode(value) match {
+          case s: String =>
+            s match {
+              case s: S => Some(s)
+              case _ => None
+            }
+
+          case _ => None
+        }).toRight {
+          s"Could not convert value to string: $value"
+        }
+    }
 
   given JSValueCodec[Double] with
     override def toJSValue(context: JSContext)(a: Double): JSValue = context.fromDouble(a)
@@ -53,18 +214,29 @@ object JSValueCodec extends Derivation[JSValueCodec]:
       }
   end given
 
-  given [B <: Boolean](using TypeTest[Boolean, B]): JSValueCodec[B] with
-    override def toJSValue(context: JSContext)(a: B): JSValue = context.fromBoolean(a)
-    override def fromJSValue(context: JSContext)(value: JSValue): Either[String, B] =
+  given JSValueCodec[Boolean] with
+    override def toJSValue(context: JSContext)(a: Boolean): JSValue = context.fromBoolean(a)
+    override def fromJSValue(context: JSContext)(value: JSValue): Either[String, Boolean] =
       (context.decode(value) match {
         case b: Boolean =>
-          b match {
-            case b: B => Some(b)
-            case _ => None
-          }
+          Some(b)
 
         case _ => None
       }).toRight { "Could not convert value to boolean" }
+  end given
+
+  given[B <: Boolean] (using boolValue: ValueOf[B]): JSValueCodec[B] with
+    override def toJSValue(context: JSContext)(a: B): JSValue = context.fromBoolean(a)
+
+    override def fromJSValue(context: JSContext)(value: JSValue): Either[String, B] =
+      (context.decode(value) match {
+        case b: Boolean if b == boolValue.value =>
+          Some(boolValue.value)
+
+        case _ => None
+      }).toRight {
+        "Could not convert value to boolean"
+      }
   end given
 
   given JSValueCodec[Nothing] with
@@ -91,7 +263,6 @@ object JSValueCodec extends Derivation[JSValueCodec]:
       a.fold(context.fromNull, summon[JSValueCodec[A]].toJSValue(context))
 
     override def fromJSValue(context: JSContext)(value: JSValue): Either[String, Nullable[A]] =
-//      given CanEqual[context.DecodedJSValueNotNull | Null, Null] = canEqualNullRight[context.DecodedJSValueNotNull, context.DecodedJSValueNotNull | Null, Null]
       if context.decode(value) == null then
         Right(Nullable(null))
       else
@@ -132,77 +303,6 @@ object JSValueCodec extends Derivation[JSValueCodec]:
                 Left(s"Alternatives failed:\nValue: $value\nAttempted ${summon[JSValueCodec[A]]}, got $error\nAttempted ${summon[JSValueCodec[B]]}, got $error2")
             }
         }
-    }
-
-  override def join[T](ctx: CaseClass[JSValueCodec, T]): JSValueCodec[T] =
-    new JSValueCodec[T] {
-      override def toJSValue(context: JSContext)(value: T): JSValue =
-        context.fromMap(
-          ctx.params
-            .iterator
-            .filterNot { param => param.typeclass.skipForField(param.deref(value)) }
-            .map { param =>
-              param.label -> param.typeclass.toJSValue(context)(param.deref(value))
-            }
-            .toMap
-        )
-
-      override def fromJSValue(context: JSContext)(value: JSValue): Either[String, T] =
-        context.decode(value) match {
-          case DecodedJSObject(map) =>
-            ctx.constructEither { param =>
-              map.get(param.label) match {
-                case Some(memberValue) => param.typeclass.fromJSValue(context)(memberValue)
-                case None =>
-                  param.typeclass.defaultValue match
-                    case Some(memberValue) => Right(memberValue)
-                    case None => Left(s"Missing key ${param.label} in object of type ${ctx.typeInfo.short}: , map: ${map}")
-
-              }
-            }.left.map { _.mkString("\n") }
-
-          case obj =>
-            Left("Invalid object")
-        }
-
-      override def toString: String = s"JSValueCodec for ${ctx.typeInfo.full}"
-    }
-
-  private trait SplitValueCodec[T] extends JSValueCodec[T] {
-    def supportsType(typeName: String): Boolean
-  }
-
-  override def split[T](ctx: SealedTrait[JSValueCodec, T]): JSValueCodec[T] =
-    new SplitValueCodec[T] {
-      override def toJSValue(context: JSContext)(value: T): JSValue =
-        ctx.choose(value) { sub => sub.typeclass.toJSValue(context)(sub.cast(value)) }
-
-      override def fromJSValue(context: JSContext)(value: JSValue): Either[String, T] =
-        context.decode(value) match {
-          case DecodedJSObject(map) =>
-            for {
-              typeName <- map.get("type").map(context.decode) match {
-                case Some(typeName: String) => Right(typeName)
-                case _ => Left(s"Could not get type specifier from $map")
-              }
-              subtype <- ctx.subtypes.find(matchingTypeInfo(typeName)).toRight { s"Could not find specified type: $typeName, known sub types: ${ctx.subtypes.toSeq}" }
-              value <- subtype.typeclass.fromJSValue(context)(value)
-            } yield value
-
-          case obj =>
-            Left("Invalid object")
-        }
-
-      override def supportsType(typeName: String): Boolean =
-        ctx.subtypes.exists(matchingTypeInfo(typeName))
-
-      private def matchingTypeInfo(typeName: String)(subtype: SealedTrait.Subtype[JSValueCodec, T, ?]): Boolean =
-        typeName == subtype.typeInfo.short || (subtype.typeclass match {
-          case typeclass: SplitValueCodec[?] => typeclass.supportsType(typeName)
-          case _ => false
-        })
-
-      override def toString: String = s"JSValueCodec for ${ctx.typeInfo.full}"
     }
 
 end JSValueCodec

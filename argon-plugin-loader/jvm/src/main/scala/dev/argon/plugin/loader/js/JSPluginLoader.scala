@@ -3,6 +3,7 @@ package dev.argon.plugin.loader.js
 import dev.argon.io.PathLike
 import dev.argon.plugin.tube.InvalidTube
 import dev.argon.plugin.{Plugin, PluginLoader}
+import org.graalvm.polyglot.io.IOAccess
 import org.graalvm.polyglot.{HostAccess, Value, Context as JSContext}
 import zio.*
 
@@ -22,7 +23,7 @@ class JSPluginLoader[R, E >: InvalidTube] extends PluginLoader[R, E] {
       given JSContext <- ZIO.fromAutoCloseable(ZIO.succeed(
         JSContext.newBuilder("js").nn
           .allowHostAccess(HostAccess.ALL).nn
-          .allowIO(true).nn
+          .allowIO(IOAccess.ALL).nn
           .option("engine.WarnInterpreterOnly", false.toString).nn
           .build().nn
       ))

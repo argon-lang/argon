@@ -45,6 +45,33 @@ given literalValueEncoder: JSValueCodec[String | Boolean | Double | BigInt] =
   JSValueCodec.union[String, Boolean | Double | BigInt]
 end literalValueEncoder
 
+given sourceTypeLiteral: JSValueCodec["script" | "module"] =
+  JSValueCodec.stringLiterals
+
+given varDeclKindLiteral: JSValueCodec["var" | "let" | "const"] =
+  JSValueCodec.stringLiterals
+
+given propKindLiteral: JSValueCodec["init" | "get" | "set"] =
+  JSValueCodec.stringLiterals
+
+
+given unaryOpLiteral: JSValueCodec[UnaryOperator] =
+  JSValueCodec.stringLiterals
+
+given updateOpLiteral: JSValueCodec[UpdateOperator] =
+  JSValueCodec.stringLiterals
+
+given binaryOpLiteral: JSValueCodec[BinaryOperator] =
+  JSValueCodec.stringLiterals
+
+given assignOpLiteral: JSValueCodec[AssignmentOperator] =
+  JSValueCodec.stringLiterals
+
+given logicalOpLiteral: JSValueCodec[LogicalOperator] =
+  JSValueCodec.stringLiterals
+
+given methodDefKindLiteral: JSValueCodec["constructor" | "method" | "get" | "set"] =
+  JSValueCodec.stringLiterals
 
 sealed trait Node derives JSValueCodec {
   val `type`: String

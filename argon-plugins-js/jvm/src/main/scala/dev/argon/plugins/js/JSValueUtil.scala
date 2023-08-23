@@ -5,6 +5,7 @@ import dev.argon.util.{*, given}
 import scala.jdk.CollectionConverters.given
 import org.graalvm.polyglot.proxy.{ProxyArray, ProxyObject}
 import com.oracle.truffle.js.runtime.BigInt as JSBigInt
+import org.graalvm.polyglot.io.IOAccess
 import org.graalvm.polyglot.{Context, Source, Value}
 
 import java.util.{List as JList, Map as JMap}
@@ -24,8 +25,11 @@ object JSValueUtil:
 
     private def createContext(): Context =
       Context.newBuilder("js").nn
-        .allowIO(true).nn
-        .fileSystem(new ResourceFileSystem).nn
+        .allowIO(
+          IOAccess.newBuilder().nn
+            .fileSystem(new ResourceFileSystem).nn
+            .build()
+        ).nn
         .option("engine.WarnInterpreterOnly", false.toString).nn
         .build().nn
   }

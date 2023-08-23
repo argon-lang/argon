@@ -1,9 +1,0 @@
-[package]
-name = "wasm2argonvm"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-argon-vm-format = { path = "../format" }
-wasmparser = "0.92.0"
-protobuf = "3.2.0"

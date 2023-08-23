@@ -5,5 +5,5 @@
     },
 
     "include": ["src/**/*"],
-    "extends": "../../../common/js/tsconfig.base.json"
+    "extends": "../../common/js/tsconfig.base.json"
 }

@@ -16,7 +16,7 @@ import org.apache.commons.io.input.NullInputStream
 import org.apache.commons.compress.utils.SeekableInMemoryByteChannel
 import org.apache.commons.io.FilenameUtils
 import org.graalvm.polyglot.Context
-import org.graalvm.polyglot.io.FileSystem
+import org.graalvm.polyglot.io.{FileSystem, IOAccess}
 import org.graalvm.polyglot.Source
 
 
@@ -28,11 +28,14 @@ object JSOutputExecutor {
         val output = new ByteArrayOutputStream()
 
         val context = Context.newBuilder("js").nn
-          .allowIO(true).nn
+          .allowIO(
+            IOAccess.newBuilder().nn
+              .fileSystem(new JSFileSystem(fileSystem)).nn
+              .build()
+          ).nn
           .out(output).nn
           .err(output).nn
           .in(new NullInputStream(0)).nn
-          .fileSystem(new JSFileSystem(fileSystem)).nn
           .option("engine.WarnInterpreterOnly", false.toString).nn
           .build().nn
         try {
