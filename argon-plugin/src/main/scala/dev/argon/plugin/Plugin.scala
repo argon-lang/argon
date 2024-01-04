@@ -5,6 +5,7 @@ import dev.argon.compiler.definitions.HasImplementation
 import dev.argon.compiler.tube.ArTubeC
 import dev.argon.options.*
 import dev.argon.io.*
+import dev.argon.plugin.executor.TestExecutor
 import dev.argon.util.*
 import zio.*
 
@@ -20,8 +21,13 @@ trait Plugin[R, E] {
 
 
   type ExternMethodImplementation
+  type MethodReference
+
   type ExternFunctionImplementation
+  type FunctionReference
+
   type ExternClassConstructorImplementation
+  type ClassConstructorReference
 
 
   def emitTube
@@ -42,12 +48,12 @@ trait Plugin[R, E] {
   (id: String)
   : ZIO[R, E, Option[ExternFunctionImplementation]]
 
+  def testExecutor: Option[TestExecutor[R, E, Options, Output]]
 
   def loadExternClassConstructor
   (options: Options)
   (id: String)
   : ZIO[R, E, Option[ExternClassConstructorImplementation]]
-
 
   def tubeLoaders[ContextOptions]: Map[String, TubeLoader[R, E, ContextOptions]]
 }

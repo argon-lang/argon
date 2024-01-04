@@ -1,6 +1,6 @@
 package dev.argon.io
 
-import typings.node.pathMod.^ as NodePath
+import dev.argon.io.jstypes.node.NodePath
 
 type PathLike = String
 

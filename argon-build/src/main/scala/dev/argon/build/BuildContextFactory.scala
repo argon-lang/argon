@@ -2,6 +2,7 @@ package dev.argon.build
 
 import dev.argon.compiler.*
 import dev.argon.compiler.tube.{ArTubeC, TubeImporter, TubeName}
+import dev.argon.esexpr.{Dictionary, ESExpr, ESExprCodec, ESExprTag}
 import dev.argon.io.{ResourceFactory, ResourceRecorder}
 import dev.argon.options.OptionCodec
 import dev.argon.plugin.*
@@ -15,7 +16,7 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
   type ExternFunctionImplementation <: Tuple
   type ExternClassConstructorImplementation <: Tuple
 
-  given optionsHandler: OptionCodecTable[R, E, Options]
+  given optionsHandler: OptionMapCodec[R, E, Options]
 
   def getPlugin(name: String): Option[Plugin[R, E]] =
     getPluginHelper(name).map { _.plugin }
@@ -70,7 +71,7 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
       override type Error = E
 
       override type Options = BuildContextFactory.this.Options
-      override def optionsCodec: OptionCodec[Env, Error, Options] = optionsHandler
+      override def optionsCodec: OptionCodec[Env, Error, Options] = optionsHandler.toCodec
 
       override type ExternMethodImplementation = BuildContextFactory.this.ExternMethodImplementation
       override type ExternFunctionImplementation = BuildContextFactory.this.ExternFunctionImplementation
@@ -91,6 +92,8 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
       tubes <- TMap.empty[TubeName, ArTubeC & HasContext[ctx.type]].commit
     yield new TubeImporter with LoadTube {
       override val context: ctx.type = ctx
+      import context.given
+
       override def getTube(tubeName: TubeName): Comp[ArTube] =
         tubes.get(tubeName).commit
           .some
@@ -102,7 +105,7 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
           loader <- ZIO.fromEither(plugin.tubeLoaders[context.Options].get(tubeOptions.loader.name).toRight(UnknownTubeLoader(tubeOptions.loader)))
 
           libOptions <- ZIO.fromEither(
-            loader.libOptionDecoder
+            loader.libOptionCodec
               .decode(resFactory)(tubeOptions.options)
               .left.map(BuildConfigParseError.apply)
           )
@@ -118,8 +121,23 @@ private[build] sealed abstract class BuildContextFactory[R <: CompEnv, E >: Buil
 
 }
 
-private[build] trait OptionCodecTable[R, E, A] extends OptionCodec[R, E, A] {
-  override def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, Toml.Table]
+private[build] trait OptionMapCodec[R, E, A] {
+  def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, Map[String, ESExpr]]
+  def decode(resFactory: ResourceFactory[R, E])(value: ESExpr): Either[String, A]
+
+  def toCodec: OptionCodec[R, E, A] =
+    new OptionCodec[R, E, A] {
+      override lazy val tags: Set[ESExprTag] =
+        summon[ESExprCodec[Dictionary[ESExpr]]].tags
+
+      override def encode(recorder: ResourceRecorder[R, E])(value: A): ZIO[R, E, ESExpr] =
+        OptionMapCodec.this.encode(recorder)(value).map { map =>
+          summon[ESExprCodec[Dictionary[ESExpr]]].encode(Dictionary(map))
+        }
+
+      override def decode(resFactory: ResourceFactory[R, E])(value: ESExpr): Either[String, A] =
+        OptionMapCodec.this.decode(resFactory)(value)
+    }
 }
 
 private[build] object BuildContextFactory {
@@ -144,12 +162,13 @@ private[build] final class BuildContextFactoryNil[R <: CompEnv, E >: BuildError 
   override type ExternFunctionImplementation = EmptyTuple
   override type ExternClassConstructorImplementation = EmptyTuple
 
-  override given optionsHandler: OptionCodecTable[R, E, Options] with
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, Options] =
+  override given optionsHandler: OptionMapCodec[R, E, Options] with
+
+    override def decode(resFactory: ResourceFactory[R, E])(value: ESExpr): Either[String, Options] =
       Right(EmptyTuple)
 
-    override def encode(recorder: ResourceRecorder[R, E])(value: Options): ZIO[R, E, Toml.Table] =
-      ZIO.succeed(Toml.Table.empty)
+    override def encode(recorder: ResourceRecorder[R, E])(value: Options): ZIO[R, E, Map[String, ESExpr]] =
+      ZIO.succeed(Map.empty)
 
   end optionsHandler
 
@@ -174,24 +193,22 @@ private[build] final class BuildContextFactoryCons[R <: CompEnv, E >: BuildError
   override type ExternFunctionImplementation = plugin.ExternFunctionImplementation *: rest.ExternFunctionImplementation
   override type ExternClassConstructorImplementation = plugin.ExternClassConstructorImplementation *: rest.ExternClassConstructorImplementation
 
-  override given optionsHandler: OptionCodecTable[R, E, Options] with
-    override def decode(resFactory: ResourceFactory[R, E])(value: Toml): Either[String, Options] =
-      val pluginOptToml = value match {
-        case Toml.Table(map) => map.get(pluginName).getOrElse(Toml.Table.empty)
-        case _ => Toml.Table.empty
-      }
+  override given optionsHandler: OptionMapCodec[R, E, Options] with
+    override def decode(resFactory: ResourceFactory[R, E])(value: ESExpr): Either[String, Options] =
       for
-        pluginOpt <- plugin.optionCodec.decode(resFactory)(pluginOptToml)
+        pluginOptMap <- summon[ESExprCodec[Dictionary[ESExpr]]].decode(value)
+        pluginOptExpr <- pluginOptMap.dict.get(pluginName).toRight("Missing plugin options")
+        pluginOpt <- plugin.optionCodec.decode(resFactory)(pluginOptExpr)
         tailOpt <- rest.optionsHandler.decode(resFactory)(value)
       yield pluginOpt *: tailOpt
     end decode
 
-    override def encode(recorder: ResourceRecorder[R, E])(value: plugin.Options *: rest.Options): ZIO[R, E, Toml.Table] =
+    override def encode(recorder: ResourceRecorder[R, E])(value: plugin.Options *: rest.Options): ZIO[R, E, Map[String, ESExpr]] =
       val (head *: tail) = value
       for
-        headToml <- plugin.optionCodec.encode(recorder)(head)
-        tailToml <- rest.optionsHandler.encode(recorder)(tail)
-      yield tailToml
+        headExpr <- plugin.optionCodec.encode(recorder)(head)
+        tailExpr <- rest.optionsHandler.encode(recorder)(tail)
+      yield tailExpr.updated(pluginName, headExpr)
     end encode
   end optionsHandler
 

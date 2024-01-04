@@ -28,11 +28,11 @@ abstract class ArMethodC extends Definition with UsingContext derives CanEqual {
   def instanceVariableName: Option[IdentifierExpr]
 
   type ImplementationType = IsImplementation match {
-    case true => Comp[MethodImplementation]
-    case false => Comp[Option[MethodImplementation]]
+    case true => MethodImplementation
+    case false => Option[MethodImplementation]
   }
 
-  def implementation: ImplementationType
+  def implementation: Comp[ImplementationType]
   def maybeImplementation: Comp[Option[MethodImplementation]]
 
   def validate: Comp[Unit]

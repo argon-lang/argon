@@ -6,8 +6,7 @@ import dev.argon.compiler.tube.ArTubeC
 import dev.argon.util.UniqueIdentifier
 import dev.argon.compiler.signature.Signature
 
-abstract class 
-ClassConstructorC extends Definition with UsingContext derives CanEqual {
+abstract class ClassConstructorC extends Definition with UsingContext derives CanEqual {
   import context.ExprContext.*
 
   val id: UniqueIdentifier
@@ -18,11 +17,11 @@ ClassConstructorC extends Definition with UsingContext derives CanEqual {
   val owner: ClassConstructorC.Ownership[context.type, IsImplementation]
 
   type ImplementationType = IsImplementation match {
-    case true => Comp[ClassConstructorImplementation]
-    case false => Comp[Option[ClassConstructorImplementation]]
+    case true => ClassConstructorImplementation
+    case false => Option[ClassConstructorImplementation]
   }
 
-  def implementation: ImplementationType
+  def implementation: Comp[ImplementationType]
 
   final override def equals(obj: Any): Boolean =
     obj.asInstanceOf[Matchable] match {

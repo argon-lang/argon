@@ -1,9 +1,15 @@
 import sbtcrossproject.CrossPlugin.autoImport.{CrossType, crossProject}
 import org.scalajs.jsenv.nodejs.NodeJSEnv
-import NodePlatformImplicits._
+import NodePlatformImplicits.*
+import org.apache.commons.lang3.StringUtils
+import org.apache.commons.io.FilenameUtils
 
-val graalVersion = "23.0.1"
-val zioVersion = "2.0.15"
+import java.io.File
+import java.nio.charset.StandardCharsets
+import scala.sys.process.Process
+
+val graalVersion = "23.1.0"
+val zioVersion = "2.0.17"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -11,7 +17,7 @@ lazy val envValues = Map(
 )
 
 lazy val commonSettingsNoLibs = Seq(
-  scalaVersion := "3.3.0",
+  scalaVersion := "3.3.1",
 )
 
 lazy val commonSettings = commonSettingsNoLibs ++ Seq(
@@ -21,32 +27,17 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio" % zioVersion,
     "dev.zio" %%% "zio-streams" % zioVersion,
 
-    "dev.zio" %% "zio-direct" % "1.0.0-RC7", // Compile time only dependency
-
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.zio" %%% "zio-json" % "0.6.0",
+    "dev.zio" %%% "zio-json" % "0.6.2",
     "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.3",
 
     "org.scala-lang.modules" %%% "scala-xml" % "2.2.0",
-    "org.gnieh" %%% "fs2-data-xml-scala" % "1.8.0",
+    "org.gnieh" %%% "fs2-data-xml-scala" % "1.8.1",
     "dev.zio" %%% "zio-interop-cats" % "23.0.0.8",
-
-    "com.thesamet.scalapb" %%% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
-    "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion % "protobuf",
   ),
 
-)
-
-lazy val npmDeps = Seq(
-  "jszip" -> "^3.10.1",
-  "acorn" -> "^8.8.2",
-  "astring" -> "1.8.4",
-)
-
-lazy val npmDevDeps = Seq(
-  "typescript" -> "^4.8.4",
 )
 
 lazy val sharedJSNodeSettings = Seq(
@@ -55,8 +46,11 @@ lazy val sharedJSNodeSettings = Seq(
     "io.github.cquiroz" %%% "scala-java-time" % "2.5.0",
   ),
 
-  npmDependencies ++= npmDeps,
-  npmDevDependencies ++= npmDevDeps,
+  npmDependencies ++= Seq(
+    "jszip" -> "3.10.1",
+    "acorn" -> "8.10.0",
+    "astring" -> "1.8.6",
+  ),
   
   scalaJSLinkerConfig ~= {
     _
@@ -64,62 +58,46 @@ lazy val sharedJSNodeSettings = Seq(
       .withBatchMode(true)
   },
 
-  externalNpm := {
-    (Compile / npmInstall).value
-    crossTarget.value
-  },
-
-  stIncludeDev := true,
-  stUseScalaJsDom := false,
-
   fork := false,
 
 )
 
 lazy val graalDependencies = Seq(
-  "org.graalvm.sdk" % "graal-sdk" % graalVersion,
-  "org.graalvm.js" % "js" % graalVersion,
-  "org.graalvm.js" % "js-scriptengine" % graalVersion,
-  "org.graalvm.tools" % "profiler" % graalVersion,
-  "org.graalvm.tools" % "chromeinspector" % graalVersion,
-)
-
-lazy val protobufJavaDependencies = Seq(
-  "com.google.protobuf" % "protobuf-java" % "3.24.1",
-  "com.google.protobuf" % "protobuf-java" % "3.24.1" % "protobuf",
+  "org.graalvm.polyglot" % "polyglot" % graalVersion,
+  "org.graalvm.polyglot" % "js" % graalVersion,
+  "org.graalvm.polyglot" % "wasm" % graalVersion,
 )
 
 lazy val annotationDependencies = Seq(
   "org.jetbrains" % "annotations" % "24.0.1",
 )
 
-lazy val commonsCompressDependencies = Seq(
-  "org.apache.commons" % "commons-compress" % "1.23.0",
-)
-
 lazy val commonJVMSettings = Seq(
 
-  libraryDependencies ++= commonsCompressDependencies ++ Seq(
+  libraryDependencies ++= annotationDependencies ++ Seq(
     "commons-io" % "commons-io" % "2.13.0",
     "org.apache.commons" % "commons-lang3" % "3.13.0",
     "org.apache.commons" % "commons-text" % "1.10.0",
+    "org.apache.commons" % "commons-compress" % "1.24.0",
     "dev.zio" %% "zio-logging" % "2.1.14",
+    "net.aichler" % "jupiter-interface" % JupiterKeys.jupiterVersion.value % Test,
   ),
 
-  Test / fork := true,
+  fork := true,
   Test / envVars ++= envValues,
 
 )
 
 lazy val commonBrowserSettings = sharedJSNodeSettings
 
+lazy val nodeEnvConfig =
+  NodeJSEnv.Config()
+    .withEnv(envValues)
+    .withArgs(List("--no-warnings", "--experimental-vm-modules"))
+
 lazy val commonNodeSettings = sharedJSNodeSettings ++ Seq(
 
-  jsEnv := new NodeJSEnv(
-    NodeJSEnv.Config()
-      .withEnv(envValues)
-      .withArgs(List("--no-warnings", "--experimental-vm-modules"))
-  ),
+  jsEnv := new NodeJSEnv(nodeEnvConfig),
 
   npmDevDependencies ++= Seq(
     "@types/node" -> "18.8.1",
@@ -129,8 +107,7 @@ lazy val commonNodeSettings = sharedJSNodeSettings ++ Seq(
 lazy val javaCompilerOptions = Seq(
   javacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "--release", "20",
-    "--enable-preview",
+    "--release", "21",
 //    "-Werror",
     "-Xlint:all,-serial,-try,-processing",
   ),
@@ -143,7 +120,7 @@ lazy val compilerOptions = javaCompilerOptions ++ Seq(
 
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "-release", "20",
+    "-release", "21",
     "-source", "future",
     "-language:higherKinds",
     "-language:existentials",
@@ -160,67 +137,69 @@ lazy val compilerOptions = javaCompilerOptions ++ Seq(
 
 )
 
+def escapeESExprString(s: String): String =
+  s.replace("\\", "\\\\").replace("\"", "\\\"")
 
-lazy val esexpr_java = project.in(file("esexpr/java"))
-  .settings(
-    javaOnlyOptions,
+def generateESExprTask(config: File => String): Def.Initialize[_root_.sbt.Task[Seq[File]]] =
+  Def.task {
+    val s = streams.value
+    val baseDir = baseDirectory.value
+    val managedDir = sourceManaged.value
 
-    libraryDependencies ++= annotationDependencies,
+    val javaArgs = javaOptions.value
+    val generatorCP = (esexpr_generator / Compile / fullClasspath).value.map(_.data.toString).mkString(File.pathSeparator)
 
-    autoScalaLibrary := false,
-    Test / fork := true,
+    val genRunner = (Compile / runner).value
 
-    name := "esexpr-java",
-  )
+    IO.withTemporaryFile("generator-", ".esx") { configFile =>
+      IO.write(configFile, config(baseDir), StandardCharsets.UTF_8)
 
-lazy val esexpr_sjs = crossProject(JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("esexpr/scalajs"))
-  .dependsOn(util)
+      val f = FileFunction.cached(s.cacheDirectory / "generate-esx") { (in: Set[File]) =>
+        val outDir = managedDir / "generate-esx"
+        IO.createDirectory(outDir)
+
+        s.log.info(s"Generating sources from ESExpr schema in ${outDir}")
+
+        IO.createDirectory(outDir)
+        val exitCode = Process(Seq("java") ++ javaArgs ++ Seq("-cp", generatorCP, "dev.argon.esexpr.generator.Generator", configFile.getAbsolutePath, outDir.getAbsolutePath)).!(s.log)
+        if (exitCode != 0) {
+          throw new Exception(s"ESExpr Generator failed with exit code ${exitCode}")
+        }
+
+        outDir.allPaths.filter(_.isFile).get().toSet
+      }
+
+      val inputFilesJson = Process(Seq("java") ++ javaArgs ++ Seq("-cp", generatorCP, "dev.argon.esexpr.generator.GeneratorInputs", configFile.getAbsolutePath)).!!(s.log)
+
+      f(implicitly[_root_.io.circe.Decoder[Seq[String]]].decodeJson(_root_.io.circe.parser.parse(inputFilesJson).right.get).right.get.map(new File(_)).toSet).toSeq
+    }
+  }
+
+
+lazy val esexpr = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("esexpr"))
+  .dependsOn(util, grammar)
+  .jvmConfigure(_.settings(commonJVMSettings))
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
     compilerOptions,
 
-    name := "esexpr-scalajs",
+    name := "esexpr",
   )
 
-lazy val esexpr_sjsJS = esexpr_sjs.js
-lazy val esexpr_sjsNode = esexpr_sjs.node
+lazy val esexprJVM = esexpr.jvm
+lazy val esexprJS = esexpr.js
+lazy val esexprNode = esexpr.node
 
-lazy val esexpr_scala = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("esexpr/scala"))
-  .dependsOn(util)
-  .jvmConfigure(
-    _.dependsOn(esexpr_java).settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.dependsOn(esexpr_sjsJS)
-      .enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.dependsOn(esexpr_sjsNode)
-      .enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "esexpr-scala",
-  )
-
-lazy val esexpr_scalaJVM = esexpr_scala.jvm
-lazy val esexpr_scalaJS = esexpr_scala.js
-lazy val esexpr_scalaNode = esexpr_scala.node
-
-lazy val esexpr_generator = project.in(file("esexpr/generator"))
-  .dependsOn(esexpr_scalaJVM)
+lazy val esexpr_generator = project.in(file("esexpr-generator"))
+  .dependsOn(esexprJVM)
   .settings(
     commonJVMSettings,
     commonSettings,
@@ -235,11 +214,11 @@ lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -260,11 +239,11 @@ lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -285,11 +264,11 @@ lazy val parser_data = crossProject(JVMPlatform, JSPlatform, NodePlatform).cross
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -309,11 +288,11 @@ lazy val util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("arg
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -329,16 +308,16 @@ lazy val utilNode = util.node
 
 
 lazy val options = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-options"))
-  .dependsOn(util, argon_io)
+  .dependsOn(util, argon_io, esexpr)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -359,11 +338,11 @@ lazy val argon_prover = crossProject(JVMPlatform, JSPlatform, NodePlatform).cros
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -384,11 +363,11 @@ lazy val argon_prover_prolog = crossProject(JVMPlatform, JSPlatform, NodePlatfor
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -409,11 +388,11 @@ lazy val argon_prover_smt = crossProject(JVMPlatform, JSPlatform, NodePlatform).
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -434,11 +413,11 @@ lazy val argon_expr = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossT
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -459,11 +438,11 @@ lazy val argon_compiler_core = crossProject(JVMPlatform, JSPlatform, NodePlatfor
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -478,101 +457,35 @@ lazy val argon_compiler_coreJS = argon_compiler_core.js
 lazy val argon_compiler_coreNode = argon_compiler_core.node
 
 
-lazy val argon_util_protobuf = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-util-protobuf"))
-  .dependsOn(util)
-  .jvmConfigure(
-    _.settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    libraryDependencies += "com.thesamet.scalapb" %% "scalapb-runtime" % scalapb.compiler.Version.scalapbVersion,
-
-    name := "argon-util-protobuf",
-  )
-
-lazy val argon_util_protobufJVM = argon_util_protobuf.jvm
-lazy val argon_util_protobufJS = argon_util_protobuf.js
-lazy val argon_util_protobufNode = argon_util_protobuf.node
-
-
-lazy val argon_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-tube"))
-  .dependsOn(util, argon_util_protobuf)
-  .jvmConfigure(
-    _.dependsOn(argon_plugin_java_api).settings(commonJVMSettings)
-      .settings(
-        Compile / PB.targets := Seq(
-          scalapb.gen(javaConversions=true) -> (Compile / sourceManaged).value / "scalapb"
-        ),
-      )
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonBrowserSettings)
-      .settings(
-        Compile / PB.targets := Seq(
-          scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
-        ),
-      )
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonNodeSettings)
-      .settings(
-        Compile / PB.targets := Seq(
-          scalapb.gen() -> (Compile / sourceManaged).value / "scalapb"
-        ),
-      )
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    scalacOptions := scalacOptions.value.filterNot(Seq(
-      "-source",
-      "future",
-      "-language:strictEquality",
-      "-Yexplicit-nulls",
-    ).contains),
-
-    Compile / PB.protoSources += (Compile / baseDirectory).value.getParentFile / "src/main/protobuf",
-    Compile / PB.protoSources += (Compile / baseDirectory).value.getParentFile.getParentFile / "plugin/api/protobuf",
-
-    name := "argon-tube",
-  )
-
-lazy val argon_tubeJVM = argon_tube.jvm
-lazy val argon_tubeJS = argon_tube.js
-lazy val argon_tubeNode = argon_tube.node
-
 
 lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugin"))
-  .dependsOn(util, argon_tube, argon_compiler_core)
+  .dependsOn(util, argon_compiler_core, esexpr)
   .jvmConfigure(
     _.settings(
         commonJVMSettings,
       )
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
     compilerOptions,
+
+    Compile / sourceGenerators += generateESExprTask(dir =>
+      s"""
+        (scala
+           esx-file: "${escapeESExprString((dir / "../../plugin/api/esx/tube.esx").getAbsolutePath)}"
+           out-file: "api_tube.scala"
+           package-name: "dev.argon.plugin.tube"
+        )
+        """
+    ),
 
     name := "argon-plugin",
   )
@@ -582,63 +495,6 @@ lazy val argon_pluginJS = argon_plugin.js
 lazy val argon_pluginNode = argon_plugin.node
 
 
-lazy val argon_test_util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-test-util"))
-  .dependsOn(util, argon_io)
-  .jvmConfigure(
-    _.settings(
-        commonJVMSettings,
-      )
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-    
-    libraryDependencies += "dev.zio" %%% "zio-test" % zioVersion,
-
-    name := "argon-test-util",
-  )
-
-lazy val argon_test_utilJVM = argon_test_util.jvm
-lazy val argon_test_utilJS = argon_test_util.js
-lazy val argon_test_utilNode = argon_test_util.node
-
-
-lazy val argon_plugin_test_util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-test-util"))
-  .dependsOn(argon_test_util, argon_plugin, argon_plugins_source)
-  .jvmConfigure(
-    _.settings(
-      commonJVMSettings,
-    )
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    libraryDependencies += "dev.zio" %%% "zio-test" % zioVersion,
-
-    name := "argon-plugin-test-util",
-  )
-
-lazy val argon_plugin_test_utilJVM = argon_plugin_test_util.jvm
-lazy val argon_plugin_test_utilJS = argon_plugin_test_util.js
-lazy val argon_plugin_test_utilNode = argon_plugin_test_util.node
-
 
 lazy val argon_plugins_source = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugins-source"))
   .dependsOn(argon_compiler_core, parser, argon_plugin)
@@ -646,11 +502,11 @@ lazy val argon_plugins_source = crossProject(JVMPlatform, JSPlatform, NodePlatfo
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -664,207 +520,38 @@ lazy val argon_plugins_sourceJVM = argon_plugins_source.jvm
 lazy val argon_plugins_sourceJS = argon_plugins_source.js
 lazy val argon_plugins_sourceNode = argon_plugins_source.node
 
-
-lazy val argon_plugins_tube = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugins-tube"))
-  .dependsOn(argon_compiler_core, argon_tube, argon_plugin)
+lazy val argon_plugin_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-platform"))
+  .dependsOn(argon_plugin, argon_plugins_source)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
     commonSettings,
     compilerOptions,
 
-    name := "argon-plugins-tube",
+    name := "argon-plugin-platform",
   )
-
-lazy val argon_plugins_tubeJVM = argon_plugins_tube.jvm
-lazy val argon_plugins_tubeJS = argon_plugins_tube.js
-lazy val argon_plugins_tubeNode = argon_plugins_tube.node
-
-
-lazy val argon_plugin_java_api = project.in(file("plugin/api/java"))
-  .settings(
-    commonSettingsNoLibs,
-    compilerOptions,
-
-    libraryDependencies ++= protobufJavaDependencies ++ annotationDependencies,
-
-    Compile / PB.targets := Seq(
-      PB.gens.java -> (Compile / sourceManaged).value / "protobuf",
-    ),
-
-    Compile / PB.protoSources += (Compile / baseDirectory).value.getParentFile / "protobuf",
-
-    autoScalaLibrary := false,
-    fork := true,
-
-    name := "argon-plugin-java-api",
-  )
-
-
-lazy val argon_plugin_java_sourcegen = project.in(file("plugin/util/java/java-sourcegen"))
-  .settings(
-    commonSettingsNoLibs,
-    compilerOptions,
-
-    libraryDependencies += "org.apache.commons" % "commons-text" % "1.10.0",
-
-    autoScalaLibrary := false,
-    fork := true,
-
-    name := "argon-plugin-java-sourcegen",
-  )
-
-lazy val argon_plugin_js_api = crossProject(JSPlatform, NodePlatform).in(file("argon-plugin-js-api"))
-  .dependsOn(argon_plugin)
-  .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-plugin-js-api",
-  )
-
-lazy val argon_plugin_js_apiJS = argon_plugin_js_api.js
-lazy val argon_plugin_js_apiNode = argon_plugin_js_api.node
-
-
-
-lazy val argon_plugin_java_run_js = project.in(file("plugin/adapter/java-run-js"))
-  .dependsOn(argon_plugin_java_api)
-  .settings(
-    commonSettingsNoLibs,
-    compilerOptions,
-
-    libraryDependencies ++= graalDependencies ++ protobufJavaDependencies ++ annotationDependencies,
-
-    autoScalaLibrary := false,
-    fork := true,
-
-    name := "argon-plugin-java-api",
-  )
-
-
-
-lazy val argon_plugin_loader = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-loader"))
-  .dependsOn(argon_plugin)
-  .jvmConfigure(
-    _.dependsOn(argon_plugin_java_api)
-      .settings(commonJVMSettings)
-      .settings(
-        libraryDependencies ++= graalDependencies,
-      )
-  )
-  .jsConfigure(
-    _.dependsOn(argon_plugin_js_apiJS)
-      .enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonBrowserSettings)
-      .settings(
-        npmDependencies += "@argon-lang/plugin-api" -> "file:../../../../plugin/api/js",
-      )
-  )
-  .nodeConfigure(
-    _.dependsOn(argon_plugin_js_apiNode)
-      .enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonNodeSettings)
-      .settings(
-        npmDependencies += "@argon-lang/plugin-api" -> "file:../../../../plugin/api/js",
-      )
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-plugin-loader",
-  )
-
-lazy val argon_plugin_loaderJVM = argon_plugin_loader.jvm
-lazy val argon_plugin_loaderJS = argon_plugin_loader.js
-lazy val argon_plugin_loaderNode = argon_plugin_loader.node
-
-lazy val argon_plugins_js = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugins-js"))
-  .dependsOn(util, argon_tube, argon_plugin, argon_plugin_test_util % "test->compile")
-  .jvmConfigure(
-    _.settings(
-        commonJVMSettings,
-
-        libraryDependencies ++= graalDependencies,
-
-        Compile / resourceGenerators += Def.task {
-          val resourceDir = (Compile / resourceManaged).value
-          val targetDir = crossTarget.value
-
-          NpmUtil.npmInstallCommon(
-            name = name.value,
-            packageLock = baseDirectory.value / "package-lock.json",
-            dir = targetDir,
-            linkerConfig = org.scalajs.linker.interface.StandardConfig()
-              .withModuleKind(ModuleKind.CommonJSModule),
-
-            npmDependencies = npmDeps,
-            npmDevDependencies = Seq.empty,
-          )
-
-
-          val dir = resourceDir / "dev" / "argon" / "plugins" / "js"
-          IO.createDirectory(dir)
-
-          val astringFile = dir / "astring.mjs"
-          IO.copyFile(targetDir / "node_modules" / "astring" / "dist" / "astring.mjs", astringFile)
-
-          val acornFile = dir / "acorn.mjs"
-          IO.copyFile(targetDir / "node_modules" / "acorn" / "dist" / "acorn.mjs", acornFile)
-
-          Seq(astringFile, acornFile)
-        }.taskValue
-      )
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-plugins-js",
-  )
-
-lazy val argon_plugins_jsJVM = argon_plugins_js.jvm
-lazy val argon_plugins_jsJS = argon_plugins_js.js
-lazy val argon_plugins_jsNode = argon_plugins_js.node
 
 
 lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-io"))
-  .dependsOn(util)
+  .dependsOn(util, esexpr)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -885,11 +572,11 @@ lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).cross
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -905,16 +592,15 @@ lazy val argon_buildNode = argon_build.node
 
 
 lazy val argon_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-platform"))
-  .dependsOn(util, options, argon_compiler_core, argon_io, argon_build, argon_plugins_source, argon_plugins_js)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
   .jsConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
   )
   .settings(
@@ -931,7 +617,7 @@ lazy val argon_platformNode = argon_platform.node
 
 
 lazy val cli = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-cli"))
-  .dependsOn(util, argon_platform, argon_build)
+  .dependsOn(util, argon_platform, argon_build, argon_plugin_platform)
   .jvmConfigure(
     _.settings(commonJVMSettings)
       .settings(
@@ -939,7 +625,7 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Pure)
       )
   )
   .nodeConfigure(
-    _.enablePlugins(NpmUtil, ScalablyTypedConverterExternalNpmPlugin)
+    _.enablePlugins(NpmUtil)
       .settings(commonNodeSettings)
       .settings(
         scalaJSUseMainModuleInitializer := true,

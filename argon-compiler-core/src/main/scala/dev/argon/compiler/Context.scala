@@ -26,8 +26,13 @@ trait Context {
   given optionsCodec: OptionCodec[Env, Error, Options]
 
   type ExternMethodImplementation
+  type MethodReference
+  
   type ExternFunctionImplementation
+  type FunctionReference
+  
   type ExternClassConstructorImplementation
+  type ClassConstructorReference
 
 
   def getExternMethodImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternMethodImplementation]

@@ -20,11 +20,11 @@ abstract class ArFuncC extends Definition with UsingContext derives CanEqual {
   def isInline: Boolean
 
   type ImplementationType = IsImplementation match {
-    case true => Comp[FunctionImplementation]
-    case false => Comp[Option[FunctionImplementation]]
+    case true => FunctionImplementation
+    case false => Option[FunctionImplementation]
   }
 
-  def implementation: ImplementationType
+  def implementation: Comp[ImplementationType]
   def maybeImplementation: Comp[Option[FunctionImplementation]]
 
   def validate: Comp[Unit]

@@ -18,6 +18,11 @@ given canEqualNullNullable[A]: CanEqual[Null, A | Null] = CanEqual.derived
 
 given canEqualNullableNullable[A, B](using CanEqual[A, B]): CanEqual[A | Null, B | Null] = CanEqual.derived
 
+
+given [E <: Enum[E]]: CanEqual[E, E] = CanEqual.derived
+
+
+
 @unused
 private def dummy(): Unit =
   summon[NotGiven[CanEqual[Option[String], String]]]

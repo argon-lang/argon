@@ -14,7 +14,7 @@ object TextResource:
     override def asBytes: ZStream[R, E, Byte] = ZPipeline.utf8Encode.apply(asText)
   end Impl
 
-  given BinaryResourceDecoder[TextResource, Any, CharacterCodingException] with
+  given resourceDecoder: BinaryResourceDecoder[TextResource, Any, CharacterCodingException] with
     def decode[R <: Any, E >: CharacterCodingException](resource: BinaryResource[R, E]): TextResource[R, E] =
       resource match {
         case resource: TextResource[R, E] => resource
@@ -26,7 +26,7 @@ object TextResource:
             resource.fileName
         }
       }
-  end given
+  end resourceDecoder
 
   def fromString(str: String): TextResource[Any, CharacterCodingException] =
     new TextResource[Any, CharacterCodingException] with Impl[Any, CharacterCodingException] {

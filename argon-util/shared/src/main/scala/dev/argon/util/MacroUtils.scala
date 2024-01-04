@@ -30,4 +30,193 @@ object MacroUtils {
       case _ => throw new Exception(s"Unexpected type for tuple: ${Type.show[T]}")
     }
   end tupleForeach
+
+  inline def typeHasAnn[T, Ann]: Boolean =
+    ${ typeHasAnnMacro[T, Ann] }
+
+  private def typeHasAnnMacro[T: Type, Ann: Type](using q: Quotes): Expr[Boolean] =
+    import q.reflect.{*, given}
+
+    val tRep = TypeRepr.of[T]
+    val t = tRep match {
+      case tRep: TermRef => tRep.termSymbol
+      case _ => tRep.typeSymbol
+    }
+
+    val res = t.hasAnnotation(TypeRepr.of[Ann].typeSymbol)
+
+    Expr(res)
+  end typeHasAnnMacro
+
+  inline def typeGetAnn[T, Ann]: Ann =
+    ${ typeGetAnnMacro[T, Ann] }
+
+  private def typeGetAnnMacro[T: Type, Ann: Type](using q: Quotes): Expr[Ann] =
+    import q.reflect.{*, given}
+
+    val tRep = TypeRepr.of[T]
+    val t = tRep match {
+      case tRep: TermRef => tRep.termSymbol
+      case _ => tRep.typeSymbol
+    }
+
+    val res = t.getAnnotation(TypeRepr.of[Ann].typeSymbol).getOrElse {
+      throw new Exception(s"Could not find annotation of type $tRep")
+    }
+
+    res.asExprOf[Ann]
+  end typeGetAnnMacro
+
+
+  inline def typeHasVarArgs[T]: Boolean =
+    ${ typeHasVarArgsMacro[T] }
+
+  private def asMatchable[A](a: A): A & Matchable =
+    a.asInstanceOf[A & Matchable]
+
+  private def typeHasVarArgsMacro[T: Type](using q: Quotes): Expr[Boolean] =
+    import q.reflect.{*, given}
+
+    val tRep = TypeRepr.of[T]
+    val t = tRep.typeSymbol
+
+    val res = t
+      .caseFields
+      .lastOption
+      .map(tRep.memberType)
+      .map[TypeRepr & Matchable](asMatchable)
+      .collect {
+        case AnnotatedType(_, Apply(Select(New(t), "<init>"), List())) => t
+      }
+      .map[TypeRepr & Matchable] { t => asMatchable(t.tpe) }
+      .collect {
+        case TypeRef(t, "Repeated") => t
+      }
+      .map[TypeRepr & Matchable](asMatchable)
+      .collect {
+        case ThisType(t) => t
+      }
+      .map[TypeRepr & Matchable](asMatchable)
+      .collect {
+        case TypeRef(t, "internal") => t
+      }
+      .map[TypeRepr & Matchable](asMatchable)
+      .collect {
+        case NoPrefix() =>
+      }
+      .isDefined
+
+    Expr(res)
+  end typeHasVarArgsMacro
+
+
+  inline def caseFieldHasAnn[T, Ann](fieldName: String): Boolean =
+    ${ caseFieldHasAnnMacro[T, Ann]('fieldName) }
+
+  private def caseFieldHasAnnMacro[T: Type, Ann: Type](fieldName: Expr[String])(using q: Quotes): Expr[Boolean] =
+    import q.reflect.{*, given}
+
+    val fieldNameStr = fieldName.valueOrAbort
+
+    val tRep = TypeRepr.of[T]
+    val t = tRep.typeSymbol
+
+    val res = t.primaryConstructor
+      .paramSymss
+      .flatten
+      .exists { param =>
+        param.name == fieldNameStr &&
+          param.hasAnnotation(TypeRepr.of[Ann].typeSymbol)
+      }
+
+    Expr(res)
+  end caseFieldHasAnnMacro
+
+
+  inline def caseFieldGetAnn[T, Ann](fieldName: String): Ann =
+    ${ caseFieldGetAnnMacro[T, Ann]('fieldName) }
+
+  private def caseFieldGetAnnMacro[T: Type, Ann: Type](fieldName: Expr[String])(using q: Quotes): Expr[Ann] =
+    import q.reflect.{*, given}
+
+    val fieldNameStr = fieldName.valueOrAbort
+
+    val tRep = TypeRepr.of[T]
+    val t = tRep.typeSymbol
+
+    val res = t.primaryConstructor
+      .paramSymss
+      .flatten
+      .filter(param => param.name == fieldNameStr)
+      .flatMap(param => param.getAnnotation(TypeRepr.of[Ann].typeSymbol))
+      .headOption
+      .getOrElse(throw new Exception("Could not find annotation"))
+
+    res.asExprOf[Ann]
+  end caseFieldGetAnnMacro
+
+
+  inline def caseFieldHasDefaultValue[T, A](fieldName: String): Boolean =
+    ${ caseFieldHasDefaultValueMacro[T, A]('fieldName) }
+
+  private def caseFieldHasDefaultValueMacro[T: Type, A: Type](fieldName: Expr[String])(using q: Quotes): Expr[Boolean] =
+    import q.reflect.{*, given}
+
+    val fieldNameStr = fieldName.valueOrAbort
+
+
+    val tRep = TypeRepr.of[T]
+    val t = tRep.typeSymbol
+    val compClass = t.companionClass
+
+    val index = t.caseFields.indexWhere(_.name == fieldNameStr)
+
+    val res = compClass.tree match {
+      case ClassDef(_, _, _, _, body) =>
+        body
+          .exists {
+            case dd: DefDef =>
+              dd.name == "$lessinit$greater$default$" + (index + 1)
+            case _ => false
+          }
+
+      case _ => false
+    }
+
+    Expr(res)
+  end caseFieldHasDefaultValueMacro
+
+  inline def caseFieldDefaultValue[T, A](fieldName: String): A =
+    ${ caseFieldDefaultValueMacro[T, A]('fieldName) }
+
+  def caseFieldDefaultValueMacro[T: Type, A: Type](fieldName: Expr[String])(using q: Quotes): Expr[A] =
+    import q.reflect.{*, given}
+
+    val fieldNameStr = fieldName.valueOrAbort
+
+    val tRep = TypeRepr.of[T]
+    val t = tRep.typeSymbol
+    val compClass = t.companionClass
+    val compMod = Ref(t.companionModule)
+
+    val index = t.caseFields.indexWhere(_.name == fieldNameStr)
+
+    val defaultValue = compClass.tree match {
+      case ClassDef(_, _, _, _, body) =>
+        body
+          .collectFirst {
+            case dd: DefDef if dd.name == "$lessinit$greater$default$" + (index + 1) =>
+              compMod.select(dd.symbol)
+          }
+          .getOrElse {
+            throw new Exception("Could not find default case field value")
+          }
+
+      case _ => throw new Exception("Could not find default case field value")
+    }
+
+    defaultValue.asExprOf[A]
+  end caseFieldDefaultValueMacro
+
+
 }

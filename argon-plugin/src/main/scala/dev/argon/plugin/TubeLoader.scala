@@ -4,14 +4,14 @@ import dev.argon.compiler.*
 import dev.argon.compiler.tube.{ArTubeC, TubeImporter}
 import dev.argon.util.*
 import dev.argon.io.*
-import dev.argon.options.OptionDecoder
+import dev.argon.options.OptionCodec
 import zio.*
 
 import java.io.IOException
 
 trait TubeLoader[R, E, ContextOptions] {
   type LibOptions
-  given libOptionDecoder(using OptionDecoder[R, E, ContextOptions]): OptionDecoder[R, E, LibOptions]
+  given libOptionCodec(using OptionCodec[R, E, ContextOptions]): OptionCodec[R, E, LibOptions]
 
   def load
   (context: Context { type Env = R; type Error = E; type Options = ContextOptions })

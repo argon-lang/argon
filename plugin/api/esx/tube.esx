@@ -1,0 +1,780 @@
+(constructor "tube-name"
+    (arg "name" (list (string)))
+)
+(constructor "module-path"
+    (arg "path" (list (string)))
+)
+(constructor "module-name"
+    (arg "tube" "tube-name")
+    (arg "path" "module-path")
+)
+
+(type-struct "external-implementation"
+    "method"
+    "method-reference"
+    "function"
+    "function-reference"
+    "class-constructor"
+    "class-constructor-reference"
+)
+
+(type-enum "definition-type"
+    "implementation"
+    "reference"
+)
+
+(interface "tube"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+        (type-parameter "d-t" enum: "definition-type")
+    )
+    (field "name" "tube-name")
+    (field "module-paths" (list "module-path"))
+    (method "module" (list (arg "path" "module-path")) (apply "module" "externs" "d-t"))
+)
+
+(interface "module"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+        (type-parameter "d-t" enum: "definition-type")
+    )
+
+    (field "tube" (apply "tube" "externs" "d-t"))
+    (field "name" "module-name")
+    (method "all-exports" (list) (list (apply "module-element" "externs" "d-t")))
+)
+
+(enum-class "module-element"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+        (type-parameter "d-t" enum: "definition-type")
+    )
+    (enum-case "class"
+        (field "class" (apply "tube-class" "externs" "d-t"))
+    )
+    (enum-case "trait"
+        (field "trait" (apply "tube-trait" "externs" "d-t"))
+    )
+    (enum-case "function"
+        (field "function" (apply "tube-function" "externs" "d-t"))
+    )
+)
+
+(simple-enum "access-modifier-global"
+    "public"
+    "tube-private"
+    "module-private"
+)
+
+(simple-enum "access-modifier"
+    "public"
+    "tube-private"
+    "module-private"
+    "tube-or-protected"
+    "tube-and-protected"
+    "protected"
+    "private"
+)
+
+(simple-enum "operator-name"
+    "assign"
+    "plus"
+    "minus"
+    "mul"
+    "div"
+    "equal"
+    "not-equal"
+    "less-than"
+    "less-than-eq"
+    "greater-than"
+    "greater-than-eq"
+    "bit-not"
+    "bit-or"
+    "bit-xor"
+    "bit-and"
+    "bool-not"
+    "bool-or"
+    "bool-and"
+    "shift-left"
+    "shift-right"
+    "union"
+    "intersection"
+    "concat"
+    "subtype"
+    "prop-equal"
+    "prop-disjunction"
+    "prop-conjunction"
+)
+
+(enum "identifier"
+    (constructor "named" inline: #true
+        (arg "name" (string))
+    )
+    (constructor "operator"
+        (arg "name" "operator-name")
+    )
+    (constructor "extension"
+        (arg "inner" "identifier")
+    )
+    (constructor "inverse"
+        (arg "inner" "identifier")
+    )
+    (constructor "update"
+        (arg "inner" "identifier")
+    )
+    (constructor "function-result-value")
+)
+
+(interface "owned-by-module"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "module" "module-name")
+    (field "owned-name" (nullable "identifier"))
+    (field "access-modifier" "access-modifier-global")
+)
+
+(enum-class "erased-type"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+    (enum-case "class"
+        (field "class" (apply "tube-class-any" "externs"))
+        (field "arguments" (list (apply "erased-type" "externs")))
+    )
+    (enum-case "trait"
+        (field "trait" (apply "tube-trait-any" "externs"))
+        (field "arguments" (list (apply "erased-type" "externs")))
+    )
+    (enum-case "function"
+        (field "input" (apply "erased-type" "externs"))
+        (field "output" (apply "erased-type" "externs"))
+    )
+    (enum-case "tuple"
+        (field "elements" (list (apply "erased-type" "externs")))
+    )
+    (enum-case "erased")
+)
+
+(interface "parameter-info-erased"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+
+    (field "type" (apply "erased-type" "externs"))
+    (field "name" (nullable "identifier"))
+    (field "is-erased" (bool))
+)
+
+(interface "tube-class-any"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "owner" (apply "owned-by-module" "externs"))
+
+    (field "is-abstract" (bool))
+    (field "is-sealed" (bool))
+    (field "is-open" (bool))
+
+    (method "erased-signature" (list) (apply "erased-signature-class" "externs"))
+    (method "methods" (list) (list (apply "tube-method-any" "externs")))
+    (method "static-methods" (list) (list (apply "tube-method-any" "externs")))
+    (method "constructors" (list) (list (apply "tube-class-constructor-any" "externs")))
+    (method "fields" (list) (list (apply "tube-class-field" "externs")))
+    (method "vtable-diff" (list) (apply "vtable" "externs"))
+
+    (method "is-same-class" async: #false
+        (list
+            (arg "other" (apply "tube-class-any" "externs"))
+        )
+        (bool)
+    )
+)
+
+(interface "tube-class"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+        (type-parameter "d-t" enum: "definition-type")
+    )
+
+    extends: (list
+        (apply "tube-class-any" "externs")
+    )
+
+    (method override: #true "methods" (list) (list (apply "tube-method" "externs" "d-t")))
+    (method override: #true "static-methods" (list) (list (apply "tube-method" "externs" "d-t")))
+    (method override: #true "constructors" (list) (list (apply "tube-class-constructor" "externs" "d-t")))
+ )
+
+(interface "base-class"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "class" (apply "tube-class-any" "externs"))
+    (field "class-expr" (apply "expression-resolved" "externs"))
+)
+
+(interface "base-trait"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "trait" (apply "tube-trait-any" "externs"))
+    (field "trait-expr" (apply "expression-resolved" "externs"))
+)
+
+(interface "erased-signature-class"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "parameters" (list (apply "parameter-info-erased" "externs")))
+    (field "base-class" (nullable (apply "base-class" "externs")))
+    (field "base-traits" (list (apply "base-trait" "externs")))
+)
+
+(interface "tube-class-field"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "owner-class" (apply "tube-class-any" "externs"))
+    (field "var-type" (apply "erased-type" "externs"))
+    (field "name" "identifier")
+    (field "isMutable" (bool))
+)
+
+(interface "tube-trait-any"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "owner" (apply "owned-by-module" "externs"))
+
+    (field "is-sealed" (bool))
+
+    (method "erased-signature" (list) (apply "erased-signature-trait" "externs"))
+    (method "methods" (list) (list (apply "tube-method-any" "externs")))
+    (method "static-methods" (list) (list (apply "tube-method-any" "externs")))
+
+    (method "is-same-trait" async: #false
+        (list
+            (arg "other" (apply "tube-trait-any" "externs"))
+        )
+        (bool)
+    )
+)
+
+(interface "tube-trait"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+        (type-parameter "d-t" enum: "definition-type")
+    )
+
+    extends: (list
+        (apply "tube-trait-any" "externs")
+    )
+
+    (method override: #true "methods" (list) (list (apply "tube-method" "externs" "d-t")))
+    (method override: #true "static-methods" (list) (list (apply "tube-method" "externs" "d-t")))
+)
+
+(interface "erased-signature-trait"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "parameters" (list (apply "parameter-info-erased" "externs")))
+    (field "base-traits" (list (apply "base-trait" "externs")))
+)
+
+(enum-class "method-owner"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+    (enum-case "class"
+        (field "class" (apply "tube-class-any" "externs"))
+        (field "access" "access-modifier")
+        (field "ownedName" (nullable "identifier"))
+    )
+    (enum-case "class-static"
+        (field "class" (apply "tube-class-any" "externs"))
+        (field "access" "access-modifier")
+        (field "ownedName" (nullable "identifier"))
+    )
+    (enum-case "trait"
+        (field "trait" (apply "tube-trait-any" "externs"))
+        (field "access" "access-modifier")
+        (field "ownedName" (nullable "identifier"))
+    )
+    (enum-case "trait-static"
+        (field "trait" (apply "tube-trait-any" "externs"))
+        (field "access" "access-modifier")
+        (field "ownedName" (nullable "identifier"))
+    )
+)
+
+(interface "erased-signature-function"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "parameters" (list (apply "parameter-info-erased" "externs")))
+    (field "return-type" (apply "erased-type" "externs"))
+)
+
+(interface "tube-method-any"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "owner" (apply "method-owner" "externs"))
+
+    (field "is-abstract" (bool))
+    (field "is-implicit-override" (bool))
+    (field "is-virtual" (bool))
+    (field "is-final" (bool))
+    (field "is-proof" (bool))
+    (field "is-erased" (bool))
+    (field "is-inline" (bool))
+    (field "purity" (bool))
+
+    (method "erased-signature" (list) (apply "erased-signature-function" "externs"))
+
+    (method "is-same-method" async: #false
+        (list
+            (arg "other" (apply "tube-method-any" "externs"))
+        )
+        (bool)
+    )
+)
+
+(interface "tube-method"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+        (type-parameter "d-t" enum: "definition-type")
+    )
+
+    extends: (list
+        (apply "tube-method-any" "externs")
+    )
+
+    (method "implementation" (list) (type-enum-match "definition-type" "d-t"
+        implementation: (apply "method-implementation" "externs")
+        reference: (nullable (apply "method-implementation" "externs"))
+    ))
+)
+
+(enum-class "method-implementation"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+    (enum-case "abstract")
+    (enum-case "external"
+        (field "impl" (type-struct-member "external-implementation" "externs" "method"))
+    )
+    (enum-case "expression-body"
+        (field "body" (apply "expression-resolved" "externs"))
+    )
+)
+
+(enum-class "method-reference"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+    (enum-case "abstract")
+    (enum-case "reference"
+        (field "reference" (type-struct-member "external-implementation" "externs" "method-reference"))
+    )
+)
+
+(interface "tube-function-any"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "owner" (apply "owned-by-module" "externs"))
+
+    (field "is-proof" (bool))
+    (field "is-erased" (bool))
+    (field "is-inline" (bool))
+    (field "purity" (bool))
+
+    (method "erased-signature" (list) (apply "erased-signature-function" "externs"))
+
+    (method "is-same-function" async: #false
+        (list
+            (arg "other" (apply "tube-function-any" "externs"))
+        )
+        (bool)
+    )
+)
+
+(interface "tube-function"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+        (type-parameter "d-t" enum: "definition-type")
+    )
+
+    extends: (list
+        (apply "tube-function-any" "externs")
+    )
+
+    (method "implementation" (list) (type-enum-match "definition-type" "d-t"
+        implementation: (apply "function-implementation" "externs")
+        reference: (nullable (apply "function-implementation" "externs"))
+    ))
+)
+
+(enum-class "function-implementation"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+    (enum-case "external"
+        (field "impl" (type-struct-member "external-implementation" "externs" "function"))
+    )
+    (enum-case "expression-body"
+        (field "body" (apply "expression-resolved" "externs"))
+    )
+)
+
+(enum-class "function-reference"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+    (enum-case "reference"
+        (field "reference" (type-struct-member "external-implementation" "externs" "function-reference"))
+    )
+)
+
+(interface "tube-class-constructor-any"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "owner" (apply "method-owner" "externs"))
+
+    (field "purity" (bool))
+
+    (method "erased-signature" (list) (apply "erased-signature-class-constructor" "externs"))
+
+    (method "is-same-constructor" async: #false
+        (list
+            (arg "other" (apply "tube-class-constructor-any" "externs"))
+        )
+        (bool)
+    )
+)
+
+(interface "tube-class-constructor"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+        (type-parameter "d-t" enum: "definition-type")
+    )
+
+    extends: (list
+        (apply "tube-class-constructor-any" "externs")
+    )
+    (method "implementation" (list) (type-enum-match "definition-type" "d-t"
+        implementation: (apply "class-constructor-implementation" "externs")
+        reference: (nullable (apply "class-constructor-implementation" "externs"))
+    ))
+)
+
+(enum-class "class-constructor-implementation"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+    (enum-case "external"
+        (field "impl" (type-struct-member "external-implementation" "externs" "class-constructor"))
+    )
+    (enum-case "expression-body"
+        (field "lookups" (apply "bytecode-lookups" "externs"))
+        (field "pre-initialization" (list "pre-initialization-stmt"))
+        (field "base-constructor-call" "base-constructor-call-stmt")
+        (field "post-initialization" "expression")
+    )
+)
+
+(enum-class "class-constructor-reference"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+    (enum-case "reference"
+        (field "reference" (type-struct-member "external-implementation" "externs" "class-constructor-reference"))
+    )
+)
+
+
+(interface "erased-signature-class-constructor"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "parameters" (list (apply "parameter-info-erased" "externs")))
+)
+
+(interface "vtable"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "methods" (list (apply "vtable-entry" "externs")))
+)
+
+
+(interface "vtable-entry"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+    (field "name" (nullable "identifier"))
+    (field "slot-instance-type" (apply "expression-resolved" "externs"))
+    (field "slot-method" (apply "tube-method-any" "externs"))
+    (field "instance-type" (apply "expression-resolved" "externs"))
+    (field "method" (apply "tube-method-any" "externs"))
+)
+
+(interface "bytecode-lookups"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "functions" (list (apply "tube-function-any" "externs")))
+    (field "methods" (list (apply "tube-method-any" "externs")))
+    (field "class-constructors" (list (apply "tube-class-constructor-any" "externs")))
+    (field "classes" (list (apply "tube-class-any" "externs")))
+    (field "traits" (list (apply "tube-trait-any" "externs")))
+)
+
+(interface "expression-resolved"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (field "lookups" (apply "bytecode-lookups" "externs"))
+    (field "expr" "expression")
+)
+
+
+
+
+
+
+
+(constructor "local-variable"
+    (arg "var-type" "expression")
+    (kwarg "name" optional: #true "identifier")
+    (kwarg "is-mutable" (bool))
+    (kwarg "is-erased" (bool))
+)
+
+(simple-enum "parameter-owner-type"
+    "class"
+    "trait"
+    "method"
+    "function"
+    "constructor"
+)
+
+(enum "expression"
+    (constructor "if-else"
+        (arg "cond" "expression")
+        (arg "when-true" "expression")
+        (arg "when-false" "expression")
+        (kwarg "when-true-var" optional: #true "local-variable")
+        (kwarg "when-false-var" optional: #true "local-variable")
+    )
+
+    (constructor "block"
+        (vararg "body" "expression")
+    )
+
+    (constructor "ensuring"
+        (arg "body" "expression")
+        (arg "ensure" "expression")
+    )
+
+    (constructor "bind"
+        (arg "variable" "local-variable")
+        (arg "value" "expression")
+    )
+
+    (constructor "load-local"
+        (arg "r" (int))
+    )
+
+    (constructor "store-local"
+        (arg "r" (int))
+        (arg "value" "expression")
+    )
+
+    (constructor "load-instance-variable"
+        (arg "method" (int))
+    )
+
+    (constructor "load-parameter"
+        (arg "owner-type" "parameter-owner-type")
+        (arg "owner" (int))
+        (arg "index" (int))
+    )
+
+    (constructor "load-field"
+        (arg "class" (int))
+        (arg "name" "identifier")
+    )
+
+    (constructor "store-field"
+        (arg "class" (int))
+        (arg "name" "identifier")
+        (arg "value" "expression")
+    )
+
+    (constructor "load-function-result-variable"
+        (arg "owner-type" "parameter-owner-type")
+        (arg "owner" (int))
+    )
+
+
+    (constructor "literal-string"
+        (arg "s" (string))
+    )
+    (constructor "literal-int"
+        (arg "i" (int))
+    )
+    (constructor "literal-bool"
+        (arg "b" (bool))
+    )
+    (constructor "tuple"
+        (vararg "values" "expression")
+    )
+    (constructor "tuple-get"
+        (arg "t" "expression")
+        (arg "index" (int))
+    )
+
+    (constructor "call-function"
+        (arg "f" (int))
+        (vararg "args" "expression")
+    )
+
+    (constructor "call-function-object"
+        (arg "f" "expression")
+        (arg "a" "expression")
+    )
+
+    (constructor "call-method"
+        (arg "f" (int))
+        (arg "o" "expression")
+        (arg "method-call-owner-type" "expression")
+        (vararg "args" "expression")
+    )
+
+    (constructor "call-constructor"
+        (arg "f" (int))
+        (arg "t" "expression")
+        (kwarg "base-initialize" optional: #true (bool))
+        (vararg "args" "expression")
+    )
+
+    (constructor "lambda"
+        (arg "arg" "local-variable")
+        (arg "body" "expression")
+    )
+
+    (constructor "proving"
+        (arg "value" "expression")
+        (vararg "witnesses" "local-variable")
+    )
+
+    (constructor "raise"
+        (arg "exception" "expression")
+    )
+
+
+
+    (constructor "type-n"
+        (arg "level" "expression")
+    )
+
+    (constructor "omega-type-n"
+        (arg "level" (int))
+    )
+
+    (constructor "trait-type"
+        (arg "trait" (int))
+        (vararg "args" "expression")
+    )
+
+    (constructor "class-type"
+        (arg "class" (int))
+        (vararg "args" "expression")
+    )
+
+    (constructor "function-type"
+        (arg "argument" "expression")
+        (arg "result" "expression")
+    )
+
+    (constructor "union-type"
+        (arg "a" "expression")
+        (arg "b" "expression")
+    )
+
+    (constructor "intersection-type"
+        (arg "a" "expression")
+        (arg "b" "expression")
+    )
+
+    (constructor "existential-type"
+        (arg "variable" "local-variable")
+        (arg "body" "expression")
+    )
+
+    (constructor "conjunction-type"
+        (arg "a" "expression")
+        (arg "b" "expression")
+    )
+
+    (constructor "disjunction-type"
+        (arg "a" "expression")
+        (arg "b" "expression")
+    )
+
+    (constructor "never-type")
+
+    (constructor "subtype-witness-type"
+        (arg "a" "expression")
+        (arg "b" "expression")
+    )
+
+    (constructor "equal-to"
+        (arg "t" "expression")
+        (arg "a" "expression")
+        (arg "b" "expression")
+    )
+
+    (constructor "assume-erased-value")
+
+)
+
+(enum "pre-initialization-stmt"
+    (constructor "init-expression" inline: #true
+        (arg "expr" "expression")
+    )
+
+    (constructor "field-init"
+        (arg "field" "identifier")
+        (arg "value" "expression")
+    )
+)
+
+
+(constructor "base-constructor-call-stmt"
+    (kwarg "base-call" optional: #true "expression")
+    (arg "instance-variable" "local-variable")
+)
+

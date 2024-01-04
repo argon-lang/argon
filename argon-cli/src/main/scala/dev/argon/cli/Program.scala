@@ -1,18 +1,29 @@
 package dev.argon.cli
 
-import dev.argon.io.{BinaryResourceDecoder, JsonResource, ResourceWriter, ResourceReader}
+import dev.argon.io.{BinaryResourceDecoder, ESExprTextResource, PathLike, PathUtil, ResourceReader, ResourceWriter}
 import dev.argon.platform.*
 import dev.argon.util.toml.Toml
 import dev.argon.util.{*, given}
-import dev.argon.build.Compile
+import dev.argon.build.{BuildConfig, BuildError, Compile}
+import dev.argon.compiler.DiagnosticError
+import dev.argon.esexpr.ESExprException
+import dev.argon.parser.SyntaxError
+import dev.argon.plugin
+import dev.argon.plugin.Plugin
+import dev.argon.plugin.tube.InvalidTube
 import zio.*
+import zio.stream.*
 
 import java.io.IOException
 import scopt.{OEffect, OParser}
 
 import java.util.concurrent.TimeUnit
 
-object Program extends PlatformApp {
+object Program extends PlatformApp[PathUtil, InvalidTube | SyntaxError | DiagnosticError | IOException | BuildError | ESExprException] {
+
+  override def appBootstrapLayer: ZLayer[ZIOAppArgs, Error, Environment] =
+    PathUtil.live
+
   def runApp: ZIO[Environment & ZIOAppArgs, Error, ExitCode] =
     val builder = OParser.builder[Options]
     val parser =
@@ -25,7 +36,7 @@ object Program extends PlatformApp {
           .action((_, c) => c.copy(command = Some(Command.Compile)))
           .text("Low-level compile command. See build command for higher level build system.")
           .children(
-            arg[FilePath]("build-spec")
+            arg[PathLike]("build-spec")
               .action((path, c) => c.copy(buildSpec = Some(path)))
               .text("Build spec TOML file")
           ),
@@ -34,7 +45,7 @@ object Program extends PlatformApp {
           .action((_, c) => c.copy(command = Some(Command.Build)))
           .text("Automated build system for Argon")
           .children(
-            arg[FilePath]("build-spec")
+            arg[PathLike]("build-spec")
               .action((path, c) => c.copy(buildSpec = Some(path)))
               .text("Build spec TOML file")
           ),
@@ -86,10 +97,10 @@ object Program extends PlatformApp {
       case Some(Command.Compile) =>
         for
           configRes <- ZIO.serviceWith[PathUtil](_.binaryResource(options.buildSpec.get))
-          config <- summon[BinaryResourceDecoder[JsonResource, Environment, Error]].decode(configRes).decode[Toml]
+          config <- ESExprTextResource.resourceDecoder[BuildConfig].decode(configRes).decoded
           baseDir <- ZIO.serviceWithZIO[PathUtil](_.dirname(options.buildSpec.get))
           layer <- ZIO.serviceWith[PathUtil](_.resourceLayer(baseDir))
-          _ <- Compile.compile(config, plugins).provideSomeLayer[Environment](layer)
+          _ <- Compile.compile(config, plugin.platform.plugins[Environment & ResourceReader & ResourceWriter, Error]).provideSomeLayer[Environment](layer)
         yield ExitCode.success
 
 

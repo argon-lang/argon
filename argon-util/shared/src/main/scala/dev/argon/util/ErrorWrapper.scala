@@ -1,6 +1,7 @@
 package dev.argon.util
 
 import zio.*
+import zio.stream.ZStream
 
 import scala.reflect.TypeTest
 
@@ -21,5 +22,12 @@ object ErrorWrapper {
       case ex: EX => ZIO.failCause(ErrorWrapper[E, EX].unwrap(ex))
       case ex => ZIO.die(ex)
     }
+
+  def unwrapStream[R, E, EX <: Throwable, A](a: ZStream[R, Throwable, A])(using ErrorWrapper[E, EX], TypeTest[Throwable, EX]): ZStream[R, E, A] =
+    a.catchAll {
+      case ex: EX => ZStream.failCause(ErrorWrapper[E, EX].unwrap(ex))
+      case ex => ZStream.die(ex)
+    }
+
 }
 

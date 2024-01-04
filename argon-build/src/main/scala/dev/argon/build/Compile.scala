@@ -3,6 +3,7 @@ package dev.argon.build
 import dev.argon.io.*
 import dev.argon.compiler.*
 import dev.argon.compiler.tube.{ArTubeC, TubeName}
+import dev.argon.esexpr.{ESExpr, ESExprCodec}
 import dev.argon.options.{OptionCodec, OutputHandler, OutputInfo}
 import dev.argon.plugin.*
 import dev.argon.util.toml.{Toml, TomlCodec}
@@ -13,15 +14,11 @@ import java.io.IOException
 
 object Compile {
   def compile[R <: ResourceReader & ResourceWriter, E >: BuildError | CompError | IOException](
-    buildConfig: Toml,
+    config: BuildConfig,
     plugins: Map[String, Plugin[R, E]],
   ): ZIO[R, E, Unit] =
     ZIO.scoped(
       for
-        config <- ZIO.fromEither(summon[TomlCodec[BuildConfig]].decode(buildConfig))
-          .tapError { error => Console.printLineError(error).orDie }
-          .mapError(BuildConfigParseError.apply)
-
         contextFactory <- BuildContextFactory.make(plugins, config)
 
         _ <- ZIO.unit // Used to allow below type annotation
@@ -37,7 +34,7 @@ object Compile {
         _ <- ZIO.foreachDiscard(config.libraries)(tubeImporter.loadTube(resReader))
 
         _ <- ZIO.logTrace(s"Writing output")
-        _ <- ZIO.foreachDiscard(config.output) { case (pluginName, outputOptions) =>
+        _ <- ZIO.foreachDiscard(config.output.output) { case (pluginName, outputOptions) =>
           for
             pluginHelper <- ZIO.fromEither(contextFactory.getPluginHelper(pluginName).toRight(UnknownPlugin(pluginName)))
             tubeOutput <- pluginHelper.plugin.emitTube(context)(pluginHelper.adapter(context))(declTube)
@@ -49,19 +46,19 @@ object Compile {
     )
 
 
-  private def handlePluginOutput[R <: ResourceWriter, E >: BuildError | IOException, Output](pluginName: String, prefix: Seq[String], outputOptions: Toml, output: Output, handler: OutputHandler[R, E, Output]): ZIO[R, E, Unit] =
+  private def handlePluginOutput[R <: ResourceWriter, E >: BuildError | IOException, Output](pluginName: String, prefix: Seq[String], outputOptions: ESExpr, output: Output, handler: OutputHandler[R, E, Output]): ZIO[R, E, Unit] =
     outputOptions match
-      case Toml.Table(map) =>
+      case ESExpr.Constructed("dict", map, Seq()) =>
         ZIO.foreachDiscard(map) { case (name, value) =>
           handlePluginOutput(pluginName, prefix :+ name, value, output, handler)
         }
 
-      case Toml.String(value) =>
+      case ESExpr.Str(value) =>
         for
           _ <- ZIO.logTrace(s"Writing output: ${prefix.mkString(".")} to $value")
           outputInfo <- ZIO.fromEither(handler.options.get(prefix).toRight(UnknownOutput(pluginName, prefix)))
           _ <- outputInfo.getValue(output) match {
-            case resource: BinaryResource[R, E] => ZIO.serviceWithZIO[ResourceWriter](_.write(value, resource))
+            case FileSystemResource.Of(resource) => ZIO.serviceWithZIO[ResourceWriter](_.write(value, resource))
             case resource: DirectoryResource[R, E, BinaryResource] => ZIO.serviceWithZIO[ResourceWriter](_.write(value, resource))
           }
         yield ()

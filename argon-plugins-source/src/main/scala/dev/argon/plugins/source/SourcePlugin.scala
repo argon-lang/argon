@@ -7,6 +7,8 @@ import dev.argon.io.ResourceFactory
 import dev.argon.options.{OptionCodec, OutputHandler}
 import dev.argon.parser.SyntaxError
 import dev.argon.plugin.*
+import dev.argon.plugin.executor.TestExecutor
+
 import java.io.IOException
 import zio.*
 
@@ -48,4 +50,6 @@ final class SourcePlugin[R, E >: SourceError] extends Plugin[R, E] {
 
   override def tubeLoaders[ContextOptions]: Map[String, TubeLoader[R, E, ContextOptions]] =
     Map("buildspec" -> SourceTubeLoader())
+
+  override def testExecutor: Option[TestExecutor[R, E, SourceOptions[R, E], SourceOutput[R, E]]] = None
 }

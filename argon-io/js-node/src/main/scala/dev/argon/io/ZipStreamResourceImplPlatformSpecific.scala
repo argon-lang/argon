@@ -4,27 +4,28 @@ import zio.*
 import zio.stream.*
 
 import java.io.IOException
-import typings.jszip.mod.{Class as JSZipClass, JSZipGeneratorOptions}
-import typings.jszip.jszipStrings
+import dev.argon.io.jstypes.jszip.JSZip
+
+import scala.scalajs.js
 
 trait ZipStreamResourceImplPlatformSpecific[-R, +E >: IOException] extends ZipStreamResource[R, E] {
   override def asBytes: ZStream[R, E, Byte] =
     ZStream.unwrapScoped(
       for
-        jszip <- ZIO.succeed { new JSZipClass() }
+        jszip <- ZIO.succeed { new JSZip() }
         zip <- asZip
         _ <- zip.entries.foreach { entry =>
           dataStreamToUint8Array(entry.value.asBytes).flatMap { data =>
-            ZIO.succeed { jszip.file(entry.path, data) }
+            ZIO.succeed { jszip.file["uint8array"](entry.path, data) }
           }
         }
         zipData <- ZIO.fromPromiseJS {
-          val options = JSZipGeneratorOptions[jszipStrings.uint8array]()
-          options.`type` = jszipStrings.uint8array
+          val options = new JSZip.JSZipGeneratorOptions["uint8array"] {
+            override val `type`: js.UndefOr["uint8array"] = "uint8array"
+          }
 
-          jszip.generateAsync_uint8array(options)
+          jszip.generateAsync(options)
         }.orDie
-        zipDataChunk <- uint8ArrayToChunk(zipData)
-      yield ZStream.fromChunk(zipDataChunk)
+      yield ZStream.fromChunk(uint8ArrayToChunk(zipData))
     )
 }

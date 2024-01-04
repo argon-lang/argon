@@ -6,8 +6,8 @@ import zio.stream.*
 
 import java.io.IOException
 import scala.scalajs.js.typedarray.{Int8Array, Uint8Array}
-import typings.jszip.mod.{JSZip, Class as JSZipClass, JSZipObject}
-import typings.jszip.jszipStrings
+import dev.argon.io.jstypes.jszip.JSZip
+import dev.argon.io.jstypes.jszip.JSZip.JSZipObject
 
 final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFileResource, Any, IOException] {
   override def decode[R <: Any, E >: IOException](resource: BinaryResource[R, E]): ZipFileResource[R, E] =
@@ -22,7 +22,7 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
         dataStreamToUint8Array(resource.asBytes)
           .flatMap { data =>
             ZIO.fromPromiseJS {
-              new JSZipClass().loadAsync(data)
+              new JSZip().loadAsync(data)
             }.orDie
           }
           .map(ZipImpl(_))
@@ -63,10 +63,9 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
 
               override def asBytes: ZStream[R, E, Byte] =
                 ZStream.unwrap(
-                  ZIO.fromPromiseJS(entry.async_uint8array(jszipStrings.uint8array))
+                  ZIO.fromPromiseJS(entry.async("uint8array"))
                     .orDie
-                    .flatMap(uint8ArrayToChunk)
-                    .map(ZStream.fromChunk(_))
+                    .map(arr => ZStream.fromChunk(uint8ArrayToChunk(arr)))
                 )
             }
 

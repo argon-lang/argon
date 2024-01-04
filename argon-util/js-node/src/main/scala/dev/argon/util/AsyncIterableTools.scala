@@ -2,7 +2,6 @@ package dev.argon.util
 
 import zio.*
 import zio.stream.*
-import zio.direct.*
 
 import scala.reflect.TypeTest
 import scala.scalajs.js.annotation.{JSGlobal, JSName}
@@ -56,21 +55,32 @@ object AsyncIterableTools {
   end extension
 
 
-  trait AsyncIterable[T] extends js.Any {
+  trait AsyncIterable[+T] extends js.Any {
     @JSName(SymbolGlobal.asyncIterator)
     def asyncIterator(): AsyncIterator[T]
   }
 
-  trait AsyncIterator[T] extends js.Any {
+  trait AsyncIterator[+T] extends js.Any {
     def next(): js.Promise[IteratorResult[T, Any]]
-    def `return`: js.UndefOr[js.Function0[js.Promise[IteratorResult[T, Any]]]]
   }
+
+  trait AsyncIteratorReturn[+T] extends AsyncIterator[T] {
+    def `return`(): js.Promise[IteratorResult[T, Any]]
+  }
+
+  def iteratorHasReturn[T](iter: AsyncIterator[T]): Option[AsyncIteratorReturn[T]] =
+    if iter.asInstanceOf[js.Dynamic].selectDynamic("return").asInstanceOf[js.UndefOr[Any]].isDefined then
+      Some(iter.asInstanceOf[AsyncIteratorReturn[T]])
+    else
+      None
+
+
 
   def zstreamToAsyncIterable[R, E, EX <: Throwable, T](stream: ZStream[R, E, T])(using runtime: Runtime[R], errorWrapper: ErrorWrapper[E, EX]): AsyncIterable[T] =
     new js.Object with AsyncIterable[T] {
       @JSName(SymbolGlobal.asyncIterator)
       override def asyncIterator(): AsyncIterator[T] =
-        new js.Object with AsyncIterator[T] {
+        new js.Object with AsyncIteratorReturn[T] {
 
           private var scope: Scope.Closeable | Null = null
           private var pull: ZIO[R, Option[E], Chunk[T]] | Null = null
@@ -110,17 +120,15 @@ object AsyncIterableTools {
               .map(_.isDefined)
 
           private def nextImpl: ZIO[R, E, IteratorResult[T, Any]] =
-            defer {
-              consumeFromBuffer.run match {
-                case Some(a) => IteratorYieldResult(a)
-                case None =>
-                  if readNextBuffer.run then
-                    nextImpl.run
-                  else
-                    ZIO.foreachDiscard(Nullable(scope).toOption)(_.close(Exit.unit)).run
-                    IteratorReturnResult(())
-                  end if
-              }
+            consumeFromBuffer.flatMap {
+              case Some(a) => ZIO.succeed(IteratorYieldResult(a))
+              case None =>
+                readNextBuffer.flatMap {
+                  case true => nextImpl
+                  case false =>
+                    ZIO.foreachDiscard(Nullable(scope).toOption)(_.close(Exit.unit))
+                      .as(IteratorReturnResult(()))
+                }
             }
 
 
@@ -130,25 +138,27 @@ object AsyncIterableTools {
             ) { scope => JSPromiseUtil.runEffectToPromise(scope.close(Exit.unit).as(IteratorReturnResult(()))) }
 
 
-          override def `return`: js.UndefOr[js.Function0[js.Promise[IteratorResult[T, Any]]]] =
-            () => closeScope()
+          override def `return`(): js.Promise[IteratorResult[T, Any]] =
+            closeScope()
         }
     }
 
-  def asyncIterableToZStream[E, EX <: Throwable, T](iterable: => AsyncIterable[T])(using ErrorWrapper[E, EX], TypeTest[Throwable, EX]): Stream[E, T] =
+  def asyncIterableToZStreamRaw[T](iterable: => AsyncIterable[T]): Stream[Throwable, T] =
     ZStream.fromPull(
       for
         needReturn <- Ref.make(false)
         iteratorMemo <- (
           needReturn.set(true) *>
-          ZIO.attempt { iterable.asyncIterator() }
-        ).memoize
+            ZIO.attempt {
+              iterable.asyncIterator()
+            }
+          ).memoize
         _ <- Scope.addFinalizer(iteratorMemo.flatMap { iterator =>
-          ZIO.foreachDiscard(iterator.`return`.toOption) { f => ZIO.fromPromiseJS(f()) }
+          ZIO.foreachDiscard(iteratorHasReturn(iterator)) { iterator => ZIO.fromPromiseJS(iterator.`return`()) }
         }.orDie)
       yield (
-        ErrorWrapper.unwrapEffect(iteratorMemo)
-          .flatMap { iterator => JSPromiseUtil.promiseToEffect(iterator.next()) }
+        iteratorMemo
+          .flatMap { iterator => ZIO.fromPromiseJS(iterator.next()) }
           .asSomeError
           .flatMap { res =>
             res.toEither match {
@@ -156,7 +166,10 @@ object AsyncIterableTools {
               case Right(a) => ZIO.succeed(Chunk(a))
             }
           }
-      )
+        )
     )
+
+  def asyncIterableToZStream[E, EX <: Throwable, T](iterable: => AsyncIterable[T])(using ErrorWrapper[E, EX], TypeTest[Throwable, EX]): Stream[E, T] =
+    ErrorWrapper.unwrapStream(asyncIterableToZStreamRaw(iterable))
 
 }

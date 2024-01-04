@@ -15,10 +15,16 @@ private[io] def dataStreamToUint8Array[R, E](dataStream: ZStream[R, E, Byte]): Z
     u8arr
   }
 
-private[io] def uint8ArrayToChunk(array: Uint8Array): UIO[Chunk[Byte]] =
-  ZIO.succeed {
-    val cb = ChunkBuilder.make[Byte](array.length)
-    for b <- array do
-      cb += b.toByte
-    cb.result()
-  }
+def uint8ArrayToChunk(array: Uint8Array): Chunk[Byte] =
+  val cb = ChunkBuilder.make[Byte](array.length)
+  for b <- array do
+    cb += b.toByte
+  cb.result()
+end uint8ArrayToChunk
+
+def chunkToUint8Array(chunk: Chunk[Byte]): Uint8Array =
+  val arr = new Uint8Array(chunk.size)
+  for i <- chunk.indices do
+    arr(i) = chunk.byte(i)
+  arr
+end chunkToUint8Array

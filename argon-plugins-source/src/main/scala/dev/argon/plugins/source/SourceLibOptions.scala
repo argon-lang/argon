@@ -1,7 +1,7 @@
 package dev.argon.plugins.source
 
 import dev.argon.io.{BinaryResourceDecoder, DirectoryResource, ResourceFactory}
-import dev.argon.options.{OptionCodec, OptionDecoder}
+import dev.argon.options.OptionCodec
 import dev.argon.parser.SyntaxError
 import dev.argon.util.*
 import dev.argon.util.toml.Toml
@@ -20,8 +20,8 @@ final case class SourceLibOptions[-R, +E, ContextOptions]
 
 object SourceLibOptions:
 
-  given optionDecoder[R, E >: SourceError, ContextOptions](using OptionDecoder[R, E, ContextOptions]): OptionDecoder[R, E, SourceLibOptions[R, E, ContextOptions]] =
-    OptionDecoder.derive
+  given optionCodec[R, E >: SourceError, ContextOptions](using OptionCodec[R, E, ContextOptions]): OptionCodec[R, E, SourceLibOptions[R, E, ContextOptions]] =
+    OptionCodec.derive
 
 end SourceLibOptions
 

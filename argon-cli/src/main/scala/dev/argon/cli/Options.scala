@@ -1,11 +1,11 @@
 package dev.argon.cli
 
-import dev.argon.platform.*
+import dev.argon.io.PathLike
 
 final case class Options
 (
   command: Option[Command] = None,
-  buildSpec: Option[FilePath] = None,
+  buildSpec: Option[PathLike] = None,
 )
 
 

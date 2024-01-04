@@ -1,30 +1,9 @@
 package dev.argon.platform
 
-import dev.argon.compiler.DiagnosticError
-import dev.argon.io.JsonResource.DecodeError
-import dev.argon.parser.SyntaxError
-import dev.argon.plugin.Plugin
-import dev.argon.plugins.source.SourcePlugin
-import dev.argon.build.BuildError
-import dev.argon.plugins.js.{JSPlugin, JSPluginError}
 import zio.*
-import zio.logging.*
 
-import java.io.IOException
-import java.nio.charset.CharacterCodingException
-
-abstract class PlatformApp extends ZIOApp {
-  final override type Environment = PathUtil
-  type Error = SyntaxError | DiagnosticError | IOException | CharacterCodingException | DecodeError | BuildError | JSPluginError
-
-  final override def environmentTag: EnvironmentTag[Environment] = summon[EnvironmentTag[Environment]]
-
-  final override def bootstrap: ZLayer[ZIOAppArgs, Any, Environment] =
-    (Runtime.removeDefaultLoggers >>> consoleLogger(ConsoleLoggerConfig(
-      format = LogFormat.colored,
-      filter = LogFilter.logLevel(LogLevel.Trace),
-    ))) +!+
-      ZLayer.succeed(PlatformPathUtil())
+abstract class PlatformApp[R: EnvironmentTag, E] extends PlatformAppBase[R, E, ZIOAppArgs] {
+  override def environmentTag: EnvironmentTag[R] = summon[EnvironmentTag[R]]
 
   final override def run: ZIO[Environment & ZIOAppArgs, Any, Any] =
     runApp.flatMap(exit)
@@ -40,11 +19,5 @@ abstract class PlatformApp extends ZIOApp {
         end match
       }
 
-  def runApp: ZIO[Environment & ZIOAppArgs, Any, ExitCode]
-
-  def plugins[R <: Environment, E >: Error]: Map[String, Plugin[R, E]] =
-    Map(
-      "source" -> SourcePlugin(),
-      "js" -> JSPlugin(),
-    )
+  def runApp: ZIO[Environment & ZIOAppArgs, E, ExitCode]
 }
