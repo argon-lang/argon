@@ -15,7 +15,7 @@ trait ESExprTextResource[R, E, A] extends TextResource[R, E] {
 }
 
 object ESExprTextResource {
-  given resourceDecoder[A](using ESExprCodec[A]): BinaryResourceDecoder[[R, E] =>> ESExprTextResource[R, E, A], Any, CharacterCodingException | ESExprException] with
+  given resourceCodec[A](using ESExprCodec[A]): BinaryResourceDecoder[[R, E] =>> ESExprTextResource[R, E, A], Any, CharacterCodingException | ESExprException] with
     override def decode[R <: Any, E >: CharacterCodingException | ESExprException](resource: BinaryResource[R, E]): ESExprTextResource[R, E, A] =
       new ESExprTextResource[R, E, A] {
         override protected def codec: ESExprCodec[A] =
@@ -24,7 +24,7 @@ object ESExprTextResource {
         override def decoded: ZIO[R, E, A] =
           summon[BinaryResourceDecoder[TextResource, R, E]].decode(resource)
             .asText
-            .pipeThroughChannel(ESExprTextReader.read(fileName))
+            .via(ESExprTextReader.read(fileName))
             .runCollect
             .flatMap {
               case Seq(elem) =>
@@ -45,5 +45,5 @@ object ESExprTextResource {
         override def fileName: Option[String] =
           resource.fileName
       }
-  end resourceDecoder
+  end resourceCodec
 }

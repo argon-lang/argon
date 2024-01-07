@@ -69,7 +69,7 @@ object SourceMethod {
                 override val context: ctx.type = ctx
               })
 
-            case Some(WithSource(parser.ExternExpr(specifier), location)) =>
+            case Some(WithLocation(parser.ExternExpr(specifier), location)) =>
               val tube = ArMethodC.getOwningModule(owner).tube
               context.getExternMethodImplementation(tube.options, specifier)
                 .mapBoth(

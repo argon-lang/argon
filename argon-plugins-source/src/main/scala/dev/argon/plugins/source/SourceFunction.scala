@@ -57,7 +57,7 @@ object SourceFunction {
       override def implementation: Comp[FunctionImplementation] =
         implCell.get(
           stmt.body match {
-            case WithSource(parser.ExternExpr(specifier), location) =>
+            case WithLocation(parser.ExternExpr(specifier), location) =>
               val tube = ArFuncC.getOwningModule(owner).tube
               context.getExternFunctionImplementation(tube.options, specifier)
                 .mapBoth(

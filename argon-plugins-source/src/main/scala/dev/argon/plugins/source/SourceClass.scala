@@ -100,8 +100,8 @@ object SourceClass {
       private def filteredBody[T <: parser.Stmt](body: Vector[WithSource[parser.Stmt]])(using TypeTest[parser.Stmt, T])
         : Vector[WithSource[parser.Stmt]] =
         body.filter {
-          case WithSource(_: T, _) => true
-          case WithSource(s, _) => !isValidClassStmt(s)
+          case WithLocation(_: T, _) => true
+          case WithLocation(s, _) => !isValidClassStmt(s)
         }
 
       override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true] & HasOwner[OwnedByClass[owner.type, true]]]]] =
@@ -117,7 +117,7 @@ object SourceClass {
       override def constructors: Comp[Seq[ClassConstructor & HasImplementation[true]]] =
         ctorsCell.get {
           ZIO.collect(stmt.instanceBody) {
-            case WithSource(ctorDecl: parser.ClassConstructorDeclarationStmt, _) =>
+            case WithLocation(ctorDecl: parser.ClassConstructorDeclarationStmt, _) =>
               (
                 for {
                   access <- AccessUtil.parse(ctorDecl.modifiers)
@@ -133,7 +133,7 @@ object SourceClass {
       override def fields: Comp[Seq[context.ExprContext.MemberVariable]] =
         fieldsCell.get(
           ZIO.collect(stmt.instanceBody) {
-            case WithSource(field: parser.FieldDeclarationStmt, _) =>
+            case WithLocation(field: parser.FieldDeclarationStmt, _) =>
               val opt = exprConverter.ExprOptions(
                 purity = true,
                 accessToken = SignatureUtil.createAccessToken(exprConverter)(this),

@@ -103,17 +103,17 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
   def convertStmtList(stmts: WithSource[Seq[WithSource[parser.Stmt]]]): ExprFactory =
     stmts.value match {
-      case Seq(WithSource(expr: parser.Expr, location)) =>
-        EndOverloadExprFactory(convertExpr(WithSource(expr, location)))
+      case Seq(WithLocation(expr: parser.Expr, location)) =>
+        EndOverloadExprFactory(convertExpr(WithLocation(expr, location)))
 
       case head +: tail =>
         val tailStmts: WithSource[Seq[WithSource[parser.Stmt]]] =
-          WithSource(
+          WithLocation(
             tail,
-            SourceLocation(
+            Location(
               stmts.location.fileName,
               tail.headOption
-                .map { case WithSource(_, nextLoc) => nextLoc.start }
+                .map { case WithLocation(_, nextLoc) => nextLoc.start }
                 .getOrElse { head.location.end },
               stmts.location.end,
             ),
@@ -122,7 +122,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         def headResult(env: Env, opt: ExprOptions): Comp[ExprResult] =
           head.value match {
             case expr: parser.Expr =>
-              convertExpr(WithSource(expr, head.location)).check(env, opt, unitType)
+              convertExpr(WithLocation(expr, head.location)).check(env, opt, unitType)
 
             case varDecl: parser.VariableDeclarationStmt =>
               def addKnownStableValue(env: Env, value: WrapExpr, localVar: Variable): Comp[Env] =
@@ -197,7 +197,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
             ZIO.unit
         }
 
-      case _ => convertExpr(WithSource(parser.TupleExpr(Vector.empty), stmts.location))
+      case _ => convertExpr(WithLocation(parser.TupleExpr(Vector.empty), stmts.location))
     }
 
   def createTypeOperatorFactory
@@ -243,16 +243,16 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
         }
 
-      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.Intersection, _), left, right) =>
+      case parser.BinaryOperatorExpr(WithLocation(parser.BinaryOperator.Intersection, _), left, right) =>
         createTypeOperatorFactory(expr.location)(ExprConstructor.IntersectionType)(left, right)
 
-      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.Union, _), left, right) =>
+      case parser.BinaryOperatorExpr(WithLocation(parser.BinaryOperator.Union, _), left, right) =>
         createTypeOperatorFactory(expr.location)(ExprConstructor.UnionType)(left, right)
 
-      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.SubType, _), left, right) =>
+      case parser.BinaryOperatorExpr(WithLocation(parser.BinaryOperator.SubType, _), left, right) =>
         createTypeOperatorFactory(expr.location)(ExprConstructor.SubtypeWitnessType)(left, right)
 
-      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.PropEqual, _), left, right) =>
+      case parser.BinaryOperatorExpr(WithLocation(parser.BinaryOperator.PropEqual, _), left, right) =>
         new ExprFactory {
           override def exprLocation: SourceLocation = expr.location
 
@@ -271,13 +271,13 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
             yield ExprResult(WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (equalityType, l, r))), env)
         }
 
-      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.PropDisjunction, _), left, right) =>
+      case parser.BinaryOperatorExpr(WithLocation(parser.BinaryOperator.PropDisjunction, _), left, right) =>
         createTypeOperatorFactory(expr.location)(ExprConstructor.DisjunctionType)(left, right)
 
-      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.PropConjunction, _), left, right) =>
+      case parser.BinaryOperatorExpr(WithLocation(parser.BinaryOperator.PropConjunction, _), left, right) =>
         createTypeOperatorFactory(expr.location)(ExprConstructor.ConjunctionType)(left, right)
 
-      case parser.BinaryOperatorExpr(WithSource(parser.BinaryOperator.Assign, assignLoc), left, right) =>
+      case parser.BinaryOperatorExpr(WithLocation(parser.BinaryOperator.Assign, assignLoc), left, right) =>
         convertExpr(left).mutate(MutatorValue(convertExpr(right), assignLoc))
 
       case parser.BinaryOperatorExpr(op, left, right) =>
@@ -297,7 +297,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           override def exprLocation: SourceLocation = expr.location
 
           override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
-            val inner = WithSource(parser.BlockExpr(body, rescueCases, elseBody, None), expr.location)
+            val inner = WithLocation(parser.BlockExpr(body, rescueCases, elseBody, None), expr.location)
             for {
               innerRes <- convertExpr(inner).synth(env, opt)
               ensuring <- convertStmtList(ensureBody).check(innerRes.env, opt, unitType)
@@ -306,7 +306,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           end synthImpl
 
           override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
-            val inner = WithSource(parser.BlockExpr(body, rescueCases, elseBody, None), expr.location)
+            val inner = WithLocation(parser.BlockExpr(body, rescueCases, elseBody, None), expr.location)
             for {
               innerRes <- convertExpr(inner).check(env, opt, t)
               ensuring <- convertStmtList(ensureBody).check(innerRes.env, opt, unitType)
@@ -373,7 +373,7 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
         }
 
 
-      case parser.DotExpr(left, WithSource(id, idLocation)) =>
+      case parser.DotExpr(left, WithLocation(id, idLocation)) =>
         OverloadExprFactoryMethod.fromInstanceFactory(convertExpr(left), id, idLocation)
 
       case parser.ExternExpr(specifier) => ???

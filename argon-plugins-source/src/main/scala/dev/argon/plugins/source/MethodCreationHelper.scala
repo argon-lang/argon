@@ -21,7 +21,7 @@ trait MethodCreationHelper extends Definition {
     (body: Vector[WithSource[parser.Stmt]])
     : Comp[Map[Option[IdentifierExpr], Seq[ArMethodC & HasContext[context.type] & HasImplementation[true] & HasOwner[TMethodOwner]]]] =
     ZIO.foreach(body) {
-      case WithSource(stmt: parser.MethodDeclarationStmt, _) =>
+      case WithLocation(stmt: parser.MethodDeclarationStmt, _) =>
         buildMethod(createMethodOwner)(stmt)
 
       case _ => ???

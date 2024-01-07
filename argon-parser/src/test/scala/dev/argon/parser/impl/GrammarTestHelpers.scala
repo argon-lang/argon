@@ -11,18 +11,18 @@ trait GrammarTestHelpers {
   type TSyntaxError
   type TLabel[_]
 
-  type TGrammar[T] = Grammar[TToken, TSyntaxError, TLabel, T]
+  type TGrammar[T] = Grammar[TToken, FilePosition, TSyntaxError, TLabel, T]
 
-  protected val grammarFactory: Grammar.GrammarFactory[TToken, TSyntaxError, TLabel]
+  protected val grammarFactory: Grammar.GrammarFactory[TToken, FilePosition, TSyntaxError, TLabel]
 
-  def parseTokens[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: Chunk[WithSource[TToken]])
-    : GrammarResultComplete[TToken, TSyntaxError, TLabel, T]
+  def parseTokens[T](grammar: Grammar[TToken, FilePosition, TSyntaxError, TLabel, T])(tokens: Chunk[WithSource[TToken]])
+    : GrammarResultComplete[TToken, FilePosition, TSyntaxError, TLabel, T]
 
-  protected def parse[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: TToken*)
+  protected def parse[T](grammar: Grammar[TToken, FilePosition, TSyntaxError, TLabel, T])(tokens: TToken*)
     : Either[NonEmptyChunk[TSyntaxError], (Chunk[TToken], T)] =
     parseTokens(grammar)(
       Chunk.fromIterable(tokens.zipWithIndex.map { case (value, i) =>
-        WithSource(value, SourceLocation(None, FilePosition(1, i + 1), FilePosition(1, i + 2)))
+        WithLocation(value, Location(None, FilePosition(1, i + 1), FilePosition(1, i + 2)))
       })
     )
       .toEither
@@ -32,8 +32,8 @@ trait GrammarTestHelpers {
 
 trait GrammarTestHelpersEntireSequence extends GrammarTestHelpers {
 
-  override def parseTokens[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: Chunk[WithSource[TToken]])
-    : GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+  override def parseTokens[T](grammar: Grammar[TToken, FilePosition, TSyntaxError, TLabel, T])(tokens: Chunk[WithSource[TToken]])
+    : GrammarResultComplete[TToken, FilePosition, TSyntaxError, TLabel, T] =
     tokens match {
       case ChunkUnCons(tokens) =>
         grammar
@@ -55,21 +55,21 @@ trait GrammarTestHelpersEntireSequence extends GrammarTestHelpers {
 
 trait GrammarTestHelpersSingleTokens extends GrammarTestHelpers {
 
-  override def parseTokens[T](grammar: Grammar[TToken, TSyntaxError, TLabel, T])(tokens: Chunk[WithSource[TToken]])
-    : GrammarResultComplete[TToken, TSyntaxError, TLabel, T] = {
+  override def parseTokens[T](grammar: Grammar[TToken, FilePosition, TSyntaxError, TLabel, T])(tokens: Chunk[WithSource[TToken]])
+    : GrammarResultComplete[TToken, FilePosition, TSyntaxError, TLabel, T] = {
     val endPos = FilePosition(1, tokens.size + 1)
 
-    def handleResult(result: GrammarResult[TToken, TSyntaxError, TLabel, T], tail: Chunk[WithSource[TToken]])
-      : GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+    def handleResult(result: GrammarResult[TToken, FilePosition, TSyntaxError, TLabel, T], tail: Chunk[WithSource[TToken]])
+      : GrammarResultComplete[TToken, FilePosition, TSyntaxError, TLabel, T] =
       result match {
-        case result: GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =>
+        case result: GrammarResultComplete[TToken, FilePosition, TSyntaxError, TLabel, T] =>
           result.map { case (unusedTokens, t) => (unusedTokens ++ tail, t) }
-        case suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T] =>
+        case suspend: GrammarResultSuspend[TToken, FilePosition, TSyntaxError, TLabel, T] =>
           impl(suspend)(tail)
       }
 
-    def impl(suspend: GrammarResultSuspend[TToken, TSyntaxError, TLabel, T])(tokens: Chunk[WithSource[TToken]])
-      : GrammarResultComplete[TToken, TSyntaxError, TLabel, T] =
+    def impl(suspend: GrammarResultSuspend[TToken, FilePosition, TSyntaxError, TLabel, T])(tokens: Chunk[WithSource[TToken]])
+      : GrammarResultComplete[TToken, FilePosition, TSyntaxError, TLabel, T] =
       tokens match {
         case ChunkUnCons(tokens) =>
           handleResult(suspend.continue(NonEmptyChunk(tokens.head)), tokens.tail)

@@ -1,5 +1,6 @@
 package dev.argon.parser.impl
 
+import dev.argon.grammar.Characterizer
 import dev.argon.parser.{Stmt, SyntaxError, SyntaxErrorData}
 import dev.argon.parser.tubespec.ModulePatternMapping
 import dev.argon.util.*
@@ -8,14 +9,18 @@ import zio.stream.*
 
 object ArgonSourceParser {
 
-  def parse[E >: SyntaxError](fileName: Option[String]): ZChannel[Any, E, Chunk[Char], Any, E, Chunk[Stmt], Any] =
-    Characterizer.characterize(fileName)
-      .pipeTo(Lexer.lex(fileName))
-      .pipeTo(ArgonParser.parse(fileName))
+  def parse(fileName: Option[String]): ZPipeline[Any, SyntaxError, Char, Stmt] =
+    ZPipeline.fromChannel(
+      Characterizer.characterize(fileName)
+        .pipeToOrFail(Lexer.lex(fileName))
+        .pipeToOrFail(ArgonParser.parse(fileName))
+    )
 
-  def parseTubeSpec[E >: SyntaxError](fileName: Option[String]): ZChannel[Any, E, Chunk[Char], Any, E, Chunk[ModulePatternMapping], Any] =
-    Characterizer.characterize(fileName)
-      .pipeTo(Lexer.lex(fileName))
-      .pipeTo(ArgonParser.parseTubeSpec(fileName))
+  def parseTubeSpec(fileName: Option[String]): ZPipeline[Any, SyntaxError, Char, ModulePatternMapping] =
+    ZPipeline.fromChannel(
+      Characterizer.characterize(fileName)
+        .pipeToOrFail(Lexer.lex(fileName))
+        .pipeToOrFail(ArgonParser.parseTubeSpec(fileName))
+    )
 
 }

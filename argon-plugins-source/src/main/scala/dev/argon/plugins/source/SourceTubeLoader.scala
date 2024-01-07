@@ -93,7 +93,7 @@ final class SourceTubeLoader[R, E >: SourceError, ContextOptions] extends TubeLo
 
       case Nil => Right(prefix.split("/", -1).nn.map(part => FileNameTemplate.Literal(part.nn)).toList)
 
-      case StringToken.StringPart(WithSource(s, _)) :: tail =>
+      case StringToken.StringPart(WithLocation(s, _)) :: tail =>
         (prefix + s).split("/", -1).nn.toSeq match {
           case init :+ last =>
             val initItems = init
@@ -111,13 +111,13 @@ final class SourceTubeLoader[R, E >: SourceError, ContextOptions] extends TubeLo
         buildTemplateExpr(prefix, expr, "").map(List(_))
 
       case (expr @ StringToken.ExprPart(_, _)) ::
-            StringToken.StringPart(WithSource(suffix1, suffix1Loc)) ::
-            StringToken.StringPart(WithSource(suffix2, suffix2Loc)) :: tail =>
-        buildTemplate(prefix, expr :: StringToken.StringPart(WithSource(suffix1 + suffix2, SourceLocation.merge(suffix1Loc, suffix2Loc))) :: tail)
+            StringToken.StringPart(WithLocation(suffix1, suffix1Loc)) ::
+            StringToken.StringPart(WithLocation(suffix2, suffix2Loc)) :: tail =>
+        buildTemplate(prefix, expr :: StringToken.StringPart(WithLocation(suffix1 + suffix2, Location.merge(suffix1Loc, suffix2Loc))) :: tail)
 
 
       case (expr: StringToken.ExprPart) ::
-            StringToken.StringPart(WithSource(suffix, suffixLocation)) ::
+            StringToken.StringPart(WithLocation(suffix, suffixLocation)) ::
             tail =>
         suffix.split("/", -1).nn.toList match {
           case suffixHead :: (suffixTail @ _ :: _) =>
@@ -143,7 +143,7 @@ final class SourceTubeLoader[R, E >: SourceError, ContextOptions] extends TubeLo
 
   private def buildTemplateExpr(prefix: String, expr: StringToken.ExprPart, suffix: String): Either[CompError, FileNameTemplate] =
     expr match {
-      case StringToken.ExprPart(None, WithSource(id: IdentifierExpr, _)) =>
+      case StringToken.ExprPart(None, WithLocation(id: IdentifierExpr, _)) =>
         Right(FileNameTemplate.Variable(prefix, id, suffix))
 
       case _ =>

@@ -9,16 +9,16 @@ import zio.*
 object AccessUtil {
   def parse(modifiers: Seq[WithSource[parser.Modifier]]): IO[CompError, AccessModifier] =
     modifiers.foldLeftM(Option.empty[AccessModifier]) {
-      case (None, WithSource(parser.PublicModifier, _)) => ZIO.some(AccessModifier.Public)
-      case (None, WithSource(parser.ProtectedModifier, _)) => ZIO.some(AccessModifier.Protected)
-      case (None, WithSource(parser.PrivateModifier, _)) => ZIO.some(AccessModifier.Private)
-      case (None, WithSource(parser.InternalModifier, _)) => ZIO.some(AccessModifier.TubePrivate)
+      case (None, WithLocation(parser.PublicModifier, _)) => ZIO.some(AccessModifier.Public)
+      case (None, WithLocation(parser.ProtectedModifier, _)) => ZIO.some(AccessModifier.Protected)
+      case (None, WithLocation(parser.PrivateModifier, _)) => ZIO.some(AccessModifier.Private)
+      case (None, WithLocation(parser.InternalModifier, _)) => ZIO.some(AccessModifier.TubePrivate)
 
-      case (Some(AccessModifier.TubePrivate), WithSource(parser.PrivateModifier, _)) | (Some(AccessModifier.Private), WithSource(parser.InternalModifier, _)) => ZIO.some(AccessModifier.ModulePrivate)
-      case (Some(AccessModifier.Private), WithSource(parser.ProtectedModifier, _)) | (Some(AccessModifier.Protected), WithSource(parser.PrivateModifier, _)) => ZIO.some(AccessModifier.TubeAndProtected)
-      case (Some(AccessModifier.TubePrivate), WithSource(parser.ProtectedModifier, _)) | (Some(AccessModifier.Protected), WithSource(parser.InternalModifier, _)) => ZIO.some(AccessModifier.TubeOrProtected)
+      case (Some(AccessModifier.TubePrivate), WithLocation(parser.PrivateModifier, _)) | (Some(AccessModifier.Private), WithLocation(parser.InternalModifier, _)) => ZIO.some(AccessModifier.ModulePrivate)
+      case (Some(AccessModifier.Private), WithLocation(parser.ProtectedModifier, _)) | (Some(AccessModifier.Protected), WithLocation(parser.PrivateModifier, _)) => ZIO.some(AccessModifier.TubeAndProtected)
+      case (Some(AccessModifier.TubePrivate), WithLocation(parser.ProtectedModifier, _)) | (Some(AccessModifier.Protected), WithLocation(parser.InternalModifier, _)) => ZIO.some(AccessModifier.TubeOrProtected)
 
-      case (_, WithSource(_: AccessModifier, _)) => ZIO.fail(DiagnosticError.InvalidAccessModifierCombination())
+      case (_, WithLocation(_: AccessModifier, _)) => ZIO.fail(DiagnosticError.InvalidAccessModifierCombination())
       case (prev, _) => ZIO.succeed(prev)
     }.map { _.getOrElse(AccessModifier.Private) }
 

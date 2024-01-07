@@ -17,14 +17,12 @@ object Generator extends ZIOAppDefault {
         val outPath = Path.of(outDir).nn
 
         ZStream.fromFileName(configFile)
-          .via(ZPipeline.utf8Decode)
-          .pipeThroughChannel(ESExprTextReader.read(Some(configFile)))
+          .via(ZPipeline.utf8Decode >>> ESExprTextReader.read(Some(configFile)))
           .mapZIO(expr => ZIO.fromEither(summon[ESExprCodec[GeneratorConfig]].decode(expr.value)))
           .foreach { config =>
             val esxFile = Path.of(configFile).nn.resolveSibling(config.esxFile).nn
             ZStream.fromPath(esxFile)
-              .via(ZPipeline.utf8Decode)
-              .pipeThroughChannel(ESExprTextReader.read(Some(esxFile.toString)))
+              .via(ZPipeline.utf8Decode >>> ESExprTextReader.read(Some(esxFile.toString)))
               .runCollect
               .flatMap { exprs =>
                 ZIO.fromEither(exprs.map(_.value).traverse(summon[ESExprCodec[Definition]].decode))

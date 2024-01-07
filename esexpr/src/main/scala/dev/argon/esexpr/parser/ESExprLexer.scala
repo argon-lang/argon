@@ -12,7 +12,7 @@ import Function.const
 
 object ESExprLexer {
 
-  final case class LexerError(val fileName: Option[String], val error: GrammarError[String, Unit]) extends ESExprException("Could not lex ESExpr")
+  final case class LexerError(val fileName: Option[String], val error: GrammarError[String, Unit, FilePosition]) extends ESExprTextParseException("Could not lex ESExpr")
 
 
   private[ESExprLexer] object Rule {
@@ -34,10 +34,10 @@ object ESExprLexer {
     case object NonEmptyToken extends LexerRuleName[ESExprToken]
   }
 
-  private[ESExprLexer] final class LexerGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[String, LexerError, Rule.LexerRuleName] {
+  private[ESExprLexer] final class LexerGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[String, FilePosition, LexerError, Rule.LexerRuleName] {
 
-    private given ErrorFactory[String, Unit, LexerError] with
-      override def createError(error: GrammarError[String, Unit]): LexerError =
+    private given ErrorFactory[String, Unit, LexerError, FilePosition] with
+      override def createError(error: GrammarError[String, Unit, FilePosition]): LexerError =
         LexerError(fileName, error)
 
       override def errorEndLocationOrder: Ordering[LexerError] = new Ordering[LexerError] {
@@ -130,7 +130,7 @@ object ESExprLexer {
           token("#") ++! rule(Rule.IdentifierStr) --> { (_, id) => ESExprToken.Atom(id) }
 
         case Rule.ResultToken =>
-          (rule(Rule.NonEmptyToken).observeSource --> Some.apply) |
+          (rule(Rule.NonEmptyToken).observeLocation --> Some.apply) |
             (rule(Rule.Whitespace) --> const(Option.empty[WithSource[ESExprToken]]))
 
         case Rule.NonEmptyToken =>
@@ -145,9 +145,9 @@ object ESExprLexer {
 
   }
 
-  def lex[E](fileName: Option[String])
-  : ZChannel[Any, E, Chunk[WithSource[String]], FilePosition, E | LexerError, Chunk[WithSource[ESExprToken]], FilePosition] =
+  def lex(fileName: Option[String])
+  : ZChannel[Any, Nothing, Chunk[WithSource[String]], FilePosition, LexerError, Chunk[WithSource[ESExprToken]], FilePosition] =
     Grammar.parseAll(LexerGrammarFactory(fileName))(Rule.ResultToken)
-      .pipeTo(ZChannelUtil.mapElements(_.flatten))
+      .mapOut(_.flatten)
 
 }

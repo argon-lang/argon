@@ -13,8 +13,7 @@ object GeneratorInputs extends ZIOAppDefault {
     ZIOAppArgs.getArgs.flatMap {
       case Chunk(configFile) =>
         ZStream.fromFileName(configFile)
-          .via(ZPipeline.utf8Decode)
-          .pipeThroughChannel(ESExprTextReader.read(Some(configFile)))
+          .via(ZPipeline.utf8Decode >>> ESExprTextReader.read(Some(configFile)))
           .mapZIO(expr => ZIO.fromEither(summon[ESExprCodec[GeneratorConfig]].decode(expr.value)))
           .mapZIO { config =>
             ZIO.succeed {

@@ -148,11 +148,11 @@ object ArgonParser {
 
   }
 
-  private[parser] final class ArgonGrammarFactory(override val fileName: Option[String]) extends GrammarFactory[Token, SyntaxError, Rule.ArgonRuleName] {
+  private[parser] final class ArgonGrammarFactory(override val fileName: Option[String]) extends GrammarFactory[Token, FilePosition, SyntaxError, Rule.ArgonRuleName] {
 
-    private implicit val errorFactory: Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] =
-      new Grammar.ErrorFactory[Token, TokenCategory, SyntaxError] {
-        override def createError(error: GrammarError[Token, TokenCategory]): SyntaxError = SyntaxError.ParserError(fileName, error)
+    private implicit val errorFactory: Grammar.ErrorFactory[Token, TokenCategory, SyntaxError, FilePosition] =
+      new Grammar.ErrorFactory[Token, TokenCategory, SyntaxError, FilePosition] {
+        override def createError(error: GrammarError[Token, TokenCategory, FilePosition]): SyntaxError = SyntaxError.ParserError(fileName, error)
 
         override def errorEndLocationOrder: Ordering[SyntaxError] =
           (a, b) => implicitly[Ordering[FilePosition]].compare(a.location.end, b.location.end)
@@ -180,9 +180,9 @@ object ArgonParser {
       matchToken(token) --> const(token.modifier)
 
     private def createLeftRec[A](left: TGrammar[A])(rightRepeat: TGrammar[WithSource[A] => A]): TGrammar[A] =
-      left.observeSource ++ (rightRepeat.observeSource*) --> { case (a, fs) =>
-        fs.foldLeft(a) { case (a, WithSource(f, loc)) =>
-          WithSource(f(a), SourceLocation.merge(a.location, loc))
+      left.observeLocation ++ (rightRepeat.observeLocation*) --> { case (a, fs) =>
+        fs.foldLeft(a) { case (a, WithLocation(f, loc)) =>
+          WithLocation(f(a), Location.merge(a.location, loc))
         }.value
       }
 
@@ -262,21 +262,21 @@ object ArgonParser {
 
         case Rule.IfExpr => matchToken(KW_IF) ++! rule(Rule.IfExprPart) --> second
         case Rule.IfExprStart =>
-          rule(Rule.Expression).observeSource ++ matchToken(KW_THEN) ++ rule(Rule.StatementList).observeSource --> {
+          rule(Rule.Expression).observeLocation ++ matchToken(KW_THEN) ++ rule(Rule.StatementList).observeLocation --> {
             case (condition, _, body) => (condition, body)
           }
 
         case Rule.IfExprPart =>
-          rule(Rule.IfExprStart) ++ matchToken(KW_END).observeSource --> {
-            case (condition, body, WithSource(_, endLocation)) =>
-              IfElseExpr(condition, body, WithSource(Vector.empty, endLocation)): Expr
+          rule(Rule.IfExprStart) ++ matchToken(KW_END).observeLocation --> {
+            case (condition, body, WithLocation(_, endLocation)) =>
+              IfElseExpr(condition, body, WithLocation(Vector.empty, endLocation)): Expr
           } |
-            rule(Rule.IfExprStart) ++ matchToken(KW_ELSE) ++! rule(Rule.StatementList).observeSource ++ matchToken(
+            rule(Rule.IfExprStart) ++ matchToken(KW_ELSE) ++! rule(Rule.StatementList).observeLocation ++ matchToken(
               KW_END
             ) --> { case (condition, body, _, elseBody, _) => IfElseExpr(condition, body, elseBody) } |
-            rule(Rule.IfExprStart) ++ matchToken(KW_ELSIF) ++! rule(Rule.IfExprPart).observeSource --> {
+            rule(Rule.IfExprStart) ++ matchToken(KW_ELSIF) ++! rule(Rule.IfExprPart).observeLocation --> {
               case (condition, body, _, elseExpr) =>
-                IfElseExpr(condition, body, WithSource(Vector(elseExpr), elseExpr.location))
+                IfElseExpr(condition, body, WithLocation(Vector(elseExpr), elseExpr.location))
             }
 
         case Rule.ParenPattern =>
@@ -287,7 +287,7 @@ object ArgonParser {
         case Rule.VariablePattern =>
           matchToken(KW_VAL) ++! rule(Rule.IdentifierOptional) ++ ((matchToken(OP_COLON) ++ rule(
             Rule.PatternType
-          ).observeSource) ?) --> {
+          ).observeLocation) ?) --> {
             case (_, idOpt, Some((_, varType))) => TypeTestPattern(idOpt, varType)
             case (_, idOpt, None) => BindingPattern(idOpt)
           }
@@ -305,21 +305,21 @@ object ArgonParser {
           createLeftRec(
             rule(Rule.Identifier)
           )(
-            (matchToken(OP_DOT) ++ rule(Rule.Identifier).observeSource) --> {
+            (matchToken(OP_DOT) ++ rule(Rule.Identifier).observeLocation) --> {
               case (_, id) => (baseExpr: WithSource[Expr]) => DotExpr(baseExpr, id)
             }
           )
 
         case Rule.ContainedPattern =>
-          rule(Rule.ConstructorExprPattern).observeSource --> { expr => DeconstructPattern(expr, Vector()): Pattern } |
+          rule(Rule.ConstructorExprPattern).observeLocation --> { expr => DeconstructPattern(expr, Vector()): Pattern } |
             rule(Rule.DiscardPattern) |
             rule(Rule.ParenPattern)
 
         case Rule.PatternSeq =>
-          (rule(Rule.ContainedPattern).observeSource *) --> { _.toVector }
+          (rule(Rule.ContainedPattern).observeLocation *) --> { _.toVector }
 
         case Rule.DeconstructPattern =>
-          rule(Rule.ConstructorExprPattern).observeSource ++ rule(
+          rule(Rule.ConstructorExprPattern).observeLocation ++ rule(
             Rule.PatternSeq
           ) --> DeconstructPattern.apply.tupled
 
@@ -332,14 +332,14 @@ object ArgonParser {
         case Rule.MatchCase =>
           rule(Rule.NewLines) ++ matchToken(KW_CASE) ++! (rule(Rule.NewLines) ++ rule(
             Rule.PatternSpec
-          ).observeSource ++ matchToken(OP_EQUALS) ++ rule(Rule.StatementList).observeSource) --> {
+          ).observeLocation ++ matchToken(OP_EQUALS) ++ rule(Rule.StatementList).observeLocation) --> {
             case (_, _, (_, pattern, _, body)) => MatchExprCase(pattern, body)
           }
 
         case Rule.MatchExpr =>
-          matchToken(KW_MATCH) ++! (rule(Rule.Expression).observeSource ++ (rule(
+          matchToken(KW_MATCH) ++! (rule(Rule.Expression).observeLocation ++ (rule(
             Rule.MatchCase
-          ).observeSource*) ++ matchToken(KW_END)) --> {
+          ).observeLocation*) ++ matchToken(KW_END)) --> {
             case (_, (cmpValue, cases, _)) =>
               MatchExpr(cmpValue, cases)
           }
@@ -375,9 +375,9 @@ object ArgonParser {
             rule(Rule.PrimaryExpr(Rule.ParenAllowed))
           )(
             postfixExprMemberAccess |
-              rule(Rule.ParenArgList).observeSource --> {
-                case WithSource((listType, argList), location) =>
-                  (funcExpr: WithSource[Expr]) => FunctionCallExpr(funcExpr, listType, WithSource(argList, location))
+              rule(Rule.ParenArgList).observeLocation --> {
+                case WithLocation((listType, argList), location) =>
+                  (funcExpr: WithSource[Expr]) => FunctionCallExpr(funcExpr, listType, WithLocation(argList, location))
               }
           )
 
@@ -395,7 +395,7 @@ object ArgonParser {
           }
 
         case Rule.MemberAccess =>
-          rule(Rule.Identifier).observeSource --> { id => (baseExpr: WithSource[Expr]) => DotExpr(baseExpr, id) } |
+          rule(Rule.Identifier).observeLocation --> { id => (baseExpr: WithSource[Expr]) => DotExpr(baseExpr, id) } |
             matchToken(KW_NEW) --> const(ClassConstructorExpr.apply) |
             matchToken(KW_TYPE) --> const(TypeOfExpr.apply)
 
@@ -403,13 +403,13 @@ object ArgonParser {
           createLeftRec(
             rule(Rule.PostfixExpr(Rule.ParenAllowed))
           )(
-            rule(Rule.PostfixExpr(Rule.ParenDisallowed)).observeSource --> {
+            rule(Rule.PostfixExpr(Rule.ParenDisallowed)).observeLocation --> {
               argExpr => (funcExpr: WithSource[Expr]) =>
                 FunctionCallExpr(funcExpr, FunctionParameterListType.NormalList, argExpr)
             } |
-              rule(Rule.ParenArgList).observeSource --> {
-                case WithSource((listType, argExpr), location) =>
-                  (funcExpr: WithSource[Expr]) => FunctionCallExpr(funcExpr, listType, WithSource(argExpr, location))
+              rule(Rule.ParenArgList).observeLocation --> {
+                case WithLocation((listType, argExpr), location) =>
+                  (funcExpr: WithSource[Expr]) => FunctionCallExpr(funcExpr, listType, WithLocation(argExpr, location))
               }
           )
 
@@ -417,7 +417,7 @@ object ArgonParser {
           def matchUnaryOp[TToken <: TokenWithCategory[? <: TokenCategory] & UnaryOperatorToken](token: TToken)
             (using TypeTest[Token, TToken])
             : TGrammar[Expr] =
-            matchToken(token).observeSource ++! rule(Rule.UnaryExpr).observeSource --> { case (opToken, inner) =>
+            matchToken(token).observeLocation ++! rule(Rule.UnaryExpr).observeLocation --> { case (opToken, inner) =>
               UnaryOperatorExpr(opToken.map(_.operator), inner)
             }
 
@@ -430,7 +430,7 @@ object ArgonParser {
 
         case Rule.TypeExpr =>
           (
-            matchToken(KW_TYPE) ++! ((matchToken(OP_OPENBRACKET) ++ rule(Rule.Expression).observeSource ++ matchToken(
+            matchToken(KW_TYPE) ++! ((matchToken(OP_OPENBRACKET) ++ rule(Rule.Expression).observeLocation ++ matchToken(
               OP_CLOSEBRACKET
             ) --> { case (_, level, _) => level }) ?) --> {
               case (_, level) => TypeExpr(level)
@@ -490,10 +490,10 @@ object ArgonParser {
           )(rule(Rule.XorExpr))
 
         case Rule.LambdaTypeExpr =>
-          rule(Rule.OrExpr).observeSource ++ ((matchToken(OP_LAMBDA_TYPE) ++! rule(
+          rule(Rule.OrExpr).observeLocation ++ ((matchToken(OP_LAMBDA_TYPE) ++! rule(
             Rule.LambdaTypeExpr
-          ).observeSource) ?) --> {
-            case (WithSource(left, _), None) => left
+          ).observeLocation) ?) --> {
+            case (WithLocation(left, _), None) => left
             case (left, Some((_, right))) => LambdaTypeExpr(left, right)
           }
 
@@ -529,16 +529,16 @@ object ArgonParser {
         case Rule.AsExpr =>
           val nextRule = rule(Rule.PropEqualityExpr)
 
-          nextRule.observeSource ++ ((matchToken(KW_AS) ++! nextRule.observeSource) ?) --> {
-            case (WithSource(left, _), None) => left
+          nextRule.observeLocation ++ ((matchToken(KW_AS) ++! nextRule.observeLocation) ?) --> {
+            case (WithLocation(left, _), None) => left
             case (left, Some((_, right))) => AsExpr(left, right)
           }
 
         case Rule.LambdaExpr =>
-          rule(Rule.IdentifierOptional) ++ matchToken(OP_LAMBDA) ++! rule(Rule.LambdaExpr).observeSource --> {
+          rule(Rule.IdentifierOptional) ++ matchToken(OP_LAMBDA) ++! rule(Rule.LambdaExpr).observeLocation --> {
             case (id, _, body) => LambdaExpr(id, body)
           } |
-            matchToken(KW_SUMMON) ++! rule(Rule.AsExpr).observeSource --> {
+            matchToken(KW_SUMMON) ++! rule(Rule.AsExpr).observeLocation --> {
               case (_, summonedType) =>
                 SummonExpr(summonedType)
             } |
@@ -552,8 +552,8 @@ object ArgonParser {
 
         case Rule.TupleExpr =>
           val nextRule = rule(Rule.LambdaExpr)
-          nextRule.observeSource ++ ((matchToken(OP_COMMA) ++! nextRule.observeSource --> second)*) --> {
-            case (WithSource(expr, _), Chunk()) => expr
+          nextRule.observeLocation ++ ((matchToken(OP_COMMA) ++! nextRule.observeLocation --> second)*) --> {
+            case (WithLocation(expr, _), Chunk()) => expr
             case (head, tail) => TupleExpr((head +: tail).toVector)
           }
 
@@ -564,14 +564,14 @@ object ArgonParser {
 
         case Rule.AssignExpr =>
           val nextRule = rule(Rule.SubTypeExpr)
-          nextRule.observeSource ++ ((matchToken(OP_ASSIGN).observeSource ++! nextRule.observeSource) ?) --> {
-            case (WithSource(left, _), None) => left
-            case (left, Some((WithSource(_, opLocation), right))) =>
-              BinaryOperatorExpr(WithSource(BinaryOperator.Assign, opLocation), left, right)
+          nextRule.observeLocation ++ ((matchToken(OP_ASSIGN).observeLocation ++! nextRule.observeLocation) ?) --> {
+            case (WithLocation(left, _), None) => left
+            case (left, Some((WithLocation(_, opLocation), right))) =>
+              BinaryOperatorExpr(WithLocation(BinaryOperator.Assign, opLocation), left, right)
           }
 
         case Rule.AssertExpr =>
-          matchToken(KW_ASSERT) ++! rule(Rule.SubTypeExpr).observeSource --> {
+          matchToken(KW_ASSERT) ++! rule(Rule.SubTypeExpr).observeLocation --> {
             case (_, assertType) =>
               AssertExpr(assertType)
           }
@@ -590,9 +590,9 @@ object ArgonParser {
           rule(Rule.LocalVariableModifiers) ++
             rule(Rule.VariableMutSpec) ++! (
               rule(Rule.IdentifierOptional) ++
-                ((matchToken(OP_COLON) ++ rule(Rule.Type).observeSource --> second) ?) ++
+                ((matchToken(OP_COLON) ++ rule(Rule.Type).observeLocation --> second) ?) ++
                 matchToken(OP_EQUALS) ++
-                rule(Rule.Expression).observeSource
+                rule(Rule.Expression).observeLocation
             ) --> { case (modifiers, isMutable, (id, typeAnnotation, _, value)) =>
             VariableDeclarationStmt(modifiers, isMutable, typeAnnotation, id, value)
           }
@@ -602,7 +602,7 @@ object ArgonParser {
             (rule(Rule.VariableMutSpec) ?) ++
             rule(Rule.Identifier) ++
             matchToken(OP_COLON) ++!
-            rule(Rule.Type).observeSource --> { case (_, isMutable, id, _, typeAnnotation) =>
+            rule(Rule.Type).observeLocation --> { case (_, isMutable, id, _, typeAnnotation) =>
               FieldDeclarationStmt(isMutable.getOrElse(false), id, typeAnnotation)
             }
 
@@ -610,7 +610,7 @@ object ArgonParser {
           matchToken(KW_FIELD) ++
             rule(Rule.Identifier) ++
             matchToken(OP_EQUALS) ++!
-            rule(Rule.Expression).observeSource --> { case (_, id, _, value) =>
+            rule(Rule.Expression).observeLocation --> { case (_, id, _, value) =>
               FieldInitializationStmt(id, value)
             }
 
@@ -618,7 +618,7 @@ object ArgonParser {
           matchToken(KW_INITIALIZE) ++
             rule(Rule.IdentifierOptional) ++
             (
-              (matchToken(OP_EQUALS) ++ rule(Rule.Expression).observeSource --> second) ?
+              (matchToken(OP_EQUALS) ++ rule(Rule.Expression).observeLocation --> second) ?
             ) --> { case (_, id, value) =>
               InitializeStmt(id, value)
             }
@@ -633,7 +633,7 @@ object ArgonParser {
               ruleModifier(KW_SEALED) |
               ruleModifier(KW_OPEN)
 
-          (anyModifier.observeSource.*) --> { _.toVector }
+          (anyModifier.observeLocation.*) --> { _.toVector }
 
         case Rule.TraitModifiers =>
 
@@ -643,7 +643,7 @@ object ArgonParser {
               ruleModifier(KW_INTERNAL) |
               ruleModifier(KW_SEALED)
 
-          anyModifier.observeSource.* --> {
+          anyModifier.observeLocation.* --> {
             _.toVector
           }
 
@@ -657,7 +657,7 @@ object ArgonParser {
               ruleModifier(KW_ERASED) |
               ruleModifier(KW_INLINE)
 
-          anyModifier.observeSource.* --> {
+          anyModifier.observeLocation.* --> {
             _.toVector
           }
 
@@ -676,7 +676,7 @@ object ArgonParser {
               ruleModifier(KW_ERASED) |
               ruleModifier(KW_INLINE)
 
-          anyModifier.observeSource.* --> {
+          anyModifier.observeLocation.* --> {
             _.toVector
           }
 
@@ -688,7 +688,7 @@ object ArgonParser {
               ruleModifier(KW_PRIVATE) |
               ruleModifier(KW_INTERNAL)
 
-          anyModifier.observeSource.* --> {
+          anyModifier.observeLocation.* --> {
             _.toVector
           }
 
@@ -698,7 +698,7 @@ object ArgonParser {
             ruleModifier(KW_PROOF) |
               ruleModifier(KW_ERASED)
 
-          anyModifier.observeSource.* --> {
+          anyModifier.observeLocation.* --> {
             _.toVector
           }
 
@@ -707,7 +707,7 @@ object ArgonParser {
             rule(Rule.NewLines) ++
             matchToken(OP_COLON) ++
             rule(Rule.NewLines) ++
-            rule(Rule.Type).observeSource
+            rule(Rule.Type).observeLocation
           ) --> {
               case (name, (_, _, _, paramType)) =>
                 FunctionParameter(paramType, name)
@@ -715,9 +715,9 @@ object ArgonParser {
 
         case Rule.MethodParameterList =>
           ((
-            rule(Rule.MethodParameter).observeSource ++
+            rule(Rule.MethodParameter).observeLocation ++
               rule(Rule.NewLines) ++
-              ((matchToken(OP_COMMA) ++ rule(Rule.MethodParameter).observeSource ++ rule(Rule.NewLines) --> {
+              ((matchToken(OP_COMMA) ++ rule(Rule.MethodParameter).observeLocation ++ rule(Rule.NewLines) --> {
                 case (_, param, _) => param
               })*) ++
               (matchToken(OP_COMMA) ?) --> {
@@ -769,15 +769,15 @@ object ArgonParser {
                     )
                 }
               )
-          ).observeSource *) --> { _.toVector }
+          ).observeLocation *) --> { _.toVector }
 
         case Rule.MethodReturnType =>
-          rule(Rule.Type).observeSource ++
+          rule(Rule.Type).observeLocation ++
             (
               rule(Rule.NewLines) ++
                 matchToken(KW_ENSURES) ++! (
                 rule(Rule.NewLines) ++
-                  rule(Rule.Type).observeSource
+                  rule(Rule.Type).observeLocation
               ) --> { case (_, _, (_, t)) => t }
             ).* --> {
             case (returnType, ensuresClauses) =>
@@ -789,12 +789,12 @@ object ArgonParser {
             matchToken(OP_EQUALS) ++! (rule(Rule.NewLines) ++ rule(Rule.Expression)) --> { case (_, (_, expr)) => expr }
 
         case Rule.BlockBody =>
-          rule(Rule.StatementList).observeSource ++
-            (matchToken(KW_RESCUE) ++! (rule(Rule.NewLines) ++ rule(Rule.PatternSpec).observeSource ++ rule(
+          rule(Rule.StatementList).observeLocation ++
+            (matchToken(KW_RESCUE) ++! (rule(Rule.NewLines) ++ rule(Rule.PatternSpec).observeLocation ++ rule(
               Rule.StatementList
-            ).observeSource)).* ++
-            (matchToken(KW_ELSE) ++! rule(Rule.StatementList).observeSource).? ++
-            (matchToken(KW_FINALLY) ++! rule(Rule.StatementList).observeSource).? --> {
+            ).observeLocation)).* ++
+            (matchToken(KW_ELSE) ++! rule(Rule.StatementList).observeLocation).? ++
+            (matchToken(KW_FINALLY) ++! rule(Rule.StatementList).observeLocation).? --> {
               case (body, rescueCases, elseBody, ensureBody) =>
                 BlockExpr(
                   body,
@@ -814,14 +814,14 @@ object ArgonParser {
         case Rule.FunctionDefinitionStmt =>
           rule(Rule.FunctionModifiers) ++
             rule(Rule.MethodPurity) ++
-            rule(Rule.IdentifierOptional).observeSource ++
+            rule(Rule.IdentifierOptional).observeLocation ++
             rule(Rule.NewLines) ++
             rule(Rule.MethodParameters) ++! (
               matchToken(OP_COLON) ++
                 rule(Rule.NewLines) ++
-                rule(Rule.MethodReturnType).observeSource ++
+                rule(Rule.MethodReturnType).observeLocation ++
                 rule(Rule.NewLines) ++
-                rule(Rule.MethodBody).observeSource
+                rule(Rule.MethodBody).observeLocation
             ) --> {
               case (modifiers, purity, name, _, params, (_, _, returnType, _, body)) =>
                 FunctionDeclarationStmt(name, params, returnType, body, modifiers, purity)
@@ -834,14 +834,14 @@ object ArgonParser {
             rule(Rule.NewLines) ++
             matchToken(OP_DOT) ++
             rule(Rule.NewLines) ++
-            rule(Rule.MethodName).observeSource ++! (
+            rule(Rule.MethodName).observeLocation ++! (
               rule(Rule.NewLines) ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_COLON) ++
                 rule(Rule.NewLines) ++
-                rule(Rule.MethodReturnType).observeSource ++
+                rule(Rule.MethodReturnType).observeLocation ++
                 rule(Rule.NewLines) ++
-                (rule(Rule.MethodBody).observeSource ?)
+                (rule(Rule.MethodBody).observeLocation ?)
             ) --> {
               case (modifiers, purity, instanceName, _, _, _, name, (_, params, _, _, returnType, _, body)) =>
                 MethodDeclarationStmt(instanceName, name, params, returnType, body, modifiers, purity)
@@ -850,10 +850,10 @@ object ArgonParser {
         case Rule.ClassConstructorDefinitionStmt =>
           rule(Rule.ClassConstructorModifiers) ++
             rule(Rule.MethodPurity).? ++
-            matchToken(KW_NEW).observeSource ++! (
+            matchToken(KW_NEW).observeLocation ++! (
               rule(Rule.MethodParameters) ++
                 rule(Rule.StatementSeparator) ++
-                rule(Rule.StatementList).observeSource ++
+                rule(Rule.StatementList).observeLocation ++
                 matchToken(KW_END)
             ) --> {
               case (modifiers, purity, newKW, (params, _, body, _)) =>
@@ -874,12 +874,12 @@ object ArgonParser {
 
         case Rule.BaseTypeSpecifier =>
           matchToken(KW_UNDERSCORE) --> { _ => Option.empty[WithSource[Expr]] } |
-            rule(Rule.Type).observeSource --> Some.apply
+            rule(Rule.Type).observeLocation --> Some.apply
 
         case Rule.TraitDeclarationStmt =>
           rule(Rule.TraitModifiers) ++
             matchToken(KW_TRAIT) ++! (
-              rule(Rule.IdentifierOptional).observeSource ++
+              rule(Rule.IdentifierOptional).observeLocation ++
                 rule(Rule.NewLines) ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_SUBTYPE) ++
@@ -895,7 +895,7 @@ object ArgonParser {
         case Rule.ClassDeclarationStmt =>
           rule(Rule.ClassModifiers) ++
             matchToken(KW_CLASS) ++! (
-              rule(Rule.IdentifierOptional).observeSource ++
+              rule(Rule.IdentifierOptional).observeLocation ++
                 rule(Rule.MethodParameters) ++
                 matchToken(OP_SUBTYPE) ++
                 rule(Rule.BaseTypeSpecifier) ++
@@ -922,7 +922,7 @@ object ArgonParser {
             rule(Rule.ExportStatement)
 
         case Rule.StatementList =>
-          (rule(Rule.StatementSeparator) *) ++ (((rule(Rule.Statement).observeSource ++ (rule(
+          (rule(Rule.StatementSeparator) *) ++ (((rule(Rule.Statement).observeLocation ++ (rule(
             Rule.StatementSeparator
           )*)) --> { case (stmt, _) => stmt })*) --> {
             case (_, stmts) => stmts.toVector
@@ -1056,16 +1056,16 @@ object ArgonParser {
       val rightGrammars =
         opGrammarsNec.map { opGrammar =>
           Lazy {
-            (opGrammar.observeSource ++! nextGrammar.observeSource) --> { case (op, right) =>
+            (opGrammar.observeLocation ++! nextGrammar.observeLocation) --> { case (op, right) =>
               (left: WithSource[Expr]) => BinaryOperatorExpr(op, left, right)
             }
           }
         }
 
-      nextGrammar.observeSource ++ (UnionGrammar.fromList(rightGrammars).observeSource*) --> {
+      nextGrammar.observeLocation ++ (UnionGrammar.fromList(rightGrammars).observeLocation*) --> {
         case (left, rightSeq) =>
-          rightSeq.foldLeft(left) { case (l, WithSource(f, rightLoc)) =>
-            WithSource(f(l), SourceLocation(fileName, l.location.start, rightLoc.end))
+          rightSeq.foldLeft(left) { case (l, WithLocation(f, rightLoc)) =>
+            WithLocation(f(l), Location(fileName, l.location.start, rightLoc.end))
           }.value
       }
     }
@@ -1076,10 +1076,10 @@ object ArgonParser {
 
   }
 
-  def parse[E](fileName: Option[String]): ZChannel[Any, E, Chunk[WithSource[Token]], FilePosition, E | SyntaxError, Chunk[Stmt], FilePosition] =
+  def parse(fileName: Option[String]): ZChannel[Any, Nothing, Chunk[WithSource[Token]], FilePosition, SyntaxError, Chunk[Stmt], FilePosition] =
     Grammar.parseAll(ArgonGrammarFactory(fileName))(Rule.PaddedStatement)
 
-  def parseTubeSpec[E](fileName: Option[String]): ZChannel[Any, E, Chunk[WithSource[Token]], FilePosition, E | SyntaxError, Chunk[ModulePatternMapping], FilePosition] =
+  def parseTubeSpec(fileName: Option[String]): ZChannel[Any, Nothing, Chunk[WithSource[Token]], FilePosition, SyntaxError, Chunk[ModulePatternMapping], FilePosition] =
     Grammar.parseAll(ArgonGrammarFactory(fileName))(Rule.ModulePatternMappingStmt)
 
 }

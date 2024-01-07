@@ -13,7 +13,7 @@ import scala.reflect.TypeTest
 
 object ESExprParser {
 
-  final case class ParseError(val fileName: Option[String], val error: GrammarError[ESExprToken, Unit]) extends ESExprException(s"Could not parse ESExpr: ${error}")
+  final case class ParseError(val fileName: Option[String], val error: GrammarError[ESExprToken, Unit, FilePosition]) extends ESExprTextParseException(s"Could not parse ESExpr: ${error}")
 
   private[ESExprParser] object Rule {
     sealed trait RuleName[T]
@@ -34,10 +34,10 @@ object ESExprParser {
     case object Result extends RuleName[WithSource[ESExpr]]
   }
 
-  private[ESExprParser] final class ParserGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[ESExprToken, ParseError, Rule.RuleName] {
+  private[ESExprParser] final class ParserGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[ESExprToken, FilePosition, ParseError, Rule.RuleName] {
 
-    private given ErrorFactory[ESExprToken, Unit, ParseError] with
-      override def createError(error: GrammarError[ESExprToken, Unit]): ParseError =
+    private given ErrorFactory[ESExprToken, Unit, ParseError, FilePosition] with
+      override def createError(error: GrammarError[ESExprToken, Unit, FilePosition]): ParseError =
         ParseError(fileName, error)
 
       override def errorEndLocationOrder: Ordering[ParseError] = new Ordering[ParseError] {
@@ -100,11 +100,11 @@ object ESExprParser {
           token(ESExprToken.Atom("null")) --> const(ESExpr.Null)
 
         case Rule.Result =>
-          rule(Rule.Expr).observeSource
+          rule(Rule.Expr).observeLocation
       }
   }
 
-  def parse[E](fileName: Option[String])
-  : ZChannel[Any, E, Chunk[WithSource[ESExprToken]], FilePosition, E | ParseError, Chunk[WithSource[ESExpr]], FilePosition] =
+  def parse(fileName: Option[String])
+  : ZChannel[Any, Nothing, Chunk[WithSource[ESExprToken]], FilePosition, ParseError, Chunk[WithSource[ESExpr]], FilePosition] =
     Grammar.parseAll(ParserGrammarFactory(fileName))(Rule.Result)
 }

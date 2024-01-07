@@ -52,7 +52,7 @@ object SourceClassConstructor {
       override def implementation: Comp[ClassConstructorImplementation] =
         implCell.get(
           stmt.body.value match {
-            case Seq(WithSource(parser.ExternExpr(specifier), location)) =>
+            case Seq(WithLocation(parser.ExternExpr(specifier), location)) =>
               val tube = ArMethodC.getOwningModule(owner).tube
               context.getExternClassConstructorImplementation(tube.options, specifier)
                 .mapBoth(
@@ -86,7 +86,7 @@ object SourceClassConstructor {
                 for
                   head <- stmts.headOption
                   last <- stmts.lastOption
-                yield WithSource(stmts, SourceLocation.merge(head.location, last.location))
+                yield WithLocation(stmts, Location.merge(head.location, last.location))
 
               def divideBody
               (
@@ -95,15 +95,15 @@ object SourceClassConstructor {
                 postFieldInit: Seq[WithSource[parser.Stmt]],
               ): (Seq[Either[Seq[WithSource[parser.Stmt]], WithSource[parser.FieldInitializationStmt]]], Option[WithSource[parser.InitializeStmt]], Seq[WithSource[parser.Stmt]]) =
                 body match {
-                  case WithSource(init: parser.InitializeStmt, initLoc) +: tail =>
+                  case WithLocation(init: parser.InitializeStmt, initLoc) +: tail =>
                     (
                       preBaseCall :+ Left(postFieldInit),
-                      Some(WithSource(init, initLoc)),
+                      Some(WithLocation(init, initLoc)),
                       tail
                     )
 
-                  case WithSource(fieldInit: parser.FieldInitializationStmt, initLoc) +: tail =>
-                    divideBody(tail, preBaseCall :+ Left(postFieldInit) :+ Right(WithSource(fieldInit, initLoc)), Seq())
+                  case WithLocation(fieldInit: parser.FieldInitializationStmt, initLoc) +: tail =>
+                    divideBody(tail, preBaseCall :+ Left(postFieldInit) :+ Right(WithLocation(fieldInit, initLoc)), Seq())
 
                   case head +: tail =>
                     divideBody(tail, preBaseCall, postFieldInit :+ head)

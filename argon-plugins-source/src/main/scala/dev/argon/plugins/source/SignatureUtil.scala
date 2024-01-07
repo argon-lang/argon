@@ -37,7 +37,7 @@ object SignatureUtil {
     (index: Int)
     : context.Comp[(Signature[context.ExprContext.WrapExpr, Res], exprConverter.Env)] =
       parameters match
-        case WithSource(param, location) +: tail =>
+        case WithLocation(param, location) +: tail =>
           def convertParamElementType(param: parser.FunctionParameter, env: exprConverter.Env): context.Comp[context.ExprContext.WrapExpr] =
             for
               exprResult <- exprConverter.convertExpr(param.paramType).check(env.withImplicitSource(_.excludeTube(owningTubeName)), opt.forTypeExpr, exprConverter.anyType)
@@ -46,7 +46,7 @@ object SignatureUtil {
 
           def convertParamElementTypes(parameters: Seq[WithSource[parser.FunctionParameter]], env: exprConverter.Env, acc: Seq[(IdentifierExpr, context.ExprContext.WrapExpr)]): context.Comp[Seq[(IdentifierExpr, context.ExprContext.WrapExpr)]] =
             parameters match
-              case WithSource(param, _) +: tail =>
+              case WithLocation(param, _) +: tail =>
                 convertParamElementType(param, env).flatMap { resExpr =>
                   convertParamElementTypes(tail, env, acc :+ (param.name -> resExpr))
                 }
@@ -69,7 +69,7 @@ object SignatureUtil {
 
 
           param match {
-            case parser.FunctionParameterList(listType, _, Vector(WithSource(paramElem, _)), false) =>
+            case parser.FunctionParameterList(listType, _, Vector(WithLocation(paramElem, _)), false) =>
               for
                 paramType <- convertParamElementType(paramElem, env)
                 paramType2 = ExprToHolesConverter(context)(exprConverter.exprContext).processWrapExpr(paramType)

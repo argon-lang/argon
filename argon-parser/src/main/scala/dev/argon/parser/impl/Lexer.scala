@@ -30,12 +30,12 @@ object Lexer {
     case object NonEmptyToken extends LexerRuleName[Token]
   }
 
-  private[Lexer] final class LexerGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[String, SyntaxError, Rule.LexerRuleName] {
+  private[Lexer] final class LexerGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[String, FilePosition, SyntaxError, Rule.LexerRuleName] {
 
-    implicit val errorFactory: Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] =
-      new Grammar.ErrorFactory[String, CharacterCategory, SyntaxError] {
+    implicit val errorFactory: Grammar.ErrorFactory[String, CharacterCategory, SyntaxError, FilePosition] =
+      new Grammar.ErrorFactory[String, CharacterCategory, SyntaxError, FilePosition] {
 
-        override def createError(error: GrammarError[String, CharacterCategory]): SyntaxError =
+        override def createError(error: GrammarError[String, CharacterCategory, FilePosition]): SyntaxError =
           SyntaxError.LexerError(fileName, error)
 
         override def errorEndLocationOrder: Ordering[SyntaxError] =
@@ -68,21 +68,21 @@ object Lexer {
           val esc = token(CharacterCategory.StringEscape, "\\")
 
           def singleEscape(ch: String, value: String): TGrammar[Token.StringToken.StringPart] =
-            (esc ++! token(CharacterCategory.StringEscape, ch)).observeSource --> {
-              case WithSource(_, location) =>
-                Token.StringToken.StringPart(WithSource(value, location))
+            (esc ++! token(CharacterCategory.StringEscape, ch)).observeLocation --> {
+              case WithLocation(_, location) =>
+                Token.StringToken.StringPart(WithLocation(value, location))
             }
 
           def isValidStringChar(c: String): Boolean = c != "\"" && c != "\\" && c != "#"
           val anyChar =
-            tokenF(CharacterCategory.StringChar, isValidStringChar).observeSource --> Token.StringToken.StringPart.apply
+            tokenF(CharacterCategory.StringChar, isValidStringChar).observeLocation --> Token.StringToken.StringPart.apply
 
           val unicodeEscape: TGrammar[Token.StringToken.StringPart] =
             (esc ++!
               token(CharacterCategory.OpenCurly, "{") ++
               rule(Rule.HexDigit).+~ ++
-              token(CharacterCategory.CloseCurly, "}")).observeSource --> {
-              case WithSource((_, _, digits, _), location) =>
+              token(CharacterCategory.CloseCurly, "}")).observeLocation --> {
+              case WithLocation((_, _, digits, _), location) =>
                 val codepoint = digits.reduceLeft { (prev, digit) => prev * 16 + digit }
 
                 val mask = (1L << 32) - 1
@@ -90,7 +90,7 @@ object Lexer {
                   throw new Exception("Invalid codepoint")
                 }
 
-                Token.StringToken.StringPart(WithSource(new String(Character.toChars(codepoint.toInt)), location))
+                Token.StringToken.StringPart(WithLocation(new String(Character.toChars(codepoint.toInt)), location))
             }
 
           val escapeSequence =
@@ -131,20 +131,21 @@ object Lexer {
             val innerExprGrammar =
               new Grammar.EmbeddedGrammar[
                 SyntaxError,
+                FilePosition,
                 String,
                 Rule.LexerRuleName,
                 Token,
                 ArgonParser.Rule.ArgonRuleName,
                 Expr,
               ] {
-                protected override val outerGrammar: Grammar[String, SyntaxError, Rule.LexerRuleName, Token] =
+                protected override val outerGrammar: Grammar[String, FilePosition, SyntaxError, Rule.LexerRuleName, Token] =
                   rule(Rule.Whitespace).* ++ rule(Rule.NonEmptyToken) --> { case (_, token) => token }
 
-                protected override val innerGrammar: Grammar[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName, Expr] =
+                protected override val innerGrammar: Grammar[Token, FilePosition, SyntaxError, ArgonParser.Rule.ArgonRuleName, Expr] =
                   ArgonParser.ArgonGrammarFactory(fileName).rule(ArgonParser.Rule.Expression)
 
                 protected override val innerFactory
-                  : Grammar.GrammarFactory[Token, SyntaxError, ArgonParser.Rule.ArgonRuleName] =
+                  : Grammar.GrammarFactory[Token, FilePosition, SyntaxError, ArgonParser.Rule.ArgonRuleName] =
                   ArgonParser.ArgonGrammarFactory(fileName)
 
                 override def stopToken(token: Token): Boolean =
@@ -160,7 +161,7 @@ object Lexer {
                   SyntaxError.ParserError(fileName, GrammarError.UnexpectedToken(TokenCategory.OP_CLOSECURLY, token))
               }
 
-            interpStart ++! (formatStr.observeSource.? ++ subExprStart ++ innerExprGrammar.observeSource) --> {
+            interpStart ++! (formatStr.observeLocation.? ++ subExprStart ++ innerExprGrammar.observeLocation) --> {
               case (_, (format, _, expr)) =>
                 Token.StringToken.ExprPart(format, expr)
             }
@@ -170,14 +171,14 @@ object Lexer {
             doubleQuote ++
               (anyChar | escapeSequence | interpolation).* ++
               doubleQuote
-          ).observeSource --> {
-            case WithSource((_, parts, _), location) =>
+          ).observeLocation --> {
+            case WithLocation((_, parts, _), location) =>
               def combineParts(parts: Chunk[Token.StringToken.Part]): Chunk[Token.StringToken.Part] =
                 parts match {
                   case Token.StringToken.StringPart(
-                        WithSource(s1, loc1)
-                      ) +: Token.StringToken.StringPart(WithSource(s2, loc2)) +: rest =>
-                    combineParts(Token.StringToken.StringPart(WithSource(s1 + s2, SourceLocation.merge(loc1, loc2))) +: rest)
+                        WithLocation(s1, loc1)
+                      ) +: Token.StringToken.StringPart(WithLocation(s2, loc2)) +: rest =>
+                    combineParts(Token.StringToken.StringPart(WithLocation(s1 + s2, Location.merge(loc1, loc2))) +: rest)
 
                   case head +: tail =>
                     head +: combineParts(tail)
@@ -187,7 +188,7 @@ object Lexer {
 
               Token.StringToken(
                 NonEmptyList.fromList(combineParts(parts).toList)
-                  .getOrElse { NonEmptyList(Token.StringToken.StringPart(WithSource("", location))) }
+                  .getOrElse { NonEmptyList(Token.StringToken.StringPart(WithLocation("", location))) }
               )
           }
 
@@ -199,7 +200,7 @@ object Lexer {
           (singleQuote ++ ((
             singleQuote ++ singleQuote --> const("'") |
               anyChar
-          ).*).observeSource ++ singleQuote) --> {
+          ).*).observeLocation ++ singleQuote) --> {
             case (_, chs, _) =>
               Token.StringToken(NonEmptyList(
                 Token.StringToken.StringPart(chs.map(_.mkString))
@@ -419,7 +420,7 @@ object Lexer {
             op(atSign, Token.OP_FUNCTION_RESULT_VALUE)
 
         case Rule.ResultToken =>
-          (rule(Rule.NonEmptyToken).observeSource --> Some.apply) |
+          (rule(Rule.NonEmptyToken).observeLocation --> Some.apply) |
             (rule(Rule.Whitespace) --> const(None: Option[WithSource[Token]]))
 
         case Rule.NonEmptyToken =>
@@ -434,9 +435,9 @@ object Lexer {
 
   }
 
-  def lex[E](fileName: Option[String])
-    : ZChannel[Any, E, Chunk[WithSource[String]], FilePosition, E | SyntaxError, Chunk[WithSource[Token]], FilePosition] =
+  def lex(fileName: Option[String])
+    : ZChannel[Any, Nothing, Chunk[WithSource[String]], FilePosition, SyntaxError, Chunk[WithSource[Token]], FilePosition] =
     Grammar.parseAll(LexerGrammarFactory(fileName))(Rule.ResultToken)
-      .pipeTo(ZChannelUtil.mapElements(_.flatten))
+      .mapOut(_.flatten)
 
 }

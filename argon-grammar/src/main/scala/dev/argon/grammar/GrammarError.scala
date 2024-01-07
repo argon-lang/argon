@@ -1,29 +1,29 @@
 package dev.argon.grammar
 
-import dev.argon.util.{FilePosition, SourceLocation, WithSource}
+import dev.argon.util.{FilePosition, Location, WithLocation}
 
-sealed trait GrammarError[+TToken, +TTokenCategory] {
-  def location: SourceLocation
+sealed trait GrammarError[+TToken, +TTokenCategory, +TPos] {
+  def location: Location[TPos]
 }
 
 object GrammarError {
 
-  final case class ExpectedEndOfFile[TToken](token: WithSource[TToken]) extends GrammarError[TToken, Nothing] {
-    override def location: SourceLocation = token.location
+  final case class ExpectedEndOfFile[TToken, TPos](token: WithLocation[TToken, TPos]) extends GrammarError[TToken, Nothing, TPos] {
+    override def location: Location[TPos] = token.location
   }
 
-  final case class UnexpectedToken[TToken, TTokenCategory](expectedCategory: TTokenCategory, token: WithSource[TToken])
-      extends GrammarError[TToken, TTokenCategory] {
-    override def location: SourceLocation = token.location
+  final case class UnexpectedToken[TToken, TTokenCategory, TPos](expectedCategory: TTokenCategory, token: WithLocation[TToken, TPos])
+      extends GrammarError[TToken, TTokenCategory, TPos] {
+    override def location: Location[TPos] = token.location
   }
 
-  final case class UnexpectedEndOfFile[TTokenCategory](expectedCategory: TTokenCategory, fileName: Option[String], position: FilePosition)
-      extends GrammarError[Nothing, TTokenCategory] {
-    override def location: SourceLocation = SourceLocation(fileName, position, FilePosition(position.line, position.position + 1))
+  final case class UnexpectedEndOfFile[TTokenCategory, TPos](expectedCategory: TTokenCategory, fileName: Option[String], position: TPos)
+      extends GrammarError[Nothing, TTokenCategory, TPos] {
+    override def location: Location[TPos] = Location(fileName, position, position)
   }
 
-  final case class InfiniteRecursion(fileName: Option[String], position: FilePosition) extends GrammarError[Nothing, Nothing] {
-    override def location: SourceLocation = SourceLocation(fileName, position, FilePosition(position.line, position.position + 1))
+  final case class InfiniteRecursion[TPos](fileName: Option[String], position: TPos) extends GrammarError[Nothing, Nothing, TPos] {
+    override def location: Location[TPos] = Location(fileName, position, position)
   }
 
 }

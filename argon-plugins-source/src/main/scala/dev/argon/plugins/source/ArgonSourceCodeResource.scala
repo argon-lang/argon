@@ -18,14 +18,11 @@ object ArgonSourceCodeResource:
     override def decode[R, E >: CharacterCodingException | SyntaxError](resource: BinaryResource[R, E]): ArgonSourceCodeResource[R, E] =
       new ArgonSourceCodeResource[R, E] with TextResource.Impl[R, E]:
         override def parsed: ZStream[R, E, Stmt] =
-          (
-            summon[BinaryResourceDecoder[TextResource, R, E]]
-              .decode(resource)
-              .asText
-              .mapChunks { strings => strings.flatMap(_.toCharArray.nn) }
-              .toChannel
-              >>> ArgonSourceParser.parse[E](fileName)
-            ).toStream
+          summon[BinaryResourceDecoder[TextResource, R, E]]
+            .decode(resource)
+            .asText
+            .mapChunks { strings => strings.flatMap(_.toCharArray.nn) }
+            .via(ArgonSourceParser.parse(fileName))
 
         override def asText: ZStream[R, E, String] =
           summon[BinaryResourceDecoder[TextResource, R, E]]

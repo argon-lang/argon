@@ -1,6 +1,6 @@
 package dev.argon.parser.impl
 
-import dev.argon.util.{FilePosition, WithSource}
+import dev.argon.util.{FilePosition, WithLocation, WithSource}
 import dev.argon.grammar.{Grammar, GrammarError}
 
 trait NumberTokenHelpers extends GrammarTestHelpers {
@@ -10,8 +10,8 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
   override type TLabel[T] = NumberTokenHelpers.NumberTokenLabel[T]
 
   protected override val grammarFactory
-    : Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] =
-    new Grammar.GrammarFactory[Int, WithSource[String], NumberTokenHelpers.NumberTokenLabel] {
+    : Grammar.GrammarFactory[Int, FilePosition, WithSource[String], NumberTokenHelpers.NumberTokenLabel] =
+    new Grammar.GrammarFactory[Int, FilePosition, WithSource[String], NumberTokenHelpers.NumberTokenLabel] {
 
       override val fileName: Option[String] = None
 
@@ -20,12 +20,12 @@ trait NumberTokenHelpers extends GrammarTestHelpers {
 
     }
 
-  protected implicit val errorFactory: Grammar.ErrorFactory[Int, String, WithSource[String]] =
-    new Grammar.ErrorFactory[Int, String, WithSource[String]] {
+  protected implicit val errorFactory: Grammar.ErrorFactory[Int, String, WithSource[String], FilePosition] =
+    new Grammar.ErrorFactory[Int, String, WithSource[String], FilePosition] {
 
       @SuppressWarnings(Array("scalafix:Disable.toString"))
-      override def createError(error: GrammarError[Int, String]): WithSource[String] =
-        WithSource(error.toString, error.location)
+      override def createError(error: GrammarError[Int, String, FilePosition]): WithSource[String] =
+        WithLocation(error.toString, error.location)
 
       override def errorEndLocationOrder: Ordering[WithSource[String]] =
         (a, b) => implicitly[Ordering[FilePosition]].compare(a.location.end, b.location.end)
