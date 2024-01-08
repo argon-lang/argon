@@ -1,6 +1,6 @@
 package dev.argon.util
 
-import zio.stream.ZChannel
+import zio.stream.*
 import zio.*
 
 object ZChannelUtil {
@@ -23,7 +23,7 @@ object ZChannelUtil {
 
     process(state)
   end mapAccumChunksZIO
-  
+
   def mapAccumChunks[A, B, S](state: S)(f: (S, A) => (S, B)): ZChannel[Any, Nothing, A, Any, Nothing, B, S] =
     def processChunk(state: S)(a: A): ZChannel[Any, Nothing, A, Any, Nothing, B, S] =
       val (state2, results) = f(state, a)
@@ -45,5 +45,12 @@ object ZChannelUtil {
 
   def mapAccumOption[A, B, S](state: S)(f: (S, A) => (S, Option[B]))
     : ZChannel[Any, Nothing, Chunk[A], Any, Nothing, Chunk[B], S] = mapAccum(state)(f).mapOut(_.flatten)
+
+  def branchOnHead[R, E, A, B, Z](f: A => ZChannel[R, Nothing, A, Z, E, B, Z]): ZChannel[R, Nothing, A, Z, E, B, Z] =
+    ZChannel.readWithCause(
+      in = f,
+      halt = ZChannel.failCause(_),
+      done = ZChannel.succeed(_),
+    )
 
 }

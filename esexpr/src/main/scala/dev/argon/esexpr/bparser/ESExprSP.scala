@@ -2,7 +2,7 @@ package dev.argon.esexpr.bparser
 
 import zio.Chunk
 
-enum ESExprSP {
+enum ESExprSP derives CanEqual {
   case Constructed(constructor: BigInt, kwargs: Map[BigInt, ESExprSP], args: Seq[ESExprSP])
   case Bool(b: Boolean)
   case Int(n: BigInt)

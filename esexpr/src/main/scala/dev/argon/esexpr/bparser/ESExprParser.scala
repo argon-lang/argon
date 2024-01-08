@@ -1,6 +1,5 @@
 package dev.argon.esexpr.bparser
 
-import dev.argon.esexpr.{ESExpr, ESExprException}
 import dev.argon.grammar.Grammar.ErrorFactory
 import dev.argon.grammar.Grammar.Operators.*
 import dev.argon.grammar.{Grammar, GrammarError}
@@ -13,7 +12,7 @@ import scala.reflect.TypeTest
 
 object ESExprParser {
 
-  final case class ParseError(val fileName: Option[String], val error: GrammarError[ESExprToken, Unit, FileOffset]) extends ESExprException(s"Could not parse ESExpr: ${error}")
+  final case class ParseError(val fileName: Option[String], val error: GrammarError[ESExprToken, Unit, FileOffset]) extends ESExprBinaryParseException(s"Could not parse ESExpr: ${error}")
 
   private[ESExprParser] object Rule {
     sealed trait RuleName[T]

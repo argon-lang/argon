@@ -1,6 +1,6 @@
 package dev.argon.esexpr.bparser
 
-import dev.argon.esexpr.ESExpr
+import dev.argon.esexpr.{ESExpr, ESExprError}
 import dev.argon.util.{FileOffset, Location, WithLocation, ZChannelUtil}
 import zio.*
 import zio.stream.*
@@ -10,10 +10,7 @@ import java.nio.charset.{CharacterCodingException, StandardCharsets}
 
 object ESExprLexer {
 
-  type BinaryParseError = BinaryParseErrorBase | CharacterCodingException | EOFException
-
-  sealed class BinaryParseErrorBase extends Exception
-  final case class UnexpectedTag(b: Byte) extends BinaryParseErrorBase
+  final case class UnexpectedTag(b: Byte) extends ESExprBinaryParseException("Unexpected tag")
 
 
   private enum VarIntTag derives CanEqual {
@@ -32,7 +29,7 @@ object ESExprLexer {
     case PartialBuffer(tag: BufferTag, data: Chunk[Byte], startOffset: FileOffset, dataOffset: FileOffset)
   }
 
-  private def readTokens(state: ReadState, fileName: Option[String], data: Chunk[Byte], prevTokens: Chunk[WithLocation[ESExprToken, FileOffset]]): IO[BinaryParseError, (ReadState, Chunk[WithLocation[ESExprToken, FileOffset]])] =
+  private def readTokens(state: ReadState, fileName: Option[String], data: Chunk[Byte], prevTokens: Chunk[WithLocation[ESExprToken, FileOffset]]): IO[ESExprError, (ReadState, Chunk[WithLocation[ESExprToken, FileOffset]])] =
     state match {
       case ReadState.Empty(dataOffset) =>
         data match {
@@ -153,8 +150,8 @@ object ESExprLexer {
     end if
   end readBuffer
 
-  def tokenize(fileName: Option[String]): ZChannel[Any, Nothing, Chunk[Byte], Any, BinaryParseError, Chunk[WithLocation[ESExprToken, FileOffset]], FileOffset] =
-    ZChannelUtil.mapAccumChunksZIO[Any, BinaryParseError, Chunk[Byte], Chunk[WithLocation[ESExprToken, FileOffset]], ReadState](ReadState.Empty(FileOffset(0))) { (state, data) =>
+  def tokenize(fileName: Option[String]): ZChannel[Any, Nothing, Chunk[Byte], Any, ESExprError, Chunk[WithLocation[ESExprToken, FileOffset]], FileOffset] =
+    ZChannelUtil.mapAccumChunksZIO[Any, ESExprError, Chunk[Byte], Chunk[WithLocation[ESExprToken, FileOffset]], ReadState](ReadState.Empty(FileOffset(0))) { (state, data) =>
       readTokens(state, fileName, data, prevTokens = Chunk.empty)
     }
       .flatMap {
