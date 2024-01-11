@@ -21,7 +21,7 @@ object Compile {
       for
         pluginLoader <- PluginLoader.make[R, E](config)
         
-        tubePlugin <- pluginLoader.loadPlugin(config.tube.loader.plugin)
+        tubePlugin <- pluginLoader.loadInputPlugin(config.tube.loader.plugin)
         
         context = PluginContext[R, E](tubePlugin)
 
@@ -38,14 +38,14 @@ object Compile {
         
         _ <- ZIO.foreachDiscard(config.output.output) { case (pluginName, OutputConfig(options, dest)) =>
           for
-            outputPlugin <- pluginLoader.loadPlugin(pluginName)
+            outputPluginWithAdapter <- pluginLoader.loadOutputPlugin(pluginName)(context)
             outputOptions <- ZIO.fromEither(
-              outputPlugin.outputOptionsDecoder
+              outputPluginWithAdapter.plugin.outputOptionsDecoder
                 .decode(resReader)(options)
                 .left.map(BuildConfigParseError.apply)
             )
-            tubeOutput <- outputPlugin.emitTube(context)(declTube)(outputOptions)
-            _ <- handlePluginOutput(outputPlugin.pluginId, Seq(), dest, tubeOutput, outputPlugin.outputHandler)
+            tubeOutput <- outputPluginWithAdapter.plugin.emitTube(context)(outputPluginWithAdapter.adapter)(declTube)(outputOptions)
+            _ <- handlePluginOutput(pluginName, Seq(), dest, tubeOutput, outputPluginWithAdapter.plugin.outputHandler)
           yield ()
         }
       yield ()

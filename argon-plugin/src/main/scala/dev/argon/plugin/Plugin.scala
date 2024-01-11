@@ -28,16 +28,9 @@ sealed abstract class Plugin[R <: CompEnv, E >: CompError] {
   val externFunction: Extern
   val externClassConstructor: Extern
 
-
-  type PluginForPlatforms = Plugin[R, E] {
-    type Options = Plugin.this.Options
-    val externMethod: Plugin.this.externMethod.type
-    val externFunction: Plugin.this.externFunction.type
-    val externClassConstructor: Plugin.this.externClassConstructor.type
-  }
-
-  def emitTube[CtxPlugin <: PluginForPlatforms]
-  (context: PluginContext[R, E, CtxPlugin])
+  def emitTube
+  (context: PluginContext[R, E, ?])
+  (pluginAdapter: PluginAdapter[R, E, context.plugin.type, this.type])
   (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
   (options: OutputOptions)
   : context.Comp[Output]
@@ -68,7 +61,7 @@ object Plugin {
   type WithId[S <: String] = { val pluginId: S }
 }
 
-sealed trait PlatformPluginSet[R, E] {
+sealed trait PlatformPluginSet[R <: CompEnv, E >: CompError] {
   def platformIds: List[String]
 
   type Options
@@ -100,7 +93,7 @@ abstract class PlatformPlugin[R <: CompEnv, E >: CompError] extends Plugin[R, E]
   override final def platformIds: List[String] = List(pluginId)
 }
 
-final class PluginSet[R, E](val partial: PluginSet.PartialPlugin[R, E]) extends PlatformPluginSet[R, E] {
+final class PluginSet[R <: CompEnv, E >: CompError](val partial: PluginSet.PartialPlugin[R, E]) extends PlatformPluginSet[R, E] {
   override def platformIds: List[String] = partial.platformIds
 
   override type Options = partial.Options
@@ -127,10 +120,47 @@ final class PluginSet[R, E](val partial: PluginSet.PartialPlugin[R, E]) extends 
 
   override def loadExternClassConstructor(options: partial.Options)(id: String): ZIO[R, E, Option[externClassConstructor.Implementation]] =
     partial.loadExternClassConstructor(options)(id)
+
+
+  type PluginForPlatforms = Plugin[R, E] {
+    val externMethod: PluginSet.this.externMethod.type
+    val externFunction: PluginSet.this.externFunction.type
+    val externClassConstructor: PluginSet.this.externClassConstructor.type
+  }
+
+  def getWithAdapter(id: String, fromPlugin: PluginForPlatforms): Option[PluginWithAdapter[R, E, fromPlugin.type]] =
+    partial.getWithAdapter(id).map { pwa =>
+      new PluginWithAdapter[R, E, fromPlugin.type] {
+        override val plugin: pwa.plugin.type = pwa.plugin
+        override val adapter: PluginAdapter[R, E, fromPlugin.type, pwa.plugin.type] =
+          new PluginAdapter[R, E, fromPlugin.type, pwa.plugin.type] {
+            override val ctxPlugin: fromPlugin.type = fromPlugin
+            override val plugin: pwa.plugin.type = pwa.plugin
+
+            override def getExternMethodImplementation(method: partial.externMethod.Implementation): plugin.externMethod.Implementation =
+              pwa.getExternMethodImplementation(method)
+
+            override def getExternMethodReference(method: partial.externMethod.Reference): plugin.externMethod.Reference =
+              pwa.getExternMethodReference(method)
+
+            override def getExternFunctionImplementation(func: partial.externFunction.Implementation): plugin.externFunction.Implementation =
+              pwa.getExternFunctionImplementation(func)
+
+            override def getExternFunctionReference(func: partial.externFunction.Reference): plugin.externFunction.Reference =
+              pwa.getExternFunctionReference(func)
+
+            override def getExternClassConstructorImplementation(ctor: partial.externClassConstructor.Implementation): plugin.externClassConstructor.Implementation =
+              pwa.getExternClassConstructorImplementation(ctor)
+
+            override def getExternClassConstructorReference(ctor: partial.externClassConstructor.Reference): plugin.externClassConstructor.Reference =
+              pwa.getExternClassConstructorReference(ctor)
+          }
+      }
+    }
 }
 
 object PluginSet {
-  sealed trait PartialPlugin[R, E] {
+  sealed trait PartialPlugin[R <: CompEnv, E >: CompError] {
     def platformIds: List[String]
 
     type Options <: Tuple
@@ -156,6 +186,8 @@ object PluginSet {
     (options: Options)
       (id: String)
     : ZIO[R, E, Option[externClassConstructor.Implementation]]
+
+    def getWithAdapter(id: String): Option[PartialPluginWithAdapter[R, E, this.type]]
   }
 
   trait PartialOptionDecoder[R, E, Options] {
@@ -250,7 +282,19 @@ object PluginSet {
       PartialESExprCodecCons[h.Reference, t.Reference](headId)
   }
 
-  final class PartialPluginNil[R, E] extends PartialPlugin[R, E] {
+  trait PartialPluginWithAdapter[R <: CompEnv, E >: CompError, TPartialPlugin <: PartialPlugin[R, E]] {
+    val partialPlugin: TPartialPlugin
+    val plugin: Plugin[R, E]
+
+    def getExternMethodImplementation(method: partialPlugin.externMethod.Implementation): plugin.externMethod.Implementation
+    def getExternMethodReference(method: partialPlugin.externMethod.Reference): plugin.externMethod.Reference
+    def getExternFunctionImplementation(func: partialPlugin.externFunction.Implementation): plugin.externFunction.Implementation
+    def getExternFunctionReference(func: partialPlugin.externFunction.Reference): plugin.externFunction.Reference
+    def getExternClassConstructorImplementation(ctor: partialPlugin.externClassConstructor.Implementation): plugin.externClassConstructor.Implementation
+    def getExternClassConstructorReference(ctor: partialPlugin.externClassConstructor.Reference): plugin.externClassConstructor.Reference
+  }
+
+  final class PartialPluginNil[R <: CompEnv, E >: CompError] extends PartialPlugin[R, E] {
     override def platformIds: List[String] = Nil
 
     override type Options = EmptyTuple
@@ -276,6 +320,8 @@ object PluginSet {
 
     override def loadExternClassConstructor(options: EmptyTuple)(id: String): ZIO[Any, Nothing, Option[externClassConstructor.Implementation]] =
       ZIO.some(EmptyTuple)
+
+    override def getWithAdapter(id: String): Option[PartialPluginWithAdapter[R, E, this.type]] = None
   }
 
   final class PartialPluginCons[R <: CompEnv, E >: CompError](val platformPlugin: PlatformPlugin[R, E], val tail: PartialPlugin[R, E]) extends PartialPlugin[R, E] {
@@ -331,6 +377,84 @@ object PluginSet {
         case None => ZIO.none
       }
     end loadExternClassConstructor
+
+    override def getWithAdapter(id: String): Option[PartialPluginWithAdapter[R, E, this.type]] =
+      if id == platformPlugin.pluginId then
+        Some(new PartialPluginWithAdapter[R, E, this.type] {
+          override val partialPlugin: PartialPluginCons.this.type =
+            PartialPluginCons.this
+
+          override val plugin: platformPlugin.type = platformPlugin
+
+          override def getExternMethodImplementation(method: partialPlugin.externMethod.h.Implementation *: partialPlugin.externMethod.t.Implementation): plugin.externMethod.Implementation =
+            val (h *: _) = method
+            h
+          end getExternMethodImplementation
+
+          override def getExternMethodReference(method: partialPlugin.externMethod.h.Reference *: partialPlugin.externMethod.t.Reference): plugin.externMethod.Reference =
+            val (h *: _) = method
+            h
+          end getExternMethodReference
+
+          override def getExternFunctionImplementation(func: partialPlugin.externFunction.h.Implementation *: partialPlugin.externFunction.t.Implementation): plugin.externFunction.Implementation =
+            val (h *: _) = func
+            h
+          end getExternFunctionImplementation
+
+          override def getExternFunctionReference(func: partialPlugin.externFunction.h.Reference *: partialPlugin.externFunction.t.Reference): plugin.externFunction.Reference =
+            val (h *: _) = func
+            h
+          end getExternFunctionReference
+
+          override def getExternClassConstructorImplementation(ctor: partialPlugin.externClassConstructor.h.Implementation *: partialPlugin.externClassConstructor.t.Implementation): plugin.externClassConstructor.Implementation =
+            val (h *: _) = ctor
+            h
+          end getExternClassConstructorImplementation
+
+          override def getExternClassConstructorReference(ctor: partialPlugin.externClassConstructor.h.Reference *: partialPlugin.externClassConstructor.t.Reference): plugin.externClassConstructor.Reference =
+            val (h *: _) = ctor
+            h
+          end getExternClassConstructorReference
+        })
+      else
+        tail.getWithAdapter(id).map { tailPWA =>
+          new PartialPluginWithAdapter[R, E, this.type] {
+            override val partialPlugin: PartialPluginCons.this.type =
+              PartialPluginCons.this
+
+            override val plugin: tailPWA.plugin.type = tailPWA.plugin
+
+            override def getExternMethodImplementation(method: partialPlugin.externMethod.h.Implementation *: partialPlugin.externMethod.t.Implementation): plugin.externMethod.Implementation =
+              val (_ *: t) = method
+              tailPWA.getExternMethodImplementation(t)
+            end getExternMethodImplementation
+
+            override def getExternMethodReference(method: partialPlugin.externMethod.h.Reference *: partialPlugin.externMethod.t.Reference): plugin.externMethod.Reference =
+              val (_ *: t) = method
+              tailPWA.getExternMethodReference(t)
+            end getExternMethodReference
+
+            override def getExternFunctionImplementation(func: partialPlugin.externFunction.h.Implementation *: partialPlugin.externFunction.t.Implementation): plugin.externFunction.Implementation =
+              val (_ *: t) = func
+              tailPWA.getExternFunctionImplementation(t)
+            end getExternFunctionImplementation
+
+            override def getExternFunctionReference(func: partialPlugin.externFunction.h.Reference *: partialPlugin.externFunction.t.Reference): plugin.externFunction.Reference =
+              val (_ *: t) = func
+              tailPWA.getExternFunctionReference(t)
+            end getExternFunctionReference
+
+            override def getExternClassConstructorImplementation(ctor: partialPlugin.externClassConstructor.h.Implementation *: partialPlugin.externClassConstructor.t.Implementation): plugin.externClassConstructor.Implementation =
+              val (_ *: t) = ctor
+              tailPWA.getExternClassConstructorImplementation(t)
+            end getExternClassConstructorImplementation
+
+            override def getExternClassConstructorReference(ctor: partialPlugin.externClassConstructor.h.Reference *: partialPlugin.externClassConstructor.t.Reference): plugin.externClassConstructor.Reference =
+              val (_ *: t) = ctor
+              tailPWA.getExternClassConstructorReference(t)
+            end getExternClassConstructorReference
+          }
+        }
   }
 
 

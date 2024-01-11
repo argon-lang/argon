@@ -29,8 +29,9 @@ final class SourcePlugin[R <: SourceEnv, E >: SourceError, PlatformPlugins <: Pl
   override def outputHandler: OutputHandler[R, E, Nothing] =
     summon[OutputHandler[R, E, Output]]
 
-  override def emitTube[CtxPlugin <: PluginForPlatforms]
-  (context: PluginContext[R, E, CtxPlugin])
+  override def emitTube
+  (context: PluginContext[R, E, ?])
+  (pluginAdapter: PluginAdapter[R, E, context.plugin.type, this.type])
   (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
   (options: OutputOptions)
   : context.Comp[Output] =
