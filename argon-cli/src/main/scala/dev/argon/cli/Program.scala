@@ -100,7 +100,7 @@ object Program extends PlatformApp[PathUtil, InvalidTube | SyntaxError | Diagnos
           config <- ESExprTextResource.resourceCodec[BuildConfig].decode(configRes).decoded
           baseDir <- ZIO.serviceWithZIO[PathUtil](_.dirname(options.buildSpec.get))
           layer <- ZIO.serviceWith[PathUtil](_.resourceLayer(baseDir))
-          _ <- Compile.compile(config, plugin.platform.plugins[Environment & ResourceReader & ResourceWriter, Error]).provideSomeLayer[Environment](layer)
+          _ <- Compile.compile(config).provideSomeLayer[Environment](layer)
         yield ExitCode.success
 
 

@@ -16,14 +16,15 @@ import java.io.IOException
 import zio.*
 import zio.stream.*
 
-final class SourceTubeLoader[R, E >: SourceError, ContextOptions] extends TubeLoader[R, E, ContextOptions] {
-  override type LibOptions = SourceLibOptions[R, E, ContextOptions]
+final class SourceTubeLoader[R <: SourceEnv, E >: SourceError, TPlugin <: SourcePlugin[R, E, ?]](val plugin: TPlugin) extends TubeLoader[R, E, TPlugin] {
+  override type LibOptions = SourceLibOptions[R, E, plugin.Options]
+  import plugin.optionDecoder
 
-  override def libOptionCodec(using OptionCodec[R, E, ContextOptions]): OptionCodec[R, E, LibOptions] =
-    summon[OptionCodec[R, E, LibOptions]]
-
+  override def libOptionDecoder: OptionDecoder[R, E, LibOptions] =
+    summon[OptionDecoder[R, E, LibOptions]]
+  
   def load
-  (context: Context { type Env = R; type Error = E; type Options = ContextOptions })
+  (context: Context { type Env = R; type Error = E; type Options = plugin.Options })
   (tubeImporter: TubeImporter & HasContext[context.type])
   (libOptions: SourceLibOptions[context.Env, context.Error, context.Options])
   : ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]] =
@@ -35,7 +36,7 @@ final class SourceTubeLoader[R, E >: SourceError, ContextOptions] extends TubeLo
 
       tubeName = TubeName(libOptions.name)
 
-      tube <- SourceTube.make(context, tubeImporter, tubeName, libOptions.plugin, sourceCode.toMap)
+      tube <- SourceTube.make(context, tubeImporter, tubeName, libOptions.platforms, sourceCode.toMap)
     yield tube
 
 

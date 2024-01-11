@@ -567,7 +567,7 @@ lazy val argon_ioNode = argon_io.node
 
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-build"))
-  .dependsOn(util, options, argon_compiler_core, argon_io, argon_plugin)
+  .dependsOn(util, options, argon_compiler_core, argon_io, argon_plugin, argon_plugin_platform)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -617,7 +617,7 @@ lazy val argon_platformNode = argon_platform.node
 
 
 lazy val cli = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-cli"))
-  .dependsOn(util, argon_platform, argon_build, argon_plugin_platform)
+  .dependsOn(util, argon_platform, argon_build)
   .jvmConfigure(
     _.settings(commonJVMSettings)
       .settings(

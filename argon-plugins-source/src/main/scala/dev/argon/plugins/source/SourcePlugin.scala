@@ -4,7 +4,7 @@ import dev.argon.compiler.*
 import dev.argon.compiler.definitions.*
 import dev.argon.compiler.tube.ArTubeC
 import dev.argon.io.ResourceFactory
-import dev.argon.options.{OptionCodec, OutputHandler}
+import dev.argon.options.{OptionDecoder, OutputHandler}
 import dev.argon.parser.SyntaxError
 import dev.argon.plugin.*
 import dev.argon.plugin.executor.TestExecutor
@@ -14,42 +14,30 @@ import zio.*
 
 import java.nio.charset.CharacterCodingException
 
+type SourceEnv = CompEnv
 type SourceError = CharacterCodingException | SyntaxError | CompError | IOException
 
-final class SourcePlugin[R, E >: SourceError] extends Plugin[R, E] {
-  override type Options = SourceOptions[R, E]
-  override type Output = SourceOutput[R, E]
+final class SourcePlugin[R <: SourceEnv, E >: SourceError, PlatformPlugins <: PlatformPluginSet[R, E]](val platformPlugins: PlatformPlugins) extends CompositePlugin[R, E, PlatformPlugins] {
+  override val pluginId: "source" = "source"
 
-  override def optionCodec: OptionCodec[R, E, Options] =
-    summon[OptionCodec[R, E, Options]]
+  override type OutputOptions = Nothing
+  override type Output = Nothing
 
-  override def outputHandler: OutputHandler[R, E, Output] =
+  override def outputOptionsDecoder: OptionDecoder[R, E, Nothing] =
+    summon[OptionDecoder[R, E, OutputOptions]]
+
+  override def outputHandler: OutputHandler[R, E, Nothing] =
     summon[OutputHandler[R, E, Output]]
 
-
-  override type ExternMethodImplementation = Unit
-  override type ExternFunctionImplementation = Unit
-  override type ExternClassConstructorImplementation = Unit
-
-  override def emitTube
-  (context: Context { type Env = R; type Error = E })
-  (adapter: PluginContextAdapter.Aux[context.type, this.type])
+  override def emitTube[CtxPlugin <: PluginForPlatforms]
+  (context: PluginContext[R, E, CtxPlugin])
   (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
+  (options: OutputOptions)
   : context.Comp[Output] =
-    ZIO.succeed(SourceOutput())
+    options
 
+  override def testExecutor: Option[TestExecutor[R, E, Options, Output]] = None
 
-  override def loadExternMethod(options: SourceOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
-    ZIO.unit.asSome
-
-  override def loadExternFunction(options: SourceOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
-    ZIO.unit.asSome
-
-  override def loadExternClassConstructor(options: SourceOptions[R, E])(id: String): ZIO[R, E, Option[Unit]] =
-    ZIO.unit.asSome
-
-  override def tubeLoaders[ContextOptions]: Map[String, TubeLoader[R, E, ContextOptions]] =
-    Map("buildspec" -> SourceTubeLoader())
-
-  override def testExecutor: Option[TestExecutor[R, E, SourceOptions[R, E], SourceOutput[R, E]]] = None
+  override def tubeLoaders[ContextOptions]: Map[String, TubeLoader[R, E, this.type]] =
+    Map("buildspec" -> SourceTubeLoader(this))
 }

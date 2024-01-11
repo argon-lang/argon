@@ -27,7 +27,7 @@ object SourceTube {
           val (tube, path) = args
           val moduleName = ModuleName(tubeName, path)
           modules.get(path) match {
-            case Some(module) => SourceModule.make(context, tubeImporter, tube, moduleName, module)
+            case Some(module) => SourceModule.make(context, tubeImporter, tube, moduleName, module, opts)
             case None => ZIO.fail(DiagnosticError.UnknownModuleException(moduleName))
           }
         }
@@ -36,8 +36,6 @@ object SourceTube {
 
       override val context: context2.type = context2
       override val tubeName: TubeName = tubeName2
-
-      override val options: context.Options = opts
 
       override def module(path: ModulePath): Comp[ArModule & HasImplementation[true]] = loadModule((this, path))
       override lazy val modulePaths: Set[ModulePath] = modules.keySet

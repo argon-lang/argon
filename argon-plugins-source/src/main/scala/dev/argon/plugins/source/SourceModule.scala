@@ -19,6 +19,7 @@ object SourceModule {
       currentTube: ArTubeC & HasContext[context.type] & HasImplementation[true],
       moduleName: ModuleName,
       moduleFile: ArgonSourceCodeResource[context.Env, context.Error],
+      tubeOptions: context.Options,
     )
     : UIO[ArModuleC & HasContext[context.type] & HasImplementation[true]] =
     val context2: context.type = context
@@ -119,21 +120,21 @@ object SourceModule {
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
               owner = OwnedByModuleC[context.type, true](currentModule, stmt.name.value, modifier)
-              arTrait <- SourceTrait.make(context)(exprConverter)(vtableBuilder)(env)(owner)(stmt)
+              arTrait <- SourceTrait.make(context)(tubeOptions)(exprConverter)(vtableBuilder)(env)(owner)(stmt)
             yield (imports, Seq(ModuleElementC.TraitElement(arTrait)))
 
           case stmt: ClassDeclarationStmt =>
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
               owner = OwnedByModuleC[context.type, true](currentModule, stmt.name.value, modifier)
-              arClass <- SourceClass.make(context)(exprConverter)(vtableBuilder)(env)(owner)(stmt)
+              arClass <- SourceClass.make(context)(tubeOptions)(exprConverter)(vtableBuilder)(env)(owner)(stmt)
             yield (imports, Seq(ModuleElementC.ClassElement(arClass)))
 
           case stmt: FunctionDeclarationStmt =>
             for
               modifier <- AccessUtil.parseGlobal(stmt.modifiers)
               owner = OwnedByModuleC[context.type, true](currentModule, stmt.name.value, modifier)
-              func <- SourceFunction.make(context)(exprConverter)(env)(owner)(stmt)
+              func <- SourceFunction.make(context)(tubeOptions)(exprConverter)(env)(owner)(stmt)
             yield (imports, Seq(ModuleElementC.FunctionElement(func)))
 
           case _ => ZIO.fail(DiagnosticError.InvalidTopLevelStatement(stmt))

@@ -14,6 +14,7 @@ object SourceClassConstructor {
 
   def make[TOwner]
   (ctx: Context)
+  (tubeOptions: ctx.Options)
   (exprConverter: ExpressionConverter & HasContext[ctx.type])
   (outerEnv: exprConverter.Env)
   (ctorOwnership: TOwner & ClassConstructorC.Ownership[ctx.type, true])
@@ -53,8 +54,7 @@ object SourceClassConstructor {
         implCell.get(
           stmt.body.value match {
             case Seq(WithLocation(parser.ExternExpr(specifier), location)) =>
-              val tube = ArMethodC.getOwningModule(owner).tube
-              context.getExternClassConstructorImplementation(tube.options, specifier)
+              context.getExternClassConstructorImplementation(tubeOptions, specifier)
                 .mapBoth(
                   {
                     case Some(e) => e

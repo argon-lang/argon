@@ -4,8 +4,9 @@ import dev.argon.io.*
 import dev.argon.compiler.*
 import dev.argon.compiler.tube.{ArTubeC, TubeName}
 import dev.argon.esexpr.{ESExpr, ESExprCodec}
-import dev.argon.options.{OptionCodec, OutputHandler, OutputInfo}
+import dev.argon.options.{OptionDecoder, OutputHandler, OutputInfo}
 import dev.argon.plugin.*
+import dev.argon.plugin.platform.{AnyPluginEnv, AnyPluginError}
 import dev.argon.util.toml.{Toml, TomlCodec}
 import zio.*
 import zio.stm.*
@@ -13,18 +14,18 @@ import zio.stm.*
 import java.io.IOException
 
 object Compile {
-  def compile[R <: ResourceReader & ResourceWriter, E >: BuildError | CompError | IOException](
+  def compile[R <: ResourceReader & ResourceWriter & AnyPluginEnv, E >: BuildError | AnyPluginError | CompError | IOException](
     config: BuildConfig,
-    plugins: Map[String, Plugin[R, E]],
   ): ZIO[R, E, Unit] =
     ZIO.scoped(
       for
-        contextFactory <- BuildContextFactory.make(plugins, config)
+        pluginLoader <- PluginLoader.make[R, E](config)
+        
+        tubePlugin <- pluginLoader.loadPlugin(config.tube.loader.plugin)
+        
+        context = PluginContext[R, E](tubePlugin)
 
-        _ <- ZIO.unit // Used to allow below type annotation
-        context: contextFactory.ContextRefined = contextFactory.createContext
-
-        tubeImporter <- contextFactory.createTubeImporter(context)
+        tubeImporter <- TubeImporterImpl[R, E](pluginLoader)(context)
 
         resReader <- ZIO.service[ResourceReader]
 
@@ -34,14 +35,19 @@ object Compile {
         _ <- ZIO.foreachDiscard(config.libraries)(tubeImporter.loadTube(resReader))
 
         _ <- ZIO.logTrace(s"Writing output")
-        _ <- ZIO.foreachDiscard(config.output.output) { case (pluginName, outputOptions) =>
+        
+        _ <- ZIO.foreachDiscard(config.output.output) { case (pluginName, OutputConfig(options, dest)) =>
           for
-            pluginHelper <- ZIO.fromEither(contextFactory.getPluginHelper(pluginName).toRight(UnknownPlugin(pluginName)))
-            tubeOutput <- pluginHelper.plugin.emitTube(context)(pluginHelper.adapter(context))(declTube)
-            _ <- handlePluginOutput(pluginName, Seq(), outputOptions, tubeOutput, pluginHelper.plugin.outputHandler)
+            outputPlugin <- pluginLoader.loadPlugin(pluginName)
+            outputOptions <- ZIO.fromEither(
+              outputPlugin.outputOptionsDecoder
+                .decode(resReader)(options)
+                .left.map(BuildConfigParseError.apply)
+            )
+            tubeOutput <- outputPlugin.emitTube(context)(declTube)(outputOptions)
+            _ <- handlePluginOutput(outputPlugin.pluginId, Seq(), dest, tubeOutput, outputPlugin.outputHandler)
           yield ()
         }
-
       yield ()
     )
 

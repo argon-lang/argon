@@ -6,7 +6,7 @@ import dev.argon.options
 import scala.deriving.Mirror
 import scala.compiletime.{constValue, erasedValue, summonInline}
 
-trait OutputHandler[R, E, Output]:
+trait OutputHandler[-R, +E, Output]:
   lazy val options: Map[Seq[String], OutputInfo[R, E, Output]]
 end OutputHandler
 
@@ -73,6 +73,10 @@ object OutputHandler:
           options
       })
   end directoryResourceOutputHandler
+
+  given OutputHandler[Any, Nothing, Nothing] with
+    override lazy val options: Map[Seq[String], OutputInfo[Any, Nothing, Nothing]] = Map.empty
+  end given
 
 end OutputHandler
 

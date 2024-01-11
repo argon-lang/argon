@@ -16,6 +16,7 @@ object SourceClass {
 
   def make[TOwner]
   (ctx: Context)
+  (tubeOptions: ctx.Options)
   (exprConverter2: ExpressionConverter & HasContext[ctx.type])
   (vtableBuilder: VTableBuilder[ctx.type])
   (outerEnv: exprConverter2.Env)
@@ -107,12 +108,12 @@ object SourceClass {
       override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true] & HasOwner[OwnedByClass[owner.type, true]]]]] =
         methodsCell.get {
           val body2 = filteredBody[parser.MethodDeclarationStmt](stmt.instanceBody)
-          buildMethods[OwnedByClass[owner.type, true]](OwnedByClassC.apply)(body2)
+          buildMethods[OwnedByClass[owner.type, true]](tubeOptions)(OwnedByClassC.apply)(body2)
         }
 
       override def staticMethods
         : Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true] & HasOwner[OwnedByClassStatic[owner.type, true]]]]] =
-        staticMethodsCell.get(buildMethods[OwnedByClassStatic[owner.type, true]](OwnedByClassStaticC.apply)(stmt.body))
+        staticMethodsCell.get(buildMethods[OwnedByClassStatic[owner.type, true]](tubeOptions)(OwnedByClassStaticC.apply)(stmt.body))
 
       override def constructors: Comp[Seq[ClassConstructor & HasImplementation[true]]] =
         ctorsCell.get {
@@ -122,7 +123,7 @@ object SourceClass {
                 for {
                   access <- AccessUtil.parse(ctorDecl.modifiers)
                   env <- innerEnvNoFields
-                  ctor <- SourceClassConstructor.make(context)(exprConverter)(env)(OwnedByClassC(this, None, access))(ctorDecl)
+                  ctor <- SourceClassConstructor.make(context)(tubeOptions)(exprConverter)(env)(OwnedByClassC(this, None, access))(ctorDecl)
                 } yield ctor
               ).asSomeError
 

@@ -1,9 +1,12 @@
 package dev.argon.plugin.platform
 
-import dev.argon.plugin.Plugin
-import dev.argon.plugins.source.{SourcePlugin, SourceError}
+import dev.argon.plugin.*
+import dev.argon.plugins.source.{SourcePluginFactory, SourceEnv, SourceError}
 
-def plugins[R, E >: SourceError]: Map[String, Plugin[R, E]] = Map(
-  "source" -> SourcePlugin[R, E](),
+type AnyPluginEnv = SourceEnv
+type AnyPluginError = SourceError
+
+def pluginFactories[R, E >: SourceError]: Map[String, PluginFactory[R, E]] = Map(
+  "source" -> SourcePluginFactory[R, E](),
 )
 

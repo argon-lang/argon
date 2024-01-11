@@ -1,5 +1,5 @@
 {
-  "plugins": [ "source", "js" ],
+  "platforms": [ "js" ],
 
   "tube": {
     "loader": {
@@ -10,7 +10,7 @@
       "name": ["Argon", "Core"],
       "spec": "Argon.Core.tubespec",
       "sources": "src",
-      "plugin": {
+      "platforms": {
         "js": {
           "modules": {
             "Bool": {

@@ -7,7 +7,7 @@ import dev.argon.parser.SyntaxError
 import dev.argon.compiler.expr.CompleteExprContext
 import dev.argon.compiler.tube.{ArTubeC, TubeName}
 import dev.argon.compiler.vtable.VTableContext
-import dev.argon.options.OptionCodec
+import dev.argon.options.OptionDecoder
 
 trait Context {
   type Env <: CompEnv
@@ -23,7 +23,6 @@ trait Context {
   }
 
   type Options
-  given optionsCodec: OptionCodec[Env, Error, Options]
 
   type ExternMethodImplementation
   type MethodReference

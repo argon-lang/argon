@@ -13,6 +13,7 @@ object SourceFunction {
 
   def make[TOwner]
   (ctx: Context)
+  (tubeOptions: ctx.Options)
   (exprConverter: ExpressionConverter & HasContext[ctx.type])
   (outerEnv: exprConverter.Env)
   (functionOwner: TOwner & ArFuncC.Ownership[ctx.type, true])
@@ -58,8 +59,7 @@ object SourceFunction {
         implCell.get(
           stmt.body match {
             case WithLocation(parser.ExternExpr(specifier), location) =>
-              val tube = ArFuncC.getOwningModule(owner).tube
-              context.getExternFunctionImplementation(tube.options, specifier)
+              context.getExternFunctionImplementation(tubeOptions, specifier)
                 .mapBoth(
                   {
                     case Some(e) => e

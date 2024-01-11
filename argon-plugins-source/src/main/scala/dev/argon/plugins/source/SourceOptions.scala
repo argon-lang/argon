@@ -1,16 +1,18 @@
 package dev.argon.plugins.source
 
-import dev.argon.options.OptionCodec
+import dev.argon.options.OptionDecoder
 import dev.argon.parser.SyntaxError
 import java.io.IOException
 
 import java.nio.charset.CharacterCodingException
 
-final case class SourceOptions[-R, +E]()
+final case class SourceOptions[PlatformOptions](
+  platform: PlatformOptions,
+)
 
 object SourceOptions:
 
-  given optionCodec[R, E >: CharacterCodingException | SyntaxError | IOException]: OptionCodec[R, E, SourceOptions[R, E]] =
-    OptionCodec.derive[R, E, SourceOptions[R, E]]
+  given optionDecoder[R, E >: CharacterCodingException | SyntaxError | IOException, PlatformOptions: [A] =>> OptionDecoder[R, E, A]]: OptionDecoder[R, E, SourceOptions[PlatformOptions]] =
+    OptionDecoder.derive[R, E, SourceOptions[PlatformOptions]]
 
 end SourceOptions

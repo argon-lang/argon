@@ -13,6 +13,7 @@ object SourceMethod {
 
   def make[TOwner]
   (ctx: Context)
+  (tubeOptions: ctx.Options)
   (exprConverter: ExpressionConverter & HasContext[ctx.type])
   (outerEnv: exprConverter.Env)
   (methodOwner: TOwner & ArMethodC.Ownership[ctx.type, true])
@@ -70,8 +71,7 @@ object SourceMethod {
               })
 
             case Some(WithLocation(parser.ExternExpr(specifier), location)) =>
-              val tube = ArMethodC.getOwningModule(owner).tube
-              context.getExternMethodImplementation(tube.options, specifier)
+              context.getExternMethodImplementation(tubeOptions, specifier)
                 .mapBoth(
                   {
                     case Some(e) => e

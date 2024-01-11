@@ -14,6 +14,7 @@ object SourceTrait {
 
   def make[TOwner]
   (ctx: Context)
+  (tubeOptions: ctx.Options)
   (exprConverter2: ExpressionConverter & HasContext[ctx.type])
   (vtableBuilder: VTableBuilder[ctx.type])
   (outerEnv: exprConverter2.Env)
@@ -69,11 +70,11 @@ object SourceTrait {
         sigEnv.map { _._2 }
 
       override def methods: Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true] & HasOwner[OwnedByTrait[owner.type, true]]]]] =
-        methodsCell.get(buildMethods[OwnedByTrait[owner.type, true]](OwnedByTraitC.apply)(stmt.instanceBody))
+        methodsCell.get(buildMethods[OwnedByTrait[owner.type, true]](tubeOptions)(OwnedByTraitC.apply)(stmt.instanceBody))
 
       override def staticMethods
         : Comp[Map[Option[IdentifierExpr], Seq[ArMethod & HasImplementation[true] & HasOwner[OwnedByTraitStatic[owner.type, true]]]]] =
-        staticMethodsCell.get(buildMethods[OwnedByTraitStatic[owner.type, true]](OwnedByTraitStaticC.apply)(stmt.body))
+        staticMethodsCell.get(buildMethods[OwnedByTraitStatic[owner.type, true]](tubeOptions)(OwnedByTraitStaticC.apply)(stmt.body))
 
       override def vtable: Comp[context.VT.VTable] =
         vtableBuilder.fromTrait(this)
