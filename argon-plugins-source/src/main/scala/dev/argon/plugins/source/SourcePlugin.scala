@@ -39,6 +39,6 @@ final class SourcePlugin[R <: SourceEnv, E >: SourceError, PlatformPlugins <: Pl
 
   override def testExecutor: Option[TestExecutor[R, E, Options, Output]] = None
 
-  override def tubeLoaders[ContextOptions]: Map[String, TubeLoader[R, E, this.type]] =
+  override def tubeLoaders: Map[String, TubeLoader[R, E, this.type]] =
     Map("buildspec" -> SourceTubeLoader(this))
 }

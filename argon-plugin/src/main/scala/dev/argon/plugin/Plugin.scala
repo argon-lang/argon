@@ -54,7 +54,7 @@ sealed abstract class Plugin[R <: CompEnv, E >: CompError] {
 
   def testExecutor: Option[TestExecutor[R, E, Options, Output]]
 
-  def tubeLoaders[ContextOptions]: Map[String, TubeLoader[R, E, this.type]]
+  def tubeLoaders: Map[String, TubeLoader[R, E, this.type]]
 }
 
 object Plugin {

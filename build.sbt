@@ -520,6 +520,30 @@ lazy val argon_plugins_sourceJVM = argon_plugins_source.jvm
 lazy val argon_plugins_sourceJS = argon_plugins_source.js
 lazy val argon_plugins_sourceNode = argon_plugins_source.node
 
+lazy val argon_plugins_wasm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-plugins-wasm"))
+  .dependsOn(argon_compiler_core, parser, argon_plugin)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-plugins-wasm",
+  )
+
+lazy val argon_plugins_wasmJVM = argon_plugins_wasm.jvm
+lazy val argon_plugins_wasmJS = argon_plugins_wasm.js
+lazy val argon_plugins_wasmNode = argon_plugins_wasm.node
+
 lazy val argon_plugin_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-platform"))
   .dependsOn(argon_plugin, argon_plugins_source)
   .jvmConfigure(

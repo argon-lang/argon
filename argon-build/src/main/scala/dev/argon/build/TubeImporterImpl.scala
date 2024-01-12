@@ -26,7 +26,7 @@ object TubeImporterImpl {
       override def loadTube(resFactory: ResourceFactory[context.Env, context.Error])(tubeOptions: TubeOptions): ZIO[R & Scope, E, ArTube] =
         for
           plugin <- loader.loadInputPlugin(tubeOptions.loader.plugin)
-          loader <- ZIO.fromEither(plugin.tubeLoaders[context.Options].get(tubeOptions.loader.name).toRight(UnknownTubeLoader(tubeOptions.loader)))
+          loader <- ZIO.fromEither(plugin.tubeLoaders.get(tubeOptions.loader.name).toRight(UnknownTubeLoader(tubeOptions.loader)))
 
           libOptions <- ZIO.fromEither(
             loader.libOptionDecoder
