@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets
 import scala.sys.process.Process
 
 val graalVersion = "23.1.0"
-val zioVersion = "2.0.17"
+val zioVersion = "2.0.21"
 
 lazy val envValues = Map(
   "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
@@ -31,11 +31,11 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
     "dev.zio" %%% "zio-json" % "0.6.2",
-    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.3",
+    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.4",
 
     "org.scala-lang.modules" %%% "scala-xml" % "2.2.0",
-    "org.gnieh" %%% "fs2-data-xml-scala" % "1.8.1",
-    "dev.zio" %%% "zio-interop-cats" % "23.0.0.8",
+    "org.gnieh" %%% "fs2-data-xml-scala" % "1.10.0",
+    "dev.zio" %%% "zio-interop-cats" % "23.1.0.0",
   ),
 
 )
@@ -48,7 +48,7 @@ lazy val sharedJSNodeSettings = Seq(
 
   npmDependencies ++= Seq(
     "jszip" -> "3.10.1",
-    "acorn" -> "8.10.0",
+    "acorn" -> "8.11.3",
     "astring" -> "1.8.6",
   ),
   
@@ -69,17 +69,17 @@ lazy val graalDependencies = Seq(
 )
 
 lazy val annotationDependencies = Seq(
-  "org.jetbrains" % "annotations" % "24.0.1",
+  "org.jetbrains" % "annotations" % "24.1.0",
 )
 
 lazy val commonJVMSettings = Seq(
 
   libraryDependencies ++= annotationDependencies ++ Seq(
-    "commons-io" % "commons-io" % "2.13.0",
-    "org.apache.commons" % "commons-lang3" % "3.13.0",
-    "org.apache.commons" % "commons-text" % "1.10.0",
-    "org.apache.commons" % "commons-compress" % "1.24.0",
-    "dev.zio" %% "zio-logging" % "2.1.14",
+    "commons-io" % "commons-io" % "2.15.1",
+    "org.apache.commons" % "commons-lang3" % "3.14.0",
+    "org.apache.commons" % "commons-text" % "1.11.0",
+    "org.apache.commons" % "commons-compress" % "1.25.0",
+    "dev.zio" %% "zio-logging" % "2.1.16",
     "net.aichler" % "jupiter-interface" % JupiterKeys.jupiterVersion.value % Test,
   ),
 
