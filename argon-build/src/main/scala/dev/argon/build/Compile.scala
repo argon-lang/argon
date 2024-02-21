@@ -2,6 +2,7 @@ package dev.argon.build
 
 import dev.argon.io.*
 import dev.argon.compiler.*
+import dev.argon.compiler.definitions.HasImplementation
 import dev.argon.compiler.tube.{ArTubeC, TubeName}
 import dev.argon.esexpr.{ESExpr, ESExprCodec}
 import dev.argon.options.{OptionDecoder, OutputHandler, OutputInfo}
@@ -31,6 +32,9 @@ object Compile {
 
         tube <- tubeImporter.loadTube(resReader)(config.tube)
         declTube <- ZIO.fromEither(tube.asDeclaration.toRight { CouldNotLoadDeclarationTube(tube.tubeName) })
+        emitTube = new EmittableTube[context.type] {
+          override val asTypedTube: ArTubeC & HasContext[context.type] & HasImplementation[true] = declTube
+        }
 
         _ <- ZIO.foreachDiscard(config.libraries)(tubeImporter.loadTube(resReader))
 
@@ -44,7 +48,7 @@ object Compile {
                 .decode(resReader)(options)
                 .left.map(BuildConfigParseError.apply)
             )
-            tubeOutput <- outputPluginWithAdapter.plugin.emitTube(context)(outputPluginWithAdapter.adapter)(declTube)(outputOptions)
+            tubeOutput <- outputPluginWithAdapter.plugin.emitTube(context)(outputPluginWithAdapter.adapter)(emitTube)(outputOptions)
             _ <- handlePluginOutput(pluginName, Seq(), dest, tubeOutput, outputPluginWithAdapter.plugin.outputHandler)
           yield ()
         }

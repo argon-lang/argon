@@ -117,7 +117,7 @@ trait ExprContext {
       override def toExprs(args: Seq[WrapExpr]): Seq[WrapExpr] = args
     }
 
-  given [N <: Nat : NListFactory]: ArgumentCodec[NList[N, WrapExpr]] with
+  given [N <: Int : NListFactory]: ArgumentCodec[NList[N, WrapExpr]] with
 
     override def fromExprs(exprs: Seq[WrapExpr]): Option[(NList[N, WrapExpr], Seq[WrapExpr])] =
       summon[NListFactory[N]].fromSeqPrefix(exprs)
@@ -204,7 +204,7 @@ trait ExprContext {
     final case class MethodCall(method: TMethod) extends ExprConstructorWithArgs[MethodCallArgs] with ExprConstructor
         derives CanEqual
 
-    final case class PatternMatch[N <: Nat](patterns: NList[N, PatternExpr])
+    final case class PatternMatch[N <: Int](patterns: NList[N, PatternExpr])
         extends ExprConstructorWithArgsBase[PatternMatchArgs[N]] with ExprConstructor {
 
       override def constructorArgsCodec: ArgumentCodec[(WrapExpr, NList[N, WrapExpr])] =
@@ -222,6 +222,8 @@ trait ExprContext {
 
     final case class StoreVariable(variable: TVariable) extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor
         derives CanEqual
+
+    final case class Builtin[N <: Int](builtin: ArgonBuiltin[N])(using val nlistFactory: NListFactory[N]) extends ExprConstructorWithArgs[NList[N, WrapExpr]] with ExprConstructor derives CanEqual
 
     case object TypeN extends ExprConstructorWithArgs[WrapExpr] with ExprConstructor derives CanEqual
 
@@ -251,8 +253,6 @@ trait ExprContext {
     case object DisjunctionType extends ExprConstructorWithArgs[DisjunctionTypeArgs] with ExprConstructor
         derives CanEqual
 
-    case object NeverType extends ExprConstructorWithArgs[EmptyTuple] with ExprConstructor derives CanEqual
-
     case object SubtypeWitnessType extends ExprConstructorWithArgs[SubtypeWitnessTypeArgs] with ExprConstructor
         derives CanEqual
 
@@ -264,7 +264,7 @@ trait ExprContext {
     type FunctionObjectCallArgs = (WrapExpr, WrapExpr)
     type IfElseArgs = (WrapExpr, WrapExpr, WrapExpr)
     type MethodCallArgs = (WrapExpr, MethodCallOwnerType, Seq[WrapExpr])
-    type PatternMatchArgs[N <: Nat] = (WrapExpr, NList[N, WrapExpr])
+    type PatternMatchArgs[N <: Int] = (WrapExpr, NList[N, WrapExpr])
     type FunctionTypeArgs = (WrapExpr, WrapExpr)
     type UnionTypeArgs = (WrapExpr, WrapExpr)
     type IntersectionTypeArgs = (WrapExpr, WrapExpr)

@@ -1,6 +1,6 @@
 package dev.argon.expr
 
-import dev.argon.util.UniqueIdentifier
+import dev.argon.util.{*, given}
 import dev.argon.prover.Proof
 import zio.stream.*
 import zio.*
@@ -24,7 +24,9 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
     Gen(ZStream(traitA, traitB, traitC, traitD, traitE).map { t => Sample(traitType(t), ZStream.empty) })
 
   private def impliesFalse(p: WrapExpr): WrapExpr =
-    wrapExpr(ExprConstructor.FunctionType, (p, wrapExpr(ExprConstructor.NeverType, EmptyTuple)))
+    val neverTypeCtor: ExprConstructor.Builtin[0] = ExprConstructor.Builtin(ArgonBuiltin.NeverType)
+    wrapExpr(ExprConstructor.FunctionType, (p, wrapExpr(neverTypeCtor, NNil)))
+  end impliesFalse
 
 
   private val type0: WrapExpr =
@@ -131,7 +133,6 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
 
   protected override def functionRelations(function: String): ZIO[R, String, Seq[ExprRelation]] =
     function match {
-      case "natLessThan" => ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
       case _ => ZIO.fail(s"Unknown function: $function")
     }
 
@@ -142,10 +143,6 @@ class TestResolver[R] extends ImplicitResolver[R, String] {
 
   override protected def substituteVariables(vars: Map[String, exprContext.WrapExpr])(expr: exprContext.WrapExpr): exprContext.WrapExpr =
     expr
-
-  protected override val natLessThanFunction: ZIO[R, String, String] = ZIO.succeed("natLessThan")
-  protected override val boolType: ZIO[R, String, WrapExpr] =
-    ZIO.succeed(wrapExpr(ExprConstructor.ClassType("Ar.Bool"), Vector()))
 
   protected override def invalidExpr: ZIO[R, String, Nothing] = ZIO.fail("Invalid expression")
   protected override def invalidPredicateExpr: ZIO[R, String, Nothing] = ZIO.fail("Invalid predicate expression")

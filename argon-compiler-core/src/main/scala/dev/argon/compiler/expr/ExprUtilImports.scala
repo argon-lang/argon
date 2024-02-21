@@ -5,6 +5,7 @@ import dev.argon.compiler.definitions.*
 import dev.argon.compiler.signature.*
 import dev.argon.compiler.module.{ModuleElementC, ModulePath}
 import dev.argon.compiler.tube.{TubeImporter, TubeName}
+import dev.argon.expr.ArgonBuiltin
 import dev.argon.parser.IdentifierExpr
 import dev.argon.util.{*, given}
 import zio.*
@@ -55,51 +56,13 @@ trait ExprUtilImports extends ExprUtilBase {
   end loadKnownExport
 
   protected val argonCoreTubeName: TubeName = TubeName(NonEmptyList("Argon", "Core"))
+  
 
+  def boolType: WrapExpr = WrapExpr.OfExpr(ArExpr[ExprConstructor.Builtin[0]](ExprConstructor.Builtin(ArgonBuiltin.BoolType), NNil))
 
-  def boolSpecifier: ImportSpecifier = ImportSpecifier(
-    argonCoreTubeName,
-    ModulePath(Seq("Bool")),
-    Some(IdentifierExpr.Named("Bool")),
-    ErasedSignatureNoResult(Seq()),
-  )
+  def intType: WrapExpr = WrapExpr.OfExpr(ArExpr[ExprConstructor.Builtin[0]](ExprConstructor.Builtin(ArgonBuiltin.IntType), NNil))
 
-  def boolType: Comp[WrapExpr] =
-    loadKnownExport[ModuleElementC.ClassElement[context.type, ?]](boolSpecifier)
-      .map { moduleElement => WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassType(moduleElement.arClass), Vector())) }
-
-  def intSpecifier: ImportSpecifier = ImportSpecifier(
-    argonCoreTubeName,
-    ModulePath(Seq("Int")),
-    Some(IdentifierExpr.Named("Int")),
-    ErasedSignatureNoResult(Seq()),
-  )
-
-  def intType: Comp[WrapExpr] =
-    loadKnownExport[ModuleElementC.ClassElement[context.type, ?]](intSpecifier)
-      .map { moduleElement => WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassType(moduleElement.arClass), Vector())) }
-
-  def natSpecifier: ImportSpecifier = ImportSpecifier(
-    argonCoreTubeName,
-    ModulePath(Seq("Nat")),
-    Some(IdentifierExpr.Named("Nat")),
-    ErasedSignatureNoResult(Seq()),
-  )
-
-  def natType: Comp[WrapExpr] =
-    loadKnownExport[ModuleElementC.ClassElement[context.type, ?]](natSpecifier)
-      .map { moduleElement => WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassType(moduleElement.arClass), Vector())) }
-
-  def stringSpecifier: ImportSpecifier = ImportSpecifier(
-    argonCoreTubeName,
-    ModulePath(Seq("String")),
-    Some(IdentifierExpr.Named("String")),
-    ErasedSignatureNoResult(Seq()),
-  )
-
-  def stringType: Comp[WrapExpr] =
-    loadKnownExport[ModuleElementC.ClassElement[context.type, ?]](stringSpecifier)
-      .map { moduleElement => WrapExpr.OfExpr(ArExpr(ExprConstructor.ClassType(moduleElement.arClass), Vector())) }
+  def stringType: WrapExpr = WrapExpr.OfExpr(ArExpr[ExprConstructor.Builtin[0]](ExprConstructor.Builtin(ArgonBuiltin.StringType), NNil))
 
   def exceptionSpecifier: ImportSpecifier = ImportSpecifier(
     argonCoreTubeName,
@@ -114,7 +77,7 @@ trait ExprUtilImports extends ExprUtilBase {
 
   def anyType: WrapExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.AnyType, EmptyTuple))
 
-  def neverType: WrapExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.NeverType, EmptyTuple))
+  def neverType: WrapExpr = WrapExpr.OfExpr(ArExpr[ExprConstructor.Builtin[0]](ExprConstructor.Builtin(ArgonBuiltin.NeverType), NNil))
 
   def unitValue: WrapExpr = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadTuple, Seq()))
 

@@ -228,26 +228,6 @@ trait ExprUtilImplicitResolver
       override protected def substituteVariables(vars: Map[Variable, WrapExpr])(expr: WrapExpr): WrapExpr =
         substituteWrapExprMany(vars)(expr)
 
-
-      override protected def natLessThanFunction: Comp[ArFunc] =
-        loadKnownExport[ModuleElementC.FunctionElement[context.type, ?]](ImportSpecifier(
-          argonCoreTubeName,
-          ModulePath(Seq("Nat")),
-          Some(IdentifierExpr.OperatorIdentifier(parser.BinaryOperator.LessThan)),
-          ErasedSignatureWithResult(
-            Seq(
-              ErasedSignatureType.Class(natSpecifier, Seq()),
-              ErasedSignatureType.Class(natSpecifier, Seq()),
-            ),
-            ErasedSignatureType.Class(boolSpecifier, Seq())
-          ),
-        )).map {
-          _.func
-        }
-
-      override protected def boolType: Comp[WrapExpr] =
-        ExprUtilImplicitResolver.this.boolType
-
       protected override def invalidExpr: Comp[Nothing] = ???
 
       protected override def invalidPredicateExpr: Comp[Nothing] = ???

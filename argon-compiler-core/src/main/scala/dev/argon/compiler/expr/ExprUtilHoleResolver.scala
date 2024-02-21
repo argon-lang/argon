@@ -1,7 +1,7 @@
 package dev.argon.compiler.expr
 
 import dev.argon.compiler.signature.*
-import dev.argon.expr.{ExprConstraints, ExprTypeBounds, ExprEqualConstraint}
+import dev.argon.expr.{ArgonBuiltin, ExprConstraints, ExprEqualConstraint, ExprTypeBounds}
 import dev.argon.util.{*, given}
 import zio.*
 
@@ -37,7 +37,7 @@ trait ExprUtilHoleResolver
               }
 
             case Some(ExprTypeBounds(_, _)) | None =>
-              ec1.WrapExpr.OfExpr(ec1.ArExpr(ec1.ExprConstructor.NeverType, EmptyTuple))
+              ec1.WrapExpr.OfExpr(ec1.ArExpr[ec1.ExprConstructor.Builtin[0]](ec1.ExprConstructor.Builtin(ArgonBuiltin.NeverType), NNil))
           }
 
           val env2 = env.copy(model = env.model.updated(hole, ExprEqualConstraint(resolvedConstraint)))

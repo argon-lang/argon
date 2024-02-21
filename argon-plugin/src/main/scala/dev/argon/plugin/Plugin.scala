@@ -31,7 +31,7 @@ sealed abstract class Plugin[R <: CompEnv, E >: CompError] {
   def emitTube
   (context: PluginContext[R, E, ?])
   (pluginAdapter: PluginAdapter[R, E, context.plugin.type, this.type])
-  (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
+  (tube: EmittableTube[R, E, context.type])
   (options: OutputOptions)
   : context.Comp[Output]
 

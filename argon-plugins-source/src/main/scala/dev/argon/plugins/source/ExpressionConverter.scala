@@ -8,7 +8,7 @@ import dev.argon.compiler.signature.{ErasedSignature, ErasedSignatureType, Erase
 import dev.argon.util.{SourceLocation, WithSource}
 import dev.argon.parser
 import dev.argon.parser.{FunctionParameterListType, IdentifierExpr}
-import dev.argon.expr.{Evaluator, ExprConstraints, ImplicitResolver}
+import dev.argon.expr.{ArgonBuiltin, Evaluator, ExprConstraints, ImplicitResolver}
 import dev.argon.util.UniqueIdentifier
 import zio.*
 import zio.stream.*
@@ -326,10 +326,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           override def exprLocation: SourceLocation = expr.location
 
           override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
-            for
-              t <- boolType
-              e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(b), EmptyTuple))
-            yield ExprTypeResult(e, env, t)
+            val e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(b), EmptyTuple))
+            ZIO.succeed(ExprTypeResult(e, env, boolType))
+          end synthImpl
         }
 
       case parser.BuiltinExpr("never") =>
@@ -339,7 +338,6 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             val zero = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(0), EmptyTuple))
             val type0 = WrapExpr.OfExpr(ArExpr(ExprConstructor.TypeN, zero))
-            val neverType = WrapExpr.OfExpr(ArExpr(ExprConstructor.NeverType, EmptyTuple))
             ZIO.succeed(ExprTypeResult(neverType, env, type0))
           end synthImpl
         }
@@ -395,16 +393,15 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
           override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             for {
-              bType <- boolType
-              ExprResult(condExpr, env) <- convertExpr(condition).check(env, opt, bType)
+              ExprResult(condExpr, env) <- convertExpr(condition).check(env, opt, boolType)
               (condExpr, condExprStable) <- asStableExpression(condExpr)
 
               whenTrueId <- UniqueIdentifier.make
-              whenTrueType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (bType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(true), EmptyTuple)))))
+              whenTrueType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (boolType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(true), EmptyTuple)))))
               whenTrue = LocalVariable(whenTrueId, whenTrueType, None, isMutable = false, isErased = true)
 
               whenFalseId <- UniqueIdentifier.make
-              whenFalseType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (bType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(false), EmptyTuple)))))
+              whenFalseType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (boolType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(false), EmptyTuple)))))
               whenFalse = LocalVariable(whenFalseId, whenFalseType, None, isMutable = false, isErased = true)
 
               trueRes <- convertStmtList(ifBody).synth(env.withImplicitSource(_.addVariable(whenTrue)), opt)
@@ -416,16 +413,15 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
           override def checkImpl(env: Env, opt: ExprOptions, t: WrapExpr): Comp[ExprResult] =
             for {
-              bType <- boolType
-              ExprResult(condExpr, env) <- convertExpr(condition).check(env, opt, bType)
+              ExprResult(condExpr, env) <- convertExpr(condition).check(env, opt, boolType)
               (condExpr, condExprStable) <- asStableExpression(condExpr)
 
               whenTrueId <- UniqueIdentifier.make
-              whenTrueType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (bType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(true), EmptyTuple)))))
+              whenTrueType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (boolType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(true), EmptyTuple)))))
               whenTrue = LocalVariable(whenTrueId, whenTrueType, None, isMutable = false, isErased = true)
 
               whenFalseId <- UniqueIdentifier.make
-              whenFalseType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (bType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(false), EmptyTuple)))))
+              whenFalseType = WrapExpr.OfExpr(ArExpr(ExprConstructor.EqualTo, (boolType, condExprStable, WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantBool(false), EmptyTuple)))))
               whenFalse = LocalVariable(whenFalseId, whenFalseType, None, isMutable = false, isErased = true)
 
               trueRes <- convertStmtList(ifBody).check(env.withImplicitSource(_.addVariable(whenTrue)), opt, t)
@@ -441,11 +437,9 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
           override def exprLocation: SourceLocation = expr.location
 
           override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
-            for {
-              t <- intType
-              e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(i.value), EmptyTuple))
-            } yield ExprTypeResult(e, env, t)
-
+            val e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantInt(i.value), EmptyTuple))
+            ZIO.succeed(ExprTypeResult(e, env, intType))
+          end synthImpl
         }
 
       case parser.LambdaTypeExpr(argType, resultType) =>
@@ -534,33 +528,17 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
           override def synthImpl(env: Env, opt: ExprOptions): Comp[ExprTypeResult] =
             for {
-              strType <- stringType
-              concat <- loadKnownExport[ModuleElementC.FunctionElement[context.type, ?]](
-                ImportSpecifier(
-                  argonCoreTubeName,
-                  ModulePath(Seq("String")),
-                  Some(IdentifierExpr.OperatorIdentifier(parser.BinaryOperator.Concat)),
-                  ErasedSignatureWithResult(
-                    Seq(
-                      ErasedSignatureType.Class(stringSpecifier, Seq()),
-                      ErasedSignatureType.Class(stringSpecifier, Seq()),
-                    ),
-                    ErasedSignatureType.Class(stringSpecifier, Seq()),
-                  )
-                ))
-
-              firstPartConv <- convertPart(strType, env, opt, headPart)
+              firstPartConv <- convertPart(stringType, env, opt, headPart)
 
               convParts <- ZIO.foldLeft(tailParts)(firstPartConv) { (prevString, part) =>
                 for
-                  convPart <- convertPart(strType, prevString.env, opt, part)
+                  convPart <- convertPart(stringType, prevString.env, opt, part)
                 yield ExprTypeResult(
-                  WrapExpr.OfExpr(ArExpr(ExprConstructor.FunctionCall(concat.func), Seq(prevString.expr, convPart.expr))),
+                  WrapExpr.OfExpr(ArExpr[ExprConstructor.Builtin[2]](ExprConstructor.Builtin(ArgonBuiltin.StringConcat), NCons(prevString.expr, NCons(convPart.expr, NNil)))),
                   convPart.env,
-                  strType
+                  stringType
                 )
               }
-
             } yield convParts
 
         }

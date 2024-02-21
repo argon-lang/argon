@@ -32,7 +32,7 @@ final class SourcePlugin[R <: SourceEnv, E >: SourceError, PlatformPlugins <: Pl
   override def emitTube
   (context: PluginContext[R, E, ?])
   (pluginAdapter: PluginAdapter[R, E, context.plugin.type, this.type])
-  (tube: ArTubeC & HasContext[context.type] & HasImplementation[true])
+  (tube: EmittableTube[context.type])
   (options: OutputOptions)
   : context.Comp[Output] =
     options

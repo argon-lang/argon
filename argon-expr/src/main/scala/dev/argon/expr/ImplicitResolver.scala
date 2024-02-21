@@ -65,9 +65,6 @@ abstract class ImplicitResolver[R, E] {
 
   protected def substituteVariables(vars: Map[TVariable, WrapExpr])(expr: WrapExpr): WrapExpr
 
-  protected def natLessThanFunction: ZIO[R, E, TFunction]
-  protected def boolType: ZIO[R, E, WrapExpr]
-
   protected def invalidExpr: ZIO[R, E, Nothing]
   protected def invalidPredicateExpr: ZIO[R, E, Nothing]
 
@@ -287,26 +284,48 @@ abstract class ImplicitResolver[R, E] {
           )
           )),
 
-        // (B < A) == true
+        // not (0 < A) == true and not (0 < A) == true and (B < A) == true
         // ------------------
         // TypeN B <: TypeN A
         newVariable => (for {
-          bType <- boolType
-          lt <- natLessThanFunction
           a <- newVariable
           b <- newVariable
+          lt = ExprConstructor.Builtin[2](ArgonBuiltin.IntLT)
         } yield (
           Proof.Atomic(TCAtomicProof.ExprProof(wrapExpr(
             ExprConstructor.AssumeErasedValue,
             EmptyTuple,
           ))) -> Implies(
-            PredicateFunction(
-              ExprConstructor.EqualTo,
-              Seq(
-                wrapExprToExpr(bType),
-                Value(ExprConstructor.FunctionCall(lt), Seq(Variable(b), Variable(a))),
-                Value(ExprConstructor.LoadConstantBool(true), Seq()),
+            And(
+              Implies(
+                PredicateFunction(
+                  ExprConstructor.EqualTo,
+                  Seq(
+                    Value(lt, Seq(Value(ExprConstructor.LoadConstantInt(0), Seq()), Variable(a))),
+                    Value(ExprConstructor.LoadConstantBool(true), Seq()),
+                  ),
+                ),
+                PropFalse,
               ),
+              And(
+                Implies(
+                  PredicateFunction(
+                    ExprConstructor.EqualTo,
+                    Seq(
+                      Value(lt, Seq(Value(ExprConstructor.LoadConstantInt(0), Seq()), Variable(b))),
+                      Value(ExprConstructor.LoadConstantBool(true), Seq()),
+                    ),
+                  ),
+                  PropFalse,
+                ),
+                PredicateFunction(
+                  ExprConstructor.EqualTo,
+                  Seq(
+                    Value(lt, Seq(Variable(a), Variable(b))),
+                    Value(ExprConstructor.LoadConstantBool(true), Seq()),
+                  ),
+                ),
+              )
             ),
             PredicateFunction(
               ExprConstructor.SubtypeWitnessType,
@@ -370,7 +389,7 @@ abstract class ImplicitResolver[R, E] {
                 b2 <- arExprToGoal(b, fuel - 1)
               } yield Implies(a2, b2)
 
-            case ExprConstructor.NeverType => ZIO.succeed(PropFalse)
+            case ctor: ExprConstructor.Builtin[?] if ctor.builtin == ArgonBuiltin.NeverType => ZIO.succeed(PropFalse)
 
             case _ =>
               val args = expr.constructor.argsToExprs(expr.args).map(wrapExprToExpr)
@@ -704,19 +723,22 @@ abstract class ImplicitResolver[R, E] {
           ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.BindVariable(_) =>
           ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
-        case ExprConstructor.LoadConstantBool(_) => ZIO.succeed(Seq(ExprRelation.TypeEquality))
-        case ExprConstructor.LoadConstantInt(_) => ZIO.succeed(Seq(ExprRelation.TypeEquality))
-        case ExprConstructor.LoadConstantString(_) => ZIO.succeed(Seq(ExprRelation.TypeEquality))
+        case ExprConstructor.LoadConstantBool(_) => ZIO.succeed(Seq())
+        case ExprConstructor.LoadConstantInt(_) => ZIO.succeed(Seq())
+        case ExprConstructor.LoadConstantString(_) => ZIO.succeed(Seq())
         case ExprConstructor.LoadLambda(_) => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
         case ExprConstructor.LoadTuple => ZIO.succeed(Seq.fill(arity)(ExprRelation.SubType))
         case ExprConstructor.LoadTupleElement(_) => ZIO.succeed(Seq(ExprRelation.SubType))
-        case ExprConstructor.LoadVariable(_) => ZIO.succeed(Seq.empty)
+        case ExprConstructor.LoadVariable(_) => ZIO.succeed(Seq())
         case ExprConstructor.MethodCall(method) => methodRelations(method)
         case ExprConstructor.PatternMatch(_) => ZIO.succeed(Seq.fill(arity)(ExprRelation.SyntacticEquality))
         case ExprConstructor.Proving(_) => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
         case ExprConstructor.RaiseException => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
         case ExprConstructor.Sequence => ZIO.succeed(Seq.fill(arity)(ExprRelation.SyntacticEquality))
         case ExprConstructor.StoreVariable(_) => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
+        case ExprConstructor.Builtin(_: ArgonBuiltin.SimpleValue) => ZIO.succeed(Seq())
+        case ExprConstructor.Builtin(_: ArgonBuiltin.UnaryOperation) => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
+        case ExprConstructor.Builtin(_: ArgonBuiltin.BinaryOperation) => ZIO.succeed(Seq(ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.TypeN => ZIO.succeed(Seq(ExprRelation.SyntacticEquality))
         case ExprConstructor.OmegaTypeN(_) | ExprConstructor.AnyType => ZIO.succeed(Seq.empty)
         case ExprConstructor.TraitType(arTrait) => traitRelations(arTrait)
@@ -727,7 +749,6 @@ abstract class ImplicitResolver[R, E] {
         case ExprConstructor.ExistentialType(_) => ZIO.succeed(Seq(ExprRelation.SubType))
         case ExprConstructor.ConjunctionType => ZIO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
         case ExprConstructor.DisjunctionType => ZIO.succeed(Seq(ExprRelation.SubType, ExprRelation.SubType))
-        case ExprConstructor.NeverType => ZIO.succeed(Seq.empty)
         case ExprConstructor.SubtypeWitnessType => ZIO.succeed(Seq(ExprRelation.SuperType, ExprRelation.SubType))
         case ExprConstructor.EqualTo => ZIO.succeed(Seq(ExprRelation.SubType, ExprRelation.SyntacticEquality, ExprRelation.SyntacticEquality))
         case ExprConstructor.AssumeErasedValue => ZIO.succeed(Seq(ExprRelation.TypeEquality))

@@ -1,6 +1,7 @@
 package dev.argon.compiler.expr
 
 import dev.argon.compiler.*
+import dev.argon.expr.ArgonBuiltin
 import dev.argon.util.{*, given}
 
 abstract class ExprProcessor[F[+_]: Monad] extends UsingContext {
@@ -51,7 +52,7 @@ abstract class ExprProcessor[F[+_]: Monad] extends UsingContext {
       } yield ec2.ArExpr(ctor, (instance2, ownerType2, callArgs2))
     end processMethodCallArgs
 
-    def processPatternMatchArgs[N <: Nat]
+    def processPatternMatchArgs[N <: Int]
     (ctor: ec2.ExprConstructor {type ConstructorArgs = ec2.ExprConstructor.PatternMatchArgs[N]})
     (args: ec1.ExprConstructor.PatternMatchArgs[N])
     : F[ec2.ArExpr[ec2.ExprConstructor]] =
@@ -166,6 +167,9 @@ abstract class ExprProcessor[F[+_]: Monad] extends UsingContext {
             processExprArgs(ec2.ExprConstructor.StoreVariable(var2))(e.getArgs(ctor))
           }
 
+        case ctor: (e.constructor.type & ec1.ExprConstructor.Builtin[n]) =>
+          processBuiltin(ctor, e.getArgs(ctor))
+
         case ctor: (e.constructor.type & ec1.ExprConstructor.TypeN.type) =>
           processExprArgs(ec2.ExprConstructor.TypeN)(e.getArgs(ctor))
 
@@ -201,9 +205,6 @@ abstract class ExprProcessor[F[+_]: Monad] extends UsingContext {
         case ctor: (e.constructor.type & ec1.ExprConstructor.DisjunctionType.type) =>
           processPairArgs(ec2.ExprConstructor.DisjunctionType)(e.getArgs(ctor))
 
-        case ctor: (e.constructor.type & ec1.ExprConstructor.NeverType.type) =>
-          Monad[F].pure(ec2.ArExpr(ec2.ExprConstructor.NeverType, EmptyTuple))
-
         case ctor: (e.constructor.type & ec1.ExprConstructor.SubtypeWitnessType.type) =>
           processPairArgs(ec2.ExprConstructor.SubtypeWitnessType)(e.getArgs(ctor))
 
@@ -216,6 +217,11 @@ abstract class ExprProcessor[F[+_]: Monad] extends UsingContext {
 
     processedExpr.map(ec2.WrapExpr.OfExpr.apply)
   end processArExpr
+  
+  def processBuiltin[N <: Int](ctor: ec1.ExprConstructor.Builtin[N], args: NList[N, ec1.WrapExpr]): F[ec2.ArExpr[ec2.ExprConstructor.Builtin[N]]] =
+    for
+      args2 <- Traverse[[A] =>> NList[N, A]].traverse(args)(processWrapExpr)
+    yield ec2.ArExpr[ec2.ExprConstructor.Builtin[N]](ec2.ExprConstructor.Builtin(ctor.builtin)(using ctor.nlistFactory), args2)
 
   def processClassType(e: ec1.ArExpr[ec1.ExprConstructor.ClassType]): F[ec2.ArExpr[ec2.ExprConstructor.ClassType]] =
     for {
