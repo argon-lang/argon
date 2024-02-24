@@ -3,8 +3,7 @@ package dev.argon.esexpr.parser
 import dev.argon.esexpr.{ESExpr, ESExprException}
 import dev.argon.util.{*, given}
 import dev.argon.grammar.{Grammar, GrammarError}
-import Grammar.Operators.*
-import dev.argon.grammar.Grammar.ErrorFactory
+import Grammar.Operators.{*, given}
 import zio.*
 import zio.stream.*
 
@@ -13,7 +12,7 @@ import scala.reflect.TypeTest
 
 object ESExprParser {
 
-  final case class ParseError(val fileName: Option[String], val error: GrammarError[ESExprToken, Unit, FilePosition]) extends ESExprTextParseException(s"Could not parse ESExpr: ${error}")
+  final case class ParseError(fileName: Option[String], error: GrammarError[ESExprToken, Unit, FilePosition]) extends ESExprTextParseException(s"Could not parse ESExpr: ${error}")
 
   private[ESExprParser] object Rule {
     sealed trait RuleName[T]
@@ -34,17 +33,7 @@ object ESExprParser {
     case object Result extends RuleName[WithSource[ESExpr]]
   }
 
-  private[ESExprParser] final class ParserGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[ESExprToken, FilePosition, ParseError, Rule.RuleName] {
-
-    private given ErrorFactory[ESExprToken, Unit, ParseError, FilePosition] with
-      override def createError(error: GrammarError[ESExprToken, Unit, FilePosition]): ParseError =
-        ParseError(fileName, error)
-
-      override def errorEndLocationOrder: Ordering[ParseError] = new Ordering[ParseError] {
-        override def compare(x: ParseError, y: ParseError): Int =
-          x.error.location.end.compareTo(y.error.location.end)
-      }
-    end given
+  private[ESExprParser] final class ParserGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[ESExprToken, Unit, FilePosition, Rule.RuleName] {
 
     private def token(t: ESExprToken): TGrammar[ESExprToken] = Grammar.token((), _ == t)
     private def token[T <: ESExprToken](using TypeTest[ESExprToken, T]): TGrammar[T] =
@@ -66,11 +55,11 @@ object ESExprParser {
 
         case Rule.Constructed =>
           val parameter =
-            (token[ESExprToken.Identifier] ++! token(ESExprToken.Colon) ++ rule(Rule.Expr)) --> { (name, _, value) => (Some(name.name), value) } |
+            (token[ESExprToken.Identifier] ++! token(ESExprToken.Colon).discard ++ rule(Rule.Expr)) --> { (name, value) => (Some(name.name), value) } |
               rule(Rule.Expr) --> { value => (None, value) }
 
-          token(ESExprToken.OpenParen) ++! token[ESExprToken.Identifier] ++ parameter.* ++ token(ESExprToken.CloseParen) --> {
-              case (_, ESExprToken.Identifier(name), params, _) =>
+          token(ESExprToken.OpenParen).discard ++! token[ESExprToken.Identifier] ++ parameter.* ++ token(ESExprToken.CloseParen).discard --> {
+              case (ESExprToken.Identifier(name), params) =>
                 params.foldLeft[ESExpr.Constructed](ESExpr.Constructed(name, Map.empty, Seq.empty)) {
                   case (prev, (Some(name), value)) =>
                     prev.copy(kwargs = prev.kwargs + (name -> value))
@@ -107,4 +96,5 @@ object ESExprParser {
   def parse(fileName: Option[String])
   : ZChannel[Any, Nothing, Chunk[WithSource[ESExprToken]], FilePosition, ParseError, Chunk[WithSource[ESExpr]], FilePosition] =
     Grammar.parseAll(ParserGrammarFactory(fileName))(Rule.Result)
+      .mapError(ParseError(fileName, _))
 }

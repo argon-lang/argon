@@ -87,7 +87,7 @@ object AsyncIterableTools {
           private var buffer: Chunk[T] = Chunk.empty
 
           private def getPull: ZIO[R, E, ZIO[R, Option[E], Chunk[T]]] =
-            Nullable(pull).toOption.fold(
+            pull.toOption.fold(
               for
                 scope <- Scope.make
                 pull <- scope.extend(stream.toPull)
@@ -126,14 +126,14 @@ object AsyncIterableTools {
                 readNextBuffer.flatMap {
                   case true => nextImpl
                   case false =>
-                    ZIO.foreachDiscard(Nullable(scope).toOption)(_.close(Exit.unit))
+                    ZIO.foreachDiscard(scope.toOption)(_.close(Exit.unit))
                       .as(IteratorReturnResult(()))
                 }
             }
 
 
           private def closeScope(): js.Promise[IteratorResult[T, Any]] =
-            Nullable(scope).toOption.fold(
+            scope.toOption.fold(
               js.Promise.resolve(IteratorReturnResult(()))
             ) { scope => JSPromiseUtil.runEffectToPromise(scope.close(Exit.unit).as(IteratorReturnResult(()))) }
 

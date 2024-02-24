@@ -2,8 +2,7 @@ package dev.argon.plugins.source
 
 import dev.argon.compiler.*
 import dev.argon.io.*
-import dev.argon.parser.{Stmt, SyntaxError}
-import dev.argon.parser.impl.ArgonSourceParser
+import dev.argon.parser.{ArgonSourceParser, Stmt, SyntaxError}
 import zio.stream.*
 
 import java.io.IOException

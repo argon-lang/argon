@@ -1,6 +1,6 @@
 package dev.argon.grammar
 
-import dev.argon.util.{FilePosition, Location, WithLocation}
+import dev.argon.util.{Location, WithLocation}
 
 sealed trait GrammarError[+TToken, +TTokenCategory, +TPos] {
   def location: Location[TPos]

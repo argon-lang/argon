@@ -31,7 +31,7 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
       private final class ZipImpl(zip: JSZip) extends ZipFileResource.Zip[R, E]:
         override def getEntry(path: String): ZIO[R & Scope, E, Option[ZipStreamResource.Entry[R, E]]] =
           ZIO.succeed {
-            Nullable(zip.file(path).asInstanceOf[JSZipObject | Null]).toOption.map(createEntry(path, _))
+            zip.file(path).asInstanceOf[JSZipObject | Null].toOption.map(createEntry(path, _))
           }
 
         override def entries: ZStream[R, E, ZipStreamResource.Entry[R, E]] =

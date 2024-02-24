@@ -49,9 +49,6 @@ object Proof {
   // given A proves not not A
   final case class DoubleNegIntro[A](p: Proof[A]) extends Proof[A]
 
-  // given A, not A proves false
-  final case class Contradiction[A](p: Proof[A], notP: Proof[A]) extends Proof[A]
-
   // given P -> Q, Q -> R proves P -> R
   final case class HypotheticalSyllogism[A](pImpliesQ: Proof[A], qImpliesR: Proof[A]) extends Proof[A]
 }

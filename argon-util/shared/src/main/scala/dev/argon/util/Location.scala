@@ -1,5 +1,7 @@
 package dev.argon.util
 
+import cats.Order
+
 final case class FilePosition(line: Int, position: Int) derives CanEqual {
 
   def compareTo(other: FilePosition): Int =
@@ -22,6 +24,10 @@ object FilePosition:
     def compare(x: FilePosition, y: FilePosition): Int = x.compareTo(y)
   end given
 
+  given Order[FilePosition] with
+    def compare(x: FilePosition, y: FilePosition): Int = x.compareTo(y)
+  end given
+
 end FilePosition
 
 final case class FileOffset(offset: Int) derives CanEqual {
@@ -31,6 +37,10 @@ final case class FileOffset(offset: Int) derives CanEqual {
 
 object FileOffset:
   given Ordering[FileOffset] with
+    def compare(x: FileOffset, y: FileOffset): Int = x.compareTo(y)
+  end given
+
+  given Order[FileOffset] with
     def compare(x: FileOffset, y: FileOffset): Int = x.compareTo(y)
   end given
 end FileOffset

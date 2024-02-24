@@ -6,6 +6,9 @@ import dev.argon.esexpr.parser.ESExprTextReader
 import dev.argon.esexpr.schema.Definition
 import zio.*
 import zio.stream.*
+import cats.*
+import cats.implicits.given
+import zio.interop.catz.core.given
 
 import java.nio.file.Path
 

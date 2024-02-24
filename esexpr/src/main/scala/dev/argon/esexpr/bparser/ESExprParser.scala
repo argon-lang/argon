@@ -1,7 +1,6 @@
 package dev.argon.esexpr.bparser
 
-import dev.argon.grammar.Grammar.ErrorFactory
-import dev.argon.grammar.Grammar.Operators.*
+import dev.argon.grammar.Grammar.Operators.{*, given}
 import dev.argon.grammar.{Grammar, GrammarError}
 import dev.argon.util.{*, given}
 import zio.*
@@ -31,17 +30,7 @@ object ESExprParser {
     case object Null extends RuleName[ESExprSP]
   }
 
-  private[ESExprParser] final class ParserGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[ESExprToken, FileOffset, ParseError, Rule.RuleName] {
-
-    private given ErrorFactory[ESExprToken, Unit, ParseError, FileOffset] with
-      override def createError(error: GrammarError[ESExprToken, Unit, FileOffset]): ParseError =
-        ParseError(fileName, error)
-
-      override def errorEndLocationOrder: Ordering[ParseError] = new Ordering[ParseError] {
-        override def compare(x: ParseError, y: ParseError): Int =
-          x.error.location.end.compareTo(y.error.location.end)
-      }
-    end given
+  private[ESExprParser] final class ParserGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[ESExprToken, Unit, FileOffset, Rule.RuleName] {
 
     private def token[T <: ESExprToken](using TypeTest[ESExprToken, T]): TGrammar[T] =
       Grammar.partialMatcher(()) {
@@ -65,8 +54,8 @@ object ESExprParser {
             (token[ESExprToken.KeywordArgument] ++! rule(Rule.Expr)) --> { (name, value) => (Some(name.nameIndex), value) } |
               rule(Rule.Expr) --> { value => (None, value) }
 
-          token[ESExprToken.ConstructorStart] ++ parameter.* ++ token[ESExprToken.ConstructorEnd.type] --> {
-              case (ESExprToken.ConstructorStart(name), params, _) =>
+          token[ESExprToken.ConstructorStart] ++ parameter.* ++ token[ESExprToken.ConstructorEnd.type].discard --> {
+              case (ESExprToken.ConstructorStart(name), params) =>
                 params.foldLeft[ESExprSP.Constructed](ESExprSP.Constructed(name, Map.empty, Seq.empty)) {
                   case (prev, (Some(name), value)) =>
                     prev.copy(kwargs = prev.kwargs + (name -> value))
@@ -100,4 +89,5 @@ object ESExprParser {
   def parse(fileName: Option[String])
   : ZChannel[Any, Nothing, Chunk[WithLocation[ESExprToken, FileOffset]], FileOffset, ParseError, Chunk[ESExprSP], FileOffset] =
     Grammar.parseAll(ParserGrammarFactory(fileName))(Rule.Expr)
+      .mapError(ParseError(fileName, _))
 }

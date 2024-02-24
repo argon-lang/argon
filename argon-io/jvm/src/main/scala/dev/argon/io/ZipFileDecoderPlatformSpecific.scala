@@ -1,7 +1,5 @@
 package dev.argon.io
 
-import dev.argon.util.Nullable
-
 import java.io.IOException
 import zio.*
 import zio.stream.ZStream
@@ -56,7 +54,7 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
             zip <- zip
             lock <- Semaphore.make(1)
             entry <- ZIO.succeed(zip.getEntry(path))
-          yield Nullable(entry).toOption.map(createEntry(zip)(lock))
+          yield entry.toOption.map(createEntry(zip)(lock))
 
         override def entries: ZStream[R, E, ZipStreamResource.Entry[R, E]] =
           ZStream.unwrapScoped(

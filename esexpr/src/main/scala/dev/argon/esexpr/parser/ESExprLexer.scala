@@ -2,9 +2,8 @@ package dev.argon.esexpr.parser
 
 import dev.argon.util.{*, given}
 import dev.argon.grammar.{Grammar, GrammarError}
-import Grammar.Operators.*
+import Grammar.Operators.{*, given}
 import dev.argon.esexpr.ESExprException
-import dev.argon.grammar.Grammar.ErrorFactory
 import zio.*
 import zio.stream.*
 
@@ -34,17 +33,7 @@ object ESExprLexer {
     case object NonEmptyToken extends LexerRuleName[ESExprToken]
   }
 
-  private[ESExprLexer] final class LexerGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[String, FilePosition, LexerError, Rule.LexerRuleName] {
-
-    private given ErrorFactory[String, Unit, LexerError, FilePosition] with
-      override def createError(error: GrammarError[String, Unit, FilePosition]): LexerError =
-        LexerError(fileName, error)
-
-      override def errorEndLocationOrder: Ordering[LexerError] = new Ordering[LexerError] {
-        override def compare(x: LexerError, y: LexerError): Int =
-          x.error.location.end.compareTo(y.error.location.end)
-      }
-    end given
+  private[ESExprLexer] final class LexerGrammarFactory(override val fileName: Option[String]) extends Grammar.GrammarFactory[String, Unit, FilePosition, Rule.LexerRuleName] {
 
     private def token(s: String): TGrammar[String] = Grammar.token((), t => t == s)
     private def tokenF(f: String => Boolean): TGrammar[String] = Grammar.token((), f)
@@ -103,14 +92,14 @@ object ESExprLexer {
           val integer =
             signOpt ++ token("0") --> const(ESExprToken.IntegerLiteral(0)) |
               signOpt ++ nonZeroDigit ++ digits --> { (s, d, i) => ESExprToken.IntegerLiteral(BigInt(s ++ d ++ i)) } |
-              signOpt ++ hexIndicator ++ hexDigits --> { (s, _, i) => ESExprToken.IntegerLiteral(BigInt(s + i, 16)) }
+              signOpt ++ hexIndicator.discard ++ hexDigits --> { (s, i) => ESExprToken.IntegerLiteral(BigInt(s + i, 16)) }
 
           floatingPoint | integer
 
         case Rule.StringLiteral =>
           val quote = token("\"")
           val unescapedCh = tokenF(s => s != "\\" && s != "\"")
-          val escapedCh = token("\\") ++! (
+          val escapedCh = token("\\").discard ++! (
             token("f") --> const("\f") |
               token("n") --> const("\n") |
               token("r") --> const("\r") |
@@ -118,16 +107,16 @@ object ESExprLexer {
               token("\\") --> const("\\") |
               token("'") --> const("\'") |
               token("\"") --> const("\"") |
-              token("u") ++ token("{") ++ hexDigits ++ token("}") --> { (_, _, digits, _) =>
+              token("u").discard ++ token("{").discard ++ hexDigits ++ token("}").discard --> { digits =>
                 Character.toString(Integer.parseInt(digits, 16))
               }
-          ) --> { (_, c) => c }
+          )
 
-          quote ++! (unescapedCh | escapedCh).* ++ quote --> { (_, s, _) => ESExprToken.StringLiteral(s.mkString) }
+          quote.discard ++! (unescapedCh | escapedCh).* ++ quote.discard --> { s => ESExprToken.StringLiteral(s.mkString) }
 
 
         case Rule.Atom =>
-          token("#") ++! rule(Rule.IdentifierStr) --> { (_, id) => ESExprToken.Atom(id) }
+          token("#").discard ++! rule(Rule.IdentifierStr) --> { id => ESExprToken.Atom(id) }
 
         case Rule.ResultToken =>
           (rule(Rule.NonEmptyToken).observeLocation --> Some.apply) |
@@ -148,6 +137,7 @@ object ESExprLexer {
   def lex(fileName: Option[String])
   : ZChannel[Any, Nothing, Chunk[WithSource[String]], FilePosition, LexerError, Chunk[WithSource[ESExprToken]], FilePosition] =
     Grammar.parseAll(LexerGrammarFactory(fileName))(Rule.ResultToken)
+      .mapError(LexerError(fileName, _))
       .mapOut(_.flatten)
 
 }

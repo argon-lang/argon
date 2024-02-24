@@ -1,9 +1,8 @@
 package dev.argon.plugins.source
 
 import dev.argon.io.*
-import dev.argon.parser.SyntaxError
+import dev.argon.parser.{ArgonSourceParser, SyntaxError}
 import dev.argon.parser.tubespec.ModulePatternMapping
-import dev.argon.parser.impl.ArgonSourceParser
 import zio.stream.*
 
 import java.nio.charset.CharacterCodingException

@@ -3,7 +3,6 @@ package dev.argon.compiler
 import zio.*
 
 import java.io.IOException
-import dev.argon.parser.SyntaxError
 import dev.argon.compiler.expr.CompleteExprContext
 import dev.argon.compiler.tube.{ArTubeC, TubeName}
 import dev.argon.compiler.vtable.VTableContext

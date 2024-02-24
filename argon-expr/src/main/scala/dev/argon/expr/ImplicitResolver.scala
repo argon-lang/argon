@@ -1,8 +1,8 @@
 package dev.argon.expr
 
+import dev.argon.prover.prolog.PrologContext
 import dev.argon.util.{*, given}
 import dev.argon.prover.{Proof, ProverSyntax, ProverContext}
-import dev.argon.prover.prolog.PrologContext
 import dev.argon.prover.smt.SmtContext
 import dev.argon.util.UniqueIdentifier
 import zio.*

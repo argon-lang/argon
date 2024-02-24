@@ -3,8 +3,8 @@ package dev.argon.build
 import dev.argon.esexpr.*
 import dev.argon.util.toml.{Toml, TomlCodec}
 import dev.argon.io.*
-import dev.argon.parser.SyntaxError
 import dev.argon.options.*
+import dev.argon.parser.SyntaxError
 
 import java.nio.charset.CharacterCodingException
 

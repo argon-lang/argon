@@ -2,6 +2,8 @@ package dev.argon.util
 
 import scala.compiletime.ops.int.*
 import scala.quoted.*
+import cats.*
+import cats.implicits.given
 
 sealed trait NList[N <: Int, +A] derives CanEqual:
   def +:[B >: A](value: B): NList[S[N], B] = NCons(value, this)
@@ -117,30 +119,43 @@ given nListFactorySucc[P <: Int : NListFactory]: NListFactory[S[P]] with {
 
 given [N <: Int]: Traverse[[A] =>> NList[N, A]] with
 
-  override def traverse[F[+_]: Applicative, A, B](ca: NList[N, A])(f: A => F[B]): F[NList[N, B]] =
+
+
+  override def traverse[G[_]: Applicative, A, B](ca: NList[N, A])(f: A => G[B]): G[NList[N, B]] =
     ca match {
       case NCons(h, t) =>
-        def consImpl[Prev <: Int](h: A, t: NList[Prev, A]): F[NList[S[Prev], B]] =
-          Applicative[F].map2(f(h), Traverse[[X] =>> NList[Prev, X]].traverse(t)(f)) { (h2, t2) => h2 +: t2 }
+        def consImpl[Prev <: Int](h: A, t: NList[Prev, A]): G[NList[S[Prev], B]] =
+          Applicative[G].map2(f(h), Traverse[[X] =>> NList[Prev, X]].traverse(t)(f)) { (h2, t2) => h2 +: t2 }
 
         consImpl(h, t)
 
-      case ca: NNil.type =>
-        Applicative[F].pure(NNil)
+      case _: NNil.type =>
+        Applicative[G].pure(NNil)
     }
 
-  def foldLeftM[F[+_]: Monad, S, A](ca: NList[N, A])(s: S)(f: (S, A) => F[S]): F[S] =
+  def foldLeftM[G[_]: Monad, S, A](ca: NList[N, A], s: S)(f: (S, A) => G[S]): G[S] =
     ca match {
       case NCons(h, t) =>
-        def consImpl[Prev <: Int](h: A, t: NList[Prev, A]): F[S] =
-          f(s, h).flatMap { s2 => Traverse[[X] =>> NList[Prev, X]].foldLeftM(t)(s2)(f) }
+        def consImpl[Prev <: Int](h: A, t: NList[Prev, A]): G[S] =
+          f(s, h).flatMap { s2 => Traverse[[X] =>> NList[Prev, X]].foldLeftM(t, s2)(f) }
 
         consImpl(h, t)
 
-      case ca: NNil.type => Applicative[F].pure(s)
+      case ca: NNil.type => Applicative[G].pure(s)
     }
 
-  def foldLeft[S, A](ca: NList[N, A])(s: S)(f: (S, A) => S): S = ca.toSeq.foldLeft(s)(f)
+  override def foldLeft[A, S](ca: NList[N, A], s: S)(f: (S, A) => S): S = ca.toSeq.foldLeft(s)(f)
 
   override def map[A, B](fa: NList[N, A])(f: A => B): NList[N, B] = fa.map(f)
+
+  override def foldRight[A, B](fa: NList[N, A], lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] =
+    def loop(l: NList[?, A]): Eval[B] =
+      l match
+        case _: NNil.type => lb
+        case NCons(head, tail) => f(head, Eval.defer(loop(tail)))
+      end match
+    
+    loop(fa)
+  end foldRight
+
 end given

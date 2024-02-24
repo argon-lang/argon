@@ -5,7 +5,6 @@ import dev.argon.compiler.module.*
 import dev.argon.compiler.tube.{ArTubeC, TubeImporter, TubeName}
 import dev.argon.io.{BinaryResource, DirectoryEntry, DirectoryResource, ResourceFactory}
 import dev.argon.parser.IdentifierExpr
-import dev.argon.parser.Token.StringToken
 import dev.argon.parser.tubespec.{ModulePatternMapping, ModulePatternSegment}
 import dev.argon.plugin.*
 import dev.argon.options.*

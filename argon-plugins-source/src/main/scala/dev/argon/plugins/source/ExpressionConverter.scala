@@ -7,7 +7,7 @@ import dev.argon.compiler.module.ModuleElementC
 import dev.argon.compiler.signature.{ErasedSignature, ErasedSignatureType, ErasedSignatureWithResult, ImportSpecifier, Signature}
 import dev.argon.util.{SourceLocation, WithSource}
 import dev.argon.parser
-import dev.argon.parser.{FunctionParameterListType, IdentifierExpr}
+import dev.argon.parser.{FunctionParameterListType, IdentifierExpr, Token}
 import dev.argon.expr.{ArgonBuiltin, Evaluator, ExprConstraints, ImplicitResolver}
 import dev.argon.util.UniqueIdentifier
 import zio.*
@@ -505,21 +505,21 @@ sealed abstract class ExpressionConverter extends UsingContext with ExprUtilWith
 
         }
 
-      case parser.StringValueExpr(parser.Token.StringToken(tokenParts)) =>
+      case parser.StringValueExpr(Token.StringToken(tokenParts)) =>
         val headPart = tokenParts.head
         val tailParts = tokenParts.tail
-        def convertPart(strType: WrapExpr, env: Env, opt: ExprOptions, part: parser.Token.StringToken.Part): Comp[ExprTypeResult] =
+        def convertPart(strType: WrapExpr, env: Env, opt: ExprOptions, part: Token.StringToken.Part): Comp[ExprTypeResult] =
           part match {
-            case parser.Token.StringToken.StringPart(str) =>
+            case Token.StringToken.StringPart(str) =>
               val e = WrapExpr.OfExpr(ArExpr(ExprConstructor.LoadConstantString(str.value), EmptyTuple))
               ZIO.succeed(ExprTypeResult(e, env, strType))
 
-            case parser.Token.StringToken.ExprPart(None, expr) =>
+            case Token.StringToken.ExprPart(None, expr) =>
               for {
                 res <- convertExpr(expr).check(env, opt, strType)
               } yield ExprTypeResult(res.expr, res.env, strType)
 
-            case parser.Token.StringToken.ExprPart(Some(format), expr) => ???
+            case Token.StringToken.ExprPart(Some(format), expr) => ???
           }
 
         new ExprFactorySynth {

@@ -1,5 +1,8 @@
 package dev.argon.esexpr
 
+import cats.*
+import cats.data.NonEmptyList
+import cats.implicits.given
 import dev.argon.util.{*, given}
 
 import scala.deriving.Mirror

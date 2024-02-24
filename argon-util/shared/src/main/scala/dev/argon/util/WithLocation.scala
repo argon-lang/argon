@@ -1,5 +1,8 @@
 package dev.argon.util
 
+import cats.*
+import cats.implicits.given
+
 final case class WithLocation[+T, Pos](value: T, location: Location[Pos]) {
   def map[U](f: T => U): WithLocation[U, Pos] = WithLocation(f(value), location)
 }

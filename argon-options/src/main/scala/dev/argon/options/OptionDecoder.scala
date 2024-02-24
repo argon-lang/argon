@@ -11,6 +11,8 @@ import zio.*
 
 import scala.compiletime.summonInline
 import scala.quoted.*
+import cats.*
+import cats.implicits.given
 
 
 trait OptionDecoder[R, E, A] {
