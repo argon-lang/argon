@@ -11,6 +11,8 @@ import zio.interop.catz.core.*
 import zio.stream.{Stream, ZStream}
 import zio.test.*
 
+import scala.compiletime.{erasedValue, summonInline}
+
 trait TestProverContextBase[PredFunc, Constructor](using CanEqual[PredFunc, PredFunc], CanEqual[Constructor, Constructor])
     extends ProverContext[VariableProvider, Nothing] {
   override val syntax: SimpleProverSyntax[PredFunc, Constructor]
@@ -30,7 +32,7 @@ trait TestProverContextBase[PredFunc, Constructor](using CanEqual[PredFunc, Pred
       case ProofResult.Yes(p, _) => proof == p
       case ProofResult.Unknown | ProofResult.No(_, _) => false
     }
-    
+
   def isProven: Assertion[ProofResult] =
     Assertion.assertion[ProofResult]("hasProof") {
       case ProofResult.Yes(_, _) => true
@@ -55,5 +57,5 @@ trait TestProverContextBase[PredFunc, Constructor](using CanEqual[PredFunc, Pred
 
   def assertNotProves(p: Predicate): ZIO[VariableProvider, Any, TestResult] =
     assertZIO(check(p, Map.empty, fuel))(notProven)
-  
+
 }

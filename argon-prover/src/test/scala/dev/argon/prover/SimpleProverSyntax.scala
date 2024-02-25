@@ -1,6 +1,7 @@
 package dev.argon.prover
 
 import dev.argon.prover.*
+import dev.argon.util.TreeComparison
 
 class SimpleProverSyntax[PredFunc, Constructor] extends ProverSyntax {
   override type TVariable = Expr.Variable
@@ -25,6 +26,5 @@ class SimpleProverSyntax[PredFunc, Constructor] extends ProverSyntax {
     def unary_! : Predicate = not(pred)
     def ==>(other: Predicate): Predicate = Implies(pred, other)
   }
-    
 
 }

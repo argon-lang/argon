@@ -5,7 +5,7 @@ import scala.quoted.*
 
 object MacroUtils {
 
-  def patternMatch[T: Type, SubTypes <: Tuple: Type, A: Type](expr: Expr[T])(f: [U] => (Expr[U], Type[U]) => Expr[A])(using q: Quotes): Expr[A] =
+  def patternMatch[T: Type, SubTypes <: Tuple : Type, A: Type](expr: Expr[T])(f: [U] => (Expr[U], Type[U]) => Expr[A])(using q: Quotes): Expr[A] =
     import q.reflect.{*, given}
 
     def createPatternBranch[U: Type]: CaseDef =
@@ -23,13 +23,53 @@ object MacroUtils {
     Match(expr.asTerm, cases).asExprOf[A]
   end patternMatch
 
-  private def tupleForeach[T <: Tuple : Type, A](f: [U] => Type[U] => A)(using q: Quotes): List[A] =
+  def patternMatch2[T <: Matchable : Type, SubTypes <: Tuple : Type, A: Type](expr1: Expr[T], expr2: Expr[T])(mismatch: Expr[A])(f: [U] => (Expr[U], Expr[U], Type[U]) => Expr[A])(using q: Quotes): Expr[A] =
+    import q.reflect.{*, given}
+
+    def createPatternBranch[U: Type]: List[CaseDef] =
+      val expr = '{
+        ($expr1, $expr2) match {
+          case (a: U, b: U) => ${ f('a, 'b, Type.of[U]) }
+          case (_: U, _) | (_, _: U) => $mismatch
+          case _ => $mismatch
+        }
+      }
+
+      def getCases(e: Term): List[CaseDef] =
+        e match {
+          case Inlined(_, _, inner) => getCases(inner)
+          case Match(_, cases) =>
+            cases.filter {
+              case CaseDef(Ident(_), _, _) => false
+              case _ => true
+            }
+
+          case _ => throw new Exception("Unexpected expression")
+        }
+
+      getCases(expr.asTerm)
+    end createPatternBranch
+
+    val cases = tupleForeach[SubTypes, List[CaseDef]]([U] => (uType: Type[U]) => createPatternBranch[U](using uType)).flatten
+
+    Match('{ ($expr1, $expr2) }.asTerm, cases.take(cases.size - 1)).asExprOf[A]
+  end patternMatch2
+
+  def tupleForeach[T <: Tuple : Type, A](f: [U] => Type[U] => A)(using q: Quotes): List[A] =
     Type.of[T] match {
       case '[h *: t] => f(Type.of[h]) :: tupleForeach[t, A](f)
       case '[EmptyTuple] => Nil
       case _ => throw new Exception(s"Unexpected type for tuple: ${Type.show[T]}")
     }
   end tupleForeach
+
+  def tupleForeachPair[T1 <: Tuple : Type, T2 <: Tuple : Type, A](f: [U1, U2] => (Type[U1], Type[U2]) => A)(using q: Quotes): List[A] =
+    (Type.of[T1], Type.of[T2]) match {
+      case ('[h1 *: t1], '[h2 *: t2]) => f(Type.of[h1], Type.of[h2]) :: tupleForeachPair[t1, t2, A](f)
+      case ('[EmptyTuple], '[EmptyTuple]) => Nil
+      case _ => throw new Exception(s"Unexpected type for tuple pairs: ${Type.show[T1]} and ${Type.show[T2]}")
+    }
+  end tupleForeachPair
 
   inline def typeHasAnn[T, Ann]: Boolean =
     ${ typeHasAnnMacro[T, Ann] }
