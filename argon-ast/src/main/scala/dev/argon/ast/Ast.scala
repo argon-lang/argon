@@ -1,6 +1,6 @@
 package dev.argon.ast
 
-import cats.data.NonEmptyList
+import cats.data.NonEmptySeq
 import dev.argon.util.WithSource
 
 sealed trait Stmt
@@ -45,7 +45,7 @@ final case class MethodDeclarationStmt(
 final case class FunctionParameter
 (paramType: WithSource[Expr], name: IdentifierExpr)
 
-enum FunctionParameterListType {
+enum FunctionParameterListType derives CanEqual {
   case NormalList
   case InferrableList
   case QuoteList
@@ -66,7 +66,7 @@ final case class ReturnTypeSpecifier
   ensuresClauses: Seq[WithSource[Expr]],
 )
 
-enum Modifier {
+enum Modifier derives CanEqual {
   case Public, Protected, Private, Internal
   case Erased, Proof, Inline
 }
@@ -74,7 +74,7 @@ enum Modifier {
 enum ImportStmt extends Stmt {
   case Absolute(path: ImportPathSegment)
   case Relative(upCount: Int, path: ImportPathSegment)
-  case Tube(tubeName: NonEmptyList[String], path: ImportPathSegment)
+  case Tube(tubeName: NonEmptySeq[String], path: ImportPathSegment)
   case Member(memberPath: ImportPathSegment)
 }
 
@@ -113,7 +113,7 @@ object Expr:
   final case class FunctionType(a: WithSource[Expr], r: WithSource[Expr]) extends Expr
   final case class IfElse(condition: WithSource[Expr], whenTrue: WithSource[Seq[WithSource[Stmt]]], whenFalse: WithSource[Seq[WithSource[Stmt]]]) extends Expr
   final case class IntLiteral(i: BigInt) extends Expr
-  final case class StringLiteral(parts: NonEmptyList[StringFragment]) extends Expr
+  final case class StringLiteral(parts: NonEmptySeq[StringFragment]) extends Expr
   final case class Summon(t: WithSource[Expr]) extends Expr
   final case class Tuple(items: Seq[WithSource[Expr]]) extends Expr
   final case class Type(n: Option[WithSource[Expr]]) extends Expr
@@ -121,7 +121,7 @@ object Expr:
   final case class UnaryOperation(op: UnaryOperator, a: WithSource[Expr]) extends Expr
 end Expr
 
-enum IdentifierExpr extends Expr {
+enum IdentifierExpr extends Expr derives CanEqual {
   case Named(s: String)
   case Op(op: Operator)
   case Extension(inner: IdentifierExpr)
@@ -134,11 +134,11 @@ enum StringFragment {
   case Interpolate(format: Option[WithSource[String]], value: WithSource[Expr])
 }
 
-sealed trait Operator:
+sealed trait Operator derives CanEqual:
   val symbol: String
 end Operator
 
-enum BinaryOperator(val symbol: String) extends Operator:
+enum BinaryOperator(val symbol: String) extends Operator derives CanEqual:
   case Assign extends BinaryOperator("+")
   case Plus extends BinaryOperator("+")
   case Minus extends BinaryOperator("-")
@@ -163,7 +163,7 @@ enum BinaryOperator(val symbol: String) extends Operator:
   case PropConjunction extends BinaryOperator("/\\")
 end BinaryOperator
 
-enum UnaryOperator(val symbol: String) extends Operator:
+enum UnaryOperator(val symbol: String) extends Operator derives CanEqual:
   case Plus extends UnaryOperator("+")
   case Minus extends UnaryOperator("-")
   case BitNot extends UnaryOperator("~~~")
@@ -179,7 +179,7 @@ final case class TubeSpec(
 
 
 final case class ModulePatternMapping(
-  module: Seq[ModulePatternSegment],
+  module: Seq[WithSource[ModulePatternSegment]],
   fileNameTemplate: Expr.StringLiteral,
 )
 

@@ -1,6 +1,7 @@
 package dev.argon.prover.smt
 
 import dev.argon.prover.*
+import dev.argon.util.Fuel
 import zio.*
 import zio.test.*
 import zio.test.Assertion.*
@@ -33,7 +34,7 @@ object SmtOrderTests extends ZIOSpecDefault {
 
     private val commonAssertions = Seq()
 
-    override val fuel = 10
+    override val fuel = Fuel(10)
 
     protected override def freshAssertions: Seq[URIO[VariableProvider, TVariable] => URIO[VariableProvider, (Proof[String], Predicate)]] =
       (commonAssertions ++ extraAssertions)

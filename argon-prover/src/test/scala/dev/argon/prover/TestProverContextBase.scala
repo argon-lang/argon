@@ -21,7 +21,7 @@ trait TestProverContextBase[PredFunc, Constructor](using CanEqual[PredFunc, Pred
   override type ProofAtom = String
   override type Model = Map[String, Expr]
 
-  val fuel: Int
+  val fuel: Fuel
 
   protected final override def newVariable: URIO[VariableProvider, Expr.Variable] =
     VariableProvider.next.map(Expr.Variable.apply)

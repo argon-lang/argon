@@ -54,7 +54,7 @@ trait ESExprCodecDerivation[TCodec[_]] {
   inline def buildSumCodecs[T, SubTypes <: Tuple]: Map[ESExprTag, WrappedCodec[TCodec, ? <: T]] =
     inline erasedValue[SubTypes] match
       case _: (htype *: ttypes) =>
-        val hcodec =  derivedProduct[htype](using summonInline[Mirror.ProductOf[htype]])
+        val hcodec =  derived[htype](using summonInline[Mirror.Of[htype]])
         val tailMap = buildSumCodecs[T, ttypes]
         val hcodec2 = summonInline[WrappedCodec[TCodec, htype] <:< WrappedCodec[TCodec, ? <: T]](WrappedCodec(hcodec))
 

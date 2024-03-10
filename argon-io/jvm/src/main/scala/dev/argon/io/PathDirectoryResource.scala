@@ -7,9 +7,9 @@ import zio.stream.*
 import java.io.IOException
 import java.nio.file.{Files, Path}
 
-private[io] class PathDirectoryResource(path: Path) extends DirectoryResource[Any, IOException, BinaryResource] {
+private[io] class PathDirectoryResource(path: Path) extends DirectoryResource[IOException, BinaryResource] {
 
-  override def contents: ZStream[Any, IOException, DirectoryEntry[Any, IOException, BinaryResource]] =
+  override def contents: ZStream[Any, IOException, DirectoryEntry[IOException, BinaryResource]] =
     ZStream.fromJavaStream(Files.list(path).nn)
       .refineToOrDie[IOException]
       .mapZIO { path =>

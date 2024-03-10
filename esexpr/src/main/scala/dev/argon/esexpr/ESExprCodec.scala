@@ -1,8 +1,9 @@
 package dev.argon.esexpr
 
 import cats.*
-import cats.data.NonEmptyList
+import cats.data.NonEmptySeq
 import cats.implicits.given
+import dev.argon.esexpr.ESExprCodec.DecodeError
 import dev.argon.util.{*, given}
 
 import scala.deriving.Mirror
@@ -13,20 +14,30 @@ import scala.deriving.Mirror.ProductOf
 trait ESExprCodec[T] {
   lazy val tags: Set[ESExprTag]
   def encode(value: T): ESExpr
-  def decode(expr: ESExpr): Either[String, T]
+  def decode(expr: ESExpr): Either[DecodeError, T]
 }
 
 object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
+
+  enum ErrorPath {
+    case Current
+    case Constructor(constructor: String)
+    case Positional(constructor: String, pos: Int, next: ErrorPath)
+    case Keyword(constructor: String, name: String, next: ErrorPath)
+  }
+
+  final case class DecodeError(message: String, path: ErrorPath) extends ESExprDecodeException(message)
+
 
   given ESExprCodec[String] with
     override lazy val tags: Set[ESExprTag] = Set(ESExprTag.Str)
     override def encode(value: String): ESExpr =
       ESExpr.Str(value)
 
-    override def decode(expr: ESExpr): Either[String, String] =
+    override def decode(expr: ESExpr): Either[DecodeError, String] =
       expr match {
         case ESExpr.Str(s) => Right(s)
-        case _ => Left("Expected a string")
+        case _ => Left(DecodeError("Expected a string", ErrorPath.Current))
       }
   end given
 
@@ -35,10 +46,10 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
     override def encode(value: Boolean): ESExpr =
       ESExpr.Bool(value)
 
-    override def decode(expr: ESExpr): Either[String, Boolean] =
+    override def decode(expr: ESExpr): Either[DecodeError, Boolean] =
       expr match {
         case ESExpr.Bool(b) => Right(b)
-        case _ => Left("Expected a bool")
+        case _ => Left(DecodeError("Expected a bool", ErrorPath.Current))
       }
   end given
 
@@ -47,17 +58,41 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
     override def encode(value: BigInt): ESExpr =
       ESExpr.Int(value)
 
-    override def decode(expr: ESExpr): Either[String, BigInt] =
+    override def decode(expr: ESExpr): Either[DecodeError, BigInt] =
       expr match {
         case ESExpr.Int(n) => Right(n)
-        case _ => Left("Expected an int")
+        case _ => Left(DecodeError("Expected an int", ErrorPath.Current))
+      }
+  end given
+
+  given ESExprCodec[Long] with
+    override lazy val tags: Set[ESExprTag] = Set(ESExprTag.Int)
+    override def encode(value: Long): ESExpr =
+      ESExpr.Int(value)
+
+    override def decode(expr: ESExpr): Either[DecodeError, Long] =
+      expr match {
+        case ESExpr.Int(n) if n >= Long.MinValue && n <= Long.MaxValue => Right(n.toLong)
+        case _ => Left(DecodeError("Expected an int within the range of a 64-bit siged integer", ErrorPath.Current))
+      }
+  end given
+
+  given ESExprCodec[Double] with
+    override lazy val tags: Set[ESExprTag] = Set(ESExprTag.Float64)
+    override def encode(value: Double): ESExpr =
+      ESExpr.Float64(value)
+
+    override def decode(expr: ESExpr): Either[DecodeError, Double] =
+      expr match {
+        case ESExpr.Float64(f) => Right(f)
+        case _ => Left(DecodeError("Expected a float64", ErrorPath.Current))
       }
   end given
 
   given ESExprCodec[ESExpr] with
     override lazy val tags: Set[ESExprTag] = Set.empty
     override def encode(value: ESExpr): ESExpr = value
-    override def decode(expr: ESExpr): Either[String, ESExpr] = Right(expr)
+    override def decode(expr: ESExpr): Either[DecodeError, ESExpr] = Right(expr)
   end given
 
   given [A: ESExprCodec]: ESExprCodec[Seq[A]] with
@@ -70,28 +105,29 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
         value.map(summon[ESExprCodec[A]].encode)
       )
 
-    override def decode(expr: ESExpr): Either[String, Seq[A]] =
+    override def decode(expr: ESExpr): Either[DecodeError, Seq[A]] =
       expr match {
         case expr: ESExpr.Constructed =>
           for
-            _ <- if expr.constructor == "list" then Right(()) else Left("Invalid constructor name for list")
-            _ <- if expr.kwargs.isEmpty then Right(()) else Left("Unexpected keyword arguments for list")
-            values <- expr.args.traverse(summon[ESExprCodec[A]].decode)
+            _ <- if expr.constructor == "list" then Right(()) else Left(DecodeError(s"Invalid constructor name for list: ${expr.constructor}", ErrorPath.Current))
+            _ <- if expr.kwargs.isEmpty then Right(()) else Left(DecodeError(s"Unexpected keyword arguments for list: ${expr.constructor}", ErrorPath.Current))
+            values <- expr.args.zipWithIndex
+              .traverse((arg, i) => summon[ESExprCodec[A]].decode(arg).left.map(error => DecodeError(error.message, ErrorPath.Positional("list", i, error.path))))
           yield values
 
-        case _ => Left("Expected constructor for list")
+        case _ => Left(DecodeError("Expected constructor for list", ErrorPath.Current))
       }
   end given
 
-  given[A: ESExprCodec]: ESExprCodec[NonEmptyList[A]] with
+  given[A: ESExprCodec]: ESExprCodec[NonEmptySeq[A]] with
     override lazy val tags: Set[ESExprTag] = Set(ESExprTag.Constructor("list"))
 
-    override def encode(value: NonEmptyList[A]): ESExpr =
+    override def encode(value: NonEmptySeq[A]): ESExpr =
       summon[ESExprCodec[Seq[A]]].encode(value.toList)
 
-    override def decode(expr: ESExpr): Either[String, NonEmptyList[A]] =
+    override def decode(expr: ESExpr): Either[DecodeError, NonEmptySeq[A]] =
       summon[ESExprCodec[Seq[A]]].decode(expr).flatMap { values =>
-        NonEmptyList.fromList(values.toList).toRight("List was expected to be non-empty")
+        NonEmptySeq.fromSeq(values.toList).toRight(DecodeError("List was expected to be non-empty", ErrorPath.Current))
       }
   end given
 
@@ -102,13 +138,13 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
       override def encode(value: T): ESExpr =
         ESExpr.Str(caseNames(m.ordinal(value)))
 
-      override def decode(expr: ESExpr): Either[String, T] =
+      override def decode(expr: ESExpr): Either[DecodeError, T] =
         expr match {
           case ESExpr.Str(s) =>
-            caseValues.get(s).toRight { s"Invalid simple enum value: $s" }
+            caseValues.get(s).toRight { DecodeError(s"Invalid simple enum value: $s", ErrorPath.Current) }
 
           case _ =>
-            Left("Expected a string for enum value")
+            Left(DecodeError("Expected a string for enum value", ErrorPath.Current))
         }
     }
 
@@ -128,15 +164,15 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
             MacroUtils.patternMatch[T, SubTypes, ESExpr]('value)([U] => (uValue: Expr[U], uType: Type[U]) => {
               given Type[U] = uType
               '{
-                ESExprCodec.derivedProduct[U](using summonInline[Mirror.ProductOf[U]]).encode($uValue)
+                ESExprCodec.derived[U](using summonInline[Mirror.Of[U]]).encode($uValue)
               }
             })
           }
 
-        override def decode(expr: ESExpr): Either[String, T] =
+        override def decode(expr: ESExpr): Either[DecodeError, T] =
           val tag = ESExprTag.fromExpr(expr)
 
-          ${codecMap}.get(tag).toRight(s"Unexpected tag: $tag (valid tags: ${tags})")
+          ${codecMap}.get(tag).toRight(DecodeError(s"Unexpected tag: $tag (valid tags: ${tags})", ErrorPath.Current))
             .flatMap { codec => codec.codec.decode(expr) }
         end decode
       }
@@ -146,15 +182,30 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
   override type TCodecProduct[T] = ESExprCodecProduct[T]
   override type TCodecField[T] = ESExprCodecField[T]
 
+  enum ProductErrorPath derives CanEqual {
+    case Current
+    case Positional(pos: Int, next: ErrorPath)
+    case Keyword(name: String, next: ErrorPath)
+  }
+
+  final case class ProductDecodeError(message: String, path: ProductErrorPath) {
+    def toDecodeError(constructor: String): DecodeError =
+      DecodeError(message, path match {
+        case ProductErrorPath.Current => ErrorPath.Constructor(constructor)
+        case ProductErrorPath.Positional(pos, next) => ErrorPath.Positional(constructor, pos, next)
+        case ProductErrorPath.Keyword(name, next) => ErrorPath.Keyword(constructor, name, next)
+      })
+  }
+
   trait ESExprCodecProduct[T] {
     def encode(value: T): (Map[String, ESExpr], List[ESExpr])
-    def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[String, T]
+    def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[ProductDecodeError, T]
   }
 
   trait ESExprCodecField[T] {
     def defaultValue: Option[T]
     def encode(value: T): Option[ESExpr]
-    def decode(expr: ESExpr): Either[String, T]
+    def decode(expr: ESExpr): Either[DecodeError, T]
   }
 
 
@@ -172,16 +223,17 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
         ESExpr.Constructed(constructor, kwargs, args)
       end encode
 
-      override def decode(expr: ESExpr): Either[String, T] =
+      override def decode(expr: ESExpr): Either[DecodeError, T] =
         expr match {
           case expr: ESExpr.Constructed =>
             for
-              _ <- if expr.constructor == constructor then Right(()) else Left("Unexpected constructor name")
+              _ <- if expr.constructor == constructor then Right(()) else Left(DecodeError(s"Unexpected constructor name: ${expr.constructor}", ErrorPath.Current))
               res <- codecProduct.decode(expr.kwargs, expr.args.toList)
+                .left.map(_.toDecodeError(constructor))
             yield m.fromTuple(res)
 
           case _ =>
-            Left("Expected a constructed value")
+            Left(DecodeError("Expected a constructed value", ErrorPath.Current))
         }
     }
 
@@ -192,7 +244,7 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
       override def encode(value: Option[Elem]): Option[ESExpr] =
         value.map(elemCodec.encode)
 
-      override def decode(expr: ESExpr): Either[String, Option[Elem]] =
+      override def decode(expr: ESExpr): Either[DecodeError, Option[Elem]] =
         elemCodec.decode(expr).map(Some.apply)
     }
 
@@ -208,14 +260,14 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
         else
           None
 
-      override def decode(expr: ESExpr): Either[String, Elem] = elemCodec.decode(expr)
+      override def decode(expr: ESExpr): Either[DecodeError, Elem] = elemCodec.decode(expr)
     }
 
   override def codecToFieldCodec[Elem](elemCodec: ESExprCodec[Elem]): ESExprCodecField[Elem] =
     new ESExprCodecField[Elem] {
       override def defaultValue: Option[Elem] = None
       override def encode(value: Elem): Option[ESExpr] = Some(elemCodec.encode(value))
-      override def decode(expr: ESExpr): Either[String, Elem] = elemCodec.decode(expr)
+      override def decode(expr: ESExpr): Either[DecodeError, Elem] = elemCodec.decode(expr)
     }
 
 
@@ -227,11 +279,12 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
         (kwargs ++ h.view.mapValues(elemCodec.encode), args)
       end encode
 
-      override def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[String, Map[String, Elem] *: Tail] =
+      override def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[ProductDecodeError, Map[String, Elem] *: Tail] =
         for
           decoded <- kwargs.toSeq.traverse((k, v) =>
             for
               v2 <- elemCodec.decode(v)
+                .left.map { error => ProductDecodeError(error.message, ProductErrorPath.Keyword(k, error.path)) }
             yield k -> v2
           )
           tailDecoded <- tailCodec.decode(Map.empty, args)
@@ -247,11 +300,12 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
         (fieldCodec.encode(h).fold(kwargs)(h => kwargs + (keyName -> h)), args)
       end encode
 
-      override def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[String, A *: Tail] =
+      override def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[ProductDecodeError, A *: Tail] =
         for
           decoded <- kwargs.get(keyName) match {
             case Some(value) => fieldCodec.decode(value)
-            case None => fieldCodec.defaultValue.toRight(s"Required key $keyName was not provided")
+              .left.map { error => ProductDecodeError(error.message, ProductErrorPath.Keyword(keyName, error.path)) }
+            case None => fieldCodec.defaultValue.toRight(ProductDecodeError(s"Required key $keyName was not provided", ProductErrorPath.Current))
           }
           tailDecoded <- tailCodec.decode(kwargs.removed(keyName), args)
         yield decoded *: tailDecoded
@@ -266,11 +320,15 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
         (Map.empty, elems.map(elemCodec.encode).toList)
       end encode
 
-      override def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[String, Seq[Elem] *: EmptyTuple] =
+      override def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[ProductDecodeError, Seq[Elem] *: EmptyTuple] =
         if kwargs.nonEmpty then
-          Left(s"Extra keyword arguments were provided for $typeName: ${kwargs.keySet}")
+          Left(ProductDecodeError(s"Extra keyword arguments were provided for $typeName: ${kwargs.keySet}", ProductErrorPath.Current))
         else
-          args.traverse(elemCodec.decode)
+          args.zipWithIndex
+            .traverse((arg, i) =>
+              elemCodec.decode(arg)
+                .left.map(error => ProductDecodeError(error.message, ProductErrorPath.Positional(i, error.path)))
+            )
             .map(_ *: EmptyTuple)
     }
 
@@ -282,16 +340,23 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
         (kwargs, elemCodec.encode(h) :: args)
       end encode
 
-      override def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[String, Elem *: Tail] =
+      override def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[ProductDecodeError, Elem *: Tail] =
         args match {
           case h :: t =>
             for
               decoded <- elemCodec.decode(h)
+                .left.map(error => ProductDecodeError(error.message, ProductErrorPath.Positional(0, error.path)))
               tailDecoded <- tailCodec.decode(kwargs, t)
+                .left.map(error => error.path match {
+                  case ProductErrorPath.Positional(pos, path) =>
+                    ProductDecodeError(error.message, ProductErrorPath.Positional(pos, path))
+
+                  case _ => error
+                })
             yield decoded *: tailDecoded
 
           case _ =>
-            Left("Not enough arguments were provided")
+            Left(ProductDecodeError("Not enough arguments were provided", ProductErrorPath.Current))
         }
     }
 
@@ -300,9 +365,9 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
     new ESExprCodecProduct[EmptyTuple] {
       override def encode(value: EmptyTuple): (Map[String, ESExpr], List[ESExpr]) = (Map.empty, List.empty)
 
-      override def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[String, EmptyTuple] =
+      override def decode(kwargs: Map[String, ESExpr], args: List[ESExpr]): Either[ProductDecodeError, EmptyTuple] =
         if kwargs.nonEmpty || args.nonEmpty then
-          Left("Extra arguments were provided")
+          Left(ProductDecodeError("Extra arguments were provided", ProductErrorPath.Current))
         else
           Right(EmptyTuple)
     }
@@ -316,7 +381,7 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
         elemCodec.encode(elemValue)
       }
 
-      override def decode(expr: ESExpr): Either[String, T] =
+      override def decode(expr: ESExpr): Either[DecodeError, T] =
         elemCodec.decode(expr).map(res => m.fromTuple(res *: EmptyTuple))
     }
 }

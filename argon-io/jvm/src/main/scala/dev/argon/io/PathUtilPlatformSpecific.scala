@@ -28,7 +28,7 @@ trait PathUtilPlatformSpecific {
         ZStream.fromJavaStream(Files.list(path).nn)
           .refineToOrDie[IOException]
 
-      override def binaryResource(path: Path): BinaryResource[Any, IOException] =
+      override def binaryResource(path: Path): BinaryResource[IOException] =
         PathBinaryResource(path)
 
       override def resourceLayer(path: Path): ULayer[ResourceReader & ResourceWriter] =

@@ -1,5 +1,5 @@
 package dev.argon.io
 
-trait BinaryResourcePlatformSpecific[-R, +E] {
+trait BinaryResourcePlatformSpecific[+E] {
   
 }

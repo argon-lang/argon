@@ -11,7 +11,7 @@ import scala.scalajs.js.JavaScriptException
 import scala.scalajs.js.typedarray.{Int8Array, Uint8Array}
 
 
-private[io] final class NodeBinaryResource(path: String) extends BinaryResource[Any, IOException] {
+private[io] final class NodeBinaryResource(path: String) extends BinaryResource[IOException] {
   override def asBytes: ZStream[Any, IOException, Byte] =
     ZStream.scoped[Any](
       ZIO.acquireRelease(ZIO.fromPromiseJS { NodeFileSystem.open(path, "r") })

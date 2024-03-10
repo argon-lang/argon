@@ -6,35 +6,35 @@ import dev.argon.options
 import scala.deriving.Mirror
 import scala.compiletime.{constValue, erasedValue, summonInline}
 
-trait OutputHandler[-R, +E, Output]:
-  lazy val options: Map[Seq[String], OutputInfo[R, E, Output]]
+trait OutputHandler[+E, -Output]:
+  lazy val options: Map[Seq[String], OutputInfo[E, Output]]
 end OutputHandler
 
 object OutputHandler:
 
-  inline def derive[R, E, A <: Product](using m: Mirror.ProductOf[A]): OutputHandler[R, E, A] =
-    lazy val opts = getFieldInfo[R, E, m.MirroredElemLabels, m.MirroredElemTypes]
-    new OutputHandler[R, E, A] {
-      override lazy val options: Map[Seq[String], OutputInfo[R, E, A]] =
+  inline def derive[E, A <: Product](using m: Mirror.ProductOf[A]): OutputHandler[E, A] =
+    lazy val opts = getFieldInfo[E, m.MirroredElemLabels, m.MirroredElemTypes]
+    new OutputHandler[E, A] {
+      override lazy val options: Map[Seq[String], OutputInfo[E, A]] =
         opts.view.mapValues { info =>
-          new OutputInfo[R, E, A] {
-            override def getValue(options: A): FileSystemResource[R, E, BinaryResource] =
+          new OutputInfo[E, A] {
+            override def getValue(options: A): FileSystemResource[E, BinaryResource] =
               info.getValue(Tuple.fromProductTyped(options))
           }
         }.toMap
     }
   end derive
 
-  inline def getFieldInfo[R, E, Labels <: Tuple, Elems <: Tuple]: Map[Seq[String], OutputInfo[R, E, Elems]] =
+  inline def getFieldInfo[E, Labels <: Tuple, Elems <: Tuple]: Map[Seq[String], OutputInfo[E, Elems]] =
     inline erasedValue[(Labels, Elems)] match {
       case _: (hlabel *: tlabels, helem *: telems) =>
         val label = constValue[hlabel & String]
-        val fieldHandler = summonInline[OutputHandler[R, E, helem]]
-        val tailFieldInfo = getFieldInfo[R, E, tlabels, telems]
+        val fieldHandler = summonInline[OutputHandler[E, helem]]
+        val tailFieldInfo = getFieldInfo[E, tlabels, telems]
 
         val fieldInfo = fieldHandler.options.map { (key, info) =>
-          (label +: key) -> new OutputInfo[R, E, helem *: telems] {
-            override def getValue(options: helem *: telems): FileSystemResource[R, E, BinaryResource] =
+          (label +: key) -> new OutputInfo[E, helem *: telems] {
+            override def getValue(options: helem *: telems): FileSystemResource[E, BinaryResource] =
               val (h *: _) = options
               info.getValue(h)
             end getValue
@@ -42,8 +42,8 @@ object OutputHandler:
         }
 
         val tailFieldInfo2 = tailFieldInfo.view.mapValues { info =>
-          new OutputInfo[R, E, helem *: telems] {
-            override def getValue(options: helem *: telems): FileSystemResource[R, E, BinaryResource] =
+          new OutputInfo[E, helem *: telems] {
+            override def getValue(options: helem *: telems): FileSystemResource[E, BinaryResource] =
               val (_ *: t) = options
               info.getValue(t)
             end getValue
@@ -52,30 +52,30 @@ object OutputHandler:
 
         val fields = fieldInfo ++ tailFieldInfo2
 
-        summonInline[Map[Seq[String], OutputInfo[R, E, helem *: telems]] <:< Map[Seq[String], OutputInfo[R, E, Elems]]](fields)
+        summonInline[Map[Seq[String], OutputInfo[E, helem *: telems]] <:< Map[Seq[String], OutputInfo[E, Elems]]](fields)
 
       case _: (EmptyTuple, EmptyTuple) =>
         Map.empty
     }
 
-  given binaryResourceOutputHandler[R, E, Res <: BinaryResource[R, E]]: OutputHandler[R, E, Res] with
-    override lazy val options: Map[Seq[String], OutputInfo[R, E, Res]] =
-      Map(Seq() -> new OutputInfo[R, E, Res] {
-        override def getValue(options: Res): FileSystemResource[R, E, BinaryResource] =
+  given binaryResourceOutputHandler[E, Res <: BinaryResource[E]]: OutputHandler[E, Res] with
+    override lazy val options: Map[Seq[String], OutputInfo[E, Res]] =
+      Map(Seq() -> new OutputInfo[E, Res] {
+        override def getValue(options: Res): FileSystemResource[E, BinaryResource] =
           FileSystemResource.Of(options)
       })
   end binaryResourceOutputHandler
 
-  given directoryResourceOutputHandler[R, E, FileRes[-R2, +E2] <: BinaryResource[R2, E2], Res <: DirectoryResource[R, E, FileRes]]: OutputHandler[R, E, Res] with
-    override lazy val options: Map[Seq[String], OutputInfo[R, E, Res]] =
-      Map(Seq() -> new OutputInfo[R, E, Res] {
-        override def getValue(options: Res): FileSystemResource[R, E, BinaryResource] =
+  given directoryResourceOutputHandler[E, FileRes[+E2] <: BinaryResource[E2], Res <: DirectoryResource[E, FileRes]]: OutputHandler[E, Res] with
+    override lazy val options: Map[Seq[String], OutputInfo[E, Res]] =
+      Map(Seq() -> new OutputInfo[E, Res] {
+        override def getValue(options: Res): FileSystemResource[E, BinaryResource] =
           options
       })
   end directoryResourceOutputHandler
 
-  given OutputHandler[Any, Nothing, Nothing] with
-    override lazy val options: Map[Seq[String], OutputInfo[Any, Nothing, Nothing]] = Map.empty
+  given OutputHandler[Nothing, Nothing] with
+    override lazy val options: Map[Seq[String], OutputInfo[Nothing, Nothing]] = Map.empty
   end given
 
 end OutputHandler

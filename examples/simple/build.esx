@@ -1,0 +1,34 @@
+(build-config
+    plugins: (list
+        "source"
+        "lua"
+    )
+
+    tube: (tube-options
+        loader: (tube-loader-options
+            plugin: "source"
+            name: "argon-sources"
+        )
+        options: (source-options
+            name: (tube-name "Simple")
+            sources: (list "src")
+            platforms: (dict
+                lua: (lua-options)
+            )
+        )
+    )
+
+    output: (output-config
+        options: (dict
+            lua: (lua-output-options)
+        )
+
+        dest: (dict
+            lua: (dict
+                chunk: "out.lua"
+            )
+        )
+    )
+
+    libraries: (list)
+)

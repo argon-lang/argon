@@ -42,7 +42,7 @@ trait PathUtilPlatformSpecific {
           .refineToOrDie[IOException]
 
 
-      override def binaryResource(path: String): BinaryResource[Any, IOException] =
+      override def binaryResource(path: String): BinaryResource[IOException] =
         NodeBinaryResource(path)
 
       override def resourceLayer(path: String): ULayer[ResourceReader & ResourceWriter] =

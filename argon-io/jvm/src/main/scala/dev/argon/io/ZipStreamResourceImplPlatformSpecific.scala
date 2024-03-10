@@ -7,8 +7,8 @@ import zio.stream.*
 
 import java.io.IOException
 
-trait ZipStreamResourceImplPlatformSpecific[-R, +E >: IOException] extends ZipStreamResource[R, E] {
-  override def asBytes: ZStream[R, E, Byte] =
+trait ZipStreamResourceImplPlatformSpecific[+E >: IOException] extends ZipStreamResource[E] {
+  override def asBytes: ZStream[Any, E, Byte] =
     ZStreamFromOutputStreamWriterZIO { outputStream =>
       ZIO.scoped(
         for

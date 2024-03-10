@@ -1,44 +1,31 @@
 package dev.argon.plugins.source
 
-import dev.argon.compiler.*
-import dev.argon.compiler.definitions.*
-import dev.argon.compiler.tube.ArTubeC
-import dev.argon.io.ResourceFactory
-import dev.argon.options.{OptionDecoder, OutputHandler}
+import cats.data.NonEmptySeq
+import dev.argon.compiler.{ArTubeC, HasContext, TubeImporter, TubeName}
+import dev.argon.options.OptionDecoder
 import dev.argon.parser.SyntaxError
-import dev.argon.plugin.*
-import dev.argon.plugin.executor.TestExecutor
-
-import java.io.IOException
-import zio.*
+import dev.argon.plugin.{FormatPlugin, PlatformPluginSet, PluginError, TubeEmitter, TubeLoader}
+import zio.{Scope, ZIO}
 
 import java.nio.charset.CharacterCodingException
+import dev.argon.plugin.PluginSetUtil.PartialOptionDecoder.given
 
-type SourceEnv = CompEnv
-type SourceError = CharacterCodingException | SyntaxError | CompError | IOException
+final class SourcePlugin[Platforms <: PlatformPluginSet](override val platforms: Platforms) extends FormatPlugin[Platforms] {
+  override val pluginId: String = "source"
 
-final class SourcePlugin[R <: SourceEnv, E >: SourceError, PlatformPlugins <: PlatformPluginSet[R, E]](val platformPlugins: PlatformPlugins) extends CompositePlugin[R, E, PlatformPlugins] {
-  override val pluginId: "source" = "source"
+  override def emitter[Ctx <: CompatibleContext]: Option[TubeEmitter[Ctx]] = None
 
-  override type OutputOptions = Nothing
-  override type Output = Nothing
+  override def tubeLoaders[Ctx <: CompatibleContext]: Map[String, TubeLoader[Ctx]] =
+    Map("argon-sources" -> new TubeLoader[Ctx] {
+      override type LibOptions[E >: PluginError] = SourceCodeTubeOptions[E, platforms.PlatformOptions[E]]
+      override def libOptionDecoder[E >: PluginError]: OptionDecoder[E, LibOptions[E]] =
+        SourceCodeTubeOptions.optionDecoder
 
-  override def outputOptionsDecoder: OptionDecoder[R, E, Nothing] =
-    summon[OptionDecoder[R, E, OutputOptions]]
-
-  override def outputHandler: OutputHandler[R, E, Nothing] =
-    summon[OutputHandler[R, E, Output]]
-
-  override def emitTube
-  (context: PluginContext[R, E, ?])
-  (pluginAdapter: PluginAdapter[R, E, context.plugin.type, this.type])
-  (tube: EmittableTube[context.type])
-  (options: OutputOptions)
-  : context.Comp[Output] =
-    options
-
-  override def testExecutor: Option[TestExecutor[R, E, Options, Output]] = None
-
-  override def tubeLoaders: Map[String, TubeLoader[R, E, this.type]] =
-    Map("buildspec" -> SourceTubeLoader(this))
+      override def load
+      (context: Ctx)
+      (tubeImporter: TubeImporter & HasContext[context.type])
+      (libOptions: LibOptions[context.Error])
+      : ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]] =
+        SourceTube.make(platforms)(context)(libOptions)        
+    })
 }

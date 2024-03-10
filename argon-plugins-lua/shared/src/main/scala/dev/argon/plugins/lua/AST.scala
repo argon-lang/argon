@@ -1,5 +1,7 @@
 package dev.argon.plugins.lua
 
+import dev.argon.esexpr.{ESExprCodec, keyword}
+import zio.ZIO
 import zio.stream.*
 
 import java.nio.charset.StandardCharsets
@@ -10,9 +12,9 @@ object AST {
     def toStream: UStream[String] = blockToStream(block)
   }
 
-  final case class Block(statements: Seq[Stat])
+  final case class Block(statements: Seq[Stat]) derives ESExprCodec
 
-  sealed trait Stat derives CanEqual
+  sealed trait Stat derives CanEqual, ESExprCodec
   final case class Assignment(vars: Seq[Var], exps: Seq[Exp]) extends Stat
   sealed trait FunctionCall extends Stat with PrefixExp
   final case class SimpleFunctionCall(func: PrefixExp, args: Seq[Exp]) extends FunctionCall
@@ -23,21 +25,22 @@ object AST {
   final case class Do(block: Block) extends Stat
   final case class While(condition: Exp, body: Block) extends Stat
   final case class Repeat(body: Block, condition: Exp) extends Stat
-  final case class If(condition: Exp, body: Block, elseIfs: Seq[ElseIf], elseBody: Option[Block]) extends Stat
-  final case class ElseIf(condition: Exp, body: Block)
-  final case class NumericalFor(varName: String, init: Exp, limit: Exp, step: Option[Exp], body: Block) extends Stat
+  final case class If(condition: Exp, body: Block, elseIfs: Seq[ElseIf], @keyword elseBody: Option[Block]) extends Stat
+  final case class ElseIf(condition: Exp, body: Block) derives ESExprCodec
+  final case class NumericalFor(varName: String, init: Exp, limit: Exp, @keyword step: Option[Exp], body: Block) extends Stat
   final case class GenericFor(varNames: Seq[String], expList: Seq[Exp], body: Block) extends Stat
   final case class FunctionDeclaration(isLocal: Boolean, name: String, params: Seq[String], hasRest: Boolean, body: Block) extends Stat
-  final case class LocalDeclaration(names: Seq[(String, Attrib)], values: Seq[Exp]) extends Stat
-  enum Attrib derives CanEqual {
+  final case class LocalDeclaration(names: Seq[VariableBinding], values: Seq[Exp]) extends Stat
+  final case class VariableBinding(name: String, @keyword attrib: Attrib) derives ESExprCodec
+  enum Attrib derives CanEqual, ESExprCodec {
     case Empty
     case Const, Close
   }
   final case class Return(values: Seq[Exp]) extends Stat
 
-  sealed trait Exp derives CanEqual
-  sealed trait PrefixExp extends Exp
-  sealed trait Var extends PrefixExp
+  sealed trait Exp derives CanEqual, ESExprCodec
+  sealed trait PrefixExp extends Exp derives ESExprCodec
+  sealed trait Var extends PrefixExp derives ESExprCodec
   case object NilLiteral extends Exp
   case object FalseLiteral extends Exp
   case object TrueLiteral extends Exp
@@ -51,7 +54,7 @@ object AST {
   final case class MemberAccessName(prefix: PrefixExp, name: String) extends Var
   final case class ParenExp(exp: Exp) extends PrefixExp
   final case class TableConstructor(fields: Seq[Field]) extends Exp
-  enum Field derives CanEqual {
+  enum Field derives CanEqual, ESExprCodec {
      case NamedWithExp(name: Exp, value: Exp)
      case NamedFixed(name: String, value: Exp)
      case Positional(value: Exp)
@@ -64,7 +67,7 @@ object AST {
   }
 
   final case class BinOpExp(op: BinOp, a: Exp, b: Exp) extends OpExp
-  enum BinOp(val text: String, val precedence: Int, val leftAssoc: Boolean) extends Op {
+  enum BinOp(val text: String, val precedence: Int, val leftAssoc: Boolean) extends Op derives ESExprCodec {
     case Add extends BinOp("+", 8, true)
     case Sub extends BinOp("-", 8, true)
     case Mul extends BinOp("*", 9, true)
@@ -88,7 +91,7 @@ object AST {
     case Or extends BinOp("or", 0, true)
   }
   final case class UnOpExp(op: UnOp, a: Exp) extends OpExp
-  enum UnOp(val text: String) extends Op {
+  enum UnOp(val text: String) extends Op derives ESExprCodec {
     override val precedence: Int = 10
 
     case Minus extends UnOp("-")
@@ -106,9 +109,9 @@ object AST {
   private def statToStream(stat: Stat): UStream[String] =
     stat match {
       case Assignment(vars, exps) =>
-        ZStream.fromIterable(vars).flatMap(varToStream).intersperse(", ") ++
-          ZStream(" = ")
-        ZStream.fromIterable(exps).flatMap(expToStream).intersperse(", ")
+        withCommas(vars)(varToStream) ++
+          ZStream(" = ") ++
+        withCommas(exps)(expToStream)
 
       case functionCall: FunctionCall => expToStream(functionCall)
 
@@ -169,9 +172,9 @@ object AST {
 
       case GenericFor(varNames, expList, body) =>
         ZStream("for ") ++
-          ZStream.fromIterable(varNames).intersperse(", ") ++
+          withCommas(varNames)(ZStream.succeed(_)) ++
           ZStream(" in ") ++
-          ZStream.fromIterable(expList).flatMap(expToStream).intersperse(", ") ++
+          withCommas(expList)(expToStream) ++
           ZStream(" do ") ++
           blockToStream(body) ++
           ZStream(" end")
@@ -183,24 +186,25 @@ object AST {
 
       case LocalDeclaration(names, values) =>
         ZStream("local ") ++
-          ZStream.fromIterable(names).flatMap {
-            case (name, Attrib.Empty) => ZStream(name)
-            case (name, Attrib.Const) => ZStream(name, " const")
-            case (name, Attrib.Close) => ZStream(name, " close")
+          withCommas(names) {
+            case VariableBinding(name, Attrib.Empty) => ZStream(name)
+            case VariableBinding(name, Attrib.Const) => ZStream(name, " const")
+            case VariableBinding(name, Attrib.Close) => ZStream(name, " close")
           } ++
           (if values.nonEmpty then ZStream(" = ") else ZStream.empty) ++
-          ZStream.fromIterable(values).flatMap(expToStream).intersperse(", ")
+          withCommas(values)(expToStream)
 
       case Return(Seq()) =>
         ZStream("return")
 
       case Return(values) =>
-        ZStream("return ") ++ ZStream.fromIterable(values).flatMap(expToStream).intersperse(", ")
+        ZStream("return ") ++ withCommas(values)(expToStream)
     }
 
   private def writeFunctionBody(params: Seq[String], hasRest: Boolean, body: Block): UStream[String] =
     ZStream("(") ++
-      (ZStream.fromIterable(params) ++ (if hasRest then ZStream("...") else ZStream.empty)).intersperse(", ") ++
+      withCommas(params)(ZStream.succeed(_)) ++
+      (if hasRest then ZStream(", ...") else ZStream.empty) ++
       ZStream(") ") ++
       blockToStream(body) ++
       ZStream(" end")
@@ -220,15 +224,16 @@ object AST {
       case FloatLiteral(value) => ZStream(java.lang.Double.toHexString(value).nn)
       case StringLiteral(value) =>
         val b = value.getBytes(StandardCharsets.UTF_8).nn
-        ZStream.fromIterable(
+
+        ZStream("\"") ++ ZStream.fromIterable(
           b.map { c =>
             val c2 = (c & 0xFF).toChar
             if isWhitelistedChar(c2) then
               c2.toString
             else
-              "\\x%02X"
+              "\\x%02X".formatted(c2).nn
           }
-        )
+        ) ++ ZStream("\"")
 
       case RestExp => ZStream("...")
       case FunctionDefinitionExp(params, hasRest, body) =>
@@ -271,7 +276,7 @@ object AST {
       case SimpleFunctionCall(f, args) =>
         expToStream(f) ++
           ZStream("(") ++
-          ZStream.fromIterable(args).flatMap(expToStream).intersperse(", ") ++
+          withCommas(args)(expToStream) ++
           ZStream(")")
 
       case MethodCall(f, name, Seq(s: StringLiteral)) =>
@@ -283,7 +288,7 @@ object AST {
       case MethodCall(f, name, args) =>
         expToStream(f) ++
           ZStream(":", name, "(") ++
-          ZStream.fromIterable(args).flatMap(expToStream).intersperse(", ") ++
+          withCommas(args)(expToStream) ++
           ZStream(")")
 
       case NameExp(name) =>
@@ -309,7 +314,7 @@ object AST {
         val aStream = opExpArgToStream(op, !op.leftAssoc, a)
         val bStream = opExpArgToStream(op, op.leftAssoc, b)
         aStream ++ ZStream(" ", op.text, " ") ++ bStream
-        
+
       case UnOpExp(op, a) =>
         ZStream(op.text) ++ opExpArgToStream(op, true, a)
     }
@@ -321,5 +326,8 @@ object AST {
       case a: OpExp => expToStream(ParenExp(a))
       case _ => expToStream(a)
     }
+
+  private def withCommas[A](items: Seq[A])(f: A => UStream[String]): UStream[String] =
+    ZStream.fromIterable(items.zipWithIndex).flatMap((item, i) => (if i > 0 then ZStream(", ") else ZStream.empty) ++ f(item))
 
 }

@@ -6,6 +6,7 @@ import zio.test.Assertion.*
 import zio.test.*
 import cats.*
 import cats.implicits.given
+import dev.argon.util.Fuel
 import zio.interop.catz.core.*
 
 object PrologProofTests extends ZIOSpecDefault {
@@ -27,7 +28,7 @@ object PrologProofTests extends ZIOSpecDefault {
   private final class TestContext extends SimplePrologContext[TestPredicate, TestCtor] {
     override val syntax: prologSyntax.type = prologSyntax
     
-    override val fuel: Int = 100
+    override val fuel: Fuel = Fuel(100)
 
     val succIsGreaterThanZero = Proof.Atomic("succIsGreaterThanZero")
     val succIsGreaterThanSucc = Proof.Atomic("succIsGreaterThanSucc")

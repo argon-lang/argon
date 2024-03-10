@@ -1,0 +1,6 @@
+
+public def String: type = __argon_builtin string_type
+
+public proc puts(s: String): () = ()
+
+public def main(): () = ()

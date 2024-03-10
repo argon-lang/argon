@@ -11,16 +11,16 @@ import dev.argon.util.{*, given}
 
 import java.nio.channels.SeekableByteChannel
 
-final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFileResource, Any, IOException] {
-  override def decode[R <: Any, E >: IOException](resource: BinaryResource[R, E]): ZipFileResource[R, E] =
-    new ZipFileResource[R, E] {
+final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFileResource, IOException] {
+  override def decode[E >: IOException](resource: BinaryResource[E]): ZipFileResource[E] =
+    new ZipFileResource[E] {
 
       override def fileName: Option[String] = None
 
-      override def asBytes: ZStream[R, E, Byte] = resource.asBytes
+      override def asBytes: ZStream[Any, E, Byte] = resource.asBytes
 
 
-      override def asZip: ZIO[R & Scope, E, ZipFileResource.Zip[R, E]] =
+      override def asZip: ZIO[Scope, E, ZipFileResource.Zip[E]] =
         resource.asSeekableByteChannel match {
           case Some(channel) =>
             for
@@ -48,15 +48,15 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
         }
 
 
-      private final class ZipImpl(zip: ZIO[R & Scope, E, ZipFile]) extends ZipFileResource.Zip[R, E] :
-        override def getEntry(path: String): ZIO[R & Scope, E, Option[ZipStreamResource.Entry[R, E]]] =
+      private final class ZipImpl(zip: ZIO[Scope, E, ZipFile]) extends ZipFileResource.Zip[E] :
+        override def getEntry(path: String): ZIO[Scope, E, Option[ZipStreamResource.Entry[E]]] =
           for
             zip <- zip
             lock <- Semaphore.make(1)
             entry <- ZIO.succeed(zip.getEntry(path))
           yield entry.toOption.map(createEntry(zip)(lock))
 
-        override def entries: ZStream[R, E, ZipStreamResource.Entry[R, E]] =
+        override def entries: ZStream[Any, E, ZipStreamResource.Entry[E]] =
           ZStream.unwrapScoped(
             for
               zip <- zip
@@ -66,15 +66,15 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
           )
       end ZipImpl
 
-      private def createEntry(zip: ZipFile)(lock: Semaphore)(entry: ZipArchiveEntry): ZipStreamResource.Entry[R, E] =
-        new ZipStreamResource.Entry[R, E] {
+      private def createEntry(zip: ZipFile)(lock: Semaphore)(entry: ZipArchiveEntry): ZipStreamResource.Entry[E] =
+        new ZipStreamResource.Entry[E] {
           override val path: String = entry.getName.nn
 
-          override def value: BinaryResource[R, E] =
-            new BinaryResource[R, E] {
+          override def value: BinaryResource[E] =
+            new BinaryResource[E] {
               override def fileName: Option[String] = None
 
-              override def asBytes: ZStream[R, E, Byte] =
+              override def asBytes: ZStream[Any, E, Byte] =
                 ZStream.fromInputStreamScoped(
                   lock.withPermitScoped.as(zip.getInputStream(entry).nn)
                 )

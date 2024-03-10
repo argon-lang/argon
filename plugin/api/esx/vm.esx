@@ -1,0 +1,24 @@
+
+
+(constructor "tube-name"
+    (arg "head" (string))
+    (vararg "tail" (string))
+)
+(constructor "module-path"
+    (arg "path" (list (string)))
+)
+
+(enum-class "definition-info"
+    (constructor "global"
+        (kwarg "tube-name" "tube-name")
+        (kwarg "module-path" "module-path")
+        (kwarg "name" optional: #true "identifier")
+        (kwarg "signature" "signature")
+    )
+)
+
+(interface "signature"
+    
+)
+
+

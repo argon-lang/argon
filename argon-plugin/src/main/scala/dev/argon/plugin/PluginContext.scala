@@ -1,37 +1,18 @@
 package dev.argon.plugin
 
-import dev.argon.compiler.{CompError, Context}
+import dev.argon.compiler.Context
 import dev.argon.options.OptionDecoder
 import zio.*
 
-sealed abstract class PluginContext[R, E >: CompError, P <: Plugin[R, E]] extends Context {
-  val plugin: P
+abstract class PluginContext[R, E] extends Context {
+  val plugins: PluginSet
 
-  override type Env = R
-  override type Error = E
+  override type Env = Env0 & PluginEnv & R
+  override type Error = Error0 | PluginError | E
 
-  override type Options = plugin.Options
-
-  override type ExternMethodImplementation = plugin.externMethod.Implementation
-  override type MethodReference = plugin.externMethod.Reference
-  override type ExternFunctionImplementation = plugin.externFunction.Implementation
-  override type FunctionReference = plugin.externFunction.Reference
-  override type ExternClassConstructorImplementation = plugin.externClassConstructor.Implementation
-  override type ClassConstructorReference = plugin.externClassConstructor.Reference
-
-  override def getExternMethodImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternMethodImplementation] =
-    plugin.loadExternMethod(options)(id).some
-
-  override def getExternFunctionImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternFunctionImplementation] =
-    plugin.loadExternFunction(options)(id).some
-
-  override def getExternClassConstructorImplementation(options: Options, id: String): ZIO[Env, Option[Error], ExternClassConstructorImplementation] =
-    plugin.loadExternClassConstructor(options)(id).some
+  override val implementations: Implementations {
+    type ExternFunctionImplementation = plugins.externFunction.Implementation
+    type FunctionReference = plugins.externFunction.Reference
+  }
 }
 
-object PluginContext {
-  def apply[R, E >: CompError](p: Plugin[R, E]): PluginContext[R, E, p.type] =
-    new PluginContext[R, E, p.type] {
-      override val plugin: p.type = p
-    }
-}

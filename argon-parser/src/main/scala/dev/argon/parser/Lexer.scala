@@ -9,7 +9,7 @@ import Grammar.Operators.*
 import dev.argon.ast.StringFragment
 import zio.Chunk
 import zio.stream.ZChannel
-import cats.data.NonEmptyList
+import cats.data.NonEmptySeq
 
 import Function.const
 
@@ -116,8 +116,8 @@ object Lexer {
                 }
 
               Token.StringToken(
-                NonEmptyList.fromList(combineParts(parts).toList)
-                  .getOrElse { NonEmptyList.of(StringFragment.Text("")) }
+                NonEmptySeq.fromSeq(combineParts(parts).toList)
+                  .getOrElse { NonEmptySeq.of(StringFragment.Text("")) }
               )
           }
 

@@ -9,7 +9,7 @@ import java.nio.channels.SeekableByteChannel
 import java.nio.file.{Files, Path}
 
 
-private[io] final class PathBinaryResource(path: Path) extends BinaryResource[Any, IOException] {
+private[io] final class PathBinaryResource(path: Path) extends BinaryResource[IOException] {
   override def asBytes: ZStream[Any, IOException, Byte] =
     ZStream.fromPath(path).refineToOrDie[IOException]
 

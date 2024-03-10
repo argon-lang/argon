@@ -1,11 +1,12 @@
 package dev.argon.expr
 
+import dev.argon.ast.IdentifierExpr
 import dev.argon.util.{*, given}
 import zio.*
 
-import scala.compiletime.{error, erasedValue, summonInline}
+import scala.compiletime.{erasedValue, error, summonInline}
 
-trait Unification[R, E] {
+private[expr] sealed trait Unification[R, E] {
   val exprContext: ExprContext
   import exprContext.{*, given}
 
@@ -26,41 +27,42 @@ trait Unification[R, E] {
       ZIO.forall(a)(f)
 
 
-    private given Comparer[WExpr] = unify
-    private given Comparer[Expr] = autoComparer[Expr]
-    private given Comparer[Builtin] = autoComparer[Builtin]
-    private given Comparer[LocalVar] = unifyLocalVariable
-    private given Comparer[Var] = unifyVariable
+    private given Comparer[Expr] = unify
+    private given Comparer[Builtin] = autoComparer
+    private given Comparer[LocalVar] = autoComparer
+    private given Comparer[Var] = autoComparer
 
+    // Needed to make autoComparer for Expr happy, even though it will not be used.
+    private given Comparer[Hole] = EqualComparer[Hole]
     private given Comparer[Function] = EqualComparer[Function]
 
+    private given Comparer[UniqueIdentifier] = EqualComparer[UniqueIdentifier]
     private given Comparer[NullaryBuiltin] = EqualComparer[NullaryBuiltin]
     private given Comparer[UnaryBuiltin] = EqualComparer[UnaryBuiltin]
     private given Comparer[BinaryBuiltin] = EqualComparer[BinaryBuiltin]
+    private given Comparer[IdentifierExpr] = EqualComparer[IdentifierExpr]
 
-    def unify(a: WExpr, b: WExpr): ZIO[R, E, Boolean] =
+    def unify(a: Expr, b: Expr): ZIO[R, E, Boolean] =
       (a, b) match {
-        case (WExpr.Error(), _) | (_, WExpr.Error()) => ZIO.succeed(false)
-        case (WExpr.Normal(a), WExpr.Normal(b)) =>
-          summon[Comparer[Expr]].compare(a, b)
+        case (Expr.Error(), _) | (_, Expr.Error()) => ZIO.succeed(false)
 
-        case (WExpr.Hole(a), _) => unifyHole(a, b)
-        case (_, WExpr.Hole(b)) => unifyHole(b, a)
+        case (Expr.Hole(a), _) => unifyHole(a, b)
+        case (_, Expr.Hole(b)) => unifyHole(b, a)
+        
+        case _ =>
+          autoComparer[Expr].compare(a, b)
       }
   }
 
   export Matcher.unify
 
-  protected def unifyLocalVariable(a: Var, b: Var): ZIO[R, E, Boolean]
-  protected def unifyVariable(a: Var, b: Var): ZIO[R, E, Boolean]
 
 
 
 
-
-  private def unifyHole(hole: Hole, expr: WExpr): ZIO[R, E, Boolean] =
+  private def unifyHole(hole: Hole, expr: Expr): ZIO[R, E, Boolean] =
     expr match {
-      case WExpr.Hole(other) if hole == other => ZIO.succeed(true)
+      case Expr.Hole(other) if hole == other => ZIO.succeed(true)
       case _ =>
         model.get.flatMap { m =>
           m.resolveHole(hole) match {
@@ -85,10 +87,18 @@ trait Unification[R, E] {
     }
 
 
-  private def containsHole(e: WExpr, h: Hole): Boolean =
+  private def containsHole(e: Expr, h: Hole): Boolean =
     new HoleScanner {
       override val exprContext: Unification.this.exprContext.type = Unification.this.exprContext
       override val searchTarget: Hole = h
-    }.wexprScanner.scan(e).isLeft
+    }.exprScanner.scan(e).isLeft
 
+}
+
+object Unification {
+  def unify[R, E](ec: ExprContext)(m: Ref[ec.Model])(a: ec.Expr, b: ec.Expr): ZIO[R, E, Boolean] =
+    new Unification[R, E] {
+      override val exprContext: ec.type = ec
+      override protected val model: Ref[exprContext.Model] = m
+    }.unify(a, b)
 }

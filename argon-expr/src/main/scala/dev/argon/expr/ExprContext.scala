@@ -8,14 +8,30 @@ import scala.reflect.TypeTest
 
 trait ExprContext {
 
-  sealed trait Var
+  sealed trait Var {
+    def name: Option[IdentifierExpr]
+    def varType: Expr
+  }
+
   final case class LocalVar(
     id: UniqueIdentifier,
-    varType: WExpr,
+    varType: Expr,
     name: Option[IdentifierExpr],
     isMutable: Boolean,
     isErased: Boolean,
-    isGiven: Boolean,
+    isProof: Boolean,
+  ) extends Var
+  
+  type ParameterOwner = Function
+  
+  final case class ParameterVar(
+    owner: ParameterOwner,
+    parameterIndex: Int,
+    tupleIndex: Option[Int],
+    varType: Expr,
+    name: Option[IdentifierExpr],
+    isErased: Boolean,
+    isProof: Boolean,
   ) extends Var
 
   type Function
@@ -27,45 +43,46 @@ trait ExprContext {
 
   enum Builtin {
     case Nullary(builtin: NullaryBuiltin)
-    case Unary(builtin: UnaryBuiltin, a: WExpr)
-    case Binary(builtin: BinaryBuiltin, a: WExpr, b: WExpr)
+    case Unary(builtin: UnaryBuiltin, a: Expr)
+    case Binary(builtin: BinaryBuiltin, a: Expr, b: Expr)
 
-    case EqualTo(t: WExpr, a: WExpr, b: WExpr)
+    case EqualTo(t: Expr, a: Expr, b: Expr)
   }
 
   enum Expr {
-    case BindVariable(v: LocalVar, value: WExpr)
+    case Error()
+    case Hole(hole: ExprContext.this.Hole)
+    
+    
+    case BindVariable(v: LocalVar, value: Expr)
     case BoolLiteral(b: Boolean)
     case Builtin(b: ExprContext.this.Builtin)
-    case FunctionCall(f: Function, args: Seq[WExpr])
-    case FunctionObjectCall(f: WExpr, a: WExpr)
-    case FunctionType(a: WExpr, r: WExpr)
+    case FunctionCall(f: Function, args: Seq[Expr])
+    case FunctionObjectCall(f: Expr, a: Expr)
+    case FunctionType(a: Expr, r: Expr)
     case IfElse(
       whenTrueWitness: Option[LocalVar],
       whenFalseWitness: Option[LocalVar],
-      condition: WExpr,
-      trueBody: WExpr,
-      falseBody: WExpr,
+      condition: Expr,
+      trueBody: Expr,
+      falseBody: Expr,
     )
     case IntLiteral(i: BigInt)
-    case Sequence(stmts: Seq[WExpr], result: WExpr)
-    case StoreVariable(v: Var, value: WExpr)
-    case Tuple(items: Seq[WExpr])
-    case TupleElement(index: Int, tuple: WExpr)
+    case Sequence(stmts: Seq[Expr], result: Expr)
+    case StringLiteral(s: String)
+    case StoreVariable(v: Var, value: Expr)
+    case Tuple(items: Seq[Expr])
+    case TupleElement(index: Int, tuple: Expr)
+    case TypeN(n: Expr)
+    case TypeBigN(n: BigInt)
     case Variable(v: Var)
   }
 
-  enum WExpr {
-    case Normal(e: Expr)
-    case Hole(h: ExprContext.this.Hole)
-    case Error()
-  }
-
-  final class Model private(mapping: Map[Hole, WExpr]) {
-    def resolveHole(hole: Hole): Option[WExpr] =
+  final class Model private(mapping: Map[Hole, Expr]) {
+    def resolveHole(hole: Hole): Option[Expr] =
       mapping.get(hole)
 
-    private[expr] def addMapping(hole: Hole, expr: WExpr): Model =
+    private[expr] def addMapping(hole: Hole, expr: Expr): Model =
       Model(mapping.updated(hole, expr))
   }
 

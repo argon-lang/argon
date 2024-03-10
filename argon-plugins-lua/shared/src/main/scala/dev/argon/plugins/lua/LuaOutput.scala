@@ -3,11 +3,11 @@ package dev.argon.plugins.lua
 import dev.argon.esexpr.keyword
 import dev.argon.options.OutputHandler
 
-final case class LuaOutput[R, E](
-  @keyword chunk: LuaChunkResource[R, E] 
+final case class LuaOutput[E](
+  @keyword chunk: LuaChunkResource[E] 
 )
 
 object LuaOutput {
-  given [R, E]: OutputHandler[R, E, LuaOutput[R, E]] =
-    OutputHandler.derive[R, E, LuaOutput[R, E]]
+  given [E]: OutputHandler[E, LuaOutput[E]] =
+    OutputHandler.derive[E, LuaOutput[E]]
 }

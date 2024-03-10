@@ -200,6 +200,7 @@ lazy val esexprJVM = esexpr.jvm
 lazy val esexprJS = esexpr.js
 lazy val esexprNode = esexpr.node
 
+
 lazy val esexpr_generator = project.in(file("esexpr-generator"))
   .dependsOn(esexprJVM)
   .settings(
@@ -409,8 +410,7 @@ lazy val argon_exprJS = argon_expr.js
 lazy val argon_exprNode = argon_expr.node
 
 
-/*
-lazy val argon_compiler_core = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-compiler-core"))
+lazy val argon_compiler = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-compiler"))
   .dependsOn(ast, util, argon_expr, options, argon_io)
   .jvmConfigure(
     _.settings(commonJVMSettings)
@@ -427,15 +427,16 @@ lazy val argon_compiler_core = crossProject(JVMPlatform, JSPlatform, NodePlatfor
     commonSettings,
     compilerOptions,
 
-    name := "argon-compiler-core",
+    name := "argon-compiler",
   )
 
-lazy val argon_compiler_coreJVM = argon_compiler_core.jvm
-lazy val argon_compiler_coreJS = argon_compiler_core.js
-lazy val argon_compiler_coreNode = argon_compiler_core.node
+lazy val argon_compilerJVM = argon_compiler.jvm
+lazy val argon_compilerJS = argon_compiler.js
+lazy val argon_compilerNode = argon_compiler.node
+
 
 lazy val argonvm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argonvm"))
-  .dependsOn(argon_compiler_core)
+  .dependsOn(argon_compiler)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -454,12 +455,13 @@ lazy val argonvm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType
     name := "argonvm",
   )
 
-lazy val argonvmJVM = argonvm.jvm
-lazy val argonvmJS = argonvm.js
-lazy val argonvmNode = argonvm.node
+lazy val argonvmJVM = argon_compiler.jvm
+lazy val argonvmJS = argon_compiler.js
+lazy val argonvmNode = argon_compiler.node
+
 
 lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugin"))
-  .dependsOn(util, argon_compiler_core, esexpr, argonvm)
+  .dependsOn(util, argon_compiler, esexpr)
   .jvmConfigure(
     _.settings(
         commonJVMSettings,
@@ -495,9 +497,8 @@ lazy val argon_pluginJS = argon_plugin.js
 lazy val argon_pluginNode = argon_plugin.node
 
 
-
 lazy val argon_plugins_source = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugins-source"))
-  .dependsOn(argon_compiler_core, parser, argon_plugin)
+  .dependsOn(argon_compiler, parser, argon_plugin)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -520,8 +521,9 @@ lazy val argon_plugins_sourceJVM = argon_plugins_source.jvm
 lazy val argon_plugins_sourceJS = argon_plugins_source.js
 lazy val argon_plugins_sourceNode = argon_plugins_source.node
 
+
 lazy val argon_plugins_lua = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-plugins-lua"))
-  .dependsOn(argon_compiler_core, parser, argon_plugin)
+  .dependsOn(argon_plugin, argonvm)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -544,32 +546,9 @@ lazy val argon_plugins_luaJVM = argon_plugins_lua.jvm
 lazy val argon_plugins_luaJS = argon_plugins_lua.js
 lazy val argon_plugins_luaNode = argon_plugins_lua.node
 
-lazy val argon_plugins_wasm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-plugins-wasm"))
-  .dependsOn(argon_compiler_core, parser, argon_plugin)
-  .jvmConfigure(
-    _.settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-plugins-wasm",
-  )
-
-lazy val argon_plugins_wasmJVM = argon_plugins_wasm.jvm
-lazy val argon_plugins_wasmJS = argon_plugins_wasm.js
-lazy val argon_plugins_wasmNode = argon_plugins_wasm.node
 
 lazy val argon_plugin_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-platform"))
-  .dependsOn(argon_plugin, argon_plugins_source)
+  .dependsOn(argon_plugin, argon_plugins_source, argon_plugins_lua)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -588,10 +567,13 @@ lazy val argon_plugin_platform = crossProject(JVMPlatform, JSPlatform, NodePlatf
     name := "argon-plugin-platform",
   )
 
+lazy val argon_plugin_platformJVM = argon_plugin_platform.jvm
+lazy val argon_plugin_platformJS = argon_plugin_platform.js
+lazy val argon_plugin_platformNode = argon_plugin_platform.node
 
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-build"))
-  .dependsOn(util, options, argon_compiler_core, argon_io, argon_plugin, argon_plugin_platform)
+  .dependsOn(util, options, argon_compiler, argon_io, argon_plugin, argon_plugin_platform)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -666,6 +648,4 @@ lazy val cli = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Pure)
 
 lazy val cliJVM = cli.jvm
 lazy val cliNode = cli.node
-
-*/
 

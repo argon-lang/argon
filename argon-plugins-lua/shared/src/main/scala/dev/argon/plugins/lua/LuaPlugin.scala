@@ -1,67 +1,96 @@
 package dev.argon.plugins.lua
 
-import dev.argon.compiler.definitions.HasImplementation
-import dev.argon.compiler.tube.ArTubeC
-import dev.argon.plugin.{PlatformPlugin, PluginAdapter, PluginContext, TubeLoader}
+import cats.data.OptionT
+import dev.argon.argonvm.{VMContext, VMContextBuilder}
+import dev.argon.plugin.{PlatformPlugin, PluginContext, PluginEnv, PluginError, TubeEmitter, TubeLoader}
 import dev.argon.options.{OptionDecoder, OutputHandler}
-import dev.argon.compiler.{CompEnv, CompError, HasContext}
+import dev.argon.compiler.*
+import dev.argon.esexpr.ESExprCodec
 import dev.argon.io.Resource
-import dev.argon.plugin.executor.TestExecutor
-import zio.ZIO
+import zio.{Tag, ZEnvironment, ZIO}
+import zio.interop.catz.core.given
 
 import java.nio.charset.CharacterCodingException
 
-type LuaEnv = CompEnv
-type LuaError = CompError | CharacterCodingException
-
-class LuaPlugin[R <: LuaEnv, E >: LuaError] extends PlatformPlugin[R, E] {
+final class LuaPlugin extends PlatformPlugin {
   override val pluginId: String = "lua"
 
-  override type Options = LuaOptions
-  override type OutputOptions = LuaOutputOptions
-  override type Output = LuaOutput[R, E]
+  override type PlatformOptions[E >: PluginError] = LuaOptions
 
-  override def optionDecoder: OptionDecoder[R, E, Options] =
-    summon[OptionDecoder[R, E, Options]]
+  override def optionDecoder[E >: PluginError]: OptionDecoder[E, LuaOptions] =
+    summon[OptionDecoder[E, LuaOptions]]
 
-  override def outputOptionsDecoder: OptionDecoder[R, E, OutputOptions] =
-    summon[OptionDecoder[R, E, OutputOptions]]
+  trait LuaExtern extends Extern.Tagged {
+    override type Implementation = LuaExternImplementation
+    override def implementationCodec: ESExprCodec[Implementation] = summon[ESExprCodec[Implementation]]
+    override def implementationTag: Tag[LuaExternImplementation] = summon
 
-  override def outputHandler: OutputHandler[R, E, Output] =
-    summon[OutputHandler[R, E, Output]]
-    
-  override val externMethod: LuaExtern.type = LuaExtern
-  override val externFunction: LuaExtern.type = LuaExtern
-  override val externClassConstructor: LuaExtern.type = LuaExtern
+    override type Reference = LuaReference
+    override def referenceCodec: ESExprCodec[Reference] = summon
+    override def referenceTag: Tag[Reference] = summon
+  }
 
-  override def loadExternMethod(options: Options)(id: String): ZIO[R, E, Option[externMethod.Implementation]] =
-    ZIO.none
+  override val externFunction: LuaExtern = new LuaExtern {
+    override def loadExtern[E >: PluginError]
+    (options: PlatformOptions[E])
+    (id: String)
+    : OptionT[[A] =>> ZIO[PluginEnv, E, A], externFunction.Implementation] =
+      OptionT.none
 
-  override def loadExternFunction(options: Options)(id: String): ZIO[R, E, Option[externFunction.Implementation]] =
-    ZIO.none
-
-  override def loadExternClassConstructor(options: Options)(id: String): ZIO[R, E, Option[externClassConstructor.Implementation]] =
-    ZIO.none
-
-  override def emitTube
-  (ctx: PluginContext[R, E, ?])
-    (pluginAdapter0: PluginAdapter[R, E, ctx.plugin.type, LuaPlugin.this.type])
-    (tube: ArTubeC & HasContext[ctx.type] & HasImplementation[true])
-    (options: OutputOptions)
-  : ctx.Comp[Output] =
-    ZIO.succeed(LuaOutput(
-      chunk = new LuaChunkResource[R, E] with LuaChunkResource.Impl[R, E] with Resource.WithoutFileName {
-        override def luaChunk: ZIO[R, E, AST.Chunk] =
-          new TubeEmitter[R, E] {
-            override val context: ctx.type = ctx
-            override val plugin: LuaPlugin.this.type = ???
-            override val pluginAdapter: PluginAdapter[R, E, ctx.plugin.type, LuaPlugin.this.type] = pluginAdapter0
-            override val currentTube: ArTube & HasImplementation[true] = tube
-          }.emitTube
+    override def defineReference[E >: PluginError]
+    (options: LuaOptions)
+    (definitionInfo: DefinitionInfo)
+    : ZIO[PluginEnv, E, externFunction.Reference] =
+      definitionInfo match {
+        case DefinitionInfo.Global(tubeName, modulePath, name, sig) =>
+          ZIO.succeed(LuaReference.Global(EmitUtil.getTubePath(tubeName), modulePath.encode, ???, ???))
       }
-    ))
+  }
 
-  override def testExecutor: Option[TestExecutor[R, E, Options, Output]] = None
+  type VMContextIncluding = VMContext {
+    type Env <: PluginEnv
+    type Error >: PluginError
+    val implementations: {
+      type ExternFunctionImplementation <: ZEnvironment[externFunction.Implementation]
+      type FunctionReference <: ZEnvironment[externFunction.Reference]
+    }
+  }
 
-  override def tubeLoaders: Map[String, TubeLoader[R, E, LuaPlugin.this.type]] = Map.empty
+
+  override def emitter[Ctx <: ContextIncluding]: Option[TubeEmitter[Ctx]] =
+    Some(new TubeEmitter[Ctx] {
+      override type OutputOptions[E >: PluginError] = LuaOutputOptions
+      override type Output[E >: PluginError] = LuaOutput[E]
+
+
+      override def outputOptionsDecoder[E >: PluginError]: OptionDecoder[E, OutputOptions[E]] =
+        summon[OptionDecoder[E, OutputOptions[E]]]
+
+      override def outputHandler[E >: PluginError]: OutputHandler[E, Output[E]] =
+        summon[OutputHandler[E, Output[E]]]
+
+      override def emitTube
+      (ctx: Ctx)
+      (tube: ArTubeC & HasContext[ctx.type])
+      (options: LuaOutputOptions)
+      : ctx.Comp[LuaOutput[ctx.Error]] =
+        val builder = VMContextBuilder(ctx)
+
+        for
+          env <- ZIO.environment[ctx.Env]
+
+        yield LuaOutput(
+          chunk = new LuaChunkResource[ctx.Error] with LuaChunkResource.Impl[ctx.Error] with Resource.WithoutFileName {
+            override def luaChunk: ZIO[Any, ctx.Error, AST.Chunk] =
+              new TubeEmit {
+                override val plugin: LuaPlugin.this.type = LuaPlugin.this
+                override val context: builder.vmContext.type = builder.vmContext
+                override val currentTube: VMTube = builder.createTube(tube)
+              }.emitTube.provideEnvironment(env)
+          }
+        )
+      end emitTube
+    })
+
+  override def tubeLoaders[Ctx <: ContextOnlyIncluding]: Map[String, TubeLoader[Ctx]] = Map.empty
 }

@@ -13,7 +13,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
   protected def variableToExpr(v: TVariable): Expr
   protected def assumeResultProof: Proof[ProofAtom]
 
-  protected def normalizePredicateExpression(p: TPredicateExpr, model: Model, fuel: Int): ZIO[R, E, TPredicateExpr]
+  protected def normalizePredicateExpression(p: TPredicateExpr, model: Model, fuel: Fuel): ZIO[R, E, TPredicateExpr]
 
 
   enum Literal derives CanEqual {
@@ -40,13 +40,13 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
   final case class ProverState
   (
     model: Model,
-    fuel: Int,
+    fuel: Fuel,
     predEqClasses: Seq[PredEquivalenceClass],
     quantAsserts: Seq[QuantifiedPredicate],
     instantiatedEqClasses: Set[Int],
     knownPredicates: Seq[(TPredicateExpr, Boolean)],
   ) {
-    def consumeFuel: ProverState = copy(fuel = fuel - 1)
+    def consumeFuel: ProverState = copy(fuel = fuel.consume)
   }
 
   protected def predicateSatisfiableInModel(pf: TPredicateExpr, state: ProverState): ZIO[R, E, Option[Boolean]] =
@@ -332,7 +332,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
   end instantiateQuantifier
 
   private def instantiateQuantifiers(p: CNF, state: ProverState): ZIO[R, E, (ProverState, CNF)] =
-    if state.fuel > 0 then
+    if state.fuel.nonEmpty then
       for
         stateRef <- Ref.make(state)
         clauses <- ZIO.foreach(p.flatten) { lit =>
@@ -362,7 +362,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
           case (state, PredicateChoice.SelectedPredicate(_, _, _)) if clauses.nonEmpty =>
             satisfiable(p, state)
 
-          case (state, PredicateChoice.SelectedPredicate(lit, eqClass, value)) if state.fuel > 0 =>
+          case (state, PredicateChoice.SelectedPredicate(lit, eqClass, value)) if state.fuel.nonEmpty =>
             recordKnownPredicate(state.consumeFuel, lit.pf, value).flatMap(assumePredicate(p, _, eqClass, value)).flatMap(satisfiable) ||
               recordKnownPredicate(state.consumeFuel, lit.pf, !value).flatMap(assumePredicate(p, _, eqClass, !value)).flatMap(satisfiable)
 
@@ -386,7 +386,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     yield QuantifiedPredicate(vars, conjunctiveNormalForm(getAssertionTrigger(pred)), conjunctiveNormalForm(pred))
 
 
-  override def check(goal: Predicate, model: Model, fuel: Int): ZIO[R, E, ProofResult] =
+  override def check(goal: Predicate, model: Model, fuel: Fuel): ZIO[R, E, ProofResult] =
     ZIO.foreach(freshAssertions) { assertion =>
       assertionAsQuantifier(assertion)
     }

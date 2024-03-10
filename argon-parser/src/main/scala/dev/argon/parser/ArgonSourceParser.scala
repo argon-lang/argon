@@ -8,7 +8,7 @@ import zio.stream.*
 
 object ArgonSourceParser {
 
-  def parse(fileName: Option[String]): ZPipeline[Any, SyntaxError, Char, Stmt] =
+  def parse(fileName: Option[String]): ZPipeline[Any, SyntaxError, Char, WithSource[Stmt]] =
     ZPipeline.fromChannel(
       Characterizer.characterize(fileName)
         .pipeToOrFail(Lexer.lex(fileName))

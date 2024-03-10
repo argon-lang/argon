@@ -8,13 +8,13 @@ import java.io.IOException
 import java.nio.file.{Files, Path}
 
 private[io] final class PlatformResourceWriter(baseDir: Path) extends ResourceWriter {
-  override def write[R, E >: IOException](name: String, resource: BinaryResource[R, E]): ZIO[R, E, Unit] =
+  override def write[E >: IOException](name: String, resource: BinaryResource[E]): ZIO[Any, E, Unit] =
     writeFile(baseDir.resolve(name).nn, resource)
 
-  override def write[R, E >: IOException](name: String, resource: DirectoryResource[R, E, BinaryResource]): ZIO[R, E, Unit] =
+  override def write[E >: IOException](name: String, resource: DirectoryResource[E, BinaryResource]): ZIO[Any, E, Unit] =
     writeDir(baseDir.resolve(name).nn, resource)
 
-  private def writeFile[R, E >: IOException](path: Path, resource: BinaryResource[R, E]): ZIO[R, E, Unit] =
+  private def writeFile[E >: IOException](path: Path, resource: BinaryResource[E]): ZIO[Any, E, Unit] =
     ZIO.logTrace(s"Writing file: $path") *>
     resource.asBytes.run(ZSink.fromPath(path).foldSink(
       failure = {
@@ -24,7 +24,7 @@ private[io] final class PlatformResourceWriter(baseDir: Path) extends ResourceWr
       success = _ => ZSink.succeed(())
     ))
 
-  private def writeDir[R, E >: IOException](path: Path, resource: DirectoryResource[R, E, BinaryResource]): ZIO[R, E, Unit] =
+  private def writeDir[E >: IOException](path: Path, resource: DirectoryResource[E, BinaryResource]): ZIO[Any, E, Unit] =
     ZIO.logTrace(s"Writing directory: $path") *>
     ZIO.attempt { Files.createDirectories(path).nn }.refineToOrDie[IOException] *>
       resource.contents.foreach {

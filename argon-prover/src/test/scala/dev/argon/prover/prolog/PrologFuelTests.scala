@@ -6,6 +6,7 @@ import zio.test.Assertion.*
 import zio.test.*
 import cats.*
 import cats.implicits.given
+import dev.argon.util.Fuel
 import zio.interop.catz.core.*
 
 object PrologFuelTests extends ZIOSpecDefault {
@@ -23,7 +24,7 @@ object PrologFuelTests extends ZIOSpecDefault {
 
     override val syntax: prologSyntax.type = prologSyntax
 
-    override val fuel: Int = 10
+    override val fuel: Fuel = Fuel(10)
 
     override protected def freshAssertions: Seq[URIO[VariableProvider, TVariable] => URIO[VariableProvider, (Proof[ProofAtom], Predicate)]] =
       Seq(

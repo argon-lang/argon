@@ -1,27 +1,17 @@
 package dev.argon.plugin
 
 import dev.argon.compiler.*
-import dev.argon.compiler.tube.{ArTubeC, TubeImporter}
-import dev.argon.util.*
-import dev.argon.io.*
 import dev.argon.options.OptionDecoder
 import zio.*
 
-import java.io.IOException
 
-trait TubeLoader[R <: CompEnv, E >: CompError, TPlugin <: Plugin[R, E]] {
-  val plugin: TPlugin
-  
-  type LibOptions
-  given libOptionDecoder: OptionDecoder[R, E, LibOptions]
+trait TubeLoader[Ctx <: Context { type Env <: PluginEnv; type Error >: PluginError }] {
+  type LibOptions[E >: PluginError]
+  given libOptionDecoder[E >: PluginError]: OptionDecoder[E, LibOptions[E]]
 
   def load
-  (context: Context { type Env = R; type Error = E; type Options = plugin.Options })
+  (context: Ctx)
   (tubeImporter: TubeImporter & HasContext[context.type])
-  (libOptions: LibOptions)
+  (libOptions: LibOptions[context.Error])
   : ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]]
-}
-
-object TubeLoader {
-  type Aux[R <: CompEnv, E >: CompError, TPlugin <: Plugin[R, E], LibOpts] = TubeLoader[R, E, TPlugin] { type LibOptions = LibOpts }
 }

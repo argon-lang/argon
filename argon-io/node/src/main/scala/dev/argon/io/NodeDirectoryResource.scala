@@ -8,9 +8,9 @@ import zio.stream.*
 import java.io.IOException
 import scala.scalajs.js.JavaScriptException
 
-private[io] class NodeDirectoryResource(path: String) extends DirectoryResource[Any, IOException, BinaryResource] {
+private[io] class NodeDirectoryResource(path: String) extends DirectoryResource[IOException, BinaryResource] {
 
-  override def contents: ZStream[Any, IOException, DirectoryEntry[Any, IOException, BinaryResource]] =
+  override def contents: ZStream[Any, IOException, DirectoryEntry[IOException, BinaryResource]] =
     ZStream.fromIterableZIO(
       ZIO.fromPromiseJS { NodeFileSystem.readdir(path) }
         .refineToOrDie[JavaScriptException].mapBoth(IOException(_), _.toArray)

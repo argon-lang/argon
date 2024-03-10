@@ -12,8 +12,6 @@ trait HoleScanner extends TreeScanner[[A] =>> Either[Unit, A]] {
 
   import StandardScanners.given
 
-  given wexprScanner: Scanner[WExpr] = autoScanner
-
   private given Scanner[Hole] with
     override def scan(a: Hole): Either[Unit, Unit] =
       if a == searchTarget then
@@ -22,7 +20,7 @@ trait HoleScanner extends TreeScanner[[A] =>> Either[Unit, A]] {
         Right(())
   end given
 
-  private given Scanner[Expr] = autoScanner
+  given exprScanner: Scanner[Expr] = autoScanner
   private given Scanner[Builtin] = autoScanner
   private given Scanner[LocalVar] = autoScanner
   private given Scanner[Var] = autoScanner
@@ -37,6 +35,7 @@ trait HoleScanner extends TreeScanner[[A] =>> Either[Unit, A]] {
   private given Scanner[Boolean] = IgnoreScanner[Boolean]
   private given Scanner[BigInt] = IgnoreScanner[BigInt]
   private given Scanner[Int] = IgnoreScanner[Int]
+  private given Scanner[String] = IgnoreScanner[String]
 
 
 

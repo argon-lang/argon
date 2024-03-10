@@ -17,7 +17,7 @@ abstract class TestSmtContext[PredFunc, Constructor](using CanEqual[PredFunc, Pr
 
   override protected def assumeResultProof: Proof[String] = Proof.Atomic("dummy")
 
-  override protected def normalizePredicateExpression(p: PredicateApply, model: Model, fuel: Int): ZIO[VariableProvider, Nothing, PredicateApply] =
+  override protected def normalizePredicateExpression(p: PredicateApply, model: Model, fuel: Fuel): ZIO[VariableProvider, Nothing, PredicateApply] =
     ZIO.succeed(p)
 
   override protected def substituteVariablesPE(varMap: Map[Expr.Variable, Expr])(pf: PredicateApply): PredicateApply =
@@ -42,7 +42,7 @@ abstract class TestSmtContext[PredFunc, Constructor](using CanEqual[PredFunc, Pr
     yield if res then Some(qvm) else None
 
   private def exprEquiv(a: Expr, b: Expr, state: ProverState, quantVars: Set[Expr.Variable], quantVarMap: Ref[Map[Expr.Variable, Expr]]): UIO[Boolean] =
-    if state.fuel <= 0 then
+    if state.fuel.isEmpty then
       ZIO.succeed(false)
     else
       (a, b) match {

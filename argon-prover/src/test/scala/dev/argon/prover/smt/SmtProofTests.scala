@@ -1,6 +1,7 @@
 package dev.argon.prover.smt
 
 import dev.argon.prover.*
+import dev.argon.util.Fuel
 import zio.*
 import zio.test.*
 import zio.test.Assertion.*
@@ -26,7 +27,7 @@ object SmtProofTests extends ZIOSpecDefault {
   private final class TestContext(extraAssertions: Seq[Predicate]) extends TestSmtContext[TestPredicate, TestCtor] {
     override val syntax: prologSyntax.type = prologSyntax
 
-    override val fuel = 100
+    override val fuel = Fuel(100)
 
     private val commonAssertions = Seq(
       pred(KnownTrue),

@@ -2,78 +2,123 @@ package dev.argon.build
 
 import dev.argon.io.*
 import dev.argon.compiler.*
-import dev.argon.compiler.definitions.HasImplementation
-import dev.argon.compiler.tube.{ArTubeC, TubeName}
 import dev.argon.esexpr.{ESExpr, ESExprCodec}
 import dev.argon.options.{OptionDecoder, OutputHandler, OutputInfo}
 import dev.argon.plugin.*
-import dev.argon.plugin.platform.{AnyPluginEnv, AnyPluginError}
-import dev.argon.util.toml.{Toml, TomlCodec}
+import dev.argon.plugin.platform.pluginFactories
 import zio.*
 import zio.stm.*
 
 import java.io.IOException
 
 object Compile {
-  def compile[R <: ResourceReader & ResourceWriter & AnyPluginEnv, E >: BuildError | AnyPluginError | CompError | IOException](
+  def compile[R <: ResourceReader & ResourceWriter & PluginEnv, E >: BuildError | IOException | PluginError](
     config: BuildConfig,
   ): ZIO[R, E, Unit] =
     ZIO.scoped(
-      for
-        pluginLoader <- PluginLoader.make[R, E](config)
-        
-        tubePlugin <- pluginLoader.loadInputPlugin(config.tube.loader.plugin)
-        
-        context = PluginContext[R, E](tubePlugin)
-
-        tubeImporter <- TubeImporterImpl[R, E](pluginLoader)(context)
-
-        resReader <- ZIO.service[ResourceReader]
-
-        tube <- tubeImporter.loadTube(resReader)(config.tube)
-        declTube <- ZIO.fromEither(tube.asDeclaration.toRight { CouldNotLoadDeclarationTube(tube.tubeName) })
-        emitTube = new EmittableTube[context.type] {
-          override val asTypedTube: ArTubeC & HasContext[context.type] & HasImplementation[true] = declTube
+      createContext[R, BuildError | IOException](config)
+        .flatMap { context =>
+          createLogger(context).flatMap { logger =>
+            compileImpl(config, context)
+              .provideSomeEnvironment[R & Scope](_.add[context.ErrorLog](logger))
+          }
         }
-
-        _ <- ZIO.foreachDiscard(config.libraries)(tubeImporter.loadTube(resReader))
-
-        _ <- ZIO.logTrace(s"Writing output")
-        
-        _ <- ZIO.foreachDiscard(config.output.output) { case (pluginName, OutputConfig(options, dest)) =>
-          for
-            outputPluginWithAdapter <- pluginLoader.loadOutputPlugin(pluginName)(context)
-            outputOptions <- ZIO.fromEither(
-              outputPluginWithAdapter.plugin.outputOptionsDecoder
-                .decode(resReader)(options)
-                .left.map(BuildConfigParseError.apply)
-            )
-            tubeOutput <- outputPluginWithAdapter.plugin.emitTube(context)(outputPluginWithAdapter.adapter)(emitTube)(outputOptions)
-            _ <- handlePluginOutput(pluginName, Seq(), dest, tubeOutput, outputPluginWithAdapter.plugin.outputHandler)
-          yield ()
-        }
-      yield ()
     )
 
+  private def createContext[R <: ResourceReader & ResourceWriter & PluginEnv, E >: BuildError | IOException]
+  (config: BuildConfig)
+  : ZIO[R & Scope, E, PluginContext[R, E]] =
+    ZIO.foreach(config.plugins)(name => ZIO.fromEither(pluginFactories.get(name).toRight(UnknownPlugin(name))))
+      .flatMap(PluginLoader.load)
+      .map { pluginSet =>
+        new PluginContext[R, E] {
+          override val plugins: PluginSet = pluginSet
+          override val implementations: Implementations {
+            type ExternFunctionImplementation = plugins.externFunction.Implementation
+            type FunctionReference = plugins.externFunction.Reference
+          } = new Implementations {
+            override type ExternFunctionImplementation = plugins.externFunction.Implementation
+            override type FunctionReference = plugins.externFunction.Reference
+          }
+        }
+      }
 
-  private def handlePluginOutput[R <: ResourceWriter, E >: BuildError | IOException, Output](pluginName: String, prefix: Seq[String], outputOptions: ESExpr, output: Output, handler: OutputHandler[R, E, Output]): ZIO[R, E, Unit] =
+  private trait LogReporter {
+    def reportLogs: IO[BuildError | IOException, Unit]
+  }
+
+  private def createLogger(context: Context): UIO[context.ErrorLog & LogReporter] =
+    for
+      errors <- Ref.make(Seq.empty[context.CompilerError])
+    yield new context.ErrorLog with LogReporter {
+      override def logError(error: => context.CompilerError): UIO[Unit] =
+        errors.update(_ :+ error)
+
+      override def reportLogs: IO[BuildError | IOException, Unit] =
+        errors.get.flatMap { errors =>
+          if errors.isEmpty then
+            ZIO.unit
+          else
+            ZIO.foreach(errors) { e => Console.printError(e) } *>
+              ZIO.fail(BuildFailed(errorCount = errors.size))
+
+          end if
+        }
+    }
+
+  private def compileImpl(config: BuildConfig, context: PluginContext[? <: ResourceReader & ResourceWriter, ? >: IOException | BuildError]): ZIO[context.Env & Scope, context.Error, Unit] =
+    for
+      tubeImporter <- TubeImporterImpl(context)
+
+      resReader <- ZIO.service[ResourceReader]
+      tube <- tubeImporter.loadTube(resReader)(path => ESExprCodec.ErrorPath.Keyword("build-config", "tube", ESExprCodec.ErrorPath.Keyword("tube-options", "options", path)))(config.tube)
+      _ <- ZIO.foreachDiscard(config.libraries.zipWithIndex) { (lib, i) =>
+        tubeImporter.loadTube(resReader)(path => ESExprCodec.ErrorPath.Keyword("build-config", "libraries", ESExprCodec.ErrorPath.Positional("list", i, ESExprCodec.ErrorPath.Keyword("tube-options", "options", path))))(lib)
+      }
+
+      _ <- ZIO.logTrace(s"Writing output")
+
+      emitter = context.plugins.emitter[context.type]
+
+      outputOptions <- ZIO.fromEither(
+        emitter.outputOptionsDecoder[context.Error]
+          .decode(resReader)(config.output.options)
+          .left.map(error => BuildConfigParseError(
+            ESExprCodec.DecodeError(
+              error.message,
+              ESExprCodec.ErrorPath.Keyword(
+                "build-config",
+                "output",
+                ESExprCodec.ErrorPath.Keyword(
+                  "output-config",
+                  "options",
+                  error.path,
+                ),
+              ),
+            )
+          ))
+      )
+
+      output <- emitter.emitTube(context)(tube)(outputOptions)
+      _ <- handlePluginOutput(Seq(), config.output.dest, output, emitter.outputHandler)
+    yield ()
+
+  private def handlePluginOutput[R <: ResourceWriter, E >: BuildError | IOException, Output](prefix: Seq[String], outputOptions: DeepStringDict, output: Output, handler: OutputHandler[E, Output]): ZIO[R, E, Unit] =
     outputOptions match
-      case ESExpr.Constructed("dict", map, Seq()) =>
-        ZIO.foreachDiscard(map) { case (name, value) =>
-          handlePluginOutput(pluginName, prefix :+ name, value, output, handler)
+      case DeepStringDict.Dict(map) =>
+        ZIO.foreachDiscard(map.dict) { case (name, value) =>
+          handlePluginOutput(prefix :+ name, value, output, handler)
         }
 
-      case ESExpr.Str(value) =>
+      case DeepStringDict.Str(value) =>
         for
           _ <- ZIO.logTrace(s"Writing output: ${prefix.mkString(".")} to $value")
-          outputInfo <- ZIO.fromEither(handler.options.get(prefix).toRight(UnknownOutput(pluginName, prefix)))
+          outputInfo <- ZIO.fromEither(handler.options.get(prefix).toRight(UnknownOutput(prefix)))
           _ <- outputInfo.getValue(output) match {
             case FileSystemResource.Of(resource) => ZIO.serviceWithZIO[ResourceWriter](_.write(value, resource))
-            case resource: DirectoryResource[R, E, BinaryResource] => ZIO.serviceWithZIO[ResourceWriter](_.write(value, resource))
+            case resource: DirectoryResource[E, BinaryResource] => ZIO.serviceWithZIO[ResourceWriter](_.write(value, resource))
           }
         yield ()
-
-      case _ => ZIO.fail(BuildConfigParseError("Invalid type for output option. Expected string or table."))
     end match
 
 

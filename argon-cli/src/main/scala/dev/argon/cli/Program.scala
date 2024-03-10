@@ -2,15 +2,10 @@ package dev.argon.cli
 
 import dev.argon.io.{BinaryResourceDecoder, ESExprTextResource, PathLike, PathUtil, ResourceReader, ResourceWriter}
 import dev.argon.platform.*
-import dev.argon.util.toml.Toml
 import dev.argon.util.{*, given}
 import dev.argon.build.{BuildConfig, BuildError, Compile}
-import dev.argon.compiler.DiagnosticError
 import dev.argon.esexpr.ESExprException
-import dev.argon.parser.SyntaxError
-import dev.argon.plugin
-import dev.argon.plugin.Plugin
-import dev.argon.plugin.tube.InvalidTube
+import dev.argon.plugin.PluginError
 import zio.*
 import zio.stream.*
 
@@ -19,7 +14,7 @@ import scopt.{OEffect, OParser}
 
 import java.util.concurrent.TimeUnit
 
-object Program extends PlatformApp[PathUtil, InvalidTube | SyntaxError | DiagnosticError | IOException | BuildError | ESExprException] {
+object Program extends PlatformApp[PathUtil, IOException | BuildError | PluginError | ESExprException] {
 
   override def appBootstrapLayer: ZLayer[ZIOAppArgs, Error, Environment] =
     PathUtil.live
@@ -38,7 +33,7 @@ object Program extends PlatformApp[PathUtil, InvalidTube | SyntaxError | Diagnos
           .children(
             arg[PathLike]("build-spec")
               .action((path, c) => c.copy(buildSpec = Some(path)))
-              .text("Build spec TOML file")
+              .text("Build spec ESExpr file")
           ),
 
         cmd("build")
@@ -47,7 +42,7 @@ object Program extends PlatformApp[PathUtil, InvalidTube | SyntaxError | Diagnos
           .children(
             arg[PathLike]("build-spec")
               .action((path, c) => c.copy(buildSpec = Some(path)))
-              .text("Build spec TOML file")
+              .text("Build spec ESExpr file")
           ),
       )
     end parser

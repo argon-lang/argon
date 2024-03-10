@@ -1,5 +1,6 @@
 (constructor "tube-name"
-    (arg "name" (list (string)))
+    (arg "head" (string))
+    (vararg "tail" (string))
 )
 (constructor "module-path"
     (arg "path" (list (string)))

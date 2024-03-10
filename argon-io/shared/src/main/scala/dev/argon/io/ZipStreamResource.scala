@@ -5,23 +5,23 @@ import zio.stream.ZStream
 
 import java.io.IOException
 
-trait ZipStreamResource[-R, +E] extends BinaryResource[R, E] {
-  def asZip: ZIO[R & Scope, E, ZipStreamResource.Zip[R, E]]
+trait ZipStreamResource[+E] extends BinaryResource[E] {
+  def asZip: ZIO[Scope, E, ZipStreamResource.Zip[E]]
 }
 
 object ZipStreamResource:
-  trait Impl[-R, +E >: IOException] extends ZipStreamResource[R, E] with ZipStreamResourceImplPlatformSpecific[R, E]
+  trait Impl[+E >: IOException] extends ZipStreamResource[E] with ZipStreamResourceImplPlatformSpecific[E]
 
-  trait Zip[-R, +E]:
-    def entries: ZStream[R, E, Entry[R, E]]
+  trait Zip[+E]:
+    def entries: ZStream[Any, E, Entry[E]]
   end Zip
 
-  trait Entry[-R, +E]:
+  trait Entry[+E]:
     val path: String
-    def value: BinaryResource[R, E]
+    def value: BinaryResource[E]
   end Entry
 
-  given BinaryResourceDecoder[ZipFileResource, Any, IOException] =
+  given BinaryResourceDecoder[ZipFileResource, IOException] =
     ZipFileDecoderPlatformSpecific()
 
 end ZipStreamResource

@@ -118,16 +118,32 @@ object TreeShifter {
       val sym = Symbol.newBind(Symbol.spliceOwner, "v", Flags.EmptyFlags, TypeRepr.of[U1])
       val varExpr = Ref(sym).asExprOf[U1]
 
+      val shiftedValue: Expr[F[B]] =
+        Implicits.search(TypeRepr.of[Shifter[F, U1, U2]]) match {
+          case searchRes: ImplicitSearchSuccess =>
+            '{ $fMonad.map(${searchRes.tree.asExprOf[Shifter[F, U1, U2]]}.shift($varExpr))(summonInline[U2 <:< B]) }
+
+          case _ =>
+            Implicits.search(TypeRepr.of[Shifter[F, U1, B]]) match {
+              case searchRes: ImplicitSearchSuccess =>
+                '{ ${searchRes.tree.asExprOf[Shifter[F, U1, B]]}.shift($varExpr) }
+
+              case _ =>
+                '{
+                  $fMonad.map(
+                    $ts.autoShifterProduct[U1, U2](using summonInline[Mirror.ProductOf[U1]], summonInline[Mirror.ProductOf[U2]])
+                      .shift($varExpr)
+                  )(summonInline[U2 <:< B])
+                }
+
+            }
+        }
+
 
       CaseDef(
         Bind(sym, Typed(Wildcard(), TypeTree.of[U1])),
         None,
-        '{
-          $fMonad.map(
-            $ts.autoShifterProduct[U1, U2](using summonInline[Mirror.ProductOf[U1]], summonInline[Mirror.ProductOf[U2]])
-              .shift($varExpr)
-          )(summonInline[U2 <:< B])
-        }.asTerm
+        shiftedValue.asTerm
       )
     })
 

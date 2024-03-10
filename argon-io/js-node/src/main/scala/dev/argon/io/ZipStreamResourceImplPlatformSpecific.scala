@@ -8,8 +8,8 @@ import dev.argon.io.jstypes.jszip.JSZip
 
 import scala.scalajs.js
 
-trait ZipStreamResourceImplPlatformSpecific[-R, +E >: IOException] extends ZipStreamResource[R, E] {
-  override def asBytes: ZStream[R, E, Byte] =
+trait ZipStreamResourceImplPlatformSpecific[+E >: IOException] extends ZipStreamResource[E] {
+  override def asBytes: ZStream[Any, E, Byte] =
     ZStream.unwrapScoped(
       for
         jszip <- ZIO.succeed { new JSZip() }

@@ -6,7 +6,7 @@ import zio.stream.*
 import java.io.IOException
 import java.nio.charset.CharacterCodingException
 
-abstract class Resource[-R, +E] {
+abstract class Resource[+E] {
   def fileName: Option[String]
 }
 
@@ -17,32 +17,32 @@ object Resource:
 end Resource
 
 
-abstract class BinaryResource[-R, +E] extends Resource[R, E] with BinaryResourcePlatformSpecific[R, E] {
-  def asBytes: ZStream[R, E, Byte]
+abstract class BinaryResource[+E] extends Resource[E] with BinaryResourcePlatformSpecific[E] {
+  def asBytes: ZStream[Any, E, Byte]
 
-  def byteSize: Option[ZIO[R, E, BigInt]] = None
+  def byteSize: Option[ZIO[Any, E, BigInt]] = None
 }
 
 object BinaryResource:
-  given BinaryResourceDecoder[BinaryResource, Any, Nothing] with
-    def decode[R <: Any, E >: Nothing](resource: BinaryResource[R, E]): BinaryResource[R, E] =
+  given BinaryResourceDecoder[BinaryResource, Nothing] with
+    def decode[E >: Nothing](resource: BinaryResource[E]): BinaryResource[E] =
       resource
   end given
 end BinaryResource
 
-sealed trait FileSystemResource[-R, +E, +FileResource[-R2, +E2] <: Resource[R2, E2]]
+sealed trait FileSystemResource[+E, +FileResource[+E2] <: Resource[E2]]
 
 object FileSystemResource {
-  final case class Of[-R, +E, +FileResource[-R2, +E2] <: Resource[R2, E2]](fileResource: FileResource[R, E]) extends FileSystemResource[R, E, FileResource]
+  final case class Of[+E, +FileResource[+E2] <: Resource[E2]](fileResource: FileResource[E]) extends FileSystemResource[E, FileResource]
 }
 
-abstract class DirectoryResource[-R, +E, +FileResource[-R2, +E2] <: Resource[R2, E2]] extends Resource[R, E] with FileSystemResource[R, E, FileResource] {
-  def contents: ZStream[R, E, DirectoryEntry[R, E, FileResource]]
+abstract class DirectoryResource[+E, +FileResource[+E2] <: Resource[E2]] extends Resource[E] with FileSystemResource[E, FileResource] {
+  def contents: ZStream[Any, E, DirectoryEntry[E, FileResource]]
 
-  def numEntries: Option[ZIO[R, E, BigInt]] = None
+  def numEntries: Option[ZIO[Any, E, BigInt]] = None
 
 
-  final def flatten: ZStream[R, E, (String, FileResource[R, E])] =
+  final def flatten: ZStream[Any, E, (String, FileResource[E])] =
     contents.flatMap {
       case DirectoryEntry.Subdirectory(name, resource) =>
         resource.flatten.map { (subName, res) =>
@@ -57,13 +57,13 @@ abstract class DirectoryResource[-R, +E, +FileResource[-R2, +E2] <: Resource[R2,
 
 object DirectoryResource {
 
-  extension [R, E, FileResource[-R2, +E2] <: BinaryResource[R2, E2]](dr: DirectoryResource[R, E, FileResource])
-    def decode[Res[-R2, +E2] <: Resource[R2, E2]](using BinaryResourceDecoder[Res, R, E]): DirectoryResource[R, E, Res] =
-      new DirectoryResource[R, E, Res] {
-        override def contents: ZStream[R, E, DirectoryEntry[R, E, Res]] =
+  extension [E, FileResource[+E2] <: BinaryResource[E2]](dr: DirectoryResource[E, FileResource])
+    def decode[Res[+E2] <: Resource[E2]](using BinaryResourceDecoder[Res, E]): DirectoryResource[E, Res] =
+      new DirectoryResource[E, Res] {
+        override def contents: ZStream[Any, E, DirectoryEntry[E, Res]] =
           dr.contents.map {
             case DirectoryEntry.Subdirectory(name, resource) => DirectoryEntry.Subdirectory(name, resource.decode[Res])
-            case DirectoryEntry.File(name, resource) => DirectoryEntry.File(name, summon[BinaryResourceDecoder[Res, R, E]].decode(resource))
+            case DirectoryEntry.File(name, resource) => DirectoryEntry.File(name, summon[BinaryResourceDecoder[Res, E]].decode(resource))
           }
 
         override def fileName: Option[String] =

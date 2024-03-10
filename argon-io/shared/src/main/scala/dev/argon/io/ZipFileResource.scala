@@ -6,18 +6,18 @@ import zio.stream.*
 import java.io.IOException
 
 
-trait ZipFileResource[-R, +E] extends ZipStreamResource[R, E] {
-  override def asZip: ZIO[R & Scope, E, ZipFileResource.Zip[R, E]]
+trait ZipFileResource[+E] extends ZipStreamResource[E] {
+  override def asZip: ZIO[Scope, E, ZipFileResource.Zip[E]]
 }
 
 object ZipFileResource:
-  trait Impl[-R, +E >: IOException] extends ZipFileResource[R, E]
+  trait Impl[+E >: IOException] extends ZipFileResource[E]
 
-  trait Zip[-R, +E] extends ZipStreamResource.Zip[R, E]:
-    def getEntry(path: String): ZIO[R & Scope, E, Option[ZipStreamResource.Entry[R, E]]]
+  trait Zip[+E] extends ZipStreamResource.Zip[E]:
+    def getEntry(path: String): ZIO[Scope, E, Option[ZipStreamResource.Entry[E]]]
   end Zip
 
-  given BinaryResourceDecoder[ZipFileResource, Any, IOException] =
+  given BinaryResourceDecoder[ZipFileResource, IOException] =
     ZipFileDecoderPlatformSpecific()
 
 end ZipFileResource

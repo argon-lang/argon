@@ -1,6 +1,7 @@
 package dev.argon.prover
 
 
+import dev.argon.util.Fuel
 import zio.*
 import zio.stream.*
 
@@ -26,6 +27,6 @@ trait ProverContext[R, E] {
   protected def newVariable: ZIO[R, E, TVariable]
   protected def freshAssertions: Seq[ZIO[R, E, TVariable] => ZIO[R, E, (Proof[ProofAtom], Predicate)]]
 
-  def check(goal: Predicate, model: Model, fuel: Int): ZIO[R, E, ProofResult]
+  def check(goal: Predicate, model: Model, fuel: Fuel): ZIO[R, E, ProofResult]
   
 }

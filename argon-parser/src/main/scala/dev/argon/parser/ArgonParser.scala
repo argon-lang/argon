@@ -10,7 +10,7 @@ import Grammar.{GrammarFactory, UnionGrammar}
 import zio.{Chunk, NonEmptyChunk}
 import zio.stream.ZChannel
 import Function.const
-import cats.data.NonEmptyList
+import cats.data.NonEmptySeq
 
 object ArgonParser {
 
@@ -100,11 +100,11 @@ object ArgonParser {
     case object ImportPathRelative extends ArgonRuleName[ImportStmt]
     case object ImportPathTube extends ArgonRuleName[ImportStmt]
     case object ImportPathMember extends ArgonRuleName[ImportStmt]
-    case object ImportPathTubeName extends ArgonRuleName[NonEmptyList[String]]
+    case object ImportPathTubeName extends ArgonRuleName[NonEmptySeq[String]]
 
     // TubeSpec
     case object ModulePatternMappingStmt extends ArgonRuleName[ModulePatternMapping]
-    case object ModulePatternExpr extends ArgonRuleName[Seq[ModulePatternSegment]]
+    case object ModulePatternExpr extends ArgonRuleName[Seq[WithSource[ModulePatternSegment]]]
     case object ModulePatternSegmentExpr extends ArgonRuleName[ModulePatternSegment]
 
     final case class ImportPathSegmentRule(separator: ImportPathSegmentSeparator)
@@ -114,7 +114,7 @@ object ArgonParser {
       case Slash, Dot
     }
 
-    case object PaddedStatement extends ArgonRuleName[Stmt]
+    case object PaddedStatement extends ArgonRuleName[WithSource[Stmt]]
 
   }
 
@@ -654,7 +654,7 @@ object ArgonParser {
           tokenIdentifier ++ (
             rule(Rule.NewLines) ++ matchToken(OP_DOT).discard ++ rule(Rule.NewLines) ++ tokenIdentifier
           ).* --> {
-            case (h, t) => NonEmptyList(h, t.toList)
+            case (h, t) => NonEmptySeq(h, t.toList)
           }
 
         case Rule.ImportPathSegmentRule(sep) =>
@@ -699,7 +699,7 @@ object ArgonParser {
           cons | many | renaming | imported | wildcard
 
         case Rule.PaddedStatement =>
-          rule(Rule.StatementSeparator).*.discard ++ rule(Rule.Statement) ++ rule(Rule.StatementSeparator).*.discard
+          rule(Rule.StatementSeparator).*.discard ++ rule(Rule.Statement).observeLocation ++ rule(Rule.StatementSeparator).*.discard
 
         // TubeSpec
         case Rule.ModulePatternMappingStmt =>
@@ -709,7 +709,7 @@ object ArgonParser {
 
         case Rule.ModulePatternExpr =>
           matchToken(OP_SLASH) --> const(Seq.empty) |
-            rule(Rule.ModulePatternSegmentExpr) ++ (rule(Rule.NewLines) ++ matchToken(OP_SLASH).discard ++ rule(Rule.NewLines) ++ rule(Rule.ModulePatternSegmentExpr)).* --> {
+            rule(Rule.ModulePatternSegmentExpr).observeLocation ++ (rule(Rule.NewLines) ++ matchToken(OP_SLASH).discard ++ rule(Rule.NewLines) ++ rule(Rule.ModulePatternSegmentExpr).observeLocation).* --> {
               case (head, tail) => head +: tail
             }
 
@@ -753,7 +753,7 @@ object ArgonParser {
 
   }
 
-  def parse(fileName: Option[String]): ZChannel[Any, Nothing, Chunk[WithSource[Token]], FilePosition, SyntaxError, Chunk[Stmt], FilePosition] =
+  def parse(fileName: Option[String]): ZChannel[Any, Nothing, Chunk[WithSource[Token]], FilePosition, SyntaxError, Chunk[WithSource[Stmt]], FilePosition] =
     Grammar.parseAll(ArgonGrammarFactory(fileName))(Rule.PaddedStatement).mapError(SyntaxError.ParserError(fileName, _))
 
   def parseTubeSpec(fileName: Option[String]): ZChannel[Any, Nothing, Chunk[WithSource[Token]], FilePosition, SyntaxError, Chunk[ModulePatternMapping], FilePosition] =

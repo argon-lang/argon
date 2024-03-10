@@ -2,7 +2,7 @@ package dev.argon.parser
 
 import dev.argon.ast.*
 import dev.argon.util.*
-import cats.data.NonEmptyList
+import cats.data.NonEmptySeq
 
 sealed trait Token(val category: TokenCategory) derives CanEqual
 
@@ -24,7 +24,7 @@ object Token {
     self: Token =>
   }
 
-  final case class StringToken(parts: NonEmptyList[StringFragment])
+  final case class StringToken(parts: NonEmptySeq[StringFragment])
       extends Token(TokenCategory.StringToken)
 
   object StringToken extends TokenFactory[StringToken] {

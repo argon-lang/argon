@@ -13,9 +13,9 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
   protected def intrinsicPredicate(predicate: TPredicateExpr, model: Model, solveState: SolveState)
     : ZStream[R, E, ProofResult.Definitive]
 
-  protected def unifyPredicateExpression(f1: TPredicateExpr, f2: TPredicateExpr, model: Ref[Model], fuel: Int): ZIO[R, E, Boolean]
+  protected def unifyPredicateExpression(f1: TPredicateExpr, f2: TPredicateExpr, model: Ref[Model], fuel: Fuel): ZIO[R, E, Boolean]
 
-  final def check(goal: Predicate, model: Model, fuel: Int): ZIO[R, E, ProofResult] =
+  final def check(goal: Predicate, model: Model, fuel: Fuel): ZIO[R, E, ProofResult] =
     solve(goal, model, SolveState(seenPredicates = Set.empty, fuel = fuel, additionalGivens = Seq.empty))
       .runHead
       .map {
@@ -26,14 +26,14 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
   final case class SolveState
   (
     seenPredicates: Set[Predicate],
-    fuel: Int,
+    fuel: Fuel,
     additionalGivens: Seq[(Proof[ProofAtom], Predicate)],
   ) {
     def consumeFuel: SolveState =
-      copy(fuel = fuel - 1)
+      copy(fuel = fuel.consume)
 
     def fuelEmpty: Boolean =
-      fuel <= 0
+      fuel.isEmpty
 
     def addPredicate(pred: Predicate): SolveState =
       copy(seenPredicates = seenPredicates + pred)
