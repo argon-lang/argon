@@ -162,22 +162,8 @@ trait VMContextBuilder {
       ZIO.foreachDiscard(params) { param =>
         for
           reg <- makeRegister
-
-          _ <- param.tupleIndex match {
-            case Some(tupleIndex) =>
-              for
-                paramRegs <- blockParams.get
-                paramReg = paramRegs.last
-                _ <- append(Instruction.TupleElement(reg, paramReg.register, tupleIndex))
-              yield ()
-
-            case None =>
-              for
-                t <- exprToType(param.varType)
-                _ <- blockParams.update(_ :+ RegisterDeclaration(reg, t))
-              yield ()
-          }
-
+          t <- exprToType(param.varType)
+          _ <- blockParams.update(_ :+ RegisterDeclaration(reg, t))
           _ <- variables.update(_.updated(param, reg))
         yield ()
       }
@@ -198,6 +184,13 @@ trait VMContextBuilder {
             _ <- append(Instruction.Call(InstructionResult.Value(reg), call))
           yield reg
 
+        case Expr.StringLiteral(s) =>
+          for
+            reg <- makeRegister
+            _ <- append(Instruction.LoadString(reg, s))
+          yield reg
+          
+          
         case Expr.Tuple(items) =>
           for
             itemRegs <- ZIO.foreach(items)(emitExpr)

@@ -20,6 +20,7 @@ trait ScopeContext {
 
       final case class NotFound() extends OverloadableOnly
       final case class Variable(v: Var) extends LookupResult
+      final case class VariableTupleElement(v: Var, index: Int, t: TRExprContext.Expr) extends LookupResult
       final case class Overloaded(overloads: Seq[Overloadable], next: Comp[LookupResult.OverloadableOnly]) extends OverloadableOnly
     }
 
@@ -30,7 +31,7 @@ trait ScopeContext {
         this match {
           case Function(f) => f.signature.map(TRSignatureContext.signatureFromDefault)
         }
-        
+
       def asOwner: TRExprContext.ParameterOwner =
         this match {
           case Function(f) => f
@@ -82,9 +83,25 @@ trait ScopeContext {
 
 
       override def lookup(id: IdentifierExpr): Comp[LookupResult] =
-        parameters.find(_.name.contains(id)).fold(parentScope.lookup(id)) { v =>
-          ZIO.succeed(LookupResult.Variable(v))
-        }
+        parameters.find(_.name.contains(id))
+          .map { v => ZIO.succeed(LookupResult.Variable(v)) }
+          .orElse {
+            (
+              for
+                (param, sigParam) <- parameters.zip(sigParams)
+                (binding, i) <- sigParam.bindings.zipWithIndex
+              yield (param, binding, i)
+            )
+              .find { (_, binding, _) => binding.name.contains(id) }
+              .map { (param, binding, i) =>
+                val shifter = DefaultToTRShifter[self.type](self)
+                val bindingType = shifter.shiftExpr(binding.paramType)
+                ZIO.succeed(LookupResult.VariableTupleElement(param, i, bindingType))
+              }
+          }
+          .getOrElse {
+            parentScope.lookup(id)
+          }
     }
 
     final class LocalScope private(parent: Scope, variables: TMap[IdentifierExpr, LocalVar]) extends Scope {

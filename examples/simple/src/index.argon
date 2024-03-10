@@ -1,6 +1,6 @@
 
-public def String: type = __argon_builtin string_type
+public inline def String: type = __argon_builtin string_type
 
-public proc puts(s: String): () = ()
+public proc puts(s: String): () = extern puts
 
-public def main(): () = ()
+public proc main(): () = puts "Hello World"

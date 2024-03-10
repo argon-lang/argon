@@ -74,6 +74,7 @@ trait VMContext {
     case Call(result: InstructionResult, call: FunctionCall)
     case CreateTuple(result: Register, items: Seq[Register])
     case LoadNullaryBuiltin(result: Register, builtin: NullaryBuiltin)
+    case LoadString(result: Register, s: String)
     case TupleElement(result: Register, tuple: Register, index: Int)
   }
   

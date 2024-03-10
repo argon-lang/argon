@@ -27,7 +27,6 @@ trait ExprContext {
   final case class ParameterVar(
     owner: ParameterOwner,
     parameterIndex: Int,
-    tupleIndex: Option[Int],
     varType: Expr,
     name: Option[IdentifierExpr],
     isErased: Boolean,

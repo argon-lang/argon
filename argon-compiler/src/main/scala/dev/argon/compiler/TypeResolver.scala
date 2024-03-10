@@ -13,7 +13,7 @@ import zio.stream.ZStream
 
 trait TypeResolver extends UsingContext {
 
-  import context.{ErrorLog, CompilerError, TRExprContext, TRSignatureContext, Scopes}
+  import context.{TRExprContext, TRSignatureContext, Scopes}
   import Scopes.{LookupResult, Overloadable}
 
   import TRExprContext.{Expr, Builtin, LocalVar, Var, Hole}
@@ -48,7 +48,7 @@ trait TypeResolver extends UsingContext {
     TREvaluator().normalizeToValue(e, context.Config.fuel)
 
   private def unifyExpr(a: Expr, b: Expr)(using state: EmitState): Comp[Boolean] =
-    Unification.unify[context.Env, context.Error](TRExprContext)(state.model)(a, b)
+    Unification.unify[context.Env, context.Error](TRExprContext)(state.model, TREvaluator(), context.Config.fuel)(a, b)
 
   private def nestedScope[A](using state: EmitState)(f: EmitState ?=> Comp[A]): Comp[A] =
     for
@@ -93,8 +93,8 @@ trait TypeResolver extends UsingContext {
         case InferredExpr(e, inferredType) =>
           ErrorLog.logError(CompilerError.TypeError(
             loc,
-            expected = t,
-            actual = inferredType,
+            expected = TRToErrorShifter[context.type](context).shiftExpr(t),
+            actual = TRToErrorShifter[context.type](context).shiftExpr(inferredType),
           ))
             .whenZIO(unifyExpr(t, inferredType).negate)
             .as(e)
@@ -147,12 +147,10 @@ trait TypeResolver extends UsingContext {
           override def loc: Loc = stmt.location
 
           override def infer(using state: EmitState): Comp[InferredExpr] =
-            val modifierUtil = ModifierUtil(context)
-
             for
               isErased <- Ref.make(false)
               isProof <- Ref.make(false)
-              _ <- modifierUtil.ModifierParser()
+              _ <- ModifierParser()
                 .withErased(isErased)
                 .withProof(isProof)
                 .parse(decl.modifiers)
@@ -346,8 +344,8 @@ trait TypeResolver extends UsingContext {
       e <- resolveExpr(expr).check(t)
       _ <- ErrorLog.logError(CompilerError.InvalidTypeError(
         expr.location,
-        expr = e,
-        exprType = t,
+        expr = TRToErrorShifter[context.type](context).shiftExpr(e),
+        exprType = TRToErrorShifter[context.type](context).shiftExpr(t),
       )).whenZIO(isValidTypeOfType(t).negate)
     yield e
   end resolveType
@@ -427,12 +425,29 @@ trait TypeResolver extends UsingContext {
               ))
           }
 
+        case LookupResult.VariableTupleElement(v, index, t) =>
+          new InferFactory {
+            override def loc: Loc = LookupIdFactory.this.loc
+
+            override def infer(using EmitState): Comp[InferredExpr] =
+              ZIO.succeed(InferredExpr(
+                Expr.TupleElement(index, Expr.Variable(v)),
+                t,
+              ))
+          }
+
+
         case lookup: LookupResult.Overloaded =>
           OverloadedExprFactory(loc, lookup, Seq())
       }
   }
 
   private final class OverloadedExprFactory(override val loc: Loc, lookup: LookupResult.Overloaded, args: Seq[ArgumentInfo]) extends ExprFactory {
+    private def toAttemptedOverload(overload: Overloadable): AttemptedOverload =
+      overload match {
+        case Overloadable.Function(f) => AttemptedOverload.Function(f)
+      }
+
     override def check(t: Expr)(using EmitState): Comp[Expr] =
       Ref.make(Seq.empty[Overloadable]).flatMap { rejectedOverloads =>
         val resolver = OverloadResolver(rejectedOverloads)
@@ -479,14 +494,14 @@ trait TypeResolver extends UsingContext {
 
               val factory = overloadResult.remainingArguments.foldLeft(factory0)(_.invoke(_))
 
-              ErrorLog.logError(CompilerError.AmbiguousOverload(loc, overloads.map { (overload, _) => overload })).when(overloads.size > 1) *>
+              ErrorLog.logError(CompilerError.AmbiguousOverload(loc, overloads.map { (overload, _) => toAttemptedOverload(overload) })).when(overloads.size > 1) *>
                 factory.check(t)
 
 
             case _ =>
               for
                 attempted <- rejectedOverloads.get
-                _ <- ErrorLog.logError(CompilerError.InvalidOverload(loc, attempted))
+                _ <- ErrorLog.logError(CompilerError.InvalidOverload(loc, attempted.map(toAttemptedOverload)))
               yield Expr.Error()
           }
 
@@ -517,7 +532,7 @@ trait TypeResolver extends UsingContext {
       for
         errors <- Ref.make(Seq.empty[CompilerError])
         attemptErrorLog = new ErrorLog {
-          override def logError(error: => context.CompilerError): UIO[Unit] =
+          override def logError(error: => CompilerError): UIO[Unit] =
             errors.update(_ :+ error)
         }
 
@@ -533,12 +548,13 @@ trait TypeResolver extends UsingContext {
 
         sig <- overload.signature
 
-        attemptRes <- attemptOverloadCheck(overload, sig, args, Seq.empty)(using attemptState).provideSomeEnvironment[context.Env](_.add(attemptErrorLog))
+        attemptRes <- attemptOverloadCheck(overload, sig, args, Seq.empty)(using attemptState).provideSomeEnvironment[context.Env](_.add[ErrorLog](attemptErrorLog))
         partialScope <- attemptScope.toPartialScope
 
         errors <- errors.get
         res <-
           if errors.nonEmpty then
+            println(errors)
             ZIO.succeed(OverloadAttempt.Failure(errors))
           else
             for
@@ -583,23 +599,15 @@ trait TypeResolver extends UsingContext {
               ZIO.die(RuntimeException("Parameter argument mismatches should have been filtered out already"))
           }).flatMap { (callArg, restArgs) =>
             val isProof = param.listType == FunctionParameterListType.RequiresList
-            val paramVar = TRExprContext.ParameterVar(
-              owner = overload.asOwner,
-              parameterIndex = callArgs.size,
-              tupleIndex = None,
-              varType = param.paramType,
-              name = param.name,
-              isErased = param.isErased,
-              isProof = isProof,
-            )
-            
+            val paramVar = param.asParameterVar(overload.asOwner, callArgs.size)
+
             val mapping = Map[Var, Expr](paramVar -> callArg)
             val restParams = tailParams.map { tParam =>
               tParam.copy(paramType = Substitution.substitute(TRExprContext)(mapping)(tParam.paramType))
             }
-            
+
             val restSig = sig.copy(parameters = restParams)
-            
+
             attemptOverloadCheck(overload, restSig, restArgs, callArgs :+ callArg)
           }
 
@@ -704,7 +712,11 @@ trait TypeResolver extends UsingContext {
           for
             itemTypes <- ZIO.foreach(items) { _ => makeHole }
             actualType = Expr.Tuple(itemTypes)
-            _ <- ErrorLog.logError(CompilerError.TypeError(loc, t, actualType)).whenZIO(unifyExpr(t, actualType).negate)
+            _ <- ErrorLog.logError(CompilerError.TypeError(
+              loc,
+              TRToErrorShifter[context.type](context).shiftExpr(t),
+              TRToErrorShifter[context.type](context).shiftExpr(actualType)
+            )).whenZIO(unifyExpr(t, actualType).negate)
 
             itemExprs <- ZIO.foreach(items.zip(itemTypes)) { (item, itemType) =>
               item.check(itemType)
@@ -777,12 +789,18 @@ trait TypeResolver extends UsingContext {
       }
   }
 
-  private class TREvaluator(using state: EmitState) extends Evaluator[context.Env, context.Error] {
+  private class TREvaluator(using state: EmitState) extends ArgonEvaluatorBase[context.Env, context.Error] {
+    override val context: TypeResolver.this.context.type = TypeResolver.this.context
     override val exprContext: TRExprContext.type = TRExprContext
 
-    override def getFunctionBody(function: ArFunc, args: Seq[Expr], fuel: Fuel): Comp[(Expr, Boolean)] =
-      ZIO.succeed((Expr.FunctionCall(function, args), false))
+    override protected val signatureContext: TRSignatureContext.type = TRSignatureContext
 
+    override protected def shiftExpr(expr: context.DefaultExprContext.Expr): exprContext.Expr =
+      DefaultToTRShifter[context.type](context).shiftExpr(expr)
+
+    override protected def shiftSig(sig: context.DefaultSignatureContext.FunctionSignature): signatureContext.FunctionSignature =
+      TRSignatureContext.signatureFromDefault(sig)
+    
     override def normalizeHole(hole: Hole): Comp[Expr] =
       state.model.get.map(_.resolveHole(hole).getOrElse(Expr.Hole(hole)))
   }

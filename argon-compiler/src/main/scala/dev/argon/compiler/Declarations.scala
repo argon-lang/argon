@@ -6,7 +6,7 @@ import dev.argon.expr.ExprContext
 import dev.argon.util.{Fuel, UniqueIdentifier}
 import zio.ZIO
 
-trait Context extends ErrorContext with ScopeContext {
+trait Context extends ScopeContext {
   type Env0 = ErrorLog
   type Env <: ErrorLog
   type Error0 = Nothing
@@ -14,18 +14,17 @@ trait Context extends ErrorContext with ScopeContext {
 
   type Comp[+A] = ZIO[Env, Error, A]
 
-  object DefaultExprContext extends ExprContext {
+  trait ArgonExprContext extends ExprContext {
     override type Function = ArFuncC & HasContext[Context.this.type]
     override def functionCanEqual: CanEqual[Function, Function] = summon
+  }
 
+  object DefaultExprContext extends ArgonExprContext {
     override type Hole = Nothing
     override def holeCanEqual: CanEqual[Hole, Hole] = CanEqual.derived
   }
 
-  object TRExprContext extends ExprContext {
-    override type Function = DefaultExprContext.Function
-    override def functionCanEqual: CanEqual[Function, Function] = DefaultExprContext.functionCanEqual
-
+  object TRExprContext extends ArgonExprContext {
     override type Hole = UniqueIdentifier
     override def holeCanEqual: CanEqual[Hole, Hole] = summon
   }
@@ -144,6 +143,8 @@ enum ModuleExportC[Ctx <: Context] {
 
 abstract class ArFuncC extends UsingContext derives CanEqual {
   val id: UniqueIdentifier
+
+  def isInline: Boolean
 
   def signature: Comp[FunctionSignature]
 

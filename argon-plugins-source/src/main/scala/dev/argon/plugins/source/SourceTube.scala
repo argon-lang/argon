@@ -2,7 +2,7 @@ package dev.argon.plugins.source
 
 import cats.data.{NonEmptySeq, OptionT}
 import dev.argon.ast.{IdentifierExpr, ModulePatternMapping, ModulePatternSegment}
-import dev.argon.compiler.{ArModuleC, ArTubeC, Context, HasContext, ModulePath, TubeName}
+import dev.argon.compiler.{ArModuleC, ArTubeC, CompilerError, Context, ErrorLog, HasContext, ModulePath, TubeName}
 import dev.argon.io.{DirectoryEntry, DirectoryResource}
 import dev.argon.util.{*, given}
 import zio.ZIO
@@ -20,7 +20,7 @@ object SourceTube {
   def make(platforms: PlatformPluginSet)(ctx: platforms.ContextOnlyIncluding)(tubeOptions: SourceCodeTubeOptions[ctx.Error, platforms.PlatformOptions[ctx.Error]]): ZIO[ctx.Env, ctx.Error, ArTubeC & HasContext[ctx.type]] =
     val tubeName = TubeName(NonEmptySeq.of(tubeOptions.name.head, tubeOptions.name.tail*))
     for
-      moduleMap <- buildModuleMap(platforms)(ctx)(tubeName)(
+      moduleMap <- buildModuleMap(platforms)(ctx)(tubeName)(tubeOptions.platforms)(
         ZStream.fromIterable(tubeOptions.sources).flatMap(getSourceCode(ctx)(Seq.empty))
       )
 
@@ -61,13 +61,13 @@ object SourceTube {
       case DirectoryEntry.File(_, _) => ZStream.empty
     }
 
-  private def buildModuleMap(platforms: PlatformPluginSet)(context: platforms.ContextOnlyIncluding)(tubeName: TubeName)(stream: ZStream[context.Env, context.Error, (ModulePath, ArgonSourceCodeResource[context.Error])]): context.Comp[Map[ModulePath, ArModuleC & HasContext[context.type]]] =
+  private def buildModuleMap(platforms: PlatformPluginSet)(context: platforms.ContextOnlyIncluding)(tubeName: TubeName)(platformOptions: platforms.PlatformOptions[context.Error])(stream: ZStream[context.Env, context.Error, (ModulePath, ArgonSourceCodeResource[context.Error])]): context.Comp[Map[ModulePath, ArModuleC & HasContext[context.type]]] =
     stream.runFoldZIO(Map.empty[ModulePath, ArModuleC & HasContext[context.type]]) {
       case (modules, (path, sourceCode)) =>
         if modules.contains(path) then
-          context.ErrorLog.logError(context.CompilerError.DuplicateModuleDefinition(path)).as(modules)
+          ErrorLog.logError(CompilerError.DuplicateModuleDefinition(path)).as(modules)
         else
-          SourceModule.make(platforms)(context)(tubeName, path)(sourceCode)
+          SourceModule.make(platforms)(context)(tubeName, path)(sourceCode, platformOptions)
             .map { module => modules.updated(path, module) }
     }
 

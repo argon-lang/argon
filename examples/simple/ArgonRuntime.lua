@@ -63,6 +63,9 @@ ArgonRuntime.int_type = { type = "builtin", name = "int" }
 ArgonRuntime.bool_type = { type = "builtin", name = "bool" }
 ArgonRuntime.string_type = { type = "builtin", name = "string" }
 ArgonRuntime.never_type = { type = "builtin", name = "never" }
+ArgonRuntime.puts = function(s)
+    print(s)
+end
 
 return ArgonRuntime
 

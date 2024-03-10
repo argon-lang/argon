@@ -20,33 +20,26 @@ trait SignatureContext {
     bindings: Seq[ParameterBinding],
     name: Option[IdentifierExpr],
     paramType: Expr,
-  )
+  ) {
+    
+    def asParameterVar(owner: exprContext.ParameterOwner, index: Int): exprContext.ParameterVar =
+      exprContext.ParameterVar(
+        owner,
+        parameterIndex = index,
+        varType = paramType,
+        name = name,
+        isErased = isErased,
+        isProof = listType == FunctionParameterListType.RequiresList,
+      )
+    
+  }
   
   object SignatureParameter {
     import exprContext.ParameterVar
 
     def getParameterVariables(owner: exprContext.ParameterOwner, parameters: Seq[SignatureParameter]): Seq[ParameterVar] =
-      parameters.zipWithIndex.flatMap { (param, index) =>
-        val isProof = param.listType == FunctionParameterListType.RequiresList
-        ParameterVar(
-          owner,
-          parameterIndex = index,
-          tupleIndex = None,
-          varType = param.paramType,
-          name = param.name,
-          isErased = param.isErased,
-          isProof = isProof,
-        ) +: param.bindings.zipWithIndex.map { (binding, bindingIndex) =>
-          ParameterVar(
-            owner,
-            parameterIndex = index,
-            tupleIndex = Some(bindingIndex),
-            varType = binding.paramType,
-            name = binding.name,
-            isErased = param.isErased,
-            isProof = isProof,
-          )
-        }
+      parameters.zipWithIndex.map { (param, index) =>
+        param.asParameterVar(owner, index)
       }
   }
 

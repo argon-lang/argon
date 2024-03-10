@@ -13,7 +13,11 @@
             name: (tube-name "Simple")
             sources: (list "src")
             platforms: (dict
-                lua: (lua-options)
+                lua: (lua-options
+                    externs: (dict
+                        puts: (lua-extern "ArgonRuntime" "puts")
+                    )
+                )
             )
         )
     )
@@ -25,7 +29,7 @@
 
         dest: (dict
             lua: (dict
-                chunk: "out.lua"
+                chunk: "Simple.lua"
             )
         )
     )

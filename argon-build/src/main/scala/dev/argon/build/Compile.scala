@@ -20,7 +20,9 @@ object Compile {
         .flatMap { context =>
           createLogger(context).flatMap { logger =>
             compileImpl(config, context)
-              .provideSomeEnvironment[R & Scope](_.add[context.ErrorLog](logger))
+              .provideSomeEnvironment[R & Scope](_.add[ErrorLog](logger))
+              .ensuring { logger.reportLogs }
+              .flatMap { _ => logger.failOnErrors }
           }
         }
     )
@@ -44,24 +46,32 @@ object Compile {
       }
 
   private trait LogReporter {
-    def reportLogs: IO[BuildError | IOException, Unit]
+    def reportLogs: UIO[Unit]
+    def failOnErrors: IO[BuildError, Unit]
   }
 
-  private def createLogger(context: Context): UIO[context.ErrorLog & LogReporter] =
+  private def createLogger(context: Context): UIO[ErrorLog & LogReporter] =
     for
-      errors <- Ref.make(Seq.empty[context.CompilerError])
-    yield new context.ErrorLog with LogReporter {
-      override def logError(error: => context.CompilerError): UIO[Unit] =
+      errors <- Ref.make(Seq.empty[CompilerError])
+    yield new ErrorLog with LogReporter {
+      override def logError(error: => CompilerError): UIO[Unit] =
         errors.update(_ :+ error)
 
-      override def reportLogs: IO[BuildError | IOException, Unit] =
+      override def reportLogs: UIO[Unit] =
         errors.get.flatMap { errors =>
           if errors.isEmpty then
             ZIO.unit
           else
-            ZIO.foreach(errors) { e => Console.printError(e) } *>
-              ZIO.fail(BuildFailed(errorCount = errors.size))
+            ZIO.foreachDiscard(errors) { e => Console.printLineError(e).orDie }
+          end if
+        }
 
+      override def failOnErrors: IO[BuildError, Unit] =
+        errors.get.flatMap { errors =>
+          if errors.isEmpty then
+            ZIO.unit
+          else
+            ZIO.fail(BuildFailed(errorCount = errors.size))
           end if
         }
     }

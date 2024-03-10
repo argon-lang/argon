@@ -35,7 +35,7 @@ final class LuaPlugin extends PlatformPlugin {
     (options: PlatformOptions[E])
     (id: String)
     : OptionT[[A] =>> ZIO[PluginEnv, E, A], externFunction.Implementation] =
-      OptionT.none
+      OptionT.fromOption(options.externs.dict.get(id))
 
     override def defineReference[E >: PluginError]
     (options: LuaOptions)
@@ -43,7 +43,16 @@ final class LuaPlugin extends PlatformPlugin {
     : ZIO[PluginEnv, E, externFunction.Reference] =
       definitionInfo match {
         case DefinitionInfo.Global(tubeName, modulePath, name, sig) =>
-          ZIO.succeed(LuaReference.Global(EmitUtil.getTubePath(tubeName), modulePath.encode, ???, ???))
+          val emit = new EmitBase {
+            override val plugin: LuaPlugin = LuaPlugin.this
+          }
+
+          ZIO.succeed(LuaReference.Global(
+            emit.getTubePath(tubeName),
+            modulePath.encode,
+            emit.getIdentifierKeyExprMemo(name),
+            emit.getErasedSigKeyExprMemo(sig)
+          ))
       }
   }
 

@@ -1,12 +1,13 @@
 package dev.argon.plugins.source
 
 import dev.argon.ast
-import dev.argon.compiler.{ArFuncC, Context, HasContext, SignatureEraser, TypeResolver}
+import dev.argon.compiler.*
 import dev.argon.plugin.PlatformPluginSet
-import dev.argon.util.*
+import dev.argon.util.{*, given}
+import zio.*
 
 object SourceFunction {
-  def make(ctx: Context)(scope: ctx.Scopes.GlobalScopeBuilder, refFactory: ReferenceFactory & HasContext[ctx.type])(decl: ast.FunctionDeclarationStmt): ctx.Comp[ArFuncC & HasContext[ctx.type]] =
+  def make(ctx: Context)(scope: ctx.Scopes.GlobalScopeBuilder, externFactory: ExternFactory & HasContext[ctx.type])(decl: ast.FunctionDeclarationStmt): ctx.Comp[ArFuncC & HasContext[ctx.type]] =
     for
       funcId <- UniqueIdentifier.make
       sigCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
@@ -15,6 +16,8 @@ object SourceFunction {
     yield new ArFuncC {
       override val context: ctx.type = ctx
       override val id: UniqueIdentifier = funcId
+
+      override def isInline: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Inline)
 
       override def signature: Comp[FunctionSignature] = sigCache.get(
         scope.toScope.flatMap { scope =>
@@ -29,14 +32,25 @@ object SourceFunction {
             sig <- signature
             scope2 = context.Scopes.ParameterScope(this, scope, sig.parameters)
             impl <- decl.body.value match {
-              case ast.Expr.Extern(name) => ???
+              case ast.Expr.Extern(name) =>
+                externFactory.getExternFunctionImplementation(name)
+                  .flatMap {
+                    case Some(e) => ZIO.succeed(ctx.implementations.FunctionImplementation.Extern(e))
+                    case None =>
+                      for
+                        _ <- ErrorLog.logError(CompilerError.UnknownExtern(name))
+                      yield context.implementations.FunctionImplementation.Expr(context.DefaultExprContext.Expr.Error())
+
+                  }
+
+
               case _ =>
                 val tr = new TypeResolver {
                   override val context: ctx.type = ctx
                 }
 
                 tr.typeCheckExpr(scope2)(decl.body, sig.returnType)
-                  .map(ctx.implementations.FunctionImplementation.Expr.apply)
+                  .map(context.implementations.FunctionImplementation.Expr.apply)
             }
           yield impl
         ))
@@ -45,7 +59,7 @@ object SourceFunction {
         refCache.get(
           signature
             .flatMap(SignatureEraser(context).eraseSignature)
-            .flatMap(refFactory.defineFunctionReference)
+            .flatMap(externFactory.defineFunctionReference)
         )
 
     }

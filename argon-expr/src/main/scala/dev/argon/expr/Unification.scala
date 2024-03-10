@@ -6,11 +6,12 @@ import zio.*
 
 import scala.compiletime.{erasedValue, error, summonInline}
 
-private[expr] sealed trait Unification[R, E] {
+private[expr] sealed trait Unification[R, E](fuel: Fuel) {
   val exprContext: ExprContext
   import exprContext.{*, given}
 
   protected val model: Ref[Model]
+  protected val evaluator: Evaluator[R, E] { val exprContext: Unification.this.exprContext.type }
 
   private object Matcher extends TreeComparison {
     import StandardComparers.given
@@ -43,14 +44,18 @@ private[expr] sealed trait Unification[R, E] {
     private given Comparer[IdentifierExpr] = EqualComparer[IdentifierExpr]
 
     def unify(a: Expr, b: Expr): ZIO[R, E, Boolean] =
-      (a, b) match {
-        case (Expr.Error(), _) | (_, Expr.Error()) => ZIO.succeed(false)
+      evaluator.normalizeToValue(a, fuel).flatMap { a =>
+        evaluator.normalizeToValue(b, fuel).flatMap { b =>
+          (a, b) match {
+            case (Expr.Error(), _) | (_, Expr.Error()) => ZIO.succeed(false)
 
-        case (Expr.Hole(a), _) => unifyHole(a, b)
-        case (_, Expr.Hole(b)) => unifyHole(b, a)
-        
-        case _ =>
-          autoComparer[Expr].compare(a, b)
+            case (Expr.Hole(a), _) => unifyHole(a, b)
+            case (_, Expr.Hole(b)) => unifyHole(b, a)
+
+            case _ =>
+              autoComparer[Expr].compare(a, b)
+          }
+        }
       }
   }
 
@@ -96,9 +101,10 @@ private[expr] sealed trait Unification[R, E] {
 }
 
 object Unification {
-  def unify[R, E](ec: ExprContext)(m: Ref[ec.Model])(a: ec.Expr, b: ec.Expr): ZIO[R, E, Boolean] =
-    new Unification[R, E] {
+  def unify[R, E](ec: ExprContext)(m: Ref[ec.Model], eval: Evaluator[R, E] { val exprContext: ec.type }, fuel: Fuel)(a: ec.Expr, b: ec.Expr): ZIO[R, E, Boolean] =
+    new Unification[R, E](fuel) {
       override val exprContext: ec.type = ec
       override protected val model: Ref[exprContext.Model] = m
+      override protected val evaluator: eval.type = eval
     }.unify(a, b)
 }

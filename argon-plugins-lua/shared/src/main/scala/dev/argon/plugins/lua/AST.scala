@@ -212,7 +212,7 @@ object AST {
   private def isWhitelistedChar(ch: Char): Boolean =
     ch < 128 && (
       Character.isLetterOrDigit(ch) ||
-        "!@#$%^&*()_+-=|`~[]{};:,./<>?".contains(ch)
+        "!@#$%^&*()_+-=|`~[]{};:,./<>? ".contains(ch)
     )
 
   private def expToStream(e: Exp): UStream[String] =
@@ -231,7 +231,7 @@ object AST {
             if isWhitelistedChar(c2) then
               c2.toString
             else
-              "\\x%02X".formatted(c2).nn
+              "\\x%02X".formatted(c2.toInt).nn
           }
         ) ++ ZStream("\"")
 
@@ -267,11 +267,11 @@ object AST {
 
   private def prefixToStream(p: PrefixExp): UStream[String] =
     p match {
-      case SimpleFunctionCall(f, Seq(s: StringLiteral)) =>
-        expToStream(f) ++ ZStream(" ") ++ expToStream(s)
-
-      case SimpleFunctionCall(f, Seq(t: TableConstructor)) =>
-        expToStream(f) ++ ZStream(" ") ++ expToStream(t)
+//      case SimpleFunctionCall(f, Seq(s: StringLiteral)) =>
+//        expToStream(f) ++ ZStream(" ") ++ expToStream(s)
+//
+//      case SimpleFunctionCall(f, Seq(t: TableConstructor)) =>
+//        expToStream(f) ++ ZStream(" ") ++ expToStream(t)
 
       case SimpleFunctionCall(f, args) =>
         expToStream(f) ++

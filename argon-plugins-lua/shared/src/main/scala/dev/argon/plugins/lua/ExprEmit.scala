@@ -140,6 +140,11 @@ trait ExprEmit extends ModuleEmitBase {
           v <- getRegVar(res)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(AST.MemberAccessName(AST.NameExp("ArgonRuntime"), builtinName))))
 
+      case Instruction.LoadString(res, s) =>
+        for
+          v <- getRegVar(res)
+        yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(AST.StringLiteral(s))))
+        
 
       case Instruction.TupleElement(res, tuple, index) =>
         for

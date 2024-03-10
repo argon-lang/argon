@@ -10,7 +10,7 @@ trait ContextShifter[F[_]: Monad] {
 
   val ec1: ExprContext
   val ec2: ExprContext {
-    type Function = ec1.Function
+    type Function >: ec1.Function
   }
 
 

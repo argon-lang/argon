@@ -11,7 +11,7 @@ import dev.argon.plugin.PlatformPluginSet
 import zio.interop.catz.given
 
 object SourceModule {
-  def make(platforms: PlatformPluginSet)(ctx: platforms.ContextOnlyIncluding)(tn: TubeName, p: ModulePath)(sourceCode: ArgonSourceCodeResource[ctx.Error]): ctx.Comp[ArModuleC & HasContext[ctx.type]] =
+  def make(platforms: PlatformPluginSet)(ctx: platforms.ContextOnlyIncluding)(tn: TubeName, p: ModulePath)(sourceCode: ArgonSourceCodeResource[ctx.Error], platformOptions: platforms.PlatformOptions[ctx.Error]): ctx.Comp[ArModuleC & HasContext[ctx.type]] =
     for
       exportMapCell <- MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]]]
     yield new ArModuleC {
@@ -51,12 +51,15 @@ object SourceModule {
           case _ => ???
         }
 
-      private def createRefFactory(name: Option[IdentifierExpr]): ReferenceFactory & HasContext[context.type] =
-        new ReferenceFactory {
+      private def createRefFactory(name: Option[IdentifierExpr]): ExternFactory & HasContext[context.type] =
+        new ExternFactory {
           override val context: ctx.type = ctx
 
+          override def getExternFunctionImplementation(name: String): Comp[Option[context.implementations.ExternFunctionImplementation]] =
+            platforms.externFunction.loadExtern(platformOptions)(name).value
+
           override def defineFunctionReference(sig: ErasedSignature): Comp[context.implementations.FunctionReference] =
-            ???
+            platforms.externFunction.defineReference(platformOptions)(DefinitionInfo.Global(tn, p, name, sig))
         }
     }
 }
