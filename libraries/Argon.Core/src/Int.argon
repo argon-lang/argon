@@ -1,87 +1,26 @@
 
-import ./Object/*
-import ./Bool/*
-import ./String/*
-import /Never
+import ../Bool/*
 
-public class Int <: Object
-	public def this.to_s(): String = extern Int_to_s
-end
+public inline def Int: type = __argon_builtin int_type
 
-public def (+) (a: Int): Int = a
-public def (-) (a: Int): Int = extern negateInt
-public def (~~~) (a: Int): Int = extern bitNotInt
+public inline def unary operator + (a: Int): Int = a
+public inline def unary operator - (a: Int): Int = __argon_builtin int_negate a
+public inline def unary operator ~~~ (a: Int): Int = __argon_builtin int_bitnot a
 
-public def (+) (a: Int) (b: Int): Int = extern addInt
-public def (-) (a: Int) (b: Int): Int = extern subInt
-public def (*) (a: Int) (b: Int): Int = extern mulInt
-public def (/) (a: Int) (b: Int): Int = extern divInt
+public inline def operator + (a: Int) (b: Int): Int = __argon_builtin int_add a b
+public inline def operator - (a: Int) (b: Int): Int = __argon_builtin int_sub a b
+public inline def operator * (a: Int) (b: Int): Int = __argon_builtin int_mul a b
 
-public def (|||) (a: Int) (b: Int): Int = extern bitOrInt
-public def (&&&) (a: Int) (b: Int): Int = extern bitAndInt
-public def (^^^) (a: Int) (b: Int): Int = extern bitXOrInt
-public def (<<<) (a: Int) (b: Int): Int = extern shiftLeftInt
-public def (>>>) (a: Int) (b: Int): Int = extern shiftRightInt
+public inline def operator &&& (a: Int) (b: Int): Int = __argon_builtin int_bitand a b
+public inline def operator ||| (a: Int) (b: Int): Int = __argon_builtin int_bitor a b
+public inline def operator ^^^ (a: Int) (b: Int): Int = __argon_builtin int_bitxor a b
+public inline def operator <<< (a: Int) (b: Int): Int = __argon_builtin int_bitshiftleft a b
+public inline def operator >>> (a: Int) (b: Int): Int = __argon_builtin int_bitshiftright a b
 
-public def (=) (a: Int) (b: Int): Bool = extern intEqual
-public inline def (!=) (a: Int) (b: Int): Bool = !(a = b)
-public def (<) (a: Int) (b: Int): Bool = extern intLessThan
-public def (<=) (a: Int) (b: Int): Bool = extern intLessThanEq
-public def (>) (a: Int) (b: Int): Bool = extern intGreaterThan
-public def (>=) (a: Int) (b: Int): Bool = extern intGreaterThanEq
+public inline def operator = (a: Int) (b: Int): Bool = __argon_builtin int_eq a b
+public inline def operator != (a: Int) (b: Int): Bool = __argon_builtin int_ne a b
+public inline def operator < (a: Int) (b: Int): Bool = __argon_builtin int_lt a b
+public inline def operator <= (a: Int) (b: Int): Bool = __argon_builtin int_le a b
+public inline def operator > (a: Int) (b: Int): Bool = __argon_builtin int_gt a b
+public inline def operator >= (a: Int) (b: Int): Bool = __argon_builtin int_ge a b
 
-
-
-public erased proof def intEqualImpliesEqualTo[a: Int][b: Int](requires p: ((a = b) == true)): (a == b) =
-	extern assumeTrue
-
-public erased proof def intNotEqualImpliesNotEqualTo[a: Int][b: Int](requires p: ((a = b) == false)): ((a == b) -> Never) =
-	extern assumeTrue
-
-public erased proof def intEqualToImpliesEqual[a: Int][b: Int](requires p: (a == b)): ((a = b) == true) =
-	extern assumeTrue
-
-public erased proof def intNotEqualToImpliesNotEqual[a: Int][b: Int](requires p: ((a == b) -> Never)): ((a = b) == false) =
-	extern assumeTrue
-
-
-
-public erased proof def intLEQReflexive[a: Int][b: Int](requires p: (a == b)): ((a <= b) == true) =
-	extern assumeTrue
-
-public erased proof def intLEQTransitive[a: Int, b: Int, c: Int](requires p: ((a <= b) == true))(requires q: ((b <= c) == true)): ((a <= c) == true) =
-	extern assumeTrue
-
-public erased proof def intLEQAntisymmetric[a: Int][b: Int](requires p: ((a <= b) == true))(requires q: ((b <= a) == true)): (a == b) =
-	extern assumeTrue
-
-public erased proof def intLEQStronglyConnected[a: Int][b: Int]: (((a <= b) == true) \/ ((b <= a) == true)) =
-	extern assumeTrue
-
-public erased proof def intLEQAndNotEqualImpliesEqualsOrLT[a: Int][b: Int](requires p: ((a <= b) == true))(requires q: ((a == b) -> Never)): ((a < b) == true) =
-	extern assumeTrue
-
-public erased proof def intLTImpliesLEQ[a: Int][b: Int](requires p: ((a < b) == true)): ((a <= b) == true) =
-	extern assumeTrue
-
-public erased proof def intEQImpliesLEQ[a: Int][b: Int](requires p: (a == b)): ((a <= b) == true) =
-	extern assumeTrue
-
-public erased proof def intLEQImpliesLTOrEQ[a: Int][b: Int](requires p: ((a <= b) == true)): ((a == b) \/ ((a < b) == true)) =
-	extern assumeTrue
-
-public erased proof def intLTImpliesNotEqual[a: Int][b: Int](requires p: ((a < b) == true)): ((a == b) -> Never) =
-	extern assumeTrue
-
-
-public erased proof def intGEQIsConverseLEQ1[a: Int][b: Int][c: Bool](requires p: ((a <= b) == c)): ((b >= a) == c) =
-	extern assumeTrue
-public erased proof def intGEQIsConverseLEQ2[a: Int][b: Int][c: Bool](requires p: ((a >= b) == c)): ((b <= a) == c) =
-	extern assumeTrue
-
-
-public erased proof def intGTIsConverseLT1[a: Int][b: Int][c: Bool](requires p: ((a < b) == c)): ((b > a) == c) =
-	extern assumeTrue
-
-public erased proof def intGTIsConverseLT2[a: Int][b: Int][c: Bool](requires p: ((a > b) == c)): ((b < a) == c) =
-	extern assumeTrue

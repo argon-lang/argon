@@ -2,7 +2,7 @@ package dev.argon.plugins.source
 
 import cats.data.{NonEmptySeq, OptionT}
 import dev.argon.ast.{IdentifierExpr, ModulePatternMapping, ModulePatternSegment}
-import dev.argon.compiler.{ArModuleC, ArTubeC, CompilerError, Context, ErrorLog, HasContext, ModulePath, TubeName}
+import dev.argon.compiler.{ArModuleC, ArTubeC, CompilerError, Context, ErrorLog, HasContext, ModulePath, TubeImporter, TubeName}
 import dev.argon.io.{DirectoryEntry, DirectoryResource}
 import dev.argon.util.{*, given}
 import zio.ZIO
@@ -17,10 +17,15 @@ import java.nio.charset.StandardCharsets
 import java.util.Locale
 
 object SourceTube {
-  def make(platforms: PlatformPluginSet)(ctx: platforms.ContextOnlyIncluding)(tubeOptions: SourceCodeTubeOptions[ctx.Error, platforms.PlatformOptions[ctx.Error]]): ZIO[ctx.Env, ctx.Error, ArTubeC & HasContext[ctx.type]] =
+  def make
+  (platforms: PlatformPluginSet)
+  (ctx: platforms.ContextOnlyIncluding)
+  (tubeOptions: SourceCodeTubeOptions[ctx.Error, platforms.PlatformOptions[ctx.Error]])
+  (tubeImporter: TubeImporter & HasContext[ctx.type])
+  : ZIO[ctx.Env, ctx.Error, ArTubeC & HasContext[ctx.type]] =
     val tubeName = TubeName(NonEmptySeq.of(tubeOptions.name.head, tubeOptions.name.tail*))
     for
-      moduleMap <- buildModuleMap(platforms)(ctx)(tubeName)(tubeOptions.platforms)(
+      moduleMap <- buildModuleMap(platforms)(ctx)(tubeName)(tubeImporter)(tubeOptions.platforms)(
         ZStream.fromIterable(tubeOptions.sources).flatMap(getSourceCode(ctx)(Seq.empty))
       )
 
@@ -53,7 +58,7 @@ object SourceTube {
           else if nameNoExt.matches("_+index") then
             path :+ nameNoExt.substring(1).nn
           else
-            path :+ URLDecoder.decode(name, StandardCharsets.UTF_8).nn
+            path :+ URLDecoder.decode(nameNoExt, StandardCharsets.UTF_8).nn
 
         ZStream(ModulePath(fullPath) -> resource)
 
@@ -61,13 +66,20 @@ object SourceTube {
       case DirectoryEntry.File(_, _) => ZStream.empty
     }
 
-  private def buildModuleMap(platforms: PlatformPluginSet)(context: platforms.ContextOnlyIncluding)(tubeName: TubeName)(platformOptions: platforms.PlatformOptions[context.Error])(stream: ZStream[context.Env, context.Error, (ModulePath, ArgonSourceCodeResource[context.Error])]): context.Comp[Map[ModulePath, ArModuleC & HasContext[context.type]]] =
+  private def buildModuleMap
+  (platforms: PlatformPluginSet)
+  (context: platforms.ContextOnlyIncluding)
+  (tubeName: TubeName)
+  (tubeImporter: TubeImporter & HasContext[context.type])
+  (platformOptions: platforms.PlatformOptions[context.Error])
+  (stream: ZStream[context.Env, context.Error, (ModulePath, ArgonSourceCodeResource[context.Error])])
+  : context.Comp[Map[ModulePath, ArModuleC & HasContext[context.type]]] =
     stream.runFoldZIO(Map.empty[ModulePath, ArModuleC & HasContext[context.type]]) {
       case (modules, (path, sourceCode)) =>
         if modules.contains(path) then
           ErrorLog.logError(CompilerError.DuplicateModuleDefinition(path)).as(modules)
         else
-          SourceModule.make(platforms)(context)(tubeName, path)(sourceCode, platformOptions)
+          SourceModule.make(platforms)(context)(tubeName, path)(tubeImporter)(sourceCode, platformOptions)
             .map { module => modules.updated(path, module) }
     }
 

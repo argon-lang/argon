@@ -1,41 +1,21 @@
 
-import ./Object/*
-import ./String/*
-import /Never
+public inline def Bool: type = __argon_builtin bool_type
 
-public class Bool <: Object
-	public def this.to_s(): String = extern Bool_to_s
-end
+public inline def unary operator ! (a: Bool): Bool = if a then false else true end
 
-public def (!) (a: Bool): Bool = extern boolNot
+public inline def operator = (a: Bool) (b: Bool): Bool =
+    if a then
+        if b then
+            true
+        else
+            false
+        end
+    else
+        if b then
+            false
+        else
+            true
+        end
+    end
 
-public def (=) (a: Bool) (b: Bool): Bool = extern boolEqual
-public inline def (!=) (a: Bool) (b: Bool): Bool = !(a = b)
-
-
-public erased proof def boolEqualImpliesEqualTo[a: Bool][b: Bool](requires p: ((a = b) == true)): (a == b) =
-	extern assumeTrue
-
-public erased proof def boolNotEqualImpliesNotEqualTo[a: Bool][b: Bool](requires p: ((a = b) == false)): ((a == b) -> Never) =
-	extern assumeTrue
-
-public erased proof def boolEqualToImpliesEqual[a: Bool][b: Bool](requires p: (a == b)): ((a = b) == true) =
-	extern assumeTrue
-
-public erased proof def boolNotEqualToImpliesNotEqual[a: Bool][b: Bool](requires p: ((a == b) -> Never)): ((a = b) == false) =
-	extern assumeTrue
-
-public erased proof def boolIsTrueOrFalse[a: Bool]: ((a == true) \/ (a == false)) =
-	extern assumeTrue
-
-public erased proof def boolNotTrueImpliesFalse[a: Bool](requires p: (a == true) -> Never): (a == false) =
-	extern assumeTrue
-
-public erased proof def boolTrueImpliesNotFalse[a: Bool](requires p: (a == true)): (a == false) -> Never =
-	extern assumeTrue
-
-public erased proof def boolNotFalseImpliesTrue[a: Bool](requires p: (a == false) -> Never): (a == true) =
-	extern assumeTrue
-
-public erased proof def boolFalseImpliesNotTrue[a: Bool](requires p: (a == false)): (a == true) -> Never =
-	extern assumeTrue
+public inline def operator != (a: Bool) (b: Bool): Bool = !(a = b)

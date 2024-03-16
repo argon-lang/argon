@@ -18,6 +18,7 @@ object SourceFunction {
       override val id: UniqueIdentifier = funcId
 
       override def isInline: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Inline)
+      override def isErased: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Erased)
 
       override def signature: Comp[FunctionSignature] = sigCache.get(
         scope.toScope.flatMap { scope =>

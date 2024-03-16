@@ -11,6 +11,7 @@ enum NullaryBuiltin derives CanEqual {
 
 enum UnaryBuiltin derives CanEqual {
   case IntNegate
+  case IntBitNot
 }
 
 enum BinaryBuiltin derives CanEqual {
@@ -20,6 +21,11 @@ enum BinaryBuiltin derives CanEqual {
   case IntAdd
   case IntSub
   case IntMul
+  case IntBitAnd
+  case IntBitOr
+  case IntBitXOr
+  case IntBitShiftLeft
+  case IntBitShiftRight
   case IntEQ
   case IntNE
   case IntLT
@@ -27,6 +33,9 @@ enum BinaryBuiltin derives CanEqual {
   case IntGT
   case IntGE
 
+
   case StringConcat
+  case StringEQ
+  case StringNE
 }
 

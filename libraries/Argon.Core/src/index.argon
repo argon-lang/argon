@@ -2,10 +2,7 @@
 
 export ./Bool/*
 export ./Int/*
-export ./Nat/*
-export ./Object/*
 export ./Puts/*
-export ./String/*
 
-public erased inline def Never: type = __argon_builtin never
+public erased inline def Never: type = __argon_builtin never_type
 

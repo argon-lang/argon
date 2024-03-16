@@ -10,8 +10,8 @@ metals.sbt
 *.semanticdb
 
 /libraries/*/bin/
-/examples/*/bin/js/*
-!/examples/*/bin/js/main.js
+/examples/*/bin/lua/*
+!/examples/*/bin/lua/main.lua
 node_modules/
 
 out/

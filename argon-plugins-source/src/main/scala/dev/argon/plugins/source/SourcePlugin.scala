@@ -26,6 +26,6 @@ final class SourcePlugin[Platforms <: PlatformPluginSet](override val platforms:
       (tubeImporter: TubeImporter & HasContext[context.type])
       (libOptions: LibOptions[context.Error])
       : ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]] =
-        SourceTube.make(platforms)(context)(libOptions)        
+        SourceTube.make(platforms)(context)(libOptions)(tubeImporter)
     })
 }

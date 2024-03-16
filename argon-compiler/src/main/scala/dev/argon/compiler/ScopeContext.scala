@@ -6,6 +6,9 @@ import dev.argon.ast.{FunctionParameterListType, IdentifierExpr}
 import dev.argon.util.{FilePosition, Location}
 import zio.*
 import zio.stm.*
+import cats.*
+import cats.implicits.given
+import zio.interop.catz.core.given
 
 trait ScopeContext {
   self: Context =>
@@ -42,30 +45,41 @@ trait ScopeContext {
       def lookup(id: IdentifierExpr): Comp[LookupResult]
     }
 
-    final class GlobalScopeBuilder private(imports: Seq[ast.ImportStmt], module: ArModuleC & HasContext[self.type]) {
+    final class GlobalScopeBuilder private(importer: TubeImporter & HasContext[self.type], imports: Seq[ast.ImportStmt], module: ArModuleC & HasContext[self.type]) {
       def addImport(importSpec: ast.ImportStmt): GlobalScopeBuilder =
-        GlobalScopeBuilder(imports :+ importSpec, module)
+        GlobalScopeBuilder(importer, imports :+ importSpec, module)
 
-      def toScope: Comp[Scope] = ZIO.succeed(CurrentModuleScope(GlobalScope(), module))
+      def toScope: Comp[Scope] = ZIO.succeed(CurrentModuleScope(GlobalScope(importer, imports, module), module))
     }
 
     object GlobalScopeBuilder {
-      def empty(module: ArModuleC & HasContext[self.type]): GlobalScopeBuilder = GlobalScopeBuilder(Seq.empty, module)
+      def empty(importer: TubeImporter & HasContext[self.type], module: ArModuleC & HasContext[self.type]): GlobalScopeBuilder =
+        GlobalScopeBuilder(importer, Seq.empty, module)
     }
 
-    final class GlobalScope private[Scopes] () extends Scope {
+    private def moduleExportToOverloadable(exp: ModuleExportC[self.type]): Overloadable =
+      exp match {
+        case ModuleExportC.Function(f) => Overloadable.Function(f)
+        case ModuleExportC.Exported(exp) => moduleExportToOverloadable(exp)
+      }
+
+    final class GlobalScope private[Scopes] (importer: TubeImporter & HasContext[self.type], imports: Seq[ast.ImportStmt], module: ArModuleC & HasContext[self.type]) extends Scope {
       override def lookup(id: IdentifierExpr): Comp[LookupResult.OverloadableOnly] =
-        ZIO.succeed { ??? }
+        Foldable[Seq].collectFold(imports)(ImportUtil.getModuleExports(self)(importer)(Set.empty)(module.tubeName, module.path)(_))
+          .map { importMap =>
+            importMap.get(id) match {
+              case Some(res) => LookupResult.Overloaded(res.map(moduleExportToOverloadable), ZIO.succeed(LookupResult.NotFound()))
+              case None => LookupResult.NotFound()
+            }
+          }
     }
 
     final class CurrentModuleScope(parent: GlobalScope, module: ArModuleC & HasContext[self.type]) extends Scope {
       override def lookup(id: IdentifierExpr): Comp[LookupResult] =
-        module.getExports(Some(id)).flatMap {
+        module.getExports(Set.empty)(Some(id)).flatMap {
           case Some(exports) =>
             ZIO.succeed(LookupResult.Overloaded(
-              exports.map {
-                case ModuleExportC.Function(f) => Overloadable.Function(f)
-              },
+              exports.map(moduleExportToOverloadable),
               parent.lookup(id)
             ))
 

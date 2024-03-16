@@ -17,7 +17,7 @@ lazy val envValues = Map(
 )
 
 lazy val commonSettingsNoLibs = Seq(
-  scalaVersion := "3.3.1",
+  scalaVersion := "3.4.0",
 )
 
 lazy val commonSettings = commonSettingsNoLibs ++ Seq(
@@ -36,7 +36,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "org.scala-lang.modules" %%% "scala-xml" % "2.2.0",
     "org.gnieh" %%% "fs2-data-xml-scala" % "1.10.0",
     "org.typelevel" %% "cats-core" % "2.10.0",
-    "dev.zio" %%% "zio-interop-cats" % "23.1.0.0",
+    "dev.zio" %%% "zio-interop-cats" % "23.1.0.1",
   ),
 
 )
@@ -79,8 +79,8 @@ lazy val commonJVMSettings = Seq(
     "commons-io" % "commons-io" % "2.15.1",
     "org.apache.commons" % "commons-lang3" % "3.14.0",
     "org.apache.commons" % "commons-text" % "1.11.0",
-    "org.apache.commons" % "commons-compress" % "1.25.0",
-    "dev.zio" %% "zio-logging" % "2.1.16",
+    "org.apache.commons" % "commons-compress" % "1.26.1",
+    "dev.zio" %% "zio-logging" % "2.2.2",
     "net.java.dev.jna" % "jna" % "5.14.0",
     "net.aichler" % "jupiter-interface" % JupiterKeys.jupiterVersion.value % Test,
   ),

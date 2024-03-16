@@ -5,7 +5,7 @@ import dev.argon.compiler.*
 import dev.argon.esexpr.{ESExpr, ESExprCodec}
 import dev.argon.options.{OptionDecoder, OutputHandler, OutputInfo}
 import dev.argon.plugin.*
-import dev.argon.plugin.platform.pluginFactories
+import dev.argon.plugin.platform.PlatformPlugins.pluginFactories
 import zio.*
 import zio.stm.*
 

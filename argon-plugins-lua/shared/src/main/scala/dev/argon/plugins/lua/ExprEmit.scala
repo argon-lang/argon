@@ -105,15 +105,9 @@ trait ExprEmit extends ModuleEmitBase {
 
   private def emitInsn(insn: Instruction): Comp[Seq[AST.Stat]] =
     insn match {
-      case Instruction.Move(target, source) =>
-        for
-          tv <- getRegVar(target)
-          sv <- getRegVar(source)
-        yield Seq(AST.Assignment(Seq(AST.NameExp(tv)), Seq(AST.NameExp(sv))))
-
       case Instruction.Call(InstructionResult.Value(res), call) =>
         for
-          v <- getRegVar(res)
+          v <- getRegVar(res.register)
           callExp <- emitCall(call)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(callExp)))
 
@@ -124,9 +118,14 @@ trait ExprEmit extends ModuleEmitBase {
 
       case Instruction.CreateTuple(res, items) =>
         for
-          v <- getRegVar(res)
+          v <- getRegVar(res.register)
           itemVars <- ZIO.foreach(items)(getRegVar)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(toArrayExp(itemVars.map(AST.NameExp.apply)))))
+
+      case Instruction.LoadBool(res, value) =>
+        for
+          v <- getRegVar(res.register)
+        yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(if value then AST.TrueLiteral else AST.FalseLiteral)))
 
       case Instruction.LoadNullaryBuiltin(res, builtin) =>
         val builtinName = builtin match {
@@ -137,18 +136,59 @@ trait ExprEmit extends ModuleEmitBase {
         }
 
         for
-          v <- getRegVar(res)
+          v <- getRegVar(res.register)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(AST.MemberAccessName(AST.NameExp("ArgonRuntime"), builtinName))))
+
+      case Instruction.LoadUnaryBuiltin(res, builtin, a) =>
+        for
+          av <- getRegVar(a)
+          expr = builtin match {
+            case UnaryBuiltin.IntNegate => AST.UnOpExp(AST.UnOp.Minus, AST.NameExp(av))
+            case UnaryBuiltin.IntBitNot => AST.UnOpExp(AST.UnOp.BNot, AST.NameExp(av))
+          }
+
+          v <- getRegVar(res.register)
+        yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(expr)))
+
+      case Instruction.LoadBinaryBuiltin(res, builtin, a, b) =>
+        for
+          av <- getRegVar(a)
+          bv <- getRegVar(b)
+          expr = builtin match {
+            case BinaryBuiltin.ConjunctionType => ???
+            case BinaryBuiltin.DisjunctionType => ???
+
+            case BinaryBuiltin.IntAdd => AST.BinOpExp(AST.BinOp.Add, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntSub => AST.BinOpExp(AST.BinOp.Sub, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntMul => AST.BinOpExp(AST.BinOp.Mul, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntBitAnd => AST.BinOpExp(AST.BinOp.BAnd, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntBitOr => AST.BinOpExp(AST.BinOp.BOr, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntBitXOr => AST.BinOpExp(AST.BinOp.BXOr, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntBitShiftLeft => AST.BinOpExp(AST.BinOp.ShiftLeft, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntBitShiftRight => AST.BinOpExp(AST.BinOp.ShiftRight, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntEQ | BinaryBuiltin.StringEQ => AST.BinOpExp(AST.BinOp.EQ, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntNE | BinaryBuiltin.StringNE => AST.BinOpExp(AST.BinOp.NE, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntLT => AST.BinOpExp(AST.BinOp.LT, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntLE => AST.BinOpExp(AST.BinOp.LE, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntGT => AST.BinOpExp(AST.BinOp.GT, AST.NameExp(av), AST.NameExp(bv))
+            case BinaryBuiltin.IntGE => AST.BinOpExp(AST.BinOp.GE, AST.NameExp(av), AST.NameExp(bv))
+
+            case BinaryBuiltin.StringConcat => AST.BinOpExp(AST.BinOp.Concat, AST.NameExp(av), AST.NameExp(bv))
+          }
+
+          v <- getRegVar(res.register)
+        yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(expr)))
+
 
       case Instruction.LoadString(res, s) =>
         for
-          v <- getRegVar(res)
+          v <- getRegVar(res.register)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(AST.StringLiteral(s))))
         
 
       case Instruction.TupleElement(res, tuple, index) =>
         for
-          v <- getRegVar(res)
+          v <- getRegVar(res.register)
           t <- getRegVar(tuple)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(AST.MemberAccessIndex(
           AST.NameExp(t),
@@ -202,8 +242,9 @@ trait ExprEmit extends ModuleEmitBase {
       case FunctionCall.Function(f, args) =>
         for
           argVars <- ZIO.foreach(args)(getRegVar)
+          fRef <- f.reference
         yield AST.SimpleFunctionCall(
-          getReferenceExp(f.get[LuaReference]),
+          getReferenceExp(fRef.get[LuaReference]),
           argVars.map(AST.NameExp.apply),
         )
 

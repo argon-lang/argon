@@ -254,6 +254,18 @@ trait TypeResolver extends UsingContext {
       case id: IdentifierExpr =>
         LookupIdFactory(expr.location, id)
 
+      case ast.Expr.IfElse(cond, whenTrue, whenFalse) =>
+        new ExprFactory {
+          override def loc: Loc = expr.location
+
+          override def check(t: Expr)(using EmitState): Comp[Expr] =
+            for
+              condExpr <- resolveExpr(cond).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
+              trueBody <- resolveStmtBlock(whenTrue).check(t)
+              falseBody <- resolveStmtBlock(whenFalse).check(t)
+            yield Expr.IfElse(None, None, condExpr, trueBody, falseBody)
+        }
+
       case ast.Expr.IntLiteral(i) =>
         new InferFactory {
           override def loc: Loc = expr.location
@@ -320,6 +332,14 @@ trait TypeResolver extends UsingContext {
             ))
         }
 
+      case ast.Expr.UnaryOperation(op, a) =>
+        LookupIdFactory(expr.location, IdentifierExpr.Op(op))
+          .invoke(ArgumentInfo(
+            callLocation = expr.location,
+            arg = resolveExpr(a),
+            listType = FunctionParameterListType.NormalList,
+          ))
+
       case _ =>
         println(expr.value.getClass)
         ???
@@ -359,6 +379,7 @@ trait TypeResolver extends UsingContext {
       case "never_type" => NullaryBuiltinFactory(loc, NullaryBuiltin.NeverType, Expr.TypeN(Expr.IntLiteral(0)))
   
       case "int_negate" => UnaryBuiltinFactory(loc, UnaryBuiltin.IntNegate, intType, intType)
+      case "int_bitnot" => UnaryBuiltinFactory(loc, UnaryBuiltin.IntBitNot, intType, intType)
   
       case "conjunction_type" => ???
       case "disjunction_type" => ???
@@ -371,10 +392,19 @@ trait TypeResolver extends UsingContext {
       case "int_le" => BinaryBuiltinFactory(loc, BinaryBuiltin.IntLE, boolType, intType, intType)
       case "int_gt" => BinaryBuiltinFactory(loc, BinaryBuiltin.IntGT, boolType, intType, intType)
       case "int_ge" => BinaryBuiltinFactory(loc, BinaryBuiltin.IntGE, boolType, intType, intType)
+      case "int_bitand" => BinaryBuiltinFactory(loc, BinaryBuiltin.IntBitAnd, intType, intType, intType)
+      case "int_bitor" => BinaryBuiltinFactory(loc, BinaryBuiltin.IntBitOr, intType, intType, intType)
+      case "int_bitxor" => BinaryBuiltinFactory(loc, BinaryBuiltin.IntBitXOr, intType, intType, intType)
+      case "int_bitshiftleft" => BinaryBuiltinFactory(loc, BinaryBuiltin.IntBitShiftLeft, intType, intType, intType)
+      case "int_bitshiftright" => BinaryBuiltinFactory(loc, BinaryBuiltin.IntBitShiftRight, intType, intType, intType)
       case "string_concat" => BinaryBuiltinFactory(loc, BinaryBuiltin.StringConcat, stringType, stringType, stringType)
+      case "string_eq" => BinaryBuiltinFactory(loc, BinaryBuiltin.StringEQ, boolType, stringType, stringType)
+      case "string_ne" => BinaryBuiltinFactory(loc, BinaryBuiltin.StringNE, boolType, stringType, stringType)
   
       case "equal_to_type" => ???
-      case _ => ???
+      case _ =>
+        scala.Console.err.println(name)
+        ???
     }
 
 
@@ -800,7 +830,7 @@ trait TypeResolver extends UsingContext {
 
     override protected def shiftSig(sig: context.DefaultSignatureContext.FunctionSignature): signatureContext.FunctionSignature =
       TRSignatureContext.signatureFromDefault(sig)
-    
+
     override def normalizeHole(hole: Hole): Comp[Expr] =
       state.model.get.map(_.resolveHole(hole).getOrElse(Expr.Hole(hole)))
   }

@@ -12,6 +12,6 @@ trait PlatformAppBase[R, E, AppLayerIn >: ZIOAppArgs] extends ZIOApp {
   final override def bootstrap: ZLayer[AppLayerIn, Any, R] =
     (Runtime.removeDefaultLoggers >+> consoleLogger(ConsoleLoggerConfig(
       format = LogFormat.colored,
-      filter = LogFilter.logLevel(LogLevel.Trace),
+      filter = LogFilter.LogLevelByNameConfig(LogLevel.Trace),
     ))) >>> appBootstrapLayer
 }

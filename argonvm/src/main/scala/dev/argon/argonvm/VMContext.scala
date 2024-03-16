@@ -2,7 +2,7 @@ package dev.argon.argonvm
 
 import dev.argon.ast.IdentifierExpr
 import dev.argon.compiler.{ErasedSignature, ModulePath}
-import dev.argon.expr.{BuiltinType, NullaryBuiltin}
+import dev.argon.expr.{BuiltinType, UnaryBuiltin, NullaryBuiltin, BinaryBuiltin}
 import dev.argon.util.UniqueIdentifier
 import zio.ZIO
 
@@ -30,6 +30,16 @@ trait VMContext {
     case Builtin(builtin: BuiltinType, args: Seq[VMType])
     case Function(input: VMType, output: VMType)
     case Tuple(elements: Seq[VMType])
+    case Type
+    case Param(index: Int)
+  }
+
+  enum RegisterType derives CanEqual {
+    case Builtin(builtin: BuiltinType, args: Seq[RegisterType])
+    case Function(input: RegisterType, output: RegisterType)
+    case Tuple(elements: Seq[RegisterType])
+    case Type
+    case Reg(r: Register)
   }
 
   trait VMTube {
@@ -51,7 +61,7 @@ trait VMContext {
   }
 
   final case class Register(id: UniqueIdentifier) derives CanEqual
-  final case class RegisterDeclaration(register: Register, t: VMType)
+  final case class RegisterDeclaration(register: Register, t: RegisterType)
 
   final case class ControlFlowGraph(
     startBlockId: UniqueIdentifier,
@@ -65,21 +75,23 @@ trait VMContext {
   )
   
   enum InstructionResult derives CanEqual {
-    case Value(register: Register)
+    case Value(register: RegisterDeclaration)
     case Discard
   }
 
   enum Instruction {
-    case Move(target: Register, source: Register)
     case Call(result: InstructionResult, call: FunctionCall)
-    case CreateTuple(result: Register, items: Seq[Register])
-    case LoadNullaryBuiltin(result: Register, builtin: NullaryBuiltin)
-    case LoadString(result: Register, s: String)
-    case TupleElement(result: Register, tuple: Register, index: Int)
+    case CreateTuple(result: RegisterDeclaration, items: Seq[Register])
+    case LoadBool(result: RegisterDeclaration, value: Boolean)
+    case LoadNullaryBuiltin(result: RegisterDeclaration, builtin: NullaryBuiltin)
+    case LoadUnaryBuiltin(result: RegisterDeclaration, builtin: UnaryBuiltin, a: Register)
+    case LoadBinaryBuiltin(result: RegisterDeclaration, builtin: BinaryBuiltin, a: Register, b: Register)
+    case LoadString(result: RegisterDeclaration, value: String)
+    case TupleElement(result: RegisterDeclaration, tuple: Register, index: Int)
   }
   
   enum FunctionCall {
-    case Function(f: implementations.FunctionReference, args: Seq[Register])
+    case Function(f: VMFunction, args: Seq[Register])
     case FunctionObject(f: Register, arg: Register)
   }
 

@@ -16,13 +16,14 @@ private[io] final class PlatformResourceWriter(baseDir: Path) extends ResourceWr
 
   private def writeFile[E >: IOException](path: Path, resource: BinaryResource[E]): ZIO[Any, E, Unit] =
     ZIO.logTrace(s"Writing file: $path") *>
-    resource.asBytes.run(ZSink.fromPath(path).foldSink(
-      failure = {
-        case ex: IOException => ZSink.fail(ex)
-        case ex => ZSink.die(ex)
-      },
-      success = _ => ZSink.succeed(())
-    ))
+      ZIO.attempt { Files.createDirectories(path.getParent).nn }.refineToOrDie[IOException] *>
+      resource.asBytes.run(ZSink.fromPath(path).foldSink(
+        failure = {
+          case ex: IOException => ZSink.fail(ex)
+          case ex => ZSink.die(ex)
+        },
+        success = _ => ZSink.succeed(())
+      ))
 
   private def writeDir[E >: IOException](path: Path, resource: DirectoryResource[E, BinaryResource]): ZIO[Any, E, Unit] =
     ZIO.logTrace(s"Writing directory: $path") *>

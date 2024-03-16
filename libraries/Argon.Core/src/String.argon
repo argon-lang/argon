@@ -1,10 +1,9 @@
-import ./Object/*
-import ./Bool/*
 
-public class String <: Object
-end
+import ../Bool/*
 
-public def (++) (a: String) (b: String): String = extern stringConcat
+public inline def String: type = __argon_builtin string_type
 
-public def (=) (a: String) (b: String): Bool = extern stringEqual
-public inline def (!=) (a: String) (b: String): Bool = !(a = b)
+public inline def operator ++ (a: String) (b: String): String = __argon_builtin string_concat a b
+
+public inline def operator = (a: String) (b: String): Bool = __argon_builtin string_eq a b
+public inline def operator != (a: String) (b: String): Bool = __argon_builtin string_ne a b

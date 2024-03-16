@@ -10,7 +10,7 @@
             name: "argon-sources"
         )
         options: (source-options
-            name: (tube-name "Simple")
+            name: (tube-name "Argon" "Core")
             sources: (list "src")
             platforms: (dict
                 lua: (lua-options
@@ -29,7 +29,7 @@
 
         dest: (dict
             lua: (dict
-                chunk: "Simple.lua"
+                chunk: "bin/lua/Argon_Core.lua"
             )
         )
     )

@@ -27,7 +27,7 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
               numCores <- ZIO.succeed {
                 java.lang.Runtime.getRuntime.nn.availableProcessors()
               }
-              pool <- ZPool.make(channel.map(ZipFile(_)), numCores)
+              pool <- ZPool.make(channel.map(channel => ZipFile.builder().nn.setSeekableByteChannel(channel).nn.get().nn), numCores)
             yield ZipImpl(pool.get)
 
           case None =>
@@ -41,7 +41,7 @@ final class ZipFileDecoderPlatformSpecific extends BinaryResourceDecoder[ZipFile
               .map { bytes =>
                 ZipImpl(
                   bytes.flatMap { byteArray =>
-                    ZIO.attempt(ZipFile(SeekableInMemoryByteChannel(byteArray))).refineToOrDie[IOException]
+                    ZIO.attempt(ZipFile.builder().nn.setSeekableByteChannel(SeekableInMemoryByteChannel(byteArray)).nn.get().nn).refineToOrDie[IOException]
                   }
                 )
               }

@@ -113,10 +113,12 @@ final case class ModulePath(parts: Seq[String]) derives CanEqual {
       .replace("/", "%2F").nn
       .replace("\\", "%5C").nn
   ).mkString("/")
-  
-  def encodeWithTube(tube: TubeName): String =
-    if parts.isEmpty then tube.encode
-    else tube.encode + "/" + encode
+}
+
+final case class ModuleName(tubeName: TubeName, path: ModulePath) derives CanEqual {
+  def encode(tube: TubeName): String =
+    if path.parts.isEmpty then tube.encode
+    else tube.encode + "/" + path.encode
 }
 
 trait TubeImporter extends UsingContext {
@@ -133,18 +135,20 @@ abstract class ArModuleC extends UsingContext {
   def tubeName: TubeName
   def path: ModulePath
 
-  def allExports: Comp[Map[Option[IdentifierExpr], Seq[ModuleExport]]]
-  def getExports(id: Option[IdentifierExpr]): Comp[Option[Seq[ModuleExport]]]
+  def allExports(reexportingModules: Set[ModuleName]): Comp[Map[Option[IdentifierExpr], Seq[ModuleExport]]]
+  def getExports(reexportingModules: Set[ModuleName])(id: Option[IdentifierExpr]): Comp[Option[Seq[ModuleExport]]]
 }
 
 enum ModuleExportC[Ctx <: Context] {
   case Function(f: ArFuncC & HasContext[Ctx])
+  case Exported(exp: ModuleExportC[Ctx])
 }
 
 abstract class ArFuncC extends UsingContext derives CanEqual {
   val id: UniqueIdentifier
 
   def isInline: Boolean
+  def isErased: Boolean
 
   def signature: Comp[FunctionSignature]
 

@@ -232,6 +232,8 @@ object Lexer {
               case "inverse" => Token.KW_INVERSE
               case "update" => Token.KW_UPDATE
               case "inline" => Token.KW_INLINE
+              case "operator" => Token.KW_OPERATOR
+              case "unary" => Token.KW_UNARY
               case "_" => Token.KW_UNDERSCORE
 
               case _ => Token.Identifier(id)

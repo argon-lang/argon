@@ -205,17 +205,17 @@ object ArgonParser {
 
         case Rule.ImportStatement =>
           matchToken(KW_IMPORT).discard ++! rule(Rule.NewLines).discard ++ (
-            rule(Rule.ImportPathAbsolute) |
+            rule(Rule.ImportPathTube) |
+              rule(Rule.ImportPathAbsolute) |
               rule(Rule.ImportPathRelative) |
-              rule(Rule.ImportPathTube) |
               rule(Rule.ImportPathMember)
             )
 
         case Rule.ExportStatement =>
           matchToken(KW_EXPORT).discard ++! (rule(Rule.NewLines).discard ++ (
-            rule(Rule.ImportPathAbsolute) |
+            rule(Rule.ImportPathTube) |
+              rule(Rule.ImportPathAbsolute) |
               rule(Rule.ImportPathRelative) |
-              rule(Rule.ImportPathTube) |
               rule(Rule.ImportPathMember)
             )) --> ExportStmt.apply
 
@@ -652,7 +652,7 @@ object ArgonParser {
 
         case Rule.ImportPathTubeName =>
           tokenIdentifier ++ (
-            rule(Rule.NewLines) ++ matchToken(OP_DOT).discard ++ rule(Rule.NewLines) ++ tokenIdentifier
+            rule(Rule.NewLines) ++ matchToken(OP_DOT).discard ++! rule(Rule.NewLines) ++ tokenIdentifier
           ).* --> {
             case (h, t) => NonEmptySeq(h, t.toList)
           }
