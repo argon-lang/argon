@@ -1,8 +1,8 @@
 package dev.argon.plugins.lua
 
 import cats.data.OptionT
-import dev.argon.argonvm.{VMContext, VMContextBuilder}
 import dev.argon.plugin.{PlatformPlugin, PluginContext, PluginEnv, PluginError, TubeEmitter, TubeLoader}
+import dev.argon.plugin.vm.{VMTubeImpl, VmTube}
 import dev.argon.options.{OptionDecoder, OutputHandler}
 import dev.argon.compiler.*
 import dev.argon.esexpr.ESExprCodec
@@ -43,26 +43,15 @@ final class LuaPlugin extends PlatformPlugin {
     : ZIO[PluginEnv, E, externFunction.Reference] =
       definitionInfo match {
         case DefinitionInfo.Global(tubeName, modulePath, name, sig) =>
-          val emit = new EmitBase {
-            override val plugin: LuaPlugin = LuaPlugin.this
-          }
+          val emit = new EmitBase {}
 
           ZIO.succeed(LuaReference.Global(
             emit.getTubePath(tubeName),
             modulePath.encode,
-            emit.getIdentifierKeyExprMemo(name),
-            emit.getErasedSigKeyExprMemo(sig)
+            emit.getIdentifierKeyExprMemo(name.map(VMTubeImpl.getIdentifier)),
+            emit.getErasedSigKeyExprMemo(VMTubeImpl.getErasedSignature(sig))
           ))
       }
-  }
-
-  type VMContextIncluding = VMContext {
-    type Env <: PluginEnv
-    type Error >: PluginError
-    val implementations: {
-      type ExternFunctionImplementation <: ZEnvironment[externFunction.Implementation]
-      type FunctionReference <: ZEnvironment[externFunction.Reference]
-    }
   }
 
 
@@ -83,22 +72,19 @@ final class LuaPlugin extends PlatformPlugin {
       (tube: ArTubeC & HasContext[ctx.type])
       (options: LuaOutputOptions)
       : ctx.Comp[LuaOutput[ctx.Error]] =
-        val builder = VMContextBuilder(ctx)
-
         for
           env <- ZIO.environment[ctx.Env]
+          ct <- VMTubeImpl.make(ctx)(tube)
 
         yield LuaOutput(
           chunk = new LuaChunkResource[ctx.Error] with LuaChunkResource.Impl[ctx.Error] with Resource.WithoutFileName {
             override def luaChunk: ZIO[Any, ctx.Error, AST.Chunk] =
               new TubeEmit {
-                override val plugin: LuaPlugin.this.type = LuaPlugin.this
-                override val context: builder.vmContext.type = builder.vmContext
-                override val currentTube: VMTube = builder.createTube(tube)
+                override val context: ctx.type = ctx
+                override val currentTube: VmTube[ctx.Env, ctx.Error, Externs] = ct
               }.emitTube.provideEnvironment(env)
           }
         )
-      end emitTube
     })
 
   override def tubeLoaders[Ctx <: ContextOnlyIncluding]: Map[String, TubeLoader[Ctx]] = Map.empty

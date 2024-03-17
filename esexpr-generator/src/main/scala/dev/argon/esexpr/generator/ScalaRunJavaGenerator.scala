@@ -44,63 +44,6 @@ private[generator] final class ScalaRunJavaGenerator(
 
 
     definition match {
-      case definition: Definition.TypeEnum =>
-        w("trait ")
-        writeTypeName(definitionName)
-        w("WrapCodec[TScala <: ")
-        w(scalaApiPackageName)
-        w(".")
-        writeTypeName(definitionName)
-        w(", TJava <: ")
-        w(javaApiPackageName)
-        w(".")
-        writeTypeName(definitionName)
-        wl("] {")
-        indent {
-          w("def matchCodec[")
-          writeCommaListSingleLine[String](value => {
-            w("S")
-            writeTypeName(value)
-            w(", J")
-            writeTypeName(value)
-          })(definition.values)
-          w("](")
-          writeCommaListSingleLine[String](value => {
-            writeValueName(value)
-            w("Codec: ")
-
-            w(utilPackageName)
-            w(".WrapCodec[")
-            w("S")
-            writeTypeName(value)
-            w(", J")
-            writeTypeName(value)
-            w("]")
-          })(definition.values)
-          w("): ")
-
-          w(utilPackageName)
-          w(".WrapCodec[")
-          w("TScala match {")
-          for value <- definition.values do
-            w(" case \"")
-            w(StringEscapeUtils.escapeJava(value).nn)
-            w("\" => S")
-            writeTypeName(value)
-          end for
-          wl(" }, ")
-          w(javaApiPackageName)
-          w(".")
-          writeTypeName(definitionName)
-          w(".Match[TJava")
-          for value <- definition.values do
-            w(", J")
-            writeTypeName(value)
-          end for
-          wl("]]")
-        }
-        wl("}")
-
       case definition: Definition.TypeStruct =>
         w("final case class ")
         writeTypeName(definitionName)
@@ -373,7 +316,6 @@ private[generator] final class ScalaRunJavaGenerator(
           wl("}")
         }
 
-      case Definition.TypeEnum(name, values*) => throw new UnsupportedOperationException()
       case Definition.TypeStruct(name, values*) => throw new UnsupportedOperationException()
       case _: Definition.Extern => throw new UnsupportedOperationException()
     }
@@ -554,7 +496,6 @@ private[generator] final class ScalaRunJavaGenerator(
         }
 
 
-      case Definition.TypeEnum(name, values*) => throw new UnsupportedOperationException()
       case Definition.TypeStruct(name, members*) => throw new UnsupportedOperationException()
       case _: Definition.Extern => throw new UnsupportedOperationException()
     }
@@ -708,20 +649,6 @@ private[generator] final class ScalaRunJavaGenerator(
         writeCommaListSingleLine(writeWrapCodecOfType)(args)
         w(")")
 
-      case DataType.TypeEnumMatch(typeEnum, typeEnumValue, mappings) =>
-        val typeEnumDef = definitions.find(GeneratorUtil.getDefinitionName(_) == typeEnum) match {
-          case Some(t: Definition.TypeEnum) => t
-          case Some(_) => throw new Exception(s"${typeEnum} is not a type enum")
-          case None => throw new Exception(s"${typeEnum} is not defined")
-        }
-
-        writeWrapCodecOfType(typeEnumValue)
-        w(".matchCodec(")
-        writeCommaListSingleLine[String](value => {
-          writeWrapCodecOfType(mappings(value))
-        })(typeEnumDef.values)
-        w(")")
-
 
       case DataType.TypeStructMember(_, typeStructValue, member) =>
         writeWrapCodecOfType(typeStructValue)
@@ -805,24 +732,6 @@ private[generator] final class ScalaRunJavaGenerator(
       if requiresErrorParam(name) then
         w("EX, ")
       writeCommaListSingleLine(writeJType)(args)
-      w("]")
-
-    case DataType.TypeEnumMatch(enumType, enumTypeCase, mappings) =>
-      val enumTypeInfo = definitions.collectFirst {
-        case enumTypeInfo@Definition.TypeEnum(name, _*) if enumType == name =>
-          enumTypeInfo
-      }.getOrElse(throw new Exception(s"Unknown enum type: $enumType"))
-
-      if enumTypeInfo.values.size != mappings.size then
-        throw new Exception(s"Invalid mappings for enum ${enumTypeInfo.name}")
-
-      writeJType(DataType.UserDefined(enumType))
-      w(".Match[")
-      writeJType(enumTypeCase)
-      for value <- enumTypeInfo.values do
-        w(", ")
-        writeJType(mappings(value))
-      end for
       w("]")
 
     case DataType.TypeStructMember(typeStruct, typeStructValue, member) =>

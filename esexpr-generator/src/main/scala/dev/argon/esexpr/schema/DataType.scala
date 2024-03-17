@@ -8,7 +8,6 @@ enum DataType derives ESExprCodec, CanEqual {
 
   case Apply(name: String, args: DataType*)
 
-  case TypeEnumMatch(typeEnum: String, typeEnumValue: DataType, @dict mappings: Map[String, DataType])
   case TypeStructMember(typeStruct: String, typeStructValue: DataType, member: String)
 
   case List(elementType: DataType)

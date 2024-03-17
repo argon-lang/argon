@@ -148,13 +148,6 @@ private[generator] abstract class GeneratorBase extends GeneratorNaming {
       case DataType.Apply(name, args*) =>
         DataType.Apply(name, args.map(substituteType(typeSubst)) *)
 
-      case DataType.TypeEnumMatch(typeEnum, typeEnumValue, mappings) =>
-        DataType.TypeEnumMatch(
-          typeEnum,
-          substituteType(typeSubst)(typeEnumValue),
-          mappings.view.mapValues(substituteType(typeSubst)).toMap
-        )
-
       case DataType.TypeStructMember(typeStruct, typeStructValue, member) =>
         DataType.TypeStructMember(typeStruct, substituteType(typeSubst)(typeStructValue), member)
 

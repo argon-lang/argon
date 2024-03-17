@@ -1,11 +1,24 @@
 package dev.argon.plugins.lua
 
-trait TubeEmitBase extends EmitBase {
-  val context: plugin.VMContextIncluding
-  export context.*
-  export context.implementations.*
+import dev.argon.compiler.Context
+import dev.argon.plugin.vm.*
+import zio.ZEnvironment
 
-  val currentTube: VMTube
+trait TubeEmitBase extends EmitBase {
+  val context: Context {
+    val implementations: {
+      type ExternFunctionImplementation <: ZEnvironment[LuaExternImplementation]
+      type FunctionReference <: ZEnvironment[LuaReference]
+    }
+  }
+  export context.{Comp, Env, Error}
+
+  type Externs[E <: ExternalImplementation] = E match {
+    case "function" => context.implementations.ExternFunctionImplementation
+    case "function-reference" => context.implementations.FunctionReference
+  }
+
+  val currentTube: VmTube[context.Env, context.Error, Externs]
 }
 
 

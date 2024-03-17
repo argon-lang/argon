@@ -26,7 +26,7 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
     case Keyword(constructor: String, name: String, next: ErrorPath)
   }
 
-  final case class DecodeError(message: String, path: ErrorPath) extends ESExprDecodeException(message)
+  final case class DecodeError(message: String, path: ErrorPath) extends ESExprDecodeException(message + " " + path.toString)
 
 
   given ESExprCodec[String] with
@@ -130,6 +130,19 @@ object ESExprCodec extends ESExprCodecDerivation[ESExprCodec] {
         NonEmptySeq.fromSeq(values.toList).toRight(DecodeError("List was expected to be non-empty", ErrorPath.Current))
       }
   end given
+
+  given[A: ESExprCodec]: ESExprCodec[Option[A]] with
+    override lazy val tags: Set[ESExprTag] = summon[ESExprCodec[A]].tags + ESExprTag.Null
+
+    override def encode(value: Option[A]): ESExpr =
+      value.fold(ESExpr.Null)(summon[ESExprCodec[A]].encode)
+
+    override def decode(expr: ESExpr): Either[DecodeError, Option[A]] =
+      expr match {
+        case ESExpr.Null => Right(None)
+        case _ => summon[ESExprCodec[A]].decode(expr).map(Some.apply)
+      }
+
 
   override def simpleEnumCodec[T](caseNames: Array[String], caseValues: Map[String, T])(using m: Mirror.SumOf[T]): ESExprCodec[T] =
     new ESExprCodec[T] {

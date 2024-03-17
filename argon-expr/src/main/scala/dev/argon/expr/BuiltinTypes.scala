@@ -1,20 +1,21 @@
 package dev.argon.expr
 
-sealed trait BuiltinType derives CanEqual
+sealed trait BuiltinBase derives CanEqual
+sealed trait BuiltinType extends BuiltinBase derives CanEqual
 
-enum NullaryBuiltin derives CanEqual {
+enum NullaryBuiltin extends BuiltinBase derives CanEqual {
   case IntType extends NullaryBuiltin with BuiltinType
   case BoolType extends NullaryBuiltin with BuiltinType
   case StringType extends NullaryBuiltin with BuiltinType
   case NeverType extends NullaryBuiltin with BuiltinType
 }
 
-enum UnaryBuiltin derives CanEqual {
+enum UnaryBuiltin extends BuiltinBase derives CanEqual {
   case IntNegate
   case IntBitNot
 }
 
-enum BinaryBuiltin derives CanEqual {
+enum BinaryBuiltin extends BuiltinBase derives CanEqual {
   case ConjunctionType extends BinaryBuiltin with BuiltinType
   case DisjunctionType extends BinaryBuiltin with BuiltinType
 

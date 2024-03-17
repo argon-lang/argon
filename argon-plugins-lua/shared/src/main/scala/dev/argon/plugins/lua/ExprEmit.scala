@@ -2,6 +2,7 @@ package dev.argon.plugins.lua
 
 import dev.argon.compiler.*
 import dev.argon.expr.*
+import dev.argon.plugin.vm.*
 import dev.argon.plugins.lua.ExprEmit.OutputMode
 import dev.argon.util.{*, given}
 import zio.*
@@ -12,29 +13,17 @@ import zio.interop.catz.core.given
 import scala.collection.mutable
 
 trait ExprEmit extends ModuleEmitBase {
-  val regMapping: TMap[Register, String]
-  val blockMapping: TMap[UniqueIdentifier, String]
-
+  val regNames: TSet[String]
 
   private def getRegVar(r: Register): UIO[String] =
-    regMapping.get(r).flatMap {
-      case Some(v) => STM.succeed(v)
-      case None =>
-        regMapping.size.flatMap { i =>
-          val name = s"r$i"
-          regMapping.put(r, name).as(name)
-        }
-    }.commit
+    r match {
+      case Register.Reg(n) =>
+        val name = s"r$n"
+        regNames.put(name).as(name).commit
+    }
 
-  private def getBlockLabel(id: UniqueIdentifier): UIO[String] =
-    blockMapping.get(id).flatMap {
-      case Some(v) => STM.succeed(v)
-      case None =>
-        blockMapping.size.flatMap { i =>
-          val name = s"l$i"
-          blockMapping.put(id, name).as(name)
-        }
-    }.commit
+  private def getBlockLabel(id: BigInt): String =
+    s"l$id"
 
   private def getReferenceExp(reference: LuaReference): AST.PrefixExp =
     reference match {
@@ -58,17 +47,17 @@ trait ExprEmit extends ModuleEmitBase {
 
   def emit(cfg: ControlFlowGraph): Comp[AST.FunctionDefinitionExp] =
     for
-      emittedBlocks <- TSet.empty[UniqueIdentifier].commit
-      paramNames <- ZIO.foreach(cfg.blocks(cfg.startBlockId).parameters)(r => getRegVar(r.register))
+      emittedBlocks <- TSet.empty[BigInt].commit
+      paramNames <- ZIO.foreach(cfg.blocks.head.parameters)(r => getRegVar(r.register))
       body <- {
-        def getSuccBlocks(blockId: UniqueIdentifier): Seq[UniqueIdentifier] =
-          cfg.blocks(blockId).branch match {
+        def getSuccBlocks(blockId: BigInt): Seq[BigInt] =
+          cfg.blocks(blockId.toInt).branch match {
             case BranchInstruction.Return(_) | BranchInstruction.ReturnCall(_) => Seq()
-            case BranchInstruction.Jump(target, _) => Seq(target)
+            case BranchInstruction.Jump(target, _*) => Seq(target)
             case BranchInstruction.JumpIf(_, taken, _, notTaken, _) => Seq(taken, notTaken)
           }
 
-        def impl(blockId: UniqueIdentifier): Comp[Seq[AST.Stat]] =
+        def impl(blockId: BigInt): Comp[Seq[AST.Stat]] =
           emittedBlocks.contains(blockId).commit.flatMap {
             case true => ZIO.succeed(Seq.empty)
             case false =>
@@ -79,22 +68,22 @@ trait ExprEmit extends ModuleEmitBase {
               yield stats ++ succStats.flatten
           }
 
-        impl(cfg.startBlockId)
+        impl(0)
       }
-      varNames <- regMapping.values.commit
+      varNames <- regNames.toSet.commit
+      nonParamVars = (varNames -- paramNames).toSeq
     yield AST.FunctionDefinitionExp(
       params = paramNames,
       hasRest = false,
       body = AST.Block(
-        (AST.LocalDeclaration(varNames.map(name => AST.VariableBinding(name, AST.Attrib.Empty)), Seq())) +:
-          body
+        (AST.LocalDeclaration(nonParamVars.map(name => AST.VariableBinding(name, AST.Attrib.Empty)), Seq())) +: body
       )
     )
 
-  private def emitBlock(cfg: ControlFlowGraph, id: UniqueIdentifier): Comp[Seq[AST.Stat]] =
-    val block = cfg.blocks(id)
+  private def emitBlock(cfg: ControlFlowGraph, id: BigInt): Comp[Seq[AST.Stat]] =
+    val block = cfg.blocks(id.toInt)
+    val label = getBlockLabel(id)
     for
-      label <- getBlockLabel(id)
       insnStats <- ZIO.foreach(block.instructions)(emitInsn)
       branchStats <- emitBranch(cfg)(block.branch)
     yield Seq(
@@ -116,7 +105,7 @@ trait ExprEmit extends ModuleEmitBase {
           callExp <- emitCall(call)
         yield Seq(callExp)
 
-      case Instruction.CreateTuple(res, items) =>
+      case Instruction.CreateTuple(res, items*) =>
         for
           v <- getRegVar(res.register)
           itemVars <- ZIO.foreach(items)(getRegVar)
@@ -127,58 +116,78 @@ trait ExprEmit extends ModuleEmitBase {
           v <- getRegVar(res.register)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(if value then AST.TrueLiteral else AST.FalseLiteral)))
 
-      case Instruction.LoadNullaryBuiltin(res, builtin) =>
-        val builtinName = builtin match {
-          case NullaryBuiltin.IntType => "int_type"
-          case NullaryBuiltin.BoolType => "bool_type"
-          case NullaryBuiltin.StringType => "string_type"
-          case NullaryBuiltin.NeverType => "never_type"
+      case Instruction.LoadBuiltin(res, builtin, args*) =>
+        def nullaryRuntimeExport(name: String): Comp[Seq[AST.Stat]] =
+          args match {
+            case Seq() =>
+              for
+                v <- getRegVar(res.register)
+              yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(AST.MemberAccessName(AST.NameExp("ArgonRuntime"), name))))
+
+            case _ => ???
+          }
+          
+        def unOp(op: AST.UnOp): Comp[Seq[AST.Stat]] =
+          args match {
+            case Seq(a) =>
+              for
+                av <- getRegVar(a)
+                expr = AST.UnOpExp(op, AST.NameExp(av))
+
+                v <- getRegVar(res.register)
+              yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(expr)))
+
+            case _ => ???
+          }
+        
+        def binOp(op: AST.BinOp): Comp[Seq[AST.Stat]] =
+          args match {
+            case Seq(a, b) =>
+              for
+                av <- getRegVar(a)
+                bv <- getRegVar(b)
+                expr = AST.BinOpExp(op, AST.NameExp(av), AST.NameExp(bv))
+
+                v <- getRegVar(res.register)
+              yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(expr)))
+
+            case _ => ???
+          }
+        
+        builtin match {
+          case Builtin.IntType => nullaryRuntimeExport("int_type")
+          case Builtin.BoolType => nullaryRuntimeExport("bool_type")
+          case Builtin.StringType => nullaryRuntimeExport("string_type")
+          case Builtin.NeverType => nullaryRuntimeExport("never_type")
+          
+          
+          
+          case Builtin.IntNegate => unOp(AST.UnOp.Minus)
+          case Builtin.IntBitNot => unOp(AST.UnOp.BNot)
+          
+          
+          case Builtin.ConjunctionType => ???
+          case Builtin.DisjunctionType => ???
+
+          case Builtin.IntAdd => binOp(AST.BinOp.Add)
+          case Builtin.IntSub => binOp(AST.BinOp.Sub)
+          case Builtin.IntMul => binOp(AST.BinOp.Mul)
+          case Builtin.IntBitAnd => binOp(AST.BinOp.BAnd)
+          case Builtin.IntBitOr => binOp(AST.BinOp.BOr)
+          case Builtin.IntBitXor => binOp(AST.BinOp.BXOr)
+          case Builtin.IntBitShiftLeft => binOp(AST.BinOp.ShiftLeft)
+          case Builtin.IntBitShiftRight => binOp(AST.BinOp.ShiftRight)
+          case Builtin.IntEq | Builtin.StringEq => binOp(AST.BinOp.EQ)
+          case Builtin.IntNe | Builtin.StringNe => binOp(AST.BinOp.NE)
+          case Builtin.IntLt => binOp(AST.BinOp.LT)
+          case Builtin.IntLe => binOp(AST.BinOp.LE)
+          case Builtin.IntGt => binOp(AST.BinOp.GT)
+          case Builtin.IntGe => binOp(AST.BinOp.GE)
+
+          case Builtin.StringConcat => binOp(AST.BinOp.Concat)
+
+          case Builtin.EqualTo => ???
         }
-
-        for
-          v <- getRegVar(res.register)
-        yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(AST.MemberAccessName(AST.NameExp("ArgonRuntime"), builtinName))))
-
-      case Instruction.LoadUnaryBuiltin(res, builtin, a) =>
-        for
-          av <- getRegVar(a)
-          expr = builtin match {
-            case UnaryBuiltin.IntNegate => AST.UnOpExp(AST.UnOp.Minus, AST.NameExp(av))
-            case UnaryBuiltin.IntBitNot => AST.UnOpExp(AST.UnOp.BNot, AST.NameExp(av))
-          }
-
-          v <- getRegVar(res.register)
-        yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(expr)))
-
-      case Instruction.LoadBinaryBuiltin(res, builtin, a, b) =>
-        for
-          av <- getRegVar(a)
-          bv <- getRegVar(b)
-          expr = builtin match {
-            case BinaryBuiltin.ConjunctionType => ???
-            case BinaryBuiltin.DisjunctionType => ???
-
-            case BinaryBuiltin.IntAdd => AST.BinOpExp(AST.BinOp.Add, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntSub => AST.BinOpExp(AST.BinOp.Sub, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntMul => AST.BinOpExp(AST.BinOp.Mul, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntBitAnd => AST.BinOpExp(AST.BinOp.BAnd, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntBitOr => AST.BinOpExp(AST.BinOp.BOr, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntBitXOr => AST.BinOpExp(AST.BinOp.BXOr, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntBitShiftLeft => AST.BinOpExp(AST.BinOp.ShiftLeft, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntBitShiftRight => AST.BinOpExp(AST.BinOp.ShiftRight, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntEQ | BinaryBuiltin.StringEQ => AST.BinOpExp(AST.BinOp.EQ, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntNE | BinaryBuiltin.StringNE => AST.BinOpExp(AST.BinOp.NE, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntLT => AST.BinOpExp(AST.BinOp.LT, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntLE => AST.BinOpExp(AST.BinOp.LE, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntGT => AST.BinOpExp(AST.BinOp.GT, AST.NameExp(av), AST.NameExp(bv))
-            case BinaryBuiltin.IntGE => AST.BinOpExp(AST.BinOp.GE, AST.NameExp(av), AST.NameExp(bv))
-
-            case BinaryBuiltin.StringConcat => AST.BinOpExp(AST.BinOp.Concat, AST.NameExp(av), AST.NameExp(bv))
-          }
-
-          v <- getRegVar(res.register)
-        yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(expr)))
-
 
       case Instruction.LoadString(res, s) =>
         for
@@ -192,7 +201,7 @@ trait ExprEmit extends ModuleEmitBase {
           t <- getRegVar(tuple)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(AST.MemberAccessIndex(
           AST.NameExp(t),
-          AST.IntegerLiteral(index)
+          AST.IntegerLiteral(index.toLong)
         ))))
     }
 
@@ -208,10 +217,10 @@ trait ExprEmit extends ModuleEmitBase {
           callExp <- emitCall(call)
         yield Seq(AST.Return(Seq(callExp)))
 
-      case BranchInstruction.Jump(targetId, args) =>
+      case BranchInstruction.Jump(targetId, args*) =>
+        val targetLabel = getBlockLabel(targetId)
         for
-          targetLabel <- getBlockLabel(targetId)
-          paramVars <- ZIO.foreach(cfg.blocks(targetId).parameters.map(_.register))(getRegVar)
+          paramVars <- ZIO.foreach(cfg.blocks(targetId.toInt).parameters.map(_.register))(getRegVar)
           argVars <- ZIO.foreach(args)(getRegVar)
         yield Seq(
           AST.Assignment(
@@ -224,8 +233,8 @@ trait ExprEmit extends ModuleEmitBase {
       case BranchInstruction.JumpIf(condition, takenId, takenArgs, notTakenId, notTakenArgs) =>
         for
           condVar <- getRegVar(condition)
-          takenJump <- emitBranch(cfg)(BranchInstruction.Jump(takenId, takenArgs))
-          notTakenJump <- emitBranch(cfg)(BranchInstruction.Jump(notTakenId, notTakenArgs))
+          takenJump <- emitBranch(cfg)(BranchInstruction.Jump(takenId, takenArgs*))
+          notTakenJump <- emitBranch(cfg)(BranchInstruction.Jump(notTakenId, notTakenArgs*))
         yield Seq(
           AST.If(
             AST.NameExp(condVar),
@@ -239,10 +248,10 @@ trait ExprEmit extends ModuleEmitBase {
 
   private def emitCall(call: FunctionCall): Comp[AST.FunctionCall] =
     call match {
-      case FunctionCall.Function(f, args) =>
+      case FunctionCall.Function(f, args*) =>
         for
           argVars <- ZIO.foreach(args)(getRegVar)
-          fRef <- f.reference
+          fRef <- currentTube.getFunctionReference(f)
         yield AST.SimpleFunctionCall(
           getReferenceExp(fRef.get[LuaReference]),
           argVars.map(AST.NameExp.apply),

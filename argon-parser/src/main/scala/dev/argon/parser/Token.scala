@@ -12,11 +12,11 @@ object Token {
     val category: TokenCategory
   }
 
-  sealed trait BinaryOperatorToken(val binOperator: BinaryOperator) {
+  sealed trait BinaryOperatorToken[O <: BinaryOperator](val binOperator: O) {
     self: Token =>
-  }
+  } 
 
-  sealed trait UnaryOperatorToken(val unOperator: UnaryOperator) {
+  sealed trait UnaryOperatorToken[O <: UnaryOperator](val unOperator: O) {
     self: Token =>
   }
 

@@ -205,15 +205,7 @@ trait TypeResolver extends UsingContext {
 
       case ast.Expr.BinaryOperation(
         left,
-        op @ (
-          ast.BinaryOperator.Plus | ast.BinaryOperator.Minus |ast.BinaryOperator.Mul | ast.BinaryOperator.Div |
-          ast.BinaryOperator.Equal | ast.BinaryOperator.NotEqual |
-          ast.BinaryOperator.LessThan | ast.BinaryOperator.LessThanEq |
-          ast.BinaryOperator.GreaterThan | ast.BinaryOperator.GreaterThanEq |
-          ast.BinaryOperator.BitOr | ast.BinaryOperator.BitAnd | ast.BinaryOperator.BitXOr |
-          ast.BinaryOperator.ShiftLeft | ast.BinaryOperator.ShiftRight |
-          ast.BinaryOperator.Concat
-        ),
+        op: ast.Operator.ValidIdentifier,
         right,
       ) =>
         LookupIdFactory(expr.location, IdentifierExpr.Op(op))
@@ -261,8 +253,8 @@ trait TypeResolver extends UsingContext {
           override def check(t: Expr)(using EmitState): Comp[Expr] =
             for
               condExpr <- resolveExpr(cond).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
-              trueBody <- resolveStmtBlock(whenTrue).check(t)
-              falseBody <- resolveStmtBlock(whenFalse).check(t)
+              trueBody <- nestedScope { resolveStmtBlock(whenTrue).check(t) }
+              falseBody <- nestedScope { resolveStmtBlock(whenFalse).check(t) }
             yield Expr.IfElse(None, None, condExpr, trueBody, falseBody)
         }
 
@@ -332,7 +324,7 @@ trait TypeResolver extends UsingContext {
             ))
         }
 
-      case ast.Expr.UnaryOperation(op, a) =>
+      case ast.Expr.UnaryOperation(op: ast.Operator.ValidIdentifier, a) =>
         LookupIdFactory(expr.location, IdentifierExpr.Op(op))
           .invoke(ArgumentInfo(
             callLocation = expr.location,

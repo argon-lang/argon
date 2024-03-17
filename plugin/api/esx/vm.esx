@@ -1,5 +1,3 @@
-
-
 (constructor "tube-name"
     (arg "head" (string))
     (vararg "tail" (string))
@@ -7,18 +5,290 @@
 (constructor "module-path"
     (arg "path" (list (string)))
 )
+(constructor "module-name"
+    (arg "tube" "tube-name")
+    (arg "path" "module-path")
+)
 
-(enum-class "definition-info"
-    (constructor "global"
-        (kwarg "tube-name" "tube-name")
-        (kwarg "module-path" "module-path")
-        (kwarg "name" optional: #true "identifier")
-        (kwarg "signature" "signature")
+(type-struct "external-implementation"
+    "function"
+    "function-reference"
+)
+
+(interface "vm-tube"
+    type-parameters: (list
+        (type-parameter "externs" tuple: "external-implementation")
+    )
+
+    (method "metadata" (list) "vm-tube-metadata")
+
+    (method "get-module" (list (arg "module" "module-path")) "vm-module")
+
+    (method "get-function-definition" (list (arg "id" (int))) "vm-function")
+    (method "get-function-extern-implementation" (list (arg "id" (int))) (type-struct-member "external-implementation" "externs" "function"))
+    (method "get-function-reference" (list (arg "id" (int))) (type-struct-member "external-implementation" "externs" "function-reference"))
+)
+
+(constructor "vm-tube-metadata"
+    (kwarg "modules" (list "module-path"))
+)
+
+(constructor "vm-module"
+    (kwarg "exports" (list "vm-module-export-entry"))
+)
+
+(constructor "vm-module-export-entry"
+    (arg "name" (nullable "identifier"))
+    (arg "signature" "erased-signature")
+    (arg "export" "vm-module-export")
+)
+
+(enum "vm-module-export"
+    (constructor "function"
+        (arg "function" (int))
     )
 )
 
-(interface "signature"
-    
+
+(simple-enum "builtin"
+    "int-type"
+    "bool-type"
+    "string-type"
+    "never-type"
+
+
+
+    "int-negate"
+    "int-bit-not"
+
+
+
+    "conjunction-type"
+    "disjunction-type"
+
+    "int-add"
+    "int-sub"
+    "int-mul"
+    "int-bit-and"
+    "int-bit-or"
+    "int-bit-xor"
+    "int-bit-shift-left"
+    "int-bit-shift-right"
+    "int-eq"
+    "int-ne"
+    "int-lt"
+    "int-le"
+    "int-gt"
+    "int-ge"
+
+    "string-concat"
+    "string-eq"
+    "string-ne"
+
+    "equal-to"
 )
 
+(simple-enum "unary-operator-name"
+    "plus"
+    "minus"
+    "bit-not"
+    "logical-not"
+)
+
+(simple-enum "binary-operator-name"
+    "plus"
+    "minus"
+    "mul"
+    "div"
+    "equal"
+    "not-equal"
+    "less-than"
+    "less-than-eq"
+    "greater-than"
+    "greater-than-eq"
+    "bit-and"
+    "bit-or"
+    "bit-xor"
+    "shift-left"
+    "shift-right"
+    "concat"
+)
+
+(enum "identifier"
+    (constructor "named" inline: #true
+        (arg "name" (string))
+    )
+    (constructor "unary-operator"
+        (arg "name" "unary-operator-name")
+    )
+    (constructor "binary-operator"
+        (arg "name" "binary-operator-name")
+    )
+    (constructor "extension"
+        (arg "inner" "identifier")
+    )
+    (constructor "inverse"
+        (arg "inner" "identifier")
+    )
+    (constructor "update"
+        (arg "inner" "identifier")
+    )
+)
+
+(enum "erased-type"
+    (constructor "builtin"
+        (arg "builtin" "builtin")
+        (vararg "args" "erased-type")
+    )
+    (constructor "function"
+        (arg "input" "erased-type")
+        (arg "output" "erased-type")
+    )
+    (constructor "tuple"
+        (vararg "elements" "erased-type")
+    )
+    (constructor "erased")
+)
+
+(constructor "erased-signature"
+    (kwarg "parameters" (list "erased-type"))
+    (kwarg "return-type" "erased-type")
+)
+
+(enum "vm-type"
+    (constructor "builtin"
+        (arg "b" "builtin")
+        (vararg "args" "vm-type")
+    )
+    (constructor "function"
+        (arg "arg" "vm-type")
+        (arg "res" "vm-type")
+    )
+    (constructor "tuple"
+        (vararg "args" "vm-type")
+    )
+    (constructor "type")
+    (constructor "param"
+        (arg "index" (int))
+    )
+)
+
+(enum "register-type"
+    (constructor "builtin"
+        (arg "b" "builtin")
+        (vararg "args" "register-type")
+    )
+    (constructor "function"
+        (arg "arg" "register-type")
+        (arg "res" "register-type")
+    )
+    (constructor "tuple"
+        (vararg "args" "register-type")
+    )
+    (constructor "type")
+    (constructor "reg"
+        (arg "register" "register")
+    )
+)
+
+(constructor "vm-function"
+    (kwarg "parameters" (list "vm-type"))
+    (kwarg "return-type" "vm-type")
+    (kwarg "implementation" optional: #true "vm-function-implementation")
+)
+
+(enum "vm-function-implementation"
+    (constructor "instructions"
+        (arg "impl" "control-flow-graph")
+    )
+    (constructor "extern")
+)
+
+(enum "register"
+    (constructor "reg" inline: #true
+        (arg "id" (int))
+    )
+)
+
+(constructor "register-declaration"
+    (arg "register" "register")
+    (arg "t" "register-type")
+)
+
+(constructor "control-flow-graph"
+    (kwarg "blocks" (list "instruction-block"))
+)
+
+(constructor "instruction-block"
+    (kwarg "parameters" (list "register-declaration"))
+    (kwarg "instructions" (list "instruction"))
+    (kwarg "branch" "branch-instruction")
+)
+
+(enum "instruction-result"
+    (constructor "value" inline: #true
+        (arg "register" "register-declaration")
+    )
+    (constructor "discard")
+)
+
+(enum "instruction"
+    (constructor "call"
+        (arg "result" "instruction-result")
+        (arg "call" "function-call")
+    )
+    (constructor "create-tuple"
+        (arg "result" "register-declaration")
+        (vararg "items" "register")
+    )
+    (constructor "load-bool"
+        (arg "result" "register-declaration")
+        (arg "value" (bool))
+    )
+    (constructor "load-builtin"
+        (arg "result" "register-declaration")
+        (arg "value" "builtin")
+        (vararg "args" "register")
+    )
+    (constructor "load-string"
+        (arg "result" "register-declaration")
+        (arg "value" (string))
+    )
+    (constructor "tuple-element"
+        (arg "result" "register-declaration")
+        (arg "tuple" "register")
+        (arg "index" (int))
+    )
+)
+
+(enum "function-call"
+    (constructor "function"
+        (arg "function-id" (int))
+        (vararg "args" "register")
+    )
+    (constructor "function-object"
+        (arg "f" "register")
+        (arg "arg" "register")
+    )
+)
+
+(enum "branch-instruction"
+    (constructor "return"
+        (arg "value" "register")
+    )
+    (constructor "return-call"
+        (arg "call" "function-call")
+    )
+    (constructor "jump"
+        (arg "block-id" (int))
+        (vararg "args" "register")
+    )
+    (constructor "jump-if"
+        (arg "condition" "register")
+        (arg "taken-id" (int))
+        (arg "taken-args" (list "register"))
+        (arg "not-taken-id" (int))
+        (arg "not-taken-args" (list "register"))
+    )
+)
 

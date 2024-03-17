@@ -119,43 +119,6 @@ private[generator] final class JavaGenerator
         }
         wl("}")
 
-      case Definition.TypeEnum(name, values*) =>
-        writeInterface(name, `sealed` = true) {
-          for value <- values do
-            writeClass(value, `final` = true, `implements` = Seq(DataType.UserDefined(name))) {}
-
-          writeInterface(
-            "match",
-            `sealed` = true,
-            typeParameters =
-              Seq(TypeParameter("T", tuple = None, `enum` = Some(name))) ++
-                values.map(v => TypeParameter("t-" + v, None, None)),
-          ) {
-          }
-
-          for value <- values do
-            w("record Case")
-            writeTypeName(value)
-            w("<")
-            writeCommaListSingleLine[String](v => {
-              w("T")
-              writeTypeName(v)
-            })(values)
-            w(">(T")
-            writeTypeName(value)
-            w(" ")
-            writeValueName(name)
-            w(") implements ")
-            w("Match<")
-            writeTypeName(value)
-            for v <- values do
-              w(", T")
-              writeTypeName(v)
-            end for
-            wl("> {}")
-          end for
-        }
-
       case Definition.TypeStruct(name, values*) =>
         writeInterface(name, `sealed` = true, typeParameters = Seq(TypeParameter("T", tuple = Some(name), `enum` = None))) {
 

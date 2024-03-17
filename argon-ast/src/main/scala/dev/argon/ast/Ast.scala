@@ -123,7 +123,7 @@ end Expr
 
 enum IdentifierExpr extends Expr derives CanEqual {
   case Named(s: String)
-  case Op(op: Operator)
+  case Op(op: Operator.ValidIdentifier)
   case Extension(inner: IdentifierExpr)
   case Inverse(inner: IdentifierExpr)
   case Update(inner: IdentifierExpr)
@@ -138,36 +138,41 @@ sealed trait Operator derives CanEqual:
   val symbol: String
 end Operator
 
+object Operator:
+  sealed trait ValidIdentifier
+end Operator
+
+
 enum BinaryOperator(val symbol: String) extends Operator derives CanEqual:
   case Assign extends BinaryOperator("+")
-  case Plus extends BinaryOperator("+")
-  case Minus extends BinaryOperator("-")
-  case Mul extends BinaryOperator("×")
-  case Div extends BinaryOperator("÷")
-  case Equal extends BinaryOperator("=")
-  case NotEqual extends BinaryOperator("!=")
-  case LessThan extends BinaryOperator("<")
-  case LessThanEq extends BinaryOperator("≤")
-  case GreaterThan extends BinaryOperator(">")
-  case GreaterThanEq extends BinaryOperator("≥")
-  case BitOr extends BinaryOperator("|||")
-  case BitXOr extends BinaryOperator("^^^")
-  case BitAnd extends BinaryOperator("&&&")
+  case Plus extends BinaryOperator("+") with Operator.ValidIdentifier
+  case Minus extends BinaryOperator("-") with Operator.ValidIdentifier
+  case Mul extends BinaryOperator("×") with Operator.ValidIdentifier
+  case Div extends BinaryOperator("÷") with Operator.ValidIdentifier
+  case Equal extends BinaryOperator("=") with Operator.ValidIdentifier
+  case NotEqual extends BinaryOperator("!=") with Operator.ValidIdentifier
+  case LessThan extends BinaryOperator("<") with Operator.ValidIdentifier
+  case LessThanEq extends BinaryOperator("≤") with Operator.ValidIdentifier
+  case GreaterThan extends BinaryOperator(">") with Operator.ValidIdentifier
+  case GreaterThanEq extends BinaryOperator("≥") with Operator.ValidIdentifier
+  case BitOr extends BinaryOperator("|||") with Operator.ValidIdentifier
+  case BitXOr extends BinaryOperator("^^^") with Operator.ValidIdentifier
+  case BitAnd extends BinaryOperator("&&&") with Operator.ValidIdentifier
   case LogicalOr extends BinaryOperator("||")
   case LogicalAnd extends BinaryOperator("&&")
-  case ShiftLeft extends BinaryOperator("<<")
-  case ShiftRight extends BinaryOperator(">>")
-  case Concat extends BinaryOperator("++")
+  case ShiftLeft extends BinaryOperator("<<") with Operator.ValidIdentifier
+  case ShiftRight extends BinaryOperator(">>") with Operator.ValidIdentifier
+  case Concat extends BinaryOperator("++") with Operator.ValidIdentifier
   case PropEqual extends BinaryOperator("==")
   case PropDisjunction extends BinaryOperator("\\/")
   case PropConjunction extends BinaryOperator("/\\")
 end BinaryOperator
 
 enum UnaryOperator(val symbol: String) extends Operator derives CanEqual:
-  case Plus extends UnaryOperator("+")
-  case Minus extends UnaryOperator("-")
-  case BitNot extends UnaryOperator("~~~")
-  case LogicalNot extends UnaryOperator("!")
+  case Plus extends UnaryOperator("+") with Operator.ValidIdentifier
+  case Minus extends UnaryOperator("-") with Operator.ValidIdentifier
+  case BitNot extends UnaryOperator("~~~") with Operator.ValidIdentifier
+  case LogicalNot extends UnaryOperator("!") with Operator.ValidIdentifier
 end UnaryOperator
 
 

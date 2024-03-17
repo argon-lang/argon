@@ -9,7 +9,7 @@ import java.nio.charset.CharacterCodingException
 
 @constructor("source-options")
 final case class SourceCodeTubeOptions[E, PlatformOptions](
-  @keyword name: dev.argon.plugin.tube.TubeName,
+  @keyword name: dev.argon.plugin.vm.TubeName,
   @keyword sources: Seq[DirectoryResource[E, ArgonSourceCodeResource]],
   @keyword platforms: PlatformOptions,
 )

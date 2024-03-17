@@ -47,44 +47,6 @@ private[generator] final class JavaRunJSGenerator(
     writeClass(definitionName + "-wrap-codec", `final` = true) {
 
       definition match {
-        case definition: Definition.TypeEnum =>
-          w("public static abstract class Codec<T extends ")
-          w(javaApiPackageName)
-          w(".")
-          writeTypeName(definitionName)
-          wl("> {")
-          indent {
-            w("public abstract <")
-            writeCommaListSingleLine[String](value => {
-              w("T")
-              writeTypeName(value)
-            })(definition.values)
-            w("> ")
-            w(jsUtilPackageName)
-            w(".WrapCodec<")
-            w(javaApiPackageName)
-            w(".")
-            writeTypeName(definitionName)
-            w(".Match<T")
-            for value <- definition.values do
-              w(", T")
-              writeTypeName(value)
-            end for
-            w(">> matchCodec(")
-            writeCommaListSingleLine[String](value => {
-              w(jsUtilPackageName)
-              w(".WrapCodec<")
-              w("T")
-              writeTypeName(value)
-              w("> ")
-
-              writeValueName(value)
-              w("Codec")
-            })(definition.values)
-            wl(");")
-          }
-          wl("}")
-
         case definition: Definition.TypeStruct =>
           w("public interface Codec<TS extends ")
           w(javaApiPackageName)
@@ -305,7 +267,6 @@ private[generator] final class JavaRunJSGenerator(
         allMembers.values.foreach(generateWrapImplInterfaceMember(reservedValueName))
         wl("return obj;")
 
-      case Definition.TypeEnum(name, values*) => throw new UnsupportedOperationException()
       case Definition.TypeStruct(name, values*) => throw new UnsupportedOperationException()
 
       case _: Definition.Extern => throw new UnsupportedOperationException()
@@ -477,7 +438,6 @@ private[generator] final class JavaRunJSGenerator(
         }
         wl("};")
 
-      case Definition.TypeEnum(name, values*) => throw new UnsupportedOperationException()
       case Definition.TypeStruct(name, members*) => throw new UnsupportedOperationException()
       case _: Definition.Extern => throw new UnsupportedOperationException()
     }
@@ -619,21 +579,6 @@ private[generator] final class JavaRunJSGenerator(
           writeWrapCodecOfType(arg)
         end for
         w(")")
-
-      case DataType.TypeEnumMatch(typeEnum, typeEnumValue, mappings) =>
-        val typeEnumDef = definitions.find(GeneratorUtil.getDefinitionName(_) == typeEnum) match {
-          case Some(t: Definition.TypeEnum) => t
-          case Some(_) => throw new Exception(s"${typeEnum} is not a type enum")
-          case None => throw new Exception(s"${typeEnum} is not defined")
-        }
-
-        writeWrapCodecOfType(typeEnumValue)
-        w(".matchCodec(")
-        writeCommaListSingleLine[String](value => {
-          writeWrapCodecOfType(mappings(value))
-        })(typeEnumDef.values)
-        w(")")
-
 
       case DataType.TypeStructMember(_, typeStructValue, member) =>
         writeWrapCodecOfType(typeStructValue)

@@ -1,6 +1,7 @@
 package dev.argon.plugins.lua
 
-import dev.argon.compiler.*
+import dev.argon.plugin.vm.*
+import dev.argon.compiler.ModulePath as CModulePath
 import zio.*
 
 trait TubeEmit extends TubeEmitBase {
@@ -8,13 +9,14 @@ trait TubeEmit extends TubeEmitBase {
 
   def emitTube: Comp[AST.Chunk] =
     for
-      modules <- ZIO.foreach(currentTube.modules.toSeq) { (modulePath, module) =>
-        val moduleExpr = AST.MemberAccessIndex(
-          AST.NameExp("modules"),
-          AST.StringLiteral(modulePath.encode)
-        )
-
+      metadata <- currentTube.metadata()
+      modules <- ZIO.foreach(metadata.modules) { modulePath =>
         for
+          module <- currentTube.getModule(modulePath)
+          moduleExpr = AST.MemberAccessIndex(
+            AST.NameExp("modules"),
+            AST.StringLiteral(CModulePath(modulePath.path).encode)
+          )
           modStats <- emitModule(moduleExpr, module)
         yield AST.Assignment(Seq(moduleExpr),  Seq(toArrayExp(Seq()))) +: modStats
       }
@@ -33,12 +35,11 @@ trait TubeEmit extends TubeEmitBase {
         )
     ))
 
-  private def emitModule(moduleExpr: AST.PrefixExp, module: VMModule): Comp[Seq[AST.Stat]] =
+  private def emitModule(moduleExpr: AST.PrefixExp, module: VmModule): Comp[Seq[AST.Stat]] =
     new ModuleEmit {
       override val context: TubeEmit.this.context.type = TubeEmit.this.context
-      override val plugin: TubeEmit.this.plugin.type = TubeEmit.this.plugin
-      override val currentTube: VMTube = TubeEmit.this.currentTube
-      override val currentModule: VMModule = module
+      override val currentTube: VmTube[Env, Error, Externs] = TubeEmit.this.currentTube
+      override val currentModule: VmModule = module
     }.emitModule(moduleExpr)
 
 }

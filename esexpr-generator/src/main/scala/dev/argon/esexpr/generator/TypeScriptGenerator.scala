@@ -200,9 +200,6 @@ private[generator] final class TypeScriptGenerator
           members.foreach(writeMember)
         }
 
-      case Definition.TypeEnum(name, values*) =>
-        writeUnion(name)(values)(writeString)
-
       case Definition.TypeStruct(name, values*) =>
         writeInterface(name) {
           for value <- values do
@@ -252,25 +249,6 @@ private[generator] final class TypeScriptGenerator
       writeType(elementType)
       w(">")
 
-    case DataType.TypeEnumMatch(_, t, cases) =>
-      def writeCases(cases: List[(String, DataType)]): Unit =
-        cases match {
-          case (caseName, mappedType) :: tail =>
-            writeType(t)
-            w(" extends ")
-            writeString(caseName)
-            w(" ? (")
-            writeType(mappedType)
-            w(") : (")
-            writeCases(tail)
-            w(")")
-
-          case Nil =>
-            w("never")
-        }
-
-      writeCases(cases.toList)
-
     case DataType.TypeStructMember(_, t, member) =>
       writeType(t)
       w("[")
@@ -298,7 +276,7 @@ private[generator] final class TypeScriptGenerator
 
   def typeNeedsParen(t: DataType): Boolean =
     t match {
-      case DataType.List(_) | DataType.Nullable(_) | _: DataType.TypeEnumMatch => true
+      case DataType.List(_) | DataType.Nullable(_) => true
       case _ => false
     }
 

@@ -435,31 +435,6 @@ lazy val argon_compilerJS = argon_compiler.js
 lazy val argon_compilerNode = argon_compiler.node
 
 
-lazy val argonvm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argonvm"))
-  .dependsOn(argon_compiler)
-  .jvmConfigure(
-    _.settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "argonvm",
-  )
-
-lazy val argonvmJVM = argon_compiler.jvm
-lazy val argonvmJS = argon_compiler.js
-lazy val argonvmNode = argon_compiler.node
-
-
 lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugin"))
   .dependsOn(util, argon_compiler, esexpr)
   .jvmConfigure(
@@ -482,9 +457,9 @@ lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).cros
     Compile / sourceGenerators += generateESExprTask(dir =>
       s"""
         (scala
-           esx-file: "${escapeESExprString((dir / "../../plugin/api/esx/tube.esx").getAbsolutePath)}"
-           out-file: "api_tube.scala"
-           package-name: "dev.argon.plugin.tube"
+           esx-file: "${escapeESExprString((dir / "../../plugin/api/esx/vm.esx").getAbsolutePath)}"
+           out-file: "api_vm.scala"
+           package-name: "dev.argon.plugin.vm"
         )
         """
     ),
@@ -523,7 +498,7 @@ lazy val argon_plugins_sourceNode = argon_plugins_source.node
 
 
 lazy val argon_plugins_lua = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-plugins-lua"))
-  .dependsOn(argon_plugin, argonvm)
+  .dependsOn(argon_plugin)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )

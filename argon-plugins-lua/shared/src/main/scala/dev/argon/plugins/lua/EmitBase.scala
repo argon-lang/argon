@@ -1,50 +1,72 @@
 package dev.argon.plugins.lua
 
+import cats.data.NonEmptySeq
 import dev.argon.ast
 import dev.argon.ast.IdentifierExpr
-import dev.argon.compiler.*
+import dev.argon.compiler.TubeName as CTubeName
 import dev.argon.expr.{BinaryBuiltin, NullaryBuiltin}
+import dev.argon.plugin.vm.*
 
 trait EmitBase {
-  val plugin: LuaPlugin
-
   protected def toArrayExp(values: Seq[AST.Exp]): AST.Exp =
     AST.TableConstructor(values.map(AST.Field.Positional.apply))
 
 
-  def getTubePath(tubeName: TubeName): String =
+  def getTubePath(tubeName: CTubeName): String =
     tubeName.encode.replace(".", "_").nn
 
-  protected def getIdentifierKeyExpr(id: Option[IdentifierExpr]): AST.Exp =
+  protected def getIdentifierKeyExpr(id: Option[Identifier]): AST.Exp =
     id match {
-      case Some(IdentifierExpr.Named(name)) =>
+      case Some(Identifier.Named(name)) =>
         AST.StringLiteral(name)
 
-      case Some(IdentifierExpr.Op(op: ast.UnaryOperator)) =>
+      case Some(Identifier.UnaryOperator(op)) =>
         AST.TableConstructor(Seq(
           AST.Field.NamedFixed("type", AST.StringLiteral("unary-operator")),
-          AST.Field.NamedFixed("operator", AST.StringLiteral(op.symbol)),
+          AST.Field.NamedFixed("operator", AST.StringLiteral(op match {
+            case UnaryOperatorName.Plus => "+"
+            case UnaryOperatorName.Minus => "-"
+            case UnaryOperatorName.BitNot => "~~~"
+            case UnaryOperatorName.LogicalNot => "!"
+          })),
         ))
 
-      case Some(IdentifierExpr.Op(op: ast.BinaryOperator)) =>
+      case Some(Identifier.BinaryOperator(op)) =>
         AST.TableConstructor(Seq(
           AST.Field.NamedFixed("type", AST.StringLiteral("binary-operator")),
-          AST.Field.NamedFixed("operator", AST.StringLiteral(op.symbol)),
+          AST.Field.NamedFixed("operator", AST.StringLiteral(op match {
+            case BinaryOperatorName.Plus => "+"
+            case BinaryOperatorName.Minus => "-"
+            case BinaryOperatorName.Mul => "*"
+            case BinaryOperatorName.Div => "/"
+            case BinaryOperatorName.Equal => "="
+            case BinaryOperatorName.NotEqual => "!="
+            case BinaryOperatorName.LessThan => "<"
+            case BinaryOperatorName.LessThanEq => "<="
+            case BinaryOperatorName.GreaterThan => ">"
+            case BinaryOperatorName.GreaterThanEq => ">="
+            case BinaryOperatorName.BitAnd => "&&&"
+            case BinaryOperatorName.BitOr => "|||"
+            case BinaryOperatorName.BitXor => "^^^"
+            case BinaryOperatorName.ShiftLeft => "<<"
+            case BinaryOperatorName.ShiftRight => ">>"
+            case BinaryOperatorName.Concat => "++"
+          })),
         ))
 
-      case Some(IdentifierExpr.Extension(inner)) =>
+      case Some(Identifier.Extension(inner)) =>
         AST.TableConstructor(Seq(
           AST.Field.NamedFixed("type", AST.StringLiteral("extension")),
           AST.Field.NamedFixed("inner", getIdentifierKeyExpr(Some(inner))),
         ))
 
-      case Some(IdentifierExpr.Inverse(inner)) =>
+      case Some(Identifier.Inverse(inner)) =>
         AST.TableConstructor(Seq(
           AST.Field.NamedFixed("type", AST.StringLiteral("inverse")),
           AST.Field.NamedFixed("inner", getIdentifierKeyExpr(Some(inner))),
         ))
 
-      case Some(IdentifierExpr.Update(inner)) =>
+      case Some(Identifier.Update(inner)) =>
         AST.TableConstructor(Seq(
           AST.Field.NamedFixed("type", AST.StringLiteral("update")),
           AST.Field.NamedFixed("inner", getIdentifierKeyExpr(Some(inner))),
@@ -54,7 +76,7 @@ trait EmitBase {
         AST.FalseLiteral
     }
 
-  def getIdentifierKeyExprMemo(id: Option[IdentifierExpr]): AST.Exp =
+  def getIdentifierKeyExprMemo(id: Option[Identifier]): AST.Exp =
     AST.MethodCall(
       AST.NameExp("ArgonRuntime"),
       "intern_name",
@@ -63,8 +85,8 @@ trait EmitBase {
 
 
   protected def getErasedSigKeyExpr(sig: ErasedSignature): AST.Exp =
-    val paramsExprs = sig.params.map(getErasedTypeExpr)
-    val resExpr = getErasedTypeExpr(sig.result)
+    val paramsExprs = sig.parameters.map(getErasedTypeExpr)
+    val resExpr = getErasedTypeExpr(sig.returnType)
     AST.TableConstructor(Seq(
       AST.Field.NamedFixed(
         "parameters",
@@ -83,9 +105,9 @@ trait EmitBase {
       Seq(getErasedSigKeyExpr(sig)),
     )
 
-  protected def getErasedTypeExpr(t: ErasedSignatureType): AST.Exp =
+  protected def getErasedTypeExpr(t: ErasedType): AST.Exp =
     t match
-      case ErasedSignatureType.Builtin(builtin, args) =>
+      case ErasedType.Builtin(builtin, args*) =>
         AST.TableConstructor(Seq(
           AST.Field.NamedFixed(
             "type",
@@ -94,12 +116,13 @@ trait EmitBase {
           AST.Field.NamedFixed(
             "builtin",
             AST.StringLiteral(builtin match {
-              case NullaryBuiltin.IntType => "int"
-              case NullaryBuiltin.BoolType => "bool"
-              case NullaryBuiltin.StringType => "string"
-              case NullaryBuiltin.NeverType => "never"
-              case BinaryBuiltin.ConjunctionType => "/\\"
-              case BinaryBuiltin.DisjunctionType => "\\/"
+              case Builtin.IntType => "int"
+              case Builtin.BoolType => "bool"
+              case Builtin.StringType => "string"
+              case Builtin.NeverType => "never"
+              case Builtin.ConjunctionType => "/\\"
+              case Builtin.DisjunctionType => "\\/"
+              case _ => ???
             }),
           ),
           AST.Field.NamedFixed(
@@ -108,7 +131,7 @@ trait EmitBase {
           ),
         ))
 
-      case ErasedSignatureType.Function(input, output) =>
+      case ErasedType.Function(input, output) =>
         AST.TableConstructor(Seq(
           AST.Field.NamedFixed(
             "type",
@@ -124,7 +147,7 @@ trait EmitBase {
           ),
         ))
 
-      case ErasedSignatureType.Tuple(elements) =>
+      case ErasedType.Tuple(elements*) =>
         AST.TableConstructor(Seq(
           AST.Field.NamedFixed(
             "type",
@@ -135,7 +158,7 @@ trait EmitBase {
             toArrayExp(elements.map(getErasedTypeExpr)),
           ),
         ))
-      case ErasedSignatureType.Erased =>
+      case ErasedType.Erased =>
         AST.TableConstructor(Seq(
           AST.Field.NamedFixed(
             "type",

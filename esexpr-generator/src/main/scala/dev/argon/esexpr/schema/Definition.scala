@@ -33,7 +33,6 @@ enum Definition derives ESExprCodec {
     members: Member*
   )
 
-  case TypeEnum(name: String, values: String*)
   case TypeStruct(name: String, members: String*)
 
   case Extern(

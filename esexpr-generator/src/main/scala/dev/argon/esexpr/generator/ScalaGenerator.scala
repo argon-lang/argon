@@ -211,18 +211,6 @@ private[generator] final class ScalaGenerator
         }
         wl("}")
 
-      case Definition.TypeEnum(name, values*) =>
-        w("type ")
-        writeTypeName(name)
-        w(" = ")
-        for (s, i) <- values.zipWithIndex do
-          if i > 0 then w(" | ")
-          w("\"")
-          w(StringEscapeUtils.escapeJava(s).nn)
-          w("\"")
-        end for
-        wl("")
-
       case Definition.TypeStruct(name, values*) =>
         w("type ")
         writeTypeName(name)

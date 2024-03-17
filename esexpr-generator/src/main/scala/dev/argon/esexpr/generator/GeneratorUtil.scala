@@ -11,7 +11,6 @@ object GeneratorUtil {
       case Definition.SimpleEnum(name, _*) => name
       case Definition.EnumClass(name, _, _*) => name
       case Definition.Interface(name, _, _, _*) => name
-      case Definition.TypeEnum(name, _*) => name
       case Definition.TypeStruct(name, _*) => name
       case Definition.Extern(name, _) => name
     end match
@@ -24,7 +23,6 @@ object GeneratorUtil {
       case Definition.SimpleEnum(_, _*) => Seq()
       case Definition.EnumClass(_, typeParameters, _*) => typeParameters
       case Definition.Interface(_, typeParameters, _, _*) => typeParameters
-      case Definition.TypeEnum(_, _*) => Seq()
       case Definition.TypeStruct(_, _*) => Seq()
       case Definition.Extern(_, typeParameters) => typeParameters
     end match

@@ -32,8 +32,8 @@ object ArgonParser {
     case object OperatorIdentifier extends ArgonRuleName[IdentifierExpr]
     final case class IdentifierParen(parenAllowed: ParenAllowedState) extends ArgonRuleName[IdentifierExpr]
     val Identifier: IdentifierParen = IdentifierParen(ParenAllowed)
-    case object BinaryOperatorName extends ArgonRuleName[BinaryOperatorToken]
-    case object UnaryOperatorName extends ArgonRuleName[UnaryOperatorToken]
+    case object BinaryOperatorName extends ArgonRuleName[BinaryOperatorToken[BinaryOperator & Operator.ValidIdentifier]]
+    case object UnaryOperatorName extends ArgonRuleName[UnaryOperatorToken[UnaryOperator & Operator.ValidIdentifier]]
     case object MethodName extends ArgonRuleName[Option[IdentifierExpr]]
     case object NewLines extends ArgonRuleName[Unit]
     case object StatementSeparator extends ArgonRuleName[Unit]
@@ -301,7 +301,7 @@ object ArgonParser {
           )
 
         case Rule.UnaryExpr =>
-          def matchUnaryOp[TToken <: Token & UnaryOperatorToken](token: TToken)
+          def matchUnaryOp[TToken <: Token & UnaryOperatorToken[?]](token: TToken)
             (using TypeTest[Token, TToken])
             : TGrammar[Expr] =
             matchToken(token) ++! rule(Rule.UnaryExpr).observeLocation --> { case (opToken, inner) =>
@@ -747,7 +747,7 @@ object ArgonParser {
       }
     }
 
-    private def ruleBinaryOperator[TToken <: Token & BinaryOperatorToken]
+    private def ruleBinaryOperator[TToken <: Token & BinaryOperatorToken[?]]
       (token: TToken)(using TypeTest[Token, TToken])
       : TGrammar[BinaryOperator] = matchToken(token) --> const(token.binOperator)
 

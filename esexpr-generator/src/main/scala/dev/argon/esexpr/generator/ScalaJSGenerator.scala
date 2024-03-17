@@ -213,18 +213,6 @@ private[generator] final class ScalaJSGenerator
           wl("}")
         }
 
-      case Definition.TypeEnum(name, values*) =>
-        w("type ")
-        writeTypeName(name)
-        w(" = ")
-        for (s, i) <- values.zipWithIndex do
-          if i > 0 then w(" | ")
-          w("\"")
-          w(StringEscapeUtils.escapeJava(s).nn)
-          w("\"")
-        end for
-        wl("")
-
       case Definition.TypeStruct(name, values*)=>
         w("type ")
         writeTypeName(name)
@@ -274,27 +262,6 @@ private[generator] final class ScalaJSGenerator
       case DataType.Nullable(t) =>
         writeType(t)
         w(" | Null")
-
-      case DataType.TypeEnumMatch(enumType, enumTypeCase, mappings) =>
-        val enumTypeInfo = definitions.collectFirst {
-          case enumTypeInfo@Definition.TypeEnum(name, _*) if enumType == name =>
-            enumTypeInfo
-        }.getOrElse(throw new Exception(s"Unknown enum type: $enumType"))
-
-        if enumTypeInfo.values.size != mappings.size then
-          throw new Exception(s"Invalid mappings for enum ${enumTypeInfo.name}")
-
-
-        writeType(enumTypeCase)
-        w(" match { ")
-        for value <- enumTypeInfo.values do
-          w("case \"")
-          w(StringEscapeUtils.escapeJava(value).nn)
-          w("\" => ")
-          writeType(mappings(value))
-          w(" ")
-        end for
-        w("}")
 
       case DataType.TypeStructMember(_, typeStructValue, member) =>
         writeType(typeStructValue)
