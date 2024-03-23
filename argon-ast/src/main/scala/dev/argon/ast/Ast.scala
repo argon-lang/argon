@@ -1,7 +1,7 @@
 package dev.argon.ast
 
 import cats.data.NonEmptySeq
-import dev.argon.util.WithSource
+import dev.argon.util.{WithSource, FilePosition, Location}
 
 sealed trait Stmt
 sealed trait RecordBodyStmt
@@ -85,12 +85,12 @@ object ImportPathSegment {
 
   final case class Cons(id: String, subPath: ImportPathSegment) extends ImportPathSegment
   final case class Many(segments: Seq[ImportPathSegment]) extends ImportPathSegment
-  final case class Renaming(importing: IdentifierExpr, viewedName: Option[IdentifierExpr]) extends End
-  final case class Imported(id: IdentifierExpr) extends End
-  case object Wildcard extends End
+  final case class Renaming(importing: WithSource[IdentifierExpr], viewedName: WithSource[Option[IdentifierExpr]]) extends End
+  final case class Imported(id: WithSource[IdentifierExpr]) extends End
+  final case class Wildcard(location: Location[FilePosition]) extends End
 }
 
-final case class ExportStmt(fromImport: ImportStmt) extends Stmt
+final case class ExportStmt(fromImport: WithSource[ImportStmt]) extends Stmt
 
 
 final case class AssertStmt(t: WithSource[Expr]) extends Stmt

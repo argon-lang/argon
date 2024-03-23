@@ -8,6 +8,7 @@ import dev.argon.util.{*, given}
 import zio.*
 import zio.stm.*
 import cats.*
+import cats.data.NonEmptySeq
 import cats.implicits.given
 import zio.interop.catz.core.given
 import scala.collection.mutable
@@ -76,7 +77,12 @@ trait ExprEmit extends ModuleEmitBase {
       params = paramNames,
       hasRest = false,
       body = AST.Block(
-        (AST.LocalDeclaration(nonParamVars.map(name => AST.VariableBinding(name, AST.Attrib.Empty)), Seq())) +: body
+        (
+          NonEmptySeq.fromSeq(nonParamVars)
+            .map(npv => Seq(AST.LocalDeclaration(npv.map(name => AST.VariableBinding(name, AST.Attrib.Empty)), Seq())))
+            .getOrElse(Seq())
+        )
+          ++ body
       )
     )
 

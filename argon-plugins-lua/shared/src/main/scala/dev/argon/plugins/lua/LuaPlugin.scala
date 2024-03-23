@@ -55,8 +55,8 @@ final class LuaPlugin extends PlatformPlugin {
   }
 
 
-  override def emitter[Ctx <: ContextIncluding]: Option[TubeEmitter[Ctx]] =
-    Some(new TubeEmitter[Ctx] {
+  override def emitter[Ctx <: ContextIncluding]: Some[LuaEmitter[Ctx]] =
+    Some(new LuaEmitter[Ctx] {
       override type OutputOptions[E >: PluginError] = LuaOutputOptions
       override type Output[E >: PluginError] = LuaOutput[E]
 

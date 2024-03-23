@@ -1,5 +1,5 @@
 package dev.argon.plugin
 
-import java.nio.charset.CharacterCodingException
+import java.io.IOException
 
-type PluginError = PluginException | CharacterCodingException 
+type PluginError = PluginException | IOException

@@ -7,7 +7,7 @@
         import Argon.Core/*
 
         proc main(): () do
-            puts 'Hello World'
+            puts "Hello World"
         end
 
 

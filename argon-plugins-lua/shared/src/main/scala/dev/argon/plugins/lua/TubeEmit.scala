@@ -3,6 +3,7 @@ package dev.argon.plugins.lua
 import dev.argon.plugin.vm.*
 import dev.argon.compiler.ModulePath as CModulePath
 import zio.*
+import cats.data.NonEmptySeq
 
 trait TubeEmit extends TubeEmitBase {
   import context.Comp
@@ -24,10 +25,10 @@ trait TubeEmit extends TubeEmitBase {
     yield AST.Chunk(AST.Block(
       Seq(
         AST.LocalDeclaration(
-          Seq(AST.VariableBinding("ArgonRuntime", AST.Attrib.Empty)),
+          NonEmptySeq.of(AST.VariableBinding("ArgonRuntime", AST.Attrib.Empty)),
           Seq(AST.SimpleFunctionCall(AST.NameExp("require"), Seq(AST.StringLiteral("ArgonRuntime"))))
         ),
-        AST.LocalDeclaration(Seq(AST.VariableBinding("modules", AST.Attrib.Empty)), Seq(AST.TableConstructor(Seq.empty)))
+        AST.LocalDeclaration(NonEmptySeq.of(AST.VariableBinding("modules", AST.Attrib.Empty)), Seq(AST.TableConstructor(Seq.empty)))
       ) ++
         modules.flatten ++
         Seq(

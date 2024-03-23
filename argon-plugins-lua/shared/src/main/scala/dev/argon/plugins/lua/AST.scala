@@ -5,6 +5,7 @@ import zio.ZIO
 import zio.stream.*
 
 import java.nio.charset.StandardCharsets
+import cats.data.NonEmptySeq
 
 object AST {
 
@@ -30,7 +31,7 @@ object AST {
   final case class NumericalFor(varName: String, init: Exp, limit: Exp, @keyword step: Option[Exp], body: Block) extends Stat
   final case class GenericFor(varNames: Seq[String], expList: Seq[Exp], body: Block) extends Stat
   final case class FunctionDeclaration(isLocal: Boolean, name: String, params: Seq[String], hasRest: Boolean, body: Block) extends Stat
-  final case class LocalDeclaration(names: Seq[VariableBinding], values: Seq[Exp]) extends Stat
+  final case class LocalDeclaration(names: NonEmptySeq[VariableBinding], values: Seq[Exp]) extends Stat
   final case class VariableBinding(name: String, @keyword attrib: Attrib) derives ESExprCodec
   enum Attrib derives CanEqual, ESExprCodec {
     case Empty
@@ -186,7 +187,7 @@ object AST {
 
       case LocalDeclaration(names, values) =>
         ZStream("local ") ++
-          withCommas(names) {
+          withCommas(names.toSeq) {
             case VariableBinding(name, Attrib.Empty) => ZStream(name)
             case VariableBinding(name, Attrib.Const) => ZStream(name, " const")
             case VariableBinding(name, Attrib.Close) => ZStream(name, " close")
@@ -231,7 +232,7 @@ object AST {
             if isWhitelistedChar(c2) then
               c2.toString
             else
-              "\\x%02X".formatted(c2.toInt).nn
+              String.format("\\x%02X", c2.toInt).nn
           }
         ) ++ ZStream("\"")
 

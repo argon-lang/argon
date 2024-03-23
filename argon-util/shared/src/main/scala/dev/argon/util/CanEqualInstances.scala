@@ -2,6 +2,7 @@ package dev.argon.util
 
 import scala.annotation.unused
 import scala.util.NotGiven
+import zio.Cause
 
 given [A, B](using CanEqual[A, B]): CanEqual[Option[A], Option[B]] = CanEqual.canEqualAny
 
@@ -20,6 +21,10 @@ given canEqualNullableNullable[A, B](using CanEqual[A, B]): CanEqual[A | Null, B
 
 
 given [E <: Enum[E]]: CanEqual[E, E] = CanEqual.derived
+
+given canEqualCauseEmpty[A]: CanEqual[Cause[A], Cause.Empty.type] = CanEqual.derived
+given canEqualEmptyCause[A]: CanEqual[Cause.Empty.type, Cause[A]] = CanEqual.derived
+
 
 
 

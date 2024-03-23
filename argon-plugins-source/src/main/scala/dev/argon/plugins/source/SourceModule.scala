@@ -50,7 +50,7 @@ object SourceModule {
       private def processStmt(reexportingModules: Set[ModuleName])(stmt: WithSource[ast.Stmt], scope: GlobalScopeBuilder): Comp[(GlobalScopeBuilder, Map[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]])] =
         stmt.value match {
           case importStmt: ast.ImportStmt =>
-            ZIO.succeed((scope.addImport(importStmt), Map.empty))
+            ZIO.succeed((scope.addImport(WithLocation(importStmt, stmt.location)), Map.empty))
 
           case funcDecl: ast.FunctionDeclarationStmt =>
             for

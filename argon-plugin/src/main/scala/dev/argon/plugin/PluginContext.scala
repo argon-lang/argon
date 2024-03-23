@@ -4,6 +4,11 @@ import dev.argon.compiler.Context
 import dev.argon.options.OptionDecoder
 import zio.*
 
+type PluginCompatibleContext = Context {
+  type Env <: PluginEnv
+  type Error >: PluginError
+}
+
 abstract class PluginContext[R, E] extends Context {
   val plugins: PluginSet
 

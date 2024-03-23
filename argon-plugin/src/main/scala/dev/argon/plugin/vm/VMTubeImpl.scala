@@ -178,6 +178,9 @@ object VMTubeImpl {
               items <- ZIO.foreach(items)(exprToType)
             yield VmType.Tuple(items*)
 
+          case Expr.TypeN(_) | Expr.TypeBigN(_) =>
+            ZIO.succeed(VmType.Type)
+
           case _ =>
             println(e.getClass)
             ???
@@ -209,6 +212,9 @@ object VMTubeImpl {
             for
               items <- ZIO.foreach(items)(exprToRegType)
             yield RegisterType.Tuple(items*)
+
+          case Expr.TypeN(_) | Expr.TypeBigN(_) =>
+            ZIO.succeed(RegisterType.Type)
 
           case _ =>
             println(e.getClass)

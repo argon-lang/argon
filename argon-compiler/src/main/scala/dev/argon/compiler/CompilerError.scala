@@ -37,6 +37,8 @@ enum CompilerError {
     id: IdentifierExpr,
   )
 
+  case UnknownModule(tube: TubeName, modulePath: ModulePath, loc: Location[FilePosition])
+
   case InvalidAssignmentTarget(loc: Location[FilePosition])
 
   case AmbiguousOverload(loc: Location[FilePosition], attempted: Seq[AttemptedOverload])

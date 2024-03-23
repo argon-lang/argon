@@ -3,8 +3,9 @@ package dev.argon.plugin
 import dev.argon.compiler.*
 import dev.argon.options.{OptionDecoder, OutputHandler}
 import zio.*
+import scala.reflect.TypeTest
 
-trait TubeEmitter[Ctx <: Context { type Env <: PluginEnv; type Error >: PluginError }] {
+trait TubeEmitter[Ctx <: PluginCompatibleContext] {
   type OutputOptions[E >: PluginError]
   type Output[E >: PluginError]
 
@@ -18,8 +19,12 @@ trait TubeEmitter[Ctx <: Context { type Env <: PluginEnv; type Error >: PluginEr
   : context.Comp[Output[context.Error]]
 }
 
+trait CompoundTubeEmitter[Ctx <: PluginCompatibleContext] extends TubeEmitter[Ctx] {
+  def extract[Emitter <: TubeEmitter[Ctx]](using TypeTest[TubeEmitter[Ctx], Emitter]): Option[Emitter]
+}
 
-sealed trait TubeEmitterSet[Ctx <: Context { type Env <: PluginEnv; type Error >: PluginError }] {
+
+sealed trait TubeEmitterSet[Ctx <: PluginCompatibleContext] {
   type OutputOptions[E >: PluginError]
   type Output[E >: PluginError]
 
@@ -27,14 +32,16 @@ sealed trait TubeEmitterSet[Ctx <: Context { type Env <: PluginEnv; type Error >
 
   given outputHandler[E >: PluginError]: OutputHandler[E, Output[E]]
 
+  def extract[Emitter <: TubeEmitter[Ctx]](using TypeTest[TubeEmitter[Ctx], Emitter]): Option[Emitter]
+
   def emitTube
   (context: Ctx)
   (tube: ArTubeC & HasContext[context.type])
   (options: OutputOptions[context.Error])
   : context.Comp[Output[context.Error]]
 
-  def toEmitter: TubeEmitter[Ctx] =
-    new TubeEmitter[Ctx] {
+  def toEmitter: CompoundTubeEmitter[Ctx] =
+    new CompoundTubeEmitter[Ctx] {
       override type OutputOptions[E >: PluginError] = TubeEmitterSet.this.OutputOptions[E]
       override type Output[E >: PluginError] = TubeEmitterSet.this.Output[E]
 
@@ -51,12 +58,15 @@ sealed trait TubeEmitterSet[Ctx <: Context { type Env <: PluginEnv; type Error >
       (options: OutputOptions[context.Error])
       : context.Comp[Output[context.Error]] =
         TubeEmitterSet.this.emitTube(context)(tube)(options)
+
+      def extract[Emitter <: TubeEmitter[Ctx]](using TypeTest[TubeEmitter[Ctx], Emitter]): Option[Emitter] =
+        TubeEmitterSet.this.extract[Emitter]
     }
 }
 
 object TubeEmitterSet {
 
-  final class Empty[Ctx <: Context { type Env <: PluginEnv; type Error >: PluginError }] extends TubeEmitterSet[Ctx] {
+  final class Empty[Ctx <: PluginCompatibleContext] extends TubeEmitterSet[Ctx] {
     type OutputOptions[E >: PluginError] = Unit
     type Output[E >: PluginError] = Unit
 
@@ -72,9 +82,12 @@ object TubeEmitterSet {
       (options: OutputOptions[context.Error])
     : context.Comp[Output[context.Error]] =
       ZIO.unit
+
+    def extract[Emitter <: TubeEmitter[Ctx]](using TypeTest[TubeEmitter[Ctx], Emitter]): Option[Emitter] =
+      None
   }
 
-  sealed trait Singleton[Ctx <: Context { type Env <: PluginEnv; type Error >: PluginError }, TE <: TubeEmitter[Ctx]](pluginId: String) extends TubeEmitterSet[Ctx] {
+  sealed trait Singleton[Ctx <: PluginCompatibleContext, TE <: TubeEmitter[Ctx]](pluginId: String) extends TubeEmitterSet[Ctx] {
     val tubeEmitter: TE
 
     type OutputOptions[E >: PluginError] = tubeEmitter.OutputOptions[E]
@@ -92,16 +105,22 @@ object TubeEmitterSet {
       (options: OutputOptions[context.Error])
     : context.Comp[Output[context.Error]] =
       tubeEmitter.emitTube(context)(tube)(options)
+
+    def extract[Emitter <: TubeEmitter[Ctx]](using TypeTest[TubeEmitter[Ctx], Emitter]): Option[Emitter] =
+      tubeEmitter match {
+        case emitter: Emitter => Some(emitter)
+        case _ => None
+      }
   }
 
   object Singleton {
-    def apply[Ctx <: Context { type Env <: PluginEnv; type Error >: PluginError }](emitter: TubeEmitter[Ctx], pluginId: String): Singleton[Ctx, emitter.type] =
+    def apply[Ctx <: PluginCompatibleContext](emitter: TubeEmitter[Ctx], pluginId: String): Singleton[Ctx, emitter.type] =
       new Singleton[Ctx, emitter.type](pluginId) {
         override val tubeEmitter: emitter.type = emitter
       }
   }
 
-  sealed trait Union[Ctx <: Context {type Env <: PluginEnv; type Error >: PluginError}, TEA <: TubeEmitterSet[Ctx], TEB <: TubeEmitterSet[Ctx]] extends TubeEmitterSet[Ctx] {
+  sealed trait Union[Ctx <: PluginCompatibleContext, TEA <: TubeEmitterSet[Ctx], TEB <: TubeEmitterSet[Ctx]] extends TubeEmitterSet[Ctx] {
     val aSet: TEA
     val bSet: TEB
 
@@ -123,10 +142,13 @@ object TubeEmitterSet {
         aOut <- aSet.emitTube(context)(tube)(options._1)
         bOut <- bSet.emitTube(context)(tube)(options._2)
       yield (aOut, bOut)
+
+    def extract[Emitter <: TubeEmitter[Ctx]](using TypeTest[TubeEmitter[Ctx], Emitter]): Option[Emitter] =
+      aSet.extract[Emitter].orElse(bSet.extract[Emitter])
   }
 
   object Union {
-    def apply[Ctx <: Context { type Env <: PluginEnv; type Error >: PluginError }](a: TubeEmitterSet[Ctx], b: TubeEmitterSet[Ctx]): Union[Ctx, a.type, b.type] =
+    def apply[Ctx <: PluginCompatibleContext](a: TubeEmitterSet[Ctx], b: TubeEmitterSet[Ctx]): Union[Ctx, a.type, b.type] =
       new Union[Ctx, a.type, b.type] {
         override val aSet: a.type = a
         override val bSet: b.type = b

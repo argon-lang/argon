@@ -12,25 +12,23 @@ import zio.stm.*
 import java.io.IOException
 
 object Compile {
-  def compile[R <: ResourceReader & ResourceWriter & PluginEnv, E >: BuildError | IOException | PluginError](
+  def compile[R <: ResourceReader & ResourceWriter & PluginEnv: EnvironmentTag, E >: BuildError | IOException | PluginError](
     config: BuildConfig,
   ): ZIO[R, E, Unit] =
-    ZIO.scoped(
-      createContext[R, BuildError | IOException](config)
+    ZIO.scoped[R & LogReporter & ErrorLog](
+      createContext[R, BuildError | IOException](config.plugins)
         .flatMap { context =>
-          createLogger(context).flatMap { logger =>
-            compileImpl(config, context)
-              .provideSomeEnvironment[R & Scope](_.add[ErrorLog](logger))
-              .ensuring { logger.reportLogs }
-              .flatMap { _ => logger.failOnErrors }
-          }
+          compileImpl(config, context)
         }
     )
+      .ensuring { ZIO.serviceWithZIO[LogReporter](_.reportLogs) }
+      .flatMap { _ => ZIO.serviceWithZIO[LogReporter](_.failOnErrors) }
+      .provideSome[R](LogReporter.live)
 
-  private def createContext[R <: ResourceReader & ResourceWriter & PluginEnv, E >: BuildError | IOException]
-  (config: BuildConfig)
-  : ZIO[R & Scope, E, PluginContext[R, E]] =
-    ZIO.foreach(config.plugins)(name => ZIO.fromEither(pluginFactories.get(name).toRight(UnknownPlugin(name))))
+  def createContext[R <: PluginEnv, E >: BuildError | IOException]
+  (pluginIds: Seq[String])
+  : ZIO[Scope, E, PluginContext[R, E]] =
+    ZIO.foreach(pluginIds)(name => ZIO.fromEither(pluginFactories.get(name).toRight(UnknownPlugin(name))))
       .flatMap(PluginLoader.load)
       .map { pluginSet =>
         new PluginContext[R, E] {
@@ -45,36 +43,44 @@ object Compile {
         }
       }
 
-  private trait LogReporter {
-    def reportLogs: UIO[Unit]
-    def failOnErrors: IO[BuildError, Unit]
+  trait LogReporter {
+    def getErrors: UIO[Seq[CompilerError]]
+    def reportLogs: UIO[Unit] =
+      getErrors.flatMap { errors =>
+        if errors.isEmpty then
+          ZIO.unit
+        else
+          ZIO.foreachDiscard(errors) { e => Console.printLineError(e).orDie }
+        end if
+      }
+
+    def failOnErrors: IO[BuildError, Unit] =
+      getErrors.flatMap { errors =>
+        if errors.isEmpty then
+          ZIO.unit
+        else
+          ZIO.fail(BuildFailed(errorCount = errors.size))
+        end if
+      }
   }
 
-  private def createLogger(context: Context): UIO[ErrorLog & LogReporter] =
-    for
-      errors <- Ref.make(Seq.empty[CompilerError])
-    yield new ErrorLog with LogReporter {
-      override def logError(error: => CompilerError): UIO[Unit] =
-        errors.update(_ :+ error)
-
-      override def reportLogs: UIO[Unit] =
-        errors.get.flatMap { errors =>
-          if errors.isEmpty then
-            ZIO.unit
-          else
-            ZIO.foreachDiscard(errors) { e => Console.printLineError(e).orDie }
-          end if
-        }
-
-      override def failOnErrors: IO[BuildError, Unit] =
-        errors.get.flatMap { errors =>
-          if errors.isEmpty then
-            ZIO.unit
-          else
-            ZIO.fail(BuildFailed(errorCount = errors.size))
-          end if
-        }
-    }
+  object LogReporter {
+    val live: ULayer[ErrorLog & LogReporter] =
+      ZLayer.fromZIOEnvironment(
+        for
+          errors <- Ref.make(Seq.empty[CompilerError])
+        yield ZEnvironment[ErrorLog, LogReporter](
+          new ErrorLog {
+            override def logError(error: => CompilerError): UIO[Unit] =
+              errors.update(_ :+ error)
+          },
+          new LogReporter {
+            override def getErrors: UIO[Seq[CompilerError]] =
+              errors.get
+          },
+        )
+      )
+  }
 
   private def compileImpl(config: BuildConfig, context: PluginContext[? <: ResourceReader & ResourceWriter, ? >: IOException | BuildError]): ZIO[context.Env & Scope, context.Error, Unit] =
     for

@@ -1,20 +1,22 @@
+import java.io.PrintWriter
+import java.io.FileOutputStream
+import sbt.io.Using
 import sbtcrossproject.CrossPlugin.autoImport.{CrossType, crossProject}
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits.*
 import org.apache.commons.lang3.StringUtils
 import org.apache.commons.io.FilenameUtils
+import org.apache.commons.text.StringEscapeUtils
+import org.scalajs.linker.interface.ESVersion
 
 import java.io.File
 import java.nio.charset.StandardCharsets
 import scala.sys.process.Process
 
+Global / semanticdbEnabled := true
+
 val graalVersion = "23.1.0"
 val zioVersion = "2.0.21"
-
-lazy val envValues = Map(
-  "ARGON_LIB_DIR" -> file("libraries").getAbsolutePath,
-  "ARGON_TEST_CASES" -> file("testcases").getAbsolutePath,
-)
 
 lazy val commonSettingsNoLibs = Seq(
   scalaVersion := "3.4.0",
@@ -57,6 +59,7 @@ lazy val sharedJSNodeSettings = Seq(
     _
       .withModuleKind(ModuleKind.ESModule)
       .withBatchMode(true)
+      .withESFeatures(_.withESVersion(ESVersion.ES2021))
   },
 
   fork := false,
@@ -86,7 +89,6 @@ lazy val commonJVMSettings = Seq(
   ),
 
   fork := true,
-  Test / envVars ++= envValues,
 
 )
 
@@ -94,7 +96,6 @@ lazy val commonBrowserSettings = sharedJSNodeSettings
 
 lazy val nodeEnvConfig =
   NodeJSEnv.Config()
-    .withEnv(envValues)
     .withArgs(List("--no-warnings", "--experimental-vm-modules"))
 
 lazy val commonNodeSettings = sharedJSNodeSettings ++ Seq(
@@ -142,7 +143,7 @@ lazy val compilerOptions = javaCompilerOptions ++ Seq(
 def escapeESExprString(s: String): String =
   s.replace("\\", "\\\\").replace("\"", "\\\"")
 
-def generateESExprTask(config: File => String): Def.Initialize[_root_.sbt.Task[Seq[File]]] =
+def generateESExprTask(config: File => String): Def.Initialize[sbt.Task[Seq[File]]] =
   Def.task {
     val s = streams.value
     val baseDir = baseDirectory.value
@@ -175,6 +176,62 @@ def generateESExprTask(config: File => String): Def.Initialize[_root_.sbt.Task[S
 
       f(implicitly[_root_.io.circe.Decoder[Seq[String]]].decodeJson(_root_.io.circe.parser.parse(inputFilesJson).right.get).right.get.map(new File(_)).toSet).toSeq
     }
+  }
+
+def generateTestCasesTask(): Def.Initialize[sbt.Task[Seq[File]]] =
+  Def.task {
+    import java.nio.file.{Path, Files}
+
+    val s = streams.value
+    val managedDir = sourceManaged.value
+
+    def generateFSMapFile(inDir: File, outName: String, mapName: String)(in: Set[File]): Set[File] = {
+      val inDirPath = inDir.toPath().toAbsolutePath()
+
+      val outDir = managedDir / "generated-test-cases"
+      IO.createDirectory(outDir)
+
+      val outFile = outDir / outName
+
+      s.log.info(s"Generating sources from test cases in ${outDir}")
+
+      IO.createDirectory(outDir)
+      
+      val writer = new PrintWriter(outFile, StandardCharsets.UTF_8)
+      try {
+        writer.println("package dev.argon.compiler_tests")
+
+        writer.println(s"val $mapName: Map[String, String] = Map(")
+
+        for(file <- in) {
+          val path = file.toPath().toAbsolutePath()
+          val relPath = inDirPath.relativize(path).toString
+          val content = Files.readString(path)
+
+          writer.print("  \"")
+          writer.print(StringEscapeUtils.escapeJava(relPath))
+          writer.print("\" -> \"")
+          writer.print(StringEscapeUtils.escapeJava(content))
+          writer.println("\",")
+        }
+
+        writer.println(")")
+      }
+      finally writer.close()
+
+      Set(outFile)
+    }
+
+    val f1 = FileFunction.cached(s.cacheDirectory / "generated-test-cases")(generateFSMapFile(file("testcases"), "TestCases.scala", "testCases"))
+    val f2 = FileFunction.cached(s.cacheDirectory / "generated-libraries")(generateFSMapFile(file("libraries"), "Libraries.scala", "libraries"))
+
+    f1((file("testcases") ** "*.xml").get().toSet).toSeq ++
+      f2((
+        file("libraries") ** "*" ---
+          file("libraries") ** "bin" ** "*"
+      ).filter(_.isFile()).get().toSet).toSeq
+
+      
   }
 
 
@@ -595,6 +652,27 @@ lazy val argon_platformJVM = argon_platform.jvm
 lazy val argon_platformJS = argon_platform.js
 lazy val argon_platformNode = argon_platform.node
 
+
+lazy val compiler_tests = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Full).in(file("compiler-tests"))
+  .dependsOn(util, argon_platform, argon_build)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    Compile / sourceGenerators += generateTestCasesTask(),
+
+    name := "compiler-tests",
+  )
+
+lazy val compiler_testsJVM = compiler_tests.jvm
+lazy val compiler_testsNode = compiler_tests.node
 
 
 lazy val cli = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-cli"))

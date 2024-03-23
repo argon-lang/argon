@@ -217,7 +217,7 @@ object ArgonParser {
               rule(Rule.ImportPathAbsolute) |
               rule(Rule.ImportPathRelative) |
               rule(Rule.ImportPathMember)
-            )) --> ExportStmt.apply
+            ).observeLocation) --> ExportStmt.apply
 
         case Rule.IfExpr => matchToken(KW_IF).discard ++! rule(Rule.IfExprPart)
         case Rule.IfExprStart =>
@@ -687,14 +687,14 @@ object ArgonParser {
               }
 
           val renaming =
-            rule(Rule.Identifier) ++ rule(Rule.NewLines) ++ matchToken(OP_LAMBDA).discard ++ rule(Rule.NewLines) ++ rule(
+            rule(Rule.Identifier).observeLocation ++ rule(Rule.NewLines) ++ matchToken(OP_LAMBDA).discard ++ rule(Rule.NewLines) ++ rule(
               Rule.IdentifierOptional
-            ) --> {
+            ).observeLocation --> {
               case (importing, viewedName) => ImportPathSegment.Renaming(importing, viewedName)
             }
 
-          val imported = rule(Rule.Identifier) --> ImportPathSegment.Imported.apply
-          val wildcard = matchToken(OP_STAR) --> const(ImportPathSegment.Wildcard)
+          val imported = rule(Rule.Identifier).observeLocation --> ImportPathSegment.Imported.apply
+          val wildcard = matchToken(OP_STAR).observeLocation --> { case WithLocation(_, loc) => ImportPathSegment.Wildcard(loc) }
 
           cons | many | renaming | imported | wildcard
 
