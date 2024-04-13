@@ -70,7 +70,7 @@ trait ModuleEmit extends ModuleEmitBase {
 
           func <- (new ExprEmitCommon {
             override val regNames: TSet[String] = rn
-          }).emit(body)
+          }).emit(body, f.parameters)
         yield func
 
       case Some(VmFunctionImplementation.Extern) =>

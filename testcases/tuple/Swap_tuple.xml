@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Tuple argument</Name>
+    <Name>Swap tuple</Name>
 
 
     <InputSource name="index.argon">
@@ -12,20 +12,20 @@
             puts b
         end
         
-        proc printTuple2(tupleValue: (String, String)): () =
-            printTuple tupleValue
+        def swapTuple(a: String, b: String): (String, String) =
+            b, a
         
         proc main(): () do
-            val tupleValue: (String, String) = '1', '2'
-            printTuple2 tupleValue
+            val tupleValue: (String, String) = "1", "2"
+            printTuple (swapTuple tupleValue)
         end
         
             
     </InputSource>
 
     <ExpectedOutput>
-        1
         2
+        1
     </ExpectedOutput>
 
 </ArgonTest>

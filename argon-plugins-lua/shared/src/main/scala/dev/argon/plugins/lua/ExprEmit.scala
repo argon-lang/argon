@@ -46,16 +46,16 @@ trait ExprEmit extends ModuleEmitBase {
         )
     }
 
-  def emit(cfg: ControlFlowGraph): Comp[AST.FunctionDefinitionExp] =
+  def emit(cfg: ControlFlowGraph, parameters: Seq[VmType]): Comp[AST.FunctionDefinitionExp] =
     for
       emittedBlocks <- TSet.empty[BigInt].commit
-      paramNames <- ZIO.foreach(cfg.blocks.head.parameters)(r => getRegVar(r.register))
+      paramNames <- ZIO.foreach(parameters.zipWithIndex) { (_, i) => getRegVar(Register.Reg(i)) }
       body <- {
         def getSuccBlocks(blockId: BigInt): Seq[BigInt] =
           cfg.blocks(blockId.toInt).branch match {
             case BranchInstruction.Return(_) | BranchInstruction.ReturnCall(_) => Seq()
-            case BranchInstruction.Jump(target, _*) => Seq(target)
-            case BranchInstruction.JumpIf(_, taken, _, notTaken, _) => Seq(taken, notTaken)
+            case BranchInstruction.Jump(target) => Seq(target)
+            case BranchInstruction.JumpIf(_, taken, notTaken) => Seq(taken, notTaken)
           }
 
         def impl(blockId: BigInt): Comp[Seq[AST.Stat]] =
@@ -102,7 +102,7 @@ trait ExprEmit extends ModuleEmitBase {
     insn match {
       case Instruction.Call(InstructionResult.Value(res), call) =>
         for
-          v <- getRegVar(res.register)
+          v <- getRegVar(res)
           callExp <- emitCall(call)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(callExp)))
 
@@ -113,13 +113,13 @@ trait ExprEmit extends ModuleEmitBase {
 
       case Instruction.CreateTuple(res, items*) =>
         for
-          v <- getRegVar(res.register)
+          v <- getRegVar(res)
           itemVars <- ZIO.foreach(items)(getRegVar)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(toArrayExp(itemVars.map(AST.NameExp.apply)))))
 
       case Instruction.LoadBool(res, value) =>
         for
-          v <- getRegVar(res.register)
+          v <- getRegVar(res)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(if value then AST.TrueLiteral else AST.FalseLiteral)))
 
       case Instruction.LoadBuiltin(res, builtin, args*) =>
@@ -127,7 +127,7 @@ trait ExprEmit extends ModuleEmitBase {
           args match {
             case Seq() =>
               for
-                v <- getRegVar(res.register)
+                v <- getRegVar(res)
               yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(AST.MemberAccessName(AST.NameExp("ArgonRuntime"), name))))
 
             case _ => ???
@@ -140,7 +140,7 @@ trait ExprEmit extends ModuleEmitBase {
                 av <- getRegVar(a)
                 expr = AST.UnOpExp(op, AST.NameExp(av))
 
-                v <- getRegVar(res.register)
+                v <- getRegVar(res)
               yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(expr)))
 
             case _ => ???
@@ -154,7 +154,7 @@ trait ExprEmit extends ModuleEmitBase {
                 bv <- getRegVar(b)
                 expr = AST.BinOpExp(op, AST.NameExp(av), AST.NameExp(bv))
 
-                v <- getRegVar(res.register)
+                v <- getRegVar(res)
               yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(expr)))
 
             case _ => ???
@@ -195,19 +195,34 @@ trait ExprEmit extends ModuleEmitBase {
           case Builtin.EqualTo => ???
         }
 
+      case Instruction.LoadInt(res, i) =>
+        for
+          v <- getRegVar(res)
+        yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(
+          AST.SimpleFunctionCall(
+            AST.MemberAccessName(AST.NameExp("ArgonRuntime"), "int_from_bytes"),
+            i.toByteArray.view.reverse.map(b => AST.IntegerLiteral(java.lang.Byte.toUnsignedInt(b))).toSeq,
+          ),
+        )))
+
       case Instruction.LoadString(res, s) =>
         for
-          v <- getRegVar(res.register)
+          v <- getRegVar(res)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(AST.StringLiteral(s))))
-        
+
+      case Instruction.Move(target, source) =>
+        for
+          tVar <- getRegVar(target)
+          sVar <- getRegVar(source)
+        yield Seq(AST.Assignment(Seq(AST.NameExp(tVar)), Seq(AST.NameExp(sVar))))
 
       case Instruction.TupleElement(res, tuple, index) =>
         for
-          v <- getRegVar(res.register)
+          v <- getRegVar(res)
           t <- getRegVar(tuple)
         yield Seq(AST.Assignment(Seq(AST.NameExp(v)), Seq(AST.MemberAccessIndex(
           AST.NameExp(t),
-          AST.IntegerLiteral(index.toLong)
+          AST.IntegerLiteral((index + 1).toLong)
         ))))
     }
 
@@ -223,24 +238,17 @@ trait ExprEmit extends ModuleEmitBase {
           callExp <- emitCall(call)
         yield Seq(AST.Return(Seq(callExp)))
 
-      case BranchInstruction.Jump(targetId, args*) =>
+      case BranchInstruction.Jump(targetId) =>
         val targetLabel = getBlockLabel(targetId)
-        for
-          paramVars <- ZIO.foreach(cfg.blocks(targetId.toInt).parameters.map(_.register))(getRegVar)
-          argVars <- ZIO.foreach(args)(getRegVar)
-        yield Seq(
-          AST.Assignment(
-            paramVars.map(AST.NameExp.apply),
-            argVars.map(AST.NameExp.apply)
-          ),
+        ZIO.succeed(Seq(
           AST.Goto(targetLabel),
-        )
+        ))
 
-      case BranchInstruction.JumpIf(condition, takenId, takenArgs, notTakenId, notTakenArgs) =>
+      case BranchInstruction.JumpIf(condition, takenId, notTakenId) =>
         for
           condVar <- getRegVar(condition)
-          takenJump <- emitBranch(cfg)(BranchInstruction.Jump(takenId, takenArgs*))
-          notTakenJump <- emitBranch(cfg)(BranchInstruction.Jump(notTakenId, notTakenArgs*))
+          takenJump <- emitBranch(cfg)(BranchInstruction.Jump(takenId))
+          notTakenJump <- emitBranch(cfg)(BranchInstruction.Jump(notTakenId))
         yield Seq(
           AST.If(
             AST.NameExp(condVar),

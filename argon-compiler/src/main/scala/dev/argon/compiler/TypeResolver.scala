@@ -16,7 +16,7 @@ trait TypeResolver extends UsingContext {
   import context.{TRExprContext, TRSignatureContext, Scopes}
   import Scopes.{LookupResult, Overloadable}
 
-  import TRExprContext.{Expr, Builtin, LocalVar, Var, Hole}
+  import TRExprContext.{Expr, Builtin, LocalVar, Var, Hole, AnnotatedExpr}
   private type Loc = Location[FilePosition]
 
 
@@ -235,6 +235,10 @@ trait TypeResolver extends UsingContext {
 
       case ast.Expr.Builtin(name) =>
         builtinExprFactory(expr.location, name)
+
+      case ast.Expr.Dot(o, member) =>
+        LookupMemberFactory(expr.location, resolveExpr(o), member)
+        
 
       case ast.Expr.FunctionCall(f, listType, arg) =>
         resolveExpr(f).invoke(ArgumentInfo(
@@ -464,10 +468,39 @@ trait TypeResolver extends UsingContext {
       }
   }
 
+  private final class LookupMemberFactory(override val loc: Loc, obj: ExprFactory, memberName: WithSource[IdentifierExpr]) extends WrappedFactory {
+    override protected def unwrap(using EmitState): Comp[ExprFactory] =
+      for
+        t <- makeHole
+        e <- obj.check(t)
+        t <- normalizeToValue(t)
+        overloads <- overloadsFromType(t, e)
+        lookup = LookupResult.Overloaded(overloads, extensionMethods(t, e))
+      yield OverloadedExprFactory(loc, lookup, Seq())
+
+    private def overloadsFromType(t: Expr, e: Expr): Comp[Seq[Overloadable]] = ZIO.succeed(Seq.empty)
+
+    private def extensionMethods(t: Expr, e: Expr)(using state: EmitState): Comp[LookupResult.OverloadableOnly] =
+      state.scope.lookup(IdentifierExpr.Extension(memberName.value)).map {
+        case LookupResult.Overloaded(overloads, next) =>
+          val emOverloads = overloads.flatMap {
+              case Overloadable.Function(f) =>
+                Seq(Overloadable.ExtensionMethod(f, AnnotatedExpr(obj.loc, e, t)))
+
+              case _ => Seq()
+            }
+
+          LookupResult.Overloaded(emOverloads, next)
+
+        case _ => LookupResult.NotFound()
+      }
+  }
+
   private final class OverloadedExprFactory(override val loc: Loc, lookup: LookupResult.Overloaded, args: Seq[ArgumentInfo]) extends ExprFactory {
     private def toAttemptedOverload(overload: Overloadable): AttemptedOverload =
       overload match {
         case Overloadable.Function(f) => AttemptedOverload.Function(f)
+        case Overloadable.ExtensionMethod(f, _) => AttemptedOverload.Function(f)
       }
 
     override def check(t: Expr)(using EmitState): Comp[Expr] =
@@ -499,19 +532,24 @@ trait TypeResolver extends UsingContext {
           .runHead
           .flatMap {
             case Some(overloads @ ((selectedOverload, overloadResult) +: _)) =>
+
+              def functionOverload(f: ArFunc): ExprFactory =
+                if overloadResult.remainingSig.parameters.nonEmpty then
+                  ???
+                else
+                  new InferFactory {
+                    // TODO: Fix location
+                    override def loc: Loc = OverloadedExprFactory.this.loc
+                    override def infer(using EmitState): Comp[InferredExpr] =
+                      ZIO.succeed(InferredExpr(
+                        Expr.FunctionCall(f, overloadResult.arguments),
+                        overloadResult.remainingSig.returnType
+                      ))
+                  }
+
               val factory0: ExprFactory = selectedOverload match {
-                case Overloadable.Function(f) =>
-                  if overloadResult.remainingSig.parameters.nonEmpty then ???
-                  else
-                    new InferFactory {
-                      // TODO: Fix location
-                      override def loc: Loc = OverloadedExprFactory.this.loc
-                      override def infer(using EmitState): Comp[InferredExpr] =
-                        ZIO.succeed(InferredExpr(
-                          Expr.FunctionCall(f, overloadResult.arguments),
-                          overloadResult.remainingSig.returnType
-                        ))
-                    }
+                case Overloadable.Function(f) => functionOverload(f)
+                case Overloadable.ExtensionMethod(f, _) => functionOverload(f)
               }
 
               val factory = overloadResult.remainingArguments.foldLeft(factory0)(_.invoke(_))
@@ -570,13 +608,12 @@ trait TypeResolver extends UsingContext {
 
         sig <- overload.signature
 
-        attemptRes <- attemptOverloadCheck(overload, sig, args, Seq.empty)(using attemptState).provideSomeEnvironment[context.Env](_.add[ErrorLog](attemptErrorLog))
+        attemptRes <- attemptOverloadCheck(overload, sig, overload.initialArgs.map(annExprToArg) ++ args, Seq.empty)(using attemptState).provideSomeEnvironment[context.Env](_.add[ErrorLog](attemptErrorLog))
         partialScope <- attemptScope.toPartialScope
 
         errors <- errors.get
         res <-
           if errors.nonEmpty then
-            println(errors)
             ZIO.succeed(OverloadAttempt.Failure(errors))
           else
             for
@@ -623,12 +660,7 @@ trait TypeResolver extends UsingContext {
             val isProof = param.listType == FunctionParameterListType.RequiresList
             val paramVar = param.asParameterVar(overload.asOwner, callArgs.size)
 
-            val mapping = Map[Var, Expr](paramVar -> callArg)
-            val restParams = tailParams.map { tParam =>
-              tParam.copy(paramType = Substitution.substitute(TRExprContext)(mapping)(tParam.paramType))
-            }
-
-            val restSig = sig.copy(parameters = restParams)
+            val restSig = sig.copy(parameters = tailParams).substituteVar(paramVar, callArg)
 
             attemptOverloadCheck(overload, restSig, restArgs, callArgs :+ callArg)
           }
@@ -654,7 +686,7 @@ trait TypeResolver extends UsingContext {
           _ <- ZIO.foreachDiscard(overloads) { overload =>
             for
               sig <- overload.signature
-              _ <- rankByParamLength(sig.parameters, args) match {
+              _ <- rankByParamLength(sig.parameters, overload.initialArgs.map(annExprToArg) ++ args) match {
                 case OverloadRank.Mismatch => rejectedGroup.update(_ :+ overload)
                 case OverloadRank.Exact => exactGroup.update(_ :+ overload)
                 case OverloadRank.More(n) => moreGroups.update(addToIntGroup(n)(overload))
@@ -717,6 +749,16 @@ trait TypeResolver extends UsingContext {
 
     private def addToIntGroup(n: Int)(overload: Overloadable)(m: Map[Int, Seq[Overloadable]]): Map[Int, Seq[Overloadable]] =
       m.updatedWith(n)(overloads => Some(overloads.toSeq.flatten :+ overload))
+
+    private def annExprToArg(expr: AnnotatedExpr): ArgumentInfo =
+      val factory = new InferFactory {
+        override def loc: Loc = expr.location
+
+        override def infer(using EmitState): Comp[InferredExpr] =
+          ZIO.succeed(InferredExpr(expr.e, expr.t))
+      }
+      ArgumentInfo(expr.location, factory, FunctionParameterListType.NormalList)
+    end annExprToArg
   }
 
   private final class TupleExprFactory(override val loc: Loc, items: Seq[ExprFactory]) extends ExprFactory {

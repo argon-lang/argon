@@ -15,7 +15,7 @@
         
         proc main(): () do
             printMe 55
-            printMe 'Fifty Five'
+            printMe "Fifty Five"
         end
         
             

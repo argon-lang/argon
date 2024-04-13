@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>99 + 2 (val)</Name>
+
+
+    <InputSource name="index.argon">
+            
+        import Argon.Core/*
+        
+        def add(a: Int, b: Int): Int =
+            a + b
+        
+        proc main(): () do
+            val sumStr = add(99, 2).to_s()
+            puts(sumStr)
+        end
+        
+            
+    </InputSource>
+
+    <ExpectedOutput>101</ExpectedOutput>
+
+</ArgonTest>

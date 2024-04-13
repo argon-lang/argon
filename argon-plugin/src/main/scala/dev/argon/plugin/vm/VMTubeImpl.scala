@@ -33,7 +33,7 @@ object VMTubeImpl {
       cache: MemoCacheStore[Env, Error, A, B],
     ) {
       def getId(a: A): UIO[BigInt] =
-        (
+        ids.getOrElseSTM(a,
           for
             id0 <- ids.size
             id = id0 : BigInt
@@ -186,6 +186,8 @@ object VMTubeImpl {
             ???
         }
 
+      private final case class RegisterWithType(r: Register, t: RegisterType)
+
       private def exprToRegType(e: Expr): Comp[RegisterType] =
         ArgonEvaluator(context).normalizeToValue(e, context.Config.fuel).flatMap {
           case Expr.Builtin(EBuiltin.Nullary(t: expr.BuiltinType)) =>
@@ -248,8 +250,8 @@ object VMTubeImpl {
           nextBlockId <- Ref.make[BigInt](1)
           blocks <- Ref.make(SortedMap.empty[BigInt, InstructionBlock])
           nextRegId <- Ref.make[BigInt](0)
-          variables <- Ref.make(Map.empty[Var, RegisterDeclaration])
-          blockParams <- Ref.make(Seq.empty[RegisterDeclaration])
+          variables <- Ref.make(Map.empty[Var, Register])
+          registers <- Ref.make(Seq.empty[RegisterDeclaration])
           currentBlockId <- Ref.make[BigInt](0)
           instructions <- Ref.make(Seq.empty[Instruction])
 
@@ -258,7 +260,7 @@ object VMTubeImpl {
             blocks = blocks,
             nextRegId = nextRegId,
             variables = variables,
-            blockParams = blockParams,
+            registers = registers,
             currentBlockId = currentBlockId,
             instructions = instructions,
           )
@@ -272,8 +274,8 @@ object VMTubeImpl {
         nextBlockId: Ref[BigInt],
         blocks: Ref[SortedMap[BigInt, InstructionBlock]],
         nextRegId: Ref[BigInt],
-        variables: Ref[Map[Var, RegisterDeclaration]],
-        blockParams: Ref[Seq[RegisterDeclaration]],
+        variables: Ref[Map[Var, Register]],
+        registers: Ref[Seq[RegisterDeclaration]],
         currentBlockId: Ref[BigInt],
         instructions: Ref[Seq[Instruction]],
       ) {
@@ -281,19 +283,30 @@ object VMTubeImpl {
           ZIO.foreachDiscard(params) { param =>
             for
               t <- exprToRegType(param.varType)
-              reg <- makeRegister(t)
-              _ <- blockParams.update(_ :+ reg)
-              _ <- variables.update(_.updated(param, reg))
+              regId <- nextRegId.getAndUpdate(_ + 1)
+              
+              _ <- variables.update(_.updated(param, Register.Reg(regId)))
             yield ()
           }
 
-        def emitExpr(e: Expr): Comp[RegisterDeclaration] =
+        def emitExpr(e: Expr): Comp[RegisterWithType] =
           e match {
-            case Expr.BoolLiteral(b) =>
+            case Expr.BindVariable(v, value) =>
               for
-                reg <- makeRegister(RegisterType.Builtin(Builtin.BoolType))
+                varReg <- emitExpr(value)
+                _ <- variables.update(_.updated(v, varReg.r))
+
+                t = RegisterType.Tuple()
+                reg <- makeRegister(t)
+                _ <- append(Instruction.CreateTuple(reg))
+              yield RegisterWithType(reg, t)
+
+            case Expr.BoolLiteral(b) =>
+              val t = RegisterType.Builtin(Builtin.BoolType)
+              for
+                reg <- makeRegister(t)
                 _ <- append(Instruction.LoadBool(reg, b))
-              yield reg
+              yield RegisterWithType(reg, t)
 
             case Expr.Builtin(EBuiltin.Nullary(builtin)) =>
               val t = builtin match {
@@ -306,7 +319,7 @@ object VMTubeImpl {
               for
                 reg <- makeRegister(t)
                 _ <- append(Instruction.LoadBuiltin(reg, getBuiltin(builtin)))
-              yield reg
+              yield RegisterWithType(reg, t)
 
             case Expr.Builtin(EBuiltin.Unary(builtin, a)) =>
               val t = builtin match {
@@ -318,8 +331,8 @@ object VMTubeImpl {
               for
                 aReg <- emitExpr(a)
                 reg <- makeRegister(t)
-                _ <- append(Instruction.LoadBuiltin(reg, getBuiltin(builtin), aReg.register))
-              yield reg
+                _ <- append(Instruction.LoadBuiltin(reg, getBuiltin(builtin), aReg.r))
+              yield RegisterWithType(reg, t)
 
             case Expr.Builtin(EBuiltin.Binary(builtin, a, b)) =>
               val t = builtin match {
@@ -356,49 +369,50 @@ object VMTubeImpl {
                 aReg <- emitExpr(a)
                 bReg <- emitExpr(b)
                 reg <- makeRegister(t)
-                _ <- append(Instruction.LoadBuiltin(reg, getBuiltin(builtin), aReg.register, bReg.register))
-              yield reg
+                _ <- append(Instruction.LoadBuiltin(reg, getBuiltin(builtin), aReg.r, bReg.r))
+              yield RegisterWithType(reg, t)
 
             case Expr.FunctionCall(f, args) =>
               for
                 call <- emitFunctionCall(f, args)
-
-                f <- funcs.fromId(call.functionId)
                 sig <- f.signature
                 returnType <- exprToType(sig.returnType)
 
-                reg <- makeRegister(vmTypeToRegType(call.args)(returnType))
+                t = vmTypeToRegType(call.args)(returnType)
+                reg <- makeRegister(t)
                 _ <- append(Instruction.Call(InstructionResult.Value(reg), call))
-              yield reg
+              yield RegisterWithType(reg, t)
 
             case Expr.IfElse(_, _, cond, whenTrue, whenFalse) =>
               for
                 condReg <- emitExpr(cond)
 
-                savedVars <- variables.get
-                savedVarSeq = savedVars.keys.toSeq
-                savedVarRegDecls = savedVarSeq.map(v => savedVars(v))
-                savedVarRegs = savedVarRegDecls.map(r => r.register)
-
                 whenTrueLabel <- nextLabel
                 whenFalseLabel <- nextLabel
                 endLabel <- nextLabel
 
-                _ <- generateBlock(BranchInstruction.JumpIf(condReg.register, whenTrueLabel, savedVarRegs, whenFalseLabel, savedVarRegs))
+                _ <- generateBlock(BranchInstruction.JumpIf(condReg.r, whenTrueLabel, whenFalseLabel))
 
-                _ <- startBlock(whenTrueLabel, savedVarRegDecls, savedVars)
+                _ <- startBlock(whenTrueLabel)
                 trueReg <- emitExpr(whenTrue)
-                currentVars <- variables.get
-                _ <- generateBlock(BranchInstruction.Jump(endLabel, (savedVarSeq.map(v => currentVars(v).register) :+ trueReg.register)*))
+                _ <- generateBlock(BranchInstruction.Jump(endLabel))
 
-                _ <- startBlock(whenFalseLabel, savedVarRegDecls, savedVars)
+                _ <- startBlock(whenFalseLabel)
                 falseReg <- emitExpr(whenFalse)
-                currentVars <- variables.get
-                _ <- generateBlock(BranchInstruction.Jump(endLabel, (savedVarSeq.map(v => currentVars(v).register) :+ falseReg.register)*))
+                _ <- append(Instruction.Move(trueReg.r, falseReg.r))
+                _ <- generateBlock(BranchInstruction.Jump(endLabel))
 
-                regMapping <- startBlock(endLabel, savedVarRegDecls :+ trueReg, savedVars)
+                _ <- startBlock(endLabel)
 
-              yield regMapping(trueReg.register)
+              yield trueReg
+
+            case Expr.IntLiteral(i) =>
+              val t = RegisterType.Builtin(Builtin.IntType)
+              for
+                reg <- makeRegister(t)
+                _ <- append(Instruction.LoadInt(reg, i))
+              yield RegisterWithType(reg, t)
+
 
             case Expr.Sequence(stmts, result) =>
               for
@@ -407,23 +421,39 @@ object VMTubeImpl {
               yield r
 
             case Expr.StringLiteral(s) =>
+              val t = RegisterType.Builtin(Builtin.StringType)
               for
-                reg <- makeRegister(RegisterType.Builtin(Builtin.StringType))
+                reg <- makeRegister(t)
                 _ <- append(Instruction.LoadString(reg, s))
-              yield reg
-
+              yield RegisterWithType(reg, t)
 
             case Expr.Tuple(items) =>
               for
                 itemRegs <- ZIO.foreach(items)(emitExpr)
-                reg <- makeRegister(RegisterType.Tuple(itemRegs.map(_.t)*))
-                _ <- append(Instruction.CreateTuple(reg, itemRegs.map(_.register)*))
-              yield reg
+                tupleType = RegisterType.Tuple(itemRegs.map(_.t)*)
+                reg <- makeRegister(tupleType)
+                _ <- append(Instruction.CreateTuple(reg, itemRegs.map(_.r)*))
+              yield RegisterWithType(reg, tupleType)
+
+            case Expr.TupleElement(index, tuple) =>
+              for
+                tupleReg <- emitExpr(tuple)
+                itemType = tupleReg.t match {
+                  case dev.argon.plugin.vm.RegisterType.Tuple(itemTypes*) =>
+                    itemTypes(index)
+                    
+                  case _ => ???
+                }
+
+                reg <- makeRegister(itemType)
+                _ <- append(Instruction.TupleElement(reg, tupleReg.r, index))
+              yield RegisterWithType(reg, itemType)
 
             case Expr.Variable(v) =>
               for
                 vars <- variables.get
-              yield vars(v)
+                t <- exprToRegType(v.varType)
+              yield RegisterWithType(vars(v), t) 
 
             case _ =>
               println(e.getClass)
@@ -442,20 +472,15 @@ object VMTubeImpl {
               for
                 condReg <- emitExpr(cond)
 
-                savedVars <- variables.get
-                savedVarSeq = savedVars.keys.toSeq
-                savedVarRegDecls = savedVarSeq.map(v => savedVars(v))
-                savedVarRegs = savedVarRegDecls.map(r => r.register)
-
                 whenTrueLabel <- nextLabel
                 whenFalseLabel <- nextLabel
 
-                _ <- generateBlock(BranchInstruction.JumpIf(condReg.register, whenTrueLabel, savedVarRegs, whenFalseLabel, savedVarRegs))
+                _ <- generateBlock(BranchInstruction.JumpIf(condReg.r, whenTrueLabel, whenFalseLabel))
 
-                _ <- startBlock(whenTrueLabel, savedVarRegDecls, savedVars)
+                _ <- startBlock(whenTrueLabel)
                 _ <- emitExprTail(whenTrue)
 
-                _ <- startBlock(whenFalseLabel, savedVarRegDecls, savedVars)
+                _ <- startBlock(whenFalseLabel)
                 _ <- emitExprTail(whenFalse)
               yield ()
 
@@ -468,19 +493,21 @@ object VMTubeImpl {
             case _ =>
               for
                 reg <- emitExpr(expr)
-                _ <- generateBlock(BranchInstruction.Return(reg.register))
+                _ <- generateBlock(BranchInstruction.Return(reg.r))
               yield ()
           }
 
         def toCFG: Comp[ControlFlowGraph] =
           for
+            registers <- registers.get
             blocks <- blocks.get
-          yield ControlFlowGraph(blocks.values.toSeq)
+          yield ControlFlowGraph(registers, blocks.values.toSeq)
 
-        private def makeRegister(t: RegisterType): Comp[RegisterDeclaration] =
+        private def makeRegister(t: RegisterType): Comp[Register] =
           for
             regId <- nextRegId.getAndUpdate(_ + 1)
-          yield RegisterDeclaration(Register.Reg(regId), t)
+            _ <- registers.update(_ :+ RegisterDeclaration(t))
+          yield Register.Reg(regId)
 
         private def nextLabel: UIO[BigInt] =
           nextBlockId.getAndUpdate(_ + 1)
@@ -491,27 +518,15 @@ object VMTubeImpl {
         private def generateBlock(branch: BranchInstruction): Comp[Unit] =
           for
             blockId <- currentBlockId.get
-            params <- blockParams.get
             insns <- instructions.get
-            _ <- blocks.update(_.updated(blockId, InstructionBlock(params, insns, branch)))
+            _ <- blocks.update(_.updated(blockId, InstructionBlock(insns, branch)))
           yield ()
 
-        private def startBlock(blockId: BigInt, scopeVariableRegs: Seq[RegisterDeclaration], scopeVariables: Map[Var, RegisterDeclaration]): Comp[Map[Register, RegisterDeclaration]] =
+        private def startBlock(blockId: BigInt): Comp[Unit] =
           for
             _ <- currentBlockId.set(blockId)
-            regMappingSeq <- ZIO.foreach(scopeVariableRegs) { r =>
-              for
-                r2 <- makeRegister(r.t)
-              yield r.register -> r2
-            }
-            regMapping = regMappingSeq.toMap
-
-
-            _ <- variables.set(scopeVariables.view.mapValues { r => regMapping(r.register) }.toMap)
-            _ <- blockParams.set(regMappingSeq.map(_._2))
-            _ <- currentBlockId.set(blockId)
             _ <- instructions.set(Seq.empty)
-          yield regMapping
+          yield ()
 
         private def tailCall(call: Comp[FunctionCall]): Comp[Unit] =
           for
@@ -523,7 +538,7 @@ object VMTubeImpl {
           for
             id <- funcs.getId(f)
             argRegs <- ZIO.foreach(args)(emitExpr)
-          yield FunctionCall.Function(id, argRegs.map(_.register)*)
+          yield FunctionCall.Function(id, argRegs.map(_.r)*)
 
         private def emitFunctionObjectCall(f: Expr, a: Expr): Comp[(FunctionCall.FunctionObject, RegisterType)] =
           for
@@ -535,7 +550,7 @@ object VMTubeImpl {
               case _ => ???
             }
 
-          yield (FunctionCall.FunctionObject(fReg.register, aReg.register), resType)
+          yield (FunctionCall.FunctionObject(fReg.r, aReg.r), resType)
       }
 
 

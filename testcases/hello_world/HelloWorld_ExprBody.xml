@@ -1,15 +1,13 @@
 <ArgonTest>
 
-    <Name>Hello World (Parenthesis)</Name>
+    <Name>Hello World (Expression Body)</Name>
 
     <InputSource name="index.argon">
 
         import Argon.Core/*
 
-        proc main(): () do
-            puts('Hello World')
-        end
-
+        proc main(): () =
+            puts "Hello World"
 
     </InputSource>
 

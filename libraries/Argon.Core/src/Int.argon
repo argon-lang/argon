@@ -1,5 +1,6 @@
 
 import ../Bool/*
+import ../String/*
 
 public inline def Int: type = __argon_builtin int_type
 
@@ -23,4 +24,7 @@ public inline def operator < (a: Int) (b: Int): Bool = __argon_builtin int_lt a 
 public inline def operator <= (a: Int) (b: Int): Bool = __argon_builtin int_le a b
 public inline def operator > (a: Int) (b: Int): Bool = __argon_builtin int_gt a b
 public inline def operator >= (a: Int) (b: Int): Bool = __argon_builtin int_ge a b
+
+public def extension to_s (i: Int)(): String = extern int_to_s
+
 

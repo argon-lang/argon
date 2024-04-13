@@ -211,23 +211,22 @@
 )
 
 (constructor "register-declaration"
-    (arg "register" "register")
     (arg "t" "register-type")
 )
 
 (constructor "control-flow-graph"
+    (kwarg "registers" (list "register-declaration"))
     (kwarg "blocks" (list "instruction-block"))
 )
 
 (constructor "instruction-block"
-    (kwarg "parameters" (list "register-declaration"))
     (kwarg "instructions" (list "instruction"))
     (kwarg "branch" "branch-instruction")
 )
 
 (enum "instruction-result"
     (constructor "value" inline: #true
-        (arg "register" "register-declaration")
+        (arg "register" "register")
     )
     (constructor "discard")
 )
@@ -238,24 +237,32 @@
         (arg "call" "function-call")
     )
     (constructor "create-tuple"
-        (arg "result" "register-declaration")
+        (arg "result" "register")
         (vararg "items" "register")
     )
     (constructor "load-bool"
-        (arg "result" "register-declaration")
+        (arg "result" "register")
         (arg "value" (bool))
     )
     (constructor "load-builtin"
-        (arg "result" "register-declaration")
+        (arg "result" "register")
         (arg "value" "builtin")
         (vararg "args" "register")
     )
+    (constructor "load-int"
+        (arg "result" "register")
+        (arg "value" (int))
+    )
     (constructor "load-string"
-        (arg "result" "register-declaration")
+        (arg "result" "register")
         (arg "value" (string))
     )
+    (constructor "move"
+        (arg "target" "register")
+        (arg "source" "register")
+    )
     (constructor "tuple-element"
-        (arg "result" "register-declaration")
+        (arg "result" "register")
         (arg "tuple" "register")
         (arg "index" (int))
     )
@@ -281,14 +288,11 @@
     )
     (constructor "jump"
         (arg "block-id" (int))
-        (vararg "args" "register")
     )
     (constructor "jump-if"
         (arg "condition" "register")
         (arg "taken-id" (int))
-        (arg "taken-args" (list "register"))
         (arg "not-taken-id" (int))
-        (arg "not-taken-args" (list "register"))
     )
 )
 

@@ -1,6 +1,7 @@
 
 
 export ./Bool/*
+export ./String/*
 export ./Int/*
 export ./Puts/*
 

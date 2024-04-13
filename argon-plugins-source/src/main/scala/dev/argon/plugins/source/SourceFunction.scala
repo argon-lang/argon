@@ -63,5 +63,8 @@ object SourceFunction {
             .flatMap(externFactory.defineFunctionReference)
         )
 
+      override def toString(): String =
+        decl.name.toString()
+
     }
 }

@@ -29,15 +29,24 @@ trait ScopeContext {
 
     enum Overloadable {
       case Function(f: ArFuncC & HasContext[self.type])
+      case ExtensionMethod(f: ArFuncC & HasContext[self.type], obj: TRExprContext.AnnotatedExpr)
+
+      def initialArgs: Seq[TRExprContext.AnnotatedExpr] =
+        this match {
+          case Function(f) => Seq()
+          case ExtensionMethod(f, obj) => Seq(obj)
+        }
 
       def signature: Comp[TRSignatureContext.FunctionSignature] =
         this match {
           case Function(f) => f.signature.map(TRSignatureContext.signatureFromDefault)
+          case ExtensionMethod(f, obj) => f.signature.map(TRSignatureContext.signatureFromDefault)              
         }
 
       def asOwner: TRExprContext.ParameterOwner =
         this match {
           case Function(f) => f
+          case ExtensionMethod(f, _) => f
         }
     }
 

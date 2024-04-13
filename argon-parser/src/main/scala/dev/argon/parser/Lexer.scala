@@ -168,14 +168,14 @@ object Lexer {
           val withBaseSpec =
             token(CharacterCategory.Zero, "0").discard ++ numBase ++! digit.+~ --> {
               case (base, digits) =>
-                val n = digits.foldRight(0: BigInt) { (acc, d) => acc * base + d }
+                val n = digits.foldLeft(0: BigInt) { (acc, d) => acc * base + d }
                 Token.IntToken(n)
             }
 
           val decimalNum =
             decDigit ++ decDigit.+~ --> { case (d1, tail) =>
               val digits = d1 :: tail.toList
-              val n = digits.foldRight(d1) { (acc, d) => acc * 10 + d }
+              val n = digits.foldLeft(0: BigInt) { (acc, d) => acc * 10 + d }
               Token.IntToken(n)
             }
 

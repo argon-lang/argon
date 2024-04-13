@@ -135,7 +135,7 @@ lazy val compilerOptions = javaCompilerOptions ++ Seq(
     "-Yretain-trees",
     "-Yexplicit-nulls",
     "-Xmax-inlines", "128",
-    "-Wconf:id=E029:e,id=E165:e,cat=unchecked:e,cat=deprecation:e",
+    "-Wconf:id=E029:e,id=E165:e,id=E190:e,cat=unchecked:e,cat=deprecation:e",
   ),
 
 )

@@ -16,6 +16,7 @@
                 lua: (lua-options
                     externs: (dict
                         puts: (lua-extern "ArgonRuntime" "puts")
+                        int_to_s: (lua-extern "ArgonRuntime" "int_to_s")
                     )
                 )
             )

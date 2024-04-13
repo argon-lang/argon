@@ -1,6 +1,6 @@
 <ArgonTest>
 
-    <Name>Hello World (val with type annotation)</Name>
+    <Name>Hello World (val)</Name>
 
 
     <InputSource name="index.argon">
@@ -8,7 +8,7 @@
         import Argon.Core/*
         
         proc main(): () do
-            val msg: String = 'Hello World'
+            val msg = "Hello World"
             puts msg
         end
         

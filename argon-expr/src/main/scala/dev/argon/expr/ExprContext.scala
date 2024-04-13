@@ -5,6 +5,7 @@ import dev.argon.ast.IdentifierExpr
 import dev.argon.util.{TreeShifter, UniqueIdentifier}
 
 import scala.reflect.TypeTest
+import dev.argon.util.SourceLocation
 
 trait ExprContext {
 
@@ -76,6 +77,8 @@ trait ExprContext {
     case TypeBigN(n: BigInt)
     case Variable(v: Var)
   }
+
+  final case class AnnotatedExpr(location: SourceLocation, e: Expr, t: Expr)
 
   final class Model private(mapping: Map[Hole, Expr]) {
     def resolveHole(hole: Hole): Option[Expr] =

@@ -8,11 +8,11 @@
         import Argon.Core/*
 
         proc main(): () do
-            puts ('A' ++ 'B')
-            puts (('A' = 'A').to_s())
-            puts (('A' = 'B').to_s())
-            puts (('A' != 'A').to_s())
-            puts (('A' != 'B').to_s())
+            puts ("A" ++ "B")
+            puts (("A" = "A").to_s())
+            puts (("A" = "B").to_s())
+            puts (("A" != "A").to_s())
+            puts (("A" != "B").to_s())
         end
 
 

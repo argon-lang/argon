@@ -13,7 +13,7 @@
         end
         
         proc main(): () do
-            val tupleValue: (String, String) = '1', '2'
+            val tupleValue: (String, String) = "1", "2"
             printTuple tupleValue
         end
         
