@@ -50,8 +50,15 @@ trait ScopeContext {
         }
     }
 
+    enum ImplicitValue {
+      case OfVar(v: Var)
+      case OfFunction(f: ArFuncC & HasContext[self.type])
+    }
+
     trait Scope {
       def lookup(id: IdentifierExpr): Comp[LookupResult]
+      def givenAssertions: Comp[Seq[ImplicitValue]] = ???
+      def knownVarValues: Map[Var, TRExprContext.Expr] = ???
     }
 
     final class GlobalScopeBuilder private(importer: TubeImporter & HasContext[self.type], imports: Seq[WithSource[ast.ImportStmt]], module: ArModuleC & HasContext[self.type]) {

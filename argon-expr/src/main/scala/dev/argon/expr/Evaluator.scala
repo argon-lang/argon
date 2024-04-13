@@ -15,10 +15,12 @@ trait Evaluator[R, E] {
     expr match {
       // These expressions always construct values or otherwise have no remaining normalizing to perform
       case Expr.Error() |
+        Expr.ErasedValue() |
         Expr.BoolLiteral(_) | Expr.IntLiteral(_) | Expr.StringLiteral(_) |
         Expr.Builtin(
-          Builtin.Nullary(_) | Builtin.EqualTo(_, _, _)
+          Builtin.Nullary(_) | Builtin.EqualTo(_, _, _) | Builtin.EqualToRefl(_, _)
         ) |
+        Expr.Lambda(_, _) |
         Expr.Tuple(_) |
         Expr.TypeN(_) | Expr.TypeBigN(_) | Expr.FunctionType(_, _) |
         Expr.Variable(_) => ZIO.succeed(expr)

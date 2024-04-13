@@ -25,7 +25,8 @@ trait ProverContext[R, E] {
 
 
   protected def newVariable: ZIO[R, E, TVariable]
-  protected def freshAssertions: Seq[ZIO[R, E, TVariable] => ZIO[R, E, (Proof[ProofAtom], Predicate)]]
+  protected def freshAssertions(model: Model): Seq[ZIO[R, E, TVariable] => ZIO[R, E, (Proof[ProofAtom], Predicate)]]
+  protected def unifyPredicateExpression(f1: TPredicateExpr, f2: TPredicateExpr, model: Ref[Model], fuel: Fuel): ZIO[R, E, Boolean]
 
   def check(goal: Predicate, model: Model, fuel: Fuel): ZIO[R, E, ProofResult]
   

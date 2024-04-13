@@ -11,21 +11,19 @@ import zio.interop.catz.core.*
 
 object PrologProofTests extends ZIOSpecDefault {
 
-  sealed trait TestPredicate derives CanEqual
-  case object Gt extends TestPredicate derives CanEqual
-  case object KnownTrue extends TestPredicate derives CanEqual
-  case object KnownFalse extends TestPredicate derives CanEqual
-  case object KnownDisjunctLeft extends TestPredicate derives CanEqual
-  case object KnownDisjunctRight extends TestPredicate derives CanEqual
-
   sealed trait TestCtor derives CanEqual
+  case object Gt extends TestCtor derives CanEqual
+  case object KnownTrue extends TestCtor derives CanEqual
+  case object KnownFalse extends TestCtor derives CanEqual
+  case object KnownDisjunctLeft extends TestCtor derives CanEqual
+  case object KnownDisjunctRight extends TestCtor derives CanEqual
   case object Succ extends TestCtor derives CanEqual
   case object Zero extends TestCtor derives CanEqual
 
-  val prologSyntax = new SimpleProverSyntax[TestPredicate, TestCtor]
+  val prologSyntax = new SimpleProverSyntax[TestCtor]
   import prologSyntax.*
 
-  private final class TestContext extends SimplePrologContext[TestPredicate, TestCtor] {
+  private final class TestContext extends SimplePrologContext[TestCtor] {
     override val syntax: prologSyntax.type = prologSyntax
     
     override val fuel: Fuel = Fuel(100)
@@ -36,7 +34,7 @@ object PrologProofTests extends ZIOSpecDefault {
     val knownTrue = Proof.Atomic("knownTrue")
     val knownFalse = Proof.Atomic("knownFalse")
 
-    override protected def freshAssertions: Seq[URIO[VariableProvider, TVariable] => URIO[VariableProvider, (Proof[ProofAtom], Predicate)]] =
+    override protected def freshAssertions(model: Model): Seq[URIO[VariableProvider, TVariable] => URIO[VariableProvider, (Proof[ProofAtom], Predicate)]] =
       Seq(
         newVariable => for {
           x <- newVariable
@@ -49,7 +47,7 @@ object PrologProofTests extends ZIOSpecDefault {
 
         newVariable => ZIO.succeed(knownDisjunct -> Or(pred(KnownDisjunctLeft), pred(KnownDisjunctRight))),
         newVariable => ZIO.succeed(knownTrue -> pred(KnownTrue)),
-        newVariable => ZIO.succeed(knownFalse -> not(pred(KnownFalse))),
+        newVariable => ZIO.succeed(knownFalse -> !pred(KnownFalse)),
       )
 
   }
@@ -110,19 +108,19 @@ object PrologProofTests extends ZIOSpecDefault {
         )
       },
       test("not (true | false)") {
-        assertZIO(prologContext.check(not(Or(pred(KnownTrue), pred(KnownFalse))), Map.empty, fuel))(notProven)
+        assertZIO(prologContext.check(!(pred(KnownTrue) | pred(KnownFalse)), Map.empty, fuel))(notProven)
       },
       test("not (false | true)") {
-        assertZIO(prologContext.check(not(Or(pred(KnownFalse), pred(KnownTrue))), Map.empty, fuel))(notProven)
+        assertZIO(prologContext.check(!(pred(KnownFalse) | pred(KnownTrue)), Map.empty, fuel))(notProven)
       },
       test("not (true | true)") {
-        assertZIO(prologContext.check(not(Or(pred(KnownTrue), pred(KnownTrue))), Map.empty, fuel))(notProven)
+        assertZIO(prologContext.check(!(pred(KnownTrue) | pred(KnownTrue)), Map.empty, fuel))(notProven)
       },
       test("not (true & true)") {
-        assertZIO(prologContext.check(not(And(pred(KnownTrue), pred(KnownTrue))), Map.empty, fuel))(equalTo(ProofResult.Unknown))
+        assertZIO(prologContext.check(!(pred(KnownTrue) & pred(KnownTrue)), Map.empty, fuel))(equalTo(ProofResult.Unknown))
       },
       test("not not true") {
-        assertZIO(prologContext.check(not(not(pred(KnownTrue))), Map.empty, fuel))(
+        assertZIO(prologContext.check(!(!pred(KnownTrue)), Map.empty, fuel))(
           hasProof(Proof.DoubleNegIntro(knownTrue))
         )
       },

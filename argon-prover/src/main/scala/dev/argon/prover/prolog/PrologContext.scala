@@ -13,8 +13,6 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
   protected def intrinsicPredicate(predicate: TPredicateExpr, model: Model, solveState: SolveState)
     : ZStream[R, E, ProofResult.Definitive]
 
-  protected def unifyPredicateExpression(f1: TPredicateExpr, f2: TPredicateExpr, model: Ref[Model], fuel: Fuel): ZIO[R, E, Boolean]
-
   final def check(goal: Predicate, model: Model, fuel: Fuel): ZIO[R, E, ProofResult] =
     solve(goal, model, SolveState(seenPredicates = Set.empty, fuel = fuel, additionalGivens = Seq.empty))
       .runHead
@@ -176,7 +174,7 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
     else
       ZStream.unwrap(
         for {
-          kb <- ZIO.foreach(freshAssertions) { makeAssertion => makeAssertion(newVariable) }
+          kb <- ZIO.foreach(freshAssertions(model)) { makeAssertion => makeAssertion(newVariable) }
         } yield ZStream.fromIterable(kb ++ solveState.additionalGivens).flatMap { (proof, assertion) =>
           inferOne(goal, assertion, model, solveState)
             .map {

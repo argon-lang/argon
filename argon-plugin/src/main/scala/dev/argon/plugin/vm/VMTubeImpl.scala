@@ -152,7 +152,7 @@ object VMTubeImpl {
 
 
       private def exprToType(e: Expr): Comp[VmType] =
-        ArgonEvaluator(context).normalizeToValue(e, context.Config.fuel).flatMap {
+        ArgonEvaluator(context).normalizeToValue(e, context.Config.evaluatorFuel).flatMap {
           case Expr.Builtin(EBuiltin.Nullary(t: expr.BuiltinType)) =>
             ZIO.succeed(VmType.Builtin(getBuiltin(t)))
 
@@ -189,7 +189,7 @@ object VMTubeImpl {
       private final case class RegisterWithType(r: Register, t: RegisterType)
 
       private def exprToRegType(e: Expr): Comp[RegisterType] =
-        ArgonEvaluator(context).normalizeToValue(e, context.Config.fuel).flatMap {
+        ArgonEvaluator(context).normalizeToValue(e, context.Config.evaluatorFuel).flatMap {
           case Expr.Builtin(EBuiltin.Nullary(t: expr.BuiltinType)) =>
             ZIO.succeed(RegisterType.Builtin(getBuiltin(t)))
 

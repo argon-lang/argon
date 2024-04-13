@@ -17,7 +17,7 @@ sealed trait SignatureEraser extends UsingContext {
     )
 
   private def getErasedType(t: Expr): Comp[ErasedSignatureType] =
-    ArgonEvaluator(context).normalizeToValue(t, context.Config.fuel).flatMap {
+    ArgonEvaluator(context).normalizeToValue(t, context.Config.evaluatorFuel).flatMap {
       case Expr.Builtin(Builtin.Nullary(t: BuiltinType)) =>
         ZIO.succeed(ErasedSignatureType.Builtin(t, Seq()))
 

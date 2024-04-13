@@ -11,25 +11,23 @@ import zio.interop.catz.core.*
 
 object PrologListTests extends ZIOSpecDefault {
 
-  sealed trait TestPredicate derives CanEqual
-  case object Member extends TestPredicate derives CanEqual
-
   sealed trait TestCtor derives CanEqual
+  case object Member extends TestCtor derives CanEqual
   case object Cons extends TestCtor derives CanEqual
   case object Nil extends TestCtor derives CanEqual
   case object A extends TestCtor derives CanEqual
   case object B extends TestCtor derives CanEqual
 
-  val prologSyntax = new SimpleProverSyntax[TestPredicate, TestCtor]
+  val prologSyntax = new SimpleProverSyntax[TestCtor]
   import prologSyntax.*
 
-  private object FuelContext extends SimplePrologContext[TestPredicate, TestCtor] {
+  private object FuelContext extends SimplePrologContext[TestCtor] {
 
     override val syntax: prologSyntax.type = prologSyntax
     
     override val fuel: Fuel = Fuel(100)
 
-    override protected def freshAssertions: Seq[URIO[VariableProvider, TVariable] => URIO[VariableProvider, (Proof[ProofAtom], Predicate)]] =
+    override protected def freshAssertions(model: Model): Seq[URIO[VariableProvider, TVariable] => URIO[VariableProvider, (Proof[ProofAtom], Predicate)]] =
       Seq(
         newVariable => for {
           x <- newVariable

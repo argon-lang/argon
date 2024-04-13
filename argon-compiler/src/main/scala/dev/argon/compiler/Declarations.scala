@@ -58,7 +58,9 @@ trait Context extends ScopeContext {
   }
   
   object Config {
-    val fuel: Fuel = Fuel(10)
+    val evaluatorFuel: Fuel = Fuel(10)
+    val prologFuel: Fuel = Fuel(10)
+    val smtFuel: Fuel = Fuel(5)
   }
 
   trait Implementations {

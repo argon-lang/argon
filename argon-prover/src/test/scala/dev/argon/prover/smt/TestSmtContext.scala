@@ -5,39 +5,38 @@ import dev.argon.prover.*
 import zio.*
 import zio.stream.{Stream, ZStream}
 
-abstract class TestSmtContext[PredFunc, Constructor](using CanEqual[PredFunc, PredFunc], CanEqual[Constructor, Constructor])
+abstract class TestSmtContext[Constructor](using CanEqual[Constructor, Constructor])
     extends SmtContext[VariableProvider, Nothing]
-      with TestProverContextBase[PredFunc, Constructor] {
+      with TestProverContextBase[Constructor] {
   import syntax.*
 
   override type ProofAtom = String
-  override type Expr = syntax.Expr
-
-  override protected def variableToExpr(v: Expr.Variable): Expr = v
 
   override protected def assumeResultProof: Proof[String] = Proof.Atomic("dummy")
 
-  override protected def normalizePredicateExpression(p: PredicateApply, model: Model, fuel: Fuel): ZIO[VariableProvider, Nothing, PredicateApply] =
-    ZIO.succeed(p)
+  override protected def normalizePredicateExpression(p: Expr, model: Model, fuel: Fuel): ZIO[VariableProvider, Nothing, Expr] =
+    ZIO.succeed {
+      p match {
+        case Expr.Variable(name) =>
+          model.get(name).getOrElse(p)
 
-  override protected def substituteVariablesPE(varMap: Map[Expr.Variable, Expr])(pf: PredicateApply): PredicateApply =
-    PredicateApply(pf.name, pf.args.map(substituteVariablesExpr(varMap)))
-    
-  private def substituteVariablesExpr(varMap: Map[Expr.Variable, Expr])(e: Expr): Expr =
-    e match {
+        case Expr.Value(_, _) => p
+      }
+    }
+
+  override protected def substituteVariablesPE(varMap: Map[Expr.Variable, Expr])(pe: Expr): Expr =
+    pe match {
       case Expr.Value(ctor, args) =>
-        Expr.Value(ctor, args.map(substituteVariablesExpr(varMap)))
+        Expr.Value(ctor, args.map(substituteVariablesPE(varMap)))
 
       case v: Expr.Variable =>
         varMap.getOrElse(v, v)
     }
 
-  override protected def matchPredicateExpr(a: PredicateApply, b: PredicateApply, state: ProverState, quantVars: Set[Expr.Variable]): ZIO[VariableProvider, Nothing, Option[Map[Expr.Variable, Expr]]] =
+  override protected def matchPredicateExpr(a: Expr, b: Expr, state: ProverState, quantVars: Set[Expr.Variable]): UIO[Option[Map[Expr.Variable, Expr]]] =
     for
       quantVarMap <- Ref.make(Map.empty[Expr.Variable, Expr])
-      res <-
-        ZIO.succeed(a.name == b.name && a.args.size == b.args.size) &&
-          ZIO.forall(a.args.zip(b.args)) { (a, b) => exprEquiv(a, b, state, quantVars, quantVarMap) }
+      res <- exprEquiv(a, b, state, quantVars, quantVarMap)
       qvm <- quantVarMap.get
     yield if res then Some(qvm) else None
 

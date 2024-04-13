@@ -7,10 +7,7 @@ import zio.stm.*
 
 abstract class SmtContext[R, E] extends ProverContext[R, E] {
   import syntax.*
-  
-  type Expr
 
-  protected def variableToExpr(v: TVariable): Expr
   protected def assumeResultProof: Proof[ProofAtom]
 
   protected def normalizePredicateExpression(p: TPredicateExpr, model: Model, fuel: Fuel): ZIO[R, E, TPredicateExpr]
@@ -159,9 +156,9 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       case (literal: Literal) :: tail => simplifyDisjunct(tail).map { literal :: _ }
     }
 
-  protected def substituteVariablesPE(varMap: Map[TVariable, Expr])(pf: TPredicateExpr): TPredicateExpr
+  protected def substituteVariablesPE(varMap: Map[TVariable, TPredicateExpr])(pf: TPredicateExpr): TPredicateExpr
 
-  private def substituteVariablesCNF(varMap: Map[TVariable, Expr])(p: CNF): CNF =
+  private def substituteVariablesCNF(varMap: Map[TVariable, TPredicateExpr])(p: CNF): CNF =
     p.map { _.map {
       case Literal.Atom(pf) => Literal.Atom(substituteVariablesPE(varMap)(pf))
       case Literal.NotAtom(pf) => Literal.NotAtom(substituteVariablesPE(varMap)(pf))
@@ -287,9 +284,9 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     impl(p, state, Map.empty)
   end choosePredicate
 
-  protected def matchPredicateExpr(pf: TPredicateExpr, quantPF: TPredicateExpr, state: ProverState, quantVars: Set[TVariable]): ZIO[R, E, Option[Map[TVariable, Expr]]]
+  protected def matchPredicateExpr(pf: TPredicateExpr, quantPF: TPredicateExpr, state: ProverState, quantVars: Set[TVariable]): ZIO[R, E, Option[Map[TVariable, TPredicateExpr]]]
 
-  private def quantLitMatch(state: ProverState, lit: Literal, quantLit: Literal, quantVars: Set[TVariable]): ZIO[R, E, Option[Map[TVariable, Expr]]] =
+  private def quantLitMatch(state: ProverState, lit: Literal, quantLit: Literal, quantVars: Set[TVariable]): ZIO[R, E, Option[Map[TVariable, TPredicateExpr]]] =
     (lit, quantLit) match {
       case (Literal.Atom(pf), Literal.NotAtom(quantPF)) => matchPredicateExpr(pf, quantPF, state, quantVars)
       case (Literal.NotAtom(pf), Literal.Atom(quantPF)) => matchPredicateExpr(pf, quantPF, state, quantVars)
@@ -387,7 +384,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
 
 
   override def check(goal: Predicate, model: Model, fuel: Fuel): ZIO[R, E, ProofResult] =
-    ZIO.foreach(freshAssertions) { assertion =>
+    ZIO.foreach(freshAssertions(model)) { assertion =>
       assertionAsQuantifier(assertion)
     }
       .flatMap { asserts =>

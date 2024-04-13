@@ -47,10 +47,13 @@ trait ExprContext {
     case Binary(builtin: BinaryBuiltin, a: Expr, b: Expr)
 
     case EqualTo(t: Expr, a: Expr, b: Expr)
+    case EqualToRefl(t: Expr, a: Expr)
   }
 
-  enum Expr {
+  enum Expr derives CanEqual {
     case Error()
+    case ErasedValue()
+
     case Hole(hole: ExprContext.this.Hole)
     
     
@@ -68,6 +71,7 @@ trait ExprContext {
       falseBody: Expr,
     )
     case IntLiteral(i: BigInt)
+    case Lambda(v: LocalVar, body: Expr)
     case Sequence(stmts: Seq[Expr], result: Expr)
     case StringLiteral(s: String)
     case StoreVariable(v: Var, value: Expr)

@@ -8,10 +8,8 @@ import zio.test.Assertion.*
 
 object SmtOrderTests extends ZIOSpecDefault {
 
-  sealed trait TestPredicate derives CanEqual
-  case object EqualTo extends TestPredicate derives CanEqual
-
   sealed trait TestCtor derives CanEqual
+  case object EqualTo extends TestCtor derives CanEqual
   case object Not extends TestCtor derives CanEqual
   case object Eq extends TestCtor derives CanEqual
   case object Lt extends TestCtor derives CanEqual
@@ -25,18 +23,18 @@ object SmtOrderTests extends ZIOSpecDefault {
 
   val dummyProof = Proof.Atomic("dummy")
 
-  private val prologSyntax: SimpleProverSyntax[TestPredicate, TestCtor] = new SimpleProverSyntax[TestPredicate, TestCtor]
+  private val prologSyntax: SimpleProverSyntax[TestCtor] = new SimpleProverSyntax[TestCtor]
   import prologSyntax.*
 
 
-  private final class TestContext(extraAssertions: Seq[Predicate]) extends TestSmtContext[TestPredicate, TestCtor] {
+  private final class TestContext(extraAssertions: Seq[Predicate]) extends TestSmtContext[TestCtor] {
     override val syntax: prologSyntax.type = prologSyntax
 
     private val commonAssertions = Seq()
 
     override val fuel = Fuel(10)
 
-    protected override def freshAssertions: Seq[URIO[VariableProvider, TVariable] => URIO[VariableProvider, (Proof[String], Predicate)]] =
+    protected override def freshAssertions(model: Model): Seq[URIO[VariableProvider, TVariable] => URIO[VariableProvider, (Proof[String], Predicate)]] =
       (commonAssertions ++ extraAssertions)
         .map { p =>
           (_: URIO[VariableProvider, TVariable]) => ZIO.succeed(dummyProof -> p)
