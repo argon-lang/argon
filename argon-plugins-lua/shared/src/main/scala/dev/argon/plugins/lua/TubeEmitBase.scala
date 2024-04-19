@@ -9,6 +9,7 @@ trait TubeEmitBase extends EmitBase {
     val implementations: {
       type ExternFunctionImplementation <: ZEnvironment[LuaExternImplementation]
       type FunctionReference <: ZEnvironment[LuaReference]
+      type RecordReference <: ZEnvironment[LuaReference]
     }
   }
   export context.{Comp, Env, Error}
@@ -16,6 +17,7 @@ trait TubeEmitBase extends EmitBase {
   type Externs[E <: ExternalImplementation] = E match {
     case "function" => context.implementations.ExternFunctionImplementation
     case "function-reference" => context.implementations.FunctionReference
+    case "record-reference" => context.implementations.RecordReference
   }
 
   val currentTube: VmTube[context.Env, context.Error, Externs]

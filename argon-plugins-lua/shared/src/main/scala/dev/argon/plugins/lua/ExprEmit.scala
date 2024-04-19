@@ -111,6 +111,23 @@ trait ExprEmit extends ModuleEmitBase {
           callExp <- emitCall(call)
         yield Seq(callExp)
 
+      case Instruction.CreateRecord(result, recordId, recordType, args*) =>
+        for
+          record <- currentTube.getRecordDefinition(recordId)
+          res <- getRegVar(result)
+
+          fields <- ZIO.foreach(record.fields.zip(args)) { (field, arg) =>
+            for
+              v <- getRegVar(arg)
+            yield AST.Field.NamedWithExp(getIdentifierKeyExprMemo(Some(field.name)), AST.NameExp(v))
+          }
+        yield Seq(
+          AST.Assignment(Seq(AST.NameExp(res)), Seq(
+            AST.TableConstructor(fields)
+          ))
+        )
+          
+
       case Instruction.CreateTuple(res, items*) =>
         for
           v <- getRegVar(res)
@@ -205,6 +222,19 @@ trait ExprEmit extends ModuleEmitBase {
           ),
         )))
 
+      case Instruction.LoadRecordField(result, recordId, _, fieldIndex, recordValue) =>
+        for
+          record <- currentTube.getRecordDefinition(recordId)
+          field = record.fields(fieldIndex.toInt)
+          res <- getRegVar(result)
+          recordValueReg <- getRegVar(recordValue)
+        yield Seq(
+          AST.Assignment(
+            Seq(AST.NameExp(res)),
+            Seq(AST.MemberAccessIndex(AST.NameExp(recordValueReg), getIdentifierKeyExprMemo(Some(field.name)))),
+          )
+        )
+
       case Instruction.LoadString(res, s) =>
         for
           v <- getRegVar(res)
@@ -215,6 +245,19 @@ trait ExprEmit extends ModuleEmitBase {
           tVar <- getRegVar(target)
           sVar <- getRegVar(source)
         yield Seq(AST.Assignment(Seq(AST.NameExp(tVar)), Seq(AST.NameExp(sVar))))
+
+      case Instruction.RecordType(res, recordId, args*) =>
+        for
+          resVar <- getRegVar(res)
+          recordRef <- currentTube.getRecordReference(recordId)
+          recordExp = getReferenceExp(recordRef.get[LuaReference])
+          argExps <- ZIO.foreach(args)(getRegVar)
+        yield Seq(AST.Assignment(
+          Seq(AST.NameExp(resVar)),
+          Seq(AST.TableConstructor(
+            AST.Field.NamedFixed("record", recordExp) +: argExps.map(AST.NameExp.apply andThen AST.Field.Positional.apply)
+          ))
+        ))
 
       case Instruction.TupleElement(res, tuple, index) =>
         for

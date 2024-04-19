@@ -15,7 +15,7 @@ trait ScopeContext {
 
   object Scopes {
 
-    import TRExprContext.{Var, LocalVar}
+    import TRExprContext.{Var, LocalVar, Expr}
 
     sealed trait LookupResult
     object LookupResult {
@@ -29,24 +29,31 @@ trait ScopeContext {
 
     enum Overloadable {
       case Function(f: ArFuncC & HasContext[self.type])
+      case Record(r: ArRecordC & HasContext[self.type])
       case ExtensionMethod(f: ArFuncC & HasContext[self.type], obj: TRExprContext.AnnotatedExpr)
+      case RecordField(r: Expr.RecordType, field: RecordFieldC & HasContext[self.type], recordValue: Expr)
 
       def initialArgs: Seq[TRExprContext.AnnotatedExpr] =
         this match {
-          case Function(f) => Seq()
+          case Function(_) | Record(_) => Seq()
           case ExtensionMethod(f, obj) => Seq(obj)
+          case RecordField(_, _, _) => Seq()
         }
 
       def signature: Comp[TRSignatureContext.FunctionSignature] =
         this match {
           case Function(f) => f.signature.map(TRSignatureContext.signatureFromDefault)
-          case ExtensionMethod(f, obj) => f.signature.map(TRSignatureContext.signatureFromDefault)              
+          case Record(r) => r.signature.map(TRSignatureContext.signatureFromDefault)
+          case ExtensionMethod(f, obj) => f.signature.map(TRSignatureContext.signatureFromDefault)
+          case RecordField(r, field, _) => TRSignatureContext.recordFieldSig(r, field)
         }
 
       def asOwner: TRExprContext.ParameterOwner =
         this match {
-          case Function(f) => f
-          case ExtensionMethod(f, _) => f
+          case Function(f) => TRExprContext.ParameterOwner.Func(f)
+          case Record(r) => TRExprContext.ParameterOwner.Rec(r)
+          case ExtensionMethod(f, _) => TRExprContext.ParameterOwner.Func(f)
+          case RecordField(_, _, _) => TRExprContext.ParameterOwner.RecordField()
         }
     }
 
@@ -76,6 +83,7 @@ trait ScopeContext {
     private def moduleExportToOverloadable(exp: ModuleExportC[self.type]): Overloadable =
       exp match {
         case ModuleExportC.Function(f) => Overloadable.Function(f)
+        case ModuleExportC.Record(r) => Overloadable.Record(r)
         case ModuleExportC.Exported(exp) => moduleExportToOverloadable(exp)
       }
 
@@ -108,7 +116,12 @@ trait ScopeContext {
 
       private val parameters =
         val shifter = DefaultToTRShifter[self.type](self)
-        DefaultSignatureContext.SignatureParameter.getParameterVariables(owner, sigParams).map(shifter.shiftVar)
+        val owner2 = owner match {
+          case TRExprContext.ParameterOwner.Func(f) => DefaultExprContext.ParameterOwner.Func(f)
+          case TRExprContext.ParameterOwner.Rec(r) => DefaultExprContext.ParameterOwner.Rec(r)
+          case TRExprContext.ParameterOwner.RecordField() => DefaultExprContext.ParameterOwner.RecordField()
+        }
+        DefaultSignatureContext.SignatureParameter.getParameterVariables(owner2, sigParams).map(shifter.shiftVar)
       end parameters
 
 

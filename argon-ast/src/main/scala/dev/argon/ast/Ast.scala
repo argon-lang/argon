@@ -25,10 +25,16 @@ final case class VariableDeclarationStmt(
 
 final case class RecordDeclarationStmt(
   modifiers: Vector[WithSource[Modifier]],
-  name: WithSource[Option[IdentifierExpr]],
+  name: WithSource[IdentifierExpr],
   parameters: Vector[WithSource[FunctionParameterList]],
+  returnType: Option[WithSource[Expr]],
   body: Vector[WithSource[RecordBodyStmt]],
 ) extends Stmt
+
+final case class RecordField(
+  name: WithSource[IdentifierExpr],
+  fieldType: WithSource[Expr],
+) extends RecordBodyStmt
 
 final case class MethodDeclarationStmt(
   modifiers: Vector[WithSource[Modifier]],
@@ -40,7 +46,6 @@ final case class MethodDeclarationStmt(
   returnType: WithSource[ReturnTypeSpecifier],
   body: Option[WithSource[Expr]],
 ) extends RecordBodyStmt
-
 
 final case class FunctionParameter
 (paramType: WithSource[Expr], name: IdentifierExpr)
@@ -113,6 +118,7 @@ object Expr:
   final case class FunctionType(a: WithSource[Expr], r: WithSource[Expr]) extends Expr
   final case class IfElse(condition: WithSource[Expr], whenTrue: WithSource[Seq[WithSource[Stmt]]], whenFalse: WithSource[Seq[WithSource[Stmt]]]) extends Expr
   final case class IntLiteral(i: BigInt) extends Expr
+  final case class RecordLiteral(recordExpr: WithSource[Expr], fields: WithSource[Seq[WithSource[RecordFieldLiteral]]]) extends Expr
   final case class StringLiteral(parts: NonEmptySeq[StringFragment]) extends Expr
   final case class Summon(t: WithSource[Expr]) extends Expr
   final case class Tuple(items: Seq[WithSource[Expr]]) extends Expr
@@ -128,6 +134,11 @@ enum IdentifierExpr extends Expr derives CanEqual {
   case Inverse(inner: IdentifierExpr)
   case Update(inner: IdentifierExpr)
 }
+
+final case class RecordFieldLiteral(
+  name: WithSource[IdentifierExpr],
+  value: WithSource[Expr],
+)
 
 enum StringFragment {
   case Text(s: String)

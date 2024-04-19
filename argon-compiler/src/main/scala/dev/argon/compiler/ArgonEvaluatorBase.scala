@@ -11,7 +11,7 @@ private[compiler] abstract class ArgonEvaluatorBase[R, E] extends Evaluator[R, E
   override val exprContext: context.ArgonExprContext
   protected val signatureContext: SignatureContext { val exprContext: ArgonEvaluatorBase.this.exprContext.type }
 
-  import exprContext.{Var, Expr}
+  import exprContext.{Var, Expr, ParameterOwner}
 
   protected def shiftExpr(expr: context.DefaultExprContext.Expr): Expr
   protected def shiftSig(sig: context.DefaultSignatureContext.FunctionSignature): signatureContext.FunctionSignature
@@ -27,7 +27,7 @@ private[compiler] abstract class ArgonEvaluatorBase[R, E] extends Evaluator[R, E
               for
                 sig <- function.signature
               yield {
-                val varMap = shiftSig(sig).parameters.zipWithIndex.map((param, index) => param.asParameterVar(function, index) : Var).zip(args).toMap
+                val varMap = shiftSig(sig).parameters.zipWithIndex.map((param, index) => param.asParameterVar(ParameterOwner.Func(function), index) : Var).zip(args).toMap
                 val e3 = Substitution.substitute(exprContext)(varMap)(e2)
                 (e3, true)
               }

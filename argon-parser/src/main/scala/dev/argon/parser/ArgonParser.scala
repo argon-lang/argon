@@ -1,6 +1,7 @@
 package dev.argon.parser
 
 import Token.*
+import dev.argon.ast
 import dev.argon.ast.*
 import dev.argon.util.{*, given}
 import scala.reflect.TypeTest
@@ -90,6 +91,9 @@ object ArgonParser {
     case object BlockBody extends ArgonRuleName[Expr.Block]
     case object MethodPurity extends ArgonRuleName[Boolean]
     case object FunctionDefinitionStmt extends ArgonRuleName[Stmt]
+    case object RecordDeclarationStmt extends ArgonRuleName[ast.RecordDeclarationStmt]
+    case object RecordBody extends ArgonRuleName[Vector[WithSource[RecordBodyStmt]]]
+    case object RecordField extends ArgonRuleName[ast.RecordField]
     case object MethodDefinitionStmt extends ArgonRuleName[MethodDeclarationStmt]
 
     // Types
@@ -263,7 +267,7 @@ object ArgonParser {
           createLeftRec(
             rule(Rule.PrimaryExpr(Rule.ParenAllowed))
           )(
-            postfixExprMemberAccess |
+            postfixExprCommon |
               rule(Rule.ParenArgList).observeLocation --> {
                 case WithLocation((listType, argList), location) =>
                   (funcExpr: WithSource[Expr]) => Expr.FunctionCall(funcExpr, listType, WithLocation(argList, location))
@@ -271,7 +275,7 @@ object ArgonParser {
           )
 
         case Rule.PostfixExpr(Rule.ParenDisallowed) =>
-          createLeftRec(rule(Rule.PrimaryExpr(Rule.ParenDisallowed)))(postfixExprMemberAccess)
+          createLeftRec(rule(Rule.PrimaryExpr(Rule.ParenDisallowed)))(postfixExprCommon)
 
         case Rule.ParenArgList =>
           matchToken(OP_OPENPAREN) ++ matchToken(KW_REQUIRES).? ++ rule(Rule.Expression).? ++ matchToken(
@@ -587,6 +591,43 @@ object ArgonParser {
                 FunctionDeclarationStmt(modifiers, purity, name, params, returnType, body)
             }
 
+        case Rule.RecordDeclarationStmt =>
+          rule(Rule.Modifiers) ++
+            matchToken(KW_RECORD).discard ++
+            rule(Rule.Identifier).observeLocation ++
+            rule(Rule.MethodParameters) ++
+            (
+              matchToken(OP_COLON).discard ++
+                rule(Rule.NewLines) ++
+                rule(Rule.Type).observeLocation
+            ).? ++
+            rule(Rule.StatementSeparator).discard ++
+            rule(Rule.RecordBody) ++
+            matchToken(KW_END).discard --> {
+              case (modifiers, name, params, returnType, body) =>
+                RecordDeclarationStmt(modifiers, name, params, returnType, body)
+            }
+
+        case Rule.RecordBody =>
+          rule(Rule.StatementSeparator).*.discard ++ (
+            (
+              rule(Rule.RecordField) |
+                rule(Rule.MethodDefinitionStmt)
+            ).observeLocation ++ rule(
+            Rule.StatementSeparator
+          ).*.discard).* --> {
+            stmts => stmts.toVector
+          }
+
+        case Rule.RecordField =>
+          rule(Rule.Identifier).observeLocation ++
+            rule(Rule.NewLines) ++
+            matchToken(OP_COLON).discard ++
+            rule(Rule.Type).observeLocation --> {
+              case (name, t) =>
+                RecordField(name, t)
+            }
+
         case Rule.MethodDefinitionStmt =>
           rule(Rule.Modifiers) ++
             rule(Rule.MethodPurity) ++
@@ -609,6 +650,7 @@ object ArgonParser {
         case Rule.Statement =>
           rule(Rule.VariableDeclaration) |
             rule(Rule.FunctionDefinitionStmt) |
+            rule(Rule.RecordDeclarationStmt) |
             rule(Rule.ExpressionStmt) |
             rule(Rule.ImportStatement) |
             rule(Rule.ExportStatement)
@@ -720,10 +762,34 @@ object ArgonParser {
       }
 
     // Expressions
+    private def postfixExprCommon: TGrammar[WithSource[Expr] => Expr] =
+      postfixExprMemberAccess | postfixExprRecordLit
+
     private def postfixExprMemberAccess: TGrammar[WithSource[Expr] => Expr] =
-      (matchToken(OP_DOT) ++! rule(Rule.MemberAccess)) --> {
-        case (_, memberAccessFunc) => (baseExpr: WithSource[Expr]) => memberAccessFunc(baseExpr)
+      (matchToken(OP_DOT).discard ++! rule(Rule.MemberAccess)) --> {
+        memberAccessFunc => (baseExpr: WithSource[Expr]) => memberAccessFunc(baseExpr)
       }
+
+    private def postfixExprRecordLit: TGrammar[WithSource[Expr] => Expr] =
+      (
+        matchToken(OP_OPENCURLY).discard ++!
+          rule(Rule.StatementSeparator).*.discard ++
+          (
+            rule(Rule.Identifier).observeLocation ++!
+              rule(Rule.NewLines) ++
+              matchToken(OP_COLON).discard ++
+              rule(Rule.NewLines) ++
+              rule(Rule.Type).observeLocation ++
+              rule(Rule.StatementSeparator).*.discard --> {
+              case (name, t) => RecordFieldLiteral(name, t)
+            }
+          ).observeLocation.*.observeLocation ++
+          matchToken(OP_CLOSECURLY).discard
+      ) --> {
+        fields => (baseExpr: WithSource[Expr]) =>
+          Expr.RecordLiteral(baseExpr, fields)
+      }
+      
 
     private def createLeftAssociativeOperatorRule
       (firstOpGrammar: TGrammar[BinaryOperator], opGrammars: TGrammar[BinaryOperator]*)(nextGrammar: TGrammar[Expr])

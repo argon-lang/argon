@@ -22,7 +22,7 @@ object SourceFunction {
 
       override def signature: Comp[FunctionSignature] = sigCache.get(
         scope.toScope.flatMap { scope =>
-          SourceSignature.parse(ctx)(scope)(this)(decl.parameters, decl.returnType)
+          SourceSignature.parse(ctx)(scope)(context.TRExprContext.ParameterOwner.Func(this))(decl.parameters, decl.returnType)
         }
       )
 
@@ -31,7 +31,7 @@ object SourceFunction {
           for
             scope <- scope.toScope
             sig <- signature
-            scope2 = context.Scopes.ParameterScope(this, scope, sig.parameters)
+            scope2 = context.Scopes.ParameterScope(context.TRExprContext.ParameterOwner.Func(this), scope, sig.parameters)
             impl <- decl.body.value match {
               case ast.Expr.Extern(name) =>
                 externFactory.getExternFunctionImplementation(name)

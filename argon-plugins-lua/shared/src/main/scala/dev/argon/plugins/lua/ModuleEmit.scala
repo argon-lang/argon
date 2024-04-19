@@ -33,28 +33,37 @@ trait ModuleEmit extends ModuleEmitBase {
 
     for
       elementStats <- ZIO.foreach(exports)(emitElement(moduleExpr))
-    yield nameTableStats ++ elementStats
+    yield nameTableStats ++ elementStats.flatten
   end emitModule
 
 
 
-  private def emitElement(moduleExpr: AST.PrefixExp)(entry: VmModuleExportEntry): Comp[AST.Stat] =
+  private def emitElement(moduleExpr: AST.PrefixExp)(entry: VmModuleExportEntry): Comp[Option[AST.Stat]] =
     for
-      elementExp <- entry.`export` match {
+      elementExpOpt <- entry.`export` match {
         case VmModuleExport.Function(funcId) =>
           currentTube.getFunctionDefinition(funcId)
             .flatMap(emitFunction(funcId))
+            .asSome
+
+        case VmModuleExport.Record(recordId) =>
+          currentTube.getRecordDefinition(recordId)
+            .flatMap(emitRecord)
+            .asSome
+
       }
-    yield AST.Assignment(
-      Seq(AST.MemberAccessIndex(
-        AST.MemberAccessIndex(
-          moduleExpr,
-          getIdentifierKeyExprMemo(entry.name),
-        ),
-        getErasedSigKeyExprMemo(entry.signature),
-      )),
-      Seq(elementExp)
-    )
+    yield elementExpOpt.map { elementExp =>
+      AST.Assignment(
+        Seq(AST.MemberAccessIndex(
+          AST.MemberAccessIndex(
+            moduleExpr,
+            getIdentifierKeyExprMemo(entry.name),
+          ),
+          getErasedSigKeyExprMemo(entry.signature),
+        )),
+        Seq(elementExp)
+      )
+    }
 
   private trait ExprEmitCommon extends ExprEmit {
     override val context: ModuleEmit.this.context.type = ModuleEmit.this.context
@@ -87,6 +96,9 @@ trait ModuleEmit extends ModuleEmitBase {
 
       case None => ???
     }
+
+  private def emitRecord(record: VmRecord): Comp[AST.Exp] =
+    ZIO.succeed(AST.TableConstructor(Seq()))
 
 }
 

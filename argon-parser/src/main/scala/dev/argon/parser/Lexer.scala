@@ -201,6 +201,7 @@ object Lexer {
               case "end" => Token.KW_END
               case "var" => Token.KW_VAR
               case "val" => Token.KW_VAL
+              case "record" => Token.KW_RECORD
               case "true" => Token.KW_TRUE
               case "false" => Token.KW_FALSE
               case "as" => Token.KW_AS

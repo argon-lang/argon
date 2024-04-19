@@ -24,8 +24,13 @@ trait HoleScanner extends TreeScanner[[A] =>> Either[Unit, A]] {
   private given Scanner[Builtin] = autoScanner
   private given Scanner[LocalVar] = autoScanner
   private given Scanner[Var] = autoScanner
+  given Scanner[Expr.RecordType] = autoScanner
+  given Scanner[RecordFieldLiteral] = autoScanner
 
+  private given Scanner[ParameterOwner] = IgnoreScanner[ParameterOwner]
   private given Scanner[Function] = IgnoreScanner[Function]
+  private given Scanner[Record] = IgnoreScanner[Record]
+  private given Scanner[RecordField] = IgnoreScanner[RecordField]
   private given Scanner[NullaryBuiltin] = IgnoreScanner[NullaryBuiltin]
   private given Scanner[UnaryBuiltin] = IgnoreScanner[UnaryBuiltin]
   private given Scanner[BinaryBuiltin] = IgnoreScanner[BinaryBuiltin]

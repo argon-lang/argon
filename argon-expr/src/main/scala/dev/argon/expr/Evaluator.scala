@@ -21,6 +21,7 @@ trait Evaluator[R, E] {
           Builtin.Nullary(_) | Builtin.EqualTo(_, _, _) | Builtin.EqualToRefl(_, _)
         ) |
         Expr.Lambda(_, _) |
+        Expr.RecordType(_, _) | Expr.RecordLiteral(_, _) |
         Expr.Tuple(_) |
         Expr.TypeN(_) | Expr.TypeBigN(_) | Expr.FunctionType(_, _) |
         Expr.Variable(_) => ZIO.succeed(expr)
@@ -69,6 +70,14 @@ trait Evaluator[R, E] {
         normalizeToValue(tuple, fuel).flatMap {
           case Expr.Tuple(items) => normalizeToValue(items(index), fuel)
           case tuple => ZIO.succeed(Expr.TupleElement(index, tuple))
+        }
+
+      case Expr.RecordFieldLoad(rec, field, recordExpr) =>
+        normalizeToValue(recordExpr, fuel).flatMap {
+          case Expr.RecordLiteral(_, fields) =>
+            ZIO.succeed(fields.find(_.name == getRecordFieldName(field)).getOrElse { ??? }.value)
+
+          case recValue => ZIO.succeed(Expr.RecordFieldLoad(rec, field, recValue))
         }
 
     }

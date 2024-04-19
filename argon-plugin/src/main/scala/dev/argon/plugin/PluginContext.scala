@@ -18,6 +18,7 @@ abstract class PluginContext[R, E] extends Context {
   override val implementations: Implementations {
     type ExternFunctionImplementation = plugins.externFunction.Implementation
     type FunctionReference = plugins.externFunction.Reference
+    type RecordReference = plugins.externRecord.Reference
   }
 }
 

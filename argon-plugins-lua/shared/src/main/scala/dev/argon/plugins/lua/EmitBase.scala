@@ -8,14 +8,17 @@ import dev.argon.expr.{BinaryBuiltin, NullaryBuiltin}
 import dev.argon.plugin.vm.*
 
 trait EmitBase {
-  protected def toArrayExp(values: Seq[AST.Exp]): AST.Exp =
+  def toArrayExp(values: Seq[AST.Exp]): AST.Exp =
     AST.TableConstructor(values.map(AST.Field.Positional.apply))
 
 
   def getTubePath(tubeName: CTubeName): String =
     tubeName.encode.replace(".", "_").nn
 
-  protected def getIdentifierKeyExpr(id: Option[Identifier]): AST.Exp =
+  def getTubePath(tubeName: TubeName): String =
+    getTubePath(CTubeName(NonEmptySeq(tubeName.head, tubeName.tail)))
+
+  private def getIdentifierKeyExpr(id: Option[Identifier]): AST.Exp =
     id match {
       case Some(Identifier.Named(name)) =>
         AST.StringLiteral(name)
@@ -84,7 +87,7 @@ trait EmitBase {
     )
 
 
-  protected def getErasedSigKeyExpr(sig: ErasedSignature): AST.Exp =
+  private def getErasedSigKeyExpr(sig: ErasedSignature): AST.Exp =
     val paramsExprs = sig.parameters.map(getErasedTypeExpr)
     val resExpr = getErasedTypeExpr(sig.returnType)
     AST.TableConstructor(Seq(
@@ -105,7 +108,7 @@ trait EmitBase {
       Seq(getErasedSigKeyExpr(sig)),
     )
 
-  protected def getErasedTypeExpr(t: ErasedType): AST.Exp =
+  private def getErasedTypeExpr(t: ErasedType): AST.Exp =
     t match
       case ErasedType.Builtin(builtin, args*) =>
         AST.TableConstructor(Seq(
@@ -130,6 +133,23 @@ trait EmitBase {
             toArrayExp(args.map(getErasedTypeExpr)),
           ),
         ))
+
+      case ErasedType.Record(recordImport, args*) =>
+        AST.TableConstructor(Seq(
+          AST.Field.NamedFixed(
+            "type",
+            AST.StringLiteral("record"),
+          ),
+          AST.Field.NamedFixed(
+            "record",
+            getImportSpecifierExpr(recordImport),
+          ),
+          AST.Field.NamedFixed(
+            "args",
+            toArrayExp(args.map(getErasedTypeExpr)),
+          ),
+        ))
+
 
       case ErasedType.Function(input, output) =>
         AST.TableConstructor(Seq(
@@ -166,5 +186,13 @@ trait EmitBase {
           ),
         ))
     end match
+
+  private def getImportSpecifierExpr(is: ImportSpecifier): AST.Exp =
+    AST.TableConstructor(Seq(
+      AST.Field.NamedFixed("tube", AST.StringLiteral(getTubePath(is.tube))),
+      AST.Field.NamedFixed("module", AST.StringLiteral(dev.argon.compiler.ModulePath(is.module.path).encode)),
+      AST.Field.NamedFixed("name", getIdentifierKeyExprMemo(is.name)),
+      AST.Field.NamedFixed("signature", getErasedSigKeyExprMemo(is.signature)),
+    ))
 
 }

@@ -2,7 +2,7 @@ package dev.argon.compiler
 
 import cats.data.NonEmptySeq
 import dev.argon.ast.IdentifierExpr
-import dev.argon.expr.ExprContext
+import dev.argon.expr.{ExprContext, Substitution}
 import dev.argon.util.{Fuel, UniqueIdentifier}
 import zio.ZIO
 
@@ -17,6 +17,13 @@ trait Context extends ScopeContext {
   trait ArgonExprContext extends ExprContext {
     override type Function = ArFuncC & HasContext[Context.this.type]
     override def functionCanEqual: CanEqual[Function, Function] = summon
+
+    override type Record = ArRecordC & HasContext[Context.this.type]
+    override def recordCanEqual: CanEqual[Record, Record] = summon
+
+    override type RecordField = RecordFieldC & HasContext[Context.this.type]
+    override def recordFieldCanEqual: CanEqual[RecordField, RecordField] = summon
+    override def getRecordFieldName(f: RecordFieldC & HasContext[Context.this.type]): IdentifierExpr = f.name
   }
 
   object DefaultExprContext extends ArgonExprContext {
@@ -29,12 +36,9 @@ trait Context extends ScopeContext {
     override def holeCanEqual: CanEqual[Hole, Hole] = summon
   }
 
-  object DefaultSignatureContext extends SignatureContext {
-    override val exprContext: DefaultExprContext.type = DefaultExprContext
-  }
-
-  object TRSignatureContext extends SignatureContext {
-    override val exprContext: TRExprContext.type = TRExprContext
+  sealed abstract class ArgonSignatureContextBase extends SignatureContext {
+    override val exprContext: ArgonExprContext
+    protected def exprFromDefault(expr: DefaultExprContext.Expr): exprContext.Expr
 
     def parameterFromDefault(p: DefaultSignatureContext.SignatureParameter): SignatureParameter =
       SignatureParameter(
@@ -42,19 +46,52 @@ trait Context extends ScopeContext {
         isErased = p.isErased,
         bindings = p.bindings.map { binding => ParameterBinding(
           name = binding.name,
-          paramType = DefaultToTRShifter[Context.this.type](Context.this).shiftExpr(binding.paramType),
+          paramType = exprFromDefault(binding.paramType),
         ) },
         name = p.name,
-        paramType = DefaultToTRShifter[Context.this.type](Context.this).shiftExpr(p.paramType),
+        paramType = exprFromDefault(p.paramType),
       )
 
     def signatureFromDefault(sig: DefaultSignatureContext.FunctionSignature): FunctionSignature =
       FunctionSignature(
         parameters = sig.parameters.map(parameterFromDefault),
-        returnType = DefaultToTRShifter[Context.this.type](Context.this).shiftExpr(sig.returnType),
-        ensuresClauses = sig.ensuresClauses.map(DefaultToTRShifter[Context.this.type](Context.this).shiftExpr),
+        returnType = exprFromDefault(sig.returnType),
+        ensuresClauses = sig.ensuresClauses.map(exprFromDefault),
       )
 
+    def recordFieldSig(r: exprContext.Expr.RecordType, field: RecordFieldC & HasContext[Context.this.type]): Comp[FunctionSignature] =
+      for
+        recordSig <- r.record.signature
+
+        argMapping =
+          SignatureParameter.getParameterVariables(
+            exprContext.ParameterOwner.Rec(r.record),
+            signatureFromDefault(recordSig).parameters
+          )
+            .zip(r.args)
+            .toMap[exprContext.Var, exprContext.Expr]
+
+      yield FunctionSignature(
+        parameters = Seq(),
+        returnType = Substitution.substitute(exprContext)(argMapping)(exprFromDefault(field.fieldType)),
+        ensuresClauses = Seq(),
+      )
+
+  }
+
+
+  object DefaultSignatureContext extends ArgonSignatureContextBase {
+    override val exprContext: DefaultExprContext.type = DefaultExprContext
+
+    override protected def exprFromDefault(expr: DefaultExprContext.Expr): exprContext.Expr =
+      expr
+  }
+
+  object TRSignatureContext extends ArgonSignatureContextBase {
+    override val exprContext: TRExprContext.type = TRExprContext
+
+    override protected def exprFromDefault(expr: DefaultExprContext.Expr): exprContext.Expr =
+      DefaultToTRShifter[Context.this.type](Context.this).shiftExpr(expr)
   }
   
   object Config {
@@ -66,6 +103,7 @@ trait Context extends ScopeContext {
   trait Implementations {
     type ExternFunctionImplementation
     type FunctionReference
+    type RecordReference
 
     enum FunctionImplementation {
       case Expr(e: DefaultExprContext.Expr)
@@ -95,6 +133,9 @@ trait UsingContext {
   type ModuleExport = ModuleExportC[context.type]
 
   type ArFunc = ArFuncC & HasContext[context.type]
+  type ArRecord = ArRecordC & HasContext[context.type]
+
+  type RecordField = RecordFieldC & HasContext[context.type]
 }
 
 
@@ -143,6 +184,7 @@ abstract class ArModuleC extends UsingContext {
 
 enum ModuleExportC[Ctx <: Context] {
   case Function(f: ArFuncC & HasContext[Ctx])
+  case Record(r: ArRecordC & HasContext[Ctx])
   case Exported(exp: ModuleExportC[Ctx])
 }
 
@@ -165,4 +207,37 @@ abstract class ArFuncC extends UsingContext derives CanEqual {
     }
 }
 
+abstract class ArRecordC extends UsingContext derives CanEqual {
+  val id: UniqueIdentifier
+
+  def importSpecifier(sigEraser: SignatureEraser & HasContext[context.type]): Comp[ImportSpecifier]
+
+  def signature: Comp[FunctionSignature]
+
+  def fields: Comp[Seq[RecordField]]
+
+  def reference: Comp[context.implementations.RecordReference]
+
+  override def hashCode(): Int = id.hashCode()
+  override def equals(obj: Any): Boolean =
+    obj.asInstanceOf[Matchable] match {
+      case other: ArRecordC => id == other.id
+      case _ => false
+    }
+}
+
+abstract class RecordFieldC extends UsingContext derives CanEqual {
+  import context.DefaultExprContext.Expr
+
+  val id: UniqueIdentifier
+  val name: IdentifierExpr
+  val fieldType: Expr
+
+  override def hashCode(): Int = id.hashCode()
+  override def equals(obj: Any): Boolean =
+    obj.asInstanceOf[Matchable] match {
+      case other: RecordFieldC => id == other.id
+      case _ => false
+    }
+}
 

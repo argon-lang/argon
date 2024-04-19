@@ -1,0 +1,31 @@
+<ArgonTest>
+
+    <Name>Record as parameter</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+        
+        record MyRecord
+            name: String
+        end
+
+        proc getName(r: MyRecord): String =
+            r.name
+        
+        proc main(): () do
+            val r = MyRecord {
+                name: "Hello"
+            }
+
+            puts (getName r)
+        end
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        Hello
+    </ExpectedOutput>
+
+</ArgonTest>

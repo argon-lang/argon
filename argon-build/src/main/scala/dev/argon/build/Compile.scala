@@ -36,9 +36,11 @@ object Compile {
           override val implementations: Implementations {
             type ExternFunctionImplementation = plugins.externFunction.Implementation
             type FunctionReference = plugins.externFunction.Reference
+            type RecordReference = plugins.externRecord.Reference
           } = new Implementations {
             override type ExternFunctionImplementation = plugins.externFunction.Implementation
             override type FunctionReference = plugins.externFunction.Reference
+            override type RecordReference = plugins.externRecord.Reference
           }
         }
       }

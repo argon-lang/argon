@@ -19,6 +19,7 @@ abstract class FormatPlugin[Platforms <: PlatformPluginSet] {
     val implementations: {
       type ExternFunctionImplementation = ZEnvironment[platforms.externFunction.Implementation]
       type FunctionReference = ZEnvironment[platforms.externFunction.Reference]
+      type RecordReference = ZEnvironment[platforms.externRecord.Reference]
     }
   }
 
@@ -37,6 +38,7 @@ private[plugin] sealed trait FormatPluginSet[Platforms <: PlatformPluginSet] {
     val implementations: {
       type ExternFunctionImplementation = ZEnvironment[platforms.externFunction.Implementation]
       type FunctionReference = ZEnvironment[platforms.externFunction.Reference]
+      type RecordReference = ZEnvironment[platforms.externRecord.Reference]
     }
   }
 

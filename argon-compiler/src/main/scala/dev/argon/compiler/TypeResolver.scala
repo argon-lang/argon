@@ -17,7 +17,7 @@ trait TypeResolver extends UsingContext {
   import context.{TRExprContext, TRSignatureContext, Scopes}
   import Scopes.{LookupResult, Overloadable, ImplicitValue}
 
-  import TRExprContext.{Expr, Builtin, LocalVar, Var, Hole, AnnotatedExpr}
+  import TRExprContext.{Expr, Builtin, LocalVar, Var, Hole, AnnotatedExpr, RecordFieldLiteral}
   private type Loc = Location[FilePosition]
 
 
@@ -273,6 +273,49 @@ trait TypeResolver extends UsingContext {
             ))
         }
 
+      case ast.Expr.RecordLiteral(rec, fields) =>
+        new InferFactory {
+          override def loc: Loc = expr.location
+          override def infer(using state: EmitState): Comp[InferredExpr] =
+            for
+              recordExpr <- resolveType(rec)
+              recordExpr <- normalizeToValue(recordExpr)
+              recordExpr <- recordExpr match {
+                case recordExpr: Expr.RecordType => ZIO.succeed(recordExpr)
+                case _ => ???
+              }
+
+              recordFields <- recordExpr.record.fields
+
+              duplicateFieldNames = fields.value
+                .groupBy(_.value.name.value)
+                .view
+                .mapValues(_.size)
+                .filter((_, v) => v > 1)
+                .keySet
+
+              _ <- if duplicateFieldNames.nonEmpty then ??? else ZIO.unit
+
+              fieldNames = fields.value.map(_.value.name.value).toSet
+
+              _ <- ZIO.foreachDiscard(recordFields) { rf =>
+                if !fieldNames.contains(rf.name) then
+                  ???
+                else
+                  ZIO.unit
+              }
+
+              recFields <- ZIO.foreach(fields.value) { field =>
+                for
+                  recordFieldDecl <- ZIO.fromEither(recordFields.find(_.name == field.value.name.value).toRight { ??? })
+                  fieldSig <- TRSignatureContext.recordFieldSig(recordExpr, recordFieldDecl)
+                  value <- resolveExpr(field.value.value).check(fieldSig.returnType)
+                yield RecordFieldLiteral(field.value.name.value, value)
+              }
+            yield InferredExpr(Expr.RecordLiteral(recordExpr, recFields), recordExpr)
+
+        }
+
       case ast.Expr.StringLiteral(parts) =>
         parts
           .map {
@@ -470,7 +513,7 @@ trait TypeResolver extends UsingContext {
   }
 
   private final class LookupMemberFactory(override val loc: Loc, obj: ExprFactory, memberName: WithSource[IdentifierExpr]) extends WrappedFactory {
-    override protected def unwrap(using EmitState): Comp[ExprFactory] =
+    override protected def unwrap(using state: EmitState): Comp[ExprFactory] =
       for
         t <- makeHole
         e <- obj.check(t)
@@ -479,7 +522,15 @@ trait TypeResolver extends UsingContext {
         lookup = LookupResult.Overloaded(overloads, extensionMethods(t, e))
       yield OverloadedExprFactory(loc, lookup, Seq())
 
-    private def overloadsFromType(t: Expr, e: Expr): Comp[Seq[Overloadable]] = ZIO.succeed(Seq.empty)
+    private def overloadsFromType(t: Expr, e: Expr): Comp[Seq[Overloadable]] =
+      t match {
+        case recType @ Expr.RecordType(record, args) =>
+          for
+            fields <- record.fields
+          yield fields.map { field => Overloadable.RecordField(recType, field, e) }
+
+        case _ => ZIO.succeed(Seq.empty)
+      }
 
     private def extensionMethods(t: Expr, e: Expr)(using state: EmitState): Comp[LookupResult.OverloadableOnly] =
       state.scope.lookup(IdentifierExpr.Extension(memberName.value)).map {
@@ -501,7 +552,9 @@ trait TypeResolver extends UsingContext {
     private def toAttemptedOverload(overload: Overloadable): AttemptedOverload =
       overload match {
         case Overloadable.Function(f) => AttemptedOverload.Function(f)
+        case Overloadable.Record(r) => AttemptedOverload.Record(r)
         case Overloadable.ExtensionMethod(f, _) => AttemptedOverload.Function(f)
+        case Overloadable.RecordField(r, field, _) => AttemptedOverload.RecordField(r.record, field)
       }
 
     override def check(t: Expr)(using EmitState): Comp[Expr] =
@@ -548,9 +601,38 @@ trait TypeResolver extends UsingContext {
                       ))
                   }
 
+              def recordOverload(r: ArRecord): ExprFactory =
+                if overloadResult.remainingSig.parameters.nonEmpty then
+                  ???
+                else
+                  new InferFactory {
+                    // TODO: Fix location
+                    override def loc: Loc = OverloadedExprFactory.this.loc
+                    override def infer(using EmitState): Comp[InferredExpr] =
+                      ZIO.succeed(InferredExpr(
+                        Expr.RecordType(r, overloadResult.arguments),
+                        overloadResult.remainingSig.returnType
+                      ))
+                  }
+
+              def recordFieldOverload(r: Expr.RecordType, field: RecordField, recordValue: Expr): ExprFactory =
+                new InferFactory {
+                    // TODO: Fix location
+                    override def loc: Loc = OverloadedExprFactory.this.loc
+                    override def infer(using EmitState): Comp[InferredExpr] =
+                      ZIO.succeed(InferredExpr(
+                        Expr.RecordFieldLoad(r, field, recordValue),
+                        overloadResult.remainingSig.returnType
+                      ))
+                }
+
+
+
               val factory0: ExprFactory = selectedOverload match {
                 case Overloadable.Function(f) => functionOverload(f)
+                case Overloadable.Record(r) => recordOverload(r)
                 case Overloadable.ExtensionMethod(f, _) => functionOverload(f)
+                case Overloadable.RecordField(r, field, recordValue) => recordFieldOverload(r, field, recordValue)
               }
 
               val factory = overloadResult.remainingArguments.foldLeft(factory0)(_.invoke(_))
@@ -814,7 +896,7 @@ trait TypeResolver extends UsingContext {
           def buildCall(sig: TRSignatureContext.FunctionSignature, args: Seq[Expr]): Comp[ir.Assertion] =
             sig.parameters.toList match
               case (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.InferrableList | FunctionParameterListType.QuoteList, _, _, _, _)) :: tailParams =>
-                val variable = param.asParameterVar(function, args.size)
+                val variable = param.asParameterVar(TRExprContext.ParameterOwner.Func(function), args.size)
                 for
                   hole <- newVariable
                   holeExpr = Expr.Hole(hole)
@@ -824,7 +906,7 @@ trait TypeResolver extends UsingContext {
                 yield assertion
 
               case (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.RequiresList, isErased, _, paramName, paramType)) :: tailParams =>
-                val variable = param.asParameterVar(function, args.size)
+                val variable = param.asParameterVar(TRExprContext.ParameterOwner.Func(function), args.size)
                 for
                   varId <- UniqueIdentifier.make
                   local = LocalVar(varId, paramType, paramName, isMutable = false, isErased = isErased, isProof = false)

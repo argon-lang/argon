@@ -4,7 +4,14 @@ import dev.argon.ast
 import dev.argon.ast.IdentifierExpr
 import dev.argon.util.{*, given}
 import dev.argon.expr
-import dev.argon.compiler.{ErasedSignature as CErasedSignature, ErasedSignatureType as CErasedSignatureType, ModulePath as CModulePath, TubeName as CTubeName, *}
+import dev.argon.compiler.{
+  ErasedSignature as CErasedSignature,
+  ErasedSignatureType as CErasedSignatureType,
+  ImportSpecifier as CImportSpecifier,
+  ModulePath as CModulePath,
+  TubeName as CTubeName,
+  *
+}
 import zio.*
 import zio.stm.*
 import cats.*
@@ -18,10 +25,12 @@ object VMTubeImpl {
   : UIO[VmTube[context.Env, context.Error, [EI <: ExternalImplementation] =>> EI match {
     case "function" => context.implementations.ExternFunctionImplementation
     case "function-reference" => context.implementations.FunctionReference
+      case "record-reference" => context.implementations.RecordReference
   }]] =
     type Externs[EI <: ExternalImplementation] = EI match {
       case "function" => context.implementations.ExternFunctionImplementation
       case "function-reference" => context.implementations.FunctionReference
+      case "record-reference" => context.implementations.RecordReference
     }
 
     import context.{Comp, Env, Error}
@@ -58,11 +67,12 @@ object VMTubeImpl {
       metadataCache <- MemoCell.make[Env, Error, VmTubeMetadata]
       moduleCache <- MemoCacheStore.make[Env, Error, ModulePath, VmModule]
       funcs <- makeLookup[ArFuncC & HasContext[context.type], VmFunction]
+      records <- makeLookup[ArRecordC & HasContext[context.type], VmRecord]
     yield new VmTube[Env, Error, Externs] {
 
       override def metadata(): Comp[VmTubeMetadata] =
         metadataCache.get(ZIO.succeed(VmTubeMetadata(
-          modules = tube.modules.keysIterator.map(p => ModulePath(p.parts)).toSeq,
+          modules = tube.modules.keysIterator.map(getModulePath).toSeq,
         )))
 
 
@@ -84,6 +94,18 @@ object VMTubeImpl {
                     sig <- eraser.eraseSignature(sig)
 
                     id <- funcs.getId(f)
+                  yield Seq(VmModuleExportEntry(
+                    name.map(getIdentifier),
+                    getErasedSignature(sig),
+                    VmModuleExport.Function(id)
+                  ))
+
+                case ModuleExportC.Record(r) =>
+                  for
+                    sig <- r.signature
+                    sig <- eraser.eraseSignature(sig)
+
+                    id <- records.getId(r)
                   yield Seq(VmModuleExportEntry(
                     name.map(getIdentifier),
                     getErasedSignature(sig),
@@ -116,6 +138,14 @@ object VMTubeImpl {
         funcs.fromId(id)
           .flatMap { func => func.reference }
 
+      override def getRecordDefinition(id: BigInt): Comp[VmRecord] =
+        records.fromId(id).flatMap { rec =>
+          records.cache.usingCreate(rec)(createRecord(id))
+        }
+
+      override def getRecordReference(id: BigInt): Comp[Externs["record-reference"]] =
+        records.fromId(id)
+          .flatMap { rec => rec.reference }
 
 
       private def createFunc(id: BigInt)(f: ArFuncC & HasContext[context.type]): Comp[VmFunction] =
@@ -136,13 +166,35 @@ object VMTubeImpl {
           implementation = funcImpl,
         )
 
+      private def createRecord(id: BigInt)(r: ArRecordC & HasContext[context.type]): Comp[VmRecord] =
+        for
+          sig <- r.signature
+
+          params <- ZIO.foreach(sig.parameters.filterNot { _.isErased }) { param =>
+            exprToType(param.paramType)
+          }
+
+          returnType <- exprToType(sig.returnType)
+
+          fields <- r.fields
+          fields <- ZIO.foreach(fields) { field =>
+            for
+              t <- exprToType(field.fieldType)
+            yield VmRecordField(getIdentifier(field.name), t)
+          }
+
+        yield VmRecord(
+          parameters = params,
+          returnType = returnType,
+          fields = fields*,
+        )
 
       private def convertImpl(f: ArFuncC & HasContext[context.type])(id: BigInt)(impl: context.implementations.FunctionImplementation): Comp[VmFunctionImplementation] =
         impl match {
           case context.implementations.FunctionImplementation.Expr(e) =>
             for
               sig <- f.signature
-              paramVars = context.DefaultSignatureContext.SignatureParameter.getParameterVariables(f, sig.parameters)
+              paramVars = context.DefaultSignatureContext.SignatureParameter.getParameterVariables(context.DefaultExprContext.ParameterOwner.Func(f), sig.parameters)
               cfg <- exprToCFG(e, paramVars.filterNot { _.isErased })
             yield VmFunctionImplementation.Instructions(cfg)
 
@@ -172,6 +224,12 @@ object VMTubeImpl {
               a <- exprToType(a)
               b <- exprToType(b)
             yield VmType.Function(a, b)
+
+          case Expr.RecordType(rec, args) =>
+            for
+              recId <- records.getId(rec)
+              args <- ZIO.foreach(args)(exprToType)
+            yield VmType.Record(recId, args*)
 
           case Expr.Tuple(items) =>
             for
@@ -210,6 +268,13 @@ object VMTubeImpl {
               b <- exprToRegType(b)
             yield RegisterType.Function(a, b)
 
+          case Expr.RecordType(rec, args) =>
+            for
+              recId <- records.getId(rec)
+              args <- ZIO.foreach(args)(exprToRegType)
+            yield RegisterType.Record(recId, args*)
+
+
           case Expr.Tuple(items) =>
             for
               items <- ZIO.foreach(items)(exprToRegType)
@@ -227,6 +292,9 @@ object VMTubeImpl {
         t match {
           case VmType.Builtin(builtin, args*) =>
             RegisterType.Builtin(builtin, args.map(vmTypeToRegType(regArgs))*)
+
+          case VmType.Record(regId, args*) =>
+            RegisterType.Record(regId, args.map(vmTypeToRegType(regArgs))*)
 
           case VmType.Function(input, output) =>
             val input2 = vmTypeToRegType(regArgs)(input)
@@ -413,6 +481,48 @@ object VMTubeImpl {
                 _ <- append(Instruction.LoadInt(reg, i))
               yield RegisterWithType(reg, t)
 
+            case Expr.RecordLiteral(rec, fields) =>
+              for
+                recordId <- records.getId(rec.record)
+                regType <- exprToRegType(rec)
+                recValue <- emitExpr(rec)
+                reg <- makeRegister(regType)
+
+                recFields <- rec.record.fields
+
+                fieldValues <- ZIO.foreach(recFields.map(recField => fields.find(_.name == recField.name).get)) { fieldLit =>
+                  emitExpr(fieldLit.value).map(_.r)
+                }
+
+                _ <- append(Instruction.CreateRecord(reg, recordId, recValue.r, fieldValues*))
+              yield RegisterWithType(reg, regType)
+
+            case Expr.RecordFieldLoad(record, field, recordValue) =>
+              for
+                recordId <- records.getId(record.record)
+                recordType <- emitExpr(record)
+
+                fields <- record.record.fields
+                fieldIndex = fields.indexOf(field)
+
+                recordValue <- emitExpr(recordValue)
+
+                fieldSig <- context.DefaultSignatureContext.recordFieldSig(record, field)
+                fieldType <- exprToRegType(fieldSig.returnType)
+                res <- makeRegister(fieldType)
+                _ <- append(Instruction.LoadRecordField(res, recordId, recordType.r, fieldIndex, recordValue.r))
+
+              yield RegisterWithType(res, fieldType)
+
+            case Expr.RecordType(rec, args) =>
+              for
+                recId <- records.getId(rec)
+                args <- ZIO.foreach(args)(emitExpr(_).map { _.r })
+
+                reg <- makeRegister(RegisterType.Type)
+                _ <- append(Instruction.RecordType(reg, recId, args*))
+
+              yield RegisterWithType(reg, RegisterType.Type)
 
             case Expr.Sequence(stmts, result) =>
               for
@@ -604,6 +714,11 @@ object VMTubeImpl {
 
     }
 
+  def getTubeName(name: CTubeName): TubeName =
+    TubeName(name.parts.head, name.parts.tail*)
+
+  def getModulePath(path: CModulePath): ModulePath =
+    ModulePath(path.parts*)
 
   def getErasedSignature(sig: CErasedSignature): ErasedSignature =
     ErasedSignature(sig.params.map(getErasedSignatureType), getErasedSignatureType(sig.result))
@@ -611,10 +726,13 @@ object VMTubeImpl {
   def getErasedSignatureType(t: CErasedSignatureType): ErasedType =
     t match {
       case CErasedSignatureType.Builtin(builtin, args) =>
-        ErasedType.Builtin(getBuiltin(builtin), args.map(getErasedSignatureType) *)
+        ErasedType.Builtin(getBuiltin(builtin), args.map(getErasedSignatureType)*)
 
       case CErasedSignatureType.Function(input, output) =>
         ErasedType.Function(getErasedSignatureType(input), getErasedSignatureType(output))
+
+      case CErasedSignatureType.Record(recordImport, args) =>
+        ErasedType.Record(getImportSpecifier(recordImport), args.map(getErasedSignatureType)*)
 
       case CErasedSignatureType.Tuple(items) =>
         ErasedType.Tuple(items.map(getErasedSignatureType) *)
@@ -622,6 +740,14 @@ object VMTubeImpl {
       case CErasedSignatureType.Erased =>
         ErasedType.Erased
     }
+
+  def getImportSpecifier(imp: CImportSpecifier): ImportSpecifier =
+    ImportSpecifier(
+      tube = getTubeName(imp.tube),
+      module = getModulePath(imp.module),
+      name = imp.name.map(getIdentifier),
+      signature = getErasedSignature(imp.signature), 
+    )
   
   def getBuiltin(e: expr.BuiltinBase): Builtin =
     e match {

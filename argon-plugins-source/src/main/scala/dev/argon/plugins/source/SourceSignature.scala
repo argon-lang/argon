@@ -9,7 +9,7 @@ object SourceSignature {
   def parse
   (ctx: Context)
   (scope: ctx.Scopes.Scope)
-  (owner: ctx.DefaultExprContext.ParameterOwner)
+  (owner: ctx.TRExprContext.ParameterOwner)
   (parameters: Seq[WithSource[ast.FunctionParameterList]], returnType: WithSource[ast.ReturnTypeSpecifier])
   : ctx.Comp[ctx.DefaultSignatureContext.FunctionSignature] =
     import ctx.Comp

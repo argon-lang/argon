@@ -57,6 +57,11 @@ object SourceModule {
               f <- SourceFunction.make(context)(scope, createRefFactory(funcDecl.name.value))(funcDecl)
             yield (scope, Map(funcDecl.name.value -> Seq(ModuleExportC.Function(f))))
 
+          case recordDecl: ast.RecordDeclarationStmt =>
+            for
+              r <- SourceRecord.make(context)(scope, createRefFactory(Some(recordDecl.name.value)))(recordDecl)
+            yield (scope, Map(Some(recordDecl.name.value) -> Seq(ModuleExportC.Record(r))))
+
           case ast.ExportStmt(fromImport) =>
             ImportUtil.getModuleExports(context)(tubeImporter)(reexportingModules + ModuleName(tubeName, path))(tubeName, path)(fromImport)
               .map(exports => (scope, exports.map((k, v) => Some(k) -> v.map(ModuleExportC.Exported.apply))))
@@ -70,11 +75,22 @@ object SourceModule {
         new ExternFactory {
           override val context: ctx.type = ctx
 
+          override def getImportSpecifier(sig: ErasedSignature): ImportSpecifier =
+            ImportSpecifier(
+              tube = tn,
+              module = p,
+              name = name,
+              signature = sig,
+            )
+
           override def getExternFunctionImplementation(name: String): Comp[Option[context.implementations.ExternFunctionImplementation]] =
             platforms.externFunction.loadExtern(platformOptions)(name).value
 
           override def defineFunctionReference(sig: ErasedSignature): Comp[context.implementations.FunctionReference] =
             platforms.externFunction.defineReference(platformOptions)(DefinitionInfo.Global(tn, p, name, sig))
+
+          override def defineRecordReference(sig: ErasedSignature): Comp[context.implementations.RecordReference] =
+            platforms.externRecord.defineReference(platformOptions)(DefinitionInfo.Global(tn, p, name, sig))
         }
     }
 }

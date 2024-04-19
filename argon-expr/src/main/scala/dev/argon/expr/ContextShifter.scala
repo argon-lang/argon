@@ -11,6 +11,8 @@ trait ContextShifter[F[_]: Monad] {
   val ec1: ExprContext
   val ec2: ExprContext {
     type Function >: ec1.Function
+    type Record >: ec1.Record
+    type RecordField >: ec1.RecordField
   }
 
 
@@ -18,15 +20,19 @@ trait ContextShifter[F[_]: Monad] {
     import StandardShifters.given
 
     given exprShifter: Shifter[ec1.Expr, ec2.Expr] = autoShifter
+    
     given Shifter[ec1.Builtin, ec2.Builtin] = autoShifter
     given Shifter[ec1.Expr.Hole, ec2.Expr] with
       override def shift(a: ec1.Expr.Hole): F[ec2.Expr] =
         shiftHole(a.hole)
     end given
+    given Shifter[ec1.Expr.RecordType, ec2.Expr.RecordType] = autoShifter
+    given Shifter[ec1.RecordFieldLiteral, ec2.RecordFieldLiteral] = autoShifter
 
 
     given varShifter: Shifter[ec1.Var, ec2.Var] = autoShifter
     given Shifter[ec1.LocalVar, ec2.LocalVar] = autoShifter
+    given Shifter[ec1.ParameterOwner, ec2.ParameterOwner] = autoShifter
 
   }
 

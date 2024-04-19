@@ -20,22 +20,10 @@ final class LuaPlugin extends PlatformPlugin {
   override def optionDecoder[E >: PluginError]: OptionDecoder[E, LuaOptions] =
     summon[OptionDecoder[E, LuaOptions]]
 
-  trait LuaExtern extends Extern.Tagged {
-    override type Implementation = LuaExternImplementation
-    override def implementationCodec: ESExprCodec[Implementation] = summon[ESExprCodec[Implementation]]
-    override def implementationTag: Tag[LuaExternImplementation] = summon
-
+  trait LuaExternRef extends Extern.TaggedRef {
     override type Reference = LuaReference
     override def referenceCodec: ESExprCodec[Reference] = summon
     override def referenceTag: Tag[Reference] = summon
-  }
-
-  override val externFunction: LuaExtern = new LuaExtern {
-    override def loadExtern[E >: PluginError]
-    (options: PlatformOptions[E])
-    (id: String)
-    : OptionT[[A] =>> ZIO[PluginEnv, E, A], externFunction.Implementation] =
-      OptionT.fromOption(options.externs.dict.get(id))
 
     override def defineReference[E >: PluginError]
     (options: LuaOptions)
@@ -53,6 +41,23 @@ final class LuaPlugin extends PlatformPlugin {
           ))
       }
   }
+
+  trait LuaExtern extends Extern.Tagged with LuaExternRef {
+    override type Implementation = LuaExternImplementation
+    override def implementationCodec: ESExprCodec[Implementation] = summon[ESExprCodec[Implementation]]
+    override def implementationTag: Tag[LuaExternImplementation] = summon
+  }
+
+  override val externFunction: LuaExtern = new LuaExtern {
+    override def loadExtern[E >: PluginError]
+    (options: PlatformOptions[E])
+    (id: String)
+    : OptionT[[A] =>> ZIO[PluginEnv, E, A], externFunction.Implementation] =
+      OptionT.fromOption(options.externs.dict.get(id))
+
+  }
+
+  override val externRecord: LuaExternRef = new LuaExternRef {}
 
 
   override def emitter[Ctx <: ContextIncluding]: Some[LuaEmitter[Ctx]] =

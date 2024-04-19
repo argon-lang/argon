@@ -38,6 +38,12 @@ sealed trait SignatureEraser extends UsingContext {
           b <- getErasedType(b)
         yield ErasedSignatureType.Function(a, b)
 
+      case Expr.RecordType(record, args) =>
+        for
+          recordImport <- record.importSpecifier(this)
+          args <- ZIO.foreach(args)(getErasedType)
+        yield ErasedSignatureType.Record(recordImport, args)
+
       case Expr.Tuple(items) =>
         for
           items <- ZIO.foreach(items)(getErasedType)

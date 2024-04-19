@@ -6,6 +6,7 @@ import cats.implicits.given
 import scala.compiletime.{erasedValue, summonInline}
 import scala.deriving.Mirror
 import scala.quoted.{Expr, Quotes, Type}
+import scala.reflect.TypeTest
 
 trait TreeShifter[F[_]: Monad] {
 
@@ -23,7 +24,6 @@ trait TreeShifter[F[_]: Monad] {
       override def shift(a: Option[A]): F[Option[B]] =
         a.traverse(summon[Shifter[A, B]].shift)
     end given
-
   }
 
   inline def autoShifter[A <: Matchable, B](using ma: Mirror.Of[A], mb: Mirror.Of[B]): Shifter[A, B] =

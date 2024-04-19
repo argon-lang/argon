@@ -23,7 +23,11 @@ trait ExprContext {
     isProof: Boolean,
   ) extends Var
   
-  type ParameterOwner = Function
+  enum ParameterOwner {
+    case Func(f: Function)
+    case Rec(r: Record)
+    case RecordField()
+  }
   
   final case class ParameterVar(
     owner: ParameterOwner,
@@ -34,8 +38,15 @@ trait ExprContext {
     isProof: Boolean,
   ) extends Var
 
-  type Function
+  type Function <: Matchable
   given functionCanEqual: CanEqual[Function, Function]
+
+  type Record <: Matchable
+  given recordCanEqual: CanEqual[Record, Record]
+
+  type RecordField
+  given recordFieldCanEqual: CanEqual[RecordField, RecordField]
+  def getRecordFieldName(f: RecordField): IdentifierExpr
 
   type Hole
   given holeCanEqual: CanEqual[Hole, Hole]
@@ -72,6 +83,9 @@ trait ExprContext {
     )
     case IntLiteral(i: BigInt)
     case Lambda(v: LocalVar, body: Expr)
+    case RecordType(record: Record, args: Seq[Expr])
+    case RecordLiteral(record: Expr.RecordType, fields: Seq[RecordFieldLiteral])
+    case RecordFieldLoad(record: Expr.RecordType, field: RecordField, recordValue: Expr)
     case Sequence(stmts: Seq[Expr], result: Expr)
     case StringLiteral(s: String)
     case StoreVariable(v: Var, value: Expr)
@@ -82,6 +96,11 @@ trait ExprContext {
     case Variable(v: Var)
   }
 
+  final case class RecordFieldLiteral(
+    name: IdentifierExpr,
+    value: Expr,
+  )
+
   final case class AnnotatedExpr(location: SourceLocation, e: Expr, t: Expr)
 
   final class Model private(mapping: Map[Hole, Expr]) {
@@ -90,6 +109,8 @@ trait ExprContext {
 
     private[expr] def addMapping(hole: Hole, expr: Expr): Model =
       Model(mapping.updated(hole, expr))
+
+    override def toString(): String = s"Model: $mapping"
   }
 
   object Model {

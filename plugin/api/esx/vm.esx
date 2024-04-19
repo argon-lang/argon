@@ -3,7 +3,7 @@
     (vararg "tail" (string))
 )
 (constructor "module-path"
-    (arg "path" (list (string)))
+    (vararg "path" (string))
 )
 (constructor "module-name"
     (arg "tube" "tube-name")
@@ -13,6 +13,7 @@
 (type-struct "external-implementation"
     "function"
     "function-reference"
+    "record-reference"
 )
 
 (interface "vm-tube"
@@ -27,6 +28,9 @@
     (method "get-function-definition" (list (arg "id" (int))) "vm-function")
     (method "get-function-extern-implementation" (list (arg "id" (int))) (type-struct-member "external-implementation" "externs" "function"))
     (method "get-function-reference" (list (arg "id" (int))) (type-struct-member "external-implementation" "externs" "function-reference"))
+
+    (method "get-record-definition" (list (arg "id" (int))) "vm-record")
+    (method "get-record-reference" (list (arg "id" (int))) (type-struct-member "external-implementation" "externs" "record-reference"))
 )
 
 (constructor "vm-tube-metadata"
@@ -46,6 +50,9 @@
 (enum "vm-module-export"
     (constructor "function"
         (arg "function" (int))
+    )
+    (constructor "record"
+        (arg "record" (int))
     )
 )
 
@@ -135,9 +142,20 @@
     )
 )
 
+(constructor "import-specifier"
+    (arg "tube" "tube-name")
+    (arg "module" "module-path")
+    (arg "name" (nullable "identifier"))
+    (arg "signature" "erased-signature")
+)
+
 (enum "erased-type"
     (constructor "builtin"
         (arg "builtin" "builtin")
+        (vararg "args" "erased-type")
+    )
+    (constructor "record"
+        (arg "record-import" "import-specifier")
         (vararg "args" "erased-type")
     )
     (constructor "function"
@@ -160,6 +178,10 @@
         (arg "b" "builtin")
         (vararg "args" "vm-type")
     )
+    (constructor "record"
+        (arg "record-id" (int))
+        (vararg "args" "vm-type")
+    )
     (constructor "function"
         (arg "arg" "vm-type")
         (arg "res" "vm-type")
@@ -176,6 +198,10 @@
 (enum "register-type"
     (constructor "builtin"
         (arg "b" "builtin")
+        (vararg "args" "register-type")
+    )
+    (constructor "record"
+        (arg "record-id" (int))
         (vararg "args" "register-type")
     )
     (constructor "function"
@@ -203,6 +229,19 @@
     )
     (constructor "extern")
 )
+
+(constructor "vm-record"
+    (kwarg "parameters" (list "vm-type"))
+    (kwarg "return-type" "vm-type")
+    (vararg "fields" "vm-record-field")
+)
+
+(constructor "vm-record-field"
+    (kwarg "name" "identifier")
+    (kwarg "field-type" "vm-type")
+)
+
+
 
 (enum "register"
     (constructor "reg" inline: #true
@@ -236,6 +275,12 @@
         (arg "result" "instruction-result")
         (arg "call" "function-call")
     )
+    (constructor "create-record"
+        (arg "result" "register")
+        (arg "record-id" (int))
+        (arg "record-type" "register")
+        (vararg "args" "register")
+    )
     (constructor "create-tuple"
         (arg "result" "register")
         (vararg "items" "register")
@@ -253,6 +298,13 @@
         (arg "result" "register")
         (arg "value" (int))
     )
+    (constructor "load-record-field"
+        (arg "result" "register")
+        (arg "record-id" (int))
+        (arg "record-type" "register")
+        (arg "field-index" (int))
+        (arg "record-value" "register")
+    )
     (constructor "load-string"
         (arg "result" "register")
         (arg "value" (string))
@@ -260,6 +312,11 @@
     (constructor "move"
         (arg "target" "register")
         (arg "source" "register")
+    )
+    (constructor "record-type"
+        (arg "result" "register")
+        (arg "record-id" (int))
+        (vararg "args" "register")
     )
     (constructor "tuple-element"
         (arg "result" "register")

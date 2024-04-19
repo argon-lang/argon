@@ -11,6 +11,7 @@ sealed trait PluginSet extends ExternContext {
   given optionDecoder[E >: PluginError]: OptionDecoder[E, PlatformOptions[E]]
 
   val externFunction: Extern
+  val externRecord: ExternRef
 
   type CompatibleContext = Context {
     type Env <: PluginEnv
@@ -18,6 +19,7 @@ sealed trait PluginSet extends ExternContext {
     val implementations: {
       type ExternFunctionImplementation = externFunction.Implementation
       type FunctionReference = externFunction.Reference
+      type RecordReference = externRecord.Reference
     }
   }
 
@@ -37,6 +39,10 @@ object PluginSet {
         type Implementation = ZEnvironment[platforms.externFunction.Implementation]
         type Reference = ZEnvironment[platforms.externFunction.Reference]
       } = platforms.externFunction.asExtern(this)
+
+      override val externRecord: ExternRef {
+        type Reference = ZEnvironment[platforms.externRecord.Reference]
+      } = platforms.externRecord.asExtern(this)
 
       override def emitter[Ctx <: CompatibleContext]: CompoundTubeEmitter[Ctx] =
         TubeEmitterSet.Union(

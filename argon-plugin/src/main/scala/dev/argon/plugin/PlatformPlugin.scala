@@ -19,6 +19,7 @@ abstract class PlatformPlugin extends ExternContext {
 
 
   val externFunction: Extern.Tagged
+  val externRecord: Extern.TaggedRef
 
 
   type ContextIncluding = Context {
@@ -27,6 +28,7 @@ abstract class PlatformPlugin extends ExternContext {
     val implementations: {
       type ExternFunctionImplementation <: ZEnvironment[externFunction.Implementation]
       type FunctionReference <: ZEnvironment[externFunction.Reference]
+      type RecordReference <: ZEnvironment[externRecord.Reference]
     }
   }
 
@@ -36,6 +38,7 @@ abstract class PlatformPlugin extends ExternContext {
     val implementations: {
       type ExternFunctionImplementation = ZEnvironment[externFunction.Implementation]
       type FunctionReference = ZEnvironment[externFunction.Reference]
+      type RecordReference = ZEnvironment[externRecord.Reference]
     }
   }
 
@@ -59,6 +62,7 @@ sealed trait PlatformPluginSet {
     val implementations: {
       type ExternFunctionImplementation <: ZEnvironment[externFunction.Implementation]
       type FunctionReference <: ZEnvironment[externFunction.Reference]
+      type RecordReference <: ZEnvironment[externRecord.Reference]
     }
   }
 
@@ -68,29 +72,19 @@ sealed trait PlatformPluginSet {
     val implementations: {
       type ExternFunctionImplementation = ZEnvironment[externFunction.Implementation]
       type FunctionReference = ZEnvironment[externFunction.Reference]
+      type RecordReference = ZEnvironment[externRecord.Reference]
     }
   }
 
   val externFunction: PartialExtern
+  val externRecord: PartialExternRef
 
 
   def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[Ctx]
   def tubeLoaders[Ctx <: ContextOnlyIncluding]: Map[TubeLoaderName, TubeLoader[Ctx]]
 
 
-
-  sealed trait PartialExtern {
-    type Implementation
-    given implementationCodec: PartialESExprCodec[Implementation]
-    given implementationEnvTag: EnvironmentTag[Implementation]
-
-    def loadExtern[E >: PluginError]
-    (options: PlatformOptions[E])
-    (id: String)
-    : OptionT[[A] =>> ZIO[PluginEnv, E, A], ZEnvironment[Implementation]]
-
-
-
+  sealed trait PartialExternRef {
     type Reference
     given referenceCodec: PartialESExprCodec[Reference]
     given referenceEnvTag: EnvironmentTag[Reference]
@@ -101,7 +95,33 @@ sealed trait PlatformPluginSet {
     : ZIO[PluginEnv, E, ZEnvironment[Reference]]
 
 
-    def asExtern(externContext: ExternContext { type PlatformOptions[E >: PluginError] = PlatformPluginSet.this.PlatformOptions[E] }): externContext.Extern {
+    def asExtern(externContext: ExternContext { type PlatformOptions[E >: PluginError] = PlatformPluginSet.this.PlatformOptions[E] }): externContext.ExternRef {
+      type Reference = ZEnvironment[PartialExternRef.this.Reference]
+    } =
+      new externContext.ExternRef {
+        override type Reference = ZEnvironment[PartialExternRef.this.Reference]
+
+        override def referenceCodec: ESExprCodec[Reference] =
+          PartialExternRef.this.referenceCodec.toCodec
+
+        override def defineReference[E >: PluginError](options: externContext.PlatformOptions[E])(definitionInfo: DefinitionInfo): ZIO[PluginEnv, E, Reference] =
+          PartialExternRef.this.defineReference(options)(definitionInfo)
+      }
+
+  }
+
+  sealed trait PartialExtern extends PartialExternRef {
+    type Implementation
+    given implementationCodec: PartialESExprCodec[Implementation]
+    given implementationEnvTag: EnvironmentTag[Implementation]
+
+    def loadExtern[E >: PluginError]
+    (options: PlatformOptions[E])
+    (id: String)
+    : OptionT[[A] =>> ZIO[PluginEnv, E, A], ZEnvironment[Implementation]]
+
+
+    override def asExtern(externContext: ExternContext { type PlatformOptions[E >: PluginError] = PlatformPluginSet.this.PlatformOptions[E] }): externContext.Extern {
       type Implementation = ZEnvironment[PartialExtern.this.Implementation]
       type Reference = ZEnvironment[PartialExtern.this.Reference]
     } =
@@ -139,6 +159,8 @@ private[plugin] object PlatformPluginSet {
     override val externFunction: PartialExternEmpty =
       PartialExternEmpty()
 
+    override val externRecord: PartialExternEmpty =
+      PartialExternEmpty()
 
     override def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[Ctx] =
       TubeEmitterSet.Empty()
@@ -174,6 +196,8 @@ private[plugin] object PlatformPluginSet {
     override val externFunction: PartialExternSingleton[plugin.externFunction.type] =
       PartialExternSingleton(plugin.externFunction)
 
+    override val externRecord: PartialExternRefSingleton[plugin.externRecord.type] =
+      PartialExternRefSingleton(plugin.externRecord)
 
     override def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[Ctx] =
       plugin.emitter[Ctx] match {
@@ -186,16 +210,9 @@ private[plugin] object PlatformPluginSet {
       plugin.tubeLoaders[Ctx].map { (k, v) => TubeLoaderName(plugin.pluginId, k) -> v }
 
 
-    sealed trait PartialExternSingleton[ET <: plugin.Extern.Tagged] extends PartialExtern {
+    
+    sealed trait PartialExternRefSingleton[ET <: plugin.Extern.TaggedRef] extends PartialExternRef {
       val extern: ET
-
-      override type Implementation = extern.Implementation
-      override def implementationCodec: PartialESExprCodec[Implementation] =
-        PartialESExprCodecSingleton[Implementation](plugin.pluginId)
-      override def implementationEnvTag: EnvironmentTag[Implementation] = summon
-
-      override def loadExtern[E >: PluginError](options: PlatformOptions[E])(id: String): OptionT[[A] =>> ZIO[PluginEnv, E, A], ZEnvironment[extern.Implementation]] =
-        extern.loadExtern(options)(id).map(ZEnvironment.apply)
 
       override type Reference = extern.Reference
 
@@ -206,6 +223,23 @@ private[plugin] object PlatformPluginSet {
 
       override def defineReference[E >: PluginError](options: PlatformOptions[E])(definitionInfo: DefinitionInfo): ZIO[PluginEnv, E, ZEnvironment[extern.Reference]] =
         extern.defineReference(options)(definitionInfo).map(ZEnvironment.apply)
+    }
+
+    object PartialExternRefSingleton {
+      def apply(extern2: plugin.Extern.TaggedRef): PartialExternRefSingleton[extern2.type] =
+        new PartialExternRefSingleton[extern2.type] {
+          override val extern: extern2.type = extern2
+        }
+    }
+
+    sealed trait PartialExternSingleton[ET <: plugin.Extern.Tagged] extends PartialExtern with PartialExternRefSingleton[ET] {
+      override type Implementation = extern.Implementation
+      override def implementationCodec: PartialESExprCodec[Implementation] =
+        PartialESExprCodecSingleton[Implementation](plugin.pluginId)
+      override def implementationEnvTag: EnvironmentTag[Implementation] = summon
+
+      override def loadExtern[E >: PluginError](options: PlatformOptions[E])(id: String): OptionT[[A] =>> ZIO[PluginEnv, E, A], ZEnvironment[extern.Implementation]] =
+        extern.loadExtern(options)(id).map(ZEnvironment.apply)
     }
 
     object PartialExternSingleton {
@@ -229,6 +263,8 @@ private[plugin] object PlatformPluginSet {
     override val externFunction: PartialExternUnion[aSet.externFunction.type, bSet.externFunction.type] =
       PartialExternUnion(aSet.externFunction, bSet.externFunction)
 
+    override val externRecord: PartialExternRefUnion[aSet.externRecord.type, bSet.externRecord.type] =
+      PartialExternRefUnion(aSet.externRecord, bSet.externRecord) 
 
     override def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[Ctx] =
       TubeEmitterSet.Union(aSet.emitter, bSet.emitter)
@@ -236,23 +272,9 @@ private[plugin] object PlatformPluginSet {
     override def tubeLoaders[Ctx <: ContextOnlyIncluding]: Map[TubeLoaderName, TubeLoader[Ctx]] = Map.empty
 
 
-    sealed trait PartialExternUnion[EA <: aSet.PartialExtern, EB <: bSet.PartialExtern] extends PartialExtern {
+    sealed trait PartialExternRefUnion[EA <: aSet.PartialExternRef, EB <: bSet.PartialExternRef] extends PartialExternRef {
       val externA: EA
       val externB: EB
-
-      override type Implementation = externA.Implementation & externB.Implementation
-
-      override def implementationCodec: PartialESExprCodec[Implementation] =
-        PartialESExprCodecUnion[externA.Implementation, externB.Implementation]
-
-      override def implementationEnvTag: EnvironmentTag[Implementation] = summon
-
-      override def loadExtern[E >: PluginError](options: PlatformOptions[E])(id: String): OptionT[[A] =>> ZIO[PluginEnv, E, A], ZEnvironment[Implementation]] =
-        for
-          externA <- externA.loadExtern(options._1)(id)
-          externB <- externB.loadExtern(options._2)(id)
-        yield externA ++ externB
-
 
 
       override type Reference = externA.Reference & externB.Reference
@@ -268,6 +290,30 @@ private[plugin] object PlatformPluginSet {
           externB <- externB.defineReference(options._2)(definitionInfo)
         yield externA ++ externB
 
+    }
+
+    object PartialExternRefUnion {
+      def apply(ea: aSet.PartialExternRef, eb: bSet.PartialExternRef): PartialExternRefUnion[ea.type, eb.type] =
+        new PartialExternRefUnion[ea.type, eb.type] {
+          override val externA: ea.type = ea
+          override val externB: eb.type = eb
+        }
+    }
+    
+
+    sealed trait PartialExternUnion[EA <: aSet.PartialExtern, EB <: bSet.PartialExtern] extends PartialExtern with PartialExternRefUnion[EA, EB] {
+      override type Implementation = externA.Implementation & externB.Implementation
+
+      override def implementationCodec: PartialESExprCodec[Implementation] =
+        PartialESExprCodecUnion[externA.Implementation, externB.Implementation]
+
+      override def implementationEnvTag: EnvironmentTag[Implementation] = summon
+
+      override def loadExtern[E >: PluginError](options: PlatformOptions[E])(id: String): OptionT[[A] =>> ZIO[PluginEnv, E, A], ZEnvironment[Implementation]] =
+        for
+          externA <- externA.loadExtern(options._1)(id)
+          externB <- externB.loadExtern(options._2)(id)
+        yield externA ++ externB
     }
 
     object PartialExternUnion {
