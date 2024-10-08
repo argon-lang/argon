@@ -37,7 +37,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
 
     "org.scala-lang.modules" %%% "scala-xml" % "2.2.0",
     "org.gnieh" %%% "fs2-data-xml-scala" % "1.10.0",
-    "org.typelevel" %% "cats-core" % "2.10.0",
+    "org.typelevel" %%% "cats-core" % "2.10.0",
     "dev.zio" %%% "zio-interop-cats" % "23.1.0.1",
   ),
 
@@ -554,33 +554,8 @@ lazy val argon_plugins_sourceJS = argon_plugins_source.js
 lazy val argon_plugins_sourceNode = argon_plugins_source.node
 
 
-lazy val argon_plugins_lua = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-plugins-lua"))
-  .dependsOn(argon_plugin)
-  .jvmConfigure(
-    _.settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-plugins-lua",
-  )
-
-lazy val argon_plugins_luaJVM = argon_plugins_lua.jvm
-lazy val argon_plugins_luaJS = argon_plugins_lua.js
-lazy val argon_plugins_luaNode = argon_plugins_lua.node
-
-
 lazy val argon_plugin_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-platform"))
-  .dependsOn(argon_plugin, argon_plugins_source, argon_plugins_lua)
+  .dependsOn(argon_plugin, argon_plugins_source)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )

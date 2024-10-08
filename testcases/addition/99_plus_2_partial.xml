@@ -14,7 +14,8 @@
             f 2
 
         proc main(): () do
-            val result = callWithTwo (add 99)
+            val f: Int -> Int = add 99
+            val result = callWithTwo f
             puts (result.to_s())
         end
         

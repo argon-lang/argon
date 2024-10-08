@@ -1,7 +1,7 @@
 package dev.argon.plugin.vm
 
 import dev.argon.ast
-import dev.argon.ast.IdentifierExpr
+import dev.argon.ast.{IdentifierExpr, FunctionParameterListType}
 import dev.argon.util.{*, given}
 import dev.argon.expr
 import dev.argon.compiler.{
@@ -19,6 +19,7 @@ import cats.implicits.given
 import zio.interop.catz.core.given
 
 import scala.collection.immutable.SortedMap
+import dev.argon.expr.{FreeVariableScanner, VariableLinearizer, Substitution}
 
 object VMTubeImpl {
   def make(context: Context)(tube: ArTubeC & HasContext[context.type])
@@ -33,8 +34,11 @@ object VMTubeImpl {
       case "record-reference" => context.implementations.RecordReference
     }
 
+    val ctx: context.type = context
+
     import context.{Comp, Env, Error}
-    import context.DefaultExprContext.{Expr, Builtin as EBuiltin, ParameterVar, Var, LocalVar}
+    import context.DefaultExprContext.{Expr, Builtin as EBuiltin, ParameterVar, Var, LocalVar, ParameterOwner}
+    import context.DefaultSignatureContext.FunctionSignature
 
     final case class Lookup[A, B](
       ids: TMap[A, BigInt],
@@ -66,6 +70,9 @@ object VMTubeImpl {
     for
       metadataCache <- MemoCell.make[Env, Error, VmTubeMetadata]
       moduleCache <- MemoCacheStore.make[Env, Error, ModulePath, VmModule]
+
+      nextInternalId <- Ref.make(0 : BigInt)
+
       funcs <- makeLookup[ArFuncC & HasContext[context.type], VmFunction]
       records <- makeLookup[ArRecordC & HasContext[context.type], VmRecord]
     yield new VmTube[Env, Error, Externs] {
@@ -163,7 +170,6 @@ object VMTubeImpl {
         yield VmFunction(
           parameters = params,
           returnType = returnType,
-          implementation = funcImpl,
         )
 
       private def createRecord(id: BigInt)(r: ArRecordC & HasContext[context.type]): Comp[VmRecord] =

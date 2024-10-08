@@ -19,6 +19,10 @@ trait TreeScanner[F[_]: Monad] {
       override def scan(a: Option[A]): F[Unit] =
         a.traverse_(summon[Scanner[A]].scan)
     end given
+
+    given Scanner[Nothing] with
+      override def scan(a: Nothing): F[Unit] = a
+    end given
   }
 
   final class IgnoreScanner[A] extends Scanner[A] {

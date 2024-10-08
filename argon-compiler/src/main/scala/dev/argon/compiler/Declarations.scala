@@ -113,6 +113,15 @@ trait Context extends ScopeContext {
 
   val implementations: Implementations
 
+  trait ImplementationLoader {
+    import implementations.*
+
+    def loadExternFunction(name: String): Comp[ExternFunctionImplementation]
+    def makeFunctionReference(definition: DefinitionInfo): Comp[FunctionReference]
+
+    def makeRecordReference(definition: DefinitionInfo): Comp[RecordReference]
+  }
+
 
 }
 

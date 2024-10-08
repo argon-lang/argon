@@ -20,7 +20,7 @@ trait Evaluator[R, E] {
         Expr.Builtin(
           Builtin.Nullary(_) | Builtin.EqualTo(_, _, _) | Builtin.EqualToRefl(_, _)
         ) |
-        Expr.Lambda(_, _) |
+        Expr.Lambda(_, _, _) |
         Expr.RecordType(_, _) | Expr.RecordLiteral(_, _) |
         Expr.Tuple(_) |
         Expr.TypeN(_) | Expr.TypeBigN(_) | Expr.FunctionType(_, _) |

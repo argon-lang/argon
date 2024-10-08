@@ -28,22 +28,21 @@ object Compile {
   def createContext[R <: PluginEnv, E >: BuildError | IOException]
   (pluginIds: Seq[String])
   : ZIO[Scope, E, PluginContext[R, E]] =
-    ZIO.foreach(pluginIds)(name => ZIO.fromEither(pluginFactories.get(name).toRight(UnknownPlugin(name))))
-      .flatMap(PluginLoader.load)
-      .map { pluginSet =>
-        new PluginContext[R, E] {
-          override val plugins: PluginSet = pluginSet
-          override val implementations: Implementations {
-            type ExternFunctionImplementation = plugins.externFunction.Implementation
-            type FunctionReference = plugins.externFunction.Reference
-            type RecordReference = plugins.externRecord.Reference
-          } = new Implementations {
-            override type ExternFunctionImplementation = plugins.externFunction.Implementation
-            override type FunctionReference = plugins.externFunction.Reference
-            override type RecordReference = plugins.externRecord.Reference
-          }
-        }
+    for
+      pluginFactories <- ZIO.foreach(pluginIds)(name => ZIO.fromEither(pluginFactories.get(name).toRight(UnknownPlugin(name))))
+      pluginSet <- PluginLoader.load(pluginFactories)
+    yield new PluginContext[R, E] {
+      override val plugins: PluginSet = pluginSet
+      override val implementations: Implementations {
+        type ExternFunctionImplementation = plugins.externFunction.Implementation
+        type FunctionReference = plugins.externFunction.Reference
+        type RecordReference = plugins.externRecord.Reference
+      } = new Implementations {
+        override type ExternFunctionImplementation = plugins.externFunction.Implementation
+        override type FunctionReference = plugins.externFunction.Reference
+        override type RecordReference = plugins.externRecord.Reference
       }
+    }
 
   trait LogReporter {
     def getErrors: UIO[Seq[CompilerError]]

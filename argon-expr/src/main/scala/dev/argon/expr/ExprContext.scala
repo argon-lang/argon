@@ -12,6 +12,7 @@ trait ExprContext {
   sealed trait Var {
     def name: Option[IdentifierExpr]
     def varType: Expr
+    def isErased: Boolean
   }
 
   final case class LocalVar(
@@ -82,7 +83,7 @@ trait ExprContext {
       falseBody: Expr,
     )
     case IntLiteral(i: BigInt)
-    case Lambda(v: LocalVar, body: Expr)
+    case Lambda(v: LocalVar, returnType: Expr, body: Expr)
     case RecordType(record: Record, args: Seq[Expr])
     case RecordLiteral(record: Expr.RecordType, fields: Seq[RecordFieldLiteral])
     case RecordFieldLoad(record: Expr.RecordType, field: RecordField, recordValue: Expr)

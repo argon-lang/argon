@@ -16,6 +16,29 @@
     "record-reference"
 )
 
+(enum "emit-command"
+    (constructor "define-tube"
+        (arg "id" (int))
+        (arg "name" "tube-name")
+    )
+    (constructor "close-tube"
+        (arg "id" (int))
+    )
+
+    (constructor "define-module"
+        (arg "id" (int))
+        (arg "tube-id" (int))
+        (arg "path" "module-path")
+    )
+    (constructor "define-function"
+        (arg "id" (int))
+        (arg "function" "vm-function")
+    )
+    (constructor "define-record"
+        (arg "id" (int))
+    )
+)
+
 (interface "vm-tube"
     type-parameters: (list
         (type-parameter "externs" tuple: "external-implementation")
@@ -140,6 +163,9 @@
     (constructor "update"
         (arg "inner" "identifier")
     )
+    (constructor "internal" inline: #true
+        (arg "id" (int))
+    )
 )
 
 (constructor "import-specifier"
@@ -220,7 +246,6 @@
 (constructor "vm-function"
     (kwarg "parameters" (list "vm-type"))
     (kwarg "return-type" "vm-type")
-    (kwarg "implementation" optional: #true "vm-function-implementation")
 )
 
 (enum "vm-function-implementation"
@@ -292,6 +317,11 @@
     (constructor "load-builtin"
         (arg "result" "register")
         (arg "value" "builtin")
+        (vararg "args" "register")
+    )
+    (constructor "load-function"
+        (arg "result" "register")
+        (arg "function-id" (int))
         (vararg "args" "register")
     )
     (constructor "load-int"

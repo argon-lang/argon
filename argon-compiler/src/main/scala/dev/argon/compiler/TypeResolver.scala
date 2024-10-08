@@ -51,6 +51,13 @@ trait TypeResolver extends UsingContext {
   private def unifyExpr(a: Expr, b: Expr)(using state: EmitState): Comp[Boolean] =
     Unification.unify[context.Env, context.Error](TRExprContext)(state.model, TREvaluator(), context.Config.evaluatorFuel)(a, b)
 
+  private def checkTypesMatch(loc: SourceLocation)(a: Expr, b: Expr)(using state: EmitState): Comp[Unit] =
+    ErrorLog.logError(CompilerError.TypeError(
+      loc,
+      TRToErrorShifter[context.type](context).shiftExpr(a),
+      TRToErrorShifter[context.type](context).shiftExpr(b)
+    )).whenZIO(unifyExpr(a, b).negate).unit
+
   private def nestedScope[A](using state: EmitState)(f: EmitState ?=> Comp[A]): Comp[A] =
     for
       innerScope <- Scopes.LocalScope.make(state.scope)
@@ -92,13 +99,7 @@ trait TypeResolver extends UsingContext {
     override final def check(t: Expr)(using EmitState): Comp[Expr] =
       infer.flatMap {
         case InferredExpr(e, inferredType) =>
-          ErrorLog.logError(CompilerError.TypeError(
-            loc,
-            expected = TRToErrorShifter[context.type](context).shiftExpr(t),
-            actual = TRToErrorShifter[context.type](context).shiftExpr(inferredType),
-          ))
-            .whenZIO(unifyExpr(t, inferredType).negate)
-            .as(e)
+          checkTypesMatch(loc)(t, inferredType).as(e)
       }
   }
 
@@ -247,6 +248,16 @@ trait TypeResolver extends UsingContext {
           arg = resolveExpr(arg),
           listType = listType,
         ))
+
+      case ast.Expr.FunctionType(a, r) =>
+        new InferFactory {
+          override def loc: Loc = expr.location
+          override def infer(using state: EmitState): Comp[InferredExpr] =
+            for
+              a <- resolveType(a)
+              r <- resolveType(r)
+            yield InferredExpr(Expr.FunctionType(a, r), Expr.TypeN(Expr.IntLiteral(0))) // TODO: Infer proper level
+        }
 
       case id: IdentifierExpr =>
         LookupIdFactory(expr.location, id)
@@ -635,7 +646,23 @@ trait TypeResolver extends UsingContext {
                 case Overloadable.RecordField(r, field, recordValue) => recordFieldOverload(r, field, recordValue)
               }
 
-              val factory = overloadResult.remainingArguments.foldLeft(factory0)(_.invoke(_))
+              val factory1 = overloadResult.remainingArguments.foldLeft(factory0)(_.invoke(_))
+
+              val factory =
+                overloadResult.lambdaParameters.foldRight(factory1) { (param, bodyFactory) =>
+                  new ExprFactory {
+                    // TODO: Fix location
+                    override def loc: Loc = OverloadedExprFactory.this.loc
+
+                    override def check(t: Expr)(using EmitState): Comp[Expr] =
+                      for
+                        bodyType <- makeHole
+                        body <- bodyFactory.check(bodyType)
+                        _ <- checkTypesMatch(loc)(t, Expr.FunctionType(param.varType, bodyType))
+                      yield Expr.Lambda(param, bodyType, body)
+                  }
+                }
+                
 
               ErrorLog.logError(CompilerError.AmbiguousOverload(loc, overloads.map { (overload, _) => toAttemptedOverload(overload) })).when(overloads.size > 1) *>
                 factory.check(t)
@@ -662,6 +689,7 @@ trait TypeResolver extends UsingContext {
       arguments: Seq[Expr],
       remainingSig: TRSignatureContext.FunctionSignature,
       remainingArguments: Seq[ArgumentInfo],
+      lambdaParameters: Seq[LocalVar],
     ) extends OverloadAttempt
 
     final case class Failure(errors: Seq[CompilerError]) extends OverloadAttempt
@@ -691,7 +719,7 @@ trait TypeResolver extends UsingContext {
 
         sig <- overload.signature
 
-        attemptRes <- attemptOverloadCheck(overload, sig, overload.initialArgs.map(annExprToArg) ++ args, Seq.empty)(using attemptState).provideSomeEnvironment[context.Env](_.add[ErrorLog](attemptErrorLog))
+        attemptRes <- attemptOverloadCheck(overload, sig, overload.initialArgs.map(annExprToArg) ++ args, Seq.empty, Seq.empty)(using attemptState).provideSomeEnvironment[context.Env](_.add[ErrorLog](attemptErrorLog))
         partialScope <- attemptScope.toPartialScope
 
         errors <- errors.get
@@ -707,6 +735,7 @@ trait TypeResolver extends UsingContext {
               arguments = attemptRes.args,
               remainingSig = attemptRes.remainingSig,
               remainingArguments = attemptRes.remainingArgs,
+              lambdaParameters = attemptRes.lambdaParameters,
             )
 
       yield res
@@ -715,10 +744,21 @@ trait TypeResolver extends UsingContext {
     private final case class AttemptOverloadCheckResult(
       args: Seq[Expr],
       remainingSig: TRSignatureContext.FunctionSignature,
-      remainingArgs: Seq[ArgumentInfo]
+      remainingArgs: Seq[ArgumentInfo],
+      lambdaParameters: Seq[LocalVar],
     )
 
-    private def attemptOverloadCheck(overload: Overloadable, sig: TRSignatureContext.FunctionSignature, args: Seq[ArgumentInfo], callArgs: Seq[Expr])(using EmitState): Comp[AttemptOverloadCheckResult] =
+    private def attemptOverloadCheck(overload: Overloadable, sig: TRSignatureContext.FunctionSignature, args: Seq[ArgumentInfo], callArgs: Seq[Expr], lambdaParams: Seq[LocalVar])(using EmitState): Comp[AttemptOverloadCheckResult] =
+      def applyArg(param: TRSignatureContext.SignatureParameter, tailParams: Seq[TRSignatureContext.SignatureParameter], arg: Expr, restArgs: Seq[ArgumentInfo], lambdaParam: Option[LocalVar]): Comp[AttemptOverloadCheckResult] =
+        val isProof = param.listType == FunctionParameterListType.RequiresList
+        val paramVar = param.asParameterVar(overload.asOwner, callArgs.size)
+
+        val restSig = sig.copy(parameters = tailParams).substituteVar(paramVar, arg)
+
+        attemptOverloadCheck(overload, restSig, restArgs, callArgs :+ arg, lambdaParams ++ lambdaParam)
+      end applyArg
+
+
       (sig.parameters, args) match {
         case (param +: tailParams, arg +: tailArgs) =>
           ((param.listType, arg.listType) match {
@@ -743,19 +783,42 @@ trait TypeResolver extends UsingContext {
             case (FunctionParameterListType.NormalList, _) =>
               ZIO.die(RuntimeException("Parameter argument mismatches should have been filtered out already"))
           }).flatMap { (callArg, restArgs) =>
-            val isProof = param.listType == FunctionParameterListType.RequiresList
-            val paramVar = param.asParameterVar(overload.asOwner, callArgs.size)
-
-            val restSig = sig.copy(parameters = tailParams).substituteVar(paramVar, callArg)
-
-            attemptOverloadCheck(overload, restSig, restArgs, callArgs :+ callArg)
+            applyArg(param, tailParams, callArg, restArgs, lambdaParam = None)
           }
 
-        case (param +: tailParams, _) => ???
+        case (param +: tailParams, _) =>
+          (param.listType match {
+            case FunctionParameterListType.NormalList =>
+              for
+                  varId <- UniqueIdentifier.make
+                  lambdaParam = LocalVar(
+                    id = varId,
+                    varType = param.paramType,
+                    name = None,
+                    isMutable = false,
+                    isErased = param.isErased,
+                    isProof = false,
+                  )
+              yield (Expr.Variable(lambdaParam), Some(lambdaParam))
+
+            case FunctionParameterListType.InferrableList | FunctionParameterListType.QuoteList =>
+              for
+                hole <- makeHole
+              yield (hole, None)
+
+            case FunctionParameterListType.RequiresList =>
+              for
+                resolvedValue <- resolveImplicit(param.paramType)
+              yield (resolvedValue, None)
+
+          }).flatMap { case (callArg, lambdaParam) =>
+            applyArg(param, tailParams, callArg, args, lambdaParam)
+          }
 
         case _ =>
-          ZIO.succeed(AttemptOverloadCheckResult(callArgs, sig, args))
+          ZIO.succeed(AttemptOverloadCheckResult(callArgs, sig, args, lambdaParams))
       }
+    end attemptOverloadCheck
 
 
     def groupOverloads(overloads: Seq[Overloadable], args: Seq[ArgumentInfo]): ZStream[context.Env, context.Error, Seq[Overloadable]] =
@@ -913,7 +976,7 @@ trait TypeResolver extends UsingContext {
                   loadLocal = Expr.Variable(local)
                   ir.Assertion(witness, assertionType) <- buildCall(sig.copy(parameters = tailParams).substituteVar(variable, loadLocal), args :+ loadLocal)
                 yield ir.Assertion(
-                  witness = Expr.Lambda(local, witness),
+                  witness = Expr.Lambda(local, assertionType, witness),
                   assertionType = Expr.FunctionType(paramType, assertionType),
                 )
 
@@ -949,11 +1012,7 @@ trait TypeResolver extends UsingContext {
           for
             itemTypes <- ZIO.foreach(items) { _ => makeHole }
             actualType = Expr.Tuple(itemTypes)
-            _ <- ErrorLog.logError(CompilerError.TypeError(
-              loc,
-              TRToErrorShifter[context.type](context).shiftExpr(t),
-              TRToErrorShifter[context.type](context).shiftExpr(actualType)
-            )).whenZIO(unifyExpr(t, actualType).negate)
+            _ <- checkTypesMatch(loc)(t, actualType)
 
             itemExprs <- ZIO.foreach(items.zip(itemTypes)) { (item, itemType) =>
               item.check(itemType)
