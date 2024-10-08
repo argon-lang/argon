@@ -16,7 +16,7 @@ import scala.sys.process.Process
 Global / semanticdbEnabled := true
 
 val graalVersion = "23.1.0"
-val zioVersion = "2.0.21"
+val zioVersion = "2.1.9"
 
 lazy val commonSettingsNoLibs = Seq(
   scalaVersion := "3.4.0",
@@ -32,13 +32,13 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.zio" %%% "zio-json" % "0.6.2",
-    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.4",
+    "dev.zio" %%% "zio-json" % "0.7.3",
+    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.7",
 
-    "org.scala-lang.modules" %%% "scala-xml" % "2.2.0",
-    "org.gnieh" %%% "fs2-data-xml-scala" % "1.10.0",
-    "org.typelevel" %%% "cats-core" % "2.10.0",
-    "dev.zio" %%% "zio-interop-cats" % "23.1.0.1",
+    "org.scala-lang.modules" %%% "scala-xml" % "2.3.0",
+    "org.gnieh" %%% "fs2-data-xml-scala" % "1.11.1",
+    "org.typelevel" %%% "cats-core" % "2.12.0",
+    "dev.zio" %%% "zio-interop-cats" % "23.1.0.3",
   ),
 
 )
@@ -46,7 +46,7 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
 lazy val sharedJSNodeSettings = Seq(
 
   libraryDependencies ++= Seq(
-    "io.github.cquiroz" %%% "scala-java-time" % "2.5.0",
+    "io.github.cquiroz" %%% "scala-java-time" % "2.6.0",
   ),
 
   npmDependencies ++= Seq(
@@ -73,18 +73,17 @@ lazy val graalDependencies = Seq(
 )
 
 lazy val annotationDependencies = Seq(
-  "org.jetbrains" % "annotations" % "24.1.0",
+  "org.jetbrains" % "annotations" % "26.0.0",
 )
 
 lazy val commonJVMSettings = Seq(
 
   libraryDependencies ++= annotationDependencies ++ Seq(
-    "commons-io" % "commons-io" % "2.15.1",
-    "org.apache.commons" % "commons-lang3" % "3.14.0",
-    "org.apache.commons" % "commons-text" % "1.11.0",
-    "org.apache.commons" % "commons-compress" % "1.26.1",
-    "dev.zio" %% "zio-logging" % "2.2.2",
-    "net.java.dev.jna" % "jna" % "5.14.0",
+    "commons-io" % "commons-io" % "2.17.0",
+    "org.apache.commons" % "commons-lang3" % "3.17.0",
+    "org.apache.commons" % "commons-text" % "1.12.0",
+    "org.apache.commons" % "commons-compress" % "1.27.1",
+    "dev.zio" %% "zio-logging" % "2.3.1",
     "net.aichler" % "jupiter-interface" % JupiterKeys.jupiterVersion.value % Test,
   ),
 

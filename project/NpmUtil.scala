@@ -8,13 +8,13 @@ import scala.sys.process.Process
 import scala.util.control.NonFatal
 import org.scalajs.sbtplugin.ScalaJSPlugin.autoImport.{fastLinkJS, fullLinkJS, scalaJSLinkerConfig, scalaJSLinkerOutputDirectory}
 
-import scalajsbundler.sbtplugin.ScalaJSBundlerPlugin.autoImport.{npmDependencies, npmDevDependencies}
-
 object NpmUtil extends AutoPlugin {
 
   object autoImport {
     val npmInstall = taskKey[Unit]("Runs npm install")
     val npmPackageLockJsonFile = settingKey[File]("The package-lock.json file")
+    val npmDependencies = settingKey[Seq[(String, String)]]("NPM dependencies")
+    val npmDevDependencies = settingKey[Seq[(String, String)]]("NPM dev dependencies")
   }
   import autoImport._
 
