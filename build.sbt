@@ -19,7 +19,7 @@ val graalVersion = "23.1.0"
 val zioVersion = "2.1.9"
 
 lazy val commonSettingsNoLibs = Seq(
-  scalaVersion := "3.4.0",
+  scalaVersion := "3.5.1",
 )
 
 lazy val commonSettings = commonSettingsNoLibs ++ Seq(

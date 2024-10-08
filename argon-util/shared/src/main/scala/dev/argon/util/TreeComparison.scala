@@ -57,13 +57,10 @@ trait TreeComparison {
 
   final inline def autoComparerProduct[T](using m: Mirror.ProductOf[T]): Comparer[T] =
     val tupleComparer = autoComparerTuple[m.MirroredElemTypes]
-    new Comparer[T] {
-      override def compare(a: T, b: T): Comparison =
-        tupleComparer.compare(
-          Tuple.fromProductTyped(summonInline[T =:= (T & Product)](a))(using summonInline[Mirror.ProductOf[T] {type MirroredElemTypes = m.MirroredElemTypes} =:= Mirror.ProductOf[T & Product] {type MirroredElemTypes = m.MirroredElemTypes}](m)),
-          Tuple.fromProductTyped(summonInline[T =:= (T & Product)](b))(using summonInline[Mirror.ProductOf[T] {type MirroredElemTypes = m.MirroredElemTypes} =:= Mirror.ProductOf[T & Product] {type MirroredElemTypes = m.MirroredElemTypes}](m)),
-        )
-    }
+    val m2 = summonInline[Mirror.ProductOf[T] {type MirroredElemTypes = m.MirroredElemTypes} =:= Mirror.ProductOf[T & Product] {type MirroredElemTypes = m.MirroredElemTypes}](m)
+    summonInline[Comparer[T & Product] =:= Comparer[T]](
+      ProductComparer[T & Product](using m2)(tupleComparer)
+    )
   end autoComparerProduct
 
   final inline def autoComparerTuple[T <: Tuple]: Comparer[T] =
@@ -72,26 +69,37 @@ trait TreeComparison {
         lazy val thComparer = summonInline[Comparer[th]]
         val ttComparer = autoComparerTuple[tt]
         summonInline[Comparer[th *: tt] =:= Comparer[T]](
-          new Comparer[th *: tt] {
-            override def compare(a: th *: tt, b: th *: tt): Comparison =
-              val (ah *: at) = a
-              val (bh *: bt) = b
-              combineComparison(
-                thComparer.compare(ah, bh),
-                ttComparer.compare(at, bt),
-              )
-            end compare
-          }
+          ConsTupleComparer(thComparer, ttComparer)
         )
 
       case _: EmptyTuple =>
-        summonInline[Comparer[EmptyTuple] =:= Comparer[T]](
-          new Comparer[EmptyTuple] {
-            override def compare(a: EmptyTuple, b: EmptyTuple): Comparison =
-              comparisonFromBoolean(true)
-          }
-        )
+        summonInline[Comparer[EmptyTuple] =:= Comparer[T]](EmptyTupleComparer)
     }
+
+  final class ProductComparer[T <: Product](using m: Mirror.ProductOf[T])(tupleComparer: Comparer[m.MirroredElemTypes]) extends Comparer[T] {
+    override def compare(a: T, b: T): Comparison =
+      tupleComparer.compare(
+        Tuple.fromProductTyped[T](a)(using m),
+        Tuple.fromProductTyped[T](b)(using m),
+      )
+  }
+
+  final class ConsTupleComparer[TH, TT <: Tuple](thComparer: => Comparer[TH], ttComparer: Comparer[TT]) extends Comparer[TH *: TT] {
+    override def compare(a: TH *: TT, b: TH *: TT): Comparison =
+      val (ah *: at) = a
+      val (bh *: bt) = b
+      combineComparison(
+        thComparer.compare(ah, bh),
+        ttComparer.compare(at, bt),
+      )
+    end compare
+
+  }
+  
+  object EmptyTupleComparer extends Comparer[EmptyTuple] {
+    override def compare(a: EmptyTuple, b: EmptyTuple): Comparison =
+      comparisonFromBoolean(true)
+  }
 
 
 }
@@ -116,5 +124,7 @@ object TreeComparison {
           }
       }
     }
+
+
 
 }

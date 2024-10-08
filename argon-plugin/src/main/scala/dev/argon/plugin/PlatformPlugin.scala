@@ -213,13 +213,14 @@ private[plugin] object PlatformPluginSet {
     
     sealed trait PartialExternRefSingleton[ET <: plugin.Extern.TaggedRef] extends PartialExternRef {
       val extern: ET
+      import extern.given
 
       override type Reference = extern.Reference
 
       override def referenceCodec: PartialESExprCodec[Reference] =
         PartialESExprCodecSingleton[Reference](plugin.pluginId)
 
-      override def referenceEnvTag: EnvironmentTag[Reference] = summon
+      override def referenceEnvTag: EnvironmentTag[Reference] = summon[EnvironmentTag[Reference]]
 
       override def defineReference[E >: PluginError](options: PlatformOptions[E])(definitionInfo: DefinitionInfo): ZIO[PluginEnv, E, ZEnvironment[extern.Reference]] =
         extern.defineReference(options)(definitionInfo).map(ZEnvironment.apply)
@@ -233,10 +234,12 @@ private[plugin] object PlatformPluginSet {
     }
 
     sealed trait PartialExternSingleton[ET <: plugin.Extern.Tagged] extends PartialExtern with PartialExternRefSingleton[ET] {
+      import extern.given
+
       override type Implementation = extern.Implementation
       override def implementationCodec: PartialESExprCodec[Implementation] =
         PartialESExprCodecSingleton[Implementation](plugin.pluginId)
-      override def implementationEnvTag: EnvironmentTag[Implementation] = summon
+      override def implementationEnvTag: EnvironmentTag[Implementation] = summon[EnvironmentTag[Implementation]]
 
       override def loadExtern[E >: PluginError](options: PlatformOptions[E])(id: String): OptionT[[A] =>> ZIO[PluginEnv, E, A], ZEnvironment[extern.Implementation]] =
         extern.loadExtern(options)(id).map(ZEnvironment.apply)

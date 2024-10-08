@@ -92,7 +92,7 @@ object Program extends PlatformApp[PathUtil, IOException | BuildError | PluginEr
       case Some(Command.Compile) =>
         for
           configRes <- ZIO.serviceWith[PathUtil](_.binaryResource(options.buildSpec.get))
-          config <- ESExprTextResource.resourceCodec[BuildConfig].decode(configRes).decoded
+          config <- ESExprTextResource.resourceCodec[BuildConfig].decode[Error](configRes).decoded
           baseDir <- ZIO.serviceWithZIO[PathUtil](_.dirname(options.buildSpec.get))
           layer <- ZIO.serviceWith[PathUtil](_.resourceLayer(baseDir))
           _ <- Compile.compile(config).provideSomeLayer[Environment](layer)
