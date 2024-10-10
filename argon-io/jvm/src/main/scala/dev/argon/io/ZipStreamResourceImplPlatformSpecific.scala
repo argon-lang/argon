@@ -1,6 +1,6 @@
 package dev.argon.io
 
-import dev.argon.util.ZStreamFromOutputStreamWriterZIO
+import dev.argon.util.async.ZStreamFromOutputStreamWriterZIO
 import org.apache.commons.compress.archivers.zip.{ZipArchiveEntry, ZipArchiveOutputStream}
 import zio.*
 import zio.stream.*

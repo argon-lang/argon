@@ -3,7 +3,7 @@ package dev.argon.plugin
 import dev.argon.util.given
 import cats.data.OptionT
 import dev.argon.compiler.*
-import dev.argon.esexpr.ESExprCodec
+import esexpr.ESExprCodec
 import dev.argon.options.{OptionDecoder, OutputHandler}
 import dev.argon.plugin.PlatformPluginSet.Empty
 import dev.argon.plugin.PluginSetUtil.*
@@ -15,7 +15,7 @@ abstract class PlatformPlugin extends ExternContext {
 
   type PlatformOptions[E >: PluginError]
 
-  given optionDecoder[E >: PluginError]: OptionDecoder[E, PlatformOptions[E]]
+  given optionDecoder[E >: PluginError]: OptionDecoder[PlatformOptions[E]]
 
 
   val externFunction: Extern.Tagged
@@ -52,7 +52,7 @@ sealed trait PlatformPluginSet {
 
   type PlatformOptions[E >: PluginError]
 
-  given optionDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[E, PlatformOptions[E]]
+  given optionDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[PlatformOptions[E]]
 
 
 
@@ -152,8 +152,8 @@ private[plugin] object PlatformPluginSet {
 
     override type PlatformOptions[E >: PluginError] = Unit
 
-    override def optionDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[E, Unit] =
-      PluginSetUtil.PartialOptionDecoderEmpty[E]()
+    override def optionDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[Unit] =
+      PluginSetUtil.PartialOptionDecoderEmpty()
 
 
     override val externFunction: PartialExternEmpty =
@@ -189,8 +189,8 @@ private[plugin] object PlatformPluginSet {
 
     override type PlatformOptions[E >: PluginError] = plugin.PlatformOptions[E]
 
-    override def optionDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[E, PlatformOptions[E]] =
-      PluginSetUtil.PartialOptionDecoderSingleton[E, PlatformOptions[E]](plugin.pluginId)
+    override def optionDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[PlatformOptions[E]] =
+      PluginSetUtil.PartialOptionDecoderSingleton[PlatformOptions[E]](plugin.pluginId)
 
 
     override val externFunction: PartialExternSingleton[plugin.externFunction.type] =
@@ -239,6 +239,7 @@ private[plugin] object PlatformPluginSet {
       override type Implementation = extern.Implementation
       override def implementationCodec: PartialESExprCodec[Implementation] =
         PartialESExprCodecSingleton[Implementation](plugin.pluginId)
+        
       override def implementationEnvTag: EnvironmentTag[Implementation] = summon[EnvironmentTag[Implementation]]
 
       override def loadExtern[E >: PluginError](options: PlatformOptions[E])(id: String): OptionT[[A] =>> ZIO[PluginEnv, E, A], ZEnvironment[extern.Implementation]] =
@@ -259,8 +260,8 @@ private[plugin] object PlatformPluginSet {
 
     override type PlatformOptions[E >: PluginError] = (aSet.PlatformOptions[E], bSet.PlatformOptions[E])
 
-    override def optionDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[E, PlatformOptions[E]] =
-      PluginSetUtil.PartialOptionDecoderUnion[E, aSet.PlatformOptions[E], bSet.PlatformOptions[E]]
+    override def optionDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[PlatformOptions[E]] =
+      PluginSetUtil.PartialOptionDecoderUnion[aSet.PlatformOptions[E], bSet.PlatformOptions[E]]
 
 
     override val externFunction: PartialExternUnion[aSet.externFunction.type, bSet.externFunction.type] =

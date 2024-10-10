@@ -43,12 +43,11 @@ trait TreeScanner[F[_]: Monad] {
 
   final inline def autoScannerProduct[T](using m: Mirror.ProductOf[T]): Scanner[T] =
     val tupleComparer = autoComparerTuple[m.MirroredElemTypes]
-    new Scanner[T] {
-      override def scan(a: T): F[Unit] =
-        tupleComparer.scan(
-          Tuple.fromProductTyped(summonInline[T =:= (T & Product)](a))(using summonInline[Mirror.ProductOf[T] {type MirroredElemTypes = m.MirroredElemTypes} =:= Mirror.ProductOf[T & Product] {type MirroredElemTypes = m.MirroredElemTypes}](m)),
-        )
-    }
+    val m2 = summonInline[Mirror.ProductOf[T] {type MirroredElemTypes = m.MirroredElemTypes} =:= Mirror.ProductOf[T & Product] {type MirroredElemTypes = m.MirroredElemTypes}](m)
+
+    summonInline[Scanner[T & Product] =:= Scanner[T]](
+      ProductScanner[T & Product](using m2)(tupleComparer)
+    )
   end autoScannerProduct
 
   final inline def autoComparerTuple[T <: Tuple]: Scanner[T] =
@@ -56,23 +55,28 @@ trait TreeScanner[F[_]: Monad] {
       case _: (th *: tt) =>
         lazy val thComparer = summonInline[Scanner[th]]
         val ttComparer = autoComparerTuple[tt]
-        summonInline[Scanner[th *: tt] =:= Scanner[T]](
-          new Scanner[th *: tt] {
-            override def scan(a: th *: tt): F[Unit] =
-              val (ah *: at) = a
-              thComparer.scan(ah).flatMap { _ => ttComparer.scan(at) }
-            end scan
-          }
-        )
+        summonInline[Scanner[th *: tt] =:= Scanner[T]](ConsTupleScanner(thComparer, ttComparer))
 
       case _: EmptyTuple =>
-        summonInline[Scanner[EmptyTuple] =:= Scanner[T]](
-          new Scanner[EmptyTuple] {
-            override def scan(a: EmptyTuple): F[Unit] =
-              Monad[F].pure(())
-          }
-        )
+        summonInline[Scanner[EmptyTuple] =:= Scanner[T]](EmptyTupleScanner)
     }
+
+  final class ProductScanner[T <: Product](using m: Mirror.ProductOf[T])(tupleComparer: Scanner[m.MirroredElemTypes]) extends Scanner[T] {
+      override def scan(a: T): F[Unit] =
+        tupleComparer.scan(Tuple.fromProductTyped(a)(using m))
+  }
+
+  final class ConsTupleScanner[TH, TT <: Tuple](thComparer: => Scanner[TH], ttComparer: Scanner[TT]) extends Scanner[TH *: TT] {
+    override def scan(a: TH *: TT): F[Unit] =
+      val (ah *: at) = a
+      thComparer.scan(ah).flatMap { _ => ttComparer.scan(at) }
+    end scan
+  }
+  
+  object EmptyTupleScanner extends Scanner[EmptyTuple] {
+    override def scan(a: EmptyTuple): F[Unit] =
+      Monad[F].pure(())
+  }
 
 
 }

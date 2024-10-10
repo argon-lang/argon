@@ -7,7 +7,7 @@ import zio.stream.*
 import java.io.IOException
 import java.nio.file.Path
 import dev.argon.io.jstypes.node.{NodePath, NodeFileSystem}
-import dev.argon.util.JSPromiseUtil
+import dev.argon.util.async.JSPromiseUtil
 
 import scala.scalajs.js
 

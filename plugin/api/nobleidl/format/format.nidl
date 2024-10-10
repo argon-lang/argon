@@ -1,0 +1,30 @@
+package argon.tube;
+
+import nobleidl.core;
+
+
+@esexpr:(derive-codec)
+record tube-name {
+    head: string;
+    tail: list[string];
+}
+
+@esexpr:(derive-codec)
+record module-path {
+    path: list[string];
+}
+
+@esexpr:(derive-codec)
+record module-name {
+    tube: tube-name;
+    path: module-path;
+}
+
+
+@esexpr:(derive-codec)
+record resource-id {
+    id: int;
+}
+
+
+

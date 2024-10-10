@@ -8,7 +8,7 @@ import zio.{ZEnvironment, ZIO}
 sealed trait PluginSet extends ExternContext {
 
   type PlatformOptions[E >: PluginError]
-  given optionDecoder[E >: PluginError]: OptionDecoder[E, PlatformOptions[E]]
+  given optionDecoder[E >: PluginError]: OptionDecoder[PlatformOptions[E]]
 
   val externFunction: Extern
   val externRecord: ExternRef
@@ -32,7 +32,7 @@ object PluginSet {
   private[plugin] def apply(platforms: PlatformPluginSet, formats: FormatPluginSet[platforms.type]): PluginSet =
     new PluginSet {
       override type PlatformOptions[E >: PluginError] = platforms.PlatformOptions[E]
-      override def optionDecoder[E >: PluginError]: OptionDecoder[E, PlatformOptions[E]] =
+      override def optionDecoder[E >: PluginError]: OptionDecoder[PlatformOptions[E]] =
         platforms.optionDecoder[E].toDecoder
 
       override val externFunction: Extern {

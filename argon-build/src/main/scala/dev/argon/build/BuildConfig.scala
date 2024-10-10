@@ -1,6 +1,6 @@
 package dev.argon.build
 
-import dev.argon.esexpr.*
+import esexpr.*
 import dev.argon.io.*
 import dev.argon.options.*
 import dev.argon.parser.SyntaxError

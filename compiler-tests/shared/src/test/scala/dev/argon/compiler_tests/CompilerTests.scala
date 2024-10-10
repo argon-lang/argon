@@ -9,7 +9,7 @@ import dev.argon.plugin.{PluginError, PluginCompatibleContext}
 import dev.argon.util.xml.XmlParser
 import java.io.IOException
 import fs2.data.xml.XmlException
-import dev.argon.esexpr.ESExpr
+import esexpr.{ESExpr, ESExprCodec}
 import dev.argon.util.xml.XmlDocumentCountException
 import dev.argon.plugin.PluginContext
 import dev.argon.plugin.PluginSet
@@ -23,10 +23,10 @@ import dev.argon.build.TubeOptions
 import dev.argon.build.TubeLoaderOptions
 import dev.argon.compiler_tests.TestCase.ExpectedResult
 import dev.argon.compiler.TubeName
+import dev.argon.io.ResourceReader
 import cats.data.NonEmptySeq
-import dev.argon.esexpr.ESExprCodec
-import dev.argon.util.ZIOErrorUtil
-import dev.argon.esexpr.parser.ESExprTextReader
+import dev.argon.util.async.ZIOErrorUtil
+import esexpr.parser.ESExprTextReader
 import dev.argon.build.BuildConfigESExprParseError
 
 object CompilerTests extends ZIOSpecDefault {
@@ -126,7 +126,7 @@ object CompilerTests extends ZIOSpecDefault {
         .flatMap { context =>
           val emitter = context.plugins.emitter[context.type].extract[exec.Emitter[context.type]].get
           val sourceLoader = context.plugins.tubeLoaders[context.type](TubeLoaderName("source", "argon-sources"))
-          val sourceReader = MapReader(libraries ++ testCaseToSourcesMap(testCase))
+          val sourceReader: ResourceReader = MapReader(libraries ++ testCaseToSourcesMap(testCase))
 
           val outputOptions = exec.outputOptions[context.Error, context.type](emitter)
 
@@ -141,7 +141,7 @@ object CompilerTests extends ZIOSpecDefault {
                     ).runHead.map { buildEsx =>
                       def getKey(e: ESExpr, s: String): Option[ESExpr] =
                         e match {
-                          case ESExpr.Constructed(_, kwargs, args) => kwargs.get(s)
+                          case ESExpr.Constructor(_, args, kwargs) => kwargs.get(s)
                           case _ => None
                         }
 
@@ -155,18 +155,18 @@ object CompilerTests extends ZIOSpecDefault {
                     }
                   }
 
-                  tube <- tubeImporter.loadTube(sourceReader)(identity)(TubeOptions(
+                  tube <- tubeImporter.loadTube(identity)(TubeOptions(
                     loader = TubeLoaderOptions("source", "argon-sources"),
-                    options = ESExpr.Constructed("source-options", Map(
-                      "name" -> summon[ESExprCodec[dev.argon.plugin.vm.TubeName]].encode(
-                        dev.argon.plugin.vm.TubeName(tubeName.parts.head, tubeName.parts.tail*)
+                    options = ESExpr.Constructor("source-options", Seq(), Map(
+                      "name" -> summon[ESExprCodec[dev.argon.tube.TubeName]].encode(
+                        dev.argon.tube.TubeName(tubeName.parts.head, tubeName.parts.tail)
                       ),
                       "sources" -> summon[ESExprCodec[Seq[String]]].encode(Seq(tubeName.encode + "/src")),
-                      "platforms" -> ESExpr.Constructed("dict", Map(
+                      "platforms" -> ESExpr.Constructor("dict", Seq(), Map(
                         exec.pluginId -> platformOptions.flatten.getOrElse(exec.options),
-                      ), Seq()),
-                    ), Seq())
-                  ))
+                      )),
+                    ))
+                  )).provideSomeLayer(ZLayer.succeed(sourceReader))
                   tubeOutput <- emitter.emitTube(context)(tube)(outputOptions)
                   tubeProgram <- exec.programState(context)(emitter)(tubeOutput)
                 yield tubeProgram

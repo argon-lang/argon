@@ -3,7 +3,7 @@ package dev.argon.compiler_tests
 import dev.argon.plugin.{TubeEmitter, PluginError, PluginEnv, PluginCompatibleContext}
 import zio.*
 import scala.reflect.TypeTest
-import dev.argon.esexpr.ESExpr
+import esexpr.ESExpr
 import dev.argon.compiler.ErrorLog
 import dev.argon.compiler.TubeName
 

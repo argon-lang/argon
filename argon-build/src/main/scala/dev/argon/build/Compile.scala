@@ -2,7 +2,7 @@ package dev.argon.build
 
 import dev.argon.io.*
 import dev.argon.compiler.*
-import dev.argon.esexpr.{ESExpr, ESExprCodec}
+import esexpr.{ESExpr, ESExprCodec}
 import dev.argon.options.{OptionDecoder, OutputHandler, OutputInfo}
 import dev.argon.plugin.*
 import dev.argon.plugin.platform.PlatformPlugins.pluginFactories
@@ -87,34 +87,32 @@ object Compile {
     for
       tubeImporter <- TubeImporterImpl(context)
 
-      resReader <- ZIO.service[ResourceReader]
-      tube <- tubeImporter.loadTube(resReader)(path => ESExprCodec.ErrorPath.Keyword("build-config", "tube", ESExprCodec.ErrorPath.Keyword("tube-options", "options", path)))(config.tube)
+      tube <- tubeImporter.loadTube(path => ESExprCodec.ErrorPath.Keyword("build-config", "tube", ESExprCodec.ErrorPath.Keyword("tube-options", "options", path)))(config.tube)
       _ <- ZIO.foreachDiscard(config.libraries.zipWithIndex) { (lib, i) =>
-        tubeImporter.loadTube(resReader)(path => ESExprCodec.ErrorPath.Keyword("build-config", "libraries", ESExprCodec.ErrorPath.Positional("list", i, ESExprCodec.ErrorPath.Keyword("tube-options", "options", path))))(lib)
+        tubeImporter.loadTube(path => ESExprCodec.ErrorPath.Keyword("build-config", "libraries", ESExprCodec.ErrorPath.Positional("list", i, ESExprCodec.ErrorPath.Keyword("tube-options", "options", path))))(lib)
       }
 
       _ <- ZIO.logTrace(s"Writing output")
 
       emitter = context.plugins.emitter[context.type]
 
-      outputOptions <- ZIO.fromEither(
-        emitter.outputOptionsDecoder[context.Error]
-          .decode(resReader)(config.output.options)
-          .left.map(error => BuildConfigParseError(
-            ESExprCodec.DecodeError(
-              error.message,
-              ESExprCodec.ErrorPath.Keyword(
-                "build-config",
-                "output",
+      outputOptions <- emitter.outputOptionsDecoder[context.Error].decode(config.output.options)
+        .mapError { error =>
+            BuildConfigParseError(
+              ESExprCodec.DecodeError(
+                error.message,
                 ESExprCodec.ErrorPath.Keyword(
-                  "output-config",
-                  "options",
-                  error.path,
+                  "build-config",
+                  "output",
+                  ESExprCodec.ErrorPath.Keyword(
+                    "output-config",
+                    "options",
+                    error.path,
+                  ),
                 ),
-              ),
+              )
             )
-          ))
-      )
+        }
 
       output <- emitter.emitTube(context)(tube)(outputOptions)
       _ <- handlePluginOutput(Seq(), config.output.dest, output, emitter.outputHandler)

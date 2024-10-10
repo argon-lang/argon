@@ -9,7 +9,7 @@ trait TubeEmitter[Ctx <: PluginCompatibleContext] {
   type OutputOptions[E >: PluginError]
   type Output[E >: PluginError]
 
-  given outputOptionsDecoder[E >: PluginError]: OptionDecoder[E, OutputOptions[E]]
+  given outputOptionsDecoder[E >: PluginError]: OptionDecoder[OutputOptions[E]]
   given outputHandler[E >: PluginError]: OutputHandler[E, Output[E]]
 
   def emitTube
@@ -28,7 +28,7 @@ sealed trait TubeEmitterSet[Ctx <: PluginCompatibleContext] {
   type OutputOptions[E >: PluginError]
   type Output[E >: PluginError]
 
-  given outputOptionsDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[E, OutputOptions[E]]
+  given outputOptionsDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[OutputOptions[E]]
 
   given outputHandler[E >: PluginError]: OutputHandler[E, Output[E]]
 
@@ -45,7 +45,7 @@ sealed trait TubeEmitterSet[Ctx <: PluginCompatibleContext] {
       override type OutputOptions[E >: PluginError] = TubeEmitterSet.this.OutputOptions[E]
       override type Output[E >: PluginError] = TubeEmitterSet.this.Output[E]
 
-      override def outputOptionsDecoder[E >: PluginError]: OptionDecoder[E, OutputOptions[E]] =
+      override def outputOptionsDecoder[E >: PluginError]: OptionDecoder[OutputOptions[E]] =
         TubeEmitterSet.this.outputOptionsDecoder[E].toDecoder
 
 
@@ -70,7 +70,7 @@ object TubeEmitterSet {
     type OutputOptions[E >: PluginError] = Unit
     type Output[E >: PluginError] = Unit
 
-    given outputOptionsDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[E, OutputOptions[E]] =
+    given outputOptionsDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[OutputOptions[E]] =
       PluginSetUtil.PartialOptionDecoderEmpty()
 
     given outputHandler[E >: PluginError]: OutputHandler[E, Output[E]] =
@@ -93,7 +93,7 @@ object TubeEmitterSet {
     type OutputOptions[E >: PluginError] = tubeEmitter.OutputOptions[E]
     type Output[E >: PluginError] = tubeEmitter.Output[E]
 
-    given outputOptionsDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[E, OutputOptions[E]] =
+    given outputOptionsDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[OutputOptions[E]] =
       PluginSetUtil.PartialOptionDecoderSingleton(pluginId)
 
     given outputHandler[E >: PluginError]: OutputHandler[E, Output[E]] =
@@ -127,8 +127,8 @@ object TubeEmitterSet {
     type OutputOptions[E >: PluginError] = (aSet.OutputOptions[E], bSet.OutputOptions[E])
     type Output[E >: PluginError] = (aSet.Output[E], bSet.Output[E])
 
-    given outputOptionsDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[E, OutputOptions[E]] =
-      PluginSetUtil.PartialOptionDecoderUnion[E, aSet.OutputOptions[E], bSet.OutputOptions[E]]
+    given outputOptionsDecoder[E >: PluginError]: PluginSetUtil.PartialOptionDecoder[OutputOptions[E]] =
+      PluginSetUtil.PartialOptionDecoderUnion[aSet.OutputOptions[E], bSet.OutputOptions[E]]
 
     given outputHandler[E >: PluginError]: OutputHandler[E, Output[E]] =
       PluginSetUtil.OutputHandlerUnion[E, aSet.Output[E], bSet.Output[E]]()

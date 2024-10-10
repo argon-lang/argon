@@ -7,7 +7,7 @@ import zio.*
 
 trait TubeLoader[Ctx <: Context { type Env <: PluginEnv; type Error >: PluginError }] {
   type LibOptions[E >: PluginError]
-  given libOptionDecoder[E >: PluginError]: OptionDecoder[E, LibOptions[E]]
+  given libOptionDecoder[E >: PluginError]: OptionDecoder[LibOptions[E]]
 
   def load
   (context: Ctx)

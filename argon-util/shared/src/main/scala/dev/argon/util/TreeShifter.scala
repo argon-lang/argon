@@ -49,14 +49,12 @@ trait TreeShifter[F[_]: Monad] {
 
   inline def autoShifterProduct[A, B](using ma: Mirror.ProductOf[A], mb: Mirror.ProductOf[B]): Shifter[A, B] =
     val tupleShifter = autoShifterTuple[ma.MirroredElemTypes, mb.MirroredElemTypes]
-    new Shifter[A, B] {
-      override def shift(a: A): F[B] =
-        tupleShifter.shift(
-          Tuple.fromProductTyped(
-            summonInline[A =:= (A & Product)](a)
-          )(using summonInline[Mirror.ProductOf[A] {type MirroredElemTypes = ma.MirroredElemTypes} =:= Mirror.ProductOf[A & Product] {type MirroredElemTypes = ma.MirroredElemTypes}](ma)),
-        ).map(mb.fromTuple)
-    }
+
+    val ma2 = summonInline[Mirror.ProductOf[A] {type MirroredElemTypes = ma.MirroredElemTypes} =:= Mirror.ProductOf[A & Product] {type MirroredElemTypes = ma.MirroredElemTypes}](ma)
+    val mb2 = summonInline[Mirror.ProductOf[B] {type MirroredElemTypes = mb.MirroredElemTypes} =:= Mirror.ProductOf[B & Product] {type MirroredElemTypes = mb.MirroredElemTypes}](mb)
+    summonInline[Shifter[A & Product, B & Product] =:= Shifter[A, B]](
+      ProductShifter[A & Product, B & Product](using ma2, mb2)(tupleShifter)
+    )
   end autoShifterProduct
 
 
@@ -68,27 +66,36 @@ trait TreeShifter[F[_]: Monad] {
             lazy val hShifter = summonInline[Shifter[ah, bh]]
             val tShifter = autoShifterTuple[at, bt]
             summonInline[Shifter[ah *: at, bh *: bt] =:= Shifter[A, B]](
-              new Shifter[ah *: at, bh *: bt] {
-                override def shift(a: ah *: at): F[bh *: bt] =
-                  val (h *: t) = a
-                  for
-                    h <- hShifter.shift(h)
-                    t <- tShifter.shift(t)
-                  yield h *: t
-                end shift
-              }
+              ConsTupleShifter(hShifter, tShifter)
             )
         }
 
 
       case _: EmptyTuple =>
-        summonInline[Shifter[EmptyTuple, EmptyTuple] =:= Shifter[A, B]](
-          new Shifter[EmptyTuple, EmptyTuple] {
-            override def shift(a: EmptyTuple): F[EmptyTuple] =
-              Monad[F].pure(a)
-          }
-        )
+        summonInline[Shifter[EmptyTuple, EmptyTuple] =:= Shifter[A, B]](EmptyTupleShifter)
     }
+
+  final class ProductShifter[A <: Product, B <: Product](using ma: Mirror.ProductOf[A], mb: Mirror.ProductOf[B])(tupleShifter: Shifter[ma.MirroredElemTypes, mb.MirroredElemTypes]) extends Shifter[A, B] {
+      override def shift(a: A): F[B] =
+        tupleShifter.shift(
+          Tuple.fromProductTyped(a)(using ma),
+        ).map(mb.fromTuple)
+  }
+
+  final class ConsTupleShifter[AH, AT <: Tuple, BH, BT <: Tuple](hShifter: => Shifter[AH, BH], tShifter: Shifter[AT, BT]) extends Shifter[AH *: AT, BH *: BT] {
+    override def shift(a: AH *: AT): F[BH *: BT] =
+      val (h *: t) = a
+      for
+        h <- hShifter.shift(h)
+        t <- tShifter.shift(t)
+      yield h *: t
+    end shift
+  }
+  
+  object EmptyTupleShifter extends Shifter[EmptyTuple, EmptyTuple] {
+    override def shift(a: EmptyTuple): F[EmptyTuple] =
+      Monad[F].pure(a)
+  }
 
 }
 

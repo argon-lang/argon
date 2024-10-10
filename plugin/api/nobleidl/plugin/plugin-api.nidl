@@ -1,0 +1,39 @@
+package argon.plugin;
+
+import nobleidl.core;
+import argon.tube;
+import argon.plugin.options;
+
+
+
+interface platform-plugin[externs, e: exception, platform-options] {
+    plugin-id(): string;
+
+    option-decoder(): option-decoder[platform-options];
+
+    emitter(): option[tube-emitter[externs]];
+    tube-loaders(): dict[tube-loader[externs]];
+}
+
+interface platform-plugin-factory[externs] {
+    create[a, e: exception](callback: platform-plugin-factory-callback[externs, e, a]): a;
+}
+
+interface platform-plugin-factory-callback[externs, e: exception, a] {
+    call[platform-options](plugin: platform-plugin[externs, e, platform-options]): a;
+}
+
+exception plugin-error of unit;
+
+extern type extern-tagged[externs];
+extern type extern-tagged-ref[externs];
+
+
+interface tube-emitter[externs] {
+
+}
+
+interface tube-loader[externs] {
+
+}
+

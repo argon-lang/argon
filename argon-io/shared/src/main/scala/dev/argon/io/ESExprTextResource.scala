@@ -1,7 +1,7 @@
 package dev.argon.io
 
-import dev.argon.esexpr.parser.{ESExprLexer, ESExprParser, ESExprTextReader}
-import dev.argon.esexpr.{ESExprCodec, ESExprException, ESExprDecodeException}
+import esexpr.*
+import esexpr.parser.ESExprTextReader
 import dev.argon.io.{BinaryResource, BinaryResourceDecoder, TextResource}
 import zio.ZIO
 import zio.stream.ZStream

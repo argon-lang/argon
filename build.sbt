@@ -13,6 +13,7 @@ import java.io.File
 import java.nio.charset.StandardCharsets
 import scala.sys.process.Process
 
+ThisBuild / resolvers += Resolver.mavenLocal
 Global / semanticdbEnabled := true
 
 val graalVersion = "23.1.0"
@@ -32,8 +33,9 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.zio" %%% "zio-json" % "0.7.3",
-    "com.softwaremill.magnolia1_3" %%% "magnolia" % "1.3.7",
+    "dev.argon" %%% "argon-async-util" % "1.0.0",
+    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.1.2",
+    "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
     "org.scala-lang.modules" %%% "scala-xml" % "2.3.0",
     "org.gnieh" %%% "fs2-data-xml-scala" % "1.11.1",
@@ -139,43 +141,6 @@ lazy val compilerOptions = javaCompilerOptions ++ Seq(
 
 )
 
-def escapeESExprString(s: String): String =
-  s.replace("\\", "\\\\").replace("\"", "\\\"")
-
-def generateESExprTask(config: File => String): Def.Initialize[sbt.Task[Seq[File]]] =
-  Def.task {
-    val s = streams.value
-    val baseDir = baseDirectory.value
-    val managedDir = sourceManaged.value
-
-    val javaArgs = javaOptions.value
-    val generatorCP = (esexpr_generator / Compile / fullClasspath).value.map(_.data.toString).mkString(File.pathSeparator)
-
-    val genRunner = (Compile / runner).value
-
-    IO.withTemporaryFile("generator-", ".esx") { configFile =>
-      IO.write(configFile, config(baseDir), StandardCharsets.UTF_8)
-
-      val f = FileFunction.cached(s.cacheDirectory / "generate-esx") { (in: Set[File]) =>
-        val outDir = managedDir / "generate-esx"
-        IO.createDirectory(outDir)
-
-        s.log.info(s"Generating sources from ESExpr schema in ${outDir}")
-
-        IO.createDirectory(outDir)
-        val exitCode = Process(Seq("java") ++ javaArgs ++ Seq("-cp", generatorCP, "dev.argon.esexpr.generator.Generator", configFile.getAbsolutePath, outDir.getAbsolutePath)).!(s.log)
-        if (exitCode != 0) {
-          throw new Exception(s"ESExpr Generator failed with exit code ${exitCode}")
-        }
-
-        outDir.allPaths.filter(_.isFile).get().toSet
-      }
-
-      val inputFilesJson = Process(Seq("java") ++ javaArgs ++ Seq("-cp", generatorCP, "dev.argon.esexpr.generator.GeneratorInputs", configFile.getAbsolutePath)).!!(s.log)
-
-      f(implicitly[_root_.io.circe.Decoder[Seq[String]]].decodeJson(_root_.io.circe.parser.parse(inputFilesJson).right.get).right.get.map(new File(_)).toSet).toSeq
-    }
-  }
 
 def generateTestCasesTask(): Def.Initialize[sbt.Task[Seq[File]]] =
   Def.task {
@@ -234,9 +199,10 @@ def generateTestCasesTask(): Def.Initialize[sbt.Task[Seq[File]]] =
   }
 
 
-lazy val esexpr = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("esexpr"))
-  .dependsOn(util, grammar)
-  .jvmConfigure(_.settings(commonJVMSettings))
+lazy val util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-util"))
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
       .settings(commonBrowserSettings)
@@ -249,23 +215,13 @@ lazy val esexpr = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(
     commonSettings,
     compilerOptions,
 
-    name := "esexpr",
+    name := "argon-util",
   )
 
-lazy val esexprJVM = esexpr.jvm
-lazy val esexprJS = esexpr.js
-lazy val esexprNode = esexpr.node
+lazy val utilJVM = util.jvm
+lazy val utilJS = util.js
+lazy val utilNode = util.node
 
-
-lazy val esexpr_generator = project.in(file("esexpr-generator"))
-  .dependsOn(esexprJVM)
-  .settings(
-    commonJVMSettings,
-    commonSettings,
-    compilerOptions,
-
-    name := "esexpr-generator",
-  )
 
 lazy val grammar = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-grammar"))
   .dependsOn(util)
@@ -316,6 +272,30 @@ lazy val astJVM = ast.jvm
 lazy val astJS = ast.js
 lazy val astNode = ast.node
 
+lazy val esexpr_parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("esexpr-parser"))
+  .dependsOn(grammar)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "esexpr-parser",
+  )
+
+lazy val esexpr_parserJVM = esexpr_parser.jvm
+lazy val esexpr_parserJS = esexpr_parser.js
+lazy val esexpr_parserNode = esexpr_parser.node
+
 
 lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-parser"))
   .dependsOn(ast, grammar)
@@ -340,30 +320,6 @@ lazy val parser = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(
 lazy val parserJVM = parser.jvm
 lazy val parserJS = parser.js
 lazy val parserNode = parser.node
-
-
-lazy val util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-util"))
-  .jvmConfigure(
-    _.settings(commonJVMSettings)
-  )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
-
-    name := "argon-util",
-  )
-
-lazy val utilJVM = util.jvm
-lazy val utilJS = util.js
-lazy val utilNode = util.node
 
 
 lazy val argon_prover = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-prover"))
@@ -392,7 +348,7 @@ lazy val argon_proverNode = argon_prover.node
 
 
 lazy val argon_io = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-io"))
-  .dependsOn(util, esexpr)
+  .dependsOn(util, esexpr_parser)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -417,7 +373,7 @@ lazy val argon_ioNode = argon_io.node
 
 
 lazy val options = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-options"))
-  .dependsOn(util, argon_io, esexpr)
+  .dependsOn(util, argon_io)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -467,7 +423,7 @@ lazy val argon_exprNode = argon_expr.node
 
 
 lazy val argon_compiler = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-compiler"))
-  .dependsOn(ast, util, argon_expr, options, argon_io)
+  .dependsOn(ast, util, argon_expr, argon_io)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )
@@ -491,8 +447,8 @@ lazy val argon_compilerJS = argon_compiler.js
 lazy val argon_compilerNode = argon_compiler.node
 
 
-lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugin"))
-  .dependsOn(util, argon_compiler, esexpr)
+lazy val argon_format = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-format"))
+  .enablePlugins(NobleIDLPlugin)
   .jvmConfigure(
     _.settings(
         commonJVMSettings,
@@ -510,15 +466,64 @@ lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).cros
     commonSettings,
     compilerOptions,
 
-    Compile / sourceGenerators += generateESExprTask(dir =>
-      s"""
-        (scala
-           esx-file: "${escapeESExprString((dir / "../../plugin/api/esx/vm.esx").getAbsolutePath)}"
-           out-file: "api_vm.scala"
-           package-name: "dev.argon.plugin.vm"
-        )
-        """
-    ),
+    Compile / nobleIdlSourceDirectories += baseDirectory.value / "../../plugin/api/nobleidl/format",
+
+    name := "argon-format",
+  )
+
+lazy val argon_formatJVM = argon_format.jvm
+lazy val argon_formatJS = argon_format.js
+lazy val argon_formatNode = argon_format.node
+
+
+lazy val argon_plugin_api = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugin-api"))
+  .enablePlugins(NobleIDLPlugin)
+  .dependsOn(argon_format, argon_io)
+  .jvmConfigure(
+    _.settings(
+        commonJVMSettings,
+      )
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    Compile / nobleIdlSourceDirectories += baseDirectory.value / "../../plugin/api/nobleidl/plugin",
+
+    name := "argon-plugin-api",
+  )
+
+lazy val argon_plugin_apiJVM = argon_plugin_api.jvm
+lazy val argon_plugin_apiJS = argon_plugin_api.js
+lazy val argon_plugin_apiNode = argon_plugin_api.node
+
+
+lazy val argon_plugin = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugin"))
+  .dependsOn(util, argon_compiler, argon_plugin_api, options)
+  .jvmConfigure(
+    _.settings(
+        commonJVMSettings,
+      )
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
 
     name := "argon-plugin",
   )
@@ -579,7 +584,7 @@ lazy val argon_plugin_platformNode = argon_plugin_platform.node
 
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-build"))
-  .dependsOn(util, options, argon_compiler, argon_io, argon_plugin, argon_plugin_platform)
+  .dependsOn(util, argon_compiler, argon_io, argon_plugin, argon_plugin_platform)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )

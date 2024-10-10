@@ -1,53 +1,51 @@
 package dev.argon.plugin
 
 import dev.argon.compiler.*
-import dev.argon.esexpr.ESExprCodec.{DecodeError, ProductDecodeError, ProductErrorPath}
-import dev.argon.esexpr.{Dictionary, ESExpr, ESExprCodec, ESExprTag}
+import esexpr.ESExprCodec.{DecodeError, ErrorPath}
+import esexpr.{Dictionary, ESExpr, ESExprCodec, ESExprTag}
 import dev.argon.io.{BinaryResource, FileSystemResource, ResourceFactory}
 import dev.argon.options.{OptionDecoder, OutputHandler, OutputInfo}
 import zio.*
+import dev.argon.io.ResourceReader
 
 object PluginSetUtil {
 
-  trait PartialOptionDecoder[E, A] {
-    def decode(resFactory: ResourceFactory[E])(kwargs: Map[String, ESExpr]): Either[ProductDecodeError, A]
+  trait PartialOptionDecoder[A] {
+    def decode(kwargs: Map[String, ESExpr]): ZIO[ResourceReader, DecodeError, A]
 
-    final def toDecoder: OptionDecoder[E, A] =
-      new OptionDecoder[E, A] {
-        override lazy val tags: Set[ESExprTag] = summon[ESExprCodec[Dictionary[ESExpr]]].tags
-
-        override def decode(resFactory: ResourceFactory[E])(value: ESExpr): Either[DecodeError, A] =
-          summon[ESExprCodec[Dictionary[ESExpr]]].decode(value)
+    final def toDecoder: OptionDecoder[A] =
+      new OptionDecoder[A] {
+        override def decode(expr: ESExpr): ZIO[ResourceReader, DecodeError, A] =
+          ZIO.fromEither(summon[ESExprCodec[Dictionary[ESExpr]]].decode(expr))
             .flatMap { dict =>
-              PartialOptionDecoder.this.decode(resFactory)(dict.dict)
-                .left.map(_.toDecodeError("dict"))
+              PartialOptionDecoder.this.decode(dict.dict)
             }
       }
   }
 
   object PartialOptionDecoder {
-    given [E, A](using partialDec: PartialOptionDecoder[E, A]): OptionDecoder[E, A] = partialDec.toDecoder
+    given [A](using partialDec: PartialOptionDecoder[A]): OptionDecoder[A] = partialDec.toDecoder
   }
 
-  private[plugin] final class PartialOptionDecoderEmpty[E] extends PartialOptionDecoder[E, Unit] {
-    override def decode(resFactory: ResourceFactory[E])(kwargs: Map[String, ESExpr]): Either[ProductDecodeError, Unit] =
-      Right(())
+  private[plugin] final class PartialOptionDecoderEmpty extends PartialOptionDecoder[Unit] {
+    override def decode(kwargs: Map[String, ESExpr]): IO[DecodeError, Unit] =
+      ZIO.unit
   }
 
-  private[plugin] final class PartialOptionDecoderSingleton[E, A](pluginId: String)(using aDecoder: OptionDecoder[E, A]) extends PartialOptionDecoder[E, A] {
-    override def decode(resFactory: ResourceFactory[E])(kwargs: Map[String, ESExpr]): Either[ProductDecodeError, A] =
-      kwargs.get(pluginId).toRight(ProductDecodeError(s"Missing value for plugin $pluginId", ProductErrorPath.Current))
+  private[plugin] final class PartialOptionDecoderSingleton[A](pluginId: String)(using aDecoder: OptionDecoder[A]) extends PartialOptionDecoder[A] {
+    override def decode(kwargs: Map[String, ESExpr]): ZIO[ResourceReader, DecodeError, A] =
+      ZIO.fromEither(kwargs.get(pluginId).toRight(DecodeError(s"Missing value for plugin $pluginId", ErrorPath.Constructor("dict"))))
         .flatMap(value =>
-          aDecoder.decode(resFactory)(value)
-            .left.map(error => ProductDecodeError(error.message, ProductErrorPath.Keyword(pluginId, error.path)))
+          aDecoder.decode(value)
+            .mapError(error => DecodeError(error.message, ErrorPath.Keyword("dict", pluginId, error.path)))
         )
   }
 
-  private[plugin] final class PartialOptionDecoderUnion[E, A, B](using aDecoder: PartialOptionDecoder[E, A], bDecoder: PartialOptionDecoder[E, B]) extends PartialOptionDecoder[E, (A, B)] {
-    override def decode(resFactory: ResourceFactory[E])(kwargs: Map[String, ESExpr]): Either[ProductDecodeError, (A, B)] =
+  private[plugin] final class PartialOptionDecoderUnion[A, B](using aDecoder: PartialOptionDecoder[A], bDecoder: PartialOptionDecoder[B]) extends PartialOptionDecoder[(A, B)] {
+    override def decode(kwargs: Map[String, ESExpr]): ZIO[ResourceReader, DecodeError, (A, B)] =
       for
-        aValue <- aDecoder.decode(resFactory)(kwargs)
-        bValue <- bDecoder.decode(resFactory)(kwargs)
+        aValue <- aDecoder.decode(kwargs)
+        bValue <- bDecoder.decode(kwargs)
       yield (aValue, bValue)
   }
 
@@ -78,7 +76,7 @@ object PluginSetUtil {
 
   private[plugin] trait PartialESExprCodec[A] {
     def encode(value: ZEnvironment[A]): Map[String, ESExpr]
-    def decode(kwargs: Map[String, ESExpr]): Either[ProductDecodeError, ZEnvironment[A]]
+    def decode(kwargs: Map[String, ESExpr]): Either[DecodeError, ZEnvironment[A]]
 
     def toCodec: ESExprCodec[ZEnvironment[A]] =
       new ESExprCodec[ZEnvironment[A]] {
@@ -92,14 +90,13 @@ object PluginSetUtil {
           summon[ESExprCodec[Dictionary[ESExpr]]].decode(expr)
             .flatMap { dict =>
               PartialESExprCodec.this.decode(dict.dict)
-                .left.map(_.toDecodeError("dict"))
             }
       }
   }
 
   private[plugin] final class PartialESExprCodecEmpty extends PartialESExprCodec[Any] {
     override def encode(value: ZEnvironment[Any]): Map[String, ESExpr] = Map.empty
-    override def decode(kwargs: Map[String, ESExpr]): Either[ProductDecodeError, ZEnvironment[Any]] =
+    override def decode(kwargs: Map[String, ESExpr]): Either[DecodeError, ZEnvironment[Any]] =
       Right(ZEnvironment.empty)
   }
 
@@ -109,11 +106,11 @@ object PluginSetUtil {
       Map(pluginId -> encodedValue)
     end encode
 
-    override def decode(kwargs: Map[String, ESExpr]): Either[ProductDecodeError, ZEnvironment[A]] =
+    override def decode(kwargs: Map[String, ESExpr]): Either[DecodeError, ZEnvironment[A]] =
       for
-        encodedValue <- kwargs.get(pluginId).toRight(ProductDecodeError(s"Missing value for plugin $pluginId", ProductErrorPath.Current))
+        encodedValue <- kwargs.get(pluginId).toRight(DecodeError(s"Missing value for plugin $pluginId", ErrorPath.Constructor("dict")))
         value <- summon[ESExprCodec[A]].decode(encodedValue)
-          .left.map(error => ProductDecodeError(error.message, ProductErrorPath.Keyword(pluginId, error.path)))
+          .left.map(error => DecodeError(error.message, ErrorPath.Keyword("dict", pluginId, error.path)))
       yield ZEnvironment(value)
   }
 
@@ -124,7 +121,7 @@ object PluginSetUtil {
       aMap ++ bMap
     end encode
 
-    override def decode(kwargs: Map[String, ESExpr]): Either[ProductDecodeError, ZEnvironment[A & B]] =
+    override def decode(kwargs: Map[String, ESExpr]): Either[DecodeError, ZEnvironment[A & B]] =
       for
         aEnv <- summon[PartialESExprCodec[A]].decode(kwargs)
         bEnv <- summon[PartialESExprCodec[B]].decode(kwargs)

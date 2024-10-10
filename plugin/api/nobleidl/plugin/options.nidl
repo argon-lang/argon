@@ -1,0 +1,30 @@
+package argon.plugin.options;
+
+import nobleidl.core;
+
+interface option-decoder[options] {
+    decode(expr: esexpr): options throws option-decode-error;
+}
+
+record resource-provider[e: exception] {
+    resources: list[resource[e]];
+}
+
+exception option-decode-error of option-decode-path;
+extern type option-decode-path;
+
+
+enum resource[e: exception] {
+    binary-resource {
+        resource: binary-resource[e];
+    },
+    directory-resource {
+        resource: directory-resource[e];
+    },
+}
+
+extern type binary-resource[e: exception];
+extern type directory-resource[e: exception];
+
+
+

@@ -2,7 +2,7 @@ package dev.argon.compiler_tests
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
-import dev.argon.util.AsyncIterableTools.AsyncIterable
+import dev.argon.util.async.AsyncIterableTools.AsyncIterable
 import scala.scalajs.js.typedarray.Uint8Array
 
 

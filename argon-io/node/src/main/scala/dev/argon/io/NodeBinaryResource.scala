@@ -2,7 +2,7 @@ package dev.argon.io
 
 import dev.argon.io.*
 import dev.argon.io.jstypes.node.NodeFileSystem
-import dev.argon.util.AsyncIterableTools
+import dev.argon.util.async.AsyncIterableTools
 import zio.*
 import zio.stream.*
 

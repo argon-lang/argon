@@ -4,7 +4,7 @@ import dev.argon.io.{BinaryResourceDecoder, ESExprTextResource, PathLike, PathUt
 import dev.argon.platform.*
 import dev.argon.util.{*, given}
 import dev.argon.build.{BuildConfig, BuildError, Compile}
-import dev.argon.esexpr.ESExprException
+import esexpr.ESExprException
 import dev.argon.plugin.PluginError
 import zio.*
 import zio.stream.*

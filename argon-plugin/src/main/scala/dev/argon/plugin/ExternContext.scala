@@ -2,7 +2,7 @@ package dev.argon.plugin
 
 import cats.data.OptionT
 import dev.argon.compiler.DefinitionInfo
-import dev.argon.esexpr.ESExprCodec
+import esexpr.ESExprCodec
 import zio.{Tag, ZIO}
 
 trait ExternContext {

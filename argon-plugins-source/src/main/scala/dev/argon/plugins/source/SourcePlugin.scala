@@ -18,7 +18,7 @@ final class SourcePlugin[Platforms <: PlatformPluginSet](override val platforms:
   override def tubeLoaders[Ctx <: CompatibleContext]: Map[String, TubeLoader[Ctx]] =
     Map("argon-sources" -> new TubeLoader[Ctx] {
       override type LibOptions[E >: PluginError] = SourceCodeTubeOptions[E, platforms.PlatformOptions[E]]
-      override def libOptionDecoder[E >: PluginError]: OptionDecoder[E, LibOptions[E]] =
+      override def libOptionDecoder[E >: PluginError]: OptionDecoder[LibOptions[E]] =
         SourceCodeTubeOptions.optionDecoder
 
       override def load

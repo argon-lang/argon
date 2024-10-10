@@ -4,6 +4,7 @@ import dev.argon.grammar.Grammar.*
 import scala.collection.immutable.{Stream as _, *}
 import scala.util.NotGiven
 import dev.argon.util.{*, given}
+import dev.argon.util.async.*
 import zio.*
 import zio.stream.*
 import zio.interop.catz.core.given

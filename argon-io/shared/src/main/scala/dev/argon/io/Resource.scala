@@ -56,20 +56,16 @@ abstract class DirectoryResource[+E, +FileResource[+E2] <: Resource[E2]] extends
 }
 
 object DirectoryResource {
+  def decode[E, FileResource[+E2] <: BinaryResource[E2], Res[+E2] <: Resource[E2]](dr: DirectoryResource[E, FileResource])(using BinaryResourceDecoder[Res, E]): DirectoryResource[E, Res] =
+    new DirectoryResource[E, Res] {
+      override def contents: ZStream[Any, E, DirectoryEntry[E, Res]] =
+        dr.contents.map {
+          case DirectoryEntry.Subdirectory(name, resource) => DirectoryEntry.Subdirectory(name, decode[E, FileResource, Res](resource))
+          case DirectoryEntry.File(name, resource) => DirectoryEntry.File(name, summon[BinaryResourceDecoder[Res, E]].decode(resource))
+        }
 
-  extension [E, FileResource[+E2] <: BinaryResource[E2]](dr: DirectoryResource[E, FileResource])
-    def decode[Res[+E2] <: Resource[E2]](using BinaryResourceDecoder[Res, E]): DirectoryResource[E, Res] =
-      new DirectoryResource[E, Res] {
-        override def contents: ZStream[Any, E, DirectoryEntry[E, Res]] =
-          dr.contents.map {
-            case DirectoryEntry.Subdirectory(name, resource) => DirectoryEntry.Subdirectory(name, resource.decode[Res])
-            case DirectoryEntry.File(name, resource) => DirectoryEntry.File(name, summon[BinaryResourceDecoder[Res, E]].decode(resource))
-          }
-
-        override def fileName: Option[String] =
-          dr.fileName
-      }
-  end extension
-
+      override def fileName: Option[String] =
+        dr.fileName
+    }
 
 }

@@ -1,6 +1,6 @@
 package dev.argon.io.jstypes.node
 
-import dev.argon.util.AsyncIterableTools.AsyncIterable
+import dev.argon.util.async.AsyncIterableTools.AsyncIterable
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport

@@ -14,15 +14,7 @@ object OutputHandler:
 
   inline def derive[E, A <: Product](using m: Mirror.ProductOf[A]): OutputHandler[E, A] =
     lazy val opts = getFieldInfo[E, m.MirroredElemLabels, m.MirroredElemTypes]
-    new OutputHandler[E, A] {
-      override lazy val options: Map[Seq[String], OutputInfo[E, A]] =
-        opts.view.mapValues { info =>
-          new OutputInfo[E, A] {
-            override def getValue(options: A): FileSystemResource[E, BinaryResource] =
-              info.getValue(Tuple.fromProductTyped(options))
-          }
-        }.toMap
-    }
+    ProductOutputHandler(opts)
   end derive
 
   inline def getFieldInfo[E, Labels <: Tuple, Elems <: Tuple]: Map[Seq[String], OutputInfo[E, Elems]] =
@@ -33,21 +25,11 @@ object OutputHandler:
         val tailFieldInfo = getFieldInfo[E, tlabels, telems]
 
         val fieldInfo = fieldHandler.options.map { (key, info) =>
-          (label +: key) -> new OutputInfo[E, helem *: telems] {
-            override def getValue(options: helem *: telems): FileSystemResource[E, BinaryResource] =
-              val (h *: _) = options
-              info.getValue(h)
-            end getValue
-          }
+          (label +: key) -> HeadFieldOutputInfo[E, helem, telems](info)
         }
 
         val tailFieldInfo2 = tailFieldInfo.view.mapValues { info =>
-          new OutputInfo[E, helem *: telems] {
-            override def getValue(options: helem *: telems): FileSystemResource[E, BinaryResource] =
-              val (_ *: t) = options
-              info.getValue(t)
-            end getValue
-          }
+          TailFieldOutputInfo[E, helem, telems](info)
         }
 
         val fields = fieldInfo ++ tailFieldInfo2
@@ -57,6 +39,38 @@ object OutputHandler:
       case _: (EmptyTuple, EmptyTuple) =>
         Map.empty
     }
+
+  final class ProductOutputHandler[E, A <: Product](using m: Mirror.ProductOf[A])(opts: Map[Seq[String], OutputInfo[E, m.MirroredElemTypes]]) extends OutputHandler[E, A] {
+    override lazy val options: Map[Seq[String], OutputInfo[E, A]] =
+      opts.view.mapValues { info =>
+        new OutputInfo[E, A] {
+          override def getValue(options: A): FileSystemResource[E, BinaryResource] =
+            info.getValue(Tuple.fromProductTyped(options))
+        }
+      }.toMap
+  }
+  
+
+  final class ProductOutputInfo[E, A <: Product](using m: Mirror.ProductOf[A])(info: OutputInfo[E, m.MirroredElemTypes]) extends OutputInfo[E, A] {
+    override def getValue(options: A): FileSystemResource[E, BinaryResource] =
+      info.getValue(Tuple.fromProductTyped(options))
+  }
+
+  final class HeadFieldOutputInfo[E, H, T <: Tuple](info: OutputInfo[E, H]) extends OutputInfo[E, H *: T] {
+    override def getValue(options: H *: T): FileSystemResource[E, BinaryResource] =
+      val (h *: _) = options
+      info.getValue(h)
+    end getValue
+  }
+
+  final class TailFieldOutputInfo[E, H, T <: Tuple](info: OutputInfo[E, T]) extends OutputInfo[E, H *: T] {
+    override def getValue(options: H *: T): FileSystemResource[E, BinaryResource] =
+      val (_ *: t) = options
+      info.getValue(t)
+    end getValue
+  }
+
+
 
   given binaryResourceOutputHandler[E, Res <: BinaryResource[E]]: OutputHandler[E, Res] with
     override lazy val options: Map[Seq[String], OutputInfo[E, Res]] =

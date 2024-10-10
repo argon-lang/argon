@@ -1,6 +1,7 @@
 package dev.argon.grammar
 
 import dev.argon.util.*
+import dev.argon.util.async.*
 import zio.stream.ZChannel
 import zio.{Chunk, IO, NonEmptyChunk, UIO, ZIO}
 
