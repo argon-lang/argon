@@ -8,14 +8,14 @@ import zio.{ZEnvironment, ZIO}
 
 
 
-abstract class FormatPlugin[Platforms <: PlatformPluginSet] {
+abstract class FormatPlugin[E >: PluginError, Platforms <: PlatformPluginSet[E]] {
   val platforms: Platforms
   val pluginId: String
 
 
   type CompatibleContext = Context {
     type Env <: PluginEnv
-    type Error >: PluginError
+    type Error = E
     val implementations: {
       type ExternFunctionImplementation = ZEnvironment[platforms.externFunction.Implementation]
       type FunctionReference = ZEnvironment[platforms.externFunction.Reference]
@@ -27,14 +27,14 @@ abstract class FormatPlugin[Platforms <: PlatformPluginSet] {
   def tubeLoaders[Ctx <: CompatibleContext]: Map[String, TubeLoader[Ctx]]
 }
 
-private[plugin] sealed trait FormatPluginSet[Platforms <: PlatformPluginSet] {
+private[plugin] sealed trait FormatPluginSet[E >: PluginError, Platforms <: PlatformPluginSet[E]] {
   val platforms: Platforms
   val pluginIds: Set[String]
 
 
   type CompatibleContext = Context {
     type Env <: PluginEnv
-    type Error >: PluginError
+    type Error = E
     val implementations: {
       type ExternFunctionImplementation = ZEnvironment[platforms.externFunction.Implementation]
       type FunctionReference = ZEnvironment[platforms.externFunction.Reference]
@@ -47,7 +47,7 @@ private[plugin] sealed trait FormatPluginSet[Platforms <: PlatformPluginSet] {
 }
 
 private[plugin] object FormatPluginSet {
-  final class Empty[Platforms <: PlatformPluginSet](override val platforms: Platforms) extends FormatPluginSet[Platforms] {
+  final class Empty[E >: PluginError, Platforms <: PlatformPluginSet[E]](override val platforms: Platforms) extends FormatPluginSet[E, Platforms] {
     override val pluginIds: Set[String] = Set.empty
 
     override def emitter[Ctx <: CompatibleContext]: TubeEmitterSet[Ctx] =
@@ -56,7 +56,7 @@ private[plugin] object FormatPluginSet {
     override def tubeLoaders[Ctx <: CompatibleContext]: Map[TubeLoaderName, TubeLoader[Ctx]] = Map.empty
   }
 
-  final class Singleton[Platforms <: PlatformPluginSet](val plugin: FormatPlugin[Platforms]) extends FormatPluginSet[Platforms] {
+  final class Singleton[E >: PluginError, Platforms <: PlatformPluginSet[E]](val plugin: FormatPlugin[E, Platforms]) extends FormatPluginSet[E, Platforms] {
     override val platforms: plugin.platforms.type = plugin.platforms
     override val pluginIds: Set[String] = Set(plugin.pluginId)
 
@@ -70,7 +70,7 @@ private[plugin] object FormatPluginSet {
       plugin.tubeLoaders[Ctx].map { (k, v) => TubeLoaderName(plugin.pluginId, k) -> v }
   }
 
-  private final class Union[Platforms <: PlatformPluginSet](val aSet: FormatPluginSet[Platforms], val bSet: FormatPluginSet[aSet.platforms.type]) extends FormatPluginSet[Platforms] {
+  private final class Union[E >: PluginError, Platforms <: PlatformPluginSet[E]](val aSet: FormatPluginSet[E, Platforms], val bSet: FormatPluginSet[E, aSet.platforms.type]) extends FormatPluginSet[E, Platforms] {
     override val platforms: aSet.platforms.type = aSet.platforms
     override val pluginIds: Set[String] = aSet.pluginIds | bSet.pluginIds
 
@@ -81,10 +81,10 @@ private[plugin] object FormatPluginSet {
       aSet.tubeLoaders ++ bSet.tubeLoaders
   }
 
-  def union(platforms: PlatformPluginSet)(a: FormatPluginSet[platforms.type], b: FormatPluginSet[platforms.type]): FormatPluginSet[platforms.type] =
+  def union[E >: PluginError](platforms: PlatformPluginSet[E])(a: FormatPluginSet[E, platforms.type], b: FormatPluginSet[E, platforms.type]): FormatPluginSet[E, platforms.type] =
     (a, b) match {
-      case (_: FormatPluginSet.Empty[platforms.type], _) => b
-      case (_, _: FormatPluginSet.Empty[platforms.type]) => a
+      case (_: FormatPluginSet.Empty[E, platforms.type], _) => b
+      case (_, _: FormatPluginSet.Empty[E, platforms.type]) => a
       case _ => Union(a, b)
     }
 }

@@ -30,9 +30,9 @@ object Compile {
   : ZIO[Scope, E, PluginContext[R, E]] =
     for
       pluginFactories <- ZIO.foreach(pluginIds)(name => ZIO.fromEither(pluginFactories.get(name).toRight(UnknownPlugin(name))))
-      pluginSet <- PluginLoader.load(pluginFactories)
+      pluginSet <- PluginLoader.load[E | PluginError](pluginFactories)
     yield new PluginContext[R, E] {
-      override val plugins: PluginSet = pluginSet
+      override val plugins: PluginSet[Error] = pluginSet
       override val implementations: Implementations {
         type ExternFunctionImplementation = plugins.externFunction.Implementation
         type FunctionReference = plugins.externFunction.Reference

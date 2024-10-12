@@ -10,7 +10,6 @@ import esexpr.ESExprCodec
 import esexpr.ESExpr
 import esexpr.ESExprCodec.{DecodeError, ErrorPath}
 import zio.*
-import dev.argon.tube.ResourceId
 import java.io.IOException
 
 final case class SourceCodeTubeOptions[E, PlatformOptions](
@@ -20,7 +19,7 @@ final case class SourceCodeTubeOptions[E, PlatformOptions](
 )
 
 @constructor("source-options")
-final case class SourceCodeTubeOptionsRepr[E](
+final case class SourceCodeTubeOptionsRepr(
   @keyword name: dev.argon.tube.TubeName,
   @keyword sources: Seq[String],
   @keyword platforms: ESExpr,
@@ -32,7 +31,7 @@ object SourceCodeTubeOptions {
 
       override def decode(expr: ESExpr): ZIO[ResourceReader, DecodeError, SourceCodeTubeOptions[E, PlatformOptions]] =
         for
-          repr <- ZIO.fromEither(ESExprCodec.derived[SourceCodeTubeOptionsRepr[E]].decode(expr))
+          repr <- ZIO.fromEither(ESExprCodec.derived[SourceCodeTubeOptionsRepr].decode(expr))
           sources <- ZIO.foreach(repr.sources)(id => ZIO.serviceWith[ResourceReader](resReader => DirectoryResource.decode[E, BinaryResource, ArgonSourceCodeResource](resReader.directoryResource(id))))
           platformOptions <- platformOptionsDecoder.decode(repr.platforms)
             .mapError(e => DecodeError(e.message, ErrorPath.Keyword("source-options", "platforms", e.path)))

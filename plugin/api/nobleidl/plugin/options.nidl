@@ -2,12 +2,13 @@ package argon.plugin.options;
 
 import nobleidl.core;
 
-interface option-decoder[options] {
-    decode(expr: esexpr): options throws option-decode-error;
+interface option-decoder[e: exception, options] {
+    decode(reader: resource-reader[e], expr: esexpr): options throws option-decode-error;
 }
 
-record resource-provider[e: exception] {
-    resources: list[resource[e]];
+interface resource-reader[e: exception] {
+    get-binary-resource(id: string): binary-resource[e];
+    get-directory-resource(id: string): directory-resource[e];
 }
 
 exception option-decode-error of option-decode-path;

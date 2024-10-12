@@ -4,6 +4,6 @@ import dev.argon.plugin.*
 import zio.*
 
 object SourcePluginFactory extends PluginFactory.OfFormat {
-  override def create(platforms: PlatformPluginSet): UIO[FormatPlugin[platforms.type]] =
-    ZIO.succeed(new SourcePlugin[platforms.type](platforms))
+  override def create[E >: PluginError](platforms: PlatformPluginSet[E]): UIO[FormatPlugin[E, platforms.type]] =
+    ZIO.succeed(new SourcePlugin[E, platforms.type](platforms))
 }

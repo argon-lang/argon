@@ -9,14 +9,15 @@ import cats.*
 import cats.implicits.given
 import dev.argon.plugin.PlatformPluginSet
 import zio.interop.catz.given
+import dev.argon.plugin.PluginError
 
 object SourceModule {
-  def make
-  (platforms: PlatformPluginSet)
+  def make[E >: PluginError]
+  (platforms: PlatformPluginSet[E])
   (ctx: platforms.ContextOnlyIncluding)
   (tn: TubeName, p: ModulePath)
   (tubeImporter: TubeImporter & HasContext[ctx.type])
-  (sourceCode: ArgonSourceCodeResource[ctx.Error], platformOptions: platforms.PlatformOptions[ctx.Error])
+  (sourceCode: ArgonSourceCodeResource[ctx.Error], platformOptions: platforms.PlatformOptions)
   : ctx.Comp[ArModuleC & HasContext[ctx.type]] =
     for
       exportMapCell <- MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]]]

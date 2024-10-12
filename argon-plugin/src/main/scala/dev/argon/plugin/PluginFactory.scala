@@ -6,11 +6,11 @@ sealed trait PluginFactory
 
 object PluginFactory {
   trait OfPlatform extends PluginFactory {
-    def create: UIO[PlatformPlugin]
+    def create[E >: PluginError]: UIO[PlatformPlugin[E]]
   }
 
   trait OfFormat extends PluginFactory {
-    def create(platforms: PlatformPluginSet): UIO[FormatPlugin[platforms.type]]
+    def create[E >: PluginError](platforms: PlatformPluginSet[E]): UIO[FormatPlugin[E, platforms.type]]
   }
 }
 

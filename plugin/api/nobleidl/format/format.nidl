@@ -22,9 +22,97 @@ record module-name {
 
 
 @esexpr:(derive-codec)
-record resource-id {
-    id: int;
+enum identifier {
+    named { s: string; },
+    bin-op { op: binary-operator; },
+    un-op { op: unary-operator; },
+    extension { inner: identifier; },
+    inverse { inner: identifier; },
+    update { inner: identifier; },
 }
 
+@esexpr:(derive-codec)
+enum binary-operator {
+    assign,
+    plus,
+    minus,
+    mul,
+    div,
+    equal,
+    not-equal,
+    less-than,
+    less-than-eq,
+    greater-than,
+    greater-than-eq,
+    bit-or,
+    bit-xor,
+    bit-and,
+    logical-or,
+    logical-and,
+    shift-left,
+    shift-right,
+    prop-equal,
+    prop-disjunction,
+    prop-conjunction,
+}
 
+@esexpr:(derive-codec)
+enum unary-operator {
+    plus,
+    minus,
+    bit-not,
+    logical-not,
+}
+
+@esexpr:(derive-codec)
+record erased-signature {
+    params: list[erased-signature-type];
+    result: erased-signature-type;
+}
+
+@esexpr:(derive-codec)
+enum erased-signature-type {
+    builtin {
+        b: builtin-type;
+
+        @esexpr: (vararg)
+        args: list[erased-signature-type];
+    },
+    function {
+        input: erased-signature-type;
+        output: erased-signature-type;
+    },
+    record {
+        record-import: import-specifier;
+
+        @esexpr: (vararg)
+        args: list[erased-signature-type];
+    },
+    tuple {
+        @esexpr: (vararg)
+        elements: list[erased-signature-type];
+    },
+}
+@esexpr:(derive-codec)
+enum builtin-type {
+    int,
+    bool,
+    string,
+    never,
+    conjunction,
+    disjunction,
+}
+
+@esexpr:(derive-codec)
+record import-specifier {
+    tube: tube-name;
+    module-path: module-path;
+
+    @esexpr: (keyword)
+    @esexpr: (optional)
+    name: optional-field[identifier];
+
+    @esexpr: (keyword)
+    sig: erased-signature;
+}
 

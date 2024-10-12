@@ -15,12 +15,13 @@ import zio.interop.catz.core.given
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.Locale
+import dev.argon.plugin.PluginError
 
 object SourceTube {
-  def make
-  (platforms: PlatformPluginSet)
+  def make[E >: PluginError]
+  (platforms: PlatformPluginSet[E])
   (ctx: platforms.ContextOnlyIncluding)
-  (tubeOptions: SourceCodeTubeOptions[ctx.Error, platforms.PlatformOptions[ctx.Error]])
+  (tubeOptions: SourceCodeTubeOptions[ctx.Error, platforms.PlatformOptions])
   (tubeImporter: TubeImporter & HasContext[ctx.type])
   : ZIO[ctx.Env, ctx.Error, ArTubeC & HasContext[ctx.type]] =
     val tubeName = TubeName(NonEmptySeq.of(tubeOptions.name.head, tubeOptions.name.tail*))
@@ -41,7 +42,7 @@ object SourceTube {
 
 
 
-  private def getSourceCode
+  private def getSourceCode[E >: PluginError]
   (context: Context)
   (path: Seq[String])
   (resource: DirectoryResource[context.Error, ArgonSourceCodeResource])
@@ -66,12 +67,12 @@ object SourceTube {
       case DirectoryEntry.File(_, _) => ZStream.empty
     }
 
-  private def buildModuleMap
-  (platforms: PlatformPluginSet)
+  private def buildModuleMap[E >: PluginError]
+  (platforms: PlatformPluginSet[E])
   (context: platforms.ContextOnlyIncluding)
   (tubeName: TubeName)
   (tubeImporter: TubeImporter & HasContext[context.type])
-  (platformOptions: platforms.PlatformOptions[context.Error])
+  (platformOptions: platforms.PlatformOptions)
   (stream: ZStream[context.Env, context.Error, (ModulePath, ArgonSourceCodeResource[context.Error])])
   : context.Comp[Map[ModulePath, ArModuleC & HasContext[context.type]]] =
     stream.runFoldZIO(Map.empty[ModulePath, ArModuleC & HasContext[context.type]]) {

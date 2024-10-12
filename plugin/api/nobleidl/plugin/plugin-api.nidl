@@ -9,7 +9,12 @@ import argon.plugin.options;
 interface platform-plugin[externs, e: exception, platform-options] {
     plugin-id(): string;
 
-    option-decoder(): option-decoder[platform-options];
+    option-decoder(): option-decoder[e, platform-options];
+
+    define-function-reference(options: platform-options, specifier: import-specifier): extern-function-ref[externs] throws e;
+    load-extern-function(options: platform-options, id: string): extern-function-impl[externs] throws e;
+
+    define-record-reference(options: platform-options, specifier: import-specifier): extern-record-ref[externs] throws e;
 
     emitter(): option[tube-emitter[externs]];
     tube-loaders(): dict[tube-loader[externs]];
@@ -25,8 +30,10 @@ interface platform-plugin-factory-callback[externs, e: exception, a] {
 
 exception plugin-error of unit;
 
-extern type extern-tagged[externs];
-extern type extern-tagged-ref[externs];
+extern type extern-function-impl[externs];
+extern type extern-function-ref[externs];
+
+extern type extern-record-ref[externs];
 
 
 interface tube-emitter[externs] {

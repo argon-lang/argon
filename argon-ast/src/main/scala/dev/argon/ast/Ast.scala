@@ -155,7 +155,7 @@ end Operator
 
 
 enum BinaryOperator(val symbol: String) extends Operator derives CanEqual:
-  case Assign extends BinaryOperator("+")
+  case Assign extends BinaryOperator(":=")
   case Plus extends BinaryOperator("+") with Operator.ValidIdentifier
   case Minus extends BinaryOperator("-") with Operator.ValidIdentifier
   case Mul extends BinaryOperator("×") with Operator.ValidIdentifier

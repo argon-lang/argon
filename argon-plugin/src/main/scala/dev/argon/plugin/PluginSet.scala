@@ -5,17 +5,17 @@ import dev.argon.compiler.*
 import dev.argon.options.OptionDecoder
 import zio.{ZEnvironment, ZIO}
 
-sealed trait PluginSet extends ExternContext {
+sealed trait PluginSet[E >: PluginError] extends ExternContext[E] {
 
-  type PlatformOptions[E >: PluginError]
-  given optionDecoder[E >: PluginError]: OptionDecoder[PlatformOptions[E]]
+  type PlatformOptions
+  given optionDecoder: OptionDecoder[PlatformOptions]
 
   val externFunction: Extern
   val externRecord: ExternRef
 
   type CompatibleContext = Context {
     type Env <: PluginEnv
-    type Error >: PluginError
+    type Error = E
     val implementations: {
       type ExternFunctionImplementation = externFunction.Implementation
       type FunctionReference = externFunction.Reference
@@ -29,11 +29,11 @@ sealed trait PluginSet extends ExternContext {
 }
 
 object PluginSet {
-  private[plugin] def apply(platforms: PlatformPluginSet, formats: FormatPluginSet[platforms.type]): PluginSet =
-    new PluginSet {
-      override type PlatformOptions[E >: PluginError] = platforms.PlatformOptions[E]
-      override def optionDecoder[E >: PluginError]: OptionDecoder[PlatformOptions[E]] =
-        platforms.optionDecoder[E].toDecoder
+  private[plugin] def apply[E >: PluginError](platforms: PlatformPluginSet[E], formats: FormatPluginSet[E, platforms.type]): PluginSet[E] =
+    new PluginSet[E] {
+      override type PlatformOptions = platforms.PlatformOptions
+      override def optionDecoder: OptionDecoder[PlatformOptions] =
+        platforms.optionDecoder.toDecoder
 
       override val externFunction: Extern {
         type Implementation = ZEnvironment[platforms.externFunction.Implementation]

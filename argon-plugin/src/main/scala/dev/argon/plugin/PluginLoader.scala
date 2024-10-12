@@ -4,21 +4,21 @@ import dev.argon.util.{*, given}
 import zio.*
 
 object PluginLoader {
-  def load(pluginFactories: Seq[PluginFactory]): UIO[PluginSet] =
+  def load[E >: PluginError](pluginFactories: Seq[PluginFactory]): UIO[PluginSet[E]] =
     val (platformFactories, formatFactories) = dividePluginFactories(pluginFactories)
 
     for
-      platformPlugins <- ZIO.foreach(platformFactories)(_.create)
+      platformPlugins <- ZIO.foreach(platformFactories)(_.create[E])
       platforms = platformPlugins
-        .map(PlatformPluginSet.Singleton(_))
+        .map(platPlugin => PlatformPluginSet.Singleton(platPlugin) : PlatformPluginSet[E])
         .reduceOption(PlatformPluginSet.union)
-        .getOrElse(PlatformPluginSet.Empty)
+        .getOrElse(PlatformPluginSet.Empty())
 
       formatPlugins <- ZIO.foreach(formatFactories)(_.create(platforms))
       formats = formatPlugins
-        .map(FormatPluginSet.Singleton[platforms.type](_))
+        .map(fmtPlugin => FormatPluginSet.Singleton[E, platforms.type](fmtPlugin) : FormatPluginSet[E, platforms.type])
         .reduceOption(FormatPluginSet.union(platforms))
-        .getOrElse(FormatPluginSet.Empty[platforms.type](platforms))
+        .getOrElse(FormatPluginSet.Empty[E, platforms.type](platforms))
 
     yield PluginSet(platforms, formats)
   end load

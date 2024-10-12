@@ -10,7 +10,7 @@ type PluginCompatibleContext = Context {
 }
 
 abstract class PluginContext[R, E] extends Context {
-  val plugins: PluginSet
+  val plugins: PluginSet[Error]
 
   override type Env = Env0 & PluginEnv & R
   override type Error = Error0 | PluginError | E
