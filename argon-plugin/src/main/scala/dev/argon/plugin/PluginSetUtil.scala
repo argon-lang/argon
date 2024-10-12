@@ -75,19 +75,18 @@ object PluginSetUtil {
   }
 
   private[plugin] trait PartialESExprCodec[A] {
-    def encode(value: ZEnvironment[A]): Map[String, ESExpr]
-    def decode(kwargs: Map[String, ESExpr]): Either[DecodeError, ZEnvironment[A]]
+    def encode(value: ZEnvironment[A]): UIO[Map[String, ESExpr]]
+    def decode(kwargs: Map[String, ESExpr]): IO[DecodeError, ZEnvironment[A]]
 
-    def toCodec: ESExprCodec[ZEnvironment[A]] =
-      new ESExprCodec[ZEnvironment[A]] {
-        override lazy val tags: Set[ESExprTag] = summon[ESExprCodec[Dictionary[ESExpr]]].tags
+    def toCodec: ESExprCodecAsync[ZEnvironment[A]] =
+      new ESExprCodecAsync[ZEnvironment[A]] {
+        override def encode(value: ZEnvironment[A]): UIO[ESExpr] =
+          for
+            dict <- PartialESExprCodec.this.encode(value)
+          yield summon[ESExprCodec[Dictionary[ESExpr]]].encode(Dictionary(dict))
 
-        override def encode(value: ZEnvironment[A]): ESExpr =
-          summon[ESExprCodec[Dictionary[ESExpr]]]
-            .encode(Dictionary(PartialESExprCodec.this.encode(value)))
-
-        override def decode(expr: ESExpr): Either[DecodeError, ZEnvironment[A]] =
-          summon[ESExprCodec[Dictionary[ESExpr]]].decode(expr)
+        override def decode(expr: ESExpr): IO[DecodeError, ZEnvironment[A]] =
+          ZIO.fromEither(summon[ESExprCodec[Dictionary[ESExpr]]].decode(expr))
             .flatMap { dict =>
               PartialESExprCodec.this.decode(dict.dict)
             }
@@ -95,33 +94,35 @@ object PluginSetUtil {
   }
 
   private[plugin] final class PartialESExprCodecEmpty extends PartialESExprCodec[Any] {
-    override def encode(value: ZEnvironment[Any]): Map[String, ESExpr] = Map.empty
-    override def decode(kwargs: Map[String, ESExpr]): Either[DecodeError, ZEnvironment[Any]] =
-      Right(ZEnvironment.empty)
+    override def encode(value: ZEnvironment[Any]): UIO[Map[String, ESExpr]] =
+      ZIO.succeed(Map.empty)
+
+    override def decode(kwargs: Map[String, ESExpr]): IO[DecodeError, ZEnvironment[Any]] =
+      ZIO.succeed(ZEnvironment.empty)
   }
 
-  private[plugin] final class PartialESExprCodecSingleton[A: ESExprCodec: Tag](pluginId: String) extends PartialESExprCodec[A] {
-    override def encode(value: ZEnvironment[A]): Map[String, ESExpr] =
-      val encodedValue = summon[ESExprCodec[A]].encode(value.get[A])
-      Map(pluginId -> encodedValue)
-    end encode
-
-    override def decode(kwargs: Map[String, ESExpr]): Either[DecodeError, ZEnvironment[A]] =
+  private[plugin] final class PartialESExprCodecSingleton[A: ESExprCodecAsync: Tag](pluginId: String) extends PartialESExprCodec[A] {
+    override def encode(value: ZEnvironment[A]): UIO[Map[String, ESExpr]] =
       for
-        encodedValue <- kwargs.get(pluginId).toRight(DecodeError(s"Missing value for plugin $pluginId", ErrorPath.Constructor("dict")))
-        value <- summon[ESExprCodec[A]].decode(encodedValue)
-          .left.map(error => DecodeError(error.message, ErrorPath.Keyword("dict", pluginId, error.path)))
+        encodedValue <- summon[ESExprCodecAsync[A]].encode(value.get[A])
+      yield Map(pluginId -> encodedValue)
+
+    override def decode(kwargs: Map[String, ESExpr]): IO[DecodeError, ZEnvironment[A]] =
+      for
+        encodedValue <- ZIO.fromEither(kwargs.get(pluginId).toRight(DecodeError(s"Missing value for plugin $pluginId", ErrorPath.Constructor("dict"))))
+        value <- summon[ESExprCodecAsync[A]].decode(encodedValue)
+          .mapError(error => DecodeError(error.message, ErrorPath.Keyword("dict", pluginId, error.path)))
       yield ZEnvironment(value)
   }
 
   private[plugin] final class PartialESExprCodecUnion[A: PartialESExprCodec, B: PartialESExprCodec: EnvironmentTag] extends PartialESExprCodec[A & B] {
-    override def encode(value: ZEnvironment[A & B]): Map[String, ESExpr] =
-      val aMap = summon[PartialESExprCodec[A]].encode(value)
-      val bMap = summon[PartialESExprCodec[B]].encode(value)
-      aMap ++ bMap
-    end encode
+    override def encode(value: ZEnvironment[A & B]): UIO[Map[String, ESExpr]] =
+      for
+        aMap <- summon[PartialESExprCodec[A]].encode(value)
+        bMap <- summon[PartialESExprCodec[B]].encode(value)
+      yield aMap ++ bMap
 
-    override def decode(kwargs: Map[String, ESExpr]): Either[DecodeError, ZEnvironment[A & B]] =
+    override def decode(kwargs: Map[String, ESExpr]): IO[DecodeError, ZEnvironment[A & B]] =
       for
         aEnv <- summon[PartialESExprCodec[A]].decode(kwargs)
         bEnv <- summon[PartialESExprCodec[B]].decode(kwargs)

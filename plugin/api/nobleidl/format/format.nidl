@@ -33,7 +33,6 @@ enum identifier {
 
 @esexpr:(derive-codec)
 enum binary-operator {
-    assign,
     plus,
     minus,
     mul,
@@ -47,13 +46,9 @@ enum binary-operator {
     bit-or,
     bit-xor,
     bit-and,
-    logical-or,
-    logical-and,
     shift-left,
     shift-right,
-    prop-equal,
-    prop-disjunction,
-    prop-conjunction,
+    concat,
 }
 
 @esexpr:(derive-codec)
@@ -92,6 +87,7 @@ enum erased-signature-type {
         @esexpr: (vararg)
         elements: list[erased-signature-type];
     },
+    erased,
 }
 @esexpr:(derive-codec)
 enum builtin-type {

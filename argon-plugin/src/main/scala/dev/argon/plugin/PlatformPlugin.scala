@@ -101,7 +101,7 @@ sealed trait PlatformPluginSet[E >: PluginError] {
       new externContext.ExternRef {
         override type Reference = ZEnvironment[PartialExternRef.this.Reference]
 
-        override def referenceCodec: ESExprCodec[Reference] =
+        override def referenceCodec: ESExprCodecAsync[Reference] =
           PartialExternRef.this.referenceCodec.toCodec
 
         override def defineReference(options: externContext.PlatformOptions)(definitionInfo: DefinitionInfo): ZIO[PluginEnv, E, Reference] =
@@ -128,7 +128,7 @@ sealed trait PlatformPluginSet[E >: PluginError] {
       new externContext.Extern {
         override type Implementation = ZEnvironment[PartialExtern.this.Implementation]
 
-        override def implementationCodec: ESExprCodec[Implementation] =
+        override def implementationCodec: ESExprCodecAsync[Implementation] =
           PartialExtern.this.implementationCodec.toCodec
 
         override def loadExtern(options: externContext.PlatformOptions)(id: String): OptionT[[A] =>> ZIO[PluginEnv, E, A], Implementation] =
@@ -136,7 +136,7 @@ sealed trait PlatformPluginSet[E >: PluginError] {
 
         override type Reference = ZEnvironment[PartialExtern.this.Reference]
 
-        override def referenceCodec: ESExprCodec[Reference] =
+        override def referenceCodec: ESExprCodecAsync[Reference] =
           PartialExtern.this.referenceCodec.toCodec
 
         override def defineReference(options: externContext.PlatformOptions)(definitionInfo: DefinitionInfo): ZIO[PluginEnv, E, Reference] =

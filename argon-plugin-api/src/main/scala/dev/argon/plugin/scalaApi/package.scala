@@ -12,3 +12,6 @@ type ExternFunctionRef[Externs] = Externs & ExternRefKindFunction
 
 type ExternRecordRef[Externs] = Externs & ExternRefKindRecord
 
+
+type DecodePath = esexpr.ESExprCodec.ErrorPath
+

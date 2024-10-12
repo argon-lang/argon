@@ -11,7 +11,7 @@ trait ExternContext[E >: PluginError] {
 
   trait ExternRef {
     type Reference
-    given referenceCodec: ESExprCodec[Reference]
+    given referenceCodec: ESExprCodecAsync[Reference]
     
     def defineReference
     (options: PlatformOptions)
@@ -22,7 +22,7 @@ trait ExternContext[E >: PluginError] {
 
   trait Extern extends ExternRef {
     type Implementation
-    given implementationCodec: ESExprCodec[Implementation]
+    given implementationCodec: ESExprCodecAsync[Implementation]
     
     def loadExtern
     (options: PlatformOptions)

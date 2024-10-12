@@ -5,14 +5,17 @@ import argon.tube;
 import argon.plugin.options;
 
 
-
 interface platform-plugin[externs, e: exception, platform-options] {
     plugin-id(): string;
 
     option-decoder(): option-decoder[e, platform-options];
 
+    function-reference-codec(): esexpr-codec[extern-function-ref[externs]];
+    function-implementation-codec(): esexpr-codec[extern-function-impl[externs]];
+    record-reference-codec(): esexpr-codec[extern-record-ref[externs]];
+
     define-function-reference(options: platform-options, specifier: import-specifier): extern-function-ref[externs] throws e;
-    load-extern-function(options: platform-options, id: string): extern-function-impl[externs] throws e;
+    load-extern-function(options: platform-options, id: string): option[extern-function-impl[externs]] throws e;
 
     define-record-reference(options: platform-options, specifier: import-specifier): extern-record-ref[externs] throws e;
 
@@ -42,5 +45,16 @@ interface tube-emitter[externs] {
 
 interface tube-loader[externs] {
 
+}
+
+
+
+exception decode-error of decode-path;
+extern type decode-path;
+
+
+interface esexpr-codec[a] {
+    encode(value: a): esexpr;
+    decode(expr: esexpr): a throws decode-error;
 }
 
