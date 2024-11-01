@@ -50,25 +50,28 @@ object PluginSetUtil {
   }
 
   private[plugin] final class OutputHandlerEmpty[E] extends OutputHandler[E, Unit] {
-    override lazy val options: Map[Seq[String], OutputInfo[E, Unit]] = Map.empty
+    override lazy val outputs: UIO[Map[Seq[String], OutputInfo[E, Unit]]] = ZIO.succeed(Map.empty)
   }
 
   private[plugin] final class OutputHandlerSingleton[E, A](pluginId: String, inner: OutputHandler[E, A]) extends OutputHandler[E, A] {
-    override lazy val options: Map[Seq[String], OutputInfo[E, A]] =
-      inner.options.map((k, v) => (pluginId +: k) -> v)
+    override def outputs: UIO[Map[Seq[String], OutputInfo[E, A]]] =
+      inner.outputs.map(_.map((k, v) => (pluginId +: k) -> v))
   }
 
   private[plugin] final class OutputHandlerUnion[E, A, B](using aHandler: OutputHandler[E, A], bHandler: OutputHandler[E, B]) extends OutputHandler[E, (A, B)] {
-    override lazy val options: Map[Seq[String], OutputInfo[E, (A, B)]] =
-      aHandler.options.view.mapValues { oi =>
+    override lazy val outputs: UIO[Map[Seq[String], OutputInfo[E, (A, B)]]] =
+      for
+        aOptions <- aHandler.outputs
+        bOptions <- bHandler.outputs
+      yield aOptions.view.mapValues { oi =>
         new OutputInfo[E, (A, B)] {
-          override def getValue(options: (A, B)): FileSystemResource[E, BinaryResource] =
+          override def getValue(options: (A, B)): UIO[FileSystemResource[E, BinaryResource]] =
             oi.getValue(options._1)
         }
       }.toMap ++
-        bHandler.options.view.mapValues { oi =>
+        bOptions.view.mapValues { oi =>
           new OutputInfo[E, (A, B)] {
-            override def getValue(options: (A, B)): FileSystemResource[E, BinaryResource] =
+            override def getValue(options: (A, B)): UIO[FileSystemResource[E, BinaryResource]] =
               oi.getValue(options._2)
           }
         }.toMap

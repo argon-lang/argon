@@ -84,15 +84,7 @@ object FormatAdapters {
   def createErasedSigType(t: ErasedSignatureType): tube.ErasedSignatureType =
     t match {
       case ErasedSignatureType.Builtin(builtin, args) =>
-        val b = builtin match {
-          case NullaryBuiltin.IntType => tube.BuiltinType.Int()
-          case NullaryBuiltin.BoolType => tube.BuiltinType.Bool()
-          case NullaryBuiltin.StringType => tube.BuiltinType.String()
-          case NullaryBuiltin.NeverType => tube.BuiltinType.Never()
-          case BinaryBuiltin.ConjunctionType => tube.BuiltinType.Conjunction()
-          case BinaryBuiltin.DisjunctionType => tube.BuiltinType.Disjunction()
-        }
-          
+        val b = createBuiltinType(builtin)
         tube.ErasedSignatureType.Builtin(b, args.map(createErasedSigType))
 
       case ErasedSignatureType.Function(input, output) =>
@@ -108,4 +100,14 @@ object FormatAdapters {
         tube.ErasedSignatureType.Erased()
     }
     
+  def createBuiltinType(builtin: BuiltinType): tube.BuiltinType =
+    builtin match {
+      case NullaryBuiltin.IntType => tube.BuiltinType.Int()
+      case NullaryBuiltin.BoolType => tube.BuiltinType.Bool()
+      case NullaryBuiltin.StringType => tube.BuiltinType.String()
+      case NullaryBuiltin.NeverType => tube.BuiltinType.Never()
+      case BinaryBuiltin.ConjunctionType => tube.BuiltinType.Conjunction()
+      case BinaryBuiltin.DisjunctionType => tube.BuiltinType.Disjunction()
+    }
+
 }

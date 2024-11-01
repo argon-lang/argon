@@ -96,7 +96,7 @@ object Compile {
 
       emitter = context.plugins.emitter[context.type]
 
-      outputOptions <- emitter.outputOptionsDecoder[context.Error].decode(config.output.options)
+      outputOptions <- emitter.outputOptionsDecoder.decode(config.output.options)
         .mapError { error =>
             BuildConfigParseError(
               ESExprCodec.DecodeError(
@@ -128,8 +128,9 @@ object Compile {
       case DeepStringDict.Str(value) =>
         for
           _ <- ZIO.logTrace(s"Writing output: ${prefix.mkString(".")} to $value")
-          outputInfo <- ZIO.fromEither(handler.options.get(prefix).toRight(UnknownOutput(prefix)))
-          _ <- outputInfo.getValue(output) match {
+          outputs <- handler.outputs
+          outputInfo <- ZIO.fromEither(outputs.get(prefix).toRight(UnknownOutput(prefix)))
+          _ <- outputInfo.getValue(output).flatMap {
             case FileSystemResource.Of(resource) => ZIO.serviceWithZIO[ResourceWriter](_.write(value, resource))
             case resource: DirectoryResource[E, BinaryResource] => ZIO.serviceWithZIO[ResourceWriter](_.write(value, resource))
           }

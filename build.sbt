@@ -558,8 +558,33 @@ lazy val argon_plugins_sourceJS = argon_plugins_source.js
 lazy val argon_plugins_sourceNode = argon_plugins_source.node
 
 
+lazy val argon_plugins_scheme = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-plugins-scheme"))
+  .dependsOn(argon_plugin_api)
+  .jvmConfigure(
+    _.settings(commonJVMSettings)
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-plugins-scheme",
+  )
+
+lazy val argon_plugins_schemeJVM = argon_plugins_scheme.jvm
+lazy val argon_plugins_schemeJS = argon_plugins_scheme.js
+lazy val argon_plugins_schemeNode = argon_plugins_scheme.node
+
+
 lazy val argon_plugin_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("argon-plugin-platform"))
-  .dependsOn(argon_plugin, argon_plugins_source)
+  .dependsOn(argon_plugin, argon_plugins_source, argon_plugins_scheme)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )

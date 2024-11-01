@@ -13,7 +13,7 @@ import dev.argon.plugin.PluginSetUtil.PartialOptionDecoder.given
 final class SourcePlugin[E >: PluginError, Platforms <: PlatformPluginSet[E]](override val platforms: Platforms) extends FormatPlugin[E, Platforms] {
   override val pluginId: String = "source"
 
-  override def emitter[Ctx <: CompatibleContext]: Option[TubeEmitter[Ctx]] = None
+  override def emitter[Ctx <: CompatibleContext]: Option[TubeEmitter[E, Ctx]] = None
 
   override def tubeLoaders[Ctx <: CompatibleContext]: Map[String, TubeLoader[Ctx]] =
     Map("argon-sources" -> new TubeLoader[Ctx] {

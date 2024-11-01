@@ -161,7 +161,7 @@ enum BinaryOperator(val symbol: String) extends Operator derives CanEqual:
   case Mul extends BinaryOperator("×") with Operator.ValidIdentifier
   case Div extends BinaryOperator("÷") with Operator.ValidIdentifier
   case Equal extends BinaryOperator("=") with Operator.ValidIdentifier
-  case NotEqual extends BinaryOperator("!=") with Operator.ValidIdentifier
+  case NotEqual extends BinaryOperator("≠") with Operator.ValidIdentifier
   case LessThan extends BinaryOperator("<") with Operator.ValidIdentifier
   case LessThanEq extends BinaryOperator("≤") with Operator.ValidIdentifier
   case GreaterThan extends BinaryOperator(">") with Operator.ValidIdentifier

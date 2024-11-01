@@ -5,30 +5,30 @@ import dev.argon.plugin.scalaApi
 import java.io.IOException
 import esexpr.ESExprCodec.DecodeError
 import esexpr.ESExpr
-import dev.argon.io.ResourceReader
+import dev.argon.io.{ResourceReader, BinaryResourceErrorWrapped, DirectoryResourceErrorWrapped}
 import zio.ZIO
 import dev.argon.util.{*, given}
 import zio.UIO
 import dev.argon.plugin.PluginError
+import dev.argon.util.async.ErrorWrapper
 
-final class AdaptedOptionDecoder[E >: PluginError, A](decoder: UIO[scalaApi.options.OptionDecoder[E, A]]) extends OptionDecoder[A] {
+final class AdaptedOptionDecoder[E >: PluginError, EX <: Throwable, A](
+  decoder: UIO[scalaApi.options.OptionDecoder[EX, A]]
+)(using errorWrapper: ErrorWrapper.Aux[E, EX]) extends OptionDecoder[A] {
 
   override def decode(expr: ESExpr): ZIO[ResourceReader, DecodeError, A] =
     ZIO.serviceWithZIO[ResourceReader] { resReader =>
-      val resReader2 = new scalaApi.options.ResourceReader[E] {
-        override def getBinaryResource(id: String): UIO[scalaApi.options.BinaryResource[E]] =
-          ZIO.succeed(resReader.binaryResource(id))
+      val resReader2 = new scalaApi.options.ResourceReader[EX] {
+        override def getBinaryResource(id: String): UIO[scalaApi.options.BinaryResource[EX]] =
+          ZIO.succeed(BinaryResourceErrorWrapped[E, EX](resReader.binaryResource(id)))
 
-        override def getDirectoryResource(id: String): UIO[scalaApi.options.DirectoryResource[E]] =
-          ZIO.succeed(resReader.directoryResource(id))
+        override def getDirectoryResource(id: String): UIO[scalaApi.options.DirectoryResource[EX]] =
+          ZIO.succeed(DirectoryResourceErrorWrapped[E, EX](resReader.directoryResource(id)))
       }
 
       decoder.flatMap(
         _.decode(resReader2, expr)
-          .mapError { error =>
-            val msg = error.getMessage()
-            DecodeError(if msg == null then "" else msg, error.information)
-          }
+          .mapError(scalaApi.DecodeError.toCodecError)
       )
     }
     

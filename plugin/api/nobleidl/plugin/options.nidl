@@ -7,6 +7,15 @@ interface option-decoder[e: exception, options] {
     decode(reader: resource-reader[e], expr: esexpr): options throws decode-error;
 }
 
+interface output-handler[e: exception, output] {
+    outputs(): list[output-info[e, output]];
+}
+
+interface output-info[e: exception, output] {
+    entry-name(): list[string];
+    get-value(o: output): resource[e];
+}
+
 interface resource-reader[e: exception] {
     get-binary-resource(id: string): binary-resource[e];
     get-directory-resource(id: string): directory-resource[e];

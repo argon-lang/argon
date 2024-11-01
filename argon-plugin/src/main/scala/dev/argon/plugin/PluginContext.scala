@@ -9,6 +9,11 @@ type PluginCompatibleContext = Context {
   type Error >: PluginError
 }
 
+type PluginCompatibleContextE[E >: PluginError] = Context {
+  type Env <: PluginEnv
+  type Error = E
+}
+
 abstract class PluginContext[R, E] extends Context {
   val plugins: PluginSet[Error]
 

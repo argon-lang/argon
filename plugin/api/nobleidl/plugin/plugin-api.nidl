@@ -19,7 +19,7 @@ interface platform-plugin[externs, e: exception, platform-options] {
 
     define-record-reference(options: platform-options, specifier: import-specifier): extern-record-ref[externs] throws e;
 
-    emitter(): option[tube-emitter[externs]];
+    emitter(): option[tube-emitter-factory[externs, e]];
     tube-loaders(): dict[tube-loader[externs]];
 }
 
@@ -39,8 +39,18 @@ extern type extern-function-ref[externs];
 extern type extern-record-ref[externs];
 
 
-interface tube-emitter[externs] {
+interface tube-emitter-factory[externs, e: exception] {
+    create[a](callback: tube-emitter-factory-callback[externs, e, a]): a;
+}
 
+interface tube-emitter-factory-callback[externs, e: exception, a] {
+    call[output-options, output](emitter: tube-emitter[externs, e, output-options, output]): a;
+}
+
+interface tube-emitter[externs, e: exception, output-options, output] {
+    output-options-decoder(): option-decoder[e, output-options];
+    output-handler(): output-handler[e, output];
+    emit-tube(tube: argon.plugin.vm.tube-definition[externs, e], options: output-options): output throws e;
 }
 
 interface tube-loader[externs] {
@@ -48,7 +58,7 @@ interface tube-loader[externs] {
 }
 
 
-
+@scala:(companion-extends "DecodeErrorCompanion")
 exception decode-error of decode-path;
 extern type decode-path;
 

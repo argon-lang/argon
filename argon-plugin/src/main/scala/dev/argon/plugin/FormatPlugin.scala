@@ -23,7 +23,7 @@ abstract class FormatPlugin[E >: PluginError, Platforms <: PlatformPluginSet[E]]
     }
   }
 
-  def emitter[Ctx <: CompatibleContext]: Option[TubeEmitter[Ctx]]
+  def emitter[Ctx <: CompatibleContext]: Option[TubeEmitter[E, Ctx]]
   def tubeLoaders[Ctx <: CompatibleContext]: Map[String, TubeLoader[Ctx]]
 }
 
@@ -42,7 +42,7 @@ private[plugin] sealed trait FormatPluginSet[E >: PluginError, Platforms <: Plat
     }
   }
 
-  def emitter[Ctx <: CompatibleContext]: TubeEmitterSet[Ctx]
+  def emitter[Ctx <: CompatibleContext]: TubeEmitterSet[E, Ctx]
   def tubeLoaders[Ctx <: CompatibleContext]: Map[TubeLoaderName, TubeLoader[Ctx]]
 }
 
@@ -50,7 +50,7 @@ private[plugin] object FormatPluginSet {
   final class Empty[E >: PluginError, Platforms <: PlatformPluginSet[E]](override val platforms: Platforms) extends FormatPluginSet[E, Platforms] {
     override val pluginIds: Set[String] = Set.empty
 
-    override def emitter[Ctx <: CompatibleContext]: TubeEmitterSet[Ctx] =
+    override def emitter[Ctx <: CompatibleContext]: TubeEmitterSet[E, Ctx] =
       TubeEmitterSet.Empty()
 
     override def tubeLoaders[Ctx <: CompatibleContext]: Map[TubeLoaderName, TubeLoader[Ctx]] = Map.empty
@@ -60,7 +60,7 @@ private[plugin] object FormatPluginSet {
     override val platforms: plugin.platforms.type = plugin.platforms
     override val pluginIds: Set[String] = Set(plugin.pluginId)
 
-    override def emitter[Ctx <: CompatibleContext]: TubeEmitterSet[Ctx] =
+    override def emitter[Ctx <: CompatibleContext]: TubeEmitterSet[E, Ctx] =
       plugin.emitter[Ctx] match {
         case Some(emitter) => TubeEmitterSet.Singleton(emitter, plugin.pluginId)
         case None => TubeEmitterSet.Empty()
@@ -74,7 +74,7 @@ private[plugin] object FormatPluginSet {
     override val platforms: aSet.platforms.type = aSet.platforms
     override val pluginIds: Set[String] = aSet.pluginIds | bSet.pluginIds
 
-    override def emitter[Ctx <: CompatibleContext]: TubeEmitterSet[Ctx] =
+    override def emitter[Ctx <: CompatibleContext]: TubeEmitterSet[E, Ctx] =
       TubeEmitterSet.Union(aSet.emitter, bSet.emitter)
 
     override def tubeLoaders[Ctx <: CompatibleContext]: Map[TubeLoaderName, TubeLoader[Ctx]] =

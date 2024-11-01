@@ -3,7 +3,7 @@ package dev.argon.plugin.scalaApi
 sealed trait ExternRefKind
 sealed trait ExternKind
 trait ExternRefKindFunction extends ExternRefKind
-trait ExternKindFunction extends ExternKind with ExternRefKindFunction
+trait ExternKindFunction extends ExternKind
 trait ExternRefKindRecord extends ExternRefKind
 
 

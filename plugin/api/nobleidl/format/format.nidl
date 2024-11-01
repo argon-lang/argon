@@ -89,6 +89,7 @@ enum erased-signature-type {
     },
     erased,
 }
+
 @esexpr:(derive-codec)
 enum builtin-type {
     int,

@@ -42,7 +42,7 @@ abstract class PlatformPlugin[E >: PluginError] extends ExternContext[E] {
     }
   }
 
-  def emitter[Ctx <: ContextIncluding]: Option[TubeEmitter[Ctx]]
+  def emitter[Ctx <: ContextIncluding]: Option[TubeEmitter[E, Ctx]]
   def tubeLoaders[Ctx <: ContextOnlyIncluding]: Map[String, TubeLoader[Ctx]]
 
 }
@@ -80,7 +80,7 @@ sealed trait PlatformPluginSet[E >: PluginError] {
   val externRecord: PartialExternRef
 
 
-  def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[Ctx]
+  def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[E, Ctx]
   def tubeLoaders[Ctx <: ContextOnlyIncluding]: Map[TubeLoaderName, TubeLoader[Ctx]]
 
 
@@ -162,7 +162,7 @@ private[plugin] object PlatformPluginSet {
     override val externRecord: PartialExternEmpty =
       PartialExternEmpty()
 
-    override def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[Ctx] =
+    override def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[E, Ctx] =
       TubeEmitterSet.Empty()
 
     override def tubeLoaders[Ctx <: ContextOnlyIncluding]: Map[TubeLoaderName, TubeLoader[Ctx]] = Map.empty
@@ -199,7 +199,7 @@ private[plugin] object PlatformPluginSet {
     override val externRecord: PartialExternRefSingleton[plugin.externRecord.type] =
       PartialExternRefSingleton(plugin.externRecord)
 
-    override def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[Ctx] =
+    override def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[E, Ctx] =
       plugin.emitter[Ctx] match {
         case Some(emitter) => TubeEmitterSet.Singleton(emitter, plugin.pluginId)
         case None => TubeEmitterSet.Empty()
@@ -270,7 +270,7 @@ private[plugin] object PlatformPluginSet {
     override val externRecord: PartialExternRefUnion[aSet.externRecord.type, bSet.externRecord.type] =
       PartialExternRefUnion(aSet.externRecord, bSet.externRecord) 
 
-    override def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[Ctx] =
+    override def emitter[Ctx <: ContextIncluding]: TubeEmitterSet[E, Ctx] =
       TubeEmitterSet.Union(aSet.emitter, bSet.emitter)
 
     override def tubeLoaders[Ctx <: ContextOnlyIncluding]: Map[TubeLoaderName, TubeLoader[Ctx]] = Map.empty

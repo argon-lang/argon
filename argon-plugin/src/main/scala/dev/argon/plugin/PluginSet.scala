@@ -23,7 +23,7 @@ sealed trait PluginSet[E >: PluginError] extends ExternContext[E] {
     }
   }
 
-  def emitter[Ctx <: CompatibleContext]: CompoundTubeEmitter[Ctx]
+  def emitter[Ctx <: CompatibleContext]: CompoundTubeEmitter[E, Ctx]
   def tubeLoaders[Ctx <: CompatibleContext]: Map[TubeLoaderName, TubeLoader[Ctx]]
 
 }
@@ -44,7 +44,7 @@ object PluginSet {
         type Reference = ZEnvironment[platforms.externRecord.Reference]
       } = platforms.externRecord.asExtern(this)
 
-      override def emitter[Ctx <: CompatibleContext]: CompoundTubeEmitter[Ctx] =
+      override def emitter[Ctx <: CompatibleContext]: CompoundTubeEmitter[E, Ctx] =
         TubeEmitterSet.Union(
           platforms.emitter[Ctx],
           formats.emitter[Ctx],
