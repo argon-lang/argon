@@ -12,10 +12,10 @@ import dev.argon.util.{*, given}
 object ImportUtil {
   def getModuleExports
   (context: Context)
-  (tubeImporter: TubeImporter & HasContext[context.type])
   (reexportingModules: Set[ModuleName])
   (currentTube: TubeName, currentModule: ModulePath)
   (imp: WithSource[ast.ImportStmt])
+  (using tubeImporter: TubeImporter & HasContext[context.type])
   : context.Comp[Map[IdentifierExpr, Seq[ModuleExportC[context.type]]]] =
     import context.Comp
     def importName(tubeName: TubeName, path: ModulePath, name: WithSource[IdentifierExpr]): Comp[Seq[ModuleExportC[context.type]]] =

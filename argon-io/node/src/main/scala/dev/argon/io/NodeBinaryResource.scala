@@ -10,20 +10,24 @@ import java.io.IOException
 import scala.scalajs.js.JavaScriptException
 import scala.scalajs.js.typedarray.{Int8Array, Uint8Array}
 
+import PathUtil.remapIOErrors
+
 
 private[io] final class NodeBinaryResource(path: String) extends BinaryResource[IOException] {
   override def asBytes: ZStream[Any, IOException, Byte] =
     ZStream.scoped[Any](
-      ZIO.acquireRelease(ZIO.fromPromiseJS { NodeFileSystem.open(path, "r") })
-        { fh => ZIO.fromPromiseJS(fh.close()).orDie }
+      ZIO.acquireRelease(
+        ZIO.fromPromiseJS { NodeFileSystem.open(path, "r") }
+          .mapError(remapIOErrors)
+          .refineToOrDie[IOException]
+      )(fh => ZIO.fromPromiseJS(fh.close()).mapError(remapIOErrors).orDie)
     )
       .flatMap { fh =>
         AsyncIterableTools.asyncIterableToZStreamRaw(fh.readableWebStream())
           .map(b => uint8ArrayToChunk(new Uint8Array(b)))
           .flattenChunks
-      }
-      .refineOrDie {
-        case ex: JavaScriptException => IOException(ex)
+          .mapError(remapIOErrors)
+          .refineToOrDie[IOException]
       }
 
   override def fileName: Option[String] = Some(path)

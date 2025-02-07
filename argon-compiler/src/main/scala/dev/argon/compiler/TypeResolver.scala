@@ -321,7 +321,7 @@ trait TypeResolver extends UsingContext {
                   recordFieldDecl <- ZIO.fromEither(recordFields.find(_.name == field.value.name.value).toRight { ??? })
                   fieldSig <- TRSignatureContext.recordFieldSig(recordExpr, recordFieldDecl)
                   value <- resolveExpr(field.value.value).check(fieldSig.returnType)
-                yield RecordFieldLiteral(field.value.name.value, value)
+                yield RecordFieldLiteral(recordFieldDecl, value)
               }
             yield InferredExpr(Expr.RecordLiteral(recordExpr, recFields), recordExpr)
 
@@ -751,7 +751,7 @@ trait TypeResolver extends UsingContext {
     private def attemptOverloadCheck(overload: Overloadable, sig: TRSignatureContext.FunctionSignature, args: Seq[ArgumentInfo], callArgs: Seq[Expr], lambdaParams: Seq[LocalVar])(using EmitState): Comp[AttemptOverloadCheckResult] =
       def applyArg(param: TRSignatureContext.SignatureParameter, tailParams: Seq[TRSignatureContext.SignatureParameter], arg: Expr, restArgs: Seq[ArgumentInfo], lambdaParam: Option[LocalVar]): Comp[AttemptOverloadCheckResult] =
         val isProof = param.listType == FunctionParameterListType.RequiresList
-        val paramVar = param.asParameterVar(overload.asOwner, callArgs.size)
+        val paramVar = param.asParameterVar(overload.asOwner.get, callArgs.size)
 
         val restSig = sig.copy(parameters = tailParams).substituteVar(paramVar, arg)
 

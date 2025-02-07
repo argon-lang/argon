@@ -27,7 +27,6 @@ trait ExprContext {
   enum ParameterOwner {
     case Func(f: Function)
     case Rec(r: Record)
-    case RecordField()
   }
   
   final case class ParameterVar(
@@ -98,7 +97,7 @@ trait ExprContext {
   }
 
   final case class RecordFieldLiteral(
-    name: IdentifierExpr,
+    field: RecordField,
     value: Expr,
   )
 

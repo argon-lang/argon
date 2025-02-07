@@ -3,23 +3,24 @@ package dev.argon.io
 import zio.stream.*
 
 import java.nio.charset.CharacterCodingException
+import dev.argon.util.async.ErrorWrapper
 
 
 trait TextResource[+E] extends BinaryResource[E] {
-  def asText: ZStream[Any, E, String]
+  def asText: Stream[E, String]
 }
 
 object TextResource:
   trait Impl[+E >: CharacterCodingException] extends TextResource[E]:
-    override def asBytes: ZStream[Any, E, Byte] = ZPipeline.utf8Encode.apply(asText)
+    override def asBytes: Stream[E, Byte] = ZPipeline.utf8Encode.apply(asText)
   end Impl
 
-  given resourceDecoder: BinaryResourceDecoder[TextResource, CharacterCodingException] with
-    def decode[E >: CharacterCodingException](resource: BinaryResource[E]): TextResource[E] =
+  given resourceDecoder[E >: CharacterCodingException]: BinaryResourceDecoder[TextResource, E] with
+    def decode(resource: BinaryResource[E]): TextResource[E] =
       resource match {
         case resource: TextResource[E] => resource
         case _ => new TextResource.Impl[E] {
-          override def asText: ZStream[Any, E, String] =
+          override def asText: Stream[E, String] =
             resource.asBytes.via(ZPipeline.utf8Decode)
 
           override def fileName: Option[String] =
@@ -30,7 +31,7 @@ object TextResource:
 
   def fromString(str: String): TextResource[CharacterCodingException] =
     new TextResource[CharacterCodingException] with Impl[CharacterCodingException] {
-      override def asText: ZStream[Any, CharacterCodingException, String] = ZStream.succeed(str)
+      override def asText: Stream[CharacterCodingException, String] = ZStream.succeed(str)
       override def fileName: Option[String] = None
     }
 

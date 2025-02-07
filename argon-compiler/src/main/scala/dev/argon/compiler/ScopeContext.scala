@@ -48,12 +48,12 @@ trait ScopeContext {
           case RecordField(r, field, _) => TRSignatureContext.recordFieldSig(r, field)
         }
 
-      def asOwner: TRExprContext.ParameterOwner =
+      def asOwner: Option[TRExprContext.ParameterOwner] =
         this match {
-          case Function(f) => TRExprContext.ParameterOwner.Func(f)
-          case Record(r) => TRExprContext.ParameterOwner.Rec(r)
-          case ExtensionMethod(f, _) => TRExprContext.ParameterOwner.Func(f)
-          case RecordField(_, _, _) => TRExprContext.ParameterOwner.RecordField()
+          case Function(f) => Some(TRExprContext.ParameterOwner.Func(f))
+          case Record(r) => Some(TRExprContext.ParameterOwner.Rec(r))
+          case ExtensionMethod(f, _) => Some(TRExprContext.ParameterOwner.Func(f))
+          case RecordField(_, _, _) => None
         }
     }
 
@@ -68,16 +68,16 @@ trait ScopeContext {
       def knownVarValues: Map[Var, TRExprContext.Expr] = ???
     }
 
-    final class GlobalScopeBuilder private(importer: TubeImporter & HasContext[self.type], imports: Seq[WithSource[ast.ImportStmt]], module: ArModuleC & HasContext[self.type]) {
+    final class GlobalScopeBuilder private(imports: Seq[WithSource[ast.ImportStmt]], module: ArModuleC & HasContext[self.type])(using TubeImporter & HasContext[self.type]) {
       def addImport(importSpec: WithSource[ast.ImportStmt]): GlobalScopeBuilder =
-        GlobalScopeBuilder(importer, imports :+ importSpec, module)
+        GlobalScopeBuilder(imports :+ importSpec, module)
 
-      def toScope: Comp[Scope] = ZIO.succeed(CurrentModuleScope(GlobalScope(importer, imports, module), module))
+      def toScope: Comp[Scope] = ZIO.succeed(CurrentModuleScope(GlobalScope(imports, module), module))
     }
 
     object GlobalScopeBuilder {
-      def empty(importer: TubeImporter & HasContext[self.type], module: ArModuleC & HasContext[self.type]): GlobalScopeBuilder =
-        GlobalScopeBuilder(importer, Seq.empty, module)
+      def empty(module: ArModuleC & HasContext[self.type])(using TubeImporter & HasContext[self.type]): GlobalScopeBuilder =
+        GlobalScopeBuilder(Seq.empty, module)
     }
 
     private def moduleExportToOverloadable(exp: ModuleExportC[self.type]): Overloadable =
@@ -87,9 +87,9 @@ trait ScopeContext {
         case ModuleExportC.Exported(exp) => moduleExportToOverloadable(exp)
       }
 
-    final class GlobalScope private[Scopes] (importer: TubeImporter & HasContext[self.type], imports: Seq[WithSource[ast.ImportStmt]], module: ArModuleC & HasContext[self.type]) extends Scope {
+    final class GlobalScope private[Scopes] (imports: Seq[WithSource[ast.ImportStmt]], module: ArModuleC & HasContext[self.type])(using TubeImporter & HasContext[self.type]) extends Scope {
       override def lookup(id: IdentifierExpr): Comp[LookupResult.OverloadableOnly] =
-        Foldable[Seq].collectFold(imports)(ImportUtil.getModuleExports(self)(importer)(Set.empty)(module.tubeName, module.path)(_))
+        Foldable[Seq].collectFold(imports)(ImportUtil.getModuleExports(self)(Set.empty)(module.tubeName, module.path)(_))
           .map { importMap =>
             importMap.get(id) match {
               case Some(res) => LookupResult.Overloaded(res.map(moduleExportToOverloadable), ZIO.succeed(LookupResult.NotFound()))
@@ -119,7 +119,6 @@ trait ScopeContext {
         val owner2 = owner match {
           case TRExprContext.ParameterOwner.Func(f) => DefaultExprContext.ParameterOwner.Func(f)
           case TRExprContext.ParameterOwner.Rec(r) => DefaultExprContext.ParameterOwner.Rec(r)
-          case TRExprContext.ParameterOwner.RecordField() => DefaultExprContext.ParameterOwner.RecordField()
         }
         DefaultSignatureContext.SignatureParameter.getParameterVariables(owner2, sigParams).map(shifter.shiftVar)
       end parameters

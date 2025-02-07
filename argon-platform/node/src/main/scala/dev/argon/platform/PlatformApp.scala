@@ -2,17 +2,14 @@ package dev.argon.platform
 
 import zio.*
 
-abstract class PlatformApp[R: EnvironmentTag, E] extends ZIOApp {
-  override type Environment = R
-  override def environmentTag: EnvironmentTag[R] = summon[EnvironmentTag[R]]
-
+abstract class PlatformApp[E] extends ZIOApp {
+  override type Environment = Any
   type Error = E
+  override def environmentTag: EnvironmentTag[Any] = summon[EnvironmentTag[Any]]
 
-  def appBootstrapLayer: ZLayer[ZIOAppArgs, E, R]
-
-  final override def bootstrap: ZLayer[ZIOAppArgs, Any, R] =
+  final override def bootstrap: ZLayer[ZIOAppArgs, Any, Any] =
     ZLayer.succeed(ZIOAppArgs(Chunk.fromIterable(NodeProcess.argv))) >>>
-      appBootstrapLayer +!+ ZLayer.environment[ZIOAppArgs]
+      ZLayer.environment[ZIOAppArgs]
 
   final override def run: ZIO[Environment & ZIOAppArgs, Any, Any] =
     runApp.onExit {

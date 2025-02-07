@@ -1,11 +1,10 @@
 package dev.argon.cli
 
-import dev.argon.io.{BinaryResourceDecoder, ESExprTextResource, PathLike, PathUtil, ResourceReader, ResourceWriter}
+import dev.argon.io.*
 import dev.argon.platform.*
 import dev.argon.util.{*, given}
-import dev.argon.build.{BuildConfig, BuildError, Compile}
+import dev.argon.build.{BuildError, Compile}
 import esexpr.ESExprException
-import dev.argon.plugin.PluginError
 import zio.*
 import zio.stream.*
 
@@ -13,42 +12,28 @@ import java.io.IOException
 import scopt.{OEffect, OParser}
 
 import java.util.concurrent.TimeUnit
+import dev.argon.compiler.TubeName
+import dev.argon.build.InvalidTubeName
+import dev.argon.compiler.Context
+import dev.argon.compiler.ErrorLog
+import scala.reflect.TypeTest
+import dev.argon.build.CContext
+import dev.argon.source.SourceError
+import dev.argon.compiler.HasContext
+import dev.argon.tube.resource.TubeResourceContext
+import dev.argon.build.LogReporter
+import dev.argon.tube.loader.TubeFormatException
+import dev.argon.io.DirectoryResource
+import dev.argon.source.ArgonSourceCodeResource
+import dev.argon.compiler.TubeImporter
 
-object Program extends PlatformApp[PathUtil, IOException | BuildError | PluginError | ESExprException] {
-
-  override def appBootstrapLayer: ZLayer[ZIOAppArgs, Error, Environment] =
-    PathUtil.live
+object Program extends PlatformApp[IOException | BuildError | SourceError | TubeFormatException] {
 
   def runApp: ZIO[Environment & ZIOAppArgs, Error, ExitCode] =
-    val builder = OParser.builder[Options]
-    val parser =
-      import builder.*
-      OParser.sequence(
-        programName("argon"),
-        head("argon", "0.0.0"),
-
-        cmd("compile")
-          .action((_, c) => c.copy(command = Some(Command.Compile)))
-          .text("Low-level compile command. See build command for higher level build system.")
-          .children(
-            arg[PathLike]("build-spec")
-              .action((path, c) => c.copy(buildSpec = Some(path)))
-              .text("Build spec ESExpr file")
-          ),
-
-        cmd("build")
-          .action((_, c) => c.copy(command = Some(Command.Build)))
-          .text("Automated build system for Argon")
-          .children(
-            arg[PathLike]("build-spec")
-              .action((path, c) => c.copy(buildSpec = Some(path)))
-              .text("Build spec ESExpr file")
-          ),
-      )
-    end parser
+    val parser = ArgonCommandLineOptions.parser
 
     ZIOAppArgs.getArgs.flatMap { args =>
-      val (options, effects) = OParser.runParser(parser, args, Options())
+      val (options, effects) = OParser.runParser(parser, args, ArgonCommandLineOptions())
       ZIO.foreach(effects)(runOEffect)
         .foldZIO(
           failure = {
@@ -82,7 +67,7 @@ object Program extends PlatformApp[PathUtil, IOException | BuildError | PluginEr
       case OEffect.Terminate(Right(_)) => ZIO.fail(ExitCode.success)
     end match
 
-  private def runCommand(options: Options): ZIO[Environment, Error, ExitCode] =
+  private def runCommand(options: ArgonCommandLineOptions): ZIO[Environment, Error, ExitCode] =
     options.command match
       case None =>
         for
@@ -90,19 +75,55 @@ object Program extends PlatformApp[PathUtil, IOException | BuildError | PluginEr
         yield ExitCode.failure
 
       case Some(Command.Compile) =>
-        for
-          configRes <- ZIO.serviceWith[PathUtil](_.binaryResource(options.buildSpec.get))
-          config <- ESExprTextResource.resourceCodec[BuildConfig].decode[Error](configRes).decoded
-          baseDir <- ZIO.serviceWithZIO[PathUtil](_.dirname(options.buildSpec.get))
-          layer <- ZIO.serviceWith[PathUtil](_.resourceLayer(baseDir))
-          _ <- Compile.compile(config).provideSomeLayer[Environment](layer)
-        yield ExitCode.success
-
-
-      case Some(Command.Build) =>
-        for
-          _ <- Console.printLineError("Build command not implemented")
-        yield ExitCode.failure
+        runCompile(options)
+          .as(ExitCode.success)
+          .provideSomeLayer[Environment](LogReporter.live)
+        
     end match
+
+  private def runCompile(options: ArgonCommandLineOptions): ZIO[Environment & ErrorLog & LogReporter, Error, Unit] =
+    for
+      tubeNameDec <- ZIO.fromOption(options.tubeName.flatMap(TubeName.decode)).mapError(_ => InvalidTubeName(options.tubeName.get))
+
+      ctx = new Context {
+        override type Env = Program.this.Environment & ErrorLog & LogReporter
+        override type Error = Program.this.Error
+
+        override def errorTypeTest: TypeTest[Any, Error] = summon
+      }
+
+      tubeResContext <- TubeResourceContext.make(ctx)
+
+      compile = new Compile {
+        override val context: ctx.type = ctx
+
+        override val tubeResourceContext: tubeResContext.type =
+          tubeResContext
+
+        import tubeResourceContext.TubeResource
+
+        override def tubeName: TubeName = tubeNameDec
+        override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
+          DirectoryResource.decode[Error, BinaryResource, ArgonSourceCodeResource](
+            PathUtil.directoryResource(options.inputDir.get)
+              .filterFiles(_.endsWith(".argon"))
+          )
+
+        override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
+          options.referencedTubes.map { refTubePath =>
+            summon[BinaryResourceDecoder[tubeResContext.TubeResource, Error]].decode(
+              PathUtil.binaryResource(refTubePath)
+            )
+          }
+      }
+
+      _ <- ZIO.scoped(
+        for
+          buildOutput <- compile.compile()
+          _ <- PathUtil.writeFile(options.outputFile.get, buildOutput.tube)
+        yield ()
+      )
+
+    yield ()
 
 }

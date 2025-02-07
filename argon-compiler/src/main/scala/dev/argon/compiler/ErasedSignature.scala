@@ -19,4 +19,4 @@ final case class ImportSpecifier(
   module: ModulePath,
   name: Option[IdentifierExpr],
   signature: ErasedSignature,
-)
+) derives CanEqual

@@ -40,7 +40,7 @@ sealed trait SignatureEraser extends UsingContext {
 
       case Expr.RecordType(record, args) =>
         for
-          recordImport <- record.importSpecifier(this)
+          recordImport <- record.importSpecifier
           args <- ZIO.foreach(args)(getErasedType)
         yield ErasedSignatureType.Record(recordImport, args)
 

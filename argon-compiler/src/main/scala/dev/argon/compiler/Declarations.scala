@@ -5,12 +5,16 @@ import dev.argon.ast.IdentifierExpr
 import dev.argon.expr.{ExprContext, Substitution}
 import dev.argon.util.{Fuel, UniqueIdentifier}
 import zio.ZIO
+import scala.reflect.TypeTest
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 trait Context extends ScopeContext {
   type Env0 = ErrorLog
   type Env <: ErrorLog
   type Error0 = Nothing
-  type Error
+  type Error >: Error0 <: Matchable
+  given errorTypeTest: TypeTest[Any, Error]
 
   type Comp[+A] = ZIO[Env, Error, A]
 
@@ -100,29 +104,12 @@ trait Context extends ScopeContext {
     val smtFuel: Fuel = Fuel(5)
   }
 
-  trait Implementations {
-    type ExternFunctionImplementation
-    type FunctionReference
-    type RecordReference
-
+  object Implementations {
     enum FunctionImplementation {
       case Expr(e: DefaultExprContext.Expr)
-      case Extern(e: ExternFunctionImplementation)
+      case Extern(name: String)
     }
   }
-
-  val implementations: Implementations
-
-  trait ImplementationLoader {
-    import implementations.*
-
-    def loadExternFunction(name: String): Comp[ExternFunctionImplementation]
-    def makeFunctionReference(definition: DefinitionInfo): Comp[FunctionReference]
-
-    def makeRecordReference(definition: DefinitionInfo): Comp[RecordReference]
-  }
-
-
 }
 
 type HasContext[Ctx <: Context] = {val context: Ctx}
@@ -158,6 +145,22 @@ final case class TubeName(parts: NonEmptySeq[String]) derives CanEqual {
   ).toSeq.mkString(".")
 }
 
+object TubeName {
+  def decode(s: String): Option[TubeName] =
+    if s.isEmpty() then
+      None
+    else
+      for
+        parts <- NonEmptySeq.fromSeq(
+          s.split("\\.").nn
+            .iterator
+            .map(part => URLDecoder.decode(part, StandardCharsets.UTF_8).nn)
+            .toSeq
+        )
+      yield TubeName(parts)
+      
+}
+
 final case class ModulePath(parts: Seq[String]) derives CanEqual {
   def encode: String = parts.map(part =>
     part
@@ -177,10 +180,18 @@ trait TubeImporter extends UsingContext {
   def getTube(name: TubeName): Comp[ArTube]
 }
 
+sealed trait DeclarationBase {
+  self: UsingContext =>
+
+  def importSpecifier: Comp[ImportSpecifier]
+}
+
 abstract class ArTubeC extends UsingContext {
   def name: TubeName
 
   def modules: Map[ModulePath, ArModule]
+
+  def referencedTubes: Set[TubeName]
 }
 
 abstract class ArModuleC extends UsingContext {
@@ -197,16 +208,17 @@ enum ModuleExportC[Ctx <: Context] {
   case Exported(exp: ModuleExportC[Ctx])
 }
 
-abstract class ArFuncC extends UsingContext derives CanEqual {
+abstract class ArFuncC extends UsingContext with DeclarationBase derives CanEqual {
   val id: UniqueIdentifier
 
   def isInline: Boolean
   def isErased: Boolean
 
+  def importSpecifier: Comp[ImportSpecifier]
+
   def signature: Comp[FunctionSignature]
 
-  def implementation: Option[Comp[context.implementations.FunctionImplementation]]
-  def reference: Comp[context.implementations.FunctionReference]
+  def implementation: Option[Comp[context.Implementations.FunctionImplementation]]
 
   override def hashCode(): Int = id.hashCode()
   override def equals(obj: Any): Boolean =
@@ -216,16 +228,14 @@ abstract class ArFuncC extends UsingContext derives CanEqual {
     }
 }
 
-abstract class ArRecordC extends UsingContext derives CanEqual {
+abstract class ArRecordC extends UsingContext with DeclarationBase derives CanEqual {
   val id: UniqueIdentifier
 
-  def importSpecifier(sigEraser: SignatureEraser & HasContext[context.type]): Comp[ImportSpecifier]
+  def importSpecifier: Comp[ImportSpecifier]
 
   def signature: Comp[FunctionSignature]
 
   def fields: Comp[Seq[RecordField]]
-
-  def reference: Comp[context.implementations.RecordReference]
 
   override def hashCode(): Int = id.hashCode()
   override def equals(obj: Any): Boolean =
@@ -237,6 +247,8 @@ abstract class ArRecordC extends UsingContext derives CanEqual {
 
 abstract class RecordFieldC extends UsingContext derives CanEqual {
   import context.DefaultExprContext.Expr
+
+  def owningRecord: ArRecord
 
   val id: UniqueIdentifier
   val name: IdentifierExpr

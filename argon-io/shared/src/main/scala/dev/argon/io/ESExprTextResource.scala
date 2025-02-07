@@ -3,46 +3,41 @@ package dev.argon.io
 import esexpr.*
 import esexpr.parser.ESExprTextReader
 import dev.argon.io.{BinaryResource, BinaryResourceDecoder, TextResource}
-import zio.ZIO
-import zio.stream.ZStream
+import zio.*
+import zio.stream.*
 
 import java.nio.charset.CharacterCodingException
+import dev.argon.util.async.ErrorWrapper
 
-trait ESExprTextResource[E, A] extends TextResource[E] {
-  protected def codec: ESExprCodec[A]
-
-  def decoded: ZIO[Any, E, A]
-}
+trait ESExprTextResource[E] extends TextResource[E] with ESExprResource[E]
 
 object ESExprTextResource {
-  given resourceCodec[A](using ESExprCodec[A]): BinaryResourceDecoder[[E] =>> ESExprTextResource[E, A], CharacterCodingException | ESExprException] with
-    override def decode[E >: CharacterCodingException | ESExprException](resource: BinaryResource[E]): ESExprTextResource[E, A] =
-      new ESExprTextResource[E, A] {
-        override protected def codec: ESExprCodec[A] =
-          summon[ESExprCodec[A]]
-
-        override def decoded: ZIO[Any, E, A] =
+  given[E >: CharacterCodingException | ESExprException]: BinaryResourceDecoder[ESExprTextResource, E] with
+    override def decode(resource: BinaryResource[E]): ESExprTextResource[E] =
+      new ESExprTextResource[E] {
+        override def expr: IO[E, ESExpr] =
           summon[BinaryResourceDecoder[TextResource, E]].decode(resource)
             .asText
             .via(ESExprTextReader.read(fileName))
+            .take(2)
             .runCollect
             .flatMap {
               case Seq(elem) =>
-                ZIO.fromEither(codec.decode(elem.value))
+                ZIO.succeed(elem.value)
 
               case exprs =>
                 ZIO.fail(ESExprDecodeException(s"Expected a single expression, got: $exprs"))
             }
 
-        override def asText: ZStream[Any, E, String] =
+        override def asText: Stream[E, String] =
           summon[BinaryResourceDecoder[TextResource, E]].decode(resource)
             .asText
 
-        override def asBytes: ZStream[Any, E, Byte] =
+        override def asBytes: Stream[E, Byte] =
           resource.asBytes
 
         override def fileName: Option[String] =
           resource.fileName
       }
-  end resourceCodec
+  end given
 }

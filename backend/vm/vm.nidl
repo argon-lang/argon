@@ -1,0 +1,204 @@
+package argon.vm;
+
+import nobleidl.core;
+import argon.tube;
+
+record tube-definition {
+    name: tube-name;
+    modules: list[module-definition];
+}
+
+interface module-definition {
+    path(): module-path;
+
+    exports(): list[module-export-entry];
+}
+
+record module-export-entry {
+    name: option[identifier];
+    exports: list[module-export-overload];
+}
+
+record module-export-overload {
+    sig: erased-signature;
+    export: module-export;
+}
+
+enum module-export {
+    function { f: function-definition; },
+    record { r: record-definition; },
+}
+
+
+record function-reference {
+    index: nat;
+}
+
+record record-reference {
+    index: nat;
+}
+
+
+interface function-definition {
+    metadata(): function-metadata;
+
+    signature(): function-signature;
+    implementation(): function-implementation;
+}
+
+record function-metadata {
+    is-inline: bool;
+    is-erased: bool;
+}
+
+record function-signature {
+    parameters: list[function-parameter];
+    result: vm-type;
+}
+
+record function-parameter {
+    param-type: vm-type;
+}
+
+enum function-implementation {
+    vm-ir { block: block; },
+    extern { name: string; },
+}
+
+interface record-definition {
+    metadata(): record-metadata;
+
+    signature(): type-signature;
+    fields(): list[record-field];
+}
+
+record record-metadata {
+}
+
+record type-signature {
+}
+
+record record-field {
+    name: identifier;
+    field-type: vm-type;
+}
+
+enum vm-type {
+    builtin {
+        b: builtin-type;
+        args: list[vm-type];
+    },
+    function {
+        input: vm-type;
+        output: vm-type;
+    },
+    record {
+        record: record-reference;
+        args: list[vm-type];
+    },
+    tuple {
+        elements: list[vm-type];
+    },
+}
+
+
+record block {
+    variables: list[variable-definition];
+    instructions: list[instruction];
+}
+
+enum instruction {
+    builtin-unary {
+        dest: register-id;
+        op: builtin-unary-op;
+        a: register-id;
+    },
+
+    builtin-binary {
+        dest: register-id;
+        op: builtin-binary-op;
+        a: register-id;
+        b: register-id;
+    },
+
+    const-bool {
+        dest: register-id;
+        value: bool;
+    },
+
+    const-int {
+        dest: register-id;
+        value: int;
+    },
+
+    const-string {
+        dest: register-id;
+        value: string;
+    },
+
+    function-call {
+        dest: register-id;
+        function: function-reference;
+        args: list[register-id];
+    },
+
+    move {
+        dest: register-id;
+        src: register-id;
+    },
+
+    tuple {
+        dest: register-id;
+        values: list[register-id];
+    },
+
+    tuple-element {
+        dest: register-id;
+        element-index: nat;
+        src: register-id;
+    },
+
+    return {
+        src: register-id;
+    },
+}
+
+record register-id {
+    id: nat;
+}
+
+enum function-result {
+    register { id: register-id; },
+    discard,
+    return-value,
+}
+
+record variable-definition {
+    type: vm-type;
+}
+
+enum builtin-unary-op {
+    int-negate,
+    int-bit-not,
+}
+
+enum builtin-binary-op {
+    int-add,
+    int-sub,
+    int-mul,
+    int-bit-and,
+    int-bit-or,
+    int-bit-xor,
+    int-bit-shift-left,
+    int-bit-shift-right,
+    int-eq,
+    int-ne,
+    int-lt,
+    int-le,
+    int-gt,
+    int-ge,
+    string-concat,
+    string-eq,
+    string-ne,
+}
+

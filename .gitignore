@@ -21,3 +21,5 @@ lib/
 vm/js/**/lib/
 
 *.argonvm
+*.artube
+

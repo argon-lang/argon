@@ -4,7 +4,7 @@ import dev.argon.util.async.AsyncIterableTools.AsyncIterable
 
 import scala.scalajs.js
 import scala.scalajs.js.annotation.JSImport
-import scala.scalajs.js.typedarray.{ArrayBuffer, TypedArray}
+import scala.scalajs.js.typedarray.{ArrayBuffer, TypedArray, DataView}
 
 @js.native
 @JSImport("node:fs/promises", JSImport.Namespace)
@@ -24,6 +24,7 @@ object NodeFileSystem extends js.Object {
 }
 
 trait NodeFileHandle extends js.Object {
+  def writeFile(data: TypedArray[?, ?] | DataView): js.Promise[Unit]
   def readableWebStream(): AsyncIterable[ArrayBuffer]
   def close(): js.Promise[Unit]
 }

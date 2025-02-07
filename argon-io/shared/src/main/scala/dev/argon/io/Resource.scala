@@ -5,6 +5,7 @@ import zio.stream.*
 
 import java.io.IOException
 import java.nio.charset.CharacterCodingException
+import dev.argon.util.async.ErrorWrapper
 
 abstract class Resource[+E] {
   def fileName: Option[String]
@@ -18,14 +19,14 @@ end Resource
 
 
 abstract class BinaryResource[+E] extends Resource[E] with BinaryResourcePlatformSpecific[E] {
-  def asBytes: ZStream[Any, E, Byte]
+  def asBytes: Stream[E, Byte]
 
   def byteSize: Option[ZIO[Any, E, BigInt]] = None
 }
 
 object BinaryResource:
-  given BinaryResourceDecoder[BinaryResource, Nothing] with
-    def decode[E >: Nothing](resource: BinaryResource[E]): BinaryResource[E] =
+  given [E]: BinaryResourceDecoder[BinaryResource, E] with
+    def decode(resource: BinaryResource[E]): BinaryResource[E] =
       resource
   end given
 end BinaryResource
@@ -37,12 +38,12 @@ object FileSystemResource {
 }
 
 abstract class DirectoryResource[+E, +FileResource[+E2] <: Resource[E2]] extends Resource[E] with FileSystemResource[E, FileResource] {
-  def contents: ZStream[Any, E, DirectoryEntry[E, FileResource]]
+  def contents: Stream[E, DirectoryEntry[E, FileResource]]
 
   def numEntries: Option[ZIO[Any, E, BigInt]] = None
 
 
-  final def flatten: ZStream[Any, E, (String, FileResource[E])] =
+  final def flatten: Stream[E, (String, FileResource[E])] =
     contents.flatMap {
       case DirectoryEntry.Subdirectory(name, resource) =>
         resource.flatten.map { (subName, res) =>
@@ -53,12 +54,32 @@ abstract class DirectoryResource[+E, +FileResource[+E2] <: Resource[E2]] extends
         ZStream(name -> resource)
     }
 
+  final def filterFiles(f: String => Boolean): DirectoryResource[E, FileResource] =
+    new DirectoryResource[E, FileResource] {
+      override def contents: Stream[E, DirectoryEntry[E, FileResource]] =
+        DirectoryResource.this.contents
+          .map {
+            case DirectoryEntry.Subdirectory(name, resource) => DirectoryEntry.Subdirectory(name, resource.filterFiles(f))
+            case entry => entry
+          }
+          .filter {
+            case DirectoryEntry.File(name, _) => f(name)
+            case _ => true
+          }
+
+      override def numEntries: Option[ZIO[Any, E, BigInt]] =
+        DirectoryResource.this.numEntries
+
+      override def fileName: Option[String] =
+        DirectoryResource.this.fileName
+    }
+
 }
 
 object DirectoryResource {
   def decode[E, FileResource[+E2] <: BinaryResource[E2], Res[+E2] <: Resource[E2]](dr: DirectoryResource[E, FileResource])(using BinaryResourceDecoder[Res, E]): DirectoryResource[E, Res] =
     new DirectoryResource[E, Res] {
-      override def contents: ZStream[Any, E, DirectoryEntry[E, Res]] =
+      override def contents: Stream[E, DirectoryEntry[E, Res]] =
         dr.contents.map {
           case DirectoryEntry.Subdirectory(name, resource) => DirectoryEntry.Subdirectory(name, decode[E, FileResource, Res](resource))
           case DirectoryEntry.File(name, resource) => DirectoryEntry.File(name, summon[BinaryResourceDecoder[Res, E]].decode(resource))

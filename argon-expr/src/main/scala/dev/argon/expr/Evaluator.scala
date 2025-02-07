@@ -75,7 +75,7 @@ trait Evaluator[R, E] {
       case Expr.RecordFieldLoad(rec, field, recordExpr) =>
         normalizeToValue(recordExpr, fuel).flatMap {
           case Expr.RecordLiteral(_, fields) =>
-            ZIO.succeed(fields.find(_.name == getRecordFieldName(field)).getOrElse { ??? }.value)
+            ZIO.succeed(fields.find(_.field == field).getOrElse { ??? }.value)
 
           case recValue => ZIO.succeed(Expr.RecordFieldLoad(rec, field, recValue))
         }
