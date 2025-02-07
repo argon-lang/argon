@@ -1,7 +1,7 @@
 package dev.argon.tube.resource
 
 import dev.argon.tube as t
-import dev.argon.tube.encoder.TubeEncoderImpl
+import dev.argon.tube.encoder.TubeEncoder
 import dev.argon.compiler.*
 import zio.*
 import zio.stream.*
@@ -27,7 +27,7 @@ sealed abstract class TubeResourceContext extends UsingContext {
       override def decoded: Stream[context.Error, t.TubeFileEntry] =
         ZStream.unwrapScoped(
           asTube.map { tube =>
-            TubeEncoderImpl.encode(context)(tube).provideEnvironment(environment)
+            TubeEncoder.encode(context)(tube).provideEnvironment(environment)
           }
         )
     }

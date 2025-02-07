@@ -170,6 +170,7 @@ def generateTestCasesTask(): Def.Initialize[sbt.Task[Seq[File]]] =
         for(file <- in) {
           val path = file.toPath().toAbsolutePath()
           val relPath = inDirPath.relativize(path).toString
+          
           val content = Files.readString(path)
 
           writer.print("  \"")
@@ -193,9 +194,7 @@ def generateTestCasesTask(): Def.Initialize[sbt.Task[Seq[File]]] =
       f2((
         file("libraries") ** "*" ---
           file("libraries") ** "bin" ** "*"
-      ).filter(_.isFile()).get().toSet).toSeq
-
-      
+      ).filter(_.isFile()).get().toSet).toSeq      
   }
 
 
