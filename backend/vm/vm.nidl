@@ -1,88 +1,312 @@
 package argon.vm;
 
 import nobleidl.core;
-import argon.tube;
 
-record tube-definition {
+
+@esexpr:(derive-codec)
+enum tube-file-entry {
+    @esexpr:(inline-value)
+    header {
+        header: tube-header;
+    },
+
+    @esexpr:(inline-value)
+    metadata {
+        metadata: tube-metadata;
+    },
+
+    module-reference {
+        module-id: nat;
+
+        tube-id: nat;
+        path: module-path;
+    },
+
+    @esexpr:(inline-value)
+    function-definition {
+        definition: function-definition;
+    },
+
+    function-reference {
+        function-id: nat;
+        import: import-specifier;
+    },
+
+    @esexpr:(inline-value)
+    record-definition {
+        definition: record-definition;
+    },
+
+    record-reference {
+        record-id: nat;
+        import: import-specifier;
+    },
+
+    record-field-reference {
+        record-field-id: nat;
+
+        record-id: nat;
+        name: identifier;
+    },
+}
+
+
+@esexpr:(derive-codec)
+@esexpr:(constructor "Ar18 VMIR")
+record tube-header {
+    format-version-major: int;
+    format-version-minor: int;
+}
+
+@esexpr:(derive-codec)
+record tube-metadata {
     name: tube-name;
-    modules: list[module-definition];
+
+    referenced-tubes: list[tube-name];
+    modules: list[module];
 }
 
-interface module-definition {
-    path(): module-path;
+@esexpr:(derive-codec)
+record module {
+    path: module-path;
 
-    exports(): list[module-export-entry];
+    @esexpr:(vararg)
+    groups: list[export-group];
 }
 
-record module-export-entry {
+@esexpr:(derive-codec)
+record export-group {
     name: option[identifier];
-    exports: list[module-export-overload];
+
+    @esexpr:(vararg)
+    exports: list[module-export];
 }
 
-record module-export-overload {
-    sig: erased-signature;
-    export: module-export;
-}
 
+@esexpr:(derive-codec)
 enum module-export {
-    function { f: function-definition; },
-    record { r: record-definition; },
+    function {
+        function-id: nat;
+        signature: erased-signature;
+    },
+
+    record {
+        record-id: nat;
+        signature: erased-signature;
+    },
+
+    exported {
+        exp: module-export;
+    },
 }
 
 
-record function-reference {
-    index: nat;
+
+
+@esexpr:(derive-codec)
+record tube-name {
+    head: string;
+    tail: list[string];
 }
 
-record record-reference {
-    index: nat;
+@esexpr:(derive-codec)
+record module-path {
+    path: list[string];
+}
+
+@esexpr:(derive-codec)
+record module-name {
+    tube: tube-name;
+    path: module-path;
 }
 
 
-interface function-definition {
-    metadata(): function-metadata;
-
-    signature(): function-signature;
-    implementation(): function-implementation;
+@esexpr:(derive-codec)
+enum identifier {
+    named { s: string; },
+    bin-op { op: binary-operator; },
+    un-op { op: unary-operator; },
+    extension { inner: identifier; },
+    inverse { inner: identifier; },
+    update { inner: identifier; },
 }
 
-record function-metadata {
-    is-inline: bool;
-    is-erased: bool;
+@esexpr:(derive-codec)
+simple enum binary-operator {
+    plus,
+    minus,
+    mul,
+    div,
+    equal,
+    not-equal,
+    less-than,
+    less-than-eq,
+    greater-than,
+    greater-than-eq,
+    bit-or,
+    bit-xor,
+    bit-and,
+    shift-left,
+    shift-right,
+    concat,
 }
 
+@esexpr:(derive-codec)
+simple enum unary-operator {
+    plus,
+    minus,
+    bit-not,
+    logical-not,
+}
+
+@esexpr:(derive-codec)
+record erased-signature {
+    params: list[erased-signature-type];
+    result: erased-signature-type;
+}
+
+@esexpr:(derive-codec)
+enum erased-signature-type {
+    builtin {
+        b: builtin-type;
+
+        @esexpr: (vararg)
+        args: list[erased-signature-type];
+    },
+    function {
+        input: erased-signature-type;
+        output: erased-signature-type;
+    },
+    record {
+        record-import: import-specifier;
+
+        @esexpr: (vararg)
+        args: list[erased-signature-type];
+    },
+    tuple {
+        @esexpr: (vararg)
+        elements: list[erased-signature-type];
+    },
+    erased,
+}
+
+@esexpr:(derive-codec)
+enum builtin-type {
+    int,
+    bool,
+    string,
+    never,
+    conjunction,
+    disjunction,
+}
+
+@esexpr:(derive-codec)
+record import-specifier {
+    module-id: nat;
+
+    @esexpr: (keyword)
+    @esexpr: (optional)
+    name: optional-field[identifier];
+
+    @esexpr: (keyword)
+    sig: erased-signature;
+}
+
+
+@esexpr:(derive-codec)
 record function-signature {
-    parameters: list[function-parameter];
-    result: vm-type;
+    @esexpr:(keyword)
+    parameters: list[signature-parameter];
+
+    @esexpr:(keyword)
+    return-type: vm-type;
+
+    @esexpr:(keyword)
+    ensures-clauses: list[vm-type];
 }
 
-record function-parameter {
+@esexpr:(derive-codec)
+record signature-parameter {
+    @esexpr:(keyword)
+    list-type: function-parameter-list-type;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    erased: bool;
+
+    @esexpr:(keyword)
+    bindings: list[parameter-binding];
+
+    name: option[identifier];
     param-type: vm-type;
 }
 
+@esexpr:(derive-codec)
+simple enum function-parameter-list-type {
+    normal-list,
+    inferrable-list,
+    quote-list,
+    requires-list,
+}
+
+@esexpr:(derive-codec)
+record parameter-binding {
+    name: option[identifier];
+    param-type: vm-type;
+}
+
+
+
+@esexpr:(derive-codec)
+record function-definition {
+    function-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    inline: bool;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    erased: bool;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    implementation: optional-field[function-implementation];
+}
+
+@esexpr:(derive-codec)
 enum function-implementation {
     vm-ir { block: block; },
     extern { name: string; },
 }
 
-interface record-definition {
-    metadata(): record-metadata;
 
-    signature(): type-signature;
-    fields(): list[record-field];
+
+@esexpr:(derive-codec)
+record record-definition {
+    record-id: nat;
+    import: import-specifier;
+
+    @esexpr:(keyword)
+    signature: function-signature;
+
+    @esexpr:(keyword)
+    fields: list[record-field-definition];
 }
 
-record record-metadata {
-}
 
-record type-signature {
-}
-
-record record-field {
+@esexpr:(derive-codec)
+record record-field-definition {
     name: identifier;
     field-type: vm-type;
 }
 
+
+@esexpr:(derive-codec)
 enum vm-type {
     builtin {
         b: builtin-type;
@@ -93,7 +317,7 @@ enum vm-type {
         output: vm-type;
     },
     record {
-        record: record-reference;
+        record-id: nat;
         args: list[vm-type];
     },
     tuple {
@@ -101,12 +325,13 @@ enum vm-type {
     },
 }
 
-
+@esexpr:(derive-codec)
 record block {
     variables: list[variable-definition];
     instructions: list[instruction];
 }
 
+@esexpr:(derive-codec)
 enum instruction {
     builtin-unary {
         dest: register-id;
@@ -137,9 +362,15 @@ enum instruction {
     },
 
     function-call {
-        dest: register-id;
-        function: function-reference;
+        dest: function-result;
+        function-id: nat;
         args: list[register-id];
+    },
+
+    if-else {
+        condition: register-id;
+        when-true: block;
+        when-false: block;
     },
 
     move {
@@ -163,26 +394,31 @@ enum instruction {
     },
 }
 
+@esexpr:(derive-codec)
 record register-id {
     id: nat;
 }
 
+@esexpr:(derive-codec)
 enum function-result {
     register { id: register-id; },
     discard,
     return-value,
 }
 
+@esexpr:(derive-codec)
 record variable-definition {
     type: vm-type;
 }
 
-enum builtin-unary-op {
+@esexpr:(derive-codec)
+simple enum builtin-unary-op {
     int-negate,
     int-bit-not,
 }
 
-enum builtin-binary-op {
+@esexpr:(derive-codec)
+simple enum builtin-binary-op {
     int-add,
     int-sub,
     int-mul,

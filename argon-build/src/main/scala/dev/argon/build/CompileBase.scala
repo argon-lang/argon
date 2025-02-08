@@ -14,12 +14,28 @@ trait CompileBase extends UsingContext {
 
   type BuildOutput
 
+  protected def getCurrentTube(referencedTubes: Seq[ArTube])(using TubeImporter & HasContext[context.type]): ZIO[Scope & context.Env, context.Error, ArTube]
+  protected def getReferencedTubes(using TubeImporter & HasContext[context.type]): ZIO[Scope & context.Env, context.Error, Seq[ArTube]]
+  protected def createOutput(currentTube: ArTube): BuildOutput
+
 
   def compile(): ZIO[Scope & context.Env, context.Error, BuildOutput] =
     compileImpl()
       .ensuring { ZIO.serviceWithZIO[LogReporter](_.reportLogs) }
       .tap { _ => ZIO.serviceWithZIO[LogReporter](_.failOnErrors) }
 
-  protected def compileImpl(): ZIO[Scope & context.Env, context.Error, BuildOutput]
+  private def compileImpl(): ZIO[Scope & context.Env, context.Error, BuildOutput] =
+    for
+      tubeImporter <- TubeImporterImpl(context)
+      given (TubeImporter & LoadTube & HasContext[context.type]) = tubeImporter
+
+
+      refTubes <- getReferencedTubes
+      currentTube <- getCurrentTube(refTubes)
+
+      _ <- tubeImporter.loadTube(currentTube)
+      _ <- ZIO.foreachDiscard(refTubes)(tubeImporter.loadTube)
+            
+    yield createOutput(currentTube)
 
 }

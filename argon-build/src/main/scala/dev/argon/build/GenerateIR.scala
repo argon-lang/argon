@@ -9,23 +9,26 @@ import zio.stm.*
 import java.io.IOException
 import dev.argon.tube.resource.TubeResourceContext
 import dev.argon.source.*
+import dev.argon.vm.resource.VmIrResourceContext
 
-abstract class Compile extends CompileBase {
+abstract class GenerateIR extends CompileBase {
   override val context: CContext { type Error >: SourceError }
 
   val tubeResourceContext: TubeResourceContext & HasContext[context.type]
   import tubeResourceContext.TubeResource
 
+  val vmirResourceContext: VmIrResourceContext & HasContext[context.type]
+  import vmirResourceContext.VmIrResource
 
-  def tubeName: TubeName
-  def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource]
+
+  def inputTube(using TubeImporter & HasContext[context.type]): TubeResource[context.Error]
   def referencedTubes(using TubeImporter & HasContext[context.type]): Seq[TubeResource[context.Error]]
 
-  final case class CompileOutput(
-    tube: TubeResource[context.Error],
+  final case class IROutput(
+    tube: VmIrResource[context.Error],
   )
 
-  override type BuildOutput = CompileOutput
+  override type BuildOutput = IROutput
 
   final override protected def getReferencedTubes(using TubeImporter & HasContext[context.type]): ZIO[Scope & context.Env, context.Error, Seq[ArTube]] =
     ZIO.foreach(referencedTubes) { refTube =>
@@ -33,18 +36,12 @@ abstract class Compile extends CompileBase {
     }
 
   final override protected def getCurrentTube(refTubes: Seq[ArTube])(using TubeImporter & HasContext[context.type]): ZIO[Scope & context.Env, context.Error, ArTube] =
-    val tubeOptions = SourceCodeTubeOptions(
-      name = tubeName,
-      referencedTubes = refTubes.iterator.map(_.name).toSet,
-      sources = Seq(inputDir),
-    )
-    SourceTube.make(context)(tubeOptions)
-  end getCurrentTube
+    inputTube.asTube
 
   final override protected def createOutput(currentTube: ArTubeC & HasContext[context.type]): BuildOutput =
-    CompileOutput(
-      tube = new TubeResource.Impl with Resource.WithoutFileName {
-        override def asTube: ZIO[Scope, context.Error, ArTube] = ZIO.succeed(currentTube)
+    IROutput(
+      tube = new VmIrResource.Impl with Resource.WithoutFileName {
+        protected override def tube: ArTube = currentTube
       },
     )
 

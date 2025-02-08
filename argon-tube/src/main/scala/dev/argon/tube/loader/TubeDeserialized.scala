@@ -9,7 +9,7 @@ import zio.stm.*
 import dev.argon.ast.IdentifierExpr
 
 private[loader] object TubeDeserialized {
-  def apply(ctx: Context, entries: ZStream[ctx.Env, ctx.Error, t.TubeFileEntry])(using tubeImporter: TubeImporter & HasContext[ctx.type]): ZIO[ctx.Env, ctx.Error, ArTubeC & HasContext[ctx.type]] =
+  def apply(ctx: Context { type Error >: TubeFormatException }, entries: ZStream[ctx.Env, ctx.Error, t.TubeFileEntry])(using tubeImporter: TubeImporter & HasContext[ctx.type]): ZIO[ctx.Env, ctx.Error, ArTubeC & HasContext[ctx.type]] =
     import ctx.Comp
 
     final case class ElementState(
@@ -33,7 +33,6 @@ private[loader] object TubeDeserialized {
 
         override def getTube(id: BigInt): Comp[ArTube] =
           tubeCache.usingCreate(id) { id =>
-            
             val tubeName =
               if id == 0 then
                 metadata.name
@@ -47,14 +46,20 @@ private[loader] object TubeDeserialized {
 
         override def getModule(id: BigInt): Comp[ArModule] =
           moduleCache.usingCreate(id) { id =>
-            state.moduleReferences.get(id)
-              .commit
-              .map { _.get }
-              .flatMap { modRef =>
-                for
-                  refedTube <- getTube(modRef.tubeId)
-                yield refedTube.modules(decodeModulePath(modRef.path))
+            if id < metadata.modules.size then
+              getTube(0).map { tube =>
+                val module = metadata.modules(id.toInt)
+                tube.modules(decodeModulePath(module.path))
               }
+            else
+              state.moduleReferences.get(id)
+                .commit
+                .map { _.get }
+                .flatMap { modRef =>
+                  for
+                    refedTube <- getTube(modRef.tubeId)
+                  yield refedTube.modules(decodeModulePath(modRef.path))
+                }
           }
           
 
@@ -134,7 +139,10 @@ private[loader] object TubeDeserialized {
         override val name: TubeName =
           decodeTubeName(metadata.name)
         
-        override def modules: Map[ModulePath, ArModule] = ???
+        override val modules: Map[ModulePath, ArModule] =
+          mods.iterator
+            .map { mod => mod.path -> mod }
+            .toMap
 
         override def referencedTubes: Set[TubeName] =
           metadata.referencedTubes
@@ -161,8 +169,8 @@ private[loader] object TubeDeserialized {
       def iter(state: ElementState): ZChannel[ctx.Env, Nothing, t.TubeFileEntry, Any, ctx.Error, Nothing, ArTubeC & HasContext[ctx.type]] =
         ZChannelUtils.peel(
           process = {
-            case t.TubeFileEntry.Header(_) => ???
-            case t.TubeFileEntry.Metadata(_) => ???
+            case t.TubeFileEntry.Header(_) => ZChannel.fail(TubeFormatException("Unexpected tube header"))
+            case t.TubeFileEntry.Metadata(_) => ZChannel.fail(TubeFormatException("Unexpected tube metadata"))
             
             case moduleRef: t.TubeFileEntry.ModuleReference =>
               ZChannel.fromZIO(state.moduleReferences.put(moduleRef.moduleId, moduleRef).commit) *> iter(state)
@@ -197,20 +205,20 @@ private[loader] object TubeDeserialized {
           case t.TubeFileEntry.Metadata(metadata) =>
             loadElements(metadata)
 
-          case _ => ???
+          case entry => ZChannel.fail(TubeFormatException(s"Unexpected entry (${entry.getClass}). Second entry must be metadata" ))
         },
-        empty = ???,
+        empty = ZChannel.fail(TubeFormatException(s"Unexpected end of file. Second entry must be metadata" ))
       )
 
     def loadTubeFromVersion: ZChannel[ctx.Env, Nothing, t.TubeFileEntry, Any, ctx.Error, Nothing, ArTubeC & HasContext[ctx.type]] =
       ZChannelUtils.peel(
         process = {
           case t.TubeFileEntry.Header(header) =>
-            loadTubeFromVersion
+            loadTubeFromMetadata
 
-          case _ => ???
+          case entry => ZChannel.fail(TubeFormatException(s"Unexpected entry (${entry.getClass}). Second entry must be header" ))
         },
-        empty = ???,
+        empty = ZChannel.fail(TubeFormatException(s"Unexpected end of file. Second entry must be metadata" ))
       )
 
     def loadTube: ZChannel[ctx.Env, Nothing, Chunk[t.TubeFileEntry], Any, ctx.Error, Nothing, ArTubeC & HasContext[ctx.type]] =

@@ -52,8 +52,8 @@ enum tube-file-entry {
 
 
 @esexpr:(derive-codec)
+@esexpr:(constructor "Ar18 Tube")
 record tube-header {
-    format-name: string;
     format-version-major: int;
     format-version-minor: int;
 }

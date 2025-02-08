@@ -2,11 +2,9 @@ package dev.argon.tube.encoder
 
 import dev.argon.compiler as c
 
-import dev.argon.tube.*
-
 import zio.*
 import zio.stream.*
-import zio.stm.{ZSTM, TMap}
+import zio.stm.*
 import dev.argon.ast
 import dev.argon.compiler.SignatureEraser
 import dev.argon.compiler.HasContext
@@ -53,16 +51,17 @@ trait TubeEncoderBase[Entry] {
       def assignId(value: A, id: Int): UIO[Unit] =
         mapping.put(value, id).commit
       
-      def getIdWith(value: A)(emitEntryBuilder: context.Comp[Entry] => UIO[Unit])(emit: (A, BigInt) => context.Comp[Entry]): UIO[BigInt] =
+      def getIdWith(value: A)(entryBuilderQueue: TEnqueue[context.Comp[Entry]])(emit: (A, BigInt) => context.Comp[Entry]): UIO[BigInt] =
         mapping.get(value).flatMap {
-          case Some(id) => ZSTM.succeed(ZIO.succeed(id : BigInt))
+          case Some(id) => ZSTM.succeed(id : BigInt)
           case none =>
             for
               id <- mapping.size
               _ <- mapping.put(value, id)
-            yield emitEntryBuilder(emit(value, id)).as(id : BigInt)
+              _ <- entryBuilderQueue.offer(emit(value, id))
+            yield id : BigInt
 
-        }.commit.flatten
+        }.commit
 
       def getIdOrFail(value: A): UIO[BigInt] =
         mapping.get(value).map { id => id.get : BigInt }.commit
@@ -77,7 +76,7 @@ trait TubeEncoderBase[Entry] {
 
     ZStream.unwrap(
       for
-        entryBuilders <- Ref.make(Chunk.empty[context.Comp[Entry]])
+        entryBuilders <- TQueue.unbounded[context.Comp[Entry]].commit
 
         tubeIds <- createIdManager[c.TubeName]
         moduleIds <- createIdManager[c.ModuleName]
@@ -93,7 +92,7 @@ trait TubeEncoderBase[Entry] {
           override protected[TubeEncoderBase] lazy val emitter: Emitter = createEmitter(this)
 
           override def emitEntryBuilder(entry: context.Comp[Entry]): UIO[Unit] =
-            entryBuilders.update(_ :+ entry)
+            entryBuilders.offer(entry).commit.unit
 
           override def assignTubeId(tubeName: c.TubeName, id: Int): UIO[Unit] =
             tubeIds.assignId(tubeName, id)
@@ -105,23 +104,23 @@ trait TubeEncoderBase[Entry] {
             tubeIds.getIdOrFail(tubeName)
 
           override def getModuleId(moduleName: c.ModuleName): UIO[BigInt] =
-            moduleIds.getIdWith(moduleName)(emitEntryBuilder)(emitter.emitModuleReference)
+            moduleIds.getIdWith(moduleName)(entryBuilders)(emitter.emitModuleReference)
 
           override def getFunctionId(func: ArFunc): UIO[BigInt] =
-            functionIds.getIdWith(func)(emitEntryBuilder)(emitter.emitFunction)
+            functionIds.getIdWith(func)(entryBuilders)(emitter.emitFunction)
 
           override def getRecordId(rec: ArRecord): UIO[BigInt] =
-            recordIds.getIdWith(rec)(emitEntryBuilder)(emitter.emitRecord)
+            recordIds.getIdWith(rec)(entryBuilders)(emitter.emitRecord)
 
           override def getRecordFieldId(field: RecordField): UIO[BigInt] =
-            recordFieldIds.getIdWith(field)(emitEntryBuilder)(emitter.emitRecordFieldInfo)
+            recordFieldIds.getIdWith(field)(entryBuilders)(emitter.emitRecordFieldInfo)
         }
 
         _ <- encodeState.emitter.emitTube
 
       yield ZStream
         .repeatZIOChunkOption(
-          entryBuilders.getAndSet(Chunk.empty)
+          entryBuilders.takeAll.commit
             .flatMap { chunk =>
               if chunk.isEmpty then
                 ZIO.fail(None)

@@ -17,7 +17,7 @@ ThisBuild / resolvers += Resolver.mavenLocal
 Global / semanticdbEnabled := true
 
 val graalVersion = "23.1.0"
-val zioVersion = "2.1.9"
+val zioVersion = "2.1.14"
 
 lazy val commonSettingsNoLibs = Seq(
   scalaVersion := "3.5.1",
@@ -559,7 +559,7 @@ lazy val argon_codegen_platformNode = argon_codegen_platform.node
 
 lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-vm"))
   .enablePlugins(NobleIDLPlugin)
-  .dependsOn(util, argon_compiler, argon_format, argon_codegen_platform)
+  .dependsOn(util, argon_compiler, argon_format, argon_tube, argon_codegen_platform)
   .jvmConfigure(
     _.settings(
         commonJVMSettings,

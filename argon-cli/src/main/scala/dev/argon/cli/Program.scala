@@ -26,6 +26,8 @@ import dev.argon.tube.loader.TubeFormatException
 import dev.argon.io.DirectoryResource
 import dev.argon.source.ArgonSourceCodeResource
 import dev.argon.compiler.TubeImporter
+import dev.argon.build.GenerateIR
+import dev.argon.vm.resource.VmIrResourceContext
 
 object Program extends PlatformApp[IOException | BuildError | SourceError | TubeFormatException] {
 
@@ -79,6 +81,10 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
           .as(ExitCode.success)
           .provideSomeLayer[Environment](LogReporter.live)
         
+      case Some(Command.GenerateIR) =>
+        runGenIR(options)
+          .as(ExitCode.success)
+          .provideSomeLayer[Environment](LogReporter.live)
     end match
 
   private def runCompile(options: ArgonCommandLineOptions): ZIO[Environment & ErrorLog & LogReporter, Error, Unit] =
@@ -88,6 +94,8 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
       ctx = new Context {
         override type Env = Program.this.Environment & ErrorLog & LogReporter
         override type Error = Program.this.Error
+
+        override def environmentTag: EnvironmentTag[Env] = summon
 
         override def errorTypeTest: TypeTest[Any, Error] = summon
       }
@@ -125,5 +133,50 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
       )
 
     yield ()
+
+  private def runGenIR(options: ArgonCommandLineOptions): ZIO[Environment & ErrorLog & LogReporter, Error, Unit] =
+    val ctx = new Context {
+      override type Env = Program.this.Environment & ErrorLog & LogReporter
+      override type Error = Program.this.Error
+
+      override def environmentTag: EnvironmentTag[Env] = summon
+      override def errorTypeTest: TypeTest[Any, Error] = summon
+    }
+    for
+      tubeResContext <- TubeResourceContext.make(ctx)
+      irResContext <- VmIrResourceContext.make(ctx)
+
+      compile = new GenerateIR {
+        override val context: ctx.type = ctx
+
+        override val tubeResourceContext: tubeResContext.type =
+          tubeResContext
+
+        import tubeResourceContext.TubeResource
+
+        override val vmirResourceContext: irResContext.type = irResContext
+
+        override def inputTube(using TubeImporter & HasContext[ctx.type]): TubeResource[context.Error] =
+          summon[BinaryResourceDecoder[tubeResContext.TubeResource, Error]].decode(
+            PathUtil.binaryResource(options.inputFile.get)
+          )
+
+        override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
+          options.referencedTubes.map { refTubePath =>
+            summon[BinaryResourceDecoder[tubeResContext.TubeResource, Error]].decode(
+              PathUtil.binaryResource(refTubePath)
+            )
+          }
+      }
+
+      _ <- ZIO.scoped(
+        for
+          buildOutput <- compile.compile()
+          _ <- PathUtil.writeFile(options.outputFile.get, buildOutput.tube)
+        yield ()
+      )
+
+    yield ()
+  end runGenIR
 
 }

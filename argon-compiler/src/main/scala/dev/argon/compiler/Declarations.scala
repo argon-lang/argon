@@ -4,7 +4,7 @@ import cats.data.NonEmptySeq
 import dev.argon.ast.IdentifierExpr
 import dev.argon.expr.{ExprContext, Substitution}
 import dev.argon.util.{Fuel, UniqueIdentifier}
-import zio.ZIO
+import zio.*
 import scala.reflect.TypeTest
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -14,6 +14,7 @@ trait Context extends ScopeContext {
   type Env <: ErrorLog
   type Error0 = Nothing
   type Error >: Error0 <: Matchable
+  given environmentTag: EnvironmentTag[Env]
   given errorTypeTest: TypeTest[Any, Error]
 
   type Comp[+A] = ZIO[Env, Error, A]
