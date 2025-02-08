@@ -102,7 +102,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
         for
           moduleId <- getModuleId(c.ModuleName(specifier.tube, specifier.module))
           sig <- encodeErasedSignature(specifier.signature)
-        yield ImportSpecifier(
+        yield ImportSpecifier.Global(
           moduleId = moduleId,
           name = specifier.name.map(encodeIdentifier),
           sig = sig

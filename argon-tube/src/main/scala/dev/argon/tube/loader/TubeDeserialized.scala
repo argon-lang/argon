@@ -106,18 +106,21 @@ private[loader] object TubeDeserialized {
           }
 
         private def getImport[A <: DeclarationBase & HasContext[ctx.type]](importSpec: t.ImportSpecifier)(get: PartialFunction[ModuleExport, A]): Comp[A] =
-          for
-            importSpec2 <- decodeImportSpecifier(importSpec)
-            mod <- getModule(importSpec.moduleId)
-            exps <- mod.getExports(Set.empty)(importSpec.name.map(decodeIdentifier))
-            exp <- ZStream.fromIterable(exps.toList.flatten)
-              .map(getExportFrom(get))
-              .collectSome
-              .filterZIO { exp =>
-                exp.importSpecifier.map { _ == importSpec2 }
-              }
-              .runHead
-          yield exp.get
+          importSpec match {
+            case importSpec: t.ImportSpecifier.Global =>
+              for
+                importSpec2 <- decodeImportSpecifier(importSpec)
+                mod <- getModule(importSpec.moduleId)
+                exps <- mod.getExports(Set.empty)(importSpec.name.map(decodeIdentifier))
+                exp <- ZStream.fromIterable(exps.toList.flatten)
+                  .map(getExportFrom(get))
+                  .collectSome
+                  .filterZIO { exp =>
+                    exp.importSpecifier.map { _ == importSpec2 }
+                  }
+                  .runHead
+              yield exp.get
+          }
 
         private def getExportFrom[A](get: PartialFunction[ModuleExport, A])(exp: ModuleExport): Option[A] =
           exp match {

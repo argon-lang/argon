@@ -160,42 +160,24 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           case (module, index) =>
             for
               modExports <- module.allExports(Set.empty)
-              groups <- ZIO.foreach(modExports.toSeq) { (name, items) =>
-                for
-                  exps <- ZIO.foreach(items)(emitModuleExport)
-                yield ExportGroup(
-                  name = name.map(encodeIdentifier),
-                  exports = exps,
-                )
+              _ <- ZIO.foreachDiscard(modExports.toSeq) { (name, items) =>
+                ZIO.foreachDiscard(items)(emitModuleExport)
               }
             yield Module(
               path = encodeModulePath(module.path),
-              groups = groups,
             )
         }
 
-      private def emitModuleExport(exp: ModuleExport): Comp[dev.argon.vm.ModuleExport] =
+      private def emitModuleExport(exp: ModuleExport): Comp[Unit] =
         exp match {
           case c.ModuleExportC.Function(f) =>
-            for
-              id <- getFunctionId(f)
-              sig <- f.signature
-              sig <- SignatureEraser(context).eraseSignature(sig)
-              sig <- encodeErasedSignature(sig)
-            yield dev.argon.vm.ModuleExport.Function(id, sig)
+            getFunctionId(f).unit
 
           case c.ModuleExportC.Record(r) =>
-            for
-              id <- getRecordId(r)
-              sig <- r.signature
-              sig <- SignatureEraser(context).eraseSignature(sig)
-              sig <- encodeErasedSignature(sig)
-            yield dev.argon.vm.ModuleExport.Record(id, sig)
+            getRecordId(r).unit
 
           case c.ModuleExportC.Exported(exp) =>
-            for
-              inner <- emitModuleExport(exp)
-            yield dev.argon.vm.ModuleExport.Exported(inner)
+            ZIO.unit
         }
 
       override def emitModuleReference(moduleName: c.ModuleName, id: BigInt): Comp[TubeFileEntry] =

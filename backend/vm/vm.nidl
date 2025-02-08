@@ -69,38 +69,7 @@ record tube-metadata {
 @esexpr:(derive-codec)
 record module {
     path: module-path;
-
-    @esexpr:(vararg)
-    groups: list[export-group];
 }
-
-@esexpr:(derive-codec)
-record export-group {
-    name: option[identifier];
-
-    @esexpr:(vararg)
-    exports: list[module-export];
-}
-
-
-@esexpr:(derive-codec)
-enum module-export {
-    function {
-        function-id: nat;
-        signature: erased-signature;
-    },
-
-    record {
-        record-id: nat;
-        signature: erased-signature;
-    },
-
-    exported {
-        exp: module-export;
-    },
-}
-
-
 
 
 @esexpr:(derive-codec)

@@ -9,6 +9,7 @@ import zio.*
 import dev.argon.compiler.{UsingContext, HasContext}
 import dev.argon.util.UniqueIdentifier
 import dev.argon.ast.IdentifierExpr
+import dev.argon.tube.ImportSpecifier
 
 private[loader] trait LoaderUtils extends UsingContext {
 
@@ -64,15 +65,18 @@ private[loader] trait LoaderUtils extends UsingContext {
     }
 
   protected def decodeImportSpecifier(specifier: t.ImportSpecifier): Comp[c.ImportSpecifier] =
-    for
-      module <- elementLoader.getModule(specifier.moduleId)
-      sig <- decodeErasedSignature(specifier.sig)
-    yield c.ImportSpecifier(
-      tube = module.tubeName,
-      module = module.path,
-      name = specifier.name.map(decodeIdentifier),
-      signature = sig
-    )
+    specifier match {
+      case specifier: ImportSpecifier.Global => 
+        for
+          module <- elementLoader.getModule(specifier.moduleId)
+          sig <- decodeErasedSignature(specifier.sig)
+        yield c.ImportSpecifier(
+          tube = module.tubeName,
+          module = module.path,
+          name = specifier.name.map(decodeIdentifier),
+          signature = sig
+        )
+    }
 
   def decodeErasedSignature(sig: t.ErasedSignature): Comp[c.ErasedSignature] =
     for

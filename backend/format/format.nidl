@@ -201,15 +201,17 @@ enum builtin-type {
 }
 
 @esexpr:(derive-codec)
-record import-specifier {
-    module-id: nat;
+enum import-specifier {
+    global {
+        module-id: nat;
 
-    @esexpr: (keyword)
-    @esexpr: (optional)
-    name: optional-field[identifier];
+        @esexpr: (keyword)
+        @esexpr: (optional)
+        name: optional-field[identifier];
 
-    @esexpr: (keyword)
-    sig: erased-signature;
+        @esexpr: (keyword)
+        sig: erased-signature;
+    },
 }
 
 
