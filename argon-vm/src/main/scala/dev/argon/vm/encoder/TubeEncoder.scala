@@ -171,7 +171,7 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
       private def emitModuleExport(exp: ModuleExport): Comp[Unit] =
         exp match {
           case c.ModuleExportC.Function(f) =>
-            getFunctionId(f).unit
+            getFunctionId(f).unit.whenDiscard(!f.isErased)
 
           case c.ModuleExportC.Record(r) =>
             getRecordId(r).unit
@@ -220,7 +220,7 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                   sig.parameters
                 )
                 for
-                  block <- emitBlock(e, paramVars)
+                  block <- emitFunctionBody(e, paramVars)
                 yield FunctionImplementation.VmIr(block)
 
               case context.Implementations.FunctionImplementation.Extern(name) =>
@@ -232,8 +232,6 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           FunctionDefinition(
             functionId = id,
             `import` = importSpec,
-            `inline` = func.isInline,
-            erased = func.isErased,
             signature = encSig,
             implementation = impl,
           )
@@ -293,35 +291,18 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
       private def emitFunctionSignature(sig: FunctionSignature): Comp[dev.argon.vm.FunctionSignature] =
         for
-          params <- ZIO.foreach(sig.parameters)(emitSignatureParam)
+          params <- ZIO.foreach(sig.parameters.filterNot(_.isErased))(emitSignatureParam)
           returnType <- emitType(sig.returnType)
           ensuresClauses <- ZIO.foreach(sig.ensuresClauses)(emitType)
         yield dev.argon.vm.FunctionSignature(
           parameters = params,
           returnType = returnType,
-          ensuresClauses = ensuresClauses,
         )
 
       private def emitSignatureParam(param: SignatureParameter): Comp[dev.argon.vm.SignatureParameter] =
         for
-          bindings <- ZIO.foreach(param.bindings) { binding =>
-            for
-              t <- emitType(binding.paramType)
-            yield ParameterBinding(
-              name = binding.name.map(encodeIdentifier),
-              paramType = t,
-            )
-          }
           t <- emitType(param.paramType)
         yield dev.argon.vm.SignatureParameter(
-          listType = param.listType match {
-            case dev.argon.ast.FunctionParameterListType.NormalList => FunctionParameterListType.NormalList
-            case dev.argon.ast.FunctionParameterListType.InferrableList => FunctionParameterListType.InferrableList
-            case dev.argon.ast.FunctionParameterListType.QuoteList => FunctionParameterListType.QuoteList
-            case dev.argon.ast.FunctionParameterListType.RequiresList => FunctionParameterListType.RequiresList
-          },
-          erased = param.isErased,
-          bindings = bindings,
           name = param.name.map(encodeIdentifier),
           paramType = t,
         )
@@ -342,11 +323,14 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             ZIO.foreach(items)(emitType)
               .map(VmType.Tuple.apply)
 
+          case ArExpr.TypeN(_) =>
+            ZIO.succeed(VmType.TypeInfo())
+
           case t =>
             ZIO.logError("Unimplemented type expression: " + t.getClass).as(???)
         }
 
-      private def emitBlock(e: ArExpr, parameters: Seq[context.DefaultExprContext.Var]): Comp[Block] =
+      private def emitFunctionBody(e: ArExpr, parameters: Seq[context.DefaultExprContext.Var]): Comp[FunctionBody] =
         for
           knownVars <- TMap.make[context.DefaultExprContext.Var, RegisterId](parameters.zipWithIndex.map { (param, index) => param -> RegisterId(index) }*).commit
           variables <- TRef.make(Seq.empty[VariableDefinition]).commit
@@ -360,7 +344,7 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           )
 
           _ <- emitter.exprReturn(e)
-          res <- emitter.toBlock
+          res <- emitter.toFunctionBody
         yield res
 
       private sealed trait ExprOutput derives CanEqual {
@@ -421,15 +405,20 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           yield r
           
         def toBlock: Comp[Block] =
-          (
-            for
-              vars <- variables.get
-              insns <- instructions.get
-            yield Block(
-              variables = vars,
-              instructions = insns,
-            )
-          ).commit
+          for
+            insns <- instructions.get.commit
+          yield Block(
+            instructions = insns,
+          )
+          
+        def toFunctionBody: Comp[FunctionBody] =
+          for
+            vars <- variables.get.commit
+            block <- toBlock
+          yield FunctionBody(
+            variables = vars,
+            block = block,
+          )
 
         private def emit(insn: Instruction): Comp[Unit] =
           instructions.update(_ :+ insn).commit
@@ -482,21 +471,101 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 }
           }
 
+        private def functionResult(e: ArExpr, output: ExprOutput)(f: FunctionResult => Comp[Unit]): Comp[output.ResultType] =
+          knownLocation(e, output) { location =>
+            val functionResult = location match {
+              case ExprOutput.Register(reg) => FunctionResult.Register(reg)
+              case ExprOutput.Discard => FunctionResult.Discard()
+              case ExprOutput.Return => FunctionResult.ReturnValue()
+            }
+
+            f(functionResult)
+          }
+
 
         private def expr(e: ArExpr, output: ExprOutput): Comp[output.ResultType] =
           e match {
+            case ArExpr.BoolLiteral(b) =>
+              intoRegister(e, output) { r =>
+                emit(Instruction.ConstBool(r, b))
+              }
+
             case ArExpr.Builtin(context.DefaultExprContext.Builtin.Binary(builtin, a, b)) =>
               intoRegister(e, output) { r =>
                 for
                   ar <- expr(a, ExprOutput.AnyRegister)
                   br <- expr(b, ExprOutput.AnyRegister)
                   op = builtin match {
+                    case BinaryBuiltin.IntAdd => BuiltinBinaryOp.IntAdd
+                    case BinaryBuiltin.IntSub => BuiltinBinaryOp.IntSub
+                    case BinaryBuiltin.IntMul => BuiltinBinaryOp.IntMul
+                    case BinaryBuiltin.IntBitAnd => BuiltinBinaryOp.IntBitAnd
+                    case BinaryBuiltin.IntBitOr => BuiltinBinaryOp.IntBitOr
+                    case BinaryBuiltin.IntBitXOr => BuiltinBinaryOp.IntBitXor
+                    case BinaryBuiltin.IntBitShiftLeft => BuiltinBinaryOp.IntBitShiftLeft
+                    case BinaryBuiltin.IntBitShiftRight => BuiltinBinaryOp.IntBitShiftRight
+                    case BinaryBuiltin.IntEQ => BuiltinBinaryOp.IntEq
+                    case BinaryBuiltin.IntNE => BuiltinBinaryOp.IntNe
+                    case BinaryBuiltin.IntLT => BuiltinBinaryOp.IntLt
+                    case BinaryBuiltin.IntLE => BuiltinBinaryOp.IntLe
+                    case BinaryBuiltin.IntGT => BuiltinBinaryOp.IntGt
+                    case BinaryBuiltin.IntGE => BuiltinBinaryOp.IntGe
                     case BinaryBuiltin.StringConcat => BuiltinBinaryOp.StringConcat
+                    case BinaryBuiltin.StringEQ => BuiltinBinaryOp.StringEq
+                    case BinaryBuiltin.StringNE => BuiltinBinaryOp.StringNe
                     case _ =>
                       println("Unimplemented binary builtin: " + builtin)
                       ???
                   }
                   _ <- emit(Instruction.BuiltinBinary(r, op, ar, br))
+                yield ()
+              }
+
+            case ArExpr.Builtin(context.DefaultExprContext.Builtin.Unary(builtin, a)) =>
+              intoRegister(e, output) { r =>
+                for
+                  ar <- expr(a, ExprOutput.AnyRegister)
+                  op = builtin match {
+                    case UnaryBuiltin.IntNegate => BuiltinUnaryOp.IntNegate
+                    case UnaryBuiltin.IntBitNot => BuiltinUnaryOp.IntBitNot
+                  }
+                  _ <- emit(Instruction.BuiltinUnary(r, op, ar))
+                yield ()
+              }
+
+            case ArExpr.Builtin(context.DefaultExprContext.Builtin.Nullary(builtin)) =>
+              intoRegister(e, output) { r =>
+                def typeLiteral(t: VmType): Comp[Unit] =
+                  emit(Instruction.LoadTypeInfo(r, t))
+
+                def builtinType(t: BuiltinType): Comp[Unit] =
+                  typeLiteral(VmType.Builtin(t, Seq()))
+
+                builtin match {
+                  case NullaryBuiltin.IntType => builtinType(BuiltinType.Int())
+                  case NullaryBuiltin.BoolType => builtinType(BuiltinType.Bool())
+                  case NullaryBuiltin.StringType => builtinType(BuiltinType.String())
+                  case NullaryBuiltin.NeverType => builtinType(BuiltinType.Never())
+                }
+              }
+
+            case ArExpr.FunctionCall(f, args) =>
+              functionResult(e, output) { funcResult =>
+                for
+                  id <- getFunctionId(f)
+                  sig <- f.signature
+                  argRegs <- ZIO.foreach(
+                    sig.parameters
+                      .iterator
+                      .zip(args)
+                      .filter { (param, _) => !param.isErased }
+                      .map { (_, arg) => arg }
+                      .toSeq
+                  ) { arg =>
+                    expr(arg, ExprOutput.AnyRegister)
+                  }
+
+                  _ <- emit(Instruction.FunctionCall(funcResult, id, argRegs))
                 yield ()
               }
 
@@ -528,17 +597,53 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
               ZIO.logError("Unimplemented block expression: " + e.getClass).as(???)
           }
 
+        private def boolType = ArExpr.Builtin(context.DefaultExprContext.Builtin.Nullary(NullaryBuiltin.BoolType))
+        private def intType = ArExpr.Builtin(context.DefaultExprContext.Builtin.Nullary(NullaryBuiltin.IntType))
         private def stringType = ArExpr.Builtin(context.DefaultExprContext.Builtin.Nullary(NullaryBuiltin.StringType))
 
         private def getExprType(e: ArExpr): Comp[ArExpr] =
           e match {
+            case ArExpr.BoolLiteral(_) =>
+              ZIO.succeed(boolType)
+
             case ArExpr.Builtin(context.DefaultExprContext.Builtin.Binary(builtin, _, _)) =>
               ZIO.succeed(builtin match {
+                case BinaryBuiltin.IntAdd | BinaryBuiltin.IntSub | BinaryBuiltin.IntMul |
+                  BinaryBuiltin.IntBitAnd | BinaryBuiltin.IntBitOr | BinaryBuiltin.IntBitXOr |
+                  BinaryBuiltin.IntBitShiftLeft | BinaryBuiltin.IntBitShiftRight =>
+                    intType
+
+                case BinaryBuiltin.IntEQ | BinaryBuiltin.IntNE |
+                  BinaryBuiltin.IntLT | BinaryBuiltin.IntLE |
+                  BinaryBuiltin.IntGT | BinaryBuiltin.IntGE |
+                  BinaryBuiltin.StringEQ | BinaryBuiltin.StringNE =>
+                    boolType
+
                 case BinaryBuiltin.StringConcat => stringType
                 case _ =>
                   println("Unimplemented getExprType binary builtin: " + builtin)
                   ???
               })
+
+            case ArExpr.Builtin(context.DefaultExprContext.Builtin.Unary(builtin, _)) =>
+              ZIO.succeed(builtin match {
+                case UnaryBuiltin.IntNegate | UnaryBuiltin.IntBitNot => intType
+              })
+
+            case ArExpr.Builtin(context.DefaultExprContext.Builtin.Nullary(builtin)) =>
+              ZIO.succeed(builtin match {
+                case NullaryBuiltin.BoolType | NullaryBuiltin.IntType |
+                  NullaryBuiltin.StringType | NullaryBuiltin.NeverType =>
+                    ArExpr.TypeN(ArExpr.IntLiteral(1))
+              })
+
+            case ArExpr.FunctionCall(f, args) =>
+              for
+                sig <- f.signature
+              yield sig.returnTypeForArgs(
+                context.DefaultExprContext.ParameterOwner.Func(f),
+                args
+              )
 
             case ArExpr.Variable(v) =>
               ZIO.succeed(v.varType)

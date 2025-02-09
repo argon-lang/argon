@@ -4,6 +4,7 @@ import dev.argon.ast.{FunctionParameterListType, IdentifierExpr}
 import dev.argon.expr.{BuiltinType, ExprContext}
 import dev.argon.util.WithSource
 import dev.argon.expr.Substitution
+import dev.argon.util.{*, given}
 
 trait SignatureContext {
   val exprContext: ExprContext
@@ -24,6 +25,24 @@ trait SignatureContext {
         ensuresClauses = ensuresClauses.map(Substitution.substitute(exprContext)(mapping))
       )
     end substituteVar
+
+
+    def returnTypeForArgs(owner: exprContext.ParameterOwner, args: Seq[Expr]): Expr =
+      def impl(index: Int, remaining: List[(SignatureParameter, Expr)], returnType: Expr): Expr =
+        remaining match {
+          case (param, arg) :: next =>
+            val paramVar = param.asParameterVar(owner, index)
+            impl(
+              index + 1,
+              next.map { (param, arg) => (param, Substitution.substitute(exprContext)(Map(paramVar -> arg))(arg)) },
+              Substitution.substitute(exprContext)(Map(paramVar -> arg))(returnType)
+            )
+
+          case Nil => returnType
+        }
+
+      impl(0, parameters.iterator.zip(args).toList, returnType)
+    end returnTypeForArgs
   }
   
   final case class SignatureParameter(

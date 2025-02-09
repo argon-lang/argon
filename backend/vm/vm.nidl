@@ -189,33 +189,12 @@ record function-signature {
 
     @esexpr:(keyword)
     return-type: vm-type;
-
-    @esexpr:(keyword)
-    ensures-clauses: list[vm-type];
 }
 
 @esexpr:(derive-codec)
 record signature-parameter {
-    @esexpr:(keyword)
-    list-type: function-parameter-list-type;
-
-    @esexpr:(keyword)
-    @esexpr:(default-value #false)
-    erased: bool;
-
-    @esexpr:(keyword)
-    bindings: list[parameter-binding];
-
     name: option[identifier];
     param-type: vm-type;
-}
-
-@esexpr:(derive-codec)
-simple enum function-parameter-list-type {
-    normal-list,
-    inferrable-list,
-    quote-list,
-    requires-list,
 }
 
 @esexpr:(derive-codec)
@@ -232,14 +211,6 @@ record function-definition {
     import: import-specifier;
 
     @esexpr:(keyword)
-    @esexpr:(default-value #false)
-    inline: bool;
-
-    @esexpr:(keyword)
-    @esexpr:(default-value #false)
-    erased: bool;
-
-    @esexpr:(keyword)
     signature: function-signature;
 
     @esexpr:(keyword)
@@ -249,7 +220,8 @@ record function-definition {
 
 @esexpr:(derive-codec)
 enum function-implementation {
-    vm-ir { block: block; },
+    @esexpr:(inline-value)
+    vm-ir { body: function-body; },
     extern { name: string; },
 }
 
@@ -292,11 +264,20 @@ enum vm-type {
     tuple {
         elements: list[vm-type];
     },
+    type-info,
+}
+
+@esexpr:(derive-codec)
+record function-body {
+    @esexpr:(keyword)
+    variables: list[variable-definition];
+
+    block: block;
 }
 
 @esexpr:(derive-codec)
 record block {
-    variables: list[variable-definition];
+    @esexpr:(vararg)
     instructions: list[instruction];
 }
 
@@ -342,8 +323,17 @@ enum instruction {
         when-false: block;
     },
 
+    load-type-info {
+        dest: register-id;
+        type: vm-type;
+    },
+
     move {
         dest: register-id;
+        src: register-id;
+    },
+
+    return {
         src: register-id;
     },
 
@@ -355,10 +345,6 @@ enum instruction {
     tuple-element {
         dest: register-id;
         element-index: nat;
-        src: register-id;
-    },
-
-    return {
         src: register-id;
     },
 }
