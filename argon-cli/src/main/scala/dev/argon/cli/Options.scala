@@ -34,12 +34,15 @@ object ArgonCommandLineOptions {
         .text("Compile Argon source code into a tube")
         .children(
           opt[String]("name")
+            .required()
             .action((name, c) => c.copy(tubeName = Some(name))),
 
           opt[PathLike]('i', "input")
+            .required()
             .action((path, c) => c.copy(inputDir = Some(path))),
 
           opt[PathLike]('o', "output")
+            .required()
             .action((path, c) => c.copy(outputFile = Some(path))),
           
           opt[PathLike]('r', "reference")
@@ -51,9 +54,11 @@ object ArgonCommandLineOptions {
         .text("Generate Argon VM IR from a compiled tube")
         .children(
           opt[PathLike]('i', "input")
+            .required()
             .action((path, c) => c.copy(inputFile = Some(path))),
 
           opt[PathLike]('o', "output")
+            .required()
             .action((path, c) => c.copy(outputFile = Some(path))),
           
           opt[PathLike]('r', "reference")

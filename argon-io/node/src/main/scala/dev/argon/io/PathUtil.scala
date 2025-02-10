@@ -20,7 +20,7 @@ object PathUtil {
 
   private[io] def remapIOErrors(ex: Throwable): Throwable =
     ex match {
-      case JavaScriptException(error) if ex.isInstanceOf[js.Error] => 
+      case JavaScriptException(error) if error.isInstanceOf[js.Error] => 
         val error2 = error.asInstanceOf[js.Error]
 
         ex.asInstanceOf[js.Dictionary[Matchable]].get("code")

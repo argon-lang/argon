@@ -38,7 +38,6 @@ sealed abstract class TubeResourceContext extends UsingContext {
 
 
           override def asTube: ZIO[Scope, context.Error, ArTube] =
-            println(environment)
             TubeLoader.load(context, resource)
               .provideSomeEnvironment[Scope](_ ++ environment)
 
