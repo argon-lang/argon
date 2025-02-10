@@ -10,7 +10,7 @@ metals.sbt
 *.semanticdb
 
 /libraries/*/bin/
-/examples/*/bin/lua/*
+/examples/*/bin/
 !/examples/*/bin/lua/main.lua
 node_modules/
 

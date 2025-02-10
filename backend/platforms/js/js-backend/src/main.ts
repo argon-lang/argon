@@ -18,13 +18,22 @@ interface CliArgs {
     input: string,
     output: string,
     externs: string[],
+    help?: boolean,
 }
 
-const args = parseArgs<CliArgs>({
-    input: { type: String, alias: "i" },
-    output: { type: String, alias: "o" },
-    externs: { type: String, alias: "e", multiple: true, defaultValue: [] },
-});
+const args = parseArgs<CliArgs>(
+    {
+        input: { type: String, alias: "i" },
+        output: { type: String, alias: "o" },
+        externs: { type: String, alias: "e", multiple: true, defaultValue: [] },
+        help: { type: Boolean, optional: true, alias: "h" },
+    },
+    {
+        helpArg: "help",
+        processExitCode: 1,
+        stopAtFirstUnknown: true,
+    },
+);
 
 const externLoader = new ExternLoader();
 
