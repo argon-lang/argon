@@ -23,7 +23,7 @@ object SourceTube {
   : ZIO[ctx.Env, ctx.Error, ArTubeC & HasContext[ctx.type]] =
     for
       moduleMap <- buildModuleMap(ctx)(tubeOptions.name)(
-        ZStream.fromIterable(tubeOptions.sources).flatMap(getSourceCode(ctx)(Seq.empty))
+        ZStream.fromIterable(tubeOptions.sources).flatMap(getSourceCode(ctx))
       )
 
     yield new ArTubeC {
@@ -42,27 +42,25 @@ object SourceTube {
 
   private def getSourceCode
   (context: Context)
-  (path: Seq[String])
   (resource: DirectoryResource[context.Error, ArgonSourceCodeResource])
   : ZStream[context.Env, context.Error, (ModulePath, ArgonSourceCodeResource[context.Error])] =
     resource.contents.flatMap {
-      case DirectoryEntry.Subdirectory(name, resource) =>
-        getSourceCode(context)(path :+ URLDecoder.decode(name, StandardCharsets.UTF_8).nn)(resource)
-      case DirectoryEntry.File(name, resource) if name.toUpperCase(Locale.ROOT).nn.endsWith(".ARGON") =>
-        val nameNoExt = name.substring(0, name.length - 6).nn
+      case DirectoryEntry(dirs, fileName, resource) if fileName.toUpperCase(Locale.ROOT).nn.endsWith(".ARGON") =>
+        val nameNoExt = fileName.substring(0, fileName.length - 6).nn
 
         val fullPath =
-          if nameNoExt == "index" then
-            path
-          else if nameNoExt.matches("_+index") then
-            path :+ nameNoExt.substring(1).nn
+          if dirs.isEmpty && nameNoExt == "index" then
+            Seq()
+          else if dirs.isEmpty && nameNoExt.matches("_+index") then
+            Seq(nameNoExt.substring(1).nn)
           else
-            path :+ URLDecoder.decode(nameNoExt, StandardCharsets.UTF_8).nn
+            dirs.map(s => URLDecoder.decode(s, StandardCharsets.UTF_8)) :+
+              URLDecoder.decode(nameNoExt, StandardCharsets.UTF_8).nn
 
         ZStream(ModulePath(fullPath) -> resource)
 
 
-      case DirectoryEntry.File(_, _) => ZStream.empty
+      case _ => ZStream.empty
     }
 
   private def buildModuleMap

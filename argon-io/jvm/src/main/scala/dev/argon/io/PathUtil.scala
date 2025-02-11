@@ -49,7 +49,7 @@ object PathUtil {
     ZIO.logTrace(s"Writing directory: $path") *>
     ZIO.attempt { Files.createDirectories(path).nn }.refineToOrDie[IOException] *>
       resource.contents.foreach {
-        case DirectoryEntry.Subdirectory(name, resource) => writeDir(path.resolve(name).nn, resource)
-        case DirectoryEntry.File(name, resource) => writeFile(path.resolve(name).nn, resource)
+        case DirectoryEntry(name, fileName, resource) =>
+          writeFile(name.foldLeft(path)(_.resolve(_).nn).resolve(fileName).nn, resource)
       }
 }

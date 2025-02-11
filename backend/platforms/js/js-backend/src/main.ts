@@ -1,18 +1,9 @@
-import { TubeFileEntry } from "./vm-format.js";
-
-import { readExprStream } from "@argon-lang/esexpr/binary_format";
 
 import { parse as parseArgs } from "ts-command-line-args";
-import * as astring from "astring";
-import * as acorn from "acorn";
-import type * as estree from "estree";
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { ExternLoader } from "./externs.js";
-import { getModuleOutputFile } from "./util.node.js";
-import { TubeEmitter, type EmitOptions } from "./emitter.js";
-import { readIR } from "./ir-reader.js";
+import { codegen } from "./index.js";
 
 interface CliArgs {
     input: string,
@@ -35,48 +26,32 @@ const args = parseArgs<CliArgs>(
     },
 );
 
-const externLoader = new ExternLoader();
-
-for(const externPath of args.externs) {
-    const externCode = await fs.readFile(externPath, { encoding: "utf-8" });
-    const program: acorn.Program = acorn.parse(externCode, {
-        ecmaVersion: 2024,
-        sourceType: "module",
-        sourceFile: externPath,
-        allowHashBang: false,
-    });
-    externLoader.addExterns(program as estree.Program);
-}
-
-
-const programModel = await readIR(loadIrEntries(args.input));
-
-const options: EmitOptions = {
-    program: programModel,
-    externProvider: externLoader,
+const codegenOutput = codegen({
     tubeMapping: [],
-};
 
-const tubeEmitter = new TubeEmitter(options);
+    tubeInput: {
+        type: "ir-encoded",
+        data() {
+            return readUint8ArrayStream(args.input);
+        },
+    },
 
-for(const emittedModule of tubeEmitter.emit()) {
-    const fileName = getModuleOutputFile(args.output, emittedModule.modulePath);
-    const text = astring.generate(emittedModule.jsProgram);
+    async *getExterns() {
+        for(const sourceFile of args.externs) {
+            const sourceCode = await fs.readFile(sourceFile, { encoding: "utf-8" });            
+            yield {
+                sourceCode,
+                sourceFile,
+            };
+        }
+    },
+});
+
+for await(const moduleCodegenResult of codegenOutput) {
+    const fileName = path.join(args.output, ...moduleCodegenResult.moduleFilePath);
 
     await fs.mkdir(path.dirname(fileName), { recursive: true });
-    await fs.writeFile(fileName, text, { encoding: "utf-8" });
-}
-
-
-async function* loadIrEntries(path: string): AsyncIterable<TubeFileEntry> {
-    for await(const expr of readExprStream(readUint8ArrayStream(path))) {
-        const res = TubeFileEntry.codec.decode(expr);
-        if(!res.success) {
-            throw new Error("Could not decode expression as Argon VM IR: " + res.message);
-        }
-
-        yield res.value;
-    }
+    await fs.writeFile(fileName, moduleCodegenResult.sourceCode, { encoding: "utf-8" });
 }
 
 async function* readUint8ArrayStream(path: string): AsyncIterable<Uint8Array> {

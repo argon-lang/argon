@@ -23,11 +23,8 @@ final class DirectoryResourceErrorWrapped[E, EX <: Throwable](res: DirectoryReso
   override def contents: Stream[EX, DirectoryEntry[EX, BinaryResource]] =
     ErrorWrapper.wrapStream(res.contents)
       .map {
-        case DirectoryEntry.File(name, resource) =>
-          DirectoryEntry.File(name, BinaryResourceErrorWrapped(resource))
-
-        case DirectoryEntry.Subdirectory(name, resource) =>
-          DirectoryEntry.Subdirectory(name, DirectoryResourceErrorWrapped(resource))
+        case DirectoryEntry(name, fileName, resource) =>
+          DirectoryEntry(name, fileName, BinaryResourceErrorWrapped(resource))
       }
 
   override def fileName: Option[String] =
@@ -38,11 +35,8 @@ final class DirectoryResourceErrorUnwrapped[E, EX <: Throwable](res: DirectoryRe
   override def contents: Stream[E, DirectoryEntry[E, BinaryResource]] =
     ErrorWrapper.unwrapStream(res.contents)
       .map {
-        case DirectoryEntry.File(name, resource) =>
-          DirectoryEntry.File(name, BinaryResourceErrorUnwrapped(resource))
-
-        case DirectoryEntry.Subdirectory(name, resource) =>
-          DirectoryEntry.Subdirectory(name, DirectoryResourceErrorUnwrapped(resource))
+        case DirectoryEntry(name, fileName, resource) =>
+          DirectoryEntry(name, fileName, BinaryResourceErrorUnwrapped(resource))
       }
 
   override def fileName: Option[String] =

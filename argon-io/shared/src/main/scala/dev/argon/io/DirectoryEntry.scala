@@ -1,9 +1,6 @@
 package dev.argon.io
 
-enum DirectoryEntry[+E, +FileResource[+E2] <: Resource[E2]] {
-  val name: String
+import cats.data.NonEmptySeq
 
-  case Subdirectory(name: String, resource: DirectoryResource[E, FileResource])
-  case File(name: String, resource: FileResource[E])
-}
+final case class DirectoryEntry[+E, +FileResource[+E2] <: Resource[E2]](dirs: Seq[String], fileName: String, resource: FileResource[E])
 

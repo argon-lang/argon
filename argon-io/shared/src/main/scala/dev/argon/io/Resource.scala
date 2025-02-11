@@ -43,28 +43,12 @@ abstract class DirectoryResource[+E, +FileResource[+E2] <: Resource[E2]] extends
   def numEntries: Option[ZIO[Any, E, BigInt]] = None
 
 
-  final def flatten: Stream[E, (String, FileResource[E])] =
-    contents.flatMap {
-      case DirectoryEntry.Subdirectory(name, resource) =>
-        resource.flatten.map { (subName, res) =>
-          name + "/" + subName -> res
-        }
-
-      case DirectoryEntry.File(name, resource) =>
-        ZStream(name -> resource)
-    }
-
   final def filterFiles(f: String => Boolean): DirectoryResource[E, FileResource] =
     new DirectoryResource[E, FileResource] {
       override def contents: Stream[E, DirectoryEntry[E, FileResource]] =
         DirectoryResource.this.contents
-          .map {
-            case DirectoryEntry.Subdirectory(name, resource) => DirectoryEntry.Subdirectory(name, resource.filterFiles(f))
-            case entry => entry
-          }
           .filter {
-            case DirectoryEntry.File(name, _) => f(name)
-            case _ => true
+            case DirectoryEntry(_, fileName, _) => f(fileName)
           }
 
       override def numEntries: Option[ZIO[Any, E, BigInt]] =
@@ -81,8 +65,8 @@ object DirectoryResource {
     new DirectoryResource[E, Res] {
       override def contents: Stream[E, DirectoryEntry[E, Res]] =
         dr.contents.map {
-          case DirectoryEntry.Subdirectory(name, resource) => DirectoryEntry.Subdirectory(name, decode[E, FileResource, Res](resource))
-          case DirectoryEntry.File(name, resource) => DirectoryEntry.File(name, summon[BinaryResourceDecoder[Res, E]].decode(resource))
+          case DirectoryEntry(dirs, fileName, resource) =>
+            DirectoryEntry(dirs, fileName, summon[BinaryResourceDecoder[Res, E]].decode(resource))
         }
 
       override def fileName: Option[String] =

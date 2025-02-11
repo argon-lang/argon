@@ -17,7 +17,7 @@ import scala.sys.process.Process
 ThisBuild / resolvers += Resolver.mavenLocal
 Global / semanticdbEnabled := true
 
-val graalVersion = "23.1.0"
+val graalVersion = "24.1.2"
 val zioVersion = "2.1.14"
 
 lazy val commonSettingsNoLibs = Seq(
@@ -57,6 +57,7 @@ lazy val sharedJSNodeSettings = Seq(
 
   npmDependencies ++= Seq(
     "@argon-lang/esexpr" -> "^0.1.16",
+    "@argon-lang/js-compiler-backend" -> "file:../../backend/platforms/js/js-backend",
   ),
   
   scalaJSLinkerConfig ~= {
@@ -68,12 +69,6 @@ lazy val sharedJSNodeSettings = Seq(
 
   fork := false,
 
-)
-
-lazy val graalDependencies = Seq(
-  "org.graalvm.polyglot" % "polyglot" % graalVersion,
-  "org.graalvm.polyglot" % "js" % graalVersion,
-  "org.graalvm.polyglot" % "wasm" % graalVersion,
 )
 
 lazy val annotationDependencies = Seq(
@@ -89,6 +84,9 @@ lazy val commonJVMSettings = Seq(
     "org.apache.commons" % "commons-compress" % "1.27.1",
     "dev.zio" %% "zio-logging" % "2.3.1",
     "net.aichler" % "jupiter-interface" % JupiterKeys.jupiterVersion.value % Test,
+
+    "org.graalvm.polyglot" % "polyglot" % graalVersion,
+    "org.graalvm.polyglot" % "js-community" % graalVersion,
   ),
 
   fork := true,
@@ -478,9 +476,11 @@ lazy val argon_sourceJVM = argon_source.jvm
 lazy val argon_sourceJS = argon_source.js
 lazy val argon_sourceNode = argon_source.node
 
-lazy val argon_codegen_platform = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-codegen-platform"))
+
+
+lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-vm"))
   .enablePlugins(NobleIDLPlugin)
-  .dependsOn(util, argon_compiler)
+  .dependsOn(util, argon_compiler, argon_format, argon_tube)
   .jvmConfigure(
     _.settings(
         commonJVMSettings,
@@ -488,42 +488,21 @@ lazy val argon_codegen_platform = crossProject(JVMPlatform, JSPlatform, NodePlat
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
-  .nodeConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
-  )
-  .settings(
-    commonSettings,
-    compilerOptions,
+      .settings(
+        commonBrowserSettings,
 
-    name := "argon-codegen-platform",
-
-    Compile / nobleIdlSourceDirectories += baseDirectory.value / "../../backend/spec/platform.nidl",
-  )
-
-lazy val argon_codegen_platformJVM = argon_codegen_platform.jvm
-lazy val argon_codegen_platformJS = argon_codegen_platform.js
-lazy val argon_codegen_platformNode = argon_codegen_platform.node
-
-
-
-lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-vm"))
-  .enablePlugins(NobleIDLPlugin)
-  .dependsOn(util, argon_compiler, argon_format, argon_tube, argon_codegen_platform)
-  .jvmConfigure(
-    _.settings(
-        commonJVMSettings,
+        Compile / generateNobleIdlScalaJs := true,
+        Compile / generateNobleIdlJsAdapters := true,
       )
   )
-  .jsConfigure(
-    _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
-  )
   .nodeConfigure(
     _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
+      .settings(
+        commonNodeSettings,
+
+        Compile / generateNobleIdlScalaJs := true,
+        Compile / generateNobleIdlJsAdapters := true,
+      )
   )
   .settings(
     commonSettings,
@@ -537,6 +516,65 @@ lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossTyp
 lazy val argon_vmJVM = argon_vm.jvm
 lazy val argon_vmJS = argon_vm.js
 lazy val argon_vmNode = argon_vm.node
+
+lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-backend"))
+  .enablePlugins(NobleIDLPlugin)
+  .dependsOn(util, argon_vm)
+  .jvmConfigure(
+    _.settings(
+        commonJVMSettings,
+
+        Compile / managedResourceDirectories += resourceManaged.value / "js-backend",
+        Compile / resourceGenerators += Def.task {
+          val s = streams.value
+          val log = s.log
+          val destDir = resourceManaged.value / "js-backend/dev/argon/backend/platforms/js"
+          val destFile = destDir / "js-backend.js"
+
+          val jsBackendDir = file("backend/platforms/js/js-backend")
+
+          val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
+            log.info("Building JS Backend Distribution")
+
+            val installExitCode = Process(Seq("npm", "install"), Some(jsBackendDir)) ! log
+            if(installExitCode != 0) {
+              throw new Exception("npm install failed with exit code " + installExitCode)
+            }
+
+            val distExitCode = Process(Seq("npm", "run", "dist"), Some(jsBackendDir)) ! log
+            if(distExitCode != 0) {
+              throw new Exception("npm run dist failed with exit code " + distExitCode)
+            }
+
+            IO.copyFile(jsBackendDir / "dist/dist.js", destFile)
+
+            Set(destFile)
+          }
+
+          val inputFiles = (jsBackendDir / "src" ** "*.ts").get().toSet
+
+          f(inputFiles).toSeq
+        }.taskValue,
+      )
+  )
+  .jsConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonBrowserSettings)
+  )
+  .nodeConfigure(
+    _.enablePlugins(NpmUtil)
+      .settings(commonNodeSettings)
+  )
+  .settings(
+    commonSettings,
+    compilerOptions,
+
+    name := "argon-backend",
+  )
+
+lazy val argon_backendJVM = argon_backend.jvm
+lazy val argon_backendJS = argon_backend.js
+lazy val argon_backendNode = argon_backend.node
 
 
 lazy val argon_build = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-build"))

@@ -8,6 +8,7 @@
   "scripts": {
     "codegen": "cpy --flat ../../../vm/vm.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
     "build": "npm run codegen && tsc --project . && cd out/src-gen && cpy . ../../lib/ && cd ../src && cpy . ../../lib/",
+    "dist": "npm run build && esbuild lib/index.js --bundle --format=esm --outfile=dist/dist.js",
     "test": "npm run build && vitest run --root lib"
   },
   "author": "",
@@ -15,8 +16,8 @@
     "@argon-lang/noble-idl-compiler-js": "file:../../../../../noble-idl/langs/js/backend",
     "@types/estree": "^1.0.6",
     "@types/node": "^22.13.1",
-    "astring": "^1.9.0",
     "cpy-cli": "^5.0.0",
+    "esbuild-wasm": "^0.25.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.7.3",
     "vitest": "^3.0.5"
@@ -25,6 +26,7 @@
     "@argon-lang/esexpr": "^0.1.16",
     "@argon-lang/noble-idl-core": "file:../../../../../noble-idl/langs/js/runtime",
     "acorn": "^8.14.0",
+    "astring": "^1.9.0",
     "source-map": "^0.7.4",
     "ts-command-line-args": "^2.5.1"
   },

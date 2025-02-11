@@ -13,7 +13,9 @@ abstract class PlatformApp[E] extends ZIOApp {
     (Runtime.removeDefaultLoggers >+> consoleLogger(ConsoleLoggerConfig(
       format = LogFormat.colored,
       filter = LogFilter.LogLevelByNameConfig(LogLevel.Trace),
-    )))
+    ))) ++
+      Runtime.enableLoomBasedExecutor ++
+      Runtime.enableLoomBasedBlockingExecutor
 
   final override def run: ZIO[Environment & ZIOAppArgs, Any, Any] =
     runApp.flatMap(exit)
