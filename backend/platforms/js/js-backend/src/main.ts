@@ -57,9 +57,8 @@ for await(const moduleCodegenResult of codegenOutput) {
 async function* readUint8ArrayStream(path: string): AsyncIterable<Uint8Array> {
     const file = await fs.open(path);
     try {
-        const buffer = new Uint8Array(16384);
-
         for(;;) {
+            const buffer = new Uint8Array(16384);
             const { bytesRead } = await file.read(buffer);
             if(bytesRead === 0) {
                 break;
@@ -71,7 +70,6 @@ async function* readUint8ArrayStream(path: string): AsyncIterable<Uint8Array> {
     finally {
         await file.close();
     }
-
 }
 
 

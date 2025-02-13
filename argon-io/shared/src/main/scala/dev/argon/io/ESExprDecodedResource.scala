@@ -4,7 +4,7 @@ import zio.IO
 import esexpr.ESExprCodec
 import esexpr.ESExpr
 
-trait ESExprDecodedResource[E, A] extends ESExprResource[E] {
+trait ESExprDecodedResource[+E, +A] extends ESExprResource[E] {
   def decoded: IO[E, A]
 }
 

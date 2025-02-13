@@ -21,6 +21,6 @@ dist/
 
 vm/js/**/lib/
 
-*.argonvm
+*.arvm
 *.artube
 

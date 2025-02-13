@@ -15,11 +15,16 @@ object NodeFileSystem extends js.Object {
   def mkdtemp(prefix: String): js.Promise[String] = js.native
   def rm(path: String, options: RMOptions): js.Promise[Unit] = js.native
   def writeFile(file: String, data: String | js.typedarray.TypedArray[?, ?]): js.Promise[Unit] = js.native
+  def mkdir(path: String, options: MkDirOptions): js.Promise[Unit] = js.native
 
   trait RMOptions extends js.Object {
     val maxRetries: js.UndefOr[Int] = js.undefined
     val recursive: js.UndefOr[Boolean] = js.undefined
     val retryDelay: js.UndefOr[Int] = js.undefined
+  }
+
+  trait MkDirOptions extends js.Object {
+    val recursive: js.UndefOr[Boolean] = js.undefined
   }
 }
 

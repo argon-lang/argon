@@ -25,6 +25,11 @@ abstract class BinaryResource[+E] extends Resource[E] with BinaryResourcePlatfor
 }
 
 object BinaryResource:
+  extension [E](res: BinaryResource[E]) {
+    def decode[Res[+E2] <: Resource[E2]](using decoder: BinaryResourceDecoder[Res, E]): Res[E] =
+      decoder.decode(res)
+  }
+
   given [E]: BinaryResourceDecoder[BinaryResource, E] with
     def decode(resource: BinaryResource[E]): BinaryResource[E] =
       resource
@@ -61,16 +66,18 @@ abstract class DirectoryResource[+E, +FileResource[+E2] <: Resource[E2]] extends
 }
 
 object DirectoryResource {
-  def decode[E, FileResource[+E2] <: BinaryResource[E2], Res[+E2] <: Resource[E2]](dr: DirectoryResource[E, FileResource])(using BinaryResourceDecoder[Res, E]): DirectoryResource[E, Res] =
-    new DirectoryResource[E, Res] {
-      override def contents: Stream[E, DirectoryEntry[E, Res]] =
-        dr.contents.map {
-          case DirectoryEntry(dirs, fileName, resource) =>
-            DirectoryEntry(dirs, fileName, summon[BinaryResourceDecoder[Res, E]].decode(resource))
-        }
+  extension [E, FileResource[+E2] <: BinaryResource[E2]](dr: DirectoryResource[E, FileResource]) {
+    def decode[Res[+E2] <: Resource[E2]](using BinaryResourceDecoder[Res, E]): DirectoryResource[E, Res] =
+      new DirectoryResource[E, Res] {
+        override def contents: Stream[E, DirectoryEntry[E, Res]] =
+          dr.contents.map {
+            case DirectoryEntry(dirs, fileName, resource) =>
+              DirectoryEntry(dirs, fileName, resource.decode[Res])
+          }
 
-      override def fileName: Option[String] =
-        dr.fileName
-    }
+        override def fileName: Option[String] =
+          dr.fileName
+      }
+  }
 
 }

@@ -27,9 +27,10 @@ import dev.argon.io.DirectoryResource
 import dev.argon.source.ArgonSourceCodeResource
 import dev.argon.compiler.TubeImporter
 import dev.argon.build.GenerateIR
-import dev.argon.vm.resource.VmIrResourceContext
+import dev.argon.vm.resource.VmIrResource
+import dev.argon.backend.BackendException
 
-object Program extends PlatformApp[IOException | BuildError | SourceError | TubeFormatException] {
+object Program extends PlatformApp[IOException | BuildError | SourceError | TubeFormatException | BackendException] {
 
   def runApp: ZIO[Environment & ZIOAppArgs, Error, ExitCode] =
     val parser = ArgonCommandLineOptions.parser
@@ -85,20 +86,25 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
         runGenIR(options)
           .as(ExitCode.success)
           .provideSomeLayer[Environment](LogReporter.live)
+
+      case Some(Command.CodeGen) =>
+        options.codegenBackend match
+          case None =>
+            for
+              _ <- Console.printLineError("No backend specified")
+            yield ExitCode.failure
+
+          case Some(CodegenBackend.JS) =>
+            runCodegenJS(options)
+              .as(ExitCode.success)
+        end match
     end match
 
   private def runCompile(options: ArgonCommandLineOptions): ZIO[Environment & ErrorLog & LogReporter, Error, Unit] =
     for
       tubeNameDec <- ZIO.fromOption(options.tubeName.flatMap(TubeName.decode)).mapError(_ => InvalidTubeName(options.tubeName.get))
 
-      ctx = new Context {
-        override type Env = Program.this.Environment & ErrorLog & LogReporter
-        override type Error = Program.this.Error
-
-        override def environmentTag: EnvironmentTag[Env] = summon
-
-        override def errorTypeTest: TypeTest[Any, Error] = summon
-      }
+      ctx = Context.Impl[Environment & ErrorLog & LogReporter, Error]()
 
       tubeResContext <- TubeResourceContext.make(ctx)
 
@@ -112,16 +118,16 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
 
         override def tubeName: TubeName = tubeNameDec
         override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
-          DirectoryResource.decode[Error, BinaryResource, ArgonSourceCodeResource](
-            PathUtil.directoryResource(options.inputDir.get)
-              .filterFiles(_.endsWith(".argon"))
-          )
+          PathUtil.directoryResource(options.inputDir.get)
+            .filterFiles(_.endsWith(".argon"))
+            .upcast[DirectoryResource[context.Error, BinaryResource]]
+            .decode[ArgonSourceCodeResource]
 
         override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
           options.referencedTubes.map { refTubePath =>
-            summon[BinaryResourceDecoder[tubeResContext.TubeResource, Error]].decode(
-              PathUtil.binaryResource(refTubePath)
-            )
+            PathUtil.binaryResource(refTubePath)
+              .widen[context.Error]
+              .decode[tubeResContext.TubeResource]
           }
       }
 
@@ -132,19 +138,15 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
         yield ()
       )
 
+      _ <- ZIO.serviceWithZIO[LogReporter](_.reportLogs)
+      _ <- ZIO.serviceWithZIO[LogReporter](_.failOnErrors)
+
     yield ()
 
   private def runGenIR(options: ArgonCommandLineOptions): ZIO[Environment & ErrorLog & LogReporter, Error, Unit] =
-    val ctx = new Context {
-      override type Env = Program.this.Environment & ErrorLog & LogReporter
-      override type Error = Program.this.Error
-
-      override def environmentTag: EnvironmentTag[Env] = summon
-      override def errorTypeTest: TypeTest[Any, Error] = summon
-    }
+    val ctx = Context.Impl[Environment & ErrorLog & LogReporter, Error]
     for
       tubeResContext <- TubeResourceContext.make(ctx)
-      irResContext <- VmIrResourceContext.make(ctx)
 
       compile = new GenerateIR {
         override val context: ctx.type = ctx
@@ -154,18 +156,16 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
 
         import tubeResourceContext.TubeResource
 
-        override val vmirResourceContext: irResContext.type = irResContext
-
         override def inputTube(using TubeImporter & HasContext[ctx.type]): TubeResource[context.Error] =
-          summon[BinaryResourceDecoder[tubeResContext.TubeResource, Error]].decode(
-            PathUtil.binaryResource(options.inputFile.get)
-          )
+          PathUtil.binaryResource(options.inputFile.get)
+            .widen[context.Error]
+            .decode[tubeResContext.TubeResource]
 
         override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
           options.referencedTubes.map { refTubePath =>
-            summon[BinaryResourceDecoder[tubeResContext.TubeResource, Error]].decode(
-              PathUtil.binaryResource(refTubePath)
-            )
+            PathUtil.binaryResource(refTubePath)
+              .widen[context.Error]
+              .decode[tubeResContext.TubeResource]
           }
       }
 
@@ -176,7 +176,29 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
         yield ()
       )
 
+      _ <- ZIO.serviceWithZIO[LogReporter](_.reportLogs)
+      _ <- ZIO.serviceWithZIO[LogReporter](_.failOnErrors)
+
     yield ()
   end runGenIR
+
+  private def runCodegenJS(options: ArgonCommandLineOptions): ZIO[Environment, Error, Unit] =
+    import dev.argon.backend.platforms.js.JSBackend
+
+    val backend = JSBackend()
+    ZIO.scoped(
+      for
+        output <- backend.codegen(
+          options = backend.JSOptions(
+            externs = options.externs.map(path => PathUtil.binaryResource(path).decode[TextResource]),
+          ),
+          program = PathUtil.binaryResource(options.inputFile.get).widen[Error].decode[VmIrResource],
+          libraries = Map.empty,
+        )
+
+        _ <- PathUtil.writeDir(options.outputDir.get, output.sourceCode)
+      yield ()
+    )
+  end runCodegenJS
 
 }

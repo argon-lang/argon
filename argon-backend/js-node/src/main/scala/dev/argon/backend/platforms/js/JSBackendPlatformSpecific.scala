@@ -1,7 +1,7 @@
 package dev.argon.backend.platforms.js
 
 import dev.argon.backend.*
-import dev.argon.vm.resource.VmIrResourceContext
+import dev.argon.vm.resource.VmIrResource
 import dev.argon.compiler.*
 import dev.argon.io.*
 
@@ -10,27 +10,24 @@ import zio.stream.*
 import dev.argon.util.async.AsyncIterableTools
 import dev.argon.util.async.ErrorWrapper
 import dev.argon.util.async.AsyncIterableTools.AsyncIterable
+import java.io.IOException
 
 import scala.scalajs.js
 
 trait JSBackendPlatformSpecific {
-  self: JSBackend.type =>
+  self: JSBackend =>
   
 
-  def codegen(
-    context: BackendContext
-  )(
-    vmIrResContext: VmIrResourceContext & HasContext[context.type]
-  )(
-    options: Options[context.Error],
-    program: vmIrResContext.VmIrResource[context.Error],
-    libraries: Map[TubeName, vmIrResContext.VmIrResource[context.Error]],
-  ): context.Comp[Output[context.Error]] =
+  def codegen[E >: BackendException | IOException](
+    options: Options[E],
+    program: VmIrResource[E],
+    libraries: Map[TubeName, VmIrResource[E]],
+  ): ZIO[Scope, E, Output[E]] =
 
-    val errorContext = ErrorWrapper.Context[context.Error]
+    val errorContext = ErrorWrapper.Context[E]
     import errorContext.given
 
-    def runCodegen(using Runtime[context.Env]): Stream[context.Error, ModuleCodegenResult] =
+    def runCodegen(using Runtime[Any]): Stream[E, ModuleCodegenResult] =
       AsyncIterableTools.asyncIterableToZStream(
         JSBackendModule.codegen(
           new CodegenInput {
@@ -63,12 +60,12 @@ trait JSBackendPlatformSpecific {
         )
       )
 
-    def modulesAsDirectory(stream: Stream[context.Error, ModuleCodegenResult]): DirectoryResource[context.Error, TextResource] =
-      new DirectoryResource[context.Error, TextResource] with Resource.WithoutFileName {
-        override def contents: Stream[context.Error, DirectoryEntry[context.Error, TextResource]] =
+    def modulesAsDirectory(stream: Stream[E, ModuleCodegenResult]): DirectoryResource[E, TextResource] =
+      new DirectoryResource[E, TextResource] with Resource.WithoutFileName {
+        override def contents: Stream[E, DirectoryEntry[E, TextResource]] =
           stream.map { moduleRes =>
-            val res = new TextResource.Impl[context.Error] with Resource.WithoutFileName {
-              override def asText: Stream[context.Error, String] = ZStream(moduleRes.sourceCode)
+            val res = new TextResource.Impl[E] with Resource.WithoutFileName {
+              override def asText: Stream[E, String] = ZStream(moduleRes.sourceCode)
             }
 
             DirectoryEntry(moduleRes.moduleFilePath.init.toSeq, moduleRes.moduleFilePath.last, res)
@@ -76,8 +73,7 @@ trait JSBackendPlatformSpecific {
       }
 
     for
-      env <- ZIO.environment[context.Env]
-      given Runtime[context.Env] <- ZIO.runtime
+      given Runtime[Any] <- ZIO.runtime
     yield JSOutput(
       sourceCode = modulesAsDirectory(
         runCodegen

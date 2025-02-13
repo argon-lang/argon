@@ -1,3 +1,3 @@
-package dev.argon.util.xml
+package dev.argon.io.xml
 
 final class XmlDocumentCountException extends Exception

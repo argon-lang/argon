@@ -14,18 +14,19 @@ end ArgonTubeSpecResource
 object ArgonTubeSpecResource:
   given [E >: CharacterCodingException | SyntaxError]: BinaryResourceDecoder[ArgonTubeSpecResource, E] with
     override def decode(resource: BinaryResource[E]): ArgonTubeSpecResource[E] =
-      new ArgonTubeSpecResource[E] with TextResource.Impl[E]:
+      new ArgonTubeSpecResource[E]:
         override def tubeSpec: ZStream[Any, E, ModulePatternMapping] =
-          summon[BinaryResourceDecoder[TextResource, E]]
-            .decode(resource)
+          resource.decode[TextResource]
             .asText
             .mapChunks { strings => strings.flatMap(_.toCharArray.nn) }
             .via(ArgonSourceParser.parseTubeSpec(fileName))
 
         override def asText: ZStream[Any, E, String] =
-          summon[BinaryResourceDecoder[TextResource, E]]
-            .decode(resource)
+          resource.decode[TextResource]
             .asText
+
+        override def asBytes: Stream[E, Byte] =
+          resource.asBytes
 
         override def fileName: Option[String] = resource.fileName
       end new

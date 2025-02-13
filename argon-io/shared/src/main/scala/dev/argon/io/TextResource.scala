@@ -19,9 +19,12 @@ object TextResource:
     def decode(resource: BinaryResource[E]): TextResource[E] =
       resource match {
         case resource: TextResource[E] => resource
-        case _ => new TextResource.Impl[E] {
+        case _ => new TextResource[E] {
           override def asText: Stream[E, String] =
             resource.asBytes.via(ZPipeline.utf8Decode)
+
+          override def asBytes: Stream[E, Byte] =
+            resource.asBytes
 
           override def fileName: Option[String] =
             resource.fileName

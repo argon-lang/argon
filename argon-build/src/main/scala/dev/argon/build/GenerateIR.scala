@@ -9,16 +9,13 @@ import zio.stm.*
 import java.io.IOException
 import dev.argon.tube.resource.TubeResourceContext
 import dev.argon.source.*
-import dev.argon.vm.resource.VmIrResourceContext
+import dev.argon.vm.resource.VmIrResource
 
 abstract class GenerateIR extends CompileBase {
   override val context: CContext { type Error >: SourceError }
 
   val tubeResourceContext: TubeResourceContext & HasContext[context.type]
   import tubeResourceContext.TubeResource
-
-  val vmirResourceContext: VmIrResourceContext & HasContext[context.type]
-  import vmirResourceContext.VmIrResource
 
 
   def inputTube(using TubeImporter & HasContext[context.type]): TubeResource[context.Error]
@@ -38,9 +35,14 @@ abstract class GenerateIR extends CompileBase {
   final override protected def getCurrentTube(refTubes: Seq[ArTube])(using TubeImporter & HasContext[context.type]): ZIO[Scope & context.Env, context.Error, ArTube] =
     inputTube.asTube
 
-  final override protected def createOutput(currentTube: ArTubeC & HasContext[context.type]): BuildOutput =
-    IROutput(
-      tube = new VmIrResource.Impl with Resource.WithoutFileName {
+  final override protected def createOutput(currentTube: ArTubeC & HasContext[context.type]): ZIO[Scope & context.Env, context.Error, BuildOutput] =
+    for
+      env <- ZIO.environment[context.Env]
+    yield IROutput(
+      tube = new VmIrResource.Impl[context.Error] with Resource.WithoutFileName {
+        protected override val context: GenerateIR.this.context.type = GenerateIR.this.context
+        protected override def environment: ZEnvironment[context.Env] = env
+
         protected override def tube: ArTube = currentTube
       },
     )

@@ -12,6 +12,7 @@ import esexpr.ESExprException
 import dev.argon.tube.loader.TubeFormatException
 import dev.argon.tube.loader.TubeLoader
 import zio.Cause.Die
+import dev.argon.util.*
 
 sealed abstract class TubeResourceContext extends UsingContext {
   override val context: Context { type Error >: IOException | TubeFormatException }
@@ -34,39 +35,39 @@ sealed abstract class TubeResourceContext extends UsingContext {
 
     given (using TubeImporter & HasContext[context.type]): BinaryResourceDecoder[TubeResource, context.Error] with
       override def decode(resource: BinaryResource[context.Error]): TubeResource[context.Error] =
-        new TubeResource[context.Error] {
+        resource match {
+          case resource: TubeResource[context.Error] => resource
+          case _ =>
+            new TubeResource[context.Error] {
+              override def asTube: ZIO[Scope, context.Error, ArTube] =
+                TubeLoader.load(context, resource)
+                  .provideSomeEnvironment[Scope](_ ++ environment)
 
+              override def decoded: Stream[context.Error, t.TubeFileEntry] =
+                resource.widen[context.Error | ESExprException].decode[[E] =>> ESExprDecodedBinaryStreamResource[E, t.TubeFileEntry]]
+                  .decoded
+                  .mapError {
+                    case ex: ESExprException => TubeFormatException("Could not decode tube entry", ex)
+                    case e: context.Error => e
+                  }
 
-          override def asTube: ZIO[Scope, context.Error, ArTube] =
-            TubeLoader.load(context, resource)
-              .provideSomeEnvironment[Scope](_ ++ environment)
+              override def expr: Stream[context.Error, ESExpr] =
+                resource.widen[context.Error | ESExprException].decode[ESExprBinaryStreamResource]
+                  .expr
+                  .mapError {
+                    case ex: ESExprException => TubeFormatException("Could not parse tube as ESExpr binary format", ex)
+                    case e: context.Error => e
+                  }
 
-          override def decoded: Stream[context.Error, t.TubeFileEntry] =
-            summon[BinaryResourceDecoder[[E >: context.Error | ESExprException] =>> ESExprDecodedBinaryStreamResource[E, t.TubeFileEntry], context.Error | ESExprException]]
-              .decode(resource)
-              .decoded
-              .mapError {
-                case ex: ESExprException => TubeFormatException("Could not decode tube entry", ex)
-                case e: context.Error => e
-              }
+              override def asBytes: Stream[context.Error, Byte] =
+                resource.asBytes
 
-          override def expr: Stream[context.Error, ESExpr] =
-            summon[BinaryResourceDecoder[ESExprBinaryStreamResource, context.Error | ESExprException]]
-              .decode(resource)
-              .expr
-              .mapError {
-                case ex: ESExprException => TubeFormatException("Could not parse tube as ESExpr binary format", ex)
-                case e: context.Error => e
-              }
-
-          override def asBytes: Stream[context.Error, Byte] =
-            resource.asBytes
-
-          override def fileName: Option[String] =
-            resource.fileName
+              override def fileName: Option[String] =
+                resource.fileName
 
 
         }
+      }
     end given
   }
 

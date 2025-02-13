@@ -19,21 +19,25 @@ object ESExprBinaryStreamResource {
     end asBytes
   }
 
-  given[E >: ESExprException | IOException]: BinaryResourceDecoder[ESExprBinaryStreamResource, E] with
+  given resourceDecoder[E >: ESExprException | IOException]: BinaryResourceDecoder[ESExprBinaryStreamResource, E] with
     override def decode(resource: BinaryResource[E]): ESExprBinaryStreamResource[E] =
-      new ESExprBinaryStreamResource[E] {
-        override def expr: Stream[E, ESExpr] =
-          val errorContext = ErrorWrapper.Context[E]
-          import errorContext.given
+      resource match {
+        case resource: ESExprBinaryStreamResource[E] => resource
+        case _ =>
+          new ESExprBinaryStreamResource[E] {
+            override def expr: Stream[E, ESExpr] =
+              val errorContext = ErrorWrapper.Context[E]
+              import errorContext.given
 
-          resource.asBytes.viaFunction(ESExprBinaryDecoder.readAll)
-        end expr
+              resource.asBytes.viaFunction(ESExprBinaryDecoder.readAll)
+            end expr
 
-        override def asBytes: ZStream[Any, E, Byte] =
-          resource.asBytes
+            override def asBytes: ZStream[Any, E, Byte] =
+              resource.asBytes
 
-        override def fileName: Option[String] =
-          resource.fileName
+            override def fileName: Option[String] =
+              resource.fileName
+          }
       }
-  end given
+  end resourceDecoder
 }

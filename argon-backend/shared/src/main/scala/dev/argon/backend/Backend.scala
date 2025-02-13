@@ -1,25 +1,20 @@
 package dev.argon.backend
 
 import dev.argon.compiler.*
-import dev.argon.vm.resource.VmIrResourceContext
+import dev.argon.vm.resource.VmIrResource
+import zio.*
+import java.io.IOException
 
 trait Backend {
-  type Options[E]
-  type Output[E]
+  type Options[+E]
+  type Output[+E]
 
   def name: String
 
-  def codegen(
-    context: BackendContext
-  )(
-    vmIrResContext: VmIrResourceContext & HasContext[context.type]
-  )(
-    options: Options[context.Error],
-    program: vmIrResContext.VmIrResource[context.Error],
-    libraries: Map[TubeName, vmIrResContext.VmIrResource[context.Error]],
-  ): context.Comp[Output[context.Error]]
-
-  def outputSink(context: BackendContext)(output: Output[context.Error]): context.Comp[Unit]
-  def testExecutor: Option[TestExecutor[Output]]
+  def codegen[E >: BackendException | IOException](
+    options: Options[E],
+    program: VmIrResource[E],
+    libraries: Map[TubeName, VmIrResource[E]],
+  ): ZIO[Scope, E, Output[E]]
 
 }

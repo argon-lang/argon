@@ -10,10 +10,8 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
 trait Context extends ScopeContext {
-  type Env0 = ErrorLog
-  type Env <: ErrorLog
-  type Error0 = Nothing
-  type Error >: Error0 <: Matchable
+  type Env <: Context.Env0
+  type Error >: Context.Error0 <: Matchable
   given environmentTag: EnvironmentTag[Env]
   given errorTypeTest: TypeTest[Any, Error]
 
@@ -113,6 +111,17 @@ trait Context extends ScopeContext {
   }
 }
 
+object Context {
+  type Env0 = ErrorLog
+  type Error0 = Nothing
+
+
+  class Impl[R <: Env0, E >: Error0 <: Matchable](using override val environmentTag: EnvironmentTag[R], override val errorTypeTest: TypeTest[Any, E]) extends Context {
+    override type Env = R
+    override type Error = E
+  }
+}
+
 type HasContext[Ctx <: Context] = {val context: Ctx}
 
 trait UsingContext {
@@ -147,6 +156,9 @@ final case class TubeName(parts: NonEmptySeq[String]) derives CanEqual {
 }
 
 object TubeName {
+  def apply(head: String, tail: String*): TubeName =
+    TubeName(NonEmptySeq(head, tail))
+
   def decode(s: String): Option[TubeName] =
     if s.isEmpty() then
       None

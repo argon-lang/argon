@@ -41,11 +41,13 @@ abstract class Compile extends CompileBase {
     SourceTube.make(context)(tubeOptions)
   end getCurrentTube
 
-  final override protected def createOutput(currentTube: ArTubeC & HasContext[context.type]): BuildOutput =
-    CompileOutput(
-      tube = new TubeResource.Impl with Resource.WithoutFileName {
-        override def asTube: ZIO[Scope, context.Error, ArTube] = ZIO.succeed(currentTube)
-      },
+  final override protected def createOutput(currentTube: ArTubeC & HasContext[context.type]): ZIO[Scope & context.Env, context.Error, BuildOutput] =
+    ZIO.succeed(
+      CompileOutput(
+        tube = new TubeResource.Impl with Resource.WithoutFileName {
+          override def asTube: ZIO[Scope, context.Error, ArTube] = ZIO.succeed(currentTube)
+        },
+      )
     )
 
 

@@ -56,8 +56,8 @@ lazy val sharedJSNodeSettings = Seq(
   ),
 
   npmDependencies ++= Seq(
-    "@argon-lang/esexpr" -> "^0.1.16",
-    "@argon-lang/js-compiler-backend" -> "file:../../backend/platforms/js/js-backend",
+    "@argon-lang/esexpr" -> "^0.1.17",
+    "@argon-lang/js-compiler-backend" -> "file:../../../../backend/platforms/js/js-backend",
   ),
   
   scalaJSLinkerConfig ~= {
@@ -627,7 +627,7 @@ lazy val argon_platformNode = argon_platform.node
 
 
 lazy val cli = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Pure).in(file("argon-cli"))
-  .dependsOn(util, argon_platform, argon_build)
+  .dependsOn(util, argon_platform, argon_build, argon_backend)
   .jvmConfigure(
     _.settings(commonJVMSettings)
       .settings(
@@ -655,7 +655,7 @@ lazy val cliNode = cli.node
 
 
 lazy val compiler_tests = crossProject(JVMPlatform, NodePlatform).crossType(CrossType.Full).in(file("compiler-tests"))
-  .dependsOn(util, argon_platform, argon_build)
+  .dependsOn(util, argon_platform, argon_build, argon_backend)
   .jvmConfigure(
     _.settings(commonJVMSettings)
   )

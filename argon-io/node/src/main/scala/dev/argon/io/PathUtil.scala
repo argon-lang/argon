@@ -51,6 +51,12 @@ object PathUtil {
     case "ETIMEDOUT" => new IOException(error.message)
   }
 
+  private def runPromiseIO[A](f: => js.Promise[A]): IO[IOException, A] =
+      ZIO.fromPromiseJS(f)
+        .mapError(remapIOErrors)
+        .refineToOrDie[IOException]
+
+
   def exists(path: String): IO[IOException, Boolean] =
     ZIO.fromPromiseJS(NodeFileSystem.stat(path))
       .as(true)
@@ -69,9 +75,7 @@ object PathUtil {
 
   def listDirectory(path: String): Stream[IOException, String] =
     ZStream.unwrap(
-      ZIO.fromPromiseJS(NodeFileSystem.readdir(path))
-        .mapError(remapIOErrors)
-        .refineToOrDie[IOException]
+      runPromiseIO(NodeFileSystem.readdir(path))
         .map(ZStream.fromIterable)
     )
       .map { entry =>
@@ -88,17 +92,27 @@ object PathUtil {
   
   def writeFile[E >: IOException](path: String, resource: BinaryResource[E]): IO[E, Unit] =
     ZIO.acquireReleaseWith(
-      ZIO.fromPromiseJS(NodeFileSystem.open(path, "w"))
-      .mapError(remapIOErrors)
-      .refineToOrDie[IOException]
+      runPromiseIO(NodeFileSystem.open(path, "w"))
     )(fh =>
-      ZIO.fromPromiseJS(fh.close()).mapError(remapIOErrors).orDie
+      runPromiseIO(fh.close()).orDie
     ) { fh =>
-      resource.asBytes.chunks.map(TypedArrayUtil.fromByteChunk).foreach { data =>
-        ZIO.fromPromiseJS(fh.writeFile(data))
-          .mapError(remapIOErrors)
-          .refineToOrDie[IOException]
+      runPromiseIO(NodeFileSystem.mkdir(NodePath.dirname(path), new NodeFileSystem.MkDirOptions {
+        override val recursive: js.UndefOr[Boolean] = true
+      })) *>
+        resource.asBytes.chunks.map(TypedArrayUtil.fromByteChunk).foreach { data =>
+          runPromiseIO(fh.writeFile(data))
       }
     }
+
+  def writeDir[E >: IOException](path: String, resource: DirectoryResource[E, BinaryResource]): IO[E, Unit] =
+    runPromiseIO(NodeFileSystem.mkdir(NodePath.dirname(path), new NodeFileSystem.MkDirOptions {
+      override val recursive: js.UndefOr[Boolean] = true
+    })) *>
+      resource.contents.foreach { entry =>
+        val filePath = NodePath.join((path +: entry.dirs :+ entry.fileName)*)
+        writeFile(filePath, entry.resource)
+      }
   
+
+
 }

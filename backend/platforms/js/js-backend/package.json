@@ -23,7 +23,7 @@
     "vitest": "^3.0.5"
   },
   "dependencies": {
-    "@argon-lang/esexpr": "^0.1.16",
+    "@argon-lang/esexpr": "^0.1.17",
     "@argon-lang/noble-idl-core": "file:../../../../../noble-idl/langs/js/runtime",
     "acorn": "^8.14.0",
     "astring": "^1.9.0",

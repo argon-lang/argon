@@ -16,7 +16,7 @@ object ESExprDecodedBinaryStreamResource {
       decoded.map(summon[ESExprCodec[A]].encode)
   }
 
-  given[E >: ESExprException | IOException, A: ESExprCodec]: BinaryResourceDecoder[[E1 >: E] =>> ESExprDecodedBinaryStreamResource[E1, A], E] with
+  given resourceDecoder[E >: ESExprException | IOException, A: ESExprCodec]: BinaryResourceDecoder[[E1] =>> ESExprDecodedBinaryStreamResource[E1, A], E] with
     override def decode(resource: BinaryResource[E]): ESExprDecodedBinaryStreamResource[E, A] =
       new ESExprDecodedBinaryStreamResource[E, A] {
         override def decoded: Stream[E, A] =
@@ -25,8 +25,7 @@ object ESExprDecodedBinaryStreamResource {
           }
 
         override def expr: Stream[E, ESExpr] =
-          summon[BinaryResourceDecoder[ESExprBinaryStreamResource, E]].decode(resource)
-            .expr
+          resource.decode[ESExprBinaryStreamResource].expr
 
         override def asBytes: ZStream[Any, E, Byte] =
           resource.asBytes
@@ -34,5 +33,5 @@ object ESExprDecodedBinaryStreamResource {
         override def fileName: Option[String] =
           resource.fileName
       }
-  end given
+  end resourceDecoder
 }

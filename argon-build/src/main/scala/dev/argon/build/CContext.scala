@@ -8,6 +8,6 @@ import java.io.IOException
 type CompileStepEnv = Any
 type CompileStepError = BuildError | IOException
 type CContext = Context {
-  type Env <: CompileStepEnv & LogReporter
+  type Env <: CompileStepEnv
   type Error >: CompileStepError
 }
