@@ -2,7 +2,7 @@ import * as astring from "astring";
 import * as acorn from "acorn";
 import type * as estree from "estree";
 import { ExternLoader } from "./externs.js";
-import { TubeFileEntry } from "./vm-format.js";
+import * as ir from "./vm-format.js";
 import { TubeEmitter, type EmitOptions, type TubeMapping } from "./emitter.js";
 import { readIR } from "./ir-reader.js";
 import type { ESExpr } from "@argon-lang/esexpr";
@@ -16,7 +16,7 @@ export interface CodegenInput {
 }
 
 export type TubeInput =
-    | { type: "ir", entries(): AsyncIterable<TubeFileEntry> }
+    | { type: "ir", entries(): AsyncIterable<ir.TubeFileEntry> }
     | { type: "ir-expr", exprs(): AsyncIterable<ESExpr> }
     | { type: "ir-encoded", data(): AsyncIterable<Uint8Array> }
 ;
@@ -45,7 +45,7 @@ export async function* codegen(input: CodegenInput): AsyncIterable<ModuleCodegen
         externLoader.addExterns(program as estree.Program);
     }
     
-    let ir: AsyncIterable<TubeFileEntry>;
+    let ir: AsyncIterable<ir.TubeFileEntry>;
     switch(input.tubeInput.type) {
         case "ir":
             ir = input.tubeInput.entries();
@@ -79,9 +79,29 @@ export async function* codegen(input: CodegenInput): AsyncIterable<ModuleCodegen
     }
 }
 
-async function* decodeIrEntries(exprs: AsyncIterable<ESExpr>): AsyncIterable<TubeFileEntry> {
+export interface TestProgram {
+    readonly packageJson: string,
+    readonly modules: readonly ModuleCodegenResult[],
+}
+
+export interface TestLibrary {
+    readonly name: ir.TubeName;
+    readonly program: TestProgram;
+}
+
+export interface TestInput {
+    readonly program: TestProgram;
+}
+
+export async function runTest(_input: TestInput): Promise<string> {
+    throw new Error("Not implemented");
+}
+
+
+
+async function* decodeIrEntries(exprs: AsyncIterable<ESExpr>): AsyncIterable<ir.TubeFileEntry> {
     for await(const expr of exprs) {
-        const res = TubeFileEntry.codec.decode(expr);
+        const res = ir.TubeFileEntry.codec.decode(expr);
         if(!res.success) {
             throw new Error("Could not decode expression as Argon VM IR: " + res.message);
         }
