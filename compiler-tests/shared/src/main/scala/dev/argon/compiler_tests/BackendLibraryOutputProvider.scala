@@ -7,19 +7,19 @@ import dev.argon.vm.resource.VmIrResource
 import dev.argon.build.{TubeImporterImpl, LogReporter, BuildFailed}
 
 trait BackendLibraryOutputProvider {
-  val backend: Backend
+  val backend: Backend[TestError]
   val testExecutor: TestExecutor.Aux[backend.type]
 
   def getLibraryOutput(tubeName: TubeName): IO[TestError, testExecutor.TestProgram]
 }
 
 object BackendLibraryOutputProvider {
-  type Aux[B <: Backend, Exec <: TestExecutor.Aux[B]] = BackendLibraryOutputProvider {
+  type Aux[B <: Backend[TestError], Exec <: TestExecutor.Aux[B]] = BackendLibraryOutputProvider {
     val backend: B
     val testExecutor: Exec
   }
 
-  def make(b: Backend, exec: TestExecutor.Aux[b.type]): ZIO[ArgonLibraryProvider, Nothing, BackendLibraryOutputProvider.Aux[b.type, exec.type]] =
+  def make(b: Backend[TestError], exec: TestExecutor.Aux[b.type]): ZIO[ArgonLibraryProvider, Nothing, BackendLibraryOutputProvider.Aux[b.type, exec.type]] =
     for
       libProvider <- ZIO.service[ArgonLibraryProvider]
     yield new BackendLibraryOutputProvider {

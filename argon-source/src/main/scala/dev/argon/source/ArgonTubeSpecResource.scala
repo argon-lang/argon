@@ -12,7 +12,7 @@ abstract class ArgonTubeSpecResource[+E] extends TextResource[E]:
 end ArgonTubeSpecResource
 
 object ArgonTubeSpecResource:
-  given [E >: CharacterCodingException | SyntaxError]: BinaryResourceDecoder[ArgonTubeSpecResource, E] with
+  given [E >: CharacterCodingException | SyntaxError] => BinaryResourceDecoder[ArgonTubeSpecResource, E]:
     override def decode(resource: BinaryResource[E]): ArgonTubeSpecResource[E] =
       new ArgonTubeSpecResource[E]:
         override def tubeSpec: ZStream[Any, E, ModulePatternMapping] =

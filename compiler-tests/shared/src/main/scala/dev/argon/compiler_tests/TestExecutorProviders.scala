@@ -13,14 +13,14 @@ object TestExecutorProviders {
   
   def provider: TestExecutorProvider =
     TestExecutorProvider(
-      ExecutorFactory[platforms.js.JSBackend] { b =>
+      ExecutorFactory[platforms.js.JSBackend[TestError]] { b =>
         new TestExecutor {
           override val backend: b.type = b
           
           final case class JSProgram(files: Map[String, String])
           type TestProgram = JSProgram
 
-          override def toTestProgram[E](program: backend.JSOutput[E]): IO[E, TestProgram] =
+          override def toTestProgram(program: backend.JSOutput): IO[TestError, TestProgram] =
             for
               files <- program.sourceCode
                 .contents

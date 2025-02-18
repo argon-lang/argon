@@ -6,7 +6,7 @@ import dev.argon.backend.platforms.js.JSBackend
 object TestCaseBackendOptions {
   def provider: BackendOptionsProvider =
     BackendOptionsProvider(
-      OptionsFactory[JSBackend](_.JSOptions(
+      OptionsFactory[JSBackend[TestError]](_.JSOptions(
         externs = Seq(),
       )),
     )

@@ -1,0 +1,41 @@
+package argon.backend;
+
+import nobleidl.core;
+
+interface backend[e: exception, options, output] {
+    codegen(options: options, program: vm-ir-tube[e], libraries: library-map[e]): output throws e;
+}
+
+interface backend-factory {
+    create[e: exception, a](f: backend-factory-callback[e, a]): a;
+}
+
+interface backend-factory-callback[e: exception, a] {
+    call[options, output](backend: backend[e, options, output]): a;
+}
+
+
+
+
+
+interface vm-ir-tube[e: exception] {
+    stream(): scoped-resource[stream[e, argon.vm.tube-file-entry]] throws e;
+}
+
+interface scoped-resource[a] {
+    get(): a;
+    close(): unit;
+}
+
+interface stream[e: exception, a] {
+    next(): option[a] throws e;
+}
+
+record library-map[e: exception] {
+    entries: list[library-map-entry[e]];
+}
+
+record library-map-entry[e: exception] {
+    name: argon.vm.tube-name;
+    tube: vm-ir-tube[e];
+}

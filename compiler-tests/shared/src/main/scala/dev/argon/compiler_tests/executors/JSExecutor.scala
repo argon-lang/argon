@@ -4,15 +4,15 @@ import dev.argon.compiler.TubeName
 import dev.argon.backend.platforms.js.JSBackend
 import zio.*
 import zio.stream.*
-import dev.argon.compiler_tests.TestExecutor
+import dev.argon.compiler_tests.*
 
 trait JSExecutor extends TestExecutor {
-  override val backend: JSBackend
+  override val backend: JSBackend[TestError]
   
   final case class JSProgram(files: Map[String, String])
   type TestProgram = JSProgram
 
-  override def toTestProgram[E](program: backend.JSOutput[E]): IO[E, TestProgram] =
+  override def toTestProgram(program: backend.JSOutput): IO[TestError, TestProgram] =
     for
       files <- program.sourceCode
         .contents

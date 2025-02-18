@@ -10,17 +10,17 @@ trait TreeScanner[F[_]: Monad] {
   type Scanner[T] = TreeScanner.Scanner[F, T]
 
   object StandardScanners {
-    given [A: Scanner]: Scanner[Seq[A]] with
+    given [A: Scanner] => Scanner[Seq[A]]:
       override def scan(a: Seq[A]): F[Unit] =
         a.traverse_(summon[Scanner[A]].scan)
     end given
     
-    given [A: Scanner]: Scanner[Option[A]] with
+    given [A: Scanner] => Scanner[Option[A]]:
       override def scan(a: Option[A]): F[Unit] =
         a.traverse_(summon[Scanner[A]].scan)
     end given
 
-    given Scanner[Nothing] with
+    given Scanner[Nothing]:
       override def scan(a: Nothing): F[Unit] = a
     end given
   }

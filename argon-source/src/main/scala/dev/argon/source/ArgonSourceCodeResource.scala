@@ -15,7 +15,7 @@ abstract class ArgonSourceCodeResource[+E] extends TextResource[E]:
 end ArgonSourceCodeResource
 
 object ArgonSourceCodeResource:
-  given [E >: CharacterCodingException | SyntaxError]: BinaryResourceDecoder[ArgonSourceCodeResource, E] with
+  given [E >: CharacterCodingException | SyntaxError] => BinaryResourceDecoder[ArgonSourceCodeResource, E]:
     override def decode(resource: BinaryResource[E]): ArgonSourceCodeResource[E] =
       resource match {
         case resource: ArgonSourceCodeResource[E] => resource

@@ -14,15 +14,15 @@ import java.io.IOException
 
 import scala.scalajs.js
 
-trait JSBackendPlatformSpecific {
-  self: JSBackend =>
+trait JSBackendPlatformSpecific[E >: BackendException | IOException] {
+  self: JSBackend[E] =>
   
 
-  def codegen[E >: BackendException | IOException](
-    options: Options[E],
+  def codegen(
+    options: Options,
     program: VmIrResource[E],
     libraries: Map[TubeName, VmIrResource[E]],
-  ): ZIO[Scope, E, Output[E]] =
+  ): ZIO[Scope, E, Output] =
 
     val errorContext = ErrorWrapper.Context[E]
     import errorContext.given

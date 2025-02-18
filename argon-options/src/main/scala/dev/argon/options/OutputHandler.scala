@@ -76,7 +76,7 @@ object OutputHandler:
 
 
 
-  given binaryResourceOutputHandler[E, Res <: BinaryResource[E]]: OutputHandler[E, Res] with
+  given binaryResourceOutputHandler[E, Res <: BinaryResource[E]] => OutputHandler[E, Res]:
     override def outputs: UIO[Map[Seq[String], OutputInfo[E, Res]]] =
       ZIO.succeed(Map(Seq() -> new OutputInfo[E, Res] {
         override def getValue(options: Res): UIO[FileSystemResource[E, BinaryResource]] =
@@ -84,7 +84,7 @@ object OutputHandler:
       }))
   end binaryResourceOutputHandler
 
-  given directoryResourceOutputHandler[E, FileRes[+E2] <: BinaryResource[E2], Res <: DirectoryResource[E, FileRes]]: OutputHandler[E, Res] with
+  given directoryResourceOutputHandler[E, FileRes[+E2] <: BinaryResource[E2], Res <: DirectoryResource[E, FileRes]] => OutputHandler[E, Res]:
     override def outputs: UIO[Map[Seq[String], OutputInfo[E, Res]]] =
       ZIO.succeed(Map(Seq() -> new OutputInfo[E, Res] {
         override def getValue(options: Res): UIO[FileSystemResource[E, BinaryResource]] =
@@ -92,7 +92,7 @@ object OutputHandler:
       }))
   end directoryResourceOutputHandler
 
-  given OutputHandler[Nothing, Nothing] with
+  given OutputHandler[Nothing, Nothing]:
     override def outputs: UIO[Map[Seq[String], OutputInfo[Nothing, Nothing]]] = ZIO.succeed(Map.empty)
   end given
 

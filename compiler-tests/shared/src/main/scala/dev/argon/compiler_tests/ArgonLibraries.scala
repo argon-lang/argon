@@ -21,7 +21,7 @@ object ArgonLibraries {
 
     override def optionsProvider(libPath: PathLike): BackendOptionsProvider =
       BackendOptionsProvider(
-        OptionsFactory[JSBackend](_.JSOptions(
+        OptionsFactory[JSBackend[TestError]](_.JSOptions(
           externs = Seq(
             PathUtil.binaryResource(PathLike.join(libPath, "js/externs.js")).decode[TextResource],
           ),

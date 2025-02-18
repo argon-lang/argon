@@ -6,7 +6,7 @@ import scala.reflect.TypeTest
 import dev.argon.util.{*, given}
 
 sealed trait TestExecutorProvider {
-  def getExecutorForBackend(backend: Backend): Option[TestExecutor.Aux[backend.type]]
+  def getExecutorForBackend(backend: Backend[TestError]): Option[TestExecutor.Aux[backend.type]]
 }
 
 object TestExecutorProvider {
@@ -15,13 +15,13 @@ object TestExecutorProvider {
 
   private def empty: TestExecutorProvider =
     new TestExecutorProvider {
-      override def getExecutorForBackend(backend: Backend): Option[TestExecutor.Aux[backend.type]] = None
+      override def getExecutorForBackend(backend: Backend[TestError]): Option[TestExecutor.Aux[backend.type]] = None
     }
 
-  private def forSingleFactory[B <: Backend](factory: ExecutorFactory[B]): TestExecutorProvider =
+  private def forSingleFactory[B <: Backend[TestError]](factory: ExecutorFactory[B]): TestExecutorProvider =
     import factory.typeTest
     new TestExecutorProvider {
-      override def getExecutorForBackend(backend: Backend): Option[TestExecutor.Aux[backend.type]] =
+      override def getExecutorForBackend(backend: Backend[TestError]): Option[TestExecutor.Aux[backend.type]] =
         factory.typeTest.unapply(backend) match {
           case Some(b) => Some(factory.createExecutor(b))
           case None => None
@@ -36,7 +36,7 @@ object TestExecutorProvider {
       case Seq(provider) => provider
       case _ =>
         new TestExecutorProvider {
-          override def getExecutorForBackend(backend: Backend): Option[TestExecutor.Aux[backend.type]] =
+          override def getExecutorForBackend(backend: Backend[TestError]): Option[TestExecutor.Aux[backend.type]] =
             providers
               .view
               .flatMap { _.getExecutorForBackend(backend) }
@@ -44,15 +44,15 @@ object TestExecutorProvider {
         }
     }
 
-  sealed trait ExecutorFactory[B <: Backend] {
-    private[TestExecutorProvider] val typeTest: TypeTest[Backend, B]
+  sealed trait ExecutorFactory[B <: Backend[TestError]] {
+    private[TestExecutorProvider] val typeTest: TypeTest[Backend[TestError], B]
     private[TestExecutorProvider] def createExecutor(backend: B): TestExecutor.Aux[backend.type]
   }
 
   object ExecutorFactory {
-    def apply[B <: Backend](f: (backend: B) => TestExecutor.Aux[backend.type])(using tt: TypeTest[Backend, B]): ExecutorFactory[B] =
+    def apply[B <: Backend[TestError]](f: (backend: B) => TestExecutor.Aux[backend.type])(using tt: TypeTest[Backend[TestError], B]): ExecutorFactory[B] =
       new ExecutorFactory[B] {
-        override val typeTest: TypeTest[Backend, B] = tt
+        override val typeTest: TypeTest[Backend[TestError], B] = tt
         override def createExecutor(backend: B): TestExecutor.Aux[backend.type] =
           f(backend)
       }

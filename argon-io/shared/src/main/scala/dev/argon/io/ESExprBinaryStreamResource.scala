@@ -19,7 +19,7 @@ object ESExprBinaryStreamResource {
     end asBytes
   }
 
-  given resourceDecoder[E >: ESExprException | IOException]: BinaryResourceDecoder[ESExprBinaryStreamResource, E] with
+  given resourceDecoder: [E >: ESExprException | IOException] => BinaryResourceDecoder[ESExprBinaryStreamResource, E]:
     override def decode(resource: BinaryResource[E]): ESExprBinaryStreamResource[E] =
       resource match {
         case resource: ESExprBinaryStreamResource[E] => resource

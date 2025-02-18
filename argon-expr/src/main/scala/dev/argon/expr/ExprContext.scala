@@ -7,6 +7,8 @@ import dev.argon.util.{TreeShifter, UniqueIdentifier}
 import scala.reflect.TypeTest
 import dev.argon.util.SourceLocation
 
+import scala.compiletime.deferred
+
 trait ExprContext {
 
   sealed trait Var {
@@ -39,17 +41,17 @@ trait ExprContext {
   ) extends Var
 
   type Function <: Matchable
-  given functionCanEqual: CanEqual[Function, Function]
+  given functionCanEqual: CanEqual[Function, Function] = deferred
 
   type Record <: Matchable
-  given recordCanEqual: CanEqual[Record, Record]
+  given recordCanEqual: CanEqual[Record, Record] = deferred
 
   type RecordField
-  given recordFieldCanEqual: CanEqual[RecordField, RecordField]
+  given recordFieldCanEqual: CanEqual[RecordField, RecordField] = deferred
   def getRecordFieldName(f: RecordField): IdentifierExpr
 
   type Hole
-  given holeCanEqual: CanEqual[Hole, Hole]
+  given holeCanEqual: CanEqual[Hole, Hole] = deferred
 
 
   enum Builtin {

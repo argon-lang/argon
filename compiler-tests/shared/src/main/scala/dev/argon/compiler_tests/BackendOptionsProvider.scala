@@ -6,7 +6,7 @@ import scala.reflect.TypeTest
 import dev.argon.util.{*, given}
 
 sealed trait BackendOptionsProvider {
-  def getOptionsForBackend(backend: Backend): Option[backend.Options[TestError]]
+  def getOptionsForBackend(backend: Backend[TestError]): Option[backend.Options]
 }
 
 object BackendOptionsProvider {
@@ -15,13 +15,13 @@ object BackendOptionsProvider {
 
   private def empty: BackendOptionsProvider =
     new BackendOptionsProvider {
-      override def getOptionsForBackend(backend: Backend): Option[backend.Options[TestError]] = None
+      override def getOptionsForBackend(backend: Backend[TestError]): Option[backend.Options] = None
     }
 
-  private def forSingleFactory[B <: Backend](factory: OptionsFactory[B]): BackendOptionsProvider =
+  private def forSingleFactory[B <: Backend[TestError]](factory: OptionsFactory[B]): BackendOptionsProvider =
     import factory.typeTest
     new BackendOptionsProvider {
-      override def getOptionsForBackend(backend: Backend): Option[backend.Options[TestError]] =
+      override def getOptionsForBackend(backend: Backend[TestError]): Option[backend.Options] =
         factory.typeTest.unapply(backend) match {
           case Some(b) => Some(factory.createOptions(b))
           case None => None
@@ -36,7 +36,7 @@ object BackendOptionsProvider {
       case Seq(provider) => provider
       case _ =>
         new BackendOptionsProvider {
-          override def getOptionsForBackend(backend: Backend): Option[backend.Options[TestError]] =
+          override def getOptionsForBackend(backend: Backend[TestError]): Option[backend.Options] =
             providers
               .view
               .flatMap { _.getOptionsForBackend(backend) }
@@ -44,16 +44,16 @@ object BackendOptionsProvider {
         }
     }
 
-  sealed trait OptionsFactory[B <: Backend] {
-    private[BackendOptionsProvider] val typeTest: TypeTest[Backend, B]
-    private[BackendOptionsProvider] def createOptions(backend: B): backend.Options[TestError]
+  sealed trait OptionsFactory[B <: Backend[TestError]] {
+    private[BackendOptionsProvider] val typeTest: TypeTest[Backend[TestError], B]
+    private[BackendOptionsProvider] def createOptions(backend: B): backend.Options
   }
 
   object OptionsFactory {
-    def apply[B <: Backend](f: (backend: B) => backend.Options[TestError])(using tt: TypeTest[Backend, B]): OptionsFactory[B] =
+    def apply[B <: Backend[TestError]](f: (backend: B) => backend.Options)(using tt: TypeTest[Backend[TestError], B]): OptionsFactory[B] =
       new OptionsFactory[B] {
-        override val typeTest: TypeTest[Backend, B] = tt
-        override def createOptions(backend: B): backend.Options[TestError] =
+        override val typeTest: TypeTest[Backend[TestError], B] = tt
+        override def createOptions(backend: B): backend.Options =
           f(backend)
       }
   }

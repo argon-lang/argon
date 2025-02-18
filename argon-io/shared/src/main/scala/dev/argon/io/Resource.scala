@@ -30,7 +30,7 @@ object BinaryResource:
       decoder.decode(res)
   }
 
-  given [E]: BinaryResourceDecoder[BinaryResource, E] with
+  given [E] => BinaryResourceDecoder[BinaryResource, E]:
     def decode(resource: BinaryResource[E]): BinaryResource[E] =
       resource
   end given

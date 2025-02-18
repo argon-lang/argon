@@ -12,7 +12,7 @@ trait HoleScanner extends TreeScanner[[A] =>> Either[Unit, A]] {
 
   import StandardScanners.given
 
-  private given Scanner[Hole] with
+  private given Scanner[Hole]:
     override def scan(a: Hole): Either[Unit, Unit] =
       if a == searchTarget then
         Left(())

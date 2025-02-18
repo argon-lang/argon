@@ -6,19 +6,20 @@ import dev.argon.io.*
 import dev.argon.compiler.*
 import zio.*
 import zio.stream.*
+import java.io.IOException
 
-final class JSBackend extends Backend with JSBackendPlatformSpecific {
+final class JSBackend[E >: BackendException | IOException] extends Backend[E] with JSBackendPlatformSpecific[E] {
   
-  final case class JSOptions[+E](
+  final case class JSOptions(
     externs: Seq[TextResource[E]],
   )
 
-  final case class JSOutput[+E](
+  final case class JSOutput(
     sourceCode: DirectoryResource[E, TextResource],
   )
 
-  override type Options[+E] = JSOptions[E]
-  override type Output[+E] = JSOutput[E]
+  override type Options = JSOptions
+  override type Output = JSOutput
 
   
   override def name: String = "js"

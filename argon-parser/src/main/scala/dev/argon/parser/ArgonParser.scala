@@ -26,7 +26,7 @@ object ArgonParser {
     sealed trait ArgonRuleName[T]
 
     object ArgonRuleName {
-      given [T, U]: CanEqual[ArgonRuleName[T], ArgonRuleName[U]] = CanEqual.canEqualAny
+      given [T, U] => CanEqual[ArgonRuleName[T], ArgonRuleName[U]] = CanEqual.canEqualAny
     }
 
     case object IdentifierOptional extends ArgonRuleName[Option[IdentifierExpr]]

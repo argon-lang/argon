@@ -22,7 +22,7 @@ trait ContextShifter[F[_]: Monad] {
     given exprShifter: Shifter[ec1.Expr, ec2.Expr] = autoShifter
     
     given Shifter[ec1.Builtin, ec2.Builtin] = autoShifter
-    given Shifter[ec1.Expr.Hole, ec2.Expr] with
+    given Shifter[ec1.Expr.Hole, ec2.Expr]:
       override def shift(a: ec1.Expr.Hole): F[ec2.Expr] =
         shiftHole(a.hole)
     end given

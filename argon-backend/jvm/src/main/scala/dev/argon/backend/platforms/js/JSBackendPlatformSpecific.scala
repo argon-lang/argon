@@ -28,18 +28,18 @@ import java.io.IOException
 import scala.jdk.CollectionConverters.*
 import dev.argon.util.graalext.TextDecoderPolyfill
 
-trait JSBackendPlatformSpecific {
-  self: JSBackend =>
+trait JSBackendPlatformSpecific[E >: BackendException | IOException] {
+  self: JSBackend[E] =>
 
-  def codegen[E >: BackendException | IOException](
-    options: Options[E],
+  def codegen(
+    options: Options,
     program: VmIrResource[E],
     libraries: Map[TubeName, VmIrResource[E]],
-  ): ZIO[Scope, E, Output[E]] =
+  ): ZIO[Scope, E, Output] =
     
     class JSCodegenImpl(jsContext: GraalContext, jExecutor: JExecutor, executor: Executor)(using runtime: Runtime[Any]) {
 
-      val errorContext = ErrorWrapper.Context[E]
+      private val errorContext = ErrorWrapper.Context[E]
       import errorContext.given
 
 
@@ -227,7 +227,7 @@ trait JSBackendPlatformSpecific {
 
       def runCodegen(): Stream[E, ModuleCodegenResult] =
         asyncIterableToStream {
-          val source = Source.newBuilder("js", classOf[JSBackend].getResource("js-backend.js")).nn
+          val source = Source.newBuilder("js", classOf[JSBackend[?]].getResource("js-backend.js")).nn
               .mimeType("application/javascript+module")
               .build()
 
@@ -287,6 +287,7 @@ trait JSBackendPlatformSpecific {
             GraalContext.newBuilder("js").nn
               .allowHostAccess(HostAccess.EXPLICIT)
               .option("js.esm-eval-returns-exports", "true")
+              // .option("js.text-encoding", "true")
               .option("engine.WarnInterpreterOnly", "false")
               .build()
           })

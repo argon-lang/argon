@@ -18,7 +18,7 @@ object ESExprParser {
     sealed trait RuleName[T]
 
     object RuleName {
-      given[T, U]: CanEqual[RuleName[T], RuleName[U]] = CanEqual.canEqualAny
+      given [T, U] => CanEqual[RuleName[T], RuleName[U]] = CanEqual.canEqualAny
     }
 
     case object Expr extends RuleName[ESExpr]
@@ -54,7 +54,7 @@ object ESExprParser {
             rule(Rule.Null)
 
         case Rule.Constructed =>
-          val parameter =
+          val parameter: TGrammar[(Option[String], ESExpr)] =
             (token[ESExprToken.Identifier] ++! token(ESExprToken.Colon).discard ++ rule(Rule.Expr)) --> { (name, value) => (Some(name.name), value) } |
               rule(Rule.Expr) --> { value => (None, value) }
 
@@ -66,6 +66,14 @@ object ESExprParser {
 
                   case (prev, (None, value)) =>
                     prev.copy(args = prev.args :+ value)
+//                  case (prev, (nameOpt, value)) =>
+//                    nameOpt match {
+//                      case Some(name) =>
+//                        prev.copy(kwargs = prev.kwargs + (name -> value))
+//
+//                      case None =>
+//                        prev.copy(args = prev.args :+ value)
+//                    }
                 }
           }
 

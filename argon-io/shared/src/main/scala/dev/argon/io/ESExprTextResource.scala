@@ -12,7 +12,7 @@ import dev.argon.util.async.ErrorWrapper
 trait ESExprTextResource[+E] extends TextResource[E] with ESExprResource[E]
 
 object ESExprTextResource {
-  given[E >: CharacterCodingException | ESExprException]: BinaryResourceDecoder[ESExprTextResource, E] with
+  given [E >: CharacterCodingException | ESExprException] => BinaryResourceDecoder[ESExprTextResource, E]:
     override def decode(resource: BinaryResource[E]): ESExprTextResource[E] =
       resource match {
         case resource: ESExprTextResource[E] => resource

@@ -19,7 +19,7 @@ object Lexer {
     sealed trait LexerRuleName[T]
 
     object LexerRuleName {
-      given [T, U]: CanEqual[LexerRuleName[T], LexerRuleName[U]] = CanEqual.canEqualAny
+      given [T, U] => CanEqual[LexerRuleName[T], LexerRuleName[U]] = CanEqual.canEqualAny
     }
 
     case object NewLine extends LexerRuleName[Token]

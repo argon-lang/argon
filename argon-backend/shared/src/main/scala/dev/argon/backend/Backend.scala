@@ -5,16 +5,16 @@ import dev.argon.vm.resource.VmIrResource
 import zio.*
 import java.io.IOException
 
-trait Backend {
-  type Options[+E]
-  type Output[+E]
+trait Backend[E >: BackendException | IOException] {
+  type Options
+  type Output
 
   def name: String
 
-  def codegen[E >: BackendException | IOException](
-    options: Options[E],
+  def codegen(
+    options: Options,
     program: VmIrResource[E],
     libraries: Map[TubeName, VmIrResource[E]],
-  ): ZIO[Scope, E, Output[E]]
+  ): ZIO[Scope, E, Output]
 
 }

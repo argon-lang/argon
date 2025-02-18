@@ -13,7 +13,7 @@ import zio.IO
 trait ESExprDecodedTextResource[+E, +A] extends ESExprTextResource[E] with ESExprDecodedResource[E, A]
 
 object ESExprDecodedTextResource {
-  given[E >: CharacterCodingException | ESExprException, A: ESExprCodec]: BinaryResourceDecoder[[E] =>> ESExprDecodedTextResource[E, A], E] with
+  given [E >: CharacterCodingException | ESExprException, A: ESExprCodec] => BinaryResourceDecoder[[E] =>> ESExprDecodedTextResource[E, A], E]:
     override def decode(resource: BinaryResource[E]): ESExprDecodedTextResource[E, A] =
       new ESExprDecodedTextResource[E, A] {
         override def decoded: ZIO[Any, E, A] =

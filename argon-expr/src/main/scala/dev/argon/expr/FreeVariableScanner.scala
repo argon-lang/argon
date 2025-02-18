@@ -20,7 +20,7 @@ object FreeVariableScanner {
 
       import StandardScanners.given
 
-      override given exprScanner: Scanner[Expr] with
+      override given exprScanner: Scanner[Expr]:
         override def scan(a: Expr): State[ScanState, Unit] =
           (a match {
             case Expr.BindVariable(v, _) =>

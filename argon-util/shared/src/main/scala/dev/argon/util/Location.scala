@@ -20,11 +20,11 @@ final case class FilePosition(line: Int, position: Int) derives CanEqual {
 
 object FilePosition:
 
-  given Ordering[FilePosition] with
+  given Ordering[FilePosition]:
     def compare(x: FilePosition, y: FilePosition): Int = x.compareTo(y)
   end given
 
-  given Order[FilePosition] with
+  given Order[FilePosition]:
     def compare(x: FilePosition, y: FilePosition): Int = x.compareTo(y)
   end given
 
@@ -36,11 +36,11 @@ final case class FileOffset(offset: Int) derives CanEqual {
 }
 
 object FileOffset:
-  given Ordering[FileOffset] with
+  given Ordering[FileOffset]:
     def compare(x: FileOffset, y: FileOffset): Int = x.compareTo(y)
   end given
 
-  given Order[FileOffset] with
+  given Order[FileOffset]:
     def compare(x: FileOffset, y: FileOffset): Int = x.compareTo(y)
   end given
 end FileOffset

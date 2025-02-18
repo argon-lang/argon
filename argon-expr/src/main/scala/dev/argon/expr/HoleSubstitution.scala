@@ -12,7 +12,7 @@ private trait HoleSubstitution {
   private object ShiftHelper extends TreeShifter[Id] {
     import StandardShifters.given
 
-    given exprShifter: Shifter[Expr, Expr] with
+    given exprShifter: Shifter[Expr, Expr]:
       override def shift(a: Expr): Expr =
         (a match {
           case Expr.Hole(h) => holeMapping.get(h)

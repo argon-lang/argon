@@ -33,7 +33,7 @@ sealed abstract class TubeResourceContext extends UsingContext {
         )
     }
 
-    given (using TubeImporter & HasContext[context.type]): BinaryResourceDecoder[TubeResource, context.Error] with
+    given (TubeImporter & HasContext[context.type]) => BinaryResourceDecoder[TubeResource, context.Error]:
       override def decode(resource: BinaryResource[context.Error]): TubeResource[context.Error] =
         resource match {
           case resource: TubeResource[context.Error] => resource

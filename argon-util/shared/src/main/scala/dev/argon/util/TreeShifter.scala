@@ -13,14 +13,14 @@ trait TreeShifter[F[_]: Monad] {
   type Shifter[A, B] = TreeShifter.Shifter[F, A, B]
 
   object StandardShifters {
-    given [A, B >: A]: Shifter[A, B] = Monad[F].pure
+    given [A, B >: A] => Shifter[A, B] = Monad[F].pure
 
-    given [A, B](using Shifter[A, B]): Shifter[Seq[A], Seq[B]] with
+    given [A, B] => Shifter[A, B] => Shifter[Seq[A], Seq[B]]:
       override def shift(a: Seq[A]): F[Seq[B]] =
         a.traverse(summon[Shifter[A, B]].shift)
     end given
 
-    given [A, B](using Shifter[A, B]): Shifter[Option[A], Option[B]] with
+    given [A, B] => Shifter[A, B] => Shifter[Option[A], Option[B]]:
       override def shift(a: Option[A]): F[Option[B]] =
         a.traverse(summon[Shifter[A, B]].shift)
     end given

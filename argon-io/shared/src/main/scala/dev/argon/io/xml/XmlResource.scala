@@ -32,7 +32,7 @@ object XmlResource {
     end asText
   }
 
-  given [E >: CharacterCodingException]: BinaryResourceDecoder[XmlResource, E] with
+  given [E >: CharacterCodingException] => BinaryResourceDecoder[XmlResource, E]:
     override def decode(resource: BinaryResource[E]): XmlResource[E] =
       resource match {
         case resource: XmlResource[E] => resource

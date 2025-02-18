@@ -357,10 +357,10 @@ object Grammar {
 
     end extension
 
-    given [A]: GrammarConcatCombiner[A, Unit, A] = (a, _) => a
-    given [B](using NotGiven[B <:< Unit]): GrammarConcatCombiner[Unit, B, B] = (_, b) => b
-    given [A, B](using NotGiven[A <:< Tuple], NotGiven[A <:< Unit], NotGiven[B <:< Unit]): GrammarConcatCombiner[A, B, (A, B)] = (_, _)
-    given [A <: Tuple, B](using NotGiven[B <:< Unit]): GrammarConcatCombiner[A, B, Tuple.Append[A, B]] = _ :* _
+    given [A] => GrammarConcatCombiner[A, Unit, A] = (a, _) => a
+    given [B] => NotGiven[B <:< Unit] => GrammarConcatCombiner[Unit, B, B] = (_, b) => b
+    given [A, B] => NotGiven[A <:< Tuple] => NotGiven[A <:< Unit] => NotGiven[B <:< Unit] => GrammarConcatCombiner[A, B, (A, B)] = (_, _)
+    given [A <: Tuple, B] => NotGiven[B <:< Unit] => GrammarConcatCombiner[A, B, Tuple.Append[A, B]] = _ :* _
 
   }
 

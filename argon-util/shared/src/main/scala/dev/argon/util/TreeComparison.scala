@@ -19,7 +19,7 @@ trait TreeComparison {
     given Comparer[Int] = EqualComparer[Int]
     given Comparer[String] = EqualComparer[String]
 
-    given [A: Comparer]: Comparer[Seq[A]] with
+    given [A: Comparer] => Comparer[Seq[A]]:
       override def compare(a: Seq[A], b: Seq[A]): Comparison =
         combineComparison(
           comparisonFromBoolean(a.size == b.size),
@@ -27,7 +27,7 @@ trait TreeComparison {
         )
     end given
 
-    given [A: Comparer]: Comparer[Option[A]] with
+    given [A: Comparer] => Comparer[Option[A]]:
       override def compare(a: Option[A], b: Option[A]): Comparison =
         (a, b) match {
           case (Some(a), Some(b)) => summon[Comparer[A]].compare(a, b)

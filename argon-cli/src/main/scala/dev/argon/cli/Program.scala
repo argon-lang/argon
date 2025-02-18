@@ -185,7 +185,7 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
   private def runCodegenJS(options: ArgonCommandLineOptions): ZIO[Environment, Error, Unit] =
     import dev.argon.backend.platforms.js.JSBackend
 
-    val backend = JSBackend()
+    val backend = JSBackend[Error]()
     ZIO.scoped(
       for
         output <- backend.codegen(

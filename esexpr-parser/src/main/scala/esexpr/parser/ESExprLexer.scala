@@ -19,7 +19,7 @@ object ESExprLexer {
   private[ESExprLexer] object Rule {
     sealed trait LexerRuleName[T]
     object LexerRuleName {
-      given [A, B]: CanEqual[LexerRuleName[A], LexerRuleName[B]] = CanEqual.derived
+      given [A, B] => CanEqual[LexerRuleName[A], LexerRuleName[B]] = CanEqual.derived
     }
 
     case object Whitespace extends LexerRuleName[Unit] derives CanEqual

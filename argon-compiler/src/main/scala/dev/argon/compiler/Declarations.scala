@@ -5,38 +5,34 @@ import dev.argon.ast.IdentifierExpr
 import dev.argon.expr.{ExprContext, Substitution}
 import dev.argon.util.{Fuel, UniqueIdentifier}
 import zio.*
+
 import scala.reflect.TypeTest
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
+import scala.compiletime.deferred
 
 trait Context extends ScopeContext {
   type Env <: Context.Env0
   type Error >: Context.Error0 <: Matchable
-  given environmentTag: EnvironmentTag[Env]
-  given errorTypeTest: TypeTest[Any, Error]
+  given environmentTag: EnvironmentTag[Env] = deferred
+  given errorTypeTest: TypeTest[Any, Error] = deferred
 
   type Comp[+A] = ZIO[Env, Error, A]
 
   trait ArgonExprContext extends ExprContext {
     override type Function = ArFuncC & HasContext[Context.this.type]
-    override def functionCanEqual: CanEqual[Function, Function] = summon
-
     override type Record = ArRecordC & HasContext[Context.this.type]
-    override def recordCanEqual: CanEqual[Record, Record] = summon
-
     override type RecordField = RecordFieldC & HasContext[Context.this.type]
-    override def recordFieldCanEqual: CanEqual[RecordField, RecordField] = summon
+    
     override def getRecordFieldName(f: RecordFieldC & HasContext[Context.this.type]): IdentifierExpr = f.name
   }
 
   object DefaultExprContext extends ArgonExprContext {
     override type Hole = Nothing
-    override def holeCanEqual: CanEqual[Hole, Hole] = CanEqual.derived
   }
 
   object TRExprContext extends ArgonExprContext {
     override type Hole = UniqueIdentifier
-    override def holeCanEqual: CanEqual[Hole, Hole] = summon
   }
 
   sealed abstract class ArgonSignatureContextBase extends SignatureContext {
@@ -116,7 +112,7 @@ object Context {
   type Error0 = Nothing
 
 
-  class Impl[R <: Env0, E >: Error0 <: Matchable](using override val environmentTag: EnvironmentTag[R], override val errorTypeTest: TypeTest[Any, E]) extends Context {
+  class Impl[R <: Env0, E >: Error0 <: Matchable](using EnvironmentTag[R], TypeTest[Any, E]) extends Context {
     override type Env = R
     override type Error = E
   }

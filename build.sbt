@@ -1,28 +1,22 @@
-import java.io.PrintWriter
-import java.io.FileOutputStream
-import sbt.io.Using
 import sbtcrossproject.CrossPlugin.autoImport.{CrossType, crossProject}
 import org.scalajs.jsenv.nodejs.NodeJSEnv
 import NodePlatformImplicits.*
-import org.apache.commons.lang3.StringUtils
-import org.apache.commons.io.FilenameUtils
-import org.apache.commons.text.StringEscapeUtils
 import org.scalajs.linker.interface.ESVersion
 import complete.DefaultParsers._
 
 import java.io.File
-import java.nio.charset.StandardCharsets
 import scala.sys.process.Process
 
 ThisBuild / resolvers += Resolver.mavenLocal
 Global / semanticdbEnabled := true
 
 val graalVersion = "24.1.2"
-val zioVersion = "2.1.14"
+val zioVersion = "2.1.15"
 
 lazy val commonSettingsNoLibs = Seq(
-  scalaVersion := "3.5.1",
+  scalaVersion := "3.6.3",
 )
+
 
 lazy val commonSettings = commonSettingsNoLibs ++ Seq(
   testFrameworks += new TestFramework("zio.test.sbt.ZTestFramework"),
@@ -34,13 +28,13 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.argon" %%% "argon-async-util" % "1.3.0",
-    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.1.4",
+    "dev.argon" %%% "argon-async-util" % "1.5.0",
+    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.1.5-SNAPSHOT",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
     "org.scala-lang.modules" %%% "scala-xml" % "2.3.0",
-    "org.gnieh" %%% "fs2-data-xml-scala" % "1.11.1",
-    "org.typelevel" %%% "cats-core" % "2.12.0",
+    "org.gnieh" %%% "fs2-data-xml-scala" % "1.11.2",
+    "org.typelevel" %%% "cats-core" % "2.13.0",
     "dev.zio" %%% "zio-interop-cats" % "23.1.0.3",
   ),
 
@@ -72,24 +66,21 @@ lazy val sharedJSNodeSettings = Seq(
 )
 
 lazy val annotationDependencies = Seq(
-  "org.jetbrains" % "annotations" % "26.0.0",
+  "org.jetbrains" % "annotations" % "26.0.2",
 )
 
-lazy val commonJVMSettings = Seq(
+lazy val commonJVMSettingsNoLibs = Seq(
+  fork := true,
+)
+
+lazy val commonJVMSettings = commonJVMSettingsNoLibs ++ Seq(
 
   libraryDependencies ++= annotationDependencies ++ Seq(
-    "commons-io" % "commons-io" % "2.17.0",
-    "org.apache.commons" % "commons-lang3" % "3.17.0",
-    "org.apache.commons" % "commons-text" % "1.12.0",
-    "org.apache.commons" % "commons-compress" % "1.27.1",
-    "dev.zio" %% "zio-logging" % "2.3.1",
-    "net.aichler" % "jupiter-interface" % JupiterKeys.jupiterVersion.value % Test,
+    "dev.zio" %% "zio-logging" % "2.4.0",
 
     "org.graalvm.polyglot" % "polyglot" % graalVersion,
     "org.graalvm.polyglot" % "js-community" % graalVersion,
   ),
-
-  fork := true,
 
 )
 
@@ -123,7 +114,7 @@ lazy val compilerOptions = Seq(
 
   scalacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "-release", "21",
+    "-release", "22",
     "-source", "future",
     "-language:higherKinds",
     "-language:existentials",
@@ -140,7 +131,7 @@ lazy val compilerOptions = Seq(
 
   javacOptions ++= Seq(
     "-encoding", "UTF-8",
-    "--release", "21",
+    "--release", "22",
     "-Werror",
     "-Xlint:all,-serial,-try,-processing",
   ),
@@ -163,6 +154,8 @@ lazy val util = crossProject(JVMPlatform, JSPlatform, NodePlatform).in(file("arg
   .settings(
     commonSettings,
     compilerOptions,
+
+    usePipelining := false,
 
     name := "argon-util",
   )
@@ -477,14 +470,54 @@ lazy val argon_sourceJS = argon_source.js
 lazy val argon_sourceNode = argon_source.node
 
 
+lazy val argon_backend_java_api = project.in(file("backend/platforms/java/api"))
+  .enablePlugins(NobleIDLPlugin)
+  .settings(
+    commonSettingsNoLibs,
+    commonJVMSettingsNoLibs,
+    compilerOptions,
+
+    compileOrder := CompileOrder.JavaThenScala,
+
+    semanticdbEnabled := false,
+    autoScalaLibrary := false,
+    crossPaths := false,
+
+    Compile / javacOptions ++= {
+      val modulePath = (Compile / dependencyClasspath).value.map(_.data.getAbsolutePath).mkString(java.io.File.pathSeparator)
+
+      Seq(
+        "--module-path", modulePath,
+      )
+    },
+
+    libraryDependencies ++= Seq(
+      "org.jetbrains" % "annotations" % "26.0.2",
+      "dev.argon.nobleidl" % "nobleidl-java-runtime" % "0.1.0-SNAPSHOT",
+      "dev.argon.esexpr" % "esexpr-java-runtime" % "0.2.1",
+      "org.graalvm.polyglot" % "polyglot" % graalVersion,
+      "org.graalvm.polyglot" % "js-community" % graalVersion,
+    ),
+
+    Compile / generateNobleIdlScala := false,
+    Compile / generateNobleIdlJava := true,
+    Compile / generateNobleIdlGraalJsAdapters := true,
+    Compile / nobleIdlSourceDirectories ++= Seq(
+      baseDirectory.value / "../../../vm/",
+      baseDirectory.value / "../../../api/",
+    ),
+  )
+
 
 lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-vm"))
   .enablePlugins(NobleIDLPlugin)
   .dependsOn(util, argon_compiler, argon_format, argon_tube)
   .jvmConfigure(
-    _.settings(
-        commonJVMSettings,
-      )
+    _.dependsOn(argon_backend_java_api)
+      .settings(
+      commonJVMSettings,
+      Compile / generateNobleIdlJavaAdapters := true,
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
@@ -510,66 +543,81 @@ lazy val argon_vm = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossTyp
 
     name := "argon-vm",
 
-    Compile / nobleIdlSourceDirectories += baseDirectory.value / "../../backend/vm/vm.nidl",
+    Compile / nobleIdlSourceDirectories += baseDirectory.value / "../../backend/vm/",
   )
 
 lazy val argon_vmJVM = argon_vm.jvm
 lazy val argon_vmJS = argon_vm.js
 lazy val argon_vmNode = argon_vm.node
 
+
 lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).crossType(CrossType.Full).in(file("argon-backend"))
   .enablePlugins(NobleIDLPlugin)
   .dependsOn(util, argon_vm)
   .jvmConfigure(
     _.settings(
-        commonJVMSettings,
+      commonJVMSettings,
 
-        Compile / managedResourceDirectories += resourceManaged.value / "js-backend",
-        Compile / resourceGenerators += Def.task {
-          val s = streams.value
-          val log = s.log
-          val destDir = resourceManaged.value / "js-backend/dev/argon/backend/platforms/js"
-          val destFile = destDir / "js-backend.js"
+      Compile / generateNobleIdlJavaAdapters := true,
 
-          val jsBackendDir = file("backend/platforms/js/js-backend")
+      Compile / managedResourceDirectories += resourceManaged.value / "js-backend",
+      Compile / resourceGenerators += Def.task {
+        val s = streams.value
+        val log = s.log
+        val destDir = resourceManaged.value / "js-backend/dev/argon/backend/platforms/js"
+        val destFile = destDir / "js-backend.js"
 
-          val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
-            log.info("Building JS Backend Distribution")
+        val jsBackendDir = file("backend/platforms/js/js-backend")
 
-            val installExitCode = Process(Seq("npm", "install"), Some(jsBackendDir)) ! log
-            if(installExitCode != 0) {
-              throw new Exception("npm install failed with exit code " + installExitCode)
-            }
+        val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
+          log.info("Building JS Backend Distribution")
 
-            val distExitCode = Process(Seq("npm", "run", "dist"), Some(jsBackendDir)) ! log
-            if(distExitCode != 0) {
-              throw new Exception("npm run dist failed with exit code " + distExitCode)
-            }
-
-            IO.copyFile(jsBackendDir / "dist/dist.js", destFile)
-
-            Set(destFile)
+          val installExitCode = Process(Seq("npm", "install"), Some(jsBackendDir)) ! log
+          if(installExitCode != 0) {
+            throw new Exception("npm install failed with exit code " + installExitCode)
           }
 
-          val inputFiles = (jsBackendDir / "src" ** "*.ts").get().toSet
+          val distExitCode = Process(Seq("npm", "run", "dist"), Some(jsBackendDir)) ! log
+          if(distExitCode != 0) {
+            throw new Exception("npm run dist failed with exit code " + distExitCode)
+          }
 
-          f(inputFiles).toSeq
-        }.taskValue,
-      )
+          IO.copyFile(jsBackendDir / "dist/dist.js", destFile)
+
+          Set(destFile)
+        }
+
+        val inputFiles = (jsBackendDir / "src" ** "*.ts").get().toSet
+
+        f(inputFiles).toSeq
+      }.taskValue,
+    )
   )
   .jsConfigure(
     _.enablePlugins(NpmUtil)
-      .settings(commonBrowserSettings)
+      .settings(
+        commonBrowserSettings,
+
+        Compile / generateNobleIdlScalaJs := true,
+        Compile / generateNobleIdlJsAdapters := true,
+      )
   )
   .nodeConfigure(
     _.enablePlugins(NpmUtil)
-      .settings(commonNodeSettings)
+      .settings(
+        commonNodeSettings,
+
+        Compile / generateNobleIdlScalaJs := true,
+        Compile / generateNobleIdlJsAdapters := true,
+      )
   )
   .settings(
     commonSettings,
     compilerOptions,
 
     name := "argon-backend",
+
+    Compile / nobleIdlSourceDirectories += baseDirectory.value / "../../backend/api/",
   )
 
 lazy val argon_backendJVM = argon_backend.jvm

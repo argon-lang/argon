@@ -24,7 +24,7 @@ object VmIrResource {
       TubeEncoder.encode(context)(tube).provideEnvironment(environment)
   }
 
-  given [E >: TubeFormatException | IOException <: Matchable](using TypeTest[Any, E]): BinaryResourceDecoder[VmIrResource, E] with
+  given [E >: TubeFormatException | IOException <: Matchable] => TypeTest[Any, E] => BinaryResourceDecoder[VmIrResource, E]:
     override def decode(resource: BinaryResource[E]): VmIrResource[E] =
       resource match
         case resource: VmIrResource[E] => resource
