@@ -41,7 +41,7 @@ interface scoped-resource[a] {
 }
 
 interface stream[e: exception, a] {
-    next(): option[a] throws e;
+    next(): list[a] throws e;
 }
 
 record library-map[e: exception] {

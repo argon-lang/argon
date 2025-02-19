@@ -1,7 +1,7 @@
 package dev.argon.compiler_tests
 
 import dev.argon.compiler.*
-import dev.argon.backend.Backend
+import dev.argon.backend.{Backend, CodeGenerator}
 import zio.*
 import dev.argon.vm.resource.VmIrResource
 import dev.argon.build.{TubeImporterImpl, LogReporter, BuildFailed}
@@ -43,7 +43,10 @@ object BackendLibraryOutputProvider {
               refLibName -> libProvider.getIrLibrary(refLibName).decode[VmIrResource]
             }.toMap
 
-            output <- b.codegen(options, program, depLibraries)
+            output <- (b.codeGenerator : (b.codeGenerator.type & CodeGenerator[TestError, b.Output])) match {
+              case codeGenerator: (b.codeGenerator.type & CodeGenerator.LibraryCodeGenerator[TestError, b.Output]) =>
+                codeGenerator.codegen(options, program, depLibraries)
+            }
             output <- exec.toTestProgram(output)
           yield output
         )

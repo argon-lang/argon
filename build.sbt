@@ -28,12 +28,14 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.argon" %%% "argon-async-util" % "1.5.0",
-    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.1.5-SNAPSHOT",
+    "dev.argon" %%% "argon-async-util" % "2.0.0-SNAPSHOT",
+    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.1.6-SNAPSHOT",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
     "org.scala-lang.modules" %%% "scala-xml" % "2.3.0",
     "org.gnieh" %%% "fs2-data-xml-scala" % "1.11.2",
+    "com.indoorvivants" %%% "toml" % "0.3.0",
+
     "org.typelevel" %%% "cats-core" % "2.13.0",
     "dev.zio" %%% "zio-interop-cats" % "23.1.0.3",
   ),
@@ -51,7 +53,7 @@ lazy val sharedJSNodeSettings = Seq(
 
   npmDependencies ++= Seq(
     "@argon-lang/esexpr" -> "^0.1.17",
-    "@argon-lang/js-compiler-backend" -> "file:../../../../backend/platforms/js/js-backend",
+    "@argon-lang/js-compiler-backend" -> "file:../../../../backend/backends/js/js-backend",
   ),
   
   scalaJSLinkerConfig ~= {
@@ -470,7 +472,7 @@ lazy val argon_sourceJS = argon_source.js
 lazy val argon_sourceNode = argon_source.node
 
 
-lazy val argon_backend_java_api = project.in(file("backend/platforms/java/api"))
+lazy val argon_backend_java_api = project.in(file("backend/backends/java/api"))
   .enablePlugins(NobleIDLPlugin)
   .settings(
     commonSettingsNoLibs,
@@ -564,10 +566,10 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
       Compile / resourceGenerators += Def.task {
         val s = streams.value
         val log = s.log
-        val destDir = resourceManaged.value / "js-backend/dev/argon/backend/platforms/js"
+        val destDir = resourceManaged.value / "js-backend/dev/argon/backend/backends/js"
         val destFile = destDir / "js-backend.js"
 
-        val jsBackendDir = file("backend/platforms/js/js-backend")
+        val jsBackendDir = file("backend/backends/js/js-backend")
 
         val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
           log.info("Building JS Backend Distribution")

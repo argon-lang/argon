@@ -5,6 +5,7 @@ import zio.stream.*
 import zio.test.{TestExecutor as _, *}
 import zio.test.Assertion.*
 import dev.argon.compiler.ErrorLog
+
 import java.io.IOException
 import fs2.data.xml.XmlException
 import esexpr.{ESExpr, ESExprCodec}
@@ -14,13 +15,13 @@ import dev.argon.compiler.*
 import cats.data.NonEmptySeq
 import dev.argon.util.async.ZIOErrorUtil
 import esexpr.parser.ESExprTextReader
-
 import dev.argon.util.{*, given}
 import dev.argon.io.PathUtil
+
 import java.io.StringWriter
 import java.io.PrintWriter
 import dev.argon.io.*
-import dev.argon.backend.{Backend, Backends}
+import dev.argon.backend.{Backend, Backends, CodeGenerator}
 import dev.argon.vm.resource.VmIrResource
 import dev.argon.tube.resource.TubeResourceContext
 import dev.argon.source.ArgonSourceCodeResource
@@ -38,7 +39,7 @@ object CompilerTests extends ZIOSpecDefault {
   private def buildBackendTests: Spec[Env & ArgonLibraryProvider, Error] =
     Spec.multiple(
       Chunk.fromIterable(
-        Backends.allBackends.map { backend =>
+        Backends.allBackends[Error].map { backend =>
           buildTestCases(backend)
         }
       )
@@ -60,7 +61,7 @@ object CompilerTests extends ZIOSpecDefault {
 
   
 
-  private def buildTestCases(backend: Backend): Spec[Env & ArgonLibraryProvider, Error] =
+  private def buildTestCases(backend: Backend[Error]): Spec[Env & ArgonLibraryProvider, Error] =
     Spec.scoped(
       (for
         testCases <- loadTestCases
@@ -86,7 +87,10 @@ object CompilerTests extends ZIOSpecDefault {
                   ZIO.serviceWith[ArgonLibraryProvider](_.getIrLibrary(libName))
                     .map(libName -> _)
                 } 
-                output <- backend.codegen(options, vmIrResource, libIr.toMap)
+                output <- (backend.codeGenerator: backend.codeGenerator.type & CodeGenerator[Error, backend.Output]) match {
+                  case codeGenerator: (backend.codeGenerator.type & CodeGenerator.LibraryCodeGenerator[Error, backend.Output]) =>
+                    codeGenerator.codegen(options, vmIrResource, libIr.toMap)
+                }
                 testProgram <- executor.toTestProgram(output)
                 errors <- ZIO.serviceWithZIO[LogReporter](_.getErrors)
               yield (

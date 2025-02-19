@@ -9,7 +9,7 @@ class WrappedErrorContext[E] {
   object Error {
     given ErrorWrapper[E]:
       override type EX = Error
-      override def exceptionTypeTest: TypeTest[Throwable, Error] = summon
+      override def exceptionTypeTest: TypeTest[Any, Error] = summon
 
       override def wrap(error: Cause[E]): EX = Error(error)
 

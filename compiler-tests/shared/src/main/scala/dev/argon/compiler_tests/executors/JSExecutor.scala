@@ -1,7 +1,7 @@
 package dev.argon.compiler_tests.executors
 
+import dev.argon.backend.backends.js.JSBackend
 import dev.argon.compiler.TubeName
-import dev.argon.backend.platforms.js.JSBackend
 import zio.*
 import zio.stream.*
 import dev.argon.compiler_tests.*

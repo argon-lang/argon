@@ -1,0 +1,44 @@
+package dev.argon.backend
+
+import dev.argon.util.async.ErrorWrapper
+import nobleidl.core.{ErrorType, JSAdapter}
+import nobleidl.sjs.core.ErrorChecker
+import zio.*
+
+import java.io.IOException
+import java.net.URL
+
+object JSApiBackendLoader {
+
+  def jsBackendToScala[E >: BackendException | IOException, Opts, Outs](using ew: ErrorWrapper[E], rt: Runtime[Any])(backendName: String)(backend: sjs.Backend[ew.EX, Opts, Outs]): UIO[Backend[E]] =
+    ScalaApiBackendLoader.loadScalaApiBackend(
+      backendName
+    )(
+      scalaApi.Backend.jsAdapter[ew.EX, ew.EX, Opts, Opts, Outs, Outs](
+        JSAdapter.identity,
+        JSAdapter.identity,
+        JSAdapter.identity,
+      ).fromJS(backend)
+    )
+
+  def loadJSApiBackend[E >: BackendException | IOException](backendName: String)(factory: sjs.BackendFactory): ZIO[Scope, E, Backend[E]] =
+    for
+      given Runtime[Any] <- ZIO.runtime[Any]
+      backend <- ZIO.suspendSucceed {
+        val errorContext = ErrorWrapper.Context[E]()
+        import errorContext.given
+
+        val jsBackend = createBackend(factory)
+        jsBackendToScala(backendName)(jsBackend)
+      }
+    yield backend
+
+  private def createBackend[E >: BackendException | IOException](factory: sjs.BackendFactory)(using ew: ErrorWrapper[E]): sjs.Backend[ew.EX, ?, ?] =
+    import ew.given
+    val errorType = ErrorType.toJSErrorChecker(summon[ErrorType[ew.EX]])
+
+    val hostOperations = new sjs.HostOperations[ew.EX] {}
+
+    factory.create(errorType, hostOperations, backend => backend)
+  end createBackend
+}

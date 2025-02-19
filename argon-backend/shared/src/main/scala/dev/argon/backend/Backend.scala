@@ -6,15 +6,10 @@ import zio.*
 import java.io.IOException
 
 trait Backend[E >: BackendException | IOException] {
-  type Options
   type Output
 
   def name: String
 
-  def codegen(
-    options: Options,
-    program: VmIrResource[E],
-    libraries: Map[TubeName, VmIrResource[E]],
-  ): ZIO[Scope, E, Output]
+  val codeGenerator: CodeGenerator[E, Output]
 
 }

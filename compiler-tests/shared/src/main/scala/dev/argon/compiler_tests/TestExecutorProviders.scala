@@ -1,7 +1,7 @@
 package dev.argon.compiler_tests
 
+import dev.argon.backend.backends.js.JSBackend
 import dev.argon.compiler_tests.TestExecutorProvider.ExecutorFactory
-import dev.argon.backend.platforms
 import dev.argon.compiler.CompilerError
 import dev.argon.compiler.Context
 import zio.*
@@ -13,7 +13,7 @@ object TestExecutorProviders {
   
   def provider: TestExecutorProvider =
     TestExecutorProvider(
-      ExecutorFactory[platforms.js.JSBackend[TestError]] { b =>
+      ExecutorFactory[JSBackend[TestError]] { b =>
         new TestExecutor {
           override val backend: b.type = b
           

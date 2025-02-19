@@ -13,7 +13,7 @@ trait TestCaseResource[+E] extends XmlResource[E] {
 }
 
 object TestCaseResource {
-  given [E >: CharacterCodingException | XmlException | XmlDocumentCountException]: BinaryResourceDecoder[TestCaseResource, E] with
+  given [E >: CharacterCodingException | XmlException | XmlDocumentCountException] => BinaryResourceDecoder[TestCaseResource, E]:
     override def decode(resource: BinaryResource[E]): TestCaseResource[E] =
       resource match {
         case resource: TestCaseResource[E] => resource

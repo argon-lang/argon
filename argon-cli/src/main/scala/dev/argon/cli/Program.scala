@@ -183,12 +183,12 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
   end runGenIR
 
   private def runCodegenJS(options: ArgonCommandLineOptions): ZIO[Environment, Error, Unit] =
-    import dev.argon.backend.platforms.js.JSBackend
+    import dev.argon.backend.backends.js.JSBackend
 
     val backend = JSBackend[Error]()
     ZIO.scoped(
       for
-        output <- backend.codegen(
+        output <- backend.codeGenerator.codegen(
           options = backend.JSOptions(
             externs = options.externs.map(path => PathUtil.binaryResource(path).decode[TextResource]),
           ),

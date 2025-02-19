@@ -14,7 +14,7 @@ import scala.jdk.OptionConverters.*
 import scala.reflect.TypeTest
 
 trait BinaryResource[E] {
-  def fileName: Option[String]
+  val fileName: Option[String]
   def asInputStream: IO[E, InputStreamWithError[WrappingIOException[E]]]
   def asBytes: Stream[E, Byte]
 }
@@ -41,7 +41,7 @@ object BinaryResource {
 
       override def fromJava(j: javaApi.BinaryResource[JE]): BinaryResource[SE] =
         new BinaryResource[SE] {
-          override def fileName: Option[String] = j.fileName().toScala
+          override val fileName: Option[String] = j.fileName().toScala
 
           override def asInputStream: IO[SE, InputStreamWithError[WrappingIOException[SE]]] =
             val errorTypeJ = WrappingIOErrorType[JE]()

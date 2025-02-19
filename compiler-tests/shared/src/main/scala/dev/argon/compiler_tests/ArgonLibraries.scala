@@ -4,7 +4,7 @@ import dev.argon.compiler.*
 import dev.argon.io.*
 import dev.argon.source.ArgonSourceCodeResource
 import dev.argon.backend.Backend
-import dev.argon.backend.platforms.js.JSBackend
+import dev.argon.backend.backends.js.JSBackend
 import dev.argon.compiler_tests.BackendOptionsProvider.OptionsFactory
 
 object ArgonLibraries {
