@@ -24,17 +24,17 @@ function encodeIdentifierChar(c: string): string {
 }
 
 
-export function getModuleOutputFileParts(modulePath: ir.ModulePath): string[] {
+export function getModuleOutputFileParts(modulePath: ir.ModulePath): [ string[], string ] {
     if(modulePath.path.length === 0) {
-        return [ "index.js" ];
+        return [ [], "index.js" ];
     }
     else if(modulePath.path.length === 1 && modulePath.path[0]!.match(/^_*index$/)) {
-        return [ "_" + encodeTubePathComponent(modulePath.path[0]!) + ".js" ];
+        return [ [], "_" + encodeTubePathComponent(modulePath.path[0]!) + ".js" ];
     }
     else {
         const parts = modulePath.path.map(part => encodeTubePathComponent(part));
-        parts[parts.length - 1] = parts[parts.length - 1]! + ".js";
-        return parts;
+        const fileName = parts[parts.length - 1]! + ".js";
+        return [ parts.slice(0, parts.length - 1), fileName ];
     }
 }
 

@@ -6,9 +6,9 @@ import type * as ir from "./vm-format.js";
 import type { Identifier } from "./vm-format.js";
 import type { ExternProvider, ImportHandler } from "./externs.js";
 
-export interface EmittedModule {
+export interface OutputModuleInfo {
     readonly modulePath: ir.ModulePath;
-    readonly jsProgram: estree.Program;
+    emitJsProgram(): estree.Program;
 }
 
 export interface EmitOptions {
@@ -137,15 +137,17 @@ export class TubeEmitter extends EmitterBase {
         super(options);
     }
 
-    *emit(): Iterable<EmittedModule> {
-        for(const module of this.options.program.modules) {{
-            const modEmitter = new ModuleEmitter(this.options, module);
-            const jsProgram = modEmitter.emit();
+    *emit(): Iterable<OutputModuleInfo> {
+        const options = this.options;
+        for(const module of this.options.program.modules) {
             yield {
                 modulePath: module.path,
-                jsProgram,
+                emitJsProgram() {
+                    const modEmitter = new ModuleEmitter(options, module);
+                    return modEmitter.emit();
+                },
             };
-        }}
+        }
     }
 }
 

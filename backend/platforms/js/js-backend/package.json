@@ -6,7 +6,7 @@
   "main": "./lib/index.js",
   "type": "module",
   "scripts": {
-    "codegen": "cpy --flat ../../../vm/vm.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
+    "codegen": "cpy --flat ../../../vm/vm.nidl src/ && cpy --flat ../../../api/backend.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
     "build": "npm run codegen && tsc --project . && cd out/src-gen && cpy . ../../lib/ && cd ../src && cpy . ../../lib/",
     "dist": "npm run build && rollup --config rollup.config.js",
     "test": "npm run build && vitest run --root lib"
@@ -33,9 +33,11 @@
   },
   "NobleIDL": {
     "inputFiles": [
+      "src/backend.nidl",
       "src/vm.nidl"
     ],
     "packageMapping": {
+      "argon.backend": "backend",
       "argon.vm": "vm-format"
     }
   }

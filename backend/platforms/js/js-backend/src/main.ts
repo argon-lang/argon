@@ -3,7 +3,12 @@ import { parse as parseArgs } from "ts-command-line-args";
 
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
-import { codegen } from "./index.js";
+import { codegen2 } from "./index.js";
+import type { PromiseWithError } from "@argon-lang/noble-idl-core/util";
+import type { ScopedResource, Stream } from "./backend.js";
+import { TubeFileEntry } from "./vm-format.js";
+import { readExprStream } from "@argon-lang/esexpr/binary_format";
+import { ESExpr, Option } from "@argon-lang/esexpr";
 
 interface CliArgs {
     input: string,
@@ -26,32 +31,62 @@ const args = parseArgs<CliArgs>(
     },
 );
 
-const codegenOutput = codegen({
-    tubeMapping: [],
-
-    tubeInput: {
-        type: "ir-encoded",
-        data() {
-            return readUint8ArrayStream(args.input);
-        },
+const codegenOutput = codegen2({
+    options: {
+        externs: args.externs.map(sourceFile => ({
+            fileName: sourceFile,
+            asBytes() {
+                return readUint8ArrayStream(sourceFile);
+            },
+        })),
     },
 
-    async *getExterns() {
-        for(const sourceFile of args.externs) {
-            const sourceCode = await fs.readFile(sourceFile, { encoding: "utf-8" });            
-            yield {
-                sourceCode,
-                sourceFile,
+    tubeInput: {
+        async stream(): PromiseWithError<ScopedResource<Stream<unknown, TubeFileEntry>>, unknown> {
+            const iter = decodeIrEntries(readExprStream(readUint8ArrayStream(args.input)))[Symbol.asyncIterator]();
+
+            let iterDone = false;
+
+            const stream: Stream<unknown, TubeFileEntry> = {
+                async next() {
+                    if(iterDone) {
+                        return null;
+                    }
+
+                    const res = await iter.next();
+                    if(res.done) {
+                        iterDone = true;
+                        return null;
+                    }
+                    else {
+                        return Option.some(res.value);
+                    }
+                },
+            };
+
+            return {
+                async get() {
+                    return stream;
+                },
+
+                async close() {
+                    if(!iterDone) {
+                        iterDone = true;
+                        if("return" in iter) {
+                            iter.return();
+                        }
+                    }
+                }
             };
         }
     },
 });
 
-for await(const moduleCodegenResult of codegenOutput) {
-    const fileName = path.join(args.output, ...moduleCodegenResult.moduleFilePath);
+for await(const entry of codegenOutput) {
+    const fileName = path.join(args.output, ...entry.dirs, entry.fileName);
 
     await fs.mkdir(path.dirname(fileName), { recursive: true });
-    await fs.writeFile(fileName, moduleCodegenResult.sourceCode, { encoding: "utf-8" });
+    writeUint8ArrayStream(fileName, entry.resource.asBytes());
 }
 
 async function* readUint8ArrayStream(path: string): AsyncIterable<Uint8Array> {
@@ -72,5 +107,28 @@ async function* readUint8ArrayStream(path: string): AsyncIterable<Uint8Array> {
     }
 }
 
+
+async function* decodeIrEntries(exprs: AsyncIterable<ESExpr>): AsyncIterable<TubeFileEntry> {
+    for await(const expr of exprs) {
+        const res = TubeFileEntry.codec.decode(expr);
+        if(!res.success) {
+            throw new Error("Could not decode expression as Argon VM IR: " + res.message);
+        }
+
+        yield res.value;
+    }
+}
+
+async function writeUint8ArrayStream(path: string, data: AsyncIterable<Uint8Array>): Promise<void> {
+    const file = await fs.open(path, "w");
+    try {
+        for await(const buffer of data) {
+            await file.write(buffer);
+        }
+    }
+    finally {
+        await file.close();
+    }
+}
 
 
