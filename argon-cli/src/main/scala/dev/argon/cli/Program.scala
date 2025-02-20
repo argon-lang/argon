@@ -120,13 +120,11 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
         override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
           PathUtil.directoryResource(options.inputDir.get)
             .filterFiles(_.endsWith(".argon"))
-            .upcast[DirectoryResource[context.Error, BinaryResource]]
             .decode[ArgonSourceCodeResource]
 
         override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
           options.referencedTubes.map { refTubePath =>
             PathUtil.binaryResource(refTubePath)
-              .widen[context.Error]
               .decode[tubeResContext.TubeResource]
           }
       }
@@ -158,13 +156,11 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
 
         override def inputTube(using TubeImporter & HasContext[ctx.type]): TubeResource[context.Error] =
           PathUtil.binaryResource(options.inputFile.get)
-            .widen[context.Error]
             .decode[tubeResContext.TubeResource]
 
         override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
           options.referencedTubes.map { refTubePath =>
             PathUtil.binaryResource(refTubePath)
-              .widen[context.Error]
               .decode[tubeResContext.TubeResource]
           }
       }
@@ -192,7 +188,7 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
           options = backend.JSOptions(
             externs = options.externs.map(path => PathUtil.binaryResource(path).decode[TextResource]),
           ),
-          program = PathUtil.binaryResource(options.inputFile.get).widen[Error].decode[VmIrResource],
+          program = PathUtil.binaryResource(options.inputFile.get).decode[VmIrResource],
           libraries = Map.empty,
         )
 

@@ -44,7 +44,7 @@ sealed abstract class TubeResourceContext extends UsingContext {
                   .provideSomeEnvironment[Scope](_ ++ environment)
 
               override def decoded: Stream[context.Error, t.TubeFileEntry] =
-                resource.widen[context.Error | ESExprException].decode[[E] =>> ESExprDecodedBinaryStreamResource[E, t.TubeFileEntry]]
+                resource.decode[[E] =>> ESExprDecodedBinaryStreamResource[E, t.TubeFileEntry]]
                   .decoded
                   .mapError {
                     case ex: ESExprException => TubeFormatException("Could not decode tube entry", ex)
@@ -52,7 +52,7 @@ sealed abstract class TubeResourceContext extends UsingContext {
                   }
 
               override def expr: Stream[context.Error, ESExpr] =
-                resource.widen[context.Error | ESExprException].decode[ESExprBinaryStreamResource]
+                resource.decode[ESExprBinaryStreamResource]
                   .expr
                   .mapError {
                     case ex: ESExprException => TubeFormatException("Could not parse tube as ESExpr binary format", ex)

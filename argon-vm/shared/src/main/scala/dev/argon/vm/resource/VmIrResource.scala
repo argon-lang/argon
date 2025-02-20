@@ -31,7 +31,7 @@ object VmIrResource {
         case _ =>
           new VmIrResource[E] {
             override def decoded: Stream[E, vm.TubeFileEntry] =
-              resource.widen[E | ESExprException].decode[[E] =>> ESExprDecodedBinaryStreamResource[E, vm.TubeFileEntry]]
+              resource.decode[[E] =>> ESExprDecodedBinaryStreamResource[E, vm.TubeFileEntry]]
                 .decoded
                 .mapError {
                   case ex: ESExprException => TubeFormatException("Could not decode VMIR entry", ex)
@@ -39,7 +39,7 @@ object VmIrResource {
                 }
 
             override def expr: Stream[E, ESExpr] =
-              resource.widen[E | ESExprException].decode[ESExprBinaryStreamResource]
+              resource.decode[ESExprBinaryStreamResource]
                 .expr
                 .mapError {
                   case ex: ESExprException => TubeFormatException("Could not parse VMIR as ESExpr binary format", ex)
