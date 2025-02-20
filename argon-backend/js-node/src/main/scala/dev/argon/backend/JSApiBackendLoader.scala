@@ -10,12 +10,11 @@ import java.net.URL
 
 object JSApiBackendLoader {
 
-  def jsBackendToScala[E >: BackendException | IOException, Opts, Outs](using ew: ErrorWrapper[E], rt: Runtime[Any])(backendName: String)(backend: sjs.Backend[ew.EX, Opts, Outs]): UIO[Backend[E]] =
+  def jsBackendToScala[E >: BackendException | IOException, Outs](using ew: ErrorWrapper[E], rt: Runtime[Any])(backendName: String)(backend: sjs.Backend[ew.EX, Outs]): UIO[Backend[E]] =
     ScalaApiBackendLoader.loadScalaApiBackend(
       backendName
     )(
-      scalaApi.Backend.jsAdapter[ew.EX, ew.EX, Opts, Opts, Outs, Outs](
-        JSAdapter.identity,
+      scalaApi.Backend.jsAdapter[ew.EX, ew.EX, Outs, Outs](
         JSAdapter.identity,
         JSAdapter.identity,
       ).fromJS(backend)
@@ -33,7 +32,7 @@ object JSApiBackendLoader {
       }
     yield backend
 
-  private def createBackend[E >: BackendException | IOException](factory: sjs.BackendFactory)(using ew: ErrorWrapper[E]): sjs.Backend[ew.EX, ?, ?] =
+  private def createBackend[E >: BackendException | IOException](factory: sjs.BackendFactory)(using ew: ErrorWrapper[E]): sjs.Backend[ew.EX, ?] =
     import ew.given
     val errorType = ErrorType.toJSErrorChecker(summon[ErrorType[ew.EX]])
 

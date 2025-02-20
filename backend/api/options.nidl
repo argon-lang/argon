@@ -1,0 +1,42 @@
+package argon.backend.options;
+
+import nobleidl.core;
+import argon.backend;
+
+enum option-value-atom[e: exception] {
+    string { s: string; },
+    bool { b: bool; },
+    binary-resource { res: binary-resource[e]; },
+    directory-resource { res: directory-resource[e]; },
+}
+
+enum option-value[e: exception] {
+    single-value {
+        value: option-value-atom[e];
+    },
+    many-values {
+        values: list[option-value-atom[e]];
+    },
+    many-values-required {
+        head: option-value-atom[e];
+        tail: list[option-value-atom[e]];
+    },
+}
+
+interface option-parser[e: exception, options] {
+    parse(options: dict[option-value[e]]): options throws option-parse-failure;
+}
+
+record option-parse-failure-info {
+    name: string;
+    reason: option-parse-failure-reason;
+}
+
+enum option-parse-failure-reason {
+    invalid-value,
+    unexpected-type,
+    missing-value,
+    unknown-option,
+}
+
+exception option-parse-failure of option-parse-failure-info;

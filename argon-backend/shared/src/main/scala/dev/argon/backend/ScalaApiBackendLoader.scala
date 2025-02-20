@@ -10,10 +10,22 @@ import zio.*
 import java.io.IOException
 
 object ScalaApiBackendLoader {
-  def loadScalaApiBackend[E >: BackendException | IOException, Opts, Outs](using ew: ErrorWrapper[E])(backendName: String)(backend: scalaApi.Backend[ew.EX, Opts, Outs]): UIO[Backend[E]] =
+  def loadScalaApiBackend[E >: BackendException | IOException, Outs](using ew: ErrorWrapper[E])(backendName: String)(backend: scalaApi.Backend[ew.EX, Outs]): UIO[Backend[E]] =
     for
-      apiCodeGen <- backend.codeGenerator()
-    yield new Backend[E] {
+      apiCodeGen <- backend.codeGenerator().flatMap(_.create(
+        new scalaApi.CodeGeneratorFactoryCallback[ew.EX, Outs, scalaApi.CodeGenerator[ew.EX, ?, Outs]] {
+          override def call[Options](codeGenerator: scalaApi.CodeGenerator[ew.EX, Options, Outs]): UIO[scalaApi.CodeGenerator[ew.EX, ?, Outs]] =
+            ZIO.succeed(codeGenerator)
+        }
+      ))
+    yield createBackend(backendName, backend, apiCodeGen)
+    
+  private def createBackend[E >: BackendException | IOException, CodeGenOpts, Outs](using ew: ErrorWrapper[E])(
+    backendName: String,
+    backend: scalaApi.Backend[ew.EX, Outs],
+    apiCodeGen: scalaApi.CodeGenerator[ew.EX, CodeGenOpts, Outs],
+  ): Backend[E] =
+    new Backend[E] {
       override type Output = Outs
 
       override def name: String = backendName
@@ -22,24 +34,24 @@ object ScalaApiBackendLoader {
         apiCodeGen match {
           case scalaApi.CodeGenerator.Library(libCodeGen) =>
             new CodeGenerator.LibraryCodeGenerator[E, Outs] {
-              override type Options = Opts
+              override type Options = CodeGenOpts
 
-              override def codegen(options: Opts, program: VmIrResource[E], libraries: Map[TubeName, VmIrResource[E]]): ZIO[Scope, E, Outs] =
+              override def codegen(options: CodeGenOpts, program: VmIrResource[E], libraries: Map[TubeName, VmIrResource[E]]): ZIO[Scope, E, Outs] =
                 libCodeGen.codegen(
-                  options,
-                  vmIrToApi(program),
-                  scalaApi.LibraryMap(
-                    libraries
-                      .view
-                      .map { (name, res) =>
-                        scalaApi.LibraryMapEntry(
-                          vm.TubeName(name.parts.head, name.parts.tail),
-                          vmIrToApi(res)
-                        )
-                      }
-                      .toSeq
+                    options,
+                    vmIrToApi(program),
+                    scalaApi.LibraryMap(
+                      libraries
+                        .view
+                        .map { (name, res) =>
+                          scalaApi.LibraryMapEntry(
+                            vm.TubeName(name.parts.head, name.parts.tail),
+                            vmIrToApi(res)
+                          )
+                        }
+                        .toSeq
+                    )
                   )
-                )
                   .catchAll(e => ZIO.failCause(ew.unwrap(e)))
             }
         }
@@ -75,6 +87,7 @@ object ScalaApiBackendLoader {
               failure = cause => scope.close(Exit.failCause(cause)) *> ZIO.failCause(cause),
               success = a => ZIO.succeed(new ScopedResource[A] {
                 override def get(): UIO[A] = ZIO.succeed(a)
+
                 override def close(): UIO[Unit] = scope.close(Exit.unit)
               })
             )

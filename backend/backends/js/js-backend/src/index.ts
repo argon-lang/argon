@@ -209,12 +209,18 @@ interface JSBackendOutput<E> {
     readonly modules: backendApi.DirectoryResource<E>;
 }
 
-class JSBackend<E> implements backendApi.Backend<E, JSBackendOptions<E>, JSBackendOutput<E>> {    
-    async codeGenerator(): Promise<backendApi.CodeGenerator<E, JSBackendOptions<E>, JSBackendOutput<E>>> {
-        return {
+class JSBackend<E> implements backendApi.Backend<E, JSBackendOutput<E>> {
+    async codeGenerator(): Promise<backendApi.CodeGeneratorFactory<E, JSBackendOutput<E>>> {
+        return new JSCodeGeneratorFactory();
+    }
+}
+
+class JSCodeGeneratorFactory<E> implements backendApi.CodeGeneratorFactory<E, JSBackendOutput<E>> {
+    create<A>(callback: backendApi.CodeGeneratorFactoryCallback<E, JSBackendOutput<E>, A>): Promise<A> {
+        return callback.call({
             $type: "library",
             generator: new JSCodeGenerator(),
-        };
+        });
     }
 
 }
@@ -252,11 +258,11 @@ export interface HostOperations<_E> {
 }
 
 export interface BackendFactory {
-    create<E, A>(_errorChecker_e: ErrorChecker<E>, _hostOperations: HostOperations<E>, f: <Output, Options>(backend: backendApi.Backend<E, Output, Options>) => A): A;
+    create<E, A>(_errorChecker_e: ErrorChecker<E>, _hostOperations: HostOperations<E>, f: <Output>(backend: backendApi.Backend<E, Output>) => A): A;
 }
 
 export const backendFactory: BackendFactory = {
-    create<E, A>(_errorChecker_e: ErrorChecker<E>, _hostOperations: HostOperations<E>, f: <Output, Options>(backend: backendApi.Backend<E, Output, Options>) => A): A {
+    create<E, A>(_errorChecker_e: ErrorChecker<E>, _hostOperations: HostOperations<E>, f: <Output>(backend: backendApi.Backend<E, Output>) => A): A {
         return f(new JSBackend());
     },
 };

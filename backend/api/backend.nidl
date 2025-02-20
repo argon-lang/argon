@@ -2,15 +2,17 @@ package argon.backend;
 
 import nobleidl.core;
 
-interface backend[e: exception, options, output] {
-    code-generator(): code-generator[e, options, output];
+interface backend[e: exception, output] {
+    code-generator(): code-generator-factory[e, output];
 }
 
 @scala:(adapter-needs-zio-runtime)
 extern type binary-resource[e: exception];
 
-@scala:(adapter-needs-zio-runtime)
-extern type directory-resource[e: exception];
+interface directory-resource[e: exception] {
+    entries(): scoped-resource[stream[e, directory-entry[e]]] throws e;
+}
+
 
 record directory-entry[e: exception] {
     dirs: list[string];
@@ -27,6 +29,14 @@ enum code-generator[e: exception, options, output] {
 
 interface library-code-generator[e: exception, options, output] {
     codegen(options: options, program: vm-ir-tube[e], libraries: library-map[e]): output throws e;
+}
+
+interface code-generator-factory[e: exception, output] {
+    create[a](callback: code-generator-factory-callback[e, output, a]): a;
+}
+
+interface code-generator-factory-callback[e: exception, output, a] {
+    call[options](code-generator: code-generator[e, options, output]): a;
 }
 
 

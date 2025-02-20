@@ -3,6 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "description": "",
+  "author": "",
   "main": "./lib/index.js",
   "type": "module",
   "scripts": {
@@ -11,7 +12,12 @@
     "dist": "npm run build && rollup --config rollup.config.js",
     "test": "npm run build && vitest run --root lib"
   },
-  "author": "",
+  "exports": {
+    ".": "./lib/index.js",
+    "./backend": "./lib/backend.js",
+    "./backend/options": "./lib/backend/options.js",
+    "./vm": "./lib/vm.js"
+  },
   "devDependencies": {
     "@argon-lang/noble-idl-compiler-js": "file:../../../../../noble-idl/langs/js/backend",
     "@types/estree": "^1.0.6",
@@ -38,6 +44,7 @@
     ],
     "packageMapping": {
       "argon.backend": "backend",
+      "argon.backend.options": "backend/options",
       "argon.vm": "vm-format"
     }
   }

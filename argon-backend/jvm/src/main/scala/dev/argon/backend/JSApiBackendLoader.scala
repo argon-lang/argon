@@ -67,7 +67,7 @@ private[backend] object JSApiBackendLoader {
 
   def jsApiBackendToJava(backend: JSApiBackend): javaApi.BackendFactory =
     new javaApi.BackendFactory {
-      override def create[TE, EE <: Throwable](errorType: ErrorType[TE, EE], hostOperations: HostOperations[TE]): javaApi.Backend[TE, ?, ?] =
+      override def create[TE, EE <: Throwable](errorType: ErrorType[TE, EE], hostOperations: HostOperations[TE]): javaApi.Backend[TE, ?] =
         backend.executor.runOnJSThreadWithoutError(() => {
           val errorChecker = ErrorTypeAdapter.toJS(backend.context, backend.executor, errorType)
           CallUtil.callJSFunction(
@@ -76,7 +76,6 @@ private[backend] object JSApiBackendLoader {
             javaApi.Backend.jsAdapter(
               JSAdapter.identity(),
               errorType,
-              JSAdapter.VALUE_ADAPTER,
               JSAdapter.VALUE_ADAPTER,
             ),
             () => backend.context.eval("js", "(errorChecker, backendFactory) => backendFactory.create(errorChecker, {}, x => x)") 
