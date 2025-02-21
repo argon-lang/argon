@@ -34,6 +34,8 @@ private[backend] object JSApiBackendLoader {
 
       jsContext <- ZIO.fromAutoCloseable(ZIO.succeed {
         JSContext.newBuilder("js").nn
+//          .option("js.load", "false")
+//          .option("js.print", "false")
           .option("js.esm-eval-returns-exports", "true")
           // .option("js.text-encoding", "true")
           .option("engine.WarnInterpreterOnly", "false")

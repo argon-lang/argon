@@ -59,7 +59,36 @@ object ScalaApiBackendLoader {
             }
         }
 
-      override def testExecutor: ZIO[Scope, E, Option[TestExecutor[E, Outs]]] = ZIO.none
+      override def testExecutor: IO[E, Option[TestExecutor[E, Outs]]] =
+        backend.testExecutor().flatMap {
+          case Some(execFactory) =>
+            execFactory.create(
+              new scalaApi.TestExecutorFactoryCallback[ew.EX, Outs, TestExecutor[E, Outs]] {
+                override def call[TP](testExecutor: scalaApi.TestExecutor[ew.EX, Outs, TP]): UIO[TestExecutor[E, Outs]] =
+                  ZIO.succeed(new TestExecutor[E, Outs] {
+                    override type TestProgram = TP
+
+                    override def toTestProgram(program: Outs): IO[E, TP] =
+                      ErrorWrapper.unwrapEffect(testExecutor.toTestProgram(program))
+
+                    override def run(program: TP, libraries: Map[TubeName, TP]): Task[String] =
+                      val libs = scalaApi.LibraryMap(
+                        libraries.toSeq
+                          .map { (name, lib) =>
+                            scalaApi.LibraryMapEntry(
+                              vm.TubeName(name.parts.head, name.parts.tail),
+                              lib
+                            )
+                          }
+                      )
+
+                      testExecutor.run(program, libs)
+                  })
+              }
+            ).asSome
+
+          case None => ZIO.none
+        }
     }
 
 

@@ -56,7 +56,8 @@ lazy val sharedJSNodeSettings = Seq(
 
   npmDependencies ++= Seq(
     "@argon-lang/esexpr" -> "^0.1.17",
-    "@argon-lang/js-compiler-backend" -> "file:../../../../backend/backends/js/js-backend",
+    "@argon-lang/js-backend-api" -> "file:../../../../backend/api/js",
+    "@argon-lang/compiler-backend-js" -> "file:../../../../backend/backends/js",
   ),
   
   scalaJSLinkerConfig ~= {
@@ -475,7 +476,7 @@ lazy val argon_sourceJS = argon_source.js
 lazy val argon_sourceNode = argon_source.node
 
 
-lazy val argon_backend_java_api = project.in(file("backend/backends/java/api"))
+lazy val argon_backend_java_api = project.in(file("backend/api/java"))
   .enablePlugins(NobleIDLPlugin)
   .settings(
     commonSettingsNoLibs,
@@ -508,8 +509,8 @@ lazy val argon_backend_java_api = project.in(file("backend/backends/java/api"))
     Compile / generateNobleIdlJava := true,
     Compile / generateNobleIdlGraalJsAdapters := true,
     Compile / nobleIdlSourceDirectories ++= Seq(
-      baseDirectory.value / "../../../vm/",
-      baseDirectory.value / "../../../api/",
+      baseDirectory.value / "../../vm/",
+      baseDirectory.value / "../nobleidl",
     ),
   )
 
@@ -572,7 +573,7 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
         val destDir = resourceManaged.value / "js-backend/dev/argon/backend/backends/js"
         val destFile = destDir / "js-backend.js"
 
-        val jsBackendDir = file("backend/backends/js/js-backend")
+        val jsBackendDir = file("backend/backends/js")
 
         val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
           log.info("Building JS Backend Distribution")
@@ -622,7 +623,7 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
 
     name := "argon-backend",
 
-    Compile / nobleIdlSourceDirectories += baseDirectory.value / "../../backend/api/",
+    Compile / nobleIdlSourceDirectories += baseDirectory.value / "../../backend/api/nobleidl",
   )
 
 lazy val argon_backendJVM = argon_backend.jvm

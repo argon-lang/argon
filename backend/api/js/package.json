@@ -1,0 +1,46 @@
+{
+  "name": "@argon-lang/js-backend-api",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "author": "",
+  "main": "./lib/index.js",
+  "type": "module",
+  "scripts": {
+    "codegen": "cpy --flat ../../vm/vm.nidl src/ && cpy --flat ../nobleidl/backend.nidl src/ && cpy --flat ../nobleidl/options.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
+    "build": "npm run codegen && tsc --project . && cd out/src-gen && cpy . ../../lib/ && cd ../src && cpy . ../../lib/",
+    "test": "npm run build && vitest run --root lib"
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./options": "./lib/options.js",
+    "./options/parser": "./lib/options/parser.js",
+    "./vm": "./lib/vm.js"
+  },
+  "devDependencies": {
+    "@argon-lang/noble-idl-compiler-js": "file:../../../../noble-idl/langs/js/backend",
+    "@types/estree": "^1.0.6",
+    "@types/node": "^22.13.1",
+    "cpy-cli": "^5.0.0",
+    "make-dir-cli": "^4.0.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.6"
+  },
+  "dependencies": {
+    "@argon-lang/esexpr": "^0.1.17",
+    "@argon-lang/noble-idl-core": "file:../../../../noble-idl/langs/js/runtime"
+  },
+  "NobleIDL": {
+    "inputFiles": [
+      "src/backend.nidl",
+      "src/options.nidl",
+      "src/vm.nidl"
+    ],
+    "packageMapping": {
+      "argon.backend": "",
+      "argon.backend.options": "options",
+      "argon.vm": "vm"
+    }
+  }
+}

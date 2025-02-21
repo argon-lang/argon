@@ -105,7 +105,7 @@ object PathUtil {
     }
 
   def writeDir[E >: IOException](path: String, resource: DirectoryResource[E, BinaryResource]): IO[E, Unit] =
-    runPromiseIO(NodeFileSystem.mkdir(NodePath.dirname(path), new NodeFileSystem.MkDirOptions {
+    runPromiseIO(NodeFileSystem.mkdir(path, new NodeFileSystem.MkDirOptions {
       override val recursive: js.UndefOr[Boolean] = true
     })) *>
       resource.contents.foreach { entry =>

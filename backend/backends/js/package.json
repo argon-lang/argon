@@ -1,0 +1,47 @@
+{
+  "name": "@argon-lang/compiler-backend-js",
+  "private": true,
+  "version": "1.0.0",
+  "description": "",
+  "author": "",
+  "main": "./lib/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project .",
+    "dist": "npm run build && rollup --config rollup.graal.config.js",
+    "test": "npm run build && vitest run --root lib"
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./backend": "./lib/backend.js",
+    "./backend/options": "./lib/backend/options.js",
+    "./vm": "./lib/vm.js"
+  },
+  "imports": {
+    "#executor": {
+      "node": "./lib/executor/executor.node.js",
+      "graal": "./lib/executor/executor.graal.js",
+      "default": "./lib/executor/executor.disabled.js"
+    }
+  },
+  "devDependencies": {
+    "@types/estree": "^1.0.6",
+    "@types/node": "^22.13.1",
+    "cpy-cli": "^5.0.0",
+    "make-dir-cli": "^4.0.0",
+    "rimraf": "^6.0.1",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.6"
+  },
+  "dependencies": {
+    "@argon-lang/esexpr": "^0.1.17",
+    "@argon-lang/js-backend-api": "file:../../api/js",
+    "@argon-lang/noble-idl-core": "file:../../../../noble-idl/langs/js/runtime",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "acorn": "^8.14.0",
+    "astring": "^1.9.0",
+    "rollup": "^4.34.7",
+    "source-map": "^0.7.4",
+    "ts-command-line-args": "^2.5.1"
+  }
+}
