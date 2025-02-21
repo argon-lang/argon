@@ -40,8 +40,8 @@ object BackendLibraryOutputProvider {
             library = ArgonLibraries.allLibraries(tubeName)
 
             depLibraries = library.references.view.map { refLibName =>
-              refLibName -> libProvider.getIrLibrary(refLibName).decode[VmIrResource]
-            }.toMap
+              libProvider.getIrLibrary(refLibName).decode[VmIrResource].withError[TestError]
+            }.toSeq
 
             output <- (b.codeGenerator : (b.codeGenerator.type & CodeGenerator[TestError, b.Output])) match {
               case codeGenerator: (b.codeGenerator.type & CodeGenerator.LibraryCodeGenerator[TestError, b.Output]) =>

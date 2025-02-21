@@ -5,5 +5,6 @@ module dev.argon.backend.api {
 	requires transitive org.graalvm.polyglot;
 
 	exports dev.argon.backend.api;
+	exports dev.argon.backend.api.options;
 	exports dev.argon.vm.api;
 }

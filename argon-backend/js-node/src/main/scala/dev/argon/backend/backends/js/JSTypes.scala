@@ -37,7 +37,7 @@ trait TubeMapping extends js.Object {
   val packageName: String
 }
 
-@JSImport("@argon-lang/js-compiler-backend")
+@JSImport("@argon-lang/js-compiler-backend", JSImport.Namespace)
 @js.native
 object JSBackendModule extends js.Object {
   def codegen(input: CodegenInput): AsyncIterable[ModuleCodegenResult] = js.native

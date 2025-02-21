@@ -8,8 +8,12 @@ import { readIR } from "./ir-reader.js";
 import type { ESExpr } from "@argon-lang/esexpr";
 import { readExprStream } from "@argon-lang/esexpr/binary_format";
 import { getModuleOutputFileParts } from "./util.js";
-import type * as backendApi from "./backend.js";
+import * as backendApi from "./backend.js";
+import * as backendOptions from "./backend/options.js";
 import type { ErrorChecker, PromiseWithError } from "@argon-lang/noble-idl-core/util";
+import type { OptionParser } from "./backend/options.js";
+import * as op from "./option-parser.js";
+import type { Dict } from "@argon-lang/noble-idl-core";
 
 export interface CodegenInput {
     readonly tubeMapping: readonly TubeMapping[];
@@ -107,7 +111,7 @@ export async function* codegen2<E>(input: CodegenInput2<E>): AsyncIterable<backe
         externLoader.addExterns(program as estree.Program);
     }
     
-    let ir = tubeToEntryStream(input.tubeInput);
+    let ir = streamToAsyncIterable(() => input.tubeInput.stream());
     
     const programModel = await readIR(ir);
     
@@ -152,8 +156,8 @@ function stringFuncAsResource<E>(s: () => Promise<string>): backendApi.BinaryRes
     };
 }
 
-async function* tubeToEntryStream<E>(tube: backendApi.VmIrTube<E>): AsyncIterable<ir.TubeFileEntry> {
-    const streamRes = await tube.stream();
+async function* streamToAsyncIterable<E, A>(streamFunc: () => Promise<backendApi.ScopedResource<backendApi.Stream<E, A>>>): AsyncIterable<A> {
+    const streamRes = await streamFunc();
     try {
         const stream = await streamRes.get();
         while(true) {
@@ -168,6 +172,35 @@ async function* tubeToEntryStream<E>(tube: backendApi.VmIrTube<E>): AsyncIterabl
     finally {
         await streamRes.close();
     }
+}
+
+
+async function asyncIterableToStream<E, A>(iterable: AsyncIterable<A>): Promise<backendApi.ScopedResource<backendApi.Stream<E, A>>> {
+    const iter = iterable[Symbol.asyncIterator]();
+
+    let isDone = false;
+    const stream: backendApi.Stream<E, A> = {
+        async next() {
+            const res = await iter.next();
+            if(res.done) {
+                return [];
+            }
+
+            return [ res.value ];
+        },
+    };
+
+    return {
+        async get() {
+            return stream;
+        },
+
+        async close() {
+            if(!isDone && iter.return) {
+                await iter.return();
+            }
+        },
+    };
 }
 
 export interface TestProgram {
@@ -213,6 +246,10 @@ class JSBackend<E> implements backendApi.Backend<E, JSBackendOutput<E>> {
     async codeGenerator(): Promise<backendApi.CodeGeneratorFactory<E, JSBackendOutput<E>>> {
         return new JSCodeGeneratorFactory();
     }
+
+    toString() {
+        return "JSBackend";
+    }
 }
 
 class JSCodeGeneratorFactory<E> implements backendApi.CodeGeneratorFactory<E, JSBackendOutput<E>> {
@@ -226,13 +263,21 @@ class JSCodeGeneratorFactory<E> implements backendApi.CodeGeneratorFactory<E, JS
 }
 
 class JSCodeGenerator<E> implements backendApi.LibraryCodeGenerator<E, JSBackendOptions<E>, JSBackendOutput<E>> {
-    async codegen(options: JSBackendOptions<E>, program: backendApi.VmIrTube<E>, libraries: backendApi.LibraryMap<E>): PromiseWithError<JSBackendOutput<E>, E> {
+    async optionParser(): Promise<OptionParser<E, JSBackendOptions<E>>> {
+        return new JSOptionParser();
+    }
+
+    async codegen(options: JSBackendOptions<E>, program: backendApi.VmIrTube<E>, libraries: readonly backendApi.VmIrTube<E>[]): PromiseWithError<JSBackendOutput<E>, E> {
         return new JSBackendOutputImpl(options, program, libraries);
+    }
+
+    async outputProvider(): Promise<backendOptions.OutputProvider<E, JSBackendOutput<E>>> {
+        return new JSOutputProvider();
     }
 }
 
 class JSBackendOutputImpl<E> implements JSBackendOutput<E> {
-    constructor(options: JSBackendOptions<E>, program: backendApi.VmIrTube<E>, _libraries: backendApi.LibraryMap<E>) {
+    constructor(options: JSBackendOptions<E>, program: backendApi.VmIrTube<E>, _libraries: readonly backendApi.VmIrTube<E>[]) {
         this.#options = options;
         this.#program = program;
     }
@@ -243,15 +288,33 @@ class JSBackendOutputImpl<E> implements JSBackendOutput<E> {
     get modules(): backendApi.DirectoryResource<E> {
         const outputImpl = this;
         return {
-            entries() {
-                return codegen2({
+            contents() {
+                return asyncIterableToStream(codegen2({
                     options: outputImpl.#options,
                     tubeInput: outputImpl.#program,
-                });
+                }));
             },
         };
     }
 }
+
+class JSOptionParser<E> implements backendOptions.OptionParser<E, JSBackendOptions<E>> {
+    async parse(options: ReadonlyMap<string, backendOptions.OptionValue<E>>): PromiseWithError<JSBackendOptions<E>, backendOptions.OptionParseFailure> {
+        return op.parse<E, JSBackendOptions<E>>(options, {
+            externs: op.many(op.binaryResourceOption()),
+        });
+    }
+}
+
+class JSOutputProvider<E> implements backendOptions.OutputProvider<E, JSBackendOutput<E>> {
+    async resources(o: JSBackendOutput<E>): Promise<Dict<backendOptions.OutputValue<E>>> {
+        return new Map([
+            [ "modules", { $type: "directory-resource", res: o.modules } ],
+        ]);
+    }
+}
+
+
 
 export interface HostOperations<_E> {
 

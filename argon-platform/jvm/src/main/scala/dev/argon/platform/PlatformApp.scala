@@ -19,17 +19,7 @@ abstract class PlatformApp[E] extends ZIOApp {
 
   final override def run: ZIO[Environment & ZIOAppArgs, Any, Any] =
     runApp.flatMap(exit)
-      .tapDefect { cause =>
-        ZIO.foreach(cause.defects) { ex =>
-          ZIO.succeed { ex.printStackTrace() }
-        }
-      }
-      .tapError { err =>
-        err.asInstanceOf[Matchable] match
-          case ex: Throwable => ZIO.succeed { ex.printStackTrace() }
-          case error => Console.printLineError(error)
-        end match
-      }
+      .tapErrorCause(ZIO.logErrorCause(_))
 
   def runApp: ZIO[Environment & ZIOAppArgs, E, ExitCode]
 }

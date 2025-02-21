@@ -1,30 +1,27 @@
 package dev.argon.backend.backends.js
 
 import dev.argon.backend.*
-
-
 import dev.argon.io.TextResource
 import dev.argon.io.DirectoryResource
 import dev.argon.vm.resource.VmIrResource
 import dev.argon.compiler.*
 
-import java.util.concurrent.{Executors as JExecutors, Executor as JExecutor}
-
+import java.util.concurrent.{Executor as JExecutor, Executors as JExecutors}
 import org.graalvm.polyglot.{Context as GraalContext, *}
 import org.graalvm.polyglot.proxy.{ProxyExecutable, ProxyObject}
-
-
 import zio.*
 import zio.stream.*
-
 import dev.argon.util.async.ErrorWrapper
 import dev.argon.util.async.JavaExecuteIO
+
 import scala.collection.mutable.ArrayBuffer
 import dev.argon.io.DirectoryEntry
 import dev.argon.io.Resource
 import cats.data.NonEmptySeq
-import java.io.IOException
+import dev.argon.backend.options.OutputProvider
+import dev.argon.backend.scalaApi.options.OptionParser
 
+import java.io.IOException
 import scala.jdk.CollectionConverters.*
 import dev.argon.util.graalext.TextDecoderPolyfill
 
@@ -36,10 +33,14 @@ trait JSBackendPlatformSpecific[E >: BackendException | IOException] {
     new CodeGenerator.LibraryCodeGenerator[E, JSOutput] {
       override type Options = JSOptions
 
+      override def optionParser: options.OptionParser[E, JSOptions] = ???
+
+      override def outputProvider: OutputProvider[E, JSOutput] = ???
+
       def codegen(
         options: Options,
         program: VmIrResource[E],
-        libraries: Map[TubeName, VmIrResource[E]],
+        libraries: Seq[VmIrResource[E]],
       ): ZIO[Scope, E, Output] =
 
         class JSCodegenImpl(jsContext: GraalContext, jExecutor: JExecutor, executor: Executor)(using runtime: Runtime[Any]) {

@@ -1,12 +1,16 @@
 package dev.argon.backend
 
+import dev.argon.backend.options.{OptionParser, OutputProvider}
 import dev.argon.compiler.TubeName
 import dev.argon.vm.resource.VmIrResource
+
 import java.io.IOException
 import zio.*
 
 sealed abstract class CodeGenerator[E >: BackendException | IOException, Output] {
   type Options
+  def optionParser: OptionParser[E, Options]
+  def outputProvider: OutputProvider[E, Output]
 }
 
 object CodeGenerator {
@@ -15,7 +19,8 @@ object CodeGenerator {
     def codegen(
       options: Options,
       program: VmIrResource[E],
-      libraries: Map[TubeName, VmIrResource[E]],
+      libraries: Seq[VmIrResource[E]],
     ): ZIO[Scope, E, Output]
   }
+  
 }

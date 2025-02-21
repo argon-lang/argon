@@ -3,9 +3,9 @@ package dev.argon.backend
 import dev.argon.backend.api as javaApi
 import dev.argon.backend.api.HostOperations
 import dev.argon.nobleidl.runtime.{ErrorType, FutureWithError, FutureWithoutError}
-import dev.argon.nobleidl.runtime.graaljsInterop.{ErrorChecker, ErrorTypeAdapter, JSExecutor, CallUtil, JSAdapter}
+import dev.argon.nobleidl.runtime.graaljsInterop.{CallUtil, ErrorChecker, ErrorTypeAdapter, JSAdapter, JSExecutor}
 import dev.argon.util.*
-import dev.argon.util.graalext.TextDecoderPolyfill
+import dev.argon.util.graalext.{TextDecoderPolyfill, TextEncoderPolyfill}
 
 import java.util.concurrent.{Executor as JExecutor, Executors as JExecutors}
 import org.graalvm.polyglot.{Source, Context as JSContext, Value as JSValue}
@@ -38,12 +38,13 @@ private[backend] object JSApiBackendLoader {
           // .option("js.text-encoding", "true")
           .option("engine.WarnInterpreterOnly", "false")
           .build()
-      })
+      }).onExecutor(executor)
 
       _ <- ZIO.attempt {
         TextDecoderPolyfill.polyfill(jsContext)
+        TextEncoderPolyfill.polyfill(jsContext)
       }
-        .mapError(ex => BackendException("Could not load TextDecoder polyfill", ex))
+        .mapError(ex => BackendException("Could not load polyfills", ex))
         .onExecutor(executor)
 
       module <- ZIO.attempt {
@@ -70,16 +71,13 @@ private[backend] object JSApiBackendLoader {
       override def create[TE, EE <: Throwable](errorType: ErrorType[TE, EE], hostOperations: HostOperations[TE]): javaApi.Backend[TE, ?] =
         backend.executor.runOnJSThreadWithoutError(() => {
           val errorChecker = ErrorTypeAdapter.toJS(backend.context, backend.executor, errorType)
-          CallUtil.callJSFunction(
-            backend.context,
-            backend.executor,
-            javaApi.Backend.jsAdapter(
-              JSAdapter.identity(),
-              errorType,
-              JSAdapter.VALUE_ADAPTER,
-            ),
-            () => backend.context.eval("js", "(errorChecker, backendFactory) => backendFactory.create(errorChecker, {}, x => x)") 
-          )
+          val jsBackend = backend.context.eval("js", "(errorChecker, backendFactory) => backendFactory.create(errorChecker, {}, x => x)").execute(errorChecker, backend.backendFactory)
+
+          javaApi.Backend.jsAdapter(
+            JSAdapter.identity(),
+            errorType,
+            JSAdapter.VALUE_ADAPTER,
+          ).fromJS(backend.context, backend.executor, jsBackend)
         }).get()
     }
     

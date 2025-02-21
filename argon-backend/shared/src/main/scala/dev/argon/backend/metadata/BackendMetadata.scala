@@ -20,7 +20,7 @@ final case class BackendOptionsSchema(
 
 final case class BackendOption(
   `type`: OptionType,
-  occurrence: OptionOccurrence,
+  occurrence: OptionOccurrence = OptionOccurrence.Default,
 ) derives toml.Codec
 
 final case class BackendOptionOutput(
@@ -28,7 +28,7 @@ final case class BackendOptionOutput(
 ) derives toml.Codec
 
 
-enum OptionType {
+enum OptionType derives CanEqual {
   case String
   case Bool
   case BinaryResource
@@ -51,7 +51,8 @@ object OptionType {
   end given
 }
 
-enum OptionOccurrence {
+enum OptionOccurrence derives CanEqual {
+  case Default
   case Optional
   case Required
   case Many
@@ -74,7 +75,7 @@ object OptionOccurrence {
   end given
 }
 
-enum OutputType {
+enum OutputType derives CanEqual {
   case BinaryResource
   case DirectoryResource
 }

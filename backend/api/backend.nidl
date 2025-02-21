@@ -10,7 +10,7 @@ interface backend[e: exception, output] {
 extern type binary-resource[e: exception];
 
 interface directory-resource[e: exception] {
-    entries(): scoped-resource[stream[e, directory-entry[e]]] throws e;
+    contents(): scoped-resource[stream[e, directory-entry[e]]] throws e;
 }
 
 
@@ -28,7 +28,10 @@ enum code-generator[e: exception, options, output] {
 }
 
 interface library-code-generator[e: exception, options, output] {
-    codegen(options: options, program: vm-ir-tube[e], libraries: library-map[e]): output throws e;
+    option-parser(): argon.backend.options.option-parser[e, options];
+    output-provider(): argon.backend.options.output-provider[e, output];
+
+    codegen(options: options, program: vm-ir-tube[e], libraries: list[vm-ir-tube[e]]): output throws e;
 }
 
 interface code-generator-factory[e: exception, output] {
@@ -52,13 +55,4 @@ interface scoped-resource[a] {
 
 interface stream[e: exception, a] {
     next(): list[a] throws e;
-}
-
-record library-map[e: exception] {
-    entries: list[library-map-entry[e]];
-}
-
-record library-map-entry[e: exception] {
-    name: argon.vm.tube-name;
-    tube: vm-ir-tube[e];
 }

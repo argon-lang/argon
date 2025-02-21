@@ -11,13 +11,17 @@ import java.net.URL
 object JSApiBackendLoader {
 
   def jsBackendToScala[E >: BackendException | IOException, Outs](using ew: ErrorWrapper[E], rt: Runtime[Any])(backendName: String)(backend: sjs.Backend[ew.EX, Outs]): UIO[Backend[E]] =
+    val adapter = scalaApi.Backend.jsAdapter[ew.EX, ew.EX, Outs, Outs](
+      JSAdapter.identity,
+      JSAdapter.identity,
+    )
+
+    val backendScala = adapter.fromJS(backend)
+    
     ScalaApiBackendLoader.loadScalaApiBackend(
       backendName
     )(
-      scalaApi.Backend.jsAdapter[ew.EX, ew.EX, Outs, Outs](
-        JSAdapter.identity,
-        JSAdapter.identity,
-      ).fromJS(backend)
+      backendScala
     )
 
   def loadJSApiBackend[E >: BackendException | IOException](backendName: String)(factory: sjs.BackendFactory): ZIO[Scope, E, Backend[E]] =

@@ -61,7 +61,7 @@ public abstract class BinaryResource<TE> {
 				public <EE extends IOException> InputStreamWithError<EE> asInputStream(IOErrorType<TE, EE> errorType) throws InterruptedIOException, EE {
 					try {
 						return jsExecutor.runOnJSThreadWithError(() -> {
-							var iter = context.eval("js", "res => res.asBytes()[Symbol.asyncIterable]()").execute(value);
+							var iter = context.eval("js", "res => res.asBytes()[Symbol.asyncIterator]()").execute(value);
 							return new InputStreamWithError<EE>() {
 								private boolean isDone = false;
 								private Value data = null;
@@ -84,7 +84,7 @@ public abstract class BinaryResource<TE> {
 								public int read(byte @NotNull[] b, int off, int len) throws InterruptedIOException, EE {
 									Objects.checkFromIndexSize(off, len, b.length);
 									try {
-										if(!isDone && data == null) {
+										while(!isDone && data == null) {
 											Value iterRes = CallUtil.callJSFunction(context, jsExecutor, JSAdapter.VALUE_ADAPTER, eAdapter, errorType, ErrorTypeAdapter.toJS(context, jsExecutor, errorType), () -> iter.invokeMember("next"));
 	
 											dataOffset = 0;
@@ -94,11 +94,16 @@ public abstract class BinaryResource<TE> {
 													return null;
 												}
 												else {
-													return iterRes.getMember("value");
+													Value value = iterRes.getMember("value");
+													if(value.getArraySize() == 0) {
+														return null;
+													}
+													
+													return value;
 												}
 											}).get();
 										}
-	
+
 										if(data == null) {
 											return -1;
 										}
@@ -107,20 +112,18 @@ public abstract class BinaryResource<TE> {
 											int readLen = len;
 											long arrSize = data.getArraySize();
 											long remaining = arrSize - dataOffset;
-											boolean fullRead = false;
 	
-											if(remaining < readLen) {
+											if(remaining <= readLen) {
 												readLen = (int)remaining;
 											}
-											else {
-												fullRead = true;
-											}
-	
+
 											for(int i = 0; i < readLen; ++i) {
 												b[off + i] = (byte)data.getArrayElement(dataOffset + i).asInt();
 											}
-	
-											if(fullRead) {
+											
+											dataOffset += readLen;
+
+											if(dataOffset >= arrSize) {
 												data = null;
 											}
 	
@@ -159,8 +162,8 @@ public abstract class BinaryResource<TE> {
 			});
 
 			var streamPull = CallUtil.makeJavaScriptFunction(arguments -> {
+				var is = JSAdapter.<InputStream>identity().fromJS(context, jsExecutor, arguments[0]);
 				return new JSPromiseWithErrorAdapter<>(JSAdapter.VALUE_ADAPTER, eAdapter).toJS(context, jsExecutor, errorTypeIO, jsExecutor.offloadJavaWithError(() -> {
-					var is = JSAdapter.<InputStream>identity().fromJS(context, jsExecutor, arguments[0]);
 
 					byte[] buff = new byte[4096];
 					int bytesRead = is.read(buff);
@@ -168,17 +171,19 @@ public abstract class BinaryResource<TE> {
 						return null;
 					}
 
-					var arr = context.eval("js", "n => new Uint8Array(n)").execute(bytesRead);
-					for(int i = 0; i < bytesRead; ++i) {
-						arr.setArrayElement(i, Byte.toUnsignedInt(buff[i]));
-					}
-					return arr;
+					return jsExecutor.runOnJSThreadWithoutError(() -> {
+						var arr = context.eval("js", "n => new Uint8Array(n)").execute(bytesRead);
+						for(int i = 0; i < bytesRead; ++i) {
+							arr.setArrayElement(i, Byte.toUnsignedInt(buff[i]));
+						}
+						return arr;
+					}).get();
 				}));
 			});
 
 			var streamClose = CallUtil.makeJavaScriptFunction(arguments -> {
+				var is = JSAdapter.<InputStream>identity().fromJS(context, jsExecutor, arguments[0]);
 				return new JSPromiseWithErrorAdapter<>(JSAdapter.identity(), eAdapter).toJS(context, jsExecutor, errorTypeIO, jsExecutor.offloadJavaWithError(() -> {
-					var is = JSAdapter.<InputStream>identity().fromJS(context, jsExecutor, arguments[0]);
 					is.close();
 					return null;
 				}));
@@ -187,26 +192,26 @@ public abstract class BinaryResource<TE> {
 
 			return context.eval("js",
 				"""
-						(async function*(openStreamFunc, fileName, streamPull, streamClose) {
-							return {
-								fileName: fileName ?? undefined,
-								async *asBytes() {
-									const stream = await openStreamFunc();
-									try {
-										for(;;) {
-											const items = await streamPull(stream);
-											if(items === null) {
-												break;
-											}
-											yield* items;
+					(openStreamFunc, fileName, streamPull, streamClose) => {
+						return {
+							fileName: fileName ?? undefined,
+							async *asBytes() {
+								const stream = await openStreamFunc();
+								try {
+									for(;;) {
+										const items = await streamPull(stream);
+										if(items === null) {
+											break;
 										}
+										yield items;
 									}
-									finally {
-										await streamClose(stream);
-									}
-								},
-							};
-						})
+								}
+								finally {
+									await streamClose(stream);
+								}
+							},
+						};
+					}
 					"""
 			).execute(openStreamFunc, resource.fileName().orElse(null), streamPull, streamClose);
 		}

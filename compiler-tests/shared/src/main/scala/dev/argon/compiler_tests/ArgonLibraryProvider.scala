@@ -97,7 +97,6 @@ object ArgonLibraryProvider {
 
                 override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
                   PathUtil.directoryResource(PathLike.join(tubeDir, "src"))
-                    .upcast[DirectoryResource[context.Error, BinaryResource]]
                     .decode[ArgonSourceCodeResource]
 
                 override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =

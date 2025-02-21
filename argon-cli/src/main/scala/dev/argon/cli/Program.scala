@@ -4,6 +4,8 @@ import dev.argon.io.*
 import dev.argon.platform.*
 import dev.argon.util.{*, given}
 import dev.argon.build.{BuildError, Compile}
+import dev.argon.backend.{BackendException, BackendFactory, Backends, CodeGenerator}
+import dev.argon.backend.options.OptionValue
 import esexpr.ESExprException
 import zio.*
 import zio.stream.*
@@ -16,6 +18,7 @@ import dev.argon.compiler.TubeName
 import dev.argon.build.InvalidTubeName
 import dev.argon.compiler.Context
 import dev.argon.compiler.ErrorLog
+
 import scala.reflect.TypeTest
 import dev.argon.build.CContext
 import dev.argon.source.SourceError
@@ -28,36 +31,36 @@ import dev.argon.source.ArgonSourceCodeResource
 import dev.argon.compiler.TubeImporter
 import dev.argon.build.GenerateIR
 import dev.argon.vm.resource.VmIrResource
-import dev.argon.backend.BackendException
 
 object Program extends PlatformApp[IOException | BuildError | SourceError | TubeFormatException | BackendException] {
 
   def runApp: ZIO[Environment & ZIOAppArgs, Error, ExitCode] =
     val parser = ArgonCommandLineOptions.parser
 
-    ZIOAppArgs.getArgs.flatMap { args =>
-      val (options, effects) = OParser.runParser(parser, args, ArgonCommandLineOptions())
-      ZIO.foreach(effects)(runOEffect)
-        .foldZIO(
-          failure = {
-            case ex: IOException => ZIO.fail(ex)
-            case exitCode: ExitCode => ZIO.succeed(exitCode)
-          },
-          success = _ => options match {
-            case Some(config) =>
-              runCommand(config)
-//              for
-//                fiber <- runCommand(config).fork
-//                _ <- Clock.sleep(Duration.fromSeconds(15))
-//                trace <- fiber.trace
-//                _ <- Console.printLineError(trace)
-//                res <- fiber.join
-//              yield res
+    ZIOAppArgs.getArgs
+      .flatMap { args =>
+        val (options, effects) = OParser.runParser(parser, args, ArgonCommandLineOptions())
+        ZIO.foreach(effects)(runOEffect)
+          .foldZIO(
+            failure = {
+              case ex: IOException => ZIO.fail(ex)
+              case exitCode: ExitCode => ZIO.succeed(exitCode)
+            },
+            success = _ => options match {
+              case Some(config) =>
+                runCommand(config)
+//                for
+//                  fiber <- runCommand(config).fork
+//                  _ <- Clock.sleep(Duration.fromSeconds(15))
+//                  trace <- fiber.trace
+//                  _ <- Console.printLineError(trace)
+//                  res <- fiber.join
+//                yield res
 
-            case None => ZIO.succeed(ExitCode.failure)
-          }
-        )
-    }
+              case None => ZIO.succeed(ExitCode.failure)
+            }
+          )
+      }
   end runApp
 
   private def runOEffect(effect: OEffect): IO[IOException | ExitCode, Unit] =
@@ -94,9 +97,18 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
               _ <- Console.printLineError("No backend specified")
             yield ExitCode.failure
 
-          case Some(CodegenBackend.JS) =>
-            runCodegenJS(options)
-              .as(ExitCode.success)
+          case Some(backendName) =>
+            Backends.allBackendFactories.find(_.metadata.backend.name == backendName) match
+              case None =>
+                Console.printLineError(s"Could not find backend $backendName").as(ExitCode.failure)
+
+              case Some(backend) =>
+                if options.outputOptions.isEmpty then
+                  Console.printLineError(s"No outputs were specified").as(ExitCode.failure)
+                else
+                  runCodegen(backend, options)
+                    .as(ExitCode.success)
+            end match
         end match
     end match
 
@@ -178,23 +190,54 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
     yield ()
   end runGenIR
 
-  private def runCodegenJS(options: ArgonCommandLineOptions): ZIO[Environment, Error, Unit] =
-    import dev.argon.backend.backends.js.JSBackend
-
-    val backend = JSBackend[Error]()
+  private def runCodegen(backendFactory: BackendFactory, options: ArgonCommandLineOptions): ZIO[Environment, Error, Unit] =
     ZIO.scoped(
       for
-        output <- backend.codeGenerator.codegen(
-          options = backend.JSOptions(
-            externs = options.externs.map(path => PathUtil.binaryResource(path).decode[TextResource]),
-          ),
-          program = PathUtil.binaryResource(options.inputFile.get).decode[VmIrResource],
-          libraries = Map.empty,
-        )
+        backend <- backendFactory.load[Error]
+        codeGenOpts <- backend.codeGenerator.optionParser.parse(realizeBackendOptions(options.codegenOptions))
+        output <- (backend.codeGenerator: CodeGenerator[Error, backend.Output] & backend.codeGenerator.type) match {
+          case codeGen: (CodeGenerator.LibraryCodeGenerator[Error, backend.Output] & backend.codeGenerator.type) =>
+            codeGen.codegen(
+              options = codeGenOpts,
+              program = PathUtil.binaryResource(options.inputFile.get).decode[VmIrResource],
+              libraries = options.referencedTubes.map { refTubePath =>
+                PathUtil.binaryResource(refTubePath)
+                  .decode[VmIrResource]
+              },
+            )
+        }
 
-        _ <- PathUtil.writeDir(options.outputDir.get, output.sourceCode)
+        outputMap <- backend.codeGenerator.outputProvider.outputs(output)
+
+        _ <- ZIO.foreachParDiscard(options.outputOptions) { (outputName, outputPath) =>
+          ZIO.fromEither(outputMap.get(outputName).toRight { BackendException(s"Invalid output: $outputName") })
+            .flatMap {
+              case FileSystemResource.Of(res) => PathUtil.writeFile(outputPath, res)
+              case res: DirectoryResource[Error, BinaryResource] => PathUtil.writeDir(outputPath, res)
+            }
+        }
+
       yield ()
     )
-  end runCodegenJS
+
+  private def realizeBackendOptions(o: Map[String, ArgonCommandLineOptions.OptionValue]): Map[String, OptionValue[Error]] =
+    o.view
+      .mapValues(realizeBackendOptionValue)
+      .toMap
+
+  private def realizeBackendOptionValue(o: ArgonCommandLineOptions.OptionValue): OptionValue[Error] =
+    def realizeAtom(a: ArgonCommandLineOptions.OptionValueAtom): OptionValue.Atom[Error] =
+      a match {
+        case ArgonCommandLineOptions.OptionValueAtom.String(s) => OptionValue.Atom.String(s)
+        case ArgonCommandLineOptions.OptionValueAtom.Bool(b) => OptionValue.Atom.Bool(b)
+        case ArgonCommandLineOptions.OptionValueAtom.File(path) => OptionValue.Atom.BinaryResource(PathUtil.binaryResource(path))
+        case ArgonCommandLineOptions.OptionValueAtom.Directory(path) => OptionValue.Atom.DirectoryResource(PathUtil.directoryResource(path))
+      }
+
+    o match {
+      case ArgonCommandLineOptions.OptionValue.Single(value) => OptionValue.Single(realizeAtom(value))
+      case ArgonCommandLineOptions.OptionValue.Many(values) => OptionValue.ManyValues(values.map(realizeAtom))
+    }
+  end realizeBackendOptionValue
 
 }

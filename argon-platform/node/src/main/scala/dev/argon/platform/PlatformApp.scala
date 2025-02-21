@@ -13,10 +13,21 @@ abstract class PlatformApp[E] extends ZIOApp {
   final override def run: ZIO[Environment & ZIOAppArgs, Any, Any] =
     runApp
       .provideSome[Environment](ZLayer.succeed(ZIOAppArgs(Chunk.fromIterable(NodeProcess.argv.jsSlice(2)))))
-      .onExit {
-        case Exit.Success(exitCode) => ZIO.succeed { NodeProcess.exitCode = exitCode.code }
-        case Exit.Failure(_) => ZIO.succeed { NodeProcess.exitCode = 1 }
-      }
+      .foldCauseZIO(
+        failure = cause => {
+          ZIO.succeed {
+            println(cause);
+            cause.defects.foreach(ex => ex.printStackTrace())
+            NodeProcess.exitCode = 1
+          }
+        },
+        success = exitCode => {
+          ZIO.succeed { NodeProcess.exitCode = exitCode.code }
+        },
+      )
+//      .provideSomeLayer(
+//        Runtime.removeDefaultLoggers >>> Runtime.addLogger(ConsoleL)
+//      )
 
   def runApp: ZIO[Environment & ZIOAppArgs, Error, ExitCode]
 }

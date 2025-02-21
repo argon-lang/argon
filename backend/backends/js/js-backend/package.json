@@ -7,7 +7,7 @@
   "main": "./lib/index.js",
   "type": "module",
   "scripts": {
-    "codegen": "cpy --flat ../../../vm/vm.nidl src/ && cpy --flat ../../../api/backend.nidl src/ && noble-idl-compiler-js --output-dir src-gen",
+    "codegen": "make-dir src/backend && cpy --flat ../../../vm/vm.nidl src/ && cpy --flat ../../../api/backend.nidl src/ && cpy --flat ../../../api/options.nidl src/backend/ && noble-idl-compiler-js --output-dir src-gen",
     "build": "npm run codegen && tsc --project . && cd out/src-gen && cpy . ../../lib/ && cd ../src && cpy . ../../lib/",
     "dist": "npm run build && rollup --config rollup.config.js",
     "test": "npm run build && vitest run --root lib"
@@ -23,9 +23,10 @@
     "@types/estree": "^1.0.6",
     "@types/node": "^22.13.1",
     "cpy-cli": "^5.0.0",
+    "make-dir-cli": "^4.0.0",
     "rimraf": "^6.0.1",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.5"
+    "vitest": "^3.0.6"
   },
   "dependencies": {
     "@argon-lang/esexpr": "^0.1.17",
@@ -40,6 +41,7 @@
   "NobleIDL": {
     "inputFiles": [
       "src/backend.nidl",
+      "src/backend/options.nidl",
       "src/vm.nidl"
     ],
     "packageMapping": {

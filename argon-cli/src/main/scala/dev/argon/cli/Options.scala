@@ -1,9 +1,15 @@
 package dev.argon.cli
 
+import cats.data.NonEmptySeq
+import dev.argon.backend.Backends
+import dev.argon.backend.metadata.{BackendOption, BackendOptionOutput, OptionOccurrence, OptionType, OutputType}
 import dev.argon.io.PathLike
 import dev.argon.compiler.TubeName
-
+import monocle.Lens
+import monocle.macros.GenLens
 import scopt.*
+
+
 
 enum Command derives CanEqual {
   case Compile
@@ -11,13 +17,9 @@ enum Command derives CanEqual {
   case CodeGen
 }
 
-enum CodegenBackend derives CanEqual {
-  case JS
-}
-
 final case class ArgonCommandLineOptions(
   command: Option[Command] = None,
-  codegenBackend: Option[CodegenBackend] = None,
+  codegenBackend: Option[String] = None,
 
   tubeName: Option[String] = None,
   inputDir: Option[PathLike] = None,
@@ -25,13 +27,103 @@ final case class ArgonCommandLineOptions(
   outputFile: Option[PathLike] = None,
   outputDir: Option[PathLike] = None,
   referencedTubes: Seq[PathLike] = Seq(),
-  externs: Seq[PathLike] = Seq(),
+
+  codegenOptions: Map[String, ArgonCommandLineOptions.OptionValue] = Map(),
+  outputOptions: Map[String, PathLike] = Map(),
 )
 
 object ArgonCommandLineOptions {
+  enum OptionValueAtom {
+    case String(s: java.lang.String)
+    case Bool(b: Boolean)
+    case File(p: PathLike)
+    case Directory(p: PathLike)
+  }
+
+  enum OptionValue {
+    case Single(value: OptionValueAtom)
+    case Many(values: NonEmptySeq[OptionValueAtom])
+  }
+
+
   def parser: OParser[?, ArgonCommandLineOptions] =
     val builder = OParser.builder[ArgonCommandLineOptions]
     import builder.*
+
+
+    def createOptionsFromMetadata(backendName: String, lens: Lens[ArgonCommandLineOptions, Map[String, OptionValue]])(options: Map[String, BackendOption]): Seq[OParser[?, ArgonCommandLineOptions]] =
+      def createOptionFromMetadata(name: String, optionInfo: BackendOption): OParser[?, ArgonCommandLineOptions] =
+        def createOptionForType[A: Read](f: A => OptionValueAtom): OParser[?, ArgonCommandLineOptions] =
+          val action: (A, ArgonCommandLineOptions) => ArgonCommandLineOptions =
+            optionInfo.occurrence match {
+              case OptionOccurrence.Default | OptionOccurrence.Optional | OptionOccurrence.Required =>
+                (a, o) => lens.at(name).replace(Some(OptionValue.Single(f(a))))(o)
+
+              case OptionOccurrence.Many | OptionOccurrence.ManyRequired =>
+                (a, o) =>
+                  lens.at(name).modify {
+                    case Some(OptionValue.Many(items)) => Some(OptionValue.Many(items :+ f(a)))
+                    case _ => Some(OptionValue.Many(NonEmptySeq.of(f(a))))
+                  }(o)
+            }
+
+          var o = opt[A](s"$backendName-$name")
+            .action(action)
+
+
+          optionInfo.occurrence match {
+            case OptionOccurrence.Default | OptionOccurrence.Optional => ()
+            case OptionOccurrence.Required =>
+              o = o.required()
+
+            case OptionOccurrence.Many =>
+              o = o.unbounded()
+
+            case OptionOccurrence.Many | OptionOccurrence.ManyRequired =>
+              o = o.required().unbounded()
+          }
+
+          o
+        end createOptionForType
+
+
+        optionInfo.`type` match {
+          case OptionType.String => createOptionForType[String](OptionValueAtom.String.apply)
+          case OptionType.Bool =>
+            optionInfo.occurrence match {
+              case OptionOccurrence.Default =>
+                createOptionForType[Unit](_ => OptionValueAtom.Bool(true))
+
+              case _ =>
+                createOptionForType[Boolean](OptionValueAtom.Bool.apply)
+            }
+
+          case OptionType.BinaryResource => createOptionForType[PathLike](OptionValueAtom.File.apply)
+          case OptionType.DirectoryResource => createOptionForType[PathLike](OptionValueAtom.Directory.apply)
+        }
+      end createOptionFromMetadata
+
+
+      options
+        .toSeq
+        .sortBy(_._1)
+        .map(createOptionFromMetadata)
+    end createOptionsFromMetadata
+
+
+    def createOptionsFromOutputMetadata(backendName: String, lens: Lens[ArgonCommandLineOptions, Map[String, PathLike]])(options: Map[String, BackendOptionOutput]): Seq[OParser[?, ArgonCommandLineOptions]] =
+      def createOptionFromMetadata(name: String, optionInfo: BackendOptionOutput): OParser[?, ArgonCommandLineOptions] =
+        opt[PathLike](s"$backendName-$name")
+          .action((a, o) => lens.at(name).replace(Some(a))(o))
+
+      end createOptionFromMetadata
+
+
+      options
+        .toSeq
+        .sortBy(_._1)
+        .map(createOptionFromMetadata)
+    end createOptionsFromOutputMetadata
 
     OParser.sequence(
       programName("argon"),
@@ -70,6 +162,7 @@ object ArgonCommandLineOptions {
             .action((path, c) => c.copy(outputFile = Some(path))),
           
           opt[PathLike]('r', "reference")
+            .unbounded()
             .action((path, c) => c.copy(referencedTubes = c.referencedTubes :+ path)),
         ),
 
@@ -77,23 +170,48 @@ object ArgonCommandLineOptions {
         .action((_, c) => c.copy(command = Some(Command.CodeGen)))
         .text("Generate backend-specific output")
         .children(
-          cmd("js")
-            .action((_, c) => c.copy(codegenBackend = Some(CodegenBackend.JS)))
-            .text("Generate JS output")
-            .children(
-              opt[PathLike]('i', "input")
-                .required()
-                .action((path, c) => c.copy(inputFile = Some(path))),
+          Backends.allBackendFactories
+            .map { backendFactory =>
+              val backendName = backendFactory.metadata.backend.name
 
-              opt[PathLike]('o', "output")
-                .required()
-                .action((path, c) => c.copy(outputDir = Some(path))),
-          
-              opt[PathLike]('e', "externs")
-                .action((path, c) => c.copy(externs = c.externs :+ path)),
-            )
+              val codegenOpts =
+                Seq(
+                  opt[PathLike]('i', "input")
+                    .required()
+                    .action((path, c) => c.copy(inputFile = Some(path))),
+
+                  opt[PathLike]('r', "reference")
+                    .unbounded()
+                    .action((path, c) => c.copy(referencedTubes = c.referencedTubes :+ path)),
+
+                ) ++
+                  createOptionsFromMetadata(backendName, GenLens[ArgonCommandLineOptions](_.codegenOptions))(backendFactory.metadata.options.codegen) ++
+                  createOptionsFromOutputMetadata(backendName, GenLens[ArgonCommandLineOptions](_.outputOptions))(backendFactory.metadata.options.output)
+
+              cmd(backendName)
+                .action((_, c) => c.copy(codegenBackend = Some(backendName)))
+                .text(s"Generate output using the $backendName backend")
+                .children(codegenOpts*)
+            }*
+
+//          cmd("js")
+//            .action((_, c) => c.copy(codegenBackend = Some(CodegenBackend.JS)))
+//            .text("Generate JS output")
+//            .children(
+//              opt[PathLike]('i', "input")
+//                .required()
+//                .action((path, c) => c.copy(inputFile = Some(path))),
+//
+//              opt[PathLike]('o', "output")
+//                .required()
+//                .action((path, c) => c.copy(outputDir = Some(path))),
+//
+//              opt[PathLike]('e', "externs")
+//                .action((path, c) => c.copy(externs = c.externs :+ path)),
+//            )
         )
     )
   end parser
+
 }
 

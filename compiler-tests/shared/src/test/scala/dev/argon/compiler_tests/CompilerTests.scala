@@ -48,8 +48,7 @@ object CompilerTests extends ZIOSpecDefault {
 
   private def loadTestCases: ZIO[Env, Error, Map[Seq[String], TestCase]] =
     PathUtil.directoryResource(PathLike.fromString("testcases"))
-      .upcast[DirectoryResource[TestError, BinaryResource]]
-      .decode[TestCaseResource]
+      .decode[TestCaseResource].withError[Error]
       .contents
       .mapZIO { entry =>
         for
@@ -85,11 +84,10 @@ object CompilerTests extends ZIOSpecDefault {
                 vmIrResource <- toVmIr(testCase)
                 libIr <- ZIO.foreach(testCase.libraries.toSeq) { libName =>
                   ZIO.serviceWith[ArgonLibraryProvider](_.getIrLibrary(libName))
-                    .map(libName -> _)
                 } 
                 output <- (backend.codeGenerator: backend.codeGenerator.type & CodeGenerator[Error, backend.Output]) match {
                   case codeGenerator: (backend.codeGenerator.type & CodeGenerator.LibraryCodeGenerator[Error, backend.Output]) =>
-                    codeGenerator.codegen(options, vmIrResource, libIr.toMap)
+                    codeGenerator.codegen(options, vmIrResource, libIr)
                 }
                 testProgram <- executor.toTestProgram(output)
                 errors <- ZIO.serviceWithZIO[LogReporter](_.getErrors)
@@ -180,7 +178,6 @@ object CompilerTests extends ZIOSpecDefault {
         override def tubeName: TubeName = TubeName("Argon", "TestCase")
         override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
           testCase.toDirectoryResource
-            .upcast[DirectoryResource[context.Error, BinaryResource]]
             .decode[ArgonSourceCodeResource]
 
         override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =

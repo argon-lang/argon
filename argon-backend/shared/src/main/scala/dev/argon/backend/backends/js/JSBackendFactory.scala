@@ -18,6 +18,11 @@ object JSBackendFactory extends BackendFactory with JSBackendFactoryPlatformSpec
             occurrence = OptionOccurrence.Many,
           ),
         ),
+        output = Map(
+          "modules" -> BackendOptionOutput(
+            `type` = OutputType.DirectoryResource,
+          ),
+        ),
       ),
     )
 }

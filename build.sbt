@@ -32,6 +32,9 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.1.6-SNAPSHOT",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
+    "dev.optics" %%% "monocle-core"  % "3.1.0",
+    "dev.optics" %%% "monocle-macro" % "3.1.0",
+
     "org.scala-lang.modules" %%% "scala-xml" % "2.3.0",
     "org.gnieh" %%% "fs2-data-xml-scala" % "1.11.2",
     "com.indoorvivants" %%% "toml" % "0.3.0",
