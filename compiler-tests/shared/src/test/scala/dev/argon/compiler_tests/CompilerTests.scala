@@ -21,7 +21,7 @@ import dev.argon.io.PathUtil
 import java.io.StringWriter
 import java.io.PrintWriter
 import dev.argon.io.*
-import dev.argon.backend.{Backend, Backends, CodeGenerator}
+import dev.argon.backend.{Backend, BackendFactory, Backends, CodeGenerator, TestExecutor}
 import dev.argon.vm.resource.VmIrResource
 import dev.argon.tube.resource.TubeResourceContext
 import dev.argon.source.ArgonSourceCodeResource
@@ -39,8 +39,15 @@ object CompilerTests extends ZIOSpecDefault {
   private def buildBackendTests: Spec[Env & ArgonLibraryProvider, Error] =
     Spec.multiple(
       Chunk.fromIterable(
-        Backends.allBackends[Error].map { backend =>
-          buildTestCases(backend)
+        Backends.allBackendFactories.map { backendFactory =>
+          Spec.scoped(
+            backendFactory.load[Error].flatMap { backend =>
+              backend.testExecutor.map {
+                case Some(executor) => buildTestCases(backend, executor)
+                case None => Spec.empty
+              }
+            }.mapError(TestFailure.fail)
+          )
         }
       )
     )
@@ -60,7 +67,7 @@ object CompilerTests extends ZIOSpecDefault {
 
   
 
-  private def buildTestCases(backend: Backend[Error]): Spec[Env & ArgonLibraryProvider, Error] =
+  private def buildTestCases(backend: Backend[Error], executor: TestExecutor[Error, backend.Output]): Spec[Env & ArgonLibraryProvider, Error] =
     Spec.scoped(
       (for
         testCases <- loadTestCases
@@ -68,11 +75,6 @@ object CompilerTests extends ZIOSpecDefault {
         options <- ZIO.fromEither(
           TestCaseBackendOptions.provider.getOptionsForBackend(backend)
             .toRight { TestException(s"Could not get test options for backend ${backend.name}") }
-        )
-        
-        executor <- ZIO.fromEither(
-          TestExecutorProviders.provider.getExecutorForBackend(backend)
-            .toRight { TestException(s"Could not get executor for backend ${backend.name}") }
         )
 
         outputProvider <- BackendLibraryOutputProvider.make(backend, executor)
@@ -87,7 +89,10 @@ object CompilerTests extends ZIOSpecDefault {
                 } 
                 output <- (backend.codeGenerator: backend.codeGenerator.type & CodeGenerator[Error, backend.Output]) match {
                   case codeGenerator: (backend.codeGenerator.type & CodeGenerator.LibraryCodeGenerator[Error, backend.Output]) =>
-                    codeGenerator.codegen(options, vmIrResource, libIr)
+                    for
+                      opts <- codeGenerator.optionParser.parse(options)
+                      out <- codeGenerator.codegen(opts, vmIrResource, libIr)
+                    yield out
                 }
                 testProgram <- executor.toTestProgram(output)
                 errors <- ZIO.serviceWithZIO[LogReporter](_.getErrors)

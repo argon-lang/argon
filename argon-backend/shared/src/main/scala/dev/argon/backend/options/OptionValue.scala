@@ -14,4 +14,11 @@ object OptionValue {
     case BinaryResource(res: dev.argon.io.BinaryResource[E])
     case DirectoryResource(res: dev.argon.io.DirectoryResource[E, dev.argon.io.BinaryResource])
   }
+  
+  
+  object ManyValues {
+    def apply[E](head: Atom[E], tail: Atom[E]*): OptionValue[E] =
+      OptionValue.ManyValues(NonEmptySeq(head, tail))
+  }
+  
 }

@@ -3,9 +3,7 @@ package dev.argon.compiler_tests
 import dev.argon.compiler.*
 import dev.argon.io.*
 import dev.argon.source.ArgonSourceCodeResource
-import dev.argon.backend.Backend
-import dev.argon.backend.backends.js.JSBackend
-import dev.argon.compiler_tests.BackendOptionsProvider.OptionsFactory
+import dev.argon.backend.options.OptionValue
 
 object ArgonLibraries {
 
@@ -21,11 +19,11 @@ object ArgonLibraries {
 
     override def optionsProvider(libPath: PathLike): BackendOptionsProvider =
       BackendOptionsProvider(
-        OptionsFactory[JSBackend[TestError]](_.JSOptions(
-          externs = Seq(
-            PathUtil.binaryResource(PathLike.join(libPath, "js/externs.js")).decode[TextResource],
+        "js" -> Map(
+          "externs" -> OptionValue.ManyValues(
+            OptionValue.Atom.BinaryResource(PathUtil.binaryResource(PathLike.join(libPath, "js/externs.js")).decode[TextResource])
           ),
-        )),
+        ),
       )
 
   }

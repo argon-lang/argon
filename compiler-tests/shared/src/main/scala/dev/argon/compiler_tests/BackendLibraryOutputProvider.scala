@@ -1,29 +1,26 @@
 package dev.argon.compiler_tests
 
 import dev.argon.compiler.*
-import dev.argon.backend.{Backend, CodeGenerator}
+import dev.argon.backend.{Backend, CodeGenerator, TestExecutor}
 import zio.*
 import dev.argon.vm.resource.VmIrResource
 import dev.argon.build.{TubeImporterImpl, LogReporter, BuildFailed}
 
-trait BackendLibraryOutputProvider {
-  val backend: Backend[TestError]
-  val testExecutor: TestExecutor.Aux[backend.type]
+trait BackendLibraryOutputProvider[Output] {
+  val testExecutor: TestExecutor[TestError, Output]
 
   def getLibraryOutput(tubeName: TubeName): IO[TestError, testExecutor.TestProgram]
 }
 
 object BackendLibraryOutputProvider {
-  type Aux[B <: Backend[TestError], Exec <: TestExecutor.Aux[B]] = BackendLibraryOutputProvider {
-    val backend: B
+  type Aux[Output, Exec <: TestExecutor[TestError, Output]] = BackendLibraryOutputProvider[Output] {
     val testExecutor: Exec
   }
 
-  def make(b: Backend[TestError], exec: TestExecutor.Aux[b.type]): ZIO[ArgonLibraryProvider, Nothing, BackendLibraryOutputProvider.Aux[b.type, exec.type]] =
+  def make(backend: Backend[TestError], exec: TestExecutor[TestError, backend.Output]): ZIO[ArgonLibraryProvider, Nothing, BackendLibraryOutputProvider.Aux[backend.Output, exec.type]] =
     for
       libProvider <- ZIO.service[ArgonLibraryProvider]
-    yield new BackendLibraryOutputProvider {
-      override val backend: b.type = b
+    yield new BackendLibraryOutputProvider[backend.Output] {
       override val testExecutor: exec.type = exec
 
       override def getLibraryOutput(tubeName: TubeName): IO[TestError, testExecutor.TestProgram] =
@@ -32,7 +29,7 @@ object BackendLibraryOutputProvider {
             options <- ZIO.fromEither(
               TestCaseBackendOptions.provider
                 .getOptionsForBackend(backend)
-                .toRight { TestException(s"Could create options for backend ${b.name}") }
+                .toRight { TestException(s"Could create options for backend ${backend.name}") }
             )
 
             program = libProvider.getIrLibrary(tubeName).decode[VmIrResource]
@@ -43,10 +40,14 @@ object BackendLibraryOutputProvider {
               libProvider.getIrLibrary(refLibName).decode[VmIrResource].withError[TestError]
             }.toSeq
 
-            output <- (b.codeGenerator : (b.codeGenerator.type & CodeGenerator[TestError, b.Output])) match {
-              case codeGenerator: (b.codeGenerator.type & CodeGenerator.LibraryCodeGenerator[TestError, b.Output]) =>
-                codeGenerator.codegen(options, program, depLibraries)
+            output <- (backend.codeGenerator : (backend.codeGenerator.type & CodeGenerator[TestError, backend.Output])) match {
+              case codeGenerator: (backend.codeGenerator.type & CodeGenerator.LibraryCodeGenerator[TestError, backend.Output]) =>
+                for
+                  opts <- codeGenerator.optionParser.parse(options)
+                  out <- codeGenerator.codegen(opts, program, depLibraries)
+                yield out
             }
+
             output <- exec.toTestProgram(output)
           yield output
         )

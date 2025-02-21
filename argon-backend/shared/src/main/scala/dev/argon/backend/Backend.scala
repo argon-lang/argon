@@ -11,5 +11,7 @@ trait Backend[E >: BackendException | IOException] {
   def name: String
 
   val codeGenerator: CodeGenerator[E, Output]
+  
+  def testExecutor: ZIO[Scope, E, Option[TestExecutor[E, Output]]]
 
 }

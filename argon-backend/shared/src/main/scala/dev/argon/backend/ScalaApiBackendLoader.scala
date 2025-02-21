@@ -59,7 +59,7 @@ object ScalaApiBackendLoader {
             }
         }
 
-
+      override def testExecutor: ZIO[Scope, E, Option[TestExecutor[E, Outs]]] = ZIO.none
     }
 
 
