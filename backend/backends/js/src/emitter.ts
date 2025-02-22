@@ -1,5 +1,5 @@
 import type { ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel } from "./program-model.js";
-import { encodeTubePathComponent, ensureExhaustive, getModulePathUrl, modulePathEquals, tubeNameEquals, urlEncodeIdentifier } from "./util.js"
+import { encodeTubePathComponent, ensureExhaustive, getModulePathExternalUrl, getModulePathUrl, modulePathEquals, tubeNameEquals, tubePackageName, urlEncodeIdentifier } from "./util.js"
 
 import type * as estree from "estree";
 import type * as ir from "@argon-lang/js-backend-api/vm";
@@ -250,18 +250,19 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         }
         else {
             const tubeInfo = this.options.program.getTubeInfo(moduleInfo.tubeId);
-            const tubePackage = this.options.tubeMapping.find(mapping => tubeNameEquals(mapping.tubeName, tubeInfo.tubeName));
+            let tubePackage = this.options.tubeMapping.find(mapping => tubeNameEquals(mapping.tubeName, tubeInfo.tubeName))?.packageName;
             if(tubePackage === undefined) {
+                tubePackage = tubePackageName(tubeInfo.tubeName);
                 throw new Error("No package mapping provided for tube: " + JSON.stringify(tubeInfo.tubeName));
             }
 
-            const modulePathUrl = getModulePathUrl(moduleInfo.path);
+            const modulePathUrl = getModulePathExternalUrl(moduleInfo.path);
             
             if(modulePathUrl === "") {
-                return tubePackage.packageName;
+                return tubePackage;
             }
 
-            return tubePackage.packageName + "/" + modulePathUrl;
+            return tubePackage + "/" + modulePathUrl;
         }
     }
 

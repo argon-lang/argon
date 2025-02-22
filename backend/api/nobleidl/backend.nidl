@@ -10,15 +10,15 @@ interface backend[e: exception, output] {
 @scala:(adapter-needs-zio-runtime)
 extern type binary-resource[e: exception];
 
-interface directory-resource[e: exception] {
-    contents(): scoped-resource[stream[e, directory-entry[e]]] throws e;
+interface directory-resource[e: exception, res] {
+    contents(): scoped-resource[stream[e, directory-entry[res]]] throws e;
 }
 
 
-record directory-entry[e: exception] {
+record directory-entry[res] {
     dirs: list[string];
     file-name: string;
-    resource: binary-resource[e];
+    resource: res;
 }
 
 

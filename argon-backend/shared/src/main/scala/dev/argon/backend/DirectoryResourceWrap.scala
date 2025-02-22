@@ -10,18 +10,18 @@ import java.io.IOException
 
 private[backend] object DirectoryResourceWrap {
 
-  def wrap[E >: IOException](res: DirectoryResource[E, BinaryResource])(using ew: ErrorWrapper[E], rt: Runtime[Any]): scalaApi.DirectoryResource[ew.EX] =
-    new scalaApi.DirectoryResource[ew.EX] {
-      override def contents(): IO[ew.EX, ScopedResource[scalaApi.Stream[ew.EX, scalaApi.DirectoryEntry[ew.EX]]]] =
+  def wrap[E >: IOException](res: DirectoryResource[E, BinaryResource])(using ew: ErrorWrapper[E], rt: Runtime[Any]): scalaApi.DirectoryResource[ew.EX, scalaApi.BinaryResource[ew.EX]] =
+    new scalaApi.DirectoryResource[ew.EX, scalaApi.BinaryResource[ew.EX]] {
+      override def contents(): IO[ew.EX, ScopedResource[scalaApi.Stream[ew.EX, scalaApi.DirectoryEntry[scalaApi.BinaryResource[ew.EX]]]]] =
         StreamWrap.wrapStream(
           res.contents
             .map { entry =>
-              scalaApi.DirectoryEntry[ew.EX](entry.dirs, entry.fileName, BinaryResourceWrap.wrap(entry.resource))
+              scalaApi.DirectoryEntry[scalaApi.BinaryResource[ew.EX]](entry.dirs, entry.fileName, BinaryResourceWrap.wrap(entry.resource))
             }
         )
     }
 
-  def unwrap[E](using ew: ErrorWrapper[E])(res: scalaApi.DirectoryResource[ew.EX]): DirectoryResource[E, BinaryResource] =
+  def unwrap[E](using ew: ErrorWrapper[E])(res: scalaApi.DirectoryResource[ew.EX, scalaApi.BinaryResource[ew.EX]]): DirectoryResource[E, BinaryResource] =
     new DirectoryResource[E, BinaryResource] {
       override def fileName: Option[String] = None
 

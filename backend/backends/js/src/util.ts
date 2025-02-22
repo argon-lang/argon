@@ -51,10 +51,17 @@ export function getModulePathUrl(modulePath: ir.ModulePath): string {
     }
 }
 
-export function encodeTubePathComponent(part: string): string {
-    return encodeURIComponent(part).replace(".", "%2E");
+export function getModulePathExternalUrl(modulePath: ir.ModulePath): string {
+    return modulePath.path.map(part => encodeTubePathComponent(part)).join("/");
 }
 
+export function encodeTubePathComponent(part: string): string {
+    return encodeURIComponent(part).replaceAll(".", "%2E").replaceAll("%", "$");
+}
+
+export function tubePackageName(name: ir.TubeName): string {
+    return "@argon-tube/" + [ name.head, ...name.tail ].map(encodeTubePathComponent).join(".");
+}
 
 
 export function tubeNameEquals(a: ir.TubeName, b: ir.TubeName): boolean {

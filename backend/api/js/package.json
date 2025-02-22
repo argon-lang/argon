@@ -13,6 +13,7 @@
   },
   "exports": {
     ".": "./lib/index.js",
+    "./factory": "./lib/factory.js",
     "./options": "./lib/options.js",
     "./options/parser": "./lib/options/parser.js",
     "./vm": "./lib/vm.js"

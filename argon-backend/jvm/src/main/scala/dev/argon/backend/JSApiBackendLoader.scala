@@ -31,16 +31,20 @@ private[backend] object JSApiBackendLoader {
       executor = Executor.fromJavaExecutor(jExecutor)
 
       javaExecutor <- ZIO.fromAutoCloseable(ZIO.succeed { JExecutors.newVirtualThreadPerTaskExecutor() })
-
+      
+      zioExecutor <- ZIO.executor
+      
       jsContext <- ZIO.fromAutoCloseable(ZIO.succeed {
-        JSContext.newBuilder("js").nn
+        JSContext.newBuilder("js")
 //          .option("js.load", "false")
 //          .option("js.print", "false")
           .option("js.esm-eval-returns-exports", "true")
           // .option("js.text-encoding", "true")
           .option("engine.WarnInterpreterOnly", "false")
           .build()
-      }).onExecutor(executor)
+      })
+        .onExecutor(executor)
+        .onExecutor(zioExecutor)
 
       _ <- ZIO.attempt {
         TextDecoderPolyfill.polyfill(jsContext)
@@ -48,6 +52,7 @@ private[backend] object JSApiBackendLoader {
       }
         .mapError(ex => BackendException("Could not load polyfills", ex))
         .onExecutor(executor)
+        .onExecutor(zioExecutor)
 
       module <- ZIO.attempt {
         val source = Source.newBuilder("js", url)
@@ -58,8 +63,12 @@ private[backend] object JSApiBackendLoader {
       }
         .mapError(ex => BackendException("Could not load backend module", ex))
         .onExecutor(executor)
+        .onExecutor(zioExecutor)
 
       factory <- ZIO.succeed { module.getMember(exportName).toOption }
+        .onExecutor(executor)
+        .onExecutor(zioExecutor)
+      
       factory <- ZIO.fromEither(factory.toRight(BackendException(s"Export \"$exportName\" was not found in module")))
 
     yield JSApiBackend(

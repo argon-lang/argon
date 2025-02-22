@@ -43,8 +43,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-interop-cats" % "23.1.0.3",
   ),
 
-  Compile / run / baseDirectory := file("."),
-  Test / run / baseDirectory := file("."),
+  Compile / run / baseDirectory := file(".").getAbsoluteFile,
+  Test / baseDirectory := file(".").getAbsoluteFile,
 
 )
 

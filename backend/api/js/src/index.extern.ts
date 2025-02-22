@@ -1,6 +1,6 @@
 
 export interface BinaryResource<_E> {
-    fileName?: string | undefined;
+    readonly fileName?: string | undefined;
     asBytes(): AsyncIterable<Uint8Array>;
 }
 

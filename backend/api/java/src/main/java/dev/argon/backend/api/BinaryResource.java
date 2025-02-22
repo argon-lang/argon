@@ -85,7 +85,7 @@ public abstract class BinaryResource<TE> {
 									Objects.checkFromIndexSize(off, len, b.length);
 									try {
 										while(!isDone && data == null) {
-											Value iterRes = CallUtil.callJSFunction(context, jsExecutor, JSAdapter.VALUE_ADAPTER, eAdapter, errorType, ErrorTypeAdapter.toJS(context, jsExecutor, errorType), () -> iter.invokeMember("next"));
+											Value iterRes = CallUtil.callJSFunction(context, jsExecutor, JSAdapter.VALUE_ADAPTER, eAdapter, errorType, () -> ErrorTypeAdapter.toJS(context, jsExecutor, errorType), () -> iter.invokeMember("next"));
 	
 											dataOffset = 0;
 											data = jsExecutor.runOnJSThreadWithError(() -> {

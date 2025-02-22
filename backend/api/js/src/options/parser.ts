@@ -66,6 +66,7 @@ export function parse<E, T>(options: ReadonlyMap<string, OptionValue<E>>, spec: 
         const defaultValue = spec[k].defaultValue;
         if(defaultValue !== null) {
             o[k] = Option.get(defaultValue);
+            continue;
         }
 
         throw OptionParseFailure.createError(
@@ -249,9 +250,9 @@ export function binaryResourceOption<E>(): OptionAtomSpec<E, BinaryResource<E>> 
     };
 }
 
-export function directoryResourceOption<E>(): OptionAtomSpec<E, DirectoryResource<E>> {
+export function directoryResourceOption<E>(): OptionAtomSpec<E, DirectoryResource<E, BinaryResource<E>>> {
     return {
-        fromValue(name: string, value: OptionValueAtom<E>): DirectoryResource<E> {
+        fromValue(name: string, value: OptionValueAtom<E>): DirectoryResource<E, BinaryResource<E>> {
             if(value.$type !== "directory-resource") {
                 throw OptionParseFailure.createError(
                     {
