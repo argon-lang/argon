@@ -8,7 +8,7 @@ import dev.argon.util.*
 import dev.argon.util.graalext.{TextDecoderPolyfill, TextEncoderPolyfill}
 
 import java.util.concurrent.{Executor as JExecutor, Executors as JExecutors}
-import org.graalvm.polyglot.{Source, Context as JSContext, Value as JSValue}
+import org.graalvm.polyglot.{HostAccess, Source, Context as JSContext, Value as JSValue}
 
 import java.io.IOException
 import zio.*
@@ -31,11 +31,13 @@ private[backend] object JSApiBackendLoader {
       executor = Executor.fromJavaExecutor(jExecutor)
 
       javaExecutor <- ZIO.fromAutoCloseable(ZIO.succeed { JExecutors.newVirtualThreadPerTaskExecutor() })
-      
+
       zioExecutor <- ZIO.executor
-      
+
       jsContext <- ZIO.fromAutoCloseable(ZIO.succeed {
         JSContext.newBuilder("js")
+          .allowHostClassLookup(className => className == "dev.argon.backend.backends.js.GraalJavaScriptExecutor")
+          .allowHostAccess(HostAccess.EXPLICIT)
 //          .option("js.load", "false")
 //          .option("js.print", "false")
           .option("js.esm-eval-returns-exports", "true")
@@ -47,6 +49,7 @@ private[backend] object JSApiBackendLoader {
         .onExecutor(zioExecutor)
 
       _ <- ZIO.attempt {
+        jsContext.eval(Source.newBuilder("js", classOf[JSApiBackendLoader.type].getResource("polyfill.js")).build())
         TextDecoderPolyfill.polyfill(jsContext)
         TextEncoderPolyfill.polyfill(jsContext)
       }
@@ -68,7 +71,7 @@ private[backend] object JSApiBackendLoader {
       factory <- ZIO.succeed { module.getMember(exportName).toOption }
         .onExecutor(executor)
         .onExecutor(zioExecutor)
-      
+
       factory <- ZIO.fromEither(factory.toRight(BackendException(s"Export \"$exportName\" was not found in module")))
 
     yield JSApiBackend(

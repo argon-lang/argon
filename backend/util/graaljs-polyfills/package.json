@@ -1,0 +1,16 @@
+{
+  "name": "@argon-lang/graaljs-polyfills",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dist": "rollup --config rollup.config.js"
+  },
+  "dependencies": {
+    "core-js": "^3.40.0"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "rollup": "^4.34.8"
+  }
+}

@@ -197,7 +197,7 @@ class ProgramModelImpl implements ProgramModel {
             };
         }
         else {
-            const moduleRef = this.#moduleRefMap.get(id - BigInt(this.metadata.modules.length));
+            const moduleRef = this.#moduleRefMap.get(id);
             if(moduleRef === undefined) {
                 throw new Error("Could not get referenced module");
             }

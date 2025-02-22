@@ -30,7 +30,7 @@ object NodeFileSystem extends js.Object {
 
 trait NodeFileHandle extends js.Object {
   def writeFile(data: TypedArray[?, ?] | DataView): js.Promise[Unit]
-  def readableWebStream(): AsyncIterable[ArrayBuffer]
+  def read(buffer: TypedArray[?, ?]): js.Promise[NodeFileHandleReadResult]
   def close(): js.Promise[Unit]
 }
 

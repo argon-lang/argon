@@ -33,7 +33,7 @@ private[io] class NodeDirectoryResource(path: String) extends DirectoryResource[
               .refineToOrDie[IOException]
           yield
             if stat.isDirectory() then listDir(subPath, nameParts :+ entryName)
-            else ZStream(DirectoryEntry(nameParts, entryName, NodeBinaryResource(path)))
+            else ZStream(DirectoryEntry(nameParts, entryName, NodeBinaryResource(subPath)))
         )
       }
 

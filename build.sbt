@@ -84,6 +84,8 @@ lazy val commonJVMSettings = commonJVMSettingsNoLibs ++ Seq(
   libraryDependencies ++= annotationDependencies ++ Seq(
     "dev.zio" %% "zio-logging" % "2.4.0",
 
+    "org.apache.commons" % "commons-compress" % "1.27.1",
+
     "org.graalvm.polyglot" % "polyglot" % graalVersion,
     "org.graalvm.polyglot" % "js-community" % graalVersion,
   ),
@@ -570,30 +572,42 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
       Compile / resourceGenerators += Def.task {
         val s = streams.value
         val log = s.log
-        val destDir = resourceManaged.value / "js-backend/dev/argon/backend/backends/js"
-        val destFile = destDir / "js-backend.js"
 
-        val jsBackendDir = file("backend/backends/js")
+        val resDir = resourceManaged.value / "js-backend"
 
-        val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
-          log.info("Building JS Backend Distribution")
-
-          val installExitCode = Process(Seq("npm", "install"), Some(jsBackendDir)) ! log
+        def setupJS(destFile: File, packageDir: File): Unit = {
+          val installExitCode = Process(Seq("npm", "install"), Some(packageDir)) ! log
           if(installExitCode != 0) {
             throw new Exception("npm install failed with exit code " + installExitCode)
           }
 
-          val distExitCode = Process(Seq("npm", "run", "dist"), Some(jsBackendDir)) ! log
+          val distExitCode = Process(Seq("npm", "run", "dist"), Some(packageDir)) ! log
           if(distExitCode != 0) {
             throw new Exception("npm run dist failed with exit code " + distExitCode)
           }
 
-          IO.copyFile(jsBackendDir / "dist/dist.js", destFile)
-
-          Set(destFile)
+          IO.copyFile(packageDir / "dist/dist.js", destFile)
         }
 
-        val inputFiles = (jsBackendDir / "src" ** "*.ts").get().toSet
+        val backendDestFile = resDir / "dev/argon/backend/backends/js/js-backend.js"
+        val jsBackendDir = file("backend/backends/js")
+
+        val polyfillDestFile = resDir / "dev/argon/backend/polyfill.js"
+        val polyfillPackageDir = file("backend/util/graaljs-polyfills")
+
+        val f = FileFunction.cached(s.cacheDirectory / "js-backend") { (in: Set[File]) =>
+          log.info("Building JS Backend Distribution")
+
+          setupJS(backendDestFile, jsBackendDir)
+          setupJS(polyfillDestFile, polyfillPackageDir)
+
+          Set(backendDestFile, polyfillDestFile)
+        }
+
+        val inputFiles = (
+          (jsBackendDir / "src" ** "*.ts") +++
+            (polyfillPackageDir / "src" ** "*.js")
+        ).get().toSet
 
         f(inputFiles).toSeq
       }.taskValue,
@@ -720,6 +734,7 @@ lazy val compiler_tests = crossProject(JVMPlatform, NodePlatform).crossType(Cros
   .settings(
     commonSettings,
     compilerOptions,
+
 
     name := "compiler-tests",
   )

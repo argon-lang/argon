@@ -206,10 +206,10 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
     getImportId(source: string): string {
         let index = this.imports.indexOf(source);
         if(index < 0) {
-            index = source.length;
+            index = this.imports.length;
             this.imports.push(source);
         }
-
+        
         return "import" + index;
     }
 
@@ -253,7 +253,6 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             let tubePackage = this.options.tubeMapping.find(mapping => tubeNameEquals(mapping.tubeName, tubeInfo.tubeName))?.packageName;
             if(tubePackage === undefined) {
                 tubePackage = tubePackageName(tubeInfo.tubeName);
-                throw new Error("No package mapping provided for tube: " + JSON.stringify(tubeInfo.tubeName));
             }
 
             const modulePathUrl = getModulePathExternalUrl(moduleInfo.path);

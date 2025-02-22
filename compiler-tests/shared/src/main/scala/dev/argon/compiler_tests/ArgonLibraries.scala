@@ -21,7 +21,7 @@ object ArgonLibraries {
       BackendOptionsProvider(
         "js" -> Map(
           "externs" -> OptionValue.ManyValues(
-            OptionValue.Atom.BinaryResource(PathUtil.binaryResource(PathLike.join(libPath, "js/externs.js")).decode[TextResource])
+            OptionValue.Atom.BinaryResource(PathUtil.binaryResource(PathLike.join(libPath, "js/externs.js")))
           ),
         ),
       )

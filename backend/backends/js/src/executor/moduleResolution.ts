@@ -45,6 +45,10 @@ export class ModuleResolution {
     }
 
     addDirectory(path: string): void {
+        while(path.endsWith("/")) {
+            path = path.substring(0, path.length - 1);
+        }
+
         if(!path.startsWith("/")) {
             path = "/" + path;
         }
@@ -56,13 +60,12 @@ export class ModuleResolution {
     }
 
 
-
     esmResolve(specifier: string, parentURL: URL): ESMResolution {
         const resolved = (() => {
-            try {
-                return new URL(specifier);
+            const specUrl = URL.parse(specifier);
+            if(specUrl != null) {
+                return specUrl;
             }
-            catch(_) {}
     
             if(specifier.startsWith("/") || specifier.startsWith("./") || specifier.startsWith("../")) {
                 return new URL(specifier, parentURL);
@@ -76,20 +79,20 @@ export class ModuleResolution {
         })();
     
         if(resolved.protocol !== "file:") {
-            throw new NonFileUrlError();
+            throw new NonFileUrlError(`Protocols other than file are not supported: ${resolved.protocol}`);
         }
 
         const resolvedStr = resolved.toString();
         if(resolvedStr.indexOf("%2F") >= 0 || resolvedStr.indexOf("%2f") >= 0 || resolvedStr.indexOf("%5C") >= 0 || resolvedStr.indexOf("%5c") >= 0) {
-            throw new InvalidModuleSpecifierError();
+            throw new InvalidModuleSpecifierError(`Specifier contains invalid characters ${resolvedStr}`);
         }
 
-        if(this.directories.has(resolved.pathname)) {
-            throw new UnsupportedDirectoryImport();
+        if(this.isDirectory(resolved.pathname)) {
+            throw new UnsupportedDirectoryImport(`Directory cannot be imported: ${resolved}`);
         }
 
         if(!this.sourceFiles.has(resolved.pathname)) {
-            throw new ModuleNotFoundError();
+            throw new ModuleNotFoundError(`Module not found at ${resolved}`);
         }
 
         const format = this.esmFileFormat(resolved);
@@ -99,7 +102,7 @@ export class ModuleResolution {
 
     packageResolve(packageSpecifier: string, parentURL: URL): URL {
         if(packageSpecifier === "") {
-            throw new InvalidModuleSpecifierError();
+            throw new InvalidModuleSpecifierError("Package specifier was empty");
         }
 
         // Not checking for node builtin modules because we won't have any.
@@ -130,7 +133,7 @@ export class ModuleResolution {
         }
 
         if(packageName.startsWith(".") || packageName.indexOf("\\") >= 0 || packageName.indexOf("%") >= 0) {
-            throw new InvalidModuleSpecifierError();
+            throw new InvalidModuleSpecifierError("Package name contains invalid characters: " + packageName);
         }
 
         const packageSubpath = "." + packageSpecifier.substring(packageName.length);
@@ -144,15 +147,14 @@ export class ModuleResolution {
         }
 
         while(!this.isRootUrl(parentURL)) {
-            const packageURL = new URL("node_modules/" + packageSpecifier, parentURL);
+            const packageURL = new URL("node_modules/" + packageName + "/", parentURL);
             parentURL = new URL("..", parentURL);
 
-            if(!this.directories.has(packageURL.pathname)) {
+            if(!this.isDirectory(packageURL.pathname)) {
                 continue;
             }
 
             const pjson = this.readPackageJson(packageURL);
-
             if(pjson !== null) {
                 if(pjson.exports !== undefined && pjson.exports !== null) {
                     return this.packageExportsResolve(packageURL, packageSubpath, pjson.exports, this.defaultConditions);
@@ -168,7 +170,7 @@ export class ModuleResolution {
             return new URL(packageSubpath, packageURL);
         }
 
-        throw new ModuleNotFoundError();
+        throw new ModuleNotFoundError("Could not find module: " + packageSpecifier);
     }
 
     packageSelfResolve(packageName: string, packageSubpath: string, parentURL: URL): URL | undefined {
@@ -178,8 +180,6 @@ export class ModuleResolution {
         }
 
         const pjson = this.readPackageJson(packageURL);
-
-
         if(pjson === null || pjson.exports === null || pjson.exports === undefined) {
             return undefined;
         }
@@ -206,7 +206,7 @@ export class ModuleResolution {
             }
 
             if(hasDot && hasNonDot) {
-                throw new InvalidModuleSpecifierError();
+                throw new InvalidModuleSpecifierError("Exports object contains entries both starting with and without a dot.");
             }
         }
 
@@ -233,12 +233,12 @@ export class ModuleResolution {
             }
         }
 
-        throw new PackagePathNotExportedError();
+        throw new PackagePathNotExportedError("Subpath was not exported: " + subpath);
     }
 
     packageImportsResolve(specifier: string, parentURL: URL, conditions: readonly string[]): URL {
         if(specifier === "#" || specifier.startsWith("#/")) {
-            throw new InvalidModuleSpecifierError();
+            throw new InvalidModuleSpecifierError("Invalid import specifier: " + specifier);
         }
 
         const packageURL = this.lookupPackageScope(parentURL);
@@ -253,7 +253,7 @@ export class ModuleResolution {
             }
         }
 
-        throw new PackageImportNotDefinedError();
+        throw new PackageImportNotDefinedError("Import specifier was not defined: " + specifier);
     }
 
     packageImportsExportsResolve(matchKey: string, matchObj: object, packageURL: URL, isImports: boolean, conditions: readonly string[]): URL | undefined | null {
@@ -307,19 +307,19 @@ export class ModuleResolution {
     packageTargetResolve(packageURL: URL, target: unknown, patternMatch: string | null, isImports: boolean, conditions: readonly string[]): URL | undefined | null {
         if(typeof target === "string") {
             if(!target.startsWith("./")) {
-                if(!isImports || target.startsWith("../") || target.startsWith("/") || this.isValidUrl(target)) {
-                    throw new InvalidPackageTargetError();
+                if(!isImports || target.startsWith("../") || target.startsWith("/") || URL.canParse(target)) {
+                    throw new InvalidPackageTargetError("Invalid package target: " + target);
                 }
 
                 if(patternMatch !== null) {
-                    return this.packageResolve(target.replaceAll("*", patternMatch), packageURL);
+                    return this.packageResolve(target.replaceAll("*", patternMatch), new URL(packageURL.toString() + "/"));
                 }
 
                 return this.packageResolve(target, packageURL);
             }
 
-            if(this.hasBadSegment(target)) {
-                throw new InvalidModuleSpecifierError();
+            if(this.hasBadSegment(target.substring(2))) {
+                throw new InvalidModuleSpecifierError("Invalid module specifier: " + target);
             }
 
             const resolvedTarget = new URL(target, packageURL);
@@ -328,7 +328,7 @@ export class ModuleResolution {
             }
 
             if(this.hasBadSegment(patternMatch)) {
-                throw new InvalidModuleSpecifierError();
+                throw new InvalidModuleSpecifierError("Invalid module specifier: " + patternMatch);
             }
 
             return new URL(resolvedTarget.toString().replaceAll("*", patternMatch));
@@ -382,7 +382,7 @@ export class ModuleResolution {
             return undefined;
         }
         else {
-            throw new InvalidPackageTargetError();
+            throw new InvalidPackageTargetError("Invalid package target: " + JSON.stringify(target));
         }
     }
 
@@ -433,10 +433,8 @@ export class ModuleResolution {
     lookupPackageScope(url: URL): URL | null {
         let scopeURL = url;
 
-        while(!this.isRootUrl(url)) {
-            scopeURL = new URL("..", scopeURL);
-
-            if(scopeURL.pathname.endsWith("/node_modules/")) {
+        while(!this.isRootUrl(scopeURL)) {
+            if(scopeURL.pathname.endsWith("/node_modules/") || scopeURL.pathname.endsWith("/node_modules")) {
                 return null;
             }
 
@@ -444,6 +442,8 @@ export class ModuleResolution {
             if(this.packageJsonFiles.has(pjsonURL.pathname)) {
                 return scopeURL;
             }
+
+            scopeURL = new URL("..", scopeURL);
         }
 
         return null;
@@ -459,10 +459,10 @@ export class ModuleResolution {
     }
 
     private hasBadSegment(s: string): boolean {
-        const segments = s.split(/\/\\/);
-        return segments.some((seg, index) => {
+        const segments = s.split(/\/|\\/);
+        return segments.some(seg => {
             seg = decodeURIComponent(seg).toLowerCase();
-            return index === 0 || seg === "" || seg === "." || seg === ".." || seg === "node_modules";
+            return seg === "" || seg === "." || seg === ".." || seg === "node_modules";
         });
     }
 
@@ -473,14 +473,13 @@ export class ModuleResolution {
         return true;
     }
 
-    private isValidUrl(s: string): boolean {
-        try {
-            new URL(s);
-            return true;
+
+    private isDirectory(path: string): boolean {
+        if(path !== "/" && path.endsWith("/")) {
+            path = path.substring(0, path.length - 1);
         }
-        catch(_) {
-            return false;
-        }
+
+        return this.directories.has(path);
     }
 
     private getPathParent(path: string): string {

@@ -5,6 +5,7 @@ import dev.argon.backend.{Backend, CodeGenerator, TestExecutor}
 import zio.*
 import dev.argon.vm.resource.VmIrResource
 import dev.argon.build.{TubeImporterImpl, LogReporter, BuildFailed}
+import dev.argon.io.PathLike
 
 trait BackendLibraryOutputProvider[Output] {
   val testExecutor: TestExecutor[TestError, Output]
@@ -24,17 +25,15 @@ object BackendLibraryOutputProvider {
       override val testExecutor: exec.type = exec
 
       override def getLibraryOutput(tubeName: TubeName): IO[TestError, testExecutor.TestProgram] =
-        ZIO.scoped(
+        ZIO.scoped {
+          val program = libProvider.getIrLibrary(tubeName).decode[VmIrResource]
+          val library = ArgonLibraries.allLibraries(tubeName)
           for
             options <- ZIO.fromEither(
-              TestCaseBackendOptions.provider
+              library.optionsProvider(PathLike.join(PathLike.fromString("libraries"), tubeName.encode))
                 .getOptionsForBackend(backend)
-                .toRight { TestException(s"Could create options for backend ${backend.name}") }
+                .toRight { TestException(s"Could create options for backend ${backend.name} and library ${tubeName}") }
             )
-
-            program = libProvider.getIrLibrary(tubeName).decode[VmIrResource]
-
-            library = ArgonLibraries.allLibraries(tubeName)
 
             depLibraries = library.references.view.map { refLibName =>
               libProvider.getIrLibrary(refLibName).decode[VmIrResource].withError[TestError]
@@ -50,6 +49,6 @@ object BackendLibraryOutputProvider {
 
             output <- exec.toTestProgram(output)
           yield output
-        )
+        }
     }
 }
