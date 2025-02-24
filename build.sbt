@@ -28,8 +28,8 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.argon" %%% "argon-async-util" % "2.0.0-SNAPSHOT",
-    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.1.6-SNAPSHOT",
+    "dev.argon" %%% "argon-async-util" % "2.0.0",
+    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.2.0",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
     "dev.optics" %%% "monocle-core"  % "3.1.0",

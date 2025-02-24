@@ -46,29 +46,20 @@ private[backend] object JSApiBackendLoader {
           .build()
       })
         .onExecutor(executor)
-        .onExecutor(zioExecutor)
 
-      _ <- ZIO.attempt {
+      factory <- ZIO.attempt {
         jsContext.eval(Source.newBuilder("js", classOf[JSApiBackendLoader.type].getResource("polyfill.js")).build())
         TextDecoderPolyfill.polyfill(jsContext)
         TextEncoderPolyfill.polyfill(jsContext)
-      }
-        .mapError(ex => BackendException("Could not load polyfills", ex))
-        .onExecutor(executor)
-        .onExecutor(zioExecutor)
-
-      module <- ZIO.attempt {
+        
         val source = Source.newBuilder("js", url)
           .mimeType("application/javascript+module")
           .build()
 
-        jsContext.eval(source)
+        val module = jsContext.eval(source)
+        module.getMember(exportName).toOption
       }
-        .mapError(ex => BackendException("Could not load backend module", ex))
-        .onExecutor(executor)
-        .onExecutor(zioExecutor)
-
-      factory <- ZIO.succeed { module.getMember(exportName).toOption }
+        .mapError(ex => BackendException("Error loading backend", ex))
         .onExecutor(executor)
         .onExecutor(zioExecutor)
 

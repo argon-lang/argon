@@ -16,27 +16,28 @@ object TubeLoader {
     context: Context { type Error >: TubeFormatException | IOException },
     res: BinaryResource[context.Error],
   )(using TubeImporter & HasContext[context.type]): ZIO[context.Env & Scope, context.Error, ArTubeC & HasContext[context.type]] =
-    val errorContext = WrappedErrorContext[context.Error]()
-    import errorContext.Error.given
-    
-    val tubeEntries: ZStream[context.Env, context.Error, t.TubeFileEntry] =
-      ESExprBinaryDecoder.readAll(res.asBytes)
-        .catchAllCause { cause =>
-          splitCause[ESExprFormatException, context.Error](cause) match {
-            case Left(ex) => ZStream.fail(TubeFormatException("Could not parse tube as ESExpr binary format", ex))
-            case Right(cause) => ZStream.failCause(cause)
+    ZIO.suspendSucceed {
+      val errorContext = ErrorWrapper.Context[context.Error]()
+      import errorContext.given
+
+      val tubeEntries: ZStream[context.Env, context.Error, t.TubeFileEntry] =
+        ESExprBinaryDecoder.readAll(res.asBytes)
+          .catchAllCause { cause =>
+            splitCause[ESExprFormatException, context.Error](cause) match {
+              case Left(ex) => ZStream.fail(TubeFormatException("Could not parse tube as ESExpr binary format", ex))
+              case Right(cause) => ZStream.failCause(cause)
+            }
           }
-        }
-        .mapZIO { entryExpr =>
-          ZIO.fromEither(
-            summon[ESExprCodec[t.TubeFileEntry]]
-              .decode(entryExpr)
-              .left.map(TubeFormatException("Could not decode ESExpr as tube", _))
-          )
-        }
-      
-    TubeDeserialized(context, tubeEntries)
-  end load
+          .mapZIO { entryExpr =>
+            ZIO.fromEither(
+              summon[ESExprCodec[t.TubeFileEntry]]
+                .decode(entryExpr)
+                .left.map(TubeFormatException("Could not decode ESExpr as tube", _))
+            )
+          }
+
+      TubeDeserialized(context, tubeEntries)
+    }
 
 
 }

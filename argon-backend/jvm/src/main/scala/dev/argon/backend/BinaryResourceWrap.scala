@@ -20,7 +20,7 @@ private[backend] object BinaryResourceWrap {
         given ew2: ErrorWrapper[E]:
           override type EX = WrappingIOException[ew.EX]
 
-          override def exceptionTypeTest: TypeTest[Any, WrappingIOException[ew.EX]] =
+          override lazy val exceptionTypeTest: TypeTest[Any, WrappingIOException[ew.EX]] =
             new TypeTest[Any, WrappingIOException[ew.EX]] {
               override def unapply(x: Any): Option[x.type & WrappingIOException[ew.EX]] =
                 x.asInstanceOf[Matchable] match {
