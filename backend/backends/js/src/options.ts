@@ -2,6 +2,12 @@ import * as backendApi from "@argon-lang/js-backend-api";
 import type * as estree from "estree";
 import type { PackageJson, ReadonlyDeep } from "type-fest";
 
+export interface JSDataOptions<E> {
+    readonly externs: readonly backendApi.BinaryResource<E>[];
+    readonly packageName?: string | undefined;
+    readonly externalSubpath?: string | undefined;
+}
+
 export interface JSBackendOptions<E> {
     readonly externs: readonly backendApi.BinaryResource<E>[];
 }

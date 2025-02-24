@@ -7,7 +7,7 @@ import dev.argon.io.{BinaryResource, FileSystemResource}
 import dev.argon.util.async.ErrorWrapper
 import dev.argon.vm
 import dev.argon.vm.resource.VmIrResource
-import esexpr.Dictionary
+import esexpr.{Dictionary, ESExpr}
 import zio.*
 
 import java.io.IOException
@@ -16,6 +16,14 @@ object ScalaApiBackendLoader {
   def loadScalaApiBackend[E >: BackendException | IOException, Outs](using ew: ErrorWrapper[E])(backendName: String)(backend: scalaApi.Backend[ew.EX, Outs]): UIO[Backend[E]] =
     for
       given Runtime[Any] <- ZIO.runtime[Any]
+      apiPlatformDataLoader <- backend.platformDataLoader().flatMap { pdlFac =>
+        pdlFac.create(
+          new scalaApi.PlatformDataLoaderFactoryCallback[ew.EX, scalaApi.PlatformDataLoader[ew.EX, ?]] {
+            override def call[Options](platformDataLoader: scalaApi.PlatformDataLoader[ew.EX, Options]): UIO[scalaApi.PlatformDataLoader[ew.EX, ?]] =
+              ZIO.succeed(platformDataLoader)
+          }
+        )
+      }
       apiCodeGen <- backend.codeGenerator().flatMap(codeGenFac => {
         codeGenFac.create(
           new scalaApi.CodeGeneratorFactoryCallback[ew.EX, Outs, scalaApi.CodeGenerator[ew.EX, ?, Outs]] {
@@ -24,17 +32,39 @@ object ScalaApiBackendLoader {
           }
         )
       })
-    yield createBackend(backendName, backend, apiCodeGen)
+    yield createBackend(backendName, backend, apiPlatformDataLoader, apiCodeGen)
 
-  private def createBackend[E >: BackendException | IOException, CodeGenOpts, Outs](using ew: ErrorWrapper[E], rt: Runtime[Any])(
+  private def createBackend[E >: BackendException | IOException, TubeOpts, CodeGenOpts, Outs](using ew: ErrorWrapper[E], rt: Runtime[Any])(
     backendName: String,
     backend: scalaApi.Backend[ew.EX, Outs],
+    apiPlatformDataLoader: scalaApi.PlatformDataLoader[ew.EX, TubeOpts],
     apiCodeGen: scalaApi.CodeGenerator[ew.EX, CodeGenOpts, Outs],
   ): Backend[E] =
     new Backend[E] {
       override type Output = Outs
 
       override def name: String = backendName
+
+      override val platformDataLoader: PlatformDataLoader[E] =
+        new PlatformDataLoader[E] {
+          override type Options = TubeOpts
+
+          override def optionParser: OptionParser[E, TubeOpts] =
+            unwrapOptionParser(apiPlatformDataLoader.optionParser())
+
+          override def getTubeMetadata(options: TubeOpts): IO[E, ESExpr] =
+            ErrorWrapper.unwrapEffect(apiPlatformDataLoader.getTubeMetadata(options))
+
+          override def externLoader(options: TubeOpts): ZIO[Scope, E, ExternLoader[E]] =
+            ErrorWrapper.unwrapEffect(ScopedResourceWrap.unwrap(apiPlatformDataLoader.externLoader(options)))
+              .map { extLoader =>
+                new ExternLoader[E] {
+                  override def getExtern(name: String): IO[E, Option[scalaApi.ExternInfo]] =
+                    ErrorWrapper.unwrapEffect(extLoader.getExtern(name))
+                }
+              }
+        }
+
 
       override val codeGenerator: CodeGenerator[E, Outs] =
         apiCodeGen match {

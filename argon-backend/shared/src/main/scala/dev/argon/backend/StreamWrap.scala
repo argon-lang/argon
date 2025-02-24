@@ -7,7 +7,7 @@ import zio.stream.*
 
 private[backend] object StreamWrap {
   def wrapStream[E, A](stream: Stream[E, A])(using ew: ErrorWrapper[E]): IO[ew.EX, ScopedResource[scalaApi.Stream[ew.EX, A]]] =
-    asScopedResource(
+    ScopedResourceWrap.wrap(
       for
         pull <- ErrorWrapper.wrapStream(stream).toPull
       yield new scalaApi.Stream[ew.EX, A] {
@@ -29,7 +29,7 @@ private[backend] object StreamWrap {
 
   def unwrapStream[E, A](using ew: ErrorWrapper[E])(stream: IO[ew.EX, ScopedResource[scalaApi.Stream[ew.EX, A]]]): Stream[E, A] =
     ErrorWrapper.unwrapStream(
-      ZStream.scoped(stream.withFinalizer(_.close()).flatMap(_.get()))
+      ZStream.scoped(ScopedResourceWrap.unwrap(stream))
         .flatMap { stream =>
           ZStream.fromPull(
             ZIO.succeed(
@@ -44,18 +44,5 @@ private[backend] object StreamWrap {
           )
         }
     )
-
-
-  private def asScopedResource[E, A](io: ZIO[Scope, E, A]): IO[E, ScopedResource[A]] =
-    Scope.make.flatMap { scope =>
-      io.provideEnvironment(ZEnvironment(scope))
-        .foldCauseZIO(
-          failure = cause => scope.close(Exit.failCause(cause)) *> ZIO.failCause(cause),
-          success = a => ZIO.succeed(new ScopedResource[A] {
-            override def get(): UIO[A] = ZIO.succeed(a)
-
-            override def close(): UIO[Unit] = scope.close(Exit.unit)
-          })
-        )
-    }
+  
 }

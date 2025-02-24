@@ -3,6 +3,7 @@ package argon.backend;
 import nobleidl.core;
 
 interface backend[e: exception, output] {
+    platform-data-loader(): platform-data-loader-factory[e];
     code-generator(): code-generator-factory[e, output];
     test-executor(): option[test-executor-factory[e, output]];
 }
@@ -20,6 +21,30 @@ record directory-entry[res] {
     file-name: string;
     resource: res;
 }
+
+record extern-info {
+    value: esexpr;
+    allow-function: bool;
+}
+
+interface platform-data-loader[e: exception, options] {
+    option-parser(): argon.backend.options.option-parser[e, options];
+    get-tube-metadata(options: options): esexpr throws e;
+    extern-loader(options: options): scoped-resource[extern-loader[e]] throws e;
+}
+
+interface extern-loader[e: exception] {
+    get-extern(name: string): option[extern-info] throws e;
+}
+
+interface platform-data-loader-factory[e: exception] {
+    create[a](callback: platform-data-loader-factory-callback[e, a]): a;
+}
+
+interface platform-data-loader-factory-callback[e: exception, a] {
+    call[options](platform-data-loader: platform-data-loader[e, options]): a;
+}
+
 
 
 enum code-generator[e: exception, options, output] {

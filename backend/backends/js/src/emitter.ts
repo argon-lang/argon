@@ -4,8 +4,10 @@ import { encodeTubePathComponent, ensureExhaustive, getModulePathExternalUrl, ge
 import type * as estree from "estree";
 import type * as ir from "@argon-lang/js-backend-api/vm";
 import type { Identifier } from "@argon-lang/js-backend-api/vm";
-import { ExternFunction, type ExternProvider, type ImportHandler } from "./externs.js";
+import { type ExternProvider } from "./externs.js";
 import type { IterableElement, ReadonlyDeep } from "type-fest";
+import { ExternFunction } from "./platform-data.js";
+import type { ImportHandler } from "./imports.js";
 
 export interface OutputModuleInfo {
     readonly modulePath: ir.ModulePath;
@@ -333,6 +335,10 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             
             case "extern":
                 const extern = this.options.externProvider.getExternFunction(func.implementation.name);
+                if(extern === undefined) {
+                    throw new Error("Unknown extern: " + func.implementation.name);
+                }
+
                 const funcExpr = ExternFunction.getExprForImports(extern, this);
 
                 this.declarations.push({

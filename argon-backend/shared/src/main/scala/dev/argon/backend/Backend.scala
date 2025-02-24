@@ -10,8 +10,8 @@ trait Backend[E >: BackendException | IOException] {
 
   def name: String
 
+  val platformDataLoader: PlatformDataLoader[E]
   val codeGenerator: CodeGenerator[E, Output]
-  
   def testExecutor: IO[E, Option[TestExecutor[E, Output]]]
 
 }
