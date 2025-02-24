@@ -4,11 +4,12 @@ import { encodeTubePathComponent, ensureExhaustive, getModulePathExternalUrl, ge
 import type * as estree from "estree";
 import type * as ir from "@argon-lang/js-backend-api/vm";
 import type { Identifier } from "@argon-lang/js-backend-api/vm";
-import type { ExternProvider, ImportHandler } from "./externs.js";
+import { ExternFunction, type ExternProvider, type ImportHandler } from "./externs.js";
+import type { IterableElement, ReadonlyDeep } from "type-fest";
 
 export interface OutputModuleInfo {
     readonly modulePath: ir.ModulePath;
-    emitJsProgram(): estree.Program;
+    emitJsProgram(): ReadonlyDeep<estree.Program>;
 }
 
 export interface EmitOptions {
@@ -160,14 +161,14 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
     }
 
     private readonly imports: string[] = [];
-    private readonly declarations: estree.Declaration[] = [];
+    private readonly declarations: ReadonlyDeep<estree.Declaration>[] = [];
 
-    emit(): estree.Program {
+    emit(): ReadonlyDeep<estree.Program> {
         for(const entry of this.module.exports) {
             this.emitEntry(entry);
         }
 
-        const body: estree.Program["body"] = [];
+        const body: ReadonlyDeep<IterableElement<estree.Program["body"]>>[] = [];
 
         this.imports.forEach((path, i) => {
             body.push({
@@ -209,7 +210,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             index = this.imports.length;
             this.imports.push(source);
         }
-        
+
         return "import" + index;
     }
 
@@ -332,7 +333,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             
             case "extern":
                 const extern = this.options.externProvider.getExternFunction(func.implementation.name);
-                const funcExpr = extern.getForImports(this);
+                const funcExpr = ExternFunction.getExprForImports(extern, this);
 
                 this.declarations.push({
                     type: "VariableDeclaration",

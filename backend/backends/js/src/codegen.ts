@@ -42,7 +42,7 @@ class JSModuleResourceImpl<E> extends StringResourceBase<E> implements JSModuleR
 
     readonly #outputModule: OutputModuleInfo;
 
-    async jsProgram(): Promise<estree.Program> {
+    async jsProgram(): Promise<ReadonlyDeep<estree.Program>> {
         return this.#outputModule.emitJsProgram();
     }
 

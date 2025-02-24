@@ -1,7 +1,11 @@
+import { ESExpr, type ESExprCodec } from "@argon-lang/esexpr";
+import * as esexpr from "@argon-lang/esexpr";
 import { ensureExhaustive } from "./util.js";
 
 import type * as estree from "estree";
-
+import type { ReadonlyDeep } from "type-fest";
+import type { ESExprTag } from "@argon-lang/esexpr";
+import { name as isValidName } from "estree-util-is-identifier-name";
 
 export interface ExternProvider {
     getExternFunction(name: string): ExternFunction;
@@ -10,7 +14,7 @@ export interface ExternProvider {
 
 export class ExternLoader implements ExternProvider {
 
-    #externs = new Map<string, ExternFunction>();
+    #externs = new Map<string, ExternBuilder>();
 
     get externNames(): Iterable<string> {
         return this.#externs.keys();
@@ -21,11 +25,11 @@ export class ExternLoader implements ExternProvider {
 
 
         for(const extern of moduleExternLoader.load(node)) {
-            if(this.#externs.has(extern.externName)) {
-                throw new Error("Duplicate extern: " + extern.externName);
+            if(this.#externs.has(extern.name)) {
+                throw new Error("Duplicate extern: " + extern.name);
             }
 
-            this.#externs.set(extern.externName, extern);
+            this.#externs.set(extern.name, extern.extern);
         }
     }
 
@@ -35,14 +39,14 @@ export class ExternLoader implements ExternProvider {
             throw new Error("Unknown extern: " + name);
         }
 
-        return extern;
+        return extern.buildExtern();
     }
 }
 
 class ModuleExternLoader {
     private readonly importedIds = new Map<string, ImportedId>();
 
-    * load(node: estree.Program): Iterable<ExternFunction> {
+    * load(node: ReadonlyDeep<estree.Program>): Iterable<NamedExtern> {
         if(node.sourceType !== "module") {
             throw new Error("Externs must be defined in an ES Module");
         }
@@ -63,7 +67,7 @@ class ModuleExternLoader {
         }
     }
 
-    private addImport(importDecl: estree.ImportDeclaration): void {
+    private addImport(importDecl: ReadonlyDeep<estree.ImportDeclaration>): void {
         if(typeof importDecl.source.value !== "string") {
             throw new Error("Import source must be a string literal.");
         }
@@ -73,7 +77,7 @@ class ModuleExternLoader {
                 throw new Error("Duplicate import name: " + specifier.local.name);
             }
 
-            let member: estree.Identifier | estree.Literal | undefined;
+            let member: string | undefined;
 
             switch(specifier.type) {
                 case "ImportNamespaceSpecifier":
@@ -81,14 +85,19 @@ class ModuleExternLoader {
                     break;
 
                 case "ImportDefaultSpecifier":
-                    member = {
-                        type: "Identifier",
-                        name: "default",
-                    };
+                    member = "default";
                     break;
 
                 case "ImportSpecifier":
-                    member = specifier.imported;
+                    if(specifier.imported.type === "Identifier") {
+                        member = specifier.imported.name;
+                    }
+                    else if(typeof specifier.imported.value === "string") {
+                        member = specifier.imported.value;
+                    }
+                    else {
+                        throw new Error("Imported must be an identifier or string literal.");
+                    }
                     break;
                 
                 default:
@@ -97,6 +106,7 @@ class ModuleExternLoader {
 
 
             const importedId: ImportedId = {
+                localAlias: specifier.local.name,
                 source: importDecl.source.value,
                 member,
             };
@@ -105,39 +115,90 @@ class ModuleExternLoader {
         }
     }
 
-    private addExport(exportDecl: estree.ExportNamedDeclaration): ExternFunction {
+    private addExport(exportDecl: ReadonlyDeep<estree.ExportNamedDeclaration>): NamedExtern {
         if(!exportDecl.declaration || exportDecl.declaration.type !== "FunctionDeclaration") {
             throw new Error("Externs must be defined by exporting a function definition");
         }
 
-        return new ExternFunctionImpl(this, exportDecl.declaration);
+        const modExternLoader = this;
+
+        const decl = exportDecl.declaration;
+        return {
+            name: exportDecl.declaration.id.name,
+            extern: {
+                buildExtern() {
+                    return modExternLoader.buildExternFunction(decl);
+                },
+            },
+        };
     }
 
-
-    adjustExtern(node: estree.FunctionDeclaration, importHandler: ImportHandler): estree.Expression {
+    private buildExternFunction(func: ReadonlyDeep<estree.FunctionDeclaration>): ExternFunction {
         const freeVars = new Set<string>();
         const scanner = new FreeVariableScanner(new Set(), freeVars);
-        scanner.scan(node);
+        scanner.scan(func);
 
-        const body: estree.Statement[] = [];
+        const referencedImports: ImportedId[] = [];
 
         for(const freeVar of freeVars) {
             const importedId = this.importedIds.get(freeVar);
             if(importedId === undefined) {
                 continue;
             }
+            
+            referencedImports.push(importedId);
+        }
 
+        return {
+            function: func,
+            referencedImports,
+        };
+    }
+}
+
+interface NamedExtern {
+    readonly name: string;
+    readonly extern: ExternBuilder;
+}
+
+interface ExternBuilder {
+    buildExtern(): ExternFunction;
+}
+
+export interface ExternFunction {
+    readonly function: ReadonlyDeep<estree.FunctionDeclaration>;
+    readonly referencedImports: readonly ImportedId[];
+}
+
+export namespace ExternFunction {
+    export const codec: ESExprCodec<ExternFunction> = esexpr.lazyCodec(() =>
+        esexpr.recordCodec<ExternFunction>("estree", {
+            function: esexpr.positionalFieldCodec(EstreeRepr.codecOfNode<estree.FunctionDeclaration>()),
+            referencedImports: esexpr.keywordFieldCodec("referenced-imports", esexpr.listCodec(ImportedId.codec)),
+        })
+    );
+
+    export function getExprForImports(extern: ExternFunction, importHandler: ImportHandler): ReadonlyDeep<estree.Expression> {
+        const node = extern.function;
+        const body: ReadonlyDeep<estree.Statement>[] = [];
+
+        for(const importedId of extern.referencedImports) {
             const mappedId = importHandler.getImportId(importedId.source);
 
             let value: estree.Expression;
             if(importedId.member) {
+                const memberIsValidId = isValidName(importedId.member);
+                const property: estree.Expression = memberIsValidId
+                    ? { type: "Identifier", name: importedId.member }
+                    : { type: "Literal", value: importedId.member };
+
                 value = {
                     type: "MemberExpression",
                     object: {
                         type: "Identifier",
                         name: mappedId,
                     },
-                    property: importedId.member,
+                    property: property,
                     computed: false,
                     optional: false,
                 };
@@ -157,7 +218,7 @@ class ModuleExternLoader {
                         type: "VariableDeclarator",
                         id: {
                             type: "Identifier",
-                            name: freeVar,
+                            name: importedId.localAlias,
                         },
                         init: value,
                     },
@@ -165,7 +226,7 @@ class ModuleExternLoader {
             });
         }
 
-        const funcExpr: estree.FunctionExpression = {
+        const funcExpr: ReadonlyDeep<estree.FunctionExpression> = {
             type: "FunctionExpression",
             id: node.id,
             params: node.params,
@@ -201,29 +262,256 @@ class ModuleExternLoader {
 }
 
 
-export interface ExternFunction {
-    readonly externName: string;
-    getForImports(importHandler: ImportHandler): estree.Expression;
+type EStreeRepr =
+    | string
+    | number
+    | RegExp
+    | bigint
+    | boolean
+    | null
+    | readonly EStreeRepr[]
+    | { readonly [k: string]: EStreeRepr | undefined }
+;
+
+namespace EstreeRepr {
+    type PartialEstreeReprObject = { [k: string]: EStreeRepr | undefined };
+
+    export function codecOfNode<Node extends estree.Node>(): ESExprCodec<ReadonlyDeep<Node>> {
+        return codec as unknown as ESExprCodec<ReadonlyDeep<Node>>;
+    }
+
+    export const codec: ESExprCodec<EStreeRepr> = {
+        get tags() { return new Set<ESExprTag>() },
+
+        encode: function (value: EStreeRepr): ESExpr {
+            switch(typeof value) {
+                case "string":
+                case "number":
+                case "bigint":
+                case "boolean":
+                    return value;
+
+                case "object":
+                    if(value === null) {
+                        return null;
+                    }
+                    else if(value instanceof RegExp) {
+                        return {
+                            type: "constructor",
+                            name: "RegExp",
+                            args: [
+                                value.source,
+                                value.flags,
+                            ],
+                            kwargs: new Map(),
+                        };
+                    }
+                    else if(value instanceof Array) {
+                        return esexpr.listCodec(this).encode(value);
+                    }
+                    else if(typeof value["type"] === "string") {
+                        return {
+                            type: "constructor",
+                            name: value["type"],
+                            args: [],
+                            kwargs: new Map(
+                                Object.entries(value)
+                                    .map<[string, ESExpr] | null>(([name, value]) => {
+                                        if(name === "type" || value === undefined) {
+                                            return null;
+                                        }
+                                        return [name, this.encode(value)];
+                                    })
+                                    .filter<[string, ESExpr]>(pair => pair !== null)
+                            ),
+                        };
+                    }
+                    else {
+                        return {
+                            type: "constructor",
+                            name: "obj",
+                            args: [],
+                            kwargs: new Map(
+                                Object.entries(value)
+                                    .map<[string, ESExpr] | null>(([name, value]) => {
+                                        if(value === undefined) {
+                                            return null;
+                                        }
+                                        return [name, this.encode(value)];
+                                    })
+                                    .filter<[string, ESExpr]>(pair => pair !== null)
+                            ),
+                        };
+                    }
+            }
+        },
+
+        decode: function (expr: ESExpr): esexpr.DecodeResult<EStreeRepr> {
+            switch(typeof expr) {
+                case "string":
+                case "number":
+                case "bigint":
+                case "boolean":
+                    return { success: true, value: expr };
+
+                case "object":
+                    if(expr === null) {
+                        return { success: true, value: null };
+                    }
+                    else if(ESExpr.isConstructor(expr)) {
+                        switch(expr.name) {
+                            case "list":
+                                return esexpr.listCodec(this).decode(expr);
+
+                            case "obj":
+                                if(expr.args.length !== 0) {
+                                    return {
+                                        success: false,
+                                        message: "Unexpected arguments for obj.",
+                                        path: {
+                                            type: "constructor",
+                                            constructor: expr.name,
+                                        },
+                                    };
+                                }
+
+                                const o: PartialEstreeReprObject = { type: expr.name };
+                                for(const [name, value] of expr.kwargs) {
+                                    const propRes = this.decode(value);
+                                    if(!propRes.success) {
+                                        return {
+                                            success: false,
+                                            message: propRes.message,
+                                            path: {
+                                                type: "keyword",
+                                                constructor: expr.name,
+                                                keyword: name,
+                                                next: propRes.path,
+                                            },
+                                        };
+                                    }
+
+                                    if(Object.prototype.hasOwnProperty(name)) {
+                                        Object.defineProperty(o, name, { value: propRes.value });
+                                    }
+                                    else {
+                                        o[name] = propRes.value;
+                                    }
+                                }
+                                return { success: true, value: o };
+
+                            case "RegExp":
+                            {
+                                if(expr.args.length !== 2) {
+                                    return {
+                                        success: false,
+                                        message: "RegExp expects 2 positional arguments",
+                                        path: {
+                                            type: "constructor",
+                                            constructor: expr.name,
+                                        },
+                                    };
+                                }
+
+                                if(expr.kwargs.size !== 0) {
+                                    return {
+                                        success: false,
+                                        message: "RegExp expects no keyword arguments",
+                                        path: {
+                                            type: "constructor",
+                                            constructor: expr.name,
+                                        },
+                                    };
+                                }
+
+                                const patternRes = esexpr.strCodec.decode(expr.args[0]!);
+                                if(!patternRes.success) {
+                                    return {
+                                        success: false,
+                                        message: patternRes.message,
+                                        path: {
+                                            type: "positional",
+                                            constructor: expr.name,
+                                            index: 0,
+                                            next: patternRes.path,
+                                        },
+                                    };
+                                }
+
+                                const flagsRes = esexpr.strCodec.decode(expr.args[0]!);
+                                if(!flagsRes.success) {
+                                    return {
+                                        success: false,
+                                        message: flagsRes.message,
+                                        path: {
+                                            type: "positional",
+                                            constructor: expr.name,
+                                            index: 1,
+                                            next: flagsRes.path,
+                                        },
+                                    };
+                                }
+
+                                return { success: true, value: new RegExp(patternRes.value, flagsRes.value) };
+                            }
+
+
+                            default:
+                            {
+                                if(expr.args.length !== 0) {
+                                    return {
+                                        success: false,
+                                        message: "Unexpected arguments for estree value.",
+                                        path: {
+                                            type: "constructor",
+                                            constructor: expr.name,
+                                        },
+                                    };
+                                }
+
+                                const o: PartialEstreeReprObject = { type: expr.name };
+                                for(const [name, value] of expr.kwargs) {
+                                    const propRes = this.decode(value);
+                                    if(!propRes.success) {
+                                        return {
+                                            success: false,
+                                            message: propRes.message,
+                                            path: {
+                                                type: "keyword",
+                                                constructor: expr.name,
+                                                keyword: name,
+                                                next: propRes.path,
+                                            },
+                                        };
+                                    }
+
+                                    if(name === "type") {
+                                        continue;
+                                    }
+                                    else if(Object.prototype.hasOwnProperty(name)) {
+                                        Object.defineProperty(o, name, { value: propRes.value });
+                                    }
+                                    else {
+                                        o[name] = propRes.value;
+                                    }
+                                }
+                                return { success: true, value: o };
+                            }
+                        }
+                    }
+            }
+
+            return {
+                success: false,
+                message: "Unexpected value for estree",
+                path: {
+                    type: "current",
+                },
+            };
+        },
+    };
 }
 
-class ExternFunctionImpl implements ExternFunction {
-    constructor(moduleExternLoader: ModuleExternLoader, func: estree.FunctionDeclaration) {
-        this.#moduleExternLoader = moduleExternLoader;
-        this.#func = func;
-    }
-
-    #moduleExternLoader: ModuleExternLoader;
-    #func: estree.FunctionDeclaration;
-
-    get externName(): string {
-        return this.#func.id.name;
-    }
-
-    getForImports(importHandler: ImportHandler): estree.Expression {
-        return this.#moduleExternLoader.adjustExtern(this.#func, importHandler);
-    }
-
-}
 
 
 export interface ImportHandler {
@@ -233,9 +521,20 @@ export interface ImportHandler {
 
 
 
-interface ImportedId {
+export interface ImportedId {
+    readonly localAlias: string;
     readonly source: string;
-    readonly member?: estree.Identifier | estree.Literal | undefined;
+    readonly member?: string | undefined;
+}
+
+export namespace ImportedId {
+    export const codec: ESExprCodec<ImportedId> = esexpr.lazyCodec(() =>
+        esexpr.recordCodec<ImportedId>("imported-id", {
+            localAlias: esexpr.keywordFieldCodec("local-alias", esexpr.strCodec),
+            source: esexpr.keywordFieldCodec("source", esexpr.strCodec),
+            member: esexpr.optionalKeywordFieldCodec("member", esexpr.undefinedOptionalCodec(esexpr.strCodec)),
+        })
+    );
 }
 
 
@@ -254,7 +553,7 @@ type TraverseNodes =
 
 abstract class VariableScannerBase {
 
-    scan(node: TraverseNodes): void {
+    scan(node: ReadonlyDeep<TraverseNodes>): void {
         this.traverse(node);
     }
 
@@ -263,7 +562,7 @@ abstract class VariableScannerBase {
     protected abstract identifierReference(name: string): void;
 
 
-    protected traverse(node: TraverseNodes): void {
+    protected traverse(node: ReadonlyDeep<TraverseNodes>): void {
         switch(node.type) {
             case "BlockStatement":
             case "StaticBlock":
@@ -503,7 +802,7 @@ abstract class VariableScannerBase {
         }
     }
 
-    protected scanDeclaredVars(node: estree.Pattern, kind: "let" | "const" | "var"): void {
+    protected scanDeclaredVars(node: ReadonlyDeep<estree.Pattern>, kind: "let" | "const" | "var"): void {
         if(node === null) {
             return;
         }
@@ -632,7 +931,7 @@ class FreeVariableScanner extends VariableScannerBase {
         }
     }
 
-    override scan(node: TraverseNodes): void {
+    override scan(node: ReadonlyDeep<TraverseNodes>): void {
         new DeclaredVariableScanner(this.declaredVars).scan(node);
         super.scan(node);
     }
