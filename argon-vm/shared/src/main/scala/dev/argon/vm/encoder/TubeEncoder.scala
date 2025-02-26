@@ -407,7 +407,8 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         private def getVar(v: context.DefaultExprContext.Var): Comp[RegisterId] =
           for
             indexOpt <- knownVars.get(v).commit
-            r <- ZIO.succeed(indexOpt.get)
+            index <- ZIO.fromEither(indexOpt.toRight(TubeFormatException("Could not get index for variable")))
+            r <- ZIO.succeed(index)
           yield r
           
         def toBlock: Comp[Block] =
@@ -488,9 +489,27 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             f(functionResult)
           }
 
+        private def unitResult(e: ArExpr, output: ExprOutput)(f: => Comp[Unit]): Comp[output.ResultType] =
+          (output : ExprOutput & output.type) match {
+            case o: (ExprOutput.Discard.type & output.type) =>
+              f : Comp[o.ResultType]
+
+            case _ =>
+              intoRegister(e, output) { r =>
+                emit(Instruction.Tuple(r, Seq()))
+              }
+          }
 
         private def expr(e: ArExpr, output: ExprOutput): Comp[output.ResultType] =
           e match {
+            case ArExpr.BindVariable(v, value) =>
+              unitResult(e, output)(
+                for
+                  r <- declareVar(v)
+                  _ <- expr(value, ExprOutput.Register(r))
+                yield ()
+              )
+            
             case ArExpr.BoolLiteral(b) =>
               intoRegister(e, output) { r =>
                 emit(Instruction.ConstBool(r, b))

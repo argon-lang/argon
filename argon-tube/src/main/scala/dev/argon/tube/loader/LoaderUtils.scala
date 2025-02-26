@@ -370,7 +370,7 @@ private[loader] trait LoaderUtils extends UsingContext {
             headExpr <- expr(head)
             tailExpr <- ZIO.foreach(tail)(expr)
           yield ArExpr.Sequence(
-            stmts = tailExpr.dropRight(1),
+            stmts = (if tailExpr.isEmpty then Seq() else Seq(headExpr)) ++ tailExpr.dropRight(1),
             result = tailExpr.lastOption.getOrElse(headExpr),
           )
 

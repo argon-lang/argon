@@ -563,7 +563,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
               for
                 scope <- nestedScope
                 head <- scope.expr(stmts.headOption.getOrElse(result))
-                tail <- ZIO.foreach(stmts.drop(1) :+ result)(scope.expr)
+                tail <- ZIO.foreach(stmts.drop(1) ++ (if stmts.isEmpty then Seq() else Seq(result)))(scope.expr)
               yield Expr.Sequence(head, tail)
 
             case ArExpr.StringLiteral(s) =>
