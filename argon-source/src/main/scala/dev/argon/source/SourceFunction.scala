@@ -17,6 +17,9 @@ private[source] object SourceFunction {
 
       override def isInline: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Inline)
       override def isErased: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Erased)
+      override def effects: context.DefaultExprContext.EffectInfo =
+        if decl.purity then context.DefaultExprContext.EffectInfo.Pure
+        else context.DefaultExprContext.EffectInfo.Effectful
 
       override def importSpecifier: Comp[ImportSpecifier] =
         for
@@ -56,7 +59,7 @@ private[source] object SourceFunction {
                   override val context: ctx.type = ctx
                 }
 
-                tr.typeCheckExpr(scope2)(decl.body, sig.returnType)
+                tr.typeCheckExpr(scope2)(decl.body, sig.returnType, effects)
                   .map(context.implementations.FunctionImplementation.Expr.apply)
             }
           yield impl

@@ -271,6 +271,12 @@ record parameter-binding {
     param-type: expr;
 }
 
+@esexpr:(derive-codec)
+enum effect-info {
+    pure,
+    effectful,
+}
+
 
 
 @esexpr:(derive-codec)
@@ -285,6 +291,10 @@ record function-definition {
     @esexpr:(keyword)
     @esexpr:(default-value #false)
     erased: bool;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value (pure))
+    effects: effect-info;
 
     @esexpr:(keyword)
     signature: function-signature;

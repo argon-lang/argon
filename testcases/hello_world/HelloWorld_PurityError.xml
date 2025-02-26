@@ -7,12 +7,12 @@
         import Argon.Core/*
 
         def main(): () do
-            puts 'Hello World'
+            puts "Hello World"
         end
 
 
     </InputSource>
 
-    <ExpectedError>Purity</ExpectedError>
+    <ExpectedError>PurityError</ExpectedError>
 
 </ArgonTest>

@@ -142,7 +142,8 @@ object CompilerTests extends ZIOSpecDefault {
               case ExpectedResult.ExpectedOutput(text) =>
                 assert(res)(outputMatches(text))
 
-              case _ => ???
+              case ExpectedResult.ExpectedError(error) =>
+                assert(res)(errorMatches(error))
             }
           }
 
@@ -244,16 +245,25 @@ object CompilerTests extends ZIOSpecDefault {
 
 
   private def outputMatches(expected: String): Assertion[TestResult] =
-    Assertion.assertion("Output matches") { actual =>
-      def normalize(s: String): String =
-        s.trim().nn.split("\\n").nn.map(_.nn.trim().nn).mkString("\n")
+    def normalize(s: String): String =
+      s.trim().nn.split("\\n").nn.map(_.nn.trim().nn).mkString("\n")
 
-      actual match {
-        case TestResult.Success(actual) =>
-          normalize(expected) == normalize(actual)
+    Assertion.assertion("Output matches") {
+      case TestResult.Success(actual) =>
+        normalize(expected) == normalize(actual)
 
-        case _ => false
-      }
+      case _ => false
+    }
+  end outputMatches
+
+  private def errorMatches(expected: String): Assertion[TestResult] =
+    Assertion.assertion("Error matches") {
+      case TestResult.CompileError(errors) =>
+        errors.exists { error =>
+          error.productPrefix == expected
+        }
+
+      case _ => false
     }
 
   private enum TestResult {

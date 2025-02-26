@@ -17,7 +17,7 @@ trait TypeResolver extends UsingContext {
   import context.{TRExprContext, TRSignatureContext, Scopes}
   import Scopes.{LookupResult, Overloadable, ImplicitValue}
 
-  import TRExprContext.{Expr, Builtin, LocalVar, Var, Hole, AnnotatedExpr, RecordFieldLiteral}
+  import TRExprContext.{Expr, Builtin, LocalVar, Var, Hole, AnnotatedExpr, RecordFieldLiteral, EffectInfo}
   private type Loc = Location[FilePosition]
 
 
@@ -25,13 +25,15 @@ trait TypeResolver extends UsingContext {
   private final case class EmitState(
     model: Ref[TRExprContext.Model],
     scope: Scopes.LocalScope,
+    effects: EffectInfo,
   )
 
-  final def typeCheckExpr(scope: Scopes.Scope)(e: WithSource[ast.Expr], t: context.DefaultExprContext.Expr): Comp[context.DefaultExprContext.Expr] =
+  final def typeCheckExpr(scope: Scopes.Scope)(e: WithSource[ast.Expr], t: context.DefaultExprContext.Expr, effects: context.DefaultExprContext.EffectInfo): Comp[context.DefaultExprContext.Expr] =
     for
       scope <- Scopes.LocalScope.make(scope)
       model <- Ref.make[TRExprContext.Model](TRExprContext.Model.empty)
-      expr <- resolveExpr(e).check(DefaultToTRShifter[context.type](context).shiftExpr(t))(using EmitState(model, scope))
+      shifter = DefaultToTRShifter[context.type](context)
+      expr <- resolveExpr(e).check(shifter.shiftExpr(t))(using EmitState(model, scope, shifter.shiftEffectInfo(effects)))
       model <- model.get
       shifted <- ResolvedHoleFiller(model).shiftExpr(expr)
     yield shifted
@@ -40,7 +42,7 @@ trait TypeResolver extends UsingContext {
     for
       scope <- Scopes.LocalScope.make(scope)
       model <- Ref.make[TRExprContext.Model](TRExprContext.Model.empty)
-      expr <- resolveType(e)(using EmitState(model, scope))
+      expr <- resolveType(e)(using EmitState(model, scope, EffectInfo.Pure))
       model <- model.get
       shifted <- ResolvedHoleFiller(model).shiftExpr(expr)
     yield shifted
@@ -459,6 +461,15 @@ trait TypeResolver extends UsingContext {
     }
 
 
+  private def checkAllowedEffect(loc: Loc)(effect: EffectInfo)(using state: EmitState): Comp[Unit] =
+    ErrorLog.logError(CompilerError.PurityError(loc))
+      .whenDiscard(
+        (state.effects, effect) match {
+          case (EffectInfo.Effectful, _) | (_, EffectInfo.Pure) => false
+          case (EffectInfo.Pure, EffectInfo.Effectful) => true
+        }
+      )
+
 
   private final class ErrorFactory(override val loc: Loc, error: => CompilerError) extends ExprFactory {
     override def check(t: Expr)(using EmitState): Comp[Expr] =
@@ -606,10 +617,12 @@ trait TypeResolver extends UsingContext {
                     // TODO: Fix location
                     override def loc: Loc = OverloadedExprFactory.this.loc
                     override def infer(using EmitState): Comp[InferredExpr] =
-                      ZIO.succeed(InferredExpr(
+                      for
+                        _ <- checkAllowedEffect(loc)(DefaultToTRShifter[context.type](context).shiftEffectInfo(f.effects))
+                      yield InferredExpr(
                         Expr.FunctionCall(f, overloadResult.arguments),
                         overloadResult.remainingSig.returnType
-                      ))
+                      )
                   }
 
               def recordOverload(r: ArRecord): ExprFactory =
@@ -715,6 +728,7 @@ trait TypeResolver extends UsingContext {
         attemptState = EmitState(
           model = attemptModel,
           scope = attemptScope,
+          effects = state.effects,
         )
 
         sig <- overload.signature

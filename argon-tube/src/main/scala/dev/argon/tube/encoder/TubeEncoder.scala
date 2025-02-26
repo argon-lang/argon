@@ -155,6 +155,12 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             ZIO.succeed(ErasedSignatureType.Erased())
         }
         
+      private def encodeEffectInfo(effects: context.DefaultExprContext.EffectInfo): EffectInfo =
+        effects match {
+          case context.DefaultExprContext.EffectInfo.Pure => EffectInfo.Pure()
+          case context.DefaultExprContext.EffectInfo.Effectful => EffectInfo.Effectful()
+        }
+
 
       private def emitModules(orderedModules: Seq[ArModule]): Comp[Seq[Module]] =
         ZIO.foreach(orderedModules.zipWithIndex) {
@@ -248,6 +254,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             `import` = importSpec,
             `inline` = func.isInline,
             erased = func.isErased,
+            effects = encodeEffectInfo(func.effects),
             signature = sig,
             implementation = impl,
           )

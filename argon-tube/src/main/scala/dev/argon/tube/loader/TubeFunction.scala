@@ -2,6 +2,7 @@ package dev.argon.tube.loader
 
 import dev.argon.tube as t
 import dev.argon.compiler.*
+import dev.argon.tube.EffectInfo
 import dev.argon.util.{*, given}
 import zio.*
 
@@ -24,6 +25,12 @@ private[loader] object TubeFunction {
       override def isInline: Boolean = function.inline
 
       override def isErased: Boolean = function.erased
+
+      override def effects: context.DefaultExprContext.EffectInfo =
+        function.effects match {
+          case EffectInfo.Pure() => context.DefaultExprContext.EffectInfo.Pure
+          case EffectInfo.Effectful() => context.DefaultExprContext.EffectInfo.Effectful
+        }
 
       override def importSpecifier: Comp[ImportSpecifier] =
         specCell.get(decodeImportSpecifier(function.`import`))

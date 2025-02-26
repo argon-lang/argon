@@ -36,6 +36,10 @@ enum CompilerError {
     loc: Location[FilePosition],
     id: IdentifierExpr,
   )
+  
+  case PurityError(
+    loc: Location[FilePosition],
+  )
 
   case UnknownModule(tube: TubeName, modulePath: ModulePath, loc: Location[FilePosition])
 

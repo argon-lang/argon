@@ -105,6 +105,10 @@ trait ExprContext {
 
   final case class AnnotatedExpr(location: SourceLocation, e: Expr, t: Expr)
 
+  enum EffectInfo derives CanEqual {
+    case Pure, Effectful
+  }
+
   final class Model private(mapping: Map[Hole, Expr]) {
     def resolveHole(hole: Hole): Option[Expr] =
       mapping.get(hole)

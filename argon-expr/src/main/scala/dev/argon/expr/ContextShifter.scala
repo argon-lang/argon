@@ -33,6 +33,8 @@ trait ContextShifter[F[_]: Monad] {
     given varShifter: Shifter[ec1.Var, ec2.Var] = autoShifter
     given Shifter[ec1.LocalVar, ec2.LocalVar] = autoShifter
     given Shifter[ec1.ParameterOwner, ec2.ParameterOwner] = autoShifter
+    
+    given effectShifter: Shifter[ec1.EffectInfo, ec2.EffectInfo] = autoShifter
 
   }
 
@@ -41,6 +43,9 @@ trait ContextShifter[F[_]: Monad] {
     
   final def shiftVar(v: ec1.Var): F[ec2.Var] =
     ShiftHelper.varShifter.shift(v)
+    
+  final def shiftEffectInfo(eff: ec1.EffectInfo): F[ec2.EffectInfo] =
+    ShiftHelper.effectShifter.shift(eff)
 
   protected def shiftHole(hole: ec1.Hole): F[ec2.Expr]
 
