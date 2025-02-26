@@ -509,7 +509,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   _ <- expr(value, ExprOutput.Register(r))
                 yield ()
               )
-            
+
             case ArExpr.BoolLiteral(b) =>
               intoRegister(e, output) { r =>
                 emit(Instruction.ConstBool(r, b))
@@ -604,6 +604,11 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 yield ()
               }
 
+            case ArExpr.IntLiteral(i) =>
+              intoRegister(e, output) { r =>
+                emit(Instruction.ConstInt(r, i))
+              }
+
             case ArExpr.Sequence(stmts, result) =>
               ZIO.foreach(stmts) { stmt => expr(stmt, ExprOutput.Discard) } *>
                 expr(result, output)
@@ -611,6 +616,22 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             case ArExpr.StringLiteral(s) =>
               intoRegister(e, output) { r =>
                 emit(Instruction.ConstString(r, s))
+              }
+
+            case ArExpr.Tuple(items) =>
+              intoRegister(e, output) { r =>
+                for
+                  itemRegs <- ZIO.foreach(items) { item => expr(item, ExprOutput.AnyRegister) }
+                  _ <- emit(Instruction.Tuple(r, itemRegs))
+                yield ()
+              }
+
+            case ArExpr.TupleElement(index, tuple) =>
+              intoRegister(e, output) { r =>
+                for
+                  tupleReg <- expr(tuple, ExprOutput.AnyRegister)
+                  _ <- emit(Instruction.TupleElement(r, index, tupleReg))
+                yield ()
               }
 
             case ArExpr.Variable(v) =>
@@ -670,12 +691,26 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 args
               )
 
+            case ArExpr.IntLiteral(_) =>
+              ZIO.succeed(intType)
+
             case ArExpr.Variable(v) =>
               ZIO.succeed(v.varType)
 
             case ArExpr.StringLiteral(_) =>
               ZIO.succeed(stringType)
 
+            case ArExpr.Tuple(items) =>
+              for
+                itemTypes <- ZIO.foreach(items)(getExprType)
+              yield ArExpr.Tuple(itemTypes)
+
+            case ArExpr.TupleElement(index, tuple) =>
+              getExprType(tuple).flatMap {
+                case ArExpr.Tuple(itemTypes) => ZIO.succeed(itemTypes(index))
+                case _ => ???
+              }
+              
             case _ =>
               ZIO.logError("Unimplemented getExprType expression: " + e.getClass).as(???)
           }
