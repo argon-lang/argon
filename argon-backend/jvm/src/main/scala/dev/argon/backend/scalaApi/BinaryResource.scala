@@ -69,7 +69,9 @@ object BinaryResource {
               asInputStream.map { is =>
                 ZStream.fromInputStream(is)
                   .catchAll {
-                    case ex: InterruptedIOException => ZStream.fromZIO(ZIO.interrupt)
+                    case ex: InterruptedIOException =>
+                      ex.printStackTrace()
+                      ZStream.fromZIO(ZIO.interrupt)
                     case ex @ WrappingIOException(e) =>
                       summon[ErrorType[JE]].checkObject(e) match {
                         case Some(e) => ZStream.fail(eAdapter.fromJava(e))

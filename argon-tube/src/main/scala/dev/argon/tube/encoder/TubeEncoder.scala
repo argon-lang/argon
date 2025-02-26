@@ -10,6 +10,7 @@ import zio.stm.{ZSTM, TMap}
 import dev.argon.ast
 import dev.argon.compiler.SignatureEraser
 import dev.argon.compiler.HasContext
+import esexpr.Dictionary
 
 
 private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
@@ -33,6 +34,8 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             modules <- emitModules(orderedModules)
           yield TubeMetadata(
             name = encodeTubeName(tube.name),
+            platforms = tube.metadata._1,
+            platformMetadata = Dictionary(tube.metadata._2),
             referencedTubes = orderedTubes.map(encodeTubeName),
             modules = modules,
           )
@@ -230,11 +233,11 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
           impl <- ZIO.foreach(func.implementation) { impl =>
             impl.flatMap {
-              case context.Implementations.FunctionImplementation.Expr(e) =>
+              case context.implementations.FunctionImplementation.Expr(e) =>
                 for
                   e <- emitExpr(e)
                 yield FunctionImplementation.Expr(e)
-              case context.Implementations.FunctionImplementation.Extern(name) =>
+              case context.implementations.FunctionImplementation.Extern(name) =>
                 ZIO.succeed(FunctionImplementation.Extern(name))
             }
           }

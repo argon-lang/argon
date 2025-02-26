@@ -14,7 +14,7 @@ private[source] object SourceModule {
   (ctx: Context { type Error >: SourceError })
   (tn: TubeName, p: ModulePath)
   (sourceCode: ArgonSourceCodeResource[ctx.Error])
-  (using TubeImporter & HasContext[ctx.type])
+  (using TubeImporter & HasContext[ctx.type], ExternProvider & HasContext[ctx.type])
   : ctx.Comp[ArModuleC & HasContext[ctx.type]] =
     for
       exportMapCell <- MemoCell.make[ctx.Env, ctx.Error, Map[Option[IdentifierExpr], Seq[ModuleExportC[ctx.type]]]]

@@ -14,6 +14,7 @@ import dev.argon.build.{LogReporter, Compile}
 import dev.argon.io.PathLike
 import dev.argon.build.GenerateIR
 import dev.argon.vm.resource.VmIrResource
+import dev.argon.backend.{Backend, BackendContext, BackendExternProvider}
 
 trait ArgonLibraryProvider {
   def getLibrary(tubeName: TubeName): ESExprDecodedBinaryStreamResource[TestError, t.TubeFileEntry]
@@ -21,7 +22,7 @@ trait ArgonLibraryProvider {
 }
 
 object ArgonLibraryProvider {
-  def live: ZLayer[Any, Nothing, ArgonLibraryProvider] =
+  def live(backend: Backend[TestError]): ZLayer[Any, Nothing, ArgonLibraryProvider] =
     ZLayer.fromZIO(
       for
         libraryStore <- MemoCacheStore.make[Any, TestError, TubeName, Chunk[t.TubeFileEntry]]
@@ -78,8 +79,17 @@ object ArgonLibraryProvider {
 
         private def compileLibrary(library: ArgonLibraryInfo, referencingLibraries: Set[TubeName]): Stream[TestError, t.TubeFileEntry] =
           ZStream.unwrapScoped {
-            val ctx = Context.Impl[ErrorLog & LogReporter, TestError]
+            val ctx = BackendContext[ErrorLog & LogReporter, TestError]
+
+            def tubeDir: PathLike =
+              PathLike.fromString(s"libraries/${library.tubeName.encode}")
+
             for
+              given (ExternProvider & HasContext[ctx.type]) <- BackendExternProvider.make(ctx)(
+                Set(backend.name),
+                Map(backend.name -> library.tubeOptionsProvider(tubeDir).getOptionsForBackend(backend).get),
+              )
+
               tubeResContext <- TubeResourceContext.make(ctx)
 
               compile = new Compile {
@@ -91,9 +101,6 @@ object ArgonLibraryProvider {
                 import tubeResourceContext.TubeResource
 
                 override def tubeName: TubeName = library.tubeName
-
-                private def tubeDir: PathLike =
-                  PathLike.fromString(s"libraries/${tubeName.encode}")
 
                 override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
                   PathUtil.directoryResource(PathLike.join(tubeDir, "src"))
@@ -114,12 +121,14 @@ object ArgonLibraryProvider {
 
         private def genIrLibrary(library: ArgonLibraryInfo): Stream[TestError, vm.TubeFileEntry] =
           ZStream.unwrapScoped {
-            val ctx = Context.Impl[ErrorLog & LogReporter, TestError]
+            val ctx = BackendContext[ErrorLog & LogReporter, TestError]
             for
               tubeResContext <- TubeResourceContext.make(ctx)
 
               genir = new GenerateIR {
                 override val context: ctx.type = ctx
+
+                override def platformId: String = backend.name
 
                 override val tubeResourceContext: tubeResContext.type =
                   tubeResContext

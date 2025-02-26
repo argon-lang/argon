@@ -74,28 +74,13 @@ class PackageJsonResourceImpl<E> extends StringResourceBase<E> implements Packag
 }
 
 
-async function loadEmitOptions<E>(input: CodegenInput<E>): Promise<EmitOptions> {
-    const externLoader = new ExternLoader();
-
-    for(const extern of input.options.externs) {
-        const sourceCode = await resourceAsString(extern);
-        const program: acorn.Program = acorn.parse(sourceCode, {
-            ecmaVersion: 2024,
-            sourceType: "module",
-            sourceFile: extern.fileName ?? "<extern>.js",
-            allowHashBang: false,
-        });
-        externLoader.addExterns(program as estree.Program);
-    }
-    
+async function loadEmitOptions<E>(input: CodegenInput<E>): Promise<EmitOptions> {    
     let ir = streamToAsyncIterable(() => input.tubeInput.stream());
     
     const programModel = await readIR(ir);
 
     return {
         program: programModel,
-        externProvider: externLoader,
-        tubeMapping: [],
     };
 }
 

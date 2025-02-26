@@ -2,7 +2,7 @@ package dev.argon.source
 
 import cats.data.{NonEmptySeq, OptionT}
 import dev.argon.ast.{IdentifierExpr, ModulePatternMapping, ModulePatternSegment}
-import dev.argon.compiler.{ArModuleC, ArTubeC, CompilerError, Context, ErrorLog, HasContext, ModulePath, TubeImporter, TubeName}
+import dev.argon.compiler.{ArModuleC, ArTubeC, CompilerError, Context, ErrorLog, ExternProvider, HasContext, ModulePath, TubeImporter, TubeName}
 import dev.argon.io.{DirectoryEntry, DirectoryResource}
 import dev.argon.util.{*, given}
 import zio.ZIO
@@ -19,12 +19,14 @@ object SourceTube {
   def make
   (ctx: Context { type Error >: SourceError })
   (tubeOptions: SourceCodeTubeOptions[ctx.Error])
-  (using TubeImporter & HasContext[ctx.type])
+  (using tubeImporter: TubeImporter & HasContext[ctx.type], externProvider: ExternProvider & HasContext[ctx.type])
   : ZIO[ctx.Env, ctx.Error, ArTubeC & HasContext[ctx.type]] =
     for
       moduleMap <- buildModuleMap(ctx)(tubeOptions.name)(
         ZStream.fromIterable(tubeOptions.sources).flatMap(getSourceCode(ctx))
       )
+
+      tubeMetadata <- externProvider.getTubeMetadata
 
     yield new ArTubeC {
       override val context: ctx.type = ctx
@@ -32,6 +34,8 @@ object SourceTube {
       override val name: TubeName = tubeOptions.name
 
       override val referencedTubes: Set[TubeName] = tubeOptions.referencedTubes
+
+      override def metadata: context.implementations.TubeMetadata = tubeMetadata
 
       override val modules: Map[ModulePath, ArModule] =
         moduleMap
@@ -67,7 +71,7 @@ object SourceTube {
   (context: Context { type Error >: SourceError })
   (tubeName: TubeName)
   (stream: ZStream[context.Env, context.Error, (ModulePath, ArgonSourceCodeResource[context.Error])])
-  (using TubeImporter & HasContext[context.type])
+  (using TubeImporter & HasContext[context.type], ExternProvider & HasContext[context.type])
   : context.Comp[Map[ModulePath, ArModuleC & HasContext[context.type]]] =
     stream.runFoldZIO(Map.empty[ModulePath, ArModuleC & HasContext[context.type]]) {
       case (modules, (path, sourceCode)) =>

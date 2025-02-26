@@ -1,10 +1,9 @@
 import type { ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel } from "./program-model.js";
-import { encodeTubePathComponent, ensureExhaustive, getModulePathExternalUrl, getModulePathUrl, modulePathEquals, tubeNameEquals, tubePackageName, urlEncodeIdentifier } from "./util.js"
+import { encodeTubePathComponent, ensureExhaustive, getModulePathExternalUrl, getModulePathUrl, modulePathEquals, tubePackageName, urlEncodeIdentifier } from "./util.js"
 
 import type * as estree from "estree";
 import type * as ir from "@argon-lang/js-backend-api/vm";
 import type { Identifier } from "@argon-lang/js-backend-api/vm";
-import { type ExternProvider } from "./externs.js";
 import type { IterableElement, ReadonlyDeep } from "type-fest";
 import { ExternFunction } from "./platform-data.js";
 import type { ImportHandler } from "./imports.js";
@@ -16,13 +15,6 @@ export interface OutputModuleInfo {
 
 export interface EmitOptions {
     readonly program: ProgramModel,
-    readonly externProvider: ExternProvider;
-    readonly tubeMapping: readonly TubeMapping[];
-}
-
-export interface TubeMapping {
-    readonly tubeName: ir.TubeName;
-    readonly packageName: string;
 }
 
 class EmitterBase {
@@ -253,10 +245,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         }
         else {
             const tubeInfo = this.options.program.getTubeInfo(moduleInfo.tubeId);
-            let tubePackage = this.options.tubeMapping.find(mapping => tubeNameEquals(mapping.tubeName, tubeInfo.tubeName))?.packageName;
-            if(tubePackage === undefined) {
-                tubePackage = tubePackageName(tubeInfo.tubeName);
-            }
+            const tubePackage = tubePackageName(tubeInfo.tubeName);
 
             const modulePathUrl = getModulePathExternalUrl(moduleInfo.path);
             
@@ -334,10 +323,12 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 break;
             
             case "extern":
-                const extern = this.options.externProvider.getExternFunction(func.implementation.name);
-                if(extern === undefined) {
-                    throw new Error("Unknown extern: " + func.implementation.name);
+                const externRes = ExternFunction.codec.decode(func.implementation.extern);
+                if(!externRes.success) {
+                    throw new Error("Could not decode extern: " + externRes.message + " " + JSON.stringify(externRes.path));
                 }
+
+                const extern = externRes.value;
 
                 const funcExpr = ExternFunction.getExprForImports(extern, this);
 

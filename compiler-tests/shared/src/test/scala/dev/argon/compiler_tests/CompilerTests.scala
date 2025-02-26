@@ -21,7 +21,7 @@ import dev.argon.io.PathUtil
 import java.io.StringWriter
 import java.io.PrintWriter
 import dev.argon.io.*
-import dev.argon.backend.{Backend, BackendFactory, Backends, CodeGenerator, TestExecutor}
+import dev.argon.backend.{Backend, BackendContext, BackendExternProvider, BackendFactory, Backends, CodeGenerator, TestExecutor}
 import dev.argon.vm.resource.VmIrResource
 import dev.argon.tube.resource.TubeResourceContext
 import dev.argon.source.ArgonSourceCodeResource
@@ -33,17 +33,22 @@ object CompilerTests extends ZIOSpecDefault {
 
   override def spec: Spec[TestEnvironment & Scope, Any] =
     suite("Compiler Tests")(
-      buildBackendTests.provideSomeLayer[Env](ArgonLibraryProvider.live)
+      buildBackendTests
     )
 
-  private def buildBackendTests: Spec[Env & ArgonLibraryProvider, Error] =
+  private def buildBackendTests: Spec[Env, Error] =
     Spec.multiple(
       Chunk.fromIterable(
         Backends.allBackendFactories.map { backendFactory =>
           Spec.scoped(
             backendFactory.load[Error].flatMap { backend =>
               backend.testExecutor.map {
-                case Some(executor) => buildTestCases(backend, executor)
+                case Some(executor) =>
+                  suite("backend " + backend.name)(
+                    buildTestCases(backend, executor)
+                      .provideSomeLayer[Env](ArgonLibraryProvider.live(backend))
+                  )
+
                 case None => Spec.empty
               }
             }.mapError(TestFailure.fail)
@@ -73,7 +78,7 @@ object CompilerTests extends ZIOSpecDefault {
         testCases <- loadTestCases
         
         options <- ZIO.fromEither(
-          TestCaseBackendOptions.provider.getOptionsForBackend(backend)
+          TestCaseBackendOptions.codeGenOptionsProvider.getOptionsForBackend(backend)
             .toRight { TestException(s"Could not get test options for backend ${backend.name}") }
         )
 
@@ -83,10 +88,10 @@ object CompilerTests extends ZIOSpecDefault {
           ZIO.scoped(
             (
               for
-                vmIrResource <- toVmIr(testCase)
+                vmIrResource <- toVmIr(backend, testCase)
                 libIr <- ZIO.foreach(testCase.libraries.toSeq) { libName =>
                   ZIO.serviceWith[ArgonLibraryProvider](_.getIrLibrary(libName))
-                } 
+                }
                 output <- (backend.codeGenerator: backend.codeGenerator.type & CodeGenerator[Error, backend.Output]) match {
                   case codeGenerator: (backend.codeGenerator.type & CodeGenerator.LibraryCodeGenerator[Error, backend.Output]) =>
                     for
@@ -164,57 +169,75 @@ object CompilerTests extends ZIOSpecDefault {
       }).mapError(TestFailure.fail)
     )
 
-  private def toVmIr(testCase: TestCase): ZIO[Scope & Env & ErrorLog & ArgonLibraryProvider, Error, VmIrResource[Error]] =
-    val ctx = Context.Impl[Env & ErrorLog, Error]
-    
-    for
-      tubeResContext <- TubeResourceContext.make(ctx)
+  private def toVmIr(backend: Backend[Error], testCase: TestCase): ZIO[Env & ErrorLog & ArgonLibraryProvider, Error, VmIrResource[Error]] =
+    val ctx = BackendContext[Env & ErrorLog, Error]
 
-      libProvider <- ZIO.service[ArgonLibraryProvider]
+    ZIO.scoped(
+      for
+        given (ExternProvider & HasContext[ctx.type]) <- BackendExternProvider.make(ctx)(
+          Set(backend.name),
+          Map(backend.name -> TestCaseBackendOptions.tubeOptionsProvider.getOptionsForBackend(backend).get),
+        )
 
-      compile = new Compile {
-        override val context: ctx.type = ctx
+        tubeResContext <- TubeResourceContext.make(ctx)
 
-        override val tubeResourceContext: tubeResContext.type =
-          tubeResContext
+        libProvider <- ZIO.service[ArgonLibraryProvider]
 
-        import tubeResourceContext.TubeResource
+        compile = new Compile {
+          override val context: ctx.type = ctx
 
-        override def tubeName: TubeName = TubeName("Argon", "TestCase")
-        override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
-          testCase.toDirectoryResource
-            .decode[ArgonSourceCodeResource]
+          override val tubeResourceContext: tubeResContext.type =
+            tubeResContext
 
-        override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
-          testCase.libraries.toSeq.map { libName =>
-            libProvider.getLibrary(libName)
-              .decode[TubeResource]
-          }
-      }
+          import tubeResourceContext.TubeResource
 
-      compileOutput <- compile.compile()
+          override def tubeName: TubeName = TubeName("Argon", "TestCase")
+          override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
+            testCase.toDirectoryResource
+              .decode[ArgonSourceCodeResource]
 
-      genIr = new GenerateIR {
-        override val context: ctx.type = ctx
+          override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
+            testCase.libraries.toSeq.map { libName =>
+              libProvider.getLibrary(libName)
+                .decode[TubeResource]
+            }
+        }
 
-        override val tubeResourceContext: tubeResContext.type =
-          tubeResContext
+        compiledTube <- ZIO.scoped(compile.compile().flatMap(_.tube.decoded.runCollect))
 
-        import tubeResourceContext.TubeResource
+        genIr = new GenerateIR {
+          override val context: ctx.type = ctx
 
-        override def inputTube(using TubeImporter & HasContext[ctx.type]): TubeResource[context.Error] =
-          compileOutput.tube
+          override def platformId: String = backend.name
 
-        override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
-          testCase.libraries.toSeq.map { libName =>
-            libProvider.getLibrary(libName)
-              .decode[TubeResource]
-          }
-      }
+          override val tubeResourceContext: tubeResContext.type =
+            tubeResContext
 
-      irOutput <- genIr.compile()
+          import tubeResourceContext.TubeResource
 
-    yield irOutput.tube
+          override def inputTube(using TubeImporter & HasContext[ctx.type]): TubeResource[context.Error] =
+            val resource = new ESExprDecodedBinaryStreamResource.Impl[context.Error, dev.argon.tube.TubeFileEntry] with Resource.WithoutFileName {
+              override def decoded: Stream[context.Error, dev.argon.tube.TubeFileEntry] =
+                ZStream.fromChunk(compiledTube)
+            }
+
+            resource.decode[TubeResource]
+          end inputTube
+
+          override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
+            testCase.libraries.toSeq.map { libName =>
+              libProvider.getLibrary(libName)
+                .decode[TubeResource]
+            }
+        }
+
+        irEntries <- ZIO.scoped(genIr.compile().flatMap(_.tube.decoded.runCollect))
+
+      yield new ESExprDecodedBinaryStreamResource.Impl[Error, dev.argon.vm.TubeFileEntry] with Resource.WithoutFileName {
+        override def decoded: Stream[Error, dev.argon.vm.TubeFileEntry] =
+          ZStream.fromChunk(irEntries)
+      }.decode[VmIrResource]
+    )
   end toVmIr
 
 

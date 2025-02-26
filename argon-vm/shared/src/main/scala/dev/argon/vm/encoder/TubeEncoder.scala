@@ -2,6 +2,7 @@ package dev.argon.vm.encoder
 
 import dev.argon.compiler as c
 
+import dev.argon.tube.loader.TubeFormatException
 import dev.argon.tube.encoder.TubeEncoderBase
 import dev.argon.vm.*
 
@@ -14,7 +15,7 @@ import dev.argon.compiler.{SignatureEraser, HasContext, ArgonEvaluator}
 import dev.argon.expr.{NullaryBuiltin, UnaryBuiltin, BinaryBuiltin}
 
 
-private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
+private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFileEntry] {
   override def createEmitter(state: EncodeState): state.Emitter =
     new state.Emitter {
       import state.*
@@ -36,6 +37,7 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           yield TubeMetadata(
             name = encodeTubeName(tube.name),
             referencedTubes = orderedTubes.map(encodeTubeName),
+            platformMetadata = tube.metadata._2.get(platformId),
             modules = modules,
           )
         
@@ -214,7 +216,7 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
           impl <- ZIO.foreach(func.implementation) { impl =>
             impl.flatMap {
-              case context.Implementations.FunctionImplementation.Expr(e) =>
+              case context.implementations.FunctionImplementation.Expr(e) =>
                 val paramVars = SignatureParameter.getParameterVariables(
                   context.DefaultExprContext.ParameterOwner.Func(func),
                   sig.parameters
@@ -223,8 +225,12 @@ private[vm] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                   block <- emitFunctionBody(e, paramVars)
                 yield FunctionImplementation.VmIr(block)
 
-              case context.Implementations.FunctionImplementation.Extern(name) =>
-                ZIO.succeed(FunctionImplementation.Extern(name))
+              case context.implementations.FunctionImplementation.Extern(externMap) =>
+                ZIO.fromEither(
+                  externMap.externs.dict.get(platformId)
+                    .toRight(new TubeFormatException("Missing extern implementation for platform " + platformId))
+                )
+                  .map(FunctionImplementation.Extern.apply)
             }
           }
 

@@ -27,15 +27,11 @@ trait CompileBase extends UsingContext {
       tubeImporter <- TubeImporterImpl(context)
       given (TubeImporter & LoadTube & HasContext[context.type]) = tubeImporter
 
-
       refTubes <- getReferencedTubes
       currentTube <- getCurrentTube(refTubes)
-
       _ <- tubeImporter.loadTube(currentTube)
       _ <- ZIO.foreachDiscard(refTubes)(tubeImporter.loadTube)
-
       output <- createOutput(currentTube)
-            
     yield output
 
 }

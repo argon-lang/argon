@@ -21,7 +21,7 @@ private[compiler] abstract class ArgonEvaluatorBase[R, E] extends Evaluator[R, E
       function.implementation match {
         case Some(impl) =>
           impl.flatMap {
-            case context.Implementations.FunctionImplementation.Expr(e) =>
+            case context.implementations.FunctionImplementation.Expr(e) =>
               val e2 = shiftExpr(e)
 
               for
@@ -32,7 +32,7 @@ private[compiler] abstract class ArgonEvaluatorBase[R, E] extends Evaluator[R, E
                 (e3, true)
               }
 
-            case context.Implementations.FunctionImplementation.Extern(_) =>
+            case context.implementations.FunctionImplementation.Extern(_) =>
               ZIO.succeed((Expr.FunctionCall(function, args), false))
           }
 

@@ -62,8 +62,22 @@ record tube-header {
 record tube-metadata {
     name: tube-name;
 
+    @esexpr:(keyword)
+    platforms: list[supported-platform];
+
+    @esexpr:(keyword)
     referenced-tubes: list[tube-name];
+
+    @esexpr:(keyword)
+    platform-metadata: dict[esexpr];
+
+    @esexpr:(keyword)
     modules: list[module];
+}
+
+@esexpr:(derive-codec)
+record supported-platform {
+    id: string;
 }
 
 @esexpr:(derive-codec)
@@ -286,11 +300,18 @@ enum function-implementation {
         body: expr;
     },
 
+    @esexpr:(inline-value)
     extern {
-        name: string;
+        externs: extern-map;
     },
 }
 
+@esexpr:(derive-codec)
+@esexpr:(constructor "externs")
+record extern-map {
+    @esexpr:(dict)
+    externs: dict[esexpr];
+}
 
 
 @esexpr:(derive-codec)

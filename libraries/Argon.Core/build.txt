@@ -1,6 +1,6 @@
 SBT commands to build:
 
-cliJVM/run compile --name Argon.Core -i libraries/Argon.Core/src -o libraries/Argon.Core/bin/Argon.Core.artube
-cliJVM/run genir -i libraries/Argon.Core/bin/Argon.Core.artube -o libraries/Argon.Core/bin/Argon.Core.arvm
-cliJVM/run codegen js -i libraries/Argon.Core/bin/Argon.Core.arvm --js-modules libraries/Argon.Core/bin/js --js-externs libraries/Argon.Core/js/externs.js
+cliJVM/run compile --name Argon.Core -i libraries/Argon.Core/src -o libraries/Argon.Core/bin/Argon.Core.artube --js-externs libraries/Argon.Core/js/externs.js --platform js
+cliJVM/run genir -i libraries/Argon.Core/bin/Argon.Core.artube -o libraries/Argon.Core/bin/Argon.Core.arvm --platform js
+cliJVM/run codegen js -i libraries/Argon.Core/bin/Argon.Core.arvm --js-modules libraries/Argon.Core/bin/js
 

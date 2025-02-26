@@ -6,13 +6,13 @@ import dev.argon.util.{*, given}
 import zio.*
 
 private[loader] object TubeFunction {
-  def apply(ctx: Context, elemLoader: ElementLoader & HasContext[ctx.type], function: t.FunctionDefinition): ctx.Comp[ArFuncC & HasContext[ctx.type]] =
+  def apply(ctx: TubeLoader.TubeLoadContext, elemLoader: ElementLoader & HasContext[ctx.type], function: t.FunctionDefinition): ctx.Comp[ArFuncC & HasContext[ctx.type]] =
     for
       funcId <- UniqueIdentifier.make
 
       specCell <- MemoCell.make[ctx.Env, ctx.Error, ImportSpecifier]
       sigCell <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
-      implCell <- MemoCell.make[ctx.Env, ctx.Error, ctx.Implementations.FunctionImplementation]
+      implCell <- MemoCell.make[ctx.Env, ctx.Error, ctx.implementations.FunctionImplementation]
 
     yield new ArFuncC with LoaderUtils {
 
@@ -31,16 +31,16 @@ private[loader] object TubeFunction {
       override def signature: Comp[FunctionSignature] =
         sigCell.get(decodeFunctionSignature(function.signature))
 
-      override def implementation: Option[Comp[context.Implementations.FunctionImplementation]] =
+      override def implementation: Option[Comp[context.implementations.FunctionImplementation]] =
         function.implementation.map { impl =>
           implCell.get(impl match {
             case t.FunctionImplementation.Expr(body) =>
               for
                 body <- decodeExpr(body)
-              yield context.Implementations.FunctionImplementation.Expr(body)
+              yield context.implementations.FunctionImplementation.Expr(body)
 
-            case t.FunctionImplementation.Extern(name) =>
-              ZIO.succeed(context.Implementations.FunctionImplementation.Extern(name))
+            case t.FunctionImplementation.Extern(externMap) =>
+              ZIO.succeed(context.implementations.FunctionImplementation.Extern(externMap))
           })
         }
 

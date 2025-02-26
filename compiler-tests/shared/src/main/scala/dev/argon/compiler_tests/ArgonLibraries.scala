@@ -17,13 +17,19 @@ object ArgonLibraries {
     override val tubeName: TubeName = TubeName("Argon", "Core")
     override val references: Set[TubeName] = Set.empty
 
-    override def optionsProvider(libPath: PathLike): BackendOptionsProvider =
+    override def tubeOptionsProvider(libPath: PathLike): BackendOptionsProvider =
       BackendOptionsProvider(
         "js" -> Map(
           "externs" -> OptionValue.ManyValues(
             OptionValue.Atom.BinaryResource(PathUtil.binaryResource(PathLike.join(libPath, "js/externs.js")))
           ),
         ),
+      )
+      
+
+    override def codeGenOptionsProvider(libPath: PathLike): BackendOptionsProvider =
+      BackendOptionsProvider(
+        "js" -> Map(),
       )
 
   }

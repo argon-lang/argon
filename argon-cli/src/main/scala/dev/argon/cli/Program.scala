@@ -4,7 +4,7 @@ import dev.argon.io.*
 import dev.argon.platform.*
 import dev.argon.util.{*, given}
 import dev.argon.build.{BuildError, Compile}
-import dev.argon.backend.{BackendException, BackendFactory, Backends, CodeGenerator}
+import dev.argon.backend.{BackendContext, BackendException, BackendExternProvider, BackendFactory, Backends, CodeGenerator}
 import dev.argon.backend.options.OptionValue
 import esexpr.ESExprException
 import zio.*
@@ -14,21 +14,17 @@ import java.io.IOException
 import scopt.{OEffect, OParser}
 
 import java.util.concurrent.TimeUnit
-import dev.argon.compiler.TubeName
+import dev.argon.compiler.{Context, ErrorLog, ExternProvider, HasContext, TubeImporter, TubeName}
 import dev.argon.build.InvalidTubeName
-import dev.argon.compiler.Context
-import dev.argon.compiler.ErrorLog
 
 import scala.reflect.TypeTest
 import dev.argon.build.CContext
 import dev.argon.source.SourceError
-import dev.argon.compiler.HasContext
 import dev.argon.tube.resource.TubeResourceContext
 import dev.argon.build.LogReporter
 import dev.argon.tube.loader.TubeFormatException
 import dev.argon.io.DirectoryResource
 import dev.argon.source.ArgonSourceCodeResource
-import dev.argon.compiler.TubeImporter
 import dev.argon.build.GenerateIR
 import dev.argon.vm.resource.VmIrResource
 
@@ -52,8 +48,7 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
 //                for
 //                  fiber <- runCommand(config).fork
 //                  _ <- Clock.sleep(Duration.fromSeconds(15))
-//                  trace <- fiber.trace
-//                  _ <- Console.printLineError(trace)
+//                  fibers <- Fiber.dumpAll
 //                  res <- fiber.join
 //                yield res
 
@@ -91,7 +86,7 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
           .provideSomeLayer[Environment](LogReporter.live)
 
       case Some(Command.CodeGen) =>
-        options.codegenBackend match
+        options.selectedBackend match
           case None =>
             for
               _ <- Console.printLineError("No backend specified")
@@ -113,53 +108,62 @@ object Program extends PlatformApp[IOException | BuildError | SourceError | Tube
     end match
 
   private def runCompile(options: ArgonCommandLineOptions): ZIO[Environment & ErrorLog & LogReporter, Error, Unit] =
-    for
-      tubeNameDec <- ZIO.fromOption(options.tubeName.flatMap(TubeName.decode)).mapError(_ => InvalidTubeName(options.tubeName.get))
+    ZIO.scoped(
+      for
+        tubeNameDec <- ZIO.fromOption(options.tubeName.flatMap(TubeName.decode)).mapError(_ => InvalidTubeName(options.tubeName.get))
 
-      ctx = Context.Impl[Environment & ErrorLog & LogReporter, Error]()
+        ctx = BackendContext[Environment & ErrorLog & LogReporter, Error]()
 
-      tubeResContext <- TubeResourceContext.make(ctx)
+        given (ExternProvider & HasContext[ctx.type]) <- BackendExternProvider.make(ctx)(
+          options.supportedPlatforms,
+          options.platformTubeOptions.view.mapValues(realizeBackendOptions).toMap,
+        )
 
-      compile = new Compile {
-        override val context: ctx.type = ctx
+        tubeResContext <- TubeResourceContext.make(ctx)
 
-        override val tubeResourceContext: tubeResContext.type =
-          tubeResContext
+        compile = new Compile {
+          override val context: ctx.type = ctx
 
-        import tubeResourceContext.TubeResource
+          override val tubeResourceContext: tubeResContext.type =
+            tubeResContext
 
-        override def tubeName: TubeName = tubeNameDec
-        override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
-          PathUtil.directoryResource(options.inputDir.get)
-            .filterFiles(_.endsWith(".argon"))
-            .decode[ArgonSourceCodeResource]
+          import tubeResourceContext.TubeResource
 
-        override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
-          options.referencedTubes.map { refTubePath =>
-            PathUtil.binaryResource(refTubePath)
-              .decode[tubeResContext.TubeResource]
-          }
-      }
+          override def tubeName: TubeName = tubeNameDec
+          override def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource] =
+            PathUtil.directoryResource(options.inputDir.get)
+              .filterFiles(_.endsWith(".argon"))
+              .decode[ArgonSourceCodeResource]
 
-      _ <- ZIO.scoped(
-        for
-          buildOutput <- compile.compile()
-          _ <- PathUtil.writeFile(options.outputFile.get, buildOutput.tube)
-        yield ()
-      )
+          override def referencedTubes(using TubeImporter & HasContext[ctx.type]): Seq[TubeResource[context.Error]] =
+            options.referencedTubes.map { refTubePath =>
+              PathUtil.binaryResource(refTubePath)
+                .decode[tubeResContext.TubeResource]
+            }
+        }
 
-      _ <- ZIO.serviceWithZIO[LogReporter](_.reportLogs)
-      _ <- ZIO.serviceWithZIO[LogReporter](_.failOnErrors)
+        _ <- ZIO.scoped(
+          for
+            buildOutput <- compile.compile()
+            _ <- PathUtil.writeFile(options.outputFile.get, buildOutput.tube)
+          yield ()
+        )
 
-    yield ()
+        _ <- ZIO.serviceWithZIO[LogReporter](_.reportLogs)
+        _ <- ZIO.serviceWithZIO[LogReporter](_.failOnErrors)
+
+      yield ()
+    )
 
   private def runGenIR(options: ArgonCommandLineOptions): ZIO[Environment & ErrorLog & LogReporter, Error, Unit] =
-    val ctx = Context.Impl[Environment & ErrorLog & LogReporter, Error]
+    val ctx = BackendContext[Environment & ErrorLog & LogReporter, Error]()
     for
       tubeResContext <- TubeResourceContext.make(ctx)
 
       compile = new GenerateIR {
         override val context: ctx.type = ctx
+
+        override def platformId: String = options.selectedBackend.get
 
         override val tubeResourceContext: tubeResContext.type =
           tubeResContext

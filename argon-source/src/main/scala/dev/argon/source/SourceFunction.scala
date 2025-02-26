@@ -6,11 +6,11 @@ import dev.argon.util.{*, given}
 import zio.*
 
 private[source] object SourceFunction {
-  def make(ctx: Context)(scope: ctx.Scopes.GlobalScopeBuilder, importFactory: ImportFactory)(decl: ast.FunctionDeclarationStmt): ctx.Comp[ArFuncC & HasContext[ctx.type]] =
+  def make(ctx: Context)(scope: ctx.Scopes.GlobalScopeBuilder, importFactory: ImportFactory)(decl: ast.FunctionDeclarationStmt)(using externProvider: ExternProvider & HasContext[ctx.type]): ctx.Comp[ArFuncC & HasContext[ctx.type]] =
     for
       funcId <- UniqueIdentifier.make
       sigCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
-      implCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.Implementations.FunctionImplementation]
+      implCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.implementations.FunctionImplementation]
     yield new ArFuncC {
       override val context: ctx.type = ctx
       override val id: UniqueIdentifier = funcId
@@ -30,7 +30,7 @@ private[source] object SourceFunction {
         }
       )
 
-      override def implementation: Option[Comp[context.Implementations.FunctionImplementation]] =
+      override def implementation: Option[Comp[context.implementations.FunctionImplementation]] =
         Some(implCache.get(
           for
             scope <- scope.toScope
@@ -38,7 +38,17 @@ private[source] object SourceFunction {
             scope2 = context.Scopes.ParameterScope(context.TRExprContext.ParameterOwner.Func(this), scope, sig.parameters)
             impl <- decl.body.value match {
               case ast.Expr.Extern(name) =>
-                ZIO.succeed(ctx.Implementations.FunctionImplementation.Extern(name))
+                externProvider.getExternFunction(name)
+                  .flatMap {
+                    case Some(ext) =>
+                      ZIO.succeed(ctx.implementations.FunctionImplementation.Extern(ext))
+
+                    case None =>
+                      ZIO.serviceWith[ErrorLog](_.logError(CompilerError.UnknownExtern(name)))
+                        .as(context.implementations.FunctionImplementation.Expr(
+                          context.DefaultExprContext.Expr.Error()
+                        ))
+                  }
 
 
               case _ =>
@@ -47,7 +57,7 @@ private[source] object SourceFunction {
                 }
 
                 tr.typeCheckExpr(scope2)(decl.body, sig.returnType)
-                  .map(context.Implementations.FunctionImplementation.Expr.apply)
+                  .map(context.implementations.FunctionImplementation.Expr.apply)
             }
           yield impl
         ))

@@ -7,9 +7,11 @@ import zio.*
 import zio.stream.*
 import zio.stm.*
 import dev.argon.ast.IdentifierExpr
+import dev.argon.tube.SupportedPlatform
+import esexpr.ESExpr
 
 private[loader] object TubeDeserialized {
-  def apply(ctx: Context { type Error >: TubeFormatException }, entries: ZStream[ctx.Env, ctx.Error, t.TubeFileEntry])(using tubeImporter: TubeImporter & HasContext[ctx.type]): ZIO[ctx.Env, ctx.Error, ArTubeC & HasContext[ctx.type]] =
+  def apply(ctx: TubeLoader.TubeLoadContext, entries: ZStream[ctx.Env, ctx.Error, t.TubeFileEntry])(using tubeImporter: TubeImporter & HasContext[ctx.type]): ZIO[ctx.Env, ctx.Error, ArTubeC & HasContext[ctx.type]] =
     import ctx.Comp
 
     final case class ElementState(
@@ -67,7 +69,10 @@ private[loader] object TubeDeserialized {
           funcCache.usingCreate(id) { id =>
             state.functions.get(id)
               .commit
-              .map { _.get }
+              .flatMap {
+                case Some(item) => ZIO.succeed(item)
+                case None => ZIO.fail(TubeFormatException("Invalid function id " + id))
+              }
               .flatMap {
                 case importSpec: t.ImportSpecifier =>
                   getImport(importSpec) {
@@ -83,7 +88,10 @@ private[loader] object TubeDeserialized {
           recordCache.usingCreate(id) { id =>
             state.records.get(id)
               .commit
-              .map { _.get }
+              .flatMap {
+                case Some(item) => ZIO.succeed(item)
+                case None => ZIO.fail(TubeFormatException("Invalid record id " + id))
+              }
               .flatMap {
                 case importSpec: t.ImportSpecifier =>
                   getImport(importSpec) {
@@ -130,25 +138,28 @@ private[loader] object TubeDeserialized {
 
       }
 
-    def createTube(metadata: t.TubeMetadata, state: ElementState): Comp[ArTubeC & HasContext[ctx.type]] =
+    def createTube(tubeMetadata: t.TubeMetadata, state: ElementState): Comp[ArTubeC & HasContext[ctx.type]] =
       for
-        elemLoader <- createElementLoader(metadata, state)
+        elemLoader <- createElementLoader(tubeMetadata, state)
 
-        mods <- ZIO.foreach(metadata.modules)(TubeModule(ctx, elemLoader, metadata, _) : Comp[ArModuleC & HasContext[ctx.type]])
+        mods <- ZIO.foreach(tubeMetadata.modules)(TubeModule(ctx, elemLoader, tubeMetadata, _) : Comp[ArModuleC & HasContext[ctx.type]])
       yield new ArTubeC with LoaderUtils {
         override val context: ctx.type = ctx
         override protected def elementLoader: ElementLoader & HasContext[context.type] = elemLoader
 
         override val name: TubeName =
-          decodeTubeName(metadata.name)
-        
+          decodeTubeName(tubeMetadata.name)
+
+        override def metadata: context.implementations.TubeMetadata =
+          (tubeMetadata.platforms, tubeMetadata.platformMetadata.dict)
+
         override val modules: Map[ModulePath, ArModule] =
           mods.iterator
             .map { mod => mod.path -> mod }
             .toMap
 
         override def referencedTubes: Set[TubeName] =
-          metadata.referencedTubes
+          tubeMetadata.referencedTubes
             .view
             .map(decodeTubeName)
             .toSet

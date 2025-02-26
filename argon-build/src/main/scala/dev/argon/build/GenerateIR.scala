@@ -9,10 +9,12 @@ import zio.stm.*
 import java.io.IOException
 import dev.argon.tube.resource.TubeResourceContext
 import dev.argon.source.*
+import dev.argon.tube.encoder.TubeEncoderBase
+import dev.argon.tube.loader.TubeFormatException
 import dev.argon.vm.resource.VmIrResource
 
 abstract class GenerateIR extends CompileBase {
-  override val context: CContext { type Error >: SourceError }
+  override val context: CContext & TubeEncoderBase.EncodeContext { type Error >: SourceError }
 
   val tubeResourceContext: TubeResourceContext & HasContext[context.type]
   import tubeResourceContext.TubeResource
@@ -20,6 +22,7 @@ abstract class GenerateIR extends CompileBase {
 
   def inputTube(using TubeImporter & HasContext[context.type]): TubeResource[context.Error]
   def referencedTubes(using TubeImporter & HasContext[context.type]): Seq[TubeResource[context.Error]]
+  def platformId: String
 
   final case class IROutput(
     tube: VmIrResource[context.Error],
@@ -44,6 +47,7 @@ abstract class GenerateIR extends CompileBase {
         protected override def environment: ZEnvironment[context.Env] = env
 
         protected override def tube: ArTube = currentTube
+        protected override def platformId: String = GenerateIR.this.platformId
       },
     )
 

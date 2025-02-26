@@ -19,7 +19,7 @@ enum Command derives CanEqual {
 
 final case class ArgonCommandLineOptions(
   command: Option[Command] = None,
-  codegenBackend: Option[String] = None,
+  selectedBackend: Option[String] = None,
 
   tubeName: Option[String] = None,
   inputDir: Option[PathLike] = None,
@@ -27,6 +27,9 @@ final case class ArgonCommandLineOptions(
   outputFile: Option[PathLike] = None,
   outputDir: Option[PathLike] = None,
   referencedTubes: Seq[PathLike] = Seq(),
+
+  supportedPlatforms: Set[String] = Set(),
+  platformTubeOptions: Map[String, Map[String, ArgonCommandLineOptions.OptionValue]] = Map(),
 
   codegenOptions: Map[String, ArgonCommandLineOptions.OptionValue] = Map(),
   outputOptions: Map[String, PathLike] = Map(),
@@ -133,20 +136,33 @@ object ArgonCommandLineOptions {
         .action((_, c) => c.copy(command = Some(Command.Compile)))
         .text("Compile Argon source code into a tube")
         .children(
-          opt[String]("name")
-            .required()
-            .action((name, c) => c.copy(tubeName = Some(name))),
+          (
+            Seq(
+              opt[String]("name")
+                .required()
+                .action((name, c) => c.copy(tubeName = Some(name))),
 
-          opt[PathLike]('i', "input")
-            .required()
-            .action((path, c) => c.copy(inputDir = Some(path))),
+              opt[PathLike]('i', "input")
+                .required()
+                .action((path, c) => c.copy(inputDir = Some(path))),
 
-          opt[PathLike]('o', "output")
-            .required()
-            .action((path, c) => c.copy(outputFile = Some(path))),
-          
-          opt[PathLike]('r', "reference")
-            .action((path, c) => c.copy(referencedTubes = c.referencedTubes :+ path)),
+              opt[PathLike]('o', "output")
+                .required()
+                .action((path, c) => c.copy(outputFile = Some(path))),
+
+              opt[PathLike]('r', "reference")
+                .action((path, c) => c.copy(referencedTubes = c.referencedTubes :+ path)),
+
+              opt[String]("platform")
+                .action((name, c) => c.copy(supportedPlatforms = c.supportedPlatforms + name)),
+            ) ++
+              Backends.allBackendFactories
+                .flatMap { backendFactory =>
+                  val backendName = backendFactory.metadata.backend.name
+
+                  createOptionsFromMetadata(backendName, GenLens[ArgonCommandLineOptions](_.platformTubeOptions).at(backendName).withDefault(Map.empty))(backendFactory.metadata.options.codegen)
+                }
+          )*
         ),
 
       cmd("genir")
@@ -164,6 +180,10 @@ object ArgonCommandLineOptions {
           opt[PathLike]('r', "reference")
             .unbounded()
             .action((path, c) => c.copy(referencedTubes = c.referencedTubes :+ path)),
+
+          opt[String]("platform")
+            .required()
+            .action((platform, c) => c.copy(selectedBackend = Some(platform))),
         ),
 
       cmd("codegen")
@@ -189,26 +209,10 @@ object ArgonCommandLineOptions {
                   createOptionsFromOutputMetadata(backendName, GenLens[ArgonCommandLineOptions](_.outputOptions))(backendFactory.metadata.options.output)
 
               cmd(backendName)
-                .action((_, c) => c.copy(codegenBackend = Some(backendName)))
+                .action((_, c) => c.copy(selectedBackend = Some(backendName)))
                 .text(s"Generate output using the $backendName backend")
                 .children(codegenOpts*)
             }*
-
-//          cmd("js")
-//            .action((_, c) => c.copy(codegenBackend = Some(CodegenBackend.JS)))
-//            .text("Generate JS output")
-//            .children(
-//              opt[PathLike]('i', "input")
-//                .required()
-//                .action((path, c) => c.copy(inputFile = Some(path))),
-//
-//              opt[PathLike]('o', "output")
-//                .required()
-//                .action((path, c) => c.copy(outputDir = Some(path))),
-//
-//              opt[PathLike]('e', "externs")
-//                .action((path, c) => c.copy(externs = c.externs :+ path)),
-//            )
         )
     )
   end parser

@@ -13,7 +13,7 @@ final case class BackendBackendMetadata(
 ) derives toml.Codec
 
 final case class BackendOptionsSchema(
-  externs: Map[String, BackendOption] = Map.empty,
+  tube: Map[String, BackendOption] = Map.empty,
   codegen: Map[String, BackendOption] = Map.empty,
   output: Map[String, BackendOptionOutput] = Map.empty,
 ) derives toml.Codec

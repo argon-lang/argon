@@ -1,21 +1,25 @@
 package dev.argon.tube.resource
 
 import dev.argon.tube as t
-import dev.argon.tube.encoder.TubeEncoder
+import dev.argon.tube.encoder.{TubeEncoder, TubeEncoderBase}
 import dev.argon.compiler.*
 import zio.*
 import zio.stream.*
 import dev.argon.io.*
+import dev.argon.tube.ExternMap
 import esexpr.ESExpr
+
 import java.io.IOException
 import esexpr.ESExprException
-import dev.argon.tube.loader.TubeFormatException
-import dev.argon.tube.loader.TubeLoader
+import dev.argon.tube.loader.{TubeFormatException, TubeLoader}
 import zio.Cause.Die
 import dev.argon.util.*
 
+
 sealed abstract class TubeResourceContext extends UsingContext {
-  override val context: Context { type Error >: IOException | TubeFormatException }
+  override val context: TubeEncoderBase.EncodeContext {
+    type Error >: IOException | TubeFormatException
+  }
 
   protected val environment: ZEnvironment[context.Env]
   
@@ -74,7 +78,7 @@ sealed abstract class TubeResourceContext extends UsingContext {
 }
 
 object TubeResourceContext {
-  def make(ctx: Context { type Error >: IOException | TubeFormatException }): ctx.Comp[TubeResourceContext & HasContext[ctx.type]] =
+  def make(ctx: TubeEncoderBase.EncodeContext { type Error >: IOException | TubeFormatException }): ctx.Comp[TubeResourceContext & HasContext[ctx.type]] =
     for
       env <- ZIO.environment[ctx.Env]
     yield new TubeResourceContext {

@@ -99,20 +99,26 @@ trait Context extends ScopeContext {
     val smtFuel: Fuel = Fuel(5)
   }
 
-  object Implementations {
+  trait Implementations extends Context.ImplementationExterns {
     enum FunctionImplementation {
       case Expr(e: DefaultExprContext.Expr)
-      case Extern(name: String)
+      case Extern(e: ExternFunction)
     }
   }
+
+  val implementations: Implementations
 }
 
 object Context {
   type Env0 = ErrorLog
   type Error0 = Nothing
 
+  trait ImplementationExterns {
+    type TubeMetadata
+    type ExternFunction
+  }
 
-  class Impl[R <: Env0, E >: Error0 <: Matchable](using EnvironmentTag[R], TypeTest[Any, E]) extends Context {
+  abstract class Of[R <: Env0, E >: Error0 <: Matchable](using EnvironmentTag[R], TypeTest[Any, E]) extends Context {
     override type Env = R
     override type Error = E
   }
@@ -200,6 +206,8 @@ abstract class ArTubeC extends UsingContext {
 
   def modules: Map[ModulePath, ArModule]
 
+  def metadata: context.implementations.TubeMetadata
+
   def referencedTubes: Set[TubeName]
 }
 
@@ -227,7 +235,7 @@ abstract class ArFuncC extends UsingContext with DeclarationBase derives CanEqua
 
   def signature: Comp[FunctionSignature]
 
-  def implementation: Option[Comp[context.Implementations.FunctionImplementation]]
+  def implementation: Option[Comp[context.implementations.FunctionImplementation]]
 
   override def hashCode(): Int = id.hashCode()
   override def equals(obj: Any): Boolean =

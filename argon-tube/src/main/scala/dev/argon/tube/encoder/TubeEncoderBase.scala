@@ -1,18 +1,21 @@
 package dev.argon.tube.encoder
 
 import dev.argon.compiler as c
-
 import zio.*
 import zio.stream.*
 import zio.stm.*
 import dev.argon.ast
 import dev.argon.compiler.SignatureEraser
 import dev.argon.compiler.HasContext
+import dev.argon.tube.{ExternMap, SupportedPlatform}
+import dev.argon.tube.encoder.TubeEncoderBase.EncodeContext
+import dev.argon.tube.loader.TubeFormatException
+import esexpr.ESExpr
 
 
 trait TubeEncoderBase[Entry] {
-
   sealed trait EncodeState extends c.UsingContext {
+    override val context: EncodeContext
     import context.DefaultExprContext.Expr as ArExpr
 
     val tube: ArTube
@@ -43,7 +46,7 @@ trait TubeEncoderBase[Entry] {
 
   protected def createEmitter(state: EncodeState): state.Emitter
 
-  final def encode(context: c.Context)(tube: c.ArTubeC & c.HasContext[context.type]): ZStream[context.Env, context.Error, Entry] =
+  final def encode(context: EncodeContext)(tube: c.ArTubeC & c.HasContext[context.type]): ZStream[context.Env, context.Error, Entry] =
     val ctx: context.type = context
     val tube2: tube.type = tube
 
@@ -134,3 +137,12 @@ trait TubeEncoderBase[Entry] {
 
 }
 
+object TubeEncoderBase {
+  type EncodeContext = c.Context {
+    type Error >: TubeFormatException
+    val implementations: c.Context.ImplementationExterns {
+      type TubeMetadata = (Seq[SupportedPlatform], Map[String, ESExpr])
+      type ExternFunction = ExternMap
+    }
+  }
+}

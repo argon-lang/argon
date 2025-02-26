@@ -30,7 +30,7 @@ object BackendLibraryOutputProvider {
           val library = ArgonLibraries.allLibraries(tubeName)
           for
             options <- ZIO.fromEither(
-              library.optionsProvider(PathLike.join(PathLike.fromString("libraries"), tubeName.encode))
+              library.codeGenOptionsProvider(PathLike.join(PathLike.fromString("libraries"), tubeName.encode))
                 .getOptionsForBackend(backend)
                 .toRight { TestException(s"Could create options for backend ${backend.name} and library ${tubeName}") }
             )

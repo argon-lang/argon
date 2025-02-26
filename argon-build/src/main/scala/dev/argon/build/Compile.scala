@@ -9,8 +9,9 @@ import zio.stm.*
 import java.io.IOException
 import dev.argon.tube.resource.TubeResourceContext
 import dev.argon.source.*
+import scala.compiletime.deferred
 
-abstract class Compile extends CompileBase {
+trait Compile extends CompileBase {
   override val context: CContext { type Error >: SourceError }
 
   val tubeResourceContext: TubeResourceContext & HasContext[context.type]
@@ -20,6 +21,7 @@ abstract class Compile extends CompileBase {
   def tubeName: TubeName
   def inputDir: DirectoryResource[context.Error, ArgonSourceCodeResource]
   def referencedTubes(using TubeImporter & HasContext[context.type]): Seq[TubeResource[context.Error]]
+  given externProvider: ExternProvider & HasContext[context.type] = deferred
 
   final case class CompileOutput(
     tube: TubeResource[context.Error],

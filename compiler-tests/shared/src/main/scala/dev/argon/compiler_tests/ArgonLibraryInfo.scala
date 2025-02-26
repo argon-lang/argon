@@ -9,5 +9,6 @@ trait ArgonLibraryInfo {
   val tubeName: TubeName
   val references: Set[TubeName]
 
-  def optionsProvider(libPath: PathLike): BackendOptionsProvider
+  def tubeOptionsProvider(libPath: PathLike): BackendOptionsProvider
+  def codeGenOptionsProvider(libPath: PathLike): BackendOptionsProvider
 }

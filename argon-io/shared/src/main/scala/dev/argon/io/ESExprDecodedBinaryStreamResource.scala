@@ -7,8 +7,9 @@ import zio.stream.*
 
 import dev.argon.util.async.ErrorWrapper
 import java.io.IOException
+import izumi.reflect.Tag
 
-trait ESExprDecodedBinaryStreamResource[+E, A] extends ESExprBinaryStreamResource[E] with ESExprDecodedStreamResource[E, A]
+trait ESExprDecodedBinaryStreamResource[+E, A](using val elementTag: Tag[A]) extends ESExprBinaryStreamResource[E] with ESExprDecodedStreamResource[E, A]
 
 object ESExprDecodedBinaryStreamResource {
   trait Impl[E, A: ESExprCodec] extends ESExprDecodedBinaryStreamResource[E, A] with ESExprBinaryStreamResource.Impl[E] {
@@ -16,22 +17,28 @@ object ESExprDecodedBinaryStreamResource {
       decoded.map(summon[ESExprCodec[A]].encode)
   }
 
-  given resourceDecoder: [E >: ESExprException | IOException, A: ESExprCodec] => BinaryResourceDecoder[[E1] =>> ESExprDecodedBinaryStreamResource[E1, A], E]:
+  given resourceDecoder: [E >: ESExprException | IOException, A: {ESExprCodec, Tag}] => BinaryResourceDecoder[[E1] =>> ESExprDecodedBinaryStreamResource[E1, A], E]:
     override def decode(resource: BinaryResource[E]): ESExprDecodedBinaryStreamResource[E, A] =
-      new ESExprDecodedBinaryStreamResource[E, A] {
-        override def decoded: Stream[E, A] =
-          expr.mapZIO { elem =>
-            ZIO.fromEither(summon[ESExprCodec[A]].decode(elem))
+      resource match {
+        case resource: ESExprDecodedBinaryStreamResource[E, b] if summon[Tag[A]] =:= resource.elementTag =>
+          resource.asInstanceOf[ESExprDecodedBinaryStreamResource[E, A]]
+
+        case _ =>
+          new ESExprDecodedBinaryStreamResource[E, A] {
+            override def decoded: Stream[E, A] =
+              expr.mapZIO { elem =>
+                ZIO.fromEither(summon[ESExprCodec[A]].decode(elem))
+              }
+
+            override def expr: Stream[E, ESExpr] =
+              resource.decode[ESExprBinaryStreamResource].expr
+
+            override def asBytes: ZStream[Any, E, Byte] =
+              resource.asBytes
+
+            override def fileName: Option[String] =
+              resource.fileName
           }
-
-        override def expr: Stream[E, ESExpr] =
-          resource.decode[ESExprBinaryStreamResource].expr
-
-        override def asBytes: ZStream[Any, E, Byte] =
-          resource.asBytes
-
-        override def fileName: Option[String] =
-          resource.fileName
       }
   end resourceDecoder
 }

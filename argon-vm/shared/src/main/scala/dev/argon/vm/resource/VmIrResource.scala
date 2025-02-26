@@ -2,6 +2,7 @@ package dev.argon.vm.resource
 
 import dev.argon.vm
 import dev.argon.vm.encoder.TubeEncoder
+import dev.argon.tube.encoder.TubeEncoderBase
 import dev.argon.compiler.*
 import dev.argon.io.*
 import dev.argon.tube.loader.TubeFormatException
@@ -15,13 +16,14 @@ import java.io.IOException
 trait VmIrResource[+E] extends ESExprDecodedBinaryStreamResource[E, vm.TubeFileEntry]
 
 object VmIrResource {
-  trait Impl[E >: Context.Error0 <: Matchable] extends VmIrResource[E] with ESExprDecodedBinaryStreamResource.Impl[E, vm.TubeFileEntry] {
-    protected val context: Context { type Error = E }
+  trait Impl[E >: Context.Error0 | TubeFormatException <: Matchable] extends VmIrResource[E] with ESExprDecodedBinaryStreamResource.Impl[E, vm.TubeFileEntry] {
+    protected val context: TubeEncoderBase.EncodeContext { type Error = E }
     protected def environment: ZEnvironment[context.Env]
     protected def tube: ArTubeC & HasContext[context.type]
+    protected def platformId: String
 
     override def decoded: Stream[E, vm.TubeFileEntry] =
-      TubeEncoder.encode(context)(tube).provideEnvironment(environment)
+      TubeEncoder(platformId).encode(context)(tube).provideEnvironment(environment)
   }
 
   given [E >: TubeFormatException | IOException <: Matchable] => TypeTest[Any, E] => BinaryResourceDecoder[VmIrResource, E]:

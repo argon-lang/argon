@@ -62,7 +62,14 @@ record tube-header {
 record tube-metadata {
     name: tube-name;
 
+    @esexpr:(keyword)
     referenced-tubes: list[tube-name];
+
+    @esexpr:(keyword)
+    @esexpr:(optional)
+    platform-metadata: optional-field[esexpr];
+
+    @esexpr:(keyword)
     modules: list[module];
 }
 
@@ -222,7 +229,7 @@ record function-definition {
 enum function-implementation {
     @esexpr:(inline-value)
     vm-ir { body: function-body; },
-    extern { name: string; },
+    extern { extern: esexpr; },
 }
 
 
