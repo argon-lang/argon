@@ -570,7 +570,13 @@ object ArgonParser {
             matchToken(OP_EQUALS).discard ++! rule(Rule.NewLines) ++ rule(Rule.Expression)
 
         case Rule.BlockBody =>
-          rule(Rule.StatementList).observeLocation --> Expr.Block.apply
+          rule(Rule.StatementList).observeLocation ++
+            (
+              matchToken(KW_FINALLY).discard ++ rule(Rule.StatementList).observeLocation
+            ).? --> {
+            case (body, finallyBody) =>
+              Expr.Block(body, finallyBody)
+          }
 
         case Rule.MethodPurity =>
           matchToken(KW_DEF) --> const(true) |

@@ -228,8 +228,23 @@ trait TypeResolver extends UsingContext {
             listType = FunctionParameterListType.NormalList,
           ))
 
-      case ast.Expr.Block(body) =>
-        resolveStmtBlock(body)
+      case ast.Expr.Block(body, finallyBody) =>
+        val bodyFac = resolveStmtBlock(body)
+
+        finallyBody match {
+          case Some(finallyBody) =>
+            new ExprFactory {
+              override def loc: Loc = expr.location
+
+              override def check(t: Expr)(using EmitState): Comp[Expr] =
+                for
+                  bodyExpr <- bodyFac.check(t)
+                  finallyExpr <- resolveStmtBlock(finallyBody).check(Expr.Tuple(Seq()))
+                yield Expr.Finally(bodyExpr, finallyExpr)
+            }
+
+          case None => bodyFac
+        }
 
       case ast.Expr.BoolLiteral(b) =>
         new InferFactory {

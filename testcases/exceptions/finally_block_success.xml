@@ -11,7 +11,7 @@
             begin
                 a + b
             finally
-                puts 'Hello'
+                puts "Hello"
             end
         end
         

@@ -487,6 +487,11 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 a <- expr(a)
               yield Expr.BuiltinEqualToRefl(t, a)
 
+            case ArExpr.Finally(action, ensuring) =>
+              for
+                action <- expr(action)
+                ensuring <- expr(ensuring)
+              yield Expr.Finally(action, ensuring)
               
             case ArExpr.FunctionCall(f, args) =>
               for

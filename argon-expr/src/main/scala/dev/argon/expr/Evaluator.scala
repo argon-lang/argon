@@ -56,6 +56,9 @@ trait Evaluator[R, E] {
           case _ => Expr.Builtin(Builtin.Binary(op, a, b))
         }
 
+      case Expr.Finally(action, _) =>
+        normalizeToValue(action, fuel)
+
       case Expr.FunctionCall(f, args) =>
         getFunctionBody(f, args, fuel).flatMap { (callExpr, couldInline) =>
           if couldInline then

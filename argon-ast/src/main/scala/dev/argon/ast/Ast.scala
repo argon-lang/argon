@@ -107,7 +107,7 @@ object Expr:
   final case class As(value: WithSource[Expr], valueType: WithSource[Expr]) extends Expr
   final case class Assert(t: WithSource[Expr]) extends Expr
   final case class BinaryOperation(a: WithSource[Expr], op: BinaryOperator, b: WithSource[Expr]) extends Expr
-  final case class Block(body: WithSource[Seq[WithSource[Stmt]]]) extends Expr
+  final case class Block(body: WithSource[Seq[WithSource[Stmt]]], finallyBody: Option[WithSource[Seq[WithSource[Stmt]]]]) extends Expr
   final case class BoolLiteral(b: Boolean) extends Expr
   final case class Builtin(name: String) extends Expr
   final case class Dot(o: WithSource[Expr], member: WithSource[IdentifierExpr]) extends Expr

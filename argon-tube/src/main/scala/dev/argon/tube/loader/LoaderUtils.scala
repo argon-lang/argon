@@ -291,6 +291,12 @@ private[loader] trait LoaderUtils extends UsingContext {
             aExpr <- expr(a)
           yield ArExpr.Builtin(context.DefaultExprContext.Builtin.EqualToRefl(tExpr, aExpr))
 
+        case Expr.Finally(action, ensuring) =>
+          for
+            action <- expr(action)
+            ensuring <- expr(ensuring)
+          yield ArExpr.Finally(action, ensuring)
+          
         case Expr.FunctionCall(f, args) =>
           for
             function <- elementLoader.getFunction(f)

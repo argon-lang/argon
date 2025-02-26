@@ -10,7 +10,7 @@
         proc add(a: Int, b: Int): Int do
             a + b
         finally
-            puts 'Hello'
+            puts "Hello"
         end
         
         proc main(): () do

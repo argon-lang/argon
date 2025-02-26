@@ -377,6 +377,10 @@ enum expr {
         t: expr;
         a: expr;
     },
+    finally {
+        action: expr;
+        ensuring: expr;
+    },
     function-call {
         id: nat;
 

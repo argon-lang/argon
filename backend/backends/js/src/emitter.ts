@@ -540,6 +540,16 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 });
                 break;
 
+            case "finally":
+            {
+                stmts.push({
+                    type: "TryStatement",
+                    block: this.emitBlock(insn.action),
+                    finalizer: this.emitBlock(insn.ensuring),
+                });
+                break;
+            }
+
             case "function-call":
             {
                 const functionInfo = this.options.program.getFunctionInfo(insn.functionId);

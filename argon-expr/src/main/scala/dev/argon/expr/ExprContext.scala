@@ -73,6 +73,7 @@ trait ExprContext {
     case BindVariable(v: LocalVar, value: Expr)
     case BoolLiteral(b: Boolean)
     case Builtin(b: ExprContext.this.Builtin)
+    case Finally(action: Expr, ensuring: Expr)
     case FunctionCall(f: Function, args: Seq[Expr])
     case FunctionObjectCall(f: Expr, a: Expr)
     case FunctionType(a: Expr, r: Expr)

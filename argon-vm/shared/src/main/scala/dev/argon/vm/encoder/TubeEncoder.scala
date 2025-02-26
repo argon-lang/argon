@@ -389,8 +389,12 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             instructions = instructions,
           )
 
-        private def nestedBlock[A](f: ExprEmitter => Comp[Unit]): Comp[Block] =
-          nestedScope.tap(f).flatMap(_.toBlock)
+        private def nestedBlock[A](f: ExprEmitter => Comp[A]): Comp[(Block, A)] =
+          for
+            scope <- nestedScope
+            a <- f(scope)
+            block <- scope.toBlock
+          yield (block, a)
 
         private def declareVar(v: context.DefaultExprContext.LocalVar): Comp[RegisterId] =
           for
@@ -576,6 +580,13 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 }
               }
 
+            case ArExpr.Finally(action, ensuring) =>
+              for
+                (action, res) <- nestedBlock(_.expr(action, output))
+                (ensuring, _) <- nestedBlock(_.expr(ensuring, ExprOutput.Discard))
+                _ <- emit(Instruction.Finally(action, ensuring))
+              yield res
+              
             case ArExpr.FunctionCall(f, args) =>
               functionResult(e, output) { funcResult =>
                 for
@@ -600,8 +611,8 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               knownLocation(e, output) { output =>
                 for
                   cond <- expr(ifElse.condition, ExprOutput.AnyRegister)
-                  whenTrue <- nestedBlock { _.expr(ifElse.trueBody, output) }
-                  whenFalse <- nestedBlock { _.expr(ifElse.falseBody, output) }
+                  (whenTrue, _) <- nestedBlock { _.expr(ifElse.trueBody, output) }
+                  (whenFalse, _) <- nestedBlock { _.expr(ifElse.falseBody, output) }
                   _ <- emit(Instruction.IfElse(cond, whenTrue, whenFalse))
                 yield ()
               }

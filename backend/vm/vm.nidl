@@ -318,6 +318,11 @@ enum instruction {
         value: string;
     },
 
+    finally {
+        action: block;
+        ensuring: block;
+    },
+
     function-call {
         dest: function-result;
         function-id: nat;
