@@ -7,7 +7,7 @@
         import Argon.Core/*
 
         proc printMessage(erased n: Int): () =
-            puts 'Hello World'
+            puts "Hello World"
 
         erased proc erasedFunc(a: Int)(b: Int): Int = a + b
 

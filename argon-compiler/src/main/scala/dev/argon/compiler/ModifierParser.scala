@@ -22,8 +22,7 @@ final case class ModifierParser(
         r match {
           case Some(r) =>
             ErrorLog.logError(CompilerError.DuplicateModifier(modifier.location, modifier.value))
-              .whenZIO(r.getAndSet(true))
-              .unit
+              .whenZIODiscard(r.getAndSet(true))
 
           case None =>
             ErrorLog.logError(CompilerError.InvalidModifier(modifier.location, modifier.value))

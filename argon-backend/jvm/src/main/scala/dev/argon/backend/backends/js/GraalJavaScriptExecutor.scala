@@ -55,7 +55,12 @@ class GraalJavaScriptExecutor @HostAccess.Export() extends AutoCloseable {
     val module = Source.newBuilder("js", code, "main.js")
       .mimeType("application/javascript+module")
       .build()
-    context.eval(module)
+    try context.eval(module)
+    catch {
+      case ex: Throwable =>
+        println(fileSystem.fileStore)
+        throw ex
+    }
   end executeModule
 
   @HostAccess.Export

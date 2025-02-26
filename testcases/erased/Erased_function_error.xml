@@ -1,17 +1,18 @@
 <ArgonTest>
 
-    <Name>Erased local error</Name>
+    <Name>Erased function error</Name>
 
     <InputSource name="index.argon">
 
         import Argon.Core/*
 
         proc printMessage(n: Int): () =
-            puts 'Hello World'
+            puts "Hello World"
+
+        erased def erasedFunc(a: Int)(b: Int): Int = a + b
 
         proc main(): () do
-            erased val erasedValue: Int = 3
-            printMessage(erasedValue)
+            printMessage(erasedFunc 1 2)
         end
 
 

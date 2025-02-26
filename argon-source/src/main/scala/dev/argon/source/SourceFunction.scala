@@ -11,12 +11,18 @@ private[source] object SourceFunction {
       funcId <- UniqueIdentifier.make
       sigCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.DefaultSignatureContext.FunctionSignature]
       implCache <- MemoCell.make[ctx.Env, ctx.Error, ctx.implementations.FunctionImplementation]
+      
+      erased = decl.modifiers.exists(_.value == ast.Modifier.Erased)
+      
+      _ <- ErrorLog.logError(CompilerError.ErasedMustBePure(decl.name.location))
+        .whenDiscard(erased && !decl.purity)
+      
     yield new ArFuncC {
       override val context: ctx.type = ctx
       override val id: UniqueIdentifier = funcId
 
       override def isInline: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Inline)
-      override def isErased: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Erased)
+      override def isErased: Boolean = erased
       override def effects: context.DefaultExprContext.EffectInfo =
         if decl.purity then context.DefaultExprContext.EffectInfo.Pure
         else context.DefaultExprContext.EffectInfo.Effectful
@@ -47,7 +53,7 @@ private[source] object SourceFunction {
                       ZIO.succeed(ctx.implementations.FunctionImplementation.Extern(ext))
 
                     case None =>
-                      ZIO.serviceWith[ErrorLog](_.logError(CompilerError.UnknownExtern(name)))
+                      ErrorLog.logError(CompilerError.UnknownExtern(name))
                         .as(context.implementations.FunctionImplementation.Expr(
                           context.DefaultExprContext.Expr.Error()
                         ))
@@ -59,7 +65,7 @@ private[source] object SourceFunction {
                   override val context: ctx.type = ctx
                 }
 
-                tr.typeCheckExpr(scope2)(decl.body, sig.returnType, effects)
+                tr.typeCheckExpr(scope2)(decl.body, sig.returnType, effects, erased = isErased)
                   .map(context.implementations.FunctionImplementation.Expr.apply)
             }
           yield impl

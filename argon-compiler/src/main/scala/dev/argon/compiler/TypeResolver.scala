@@ -26,14 +26,15 @@ trait TypeResolver extends UsingContext {
     model: Ref[TRExprContext.Model],
     scope: Scopes.LocalScope,
     effects: EffectInfo,
+    erased: Boolean,
   )
 
-  final def typeCheckExpr(scope: Scopes.Scope)(e: WithSource[ast.Expr], t: context.DefaultExprContext.Expr, effects: context.DefaultExprContext.EffectInfo): Comp[context.DefaultExprContext.Expr] =
+  final def typeCheckExpr(scope: Scopes.Scope)(e: WithSource[ast.Expr], t: context.DefaultExprContext.Expr, effects: context.DefaultExprContext.EffectInfo, erased: Boolean): Comp[context.DefaultExprContext.Expr] =
     for
       scope <- Scopes.LocalScope.make(scope)
       model <- Ref.make[TRExprContext.Model](TRExprContext.Model.empty)
       shifter = DefaultToTRShifter[context.type](context)
-      expr <- resolveExpr(e).check(shifter.shiftExpr(t))(using EmitState(model, scope, shifter.shiftEffectInfo(effects)))
+      expr <- resolveExpr(e).check(shifter.shiftExpr(t))(using EmitState(model, scope, shifter.shiftEffectInfo(effects), erased = erased))
       model <- model.get
       shifted <- ResolvedHoleFiller(model).shiftExpr(expr)
     yield shifted
@@ -42,7 +43,7 @@ trait TypeResolver extends UsingContext {
     for
       scope <- Scopes.LocalScope.make(scope)
       model <- Ref.make[TRExprContext.Model](TRExprContext.Model.empty)
-      expr <- resolveType(e)(using EmitState(model, scope, EffectInfo.Pure))
+      expr <- resolveType(e)(using EmitState(model, scope, EffectInfo.Pure, erased = true))
       model <- model.get
       shifted <- ResolvedHoleFiller(model).shiftExpr(expr)
     yield shifted
@@ -58,7 +59,7 @@ trait TypeResolver extends UsingContext {
       loc,
       TRToErrorShifter[context.type](context).shiftExpr(a),
       TRToErrorShifter[context.type](context).shiftExpr(b)
-    )).whenZIO(unifyExpr(a, b).negate).unit
+    )).whenZIODiscard(unifyExpr(a, b).negate)
 
   private def nestedScope[A](using state: EmitState)(f: EmitState ?=> Comp[A]): Comp[A] =
     for
@@ -82,7 +83,7 @@ trait TypeResolver extends UsingContext {
       new ExprFactory {
         override def loc: Loc = arg.callLocation
 
-        override def check(t: Expr)(using EmitState): Comp[Expr] =
+        override def check(t: Expr)(using state: EmitState): Comp[Expr] =
           for
             argType <- makeHole
             funcType = Expr.FunctionType(argType, t)
@@ -161,9 +162,12 @@ trait TypeResolver extends UsingContext {
               isErased <- isErased.get
               isProof <- isProof.get
 
+              _ <- ErrorLog.logError(CompilerError.ErasedMustBePure(loc))
+                .whenDiscard(isErased && decl.isMutable)
+
               id <- UniqueIdentifier.make
               varType <- decl.varType.fold(makeHole)(resolveType)
-              value <- resolveExpr(decl.value).check(varType)
+              value <- resolveExpr(decl.value).check(varType)(using state.copy(erased = state.erased || isErased))
 
               localVar = LocalVar(
                 id,
@@ -419,7 +423,7 @@ trait TypeResolver extends UsingContext {
         expr.location,
         expr = TRToErrorShifter[context.type](context).shiftExpr(e),
         exprType = TRToErrorShifter[context.type](context).shiftExpr(t),
-      )).whenZIO(isValidTypeOfType(t).negate)
+      )).whenZIODiscard(isValidTypeOfType(t).negate)
     yield e
   end resolveType
 
@@ -470,6 +474,13 @@ trait TypeResolver extends UsingContext {
         }
       )
 
+  private def checkErasure(loc: Loc)(erased: Boolean)(using state: EmitState): Comp[Unit] =
+    ErrorLog.logError(CompilerError.ErasedExpressionNotAllowed(loc))
+      .whenDiscard(
+        !state.erased && erased
+      )
+
+
 
   private final class ErrorFactory(override val loc: Loc, error: => CompilerError) extends ExprFactory {
     override def check(t: Expr)(using EmitState): Comp[Expr] =
@@ -511,10 +522,12 @@ trait TypeResolver extends UsingContext {
             override def loc: Loc = LookupIdFactory.this.loc
 
             override def infer(using EmitState): Comp[InferredExpr] =
-              ZIO.succeed(InferredExpr(
+              for
+                _ <- checkErasure(loc)(v.isErased)
+              yield InferredExpr(
                 Expr.Variable(v),
                 v.varType,
-              ))
+              )
           }
 
         case LookupResult.VariableTupleElement(v, index, t) =>
@@ -522,10 +535,12 @@ trait TypeResolver extends UsingContext {
             override def loc: Loc = LookupIdFactory.this.loc
 
             override def infer(using EmitState): Comp[InferredExpr] =
-              ZIO.succeed(InferredExpr(
+              for
+                _ <- checkErasure(loc)(v.isErased)
+              yield InferredExpr(
                 Expr.TupleElement(index, Expr.Variable(v)),
                 t,
-              ))
+              )
           }
 
 
@@ -570,6 +585,8 @@ trait TypeResolver extends UsingContext {
       }
   }
 
+  private final case class RejectedOverload(overloadable: Overloadable, errors: Seq[CompilerError])
+
   private final class OverloadedExprFactory(override val loc: Loc, lookup: LookupResult.Overloaded, args: Seq[ArgumentInfo]) extends ExprFactory {
     private def toAttemptedOverload(overload: Overloadable): AttemptedOverload =
       overload match {
@@ -580,7 +597,7 @@ trait TypeResolver extends UsingContext {
       }
 
     override def check(t: Expr)(using EmitState): Comp[Expr] =
-      Ref.make(Seq.empty[Overloadable]).flatMap { rejectedOverloads =>
+      Ref.make(Seq.empty[RejectedOverload]).flatMap { rejectedOverloads =>
         val resolver = OverloadResolver(rejectedOverloads)
 
         def lookupOverloads(lookup: LookupResult.OverloadableOnly): ZStream[context.Env, context.Error, Seq[Overloadable]] =
@@ -599,7 +616,7 @@ trait TypeResolver extends UsingContext {
                   ZIO.succeed(Seq((overload, success)))
 
                 case failure: OverloadAttempt.Failure =>
-                  rejectedOverloads.update(_ :+ overload).as(Seq.empty)
+                  rejectedOverloads.update(_ :+ RejectedOverload(overload, failure.errors)).as(Seq.empty)
 
               }
             }.map(_.flatten)
@@ -619,6 +636,7 @@ trait TypeResolver extends UsingContext {
                     override def infer(using EmitState): Comp[InferredExpr] =
                       for
                         _ <- checkAllowedEffect(loc)(DefaultToTRShifter[context.type](context).shiftEffectInfo(f.effects))
+                        _ <- checkErasure(loc)(f.isErased)
                       yield InferredExpr(
                         Expr.FunctionCall(f, overloadResult.arguments),
                         overloadResult.remainingSig.returnType
@@ -677,14 +695,20 @@ trait TypeResolver extends UsingContext {
                 }
                 
 
-              ErrorLog.logError(CompilerError.AmbiguousOverload(loc, overloads.map { (overload, _) => toAttemptedOverload(overload) })).when(overloads.size > 1) *>
+              ErrorLog.logError(CompilerError.AmbiguousOverload(loc, overloads.map { (overload, _) => toAttemptedOverload(overload) })).whenDiscard(overloads.size > 1) *>
                 factory.check(t)
 
 
             case _ =>
               for
                 attempted <- rejectedOverloads.get
-                _ <- ErrorLog.logError(CompilerError.InvalidOverload(loc, attempted.map(toAttemptedOverload)))
+                _ <- attempted match {
+                  case Seq(attempt) =>
+                    ZIO.foreach(attempt.errors)(ErrorLog.logError(_))
+
+                  case _ => ZIO.unit
+                }
+                _ <- ErrorLog.logError(CompilerError.InvalidOverload(loc, attempted.map(attempt => toAttemptedOverload(attempt.overloadable))))
               yield Expr.Error()
           }
 
@@ -710,7 +734,7 @@ trait TypeResolver extends UsingContext {
 
   private final case class PartialScope(variables: Seq[Var])
 
-  private final class OverloadResolver(rejectedOverloads: Ref[Seq[Overloadable]]) {
+  private final class OverloadResolver(rejectedOverloads: Ref[Seq[RejectedOverload]]) {
 
     def attemptOverload(overload: Overloadable, args: Seq[ArgumentInfo])(using state: EmitState): Comp[OverloadAttempt] =
       for
@@ -729,6 +753,7 @@ trait TypeResolver extends UsingContext {
           model = attemptModel,
           scope = attemptScope,
           effects = state.effects,
+          erased = state.erased,
         )
 
         sig <- overload.signature
@@ -762,7 +787,7 @@ trait TypeResolver extends UsingContext {
       lambdaParameters: Seq[LocalVar],
     )
 
-    private def attemptOverloadCheck(overload: Overloadable, sig: TRSignatureContext.FunctionSignature, args: Seq[ArgumentInfo], callArgs: Seq[Expr], lambdaParams: Seq[LocalVar])(using EmitState): Comp[AttemptOverloadCheckResult] =
+    private def attemptOverloadCheck(overload: Overloadable, sig: TRSignatureContext.FunctionSignature, args: Seq[ArgumentInfo], callArgs: Seq[Expr], lambdaParams: Seq[LocalVar])(using state: EmitState): Comp[AttemptOverloadCheckResult] =
       def applyArg(param: TRSignatureContext.SignatureParameter, tailParams: Seq[TRSignatureContext.SignatureParameter], arg: Expr, restArgs: Seq[ArgumentInfo], lambdaParam: Option[LocalVar]): Comp[AttemptOverloadCheckResult] =
         val isProof = param.listType == FunctionParameterListType.RequiresList
         val paramVar = param.asParameterVar(overload.asOwner.get, callArgs.size)
@@ -781,7 +806,7 @@ trait TypeResolver extends UsingContext {
                  (FunctionParameterListType.QuoteList, FunctionParameterListType.QuoteList) |
                  (FunctionParameterListType.RequiresList, FunctionParameterListType.RequiresList) =>
               for
-                argExpr <- arg.arg.check(param.paramType)
+                argExpr <- arg.arg.check(param.paramType)(using state.copy(erased = state.erased || param.isErased))
               yield (argExpr, tailArgs)
 
             case (FunctionParameterListType.InferrableList | FunctionParameterListType.QuoteList, _) =>
@@ -841,7 +866,7 @@ trait TypeResolver extends UsingContext {
     private def groupOverloadsByParamLength(overloads: Seq[Overloadable], args: Seq[ArgumentInfo]): ZStream[context.Env, context.Error, Seq[Overloadable]] =
       ZStream.unwrap(
         for
-          rejectedGroup <- Ref.make(Seq.empty[Overloadable])
+          rejectedGroup <- Ref.make(Seq.empty[RejectedOverload])
           exactGroup <- Ref.make(Seq.empty[Overloadable])
           moreGroups <- Ref.make(Map.empty[Int, Seq[Overloadable]])
           fewerGroups <- Ref.make(Map.empty[Int, Seq[Overloadable]])
@@ -850,7 +875,7 @@ trait TypeResolver extends UsingContext {
             for
               sig <- overload.signature
               _ <- rankByParamLength(sig.parameters, overload.initialArgs.map(annExprToArg) ++ args) match {
-                case OverloadRank.Mismatch => rejectedGroup.update(_ :+ overload)
+                case OverloadRank.Mismatch => rejectedGroup.update(_ :+ RejectedOverload(overload, Seq()))
                 case OverloadRank.Exact => exactGroup.update(_ :+ overload)
                 case OverloadRank.More(n) => moreGroups.update(addToIntGroup(n)(overload))
                 case OverloadRank.Fewer(n) => fewerGroups.update(addToIntGroup(n)(overload))

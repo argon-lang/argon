@@ -1,18 +1,19 @@
 <ArgonTest>
 
-    <Name>Erased function</Name>
+    <Name>Erased function value</Name>
 
     <InputSource name="index.argon">
 
         import Argon.Core/*
 
         proc printMessage(erased n: Int): () =
-            puts 'Hello World'
+            puts "Hello World"
 
         erased def erasedFunc(a: Int)(b: Int): Int = a + b
+        erased def erasedFunc2(a: Int)(b: Int): Int = erasedFunc 1 2
 
         proc main(): () do
-            printMessage(erasedFunc 1 2)
+            printMessage(erasedFunc2 1 2)
         end
 
 

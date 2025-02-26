@@ -1,17 +1,18 @@
 <ArgonTest>
 
-    <Name>Erased local</Name>
+    <Name>Erased local value</Name>
 
     <InputSource name="index.argon">
 
         import Argon.Core/*
 
         proc printMessage(erased n: Int): () =
-            puts 'Hello World'
+            puts "Hello World"
 
         proc main(): () do
             erased val erasedValue: Int = 3
-            printMessage(erasedValue)
+            erased val erasedValue2: Int = erasedValue
+            printMessage(erasedValue2)
         end
 
 

@@ -337,13 +337,14 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         }
 
       private def emitFunctionBody(e: ArExpr, parameters: Seq[context.DefaultExprContext.Var]): Comp[FunctionBody] =
+        val concreteParameters = parameters.filterNot(_.isErased)
         for
-          knownVars <- TMap.make[context.DefaultExprContext.Var, RegisterId](parameters.zipWithIndex.map { (param, index) => param -> RegisterId(index) }*).commit
+          knownVars <- TMap.make[context.DefaultExprContext.Var, RegisterId](concreteParameters.zipWithIndex.map { (param, index) => param -> RegisterId(index) }*).commit
           variables <- TRef.make(Seq.empty[VariableDefinition]).commit
           instructions <- TRef.make(Seq.empty[Instruction]).commit
 
           emitter = ExprEmitter(
-            varOffset = parameters.size,
+            varOffset = concreteParameters.size,
             knownVars = knownVars,
             variables = variables,
             instructions = instructions,
@@ -352,6 +353,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           _ <- emitter.exprReturn(e)
           res <- emitter.toFunctionBody
         yield res
+      end emitFunctionBody
 
       private sealed trait ExprOutput derives CanEqual {
         type ResultType
@@ -710,7 +712,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 case ArExpr.Tuple(itemTypes) => ZIO.succeed(itemTypes(index))
                 case _ => ???
               }
-              
+
             case _ =>
               ZIO.logError("Unimplemented getExprType expression: " + e.getClass).as(???)
           }

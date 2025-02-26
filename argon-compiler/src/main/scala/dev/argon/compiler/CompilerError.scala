@@ -41,6 +41,14 @@ enum CompilerError {
     loc: Location[FilePosition],
   )
 
+  case ErasedExpressionNotAllowed(
+    loc: Location[FilePosition],
+  )
+  
+  case ErasedMustBePure(
+    loc: Location[FilePosition],
+  )
+
   case UnknownModule(tube: TubeName, modulePath: ModulePath, loc: Location[FilePosition])
 
   case InvalidAssignmentTarget(loc: Location[FilePosition])
