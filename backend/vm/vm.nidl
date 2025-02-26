@@ -192,6 +192,9 @@ record import-specifier {
 @esexpr:(derive-codec)
 record function-signature {
     @esexpr:(keyword)
+    type-parameters: list[signature-type-parameter];
+
+    @esexpr:(keyword)
     parameters: list[signature-parameter];
 
     @esexpr:(keyword)
@@ -202,6 +205,11 @@ record function-signature {
 record signature-parameter {
     name: option[identifier];
     param-type: vm-type;
+}
+
+@esexpr:(derive-codec)
+record signature-type-parameter {
+    name: option[identifier];
 }
 
 @esexpr:(derive-codec)
@@ -271,7 +279,13 @@ enum vm-type {
     tuple {
         elements: list[vm-type];
     },
+    type-parameter {
+        index: nat;
+    },
     type-info,
+    of-type-info {
+        r: register-id;
+    },
 }
 
 @esexpr:(derive-codec)
@@ -326,6 +340,7 @@ enum instruction {
     function-call {
         dest: function-result;
         function-id: nat;
+        type-args: list[vm-type];
         args: list[register-id];
     },
 

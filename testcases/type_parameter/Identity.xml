@@ -11,7 +11,7 @@
 
         proc main(): () do
 
-            val str = identity String 'A'
+            val str = identity String "A"
 
             puts str
 

@@ -308,19 +308,36 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
 
         switch(func.implementation.$type) {
             case "vm-ir":
+            {
+                const params: estree.Pattern[] = [];
+
+                for(const i of func.signature.typeParameters.keys()) {
+                    params.push({
+                        type: "Identifier",
+                        name: `t${i}`,
+                    });
+                }
+
+                for(const i of func.signature.parameters.keys()) {
+                    params.push({
+                        type: "Identifier",
+                        name: `r${i}`,
+                    });
+                }
+
+
                 this.declarations.push({
                     type: "FunctionDeclaration",
                     id: {
                         type: "Identifier",
                         name: this.getExportNameForIdSig(func.import),
                     },
-                    params: func.signature.parameters.map((_, i) => ({
-                        type: "Identifier",
-                        name: `r${i}`,
-                    })),
+                    params: params,
                     body: this.emitFunctionBody(func.implementation.body, func.signature.parameters.length),
                 });
                 break;
+            }
+                
             
             case "extern":
                 const externRes = ExternFunction.codec.decode(func.implementation.extern);
@@ -555,10 +572,19 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 const functionInfo = this.options.program.getFunctionInfo(insn.functionId);
                 const funcExpr = this.getImportExpr(functionInfo.importSpecifier);
 
+                const args: estree.Expression[] = [];
+                for(const typeArg of insn.typeArgs) {
+                    args.push(this.buildTypeInfo(typeArg));
+                }
+
+                for(const arg of insn.args) {
+                    args.push(this.getReg(arg));
+                }
+
                 const callExpr: estree.Expression = {
                     type: "CallExpression",
                     callee: funcExpr,
-                    arguments: insn.args.map(arg => this.getReg(arg)),
+                    arguments: args,
                     optional: false,
                 };
 
@@ -719,8 +745,14 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                     elements: t.elements.map(item => this.buildTypeInfo(item)),
                 };
 
+            case "type-parameter":
+                return this.getTypeParam(t.index);
+
             case "type-info":
                 throw new Error("Not implemented buildTypeInfo type-info");
+
+            case "of-type-info":
+                return this.getReg(t.r);
         }
     }
 
@@ -728,6 +760,13 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         return {
             type: "Identifier",
             name: `r${r.id}`,
+        };
+    }
+
+    private getTypeParam(index: bigint): estree.Identifier {
+        return {
+            type: "Identifier",
+            name: `t${index}`,
         };
     }
 }
