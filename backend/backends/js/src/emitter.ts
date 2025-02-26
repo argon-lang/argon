@@ -753,6 +753,9 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
 
             case "of-type-info":
                 return this.getReg(t.r);
+
+            case "erased":
+                throw new Error("Cannot get type info for erased");
         }
     }
 

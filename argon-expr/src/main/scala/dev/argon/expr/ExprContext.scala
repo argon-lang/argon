@@ -69,7 +69,7 @@ trait ExprContext {
 
     case Hole(hole: ExprContext.this.Hole)
     
-    
+    case AnyType()
     case BindVariable(v: LocalVar, value: Expr)
     case BoolLiteral(b: Boolean)
     case Builtin(b: ExprContext.this.Builtin)

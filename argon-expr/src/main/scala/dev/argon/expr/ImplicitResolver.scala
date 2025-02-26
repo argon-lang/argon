@@ -46,9 +46,13 @@ abstract class ImplicitResolver[R, E] {
   final case class Assertion(witness: Expr, assertionType: Expr)
 
 
+  trait AssertionBuilder {
+    def create(newVariable: ZIO[R, E, Hole]): ZIO[R, E, Assertion]
+  }
+
   trait IRProverContext
   (
-    givenAssertions: Seq[ZIO[R, E, Hole] => ZIO[R, E, Assertion]],
+    givenAssertions: Seq[AssertionBuilder],
     knownVarValues: Map[Var, Expr],
     initialFuel: Fuel,
   ) extends ProverContext[R, E] {
@@ -64,7 +68,7 @@ abstract class ImplicitResolver[R, E] {
       builtinAssertions ++ givenAssertions.map { createAssertion =>
         (newVariable: ZIO[R, E, Hole]) =>
           for
-            assertion <- createAssertion(newVariable)
+            assertion <- createAssertion.create(newVariable)
             assertionType <- exprToGoal(assertion.assertionType, model, initialFuel)
           yield (Proof.Atomic(TCAtomicProof.ExprProof(assertion.witness)), assertionType)
       }
@@ -211,11 +215,10 @@ abstract class ImplicitResolver[R, E] {
       end match
   }
 
-
   protected sealed class IRPrologContext
   (
     createdHoles: Ref[Set[Hole]],
-    givenAssertions: Seq[ZIO[R, E, Hole] => ZIO[R, E, Assertion]],
+    givenAssertions: Seq[AssertionBuilder],
     knownVarValues: Map[Var, Expr],
     initialFuel: Fuel,
   ) extends PrologContext[R, E] with IRProverContext(givenAssertions, knownVarValues, initialFuel) {
@@ -295,7 +298,7 @@ abstract class ImplicitResolver[R, E] {
 
   protected sealed class IRSmtContext
   (
-    givenAssertions: Seq[ZIO[R, E, Hole] => ZIO[R, E, Assertion]],
+    givenAssertions: Seq[AssertionBuilder],
     knownVarValues: Map[Var, Expr],
     initialFuel: Fuel,
   ) extends SmtContext[R, E] with IRProverContext(givenAssertions, knownVarValues, initialFuel) {
@@ -378,7 +381,7 @@ abstract class ImplicitResolver[R, E] {
     smtFuel: Fuel,
   )
 
-  final def tryResolve(implicitType: Expr, model: Model, givenAssertions: Seq[ZIO[R, E, Hole] => ZIO[R, E, Assertion]], knownVarValues: Map[Var, Expr], fuel: FuelSpecifiers)
+  final def tryResolve(implicitType: Expr, model: Model, givenAssertions: Seq[AssertionBuilder], knownVarValues: Map[Var, Expr], fuel: FuelSpecifiers)
   : ZIO[R, E, Option[ResolvedImplicit]] =
     def prologAttempt =
       val isEqualTo = implicitType match {

@@ -225,6 +225,7 @@ private[loader] trait LoaderUtils extends UsingContext {
       e match {
         case Expr.Error() => ZIO.succeed(ArExpr.Error())
         case Expr.ErasedValue() => ZIO.succeed(ArExpr.ErasedValue())
+        case Expr.AnyType() => ZIO.succeed(ArExpr.AnyType())
         case Expr.BindVariable(v, value) =>
           for
             valueExpr <- expr(value)

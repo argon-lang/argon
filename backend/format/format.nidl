@@ -349,6 +349,7 @@ record record-field-definition {
 enum expr {
     error,
     erased-value,
+    any-type,
     bind-variable {
         v: local-var;
         value: expr;

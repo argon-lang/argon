@@ -16,6 +16,7 @@ trait Evaluator[R, E] {
       // These expressions always construct values or otherwise have no remaining normalizing to perform
       case Expr.Error() |
         Expr.ErasedValue() |
+        Expr.AnyType() |
         Expr.BoolLiteral(_) | Expr.IntLiteral(_) | Expr.StringLiteral(_) |
         Expr.Builtin(
           Builtin.Nullary(_) | Builtin.EqualTo(_, _, _) | Builtin.EqualToRefl(_, _)

@@ -9,9 +9,11 @@
 
         def identity (T: type) (value: T): T = value
 
+        erased inline def erasedString: type = String
+
         proc main(): () do
 
-            val str = identity (String | Int) 'A'
+            val str = identity erasedString "A"
 
         end
         

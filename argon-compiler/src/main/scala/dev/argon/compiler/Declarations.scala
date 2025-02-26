@@ -2,8 +2,8 @@ package dev.argon.compiler
 
 import cats.data.NonEmptySeq
 import dev.argon.ast.IdentifierExpr
-import dev.argon.expr.{ExprContext, Substitution}
-import dev.argon.util.{Fuel, UniqueIdentifier}
+import dev.argon.expr.{ExprContext, ExprContextWithHoles, Substitution}
+import dev.argon.util.{FilePosition, Fuel, Location, UniqueIdentifier}
 import zio.*
 
 import scala.reflect.TypeTest
@@ -31,9 +31,7 @@ trait Context extends ScopeContext {
     override type Hole = Nothing
   }
 
-  object TRExprContext extends ArgonExprContext {
-    override type Hole = UniqueIdentifier
-  }
+  object TRExprContext extends ArgonExprContext with ExprContextWithHoles
 
   sealed abstract class ArgonSignatureContextBase extends SignatureContext {
     override val exprContext: ArgonExprContext

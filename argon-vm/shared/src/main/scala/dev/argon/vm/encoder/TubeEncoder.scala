@@ -1,18 +1,15 @@
 package dev.argon.vm.encoder
 
 import dev.argon.compiler as c
-
 import dev.argon.tube.loader.TubeFormatException
 import dev.argon.tube.encoder.TubeEncoderBase
 import dev.argon.vm.*
-
-
 import zio.*
 import zio.stream.*
-import zio.stm.{ZSTM, USTM, TMap, TRef}
+import zio.stm.{TMap, TRef, TSet, USTM, ZSTM}
 import dev.argon.ast
-import dev.argon.compiler.{SignatureEraser, HasContext, ArgonEvaluator}
-import dev.argon.expr.{NullaryBuiltin, UnaryBuiltin, BinaryBuiltin}
+import dev.argon.compiler.{ArgonEvaluator, HasContext, SignatureEraser}
+import dev.argon.expr.{BinaryBuiltin, NullaryBuiltin, UnaryBuiltin}
 
 
 private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFileEntry] {
@@ -20,6 +17,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
     new state.Emitter {
       import state.*
       import context.DefaultExprContext.Expr as ArExpr
+      val ctx: context.type = context
   
       def emitTube: Comp[Unit] =
         val orderedTubes = tube.referencedTubes.toSeq
@@ -314,6 +312,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           params <- TRef.make(Seq.empty[dev.argon.vm.SignatureParameter]).commit
           paramVarMapping <- TMap.empty[context.DefaultExprContext.ParameterVar, Int].commit
           typeParamMapping <- TMap.empty[context.DefaultExprContext.ParameterVar, Int].commit
+          erasedParams <- TSet.empty[context.DefaultExprContext.ParameterVar].commit
 
           _ <- ZIO.foreachDiscard(sig.parameters.view.zipWithIndex) { (param, origIndex) =>
             if param.isErased then
@@ -438,6 +437,9 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
             case ArExpr.TypeN(_) =>
               ZIO.succeed(VmType.TypeInfo())
+
+            case ArExpr.Variable(v) if v.isErased =>
+              ZIO.succeed(VmType.Erased())
 
             case t @ ArExpr.Variable(v) =>
               getParameterAsType(v).flatMap {
@@ -787,77 +789,17 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             argRegs,
           )
 
-        private def boolType = ArExpr.Builtin(context.DefaultExprContext.Builtin.Nullary(NullaryBuiltin.BoolType))
-        private def intType = ArExpr.Builtin(context.DefaultExprContext.Builtin.Nullary(NullaryBuiltin.IntType))
-        private def stringType = ArExpr.Builtin(context.DefaultExprContext.Builtin.Nullary(NullaryBuiltin.StringType))
+
+        private lazy val exprType = new c.ExprType {
+          override val context: ctx.type = ctx
+          override val exprContext: context.DefaultExprContext.type = context.DefaultExprContext
+          override val sigContext: context.DefaultSignatureContext.type = context.DefaultSignatureContext
+          override protected def getHoleType(hole: Nothing): ArExpr = hole
+        }
+
 
         private def getExprType(e: ArExpr): Comp[ArExpr] =
-          e match {
-            case ArExpr.BoolLiteral(_) =>
-              ZIO.succeed(boolType)
-
-            case ArExpr.Builtin(context.DefaultExprContext.Builtin.Binary(builtin, _, _)) =>
-              ZIO.succeed(builtin match {
-                case BinaryBuiltin.IntAdd | BinaryBuiltin.IntSub | BinaryBuiltin.IntMul |
-                  BinaryBuiltin.IntBitAnd | BinaryBuiltin.IntBitOr | BinaryBuiltin.IntBitXOr |
-                  BinaryBuiltin.IntBitShiftLeft | BinaryBuiltin.IntBitShiftRight =>
-                    intType
-
-                case BinaryBuiltin.IntEQ | BinaryBuiltin.IntNE |
-                  BinaryBuiltin.IntLT | BinaryBuiltin.IntLE |
-                  BinaryBuiltin.IntGT | BinaryBuiltin.IntGE |
-                  BinaryBuiltin.StringEQ | BinaryBuiltin.StringNE =>
-                    boolType
-
-                case BinaryBuiltin.StringConcat => stringType
-                case _ =>
-                  println("Unimplemented getExprType binary builtin: " + builtin)
-                  ???
-              })
-
-            case ArExpr.Builtin(context.DefaultExprContext.Builtin.Unary(builtin, _)) =>
-              ZIO.succeed(builtin match {
-                case UnaryBuiltin.IntNegate | UnaryBuiltin.IntBitNot => intType
-              })
-
-            case ArExpr.Builtin(context.DefaultExprContext.Builtin.Nullary(builtin)) =>
-              ZIO.succeed(builtin match {
-                case NullaryBuiltin.BoolType | NullaryBuiltin.IntType |
-                  NullaryBuiltin.StringType | NullaryBuiltin.NeverType =>
-                    ArExpr.TypeN(ArExpr.IntLiteral(1))
-              })
-
-            case ArExpr.FunctionCall(f, args) =>
-              for
-                sig <- f.signature
-              yield sig.returnTypeForArgs(
-                context.DefaultExprContext.ParameterOwner.Func(f),
-                args
-              )
-
-            case ArExpr.IntLiteral(_) =>
-              ZIO.succeed(intType)
-
-            case ArExpr.Variable(v) =>
-              ZIO.succeed(v.varType)
-
-            case ArExpr.StringLiteral(_) =>
-              ZIO.succeed(stringType)
-
-            case ArExpr.Tuple(items) =>
-              for
-                itemTypes <- ZIO.foreach(items)(getExprType)
-              yield ArExpr.Tuple(itemTypes)
-
-            case ArExpr.TupleElement(index, tuple) =>
-              getExprType(tuple).flatMap {
-                case ArExpr.Tuple(itemTypes) => ZIO.succeed(itemTypes(index))
-                case _ => ???
-              }
-
-            case _ =>
-              ZIO.logError("Unimplemented getExprType expression: " + e.getClass).as(???)
-          }
+          exprType.getExprType(e)
 
         def exprReturn(e: ArExpr): Comp[Unit] =
           expr(e, ExprOutput.Return)

@@ -417,6 +417,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
           e match {
             case ArExpr.Error() => ZIO.succeed(Expr.Error())
             case ArExpr.ErasedValue() => ZIO.succeed(Expr.ErasedValue())
+            case ArExpr.AnyType() => ZIO.succeed(Expr.AnyType())
             case ArExpr.Hole(hole) => hole
             case ArExpr.BindVariable(v, value) =>
               for

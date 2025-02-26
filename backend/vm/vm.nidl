@@ -286,6 +286,7 @@ enum vm-type {
     of-type-info {
         r: register-id;
     },
+    erased,
 }
 
 @esexpr:(derive-codec)

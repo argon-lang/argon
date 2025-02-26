@@ -68,6 +68,11 @@ trait ScopeContext {
       def knownVarValues: Map[Var, TRExprContext.Expr] = ???
     }
 
+    object Empty extends Scope {
+      override def lookup(id: IdentifierExpr): Comp[LookupResult] =
+        ZIO.succeed(LookupResult.NotFound())
+    }
+
     final class GlobalScopeBuilder private(imports: Seq[WithSource[ast.ImportStmt]], module: ArModuleC & HasContext[self.type])(using TubeImporter & HasContext[self.type]) {
       def addImport(importSpec: WithSource[ast.ImportStmt]): GlobalScopeBuilder =
         GlobalScopeBuilder(imports :+ importSpec, module)

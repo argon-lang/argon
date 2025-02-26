@@ -8,5 +8,6 @@ private[compiler] final class TRToErrorShifter[Ctx <: Context](val context: Ctx)
   override val ec1: context.TRExprContext.type = context.TRExprContext
   override val ec2: ErrorExprContext.type = ErrorExprContext
 
-  override protected def shiftHole(hole: ec1.Hole): ec2.Expr = ec2.Expr.Hole(hole)
+  override protected def shiftHole(hole: ec1.Hole): ec2.Expr =
+    ec2.Expr.Hole(ec2.HoleInfo(hole.id, shiftExpr(hole.holeType), hole.location))
 }
