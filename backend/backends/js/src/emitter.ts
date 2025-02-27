@@ -155,7 +155,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
     }
 
     private readonly imports: string[] = [];
-    private readonly declarations: ReadonlyDeep<estree.Declaration>[] = [];
+    private readonly moduleStatements: ReadonlyDeep<IterableElement<estree.Program["body"]>>[] = [];
 
     emit(): ReadonlyDeep<estree.Program> {
         for(const entry of this.module.exports) {
@@ -183,19 +183,21 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             })
         });
 
-        for(const declaration of this.declarations) {
-            body.push({
-                type: "ExportNamedDeclaration",
-                declaration,
-                specifiers: [],
-            });
-        }
+        body.push(...this.moduleStatements);
 
         return {
             type: "Program",
             sourceType: "module",
             body,
         };
+    }
+
+    addDeclaration(declaration: ReadonlyDeep<estree.Declaration>): void {
+        this.moduleStatements.push({
+            type: "ExportNamedDeclaration",
+            declaration,
+            specifiers: [],
+        });
     }
 
     getImportId(source: string): string {
@@ -326,7 +328,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 }
 
 
-                this.declarations.push({
+                this.addDeclaration({
                     type: "FunctionDeclaration",
                     id: {
                         type: "Identifier",
@@ -349,7 +351,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
 
                 const funcExpr = ExternFunction.getExprForImports(extern, this);
 
-                this.declarations.push({
+                this.addDeclaration({
                     type: "VariableDeclaration",
                     kind: "const",
                     declarations: [
@@ -370,8 +372,90 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         }
     }
 
-    private emitRecord(_rec: ir.RecordDefinition): void {
-        throw new Error("Not implemented");
+    private emitRecord(rec: ir.RecordDefinition): void {
+
+        const name = this.getExportNameForIdSig(rec.import);
+        const params: estree.Pattern[] = [];
+        const body: estree.Statement[] = [];
+
+        for(const field of rec.fields) {
+            const fieldName = "field_" + this.getExportNameForId(field.name);
+            params.push({
+                type: "Identifier",
+                name: fieldName,
+            });
+
+            body.push({
+                type: "ExpressionStatement",
+                expression: {
+                    type: "AssignmentExpression",
+                    operator: "=",
+                    left: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: {
+                            type: "ThisExpression",
+                        },
+                        property: {
+                            type: "Identifier",
+                            name: fieldName,
+                        },
+                    },
+                    right: {
+                        type: "Identifier",
+                        name: fieldName,
+                    },
+                }
+            });
+        }
+
+        this.addDeclaration({
+            type: "FunctionDeclaration",
+            id: {
+                type: "Identifier",
+                name,
+            },
+            params,
+            body: {
+                type: "BlockStatement",
+                body,
+            },
+        });
+
+        this.moduleStatements.push({
+            type: "ExpressionStatement",
+            expression: {
+                type: "AssignmentExpression",
+                operator: "=",
+                left: {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: {
+                        type: "Identifier",
+                        name,
+                    },
+                    property: {
+                        type: "Identifier",
+                        name: "specialize",
+                    }
+                },
+                right: {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: {
+                        type: "Identifier",
+                        name: this.getImportId("@argon-lang/runtime"),
+                    },
+                    property: {
+                        type: "Identifier",
+                        name: "specialize",
+                    },
+                },
+            },
+        });
     }
 
 
@@ -638,6 +722,30 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 assign(insn.dest, this.getReg(insn.src));
                 break;
 
+            case "record-field-load":
+            {
+                const fieldInfo = this.options.program.getRecordFieldInfo(insn.fieldId);
+                assign(insn.dest, {
+                    type: "MemberExpression",
+                    computed: false,
+                    optional: false,
+                    object: this.getReg(insn.recordValue),
+                    property: {
+                        type: "Identifier",
+                        name: "field_" + this.getExportNameForId(fieldInfo.name),
+                    },
+                });
+                break;
+            }
+
+            case "record-literal":
+                assign(insn.dest, {
+                    type: "NewExpression",
+                    callee: this.buildTypeInfo(insn.recordType),
+                    arguments: insn.fields.map(field => this.getReg(field.value)),
+                });
+                break;
+
             case "return":
                 stmts.push({
                     type: "ReturnStatement",
@@ -684,47 +792,20 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 switch(t.b.$type) {
                     case "bool":
                         return {
-                            type: "MemberExpression",
-                            object: {
-                                type: "Identifier",
-                                name: "globalThis",
-                            },
-                            property: {
-                                type: "Identifier",
-                                name: "Boolean"
-                            },
-                            computed: false,
-                            optional: false,
+                            type: "Literal",
+                            value: "boolean",
                         };
 
                     case "int":
                         return {
-                            type: "MemberExpression",
-                            object: {
-                                type: "Identifier",
-                                name: "globalThis",
-                            },
-                            property: {
-                                type: "Identifier",
-                                name: "BigInt"
-                            },
-                            computed: false,
-                            optional: false,
+                            type: "Literal",
+                            value: "bigint",
                         };
                         
                     case "string":
                         return {
-                            type: "MemberExpression",
-                            object: {
-                                type: "Identifier",
-                                name: "globalThis",
-                            },
-                            property: {
-                                type: "Identifier",
-                                name: "String"
-                            },
-                            computed: false,
-                            optional: false,
+                            type: "Literal",
+                            value: "string",
                         };
 
                     case "never":
@@ -737,7 +818,28 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 throw new Error("Not implemented buildTypeInfo function");
 
             case "record":
-                throw new Error("Not implemented buildTypeInfo record");
+            {
+                const rec = this.options.program.getRecordInfo(t.recordId);
+                if(t.args.length === 0) {
+                    return this.getImportExpr(rec.importSpecifier);
+                }
+
+                return {
+                    type: "CallExpression",
+                    optional: false,
+                    callee: {
+                        type: "MemberExpression",
+                        computed: false,
+                        optional: false,
+                        object: this.getImportExpr(rec.importSpecifier),
+                        property: {
+                            type: "Identifier",
+                            name: "specialize",
+                        },
+                    },
+                    arguments: t.args.map(arg => this.buildTypeInfo(arg)),
+                };
+            }
 
             case "tuple":
                 return {

@@ -7,7 +7,7 @@ import { tubePackageName } from "../util.js";
 import type { ReadonlyDeep } from "type-fest";
 import type * as estree from "estree";
 import * as astring from "astring";
-import { buildModuleResolution, mainModule, TestExecutorBase } from "./executor-common.js";
+import { buildModuleResolution, mainModule, runtimePackage, TestExecutorBase } from "./executor-common.js";
 
 export function createTestExecutor<E>(): Option<backendApi.TestExecutorFactory<E, JSBackendOutput<E>>> {
     return {
@@ -67,6 +67,12 @@ function buildExecutor(exec: GraalJavaScriptExecutor, moduleRes: ModuleResolutio
     for(const lib of libraries.entries) {
         const prefix = "/test/node_modules/" + tubePackageName(lib.name) + "/";
         addProgram(prefix, lib.library);
+    }
+
+    for(const [path, content] of runtimePackage()) {
+        const suffix = path.endsWith(".js") ? ".mjs" : "";
+
+        exec.addFile("/test/node_modules/@argon-lang/runtime" + path + suffix, content);
     }
 }
 

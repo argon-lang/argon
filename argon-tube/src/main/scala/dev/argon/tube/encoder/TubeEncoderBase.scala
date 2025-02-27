@@ -30,7 +30,7 @@ trait TubeEncoderBase[Entry] {
     def getModuleId(moduleName: c.ModuleName): UIO[BigInt]
     def getFunctionId(func: ArFunc): UIO[BigInt]
     def getRecordId(rec: ArRecord): UIO[BigInt]
-    def getRecordFieldId(rec: RecordField): UIO[BigInt]
+    def getRecordFieldId(field: RecordField): UIO[BigInt]
 
     trait Emitter {
       def emitTube: Comp[Unit]

@@ -1,7 +1,7 @@
 import type * as backendApi from "@argon-lang/js-backend-api";
 import type { Option } from "@argon-lang/esexpr";
 import type { JSBackendOutput, TestProgram } from "../options.js";
-import { buildModuleResolution, mainModule, TestExecutorBase } from "./executor-common.js";
+import { buildModuleResolution, mainModule, runtimePackage, TestExecutorBase } from "./executor-common.js";
 import type { PromiseWithError } from "@argon-lang/noble-idl-core/util";
 import type { ModuleResolution } from "./moduleResolution.js";
 
@@ -45,6 +45,10 @@ function buildFileMap(program: TestProgram, libraries: backendApi.LibraryMap<Tes
     for(const lib of libraries.entries) {
         const prefix = "/test/node_modules/" + tubePackageName(lib.name) + "/";
         addProgram(prefix, lib.library);
+    }
+
+    for(const [path, content] of runtimePackage()) {
+        map.set("/test/node_modules/@argon-lang/runtime" + path, content);
     }
 
     return map;

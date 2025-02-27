@@ -1,4 +1,4 @@
-import type { FunctionInfo, ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel, TubeInfo } from "./program-model.js";
+import type { FunctionInfo, ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel, RecordFieldInfo, RecordInfo, TubeInfo } from "./program-model.js";
 import type { TubeHeader, TubeFileEntry, TubeMetadata, ImportSpecifier } from "@argon-lang/js-backend-api/vm";
 
 export interface ElementLookup {
@@ -153,8 +153,8 @@ class ProgramModelImpl implements ProgramModel {
 
         this.#moduleRefMap = options.moduleRefMap;
         this.#functionMap = options.functionMap;
-        // this.#recordMap = options.recordMap;
-        // this.#recordFieldMap = options.recordFieldMap;
+        this.#recordMap = options.recordMap;
+        this.#recordFieldMap = options.recordFieldMap;
     }
 
     readonly header: TubeHeader;
@@ -163,8 +163,8 @@ class ProgramModelImpl implements ProgramModel {
 
     readonly #moduleRefMap: Map<bigint, TubeFileEntry & { $type: "module-reference" }>;
     readonly #functionMap: Map<bigint, (TubeFileEntry & { $type: "function-reference" | "function-definition" })>;
-    // readonly #recordMap: Map<bigint, (TubeFileEntry & { $type: "record-reference" | "record-definition" })>;
-    // readonly #recordFieldMap: Map<bigint, (TubeFileEntry & { $type: "record-field-reference" })>;
+    readonly #recordMap: Map<bigint, (TubeFileEntry & { $type: "record-reference" | "record-definition" })>;
+    readonly #recordFieldMap: Map<bigint, (TubeFileEntry & { $type: "record-field-reference" })>;
 
     getTubeInfo(id: bigint): TubeInfo {
         if(id === 0n) {
@@ -227,6 +227,39 @@ class ProgramModelImpl implements ProgramModel {
             importSpecifier,
         };
     }
+
+    getRecordInfo(id: bigint): RecordInfo {
+        const entry = this.#recordMap.get(id);
+        if(entry === undefined) {
+            throw new Error("Invalid record id");
+        }
+
+        let importSpecifier: ImportSpecifier;
+        if(entry.$type === "record-definition") {
+            importSpecifier = entry.definition.import;
+        }
+        else {
+            importSpecifier = entry.import;
+        }
+
+        return {
+            importSpecifier,
+        };
+    }
+
+    getRecordFieldInfo(id: bigint): RecordFieldInfo {
+        const entry = this.#recordFieldMap.get(id);
+        if(entry === undefined) {
+            throw new Error("Invalid record field id");
+        }
+
+        return {
+            recordId: entry.recordId,
+            name: entry.name,
+        };
+    }
+
+    
 }
 
 

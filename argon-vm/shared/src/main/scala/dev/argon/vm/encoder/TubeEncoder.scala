@@ -431,6 +431,12 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 }
               )
 
+            case ArExpr.RecordType(rec, args) =>
+              for
+                id <- getRecordId(rec)
+                args <- ZIO.foreach(args)(typeExpr)
+              yield VmType.Record(id, args)
+
             case ArExpr.Tuple(items) =>
               ZIO.foreach(items)(typeExpr)
                 .map(VmType.Tuple.apply)
@@ -698,6 +704,42 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             case ArExpr.IntLiteral(i) =>
               intoRegister(e, output) { r =>
                 emit(Instruction.ConstInt(r, i))
+              }
+
+            case e @ ArExpr.RecordType(_, _) =>
+              intoRegister(e, output) { r =>
+                typeExpr(e).flatMap { t =>
+                  emit(Instruction.LoadTypeInfo(r, t))
+                }
+              }
+
+            case ArExpr.RecordFieldLoad(recordType, field, recordValue) =>
+              intoRegister(e, output) { r =>
+                for
+                  fieldId <- getRecordFieldId(field)
+                  recordValue <- expr(recordValue, ExprOutput.AnyRegister)
+                  _ <- emit(Instruction.RecordFieldLoad(r, recordValue, fieldId))
+                yield ()
+              }
+
+            case ArExpr.RecordLiteral(recordType, fields) =>
+              intoRegister(e, output) { r =>
+                for
+                  recType <- typeExpr(recordType)
+                  fieldRegs <- ZIO.foreach(fields) { field =>
+                    for
+                      fieldReg <- expr(field.value, ExprOutput.AnyRegister)
+                    yield field.field -> fieldReg
+                  }
+                  fieldRegsMap = fieldRegs.toMap
+                  fieldDefs <- recordType.record.fields
+                  fieldRegsOrdered <- ZIO.foreach(fieldDefs) { fieldDef =>
+                    for
+                      fieldId <- getRecordFieldId(fieldDef)
+                    yield RecordFieldLiteral(fieldId, fieldRegsMap(fieldDef))
+                  }
+                  _ <- emit(Instruction.RecordLiteral(r, recType, fieldRegsOrdered))
+                yield ()
               }
 
             case ArExpr.Sequence(stmts, result) =>

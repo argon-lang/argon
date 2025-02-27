@@ -212,7 +212,7 @@ export class ModuleResolution {
 
         if(subpath === ".") {
             let mainExport: unknown = undefined;
-            if(typeof exports === "string" || exports instanceof Array || (typeof exports === "object" && !hasNonDot)) {
+            if(typeof exports === "string" || exports instanceof Array || (typeof exports === "object" && !hasDot)) {
                 mainExport = exports;
             }
             else if(typeof exports === "object" && exports !== null && "." in exports) {

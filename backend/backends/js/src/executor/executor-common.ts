@@ -4,6 +4,9 @@ import type { PromiseWithError } from "@argon-lang/noble-idl-core/util";
 import { streamToAsyncIterable } from "../stream.js";
 import { ModuleResolution } from "./moduleResolution.js";
 import { tubePackageName } from "../util.js";
+import argonRuntimePackage from "./argon-runtime.js";
+import * as acorn from "acorn";
+import type * as estree from "estree";
 
 export abstract class TestExecutorBase<E> implements backendApi.TestExecutor<E, JSBackendOutput<E>, TestProgram> {
     async toTestProgram(program: JSBackendOutput<E>): PromiseWithError<TestProgram, E> {
@@ -45,8 +48,30 @@ export function buildModuleResolution(program: TestProgram, libraries: backendAp
         addProgram(prefix, lib.library);
     }
 
+    for(const [path, content] of runtimePackage()) {
+        if(path.endsWith("/package.json")) {
+            moduleRes.addPackageJsonFile("/test/node_modules/@argon-lang/runtime" + path, JSON.parse(content));
+        }
+        else if(path.endsWith(".js")) {
+            const program = acorn.parse(content, {
+                ecmaVersion: 2024,
+                sourceType: "module",
+            });
+            moduleRes.addSourceFile("/test/node_modules/@argon-lang/runtime" + path, program as estree.Program);
+        }
+        else {
+            throw new Error("Unexpected file type in runtime.")
+        }
+    }
+
+
     return moduleRes;
 }
 
 export const mainModule = "import { main$a$t$e$r$t$e } from \"/test/index.js\"; main$a$t$e$r$t$e();";
+
+
+export function runtimePackage(): Map<string, string> {
+    return new Map(Object.entries(argonRuntimePackage));
+}
 

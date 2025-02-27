@@ -35,7 +35,7 @@ trait Context extends ScopeContext {
 
   sealed abstract class ArgonSignatureContextBase extends SignatureContext {
     override val exprContext: ArgonExprContext
-    protected def exprFromDefault(expr: DefaultExprContext.Expr): exprContext.Expr
+    def exprFromDefault(expr: DefaultExprContext.Expr): exprContext.Expr
 
     def parameterFromDefault(p: DefaultSignatureContext.SignatureParameter): SignatureParameter =
       SignatureParameter(
@@ -80,14 +80,14 @@ trait Context extends ScopeContext {
   object DefaultSignatureContext extends ArgonSignatureContextBase {
     override val exprContext: DefaultExprContext.type = DefaultExprContext
 
-    override protected def exprFromDefault(expr: DefaultExprContext.Expr): exprContext.Expr =
+    override def exprFromDefault(expr: DefaultExprContext.Expr): exprContext.Expr =
       expr
   }
 
   object TRSignatureContext extends ArgonSignatureContextBase {
     override val exprContext: TRExprContext.type = TRExprContext
 
-    override protected def exprFromDefault(expr: DefaultExprContext.Expr): exprContext.Expr =
+    override def exprFromDefault(expr: DefaultExprContext.Expr): exprContext.Expr =
       DefaultToTRShifter[Context.this.type](Context.this).shiftExpr(expr)
   }
   

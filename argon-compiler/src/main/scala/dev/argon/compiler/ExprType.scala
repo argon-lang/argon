@@ -77,6 +77,25 @@ trait ExprType {
       case Expr.Variable(v) =>
         ZIO.succeed(v.varType)
 
+      case Expr.RecordFieldLoad(rec, field, _) =>
+        for
+          sig <- rec.record.signature
+        yield sigContext.signatureFromDefault(sig).substituteWithinExprForArgs(
+          exprContext.ParameterOwner.Rec(rec.record),
+          rec.args,
+          sigContext.exprFromDefault(field.fieldType)
+        )
+
+
+      case Expr.RecordType(rec, args) =>
+        for
+          sig <- rec.signature
+        yield sigContext.signatureFromDefault(sig).returnTypeForArgs(
+          exprContext.ParameterOwner.Rec(rec),
+          args
+        )
+
+
       case Expr.StringLiteral(_) =>
         ZIO.succeed(stringType)
 

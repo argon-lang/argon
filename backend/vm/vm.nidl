@@ -342,6 +342,7 @@ enum instruction {
         dest: function-result;
         function-id: nat;
         type-args: list[vm-type];
+        @esexpr:(vararg)
         args: list[register-id];
     },
 
@@ -361,6 +362,19 @@ enum instruction {
         src: register-id;
     },
 
+    record-field-load {
+        dest: register-id;
+        record-value: register-id;
+        field-id: nat;
+    },
+
+    record-literal {
+        dest: register-id;
+        record-type: vm-type;
+        @esexpr:(vararg)
+        fields: list[record-field-literal];
+    },
+
     return {
         src: register-id;
     },
@@ -375,6 +389,12 @@ enum instruction {
         element-index: nat;
         src: register-id;
     },
+}
+
+@esexpr:(derive-codec)
+record record-field-literal {
+    field-id: nat;
+    value: register-id;
 }
 
 @esexpr:(derive-codec)

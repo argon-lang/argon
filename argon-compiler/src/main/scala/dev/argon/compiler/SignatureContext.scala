@@ -28,21 +28,25 @@ trait SignatureContext {
 
 
     def returnTypeForArgs(owner: exprContext.ParameterOwner, args: Seq[Expr]): Expr =
-      def impl(index: Int, remaining: List[(SignatureParameter, Expr)], returnType: Expr): Expr =
+      substituteWithinExprForArgs(owner, args, returnType)
+
+
+    def substituteWithinExprForArgs(owner: exprContext.ParameterOwner, args: Seq[Expr], e: Expr): Expr =
+      def impl(index: Int, remaining: List[(SignatureParameter, Expr)], e: Expr): Expr =
         remaining match {
           case (param, arg) :: next =>
             val paramVar = param.asParameterVar(owner, index)
             impl(
               index + 1,
               next.map { (param, arg) => (param, Substitution.substitute(exprContext)(Map(paramVar -> arg))(arg)) },
-              Substitution.substitute(exprContext)(Map(paramVar -> arg))(returnType)
+              Substitution.substitute(exprContext)(Map(paramVar -> arg))(e)
             )
 
-          case Nil => returnType
+          case Nil => e
         }
 
-      impl(0, parameters.iterator.zip(args).toList, returnType)
-    end returnTypeForArgs
+      impl(0, parameters.iterator.zip(args).toList, e)
+    end substituteWithinExprForArgs
   }
   
   final case class SignatureParameter(

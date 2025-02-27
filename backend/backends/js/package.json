@@ -7,7 +7,8 @@
   "main": "./lib/index.js",
   "type": "module",
   "scripts": {
-    "build": "tsc --project .",
+    "codegen": "node package-runtime.js",
+    "build": "npm run codegen && tsc --project .",
     "dist": "npm run build && rollup --config rollup.graal.config.js",
     "test": "npm run build && vitest run --root lib"
   },
