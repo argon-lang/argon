@@ -29,7 +29,7 @@ object FreeVariableScanner {
             case Expr.Variable(v) =>
               State.modify[ScanState](s => s.copy(seenVars = s.seenVars + v))
 
-            case Expr.StoreVariable(v, _) =>
+            case Expr.VariableStore(v, _) =>
               State.modify[ScanState](s => s.copy(seenVars = s.seenVars + v))
 
             case _ => State.pure[ScanState, Unit](())

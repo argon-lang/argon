@@ -27,7 +27,7 @@ trait Evaluator[R, E] {
         Expr.TypeN(_) | Expr.TypeBigN(_) | Expr.FunctionType(_, _) |
         Expr.Variable(_) => ZIO.succeed(expr)
 
-      case Expr.BindVariable(_, _) | Expr.Sequence(_, _) | Expr.StoreVariable(_, _) | (_: Expr.IfElse) => ???
+      case Expr.BindVariable(_, _) | Expr.Sequence(_, _) | Expr.VariableStore(_, _) | (_: Expr.IfElse) => ???
 
       case Expr.Hole(hole) => normalizeHole(hole)
 

@@ -381,12 +381,6 @@ private[loader] trait LoaderUtils extends UsingContext {
             result = tailExpr.lastOption.getOrElse(headExpr),
           )
 
-        case Expr.StoreVariable(variable, value) =>
-          for
-            decodedVar <- getVar(variable)
-            decodedValue <- expr(value)
-          yield ArExpr.StoreVariable(decodedVar, decodedValue)
-
         case Expr.Tuple(items) =>
           for
             decodedItems <- ZIO.foreach(items)(expr)
@@ -409,6 +403,12 @@ private[loader] trait LoaderUtils extends UsingContext {
           for
             decodedVar <- getVar(variable)
           yield ArExpr.Variable(decodedVar)
+
+        case Expr.VariableStore(variable, value) =>
+          for
+            decodedVar <- getVar(variable)
+            decodedValue <- expr(value)
+          yield ArExpr.VariableStore(decodedVar, decodedValue)
 
       }
 

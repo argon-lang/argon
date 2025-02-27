@@ -441,10 +441,6 @@ enum expr {
     string-literal {
         s: string;
     },
-    store-variable {
-        v: var;
-        value: expr;
-    },
     tuple {
         items: list[expr];
     },
@@ -460,6 +456,10 @@ enum expr {
     },
     variable {
         v: var;
+    },
+    variable-store {
+        v: var;
+        value: expr;
     },
 }
 

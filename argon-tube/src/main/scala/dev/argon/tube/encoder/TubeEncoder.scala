@@ -582,12 +582,6 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             case ArExpr.StringLiteral(s) =>
               ZIO.succeed(Expr.StringLiteral(s))
 
-            case ArExpr.StoreVariable(v, value) =>
-              for
-                v <- getVar(v)
-                value <- expr(value)
-              yield Expr.StoreVariable(v, value)
-
             case ArExpr.Tuple(items) =>
               for
                 items <- ZIO.foreach(items)(expr)
@@ -610,6 +604,12 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
               for
                 v <- getVar(v)
               yield Expr.Variable(v)
+
+            case ArExpr.VariableStore(v, value) =>
+              for
+                v <- getVar(v)
+                value <- expr(value)
+              yield Expr.VariableStore(v, value)
           }
 
         private def encodeRecordType(rt: ArExpr.RecordType): Comp[RecordType] =

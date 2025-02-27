@@ -596,7 +596,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
             case _ =>
               intoRegister(e, output) { r =>
-                emit(Instruction.Tuple(r, Seq()))
+                f *> emit(Instruction.Tuple(r, Seq()))
               }
           }
 
@@ -780,6 +780,21 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 case None =>
                   ZIO.fail(TubeFormatException("Could not get index for variable"))
               }
+
+            case ArExpr.VariableStore(v, value) =>
+              unitResult(e, output)(
+                knownVars.get(v).commit.flatMap {
+                  case Some(VariableRealization.Reg(r)) =>
+                    expr(value, ExprOutput.Register(r))
+
+                  case Some(VariableRealization.TypeParam(_)) =>
+                    ZIO.fail(TubeFormatException("Cannot assign to type parameter"))
+
+                  case None =>
+                    ZIO.fail(TubeFormatException("Could not get index for variable"))
+                    
+                }
+              )
 
 
             case _ =>

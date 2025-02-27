@@ -19,6 +19,6 @@
 
     </InputSource>
 
-    <ExpectedError>Purity</ExpectedError>
+    <ExpectedError>PurityError</ExpectedError>
 
 </ArgonTest>

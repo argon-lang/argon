@@ -15,6 +15,7 @@ trait ExprContext {
     def name: Option[IdentifierExpr]
     def varType: Expr
     def isErased: Boolean
+    def isMutable: Boolean
   }
 
   final case class LocalVar(
@@ -38,7 +39,9 @@ trait ExprContext {
     name: Option[IdentifierExpr],
     isErased: Boolean,
     isProof: Boolean,
-  ) extends Var
+  ) extends Var {
+    override def isMutable: Boolean = false
+  }
 
   type Function <: Matchable
   given functionCanEqual: CanEqual[Function, Function] = deferred
@@ -91,12 +94,12 @@ trait ExprContext {
     case RecordFieldLoad(record: Expr.RecordType, field: RecordField, recordValue: Expr)
     case Sequence(stmts: Seq[Expr], result: Expr)
     case StringLiteral(s: String)
-    case StoreVariable(v: Var, value: Expr)
     case Tuple(items: Seq[Expr])
     case TupleElement(index: Int, tuple: Expr)
     case TypeN(n: Expr)
     case TypeBigN(n: BigInt)
     case Variable(v: Var)
+    case VariableStore(v: Var, value: Expr)
   }
 
   final case class RecordFieldLiteral(

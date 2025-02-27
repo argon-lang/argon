@@ -535,6 +535,25 @@ trait TypeResolver extends UsingContext {
                 Expr.Variable(v),
                 v.varType,
               )
+
+            override def assign(assignedValue: AssignedValue): ExprFactory =
+              new InferFactory {
+                override def loc: Loc = assignedValue.assignLocation
+
+                override def infer(using state: EmitState): Comp[InferredExpr] =
+                  for
+                    _ <- ErrorLog.logError(CompilerError.CanNotMutate(loc)).whenDiscard(!v.isMutable)
+                    _ <- checkAllowedEffect(loc)(EffectInfo.Effectful)
+                    
+                    value <- assignedValue.value.check(v.varType)(using state.copy(
+                      erased = state.erased || v.isErased,
+                      effects = if v.isErased then EffectInfo.Pure else state.effects,
+                    ))
+                  yield InferredExpr(
+                    Expr.VariableStore(v, value),
+                    Expr.Tuple(Seq())
+                  )
+              }
           }
 
         case LookupResult.VariableTupleElement(v, index, t) =>
