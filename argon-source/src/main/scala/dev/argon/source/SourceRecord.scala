@@ -72,6 +72,7 @@ private[source] object SourceRecord {
 
                   override def owningRecord: ArRecord = owningRec
 
+                  override val isMutable: Boolean = field.isMutable
                   override val name: IdentifierExpr = field.name.value
                   override val fieldType: context.DefaultExprContext.Expr = t
                 }

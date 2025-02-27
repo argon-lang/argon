@@ -1,0 +1,30 @@
+<ArgonTest>
+
+    <Name>Modify Field (Purity Error)</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        record MyRecord
+            var msg: String
+        end
+
+        def doMut(r: MyRecord): () do
+            r.msg := "Hello Mutation"
+        end
+
+        proc main(): () do
+            val o = MyRecord {
+                msg: "Hello Variable"
+            }
+            doMut o
+            puts o.msg
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedError>PurityError</ExpectedError>
+
+</ArgonTest>

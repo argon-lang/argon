@@ -30,7 +30,7 @@
     "@types/node": "^22.13.1",
     "type-fest": "^4.35.0",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.6"
+    "vitest": "^3.0.7"
   },
   "dependencies": {
     "@argon-lang/esexpr": "^0.1.17",

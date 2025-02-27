@@ -642,7 +642,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                       println("Unimplemented binary builtin: " + builtin)
                       ???
                   }
-                  _ <- emit(Instruction.BuiltinBinary(r, op, ar, br))
+                  _ <- emit(Instruction.BuiltinBinary(op, r, ar, br))
                 yield ()
               }
 
@@ -654,7 +654,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                     case UnaryBuiltin.IntNegate => BuiltinUnaryOp.IntNegate
                     case UnaryBuiltin.IntBitNot => BuiltinUnaryOp.IntBitNot
                   }
-                  _ <- emit(Instruction.BuiltinUnary(r, op, ar))
+                  _ <- emit(Instruction.BuiltinUnary(op, r, ar))
                 yield ()
               }
 
@@ -687,7 +687,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   id <- getFunctionId(f)
                   sig <- f.signature
                   funcArgs <- emitArguments(sig.parameters, args)
-                  _ <- emit(Instruction.FunctionCall(funcResult, id, funcArgs.typeArguments, funcArgs.arguments))
+                  _ <- emit(Instruction.FunctionCall(id, funcResult, funcArgs.typeArguments, funcArgs.arguments))
                 yield ()
               }
 
@@ -718,9 +718,19 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 for
                   fieldId <- getRecordFieldId(field)
                   recordValue <- expr(recordValue, ExprOutput.AnyRegister)
-                  _ <- emit(Instruction.RecordFieldLoad(r, recordValue, fieldId))
+                  _ <- emit(Instruction.RecordFieldLoad(fieldId, r, recordValue))
                 yield ()
               }
+
+            case ArExpr.RecordFieldStore(recordType, field, recordValue, fieldValue) =>
+              unitResult(e, output)(
+                for
+                  fieldId <- getRecordFieldId(field)
+                  recordValue <- expr(recordValue, ExprOutput.AnyRegister)
+                  fieldValue <- expr(fieldValue, ExprOutput.AnyRegister)
+                  _ <- emit(Instruction.RecordFieldStore(fieldId, recordValue, fieldValue))
+                yield ()
+              )
 
             case ArExpr.RecordLiteral(recordType, fields) =>
               intoRegister(e, output) { r =>
@@ -738,7 +748,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                       fieldId <- getRecordFieldId(fieldDef)
                     yield RecordFieldLiteral(fieldId, fieldRegsMap(fieldDef))
                   }
-                  _ <- emit(Instruction.RecordLiteral(r, recType, fieldRegsOrdered))
+                  _ <- emit(Instruction.RecordLiteral(recType, r, fieldRegsOrdered))
                 yield ()
               }
 
@@ -763,7 +773,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               intoRegister(e, output) { r =>
                 for
                   tupleReg <- expr(tuple, ExprOutput.AnyRegister)
-                  _ <- emit(Instruction.TupleElement(r, index, tupleReg))
+                  _ <- emit(Instruction.TupleElement(index, r, tupleReg))
                 yield ()
               }
 
@@ -792,7 +802,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
                   case None =>
                     ZIO.fail(TubeFormatException("Could not get index for variable"))
-                    
+
                 }
               )
 

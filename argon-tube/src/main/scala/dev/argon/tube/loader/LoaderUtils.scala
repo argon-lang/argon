@@ -354,6 +354,21 @@ private[loader] trait LoaderUtils extends UsingContext {
         case Expr.RecordType(recordType) =>
           decodeRecordType(recordType)
 
+        case Expr.RecordFieldLoad(rt, fieldId, recordValue) =>
+          for
+            rt <- decodeRecordType(rt)
+            field <- elementLoader.getRecordField(fieldId)
+            value <- expr(recordValue)
+          yield ArExpr.RecordFieldLoad(rt, field, value)
+
+        case Expr.RecordFieldStore(rt, fieldId, recordValue, fieldValue) =>
+          for
+            rt <- decodeRecordType(rt)
+            field <- elementLoader.getRecordField(fieldId)
+            recordValue <- expr(recordValue)
+            fieldValue <- expr(fieldValue)
+          yield ArExpr.RecordFieldStore(rt, field, recordValue, fieldValue)
+
         case Expr.RecordLiteral(recordType, fields) =>
           for
             decodedRecordType <- decodeRecordType(recordType)
@@ -364,13 +379,6 @@ private[loader] trait LoaderUtils extends UsingContext {
               yield context.DefaultExprContext.RecordFieldLiteral(field, fieldValue)
             }
           yield ArExpr.RecordLiteral(decodedRecordType, decodedFields)
-
-        case Expr.RecordFieldLoad(rt, fieldId, recordValue) =>
-          for
-            rt <- decodeRecordType(rt)
-            field <- elementLoader.getRecordField(fieldId)
-            value <- expr(recordValue)
-          yield ArExpr.RecordFieldLoad(rt, field, value)
 
         case Expr.Sequence(head, tail) =>
           for

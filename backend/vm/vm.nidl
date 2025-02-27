@@ -259,6 +259,10 @@ record record-definition {
 record record-field-definition {
     name: identifier;
     field-type: vm-type;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    mutable: bool;
 }
 
 
@@ -306,14 +310,14 @@ record block {
 @esexpr:(derive-codec)
 enum instruction {
     builtin-unary {
-        dest: register-id;
         op: builtin-unary-op;
+        dest: register-id;
         a: register-id;
     },
 
     builtin-binary {
-        dest: register-id;
         op: builtin-binary-op;
+        dest: register-id;
         a: register-id;
         b: register-id;
     },
@@ -339,8 +343,8 @@ enum instruction {
     },
 
     function-call {
-        dest: function-result;
         function-id: nat;
+        dest: function-result;
         type-args: list[vm-type];
         @esexpr:(vararg)
         args: list[register-id];
@@ -363,14 +367,20 @@ enum instruction {
     },
 
     record-field-load {
+        field-id: nat;
         dest: register-id;
         record-value: register-id;
+    },
+
+    record-field-store {
         field-id: nat;
+        record-value: register-id;
+        field-value: register-id;
     },
 
     record-literal {
-        dest: register-id;
         record-type: vm-type;
+        dest: register-id;
         @esexpr:(vararg)
         fields: list[record-field-literal];
     },
@@ -385,8 +395,8 @@ enum instruction {
     },
 
     tuple-element {
-        dest: register-id;
         element-index: nat;
+        dest: register-id;
         src: register-id;
     },
 }

@@ -274,7 +274,8 @@ trait TypeResolver extends UsingContext {
         builtinExprFactory(expr.location, name)
 
       case ast.Expr.Dot(o, member) =>
-        LookupMemberFactory(expr.location, resolveExpr(o), member)
+        val lookupSource = MemberLookupSource(expr.location, resolveExpr(o), hasExplicitAssign = false, member.value)
+        OverloadedExprFactory(expr.location, expr.location, lookupSource, Seq())
         
 
       case ast.Expr.FunctionCall(f, listType, arg) =>
@@ -341,6 +342,13 @@ trait TypeResolver extends UsingContext {
                 .keySet
 
               _ <- if duplicateFieldNames.nonEmpty then ??? else ZIO.unit
+
+              _ <- checkAllowedEffect(loc)(
+                if recordFields.exists(_.isMutable) then
+                  EffectInfo.Effectful
+                else
+                  EffectInfo.Pure
+              )
 
               fieldNames = fields.value.map(_.value.name.value).toSet
 
@@ -530,6 +538,7 @@ trait TypeResolver extends UsingContext {
 
             override def infer(using EmitState): Comp[InferredExpr] =
               for
+                _ <- checkAllowedEffect(loc)(if v.isMutable then EffectInfo.Effectful else EffectInfo.Pure)
                 _ <- checkErasure(loc)(v.isErased)
               yield InferredExpr(
                 Expr.Variable(v),
@@ -544,7 +553,7 @@ trait TypeResolver extends UsingContext {
                   for
                     _ <- ErrorLog.logError(CompilerError.CanNotMutate(loc)).whenDiscard(!v.isMutable)
                     _ <- checkAllowedEffect(loc)(EffectInfo.Effectful)
-                    
+
                     value <- assignedValue.value.check(v.varType)(using state.copy(
                       erased = state.erased || v.isErased,
                       effects = if v.isErased then EffectInfo.Pure else state.effects,
@@ -570,57 +579,122 @@ trait TypeResolver extends UsingContext {
           }
 
 
-        case lookup: LookupResult.Overloaded =>
-          OverloadedExprFactory(loc, lookup, Seq())
+        case lookupOverload: LookupResult.Overloaded =>
+          val scopeLookupSource = new OverloadLookupSource {
+            override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
+              ZIO.succeed(lookupOverload)
+
+            override def assignmentTarget: OverloadLookupSource =
+              RerunLookupSource(IdentifierExpr.Update(id))
+
+            private class RerunLookupSource(id: IdentifierExpr) extends OverloadLookupSource {
+              override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
+                state.scope.lookup(id).map {
+                  case res: LookupResult.OverloadableOnly => res
+                  case _ => LookupResult.NotFound()
+                }
+
+              override def assignmentTarget: OverloadLookupSource = RerunLookupSource(IdentifierExpr.Update(id))
+            }
+          }
+
+          OverloadedExprFactory(loc, loc, scopeLookupSource, Seq())
       }
   }
 
-  private final class LookupMemberFactory(override val loc: Loc, obj: ExprFactory, memberName: WithSource[IdentifierExpr]) extends WrappedFactory {
-    override protected def unwrap(using state: EmitState): Comp[ExprFactory] =
+  private trait OverloadLookupSource {
+    def lookup(using EmitState): Comp[LookupResult.OverloadableOnly]
+
+    def assignmentTarget: OverloadLookupSource
+  }
+
+  private class MemberLookupSource(
+    loc: Loc,
+    obj: ExprFactory,
+    hasExplicitAssign: Boolean,
+    memberName: IdentifierExpr
+  ) extends OverloadLookupSource {
+    override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
       for
         t <- makeHole(Expr.AnyType(), loc)
         e <- obj.check(t)
         t <- normalizeToValue(t)
-        overloads <- overloadsFromType(t, e)
-        lookup = LookupResult.Overloaded(overloads, extensionMethods(t, e))
-      yield OverloadedExprFactory(loc, lookup, Seq())
+        overloads <- overloadsFromType(t, e, extensionMethods(t, e))
+      yield overloads
 
-    private def overloadsFromType(t: Expr, e: Expr): Comp[Seq[Overloadable]] =
-      t match {
+    override def assignmentTarget: OverloadLookupSource =
+      MemberLookupSource(loc, obj, hasExplicitAssign = true, IdentifierExpr.Update(memberName))
+
+    private def overloadsFromType(t: Expr, e: Expr, next: Comp[LookupResult.OverloadableOnly]): Comp[LookupResult.OverloadableOnly] =
+      def fieldRead = t match {
         case recType @ Expr.RecordType(record, args) =>
           for
             fields <- record.fields
-          yield fields.map { field => Overloadable.RecordField(recType, field, e) }
+          yield LookupResult.Overloaded(
+            fields
+              .filter { field => field.name == memberName }
+              .map { field => Overloadable.RecordField(recType, field, e) },
+            next
+          )
 
-        case _ => ZIO.succeed(Seq.empty)
+        case _ => next
       }
 
+      memberName match {
+        case IdentifierExpr.Update(fieldName) if hasExplicitAssign =>
+          t match {
+            case recType @ Expr.RecordType(record, args) =>
+              for
+                fields <- record.fields
+              yield LookupResult.Overloaded(
+                fields
+                  .filter { field => field.name == fieldName }
+                  .map { field => Overloadable.RecordFieldUpdate(recType, field, e) },
+                next
+              )
+
+            case _ => next
+          }
+
+        case _ =>
+          fieldRead
+      }
+
+    end overloadsFromType
+
+
     private def extensionMethods(t: Expr, e: Expr)(using state: EmitState): Comp[LookupResult.OverloadableOnly] =
-      state.scope.lookup(IdentifierExpr.Extension(memberName.value)).map {
+      state.scope.lookup(IdentifierExpr.Extension(memberName)).map {
         case LookupResult.Overloaded(overloads, next) =>
           val emOverloads = overloads.flatMap {
-              case Overloadable.Function(f) =>
-                Seq(Overloadable.ExtensionMethod(f, AnnotatedExpr(obj.loc, e, t)))
+            case Overloadable.Function(f) =>
+              Seq(Overloadable.ExtensionMethod(f, AnnotatedExpr(obj.loc, e, t)))
 
-              case _ => Seq()
-            }
+            case _ => Seq()
+          }
 
           LookupResult.Overloaded(emOverloads, next)
 
         case _ => LookupResult.NotFound()
       }
+
   }
 
   private final case class RejectedOverload(overloadable: Overloadable, errors: Seq[CompilerError])
 
-  private final class OverloadedExprFactory(override val loc: Loc, lookup: LookupResult.Overloaded, args: Seq[ArgumentInfo]) extends ExprFactory {
+  private final class OverloadedExprFactory(override val loc: Loc, overloadableLoc: Loc, lookupSource: OverloadLookupSource, args: Seq[ArgumentInfo]) extends ExprFactory {
     private def toAttemptedOverload(overload: Overloadable): AttemptedOverload =
       overload match {
         case Overloadable.Function(f) => AttemptedOverload.Function(f)
         case Overloadable.Record(r) => AttemptedOverload.Record(r)
         case Overloadable.ExtensionMethod(f, _) => AttemptedOverload.Function(f)
         case Overloadable.RecordField(r, field, _) => AttemptedOverload.RecordField(r.record, field)
+        case Overloadable.RecordFieldUpdate(r, field, _) => AttemptedOverload.RecordField(r.record, field)
       }
+
+
+    private def toAttemptedOverloadWithErrors(reject: RejectedOverload): AttemptedOverloadWithErrors =
+      AttemptedOverloadWithErrors(toAttemptedOverload(reject.overloadable), reject.errors)
 
     override def check(t: Expr)(using EmitState): Comp[Expr] =
       Ref.make(Seq.empty[RejectedOverload]).flatMap { rejectedOverloads =>
@@ -633,11 +707,12 @@ trait TypeResolver extends UsingContext {
           }
 
 
-        lookupOverloads(lookup)
+        ZStream.fromZIO(lookupSource.lookup)
+          .flatMap(lookupOverloads)
           .flatMap { overloads => resolver.groupOverloads(overloads, args) }
           .mapZIO { overloads =>
             ZIO.foreach(overloads) { overload =>
-              resolver.attemptOverload(overload, loc, args).flatMap {
+              resolver.attemptOverload(overload, overloadableLoc, args).flatMap {
                 case success: OverloadAttempt.Success =>
                   ZIO.succeed(Seq((overload, success)))
 
@@ -657,8 +732,7 @@ trait TypeResolver extends UsingContext {
                   ???
                 else
                   new InferFactory {
-                    // TODO: Fix location
-                    override def loc: Loc = OverloadedExprFactory.this.loc
+                    override def loc: Loc = overloadableLoc
                     override def infer(using EmitState): Comp[InferredExpr] =
                       for
                         _ <- checkAllowedEffect(loc)(DefaultToTRShifter[context.type](context).shiftEffectInfo(f.effects))
@@ -674,8 +748,7 @@ trait TypeResolver extends UsingContext {
                   ???
                 else
                   new InferFactory {
-                    // TODO: Fix location
-                    override def loc: Loc = OverloadedExprFactory.this.loc
+                    override def loc: Loc = overloadableLoc
                     override def infer(using EmitState): Comp[InferredExpr] =
                       ZIO.succeed(InferredExpr(
                         Expr.RecordType(r, overloadResult.arguments),
@@ -685,13 +758,36 @@ trait TypeResolver extends UsingContext {
 
               def recordFieldOverload(r: Expr.RecordType, field: RecordField, recordValue: Expr): ExprFactory =
                 new InferFactory {
-                    // TODO: Fix location
-                    override def loc: Loc = OverloadedExprFactory.this.loc
-                    override def infer(using EmitState): Comp[InferredExpr] =
-                      ZIO.succeed(InferredExpr(
-                        Expr.RecordFieldLoad(r, field, recordValue),
-                        overloadResult.remainingSig.returnType
-                      ))
+                  override def loc: Loc = overloadableLoc
+                  override def infer(using EmitState): Comp[InferredExpr] =
+                    for
+                      _ <- checkAllowedEffect(loc)(
+                        if field.isMutable then EffectInfo.Effectful
+                        else EffectInfo.Pure
+                      )
+                    yield InferredExpr(
+                      Expr.RecordFieldLoad(r, field, recordValue),
+                      overloadResult.remainingSig.returnType
+                    )
+                }
+
+
+              def recordFieldStoreOverload(r: Expr.RecordType, field: RecordField, recordValue: Expr): ExprFactory =
+                new InferFactory {
+                  override def loc: Loc = overloadableLoc
+
+                  override def infer(using EmitState): Comp[InferredExpr] =
+                    val Seq(arg) = overloadResult.arguments
+                    for
+                      _ <- ErrorLog.logError(CompilerError.CanNotMutate(loc)).whenDiscard(!field.isMutable)
+                      _ <- checkAllowedEffect(loc)(EffectInfo.Effectful)
+
+                      sig <- r.record.signature
+                    yield InferredExpr(
+                      Expr.RecordFieldStore(r, field, recordValue, arg),
+                      Expr.Tuple(Seq())
+                    )
+                  end infer
                 }
 
 
@@ -701,6 +797,7 @@ trait TypeResolver extends UsingContext {
                 case Overloadable.Record(r) => recordOverload(r)
                 case Overloadable.ExtensionMethod(f, _) => functionOverload(f)
                 case Overloadable.RecordField(r, field, recordValue) => recordFieldOverload(r, field, recordValue)
+                case Overloadable.RecordFieldUpdate(r, field, recordValue) => recordFieldStoreOverload(r, field, recordValue)
               }
 
               val factory1 = overloadResult.remainingArguments.foldLeft(factory0)(_.invoke(_))
@@ -708,8 +805,7 @@ trait TypeResolver extends UsingContext {
               val factory =
                 overloadResult.lambdaParameters.foldRight(factory1) { (param, bodyFactory) =>
                   new ExprFactory {
-                    // TODO: Fix location
-                    override def loc: Loc = OverloadedExprFactory.this.loc
+                    override def loc: Loc = overloadableLoc
 
                     override def check(t: Expr)(using EmitState): Comp[Expr] =
                       for
@@ -735,14 +831,36 @@ trait TypeResolver extends UsingContext {
 
                   case _ => ZIO.unit
                 }
-                _ <- ErrorLog.logError(CompilerError.InvalidOverload(loc, attempted.map(attempt => toAttemptedOverload(attempt.overloadable))))
+                _ <- ErrorLog.logError(CompilerError.InvalidOverload(loc, attempted.map(toAttemptedOverloadWithErrors)))
               yield Expr.Error()
           }
 
       }
 
     override def invoke(arg: ArgumentInfo): ExprFactory =
-      OverloadedExprFactory(loc, lookup, args :+ arg)
+      OverloadedExprFactory(loc, overloadableLoc, lookupSource, args :+ arg)
+
+    override def assign(assignedValue: AssignedValue): ExprFactory =
+      BlackBoxExprFactory(
+        OverloadedExprFactory(
+          loc,
+          overloadableLoc,
+          lookupSource.assignmentTarget,
+          args :+ ArgumentInfo(
+            assignedValue.assignLocation,
+            assignedValue.value,
+            FunctionParameterListType.NormalList
+          ),
+        )
+      )
+  }
+
+  // Disables the inner factory's invoke and assign methods.
+  private class BlackBoxExprFactory(inner: ExprFactory) extends ExprFactory {
+    override def loc: Loc = inner.loc
+
+    override def check(t: Expr)(using EmitState): Comp[Expr] =
+      inner.check(t)
   }
 
   private sealed trait OverloadAttempt
@@ -817,9 +935,15 @@ trait TypeResolver extends UsingContext {
     private def attemptOverloadCheck(overload: Overloadable, sig: TRSignatureContext.FunctionSignature, funcLocation: SourceLocation, args: Seq[ArgumentInfo], callArgs: Seq[Expr], lambdaParams: Seq[LocalVar])(using state: EmitState): Comp[AttemptOverloadCheckResult] =
       def applyArg(param: TRSignatureContext.SignatureParameter, tailParams: Seq[TRSignatureContext.SignatureParameter], callLocation: SourceLocation, arg: Expr, restArgs: Seq[ArgumentInfo], lambdaParam: Option[LocalVar]): Comp[AttemptOverloadCheckResult] =
         val isProof = param.listType == FunctionParameterListType.RequiresList
-        val paramVar = param.asParameterVar(overload.asOwner.get, callArgs.size)
 
-        val restSig = sig.copy(parameters = tailParams).substituteVar(paramVar, arg)
+        val restSig = overload.asOwner match {
+          case Some(owner) =>
+            val paramVar = param.asParameterVar(owner, callArgs.size)
+            sig.copy(parameters = tailParams).substituteVar(paramVar, arg)
+
+          case None =>
+            sig.copy(parameters = tailParams)
+        }
 
         attemptOverloadCheck(overload, restSig, callLocation, restArgs, callArgs :+ arg, lambdaParams ++ lambdaParam)
       end applyArg
@@ -1167,7 +1291,7 @@ trait TypeResolver extends UsingContext {
       TRSignatureContext.signatureFromDefault(sig)
 
     override def normalizeHole(hole: Hole): Comp[Expr] =
-      state.model.get.map(_.resolveHole(hole).getOrElse(Expr.Hole(hole)))
+      state.model.get.map(m => m.resolveHole(hole).getOrElse(Expr.Hole(hole)))
   }
 
   private final class ResolvedHoleFiller(model: TRExprContext.Model) extends ContextShifter[Comp] {

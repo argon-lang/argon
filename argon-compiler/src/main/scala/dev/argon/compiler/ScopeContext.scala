@@ -32,12 +32,14 @@ trait ScopeContext {
       case Record(r: ArRecordC & HasContext[self.type])
       case ExtensionMethod(f: ArFuncC & HasContext[self.type], obj: TRExprContext.AnnotatedExpr)
       case RecordField(r: Expr.RecordType, field: RecordFieldC & HasContext[self.type], recordValue: Expr)
+      case RecordFieldUpdate(r: Expr.RecordType, field: RecordFieldC & HasContext[self.type], recordValue: Expr)
 
       def initialArgs: Seq[TRExprContext.AnnotatedExpr] =
         this match {
           case Function(_) | Record(_) => Seq()
           case ExtensionMethod(f, obj) => Seq(obj)
           case RecordField(_, _, _) => Seq()
+          case RecordFieldUpdate(_, _, _) => Seq()
         }
 
       def signature: Comp[TRSignatureContext.FunctionSignature] =
@@ -46,6 +48,7 @@ trait ScopeContext {
           case Record(r) => r.signature.map(TRSignatureContext.signatureFromDefault)
           case ExtensionMethod(f, obj) => f.signature.map(TRSignatureContext.signatureFromDefault)
           case RecordField(r, field, _) => TRSignatureContext.recordFieldSig(r, field)
+          case RecordFieldUpdate(r, field, _) => TRSignatureContext.recordFieldUpdateSig(r, field)
         }
 
       def asOwner: Option[TRExprContext.ParameterOwner] =
@@ -54,6 +57,7 @@ trait ScopeContext {
           case Record(r) => Some(TRExprContext.ParameterOwner.Rec(r))
           case ExtensionMethod(f, _) => Some(TRExprContext.ParameterOwner.Func(f))
           case RecordField(_, _, _) => None
+          case RecordFieldUpdate(_, field, _) => None
         }
     }
 

@@ -60,20 +60,41 @@ trait Context extends ScopeContext {
       for
         recordSig <- r.record.signature
 
-        argMapping =
-          SignatureParameter.getParameterVariables(
-            exprContext.ParameterOwner.Rec(r.record),
-            signatureFromDefault(recordSig).parameters
-          )
-            .zip(r.args)
-            .toMap[exprContext.Var, exprContext.Expr]
+        fieldType = signatureFromDefault(recordSig).substituteWithinExprForArgs(
+          exprContext.ParameterOwner.Rec(r.record),
+          r.args,
+          exprFromDefault(field.fieldType),
+        )
 
       yield FunctionSignature(
         parameters = Seq(),
-        returnType = Substitution.substitute(exprContext)(argMapping)(exprFromDefault(field.fieldType)),
+        returnType = fieldType,
         ensuresClauses = Seq(),
       )
 
+    def recordFieldUpdateSig(r: exprContext.Expr.RecordType, field: RecordFieldC & HasContext[Context.this.type]): Comp[FunctionSignature] =
+      for
+        recordSig <- r.record.signature
+
+        fieldType = signatureFromDefault(recordSig).substituteWithinExprForArgs(
+          exprContext.ParameterOwner.Rec(r.record),
+          r.args,
+          exprFromDefault(field.fieldType),
+        )
+
+      yield FunctionSignature(
+        parameters = Seq(
+          SignatureParameter(
+            listType = dev.argon.ast.FunctionParameterListType.NormalList,
+            isErased = field.isErased,
+            bindings = Seq(),
+            name = None,
+            paramType = fieldType,
+          )
+        ),
+        returnType = exprContext.Expr.Tuple(Seq()),
+        ensuresClauses = Seq(),
+      )
   }
 
 
@@ -267,6 +288,8 @@ abstract class RecordFieldC extends UsingContext derives CanEqual {
   def owningRecord: ArRecord
 
   val id: UniqueIdentifier
+  val isMutable: Boolean
+  def isErased: Boolean = false
   val name: IdentifierExpr
   val fieldType: Expr
 

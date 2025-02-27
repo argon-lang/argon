@@ -569,8 +569,16 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
               for
                 rt <- encodeRecordType(rt)
                 field <- getRecordFieldId(field)
-                value <- expr(recordValue)
-              yield Expr.RecordFieldLoad(rt, field, value)
+                recordValue <- expr(recordValue)
+              yield Expr.RecordFieldLoad(rt, field, recordValue)
+
+            case ArExpr.RecordFieldStore(rt, field, recordValue, fieldValue) =>
+              for
+                rt <- encodeRecordType(rt)
+                field <- getRecordFieldId(field)
+                recordValue <- expr(recordValue)
+                fieldValue <- expr(fieldValue)
+              yield Expr.RecordFieldStore(rt, field, recordValue, fieldValue)
 
             case ArExpr.Sequence(stmts, result) =>
               for

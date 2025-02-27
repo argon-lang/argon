@@ -5,3 +5,8 @@ enum AttemptedOverload {
   case Record(r: ArRecordC)
   case RecordField(r: ArRecordC, field: RecordFieldC)
 }
+
+final case class AttemptedOverloadWithErrors(
+  overload: AttemptedOverload,
+  errors: Seq[CompilerError],
+)

@@ -52,7 +52,7 @@ enum CompilerError {
   case CouldNotInfer(
     loc: Location[FilePosition],
   )
-  
+
   case CanNotMutate(
     loc: Location[FilePosition],
   )
@@ -62,7 +62,7 @@ enum CompilerError {
   case InvalidAssignmentTarget(loc: Location[FilePosition])
 
   case AmbiguousOverload(loc: Location[FilePosition], attempted: Seq[AttemptedOverload])
-  case InvalidOverload(loc: Location[FilePosition], attempted: Seq[AttemptedOverload])
+  case InvalidOverload(loc: Location[FilePosition], attempted: Seq[AttemptedOverloadWithErrors])
   
   case UnknownExtern(name: String)
 }

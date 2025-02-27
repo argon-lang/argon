@@ -738,6 +738,30 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 break;
             }
 
+            case "record-field-store":
+            {
+                const fieldInfo = this.options.program.getRecordFieldInfo(insn.fieldId);
+                stmts.push({
+                    type: "ExpressionStatement",
+                    expression: {
+                        type: "AssignmentExpression",
+                        operator: "=",
+                        left: {
+                            type: "MemberExpression",
+                            computed: false,
+                            optional: false,
+                            object: this.getReg(insn.recordValue),
+                            property: {
+                                type: "Identifier",
+                                name: "field_" + this.getExportNameForId(fieldInfo.name),
+                            },
+                        },
+                        right: this.getReg(insn.fieldValue),
+                    },
+                });
+                break;
+            }
+
             case "record-literal":
                 assign(insn.dest, {
                     type: "NewExpression",

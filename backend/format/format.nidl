@@ -341,6 +341,10 @@ record record-definition {
 record record-field-definition {
     name: identifier;
     field-type: expr;
+
+    @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    mutable: bool;
 }
 
 
@@ -421,16 +425,22 @@ enum expr {
     record-type {
         record-type: record-type;
     },
+    record-field-load {
+        record: record-type;
+        field-id: nat;
+        record-value: expr;
+    },
+    record-field-store {
+        record: record-type;
+        field-id: nat;
+        record-value: expr;
+        field-value: expr;
+    },
     record-literal {
         record: record-type;
 
         @esexpr:(vararg)
         fields: list[record-field-literal];
-    },
-    record-field-load {
-        record: record-type;
-        field-id: nat;
-        record-value: expr;
     },
     sequence {
         head: expr;

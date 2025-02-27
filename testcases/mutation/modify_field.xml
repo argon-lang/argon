@@ -1,0 +1,26 @@
+<ArgonTest>
+
+    <Name>Modify Field</Name>
+
+    <InputSource name="index.argon"><![CDATA[
+
+        import Argon.Core/*
+
+        record MyRecord
+            var msg: String
+        end
+
+        proc main(): () do
+            val o = MyRecord {
+                msg: "Hello Variable"
+            }
+            o.msg := "Hello Mutation"
+            puts o.msg
+        end
+
+
+    ]]></InputSource>
+
+    <ExpectedOutput>Hello Mutation</ExpectedOutput>
+
+</ArgonTest>

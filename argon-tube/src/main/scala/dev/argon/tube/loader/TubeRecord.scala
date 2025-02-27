@@ -43,6 +43,7 @@ private[loader] object TubeRecord {
               override def owningRecord: ArRecord = rec
 
               override val id: UniqueIdentifier = fieldId
+              override val isMutable: Boolean = fieldDef.mutable
               override val name: IdentifierExpr = decodeIdentifier(fieldDef.name)
               override val fieldType: context.DefaultExprContext.Expr = t
 

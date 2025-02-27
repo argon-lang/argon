@@ -27,9 +27,15 @@ trait Evaluator[R, E] {
         Expr.TypeN(_) | Expr.TypeBigN(_) | Expr.FunctionType(_, _) |
         Expr.Variable(_) => ZIO.succeed(expr)
 
-      case Expr.BindVariable(_, _) | Expr.Sequence(_, _) | Expr.VariableStore(_, _) | (_: Expr.IfElse) => ???
+      case Expr.BindVariable(_, _) | Expr.Sequence(_, _) | Expr.VariableStore(_, _) | (_: Expr.RecordFieldStore) | (_: Expr.IfElse) => ???
 
-      case Expr.Hole(hole) => normalizeHole(hole)
+      case Expr.Hole(hole) =>
+        normalizeHole(hole).flatMap { expr2 =>
+          if expr2 == expr || fuel.isEmpty then
+            ZIO.succeed(expr2)
+          else
+            normalizeToValue(expr2, fuel.consume)
+        }
 
       case Expr.Builtin(Builtin.Unary(op, a)) =>
         for

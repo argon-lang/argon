@@ -626,12 +626,13 @@ object ArgonParser {
           }
 
         case Rule.RecordField =>
-          rule(Rule.Identifier).observeLocation ++
+          rule(Rule.VariableMutSpec).? ++
+            rule(Rule.Identifier).observeLocation ++
             rule(Rule.NewLines) ++
             matchToken(OP_COLON).discard ++
             rule(Rule.Type).observeLocation --> {
-              case (name, t) =>
-                RecordField(name, t)
+              case (isMutable, name, t) =>
+                RecordField(isMutable.getOrElse(false), name, t)
             }
 
         case Rule.MethodDefinitionStmt =>

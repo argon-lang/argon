@@ -32,6 +32,7 @@ final case class RecordDeclarationStmt(
 ) extends Stmt
 
 final case class RecordField(
+  isMutable: Boolean,
   name: WithSource[IdentifierExpr],
   fieldType: WithSource[Expr],
 ) extends RecordBodyStmt
