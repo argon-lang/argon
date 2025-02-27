@@ -71,3 +71,14 @@ export function tubeNameEquals(a: ir.TubeName, b: ir.TubeName): boolean {
 export function modulePathEquals(a: ir.ModulePath, b: ir.ModulePath): boolean {
     return a.path.every((aPart, i) => aPart === b.path[i]);
 }
+
+
+export function getModuleId(importSpec: ir.ImportSpecifier): bigint {
+    switch(importSpec.$type) {
+        case "global":
+            return importSpec.moduleId;
+
+        case "synthetic-nested":
+            return getModuleId(importSpec.parent);
+    }
+}

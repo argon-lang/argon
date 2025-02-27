@@ -397,7 +397,7 @@ enum expr {
         a: expr;
     },
     function-type {
-        a: expr;
+        a: local-var;
         r: expr;
     },
     if-else {

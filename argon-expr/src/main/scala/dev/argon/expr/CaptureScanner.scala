@@ -6,11 +6,12 @@ import dev.argon.ast.IdentifierExpr
 import dev.argon.util.{*, given}
 import cats.data.State
 
-object FreeVariableScanner {
+object CaptureScanner {
+
   def apply(ec: ExprContext { type Hole = Nothing })(expr: ec.Expr): Set[ec.Var] =
     import ec.*
 
-    final case class ScanState(seenVars: Set[ec.Var], declVars: Set[ec.Var])
+    final case class ScanState(capturedVars: Set[ec.Var])
 
     trait VarScanner extends TreeScanner[[A] =>> State[ScanState, A]] {
       def exprScanner: Scanner[Expr]
@@ -23,28 +24,14 @@ object FreeVariableScanner {
       override given exprScanner: Scanner[Expr]:
         override def scan(a: Expr): State[ScanState, Unit] =
           (a match {
-            case Expr.BindVariable(v, _) =>
-              State.modify[ScanState](s => s.copy(declVars = s.declVars + v))
-
-            case Expr.Lambda(v, _, _) =>
-              State.modify[ScanState](s => s.copy(declVars = s.declVars + v))
-
-            case Expr.FunctionType(v, _) =>
-              State.modify[ScanState](s => s.copy(declVars = s.declVars + v))
-
-            case Expr.IfElse(whenTrueWitness, whenFalseWitness, _, _, _) =>
-              State.modify[ScanState](s => s.copy(declVars = s.declVars ++ whenTrueWitness.toSet[ec.Var] ++ whenFalseWitness.toSet[ec.Var]))
-
-            case Expr.Variable(v) =>
-              State.modify[ScanState](s => s.copy(seenVars = s.seenVars + v))
-
-            case Expr.VariableStore(v, _) =>
-              State.modify[ScanState](s => s.copy(seenVars = s.seenVars + v))
+            case Expr.Lambda(_, _, _) =>
+              val captured = FreeVariableScanner.apply(ec)(a)
+              State.modify[ScanState](s => s.copy(capturedVars = s.capturedVars ++ captured))
 
             case _ => State.pure[ScanState, Unit](())
           }) *> autoScanner[Expr].scan(a)
       end exprScanner
-      
+
       private given Scanner[Builtin] = autoScanner
       private given Scanner[LocalVar] = autoScanner
       private given Scanner[Var] = autoScanner
@@ -67,8 +54,8 @@ object FreeVariableScanner {
       private given Scanner[String] = IgnoreScanner[String]
     }
 
-    val res = scanner.exprScanner.scan(expr).runF.value(ScanState(Set.empty, Set.empty)).value._1
+    val res = scanner.exprScanner.scan(expr).runF.value(ScanState(Set.empty)).value._1
 
-    res.seenVars -- res.declVars
+    res.capturedVars
   end apply
 }

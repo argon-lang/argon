@@ -9,7 +9,7 @@ import zio.stream.*
 import zio.stm.{TMap, TRef, TSet, USTM, ZSTM}
 import dev.argon.ast
 import dev.argon.compiler.{ArgonEvaluator, HasContext, SignatureEraser}
-import dev.argon.expr.{BinaryBuiltin, NullaryBuiltin, UnaryBuiltin}
+import dev.argon.expr.{BinaryBuiltin, NullaryBuiltin, UnaryBuiltin, CaptureScanner}
 
 
 private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFileEntry] {
@@ -104,7 +104,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         for
           moduleId <- getModuleId(c.ModuleName(specifier.tube, specifier.module))
           sig <- encodeErasedSignature(specifier.signature)
-        yield ImportSpecifier(
+        yield ImportSpecifier.Global(
           moduleId = moduleId,
           name = specifier.name.map(encodeIdentifier),
           sig = sig
@@ -220,7 +220,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   sig.parameters
                 )
                 for
-                  block <- emitFunctionBody(e, encSig)
+                  block <- emitFunctionBody(e, encSig, importSpec)
                 yield FunctionImplementation.VmIr(block)
 
               case context.implementations.FunctionImplementation.Extern(externMap) =>
@@ -376,20 +376,25 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         case TypeParam(tp: VmType)
       }
 
-      private def emitFunctionBody(e: ArExpr, funcSig: FunctionSignatureWithMapping): Comp[FunctionBody] =
+      private def emitFunctionBody(e: ArExpr, funcSig: FunctionSignatureWithMapping, funcImport: ImportSpecifier): Comp[FunctionBody] =
         for
+          varOffset <- TRef.makeCommit(funcSig.sig.parameters.size)
           knownVars <- TMap.fromIterable[context.DefaultExprContext.Var, VariableRealization](
             funcSig.paramVarMapping.map { (param, index) => param -> VariableRealization.Reg(RegisterId(index)) } ++
               funcSig.typeParamMapping.map { (param, index) => param -> VariableRealization.TypeParam(VmType.TypeParameter(index)) }
           ).commit
-          variables <- TRef.make(Seq.empty[VariableDefinition]).commit
           instructions <- TRef.make(Seq.empty[Instruction]).commit
+          nextSyntheticIndex <- TRef.makeCommit[BigInt](0)
+          
+          capturedVars = CaptureScanner(context.DefaultExprContext)(e)
 
           emitter = ExprEmitter(
-            varOffset = funcSig.sig.parameters.size,
+            varOffset = varOffset,
             knownVars = knownVars,
-            variables = variables,
             instructions = instructions,
+            importSpecifier = funcImport,
+            nextSyntheticIndex = nextSyntheticIndex,
+            capturedVars = capturedVars,
           )
 
           _ <- emitter.exprReturn(e)
@@ -475,20 +480,26 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
       }
 
       private final class ExprEmitter(
-        varOffset: Int,
+        varOffset: TRef[Int],
         knownVars: TMap[context.DefaultExprContext.Var, VariableRealization],
-        variables: TRef[Seq[VariableDefinition]],
         instructions: TRef[Seq[Instruction]],
-      ) extends TypeEmitterBase {
+        importSpecifier: ImportSpecifier,
+        nextSyntheticIndex: TRef[BigInt],
+        capturedVars: Set[context.DefaultExprContext.Var],
+      ) extends TypeEmitterBase {        
         private def nestedScope: Comp[ExprEmitter] =
           for
+            currentVarOffset <- varOffset.get.commit
+            varOffset2 <- TRef.makeCommit(currentVarOffset)
             knownVars <- knownVars.toMap.flatMap(kv => TMap.make(kv.toSeq*)).commit
-            instructions <- TRef.make(Seq.empty[Instruction]).commit
+            instructions <- TRef.makeCommit(Seq.empty[Instruction])
           yield ExprEmitter(
-            varOffset = varOffset,
+            varOffset = varOffset2,
             knownVars = knownVars,
-            variables = variables,
             instructions = instructions,
+            importSpecifier = importSpecifier,
+            nextSyntheticIndex = nextSyntheticIndex,
+            capturedVars = capturedVars,
           )
 
         private def nestedBlock[A](f: ExprEmitter => Comp[A]): Comp[(Block, A)] =
@@ -504,11 +515,10 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             id <- addVar(t).tap { id => knownVars.put(v, VariableRealization.Reg(id)) }.commit
           yield id
 
-        private def addVar(t: VmType): USTM[RegisterId] =
+        private def addVar(t: VmType, captured: Option[VariableCaptureMode] = None): USTM[RegisterId] =
           for
-            size <- variables.get.map(_.size)
-            id = size + varOffset
-            _ <- variables.update(_ :+ VariableDefinition(t))
+            id <- varOffset.getAndUpdate(_ + 1)
+            _ <- instructions.update(_ :+ Instruction.DeclareVariable(t, captured = captured))
           yield RegisterId(id)
           
         def toBlock: Comp[Block] =
@@ -520,10 +530,8 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           
         def toFunctionBody: Comp[FunctionBody] =
           for
-            vars <- variables.get.commit
             block <- toBlock
           yield FunctionBody(
-            variables = vars,
             block = block,
           )
 
@@ -675,11 +683,13 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               }
 
             case ArExpr.Finally(action, ensuring) =>
-              for
-                (action, res) <- nestedBlock(_.expr(action, output))
-                (ensuring, _) <- nestedBlock(_.expr(ensuring, ExprOutput.Discard))
-                _ <- emit(Instruction.Finally(action, ensuring))
-              yield res
+              knownLocation(e, output) { output =>
+                for
+                  (action, res) <- nestedBlock(_.expr(action, output))
+                  (ensuring, _) <- nestedBlock(_.expr(ensuring, ExprOutput.Discard))
+                  _ <- emit(Instruction.Finally(action, ensuring))
+                yield res
+              }
 
             case ArExpr.FunctionCall(f, args) =>
               functionResult(e, output) { funcResult =>
@@ -705,6 +715,12 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               intoRegister(e, output) { r =>
                 emit(Instruction.ConstInt(r, i))
               }
+
+            case ArExpr.Lambda(param, returnType, body) =>
+              for
+                synIndex <- nextSyntheticIndex.getAndUpdate(_ + 1).commit
+                
+              yield ???
 
             case e @ ArExpr.RecordType(_, _) =>
               intoRegister(e, output) { r =>

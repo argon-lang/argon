@@ -79,7 +79,7 @@ trait ExprContext {
     case Finally(action: Expr, ensuring: Expr)
     case FunctionCall(f: Function, args: Seq[Expr])
     case FunctionObjectCall(f: Expr, a: Expr)
-    case FunctionType(a: Expr, r: Expr)
+    case FunctionType(a: LocalVar, r: Expr)
     case IfElse(
       whenTrueWitness: Option[LocalVar],
       whenFalseWitness: Option[LocalVar],

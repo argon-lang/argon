@@ -57,6 +57,10 @@ private[expr] sealed trait Unification[R, E](fuel: Fuel) {
             case (Expr.Hole(a), _) => unifyHole(a, b)
             case (_, Expr.Hole(b)) => unifyHole(b, a)
 
+            case (Expr.FunctionType(a1, r1), Expr.FunctionType(a2, r2)) =>
+              unify(a1.varType, a2.varType) &&
+                unify(r1, Substitution.substitute(exprContext)(Map(a2 -> Expr.Variable(a1)))(r2))
+
             case _ =>
               autoComparer[Expr].compare(a, b)
           }

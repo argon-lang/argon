@@ -312,7 +312,7 @@ private[loader] trait LoaderUtils extends UsingContext {
 
         case Expr.FunctionType(a, r) =>
           for
-            argExpr <- expr(a)
+            argExpr <- declareVar(a)
             returnExpr <- expr(r)
           yield ArExpr.FunctionType(argExpr, returnExpr)
 

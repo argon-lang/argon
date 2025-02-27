@@ -119,7 +119,7 @@ abstract class ImplicitResolver[R, E] {
 
           case Expr.FunctionType(a, b) =>
             for {
-              a2 <- exprToGoal(a, model, fuel.consume)
+              a2 <- exprToGoal(a.varType, model, fuel.consume)
               b2 <- exprToGoal(b, model, fuel.consume)
             } yield Implies(a2, b2)
 

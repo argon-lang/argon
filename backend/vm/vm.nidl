@@ -177,15 +177,24 @@ enum builtin-type {
 }
 
 @esexpr:(derive-codec)
-record import-specifier {
-    module-id: nat;
+enum import-specifier {
+    @esexpr:(constructor "import-global")
+    global {
+        module-id: nat;
 
-    @esexpr: (keyword)
-    @esexpr: (optional)
-    name: optional-field[identifier];
+        @esexpr: (keyword)
+        @esexpr: (optional)
+        name: optional-field[identifier];
 
-    @esexpr: (keyword)
-    sig: erased-signature;
+        @esexpr: (keyword)
+        sig: erased-signature;
+    },
+
+    @esexpr:(constructor "import-synthetic-nested")
+    synthetic-nested {
+        parent: import-specifier;
+        index: nat;
+    },
 }
 
 
@@ -295,9 +304,6 @@ enum vm-type {
 
 @esexpr:(derive-codec)
 record function-body {
-    @esexpr:(keyword)
-    variables: list[variable-definition];
-
     block: block;
 }
 
@@ -335,6 +341,14 @@ enum instruction {
     const-string {
         dest: register-id;
         value: string;
+    },
+
+    declare-variable {
+        type: vm-type;
+
+        @esexpr:(keyword)
+        @esexpr:(optional)
+        captured: optional-field[variable-capture-mode];
     },
 
     finally {
@@ -420,8 +434,9 @@ enum function-result {
 }
 
 @esexpr:(derive-codec)
-record variable-definition {
-    type: vm-type;
+simple enum variable-capture-mode {
+    copy,
+    reference,
 }
 
 @esexpr:(derive-codec)

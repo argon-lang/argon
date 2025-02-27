@@ -1,5 +1,6 @@
 import type { FunctionInfo, ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel, RecordFieldInfo, RecordInfo, TubeInfo } from "./program-model.js";
 import type { TubeHeader, TubeFileEntry, TubeMetadata, ImportSpecifier } from "@argon-lang/js-backend-api/vm";
+import { getModuleId } from "./util.js";
 
 export interface ElementLookup {
     getById(id: bigint): ElementResult;
@@ -111,12 +112,13 @@ class IrReader {
                 return;
         }
 
-        let moduleBuilder = this.modules.get(importSpec.moduleId);
+        const moduleId = getModuleId(importSpec);
+        let moduleBuilder = this.modules.get(moduleId);
         if(moduleBuilder === undefined) {
             moduleBuilder = {
                 exports: [],
             };
-            this.modules.set(importSpec.moduleId, moduleBuilder);
+            this.modules.set(moduleId, moduleBuilder);
         }
 
         moduleBuilder.exports.push(exportEntry);

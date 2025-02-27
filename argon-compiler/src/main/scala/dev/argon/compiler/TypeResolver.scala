@@ -100,7 +100,9 @@ trait TypeResolver extends UsingContext {
         override def check(t: Expr)(using state: EmitState): Comp[Expr] =
           for
             argType <- makeHole(Expr.AnyType(), loc)
-            funcType = Expr.FunctionType(argType, t)
+            paramId <- UniqueIdentifier.make
+            param = LocalVar(paramId, argType, None, isMutable = false, isErased = false, isProof = false)
+            funcType = Expr.FunctionType(param, t)
             f <- ExprFactory.this.check(funcType)
             arg <- arg.arg.check(argType)
           yield Expr.FunctionObjectCall(f, arg)
@@ -285,6 +287,25 @@ trait TypeResolver extends UsingContext {
           listType = listType,
         ))
 
+      case ast.Expr.FunctionLiteral(parameterName, body) =>
+        new ExprFactory {
+          override def loc: Loc = expr.location
+
+          override def check(t: Expr)(using state: EmitState): Comp[Expr] =
+            for
+              paramType <- makeHole(Expr.AnyType(), loc)
+              paramId <- UniqueIdentifier.make
+              param = LocalVar(paramId, paramType, parameterName, isMutable = false, isErased = false, isProof = false)
+              
+              bodyType <- makeHole(Expr.AnyType(), loc)
+              _ <- checkTypesMatch(loc)(t, Expr.FunctionType(param, bodyType))
+              
+              nestedScope <- Scopes.LocalScope.make(state.scope)
+              _ <- nestedScope.addVariable(param)
+              body <- resolveExpr(body).check(bodyType)(using state.copy(scope = nestedScope))
+            yield Expr.Lambda(param, bodyType, body)
+        }
+
       case ast.Expr.FunctionType(a, r) =>
         new InferFactory {
           override def loc: Loc = expr.location
@@ -292,7 +313,9 @@ trait TypeResolver extends UsingContext {
             for
               a <- resolveType(a)
               r <- resolveType(r)
-            yield InferredExpr(Expr.FunctionType(a, r), Expr.TypeN(Expr.IntLiteral(0))) // TODO: Infer proper level
+              paramId <- UniqueIdentifier.make
+              param = LocalVar(paramId, a, None, isMutable = false, isErased = false, isProof = false)
+            yield InferredExpr(Expr.FunctionType(param, r), Expr.TypeN(Expr.IntLiteral(0))) // TODO: Infer proper level
         }
 
       case id: IdentifierExpr =>
@@ -435,7 +458,7 @@ trait TypeResolver extends UsingContext {
           ))
 
       case _ =>
-        println(expr.value.getClass)
+        println("Unimplemented AST Expression type: " + expr.value.getClass)
         ???
     }
 
@@ -811,7 +834,7 @@ trait TypeResolver extends UsingContext {
                       for
                         bodyType <- makeHole(Expr.AnyType(), loc)
                         body <- bodyFactory.check(bodyType)
-                        _ <- checkTypesMatch(loc)(t, Expr.FunctionType(param.varType, bodyType))
+                        _ <- checkTypesMatch(loc)(t, Expr.FunctionType(param, bodyType))
                       yield Expr.Lambda(param, bodyType, body)
                   }
                 }
@@ -1169,7 +1192,7 @@ trait TypeResolver extends UsingContext {
                       ir.Assertion(witness, assertionType) <- buildCall(sig.copy(parameters = tailParams).substituteVar(variable, loadLocal), args :+ loadLocal)
                     yield ir.Assertion(
                       witness = Expr.Lambda(local, assertionType, witness),
-                      assertionType = Expr.FunctionType(paramType, assertionType),
+                      assertionType = Expr.FunctionType(local, assertionType),
                     )
 
                   case (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.NormalList, _, _, _, _)) :: tailParams => ???

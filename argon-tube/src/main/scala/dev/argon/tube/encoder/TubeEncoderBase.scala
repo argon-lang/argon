@@ -23,12 +23,13 @@ trait TubeEncoderBase[Entry] {
     protected[TubeEncoderBase] lazy val emitter: Emitter
     
     def emitEntryBuilder(entry: Comp[Entry]): UIO[Unit]
-    def assignTubeId(tubeName: c.TubeName, id: Int): UIO[Unit]
-    def assignModuleId(moduleName: c.ModuleName, id: Int): UIO[Unit]
+    def assignTubeId(tubeName: c.TubeName, id: BigInt): UIO[Unit]
+    def assignModuleId(moduleName: c.ModuleName, id: BigInt): UIO[Unit]
 
     def getTubeId(tubeName: c.TubeName): UIO[BigInt]
     def getModuleId(moduleName: c.ModuleName): UIO[BigInt]
     def getFunctionId(func: ArFunc): UIO[BigInt]
+    def newSyntheticFunctionId: UIO[BigInt]
     def getRecordId(rec: ArRecord): UIO[BigInt]
     def getRecordFieldId(field: RecordField): UIO[BigInt]
 
@@ -50,31 +51,37 @@ trait TubeEncoderBase[Entry] {
     val ctx: context.type = context
     val tube2: tube.type = tube
 
-    class IdManager[A](mapping: TMap[A, Int])(using CanEqual[A, A]) {
-      def assignId(value: A, id: Int): UIO[Unit] =
-        mapping.put(value, id).commit
+    class IdManager[A](nextId: TRef[BigInt], mapping: TMap[A, BigInt])(using CanEqual[A, A]) {
+      def assignId(value: A, id: BigInt): UIO[Unit] =
+        (mapping.put(value, id) *> nextId.update(_.max(id + 1))).commit
       
       def getIdWith(value: A)(entryBuilderQueue: TEnqueue[context.Comp[Entry]])(emit: (A, BigInt) => context.Comp[Entry]): UIO[BigInt] =
         mapping.get(value).flatMap {
           case Some(id) => ZSTM.succeed(id : BigInt)
           case none =>
             for
-              id <- mapping.size
+              id <- claimId
               _ <- mapping.put(value, id)
               _ <- entryBuilderQueue.offer(emit(value, id))
-            yield id : BigInt
+            yield id
 
         }.commit
 
       def getIdOrFail(value: A): UIO[BigInt] =
-        mapping.get(value).map { id => id.get : BigInt }.commit
+        mapping.get(value).map { id => id.get }.commit
+
+      def claimId: USTM[BigInt] =
+        nextId.getAndUpdate(_ + 1)
 
     }
 
     def createIdManager[A](using CanEqual[A, A]): UIO[IdManager[A]] =
-      for
-        mapping <- TMap.empty[A, Int].commit
-      yield IdManager(mapping)
+      (
+        for
+          nextId <- TRef.make[BigInt](0)
+          mapping <- TMap.empty[A, BigInt]
+        yield IdManager(nextId, mapping)
+      ).commit
 
 
     ZStream.unwrap(
@@ -97,10 +104,10 @@ trait TubeEncoderBase[Entry] {
           override def emitEntryBuilder(entry: context.Comp[Entry]): UIO[Unit] =
             entryBuilders.offer(entry).commit.unit
 
-          override def assignTubeId(tubeName: c.TubeName, id: Int): UIO[Unit] =
+          override def assignTubeId(tubeName: c.TubeName, id: BigInt): UIO[Unit] =
             tubeIds.assignId(tubeName, id)
 
-          override def assignModuleId(moduleName: c.ModuleName, id: Int): UIO[Unit] =
+          override def assignModuleId(moduleName: c.ModuleName, id: BigInt): UIO[Unit] =
             moduleIds.assignId(moduleName, id)
 
           override def getTubeId(tubeName: c.TubeName): UIO[BigInt] =
@@ -111,6 +118,9 @@ trait TubeEncoderBase[Entry] {
 
           override def getFunctionId(func: ArFunc): UIO[BigInt] =
             functionIds.getIdWith(func)(entryBuilders)(emitter.emitFunction)
+
+          override def newSyntheticFunctionId: UIO[BigInt] =
+            functionIds.claimId.commit
 
           override def getRecordId(rec: ArRecord): UIO[BigInt] =
             recordIds.getIdWith(rec)(entryBuilders)(emitter.emitRecord)

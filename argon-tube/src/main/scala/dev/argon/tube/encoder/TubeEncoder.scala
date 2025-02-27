@@ -508,9 +508,9 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
             case ArExpr.FunctionType(a, r) =>
               for
-                a <- expr(a)
+                a <- declareVar(a)
                 r <- expr(r)
-              yield Expr.FunctionObjectCall(a, r)
+              yield Expr.FunctionType(a, r)
 
             case ifElse: ArExpr.IfElse =>
               for

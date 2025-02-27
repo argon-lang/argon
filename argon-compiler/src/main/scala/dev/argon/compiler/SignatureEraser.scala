@@ -34,7 +34,7 @@ sealed trait SignatureEraser extends UsingContext {
 
       case Expr.FunctionType(a, b) =>
         for
-          a <- getErasedType(a)
+          a <- getErasedType(a.varType)
           b <- getErasedType(b)
         yield ErasedSignatureType.Function(a, b)
 

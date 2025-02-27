@@ -1,9 +1,9 @@
 import type { ModuleExportEntry, ModuleInfo, ModuleModel, ProgramModel } from "./program-model.js";
-import { encodeTubePathComponent, ensureExhaustive, getModulePathExternalUrl, getModulePathUrl, modulePathEquals, tubePackageName, urlEncodeIdentifier } from "./util.js"
+import { encodeTubePathComponent, ensureExhaustive, getModuleId, getModulePathExternalUrl, getModulePathUrl, modulePathEquals, tubePackageName, urlEncodeIdentifier } from "./util.js"
 
 import type * as estree from "estree";
 import type * as ir from "@argon-lang/js-backend-api/vm";
-import type { Identifier } from "@argon-lang/js-backend-api/vm";
+import { Identifier } from "@argon-lang/js-backend-api/vm";
 import type { IterableElement, ReadonlyDeep } from "type-fest";
 import { ExternFunction } from "./platform-data.js";
 import type { ImportHandler } from "./imports.js";
@@ -27,11 +27,12 @@ class EmitterBase {
     /*
         Name encoding
 
-        Import Specifier
-        Tube$dName$sModule$sName$s<name><sig>
+        Full Export Name (used to reference types in signatures)
+        Tube$dName$sModule$sName$s<export name>
 
-        Name + Sig
-        <name>$a<args>$r<result>$e
+        Export Name (identifier exported from module)
+        global           - <name>$a<args>$r<result>$e
+        synthetic nested - <parent>$k<index>
 
         Identifier
         <none>    - $_
@@ -46,15 +47,17 @@ class EmitterBase {
         Erased signature types
         builtin  - $z<int|bool|...>$a<args>$e
         function - $f<arg>$r<result>$e
-        record   - $r<import>$a<args>$e
+        record   - $r<full export name>$a<args>$e
         tuple    - $t<items>$e
         erased   - $_
 
     */
 
 
-    protected getExportNameForImportSpecifier(importSpec: ir.ImportSpecifier): string {
-        const moduleInfo = this.options.program.getModuleInfo(importSpec.moduleId);
+    protected getFullExportName(importSpec: ir.ImportSpecifier): string {
+        const moduleId = getModuleId(importSpec);
+
+        const moduleInfo = this.options.program.getModuleInfo(moduleId);
         const tubeInfo = this.options.program.getTubeInfo(moduleInfo.tubeId);
         
         const tubePart = [ tubeInfo.tubeName.head, ...tubeInfo.tubeName.tail ]
@@ -65,13 +68,19 @@ class EmitterBase {
             .map(s => this.getExportNameForId({ $type: "named", s }) + "$s")
             .join("");
 
-        return tubePart + "$s" + modulePart + this.getExportNameForIdSig(importSpec);
+        return tubePart + "$s" + modulePart + this.getExportNameForImport(importSpec);
     }
 
-    protected getExportNameForIdSig(importSpec: Pick<ir.ImportSpecifier, "name" | "sig">): string {
-        return this.getExportNameForId(importSpec.name) +
-            "$a" + importSpec.sig.params.map(arg => this.getExportNameForType(arg)).join("") +
-            "$r" + this.getExportNameForType(importSpec.sig.result);
+    protected getExportNameForImport(importSpec: ir.ImportSpecifier): string {
+        switch(importSpec.$type) {
+            case "global":
+                return this.getExportNameForId(importSpec.name) +
+                    "$a" + importSpec.sig.params.map(arg => this.getExportNameForType(arg)).join("") +
+                    "$r" + this.getExportNameForType(importSpec.sig.result);
+
+            case "synthetic-nested":
+                return this.getExportNameForImport(importSpec.parent) + "$k" + importSpec.index;
+        }
     }
 
     protected getExportNameForId(id: Identifier | undefined): string {
@@ -113,7 +122,7 @@ class EmitterBase {
                 return "$f" + this.getExportNameForType(t.input) + "$r" + this.getExportNameForType(t.output) + "$e";
 
             case "record":
-                return "$r" + this.getExportNameForImportSpecifier(t.recordImport) +
+                return "$r" + this.getFullExportName(t.recordImport) +
                     "$a" + t.args.map(arg => this.getExportNameForType(arg)).join("") +
                     "$e";
 
@@ -124,6 +133,22 @@ class EmitterBase {
             case "erased":
                 return "$_";
         }
+    }
+
+
+
+    protected getReg(r: ir.RegisterId): estree.Identifier {
+        return {
+            type: "Identifier",
+            name: `r${r.id}`,
+        };
+    }
+
+    protected getTypeParam(index: bigint): estree.Identifier {
+        return {
+            type: "Identifier",
+            name: `t${index}`,
+        };
     }
 }
 
@@ -259,10 +284,11 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         }
     }
 
-    private getImportExpr(importSpec: ir.ImportSpecifier): estree.Expression {
-        const exportName = this.getExportNameForIdSig(importSpec);
+    getImportExpr(importSpec: ir.ImportSpecifier): estree.Expression {
+        const moduleId = getModuleId(importSpec);
+        const exportName = this.getExportNameForImport(importSpec);
 
-        const moduleInfo = this.options.program.getModuleInfo(importSpec.moduleId);
+        const moduleInfo = this.options.program.getModuleInfo(moduleId);
         if(moduleInfo.tubeId === 0n && modulePathEquals(moduleInfo.path, this.module.path)) {
             return {
                 type: "Identifier",
@@ -327,15 +353,17 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                     });
                 }
 
+                const blockEmitter = new BlockEmitter(this, func.signature.parameters.length);
+                blockEmitter.emitBlock(func.implementation.body.block);
 
                 this.addDeclaration({
                     type: "FunctionDeclaration",
                     id: {
                         type: "Identifier",
-                        name: this.getExportNameForIdSig(func.import),
+                        name: this.getExportNameForImport(func.import),
                     },
                     params: params,
-                    body: this.emitFunctionBody(func.implementation.body, func.signature.parameters.length),
+                    body: blockEmitter.toBlock(),
                 });
                 break;
             }
@@ -359,7 +387,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                             type: "VariableDeclarator",
                             id: {
                                 type: "Identifier",
-                                name: this.getExportNameForIdSig(func.import),
+                                name: this.getExportNameForImport(func.import),
                             },
                             init: funcExpr,
                         }
@@ -374,7 +402,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
 
     private emitRecord(rec: ir.RecordDefinition): void {
 
-        const name = this.getExportNameForIdSig(rec.import);
+        const name = this.getExportNameForImport(rec.import);
         const params: estree.Pattern[] = [];
         const body: estree.Statement[] = [];
 
@@ -457,51 +485,39 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             },
         });
     }
+}
 
-
-    private emitFunctionBody(body: ir.FunctionBody, varOffset: number): estree.BlockStatement {
-        const stmts: estree.Statement[] = [];
-
-        for(let i = 0; i < body.variables.length; ++i) {
-            stmts.push({
-                type: "VariableDeclaration",
-                kind: "let",
-                declarations: [
-                    {
-                        type: "VariableDeclarator",
-                        id: {
-                            type: "Identifier",
-                            name: `r${i + varOffset}`,
-                        },
-                    },
-                ],
-            });
-        }
-
-        this.emitBlockWith(body.block, stmts);
-
-        return {
-            type: "BlockStatement",
-            body: stmts,
-        }
+class BlockEmitter extends EmitterBase {
+    constructor(
+        private moduleEmitter: ModuleEmitter,
+        private varOffset: number,
+    ) {
+        super(moduleEmitter.options);
     }
 
-    private emitBlockWith(block: ir.Block, stmts: estree.Statement[]): void {
+    readonly stmts: estree.Statement[] = [];
+
+    private emitNestedBlock(block: ir.Block): estree.BlockStatement {
+        const nestedEmitter = new BlockEmitter(this.moduleEmitter, this.varOffset);
+        nestedEmitter.emitBlock(block);
+        return nestedEmitter.toBlock();
+    }
+
+    emitBlock(block: ir.Block): void {
         for(const insn of block.instructions) {
-            this.emitInstruction(insn, stmts);
+            this.emitInstruction(insn);
         }
     }
 
-    private emitBlock(block: ir.Block): estree.BlockStatement {
-        const stmts: estree.Statement[] = [];
-        this.emitBlockWith(block, stmts);
+    toBlock(): estree.BlockStatement {
         return {
             type: "BlockStatement",
-            body: stmts,
+            body: this.stmts,
         };
     }
 
-    private emitInstruction(insn: ir.Instruction, stmts: estree.Statement[]): void {
+    private emitInstruction(insn: ir.Instruction): void {
+        const stmts = this.stmts;
 
         const assign = (dest: ir.RegisterId, value: estree.Expression) => {
             stmts.push({
@@ -641,12 +657,29 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 });
                 break;
 
+            case "declare-variable":
+                stmts.push({
+                    type: "VariableDeclaration",
+                    kind: "let",
+                    declarations: [
+                        {
+                            type: "VariableDeclarator",
+                            id: {
+                                type: "Identifier",
+                                name: `r${this.varOffset}`,
+                            }
+                        }
+                    ],
+                });
+                ++this.varOffset;
+                break;
+
             case "finally":
             {
                 stmts.push({
                     type: "TryStatement",
-                    block: this.emitBlock(insn.action),
-                    finalizer: this.emitBlock(insn.ensuring),
+                    block: this.emitNestedBlock(insn.action),
+                    finalizer: this.emitNestedBlock(insn.ensuring),
                 });
                 break;
             }
@@ -654,7 +687,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             case "function-call":
             {
                 const functionInfo = this.options.program.getFunctionInfo(insn.functionId);
-                const funcExpr = this.getImportExpr(functionInfo.importSpecifier);
+                const funcExpr = this.moduleEmitter.getImportExpr(functionInfo.importSpecifier);
 
                 const args: estree.Expression[] = [];
                 for(const typeArg of insn.typeArgs) {
@@ -709,8 +742,8 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                 stmts.push({
                     type: "IfStatement",
                     test: this.getReg(insn.condition),
-                    consequent: this.emitBlock(insn.whenTrue),
-                    alternate: this.emitBlock(insn.whenFalse),
+                    consequent: this.emitNestedBlock(insn.whenTrue),
+                    alternate: this.emitNestedBlock(insn.whenFalse),
                 });
                 break;
 
@@ -845,7 +878,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             {
                 const rec = this.options.program.getRecordInfo(t.recordId);
                 if(t.args.length === 0) {
-                    return this.getImportExpr(rec.importSpecifier);
+                    return this.moduleEmitter.getImportExpr(rec.importSpecifier);
                 }
 
                 return {
@@ -855,7 +888,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                         type: "MemberExpression",
                         computed: false,
                         optional: false,
-                        object: this.getImportExpr(rec.importSpecifier),
+                        object: this.moduleEmitter.getImportExpr(rec.importSpecifier),
                         property: {
                             type: "Identifier",
                             name: "specialize",
@@ -883,20 +916,6 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
             case "erased":
                 throw new Error("Cannot get type info for erased");
         }
-    }
-
-    private getReg(r: ir.RegisterId): estree.Identifier {
-        return {
-            type: "Identifier",
-            name: `r${r.id}`,
-        };
-    }
-
-    private getTypeParam(index: bigint): estree.Identifier {
-        return {
-            type: "Identifier",
-            name: `t${index}`,
-        };
     }
 }
 
