@@ -2,7 +2,7 @@ import * as astring from "astring";
 import * as acorn from "acorn";
 import type * as estree from "estree";
 import { ExternLoader } from "./externs.js";
-import { TubeEmitter, type EmitOptions, type OutputModuleInfo } from "./emitter.js";
+import { emitTube, type EmitOptions, type OutputModuleInfo } from "./emitter.js";
 import { readIR } from "./ir-reader.js";
 import type { ESExpr, Option } from "@argon-lang/esexpr";
 import { getModuleOutputFileParts, getModulePathExternalUrl, getModulePathUrl, tubePackageName } from "./util.js";
@@ -85,9 +85,7 @@ async function loadEmitOptions<E>(input: CodegenInput<E>): Promise<EmitOptions> 
 }
 
 async function* emitModules<E>(options: EmitOptions): AsyncIterable<backendApi.DirectoryEntry<JSModuleResource<E>>> {
-    const tubeEmitter = new TubeEmitter(options);
-    
-    for(const outputModule of tubeEmitter.emit()) {
+    for(const outputModule of emitTube(options)) {
         const outputFileParts = getModuleOutputFileParts(outputModule.modulePath);
 
         yield {

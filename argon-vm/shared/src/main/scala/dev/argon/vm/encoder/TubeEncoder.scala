@@ -9,7 +9,7 @@ import zio.stream.*
 import zio.stm.{TMap, TRef, TSet, USTM, ZSTM}
 import dev.argon.ast
 import dev.argon.compiler.{ArgonEvaluator, HasContext, SignatureEraser}
-import dev.argon.expr.{BinaryBuiltin, NullaryBuiltin, UnaryBuiltin, CaptureScanner}
+import dev.argon.expr.{BinaryBuiltin, CaptureScanner, FreeVariableScanner, NullaryBuiltin, UnaryBuiltin}
 
 
 private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFileEntry] {
@@ -241,6 +241,18 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           )
         )
 
+      private def emitSyntheticFunctionDef(sig: FunctionSignatureWithMapping, id: BigInt, importSpec: ImportSpecifier, body: ArExpr): Comp[TubeFileEntry] =
+        for
+          block <- emitFunctionBody(body, sig, importSpec)
+        yield TubeFileEntry.FunctionDefinition(
+          FunctionDefinition(
+            functionId = id,
+            `import` = importSpec,
+            signature = sig.sig,
+            implementation = Some(FunctionImplementation.VmIr(block)),
+          )
+        )
+
       private def emitFunctionRef(id: BigInt)(specifier: ImportSpecifier): Comp[TubeFileEntry] =
         ZIO.succeed(TubeFileEntry.FunctionReference(
           functionId = id,
@@ -295,81 +307,118 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           name = encodeIdentifier(field.name),
         )
 
-      final case class FunctionSignatureWithMapping(
+      private final case class FunctionSignatureWithMapping(
         sig: dev.argon.vm.FunctionSignature,
-        paramVarMapping: Map[context.DefaultExprContext.ParameterVar, Int],
-        typeParamMapping: Map[context.DefaultExprContext.ParameterVar, Int],
+        argConsumers: Seq[ArgConsumer],
+        typeParamMapping: Map[context.DefaultExprContext.Var, Int],
+        paramVarMapping: Map[context.DefaultExprContext.Var, Int],
       )
 
-      private def emitFunctionSignature(paramOwner: context.DefaultExprContext.ParameterOwner, sig: FunctionSignature): Comp[FunctionSignatureWithMapping] =
-        def typeEmitter(typeParamMapping: TMap[context.DefaultExprContext.ParameterVar, Int]): USTM[TypeEmitter] =
+
+      private final class FunctionSignatureBuilder private(
+        typeParams: TRef[Seq[dev.argon.vm.SignatureTypeParameter]],
+        params: TRef[Seq[dev.argon.vm.SignatureParameter]],
+
+        argConsumers: TRef[Seq[ArgConsumer]],
+
+        typeParamMapping: TMap[context.DefaultExprContext.Var, Int],
+        paramVarMapping: TMap[context.DefaultExprContext.Var, Int],
+      ) {
+
+
+
+        private def typeEmitter: UIO[TypeEmitter] =
+          (
+            for
+              tpm <- typeParamMapping.toMap
+            yield TypeEmitter.fromIndexMap(tpm)
+          ).commit
+
+        def addParameter(v: context.DefaultExprContext.Var): Comp[Unit] =
+          if v.isErased then
+            argConsumers.update(_ :+ ArgConsumer.Erased).commit
+          else if isTypeType(v.varType) then
+            val tp = dev.argon.vm.SignatureTypeParameter(
+              name = v.name.map(encodeIdentifier),
+            )
+
+            (
+              for
+                size <- typeParams.modify(tps => (tps.size, tps :+ tp))
+                _ <- typeParamMapping.put(v, size)
+                _ <- argConsumers.update(_ :+ ArgConsumer.TypeArg)
+              yield ()
+            ).commit
+          else
+            def putParam(sigParam: dev.argon.vm.SignatureParameter): USTM[Unit] =
+              for
+                size <- params.modify(params => (params.size, params :+ sigParam))
+                _ <- paramVarMapping.put(v, size)
+                _ <- argConsumers.update(_ :+ ArgConsumer.Arg)
+              yield ()
+
+            for
+              te <- typeEmitter
+
+              t <- te.typeExpr(v.varType)
+              sigParam = dev.argon.vm.SignatureParameter(
+                name = v.name.map(encodeIdentifier),
+                paramType = t,
+              )
+              _ <- putParam(sigParam).commit
+
+            yield ()
+          end if
+
+        def finish(returnType: ArExpr): Comp[FunctionSignatureWithMapping] =
           for
-            tpm <- typeParamMapping.toMap
-          yield TypeEmitter.fromIndexMap(tpm)
+            returnType <- typeEmitter.flatMap(_.typeExpr(returnType))
 
-        for
-          typeParams <- TRef.make(Seq.empty[dev.argon.vm.SignatureTypeParameter]).commit
-          params <- TRef.make(Seq.empty[dev.argon.vm.SignatureParameter]).commit
-          paramVarMapping <- TMap.empty[context.DefaultExprContext.ParameterVar, Int].commit
-          typeParamMapping <- TMap.empty[context.DefaultExprContext.ParameterVar, Int].commit
-          erasedParams <- TSet.empty[context.DefaultExprContext.ParameterVar].commit
+            typeParams <- typeParams.get.commit
+            params <- params.get.commit
+            argConsumers <- argConsumers.get.commit
+            paramVarMapping <- paramVarMapping.toMap.commit
+            typeParamMapping <- typeParamMapping.toMap.commit
+          yield FunctionSignatureWithMapping(
+            sig = dev.argon.vm.FunctionSignature(
+              typeParameters = typeParams,
+              parameters = params,
+              returnType = returnType,
+            ),
+            argConsumers = argConsumers,
+            typeParamMapping = typeParamMapping,
+            paramVarMapping = paramVarMapping,
+          )
+      }
 
-          _ <- ZIO.foreachDiscard(sig.parameters.view.zipWithIndex) { (param, origIndex) =>
-            if param.isErased then
-              ZIO.unit
-            else
+      private object FunctionSignatureBuilder {
+        def make: UIO[FunctionSignatureBuilder] =
+          for
+            typeParams <- TRef.make(Seq.empty[dev.argon.vm.SignatureTypeParameter]).commit
+            params <- TRef.make(Seq.empty[dev.argon.vm.SignatureParameter]).commit
+
+            argConsumers <- TRef.make(Seq.empty[ArgConsumer]).commit
+
+            paramVarMapping <- TMap.empty[context.DefaultExprContext.Var, Int].commit
+            typeParamMapping <- TMap.empty[context.DefaultExprContext.Var, Int].commit
+          yield FunctionSignatureBuilder(typeParams, params, argConsumers, paramVarMapping, typeParamMapping)
+      }
+
+      private enum ArgConsumer derives CanEqual {
+        case Erased
+        case TypeArg
+        case Arg
+      }
+
+      private def emitFunctionSignature(paramOwner: context.DefaultExprContext.ParameterOwner, sig: FunctionSignature): Comp[FunctionSignatureWithMapping] =
+        FunctionSignatureBuilder.make
+          .tap { sb =>
+            ZIO.foreachDiscard(sig.parameters.view.zipWithIndex) { (param, origIndex) =>
               val paramVar = param.asParameterVar(paramOwner, origIndex)
-              param.paramType match {
-                case context.DefaultExprContext.Expr.TypeN(_) | context.DefaultExprContext.Expr.TypeBigN(_) =>
-                  val tp = dev.argon.vm.SignatureTypeParameter(
-                    name = param.name.map(encodeIdentifier),
-                  )
-
-                  (
-                    for
-                      size <- typeParams.modify(tps => (tps.size, tps :+ tp))
-                      _ <- typeParamMapping.put(paramVar, size)
-                    yield ()
-                  ).commit
-
-                case _ =>
-
-                  def putParam(sigParam: dev.argon.vm.SignatureParameter): USTM[Unit] =
-                    for
-                      size <- params.modify(params => (params.size, params :+ sigParam))
-                      _ <- paramVarMapping.put(paramVar, size)
-                    yield ()
-
-
-                  for
-                    te <- typeEmitter(typeParamMapping).commit
-
-                    t <- te.typeExpr(param.paramType)
-                    sigParam = dev.argon.vm.SignatureParameter(
-                      name = param.name.map(encodeIdentifier),
-                      paramType = t,
-                    )
-                    _ <- putParam(sigParam).commit
-
-                  yield ()
-              }
-            end if
+              sb.addParameter(paramVar)
+            }
           }
-          returnType <- typeEmitter(typeParamMapping).commit.flatMap(_.typeExpr(sig.returnType))
-
-          typeParams <- typeParams.get.commit
-          params <- params.get.commit
-          paramVarMapping <- paramVarMapping.toMap.commit
-          typeParamMapping <- typeParamMapping.toMap.commit
-        yield FunctionSignatureWithMapping(
-          sig = dev.argon.vm.FunctionSignature(
-            typeParameters = typeParams,
-            parameters = params,
-            returnType = returnType,
-          ),
-          paramVarMapping = paramVarMapping,
-          typeParamMapping = typeParamMapping,
-        )
+          .flatMap { sb => sb.finish(sig.returnType) }
 
       enum VariableRealization {
         case Reg(register: RegisterId)
@@ -385,7 +434,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           ).commit
           instructions <- TRef.make(Seq.empty[Instruction]).commit
           nextSyntheticIndex <- TRef.makeCommit[BigInt](0)
-          
+
           capturedVars = CaptureScanner(context.DefaultExprContext)(e)
 
           emitter = ExprEmitter(
@@ -401,6 +450,13 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           res <- emitter.toFunctionBody
         yield res
       end emitFunctionBody
+
+
+      private def isTypeType(t: ArExpr): Boolean =
+        t match {
+          case context.DefaultExprContext.Expr.TypeN(_) | context.DefaultExprContext.Expr.TypeBigN(_) => true
+          case _ => false
+        }
 
       private sealed trait ExprOutput derives CanEqual {
         type ResultType
@@ -435,6 +491,17 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   case NullaryBuiltin.NeverType => VmType.Builtin(BuiltinType.Never(), Seq())
                 }
               )
+
+            case ArExpr.FunctionType(a, r) if a.isErased =>
+              for
+                r <- typeExpr(r)
+              yield VmType.FunctionErased(r)
+
+            case ArExpr.FunctionType(a, r) =>
+              for
+                a <- typeExpr(a.varType)
+                r <- typeExpr(r)
+              yield VmType.Function(a, r)
 
             case ArExpr.RecordType(rec, args) =>
               for
@@ -475,7 +542,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
       }
 
       private object TypeEmitter {
-        def fromIndexMap(typeParams: Map[context.DefaultExprContext.ParameterVar, Int]): TypeEmitter =
+        def fromIndexMap(typeParams: Map[context.DefaultExprContext.Var, Int]): TypeEmitter =
           TypeEmitter(typeParams.view.mapValues(i => VmType.TypeParameter(i)).toMap)
       }
 
@@ -486,7 +553,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
         importSpecifier: ImportSpecifier,
         nextSyntheticIndex: TRef[BigInt],
         capturedVars: Set[context.DefaultExprContext.Var],
-      ) extends TypeEmitterBase {        
+      ) extends TypeEmitterBase {
         private def nestedScope: Comp[ExprEmitter] =
           for
             currentVarOffset <- varOffset.get.commit
@@ -696,9 +763,37 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                 for
                   id <- getFunctionId(f)
                   sig <- f.signature
-                  funcArgs <- emitArguments(sig.parameters, args)
+                  funcArgs <- emitArguments(context.DefaultExprContext.ParameterOwner.Func(f), sig, args)
                   _ <- emit(Instruction.FunctionCall(id, funcResult, funcArgs.typeArguments, funcArgs.arguments))
                 yield ()
+              }
+
+            case ArExpr.FunctionObjectCall(f, a) =>
+              functionResult(e, output) { funcResult =>
+                getExprType(f).flatMap {
+                  case ArExpr.FunctionType(v, r) if v.isErased =>
+                    for
+                      func <- expr(f, ExprOutput.AnyRegister)
+                      _ <- emit(Instruction.FunctionObjectErasedCall(funcResult, func))
+                    yield ()
+
+                  case ArExpr.FunctionType(v, r) if isTypeType(v.varType) =>
+                    for
+                      func <- expr(f, ExprOutput.AnyRegister)
+                      a <- typeExpr(a)
+                      _ <- emit(Instruction.FunctionObjectTypeCall(funcResult, func, a))
+                    yield ()
+
+                  case ArExpr.FunctionType(v, r) =>
+                    for
+                      func <- expr(f, ExprOutput.AnyRegister)
+                      a <- expr(a, ExprOutput.AnyRegister)
+                      _ <- emit(Instruction.FunctionObjectCall(funcResult, func, a))
+                    yield ()
+
+                  case _ =>
+                    ZIO.die(RuntimeException("Invalid type for lambda expression"))
+                }
               }
 
             case ifElse: ArExpr.IfElse =>
@@ -717,10 +812,74 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
               }
 
             case ArExpr.Lambda(param, returnType, body) =>
-              for
-                synIndex <- nextSyntheticIndex.getAndUpdate(_ + 1).commit
-                
-              yield ???
+              import context.DefaultExprContext.Var
+
+              def captureVariables(vars: Seq[Var]): Comp[(Seq[VmType], Seq[Capture], FunctionSignatureWithMapping)] =
+                FunctionSignatureBuilder.make
+                  .tap { sb =>
+                    ZIO.foreachDiscard(vars)(sb.addParameter) *>
+                      sb.addParameter(param)
+                  }
+                  .flatMap { sb =>
+                    for
+                      sig <- sb.finish(returnType)
+                      typeArgs <- Ref.make(Seq.empty[VmType])
+                      args <- Ref.make(Seq.empty[Capture])
+
+                      // Not including param here because itis not a capture
+                      _ <- ZIO.foreachDiscard(sig.argConsumers.zip(vars)) {
+                        case (ArgConsumer.Erased, _) => ZIO.unit
+                        case (ArgConsumer.TypeArg, v) =>
+                          knownVars.get(v).commit.flatMap {
+                            case Some(VariableRealization.TypeParam(tp)) =>
+                              typeArgs.update(_ :+ tp)
+
+                            case _ =>
+                              ZIO.fail(TubeFormatException("Capture type mismatch"))
+                          }
+
+                        case (ArgConsumer.Arg, v) =>
+                          knownVars.get(v).commit.flatMap {
+                            case Some(VariableRealization.Reg(r)) =>
+                              val capture =
+                                if v.isMutable then
+                                  Capture.Mutable(r)
+                                else
+                                  Capture.Value(r)
+
+                              args.update(_ :+ capture)
+
+                            case _ =>
+                              ZIO.fail(TubeFormatException("Capture type mismatch"))
+                          }
+
+                      }
+
+                      typeArgs <- typeArgs.get
+                      args <- args.get
+                    yield (typeArgs, args, sig)
+                  }
+
+              intoRegister(e, output) { r =>
+                for
+                  synIndex <- nextSyntheticIndex.getAndUpdate(_ + 1).commit
+                  synId <- newSyntheticFunctionId
+                  freeVars = FreeVariableScanner(context.DefaultExprContext)(e).toSeq
+                  (typeArgs, args, sig) <- captureVariables(freeVars)
+                  synImportSpec = ImportSpecifier.SyntheticNested(importSpecifier, synIndex)
+
+                  _ <- state.emitEntryBuilder(emitSyntheticFunctionDef(sig, synId, synImportSpec, body))
+                  _ <-
+                    if param.isErased then
+                      emit(Instruction.PartiallyAppliedFunctionErased(synId, r, typeArgs, args))
+                    else if isTypeType(param.varType) then
+                      emit(Instruction.PartiallyAppliedTypeFunction(synId, r, typeArgs, args))
+                    else
+                      emit(Instruction.PartiallyAppliedFunction(synId, r, typeArgs, args))
+
+
+                yield ()
+              }
 
             case e @ ArExpr.RecordType(_, _) =>
               intoRegister(e, output) { r =>
@@ -804,7 +963,8 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   }
 
                 case None =>
-                  ZIO.fail(TubeFormatException("Could not get index for variable"))
+                  knownVars.toMap.commit.flatMap(kv => ZIO.succeed { println(kv) }) *>
+                  ZIO.fail(TubeFormatException("Could not get index for variable: " + v))
               }
 
             case ArExpr.VariableStore(v, value) =>
@@ -843,26 +1003,26 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
           arguments: Seq[RegisterId],
         )
 
-        private def emitArguments(params: Seq[SignatureParameter], args: Seq[ArExpr]): Comp[FunctionArguments] =
+        private def emitArguments(owner: context.DefaultExprContext.ParameterOwner, sig: FunctionSignature, args: Seq[ArExpr]): Comp[FunctionArguments] =
           for
             typeArgs <- TRef.make(Seq.empty[VmType]).commit
             argRegs <- TRef.make(Seq.empty[RegisterId]).commit
 
-            _ <- ZIO.foreachDiscard(params.view.zip(args)) { (param, arg) =>
-              if param.isErased then
-                ZIO.unit
-              else
-                param.paramType match {
-                  case context.DefaultExprContext.Expr.TypeN(_) | context.DefaultExprContext.Expr.TypeBigN(_) =>
-                    typeExpr(arg).flatMap { typeArg =>
-                      typeArgs.update(_ :+ typeArg).commit
-                    }
+            sigWithMapping <- emitFunctionSignature(owner, sig)
 
-                  case _ =>
-                    expr(arg, ExprOutput.AnyRegister).flatMap { r =>
-                      argRegs.update(_ :+ r).commit
-                    }
-                }
+            _ <- ZIO.foreachDiscard(sigWithMapping.argConsumers.view.zip(args)) { (consumer, arg) =>
+              consumer match {
+                case ArgConsumer.Erased => ZIO.unit
+                case ArgConsumer.TypeArg =>
+                  typeExpr(arg).flatMap { typeArg =>
+                    typeArgs.update(_ :+ typeArg).commit
+                  }
+
+                case ArgConsumer.Arg =>
+                  expr(arg, ExprOutput.AnyRegister).flatMap { r =>
+                    argRegs.update(_ :+ r).commit
+                  }
+              }
             }
 
             typeArgs <- typeArgs.get.commit

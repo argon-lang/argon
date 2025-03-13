@@ -285,6 +285,9 @@ enum vm-type {
         input: vm-type;
         output: vm-type;
     },
+    function-erased {
+        output: vm-type;
+    },
     record {
         record-id: nat;
         args: list[vm-type];
@@ -364,6 +367,23 @@ enum instruction {
         args: list[register-id];
     },
 
+    function-object-call {
+        dest: function-result;
+        function: register-id;
+        arg: register-id;
+    },
+
+    function-object-type-call {
+        dest: function-result;
+        function: register-id;
+        arg: vm-type;
+    },
+
+    function-object-erased-call {
+        dest: function-result;
+        function: register-id;
+    },
+
     if-else {
         condition: register-id;
         when-true: block;
@@ -378,6 +398,42 @@ enum instruction {
     move {
         dest: register-id;
         src: register-id;
+    },
+
+    partially-applied-function {
+        function-id: nat;
+        dest: register-id;
+
+        @esexpr:(keyword)
+        @esexpr:(default-value (list))
+        type-args: list[vm-type];
+
+        @esexpr:(vararg)
+        args: list[capture];
+    },
+
+    partially-applied-type-function {
+        function-id: nat;
+        dest: register-id;
+
+        @esexpr:(keyword)
+        @esexpr:(default-value (list))
+        type-args: list[vm-type];
+
+        @esexpr:(vararg)
+        args: list[capture];
+    },
+
+    partially-applied-function-erased {
+        function-id: nat;
+        dest: register-id;
+
+        @esexpr:(keyword)
+        @esexpr:(default-value (list))
+        type-args: list[vm-type];
+
+        @esexpr:(vararg)
+        args: list[capture];
     },
 
     record-field-load {
@@ -412,6 +468,16 @@ enum instruction {
         element-index: nat;
         dest: register-id;
         src: register-id;
+    },
+}
+
+@esexpr:(derive-codec)
+enum capture {
+    mutable {
+        r: register-id;
+    },
+    value {
+        r: register-id;
     },
 }
 

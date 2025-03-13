@@ -74,6 +74,9 @@ trait ExprType {
       case Expr.IntLiteral(_) =>
         ZIO.succeed(intType)
 
+      case Expr.Lambda(v, returnType, _) =>
+        ZIO.succeed(Expr.FunctionType(v, returnType))
+
       case Expr.Variable(v) =>
         ZIO.succeed(v.varType)
 

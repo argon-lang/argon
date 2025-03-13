@@ -160,14 +160,16 @@ private[loader] trait LoaderUtils extends UsingContext {
 
   protected def decodeExpr(e: t.Expr): Comp[context.DefaultExprContext.Expr] =
     for
-      knownVars <- Ref.make(Map.empty[Int, context.DefaultExprContext.LocalVar])
+      knownVars <- Ref.make(Map.empty[BigInt, context.DefaultExprContext.LocalVar])
       res <- ExprDecoder(
         knownVars = knownVars,
-      ).expr(e)
+      ).expr(e).onError { err =>
+        ZIO.succeed(println(e))
+      }
     yield res
 
   private final class ExprDecoder(
-    knownVars: Ref[Map[Int, context.DefaultExprContext.LocalVar]]
+    knownVars: Ref[Map[BigInt, context.DefaultExprContext.LocalVar]]
   ) {
     import dev.argon.tube.Expr
     import context.DefaultExprContext.Expr as ArExpr
@@ -191,7 +193,7 @@ private[loader] trait LoaderUtils extends UsingContext {
           isErased = v.erased,
           isProof = v.proof,
         )
-        _ <- knownVars.update(kv => kv + (kv.size -> localVar))
+        _ <- knownVars.update(kv => kv + (v.id -> localVar))
       yield localVar
 
     private def getVar(v: t.Var): Comp[context.DefaultExprContext.Var] =

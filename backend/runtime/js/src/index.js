@@ -1,4 +1,16 @@
 
+export class FunctionType {
+    constructor(param, res) {
+        this.param = param;
+        this.res = res;
+    }
+}
+
+export class FunctionTypeErased {
+    constructor(res) {
+        this.res = res;
+    }
+}
 
 function isSameType(a, b) {
     if(a === b) {
@@ -17,6 +29,14 @@ function isSameType(a, b) {
         }
 
         return true;
+    }
+
+    if(a instanceof FunctionType && b instanceof FunctionType) {
+        return isSameType(a.param, b.param) && isSameType(a.res, b.res);
+    }
+
+    if(a instanceof FunctionTypeErased && b instanceof FunctionTypeErased) {
+        return isSameType(a.res, b.res);
     }
 
     return false;

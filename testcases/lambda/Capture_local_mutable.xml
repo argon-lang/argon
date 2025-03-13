@@ -1,0 +1,24 @@
+<ArgonTest>
+
+    <Name>Capture local mutable</Name>
+
+    <InputSource name="index.argon">
+
+        import Argon.Core/*
+
+        proc callFunc (f: Int -> Int) (i: Int): Int =
+            f i
+
+        proc main(): () do
+            var addNum: Int = 25
+            val f: Int -> Int = x => x + addNum
+            addNum := 4
+            puts ((callFunc f 10).to_s())
+        end
+
+
+    </InputSource>
+
+    <ExpectedOutput>14</ExpectedOutput>
+
+</ArgonTest>

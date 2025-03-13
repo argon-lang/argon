@@ -514,6 +514,7 @@ simple enum binary-builtin {
 
 @esexpr:(derive-codec)
 record local-var {
+    id: nat;
     var-type: expr;
     name: option[identifier];
 
@@ -547,7 +548,7 @@ record record-field-literal {
 @esexpr:(derive-codec)
 enum var {
     local-var {
-        index: nat;
+        id: nat;
     },
     parameter-var {
         owner: parameter-owner;

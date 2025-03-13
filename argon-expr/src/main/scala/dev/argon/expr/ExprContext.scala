@@ -7,7 +7,8 @@ import dev.argon.util.{TreeShifter, UniqueIdentifier}
 import scala.reflect.TypeTest
 import dev.argon.util.SourceLocation
 
-import scala.compiletime.deferred
+import java.util.Objects
+import scala.compiletime.{asMatchable, deferred}
 
 trait ExprContext {
 
@@ -25,9 +26,17 @@ trait ExprContext {
     isMutable: Boolean,
     isErased: Boolean,
     isProof: Boolean,
-  ) extends Var
+  ) extends Var {
+    override def hashCode(): Int = id.hashCode()
+
+    override def equals(obj: Any): Boolean =
+      obj.asMatchable match {
+        case other: LocalVar => id == other.id
+        case _ => false
+      }
+  }
   
-  enum ParameterOwner {
+  enum ParameterOwner derives CanEqual {
     case Func(f: Function)
     case Rec(r: Record)
   }
@@ -41,6 +50,17 @@ trait ExprContext {
     isProof: Boolean,
   ) extends Var {
     override def isMutable: Boolean = false
+
+    override def hashCode(): Int =
+      Objects.hash(owner, parameterIndex)
+
+    override def equals(obj: Any): Boolean =
+      obj.asMatchable match {
+        case other: ParameterVar =>
+          owner == other.owner && parameterIndex == other.parameterIndex
+
+        case _ => false
+      }
   }
 
   type Function <: Matchable

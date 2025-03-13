@@ -17,7 +17,7 @@ export interface EmitOptions {
     readonly program: ProgramModel,
 }
 
-class EmitterBase {
+abstract class EmitterBase {
     constructor(
         readonly options: EmitOptions,
     ) {}
@@ -53,6 +53,7 @@ class EmitterBase {
 
     */
 
+    protected abstract getImportId(source: string): string;
 
     protected getFullExportName(importSpec: ir.ImportSpecifier): string {
         const moduleId = getModuleId(importSpec);
@@ -150,24 +151,33 @@ class EmitterBase {
             name: `t${index}`,
         };
     }
+
+    protected getArgonRuntimeExport(name: string): estree.Expression {
+        return {
+            type: "MemberExpression",
+            computed: false,
+            optional: false,
+            object: {
+                type: "Identifier",
+                name: this.getImportId("@argon-lang/runtime"),
+            },
+            property: {
+                type: "Identifier",
+                name,
+            },
+        };
+    }
 }
 
-export class TubeEmitter extends EmitterBase {
-    constructor(options: EmitOptions) {
-        super(options);
-    }
-
-    *emit(): Iterable<OutputModuleInfo> {
-        const options = this.options;
-        for(const module of this.options.program.modules) {
-            yield {
-                modulePath: module.path,
-                emitJsProgram() {
-                    const modEmitter = new ModuleEmitter(options, module);
-                    return modEmitter.emit();
-                },
-            };
-        }
+export function* emitTube(options: EmitOptions): Iterable<OutputModuleInfo> {
+    for(const module of options.program.modules) {
+        yield {
+            modulePath: module.path,
+            emitJsProgram() {
+                const modEmitter = new ModuleEmitter(options, module);
+                return modEmitter.emit();
+            },
+        };
     }
 }
 
@@ -225,7 +235,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
         });
     }
 
-    getImportId(source: string): string {
+    override getImportId(source: string): string {
         let index = this.imports.indexOf(source);
         if(index < 0) {
             index = this.imports.length;
@@ -469,19 +479,7 @@ class ModuleEmitter extends EmitterBase implements ImportHandler {
                         name: "specialize",
                     }
                 },
-                right: {
-                    type: "MemberExpression",
-                    computed: false,
-                    optional: false,
-                    object: {
-                        type: "Identifier",
-                        name: this.getImportId("@argon-lang/runtime"),
-                    },
-                    property: {
-                        type: "Identifier",
-                        name: "specialize",
-                    },
-                },
+                right: this.getArgonRuntimeExport("specialize"),
             },
         });
     }
@@ -496,6 +494,10 @@ class BlockEmitter extends EmitterBase {
     }
 
     readonly stmts: estree.Statement[] = [];
+
+    protected override getImportId(source: string): string {
+        return this.moduleEmitter.getImportId(source);
+    }
 
     private emitNestedBlock(block: ir.Block): estree.BlockStatement {
         const nestedEmitter = new BlockEmitter(this.moduleEmitter, this.varOffset);
@@ -530,6 +532,39 @@ class BlockEmitter extends EmitterBase {
                 }
             });
         };
+
+        const functionOutput = (dest: ir.FunctionResult, value: estree.Expression) => {
+            let stmt: estree.Statement;
+            switch(dest.$type) {
+                case "discard":
+                    stmt = {
+                        type: "ExpressionStatement",
+                        expression: value,
+                    };
+                    break;
+
+                case "register":
+                    stmt = {
+                        type: "ExpressionStatement",
+                        expression: {
+                            type: "AssignmentExpression",
+                            left: this.getReg(dest.id),
+                            operator: "=",
+                            right: value,
+                        },
+                    };
+                    break;
+
+                case "return-value":
+                    stmt = {
+                        type: "ReturnStatement",
+                        argument: value,
+                    };
+                    break;
+            }
+
+            stmts.push(stmt);
+        }
 
         switch(insn.$type) {
             case "builtin-unary":
@@ -705,36 +740,46 @@ class BlockEmitter extends EmitterBase {
                     optional: false,
                 };
 
-                let stmt: estree.Statement;
-                switch(insn.dest.$type) {
-                    case "discard":
-                        stmt = {
-                            type: "ExpressionStatement",
-                            expression: callExpr,
-                        };
-                        break;
+                functionOutput(insn.dest, callExpr);
+                break;
+            }
 
-                    case "register":
-                        stmt = {
-                            type: "ExpressionStatement",
-                            expression: {
-                                type: "AssignmentExpression",
-                                left: this.getReg(insn.dest.id),
-                                operator: "=",
-                                right: callExpr,
-                            },
-                        };
-                        break;
+            case "function-object-call":
+            {
+                const callExpr: estree.Expression = {
+                    type: "CallExpression",
+                    callee: this.getReg(insn.function),
+                    arguments: [ this.getReg(insn.arg) ],
+                    optional: false,
+                };
 
-                    case "return-value":
-                        stmt = {
-                            type: "ReturnStatement",
-                            argument: callExpr,
-                        };
-                        break;
-                }
+                functionOutput(insn.dest, callExpr);
+                break;
+            }
 
-                stmts.push(stmt);
+            case "function-object-type-call":
+            {
+                const callExpr: estree.Expression = {
+                    type: "CallExpression",
+                    callee: this.getReg(insn.function),
+                    arguments: [ this.buildTypeInfo(insn.arg) ],
+                    optional: false,
+                };
+
+                functionOutput(insn.dest, callExpr);
+                break;
+            }
+
+            case "function-object-erased-call":
+            {
+                const callExpr: estree.Expression = {
+                    type: "CallExpression",
+                    callee: this.getReg(insn.function),
+                    arguments: [],
+                    optional: false,
+                };
+
+                functionOutput(insn.dest, callExpr);
                 break;
             }
 
@@ -754,6 +799,106 @@ class BlockEmitter extends EmitterBase {
             case "move":
                 assign(insn.dest, this.getReg(insn.src));
                 break;
+
+            case "partially-applied-function":
+            case "partially-applied-type-function":
+            case "partially-applied-function-erased":
+            {
+                const argName: estree.Identifier = {
+                    type: "Identifier",
+                    name: "arg",
+                };
+
+                const args: estree.Expression[] = [];
+                for(const typeArg of insn.typeArgs) {
+                    args.push(this.buildTypeInfo(typeArg));
+                }
+
+                if(insn.$type === "partially-applied-type-function") {
+                    args.push(argName);
+                }
+
+                const block: estree.Statement[] = [];
+
+                for(const arg of insn.args) {
+                    switch(arg.$type) {
+                        case "mutable":
+                            args.push(this.getReg(arg.r));
+                            break;
+
+                        case "value":
+                        {
+                            const name: estree.Identifier = {
+                                type: "Identifier",
+                                name: "capture" + block.length,
+                            };
+
+                            block.push({
+                                type: "VariableDeclaration",
+                                kind: "const",
+                                declarations: [
+                                    {
+                                        type: "VariableDeclarator",
+                                        id: name,
+                                        init: this.getReg(arg.r),
+                                    },
+                                ],
+                            });
+
+                            args.push(name);
+                            break;
+                        }
+
+                        default:
+                            ensureExhaustive(arg);
+                    }
+                }
+
+                if(insn.$type === "partially-applied-function") {
+                    args.push(argName);
+                }
+
+                const functionInfo = this.options.program.getFunctionInfo(insn.functionId);
+                const funcExpr = this.moduleEmitter.getImportExpr(functionInfo.importSpecifier);
+
+                let params: estree.Pattern[] = [];
+                if(insn.$type !== "partially-applied-function-erased") {
+                    params.push(argName);
+                }
+
+                const lambda: estree.ArrowFunctionExpression = {
+                    type: "ArrowFunctionExpression",
+                    expression: true,
+                    body: {
+                        type: "CallExpression",
+                        callee: funcExpr,
+                        arguments: args,
+                        optional: false,
+                    },
+                    params,
+                };
+
+                if(block.length === 0) {
+                    assign(insn.dest, lambda);
+                }
+                else {
+                    block.push({
+                        type: "ExpressionStatement",
+                        expression: {
+                            type: "AssignmentExpression",
+                            operator: "=",
+                            left: this.getReg(insn.dest),
+                            right: lambda,
+                        },
+                    });
+
+                    stmts.push({
+                        type: "BlockStatement",
+                        body: block,
+                    })
+                }
+                break;
+            }
 
             case "record-field-load":
             {
@@ -872,7 +1017,23 @@ class BlockEmitter extends EmitterBase {
                 }
 
             case "function":
-                throw new Error("Not implemented buildTypeInfo function");
+                return {
+                    type: "NewExpression",
+                    callee: this.getArgonRuntimeExport("FunctionType"),
+                    arguments: [
+                        this.buildTypeInfo(t.input),
+                        this.buildTypeInfo(t.output),
+                    ],
+                };
+
+            case "function-erased":
+                return {
+                    type: "NewExpression",
+                    callee: this.getArgonRuntimeExport("FunctionType"),
+                    arguments: [
+                        this.buildTypeInfo(t.output),
+                    ],
+                };
 
             case "record":
             {

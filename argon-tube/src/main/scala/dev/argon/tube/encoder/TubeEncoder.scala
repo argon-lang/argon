@@ -368,9 +368,15 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
         private def declareVar(v: context.DefaultExprContext.LocalVar): Comp[LocalVar] =
           for
-            _ <- knownVars.update(kv => if kv.contains(v) then kv else kv + (v -> kv.size))
+            id <- knownVars.modify(kv => kv.get(v) match {
+              case Some(id) => (id, kv)
+              case None =>
+                val id = kv.size
+                (id, kv + (v -> id))
+            })
             t <- expr(v.varType)
           yield LocalVar(
+            id = id,
             varType = t,
             name = v.name.map(encodeIdentifier),
             mutable = v.isMutable,
@@ -383,7 +389,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             case v: context.DefaultExprContext.LocalVar =>
               for
                 kv <- knownVars.get
-                index <- ZIO.succeed(kv.get(v).get)
+                index <- ZIO.succeed(kv(v))
               yield Var.LocalVar(index)
 
             case v: context.DefaultExprContext.ParameterVar =>
@@ -516,13 +522,11 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
               for
                 condition <- expr(ifElse.condition)
 
-                trueScope <- nestedScope
-                whenTrueWitness <- ZIO.foreach(ifElse.whenTrueWitness)(trueScope.declareVar)
-                trueBody <- trueScope.expr(ifElse.trueBody)
+                whenTrueWitness <- ZIO.foreach(ifElse.whenTrueWitness)(declareVar)
+                trueBody <- expr(ifElse.trueBody)
 
-                falseScope <- nestedScope
-                whenFalseWitness <- ZIO.foreach(ifElse.whenFalseWitness)(falseScope.declareVar)
-                falseBody <- falseScope.expr(ifElse.falseBody)
+                whenFalseWitness <- ZIO.foreach(ifElse.whenFalseWitness)(declareVar)
+                falseBody <- expr(ifElse.falseBody)
 
               yield Expr.IfElse(
                 condition = condition,
@@ -537,10 +541,9 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
             case lambda: ArExpr.Lambda =>
               for
-                lambdaScope <- nestedScope
-                v <- lambdaScope.declareVar(lambda.v)
-                returnType <- lambdaScope.expr(lambda.returnType)
-                body <- lambdaScope.expr(lambda.body)
+                v <- declareVar(lambda.v)
+                returnType <- expr(lambda.returnType)
+                body <- expr(lambda.body)
 
               yield Expr.Lambda(
                 v = v,
