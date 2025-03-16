@@ -60,6 +60,22 @@ enum CompilerError {
   case ImplicitNotFound(
     loc: Location[FilePosition],
   )
+  
+  case FunctionTypeRequired(
+    loc: Location[FilePosition],
+    t: Expr,
+  )
+
+  case TupleTypeRequired(
+    loc: Location[FilePosition],
+    t: Expr,
+  )
+
+  case TupleSizeMismatch(
+    loc: Location[FilePosition],
+    t: Expr,
+    actualSize: Int,
+  )
 
   case UnknownModule(tube: TubeName, modulePath: ModulePath, loc: Location[FilePosition])
 

@@ -96,6 +96,8 @@ trait ExprContext {
     case AnyType()
     case BindVariable(v: LocalVar, value: Expr)
     case BoolLiteral(b: Boolean)
+    case Box(t: Expr, value: Expr) // Convert values of T to boxed T    
+    case Boxed(t: Expr) // Use an erased type in a non-erased context.
     case Builtin(b: ExprContext.this.Builtin)
     case Finally(action: Expr, ensuring: Expr)
     case FunctionCall(f: Function, args: Seq[Expr])
@@ -120,6 +122,7 @@ trait ExprContext {
     case TupleElement(index: Int, tuple: Expr)
     case TypeN(n: Expr)
     case TypeBigN(n: BigInt)
+    case Unbox(t: Expr, value: Expr) // Convert value of boxed T to T
     case Variable(v: Var)
     case VariableStore(v: Var, value: Expr)
   }

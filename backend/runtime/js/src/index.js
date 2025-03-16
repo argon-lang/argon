@@ -12,6 +12,8 @@ export class FunctionTypeErased {
     }
 }
 
+export const erasedType = {};
+
 function isSameType(a, b) {
     if(a === b) {
         return true;

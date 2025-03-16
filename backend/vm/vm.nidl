@@ -302,6 +302,7 @@ enum vm-type {
     of-type-info {
         r: register-id;
     },
+    boxed,
     erased,
 }
 
@@ -318,6 +319,11 @@ record block {
 
 @esexpr:(derive-codec)
 enum instruction {
+    box {
+        dest: register-id;
+        value: register-id;
+    },
+
     builtin-unary {
         op: builtin-unary-op;
         dest: register-id;
@@ -468,6 +474,12 @@ enum instruction {
         element-index: nat;
         dest: register-id;
         src: register-id;
+    },
+
+    unbox {
+        dest: register-id;
+        type: vm-type;
+        value: register-id;
     },
 }
 

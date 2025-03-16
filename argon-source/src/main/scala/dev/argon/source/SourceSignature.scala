@@ -21,12 +21,16 @@ object SourceSignature {
       override val context: ctx.type = ctx
     }
 
+    val ownerIsErased = owner match
+      case ctx.TRExprContext.ParameterOwner.Func(f) => f.isErased
+      case ctx.TRExprContext.ParameterOwner.Rec(r) => false
+
     def impl(remainingParams: Seq[WithSource[ast.FunctionParameterList]], convParams: Seq[SignatureParameter]): Comp[FunctionSignature] =
       remainingParams match {
         case head +: tail =>
           ZIO.foreach(head.value.parameters) { param =>
             for
-              t <- tr.typeCheckTypeExpr(ParameterScope(owner, scope, convParams))(param.value.paramType)
+              t <- tr.typeCheckTypeExpr(ParameterScope(owner, scope, convParams))(param.value.paramType, erased = ownerIsErased || head.value.isErased)
             yield ParameterBinding(
               name = Some(param.value.name),
               paramType = t,
@@ -52,8 +56,8 @@ object SourceSignature {
 
         case _ =>
           for
-            returnTypeExpr <- tr.typeCheckTypeExpr(ParameterScope(owner, scope, convParams))(returnType.value.returnType)
-            ensuresClauses <- ZIO.foreach(returnType.value.ensuresClauses)(tr.typeCheckTypeExpr(ParameterScope(owner, scope, convParams)))
+            returnTypeExpr <- tr.typeCheckTypeExpr(ParameterScope(owner, scope, convParams))(returnType.value.returnType, erased = ownerIsErased)
+            ensuresClauses <- ZIO.foreach(returnType.value.ensuresClauses)(tr.typeCheckTypeExpr(ParameterScope(owner, scope, convParams))(_, erased = true))
           yield FunctionSignature(
             parameters = convParams,
             returnType = returnTypeExpr,

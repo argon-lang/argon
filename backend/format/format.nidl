@@ -365,6 +365,13 @@ enum expr {
     bool-literal {
         value: bool;
     },
+    box {
+        t: expr;
+        value: expr;
+    },
+    boxed {
+        t: expr;
+    },
     nullary-builtin {
         builtin: nullary-builtin;
     },
@@ -467,6 +474,10 @@ enum expr {
     },
     type-big-n {
         n: nat;
+    },
+    unbox {
+        t: expr;
+        value: expr;
     },
     variable {
         v: var;

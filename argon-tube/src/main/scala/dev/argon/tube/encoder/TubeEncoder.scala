@@ -434,6 +434,17 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
             case ArExpr.BoolLiteral(b) => ZIO.succeed(Expr.BoolLiteral(b))
 
+            case ArExpr.Box(t, value) =>
+              for
+                t <- expr(t)
+                value <- expr(value)
+              yield Expr.Box(t, value)
+
+            case ArExpr.Boxed(t) =>
+              for
+                t <- expr(t)
+              yield Expr.Boxed(t)
+            
             case ArExpr.Builtin(context.DefaultExprContext.Builtin.Nullary(builtin)) =>
               val builtin2 = builtin match {
                 case dev.argon.expr.NullaryBuiltin.IntType => NullaryBuiltin.IntType
@@ -497,7 +508,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 t <- expr(t)
                 a <- expr(a)
               yield Expr.BuiltinEqualToRefl(t, a)
-
+              
             case ArExpr.Finally(action, ensuring) =>
               for
                 action <- expr(action)
@@ -614,6 +625,12 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
 
             case ArExpr.TypeBigN(n) =>
               ZIO.succeed(Expr.TypeBigN(n))
+              
+            case ArExpr.Unbox(t, value) =>
+              for
+                t <- expr(t)
+                value <- expr(value)
+              yield Expr.Unbox(t, value)
 
             case ArExpr.Variable(v) =>
               for

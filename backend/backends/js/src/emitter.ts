@@ -567,6 +567,10 @@ class BlockEmitter extends EmitterBase {
         }
 
         switch(insn.$type) {
+            case "box":
+                assign(insn.dest, this.getReg(insn.value));
+                break;
+
             case "builtin-unary":
             {
                 const unary = (operator: estree.UnaryOperator) => {
@@ -989,6 +993,10 @@ class BlockEmitter extends EmitterBase {
                 });
                 break;
 
+            case "unbox":
+                assign(insn.dest, this.getReg(insn.value));
+                break;
+
             default:
                 ensureExhaustive(insn);
         }
@@ -1079,6 +1087,9 @@ class BlockEmitter extends EmitterBase {
 
             case "of-type-info":
                 return this.getReg(t.r);
+
+            case "boxed":
+                return this.getArgonRuntimeExport("erasedType");
 
             case "erased":
                 throw new Error("Cannot get type info for erased");

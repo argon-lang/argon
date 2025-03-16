@@ -21,12 +21,11 @@ trait TypeResolver extends UsingContext {
   private type Loc = Location[FilePosition]
 
 
-
   private final case class EmitState(
     model: Ref[TRExprContext.Model],
     scope: Scopes.LocalScope,
     effects: EffectInfo,
-    erased: Boolean,
+    erased: ErasureMode,
   )
 
   final def typeCheckExpr(scope: Scopes.Scope)(e: WithSource[ast.Expr], t: context.DefaultExprContext.Expr, effects: context.DefaultExprContext.EffectInfo, erased: Boolean): Comp[context.DefaultExprContext.Expr] =
@@ -34,16 +33,16 @@ trait TypeResolver extends UsingContext {
       scope <- Scopes.LocalScope.make(scope)
       model <- Ref.make[TRExprContext.Model](TRExprContext.Model.empty)
       shifter = DefaultToTRShifter[context.type](context)
-      expr <- resolveExpr(e).check(shifter.shiftExpr(t))(using EmitState(model, scope, shifter.shiftEffectInfo(effects), erased = erased))
+      expr <- resolveExpr(e).check(shifter.shiftExpr(t))(using EmitState(model, scope, shifter.shiftEffectInfo(effects), erased = ErasureMode.fromBoolean(erased)))
       model <- model.get
       shifted <- ResolvedHoleFiller(model).shiftExpr(expr)
     yield shifted
 
-  final def typeCheckTypeExpr(scope: Scopes.Scope)(e: WithSource[ast.Expr]): Comp[context.DefaultExprContext.Expr] =
+  final def typeCheckTypeExpr(scope: Scopes.Scope)(e: WithSource[ast.Expr], erased: Boolean): Comp[context.DefaultExprContext.Expr] =
     for
       scope <- Scopes.LocalScope.make(scope)
       model <- Ref.make[TRExprContext.Model](TRExprContext.Model.empty)
-      expr <- resolveType(e)(using EmitState(model, scope, EffectInfo.Pure, erased = true))
+      expr <- resolveType(e)(using EmitState(model, scope, EffectInfo.Pure, erased = if erased then ErasureMode.Erased else ErasureMode.TypeAnnotation))
       model <- model.get
       shifted <- ResolvedHoleFiller(model).shiftExpr(expr)
     yield shifted
@@ -51,28 +50,62 @@ trait TypeResolver extends UsingContext {
   private def normalizeToValue(e: Expr)(using EmitState): Comp[Expr] =
     TREvaluator().normalizeToValue(e, context.Config.evaluatorFuel)
 
+
+  private def tryUnifyExpr(a: Expr, b: Expr)(using state: EmitState): Comp[Boolean] =
+    state.model.get.flatMap { model =>
+      Ref.make(model)
+        .flatMap { modelRef =>
+          unifyExpr(a, b)(using state.copy(model = modelRef))
+            .tap(modelRef.get.flatMap(state.model.set).whenDiscard(_))
+        }
+
+    }
+
   private def unifyExpr(a: Expr, b: Expr)(using state: EmitState): Comp[Boolean] =
     Unification.unify[context.Env, context.Error](TRExprContext)(state.model, TREvaluator(), context.Config.evaluatorFuel)(a, b)
 
-  private def checkTypesMatch(loc: SourceLocation)(a: Expr, b: Expr)(using state: EmitState): Comp[Unit] =
+  private def checkTypesMatch(loc: SourceLocation)(e: Expr)(a: Expr, b: Expr)(using state: EmitState): Comp[Expr] =
     normalizeToValue(a).flatMap { a =>
       normalizeToValue(b).flatMap { b =>
-        ErrorLog.logError(CompilerError.TypeError(
+        def err = ErrorLog.logError(CompilerError.TypeError(
           loc,
           TRToErrorShifter[context.type](context).shiftExpr(a),
           TRToErrorShifter[context.type](context).shiftExpr(b)
-        )).whenZIODiscard(
-          a match {
-            case Expr.AnyType() =>
-              ZIO.succeed(b match {
-                case Expr.AnyType() | Expr.TypeN(_) | Expr.TypeBigN(_) => false
-                case _ => true
-              })
+        ))
 
-            case _ =>
-              unifyExpr(a, b).negate
-          }
-        )
+        (a, b) match {
+          case (Expr.AnyType(), Expr.AnyType() | Expr.TypeN(_) | Expr.TypeBigN(_)) =>
+            ZIO.succeed(e)
+
+          case (Expr.AnyType(), _) =>
+            err.as(e)
+
+          case (Expr.Boxed(a), Expr.Boxed(b)) =>
+            checkTypesMatch(loc)(e)(a, b)
+
+          case (Expr.Boxed(aInner), _) =>
+            unifyExpr(a, b).flatMap {
+              case true => ZIO.succeed(e)
+              case false =>
+                unifyExpr(aInner, b).flatMap {
+                  case true => ZIO.succeed(Expr.Box(aInner, e))
+                  case false => err.as(e)
+                }
+            }
+
+          case (_, Expr.Boxed(bInner)) =>
+            unifyExpr(a, b).flatMap {
+              case true => ZIO.succeed(e)
+              case false =>
+                unifyExpr(a, bInner).flatMap {
+                  case true => ZIO.succeed(Expr.Unbox(bInner, e))
+                  case false => err.as(e)
+                }
+            }
+
+          case _ =>
+            err.whenZIODiscard(unifyExpr(a, b).negate).as(e)
+        }
       }
     }
 
@@ -84,8 +117,8 @@ trait TypeResolver extends UsingContext {
     yield res
 
 
-  private def makeHole(t: Expr, loc: Location[FilePosition]): Comp[Expr.Hole] =
-    UniqueIdentifier.make.map(id => Expr.Hole(HoleInfo(id, t, loc)))
+  private def makeHole(t: Expr, erased: ErasureMode, loc: Location[FilePosition]): Comp[Expr.Hole] =
+    UniqueIdentifier.make.map(id => Expr.Hole(HoleInfo(id, t, erased, loc)))
 
   private lazy val stringType: Expr = Expr.Builtin(Builtin.Nullary(NullaryBuiltin.StringType))
   private lazy val intType: Expr = Expr.Builtin(Builtin.Nullary(NullaryBuiltin.IntType))
@@ -103,7 +136,7 @@ trait TypeResolver extends UsingContext {
 
         override def check(t: Expr)(using state: EmitState): Comp[Expr] =
           for
-            argType <- makeHole(Expr.AnyType(), loc)
+            argType <- makeHole(Expr.AnyType(), ErasureMode.Concrete, loc)
             paramId <- UniqueIdentifier.make
             param = LocalVar(paramId, argType, None, isMutable = false, isErased = false, isProof = false)
             funcType = Expr.FunctionType(param, t)
@@ -122,7 +155,7 @@ trait TypeResolver extends UsingContext {
     override final def check(t: Expr)(using EmitState): Comp[Expr] =
       infer.flatMap {
         case InferredExpr(e, inferredType) =>
-          checkTypesMatch(loc)(t, inferredType).as(e)
+          checkTypesMatch(loc)(e)(t, inferredType)
       }
   }
 
@@ -186,8 +219,8 @@ trait TypeResolver extends UsingContext {
                 .whenDiscard(isErased && decl.isMutable)
 
               id <- UniqueIdentifier.make
-              varType <- decl.varType.fold(makeHole(Expr.AnyType(), loc))(resolveType)
-              value <- resolveExpr(decl.value).check(varType)(using state.copy(erased = state.erased || isErased))
+              varType <- decl.varType.fold(makeHole(Expr.AnyType(), ErasureMode.TypeAnnotation, loc))(resolveType)
+              value <- resolveExpr(decl.value).check(varType)(using state.copy(erased = state.erased || ErasureMode.fromBoolean(isErased)))
 
               localVar = LocalVar(
                 id,
@@ -234,7 +267,7 @@ trait TypeResolver extends UsingContext {
 
           override def infer(using state: EmitState): Comp[InferredExpr] =
             for
-              t <- resolveType(t)(using state.copy(erased = true))
+              t <- resolveType(t)(using state.copy(erased = ErasureMode.Erased))
               _ <- resolveImplicit(t, loc)
             yield InferredExpr(Expr.Tuple(Seq()), Expr.Tuple(Seq()))
         }
@@ -266,7 +299,7 @@ trait TypeResolver extends UsingContext {
 
           override def infer(using EmitState): Comp[InferredExpr] =
             for
-              t <- makeHole(Expr.AnyType(), loc)
+              t <- makeHole(Expr.AnyType(), ErasureMode.TypeAnnotation, loc)
               left <- resolveExpr(left).check(t)
               right <- resolveExpr(right).check(t)
               tt <- exprType.getExprType(t)
@@ -325,22 +358,18 @@ trait TypeResolver extends UsingContext {
         ))
 
       case ast.Expr.FunctionLiteral(parameterName, body) =>
-        new ExprFactory {
+        new LambdaExprFactory {
           override def loc: Loc = expr.location
 
-          override def check(t: Expr)(using state: EmitState): Comp[Expr] =
+          override def checkFunction(t: Expr.FunctionType)(using state: EmitState): Comp[Expr] =
             for
-              paramType <- makeHole(Expr.AnyType(), loc)
               paramId <- UniqueIdentifier.make
-              param = LocalVar(paramId, paramType, parameterName, isMutable = false, isErased = false, isProof = false)
-
-              bodyType <- makeHole(Expr.AnyType(), loc)
-              _ <- checkTypesMatch(loc)(t, Expr.FunctionType(param, bodyType))
+              param = LocalVar(paramId, t.a.varType, parameterName, isMutable = t.a.isMutable, isErased = t.a.isErased, isProof = t.a.isProof)
 
               nestedScope <- Scopes.LocalScope.make(state.scope)
               _ <- nestedScope.addVariable(param, None)
-              body <- resolveExpr(body).check(bodyType)(using state.copy(scope = nestedScope))
-            yield Expr.Lambda(param, bodyType, body)
+              body <- resolveExpr(body).check(t.r)(using state.copy(scope = nestedScope))
+            yield Expr.Lambda(param, t.r, body)
         }
 
       case ast.Expr.FunctionType(a, r) =>
@@ -499,8 +528,8 @@ trait TypeResolver extends UsingContext {
         ???
     }
 
-  private def resolveType(expr: WithSource[ast.Expr])(using EmitState): Comp[Expr] =
-    resolveExpr(expr).check(Expr.AnyType())
+  private def resolveType(expr: WithSource[ast.Expr])(using state: EmitState): Comp[Expr] =
+    resolveExpr(expr).check(Expr.AnyType())(using state.copy(erased = state.erased || ErasureMode.TypeAnnotation))
 
 
   private def builtinExprFactory(loc: Loc, name: String): ExprFactory =
@@ -552,12 +581,19 @@ trait TypeResolver extends UsingContext {
         }
       )
 
-  private def checkErasure(loc: Loc)(erased: Boolean)(using state: EmitState): Comp[Unit] =
-    ErrorLog.logError(CompilerError.ErasedExpressionNotAllowed(loc))
-      .whenDiscard(
-        !state.erased && erased
-      )
-
+  private def checkErasure(loc: Loc)(expr: Expr)(erased: Boolean)(using state: EmitState): Comp[Expr] =
+    state.erased match
+      case ErasureMode.Erased => ZIO.succeed(expr)
+      case ErasureMode.TypeAnnotation =>
+        if erased then
+          ZIO.succeed(Expr.Boxed(expr))
+        else
+          ZIO.succeed(expr)
+      case ErasureMode.Concrete =>
+        ErrorLog.logError(CompilerError.ErasedExpressionNotAllowed(loc))
+          .whenDiscard(erased)
+          .as(expr)
+    end match
 
 
   private final class ErrorFactory(override val loc: Loc, error: => CompilerError) extends ExprFactory {
@@ -589,6 +625,34 @@ trait TypeResolver extends UsingContext {
       }
   }
 
+  private abstract class LambdaExprFactory extends ExprFactory {
+    override final def check(t: Expr)(using EmitState): Comp[Expr] =
+      normalizeToValue(t).flatMap {
+        case t: Expr.FunctionType =>
+          checkFunction(t)
+
+        case _ =>
+          ErrorLog.logError(CompilerError.FunctionTypeRequired(
+            loc,
+            TRToErrorShifter[context.type](context).shiftExpr(t),
+          )).as(Expr.Error())
+      }
+
+
+    def checkFunction(t: Expr.FunctionType)(using EmitState): Comp[Expr]
+
+    protected def unifyParam(expected: Expr.FunctionType, actual: Expr.FunctionType)(using EmitState): Comp[Unit] =
+      ErrorLog.logError(CompilerError.TypeError(
+        loc,
+        TRToErrorShifter[context.type](context).shiftExpr(expected),
+        TRToErrorShifter[context.type](context).shiftExpr(actual)
+      )).whenZIODiscard(
+        unifyExpr(expected.a.varType, actual.a.varType).negate ||
+          ZIO.succeed(expected.a.isErased != actual.a.isErased)
+      )
+
+  }
+
   private final class LookupIdFactory(override val loc: Loc, id: IdentifierExpr) extends WrappedFactory {
     override protected def unwrap(using state: EmitState): Comp[ExprFactory] =
       state.scope.lookup(id).map {
@@ -602,9 +666,10 @@ trait TypeResolver extends UsingContext {
             override def infer(using EmitState): Comp[InferredExpr] =
               for
                 _ <- checkAllowedEffect(loc)(if v.isMutable then EffectInfo.Effectful else EffectInfo.Pure)
-                _ <- checkErasure(loc)(v.isErased)
+                e = Expr.Variable(v)
+                e <- checkErasure(loc)(e)(v.isErased)
               yield InferredExpr(
-                Expr.Variable(v),
+                e,
                 v.varType,
               )
 
@@ -618,7 +683,7 @@ trait TypeResolver extends UsingContext {
                     _ <- checkAllowedEffect(loc)(EffectInfo.Effectful)
 
                     value <- assignedValue.value.check(v.varType)(using state.copy(
-                      erased = state.erased || v.isErased,
+                      erased = state.erased || ErasureMode.fromBoolean(v.isErased),
                       effects = if v.isErased then EffectInfo.Pure else state.effects,
                     ))
                   yield InferredExpr(
@@ -633,12 +698,14 @@ trait TypeResolver extends UsingContext {
             override def loc: Loc = LookupIdFactory.this.loc
 
             override def infer(using EmitState): Comp[InferredExpr] =
+              val e = Expr.TupleElement(index, Expr.Variable(v))
               for
-                _ <- checkErasure(loc)(v.isErased)
+                e <- checkErasure(loc)(e)(v.isErased)
               yield InferredExpr(
-                Expr.TupleElement(index, Expr.Variable(v)),
+                e,
                 t,
               )
+            end infer
           }
 
 
@@ -679,7 +746,7 @@ trait TypeResolver extends UsingContext {
   ) extends OverloadLookupSource {
     override def lookup(using EmitState): Comp[LookupResult.OverloadableOnly] =
       for
-        t <- makeHole(Expr.AnyType(), loc)
+        t <- makeHole(Expr.AnyType(), ErasureMode.TypeAnnotation, loc)
         e <- obj.check(t)
         t <- normalizeToValue(t)
         overloads <- overloadsFromType(t, e, extensionMethods(t, e))
@@ -799,9 +866,10 @@ trait TypeResolver extends UsingContext {
                     override def infer(using EmitState): Comp[InferredExpr] =
                       for
                         _ <- checkAllowedEffect(loc)(DefaultToTRShifter[context.type](context).shiftEffectInfo(f.effects))
-                        _ <- checkErasure(loc)(f.isErased)
+                        e = Expr.FunctionCall(f, overloadResult.arguments)
+                        e <- checkErasure(loc)(e)(f.isErased)
                       yield InferredExpr(
-                        Expr.FunctionCall(f, overloadResult.arguments),
+                        e,
                         overloadResult.remainingSig.returnType
                       )
                   }
@@ -867,15 +935,14 @@ trait TypeResolver extends UsingContext {
 
               val factory =
                 overloadResult.lambdaParameters.foldRight(factory1) { (param, bodyFactory) =>
-                  new ExprFactory {
+                  new LambdaExprFactory {
                     override def loc: Loc = overloadableLoc
 
-                    override def check(t: Expr)(using EmitState): Comp[Expr] =
-                      for
-                        bodyType <- makeHole(Expr.AnyType(), loc)
-                        body <- bodyFactory.check(bodyType)
-                        _ <- checkTypesMatch(loc)(t, Expr.FunctionType(param, bodyType))
-                      yield Expr.Lambda(param, bodyType, body)
+                    override def checkFunction(t: Expr.FunctionType)(using EmitState): Comp[Expr] =
+                     for
+                       _ <- unifyParam(t, Expr.FunctionType(param, t.r))
+                       body <- bodyFactory.check(t.r)
+                     yield Expr.Lambda(param, t.r, body)
                   }
                 }
                 
@@ -1011,21 +1078,32 @@ trait TypeResolver extends UsingContext {
         attemptOverloadCheck(overload, restSig, callLocation, restArgs, callArgs :+ arg, lambdaParams ++ lambdaParam)
       end applyArg
 
+      def paramErasure(param: TRSignatureContext.SignatureParameter): ErasureMode =
+        if param.isErased then
+          ErasureMode.Erased
+        else
+          state.erased match {
+            case ErasureMode.TypeAnnotation if !ValueUtil.isTypeType(TRExprContext)(param.paramType) =>
+              ErasureMode.Concrete
+
+            case _ => state.erased
+          }
 
       (sig.parameters, args) match {
         case (param +: tailParams, arg +: tailArgs) =>
+
           ((param.listType, arg.listType) match {
             case (FunctionParameterListType.NormalList, FunctionParameterListType.NormalList) |
                  (FunctionParameterListType.InferrableList, FunctionParameterListType.InferrableList) |
                  (FunctionParameterListType.QuoteList, FunctionParameterListType.QuoteList) |
                  (FunctionParameterListType.RequiresList, FunctionParameterListType.RequiresList) =>
               for
-                argExpr <- arg.arg.check(param.paramType)(using state.copy(erased = state.erased || param.isErased))
+                argExpr <- arg.arg.check(param.paramType)(using state.copy(erased = paramErasure(param)))
               yield (argExpr, tailArgs, arg.callLocation)
 
             case (FunctionParameterListType.InferrableList | FunctionParameterListType.QuoteList, _) =>
               for
-                hole <- makeHole(param.paramType, funcLocation)
+                hole <- makeHole(param.paramType, paramErasure(param), funcLocation)
               yield (hole, args, funcLocation)
 
             case (FunctionParameterListType.RequiresList, _) =>
@@ -1056,7 +1134,7 @@ trait TypeResolver extends UsingContext {
 
             case FunctionParameterListType.InferrableList | FunctionParameterListType.QuoteList =>
               for
-                hole <- makeHole(param.paramType, funcLocation)
+                hole <- makeHole(param.paramType, paramErasure(param), funcLocation)
               yield (hole, None)
 
             case FunctionParameterListType.RequiresList =>
@@ -1164,7 +1242,7 @@ trait TypeResolver extends UsingContext {
   }
 
   private final class TupleExprFactory(override val loc: Loc, items: Seq[ExprFactory]) extends ExprFactory {
-    override def check(t: Expr)(using EmitState): Comp[Expr] =
+    override def check(t: Expr)(using state: EmitState): Comp[Expr] =
       normalizeToValue(t).flatMap {
         case t @ (Expr.TypeN(_) | Expr.TypeBigN(_) | Expr.AnyType()) =>
           for
@@ -1173,17 +1251,25 @@ trait TypeResolver extends UsingContext {
             }
           yield Expr.Tuple(itemExprs)
 
-
-        case t =>
+        case Expr.Tuple(itemTypes) if items.size != itemTypes.size =>
+          ErrorLog.logError(CompilerError.TupleSizeMismatch(
+            loc,
+            TRToErrorShifter[context.type](context).shiftExpr(t),
+            items.size,
+          )).as(Expr.Error())
+          
+        case Expr.Tuple(itemTypes) =>
           for
-            itemTypes <- ZIO.foreach(items) { _ => makeHole(Expr.AnyType(), loc) }
-            actualType = Expr.Tuple(itemTypes)
-            _ <- checkTypesMatch(loc)(t, actualType)
-
             itemExprs <- ZIO.foreach(items.zip(itemTypes)) { (item, itemType) =>
               item.check(itemType)
             }
           yield Expr.Tuple(itemExprs)
+
+        case t =>
+          ErrorLog.logError(CompilerError.TupleTypeRequired(
+            loc,
+            TRToErrorShifter[context.type](context).shiftExpr(t),
+          )).as(Expr.Error())
       }
   }
 
@@ -1388,11 +1474,13 @@ trait TypeResolver extends UsingContext {
               model = modelRef,
               scope = localScope,
               effects = EffectInfo.Pure,
-              erased = true,
+              erased = hole.erased,
             )
             et <- exprType.getExprType(e)
-            _ <- checkTypesMatch(hole.location)(hole.holeType, et)
+            e <- checkTypesMatch(hole.location)(e)(hole.holeType, et)
             e2 <- shiftExpr(e)
+            _ <- ErrorLog.logError(CompilerError.ErasedExpressionNotAllowed(hole.location))
+              .whenZIODiscard(ErasedScanner(context)(ec2)(context.DefaultSignatureContext)(e2))
           yield e2
 
         case None =>
@@ -1407,7 +1495,7 @@ trait TypeResolver extends UsingContext {
 
     override def createHole: Comp[Hole] =
       // TODO: Figure out how to get the type of the hole
-      makeHole(Expr.AnyType(), resolveLocation).map(_.hole)
+      makeHole(Expr.AnyType(), ErasureMode.Erased, resolveLocation).map(_.hole)
 
     override protected def evaluator(model: Ref[TRExprContext.Model]): Evaluator[context.Env, context.Error] {val exprContext: TRExprContext.type } =
       TREvaluator(using state.copy(model = model))

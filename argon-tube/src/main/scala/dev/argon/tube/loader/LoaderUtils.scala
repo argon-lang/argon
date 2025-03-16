@@ -236,6 +236,17 @@ private[loader] trait LoaderUtils extends UsingContext {
 
         case Expr.BoolLiteral(b) => ZIO.succeed(ArExpr.BoolLiteral(b))
 
+        case Expr.Box(t, value) =>
+          for
+            t <- expr(t)
+            value <- expr(value)
+          yield ArExpr.Box(t, value)
+
+        case Expr.Boxed(t) =>
+          for
+            t <- expr(t)
+          yield ArExpr.Boxed(t)
+
         case Expr.NullaryBuiltin(builtin) =>
           val builtin2 = builtin match {
             case t.NullaryBuiltin.IntType => dev.argon.expr.NullaryBuiltin.IntType
@@ -411,6 +422,12 @@ private[loader] trait LoaderUtils extends UsingContext {
 
         case Expr.TypeBigN(n) =>
           ZIO.succeed(ArExpr.TypeBigN(n))
+
+        case Expr.Unbox(t, value) =>
+          for
+            t <- expr(t)
+            value <- expr(value)
+          yield ArExpr.Unbox(t, value)
 
         case Expr.Variable(variable) =>
           for

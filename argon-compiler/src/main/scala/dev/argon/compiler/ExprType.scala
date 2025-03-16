@@ -32,6 +32,12 @@ trait ExprType {
       case Expr.BoolLiteral(_) =>
         ZIO.succeed(boolType)
 
+      case Expr.Box(t, _) =>
+        ZIO.succeed(Expr.Boxed(t))
+
+      case Expr.Boxed(t) =>
+        getExprType(t)
+
       case Expr.Builtin(exprContext.Builtin.Binary(builtin, _, _)) =>
         ZIO.succeed(builtin match {
           case BinaryBuiltin.IntAdd | BinaryBuiltin.IntSub | BinaryBuiltin.IntMul |
@@ -114,6 +120,9 @@ trait ExprType {
           case Expr.Tuple(itemTypes) => ZIO.succeed(itemTypes(index))
           case _ => ???
         }
+
+      case Expr.Unbox(t, _) =>
+        ZIO.succeed(t)
 
       case _ =>
         ZIO.logError("Unimplemented getExprType expression: " + e).as(???)

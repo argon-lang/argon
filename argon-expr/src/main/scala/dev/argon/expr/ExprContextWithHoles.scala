@@ -7,6 +7,7 @@ trait ExprContextWithHoles extends ExprContext {
   final case class HoleInfo(
     id: UniqueIdentifier,
     holeType: Expr,
+    erased: ErasureMode,
     location: Location[FilePosition],
   )derives CanEqual
 

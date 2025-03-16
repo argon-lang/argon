@@ -15,17 +15,19 @@ trait Evaluator[R, E] {
     expr match {
       // These expressions always construct values or otherwise have no remaining normalizing to perform
       case Expr.Error() |
-        Expr.ErasedValue() |
-        Expr.AnyType() |
-        Expr.BoolLiteral(_) | Expr.IntLiteral(_) | Expr.StringLiteral(_) |
-        Expr.Builtin(
+           Expr.ErasedValue() |
+           Expr.AnyType() |
+           Expr.Box(_, _) |
+           Expr.BoolLiteral(_) | Expr.IntLiteral(_) | Expr.StringLiteral(_) |
+           Expr.Builtin(
           Builtin.Nullary(_) | Builtin.EqualTo(_, _, _) | Builtin.EqualToRefl(_, _)
         ) |
-        Expr.Lambda(_, _, _) |
-        Expr.RecordType(_, _) | Expr.RecordLiteral(_, _) |
-        Expr.Tuple(_) |
-        Expr.TypeN(_) | Expr.TypeBigN(_) | Expr.FunctionType(_, _) |
-        Expr.Variable(_) => ZIO.succeed(expr)
+           Expr.Boxed(_) |
+           Expr.Lambda(_, _, _) |
+           Expr.RecordType(_, _) | Expr.RecordLiteral(_, _) |
+           Expr.Tuple(_) |
+           Expr.TypeN(_) | Expr.TypeBigN(_) | Expr.FunctionType(_, _) |
+           Expr.Variable(_) => ZIO.succeed(expr)
 
       case Expr.Sequence(Seq(), e) => normalizeToValue(e, fuel)
 
@@ -106,6 +108,12 @@ trait Evaluator[R, E] {
             ZIO.succeed(fields.find(_.field == field).getOrElse { ??? }.value)
 
           case recValue => ZIO.succeed(Expr.RecordFieldLoad(rec, field, recValue))
+        }
+
+      case Expr.Unbox(_, value) =>
+        normalizeToValue(value, fuel).flatMap {
+          case Expr.Box(_, inner) => normalizeToValue(inner, fuel)
+          case _ => ZIO.succeed(expr)
         }
 
     }

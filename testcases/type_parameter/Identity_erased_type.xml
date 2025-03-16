@@ -13,7 +13,7 @@
 
         proc main(): () do
 
-            val str = identity erasedString "A"
+            val str: String = identity erasedString "A"
 
         end
         

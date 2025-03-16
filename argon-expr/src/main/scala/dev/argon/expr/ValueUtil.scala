@@ -11,7 +11,9 @@ object ValueUtil {
       case Expr.AnyType() => true
       case Expr.BindVariable(_, _) => false
       case Expr.BoolLiteral(_) => true
+      case Expr.Box(_, _) => true
       case Expr.Builtin(_) => true
+      case Expr.Boxed(_) => true
       case Expr.Finally(_, _) => false
       case Expr.FunctionCall(_, _) => false
       case Expr.FunctionObjectCall(_, _) => false
@@ -29,9 +31,20 @@ object ValueUtil {
       case Expr.TupleElement(_, _) => false
       case Expr.TypeN(_) => true
       case Expr.TypeBigN(_) => true
+      case Expr.Unbox(_, _) => false
       case Expr.Variable(_) => false
       case Expr.VariableStore(_, _) => false
     end match
   end isValue
 
+
+  def isTypeType(exprContext: ExprContext)(t: exprContext.Expr): Boolean =
+    import exprContext.*
+    t match {
+      case Expr.AnyType() | Expr.TypeN(_) | Expr.TypeBigN(_) => true
+      case _ => false
+    }
+  end isTypeType
+  
+  
 }

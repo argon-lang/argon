@@ -9,7 +9,7 @@ import zio.stream.*
 import zio.stm.{TMap, TRef, TSet, USTM, ZSTM}
 import dev.argon.ast
 import dev.argon.compiler.{ArgonEvaluator, HasContext, SignatureEraser}
-import dev.argon.expr.{BinaryBuiltin, CaptureScanner, FreeVariableScanner, NullaryBuiltin, UnaryBuiltin}
+import dev.argon.expr.{BinaryBuiltin, CaptureScanner, FreeVariableScanner, NullaryBuiltin, UnaryBuiltin, ValueUtil}
 
 
 private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFileEntry] {
@@ -453,10 +453,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
 
       private def isTypeType(t: ArExpr): Boolean =
-        t match {
-          case context.DefaultExprContext.Expr.TypeN(_) | context.DefaultExprContext.Expr.TypeBigN(_) => true
-          case _ => false
-        }
+        ValueUtil.isTypeType(context.DefaultExprContext)(t)
 
       private sealed trait ExprOutput derives CanEqual {
         type ResultType
@@ -482,6 +479,9 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
         def typeExpr(t: ArExpr): Comp[VmType] =
           ArgonEvaluator(context).normalizeToValue(t, context.Config.evaluatorFuel).flatMap {
+            case ArExpr.Boxed(_) =>
+              ZIO.succeed(VmType.Boxed())
+
             case ArExpr.Builtin(context.DefaultExprContext.Builtin.Nullary(builtin)) =>
               ZIO.succeed(
                 builtin match {
@@ -688,6 +688,14 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
             case ArExpr.BoolLiteral(b) =>
               intoRegister(e, output) { r =>
                 emit(Instruction.ConstBool(r, b))
+              }
+
+            case ArExpr.Box(t, value) =>
+              intoRegister(e, output) { r =>
+                for
+                  a <- expr(value, ExprOutput.AnyRegister)
+                  _ <- emit(Instruction.Box(r, a))
+                yield ()
               }
 
             case ArExpr.Builtin(context.DefaultExprContext.Builtin.Binary(builtin, a, b)) =>
@@ -954,6 +962,16 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   _ <- emit(Instruction.TupleElement(index, r, tupleReg))
                 yield ()
               }
+
+            case ArExpr.Unbox(t, value) =>
+              intoRegister(e, output) { r =>
+                for
+                  t <- typeExpr(t)
+                  a <- expr(value, ExprOutput.AnyRegister)
+                  _ <- emit(Instruction.Unbox(r, t, a))
+                yield ()
+              }
+              
 
             case ArExpr.Variable(v) =>
               knownVars.get(v).commit.flatMap {

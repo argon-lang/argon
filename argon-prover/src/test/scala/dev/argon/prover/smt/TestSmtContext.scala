@@ -27,7 +27,7 @@ abstract class TestSmtContext[Constructor](using CanEqual[Constructor, Construct
 
   override protected def predicateReferencesVariable(p: Expr, v: Expr.Variable): Boolean =
     p match
-      case v2 @ Expr.Variable(name) => v == v2
+      case Expr.Variable(name) => v.name == name
       case Expr.Value(constructor, args) => args.exists(predicateReferencesVariable(_, v))
     end match
 
