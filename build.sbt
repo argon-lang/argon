@@ -605,7 +605,11 @@ lazy val argon_backend = crossProject(JVMPlatform, JSPlatform, NodePlatform).cro
         }
 
         val inputFiles = (
-          (jsBackendDir / "src" ** "*.ts") +++
+          (
+            (jsBackendDir / "src" ** "*.ts")
+              --- (jsBackendDir / "src/executor/argon-runtime.ts")
+
+          ) +++
             (polyfillPackageDir / "src" ** "*.js")
         ).get().toSet
 

@@ -12,6 +12,7 @@ object SmtOrderTests extends ZIOSpecDefault {
   case object EqualTo extends TestCtor derives CanEqual
   case object Not extends TestCtor derives CanEqual
   case object Eq extends TestCtor derives CanEqual
+  case object Ne extends TestCtor derives CanEqual
   case object Lt extends TestCtor derives CanEqual
   case object Le extends TestCtor derives CanEqual
   case object Gt extends TestCtor derives CanEqual
@@ -32,7 +33,9 @@ object SmtOrderTests extends ZIOSpecDefault {
 
     private val commonAssertions = Seq()
 
-    override val fuel = Fuel(10)
+    override val fuel = Fuel(4)
+
+    override protected val theories: Seq[Theory] = Seq.empty
 
     protected override def freshAssertions(model: Model): Seq[URIO[VariableProvider, TVariable] => URIO[VariableProvider, (Proof[String], Predicate)]] =
       (commonAssertions ++ extraAssertions)

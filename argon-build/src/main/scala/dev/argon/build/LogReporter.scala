@@ -19,7 +19,7 @@ trait LogReporter {
       if errors.isEmpty then
         ZIO.unit
       else
-        ZIO.fail(BuildFailed(errorCount = errors.size))
+        ZIO.fail(BuildFailed(errors))
       end if
     }
 }

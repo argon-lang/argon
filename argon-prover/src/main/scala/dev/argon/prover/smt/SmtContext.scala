@@ -5,7 +5,9 @@ import dev.argon.util.{*, given}
 import zio.*
 import zio.stm.*
 
-abstract class SmtContext[R, E] extends ProverContext[R, E] {
+import scala.reflect.TypeTest
+
+abstract class SmtContext[R, E](using TypeTest[Any, E]) extends ProverContext[R, E] {
   import syntax.*
 
   protected def assumeResultProof: Proof[ProofAtom]
@@ -33,7 +35,8 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
   }
 
   final case class PredEquivalenceClass(predicates: Seq[TPredicateExpr])
-  final case class QuantifiedPredicate(vars: Set[TVariable], trigger: CNF, expr: CNF)
+  final case class QuantifiedPredicate(vars: Set[TVariable], trigger: Seq[Literal], expr: CNF)
+  final case class KnownPredicate(p: TPredicateExpr, value: Boolean)
   final case class ProverState
   (
     model: Model,
@@ -41,13 +44,28 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     predEqClasses: Seq[PredEquivalenceClass],
     quantAsserts: Seq[QuantifiedPredicate],
     instantiatedEqClasses: Set[Int],
-    knownPredicates: Seq[(TPredicateExpr, Boolean)],
+    knownPredicates: Seq[KnownPredicate],
+    additionalConstraints: CNF,
   ) {
     def consumeFuel: ProverState = copy(fuel = fuel.consume)
   }
 
-  protected def predicateSatisfiableInModel(pf: TPredicateExpr, state: ProverState): ZIO[R, E, Option[Boolean]] =
-    ZIO.none
+  final case class SmtConstraint(p: Predicate)
+
+
+  final case class TheoryResponse(
+    impliedAssignments: Seq[KnownPredicate],
+    constraints: Predicate,
+  )
+
+  trait Theory {
+    def check(assigned: Seq[KnownPredicate], unassigned: Seq[TPredicateExpr], model: Model, fuel: Fuel): ZIO[R, E | SmtConstraint, Seq[KnownPredicate]]
+  }
+
+  protected val theories: Seq[Theory]
+
+  protected def predicateReferencesVariable(p: TPredicateExpr, v: TVariable): Boolean
+
 
   private def predicatesEquivalent(p1: TPredicateExpr, p2: TPredicateExpr, state: ProverState): ZIO[R, E, Boolean] =
     matchPredicateExpr(p1, p2, state, Set.empty).map(_.nonEmpty)
@@ -86,7 +104,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       }
 
   private def recordKnownPredicate(state: ProverState, pf: TPredicateExpr, value: Boolean): ZIO[R, E, ProverState] =
-    ZIO.succeed { state.copy(knownPredicates = state.knownPredicates :+ (pf, value)) }
+    ZIO.succeed { state.copy(knownPredicates = state.knownPredicates :+ KnownPredicate(pf, value)) }
 
 
   private def negationNormalForm(p: Predicate): NNF =
@@ -97,6 +115,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       case Implies(a, b) =>
         NNF.Or(List(elimNot(a), negationNormalForm(b)))
 
+      case PropTrue => NNF.Lit(true)
       case PropFalse => NNF.Lit(false)
       case PredicateExpression(e) => NNF.Lit(Literal.Atom(e))
     }
@@ -107,6 +126,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       case Or(a, b) => NNF.And(List(elimNot(a), elimNot(b)))
       case Implies(a, PropFalse) => negationNormalForm(a)
       case Implies(a, b) => NNF.And(List(negationNormalForm(a), elimNot(b)))
+      case PropTrue => NNF.Lit(true)
       case PropFalse => NNF.Lit(true)
       case PredicateExpression(e) => NNF.Lit(Literal.NotAtom(e))
     }
@@ -170,18 +190,11 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     case False(example: TPredicateExpr)
   }
 
-  private def unitClauses(p: CNF): List[(TPredicateExpr, Boolean)] =
+  private def unitClauses(p: CNF): List[KnownPredicate] =
     p.flatMap {
-      case Literal.Atom(pf) :: Nil => List((pf, true))
-      case Literal.NotAtom(pf) :: Nil => List((pf, false))
+      case Literal.Atom(pf) :: Nil => List(KnownPredicate(pf, true))
+      case Literal.NotAtom(pf) :: Nil => List(KnownPredicate(pf, false))
       case _ => Nil
-    }
-
-
-  private def unitPropagation(p: CNF, state: ProverState): ZIO[R, E, ProverState] =
-    ZIO.foldLeft(unitClauses(p))(state) {
-      case (state, (pf, value)) =>
-        recordKnownPredicate(state, pf, value)
     }
 
   protected def assumePredicate(p: CNF, state: ProverState, eqClass: Int, value: Boolean): ZIO[R, E, (CNF, ProverState)] =
@@ -214,34 +227,40 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     yield (simplify(updated), state)
 
   protected def assumeKnownPredicates(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
-    ZIO.foldLeft(state.knownPredicates)((p, state)) { case ((p, state), (pf, value)) =>
+    ZIO.foldLeft(state.knownPredicates)((p, state)) { case ((p, state), KnownPredicate(pf, value)) =>
       getEqClassIndex(pf, state).flatMap { case (state, eqClass) =>
         assumePredicate(p, state, eqClass, value)
       }
     }
 
-  private def checkModel(p: CNF, state: ProverState): ZIO[R, E, ProverState] =
-    ZIO.foldLeft(p.flatten)(state) { (state, lit) =>
-      predicateSatisfiableInModel(lit.pf, state).flatMap {
-        case Some(value) => recordKnownPredicate(state, lit.pf, value)
-        case None => ZIO.succeed(state)
-      }
+  private def processKnownValues(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
+    assumeKnownPredicates(p, state).flatMap { (p, state) =>
+      val units = unitClauses(p)
+      if units.isEmpty then
+        ZIO.succeed((p, state))
+      else
+        processKnownValues(p, state.copy(knownPredicates = state.knownPredicates ++ units))
     }
 
-  private def preprocess(p: CNF, state: ProverState): ZIO[R, E, (CNF, ProverState)] =
-    for
-      (p, state) <- assumeKnownPredicates(p, state)
-      state <- checkModel(p, state)
-      (p, state) <- assumeKnownPredicates(p, state)
-      state <- unitPropagation(p, state)
-      (p, state) <- assumeKnownPredicates(p, state)
-    yield (p, state)
+  private def checkModel(p: CNF, state: ProverState): ZIO[R, E | SmtConstraint, (CNF, ProverState)] =
+    assumeKnownPredicates(p, state).flatMap { (p, state) =>
+      ZIO.foldLeft(theories)((p, state)) { case ((p, state), theory) =>
+        val unassigned = p.view.flatten.map(_.pf).toSet.toSeq
+        theory.check(state.knownPredicates, unassigned, state.model, state.fuel)
+          .flatMap { impliedAssignments =>
+            if impliedAssignments.isEmpty then
+              ZIO.succeed((p, state))
+            else
+              processKnownValues(p, state.copy(knownPredicates = state.knownPredicates ++ impliedAssignments))
+          }
+      }
+    }
 
   private final case class PredicateStats(pf: TPredicateExpr, numTrue: Int, numFalse: Int)
 
   private enum PredicateChoice {
     case KnownResult(result: Boolean)
-    case SelectedPredicate(lit: Literal, eqClass: Int, bestValue: Boolean)
+    case SelectedPredicate(p: TPredicateExpr, eqClass: Int, bestValue: Boolean)
   }
 
   private def choosePredicate(p: CNF, state: ProverState): ZIO[R, E, (ProverState, PredicateChoice)] =
@@ -252,8 +271,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
           val result = bestPred match {
             case Some((eqClass, stats)) =>
               val bestValue = stats.numTrue >= stats.numFalse
-              val lit = if bestValue then Literal.Atom(stats.pf) else Literal.NotAtom(stats.pf)
-              PredicateChoice.SelectedPredicate(lit, eqClass, bestValue)
+              PredicateChoice.SelectedPredicate(stats.pf, eqClass, bestValue)
 
             case None =>
               PredicateChoice.KnownResult(true)
@@ -296,7 +314,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
 
   private def instantiateQuantifier(lit: Literal, state: ProverState): ZIO[R, E, (ProverState, CNF)] =
     def quantMatch(lit: Literal)(quant: QuantifiedPredicate): ZIO[R, E, Option[CNF]] =
-      ZIO.collectFirst(quant.trigger.flatten) { quantLit =>
+      ZIO.collectFirst(quant.trigger) { quantLit =>
         quantLitMatch(state, lit, quantLit, quant.vars).flatMap {
           case Some(varMap) =>
             for
@@ -351,28 +369,75 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
     else
       ZIO.succeed((state, Nil))
 
-  private def satisfiable(p: CNF, state: ProverState): ZIO[R, E, Boolean] =
-    instantiateQuantifiers(p, state).flatMap { (state, clauses) =>
-      preprocess(p ++ clauses, state).flatMap { (p, state) =>
-        choosePredicate(p, state).flatMap {
-          case (_, PredicateChoice.KnownResult(result)) => ZIO.succeed(result)
-          case (state, PredicateChoice.SelectedPredicate(_, _, _)) if clauses.nonEmpty =>
-            satisfiable(p, state)
+  private enum SatResult derives CanEqual {
+    case Unknown
+    case Sat(model: Model)
+    case Unsat(conflicts: CNF)
+  }
 
-          case (state, PredicateChoice.SelectedPredicate(lit, eqClass, value)) if state.fuel.nonEmpty =>
-            recordKnownPredicate(state.consumeFuel, lit.pf, value).flatMap(assumePredicate(p, _, eqClass, value)).flatMap(satisfiable) ||
-              recordKnownPredicate(state.consumeFuel, lit.pf, !value).flatMap(assumePredicate(p, _, eqClass, !value)).flatMap(satisfiable)
+  private def satisfiable(p: CNF, state: ProverState): ZIO[R, E, SatResult] =
+    def satNoQuant(p: CNF, state: ProverState) =
+      checkModel(p, state).foldCauseZIO(
+        failure = cause => ErrorTestUtils.splitCause[SmtConstraint, E](cause) match {
+          case Left(SmtConstraint(constraint)) =>
+            ZIO.succeed(SatResult.Unsat(state.additionalConstraints ++ conjunctiveNormalForm(constraint)))
 
-          case _ => ZIO.succeed(true)
-        }
+          case Right(cause) => ZIO.failCause(cause)
+        },
+        success = (p, state) => {
+          choosePredicate(p, state).flatMap {
+            case (_, PredicateChoice.KnownResult(true)) => ZIO.succeed(SatResult.Sat(state.model))
+            case (state, PredicateChoice.KnownResult(false)) => ZIO.succeed(SatResult.Unsat(state.additionalConstraints))
+
+            case (state, PredicateChoice.SelectedPredicate(pred, eqClass, value)) if state.fuel.nonEmpty =>
+              assumeKnownPredicates(p, state.copy(knownPredicates = state.knownPredicates :+ KnownPredicate(pred, value)))
+                .flatMap { (p, state1) =>
+                  satisfiable(p, state1)
+                }
+                .flatMap {
+                  case SatResult.Unknown => ZIO.succeed(SatResult.Unknown)
+                  case sat @ SatResult.Sat(_) => ZIO.succeed(sat)
+                  case SatResult.Unsat(constraint) =>
+                    assumeKnownPredicates(p, state.copy(knownPredicates = state.knownPredicates :+ KnownPredicate(pred, !value)))
+                      .flatMap { (p, state2) =>
+                        assumeKnownPredicates(
+                          p ++ constraint,
+                          state.copy(
+                            knownPredicates = state.knownPredicates :+ KnownPredicate(pred, !value),
+                            additionalConstraints = constraint
+                          )
+                        )
+                          .flatMap { (p, state) =>
+                            satisfiable(p, state)
+                          }
+                      }
+                }
+
+            case (_, PredicateChoice.SelectedPredicate(_, _, _)) => ZIO.succeed(SatResult.Unknown)
+          }
+        },
+      )
+
+    if state.fuel.nonEmpty then
+      instantiateQuantifiers(p, state).flatMap { (state, clauses) =>
+        satNoQuant(p ++ clauses, if clauses.nonEmpty then state.consumeFuel else state)
       }
-    }
+    else
+      satNoQuant(p, state)
+  end satisfiable
 
-  private def getAssertionTrigger(p: Predicate): Predicate =
+  private def getAssertionTrigger(p: Predicate, vars: Set[TVariable], invert: Boolean): Set[Literal] =
     p match {
-      case Implies(_, PropFalse) => p
-      case Implies(_, b) => getAssertionTrigger(b)
-      case _ => p
+      case PredicateExpression(p) =>
+        if !vars.exists(predicateReferencesVariable(p, _)) then Set()
+        else if invert then Set(Literal.NotAtom(p))
+        else Set(Literal.Atom(p))
+      case And(a, b) => getAssertionTrigger(a, vars, invert) ++ getAssertionTrigger(b, vars, invert)
+      case Or(a, b) => getAssertionTrigger(a, vars, invert) ++ getAssertionTrigger(b, vars, invert)
+
+      case Implies(a, b) => getAssertionTrigger(a, vars, !invert) ++ getAssertionTrigger(b, vars, invert)
+
+      case PropTrue | PropFalse => Set()
     }
 
   private def assertionAsQuantifier(assertion: ZIO[R, E, TVariable] => ZIO[R, E, (Proof[ProofAtom], Predicate)]): ZIO[R, E, QuantifiedPredicate] =
@@ -380,7 +445,7 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
       vars <- TSet.empty[TVariable].commit
       (_, pred) <- assertion(newVariable.tap(vars.put(_).commit))
       vars <- vars.toSet.commit
-    yield QuantifiedPredicate(vars, conjunctiveNormalForm(getAssertionTrigger(pred)), conjunctiveNormalForm(pred))
+    yield QuantifiedPredicate(vars, getAssertionTrigger(pred, vars, false).toSeq, conjunctiveNormalForm(pred))
 
 
   override def check(goal: Predicate, model: Model, fuel: Fuel): ZIO[R, E, ProofResult] =
@@ -402,11 +467,12 @@ abstract class SmtContext[R, E] extends ProverContext[R, E] {
           quantAsserts = quantAsserts,
           instantiatedEqClasses = Set.empty,
           knownPredicates = Seq.empty,
+          additionalConstraints = Nil,
         )
 
         satisfiable(p, initialState).map {
-          case true => ProofResult.Unknown
-          case false => ProofResult.Yes(assumeResultProof, model)
+          case SatResult.Unknown | SatResult.Sat(_) => ProofResult.Unknown
+          case SatResult.Unsat(_) => ProofResult.Yes(assumeResultProof, model)
         }
       }
   end check

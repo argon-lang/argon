@@ -1,7 +1,8 @@
 package dev.argon.expr
 
-import dev.argon.util.TreeShifter
+import dev.argon.util.{TreeShifter, UniqueIdentifier}
 import cats.*
+import dev.argon.ast.IdentifierExpr
 
 private trait Substitution {
   val exprContext: ExprContext
@@ -15,10 +16,14 @@ private trait Substitution {
     given exprShifter: Shifter[Expr, Expr]:
       override def shift(a: Expr): Expr =
         (a match {
-          case Expr.Variable(v) => variableMapping.get(v)
+          case Expr.Variable(v) =>
+            variableMapping.get(v)
           case _ => None
         }).getOrElse(autoShifter[Expr, Expr].shift(a))
     end exprShifter
+
+    given Shifter[Expr.RecordType, Expr.RecordType] = autoShifter
+    given Shifter[RecordFieldLiteral, RecordFieldLiteral] = autoShifter
 
     given Shifter[Builtin, Builtin] = autoShifter
     given Shifter[Hole, Hole] = identity
@@ -26,6 +31,18 @@ private trait Substitution {
 
     given Shifter[Var, Var] = autoShifter
     given Shifter[LocalVar, LocalVar] = autoShifter
+
+    given Shifter[Function, Function] = identityShifter
+    given Shifter[Record, Record] = identityShifter
+    given Shifter[RecordField, RecordField] = identityShifter
+
+    given Shifter[NullaryBuiltin, NullaryBuiltin] = identityShifter
+    given Shifter[UnaryBuiltin, UnaryBuiltin] = identityShifter
+    given Shifter[BinaryBuiltin, BinaryBuiltin] = identityShifter
+    given Shifter[ParameterOwner, ParameterOwner] = identityShifter
+
+    given Shifter[IdentifierExpr, IdentifierExpr] = identityShifter
+    given Shifter[UniqueIdentifier, UniqueIdentifier] = identityShifter
 
   }
 

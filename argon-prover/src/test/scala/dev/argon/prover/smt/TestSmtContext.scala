@@ -4,6 +4,7 @@ import dev.argon.util.{*, given}
 import dev.argon.prover.*
 import zio.*
 import zio.stream.{Stream, ZStream}
+import dev.argon.util.NothingTypeTest.given
 
 abstract class TestSmtContext[Constructor](using CanEqual[Constructor, Constructor])
     extends SmtContext[VariableProvider, Nothing]
@@ -23,6 +24,12 @@ abstract class TestSmtContext[Constructor](using CanEqual[Constructor, Construct
         case Expr.Value(_, _) => p
       }
     }
+
+  override protected def predicateReferencesVariable(p: Expr, v: Expr.Variable): Boolean =
+    p match
+      case v2 @ Expr.Variable(name) => v == v2
+      case Expr.Value(constructor, args) => args.exists(predicateReferencesVariable(_, v))
+    end match
 
   override protected def substituteVariablesPE(varMap: Map[Expr.Variable, Expr])(pe: Expr): Expr =
     pe match {

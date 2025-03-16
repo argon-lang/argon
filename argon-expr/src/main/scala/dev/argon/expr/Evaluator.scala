@@ -27,7 +27,20 @@ trait Evaluator[R, E] {
         Expr.TypeN(_) | Expr.TypeBigN(_) | Expr.FunctionType(_, _) |
         Expr.Variable(_) => ZIO.succeed(expr)
 
-      case Expr.BindVariable(_, _) | Expr.Sequence(_, _) | Expr.VariableStore(_, _) | (_: Expr.RecordFieldStore) | (_: Expr.IfElse) => ???
+      case Expr.Sequence(Seq(), e) => normalizeToValue(e, fuel)
+
+      case Expr.BindVariable(_, _) | Expr.Sequence(_, _) | Expr.VariableStore(_, _) | (_: Expr.RecordFieldStore) => ???
+
+      case ifElse: Expr.IfElse =>
+        normalizeToValue(ifElse.condition, fuel).flatMap {
+          case Expr.BoolLiteral(true) =>
+            normalizeToValue(ifElse.trueBody, fuel)
+
+          case Expr.BoolLiteral(false) =>
+            normalizeToValue(ifElse.falseBody, fuel)
+
+          case cond => ZIO.succeed(ifElse.copy(condition = cond))
+        }
 
       case Expr.Hole(hole) =>
         normalizeHole(hole).flatMap { expr2 =>
@@ -67,11 +80,16 @@ trait Evaluator[R, E] {
         normalizeToValue(action, fuel)
 
       case Expr.FunctionCall(f, args) =>
-        getFunctionBody(f, args, fuel).flatMap { (callExpr, couldInline) =>
-          if couldInline then
-            normalizeToValue(callExpr, fuel.consume)
-          else
-            ZIO.succeed(callExpr)
+        ZIO.foreach(args) { arg =>
+          normalizeToValue(arg, fuel)
+        }.flatMap { args =>
+          getFunctionBody(f, args, fuel).flatMap { (callExpr, couldInline) =>
+            if couldInline then
+              normalizeToValue(callExpr, fuel.consume)
+            else
+              ZIO.succeed(Expr.FunctionCall(f, args))
+
+          }
         }
 
       case Expr.FunctionObjectCall(f, a) => ???

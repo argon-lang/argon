@@ -293,6 +293,10 @@ record function-definition {
     erased: bool;
 
     @esexpr:(keyword)
+    @esexpr:(default-value #false)
+    proof: bool;
+
+    @esexpr:(keyword)
     @esexpr:(default-value (pure))
     effects: effect-info;
 
@@ -485,6 +489,7 @@ simple enum nullary-builtin {
 simple enum unary-builtin {
     int-negate,
     int-bit-not,
+    bool-not,
 }
 
 @esexpr:(derive-codec)
@@ -510,6 +515,9 @@ simple enum binary-builtin {
     string-concat,
     string-eq,
     string-ne,
+    
+    bool-eq,
+    bool-ne,
 }
 
 @esexpr:(derive-codec)

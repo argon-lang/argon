@@ -13,7 +13,10 @@ trait TreeShifter[F[_]: Monad] {
   type Shifter[A, B] = TreeShifter.Shifter[F, A, B]
 
   object StandardShifters {
-    given [A, B >: A] => Shifter[A, B] = Monad[F].pure
+    given Shifter[Boolean, Boolean] = identityShifter
+    given Shifter[BigInt, BigInt] = identityShifter
+    given Shifter[String, String] = identityShifter
+    given Shifter[Int, Int] = identityShifter
 
     given [A, B] => Shifter[A, B] => Shifter[Seq[A], Seq[B]]:
       override def shift(a: Seq[A]): F[Seq[B]] =
@@ -24,6 +27,10 @@ trait TreeShifter[F[_]: Monad] {
       override def shift(a: Option[A]): F[Option[B]] =
         a.traverse(summon[Shifter[A, B]].shift)
     end given
+  }
+
+  def identityShifter[A, B >: A]: Shifter[A, B] = new Shifter[A, B] {
+    override def shift(a: A): F[B] = Monad[F].pure[B](a)
   }
 
   inline def autoShifter[A <: Matchable, B](using ma: Mirror.Of[A], mb: Mirror.Of[B]): Shifter[A, B] =

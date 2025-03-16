@@ -254,6 +254,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
             `import` = importSpec,
             `inline` = func.isInline,
             erased = func.isErased,
+            proof = func.isProof,
             effects = encodeEffectInfo(func.effects),
             signature = sig,
             implementation = impl,
@@ -447,6 +448,7 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
               val builtin2 = builtin match {
                 case dev.argon.expr.UnaryBuiltin.IntNegate => UnaryBuiltin.IntNegate
                 case dev.argon.expr.UnaryBuiltin.IntBitNot => UnaryBuiltin.IntBitNot
+                case dev.argon.expr.UnaryBuiltin.BoolNot => UnaryBuiltin.BoolNot
               }
 
               for
@@ -474,6 +476,8 @@ private[tube] object TubeEncoder extends TubeEncoderBase[TubeFileEntry] {
                 case dev.argon.expr.BinaryBuiltin.StringConcat => BinaryBuiltin.StringConcat
                 case dev.argon.expr.BinaryBuiltin.StringEQ => BinaryBuiltin.StringEq
                 case dev.argon.expr.BinaryBuiltin.StringNE => BinaryBuiltin.StringNe
+                case dev.argon.expr.BinaryBuiltin.BoolEQ => BinaryBuiltin.BoolEq
+                case dev.argon.expr.BinaryBuiltin.BoolNE => BinaryBuiltin.BoolNe
               }
 
               for

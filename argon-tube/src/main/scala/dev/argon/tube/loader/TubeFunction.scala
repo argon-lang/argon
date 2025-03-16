@@ -26,6 +26,8 @@ private[loader] object TubeFunction {
 
       override def isErased: Boolean = function.erased
 
+      override def isProof: Boolean = function.proof
+
       override def effects: context.DefaultExprContext.EffectInfo =
         function.effects match {
           case EffectInfo.Pure() => context.DefaultExprContext.EffectInfo.Pure
@@ -51,6 +53,9 @@ private[loader] object TubeFunction {
           })
         }
 
+
+      override def toString: String =
+        function.`import`.toString
     }
 } 
 

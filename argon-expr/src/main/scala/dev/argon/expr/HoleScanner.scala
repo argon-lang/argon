@@ -4,7 +4,7 @@ import cats.*
 import dev.argon.ast.IdentifierExpr
 import dev.argon.util.{*, given}
 
-trait HoleScanner extends TreeScanner[[A] =>> Either[Unit, A]] {
+sealed trait HoleScanner extends TreeScanner[[A] =>> Either[Unit, A]] {
   val exprContext: ExprContext
   import exprContext.*
 
@@ -42,7 +42,12 @@ trait HoleScanner extends TreeScanner[[A] =>> Either[Unit, A]] {
   private given Scanner[Int] = IgnoreScanner[Int]
   private given Scanner[String] = IgnoreScanner[String]
 
+}
 
-
-
+object HoleScanner {
+  def hasHole(ec: ExprContext)(hole: ec.Hole)(expr: ec.Expr): Boolean =
+    new HoleScanner {
+      override val exprContext: ec.type = ec
+      override val searchTarget: exprContext.Hole = hole
+    }.exprScanner.scan(expr).isLeft
 }

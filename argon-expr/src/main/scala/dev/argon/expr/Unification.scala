@@ -102,10 +102,7 @@ private[expr] sealed trait Unification[R, E](fuel: Fuel) {
 
 
   private def containsHole(e: Expr, h: Hole): Boolean =
-    new HoleScanner {
-      override val exprContext: Unification.this.exprContext.type = Unification.this.exprContext
-      override val searchTarget: Hole = h
-    }.exprScanner.scan(e).isLeft
+    HoleScanner.hasHole(exprContext)(h)(e)
 
 }
 

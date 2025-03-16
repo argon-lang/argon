@@ -68,13 +68,17 @@ trait ScopeContext {
 
     trait Scope {
       def lookup(id: IdentifierExpr): Comp[LookupResult]
-      def givenAssertions: Comp[Seq[ImplicitValue]] = ???
-      def knownVarValues: Map[Var, TRExprContext.Expr] = ???
+      def givenAssertions: Comp[Seq[ImplicitValue]]
+      def knownVarValues: Comp[Map[Var, TRExprContext.Expr]]
     }
 
     object Empty extends Scope {
       override def lookup(id: IdentifierExpr): Comp[LookupResult] =
         ZIO.succeed(LookupResult.NotFound())
+
+      override def givenAssertions: Comp[Seq[ImplicitValue]] = ZIO.succeed(Seq.empty)
+
+      override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] = ZIO.succeed(Map.empty)
     }
 
     final class GlobalScopeBuilder private(imports: Seq[WithSource[ast.ImportStmt]], module: ArModuleC & HasContext[self.type])(using TubeImporter & HasContext[self.type]) {
@@ -83,6 +87,16 @@ trait ScopeContext {
 
       def toScope: Comp[Scope] = ZIO.succeed(CurrentModuleScope(GlobalScope(imports, module), module))
     }
+
+    private def toExportedGiven(exp: ModuleExportC[self.type]): Option[ImplicitValue] =
+      exp match {
+        case ModuleExportC.Function(f) if f.isProof =>
+          Some(ImplicitValue.OfFunction(f))
+
+        case ModuleExportC.Function(_) => None
+        case ModuleExportC.Record(_) => None
+        case ModuleExportC.Exported(exp) => toExportedGiven(exp)
+      }
 
     object GlobalScopeBuilder {
       def empty(module: ArModuleC & HasContext[self.type])(using TubeImporter & HasContext[self.type]): GlobalScopeBuilder =
@@ -105,6 +119,18 @@ trait ScopeContext {
               case None => LookupResult.NotFound()
             }
           }
+
+      override def givenAssertions: Comp[Seq[ImplicitValue]] =
+        ZIO.foreach(imports) { imp =>
+          ImportUtil.getModuleExports(self)(Set.empty)(module.tubeName, module.path)(imp)
+            .map { exports =>
+              exports.values.view
+                .flatten
+                .flatMap(toExportedGiven)
+            }
+        }.map(_.flatten)
+
+      override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] = ZIO.succeed(Map.empty)
     }
 
     final class CurrentModuleScope(parent: GlobalScope, module: ArModuleC & HasContext[self.type]) extends Scope {
@@ -119,11 +145,23 @@ trait ScopeContext {
 
           case None => parent.lookup(id)
         }
+
+      override def givenAssertions: Comp[Seq[ImplicitValue]] =
+        for
+          exports <- module.allExports(Set.empty)
+          parentAssertions <- parent.givenAssertions
+        yield parentAssertions ++
+          exports.values.view
+            .flatten
+            .flatMap(toExportedGiven)
+            .toSeq
+
+      override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] = ZIO.succeed(Map.empty)
     }
 
     final class ParameterScope(owner: TRExprContext.ParameterOwner, parentScope: Scope, sigParams: Seq[DefaultSignatureContext.SignatureParameter]) extends Scope {
 
-      private val parameters =
+      private val parameters: Seq[Var] =
         val shifter = DefaultToTRShifter[self.type](self)
         val owner2 = owner match {
           case TRExprContext.ParameterOwner.Func(f) => DefaultExprContext.ParameterOwner.Func(f)
@@ -153,11 +191,40 @@ trait ScopeContext {
           .getOrElse {
             parentScope.lookup(id)
           }
+
+      override def givenAssertions: Comp[Seq[ImplicitValue]] =
+        for
+          parentAssertions <- parentScope.givenAssertions
+        yield parentAssertions ++ parameters.view.filter(_.isProof).map(ImplicitValue.OfVar.apply)
+
+      override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] = ZIO.succeed(Map.empty)
     }
 
-    final class LocalScope private(parent: Scope, variables: TMap[IdentifierExpr, LocalVar]) extends Scope {
-      def addVariable(v: LocalVar): UIO[Unit] =
-        ZIO.foreachDiscard(v.name)(name => variables.put(name, v).commit)
+    final class LocalScope private(parent: Scope, variables: TMap[IdentifierExpr, LocalVar], variableValues: TMap[Var, TRExprContext.Expr]) extends Scope {
+      def addVariable(v: LocalVar, value: Option[TRExprContext.Expr]): UIO[Unit] =
+        ZIO.foreachDiscard(v.name)(name => (
+          variables.put(name, v) *>
+            (
+              value match {
+                case Some(value) if v.isMutable && PurityScanner(self)(TRExprContext)(value) =>
+                  variableValues.put(v, value)
+
+                case _ => STM.unit
+              }
+            )
+        ).commit)
+
+      override def givenAssertions: Comp[Seq[ImplicitValue]] =
+        for
+          parentAssertions <- parent.givenAssertions
+          variables <- variables.values.commit
+        yield parentAssertions ++ variables.view.filter(_.isProof).map(ImplicitValue.OfVar.apply)
+
+      override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] =
+        for
+          parentVars <- parent.knownVarValues
+          vv <- variableValues.toMap.commit
+        yield parentVars ++ vv
 
       def addPartialScope(s: PartialScope): UIO[Unit] =
         ZSTM.foreachDiscard(s.variables.toSeq) { (name, v) =>
@@ -173,16 +240,23 @@ trait ScopeContext {
       def toPartialScope: UIO[PartialScope] =
         for
           vars <- variables.toMap.commit
-        yield PartialScope(vars)
+          variableValues <- variableValues.toMap.commit
+        yield PartialScope(vars, variableValues)
+
+
     }
 
     object LocalScope {
       def make(parentScope: Scope): UIO[LocalScope] =
         for
           variables <- TMap.empty[IdentifierExpr, LocalVar].commit
-        yield LocalScope(parentScope, variables)
+          variableValues <- TMap.empty[Var, TRExprContext.Expr].commit
+        yield LocalScope(parentScope, variables, variableValues)
     }
 
-    final class PartialScope private[Scopes](private[Scopes] val variables: Map[IdentifierExpr, LocalVar])
+    final class PartialScope private[Scopes](
+      private[Scopes] val variables: Map[IdentifierExpr, LocalVar],
+      private[Scopes] val variableValues: Map[Var, TRExprContext.Expr],
+    )
   }
 }

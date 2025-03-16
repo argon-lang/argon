@@ -713,6 +713,8 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                     case BinaryBuiltin.StringConcat => BuiltinBinaryOp.StringConcat
                     case BinaryBuiltin.StringEQ => BuiltinBinaryOp.StringEq
                     case BinaryBuiltin.StringNE => BuiltinBinaryOp.StringNe
+                    case BinaryBuiltin.BoolEQ => BuiltinBinaryOp.BoolEq
+                    case BinaryBuiltin.BoolNE => BuiltinBinaryOp.BoolNe
                     case _ =>
                       println("Unimplemented binary builtin: " + builtin)
                       ???
@@ -728,6 +730,7 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
                   op = builtin match {
                     case UnaryBuiltin.IntNegate => BuiltinUnaryOp.IntNegate
                     case UnaryBuiltin.IntBitNot => BuiltinUnaryOp.IntBitNot
+                    case UnaryBuiltin.BoolNot => BuiltinUnaryOp.BoolNot
                   }
                   _ <- emit(Instruction.BuiltinUnary(op, r, ar))
                 yield ()

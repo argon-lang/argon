@@ -159,6 +159,9 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
               }
           )
 
+        case PropTrue =>
+          ZStream.succeed(ProofResult.Yes(Proof.TrueIsTrue, model))
+
         case PropFalse => ZStream.empty
 
         case PredicateExpression(e) =>
@@ -269,6 +272,7 @@ abstract class PrologContext[R, E] extends ProverContext[R, E] {
         case (Implies(left1, right1), Implies(left2, right2)) =>
           unify(left1, left2, model, solveState) && unify(right1, right2, model, solveState)
 
+        case (PropTrue, PropTrue) => ZIO.succeed(true)
         case (PropFalse, PropFalse) => ZIO.succeed(true)
 
         case _ => ZIO.succeed(false)

@@ -587,6 +587,10 @@ class BlockEmitter extends EmitterBase {
                         unary("-");
                         break;
 
+                    case "bool-not":
+                        unary("!");
+                        break;
+
                     default:
                         ensureExhaustive(insn);
                 }
@@ -640,11 +644,13 @@ class BlockEmitter extends EmitterBase {
 
                     case "int-eq":
                     case "string-eq":
+                    case "bool-eq":
                         binary("===");
                         break;
 
                     case "int-ne":
                     case "string-ne":
+                    case "bool-ne":
                         binary("!==");
                         break;
 

@@ -1,10 +1,11 @@
 package dev.argon.expr
 
-import dev.argon.util.TreeShifter
+import dev.argon.util.{TreeShifter, UniqueIdentifier}
 import cats.*
 import cats.implicits.given
 import zio.ZIO
 import zio.interop.catz.core.given
+import dev.argon.ast.IdentifierExpr
 
 trait ContextShifter[F[_]: Monad] {
 
@@ -35,6 +36,17 @@ trait ContextShifter[F[_]: Monad] {
     given Shifter[ec1.ParameterOwner, ec2.ParameterOwner] = autoShifter
     
     given effectShifter: Shifter[ec1.EffectInfo, ec2.EffectInfo] = autoShifter
+
+    given Shifter[ec1.Function, ec2.Function] = identityShifter
+    given Shifter[ec1.Record, ec2.Record] = identityShifter
+    given Shifter[ec1.RecordField, ec2.RecordField] = identityShifter
+    
+    given Shifter[NullaryBuiltin, NullaryBuiltin] = identityShifter
+    given Shifter[UnaryBuiltin, UnaryBuiltin] = identityShifter
+    given Shifter[BinaryBuiltin, BinaryBuiltin] = identityShifter
+
+    given Shifter[IdentifierExpr, IdentifierExpr] = identityShifter
+    given Shifter[UniqueIdentifier, UniqueIdentifier] = identityShifter
 
   }
 

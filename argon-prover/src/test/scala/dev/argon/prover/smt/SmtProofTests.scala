@@ -32,6 +32,8 @@ object SmtProofTests extends ZIOSpecDefault {
       !pred(KnownFalse),
     )
 
+    override protected val theories: Seq[Theory] = Seq.empty
+
     protected override def freshAssertions(model: Model): Seq[URIO[VariableProvider, TVariable] => URIO[VariableProvider, (Proof[String], Predicate)]] =
       (commonAssertions ++ extraAssertions)
         .map { p =>

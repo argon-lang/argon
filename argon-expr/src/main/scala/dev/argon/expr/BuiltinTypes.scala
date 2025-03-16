@@ -13,6 +13,7 @@ enum NullaryBuiltin extends BuiltinBase derives CanEqual {
 enum UnaryBuiltin extends BuiltinBase derives CanEqual {
   case IntNegate
   case IntBitNot
+  case BoolNot
 }
 
 enum BinaryBuiltin extends BuiltinBase derives CanEqual {
@@ -38,5 +39,8 @@ enum BinaryBuiltin extends BuiltinBase derives CanEqual {
   case StringConcat
   case StringEQ
   case StringNE
+  
+  case BoolEQ
+  case BoolNE
 }
 

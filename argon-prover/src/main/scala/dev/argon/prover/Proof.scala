@@ -7,6 +7,8 @@ sealed trait Proof[+A] derives CanEqual
 object Proof {
   final case class Atomic[+A](atom: A) extends Proof[A]
 
+  case object TrueIsTrue extends Proof[Nothing] 
+  
   // Reference an indentifier bound by a ImplicationAbstraction
   final case class Identifier(id: UniqueIdentifier) extends Proof[Nothing]
 

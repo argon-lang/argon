@@ -17,6 +17,7 @@ trait ExprContext {
     def varType: Expr
     def isErased: Boolean
     def isMutable: Boolean
+    def isProof: Boolean
   }
 
   final case class LocalVar(

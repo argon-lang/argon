@@ -11,6 +11,9 @@
 
         proc main(): () do
             assert (a != b) == !(a = b)
+            assert !(a = b) == (a != b)
+            assert !(a != b) == (a = b)
+            assert (a = b) == !(a != b)
             puts "!= == ="
         end
 

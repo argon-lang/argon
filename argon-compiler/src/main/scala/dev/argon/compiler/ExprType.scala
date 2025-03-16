@@ -42,7 +42,8 @@ trait ExprType {
           case BinaryBuiltin.IntEQ | BinaryBuiltin.IntNE |
                BinaryBuiltin.IntLT | BinaryBuiltin.IntLE |
                BinaryBuiltin.IntGT | BinaryBuiltin.IntGE |
-               BinaryBuiltin.StringEQ | BinaryBuiltin.StringNE =>
+               BinaryBuiltin.StringEQ | BinaryBuiltin.StringNE |
+               BinaryBuiltin.BoolEQ | BinaryBuiltin.BoolNE =>
             boolType
 
           case BinaryBuiltin.StringConcat => stringType
@@ -54,6 +55,7 @@ trait ExprType {
       case Expr.Builtin(exprContext.Builtin.Unary(builtin, _)) =>
         ZIO.succeed(builtin match {
           case UnaryBuiltin.IntNegate | UnaryBuiltin.IntBitNot => intType
+          case UnaryBuiltin.BoolNot => boolType
         })
 
       case Expr.Builtin(exprContext.Builtin.Nullary(builtin)) =>

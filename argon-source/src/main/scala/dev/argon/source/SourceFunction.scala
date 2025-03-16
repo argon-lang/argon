@@ -23,6 +23,8 @@ private[source] object SourceFunction {
 
       override def isInline: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Inline)
       override def isErased: Boolean = erased
+      override def isProof: Boolean = decl.modifiers.exists(_.value == ast.Modifier.Proof)
+
       override def effects: context.DefaultExprContext.EffectInfo =
         if decl.purity then context.DefaultExprContext.EffectInfo.Pure
         else context.DefaultExprContext.EffectInfo.Effectful

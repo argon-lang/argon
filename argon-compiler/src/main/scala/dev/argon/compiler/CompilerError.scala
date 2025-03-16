@@ -56,6 +56,10 @@ enum CompilerError {
   case CanNotMutate(
     loc: Location[FilePosition],
   )
+  
+  case ImplicitNotFound(
+    loc: Location[FilePosition],
+  )
 
   case UnknownModule(tube: TubeName, modulePath: ModulePath, loc: Location[FilePosition])
 

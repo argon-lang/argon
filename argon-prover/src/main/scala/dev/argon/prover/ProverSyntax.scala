@@ -9,6 +9,7 @@ trait ProverSyntax {
   final case class And(a: Predicate, b: Predicate) extends Predicate
   final case class Or(a: Predicate, b: Predicate) extends Predicate
   final case class Implies(a: Predicate, b: Predicate) extends Predicate
+  case object PropTrue extends Predicate
   case object PropFalse extends Predicate
   
 

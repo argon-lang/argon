@@ -55,22 +55,26 @@ trait TypeResolver extends UsingContext {
     Unification.unify[context.Env, context.Error](TRExprContext)(state.model, TREvaluator(), context.Config.evaluatorFuel)(a, b)
 
   private def checkTypesMatch(loc: SourceLocation)(a: Expr, b: Expr)(using state: EmitState): Comp[Unit] =
-    ErrorLog.logError(CompilerError.TypeError(
-      loc,
-      TRToErrorShifter[context.type](context).shiftExpr(a),
-      TRToErrorShifter[context.type](context).shiftExpr(b)
-    )).whenZIODiscard(
-      a match {
-        case Expr.AnyType() =>
-          normalizeToValue(b).map {
-            case Expr.AnyType() | Expr.TypeN(_) | Expr.TypeBigN(_) => false
-            case _ => true
-          }
+    normalizeToValue(a).flatMap { a =>
+      normalizeToValue(b).flatMap { b =>
+        ErrorLog.logError(CompilerError.TypeError(
+          loc,
+          TRToErrorShifter[context.type](context).shiftExpr(a),
+          TRToErrorShifter[context.type](context).shiftExpr(b)
+        )).whenZIODiscard(
+          a match {
+            case Expr.AnyType() =>
+              ZIO.succeed(b match {
+                case Expr.AnyType() | Expr.TypeN(_) | Expr.TypeBigN(_) => false
+                case _ => true
+              })
 
-        case _ =>
-          unifyExpr(a, b).negate
+            case _ =>
+              unifyExpr(a, b).negate
+          }
+        )
       }
-    )
+    }
 
 
   private def nestedScope[A](using state: EmitState)(f: EmitState ?=> Comp[A]): Comp[A] =
@@ -194,7 +198,7 @@ trait TypeResolver extends UsingContext {
                 isProof = isProof,
               )
 
-              _ <- state.scope.addVariable(localVar)
+              _ <- state.scope.addVariable(localVar, Some(value))
 
             yield InferredExpr(
               Expr.BindVariable(
@@ -224,6 +228,17 @@ trait TypeResolver extends UsingContext {
             yield InferredExpr(e, t)
         }
 
+      case ast.Expr.Assert(t) =>
+        new InferFactory {
+          override def loc: Loc = expr.location
+
+          override def infer(using state: EmitState): Comp[InferredExpr] =
+            for
+              t <- resolveType(t)(using state.copy(erased = true))
+              _ <- resolveImplicit(t, loc)
+            yield InferredExpr(Expr.Tuple(Seq()), Expr.Tuple(Seq()))
+        }
+
       case ast.Expr.BinaryOperation(left, ast.BinaryOperator.Assign, right) =>
         resolveExpr(left).assign(AssignedValue(expr.location, resolveExpr(right)))
 
@@ -243,6 +258,28 @@ trait TypeResolver extends UsingContext {
             arg = resolveExpr(right),
             listType = FunctionParameterListType.NormalList,
           ))
+
+
+      case ast.Expr.BinaryOperation(left, ast.BinaryOperator.PropEqual, right) =>
+        new InferFactory {
+          override def loc: Loc = expr.location
+
+          override def infer(using EmitState): Comp[InferredExpr] =
+            for
+              t <- makeHole(Expr.AnyType(), loc)
+              left <- resolveExpr(left).check(t)
+              right <- resolveExpr(right).check(t)
+              tt <- exprType.getExprType(t)
+            yield InferredExpr(
+              Expr.Builtin(Builtin.EqualTo(t, left, right)),
+              tt
+            )
+
+        }
+
+      case ast.Expr.BinaryOperation(left, op, right) =>
+        println("Unimplemented AST binary operation: " + op)
+        ???
 
       case ast.Expr.Block(body, finallyBody) =>
         val bodyFac = resolveStmtBlock(body)
@@ -296,12 +333,12 @@ trait TypeResolver extends UsingContext {
               paramType <- makeHole(Expr.AnyType(), loc)
               paramId <- UniqueIdentifier.make
               param = LocalVar(paramId, paramType, parameterName, isMutable = false, isErased = false, isProof = false)
-              
+
               bodyType <- makeHole(Expr.AnyType(), loc)
               _ <- checkTypesMatch(loc)(t, Expr.FunctionType(param, bodyType))
-              
+
               nestedScope <- Scopes.LocalScope.make(state.scope)
-              _ <- nestedScope.addVariable(param)
+              _ <- nestedScope.addVariable(param, None)
               body <- resolveExpr(body).check(bodyType)(using state.copy(scope = nestedScope))
             yield Expr.Lambda(param, bodyType, body)
         }
@@ -475,6 +512,7 @@ trait TypeResolver extends UsingContext {
   
       case "int_negate" => UnaryBuiltinFactory(loc, UnaryBuiltin.IntNegate, intType, intType)
       case "int_bitnot" => UnaryBuiltinFactory(loc, UnaryBuiltin.IntBitNot, intType, intType)
+      case "bool_not" => UnaryBuiltinFactory(loc, UnaryBuiltin.BoolNot, boolType, boolType)
   
       case "conjunction_type" => ???
       case "disjunction_type" => ???
@@ -495,6 +533,8 @@ trait TypeResolver extends UsingContext {
       case "string_concat" => BinaryBuiltinFactory(loc, BinaryBuiltin.StringConcat, stringType, stringType, stringType)
       case "string_eq" => BinaryBuiltinFactory(loc, BinaryBuiltin.StringEQ, boolType, stringType, stringType)
       case "string_ne" => BinaryBuiltinFactory(loc, BinaryBuiltin.StringNE, boolType, stringType, stringType)
+      case "bool_eq" => BinaryBuiltinFactory(loc, BinaryBuiltin.BoolEQ, boolType, boolType, boolType)
+      case "bool_ne" => BinaryBuiltinFactory(loc, BinaryBuiltin.BoolNE, boolType, boolType, boolType)
   
       case "equal_to_type" => ???
       case _ =>
@@ -1121,96 +1161,6 @@ trait TypeResolver extends UsingContext {
       }
       ArgumentInfo(expr.location, factory, FunctionParameterListType.NormalList)
     end annExprToArg
-
-    private def resolveImplicit(t: Expr, funcLocation: SourceLocation)(using EmitState): Comp[Expr] =
-      tryResolveImplicit(t, funcLocation).map(_.getOrElse { ??? })
-
-    private def tryResolveImplicit(t: Expr, funcLocation: SourceLocation)(using state: EmitState): Comp[Option[Expr]] =
-      state.model.get.flatMap { model =>
-        state.scope.givenAssertions.flatMap { givens =>
-          val ir = ImplicitResolverImpl(funcLocation)
-          val assertions = givens.map(buildImplicits(ir))
-          val fuel = ir.FuelSpecifiers(
-            evaluatorFuel = context.Config.evaluatorFuel,
-            prologFuel = context.Config.prologFuel,
-            smtFuel = context.Config.smtFuel,
-          )
-
-          ir.tryResolve(t, model, assertions, state.scope.knownVarValues, fuel)
-            .flatMap { res =>
-              ZIO.foreach(res) {
-                case ir.ResolvedImplicit(proof, model) =>
-                  def extractProof(proof: Proof[Expr]): Comp[Expr] =
-                    proof match {
-                      case Proof.Atomic(expr) => ZIO.succeed(expr)
-
-                      case Proof.ModusPonens(implication, premise) =>
-                        for
-                          implication <- extractProof(implication)
-                          premise <- extractProof(premise)
-                        yield Expr.FunctionObjectCall(implication, premise)
-
-                      case _ =>
-                        // TODO: Implement actual types for these proofs
-                        ZIO.succeed(Expr.ErasedValue())
-                    }
-
-                  state.model.set(model) *> extractProof(proof)
-              }
-            }
-        }
-      }
-
-    private def buildImplicits(ir: ImplicitResolverImpl)(value: ImplicitValue): ir.AssertionBuilder =
-      new ir.AssertionBuilder {
-        override def create(newVariable: ZIO[context.Env, context.Error, Hole]): ZIO[context.Env, context.Error, ir.Assertion] =
-          value match {
-            case ImplicitValue.OfVar(variable) =>
-              val loadVar = Expr.Variable(variable)
-              val assertion = ir.Assertion(loadVar, variable.varType)
-              ZIO.succeed(assertion)
-
-            case ImplicitValue.OfFunction(function) =>
-              def buildCall(sig: TRSignatureContext.FunctionSignature, args: Seq[Expr]): Comp[ir.Assertion] =
-                sig.parameters.toList match
-                  case (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.InferrableList | FunctionParameterListType.QuoteList, _, _, _, _)) :: tailParams =>
-                    val variable = param.asParameterVar(TRExprContext.ParameterOwner.Func(function), args.size)
-                    for
-                      hole <- newVariable
-                      holeExpr = Expr.Hole(hole)
-                      nextSubst = sig.copy(parameters = tailParams).substituteVar(variable, holeExpr)
-
-                      assertion <- buildCall(nextSubst, args :+ holeExpr)
-                    yield assertion
-
-                  case (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.RequiresList, isErased, _, paramName, paramType)) :: tailParams =>
-                    val variable = param.asParameterVar(TRExprContext.ParameterOwner.Func(function), args.size)
-                    for
-                      varId <- UniqueIdentifier.make
-                      local = LocalVar(varId, paramType, paramName, isMutable = false, isErased = isErased, isProof = false)
-                      loadLocal = Expr.Variable(local)
-                      ir.Assertion(witness, assertionType) <- buildCall(sig.copy(parameters = tailParams).substituteVar(variable, loadLocal), args :+ loadLocal)
-                    yield ir.Assertion(
-                      witness = Expr.Lambda(local, assertionType, witness),
-                      assertionType = Expr.FunctionType(local, assertionType),
-                    )
-
-                  case (param @ TRSignatureContext.SignatureParameter(FunctionParameterListType.NormalList, _, _, _, _)) :: tailParams => ???
-
-                  case Nil =>
-                    ZIO.succeed(ir.Assertion(
-                      witness = Expr.FunctionCall(function, args),
-                      assertionType = sig.returnType,
-                    ))
-                end match
-
-              function.signature.flatMap { sig =>
-                val sig2 = TRSignatureContext.signatureFromDefault(sig)
-                buildCall(sig2, Seq())
-              }
-
-          }
-      }
   }
 
   private final class TupleExprFactory(override val loc: Loc, items: Seq[ExprFactory]) extends ExprFactory {
@@ -1301,6 +1251,102 @@ trait TypeResolver extends UsingContext {
       }
   }
 
+
+  private def resolveImplicit(t: Expr, funcLocation: SourceLocation)(using EmitState): Comp[Expr] =
+    tryResolveImplicit(t, funcLocation)
+      .flatMap(_.fold(ErrorLog.logError(CompilerError.ImplicitNotFound(funcLocation)).as(Expr.Error()))(ZIO.succeed(_)))
+
+  private def tryResolveImplicit(t: Expr, funcLocation: SourceLocation)(using state: EmitState): Comp[Option[Expr]] =
+    val ir = ImplicitResolverImpl(funcLocation)
+    for
+      model <- state.model.get
+      givens <- state.scope.givenAssertions
+
+      assertions = givens.map(buildImplicits(ir))
+      fuel = ir.FuelSpecifiers(
+        evaluatorFuel = context.Config.evaluatorFuel,
+        prologFuel = context.Config.prologFuel,
+        smtFuel = context.Config.smtFuel,
+      )
+
+      kvv <- state.scope.knownVarValues
+
+      res <- ir.tryResolve(t, model, assertions, kvv, fuel)
+
+      res <- ZIO.foreach(res) {
+        case ir.ResolvedImplicit(proof, model) =>
+          def extractProof(proof: Proof[Expr]): Comp[Expr] =
+            proof match {
+              case Proof.Atomic(expr) => ZIO.succeed(expr)
+
+              case Proof.ModusPonens(implication, premise) =>
+                for
+                  implication <- extractProof(implication)
+                  premise <- extractProof(premise)
+                yield Expr.FunctionObjectCall(implication, premise)
+
+              case _ =>
+                // TODO: Implement actual types for these proofs
+                ZIO.succeed(Expr.ErasedValue())
+            }
+
+          state.model.set(model) *> extractProof(proof)
+      }
+    yield res
+  end tryResolveImplicit
+
+
+  private def buildImplicits(ir: ImplicitResolverImpl)(value: ImplicitValue): ir.AssertionBuilder =
+    new ir.AssertionBuilder {
+      override def create(newVariable: ZIO[context.Env, context.Error, Hole]): ZIO[context.Env, context.Error, ir.Assertion] =
+        value match {
+          case ImplicitValue.OfVar(variable) =>
+            val loadVar = Expr.Variable(variable)
+            val assertion = ir.Assertion(loadVar, variable.varType)
+            ZIO.succeed(assertion)
+
+          case ImplicitValue.OfFunction(function) =>
+            def buildCall(sig: TRSignatureContext.FunctionSignature, args: Seq[Expr]): Comp[ir.Assertion] =
+              sig.parameters.toList match
+                case (param@TRSignatureContext.SignatureParameter(FunctionParameterListType.InferrableList | FunctionParameterListType.QuoteList, _, _, _, _)) :: tailParams =>
+                  val variable = param.asParameterVar(TRExprContext.ParameterOwner.Func(function), args.size)
+                  for
+                    hole <- newVariable
+                    holeExpr = Expr.Hole(hole)
+                    nextSubst = sig.copy(parameters = tailParams).substituteVar(variable, holeExpr)
+
+                    assertion <- buildCall(nextSubst, args :+ holeExpr)
+                  yield assertion
+
+                case (param@TRSignatureContext.SignatureParameter(FunctionParameterListType.RequiresList, isErased, _, paramName, paramType)) :: tailParams =>
+                  val variable = param.asParameterVar(TRExprContext.ParameterOwner.Func(function), args.size)
+                  for
+                    varId <- UniqueIdentifier.make
+                    local = LocalVar(varId, paramType, paramName, isMutable = false, isErased = isErased, isProof = false)
+                    loadLocal = Expr.Variable(local)
+                    ir.Assertion(witness, assertionType) <- buildCall(sig.copy(parameters = tailParams).substituteVar(variable, loadLocal), args :+ loadLocal)
+                  yield ir.Assertion(
+                    witness = Expr.Lambda(local, assertionType, witness),
+                    assertionType = Expr.FunctionType(local, assertionType),
+                  )
+
+                case (param@TRSignatureContext.SignatureParameter(FunctionParameterListType.NormalList, _, _, _, _)) :: tailParams => ???
+
+                case Nil =>
+                  ZIO.succeed(ir.Assertion(
+                    witness = Expr.FunctionCall(function, args),
+                    assertionType = sig.returnType,
+                  ))
+              end match
+
+            function.signature.flatMap { sig =>
+              val sig2 = TRSignatureContext.signatureFromDefault(sig)
+              buildCall(sig2, Seq())
+            }
+
+        }
+    }
+
   private class TREvaluator(using state: EmitState) extends ArgonEvaluatorBase[context.Env, context.Error] {
     override val context: TypeResolver.this.context.type = TypeResolver.this.context
     override val exprContext: TRExprContext.type = TRExprContext
@@ -1317,18 +1363,20 @@ trait TypeResolver extends UsingContext {
       state.model.get.map(m => m.resolveHole(hole).getOrElse(Expr.Hole(hole)))
   }
 
+
+  private lazy val exprType = new ExprType {
+    override val context: TypeResolver.this.context.type = TypeResolver.this.context
+    override val exprContext: TRExprContext.type = TRExprContext
+    override val sigContext: TRSignatureContext.type = TRSignatureContext
+
+    override protected def getHoleType(hole: exprContext.HoleInfo): exprContext.Expr =
+      hole.holeType
+  }
+
   private final class ResolvedHoleFiller(model: TRExprContext.Model) extends ContextShifter[Comp] {
     override val ec1: context.TRExprContext.type = context.TRExprContext
     override val ec2: context.DefaultExprContext.type = context.DefaultExprContext
 
-    private lazy val exprType = new ExprType {
-      override val context: TypeResolver.this.context.type = TypeResolver.this.context
-      override val exprContext: TRExprContext.type = TRExprContext
-      override val sigContext: TRSignatureContext.type = TRSignatureContext
-
-      override protected def getHoleType(hole: exprContext.HoleInfo): exprContext.Expr =
-        hole.holeType
-    }
 
     override protected def shiftHole(hole: Hole): Comp[ec2.Expr] =
       model.resolveHole(hole) match {

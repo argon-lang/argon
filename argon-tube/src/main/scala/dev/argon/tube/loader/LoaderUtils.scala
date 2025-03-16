@@ -249,6 +249,7 @@ private[loader] trait LoaderUtils extends UsingContext {
           val builtin2 = builtin match {
             case t.UnaryBuiltin.IntNegate => dev.argon.expr.UnaryBuiltin.IntNegate
             case t.UnaryBuiltin.IntBitNot => dev.argon.expr.UnaryBuiltin.IntBitNot
+            case t.UnaryBuiltin.BoolNot => dev.argon.expr.UnaryBuiltin.BoolNot
           }
           for
             arg <- expr(a)
@@ -275,6 +276,8 @@ private[loader] trait LoaderUtils extends UsingContext {
             case t.BinaryBuiltin.StringConcat => dev.argon.expr.BinaryBuiltin.StringConcat
             case t.BinaryBuiltin.StringEq => dev.argon.expr.BinaryBuiltin.StringEQ
             case t.BinaryBuiltin.StringNe => dev.argon.expr.BinaryBuiltin.StringNE
+            case t.BinaryBuiltin.BoolEq => dev.argon.expr.BinaryBuiltin.BoolEQ
+            case t.BinaryBuiltin.BoolNe => dev.argon.expr.BinaryBuiltin.BoolNE
           }
           for
             argA <- expr(a)

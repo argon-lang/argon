@@ -509,6 +509,7 @@ simple enum variable-capture-mode {
 simple enum builtin-unary-op {
     int-negate,
     int-bit-not,
+    bool-not,
 }
 
 @esexpr:(derive-codec)
@@ -530,5 +531,7 @@ simple enum builtin-binary-op {
     string-concat,
     string-eq,
     string-ne,
+    bool-eq,
+    bool-ne,
 }
 
