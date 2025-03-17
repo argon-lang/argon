@@ -1,0 +1,23 @@
+<ArgonTest>
+
+    <Name>Boxing (explicit unboxing)</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+
+        def identity [erased T: type] (value: boxed T): boxed T = value
+
+        proc main(): () do
+
+            val str: String = unbox (identity "A")
+
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput></ExpectedOutput>
+
+</ArgonTest>

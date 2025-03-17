@@ -77,6 +77,11 @@ trait TypeResolver extends UsingContext {
           case (Expr.AnyType(), Expr.AnyType() | Expr.TypeN(_) | Expr.TypeBigN(_)) =>
             ZIO.succeed(e)
 
+          case (Expr.AnyType(), Expr.Tuple(items)) =>
+            ZIO.foreachDiscard(items) { item =>
+              checkTypesMatchNoBox(loc)(a, item)
+            }.as(e)
+
           case (Expr.AnyType(), _) =>
             err.as(e)
 
@@ -84,7 +89,7 @@ trait TypeResolver extends UsingContext {
             checkTypesMatch(loc)(e)(a, b)
 
           case (Expr.Boxed(aInner), _) =>
-            unifyExpr(a, b).flatMap {
+            tryUnifyExpr(a, b).flatMap {
               case true => ZIO.succeed(e)
               case false =>
                 unifyExpr(aInner, b).flatMap {
@@ -94,7 +99,7 @@ trait TypeResolver extends UsingContext {
             }
 
           case (_, Expr.Boxed(bInner)) =>
-            unifyExpr(a, b).flatMap {
+            tryUnifyExpr(a, b).flatMap {
               case true => ZIO.succeed(e)
               case false =>
                 unifyExpr(a, bInner).flatMap {
@@ -105,6 +110,33 @@ trait TypeResolver extends UsingContext {
 
           case _ =>
             err.whenZIODiscard(unifyExpr(a, b).negate).as(e)
+        }
+      }
+    }
+
+  private def checkTypesMatchNoBox(loc: SourceLocation)(a: Expr, b: Expr)(using state: EmitState): Comp[Unit] =
+    normalizeToValue(a).flatMap { a =>
+      normalizeToValue(b).flatMap { b =>
+        def err = ErrorLog.logError(CompilerError.TypeError(
+          loc,
+          TRToErrorShifter[context.type](context).shiftExpr(a),
+          TRToErrorShifter[context.type](context).shiftExpr(b)
+        ))
+
+        (a, b) match {
+          case (Expr.AnyType(), Expr.AnyType() | Expr.TypeN(_) | Expr.TypeBigN(_)) =>
+            ZIO.unit
+
+          case (Expr.AnyType(), Expr.Tuple(items)) =>
+            ZIO.foreachDiscard(items) { item =>
+              checkTypesMatchNoBox(loc)(a, item)
+            }
+
+          case (Expr.AnyType(), _) =>
+            err
+
+          case _ =>
+            err.whenZIODiscard(unifyExpr(a, b).negate)
         }
       }
     }
@@ -270,6 +302,30 @@ trait TypeResolver extends UsingContext {
               t <- resolveType(t)(using state.copy(erased = ErasureMode.Erased))
               _ <- resolveImplicit(t, loc)
             yield InferredExpr(Expr.Tuple(Seq()), Expr.Tuple(Seq()))
+        }
+
+      case ast.Expr.BoxedType(t) =>
+        new InferFactory {
+          override def loc: Loc = expr.location
+
+          override def infer(using state: EmitState): Comp[InferredExpr] =
+            for
+              t <- resolveType(t)(using state.copy(erased = ErasureMode.Erased))
+              tt <- exprType.getExprType(t)
+            yield InferredExpr(Expr.Boxed(t), tt)
+        }
+
+      case ast.Expr.Box(value) =>
+        new ExprFactory {
+          override def loc: Loc = expr.location
+
+          override def check(t: Expr)(using EmitState): Comp[Expr] =
+            for
+              tt <- exprType.getExprType(t)
+              innerType <- makeHole(tt, ErasureMode.TypeAnnotation, loc)
+              _ <- checkTypesMatchNoBox(loc)(t, Expr.Boxed(innerType))
+              innerValue <- resolveExpr(value).check(innerType)
+            yield Expr.Box(innerType, innerValue)
         }
 
       case ast.Expr.BinaryOperation(left, ast.BinaryOperator.Assign, right) =>
@@ -513,6 +569,16 @@ trait TypeResolver extends UsingContext {
               Expr.TypeBigN(n),
               Expr.TypeBigN(n + 1),
             ))
+        }
+
+      case ast.Expr.Unbox(value) =>
+        new ExprFactory {
+          override def loc: Loc = expr.location
+
+          override def check(t: Expr)(using EmitState): Comp[Expr] =
+            for
+              innerValue <- resolveExpr(value).check(Expr.Boxed(t))
+            yield Expr.Unbox(t, innerValue)
         }
 
       case ast.Expr.UnaryOperation(op: ast.Operator.ValidIdentifier, a) =>
@@ -1251,19 +1317,32 @@ trait TypeResolver extends UsingContext {
             }
           yield Expr.Tuple(itemExprs)
 
+        case Expr.Boxed(t) =>
+          for
+            tuple <- check(t)
+          yield Expr.Box(t, tuple)
+
         case Expr.Tuple(itemTypes) if items.size != itemTypes.size =>
           ErrorLog.logError(CompilerError.TupleSizeMismatch(
             loc,
             TRToErrorShifter[context.type](context).shiftExpr(t),
             items.size,
           )).as(Expr.Error())
-          
+
         case Expr.Tuple(itemTypes) =>
           for
             itemExprs <- ZIO.foreach(items.zip(itemTypes)) { (item, itemType) =>
               item.check(itemType)
             }
           yield Expr.Tuple(itemExprs)
+
+        case Expr.Hole(hole) =>
+          ZIO.foreach(items) { _ => makeHole(Expr.AnyType(), ErasureMode.TypeAnnotation, loc) }
+            .flatMap { types =>
+              val t2 = Expr.Tuple(types)
+              checkTypesMatchNoBox(loc)(t, t2).as(t2)
+            }
+            .flatMap(check)
 
         case t =>
           ErrorLog.logError(CompilerError.TupleTypeRequired(

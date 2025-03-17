@@ -316,6 +316,9 @@ object ArgonParser {
             matchUnaryOp(OP_LOGICAL_NOT) |
             matchUnaryOp(OP_PLUS) |
             matchUnaryOp(OP_MINUS) |
+            matchToken(KW_BOXED).discard ++ rule(Rule.UnaryExpr).observeLocation --> Expr.BoxedType.apply |
+            matchToken(KW_BOX).discard ++ rule(Rule.UnaryExpr).observeLocation --> Expr.Box.apply |
+            matchToken(KW_UNBOX).discard ++ rule(Rule.UnaryExpr).observeLocation --> Expr.Unbox.apply |
             rule(Rule.TypeExpr) |
             rule(Rule.CurryCallExpr)
 

@@ -126,6 +126,9 @@ object Expr:
   final case class Type(n: Option[WithSource[Expr]]) extends Expr
   final case class BigType(n: BigInt) extends Expr
   final case class UnaryOperation(op: UnaryOperator, a: WithSource[Expr]) extends Expr
+  final case class BoxedType(t: WithSource[Expr]) extends Expr
+  final case class Box(value: WithSource[Expr]) extends Expr
+  final case class Unbox(value: WithSource[Expr]) extends Expr
 end Expr
 
 enum IdentifierExpr extends Expr derives CanEqual {

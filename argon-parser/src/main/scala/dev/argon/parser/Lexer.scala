@@ -235,6 +235,9 @@ object Lexer {
               case "inline" => Token.KW_INLINE
               case "operator" => Token.KW_OPERATOR
               case "unary" => Token.KW_UNARY
+              case "boxed" => Token.KW_BOXED
+              case "box" => Token.KW_BOX
+              case "unbox" => Token.KW_UNBOX
               case "_" => Token.KW_UNDERSCORE
 
               case _ => Token.Identifier(id)

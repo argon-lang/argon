@@ -62,6 +62,9 @@ object TokenCategory {
   case object KW_UPDATE extends TokenCategory
   case object KW_OPERATOR extends TokenCategory
   case object KW_UNARY extends TokenCategory
+  case object KW_BOXED extends TokenCategory
+  case object KW_BOX extends TokenCategory
+  case object KW_UNBOX extends TokenCategory
 
   case object OP_LOGICAL_AND extends TokenCategory
   case object OP_LOGICAL_OR extends TokenCategory

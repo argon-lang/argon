@@ -95,6 +95,9 @@ object Token {
   case object KW_UPDATE extends Token(TokenCategory.KW_UPDATE)
   case object KW_OPERATOR extends Token(TokenCategory.KW_OPERATOR)
   case object KW_UNARY extends Token(TokenCategory.KW_UNARY)
+  case object KW_BOXED extends Token(TokenCategory.KW_BOXED)
+  case object KW_BOX extends Token(TokenCategory.KW_BOX)
+  case object KW_UNBOX extends Token(TokenCategory.KW_UNBOX)
 
   case object OP_LOGICAL_AND extends Token(TokenCategory.OP_LOGICAL_AND) with BinaryOperatorToken(BinaryOperator.LogicalAnd)
 
