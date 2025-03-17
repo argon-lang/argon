@@ -278,14 +278,23 @@ object ArgonParser {
           createLeftRec(rule(Rule.PrimaryExpr(Rule.ParenDisallowed)))(postfixExprCommon)
 
         case Rule.ParenArgList =>
-          matchToken(OP_OPENPAREN) ++ matchToken(KW_REQUIRES).? ++ rule(Rule.Expression).? ++ matchToken(
-            OP_CLOSEPAREN
-          ) --> {
-            case (_, Some(_), Some(argList), _) => (FunctionParameterListType.RequiresList, argList)
-            case (_, Some(_), None, _) => (FunctionParameterListType.RequiresList, Expr.Tuple(Seq.empty))
-            case (_, None, Some(argList), _) => (FunctionParameterListType.NormalList, argList)
-            case (_, None, None, _) => (FunctionParameterListType.NormalList, Expr.Tuple(Seq.empty))
-          }
+          matchToken(OP_OPENPAREN).discard ++!
+            matchToken(KW_REQUIRES).? ++
+            rule(Rule.Expression).? ++
+            matchToken(OP_CLOSEPAREN).discard --> {
+              case (Some(_), Some(argList)) => (FunctionParameterListType.RequiresList, argList)
+              case (Some(_), None) => (FunctionParameterListType.RequiresList, Expr.Tuple(Seq.empty))
+              case (None, Some(argList)) => (FunctionParameterListType.NormalList, argList)
+              case (None, None) => (FunctionParameterListType.NormalList, Expr.Tuple(Seq.empty))
+            } |
+          matchToken(OP_OPENBRACKET).discard ++!
+            rule(Rule.Expression).? ++
+            matchToken(OP_CLOSEBRACKET).discard --> {
+              case Some(argList) => (FunctionParameterListType.InferrableList, argList)
+              case None => (FunctionParameterListType.InferrableList, Expr.Tuple(Seq.empty))
+            }
+          
+          
 
         case Rule.MemberAccess =>
           rule(Rule.Identifier).observeLocation --> { id => (baseExpr: WithSource[Expr]) => Expr.Dot(baseExpr, id) }

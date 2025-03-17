@@ -1,0 +1,27 @@
+<ArgonTest>
+
+    <Name>Identity (explicit bracket)</Name>
+
+
+    <InputSource name="index.argon"><![CDATA[
+            
+        import Argon.Core/*
+
+        def identity [T: type] (value: T): T = value
+
+        proc main(): () do
+
+            val str = identity [String] "A"
+
+            puts str
+
+        end
+        
+            
+    ]]></InputSource>
+
+    <ExpectedOutput>
+        A
+    </ExpectedOutput>
+
+</ArgonTest>
