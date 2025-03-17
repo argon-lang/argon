@@ -389,7 +389,7 @@ abstract class SmtContext[R, E](using TypeTest[Any, E]) extends ProverContext[R,
             case (_, PredicateChoice.KnownResult(true)) => ZIO.succeed(SatResult.Sat(state.model))
             case (state, PredicateChoice.KnownResult(false)) => ZIO.succeed(SatResult.Unsat(state.additionalConstraints))
 
-            case (state, PredicateChoice.SelectedPredicate(pred, eqClass, value)) if state.fuel.nonEmpty =>
+            case (state, PredicateChoice.SelectedPredicate(pred, eqClass, value)) =>
               assumeKnownPredicates(p, state.copy(knownPredicates = state.knownPredicates :+ KnownPredicate(pred, value)))
                 .flatMap { (p, state1) =>
                   satisfiable(p, state1)
@@ -412,18 +412,18 @@ abstract class SmtContext[R, E](using TypeTest[Any, E]) extends ProverContext[R,
                           }
                       }
                 }
-
-            case (_, PredicateChoice.SelectedPredicate(_, _, _)) => ZIO.succeed(SatResult.Unknown)
           }
         },
       )
 
     if state.fuel.nonEmpty then
+      val oldFuel = state.fuel
       instantiateQuantifiers(p, state).flatMap { (state, clauses) =>
-        satNoQuant(p ++ clauses, if clauses.nonEmpty then state.consumeFuel else state)
+        satNoQuant(p ++ clauses, if clauses.nonEmpty then state.copy(fuel = oldFuel.consume) else state)
       }
     else
       satNoQuant(p, state)
+    end if
   end satisfiable
 
   private def getAssertionTrigger(p: Predicate, vars: Set[TVariable], invert: Boolean): Set[Literal] =
