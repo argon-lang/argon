@@ -174,17 +174,10 @@ private[loader] trait LoaderUtils extends UsingContext {
     import dev.argon.tube.Expr
     import context.DefaultExprContext.Expr as ArExpr
 
-    private def nestedScope: Comp[ExprDecoder] =
-      for
-        knownVars <- knownVars.get.flatMap(Ref.make)
-      yield ExprDecoder(
-        knownVars = knownVars,
-      )
-
     private def declareVar(v: t.LocalVar): Comp[context.DefaultExprContext.LocalVar] =
       for
         id <- UniqueIdentifier.make
-        varType <- decodeExpr(v.varType)
+        varType <- expr(v.varType)
         localVar = context.DefaultExprContext.LocalVar(
           id = id,
           varType = varType,
@@ -340,13 +333,11 @@ private[loader] trait LoaderUtils extends UsingContext {
           for
             conditionExpr <- expr(condition)
 
-            trueScope <- nestedScope
-            trueWitnessVars <- ZIO.foreach(whenTrueWitness)(trueScope.declareVar)
-            trueBodyExpr <- trueScope.expr(trueBody)
+            trueWitnessVars <- ZIO.foreach(whenTrueWitness)(declareVar)
+            trueBodyExpr <- expr(trueBody)
 
-            falseScope <- nestedScope
-            falseWitnessVars <- ZIO.foreach(whenFalseWitness)(falseScope.declareVar)
-            falseBodyExpr <- falseScope.expr(falseBody)
+            falseWitnessVars <- ZIO.foreach(whenFalseWitness)(declareVar)
+            falseBodyExpr <- expr(falseBody)
           yield ArExpr.IfElse(
             condition = conditionExpr,
             trueBody = trueBodyExpr,
@@ -357,10 +348,9 @@ private[loader] trait LoaderUtils extends UsingContext {
 
         case Expr.Lambda(v, returnType, body) =>
           for
-            lambdaScope <- nestedScope
-            localVar <- lambdaScope.declareVar(v)
-            returnTypeExpr <- lambdaScope.expr(returnType)
-            bodyExpr <- lambdaScope.expr(body)
+            localVar <- declareVar(v)
+            returnTypeExpr <- expr(returnType)
+            bodyExpr <- expr(body)
           yield ArExpr.Lambda(
             v = localVar,
             returnType = returnTypeExpr,

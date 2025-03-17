@@ -126,7 +126,7 @@ abstract class SmtContext[R, E](using TypeTest[Any, E]) extends ProverContext[R,
       case Or(a, b) => NNF.And(List(elimNot(a), elimNot(b)))
       case Implies(a, PropFalse) => negationNormalForm(a)
       case Implies(a, b) => NNF.And(List(negationNormalForm(a), elimNot(b)))
-      case PropTrue => NNF.Lit(true)
+      case PropTrue => NNF.Lit(false)
       case PropFalse => NNF.Lit(true)
       case PredicateExpression(e) => NNF.Lit(Literal.NotAtom(e))
     }
@@ -453,11 +453,12 @@ abstract class SmtContext[R, E](using TypeTest[Any, E]) extends ProverContext[R,
       assertionAsQuantifier(assertion)
     }
       .flatMap { asserts =>
+        
         val (unquantAsserts, quantAsserts) = asserts.partitionMap {
           case QuantifiedPredicate(vars, _, expr) if vars.isEmpty => Left(expr)
           case qp => Right(qp)
         }
-
+        
         val p = unquantAsserts.iterator.flatten.toList ++ conjunctiveNormalForm(Implies(goal, PropFalse))
 
         val initialState = ProverState(

@@ -200,24 +200,23 @@ trait ScopeContext {
       override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] = ZIO.succeed(Map.empty)
     }
 
-    final class LocalScope private(parent: Scope, variables: TMap[IdentifierExpr, LocalVar], variableValues: TMap[Var, TRExprContext.Expr]) extends Scope {
+    final class LocalScope private(parent: Scope, variables: TMap[IdentifierExpr, LocalVar], variableValues: TMap[Var, TRExprContext.Expr], givenVars: TSet[Var]) extends Scope {
       def addVariable(v: LocalVar, value: Option[TRExprContext.Expr]): UIO[Unit] =
-        ZIO.foreachDiscard(v.name)(name => (
-          variables.put(name, v) *>
-            (
-              value match {
-                case Some(value) if !v.isMutable && PurityScanner(self)(TRExprContext)(value) =>
-                  variableValues.put(v, value)
+        ZIO.foreachDiscard(v.name)(name => variables.put(name, v).commit) *>
+          (
+            value match {
+              case Some(value) if !v.isMutable && PurityScanner(self)(TRExprContext)(value) =>
+                variableValues.put(v, value)
 
-                case _ => STM.unit
-              }
-            )
-        ).commit)
+              case _ => STM.unit
+            }
+          ).commit *>
+          givenVars.put(v).commit.whenDiscard(v.isErased)
 
       override def givenAssertions: Comp[Seq[ImplicitValue]] =
         for
           parentAssertions <- parent.givenAssertions
-          variables <- variables.values.commit
+          variables <- givenVars.toSet.commit
         yield parentAssertions ++ variables.view.filter(_.isProof).map(ImplicitValue.OfVar.apply)
 
       override def knownVarValues: Comp[Map[Var, TRExprContext.Expr]] =
@@ -229,7 +228,14 @@ trait ScopeContext {
       def addPartialScope(s: PartialScope): UIO[Unit] =
         ZSTM.foreachDiscard(s.variables.toSeq) { (name, v) =>
           variables.put(name, v)
-        }.commit
+        }.commit *>
+          ZSTM.foreachDiscard(s.variableValues.toSeq) { (v, value) =>
+            variableValues.put(v, value)
+          }.commit *>
+          ZSTM.foreachDiscard(s.givenVars) { v =>
+            givenVars.put(v)
+          }.commit
+          
 
       override def lookup(id: IdentifierExpr): Comp[LookupResult] =
         variables.get(id).commit.flatMap {
@@ -241,7 +247,8 @@ trait ScopeContext {
         for
           vars <- variables.toMap.commit
           variableValues <- variableValues.toMap.commit
-        yield PartialScope(vars, variableValues)
+          givenVars <- givenVars.toSet.commit
+        yield PartialScope(vars, variableValues, givenVars)
 
 
     }
@@ -251,12 +258,14 @@ trait ScopeContext {
         for
           variables <- TMap.empty[IdentifierExpr, LocalVar].commit
           variableValues <- TMap.empty[Var, TRExprContext.Expr].commit
-        yield LocalScope(parentScope, variables, variableValues)
+          givenVars <- TSet.empty[Var].commit
+        yield LocalScope(parentScope, variables, variableValues, givenVars)
     }
 
     final class PartialScope private[Scopes](
       private[Scopes] val variables: Map[IdentifierExpr, LocalVar],
       private[Scopes] val variableValues: Map[Var, TRExprContext.Expr],
+      private[Scopes] val givenVars: Set[Var],
     )
   }
 }

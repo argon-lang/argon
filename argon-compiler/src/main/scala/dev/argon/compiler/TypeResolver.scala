@@ -467,12 +467,35 @@ trait TypeResolver extends UsingContext {
         new ExprFactory {
           override def loc: Loc = expr.location
 
-          override def check(t: Expr)(using EmitState): Comp[Expr] =
+          override def check(t: Expr)(using state: EmitState): Comp[Expr] =
             for
               condExpr <- resolveExpr(cond).check(Expr.Builtin(Builtin.Nullary(NullaryBuiltin.BoolType)))
-              trueBody <- nestedScope { resolveStmtBlock(whenTrue).check(t) }
-              falseBody <- nestedScope { resolveStmtBlock(whenFalse).check(t) }
-            yield Expr.IfElse(None, None, condExpr, trueBody, falseBody)
+              isPureCond = PurityScanner(context)(TRExprContext)(condExpr)
+
+              whenTrueVar <- createIfBranchVar(condExpr, true).when(isPureCond)
+              whenFalseVar <- createIfBranchVar(condExpr, false).when(isPureCond)
+
+              trueBody <- nestedScope { state ?=>
+                ZIO.foreach(whenTrueVar)(state.scope.addVariable(_, None)) *>
+                  resolveStmtBlock(whenTrue).check(t)
+              }
+              falseBody <- nestedScope { state ?=>
+                ZIO.foreach(whenFalseVar)(state.scope.addVariable(_, None)) *>
+                  resolveStmtBlock(whenFalse).check(t)
+              }
+            yield Expr.IfElse(whenTrueVar, whenFalseVar, condExpr, trueBody, falseBody)
+
+          private def createIfBranchVar(condExpr: Expr, value: Boolean)(using state: EmitState): Comp[LocalVar] =
+            for
+              id <- UniqueIdentifier.make 
+            yield LocalVar(
+              id,
+              varType = Expr.Builtin(Builtin.EqualTo(boolType, condExpr, Expr.BoolLiteral(value))),
+              name = None,
+              isMutable = false,
+              isErased = true,
+              isProof = true,
+            )
         }
 
       case ast.Expr.IntLiteral(i) =>
