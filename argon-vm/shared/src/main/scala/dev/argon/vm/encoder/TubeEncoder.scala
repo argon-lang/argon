@@ -677,6 +677,9 @@ private[vm] class TubeEncoder(platformId: String) extends TubeEncoderBase[TubeFi
 
         private def expr(e: ArExpr, output: ExprOutput): Comp[output.ResultType] =
           e match {
+            case ArExpr.BindVariable(v, _) if v.isErased =>
+              unitResult(e, output)(ZIO.unit)
+            
             case ArExpr.BindVariable(v, value) =>
               unitResult(e, output)(
                 for

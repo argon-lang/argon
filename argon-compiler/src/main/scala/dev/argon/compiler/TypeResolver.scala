@@ -300,8 +300,28 @@ trait TypeResolver extends UsingContext {
           override def infer(using state: EmitState): Comp[InferredExpr] =
             for
               t <- resolveType(t)(using state.copy(erased = ErasureMode.Erased))
-              _ <- resolveImplicit(t, loc)
-            yield InferredExpr(Expr.Tuple(Seq()), Expr.Tuple(Seq()))
+              value <- resolveImplicit(t, loc)
+
+              id <- UniqueIdentifier.make
+
+              localVar = LocalVar(
+                id,
+                t,
+                name = None,
+                isMutable = false,
+                isErased = true,
+                isProof = true,
+              )
+
+              _ <- state.scope.addVariable(localVar, Some(value))
+
+            yield InferredExpr(
+              Expr.BindVariable(
+                localVar,
+                value,
+              ),
+              unitType,
+            )
         }
 
       case ast.Expr.BoxedType(t) =>

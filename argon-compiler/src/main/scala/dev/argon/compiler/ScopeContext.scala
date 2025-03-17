@@ -206,7 +206,7 @@ trait ScopeContext {
           variables.put(name, v) *>
             (
               value match {
-                case Some(value) if v.isMutable && PurityScanner(self)(TRExprContext)(value) =>
+                case Some(value) if !v.isMutable && PurityScanner(self)(TRExprContext)(value) =>
                   variableValues.put(v, value)
 
                 case _ => STM.unit
