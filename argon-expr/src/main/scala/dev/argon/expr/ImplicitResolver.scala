@@ -423,6 +423,38 @@ abstract class ImplicitResolver[R, E](using TypeTest[Any, E]) {
             )
         )),
 
+        // A, B: string
+        // ------------------
+        // (A == B) == (A = B)
+        newVariable => (for {
+          a <- newVariable
+          b <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(Expr.ErasedValue())) ->
+            Implies(
+              PredicateExpression(binOp(BinaryBuiltin.StringEQ, Expr.Hole(a), Expr.Hole(b))),
+              PredicateExpression(Expr.Builtin(Builtin.EqualTo(
+                Expr.Builtin(Builtin.Nullary(NullaryBuiltin.StringType)),
+                Expr.Hole(a),
+                Expr.Hole(b),
+              ))),
+            )
+          )),
+        newVariable => (for {
+          a <- newVariable
+          b <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(Expr.ErasedValue())) ->
+            Implies(
+              PredicateExpression(Expr.Builtin(Builtin.EqualTo(
+                Expr.Builtin(Builtin.Nullary(NullaryBuiltin.StringType)),
+                Expr.Hole(a),
+                Expr.Hole(b),
+              ))),
+              PredicateExpression(binOp(BinaryBuiltin.StringEQ, Expr.Hole(a), Expr.Hole(b))),
+            )
+          )),
+
         // A, B: int
         // ------------------
         // (A != B) == !(A = B)
@@ -444,6 +476,54 @@ abstract class ImplicitResolver[R, E](using TypeTest[Any, E]) {
             Implies(
               Implies(PredicateExpression(binOp(BinaryBuiltin.IntEQ, Expr.Hole(a), Expr.Hole(b))), PropFalse),
               PredicateExpression(binOp(BinaryBuiltin.IntNE, Expr.Hole(a), Expr.Hole(b))),
+            )
+        )),
+
+        // A, B: int
+        // ------------------
+        // (A == B) == (A = B)
+        newVariable => (for {
+          a <- newVariable
+          b <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(Expr.ErasedValue())) ->
+            Implies(
+              PredicateExpression(binOp(BinaryBuiltin.IntEQ, Expr.Hole(a), Expr.Hole(b))),
+              PredicateExpression(Expr.Builtin(Builtin.EqualTo(
+                Expr.Builtin(Builtin.Nullary(NullaryBuiltin.IntType)),
+                Expr.Hole(a),
+                Expr.Hole(b),
+              ))),
+            )
+        )),
+        newVariable => (for {
+          a <- newVariable
+          b <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(Expr.ErasedValue())) ->
+            Implies(
+              PredicateExpression(Expr.Builtin(Builtin.EqualTo(
+                Expr.Builtin(Builtin.Nullary(NullaryBuiltin.IntType)),
+                Expr.Hole(a),
+                Expr.Hole(b),
+              ))),
+              PredicateExpression(binOp(BinaryBuiltin.IntEQ, Expr.Hole(a), Expr.Hole(b))),
+            )
+        )),
+        
+        // A, B: int
+        // A < B or A = B or A > B
+        newVariable => (for {
+          a <- newVariable
+          b <- newVariable
+        } yield (
+          Proof.Atomic(TCAtomicProof.ExprProof(Expr.ErasedValue())) ->
+            Or(
+              PredicateExpression(binOp(BinaryBuiltin.IntLT, Expr.Hole(a), Expr.Hole(b))),
+              Or(
+                PredicateExpression(binOp(BinaryBuiltin.IntEQ, Expr.Hole(a), Expr.Hole(b))),
+                PredicateExpression(binOp(BinaryBuiltin.IntGT, Expr.Hole(a), Expr.Hole(b))),
+              ),
             )
         )),
       )
