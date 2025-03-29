@@ -81,6 +81,12 @@ lazy val commonJVMSettingsNoLibs = Seq(
 
 lazy val commonJVMSettings = commonJVMSettingsNoLibs ++ Seq(
 
+  javaOptions ++= Seq(
+    "--illegal-native-access=deny",
+    "-Dpolyglotimpl.AttachLibraryFailureAction=ignore"
+  ),
+
+
   libraryDependencies ++= annotationDependencies ++ Seq(
     "dev.zio" %% "zio-logging" % "2.5.0",
 
