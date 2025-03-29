@@ -5,7 +5,6 @@ import dev.argon.backend.api.HostOperations
 import dev.argon.nobleidl.runtime.{ErrorType, FutureWithError, FutureWithoutError}
 import dev.argon.nobleidl.runtime.graaljsInterop.{CallUtil, ErrorChecker, ErrorTypeAdapter, JSAdapter, JSExecutor}
 import dev.argon.util.*
-import dev.argon.util.graalext.{TextDecoderPolyfill, TextEncoderPolyfill}
 
 import java.util.concurrent.{Executor as JExecutor, Executors as JExecutors}
 import org.graalvm.polyglot.{HostAccess, Source, Context as JSContext, Value as JSValue}
@@ -38,10 +37,11 @@ private[backend] object JSApiBackendLoader {
         JSContext.newBuilder("js")
           .allowHostClassLookup(className => className == "dev.argon.backend.backends.js.GraalJavaScriptExecutor")
           .allowHostAccess(HostAccess.EXPLICIT)
-//          .option("js.load", "false")
-//          .option("js.print", "false")
+          .allowExperimentalOptions(true)
+          .option("js.load", "false")
+          .option("js.print", "false")
           .option("js.esm-eval-returns-exports", "true")
-          // .option("js.text-encoding", "true")
+          .option("js.text-encoding", "true")
           .option("engine.WarnInterpreterOnly", "false")
           .build()
       })
@@ -49,8 +49,6 @@ private[backend] object JSApiBackendLoader {
 
       factory <- ZIO.attempt {
         jsContext.eval(Source.newBuilder("js", classOf[JSApiBackendLoader.type].getResource("polyfill.js")).build())
-        TextDecoderPolyfill.polyfill(jsContext)
-        TextEncoderPolyfill.polyfill(jsContext)
         
         val source = Source.newBuilder("js", url)
           .mimeType("application/javascript+module")

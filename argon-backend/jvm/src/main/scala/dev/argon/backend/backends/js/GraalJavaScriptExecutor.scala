@@ -24,10 +24,11 @@ class GraalJavaScriptExecutor @HostAccess.Export() extends AutoCloseable {
 
   private val context: Context =
     Context.newBuilder("js")
-      //          .option("js.load", "false")
-      //          .option("js.print", "false")
+      .allowExperimentalOptions(true)
+      .option("js.load", "false")
+      .option("js.print", "false")
       .option("js.esm-eval-returns-exports", "true")
-      // .option("js.text-encoding", "true")
+      .option("js.text-encoding", "true")
       .option("engine.WarnInterpreterOnly", "false")
       .allowIO(
         IOAccess.newBuilder()
@@ -35,7 +36,7 @@ class GraalJavaScriptExecutor @HostAccess.Export() extends AutoCloseable {
           .build()
       )
       .out(outputStream)
-//      .err(outputStream)
+      .err(outputStream)
       .in(InputStream.nullInputStream())
       .build()
 
