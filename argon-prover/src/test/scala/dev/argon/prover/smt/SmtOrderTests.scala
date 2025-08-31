@@ -163,6 +163,6 @@ object SmtOrderTests extends ZIOSpecDefault {
           !pred(Le, Expr.Variable("x"), Expr.Variable("y")),
         ).assertProves(pred(Le, Expr.Variable("y"), Expr.Variable("x")))
       },
-    ).provideSome[Environment](VariableProvider.live)
+    ).provide(VariableProvider.live)
 
 }

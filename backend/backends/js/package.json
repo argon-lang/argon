@@ -33,7 +33,7 @@
     "vitest": "^3.0.7"
   },
   "dependencies": {
-    "@argon-lang/esexpr": "^0.1.17",
+    "@argon-lang/esexpr": "^0.2.1",
     "@argon-lang/js-backend-api": "file:../../api/js",
     "@argon-lang/noble-idl-core": "file:../../../../noble-idl/langs/js/runtime",
     "@rollup/plugin-node-resolve": "^16.0.0",

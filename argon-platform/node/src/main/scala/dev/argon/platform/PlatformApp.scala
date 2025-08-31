@@ -12,7 +12,7 @@ abstract class PlatformApp[E] extends ZIOApp {
 
   final override def run: ZIO[Environment & ZIOAppArgs, Any, Any] =
     runApp
-      .provideSome[Environment](ZLayer.succeed(ZIOAppArgs(Chunk.fromIterable(NodeProcess.argv.jsSlice(2)))))
+      .provide[Environment](ZLayer.succeed(ZIOAppArgs(Chunk.fromIterable(NodeProcess.argv.jsSlice(2)))))
       .foldCauseZIO(
         failure = cause => {
           ZIO.succeed {

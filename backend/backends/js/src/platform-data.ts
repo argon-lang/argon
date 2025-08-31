@@ -138,6 +138,67 @@ namespace EstreeRepr {
     export const codec: ESExprCodec<EStreeRepr> = {
         get tags() { return new Set<ESExprTag>() },
 
+        isEncodedEqual(a: EStreeRepr, b: EStreeRepr): boolean {
+            if(
+                typeof a === "string" ||
+                typeof a === "number" ||
+                typeof a === "bigint" ||
+                typeof a === "boolean" ||
+                a === null
+            ) {
+                return a === b;
+            }
+            else if(a instanceof RegExp) {
+                return b instanceof RegExp &&
+                    a.source === b.source &&
+                    a.flags === b.flags;
+            }
+            else if(a instanceof Array) {
+                return b instanceof Array &&
+                    a.length === b.length &&
+                    a.every((ai, i) => this.isEncodedEqual(ai, b[i]!));
+            }
+            else {
+                if(typeof b !== "object" || b instanceof RegExp || b instanceof Array || b === null) {
+                    return false;
+                }
+
+                const keysA = Object.keys(a);
+                const keysB = Object.keys(b);
+                if (keysA.length !== keysB.length) {
+                    return false;
+                }
+
+
+                for(const key of keysA) {
+                    if(!(key in b)) {
+                        return false;
+                    }
+
+                    const ai = a[key];
+                    const bi = b[key];
+
+                    if(ai === undefined) {
+                        if(bi !== undefined) {
+                            return false;
+                        }
+
+                        continue;
+                    }
+
+                    if(bi === undefined) {
+                        return false;
+                    }
+
+                    if(!this.isEncodedEqual(ai, bi)) {
+                        return false;
+                    }
+                }
+
+                return true;
+            }
+        },
+
         encode: function (value: EStreeRepr): ESExpr {
             switch(typeof value) {
                 case "string":

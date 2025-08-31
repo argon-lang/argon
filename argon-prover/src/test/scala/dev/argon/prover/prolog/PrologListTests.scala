@@ -78,6 +78,6 @@ object PrologListTests extends ZIOSpecDefault {
           equalTo(ProofResult.Unknown)
         )
       },
-    ).provideSome[Environment](VariableProvider.live)
+    ).provide(VariableProvider.live)
 
 }

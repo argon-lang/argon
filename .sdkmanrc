@@ -1,2 +1,2 @@
-java=24-open
-sbt=1.10.11
+java=24.0.2-open
+sbt=1.11.5

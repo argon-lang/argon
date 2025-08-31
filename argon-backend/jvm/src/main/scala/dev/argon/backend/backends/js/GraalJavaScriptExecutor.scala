@@ -29,6 +29,7 @@ class GraalJavaScriptExecutor @HostAccess.Export() extends AutoCloseable {
       .option("js.print", "false")
       .option("js.esm-eval-returns-exports", "true")
       .option("js.text-encoding", "true")
+      .option("js.new-set-methods", "true")
       .option("engine.WarnInterpreterOnly", "false")
       .allowIO(
         IOAccess.newBuilder()

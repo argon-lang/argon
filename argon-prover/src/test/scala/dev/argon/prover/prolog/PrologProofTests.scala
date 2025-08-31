@@ -124,6 +124,6 @@ object PrologProofTests extends ZIOSpecDefault {
           hasProof(Proof.DoubleNegIntro(knownTrue))
         )
       },
-    ).provideSome[Environment](VariableProvider.live)
+    ).provide(VariableProvider.live)
 
 }

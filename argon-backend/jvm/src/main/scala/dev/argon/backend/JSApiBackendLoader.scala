@@ -42,6 +42,7 @@ private[backend] object JSApiBackendLoader {
           .option("js.print", "false")
           .option("js.esm-eval-returns-exports", "true")
           .option("js.text-encoding", "true")
+          .option("js.new-set-methods", "true")
           .option("engine.WarnInterpreterOnly", "false")
           .build()
       })

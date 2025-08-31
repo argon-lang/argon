@@ -39,6 +39,6 @@ object PrologFuelTests extends ZIOSpecDefault {
       test("recursive predicate") {
         assertNotProves(pred(Infinite, expr(A)))
       },
-    ).provideSome[Environment](VariableProvider.live)
+    ).provide(VariableProvider.live)
 
 }

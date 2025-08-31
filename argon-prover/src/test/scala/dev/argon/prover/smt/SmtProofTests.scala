@@ -97,6 +97,6 @@ object SmtProofTests extends ZIOSpecDefault {
           !pred(EqualTo, Expr.Variable("x"), expr(Zero)),
         ).assertProves(pred(Gt, Expr.Variable("x"), expr(Zero)))
       },
-    ).provideSome[Environment](VariableProvider.live)
+    ).provide(VariableProvider.live)
 
 }

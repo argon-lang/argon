@@ -10,11 +10,11 @@ import scala.sys.process.Process
 ThisBuild / resolvers += Resolver.mavenLocal
 Global / semanticdbEnabled := true
 
-val graalVersion = "24.2.0"
-val zioVersion = "2.1.16"
+val graalVersion = "24.2.2"
+val zioVersion = "2.1.20"
 
 lazy val commonSettingsNoLibs = Seq(
-  scalaVersion := "3.6.4",
+  scalaVersion := "3.7.2",
 )
 
 
@@ -28,15 +28,15 @@ lazy val commonSettings = commonSettingsNoLibs ++ Seq(
     "dev.zio" %%% "zio-test" % zioVersion % "test",
     "dev.zio" %%% "zio-test-sbt" % zioVersion % "test",
 
-    "dev.argon" %%% "argon-async-util" % "2.0.0",
-    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.2.0",
+    "dev.argon" %%% "argon-async-util" % "2.1.0",
+    "dev.argon.esexpr" %%% "esexpr-scala-runtime" % "0.3.2",
     "dev.argon.nobleidl" %%% "nobleidl-scala-runtime" % "0.1.0-SNAPSHOT",
 
     "dev.optics" %%% "monocle-core"  % "3.3.0",
     "dev.optics" %%% "monocle-macro" % "3.3.0",
 
-    "org.scala-lang.modules" %%% "scala-xml" % "2.3.0",
-    "org.gnieh" %%% "fs2-data-xml-scala" % "1.11.2",
+    "org.scala-lang.modules" %%% "scala-xml" % "2.4.0",
+    "org.gnieh" %%% "fs2-data-xml-scala" % "1.12.0",
     "com.indoorvivants" %%% "toml" % "0.3.0",
 
     "org.typelevel" %%% "cats-core" % "2.13.0",
@@ -55,7 +55,7 @@ lazy val sharedJSNodeSettings = Seq(
   ),
 
   npmDependencies ++= Seq(
-    "@argon-lang/esexpr" -> "^0.1.17",
+    "@argon-lang/esexpr" -> "^0.2.1",
     "@argon-lang/js-backend-api" -> "file:../../../../backend/api/js",
     "@argon-lang/compiler-backend-js" -> "file:../../../../backend/backends/js",
   ),
@@ -88,9 +88,9 @@ lazy val commonJVMSettings = commonJVMSettingsNoLibs ++ Seq(
 
 
   libraryDependencies ++= annotationDependencies ++ Seq(
-    "dev.zio" %% "zio-logging" % "2.5.0",
+    "dev.zio" %% "zio-logging" % "2.5.1",
 
-    "org.apache.commons" % "commons-compress" % "1.27.1",
+    "org.apache.commons" % "commons-compress" % "1.28.0",
 
     "org.graalvm.polyglot" % "polyglot" % graalVersion,
     "org.graalvm.polyglot" % "js-community" % graalVersion,

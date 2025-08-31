@@ -59,7 +59,7 @@ object SourceTube {
             Seq(nameNoExt.substring(1).nn)
           else
             dirs.map(s => URLDecoder.decode(s, StandardCharsets.UTF_8)) :+
-              URLDecoder.decode(nameNoExt, StandardCharsets.UTF_8).nn
+              URLDecoder.decode(nameNoExt, StandardCharsets.UTF_8)
 
         ZStream(ModulePath(fullPath) -> resource)
 
